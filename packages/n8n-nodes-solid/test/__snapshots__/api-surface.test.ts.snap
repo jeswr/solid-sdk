@@ -1,0 +1,238 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`public API surface (committed snapshot — one-file diff, over the shipped dist) > importable library exports (the package \`main\` = dist/src/index.js) 1`] = `
+{
+  "assertWithinPod": "function",
+  "isContainerUrl": "function",
+  "normalizePodBase": "function",
+  "parseContainerListing": "function",
+  "redactUserinfo": "function",
+  "resolveTarget": "function",
+}
+`;
+
+exports[`public API surface (committed snapshot — one-file diff, over the shipped dist) > n8n ICredentialType (credential shape + token injection) 1`] = `
+{
+  "authenticate": {
+    "properties": {
+      "headers": {
+        "Authorization": "=Bearer {{$credentials.accessToken}}",
+      },
+    },
+    "type": "generic",
+  },
+  "displayName": "Solid Pod (OIDC / Bearer) API",
+  "name": "solidApi",
+  "properties": [
+    {
+      "description": "Base URL of the pod (or a sub-container of it). The node confines all reads and writes to URLs under this base. Must be an http(s) URL.",
+      "displayName": "Pod Base URL",
+      "name": "podBaseUrl",
+      "password": false,
+      "required": true,
+      "type": "string",
+    },
+    {
+      "description": "A Solid-OIDC / bearer access token authorized for the pod. Sent as \`Authorization: Bearer <token>\`. P1 does not perform DPoP-bound proof-of-possession — see the node docs for the DPoP follow-up.",
+      "displayName": "Access Token",
+      "name": "accessToken",
+      "password": true,
+      "required": true,
+      "type": "string",
+    },
+  ],
+}
+`;
+
+exports[`public API surface (committed snapshot — one-file diff, over the shipped dist) > n8n INodeType description (resource/operation/parameter tree) 1`] = `
+{
+  "credentials": [
+    {
+      "name": "solidApi",
+      "required": true,
+    },
+  ],
+  "displayName": "Solid",
+  "inputs": [
+    "main",
+  ],
+  "name": "solid",
+  "outputs": [
+    "main",
+  ],
+  "properties": [
+    {
+      "default": "resource",
+      "description": null,
+      "displayName": "Resource",
+      "displayOptions": null,
+      "name": "resource",
+      "noDataExpression": true,
+      "options": [
+        {
+          "action": null,
+          "description": "A single LDP resource (a document)",
+          "name": "Resource",
+          "value": "resource",
+        },
+        {
+          "action": null,
+          "description": "An LDP container (a folder)",
+          "name": "Container",
+          "value": "container",
+        },
+      ],
+      "placeholder": null,
+      "required": false,
+      "type": "options",
+    },
+    {
+      "default": "read",
+      "description": null,
+      "displayName": "Operation",
+      "displayOptions": {
+        "show": {
+          "resource": [
+            "resource",
+          ],
+        },
+      },
+      "name": "operation",
+      "noDataExpression": true,
+      "options": [
+        {
+          "action": "Read a resource",
+          "description": "Get a resource's contents",
+          "name": "Read",
+          "value": "read",
+        },
+        {
+          "action": "Create a resource",
+          "description": "Create a new resource (fails if it already exists)",
+          "name": "Create",
+          "value": "create",
+        },
+        {
+          "action": "Update a resource",
+          "description": "Create or overwrite a resource",
+          "name": "Update",
+          "value": "update",
+        },
+        {
+          "action": "Delete a resource",
+          "description": "Delete a resource",
+          "name": "Delete",
+          "value": "delete",
+        },
+      ],
+      "placeholder": null,
+      "required": false,
+      "type": "options",
+    },
+    {
+      "default": "list",
+      "description": null,
+      "displayName": "Operation",
+      "displayOptions": {
+        "show": {
+          "resource": [
+            "container",
+          ],
+        },
+      },
+      "name": "operation",
+      "noDataExpression": true,
+      "options": [
+        {
+          "action": "List a container",
+          "description": "List the direct members of a container (ldp:contains)",
+          "name": "List",
+          "value": "list",
+        },
+      ],
+      "placeholder": null,
+      "required": false,
+      "type": "options",
+    },
+    {
+      "default": "",
+      "description": "The resource or container to act on. Either an absolute http(s) URL under the pod base, or a path relative to the pod base. Confined to the pod base — a target that escapes it is refused.",
+      "displayName": "Target",
+      "displayOptions": null,
+      "name": "target",
+      "noDataExpression": false,
+      "options": undefined,
+      "placeholder": "notes/today.ttl  (or an absolute URL under the pod base)",
+      "required": true,
+      "type": "string",
+    },
+    {
+      "default": "",
+      "description": "The resource body to write",
+      "displayName": "Content",
+      "displayOptions": {
+        "show": {
+          "operation": [
+            "create",
+            "update",
+          ],
+          "resource": [
+            "resource",
+          ],
+        },
+      },
+      "name": "content",
+      "noDataExpression": false,
+      "options": undefined,
+      "placeholder": null,
+      "required": false,
+      "type": "string",
+    },
+    {
+      "default": "text/turtle",
+      "description": "The Content-Type to store the body as (e.g. text/turtle, application/json, text/plain)",
+      "displayName": "Content Type",
+      "displayOptions": {
+        "show": {
+          "operation": [
+            "create",
+            "update",
+          ],
+          "resource": [
+            "resource",
+          ],
+        },
+      },
+      "name": "contentType",
+      "noDataExpression": false,
+      "options": undefined,
+      "placeholder": null,
+      "required": false,
+      "type": "string",
+    },
+    {
+      "default": "",
+      "description": "Optional. An ETag (from a prior Read) for a conditional, lost-update-safe write. If set and the resource changed, the update fails with 412.",
+      "displayName": "If-Match ETag",
+      "displayOptions": {
+        "show": {
+          "operation": [
+            "update",
+          ],
+          "resource": [
+            "resource",
+          ],
+        },
+      },
+      "name": "ifMatch",
+      "noDataExpression": false,
+      "options": undefined,
+      "placeholder": null,
+      "required": false,
+      "type": "string",
+    },
+  ],
+  "usableAsTool": true,
+  "version": 1,
+}
+`;

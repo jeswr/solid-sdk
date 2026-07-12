@@ -37,6 +37,24 @@
   },
   "overrides": [
     {
+      "includes": ["packages/app-shell/src/styles/**/*.css"],
+      "css": {
+        "parser": {
+          "tailwindDirectives": true
+        }
+      }
+    },
+    {
+      "includes": ["packages/solid-elements/src/components/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "useNamingConvention": "off"
+          }
+        }
+      }
+    },
+    {
       "includes": ["packages/solid-offline/**"],
       "javascript": {
         "formatter": {

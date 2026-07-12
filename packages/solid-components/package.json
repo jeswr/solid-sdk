@@ -1,0 +1,121 @@
+{
+  "name": "@jeswr/solid-components",
+  "version": "0.0.1",
+  "securityCritical": true,
+  "description": "Codegen-friendly, framework-agnostic Solid Web Components (Lit 3). Phase-1: an injectable read-only DataController (typed read + container listing + conditional GET + a 4-class error taxonomy), the SSRF-disciplined <jeswr-shacl-view>, and a batch of READ-ONLY per-class elements (<jeswr-task-list>/<jeswr-contact-list>/<jeswr-profile-card>/<jeswr-bookmark-list>/<jeswr-collection>) each binding a data model via the DataController + the model's typed accessors, plus the <solid-view> composer + a committed resolveComponent static map (CEM-driven, zero-network). Self-contained committed dist/ (shacl-form + n3 + the @jeswr data models esbuild-inlined) so it installs from a GitHub branch with no build step under ignore-scripts=true. Experimental, AI-agent-generated.",
+  "author": "Claude Opus 4.8 (@jeswr PSS agent)",
+  "license": "MIT",
+  "type": "module",
+  "homepage": "https://github.com/jeswr/solid-components#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jeswr/solid-components.git"
+  },
+  "bugs": {
+    "url": "https://github.com/jeswr/solid-components/issues"
+  },
+  "customElements": "custom-elements.json",
+  "sideEffects": [
+    "./dist/index.js",
+    "./dist/components/*.js",
+    "./src/index.ts",
+    "./src/components/*.ts"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./react": {
+      "types": "./dist/react/index.d.ts",
+      "import": "./dist/react/index.js"
+    },
+    "./custom-elements.json": "./custom-elements.json"
+  },
+  "files": [
+    "dist",
+    "src",
+    "custom-elements.json",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "scripts": {
+    "build": "node scripts/build-dist.mjs",
+    "manifest": "cem analyze",
+    "check:manifest": "node scripts/check-manifest.mjs",
+    "lint": "biome check src test scripts",
+    "lint:fix": "biome check --write src test scripts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage"
+  },
+  "keywords": [
+    "solid",
+    "web-components",
+    "lit",
+    "shacl",
+    "shacl-form",
+    "rdf",
+    "linked-data",
+    "codegen",
+    "framework-agnostic",
+    "custom-elements-manifest"
+  ],
+  "dependencies": {
+    "@types/n3": "^1.26.1",
+    "lit": "^3.3.1",
+    "n3": "^1.17.0"
+  },
+  "overrides": {
+    "@jeswr/solid-task-model": "$@jeswr/solid-task-model"
+  },
+  "peerDependencies": {
+    "@jeswr/guarded-fetch": "workspace:*",
+    "@lit/react": "^1.0.8",
+    "react": ">=18",
+    "react-dom": ">=18"
+  },
+  "peerDependenciesMeta": {
+    "@jeswr/guarded-fetch": {
+      "optional": true
+    },
+    "@lit/react": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    },
+    "react-dom": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.0",
+    "@custom-elements-manifest/analyzer": "^0.11.0",
+    "@jeswr/fetch-rdf": "^0.1.0",
+    "@jeswr/guarded-fetch": "workspace:*",
+    "@jeswr/solid-bookmark": "workspace:*",
+    "@jeswr/solid-chat-interop": "workspace:*",
+    "@jeswr/solid-task-model": "workspace:*",
+    "@lit/react": "^1.0.8",
+    "@rdfjs/types": "^2.0.1",
+    "@ro-kit/ui-widgets": "^1.0.44",
+    "@solid/object": "^0.6.0",
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@ulb-darmstadt/shacl-form": "^3.0.7",
+    "comment-parser": "^1.2.4",
+    "esbuild": "^0.25.0",
+    "jsdom": "^26.1.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "shacl-engine": "^1.1.0",
+    "typescript": "^5.9.0",
+    "uuid": "^13.0.0",
+    "vitest": "^4.1.8"
+  }
+}

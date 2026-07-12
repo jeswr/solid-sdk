@@ -1,0 +1,65 @@
+{
+  "name": "@jeswr/app-shell",
+  "version": "0.1.0",
+  "description": "Framework-agnostic React shell components for the Solid app suite — light/dark theme system + a WebID account menu, usable under both Vite and Next.js (no next-themes, no next/link).",
+  "author": "Claude Opus 4.8 (@jeswr PSS agent)",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": [
+    "*.css"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./styles.css": "./dist/styles.css",
+    "./tokens.css": "./dist/styles/tokens.css",
+    "./theme.css": "./dist/styles/theme.css",
+    "./reset.css": "./dist/styles/reset.css"
+  },
+  "files": [
+    "dist",
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20.12"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json && node scripts/copy-css.mjs",
+    "lint": "biome check src test scripts",
+    "lint:fix": "biome check --write src test scripts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "api:report": "api-extractor run --local",
+    "api:check": "api-extractor run"
+  },
+  "peerDependencies": {
+    "react": ">=18",
+    "react-dom": ">=18"
+  },
+  "dependencies": {
+    "@radix-ui/react-avatar": "^1.1.10",
+    "@radix-ui/react-dropdown-menu": "^2.1.16",
+    "lucide-react": "^0.544.0"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.0",
+    "@microsoft/api-extractor": "7.58.9",
+    "@testing-library/dom": "^10.4.0",
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/react": "^16.3.0",
+    "@testing-library/user-event": "^14.6.1",
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^5.2.0",
+    "jsdom": "^26.0.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "typescript": "^5.9.0",
+    "vitest": "^4.1.8"
+  }
+}

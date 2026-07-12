@@ -1,0 +1,87 @@
+{
+  "name": "n8n-nodes-solid",
+  "version": "0.1.0",
+  "securityCritical": true,
+  "description": "n8n community node to read and write a Solid pod over LDP inside automation workflows. Resource Read/Create/Update/Delete + Container List (ldp:contains parsed via @jeswr/fetch-rdf). Pod-scoped, http(s)-only, token never logged. Experimental, AI-agent-generated.",
+  "keywords": [
+    "n8n-community-node-package",
+    "n8n",
+    "solid",
+    "ldp",
+    "pod",
+    "rdf",
+    "linked-data",
+    "solid-oidc",
+    "dpop"
+  ],
+  "license": "MIT",
+  "homepage": "https://github.com/jeswr/n8n-nodes-solid#readme",
+  "author": "Jesse Wright <jwrightwho@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jeswr/n8n-nodes-solid.git"
+  },
+  "bugs": {
+    "url": "https://github.com/jeswr/n8n-nodes-solid/issues"
+  },
+  "main": "dist/src/index.js",
+  "types": "dist/src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "default": "./dist/src/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "n8n": {
+    "n8nNodesApiVersion": 1,
+    "credentials": [
+      "dist/credentials/SolidApi.credentials.js"
+    ],
+    "nodes": [
+      "dist/nodes/Solid/Solid.node.js"
+    ]
+  },
+  "scripts": {
+    "build": "node scripts/build-dist.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "biome check nodes credentials src test scripts",
+    "lint:fix": "biome check --write nodes credentials src test scripts",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage"
+  },
+  "peerDependencies": {
+    "n8n-workflow": ">=1.82.0 <3"
+  },
+  "dependencies": {
+    "@jeswr/guarded-fetch": "workspace:*",
+    "content-type": "^1.0.5",
+    "jsonld-streaming-parser": "^5.0.0",
+    "n3": "^2.0.3"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.0.0",
+    "@jeswr/fetch-rdf": "^0.1.0",
+    "@rdfjs/types": "^2.0.1",
+    "@rdfjs/wrapper": "^0.34.0",
+    "@solid/object": "^0.6.0",
+    "@types/content-type": "^1.1.8",
+    "@types/n3": "^1.16.0",
+    "@types/node": "^22.0.0",
+    "@vitest/coverage-v8": "^3.2.6",
+    "esbuild": "^0.28.1",
+    "n8n-workflow": "2.28.4",
+    "typescript": "^5.6.0",
+    "vitest": "^3.2.6"
+  },
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

@@ -1,0 +1,1914 @@
+{
+  "schemaVersion": "1.0.0",
+  "readme": "",
+  "modules": [
+    {
+      "kind": "javascript-module",
+      "path": "src/components/account-menu.ts",
+      "declarations": [
+        {
+          "kind": "function",
+          "name": "initials",
+          "return": {
+            "type": {
+              "text": "string"
+            }
+          },
+          "parameters": [
+            {
+              "name": "name",
+              "type": {
+                "text": "string"
+              }
+            }
+          ],
+          "description": "Initials from a display name, for the avatar fallback. Exported for tests + as\npart of the public API. Delegates to the shared internal `initialsFromName` (the\none reviewed implementation, also used by <jeswr-login-panel>'s `initialsOf`)."
+        },
+        {
+          "kind": "class",
+          "description": "The top-right account control: avatar + display name, opening a dropdown with\nthe WebID and a Sign out action. Decoupled via attributes; presentation chrome.\nNo RDF data model (the host supplies `webid`/`name`/`avatar-url`).",
+          "name": "JeswrAccountMenu",
+          "cssProperties": [
+            {
+              "description": "Hover background.",
+              "name": "--jeswr-accent"
+            },
+            {
+              "description": "Hover/avatar foreground.",
+              "name": "--jeswr-accent-fg"
+            },
+            {
+              "description": "Menu + separator border colour.",
+              "name": "--jeswr-border"
+            },
+            {
+              "description": "WebID line colour.",
+              "name": "--jeswr-muted-fg"
+            },
+            {
+              "description": "Menu background.",
+              "name": "--jeswr-popover"
+            },
+            {
+              "description": "Menu foreground.",
+              "name": "--jeswr-popover-fg"
+            },
+            {
+              "description": "Corner radius.",
+              "name": "--jeswr-radius"
+            },
+            {
+              "description": "Focus-ring colour.",
+              "name": "--jeswr-ring"
+            }
+          ],
+          "cssParts": [
+            {
+              "description": "The avatar+name button that opens the menu.",
+              "name": "trigger"
+            },
+            {
+              "description": "The circular avatar (image or initials).",
+              "name": "avatar"
+            },
+            {
+              "description": "The name shown next to the avatar in the trigger.",
+              "name": "trigger-name"
+            },
+            {
+              "description": "The dropdown menu container.",
+              "name": "menu"
+            },
+            {
+              "description": "The name+WebID block at the top of the menu.",
+              "name": "identity"
+            },
+            {
+              "description": "The WebID line in the identity block.",
+              "name": "webid"
+            },
+            {
+              "description": "The \"Sign out\" menu item button.",
+              "name": "sign-out"
+            }
+          ],
+          "slots": [
+            {
+              "description": "Extra menu items injected above \"Sign out\".",
+              "name": ""
+            }
+          ],
+          "members": [
+            {
+              "kind": "field",
+              "name": "webId",
+              "privacy": "public",
+              "type": {
+                "text": "string | null"
+              },
+              "description": "The authenticated user's WebID (shown under the name; the canonical id).",
+              "default": "null",
+              "attribute": "webid",
+              "reflects": true
+            },
+            {
+              "kind": "field",
+              "name": "name",
+              "privacy": "public",
+              "type": {
+                "text": "string | null"
+              },
+              "description": "Human display name (foaf:name). Falls back to the WebID, then \"Account\".",
+              "default": "null",
+              "attribute": "name",
+              "reflects": true
+            },
+            {
+              "kind": "field",
+              "name": "avatarUrl",
+              "privacy": "public",
+              "type": {
+                "text": "string | null"
+              },
+              "description": "Avatar image URL (foaf:img / vcard:hasPhoto). Falls back to initials.",
+              "default": "null",
+              "attribute": "avatar-url",
+              "reflects": true
+            },
+            {
+              "kind": "field",
+              "name": "onDocPointer",
+              "privacy": "private",
+              "readonly": true
+            },
+            {
+              "kind": "field",
+              "name": "toggle",
+              "privacy": "private"
+            },
+            {
+              "kind": "field",
+              "name": "signOut",
+              "privacy": "private"
+            },
+            {
+              "kind": "field",
+              "name": "onKeyDown",
+              "privacy": "private"
+            }
+          ],
+          "events": [
+            {
+              "description": "The user activated \"Sign out\" (no detail); host tears down the session.",
+              "name": "sign-out"
+            }
+          ],
+          "attributes": [
+            {
+              "name": "webid",
+              "type": {
+                "text": "string | null"
+              },
+              "description": "The authenticated user's WebID (shown under the name; the canonical id).",
+              "default": "null",
+              "fieldName": "webId"
+            },
+            {
+              "name": "name",
+              "type": {
+                "text": "string | null"
+              },
+              "description": "Human display name (foaf:name). Falls back to the WebID, then \"Account\".",
+              "default": "null",
+              "fieldName": "name"
+            },
+            {
+              "name": "avatar-url",
+              "type": {
+                "text": "string | null"
+              },
+              "description": "Avatar image URL (foaf:img / vcard:hasPhoto). Falls back to initials.",
+              "default": "null",
+              "fieldName": "avatarUrl"
+            }
+          ],
+          "superclass": {
+            "name": "LitElement",
+            "package": "lit"
+          },
+          "summary": "Account avatar + dropdown with WebID and sign-out.",
+          "tagName": "jeswr-account-menu",
+          "customElement": true
+        }
+      ],
+      "exports": [
+        {
+          "kind": "js",
+          "name": "initials",
+          "declaration": {
+            "name": "initials",
+            "module": "src/components/account-menu.ts"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "JeswrAccountMenu",
+          "declaration": {
+            "name": "JeswrAccountMenu",
+            "module": "src/components/account-menu.ts"
+          }
+        },
+        {
+          "kind": "custom-element-definition",
+          "name": "jeswr-account-menu",
+          "declaration": {
+            "name": "JeswrAccountMenu",
+            "module": "src/components/account-menu.ts"
+          }
+        }
+      ]
+    },
+    {
+      "kind": "javascript-module",
+      "path": "src/components/empty-state.ts",
+      "declarations": [
+        {
+          "kind": "class",
+          "description": "A centred \"nothing here yet\" placeholder with named slots for an icon, title,\ndescription, and an action. Presentation chrome — no RDF data model.",
+          "name": "JeswrEmptyState",
+          "cssProperties": [
+            {
+              "description": "Icon + description colour.",
+              "name": "--jeswr-muted-fg"
+            }
+          ],
+          "cssParts": [
+            {
+              "description": "The centred wrapper.",
+              "name": "wrap"
+            },
+            {
+              "description": "The rendered heading (when set via the `heading` attribute).",
+              "name": "title"
+            },
+            {
+              "description": "The rendered description (when set via the attribute).",
+              "name": "description"
+            },
+            {
+              "description": "The action slot container.",
+              "name": "action"
+            }
+          ],
+          "slots": [
+            {
+              "description": "An icon shown above the heading.",
+              "name": "icon"
+            },
+            {
+              "description": "The heading (alternative to the `heading` attribute).",
+              "name": "title"
+            },
+            {
+              "description": "The description (alternative to the `description` attribute).",
+              "name": "description"
+            },
+            {
+              "description": "An action, e.g. a button.",
+              "name": "action"
+            }
+          ],
+          "members": [
+            {
+              "kind": "field",
+              "name": "heading",
+              "privacy": "public",
+              "type": {
+                "text": "string | null"
+              },
+              "description": "Optional heading text (alternative to the `title` slot).",
+              "default": "null",
+              "attribute": "heading",
+              "reflects": true
+            },
+            {
+              "kind": "field",
+              "name": "description",
+              "privacy": "public",
+              "type": {
+                "text": "string | null"
+              },
+              "description": "Optional description text (alternative to the `description` slot).",
+              "default": "null",
+              "attribute": "description",
+              "reflects": true
+            }
+          ],
+          "attributes": [
+            {
+              "name": "heading",
+              "type": {
+                "text": "string | null"
+              },
+              "description": "Optional heading text (alternative to the `title` slot).",
+              "default": "null",
+              "fieldName": "heading"
+            },
+            {
+              "name": "description",
+              "type": {
+                "text": "string | null"
+              },
+              "description": "Optional description text (alternative to the `description` slot).",
+              "default": "null",
+              "fieldName": "description"
+            }
+          ],
+          "superclass": {
+            "name": "LitElement",
+            "package": "lit"
+          },
+          "summary": "Empty-state placeholder.",
+          "tagName": "jeswr-empty-state",
+          "customElement": true
+        }
+      ],
+      "exports": [
+        {
+          "kind": "js",
+          "name": "JeswrEmptyState",
+          "declaration": {
+            "name": "JeswrEmptyState",
+            "module": "src/components/empty-state.ts"
+          }
+        },
+        {
+          "kind": "custom-element-definition",
+          "name": "jeswr-empty-state",
+          "declaration": {
+            "name": "JeswrEmptyState",
+            "module": "src/components/empty-state.ts"
+          }
+        }
+      ]
+    },
+    {
+      "kind": "javascript-module",
+      "path": "src/components/error-state.ts",
+      "declarations": [
+        {
+          "kind": "class",
+          "description": "The error sibling of `<jeswr-empty-state>`: same named slots, styled with the\ndestructive token and `role=\"alert\"`. Presentation chrome — no RDF data model.",
+          "name": "JeswrErrorState",
+          "cssProperties": [
+            {
+              "description": "Icon + heading colour.",
+              "name": "--jeswr-destructive"
+            },
+            {
+              "description": "Description colour.",
+              "name": "--jeswr-muted-fg"
+            }
+          ],
+          "cssParts": [
+            {
+              "description": "The centred wrapper (carries `role=\"alert\"`).",
+              "name": "wrap"
+            },
+            {
+              "description": "The default alert icon (when no `icon` slot content is supplied).",
+              "name": "icon"
+            },
+            {
+              "description": "The rendered heading (when set via the `heading` attribute).",
+              "name": "title"
+            },
+            {
+              "description": "The rendered description (when set via the attribute).",
+              "name": "description"
+            },
+            {
+              "description": "The action slot container.",
+              "name": "action"
+            }
+          ],
+          "slots": [
+            {
+              "description": "Override the default alert icon.",
+              "name": "icon"
+            },
+            {
+              "description": "The heading (alternative to the `heading` attribute).",
+              "name": "title"
+            },
+            {
+              "description": "The description (alternative to the `description` attribute).",
+              "name": "description"
+            },
+            {
+              "description": "An action, e.g. a \"Retry\" button.",
+              "name": "action"
+            }
+          ],
+          "members": [
+            {
+              "kind": "field",
+              "name": "heading",
+              "privacy": "public",
+              "type": {
+                "text": "string | null"
+              },
+              "description": "Optional heading text (alternative to the `title` slot).",
+              "default": "null",
+              "attribute": "heading",
+              "reflects": true
+            },
+            {
+              "kind": "field",
+              "name": "description",
+              "privacy": "public",
+              "type": {
+                "text": "string | null"
+              },
+              "description": "Optional description text (alternative to the `description` slot).",
+              "default": "null",
+              "attribute": "description",
+              "reflects": true
+            }
+          ],
+          "attributes": [
+            {
+              "name": "heading",
+              "type": {
+                "text": "string | null"
+              },
+              "description": "Optional heading text (alternative to the `title` slot).",
+              "default": "null",
+              "fieldName": "heading"
+            },
+            {
+              "name": "description",
+              "type": {
+                "text": "string | null"
+              },
+              "description": "Optional description text (alternative to the `description` slot).",
+              "default": "null",
+              "fieldName": "description"
+            }
+          ],
+          "superclass": {
+            "name": "LitElement",
+            "package": "lit"
+          },
+          "summary": "Error-state placeholder with `role=\"alert\"`.",
+          "tagName": "jeswr-error-state",
+          "customElement": true
+        }
+      ],
+      "exports": [
+        {
+          "kind": "js",
+          "name": "JeswrErrorState",
+          "declaration": {
+            "name": "JeswrErrorState",
+            "module": "src/components/error-state.ts"
+          }
+        },
+        {
+          "kind": "custom-element-definition",
+          "name": "jeswr-error-state",
+          "declaration": {
+            "name": "JeswrErrorState",
+            "module": "src/components/error-state.ts"
+          }
+        }
+      ]
+    },
+    {
+      "kind": "javascript-module",
+      "path": "src/components/feedback-button.ts",
+      "declarations": [
+        {
+          "kind": "class",
+          "description": "The suite's shared \"report issue / give feedback / request help\" control. Either\nfiles the issue via an injected `submit` proxy (no GitHub account needed) or\nopens GitHub's prefilled new-issue page. Presentation chrome — no RDF data model.",
+          "name": "JeswrFeedbackButton",
+          "cssProperties": [
+            {
+              "description": "Hover background.",
+              "name": "--jeswr-accent"
+            },
+            {
+              "description": "Hover foreground.",
+              "name": "--jeswr-accent-fg"
+            },
+            {
+              "description": "Textarea background.",
+              "name": "--jeswr-bg"
+            },
+            {
+              "description": "Field + card borders.",
+              "name": "--jeswr-border"
+            },
+            {
+              "description": "Error-message colour.",
+              "name": "--jeswr-destructive"
+            },
+            {
+              "description": "Textarea text colour.",
+              "name": "--jeswr-fg"
+            },
+            {
+              "description": "Diagnostics note colour.",
+              "name": "--jeswr-muted-fg"
+            },
+            {
+              "description": "Dialog background.",
+              "name": "--jeswr-popover"
+            },
+            {
+              "description": "Dialog foreground.",
+              "name": "--jeswr-popover-fg"
+            },
+            {
+              "description": "Issue-link colour.",
+              "name": "--jeswr-primary"
+            },
+            {
+              "description": "Corner radius.",
+              "name": "--jeswr-radius"
+            },
+            {
+              "description": "Focus-ring + selected-category colour.",
+              "name": "--jeswr-ring"
+            }
+          ],
+          "cssParts": [
+            {
+              "description": "The button that opens the feedback dialog.",
+              "name": "trigger"
+            },
+            {
+              "description": "The trigger's chat-bubble icon.",
+              "name": "icon"
+            },
+            {
+              "description": "The trigger's text label.",
+              "name": "label"
+            },
+            {
+              "description": "The full-screen modal overlay.",
+              "name": "overlay"
+            },
+            {
+              "description": "The dimmed, click-to-close backdrop.",
+              "name": "backdrop"
+            },
+            {
+              "description": "The dialog surface.",
+              "name": "dialog"
+            },
+            {
+              "description": "The dialog heading.",
+              "name": "title"
+            }
+          ],
+          "members": [
+            {
+              "kind": "field",
+              "name": "repo",
+              "privacy": "public",
+              "type": {
+                "text": "string"
+              },
+              "description": "REQUIRED: the OWNER/REPO the issue is filed against (each app passes its OWN).",
+              "default": "\"\"",
+              "attribute": "repo",
+              "reflects": true
+            },
+            {
+              "kind": "field",
+              "name": "appName",
+              "privacy": "public",
+              "type": {
+                "text": "string"
+              },
+              "description": "This app's human name, attached to diagnostics + used in the dialog copy.",
+              "default": "\"\"",
+              "attribute": "app-name",
+              "reflects": true
+            },
+            {
+              "kind": "field",
+              "name": "appVersion",
+              "privacy": "public",
+              "type": {
+                "text": "string | null"
+              },
+              "description": "Optional build SHA / version, attached to diagnostics.",
+              "default": "null",
+              "attribute": "app-version",
+              "reflects": true
+            },
+            {
+              "kind": "field",
+              "name": "webId",
+              "privacy": "public",
+              "type": {
+                "text": "string | null"
+              },
+              "description": "The signed-in user's WebID. Attached ONLY if the consent box is ticked.",
+              "default": "null",
+              "attribute": "webid",
+              "reflects": true
+            },
+            {
+              "kind": "field",
+              "name": "label",
+              "privacy": "public",
+              "type": {
+                "text": "string"
+              },
+              "description": "Trigger label (default \"Feedback\").",
+              "default": "\"Feedback\"",
+              "attribute": "label",
+              "reflects": true
+            },
+            {
+              "kind": "field",
+              "name": "submit",
+              "privacy": "public",
+              "type": {
+                "text": "(payload: FeedbackPayload) => Promise<FeedbackSubmitResult> | undefined"
+              },
+              "description": "Optional proxy hook — create the issue server-side."
+            },
+            {
+              "kind": "field",
+              "name": "previouslyFocused",
+              "type": {
+                "text": "HTMLElement | null"
+              },
+              "privacy": "private",
+              "default": "null"
+            },
+            {
+              "kind": "field",
+              "name": "openDialog",
+              "privacy": "private"
+            },
+            {
+              "kind": "field",
+              "name": "closeDialog",
+              "privacy": "private"
+            },
+            {
+              "kind": "field",
+              "name": "onKeyDown",
+              "privacy": "private"
+            },
+            {
+              "kind": "method",
+              "name": "tabbable",
+              "privacy": "private",
+              "return": {
+                "type": {
+                  "text": "HTMLElement[]"
+                }
+              },
+              "parameters": [
+                {
+                  "name": "root",
+                  "type": {
+                    "text": "HTMLElement"
+                  }
+                }
+              ],
+              "description": "The tabbable elements within `root`, collapsing each radio group to the\nsingle member that participates in tab order (the checked radio, or the\nfirst if none is checked) — mirroring the browser's real tab sequence so\nShift+Tab wrapping is correct after a non-default category is selected."
+            },
+            {
+              "kind": "method",
+              "name": "buildPayload",
+              "privacy": "private",
+              "return": {
+                "type": {
+                  "text": "FeedbackPayload"
+                }
+              }
+            },
+            {
+              "kind": "field",
+              "name": "handleSubmit",
+              "privacy": "private"
+            },
+            {
+              "kind": "method",
+              "name": "renderSuccessBody",
+              "privacy": "private",
+              "parameters": [
+                {
+                  "name": "result",
+                  "type": {
+                    "text": "FeedbackSubmitResult"
+                  }
+                }
+              ],
+              "description": "The success body (shown once the proxy `submit` resolved): the issue link + Close."
+            },
+            {
+              "kind": "method",
+              "name": "renderCategoryChooser",
+              "privacy": "private",
+              "description": "The category radio group (one selectable card per FEEDBACK_CATEGORY)."
+            },
+            {
+              "kind": "method",
+              "name": "renderForm",
+              "privacy": "private",
+              "parameters": [
+                {
+                  "name": "versionLabel",
+                  "type": {
+                    "text": "string"
+                  }
+                }
+              ],
+              "description": "The feedback form (category + description + optional consent + actions)."
+            },
+            {
+              "kind": "method",
+              "name": "renderDialog",
+              "privacy": "private"
+            }
+          ],
+          "events": [
+            {
+              "description": "Submitted; `detail` is the FeedbackPayload (fires for both mechanisms).",
+              "name": "feedback-submit"
+            }
+          ],
+          "attributes": [
+            {
+              "name": "repo",
+              "type": {
+                "text": "string"
+              },
+              "description": "REQUIRED: the OWNER/REPO the issue is filed against (each app passes its OWN).",
+              "default": "\"\"",
+              "fieldName": "repo"
+            },
+            {
+              "name": "app-name",
+              "type": {
+                "text": "string"
+              },
+              "description": "This app's human name, attached to diagnostics + used in the dialog copy.",
+              "default": "\"\"",
+              "fieldName": "appName"
+            },
+            {
+              "name": "app-version",
+              "type": {
+                "text": "string | null"
+              },
+              "description": "Optional build SHA / version, attached to diagnostics.",
+              "default": "null",
+              "fieldName": "appVersion"
+            },
+            {
+              "name": "webid",
+              "type": {
+                "text": "string | null"
+              },
+              "description": "The signed-in user's WebID. Attached ONLY if the consent box is ticked.",
+              "default": "null",
+              "fieldName": "webId"
+            },
+            {
+              "name": "label",
+              "type": {
+                "text": "string"
+              },
+              "description": "Trigger label (default \"Feedback\").",
+              "default": "\"Feedback\"",
+              "fieldName": "label"
+            }
+          ],
+          "superclass": {
+            "name": "LitElement",
+            "package": "lit"
+          },
+          "summary": "Feedback dialog that files a GitHub issue.",
+          "tagName": "jeswr-feedback-button",
+          "customElement": true
+        }
+      ],
+      "exports": [
+        {
+          "kind": "js",
+          "name": "JeswrFeedbackButton",
+          "declaration": {
+            "name": "JeswrFeedbackButton",
+            "module": "src/components/feedback-button.ts"
+          }
+        },
+        {
+          "kind": "custom-element-definition",
+          "name": "jeswr-feedback-button",
+          "declaration": {
+            "name": "JeswrFeedbackButton",
+            "module": "src/components/feedback-button.ts"
+          }
+        }
+      ]
+    },
+    {
+      "kind": "javascript-module",
+      "path": "src/components/loading.ts",
+      "declarations": [
+        {
+          "kind": "class",
+          "description": "A spinner with an optional label, announced via `role=\"status\"` and respecting\n`prefers-reduced-motion`. Presentation chrome — no RDF data model.",
+          "name": "JeswrLoading",
+          "cssProperties": [
+            {
+              "description": "Spinner track colour.",
+              "name": "--jeswr-border"
+            },
+            {
+              "description": "Spinner active-arc colour.",
+              "name": "--jeswr-primary"
+            },
+            {
+              "description": "Label colour.",
+              "name": "--jeswr-muted-fg"
+            }
+          ],
+          "cssParts": [
+            {
+              "description": "The `role=\"status\"` wrapper.",
+              "name": "status"
+            },
+            {
+              "description": "The animated spinner.",
+              "name": "spinner"
+            },
+            {
+              "description": "The optional label text.",
+              "name": "label"
+            }
+          ],
+          "members": [
+            {
+              "kind": "field",
+              "name": "label",
+              "privacy": "public",
+              "type": {
+                "text": "string | null"
+              },
+              "description": "Optional text shown next to the spinner (also the accessible name).",
+              "default": "null",
+              "attribute": "label",
+              "reflects": true
+            }
+          ],
+          "attributes": [
+            {
+              "name": "label",
+              "type": {
+                "text": "string | null"
+              },
+              "description": "Optional text shown next to the spinner (also the accessible name).",
+              "default": "null",
+              "fieldName": "label"
+            }
+          ],
+          "superclass": {
+            "name": "LitElement",
+            "package": "lit"
+          },
+          "summary": "Loading spinner with optional label.",
+          "tagName": "jeswr-loading",
+          "customElement": true
+        }
+      ],
+      "exports": [
+        {
+          "kind": "js",
+          "name": "JeswrLoading",
+          "declaration": {
+            "name": "JeswrLoading",
+            "module": "src/components/loading.ts"
+          }
+        },
+        {
+          "kind": "custom-element-definition",
+          "name": "jeswr-loading",
+          "declaration": {
+            "name": "JeswrLoading",
+            "module": "src/components/loading.ts"
+          }
+        }
+      ]
+    },
+    {
+      "kind": "javascript-module",
+      "path": "src/components/login-panel.ts",
+      "declarations": [
+        {
+          "kind": "class",
+          "description": "The suite's keystone login surface as a framework-agnostic Web Component. Wraps\nthe reactive-auth DPoP login flow + silent session restore behind the injected\nLoginController seam. Presentation/auth chrome — no RDF data model (the WebID is\nan identity, surfaced via the `.webId` accessor + the `session-change` event).",
+          "name": "JeswrLoginPanel",
+          "cssProperties": [
+            {
+              "description": "Hover background.",
+              "name": "--jeswr-accent"
+            },
+            {
+              "description": "Hover foreground.",
+              "name": "--jeswr-accent-fg"
+            },
+            {
+              "description": "Input background.",
+              "name": "--jeswr-bg"
+            },
+            {
+              "description": "Panel + field borders.",
+              "name": "--jeswr-border"
+            },
+            {
+              "description": "Error-message colour.",
+              "name": "--jeswr-destructive"
+            },
+            {
+              "description": "Input text colour.",
+              "name": "--jeswr-fg"
+            },
+            {
+              "description": "Secondary text colour.",
+              "name": "--jeswr-muted-fg"
+            },
+            {
+              "description": "Panel background.",
+              "name": "--jeswr-popover"
+            },
+            {
+              "description": "Panel foreground.",
+              "name": "--jeswr-popover-fg"
+            },
+            {
+              "description": "Primary button background + link colour.",
+              "name": "--jeswr-primary"
+            },
+            {
+              "description": "Primary button foreground.",
+              "name": "--jeswr-primary-fg"
+            },
+            {
+              "description": "Corner radius.",
+              "name": "--jeswr-radius"
+            },
+            {
+              "description": "Focus-ring colour.",
+              "name": "--jeswr-ring"
+            }
+          ],
+          "cssParts": [
+            {
+              "description": "The panel container.",
+              "name": "panel"
+            },
+            {
+              "description": "The \"Sign in\" / \"Signed in\" heading.",
+              "name": "heading"
+            },
+            {
+              "description": "The \"Restoring your session…\" status row.",
+              "name": "restoring"
+            },
+            {
+              "description": "The recent-accounts list container.",
+              "name": "accounts"
+            },
+            {
+              "description": "A recent-account button.",
+              "name": "account"
+            },
+            {
+              "description": "A recent-account / signed-in avatar.",
+              "name": "avatar"
+            },
+            {
+              "description": "The \"Use a different WebID\" link button.",
+              "name": "add-account"
+            },
+            {
+              "description": "The WebID-entry form.",
+              "name": "form"
+            },
+            {
+              "description": "The WebID URL input.",
+              "name": "webid-input"
+            },
+            {
+              "description": "The \"Sign in\" submit button.",
+              "name": "login-button"
+            },
+            {
+              "description": "The signed-in summary container.",
+              "name": "signed-in"
+            },
+            {
+              "description": "The displayed WebID line.",
+              "name": "webid"
+            },
+            {
+              "description": "The \"Sign out\" button.",
+              "name": "logout-button"
+            },
+            {
+              "description": "The error message line.",
+              "name": "error"
+            },
+            {
+              "description": "The \"auth not configured\" notice (no controller).",
+              "name": "not-configured"
+            }
+          ],
+          "slots": [
+            {
+              "description": "Content shown in the signed-in state (e.g. account links).",
+              "name": ""
+            }
+          ],
+          "members": [
+            {
+              "kind": "field",
+              "name": "controller",
+              "privacy": "public",
+              "type": {
+                "text": "LoginController | undefined"
+              },
+              "description": "The injected LoginController (the auth seam)."
+            },
+            {
+              "kind": "field",
+              "name": "initialWebId",
+              "privacy": "public",
+              "type": {
+                "text": "string"
+              },
+              "description": "Optional pre-filled WebID for the input.",
+              "default": "\"\"",
+              "attribute": "initial-webid"
+            },
+            {
+              "kind": "field",
+              "name": "autoRestore",
+              "privacy": "public",
+              "type": {
+                "text": "boolean"
+              },
+              "description": "Attempt silent restore on connect (default true).",
+              "default": "true",
+              "attribute": "auto-restore",
+              "reflects": true
+            },
+            {
+              "kind": "field",
+              "name": "heading",
+              "privacy": "public",
+              "type": {
+                "text": "string"
+              },
+              "description": "Optional heading copy (default \"Sign in\").",
+              "default": "\"Sign in\"",
+              "attribute": "heading"
+            },
+            {
+              "kind": "field",
+              "name": "#nativeFetch",
+              "privacy": "private",
+              "type": {
+                "text": "typeof fetch | undefined"
+              },
+              "readonly": true,
+              "default": "PANEL_PRISTINE_FETCH",
+              "description": "The fallback `.publicFetch` source until a controller is wired (after which\n`.publicFetch` relays the controller's own pristine snapshot). Uses the\nMODULE-LOAD snapshot (taken before any patching), NOT a construction-time re-read\nof the global — so an unwired panel never exposes a patched/credentialed global\nas the pristine fetch."
+            },
+            {
+              "kind": "field",
+              "name": "#restoreStarted",
+              "privacy": "private",
+              "type": {
+                "text": "boolean"
+              },
+              "default": "false",
+              "description": "Single-flight guard so StrictMode / re-connect runs restore once."
+            },
+            {
+              "kind": "field",
+              "name": "#webIdEdited",
+              "privacy": "private",
+              "type": {
+                "text": "boolean"
+              },
+              "default": "false",
+              "description": "Whether the user has TYPED in the WebID input. While false, the input tracks the\n`initial-webid` property (so changing `initial-webid` after connect updates the\nfield); once the user edits, their input is preserved."
+            },
+            {
+              "kind": "field",
+              "name": "#generation",
+              "privacy": "private",
+              "type": {
+                "text": "number"
+              },
+              "default": "0",
+              "description": "Incremented on disconnect / new login so a stale async result is ignored."
+            },
+            {
+              "kind": "field",
+              "name": "fetch",
+              "type": {
+                "text": "typeof fetch"
+              },
+              "description": "The AUTHENTICATED, session-bound fetch (after login). Before a session\nexists — or with no controller — this is the pristine native fetch, so it is\nalways safe to call and never null. Use for the user's OWN origin(s).",
+              "readonly": true
+            },
+            {
+              "kind": "field",
+              "name": "publicFetch",
+              "type": {
+                "text": "typeof fetch"
+              },
+              "description": "The PRISTINE native fetch (the foreign-origin / public-read boundary). NEVER\ncarries the session and never upgrades on a 401, so a session token cannot\nleak cross-origin. Prefers the controller's own pre-patch snapshot; falls\nback to the element's construction-time snapshot.",
+              "readonly": true
+            },
+            {
+              "kind": "field",
+              "name": "webId",
+              "type": {
+                "text": "string | null"
+              },
+              "description": "The authenticated WebID, or null when logged out / no controller.",
+              "readonly": true
+            },
+            {
+              "kind": "method",
+              "name": "#publicFetchFallback",
+              "privacy": "private",
+              "return": {
+                "type": {
+                  "text": "typeof fetch"
+                }
+              }
+            },
+            {
+              "kind": "method",
+              "name": "#reconcilePhase",
+              "privacy": "private",
+              "return": {
+                "type": {
+                  "text": "void"
+                }
+              },
+              "description": "Sync `_phase` to the controller's CURRENT session: authenticated iff\n`controller.webId`, else leave a restore-in-flight as-is, else the prompt. Cheap,\nidempotent, no async — run on connect so the UI never shows a phase that\ncontradicts the controller (e.g. a stale \"authenticated\"/\"authenticating\" left by\nan interrupted login when the controller actually has no session)."
+            },
+            {
+              "kind": "method",
+              "name": "#maybeStartRestore",
+              "privacy": "private",
+              "return": {
+                "type": {
+                  "text": "void"
+                }
+              },
+              "description": "Begin the on-load silent restore exactly once, when a controller is present\nand auto-restore is on. If already logged in (controller has a webId), reflect\nthat immediately. Fail-closed: any restore error → the login prompt."
+            },
+            {
+              "kind": "field",
+              "name": "#doLogin",
+              "privacy": "private",
+              "description": "Run interactive login for a specific WebID (or undefined → re-login)."
+            },
+            {
+              "kind": "field",
+              "name": "#onSubmit",
+              "privacy": "private"
+            },
+            {
+              "kind": "field",
+              "name": "#onLogout",
+              "privacy": "private"
+            },
+            {
+              "kind": "method",
+              "name": "#emitSessionChange",
+              "privacy": "private",
+              "return": {
+                "type": {
+                  "text": "void"
+                }
+              },
+              "description": "Emit `session-change` reflecting the CURRENT controller session."
+            },
+            {
+              "kind": "method",
+              "name": "renderAccount",
+              "privacy": "private",
+              "parameters": [
+                {
+                  "name": "account",
+                  "type": {
+                    "text": "RecentLoginAccount"
+                  }
+                }
+              ]
+            },
+            {
+              "kind": "method",
+              "name": "renderPrompt",
+              "privacy": "private"
+            },
+            {
+              "kind": "method",
+              "name": "renderAuthenticated",
+              "privacy": "private"
+            }
+          ],
+          "events": [
+            {
+              "name": "session-change",
+              "type": {
+                "text": "CustomEvent"
+              },
+              "description": "Session changed; `detail: { webId: string | null, loggedIn: boolean }`."
+            },
+            {
+              "description": "Interactive login succeeded; `detail: { webId: string }`.",
+              "name": "login"
+            },
+            {
+              "description": "The user signed out (no detail).",
+              "name": "logout"
+            }
+          ],
+          "attributes": [
+            {
+              "name": "initial-webid",
+              "type": {
+                "text": "string"
+              },
+              "description": "Optional pre-filled WebID for the input.",
+              "default": "\"\"",
+              "fieldName": "initialWebId"
+            },
+            {
+              "name": "auto-restore",
+              "type": {
+                "text": "boolean"
+              },
+              "description": "Attempt silent restore on connect (default true).",
+              "default": "true",
+              "fieldName": "autoRestore"
+            },
+            {
+              "name": "heading",
+              "type": {
+                "text": "string"
+              },
+              "description": "Optional heading copy (default \"Sign in\").",
+              "default": "\"Sign in\"",
+              "fieldName": "heading"
+            }
+          ],
+          "superclass": {
+            "name": "LitElement",
+            "package": "lit"
+          },
+          "summary": "Solid WebID login panel with silent session restore.",
+          "tagName": "jeswr-login-panel",
+          "customElement": true
+        },
+        {
+          "kind": "function",
+          "name": "initialsOf",
+          "return": {
+            "type": {
+              "text": "string"
+            }
+          },
+          "parameters": [
+            {
+              "name": "value",
+              "type": {
+                "text": "string"
+              }
+            }
+          ],
+          "description": "Avatar-fallback initials from a display name or a WebID. Exported for tests."
+        }
+      ],
+      "exports": [
+        {
+          "kind": "js",
+          "name": "JeswrLoginPanel",
+          "declaration": {
+            "name": "JeswrLoginPanel",
+            "module": "src/components/login-panel.ts"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "initialsOf",
+          "declaration": {
+            "name": "initialsOf",
+            "module": "src/components/login-panel.ts"
+          }
+        },
+        {
+          "kind": "custom-element-definition",
+          "name": "jeswr-login-panel",
+          "declaration": {
+            "name": "JeswrLoginPanel",
+            "module": "src/components/login-panel.ts"
+          }
+        }
+      ]
+    },
+    {
+      "kind": "javascript-module",
+      "path": "src/components/saving-indicator.ts",
+      "declarations": [
+        {
+          "kind": "class",
+          "description": "The small, non-intrusive \"Saving… / Saved / Error\" cue for the suite's\noptimistic-mutation UX. A `state` attribute selects the rendering. Respects\n`prefers-reduced-motion`. Presentation chrome — no RDF data model.",
+          "name": "JeswrSavingIndicator",
+          "cssProperties": [
+            {
+              "description": "Spinner track colour.",
+              "name": "--jeswr-border"
+            },
+            {
+              "description": "Spinner active-arc colour.",
+              "name": "--jeswr-primary"
+            },
+            {
+              "description": "Default text colour.",
+              "name": "--jeswr-muted-fg"
+            },
+            {
+              "description": "Error-state colour.",
+              "name": "--jeswr-destructive"
+            }
+          ],
+          "cssParts": [
+            {
+              "description": "The `role=\"status\"` wrapper.",
+              "name": "status"
+            },
+            {
+              "description": "The spinner shown in the \"saving\" state.",
+              "name": "spinner"
+            },
+            {
+              "description": "The check/alert glyph (saved/error states).",
+              "name": "glyph"
+            },
+            {
+              "description": "The status text.",
+              "name": "label"
+            }
+          ],
+          "members": [
+            {
+              "kind": "field",
+              "name": "state",
+              "privacy": "public",
+              "type": {
+                "text": "SavingState"
+              },
+              "description": "The current mutation state. Reflected to the `state` attribute.",
+              "default": "\"idle\"",
+              "attribute": "state",
+              "reflects": true
+            },
+            {
+              "kind": "field",
+              "name": "savingLabel",
+              "privacy": "public",
+              "type": {
+                "text": "string"
+              },
+              "default": "\"Saving…\"",
+              "attribute": "saving-label",
+              "reflects": true
+            },
+            {
+              "kind": "field",
+              "name": "savedLabel",
+              "privacy": "public",
+              "type": {
+                "text": "string"
+              },
+              "default": "\"Saved\"",
+              "attribute": "saved-label",
+              "reflects": true
+            },
+            {
+              "kind": "field",
+              "name": "errorLabel",
+              "privacy": "public",
+              "type": {
+                "text": "string"
+              },
+              "default": "\"Error\"",
+              "attribute": "error-label",
+              "reflects": true
+            },
+            {
+              "kind": "field",
+              "name": "safeState",
+              "type": {
+                "text": "SavingState"
+              },
+              "privacy": "private",
+              "readonly": true
+            }
+          ],
+          "attributes": [
+            {
+              "name": "state",
+              "type": {
+                "text": "SavingState"
+              },
+              "description": "The current mutation state. Reflected to the `state` attribute.",
+              "default": "\"idle\"",
+              "fieldName": "state"
+            },
+            {
+              "name": "saving-label",
+              "type": {
+                "text": "string"
+              },
+              "default": "\"Saving…\"",
+              "fieldName": "savingLabel"
+            },
+            {
+              "name": "saved-label",
+              "type": {
+                "text": "string"
+              },
+              "default": "\"Saved\"",
+              "fieldName": "savedLabel"
+            },
+            {
+              "name": "error-label",
+              "type": {
+                "text": "string"
+              },
+              "default": "\"Error\"",
+              "fieldName": "errorLabel"
+            }
+          ],
+          "superclass": {
+            "name": "LitElement",
+            "package": "lit"
+          },
+          "summary": "Saving/saved/error status indicator.",
+          "tagName": "jeswr-saving-indicator",
+          "customElement": true
+        }
+      ],
+      "exports": [
+        {
+          "kind": "js",
+          "name": "JeswrSavingIndicator",
+          "declaration": {
+            "name": "JeswrSavingIndicator",
+            "module": "src/components/saving-indicator.ts"
+          }
+        },
+        {
+          "kind": "custom-element-definition",
+          "name": "jeswr-saving-indicator",
+          "declaration": {
+            "name": "JeswrSavingIndicator",
+            "module": "src/components/saving-indicator.ts"
+          }
+        }
+      ]
+    },
+    {
+      "kind": "javascript-module",
+      "path": "src/components/theme-toggle.ts",
+      "declarations": [
+        {
+          "kind": "class",
+          "description": "A framework-agnostic light/dark/system colour-theme switcher. Co-operative with\n`@jeswr/app-shell`'s React ThemeProvider (same storage key + `.dark` class).\nPresentation/behaviour chrome — no RDF data model.",
+          "name": "JeswrThemeToggle",
+          "cssProperties": [
+            {
+              "description": "Hover background (inherits app-shell `--accent`).",
+              "name": "--jeswr-accent"
+            },
+            {
+              "description": "Hover foreground (inherits `--accent-foreground`).",
+              "name": "--jeswr-accent-fg"
+            },
+            {
+              "description": "Corner radius (inherits `--radius`).",
+              "name": "--jeswr-radius"
+            },
+            {
+              "description": "Focus-ring colour (inherits `--ring`).",
+              "name": "--jeswr-ring"
+            }
+          ],
+          "cssParts": [
+            {
+              "description": "The clickable toggle button.",
+              "name": "button"
+            },
+            {
+              "description": "The sun/moon/monitor SVG icon.",
+              "name": "icon"
+            },
+            {
+              "description": "The current-mode text label (\"Light\"/\"Dark\"/\"System\").",
+              "name": "label"
+            }
+          ],
+          "members": [
+            {
+              "kind": "field",
+              "name": "theme",
+              "privacy": "public",
+              "type": {
+                "text": "Theme"
+              },
+              "description": "The user's selected preference. Reflected to the `theme` attribute.",
+              "default": "\"system\"",
+              "attribute": "theme",
+              "reflects": true
+            },
+            {
+              "kind": "field",
+              "name": "resolvedTheme",
+              "privacy": "public",
+              "type": {
+                "text": "ResolvedTheme"
+              },
+              "description": "The concrete mode applied right now. Reflected to `resolved-theme`.",
+              "default": "\"light\"",
+              "attribute": "resolved-theme",
+              "reflects": true
+            },
+            {
+              "kind": "field",
+              "name": "mql",
+              "type": {
+                "text": "MediaQueryList | null"
+              },
+              "privacy": "private",
+              "default": "null"
+            },
+            {
+              "kind": "field",
+              "name": "onSystemChange",
+              "privacy": "private",
+              "readonly": true
+            },
+            {
+              "kind": "method",
+              "name": "applyTheme",
+              "privacy": "private",
+              "return": {
+                "type": {
+                  "text": "void"
+                }
+              },
+              "parameters": [
+                {
+                  "name": "theme",
+                  "type": {
+                    "text": "Theme"
+                  }
+                },
+                {
+                  "name": "persist",
+                  "type": {
+                    "text": "boolean"
+                  }
+                }
+              ],
+              "description": "Set the preference, resolve + apply it to <html>, (un)subscribe to the OS\nmedia query, and (when `persist`) save it. Emits `theme-change`."
+            },
+            {
+              "kind": "method",
+              "name": "syncMediaListener",
+              "privacy": "private",
+              "return": {
+                "type": {
+                  "text": "void"
+                }
+              },
+              "parameters": [
+                {
+                  "name": "theme",
+                  "type": {
+                    "text": "Theme"
+                  }
+                }
+              ],
+              "description": "Subscribe to prefers-color-scheme only while in \"system\" mode."
+            },
+            {
+              "kind": "method",
+              "name": "teardownMediaListener",
+              "privacy": "private",
+              "return": {
+                "type": {
+                  "text": "void"
+                }
+              }
+            },
+            {
+              "kind": "field",
+              "name": "onClick",
+              "privacy": "private"
+            }
+          ],
+          "events": [
+            {
+              "name": "theme-change",
+              "type": {
+                "text": "CustomEvent"
+              },
+              "description": "The theme changed; `detail: { theme, resolvedTheme }`."
+            }
+          ],
+          "attributes": [
+            {
+              "name": "theme",
+              "type": {
+                "text": "Theme"
+              },
+              "description": "The user's selected preference. Reflected to the `theme` attribute.",
+              "default": "\"system\"",
+              "fieldName": "theme"
+            },
+            {
+              "name": "resolved-theme",
+              "type": {
+                "text": "ResolvedTheme"
+              },
+              "description": "The concrete mode applied right now. Reflected to `resolved-theme`.",
+              "default": "\"light\"",
+              "fieldName": "resolvedTheme"
+            }
+          ],
+          "superclass": {
+            "name": "LitElement",
+            "package": "lit"
+          },
+          "summary": "Light/dark/system theme toggle button.",
+          "tagName": "jeswr-theme-toggle",
+          "customElement": true
+        }
+      ],
+      "exports": [
+        {
+          "kind": "js",
+          "name": "JeswrThemeToggle",
+          "declaration": {
+            "name": "JeswrThemeToggle",
+            "module": "src/components/theme-toggle.ts"
+          }
+        },
+        {
+          "kind": "custom-element-definition",
+          "name": "jeswr-theme-toggle",
+          "declaration": {
+            "name": "JeswrThemeToggle",
+            "module": "src/components/theme-toggle.ts"
+          }
+        }
+      ]
+    },
+    {
+      "kind": "javascript-module",
+      "path": "src/index.ts",
+      "declarations": [],
+      "exports": [
+        {
+          "kind": "js",
+          "name": "initials",
+          "declaration": {
+            "name": "initials",
+            "module": "./components/account-menu.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "JeswrAccountMenu",
+          "declaration": {
+            "name": "JeswrAccountMenu",
+            "module": "./components/account-menu.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "JeswrEmptyState",
+          "declaration": {
+            "name": "JeswrEmptyState",
+            "module": "./components/empty-state.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "JeswrErrorState",
+          "declaration": {
+            "name": "JeswrErrorState",
+            "module": "./components/error-state.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "JeswrFeedbackButton",
+          "declaration": {
+            "name": "JeswrFeedbackButton",
+            "module": "./components/feedback-button.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "JeswrLoading",
+          "declaration": {
+            "name": "JeswrLoading",
+            "module": "./components/loading.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "initialsOf",
+          "declaration": {
+            "name": "initialsOf",
+            "module": "./components/login-panel.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "JeswrLoginPanel",
+          "declaration": {
+            "name": "JeswrLoginPanel",
+            "module": "./components/login-panel.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "JeswrSavingIndicator",
+          "declaration": {
+            "name": "JeswrSavingIndicator",
+            "module": "./components/saving-indicator.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "JeswrThemeToggle",
+          "declaration": {
+            "name": "JeswrThemeToggle",
+            "module": "./components/theme-toggle.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "buildIssueUrl",
+          "declaration": {
+            "name": "buildIssueUrl",
+            "module": "./feedback-core.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "composeIssueBody",
+          "declaration": {
+            "name": "composeIssueBody",
+            "module": "./feedback-core.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "composeIssueTitle",
+          "declaration": {
+            "name": "composeIssueTitle",
+            "module": "./feedback-core.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "FEEDBACK_CATEGORIES",
+          "declaration": {
+            "name": "FEEDBACK_CATEGORIES",
+            "module": "./feedback-core.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "feedbackLabels",
+          "declaration": {
+            "name": "feedbackLabels",
+            "module": "./feedback-core.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "isValidRepo",
+          "declaration": {
+            "name": "isValidRepo",
+            "module": "./feedback-core.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "sameWebId",
+          "declaration": {
+            "name": "sameWebId",
+            "module": "./login-controller.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "applyResolvedTheme",
+          "declaration": {
+            "name": "applyResolvedTheme",
+            "module": "./theme-core.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "nextTheme",
+          "declaration": {
+            "name": "nextTheme",
+            "module": "./theme-core.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "persistTheme",
+          "declaration": {
+            "name": "persistTheme",
+            "module": "./theme-core.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "readStoredTheme",
+          "declaration": {
+            "name": "readStoredTheme",
+            "module": "./theme-core.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "resolveTheme",
+          "declaration": {
+            "name": "resolveTheme",
+            "module": "./theme-core.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "systemPrefersDark",
+          "declaration": {
+            "name": "systemPrefersDark",
+            "module": "./theme-core.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "THEME_DARK_CLASS",
+          "declaration": {
+            "name": "THEME_DARK_CLASS",
+            "module": "./theme-core.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "THEME_STORAGE_KEY",
+          "declaration": {
+            "name": "THEME_STORAGE_KEY",
+            "module": "./theme-core.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "tokenStyles",
+          "declaration": {
+            "name": "tokenStyles",
+            "module": "./theme-tokens.js"
+          }
+        }
+      ]
+    }
+  ]
+}
