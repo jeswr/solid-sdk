@@ -1,0 +1,84 @@
+# AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+#
+@prefix media:   <https://w3id.org/jeswr/sectors/media#> .
+@prefix core:    <https://w3id.org/jeswr/core#> .
+@prefix owl:     <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix skos:    <http://www.w3.org/2004/02/skos/core#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix schema:  <https://schema.org/> .
+@prefix odrl:    <http://www.w3.org/ns/odrl/2/> .
+
+# =============================================================================
+# Solid Media & Activity — ALIGNMENTS (gUFO re-base, v1.0.0)
+#
+# Bridges the Solid-canonical media terms (media:) to the named external sector
+# vocabulary REQUIRED by the brief: schema.org (CreativeWork / MusicRecording /
+# MusicGroup / Event), plus a conceptual ODRL tie for the usage licence (R2).
+#
+# SEPARATED from media.ttl on purpose (R8 §2): loading this file pulls external
+# entailments into the reasoner; the consistency engine can omit it to reason
+# over a clean Core ∪ media. Mode A only.
+#
+# Alignment policy (R8 §3/§4, mirrors the core alignments file):
+#  - owl:equivalentClass / owl:equivalentProperty ONLY where genuinely
+#    co-extensional AND the external term is stable.
+#  - rdfs:subClassOf where the direction is safe and one side is strictly broader.
+#  - skos:closeMatch (annotation, NO entailment) where the match is approximate,
+#    or where schema.org's soft schema:domainIncludes/rangeIncludes (not rdfs
+#    domain/range) make a logical equivalence unsafe to import.
+# media: never silently inherits schema.org's commitments.
+# =============================================================================
+
+<https://w3id.org/jeswr/sectors/media/alignments> a owl:Ontology ;
+    dcterms:title "Solid Media & Activity — external alignments (gUFO re-base)"@en ;
+    owl:imports <https://w3id.org/jeswr/sectors/media> ;
+    owl:versionInfo "1.0.0" ;
+    owl:versionIRI <https://w3id.org/jeswr/sectors/media/alignments/1.0.0> ;
+    rdfs:comment "Mode-A thin alignments (separate file, not in the reasoned closure) to schema.org + a conceptual ODRL tie. Reuse-before-mint. "@en .
+
+dcterms:title a owl:AnnotationProperty .
+
+# --- Creative works ---
+# media:CreativeWork is NARROWER than schema:CreativeWork (also a core:Asset),
+# so subClassOf, not equivalentClass.
+media:CreativeWork    rdfs:subClassOf schema:CreativeWork ;
+                      skos:closeMatch schema:CreativeWork .
+media:MusicRecording  owl:equivalentClass schema:MusicRecording .
+media:Track           rdfs:subClassOf schema:MusicRecording ;
+                      skos:closeMatch schema:MusicRecording .
+media:MusicComposition owl:equivalentClass schema:MusicComposition .
+media:Album           owl:equivalentClass schema:MusicAlbum .
+media:Playlist        owl:equivalentClass schema:MusicPlaylist .
+media:PodcastEpisode  owl:equivalentClass schema:PodcastEpisode .
+
+# --- Artists ---
+# media:Artist is a RoleMixin (Person or Organization); closeMatch to the
+# schema role (schema has no single stable "artist" class). MusicGroup is a band.
+media:Artist          skos:closeMatch schema:MusicGroup , schema:Person .
+media:MusicGroup      owl:equivalentClass schema:MusicGroup .
+
+# --- Consumption ---
+# schema:ListenAction is a ConsumeAction (an Action), not a prov-style Activity;
+# closeMatch keeps the facet distinction.
+media:ListeningActivity skos:closeMatch schema:ListenAction , schema:ConsumeAction .
+media:PlaybackEvent     skos:closeMatch schema:ListenAction , schema:Event .
+
+# --- Account / history ---
+media:MediaAccount    skos:closeMatch schema:Account .
+media:ListeningHistory skos:closeMatch schema:CreativeWork , schema:DataFeed .
+
+# --- Usage licence (schema:license + conceptual ODRL R2 tie) ---
+media:UsageLicense    skos:closeMatch schema:CreativeWork , odrl:Policy .
+media:hasLicense      skos:closeMatch schema:license .
+media:licenseTerms    skos:closeMatch schema:license .
+
+# --- Properties (closeMatch: schema soft-typing is not rdfs domain/range) ---
+media:performedByArtist skos:closeMatch schema:byArtist .
+media:recordingOf       skos:closeMatch schema:recordingOf .
+media:inAlbum           skos:closeMatch schema:inAlbum .
+media:inPlaylist        skos:closeMatch schema:inPlaylist .
+media:playedWork        skos:closeMatch schema:object .
+media:consumedWork      skos:closeMatch schema:object .
+media:isrc              skos:closeMatch schema:isrcCode .
+media:durationSeconds   skos:closeMatch schema:duration .

@@ -1,0 +1,102 @@
+# AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+#
+@prefix sched:   <https://w3id.org/jeswr/sectors/scheduling#> .
+@prefix core:    <https://w3id.org/jeswr/core#> .
+@prefix owl:     <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix skos:    <http://www.w3.org/2004/02/skos/core#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix cal:     <http://www.w3.org/2002/12/cal/ical#> .
+@prefix schema:  <https://schema.org/> .
+@prefix time:    <http://www.w3.org/2006/time#> .
+
+# =============================================================================
+# Solid Scheduling — ALIGNMENTS (gUFO re-base, Mode A thin alignment)
+#
+# Bridges the Solid-canonical scheduling terms (sched:) to the named external
+# standards REQUIRED by the brief:
+#  - iCalendar RFC 5545, via the W3C RDF Calendar vocabulary
+#    (http://www.w3.org/2002/12/cal/ical#) — VEVENT/VTODO/VALARM + PARTSTAT.
+#  - schema.org — Event / Schedule / RsvpAction.
+#  - W3C OWL-Time (Mode C in R11 §4.2) — closeMatch on the temporal properties;
+#    full interval modelling reuses time:TemporalEntity via core:atTime.
+#
+# SEPARATED from scheduling.ttl on purpose (R8 §2): loading this file pulls
+# external entailments; the consistency engine omits it to reason over a clean,
+# self-contained sector + core (F5/F6).
+#
+# Alignment policy (R8 §3/§4): owl:equivalentClass/equivalentProperty ONLY where
+# co-extensional AND the external term is stable; skos:closeMatch (annotation, NO
+# entailment) where the match is approximate, where external axioms (esp. iCal /
+# schema.org domains/ranges) are too strong to import, or where the external
+# "term" is an RFC 5545 enumerated literal (PARTSTAT) rather than an IRI. We
+# default to closeMatch — the conservative seam that keeps Core∪Sector clean.
+# =============================================================================
+
+<https://w3id.org/jeswr/sectors/scheduling/alignments> a owl:Ontology ;
+    dcterms:title "Solid Scheduling — external alignments (gUFO re-base)"@en ;
+    owl:imports <https://w3id.org/jeswr/sectors/scheduling> ;
+    owl:versionInfo "1.0.0" ;
+    owl:versionIRI <https://w3id.org/jeswr/sectors/scheduling/alignments/1.0.0> ;
+    rdfs:comment "Mode-A thin alignments (separate file, not in the reasoned closure) to iCalendar (RFC 5545 / W3C cal:), schema.org and W3C OWL-Time. Reuse-before-mint. "@en .
+
+dcterms:title a owl:AnnotationProperty .
+
+# --- Classes: Calendar entries ------------------------------------------------
+sched:CalendarEvent  skos:closeMatch cal:Vevent , schema:Event .
+sched:Task           skos:closeMatch cal:Vtodo , schema:PlanAction .
+
+# W3C cal: defines no VCALENDAR class; schema:Schedule is the closest host.
+sched:Calendar       skos:closeMatch schema:Schedule .
+
+# iCalendar RRULE is a property-value, not a class, in cal:; schema:Schedule is
+# the closest typed external analogue. See property alignments below.
+sched:RecurrenceRule skos:closeMatch schema:Schedule .
+
+sched:Reminder       skos:closeMatch cal:Valarm .
+
+# --- Attendance / RSVP --------------------------------------------------------
+sched:Attendance     skos:closeMatch schema:RsvpAction .
+sched:Attendee       skos:closeMatch cal:attendee , schema:attendee .
+sched:AttendanceStatus skos:closeMatch schema:RsvpResponseType .
+
+# RSVP status individuals. iCalendar PARTSTAT values (ACCEPTED / DECLINED /
+# TENTATIVE / NEEDS-ACTION) are enumerated literals in RFC 5545, not IRIs in
+# cal:, so only the schema.org RsvpResponse IRIs are linked.
+sched:Accepted   skos:closeMatch schema:RsvpResponseYes .
+sched:Declined   skos:closeMatch schema:RsvpResponseNo .
+sched:Tentative  skos:closeMatch schema:RsvpResponseMaybe .
+
+# --- Properties: descriptive & temporal --------------------------------------
+sched:summary      skos:closeMatch cal:summary , schema:name .
+sched:description  skos:closeMatch cal:description , schema:description .
+sched:startTime    skos:closeMatch cal:dtstart , schema:startDate , time:hasBeginning .
+sched:endTime      skos:closeMatch cal:dtend , schema:endDate , time:hasEnd .
+sched:dueTime      skos:closeMatch cal:due .
+sched:completed    skos:closeMatch cal:completed .
+sched:completedAt  skos:closeMatch cal:completed .
+
+# --- Properties: place, organizer, attendees ---------------------------------
+sched:eventLocation skos:closeMatch cal:location , schema:location .
+sched:organizer     skos:closeMatch cal:organizer , schema:organizer , core:performedBy .
+sched:attendee      skos:closeMatch cal:attendee , schema:attendee .
+
+# --- Properties: attendance / RSVP -------------------------------------------
+# iCalendar models PARTSTAT as a parameter on ATTENDEE; no standalone cal:
+# property IRI, so only schema:rsvpResponse is linked.
+sched:attendanceStatus skos:closeMatch schema:rsvpResponse .
+sched:respondedAt      skos:closeMatch schema:dateModified .
+
+# --- Properties: recurrence --------------------------------------------------
+# iCalendar FREQ / INTERVAL / COUNT / UNTIL are sub-parts of the RRULE value in
+# cal:, not first-class property IRIs; schema:repeatFrequency is the nearest
+# first-class external term for the frequency.
+sched:recurrence skos:closeMatch cal:rrule , schema:eventSchedule .
+sched:frequency  skos:closeMatch schema:repeatFrequency .
+
+# --- Properties: reminder ----------------------------------------------------
+sched:triggerTime   skos:closeMatch cal:trigger .
+sched:triggerOffset skos:closeMatch cal:trigger .
+
+# --- Membership --------------------------------------------------------------
+sched:inCalendar skos:closeMatch schema:partOfSeries .

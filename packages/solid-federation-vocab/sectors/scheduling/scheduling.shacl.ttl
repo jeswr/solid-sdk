@@ -1,0 +1,238 @@
+# AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+#
+@prefix schsh:   <https://w3id.org/jeswr/sectors/scheduling/shapes#> .
+@prefix sched:   <https://w3id.org/jeswr/sectors/scheduling#> .
+@prefix core:    <https://w3id.org/jeswr/core#> .
+@prefix sh:      <http://www.w3.org/ns/shacl#> .
+@prefix owl:     <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:     <http://www.w3.org/2001/XMLSchema#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix prof:    <http://www.w3.org/ns/dx/prof/> .
+
+# =============================================================================
+# Solid Scheduling — SHACL data-model profile (F4; R4/R8 §4.5)
+#
+# The NORMATIVE conformance artifact: the ontology licenses meaning, THIS shape
+# checks shape. Discipline:
+#  - OPEN BY DEFAULT — no sh:closed (composes with downstream profiles; child-
+#    conformance => parent-conformance, the §3.4 ⊆ rule).
+#  - sh:severity carries the RFC 2119 grade: Violation=MUST, Warning=SHOULD,
+#    Info=MAY. A conformance RESULT is read against severity, not pass/fail.
+#  - IMMUTABLE version IRI (.../scheduling/profile/1.0.0); additive-only.
+#
+# v1.0.0 tracks the gUFO re-base of scheduling.ttl.
+# =============================================================================
+
+<https://w3id.org/jeswr/sectors/scheduling/profile/1.0.0>
+    a prof:Profile ;
+    dcterms:title "Solid Scheduling data-model profile (gUFO re-base)"@en ;
+    dcterms:isVersionOf <https://w3id.org/jeswr/sectors/scheduling/profile> ;
+    owl:versionInfo "1.0.0" ;
+    owl:versionIRI <https://w3id.org/jeswr/sectors/scheduling/profile/1.0.0> ;
+    prof:isProfileOf <https://w3id.org/jeswr/sectors/scheduling> ;
+    prof:hasToken "scheduling-1.0.0" ;
+    prof:hasResource [
+        prof:hasRole <http://www.w3.org/ns/dx/prof/role/constraints> ;
+        prof:hasArtifact <https://w3id.org/jeswr/sectors/scheduling/profile/1.0.0/shapes>
+    ] ;
+    rdfs:comment "Open-by-default SHACL profile for calendar/scheduling data, re-based onto the gUFO Core. Validates CalendarEvent, Task, Calendar, Attendance, RecurrenceRule and Reminder. "@en .
+
+# -----------------------------------------------------------------------------
+# CalendarEvent — a scheduled occurrence
+# -----------------------------------------------------------------------------
+schsh:CalendarEventShape
+    a sh:NodeShape ;
+    sh:targetClass sched:CalendarEvent ;
+    rdfs:label "Calendar Event shape"@en ;
+
+    # MUST: exactly one human-readable summary
+    sh:property [
+        sh:path sched:summary ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:severity sh:Violation ;
+        sh:message "A CalendarEvent MUST have exactly one summary."@en ;
+    ] ;
+
+    # MUST: a start time
+    sh:property [
+        sh:path sched:startTime ;
+        sh:datatype xsd:dateTime ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:severity sh:Violation ;
+        sh:message "A CalendarEvent MUST have exactly one start time."@en ;
+    ] ;
+
+    # SHOULD: an end time (open-ended / all-day events may omit)
+    sh:property [
+        sh:path sched:endTime ;
+        sh:datatype xsd:dateTime ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:severity sh:Warning ;
+        sh:message "A CalendarEvent SHOULD have an end time."@en ;
+    ] ;
+
+    # SHOULD: an organizer (an Agent)
+    sh:property [
+        sh:path sched:organizer ;
+        sh:class core:Agent ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:severity sh:Warning ;
+        sh:message "A CalendarEvent SHOULD name an organizer."@en ;
+    ] ;
+
+    # MAY: attendees are Agents (constrains type when present)
+    sh:property [
+        sh:path sched:attendee ;
+        sh:class core:Agent ;
+        sh:severity sh:Info ;
+        sh:message "Attendees, when present, should be Agents."@en ;
+    ] ;
+
+    # MAY: belongs to a calendar
+    sh:property [
+        sh:path sched:inCalendar ;
+        sh:class sched:Calendar ;
+        sh:severity sh:Info ;
+        sh:message "An event may belong to a Calendar."@en ;
+    ] ;
+
+    # MAY: a recurrence rule, when present, is a RecurrenceRule
+    sh:property [
+        sh:path sched:recurrence ;
+        sh:class sched:RecurrenceRule ;
+        sh:maxCount 1 ;
+        sh:severity sh:Info ;
+        sh:message "A recurrence value must be a RecurrenceRule."@en ;
+    ] .
+
+# -----------------------------------------------------------------------------
+# Task — a to-do
+# -----------------------------------------------------------------------------
+schsh:TaskShape
+    a sh:NodeShape ;
+    sh:targetClass sched:Task ;
+    rdfs:label "Task shape"@en ;
+
+    sh:property [
+        sh:path sched:summary ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:severity sh:Violation ;
+        sh:message "A Task MUST have a summary."@en ;
+    ] ;
+
+    sh:property [
+        sh:path sched:dueTime ;
+        sh:datatype xsd:dateTime ;
+        sh:maxCount 1 ;
+        sh:severity sh:Warning ;
+        sh:message "A Task SHOULD have a due time."@en ;
+    ] ;
+
+    sh:property [
+        sh:path sched:completed ;
+        sh:datatype xsd:boolean ;
+        sh:maxCount 1 ;
+        sh:severity sh:Info ;
+        sh:message "Completion flag, when present, must be a boolean."@en ;
+    ] .
+
+# -----------------------------------------------------------------------------
+# Calendar — the collection
+# -----------------------------------------------------------------------------
+schsh:CalendarShape
+    a sh:NodeShape ;
+    sh:targetClass sched:Calendar ;
+    rdfs:label "Calendar shape"@en ;
+
+    sh:property [
+        sh:path dcterms:title ;
+        sh:minCount 1 ;
+        sh:severity sh:Warning ;
+        sh:message "A Calendar SHOULD have a dcterms:title."@en ;
+    ] .
+
+# -----------------------------------------------------------------------------
+# Attendance — the reified RSVP (relator mediating an Attendee role)
+# -----------------------------------------------------------------------------
+schsh:AttendanceShape
+    a sh:NodeShape ;
+    sh:targetClass sched:Attendance ;
+    rdfs:label "Attendance shape"@en ;
+
+    # MUST: which event
+    sh:property [
+        sh:path sched:attendanceFor ;
+        sh:class sched:CalendarEvent ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:severity sh:Violation ;
+        sh:message "An Attendance MUST reference exactly one CalendarEvent (sched:attendanceFor)."@en ;
+    ] ;
+
+    # MUST: which attending agent (the mediated Attendee role)
+    sh:property [
+        sh:path sched:hasAttendee ;
+        sh:class core:Agent ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:severity sh:Violation ;
+        sh:message "An Attendance MUST reference exactly one attending Agent (sched:hasAttendee)."@en ;
+    ] ;
+
+    # MUST: a status drawn from the AttendanceStatus vocabulary
+    sh:property [
+        sh:path sched:attendanceStatus ;
+        sh:class sched:AttendanceStatus ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:severity sh:Violation ;
+        sh:message "An Attendance MUST carry exactly one AttendanceStatus (sched:attendanceStatus)."@en ;
+    ] .
+
+# -----------------------------------------------------------------------------
+# RecurrenceRule — frequency required
+# -----------------------------------------------------------------------------
+schsh:RecurrenceRuleShape
+    a sh:NodeShape ;
+    sh:targetClass sched:RecurrenceRule ;
+    rdfs:label "Recurrence Rule shape"@en ;
+
+    sh:property [
+        sh:path sched:frequency ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:severity sh:Violation ;
+        sh:message "A RecurrenceRule MUST state a frequency."@en ;
+    ] ;
+
+    sh:property [
+        sh:path sched:interval ;
+        sh:datatype xsd:positiveInteger ;
+        sh:maxCount 1 ;
+        sh:severity sh:Info ;
+        sh:message "Interval, when present, must be a positive integer."@en ;
+    ] .
+
+# -----------------------------------------------------------------------------
+# Reminder — carries a trigger (absolute time or relative offset)
+# -----------------------------------------------------------------------------
+schsh:ReminderShape
+    a sh:NodeShape ;
+    sh:targetClass sched:Reminder ;
+    rdfs:label "Reminder shape"@en ;
+
+    sh:property [
+        sh:path sched:triggerOffset ;
+        sh:datatype xsd:duration ;
+        sh:maxCount 1 ;
+        sh:severity sh:Warning ;
+        sh:message "A Reminder SHOULD carry a trigger offset (or an absolute triggerTime)."@en ;
+    ] .

@@ -1,0 +1,146 @@
+# AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+#
+@prefix contact: <https://w3id.org/jeswr/sectors/contacts#> .
+@prefix core:    <https://w3id.org/jeswr/core#> .
+@prefix owl:     <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix skos:    <http://www.w3.org/2004/02/skos/core#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix vcard:   <http://www.w3.org/2006/vcard/ns#> .
+@prefix schema:  <https://schema.org/> .
+
+# =============================================================================
+# Solid Contacts Sector Ontology — ALIGNMENTS (gUFO re-base, Mode A)
+#
+# Bridges the Solid-canonical contacts terms to the named external standards
+# REQUIRED by the brief:
+#  - vcard ontology (http://www.w3.org/2006/vcard/ns#) — THE canonical contacts
+#    vocabulary; aligned THOROUGHLY.
+#  - schema.org ContactPoint / PostalAddress — the web-data view
+#    (owl:equivalentClass / skos:closeMatch).
+#
+# SEPARATED from contacts.ttl on purpose (R8 §2 / §4.4): importing this file
+# pulls external entailments into the reasoner; the consistency engine can omit
+# it to reason over a clean core∪contacts (the F5/F6 closure).
+#
+# Alignment policy (R8 §3, mirrors the core/identity alignments files):
+# equivalentClass/Property ONLY for genuine co-extension with a stable external
+# term; subClassOf where the direction is safe; skos:closeMatch (no entailment)
+# where the match is approximate or the external axioms (e.g. vcard's hard
+# domains/ranges) are too strong to import safely. Every line is a reviewable
+# claim. We deliberately avoid pulling vcard's own domain/range axioms onto
+# Core/Contacts terms, do NOT widen a Core property domain/range, and do NOT
+# collapse two distinct Core classes (contract §3).
+# =============================================================================
+
+<https://w3id.org/jeswr/sectors/contacts/alignments> a owl:Ontology ;
+    dcterms:title "Solid Contacts Sector Ontology — vcard & schema.org alignments (gUFO re-base)"@en ;
+    owl:imports <https://w3id.org/jeswr/sectors/contacts> ;
+    owl:versionInfo "1.0.0" ;
+    owl:versionIRI <https://w3id.org/jeswr/sectors/contacts/alignments/1.0.0> ;
+    rdfs:comment "Mode-A thin alignments (separate file, not in the reasoned closure) to vcard (the canonical contacts vocab) and schema.org. Reuse-before-mint. "@en .
+
+dcterms:title a owl:AnnotationProperty .
+
+# -----------------------------------------------------------------------------
+# Cards / kinds — vcard:Kind is the carrier; schema:ContactPoint the web view.
+# closeMatch (not equivalentClass): a Contact is the *card* (InformationResource
+# about an agent), whereas vcard:Individual is sometimes used for the agent
+# itself — so we assert approximate match, not co-extension.
+# -----------------------------------------------------------------------------
+
+contact:Contact
+    skos:closeMatch vcard:Kind , schema:ContactPoint .
+
+contact:PersonContact
+    skos:closeMatch vcard:Individual , schema:Person .
+
+contact:OrganizationContact
+    skos:closeMatch vcard:Organization , schema:Organization .
+
+# -----------------------------------------------------------------------------
+# Contact points — value-types. subClassOf where safe (our class is the narrower
+# Solid view of the vcard value-type); closeMatch to schema.org properties.
+# -----------------------------------------------------------------------------
+
+contact:ContactPoint
+    skos:closeMatch schema:ContactPoint .
+
+contact:EmailAddress
+    rdfs:subClassOf vcard:Email ;
+    skos:closeMatch schema:email .
+
+contact:PhoneNumber
+    rdfs:subClassOf vcard:Tel ;
+    skos:closeMatch schema:telephone .
+
+contact:PostalAddress
+    rdfs:subClassOf vcard:Address ;
+    owl:equivalentClass schema:PostalAddress .
+
+contact:OnlineHandle
+    skos:closeMatch vcard:hasURL , vcard:hasInstantMessage .
+
+# Properties: closeMatch to vcard's has* channel properties and schema.org.
+contact:hasContactPoint
+    skos:closeMatch vcard:hasEmail , vcard:hasTelephone , vcard:hasAddress , schema:contactPoint .
+
+contact:rawValue
+    skos:closeMatch vcard:value , schema:value .
+
+# Structured postal-address fields — closeMatch to the exact vcard/schema terms.
+contact:streetAddress
+    skos:closeMatch vcard:street-address , schema:streetAddress .
+contact:locality
+    skos:closeMatch vcard:locality , schema:addressLocality .
+contact:region
+    skos:closeMatch vcard:region , schema:addressRegion .
+contact:postalCode
+    skos:closeMatch vcard:postal-code , schema:postalCode .
+contact:countryName
+    skos:closeMatch vcard:country-name , schema:addressCountry .
+
+# -----------------------------------------------------------------------------
+# Relationships — vcard:RelatedType is the role vocab; vcard:hasRelated the link.
+# -----------------------------------------------------------------------------
+
+contact:ContactRelationship
+    skos:closeMatch vcard:RelatedType .
+
+contact:relatesContact
+    skos:closeMatch vcard:hasRelated , schema:knows .
+
+# SKOS view of the coded value-sets. The core:Category values are bound to
+# skos:Concept here (kept OUT of contacts.ttl so the DL-reasoned closure needs no
+# SKOS import); the schemes + role/type concepts ↦ vcard:RelatedType / vcard type
+# individuals via skos:closeMatch (annotation, no entailment).
+contact:RelationshipRoleScheme a skos:ConceptScheme ;
+    rdfs:label "Contact Relationship Role Scheme"@en .
+contact:ContactPointTypeScheme a skos:ConceptScheme ;
+    rdfs:label "Contact Point Type Scheme"@en .
+
+contact:Colleague    a skos:Concept ; skos:inScheme contact:RelationshipRoleScheme ;
+    skos:prefLabel "colleague"@en ; skos:closeMatch vcard:Colleague , vcard:CoWorker .
+contact:Family       a skos:Concept ; skos:inScheme contact:RelationshipRoleScheme ;
+    skos:prefLabel "family"@en ; skos:closeMatch vcard:Kin .
+contact:Friend       a skos:Concept ; skos:inScheme contact:RelationshipRoleScheme ;
+    skos:prefLabel "friend"@en ; skos:closeMatch vcard:Friend .
+contact:Acquaintance a skos:Concept ; skos:inScheme contact:RelationshipRoleScheme ;
+    skos:prefLabel "acquaintance"@en ; skos:closeMatch vcard:Acquaintance .
+
+contact:WorkType   a skos:Concept ; skos:inScheme contact:ContactPointTypeScheme ;
+    skos:prefLabel "work"@en ; skos:closeMatch vcard:Work .
+contact:HomeType   a skos:Concept ; skos:inScheme contact:ContactPointTypeScheme ;
+    skos:prefLabel "home"@en ; skos:closeMatch vcard:Home .
+contact:MobileType a skos:Concept ; skos:inScheme contact:ContactPointTypeScheme ;
+    skos:prefLabel "mobile"@en ; skos:closeMatch vcard:Cell .
+
+# -----------------------------------------------------------------------------
+# Groups / lists.
+# -----------------------------------------------------------------------------
+
+contact:ContactGroup
+    skos:closeMatch vcard:Group .
+
+contact:hasMemberContact
+    skos:closeMatch vcard:hasMember .

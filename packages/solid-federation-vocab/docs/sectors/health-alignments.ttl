@@ -1,0 +1,141 @@
+# AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+#
+@prefix health:  <https://w3id.org/jeswr/sectors/health#> .
+@prefix core:    <https://w3id.org/jeswr/core#> .
+@prefix owl:     <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix rdf:     <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix skos:    <http://www.w3.org/2004/02/skos/core#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+
+# External health-sector vocabularies (real IRIs — encouraged in alignments):
+@prefix fhir:    <http://hl7.org/fhir/> .                              # FHIR R4/R5 resource concept IRIs (Mode A)
+@prefix sct:     <http://snomed.info/id/> .                            # SNOMED CT International concept IRIs
+@prefix loinc:   <https://loinc.org/> .                               # LOINC code concept IRIs
+@prefix idmp:    <https://spec.edmcouncil.org/idmp/ontology/ISO/ISO11615-MedicinalProducts/> .  # IDMP-O (ISO 11615)
+@prefix idmpid:  <https://spec.edmcouncil.org/idmp/ontology/ISO/ISO11616-PharmaceuticalProducts/> . # IDMP-O (ISO 11616)
+@prefix qudt:    <http://qudt.org/schema/qudt/> .
+@prefix unit:    <http://qudt.org/vocab/unit/> .
+@prefix cdt:     <http://w3id.org/lindt/custom_datatypes#> .           # cdt:ucum UCUM-typed literal datatype
+@prefix ucum:    <https://ucum.org/ucum#> .                            # UCUM unit-code system (anchor)
+
+# =============================================================================
+# Solid Health Sector Ontology — ALIGNMENTS (gUFO re-base, v1.0.0)
+#
+# Bridges the Solid-canonical health terms (health.ttl) to the external sector
+# standards the HEALTH row names. EXTERNAL REUSE IS MODE A (different from
+# finance's Mode-B FIBO slim): FHIR is a StructureDefinition / RDF serialization,
+# NOT a clean DL ontology, so we do NOT MIREOT-extract or import fhir.ttl.
+# Instead we ALIGN our classes to the FHIR R4/R5 resource concept IRIs and to
+# SNOMED CT / LOINC concept IRIs via skos:closeMatch (annotation, no entailment).
+# The SHACL profile shapes (health.shacl.ttl) are DERIVED from the corresponding
+# FHIR StructureDefinitions (required elements → sh:minCount MUST) — that is where
+# FHIR's structural force lives, not in a DL import.
+#
+# UNITS are the one Mode-B reuse: the QUDT slim (imports/qudt-health-slim.ttl +
+# the core QUDT-units slim) supplies the unit individuals; here we BIND the
+# vital-sign Observation subtypes to their default QUDT unit + UCUM code.
+#
+# SEPARATED from health.ttl on purpose (R8 §2/§4.4): importing this file pulls
+# external recognition; the consistency engine can reason over a clean
+# core ∪ health ∪ qudt-slim without it.
+#
+# Alignment policy (R8 §3):
+#  - skos:closeMatch (NO entailment) for FHIR/SNOMED/LOINC: the FHIR resource
+#    classes fuse concerns (e.g. fhir:Patient = person + record) and the SNOMED/
+#    LOINC concept IRIs are coded values, so an owl:equivalentClass would be
+#    unsafe (it could collapse core:Person and core:Record, or a class and a
+#    code). We NEVER assert an equivalence that collapses two distinct Core
+#    classes.
+#  - rdfs:subClassOf only where a FHIR resource is genuinely a narrower
+#    record-shaped view AND safe (kept minimal here; closeMatch preferred for
+#    FHIR since fhir.ttl is not imported and its axioms are not in the closure).
+# =============================================================================
+
+<https://w3id.org/jeswr/sectors/health/alignments> a owl:Ontology ;
+    dcterms:title "Solid Health Sector Ontology — external alignments (gUFO re-base)"@en ;
+    owl:imports <https://w3id.org/jeswr/sectors/health> ;
+    owl:versionInfo "1.0.0" ;
+    rdfs:comment "Optional Mode-A bridge to FHIR R4/R5, SNOMED CT, LOINC + Mode-B QUDT/UCUM unit binding + IDMP-O. External IRIs are real and subject to their bodies' governance. fhir.ttl is deliberately NOT imported."@en .
+
+dcterms:title a owl:AnnotationProperty .
+owl:versionInfo a owl:AnnotationProperty .
+
+# -----------------------------------------------------------------------------
+# FHIR R4/R5 — resource concept IRIs (Mode A: closeMatch, no fhir.ttl import).
+# fhir:Patient fuses the human + their record; we keep the patient (a Person
+# role) distinct from the record document, so closeMatch on BOTH, never
+# equivalentClass.
+# -----------------------------------------------------------------------------
+
+health:Patient            skos:closeMatch fhir:Patient .
+health:HealthRecord       skos:closeMatch fhir:Composition , fhir:Bundle .
+health:Practitioner       skos:closeMatch fhir:Practitioner .
+health:HealthcareProvider skos:closeMatch fhir:Organization .
+
+health:Observation          skos:closeMatch fhir:Observation .
+health:Condition            skos:closeMatch fhir:Condition .
+health:MedicationStatement  skos:closeMatch fhir:MedicationStatement .
+health:Immunization         skos:closeMatch fhir:Immunization .
+health:Encounter            skos:closeMatch fhir:Encounter .
+health:CodeableConcept      skos:closeMatch fhir:CodeableConcept , fhir:Coding .
+health:MedicinalProduct     skos:closeMatch fhir:Medication , fhir:MedicinalProductDefinition .
+
+# Property → FHIR element path closeMatches (the shape of the SHACL is derived
+# from these StructureDefinition elements; see health.shacl.ttl).
+health:hasCode        skos:closeMatch fhir:Observation.code , fhir:Condition.code .
+health:patient        skos:closeMatch fhir:Observation.subject , fhir:Encounter.subject .
+health:value          skos:closeMatch fhir:Observation.value , fhir:Quantity.value .
+health:unitCode       skos:closeMatch fhir:Quantity.code .
+health:hasUnit        skos:closeMatch fhir:Quantity.system .
+health:effectiveTime  skos:closeMatch fhir:Observation.effective .
+health:medication     skos:closeMatch fhir:MedicationStatement.medication , fhir:Immunization.vaccineCode .
+health:recordedBy     skos:closeMatch fhir:Encounter.participant , fhir:Immunization.performer .
+health:careProvider   skos:closeMatch fhir:Encounter.serviceProvider .
+
+# -----------------------------------------------------------------------------
+# SNOMED CT International + LOINC — terminology-binding concept IRIs (Mode A).
+# Our classes closeMatch the relevant SNOMED concept; the Apple-Health vital
+# subtypes closeMatch their LOINC observation codes (the apple-health-import
+# terminology binding). These are concept-level matches, NOT subclass axioms.
+# -----------------------------------------------------------------------------
+
+health:Patient              skos:closeMatch sct:116154003 .   # Patient (person)
+health:Practitioner         skos:closeMatch sct:223366009 .   # Healthcare professional
+health:Observation          skos:closeMatch sct:363787002 .   # Observable entity
+health:Condition            skos:closeMatch sct:64572001 .    # Clinical finding / disease
+health:Encounter            skos:closeMatch sct:308335008 .   # Patient encounter
+health:Immunization         skos:closeMatch sct:830152006 .   # Immunization
+
+health:VitalSign            skos:closeMatch loinc:85353-1 .   # Vital signs panel
+health:HeartRateObservation skos:closeMatch loinc:8867-4 .    # Heart rate
+health:StepCountObservation skos:closeMatch loinc:55423-8 .   # Number of steps in 24 hour Measured
+health:SleepObservation     skos:closeMatch loinc:93832-4 .   # Sleep duration
+
+# -----------------------------------------------------------------------------
+# QUDT + UCUM — UNIT binding (Mode B: the qudt-health-slim + core QUDT slim
+# supply the unit individuals; here we bind each vital subtype's default unit and
+# its UCUM code). health:hasUnit ranges over qudt:Unit; health:unitCode is the
+# parallel UCUM string. Apps MAY instead carry a cdt:ucum typed literal
+# ("72 /min"^^cdt:ucum) — permitted by the SHACL profile.
+# -----------------------------------------------------------------------------
+
+health:HeartRateObservation rdfs:seeAlso unit:BEAT-PER-MIN .  # UCUM '/min' (min-1{H.B.})
+health:SleepObservation     rdfs:seeAlso unit:SEC .           # UCUM 's' (core QUDT slim)
+health:StepCountObservation rdfs:seeAlso unit:M .             # distance walked, UCUM 'm'; step count itself is UCUM '{steps}'
+
+health:hasUnit  skos:closeMatch ucum:Unit .
+health:unitCode skos:closeMatch ucum:Unit , cdt:ucum .
+health:value    skos:closeMatch cdt:ucum .
+
+# -----------------------------------------------------------------------------
+# IDMP-O (ISO IDMP) — medicinal-product identification (Mode A, closeMatch).
+# health:MedicinalProduct is a core:Asset carrying IDMP identifiers via
+# core:identifiedBy. Heavy IDMP-O axioms are NOT imported.
+# -----------------------------------------------------------------------------
+
+health:MedicinalProduct skos:closeMatch
+        idmp:MedicinalProduct ,
+        idmpid:PharmaceuticalProduct .
+
+core:Identifier skos:closeMatch idmp:MedicinalProductIdentifier .  # MPID/PhPID under core:identifiedBy

@@ -1,0 +1,80 @@
+{
+  "@context": {
+    "@version": 1.1,
+    "@protected": true,
+    "col": "https://w3id.org/jeswr/sectors/collectibles#",
+    "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
+    "skos": "http://www.w3.org/2004/02/skos/core#",
+    "xsd": "http://www.w3.org/2001/XMLSchema#",
+    "id": "@id",
+    "type": "@type",
+    "amount": {
+      "@id": "col:amount",
+      "@type": "@id"
+    },
+    "Appraisal": "col:Appraisal",
+    "appraiser": {
+      "@id": "col:appraiser",
+      "@type": "@id"
+    },
+    "coverageAmount": {
+      "@id": "col:coverageAmount",
+      "@type": "@id"
+    },
+    "datePrecision": {
+      "@id": "col:datePrecision",
+      "@type": "@id"
+    },
+    "DatePrecision": "col:DatePrecision",
+    "datePrecisionScheme": "col:datePrecisionScheme",
+    "eventType": {
+      "@id": "col:eventType",
+      "@type": "@id"
+    },
+    "EventType": "col:EventType",
+    "eventTypeScheme": "col:eventTypeScheme",
+    "evt-acquisition": "col:evt-acquisition",
+    "evt-creation": "col:evt-creation",
+    "evt-exhibition": "col:evt-exhibition",
+    "evt-loan": "col:evt-loan",
+    "evt-restoration": "col:evt-restoration",
+    "evt-sale": "col:evt-sale",
+    "evt-transfer": "col:evt-transfer",
+    "hasAppraisal": {
+      "@id": "col:hasAppraisal",
+      "@type": "@id"
+    },
+    "hasInsurance": {
+      "@id": "col:hasInsurance",
+      "@type": "@id"
+    },
+    "hasValuation": {
+      "@id": "col:hasValuation",
+      "@type": "@id"
+    },
+    "InsurancePolicy": "col:InsurancePolicy",
+    "insurer": {
+      "@id": "col:insurer",
+      "@type": "@id"
+    },
+    "policyNumber": {
+      "@id": "col:policyNumber",
+      "@type": "xsd:string"
+    },
+    "precision-circa": "col:precision-circa",
+    "precision-day": "col:precision-day",
+    "precision-month": "col:precision-month",
+    "precision-year": "col:precision-year",
+    "premium": {
+      "@id": "col:premium",
+      "@type": "@id"
+    },
+    "ProvenanceEvent": "col:ProvenanceEvent",
+    "renewalDate": {
+      "@id": "col:renewalDate",
+      "@type": "xsd:date"
+    },
+    "sector": "col:sector",
+    "Valuation": "col:Valuation"
+  }
+}

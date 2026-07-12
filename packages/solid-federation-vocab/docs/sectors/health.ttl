@@ -1,0 +1,338 @@
+# AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+#
+@prefix health:  <https://w3id.org/jeswr/sectors/health#> .
+@prefix core:    <https://w3id.org/jeswr/core#> .
+@prefix owl:     <http://www.w3.org/2002/07/owl#> .
+@prefix rdf:     <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:     <http://www.w3.org/2001/XMLSchema#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix skos:    <http://www.w3.org/2004/02/skos/core#> .
+@prefix time:    <http://www.w3.org/2006/time#> .
+@prefix vann:    <http://purl.org/vocab/vann/> .
+@prefix gufo:    <http://purl.org/nemo/gufo#> .
+@prefix qudt:    <http://qudt.org/schema/qudt/> .
+
+# =============================================================================
+# Solid Health Sector Ontology (HEALTH) — RE-BASED onto the gUFO Solid Core
+# (R11 §4.2 HEALTH row).
+#
+# AUTHORING PROVENANCE: authored as an OntoUML model (health.ontouml.json),
+# verified anti-pattern-free by OntoumlVerification.verify() (F3, 0 issues),
+# transformed to gUFO-OWL by Ontouml2Gufo (health.gufo.ttl backbone), then
+# ENRICHED here with F1 definitions, Core-rooting, the property spine and the
+# QUDT/UCUM unit bindings. The backbone's gUFO meta-types are preserved verbatim.
+#
+# gUFO META-TYPES (each sector class carries its own meta-type AND roots in Core,
+# per the HEALTH row: Patient = Role of Person Kind; Observation/Encounter =
+# Event; Record = Object):
+#   Patient / Practitioner / HealthcareProvider = gufo:RoleMixin → root core:Agent
+#       (Patient additionally rdfs:subClassOf core:Person; the others core:Person/
+#        core:Organization — anti-rigid roles, not new kinds)
+#   HealthRecord / ClinicalEntry / Observation (+VitalSign + the Apple-Health
+#       vital subtypes) / Condition / MedicationStatement / Immunization =
+#       gufo:SubKind → root core:Record (measurement/clinical records)
+#   CodeableConcept = gufo:SubKind → root core:Identifier (a SNOMED/LOINC code)
+#   MedicinalProduct = gufo:Kind → root core:Asset
+#   Encounter / ObservationActivity / ImmunizationActivity = gufo:EventType →
+#       root core:Activity (the perdurant clinical acts)
+#
+# THE LOAD-BEARING SPLIT (R8 brief + the HEALTH row): the PATIENT (a core:Person,
+# a real-world agent playing the Patient role) is kept distinct from the RECORD
+# DOCUMENT (a core:Record). A health:HealthRecord is core:subject the Person; a
+# vital-sign Observation is a measurement RECORD core:about that Person, while the
+# ACT of observing is a separate health:ObservationActivity (a core:Activity).
+#
+# EXTERNAL REUSE (R11 §4.2 + brief 13): FHIR is a StructureDefinition/RDF
+# serialization, NOT a clean DL ontology — it is NOT imported (no fhir.ttl). We
+# use Mode A: align our classes to FHIR R4/R5 resource concept IRIs and to
+# SNOMED CT / LOINC concept IRIs via skos:closeMatch in health-alignments.ttl;
+# the SHACL profile shapes (health.shacl.ttl) are DERIVED from the corresponding
+# FHIR StructureDefinitions (required elements → sh:minCount MUST). UNITS reuse
+# QUDT as a slim Mode-B module (imports/qudt-health-slim.ttl + the core QUDT slim);
+# UCUM codes are bound in the alignments.
+#
+# CONTRACT (R8 §4, F1–F7): imports the re-based gUFO Core + the QUDT slim; roots
+# every class transitively in a Core class; CONSTRAINS, never forks. v1 is a
+# BREAKING re-base of v0 (meta-types change meaning), so a new MAJOR version.
+# Open-world by default; the SHACL profile carries the closed-world MUST/SHOULD.
+#
+# =============================================================================
+
+<https://w3id.org/jeswr/sectors/health> a owl:Ontology ;
+    dcterms:title "Solid Health Sector Ontology (gUFO re-base)"@en ;
+    rdfs:label "Solid Health Sector Ontology"@en ;
+    vann:preferredNamespacePrefix "health" ;
+    vann:preferredNamespaceUri "https://w3id.org/jeswr/sectors/health#" ;
+    owl:imports <https://w3id.org/jeswr/core> ,
+                <https://w3id.org/jeswr/sectors/health/imports/qudt-health-slim> ;
+    owl:versionInfo "1.0.0" ;
+    owl:versionIRI <https://w3id.org/jeswr/sectors/health/1.0.0> ;
+    dcterms:description """Personal health records for the apple-health-import app
+        and the EDMA patient-records use case, re-based onto the gUFO Solid Core.
+        Patient=RoleMixin of core:Person; observations/conditions/medication-
+        statements/immunizations=Record SubKinds about the person; encounters and
+        clinical acts=Event; vital-sign measurements (heart rate, steps, sleep —
+        the Apple Health types) carry a value + a QUDT/UCUM unit. Aligns to FHIR
+        R4/R5 (Mode A, no fhir.ttl import) and SNOMED CT / LOINC concept IRIs in
+        the companion health-alignments.ttl; reuses QUDT for units via a slim
+        Mode-B module. v1.0.0 is a BREAKING re-base of v0."""@en ;
+    dcterms:modified "2026-06-13"^^xsd:date ;
+    rdfs:comment "Re-based per R11 §4.2 (HEALTH row)."@en .
+
+# -----------------------------------------------------------------------------
+# Annotation-property declarations (F5 DL hygiene — match the Core pattern).
+# -----------------------------------------------------------------------------
+dcterms:title       a owl:AnnotationProperty .
+dcterms:description a owl:AnnotationProperty .
+dcterms:modified    a owl:AnnotationProperty .
+vann:preferredNamespacePrefix a owl:AnnotationProperty .
+vann:preferredNamespaceUri    a owl:AnnotationProperty .
+skos:definition     a owl:AnnotationProperty .
+skos:scopeNote      a owl:AnnotationProperty .
+
+# External classes referenced in ranges, declared so the DL profile is satisfied
+# even when their host ontology is not in the reasoned closure (W3C OWL-Time and
+# QUDT are vendored slim imports; declaring the punned classes is the F5 fix).
+time:TemporalEntity a owl:Class ;
+    rdfs:label "Temporal Entity"@en ;
+    rdfs:isDefinedBy <http://www.w3.org/2006/time#> .
+
+qudt:Unit a owl:Class ;
+    rdfs:label "QUDT Unit"@en ;
+    rdfs:isDefinedBy <http://qudt.org/schema/qudt/> .
+
+# =============================================================================
+# 1. PATIENT & CARE TEAM — gufo:RoleMixin; root core:Agent (the HEALTH-row
+#    "Patient = Role of Person Kind"). Anti-rigid roles played by an Agent, NOT
+#    new kinds: a person/organization plays Patient/Practitioner/Provider.
+# =============================================================================
+
+health:Patient a owl:Class, gufo:RoleMixin ;
+    rdfs:subClassOf core:Person ;
+    rdfs:label "Patient"@en ;
+    skos:definition "The role of a person as the subject of clinical care and records — the human receiving care, played contingently and relationally. A real-world agent, NOT the record document. Aligns (Mode A, closeMatch) to fhir:Patient and snomed:116154003 (Patient)."@en ;
+    skos:scopeNote "gufo:RoleMixin (anti-rigid) played by core:Person. The subject side of the record/subject split; record entries are core:about the Person playing this role."@en .
+
+health:Practitioner a owl:Class, gufo:RoleMixin ;
+    rdfs:subClassOf core:Person ;
+    rdfs:label "Practitioner"@en ;
+    skos:definition "The role of an individual care professional (clinician, nurse, pharmacist) acting in the delivery of care. Aligns to fhir:Practitioner / snomed:223366009 (Healthcare professional)."@en ;
+    skos:scopeNote "gufo:RoleMixin played by core:Person."@en .
+
+health:HealthcareProvider a owl:Class, gufo:RoleMixin ;
+    rdfs:subClassOf core:Organization ;
+    rdfs:label "Healthcare Provider"@en ;
+    skos:definition "The role of an organization that delivers care (hospital, clinic, pharmacy, GP practice). The custodial party of a record or encounter. Aligns to fhir:Organization / snomed:43741000 (Site of care)."@en ;
+    skos:scopeNote "gufo:RoleMixin played by core:Organization. Custodian via core:custodian / health:careProvider."@en .
+
+# =============================================================================
+# 2. THE RECORD DOCUMENT vs THE SUBJECT — Record = Object (HEALTH row).
+#    HealthRecord + clinical entries = gufo:SubKind of core:Record.
+# =============================================================================
+
+health:HealthRecord a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf core:Record ;
+    rdfs:label "Health Record"@en ;
+    skos:definition "A personal health record document: a core:Record whose core:subject is the patient (a core:Person). The INFORMATION RESOURCE, kept distinct from the patient it is about. Aligns (closeMatch) to fhir:Composition / fhir:Bundle — NOT to fhir:Patient (which fuses person + record)."@en ;
+    skos:scopeNote "gufo:SubKind of core:Record. Subject via core:subject; aggregates entries via health:hasEntry (a sub-property of core:hasPart)."@en .
+
+health:ClinicalEntry a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf core:Record ;
+    rdfs:label "Clinical Entry"@en ;
+    skos:definition "Abstract super-class of the structured entries making up a health record (observations, conditions, medication statements, immunizations). Each entry is a core:Record core:about a core:Person and typically core:partOf a health:HealthRecord."@en ;
+    skos:scopeNote "gufo:SubKind of core:Record (abstract)."@en .
+
+# =============================================================================
+# 3. OBSERVATIONS & VITAL-SIGN MEASUREMENTS — gufo:SubKind of core:Record.
+#    A measurement record: a code (what), a value, a UNIT, an effective time.
+#    The ACT of observing is a separate gufo:Event (health:ObservationActivity).
+# =============================================================================
+
+health:Observation a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf health:ClinicalEntry, core:Quantity ;
+    rdfs:label "Observation"@en ;
+    skos:definition "A measured or asserted clinical value as a RECORD: a code (what was measured), a value, a unit and an effective time. The data shape behind Apple Health metrics and lab results. As it carries a value+unit it is also a core:Quantity. Aligns to fhir:Observation / snomed:363787002 (Observable entity)."@en ;
+    skos:scopeNote "gufo:SubKind of core:Record (measurement record) AND core:Quantity (its value+unit). Code via health:hasCode; value via health:value (= core:numericValue role); unit via health:hasUnit (QUDT, = core:unit role) + health:unitCode (UCUM); time via health:effectiveTime. Produced by a health:ObservationActivity."@en .
+
+health:VitalSign a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf health:Observation ;
+    rdfs:label "Vital Sign"@en ;
+    skos:definition "An Observation of a physiological vital sign (heart rate, blood pressure, body temperature, respiratory rate, oxygen saturation). Mirrors the FHIR vital-signs profile category (LOINC 85353-1)."@en ;
+    skos:scopeNote "gufo:SubKind of health:Observation."@en .
+
+health:HeartRateObservation a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf health:VitalSign ;
+    rdfs:label "Heart Rate Observation"@en ;
+    skos:definition "A heart-rate measurement in beats/min. Maps the Apple Health HKQuantityTypeIdentifierHeartRate type and LOINC 8867-4; the value carries unit:BEAT-PER-MIN (QUDT) / UCUM '/min'."@en ;
+    skos:scopeNote "gufo:SubKind of health:VitalSign. Default unit unit:BEAT-PER-MIN via health:hasUnit (see the SHACL profile)."@en .
+
+health:StepCountObservation a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf health:Observation ;
+    rdfs:label "Step Count Observation"@en ;
+    skos:definition "A count of steps over an interval. Maps the Apple Health HKQuantityTypeIdentifierStepCount type and LOINC 55423-8; a dimensionless count (UCUM '{steps}'). Carries an interval effective time, not an instant."@en ;
+    skos:scopeNote "gufo:SubKind of health:Observation."@en .
+
+health:SleepObservation a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf health:Observation ;
+    rdfs:label "Sleep Observation"@en ;
+    skos:definition "A sleep-analysis record (asleep/awake/in-bed duration). Maps the Apple Health HKCategoryTypeIdentifierSleepAnalysis type and LOINC 93832-4; carries an interval effective time and a duration value in unit:SEC / UCUM 's'."@en ;
+    skos:scopeNote "gufo:SubKind of health:Observation. Duration unit unit:SEC (the core QUDT slim) via health:hasUnit."@en .
+
+health:ObservationActivity a owl:Class, gufo:EventType ;
+    rdfs:subClassOf core:Activity ;
+    rdfs:label "Observation Activity"@en ;
+    skos:definition "The act of taking a measurement or making an observation — a perdurant performed by a practitioner or device at a time, producing a health:Observation record. Keeps the record-vs-act split. Aligns to prov:Activity / fhir:Observation (the act framing)."@en ;
+    skos:scopeNote "gufo:EventType (instances are gufo:Event perdurants) under core:Activity. Performer via core:performedBy / health:recordedBy; output Observation via health:resultsIn."@en .
+
+# =============================================================================
+# 4. CONDITIONS, MEDICATION, IMMUNIZATION — Records about the Person.
+# =============================================================================
+
+health:Condition a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf health:ClinicalEntry ;
+    rdfs:label "Condition"@en ;
+    skos:definition "A clinical problem, diagnosis or health concern recorded for a patient (a coded diagnosis). A core:Record core:about a core:Person. Aligns to fhir:Condition / snomed:64572001 (Clinical finding)."@en ;
+    skos:scopeNote "gufo:SubKind of core:Record. Code (the diagnosis) via health:hasCode."@en .
+
+health:MedicationStatement a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf health:ClinicalEntry ;
+    rdfs:label "Medication Statement"@en ;
+    skos:definition "A record that a patient is/was taking a medicinal product, possibly with dosage and period. A core:Record core:about a core:Person; references a health:MedicinalProduct via health:medication. Aligns to fhir:MedicationStatement."@en ;
+    skos:scopeNote "gufo:SubKind of core:Record."@en .
+
+health:Immunization a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf health:ClinicalEntry ;
+    rdfs:label "Immunization"@en ;
+    skos:definition "A record that a vaccine was administered to a patient. A core:Record core:about a core:Person; the administration EVENT is the separate health:ImmunizationActivity. References the vaccine via health:medication. Aligns to fhir:Immunization / snomed:830152006 (Immunization)."@en ;
+    skos:scopeNote "gufo:SubKind of core:Record. The administration event is health:ImmunizationActivity (a core:Activity)."@en .
+
+health:ImmunizationActivity a owl:Class, gufo:EventType ;
+    rdfs:subClassOf core:Activity ;
+    rdfs:label "Immunization Activity"@en ;
+    skos:definition "The act of administering a vaccine to a patient — a perdurant performed by a practitioner at a time and place, recorded by a health:Immunization. Aligns to fhir:Immunization (the administration act)."@en ;
+    skos:scopeNote "gufo:EventType under core:Activity. Performer via health:recordedBy; the vaccine via health:medication."@en .
+
+health:MedicinalProduct a owl:Class, gufo:Kind ;
+    rdfs:subClassOf core:Asset ;
+    rdfs:label "Medicinal Product"@en ;
+    skos:definition "A medicinal product as an identifiable thing (a drug, a vaccine). A core:Asset (something held/consumed) carrying core:identifiedBy ISO IDMP identifiers. Aligns (closeMatch) to fhir:Medication / fhir:MedicinalProductDefinition and IDMP-O. The product is NOT the statement of taking it."@en ;
+    skos:scopeNote "gufo:Kind (Object) under core:Asset. Identified via core:identifiedBy + an IDMP-scheme core:Identifier."@en .
+
+# =============================================================================
+# 5. ENCOUNTER — gufo:EventType; root core:Activity (an interaction over time).
+# =============================================================================
+
+health:Encounter a owl:Class, gufo:EventType ;
+    rdfs:subClassOf core:Activity ;
+    rdfs:label "Encounter"@en ;
+    skos:definition "An interaction between a patient and the healthcare system (a visit, admission, consultation). A core:Activity occurring over time, performed by a practitioner/provider at a place. Aligns to fhir:Encounter / snomed:308335008 (Patient encounter)."@en ;
+    skos:scopeNote "gufo:EventType under core:Activity. Subject via health:patient (sub-property of core:about); performer via health:recordedBy; place via core:atPlace."@en .
+
+# =============================================================================
+# 6. CODEABLE CONCEPT — gufo:SubKind of core:Identifier.
+#    A coded clinical concept (SNOMED CT / LOINC / Apple-Health type code).
+# =============================================================================
+
+health:CodeableConcept a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf core:Identifier ;
+    rdfs:label "Codeable Concept"@en ;
+    skos:definition "A coded clinical concept drawn from a coding system (SNOMED CT, LOINC, or an Apple Health type). A core:Identifier whose core:inScheme is the coding system; the 'what' of an Observation/Condition. Aligns to fhir:CodeableConcept / fhir:Coding."@en ;
+    skos:scopeNote "gufo:SubKind of core:Identifier. The code value via core:value; the system via core:inScheme."@en .
+
+# =============================================================================
+# 7. PROPERTIES — sub-properties of Core where one fits, else domained onto a
+#    health: class (constrain, never widen a Core property).
+# =============================================================================
+
+# 7a. What an entry measures/asserts — the clinical code.
+health:hasCode a owl:ObjectProperty ;
+    rdfs:subPropertyOf core:identifiedBy ;
+    rdfs:domain health:ClinicalEntry ;
+    rdfs:range health:CodeableConcept ;
+    rdfs:label "has code"@en ;
+    skos:definition "The clinical code stating what a ClinicalEntry concerns (the measured quantity, the diagnosis, the vaccine). A sub-property of core:identifiedBy. Aligns to fhir:Observation.code / fhir:Condition.code."@en .
+
+# 7b. The measured value of an Observation (literal).
+health:value a owl:DatatypeProperty ;
+    rdfs:domain health:Observation ;
+    rdfs:label "value"@en ;
+    skos:definition "The measured value of an Observation (numeric or string). The QUDT/UCUM unit is carried by health:hasUnit / health:unitCode; apps MAY instead use a cdt:ucum typed literal (alignments). Aligns to fhir:Observation.value[x] (valueQuantity.value)."@en .
+
+# 7c. The QUDT unit of the value (reuse before minting — the Mode-B slim).
+health:hasUnit a owl:ObjectProperty ;
+    rdfs:domain health:Observation ;
+    rdfs:range qudt:Unit ;
+    rdfs:label "has unit"@en ;
+    skos:definition "The QUDT unit of health:value (unit:BEAT-PER-MIN for heart rate, unit:SEC for sleep duration, unit:M for distance). Reuses the QUDT slim module; the parallel UCUM code is health:unitCode. Aligns to fhir:Quantity.system+code (http://unitsofmeasure.org)."@en .
+
+# 7d. The UCUM unit code for the value (string form; FHIR Quantity.code).
+health:unitCode a owl:DatatypeProperty ;
+    rdfs:domain health:Observation ;
+    rdfs:range xsd:string ;
+    rdfs:label "unit code"@en ;
+    skos:definition "The UCUM unit code for health:value ('/min' for heart rate, 's' for sleep duration, '{steps}' for step count, 'mm[Hg]' for blood pressure). The string parallel of health:hasUnit. Aligns to fhir:Quantity.code (system http://unitsofmeasure.org)."@en .
+
+# 7e. Effective time of an Observation — instant or interval.
+health:effectiveTime a owl:ObjectProperty ;
+    rdfs:subPropertyOf core:atTime ;
+    rdfs:domain health:Observation ;
+    rdfs:range time:TemporalEntity ;
+    rdfs:label "effective time"@en ;
+    skos:definition "When the Observation is clinically effective — a time:Instant (a spot heart-rate reading) or a time:Interval (a sleep session, a daily step total). A sub-property of core:atTime. Aligns to fhir:Observation.effective[x]."@en .
+
+# 7f. The patient a clinical entry/activity concerns (the subject link).
+health:patient a owl:ObjectProperty ;
+    rdfs:subPropertyOf core:about ;
+    rdfs:range core:Person ;
+    rdfs:label "patient"@en ;
+    skos:definition "The patient (a core:Person playing health:Patient) a clinical entry, encounter or activity concerns. A sub-property of core:about, keeping the real-world person distinct from the record document. No rdfs:domain: it links both record entries (endurants) and clinical acts (events), which gUFO holds disjoint, so a domain axiom would force inconsistent typing — intended usage is enforced in SHACL. Aligns to fhir:Observation.subject / fhir:Encounter.subject."@en .
+
+# 7g. The medicinal product referenced by a statement / immunization.
+health:medication a owl:ObjectProperty ;
+    rdfs:range health:MedicinalProduct ;
+    rdfs:label "medication"@en ;
+    skos:definition "The medicinal product a MedicationStatement records, or the vaccine an Immunization administers. A health:MedicinalProduct (a core:Asset). No rdfs:domain (it spans the MedicationStatement/Immunization records and the ImmunizationActivity event). Aligns to fhir:MedicationStatement.medication / fhir:Immunization.vaccineCode."@en .
+
+# 7h. Who recorded / carried out the clinical act.
+health:recordedBy a owl:ObjectProperty ;
+    rdfs:subPropertyOf core:performedBy ;
+    rdfs:domain core:Activity ;
+    rdfs:range core:Agent ;
+    rdfs:label "recorded by"@en ;
+    skos:definition "The practitioner or provider (a core:Agent) who carried out / authored a clinical activity (an Encounter, an ObservationActivity, an ImmunizationActivity). A sub-property of core:performedBy. Aligns to fhir:Encounter.participant / fhir:Immunization.performer."@en .
+
+# 7i. The provider custodially responsible for a record or encounter.
+health:careProvider a owl:ObjectProperty ;
+    rdfs:subPropertyOf core:custodian ;
+    rdfs:range core:Organization ;
+    rdfs:label "care provider"@en ;
+    skos:definition "The healthcare organization (playing health:HealthcareProvider) custodially responsible for a record or encounter. A sub-property of core:custodian. No rdfs:domain (it spans the HealthRecord document and the Encounter event). Aligns to fhir:Encounter.serviceProvider / fhir:Patient.managingOrganization."@en .
+
+# 7j. Aggregation of clinical entries into the record document.
+health:hasEntry a owl:ObjectProperty ;
+    rdfs:subPropertyOf core:hasPart ;
+    rdfs:domain health:HealthRecord ;
+    rdfs:range health:ClinicalEntry ;
+    rdfs:label "has entry"@en ;
+    skos:definition "Relates a health:HealthRecord document to a clinical entry it contains. A sub-property of core:hasPart, so the transitive part-whole spine holds. Aligns to the FHIR document/composition section model."@en .
+
+# 7k. The observation an observation-act produces (act → record).
+health:resultsIn a owl:ObjectProperty ;
+    rdfs:domain health:ObservationActivity ;
+    rdfs:range health:Observation ;
+    rdfs:label "results in"@en ;
+    skos:definition "Links a health:ObservationActivity (the act of measuring) to the health:Observation record it produces. Keeps the act-vs-record split explicit. Aligns to prov:generated."@en .
+
+# =============================================================================
+# SECTOR MARKER — the IRI an app's fedapp:sector points at to declare it operates
+# in this sector (https://w3id.org/jeswr/fed#sector). A skos:Concept in the
+# federation sector register; dereferences to this ontology.
+# =============================================================================
+
+<https://w3id.org/jeswr/sectors/health#sector>
+    a <http://www.w3.org/2004/02/skos/core#Concept> ;
+    rdfs:label "Health sector"@en ;
+    rdfs:comment "The Health data sector. The value an app's fedapp:sector names in its Client Identifier Document to declare it operates over health data. Backed by this sector ontology."@en ;
+    rdfs:isDefinedBy <https://w3id.org/jeswr/sectors/health> ;
+    skos:prefLabel "Health"@en .

@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- OASIS XML catalog resolving owl:imports to the vendored offline foundation
+     closure, for the ROBOT/HermiT consistency gate (scripts/ontology-gate.mjs F6).
+     ROBOT (and Protege) consult this file to map import IRIs to local Turtle, so
+     no network dereference is required. The persistent w3id Core IRI resolves
+     here too. -->
+<catalog prefer="public" xmlns="urn:oasis:names:tc:entity:xmlns:xml:catalog">
+  <!-- gUFO (the adopted foundation) -->
+  <uri name="http://purl.org/nemo/gufo#" uri="imports/gufo.ttl"/>
+  <uri name="http://purl.org/nemo/gufo" uri="imports/gufo.ttl"/>
+  <uri name="http://purl.org/nemo/gufo#/1.0.0" uri="imports/gufo.ttl"/>
+  <!-- W3C OWL-Time -->
+  <uri name="http://www.w3.org/2006/time" uri="imports/owl-time.ttl"/>
+  <uri name="http://www.w3.org/2006/time#" uri="imports/owl-time.ttl"/>
+  <!-- PROV-O -->
+  <uri name="http://www.w3.org/ns/prov-o" uri="imports/prov-o.ttl"/>
+  <uri name="http://www.w3.org/ns/prov#" uri="imports/prov-o.ttl"/>
+  <uri name="http://www.w3.org/ns/prov" uri="imports/prov-o.ttl"/>
+  <!-- SKOS Core -->
+  <uri name="http://www.w3.org/2004/02/skos/core" uri="imports/skos.ttl"/>
+  <uri name="http://www.w3.org/2004/02/skos/core#" uri="imports/skos.ttl"/>
+  <!-- QUDT schema + slim units -->
+  <uri name="http://qudt.org/schema/qudt/" uri="imports/qudt-schema.ttl"/>
+  <uri name="http://qudt.org/2.1/schema/qudt" uri="imports/qudt-schema.ttl"/>
+  <uri name="http://qudt.org/2.1/vocab/qudt-slim" uri="imports/qudt-units-slim.ttl"/>
+  <!-- The Solid Core (this ontology) -->
+  <uri name="https://w3id.org/jeswr/core" uri="core.ttl"/>
+  <uri name="https://w3id.org/jeswr/core#" uri="core.ttl"/>
+  <uri name="https://w3id.org/jeswr/core/1.0.1" uri="core.ttl"/>
+</catalog>

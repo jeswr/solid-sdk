@@ -1,0 +1,70 @@
+# AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+#
+@prefix drawing: <https://w3id.org/jeswr/sectors/drawing#> .
+@prefix drsh:    <https://w3id.org/jeswr/sectors/drawing/shapes#> .
+@prefix core:    <https://w3id.org/jeswr/core#> .
+@prefix sh:      <http://www.w3.org/ns/shacl#> .
+@prefix owl:     <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:     <http://www.w3.org/2001/XMLSchema#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix prof:    <http://www.w3.org/ns/dx/prof/> .
+
+# =============================================================================
+# Solid Drawing & Whiteboard — SHACL DATA-MODEL PROFILE (R4 discipline)
+#
+# The NORMATIVE conformance artifact: the ontology licenses meaning, this shape
+# checks shape. OPEN BY DEFAULT (no sh:closed); sh:severity carries the RFC 2119
+# grade (Violation=MUST, Warning=SHOULD, Info=MAY); IMMUTABLE version IRI; additive.
+# =============================================================================
+
+<https://w3id.org/jeswr/sectors/drawing/profile> a prof:Profile ;
+    dcterms:title "Solid Drawing data-model profile (version-independent)"@en ;
+    dcterms:hasVersion <https://w3id.org/jeswr/sectors/drawing/profile/1.0.0> ;
+    rdfs:comment "Version-independent IRI resolving to the current Drawing profile. "@en .
+
+<https://w3id.org/jeswr/sectors/drawing/profile/1.0.0> a prof:Profile ;
+    dcterms:title "Solid Drawing data-model profile 1.0.0"@en ;
+    dcterms:isVersionOf <https://w3id.org/jeswr/sectors/drawing/profile> ;
+    owl:versionInfo "1.0.0" ;
+    prof:isProfileOf <https://w3id.org/jeswr/sectors/drawing> ;
+    prof:hasToken "drawing-1.0.0" ;
+    rdfs:comment "IMMUTABLE version IRI. Open shapes; sh:Violation=MUST, sh:Warning=SHOULD. "@en .
+
+# -----------------------------------------------------------------------------
+# Scene — MUST be titled and point at its scene document; SHOULD declare a schema
+# version; MAY carry a thumbnail.
+# -----------------------------------------------------------------------------
+
+drsh:SceneShape a sh:NodeShape ;
+    sh:targetClass drawing:Scene ;
+    rdfs:label "Scene shape"@en ;
+    sh:property [
+        sh:path dcterms:title ;
+        sh:minCount 1 ;
+        sh:datatype xsd:string ;
+        sh:severity sh:Violation ;          # MUST: a board needs a name to list it
+        sh:message "A drawing scene MUST have a dcterms:title."@en
+    ] ;
+    sh:property [
+        sh:path drawing:sceneDocument ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:nodeKind sh:IRI ;
+        sh:severity sh:Violation ;          # MUST: the opaque document the scene round-trips
+        sh:message "A drawing scene MUST reference exactly one drawing:sceneDocument (the opaque serialised scene resource)."@en
+    ] ;
+    sh:property [
+        sh:path drawing:schemaVersion ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+        sh:severity sh:Warning ;            # SHOULD: so an older document can be migrated
+        sh:message "A drawing scene SHOULD record the drawing:schemaVersion its document was serialised against."@en
+    ] ;
+    sh:property [
+        sh:path drawing:thumbnail ;
+        sh:nodeKind sh:IRI ;
+        sh:maxCount 1 ;
+        sh:severity sh:Info ;               # MAY: a rendered preview
+        sh:message "drawing:thumbnail, if present, MUST be a single IRI pointing at a preview image resource."@en
+    ] .

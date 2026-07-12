@@ -1,0 +1,58 @@
+<!doctype html>
+<!-- AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>w3id.org/jeswr/sectors/health# — Solid Federation Sector Ontology</title>
+    <style>
+      :root { color-scheme: light dark; }
+      body { font-family: system-ui, sans-serif; line-height: 1.6; max-width: 64rem; margin: 2rem auto; padding: 0 1rem; }
+      code { background: rgba(127,127,127,0.15); padding: 0.1em 0.35em; border-radius: 4px; }
+      .warn { border-left: 4px solid #d97706; padding: 0.5rem 1rem; background: rgba(217,119,6,0.08); border-radius: 4px; }
+      table { border-collapse: collapse; width: 100%; }
+      th, td { text-align: left; padding: 0.4rem 0.6rem; border-bottom: 1px solid rgba(127,127,127,0.3); vertical-align: top; }
+      a { color: #2563eb; }
+    </style>
+  </head>
+  <body>
+    <h1><code>https://w3id.org/jeswr/sectors/health#</code></h1>
+    <p>Prefix <code>health:</code> · a gUFO-based ontology in the @jeswr Solid federation; imports the <a href="../core.html">Solid Core</a>.</p>
+    <p class="warn">⚠️ <strong>Experimental</strong> — AI-agent-generated (Claude Opus 4.8, @jeswr PSS agent); under active development, not production-hardened.</p>
+    <p>Other representations: <a href="health.ttl">Turtle</a> · <a href="health-context.jsonld">JSON-LD context</a> · <a href="../">index</a></p>
+    <h2>Terms (30)</h2>
+    <table>
+      <tr><th>Term</th><th>Label</th><th>Comment / definition</th></tr>
+      <tr><td><code>health:careProvider</code></td><td>care provider</td><td>The healthcare organization (playing health:HealthcareProvider) custodially responsible for a record or encounter. A sub-property of core:custodian. No rdfs:domain (it spans the HealthRecord document and the Encounter event). Aligns to fhir:Encounter.serviceProvider / fhir:Patient.managingOrganization.</td></tr>
+      <tr><td><code>health:ClinicalEntry</code></td><td>Clinical Entry</td><td>Abstract super-class of the structured entries making up a health record (observations, conditions, medication statements, immunizations). Each entry is a core:Record core:about a core:Person and typically core:partOf a health:HealthRecord.</td></tr>
+      <tr><td><code>health:CodeableConcept</code></td><td>Codeable Concept</td><td>A coded clinical concept drawn from a coding system (SNOMED CT, LOINC, or an Apple Health type). A core:Identifier whose core:inScheme is the coding system; the 'what' of an Observation/Condition. Aligns to fhir:CodeableConcept / fhir:Coding.</td></tr>
+      <tr><td><code>health:Condition</code></td><td>Condition</td><td>A clinical problem, diagnosis or health concern recorded for a patient (a coded diagnosis). A core:Record core:about a core:Person. Aligns to fhir:Condition / snomed:64572001 (Clinical finding).</td></tr>
+      <tr><td><code>health:effectiveTime</code></td><td>effective time</td><td>When the Observation is clinically effective — a time:Instant (a spot heart-rate reading) or a time:Interval (a sleep session, a daily step total). A sub-property of core:atTime. Aligns to fhir:Observation.effective[x].</td></tr>
+      <tr><td><code>health:Encounter</code></td><td>Encounter</td><td>An interaction between a patient and the healthcare system (a visit, admission, consultation). A core:Activity occurring over time, performed by a practitioner/provider at a place. Aligns to fhir:Encounter / snomed:308335008 (Patient encounter).</td></tr>
+      <tr><td><code>health:hasCode</code></td><td>has code</td><td>The clinical code stating what a ClinicalEntry concerns (the measured quantity, the diagnosis, the vaccine). A sub-property of core:identifiedBy. Aligns to fhir:Observation.code / fhir:Condition.code.</td></tr>
+      <tr><td><code>health:hasEntry</code></td><td>has entry</td><td>Relates a health:HealthRecord document to a clinical entry it contains. A sub-property of core:hasPart, so the transitive part-whole spine holds. Aligns to the FHIR document/composition section model.</td></tr>
+      <tr><td><code>health:hasUnit</code></td><td>has unit</td><td>The QUDT unit of health:value (unit:BEAT-PER-MIN for heart rate, unit:SEC for sleep duration, unit:M for distance). Reuses the QUDT slim module; the parallel UCUM code is health:unitCode. Aligns to fhir:Quantity.system+code (http://unitsofmeasure.org).</td></tr>
+      <tr><td><code>health:HealthcareProvider</code></td><td>Healthcare Provider</td><td>The role of an organization that delivers care (hospital, clinic, pharmacy, GP practice). The custodial party of a record or encounter. Aligns to fhir:Organization / snomed:43741000 (Site of care).</td></tr>
+      <tr><td><code>health:HealthRecord</code></td><td>Health Record</td><td>A personal health record document: a core:Record whose core:subject is the patient (a core:Person). The INFORMATION RESOURCE, kept distinct from the patient it is about. Aligns (closeMatch) to fhir:Composition / fhir:Bundle — NOT to fhir:Patient (which fuses person + record).</td></tr>
+      <tr><td><code>health:HeartRateObservation</code></td><td>Heart Rate Observation</td><td>A heart-rate measurement in beats/min. Maps the Apple Health HKQuantityTypeIdentifierHeartRate type and LOINC 8867-4; the value carries unit:BEAT-PER-MIN (QUDT) / UCUM '/min'.</td></tr>
+      <tr><td><code>health:Immunization</code></td><td>Immunization</td><td>A record that a vaccine was administered to a patient. A core:Record core:about a core:Person; the administration EVENT is the separate health:ImmunizationActivity. References the vaccine via health:medication. Aligns to fhir:Immunization / snomed:830152006 (Immunization).</td></tr>
+      <tr><td><code>health:ImmunizationActivity</code></td><td>Immunization Activity</td><td>The act of administering a vaccine to a patient — a perdurant performed by a practitioner at a time and place, recorded by a health:Immunization. Aligns to fhir:Immunization (the administration act).</td></tr>
+      <tr><td><code>health:medication</code></td><td>medication</td><td>The medicinal product a MedicationStatement records, or the vaccine an Immunization administers. A health:MedicinalProduct (a core:Asset). No rdfs:domain (it spans the MedicationStatement/Immunization records and the ImmunizationActivity event). Aligns to fhir:MedicationStatement.medication / fhir:Immunization.vaccineCode.</td></tr>
+      <tr><td><code>health:MedicationStatement</code></td><td>Medication Statement</td><td>A record that a patient is/was taking a medicinal product, possibly with dosage and period. A core:Record core:about a core:Person; references a health:MedicinalProduct via health:medication. Aligns to fhir:MedicationStatement.</td></tr>
+      <tr><td><code>health:MedicinalProduct</code></td><td>Medicinal Product</td><td>A medicinal product as an identifiable thing (a drug, a vaccine). A core:Asset (something held/consumed) carrying core:identifiedBy ISO IDMP identifiers. Aligns (closeMatch) to fhir:Medication / fhir:MedicinalProductDefinition and IDMP-O. The product is NOT the statement of taking it.</td></tr>
+      <tr><td><code>health:Observation</code></td><td>Observation</td><td>A measured or asserted clinical value as a RECORD: a code (what was measured), a value, a unit and an effective time. The data shape behind Apple Health metrics and lab results. As it carries a value+unit it is also a core:Quantity. Aligns to fhir:Observation / snomed:363787002 (Observable entity).</td></tr>
+      <tr><td><code>health:ObservationActivity</code></td><td>Observation Activity</td><td>The act of taking a measurement or making an observation — a perdurant performed by a practitioner or device at a time, producing a health:Observation record. Keeps the record-vs-act split. Aligns to prov:Activity / fhir:Observation (the act framing).</td></tr>
+      <tr><td><code>health:patient</code></td><td>patient</td><td>The patient (a core:Person playing health:Patient) a clinical entry, encounter or activity concerns. A sub-property of core:about, keeping the real-world person distinct from the record document. No rdfs:domain: it links both record entries (endurants) and clinical acts (events), which gUFO holds disjoint, so a domain axiom would force inconsistent typing — intended usage is enforced in SHACL. Aligns to fhir:Observation.subject / fhir:Encounter.subject.</td></tr>
+      <tr><td><code>health:Patient</code></td><td>Patient</td><td>The role of a person as the subject of clinical care and records — the human receiving care, played contingently and relationally. A real-world agent, NOT the record document. Aligns (Mode A, closeMatch) to fhir:Patient and snomed:116154003 (Patient).</td></tr>
+      <tr><td><code>health:Practitioner</code></td><td>Practitioner</td><td>The role of an individual care professional (clinician, nurse, pharmacist) acting in the delivery of care. Aligns to fhir:Practitioner / snomed:223366009 (Healthcare professional).</td></tr>
+      <tr><td><code>health:recordedBy</code></td><td>recorded by</td><td>The practitioner or provider (a core:Agent) who carried out / authored a clinical activity (an Encounter, an ObservationActivity, an ImmunizationActivity). A sub-property of core:performedBy. Aligns to fhir:Encounter.participant / fhir:Immunization.performer.</td></tr>
+      <tr><td><code>health:resultsIn</code></td><td>results in</td><td>Links a health:ObservationActivity (the act of measuring) to the health:Observation record it produces. Keeps the act-vs-record split explicit. Aligns to prov:generated.</td></tr>
+      <tr><td><code>health:sector</code></td><td>Health sector</td><td>The Health data sector. The value an app's fedapp:sector names in its Client Identifier Document to declare it operates over health data. Backed by this sector ontology.</td></tr>
+      <tr><td><code>health:SleepObservation</code></td><td>Sleep Observation</td><td>A sleep-analysis record (asleep/awake/in-bed duration). Maps the Apple Health HKCategoryTypeIdentifierSleepAnalysis type and LOINC 93832-4; carries an interval effective time and a duration value in unit:SEC / UCUM 's'.</td></tr>
+      <tr><td><code>health:StepCountObservation</code></td><td>Step Count Observation</td><td>A count of steps over an interval. Maps the Apple Health HKQuantityTypeIdentifierStepCount type and LOINC 55423-8; a dimensionless count (UCUM '{steps}'). Carries an interval effective time, not an instant.</td></tr>
+      <tr><td><code>health:unitCode</code></td><td>unit code</td><td>The UCUM unit code for health:value ('/min' for heart rate, 's' for sleep duration, '{steps}' for step count, 'mm[Hg]' for blood pressure). The string parallel of health:hasUnit. Aligns to fhir:Quantity.code (system http://unitsofmeasure.org).</td></tr>
+      <tr><td><code>health:value</code></td><td>value</td><td>The measured value of an Observation (numeric or string). The QUDT/UCUM unit is carried by health:hasUnit / health:unitCode; apps MAY instead use a cdt:ucum typed literal (alignments). Aligns to fhir:Observation.value[x] (valueQuantity.value).</td></tr>
+      <tr><td><code>health:VitalSign</code></td><td>Vital Sign</td><td>An Observation of a physiological vital sign (heart rate, blood pressure, body temperature, respiratory rate, oxygen saturation). Mirrors the FHIR vital-signs profile category (LOINC 85353-1).</td></tr>
+    </table>
+  </body>
+</html>

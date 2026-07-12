@@ -1,0 +1,114 @@
+<!doctype html>
+<!-- AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>w3id.org/jeswr/sectors/finance# — Solid Federation Sector Ontology</title>
+    <style>
+      :root { color-scheme: light dark; }
+      body { font-family: system-ui, sans-serif; line-height: 1.6; max-width: 64rem; margin: 2rem auto; padding: 0 1rem; }
+      code { background: rgba(127,127,127,0.15); padding: 0.1em 0.35em; border-radius: 4px; }
+      .warn { border-left: 4px solid #d97706; padding: 0.5rem 1rem; background: rgba(217,119,6,0.08); border-radius: 4px; }
+      table { border-collapse: collapse; width: 100%; }
+      th, td { text-align: left; padding: 0.4rem 0.6rem; border-bottom: 1px solid rgba(127,127,127,0.3); vertical-align: top; }
+      a { color: #2563eb; }
+    </style>
+  </head>
+  <body>
+    <h1><code>https://w3id.org/jeswr/sectors/finance#</code></h1>
+    <p>Prefix <code>fin:</code> · a gUFO-based ontology in the @jeswr Solid federation; imports the <a href="../core.html">Solid Core</a>.</p>
+    <p class="warn">⚠️ <strong>Experimental</strong> — AI-agent-generated (Claude Opus 4.8, @jeswr PSS agent); under active development, not production-hardened.</p>
+    <p>Other representations: <a href="finance.ttl">Turtle</a> · <a href="finance-context.jsonld">JSON-LD context</a> · <a href="../">index</a></p>
+    <h2>Terms (86)</h2>
+    <table>
+      <tr><th>Term</th><th>Label</th><th>Comment / definition</th></tr>
+      <tr><td><code>fin:accountClass</code></td><td>account class</td><td>The fundamental accounting class (a coded fin:AccountClass value) of a ledger account.</td></tr>
+      <tr><td><code>fin:AccountClass</code></td><td>Account Class</td><td>The top-level classification of a ledger account: asset / liability / equity / income / expense (the five fundamental accounting classes, whose normal debit/credit balance the double-entry rules follow). A coded value; members are skos:Concepts in fin:accountClassScheme.</td></tr>
+      <tr><td><code>fin:accountClassScheme</code></td><td>Account class scheme</td><td>The five fundamental accounting classes for fin:accountClass.</td></tr>
+      <tr><td><code>fin:accountCode</code></td><td>account code</td><td>The chart-of-accounts code of a ledger account (e.g. &quot;1200&quot;).</td></tr>
+      <tr><td><code>fin:AccountCustodian</code></td><td>Account Custodian</td><td>The role of an agent that holds or controls a financial account's assets without necessarily owning them (a custodian bank).</td></tr>
+      <tr><td><code>fin:ActiveFinancialAccount</code></td><td>Active Financial Account</td><td>The phase of a financial account that is open and operable.</td></tr>
+      <tr><td><code>fin:allocated</code></td><td>allocated</td><td>The amount of money planned/allocated to a budget envelope for the period. A sub-property of fin:hasMonetaryAmount narrowed to the envelope allocation.</td></tr>
+      <tr><td><code>fin:amount</code></td><td>amount</td><td>The numeric value of a monetary amount.</td></tr>
+      <tr><td><code>fin:Balance</code></td><td>Balance</td><td>A point-in-time statement of the monetary amount standing on a financial account. A core:Record about the account, distinct from the account itself; use core:about for the account and core:timestamp for the as-of instant.</td></tr>
+      <tr><td><code>fin:Bank</code></td><td>Bank</td><td>A deposit-taking financial institution.</td></tr>
+      <tr><td><code>fin:Budget</code></td><td>Budget</td><td>A personal budget plan for a period — the envelope/zero-based budget an app like Actual Budget maintains. An information object aggregating its BudgetCategory envelopes (via core:hasPart) over a covered period (core:validFrom/core:validUntil).</td></tr>
+      <tr><td><code>fin:BudgetCategory</code></td><td>Budget Category</td><td>An envelope budgeting bucket within a Budget — a named category (&quot;Groceries&quot;, &quot;Rent&quot;) holding a planned allocation (fin:allocated, a MonetaryAmount) against which transactions are spent. An information object (the allocation record), distinct from the money itself. Its grouping/classification reuses skos:Concept (skos:broader for category groups); aligns to schema (alignments file).</td></tr>
+      <tr><td><code>fin:callAmount</code></td><td>call amount</td><td>The amount a capital-call notice draws down (a fin:MonetaryAmount node).</td></tr>
+      <tr><td><code>fin:calledToDate</code></td><td>called to date</td><td>The cumulative capital drawn down against a commitment so far (a fin:MonetaryAmount node).</td></tr>
+      <tr><td><code>fin:CardPayment</code></td><td>Card Payment</td><td>A payment initiated with a payment card.</td></tr>
+      <tr><td><code>fin:categoryConcept</code></td><td>category concept</td><td>The skos:Concept classifying this envelope (the reusable category taxonomy term — &quot;Groceries&quot;, a child of a &quot;Food&quot; group via skos:broader). Reuses SKOS for the category hierarchy rather than minting a parallel category-tree vocabulary.</td></tr>
+      <tr><td><code>fin:class-asset</code></td><td>Asset</td><td>Resources owned (normal debit balance).</td></tr>
+      <tr><td><code>fin:class-equity</code></td><td>Equity</td><td>Residual owners' interest (normal credit balance).</td></tr>
+      <tr><td><code>fin:class-expense</code></td><td>Expense</td><td>Costs incurred (normal debit balance).</td></tr>
+      <tr><td><code>fin:class-income</code></td><td>Income</td><td>Revenue earned (normal credit balance).</td></tr>
+      <tr><td><code>fin:class-liability</code></td><td>Liability</td><td>Obligations owed (normal credit balance).</td></tr>
+      <tr><td><code>fin:ClosedFinancialAccount</code></td><td>Closed Financial Account</td><td>The phase of a financial account that has been terminated.</td></tr>
+      <tr><td><code>fin:Commitment</code></td><td>Commitment</td><td>A limited partner's standing commitment of capital to a fund: the committed amount (fin:commitmentAmount), how much has been drawn to date (fin:calledToDate) and the undrawn balance (fin:remainingCommitment), for a fund (fin:fund) and an LP (fin:limitedPartner). A core:Record of the LP↔fund commitment.</td></tr>
+      <tr><td><code>fin:commitmentAmount</code></td><td>commitment amount</td><td>The total capital a limited partner has committed to a fund (a fin:MonetaryAmount node).</td></tr>
+      <tr><td><code>fin:Counterparty</code></td><td>Counterparty</td><td>The role of the agent on the far side of a transaction's money movement, played contingently and relationally for that transaction.</td></tr>
+      <tr><td><code>fin:Credit</code></td><td>Credit</td><td>The credit side of a posting — increases liability/equity/income accounts, decreases asset/expense accounts.</td></tr>
+      <tr><td><code>fin:creditAccount</code></td><td>credit account</td><td>The account credited (money arrives) by a transaction.</td></tr>
+      <tr><td><code>fin:CreditAccount</code></td><td>Credit Account</td><td>An account representing a credit facility or revolving credit line (a credit card or overdraft), where the holder owes the provider. Relevant to the EDMA lending use cases.</td></tr>
+      <tr><td><code>fin:currency</code></td><td>currency</td><td>The ISO 4217 alphabetic currency code (e.g. &quot;GBP&quot;, &quot;EUR&quot;, &quot;USD&quot;) of a monetary amount.</td></tr>
+      <tr><td><code>fin:CurrentAccount</code></td><td>Current Account</td><td>A transactional demand-deposit account (US: checking account).</td></tr>
+      <tr><td><code>fin:Debit</code></td><td>Debit</td><td>The debit side of a posting — increases asset/expense accounts, decreases liability/equity/income accounts.</td></tr>
+      <tr><td><code>fin:debitAccount</code></td><td>debit account</td><td>The account debited (money leaves) by a transaction.</td></tr>
+      <tr><td><code>fin:distributionAmount</code></td><td>distribution amount</td><td>The amount a distribution notice returns to a limited partner (a fin:MonetaryAmount node).</td></tr>
+      <tr><td><code>fin:entrySide</code></td><td>entry side</td><td>The side (fin:Debit or fin:Credit) a ledger entry posts on.</td></tr>
+      <tr><td><code>fin:EntrySide</code></td><td>Entry Side</td><td>The side of a double-entry posting: debit or credit. A coded value (core:Category); the two members are fin:Debit and fin:Credit in fin:entrySideScheme.</td></tr>
+      <tr><td><code>fin:entrySideScheme</code></td><td>Entry side scheme</td><td>The two double-entry sides for fin:entrySide.</td></tr>
+      <tr><td><code>fin:FinancialAccount</code></td><td>Financial Account</td><td>A core:Account at a financial institution through which money is held and money movements are recorded. A reified relator mediating an account holder and a provider.</td></tr>
+      <tr><td><code>fin:FinancialInstitution</code></td><td>Financial Institution</td><td>An organization that provides financial accounts and services (a bank, a building society, a payment institution). Typically the agent playing core:AccountProvider for an account.</td></tr>
+      <tr><td><code>fin:FinancialInstrument</code></td><td>Financial Instrument</td><td>A tradable financial asset — a security, bond, fund unit, or similar. Identify it with core:identifiedBy + an ISIN-scheme core:Identifier.</td></tr>
+      <tr><td><code>fin:FrozenFinancialAccount</code></td><td>Frozen Financial Account</td><td>The phase of a financial account temporarily suspended (e.g. a compliance hold).</td></tr>
+      <tr><td><code>fin:fund</code></td><td>fund</td><td>The fund a commitment or notice concerns. No rdfs:domain — shared by fin:Commitment and fin:Notice.</td></tr>
+      <tr><td><code>fin:Fund</code></td><td>Fund</td><td>A pooled private-equity / venture / real-asset investment fund vehicle into which limited partners commit capital and from which a general partner draws it down and distributes returns. Its vintage year is fin:vintageYear; its manager is a fin:GeneralPartner. Aligned Mode-A to FIBO's SEC Funds module.</td></tr>
+      <tr><td><code>fin:generalPartner</code></td><td>general partner</td><td>The agent playing the General Partner role for a fund. No rdfs:domain — carried on a fin:Fund (its manager) or a fin:Notice (its issuer).</td></tr>
+      <tr><td><code>fin:GeneralPartner</code></td><td>General Partner</td><td>The role of the agent (a management company) that manages a fund, draws down committed capital and issues notices.</td></tr>
+      <tr><td><code>fin:hasCategory</code></td><td>has category</td><td>An envelope category that is part of a budget. A sub-property of core:hasPart (the budget aggregates its envelopes).</td></tr>
+      <tr><td><code>fin:hasCounterparty</code></td><td>has counterparty</td><td>Links a transaction event to the agent playing the Counterparty role on the far side of the money movement. A fresh sector property — NOT a subproperty of core:hadParticipant, so it does not entail that a Transaction is a core:Event participation nor widen any Core property.</td></tr>
+      <tr><td><code>fin:hasMonetaryAmount</code></td><td>has monetary amount</td><td>Relates an entity (a transaction, payment, balance, or holding) to a monetary amount. No rdfs:domain: it spans both endurants (holdings) and events (transactions), which gUFO holds disjoint, so a domain axiom would force inconsistent typing — intended usage is enforced in SHACL.</td></tr>
+      <tr><td><code>fin:heldInAccount</code></td><td>held in account</td><td>The investment account a holding is custodied within.</td></tr>
+      <tr><td><code>fin:Holding</code></td><td>Holding</td><td>A held position: a quantity of a financial instrument owned within an investment account. Use core:owns for the owner, fin:ofInstrument for the instrument, fin:quantity for the units, and fin:hasMonetaryAmount for its valuation.</td></tr>
+      <tr><td><code>fin:inCategory</code></td><td>in category</td><td>The budget envelope a transaction is assigned to (the spend that draws down the envelope's allocation). A plain object property (the Transaction is a gufo:Event; this is not a part-whole link).</td></tr>
+      <tr><td><code>fin:InvestmentAccount</code></td><td>Investment Account</td><td>An account through which financial instruments are held (a brokerage or securities account). Its holdings are fin:Holding / fin:FinancialInstrument assets.</td></tr>
+      <tr><td><code>fin:JournalEntry</code></td><td>Journal Entry</td><td>A balanced double-entry bookkeeping transaction — a set of fin:LedgerEntry postings whose debits equal its credits, recorded on a date. A core:Record; its component postings reference it via fin:partOfJournalEntry.</td></tr>
+      <tr><td><code>fin:jurisdiction</code></td><td>jurisdiction</td><td>The legal jurisdiction (an ISO 3166 code or name) governing an entity or account. A neutral finance term replacing schema:jurisdiction, whose schema.org domain is GovernmentService/Legislation. No rdfs:domain — carried on institutions, funds or accounts.</td></tr>
+      <tr><td><code>fin:LedgerAccount</code></td><td>Ledger Account</td><td>A general-ledger account — a node in a chart of accounts against which double-entry postings (fin:LedgerEntry) are recorded. An information object (the account definition), classified by fin:accountClass (asset/liability/equity/income/expense), identified by fin:accountCode, and nested under a parent via fin:parentAccountCode. Distinct from a fin:FinancialAccount (a real account at an institution, a Relator); a LedgerAccount is a bookkeeping classification. Aligned Mode-A to fibo-fbc-pas-caa:LedgerAccount.</td></tr>
+      <tr><td><code>fin:LedgerEntry</code></td><td>Ledger Entry</td><td>One posting line of a double-entry transaction: a monetary amount (fin:hasMonetaryAmount) posted on one side (fin:entrySide → fin:Debit or fin:Credit) to a ledger account (fin:postsTo), as part of a journal entry (fin:partOfJournalEntry). Aligned Mode-A to fibo-fnd-txnsext-rea:LedgerEntry (FIBO's FND/TransactionsExt/REATransactions module — where FIBO's LedgerEntry actually lives, byte-verified by Keystone; NOT the ClientsAndAccounts module that holds LedgerAccount).</td></tr>
+      <tr><td><code>fin:limitedPartner</code></td><td>limited partner</td><td>The agent playing the Limited Partner role for a commitment.</td></tr>
+      <tr><td><code>fin:LimitedPartner</code></td><td>Limited Partner</td><td>The role of the agent (an investor) that commits capital to a fund as a limited partner.</td></tr>
+      <tr><td><code>fin:MonetaryAmount</code></td><td>Monetary Amount</td><td>A quantity of money: a decimal value in a single ISO 4217 currency. A value object reused by transactions, payments, balances and holdings. A core:Quantity whose unit is a currency (the ISO 4217 code on fin:currency).</td></tr>
+      <tr><td><code>fin:Notice</code></td><td>Notice</td><td>A capital-call or distribution notice issued by a fund's general partner to a limited partner: its kind is fin:noticeType (fin:notice-capital-call / fin:notice-distribution), its amount fin:callAmount (a call) or fin:distributionAmount (a distribution), for a fund (fin:fund). An information resource (the notice document); may be dual-typed schema:Invoice for a capital call (with schema:paymentDueDate).</td></tr>
+      <tr><td><code>fin:notice-capital-call</code></td><td>Capital call</td><td>A notice drawing down committed capital from limited partners (fin:callAmount).</td></tr>
+      <tr><td><code>fin:notice-distribution</code></td><td>Distribution</td><td>A notice returning proceeds to limited partners (fin:distributionAmount).</td></tr>
+      <tr><td><code>fin:noticeType</code></td><td>notice type</td><td>The kind (a coded fin:NoticeType value) of a fund notice: capital call or distribution.</td></tr>
+      <tr><td><code>fin:NoticeType</code></td><td>Notice Type</td><td>The kind of a fund notice: a capital call (drawing committed capital) or a distribution (returning proceeds). A coded value; members are skos:Concepts in fin:noticeTypeScheme.</td></tr>
+      <tr><td><code>fin:noticeTypeScheme</code></td><td>Notice type scheme</td><td>The kinds of fund notice for fin:noticeType.</td></tr>
+      <tr><td><code>fin:ofInstrument</code></td><td>of instrument</td><td>The financial instrument a holding is a position in.</td></tr>
+      <tr><td><code>fin:parentAccountCode</code></td><td>parent account code</td><td>The fin:accountCode of the parent ledger account in the chart-of-accounts hierarchy (the code-based parent link Keystone uses).</td></tr>
+      <tr><td><code>fin:partOfJournalEntry</code></td><td>part of journal entry</td><td>The journal entry a ledger-entry posting belongs to. A sub-property of core:partOf (the journal entry aggregates its posting lines).</td></tr>
+      <tr><td><code>fin:payee</code></td><td>payee</td><td>Links a payment to the agent playing the Payee role.</td></tr>
+      <tr><td><code>fin:Payee</code></td><td>Payee</td><td>The role of the agent that receives money in a payment.</td></tr>
+      <tr><td><code>fin:payer</code></td><td>payer</td><td>Links a payment to the agent playing the Payer role.</td></tr>
+      <tr><td><code>fin:Payer</code></td><td>Payer</td><td>The role of the agent that sends money in a payment.</td></tr>
+      <tr><td><code>fin:Payment</code></td><td>Payment</td><td>A transaction that transfers money from a payer to a payee to settle an obligation.</td></tr>
+      <tr><td><code>fin:postingTime</code></td><td>posting time</td><td>The instant a transaction was posted to the account ledger. A specialisation of core:timestamp.</td></tr>
+      <tr><td><code>fin:postsTo</code></td><td>posts to</td><td>The ledger account a ledger entry posts to.</td></tr>
+      <tr><td><code>fin:quantity</code></td><td>quantity</td><td>The number of units of the instrument held.</td></tr>
+      <tr><td><code>fin:remainingCommitment</code></td><td>remaining commitment</td><td>The undrawn balance of a commitment (committed minus called — a fin:MonetaryAmount node).</td></tr>
+      <tr><td><code>fin:SavingsAccount</code></td><td>Savings Account</td><td>An interest-bearing deposit account intended for saving rather than day-to-day transactions.</td></tr>
+      <tr><td><code>fin:sector</code></td><td>Finance sector</td><td>The Finance data sector. The value an app's fedapp:sector names in its Client Identifier Document to declare it operates over finance data. Backed by this sector ontology.</td></tr>
+      <tr><td><code>fin:Security</code></td><td>Security</td><td>A negotiable financial instrument such as a share or bond.</td></tr>
+      <tr><td><code>fin:sharePct</code></td><td>share percentage</td><td>A percentage (0–100) — an ownership stake or holding proportion — as a plain xsd:decimal. The HONEST replacement for a range-violating bare-literal qudt:quantityValue (QUDT requires a qudt:QuantityValue NODE; for an app-internal percentage the sector datatype property is the correct weight). No rdfs:domain — used on ownership edges and holdings.</td></tr>
+      <tr><td><code>fin:snapshot</code></td><td>snapshot</td><td>A periodic compacted snapshot resource of the budget's CRDT state, so a fresh client need not replay the whole sync log. The pointer to the snapshot resource (an opaque byte payload). A plain object property.</td></tr>
+      <tr><td><code>fin:syncLog</code></td><td>sync log</td><td>The append-only CRDT-sync container this budget's mutations are logged to (an LDP container of opaque sync-message resources). The pointer to the CRDT message log — its byte payloads are opaque to RDF. A plain object property (the pointed-at container is a core:InformationResource).</td></tr>
+      <tr><td><code>fin:Transaction</code></td><td>Transaction</td><td>A money movement on a financial account, having a monetary amount, a posting time and (usually) a counterparty. A core:Activity event.</td></tr>
+      <tr><td><code>fin:TransactionRecord</code></td><td>Transaction Record</td><td>The stored statement-line record of a transaction (as it appears on a statement), as opposed to the money-movement event itself. Use core:about to point at the fin:Transaction it documents.</td></tr>
+      <tr><td><code>fin:Transfer</code></td><td>Transfer</td><td>A movement of money between accounts (a bank transfer, a standing-order execution).</td></tr>
+      <tr><td><code>fin:vintageYear</code></td><td>vintage year</td><td>The vintage year of a fund — the year it began drawing capital, the standard PE cohort key.</td></tr>
+    </table>
+  </body>
+</html>

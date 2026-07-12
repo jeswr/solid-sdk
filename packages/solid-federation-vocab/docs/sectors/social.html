@@ -1,0 +1,37 @@
+<!doctype html>
+<!-- AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>w3id.org/jeswr/sectors/social# — Solid Federation Sector Ontology</title>
+    <style>
+      :root { color-scheme: light dark; }
+      body { font-family: system-ui, sans-serif; line-height: 1.6; max-width: 64rem; margin: 2rem auto; padding: 0 1rem; }
+      code { background: rgba(127,127,127,0.15); padding: 0.1em 0.35em; border-radius: 4px; }
+      .warn { border-left: 4px solid #d97706; padding: 0.5rem 1rem; background: rgba(217,119,6,0.08); border-radius: 4px; }
+      table { border-collapse: collapse; width: 100%; }
+      th, td { text-align: left; padding: 0.4rem 0.6rem; border-bottom: 1px solid rgba(127,127,127,0.3); vertical-align: top; }
+      a { color: #2563eb; }
+    </style>
+  </head>
+  <body>
+    <h1><code>https://w3id.org/jeswr/sectors/social#</code></h1>
+    <p>Prefix <code>social:</code> · a gUFO-based ontology in the @jeswr Solid federation; imports the <a href="../core.html">Solid Core</a>.</p>
+    <p class="warn">⚠️ <strong>Experimental</strong> — AI-agent-generated (Claude Opus 4.8, @jeswr PSS agent); under active development, not production-hardened.</p>
+    <p>Other representations: <a href="social.ttl">Turtle</a> · <a href="social-context.jsonld">JSON-LD context</a> · <a href="../">index</a></p>
+    <h2>Terms (9)</h2>
+    <table>
+      <tr><th>Term</th><th>Label</th><th>Comment / definition</th></tr>
+      <tr><td><code>social:attributedTo</code></td><td>attributed to</td><td>The agent a note is attributed to (its author — a WebID, or an AI agent for an AI-authored message). A plain object property. Aligns to as:attributedTo / CanonicalMessage.author; AI/external attribution is carried additionally via PROV-O (prov:wasAttributedTo), per chat-interop's MessageProvenance.</td></tr>
+      <tr><td><code>social:content</code></td><td>content</td><td>The body text of a note. Aligns to as:content / sioc:content / CanonicalMessage.content. Untrusted formatted bodies SHOULD be stored as text/plain (see social:mediaType) per the suite stored-XSS guard.</td></tr>
+      <tr><td><code>social:Feed</code></td><td>Feed</td><td>A collection of notes — a Mastodon timeline, a chat room/thread, or an RSS/Atom feed; its notes are core:hasPart of it. A curated/ordered collection whole. Aligns to as:Collection and to @jeswr/solid-chat-interop's CanonicalRoom.</td></tr>
+      <tr><td><code>social:inFeed</code></td><td>in feed</td><td>The feed / timeline / room a note belongs to. A sub-property of core:partOf. Aligns to as:context / CanonicalMessage.room.</td></tr>
+      <tr><td><code>social:inReplyTo</code></td><td>in reply to</td><td>The note this note is a reply to. Modelled in the as:inReplyTo direction ONLY (never the inverse sioc:has_reply), matching @jeswr/solid-chat-interop's reply-edge discipline. A plain object property.</td></tr>
+      <tr><td><code>social:mediaType</code></td><td>media type</td><td>The content type of the note body (defaults to &quot;text/plain&quot;). Aligns to as:mediaType / CanonicalMessage.mediaType.</td></tr>
+      <tr><td><code>social:Note</code></td><td>Note</td><td>A posted social message or feed item — a Mastodon toot, a forum/Discourse post, a chat message, or an RSS/Atom entry. An information object authored by an agent and posted to a feed. Aligns to as:Note / sioc:Note and to @jeswr/solid-chat-interop's CanonicalMessage (whose content model is AS2).</td></tr>
+      <tr><td><code>social:published</code></td><td>published</td><td>When the note was posted. A sub-property of core:timestamp. Aligns to as:published / dct:created / CanonicalMessage.published.</td></tr>
+      <tr><td><code>social:sector</code></td><td>Social, Fediverse &amp; Feed sector</td><td>The Social, Fediverse &amp; Feed data sector. The value an app's fedapp:sector names in its Client Identifier Document to declare it operates over social / fediverse / feed data (toots, posts, chat messages, RSS entries). Backed by this sector ontology. Already referenced by @jeswr/pod-chat's clientid.</td></tr>
+    </table>
+  </body>
+</html>

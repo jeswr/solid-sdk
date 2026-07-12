@@ -1,0 +1,33 @@
+<!doctype html>
+<!-- AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>w3id.org/jeswr/sectors/bookmarks# — Solid Federation Sector Ontology</title>
+    <style>
+      :root { color-scheme: light dark; }
+      body { font-family: system-ui, sans-serif; line-height: 1.6; max-width: 64rem; margin: 2rem auto; padding: 0 1rem; }
+      code { background: rgba(127,127,127,0.15); padding: 0.1em 0.35em; border-radius: 4px; }
+      .warn { border-left: 4px solid #d97706; padding: 0.5rem 1rem; background: rgba(217,119,6,0.08); border-radius: 4px; }
+      table { border-collapse: collapse; width: 100%; }
+      th, td { text-align: left; padding: 0.4rem 0.6rem; border-bottom: 1px solid rgba(127,127,127,0.3); vertical-align: top; }
+      a { color: #2563eb; }
+    </style>
+  </head>
+  <body>
+    <h1><code>https://w3id.org/jeswr/sectors/bookmarks#</code></h1>
+    <p>Prefix <code>bookmark:</code> · a gUFO-based ontology in the @jeswr Solid federation; imports the <a href="../core.html">Solid Core</a>.</p>
+    <p class="warn">⚠️ <strong>Experimental</strong> — AI-agent-generated (Claude Opus 4.8, @jeswr PSS agent); under active development, not production-hardened.</p>
+    <p>Other representations: <a href="bookmarks.ttl">Turtle</a> · <a href="bookmarks-context.jsonld">JSON-LD context</a> · <a href="../">index</a></p>
+    <h2>Terms (5)</h2>
+    <table>
+      <tr><th>Term</th><th>Label</th><th>Comment / definition</th></tr>
+      <tr><td><code>bookmark:archived</code></td><td>archived</td><td>Whether the bookmark has been archived / marked read (the Linkding 'archived' flag). Aligns to the forthcoming book:archived (xsd:boolean).</td></tr>
+      <tr><td><code>bookmark:Bookmark</code></td><td>Bookmark</td><td>A saved reference to a web resource the user bookmarked or queued to read later (a Linkding link). An information object — the saved record carrying the target URL, title, description, an archived/read flag, free-text notes and tags — distinct from the target resource it points at. Aligns to book:Bookmark in the forthcoming @jeswr/solid-bookmark vocabulary and to schema:BookmarkAction.</td></tr>
+      <tr><td><code>bookmark:hasTag</code></td><td>has tag</td><td>A tag applied to the bookmark, as a skos:Concept (reusing SKOS rather than minting a tag class). Aligns to schema:keywords; the free-text literal form is carried by schema:keywords in data that has no concept scheme.</td></tr>
+      <tr><td><code>bookmark:notes</code></td><td>notes</td><td>Free-text notes the user attached to the bookmark (the Linkding 'notes' field), distinct from the resource's own description. Aligns to the forthcoming book:notes.</td></tr>
+      <tr><td><code>bookmark:sector</code></td><td>Bookmarks &amp; Read-it-later sector</td><td>The Bookmarks &amp; Read-it-later data sector. The value an app's fedapp:sector names in its Client Identifier Document to declare it operates over bookmark / read-it-later data. Backed by this sector ontology.</td></tr>
+    </table>
+  </body>
+</html>

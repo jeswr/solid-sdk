@@ -1,0 +1,58 @@
+<!doctype html>
+<!-- AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>w3id.org/jeswr/sectors/contacts# — Solid Federation Sector Ontology</title>
+    <style>
+      :root { color-scheme: light dark; }
+      body { font-family: system-ui, sans-serif; line-height: 1.6; max-width: 64rem; margin: 2rem auto; padding: 0 1rem; }
+      code { background: rgba(127,127,127,0.15); padding: 0.1em 0.35em; border-radius: 4px; }
+      .warn { border-left: 4px solid #d97706; padding: 0.5rem 1rem; background: rgba(217,119,6,0.08); border-radius: 4px; }
+      table { border-collapse: collapse; width: 100%; }
+      th, td { text-align: left; padding: 0.4rem 0.6rem; border-bottom: 1px solid rgba(127,127,127,0.3); vertical-align: top; }
+      a { color: #2563eb; }
+    </style>
+  </head>
+  <body>
+    <h1><code>https://w3id.org/jeswr/sectors/contacts#</code></h1>
+    <p>Prefix <code>contact:</code> · a gUFO-based ontology in the @jeswr Solid federation; imports the <a href="../core.html">Solid Core</a>.</p>
+    <p class="warn">⚠️ <strong>Experimental</strong> — AI-agent-generated (Claude Opus 4.8, @jeswr PSS agent); under active development, not production-hardened.</p>
+    <p>Other representations: <a href="contacts.ttl">Turtle</a> · <a href="contacts-context.jsonld">JSON-LD context</a> · <a href="../">index</a></p>
+    <h2>Terms (30)</h2>
+    <table>
+      <tr><th>Term</th><th>Label</th><th>Comment / definition</th></tr>
+      <tr><td><code>contact:Acquaintance</code></td><td>acquaintance</td><td>Acquaintance relationship. vcard:Acquaintance.</td></tr>
+      <tr><td><code>contact:Colleague</code></td><td>colleague</td><td>Work/professional relationship. vcard:Colleague / vcard:CoWorker.</td></tr>
+      <tr><td><code>contact:Contact</code></td><td>Contact</td><td>An address-book entry (a card): a core:Record that is core:about exactly the Person or Organization it names. The card is distinct from the real-world agent — reading the card is not being the agent. Aligns to vcard:Kind.</td></tr>
+      <tr><td><code>contact:ContactGroup</code></td><td>Contact Group</td><td>A named address-book list / distribution group (Friends, Work, Family). A core:Group of the agents its member contacts are about. Aligns to vcard:Group.</td></tr>
+      <tr><td><code>contact:ContactPoint</code></td><td>Contact Point</td><td>A means of reaching an agent — an email address, phone number, postal address, or online handle. A core:Identifier (it locates the agent within a scheme). Aligns to schema:ContactPoint / the vcard channel value-types.</td></tr>
+      <tr><td><code>contact:contactPointType</code></td><td>contact point type</td><td>The use of a contact point (work / home / mobile / other) as a coded value (core:Category). SHOULD draw from contact:ContactPointTypeScheme; aligns to vcard Work/Home/Cell types.</td></tr>
+      <tr><td><code>contact:ContactRelationship</code></td><td>Contact Relationship</td><td>A reified relationship between the pod owner (or another agent) and a contacted agent, carrying a coded role (colleague/family/friend) via contact:relationshipRole and an optional core:validFrom/validUntil span. Reuses the Core relationship relator rather than minting a new link type; aligns to vcard:hasRelated / vcard:RelatedType.</td></tr>
+      <tr><td><code>contact:countryName</code></td><td>country name</td><td>Country name. vcard:country-name; schema:addressCountry.</td></tr>
+      <tr><td><code>contact:EmailAddress</code></td><td>Email Address</td><td>An e-mail address contact point. Aligns to vcard:Email / schema:email.</td></tr>
+      <tr><td><code>contact:Family</code></td><td>family</td><td>Family relationship. vcard:Kin / vcard:Child / vcard:Parent etc.</td></tr>
+      <tr><td><code>contact:Friend</code></td><td>friend</td><td>Personal/friend relationship. vcard:Friend.</td></tr>
+      <tr><td><code>contact:hasContactPoint</code></td><td>has contact point</td><td>Relates a Contact to one of its contact points. Sub-property of core:identifiedBy (range narrowed to contact:ContactPoint), never widening it.</td></tr>
+      <tr><td><code>contact:hasMemberContact</code></td><td>has member contact</td><td>Relates an address-book group/list to a Contact card it includes. Aligns to vcard:hasMember.</td></tr>
+      <tr><td><code>contact:HomeType</code></td><td>home</td><td>Home/personal use. vcard:Home.</td></tr>
+      <tr><td><code>contact:identifies</code></td><td>identifies</td><td>The Person or Organization a Contact card is about. Sub-property of core:about (range narrowed to core:Agent), never widening it. Keeps card ≠ agent.</td></tr>
+      <tr><td><code>contact:locality</code></td><td>locality</td><td>City / town. vcard:locality; schema:addressLocality.</td></tr>
+      <tr><td><code>contact:MobileType</code></td><td>mobile</td><td>Mobile/cell use. vcard:Cell.</td></tr>
+      <tr><td><code>contact:OnlineHandle</code></td><td>Online Handle</td><td>A messaging / social handle or URL contact point. Aligns to vcard:hasURL / vcard:hasInstantMessage.</td></tr>
+      <tr><td><code>contact:OrganizationContact</code></td><td>Organization Contact</td><td>A Contact card whose subject is a core:Organization. Aligns to vcard:Organization.</td></tr>
+      <tr><td><code>contact:PersonContact</code></td><td>Person Contact</td><td>A Contact card whose subject is a core:Person. Aligns to vcard:Individual.</td></tr>
+      <tr><td><code>contact:PhoneNumber</code></td><td>Phone Number</td><td>A telephone-number contact point. Aligns to vcard:Tel / schema:telephone.</td></tr>
+      <tr><td><code>contact:PostalAddress</code></td><td>Postal Address</td><td>A postal/mailing address contact point. core:atPlace MAY relate it to a core:Place for geocoding. Aligns to vcard:Address / schema:PostalAddress.</td></tr>
+      <tr><td><code>contact:postalCode</code></td><td>postal code</td><td>Postal / ZIP code. vcard:postal-code; schema:postalCode.</td></tr>
+      <tr><td><code>contact:rawValue</code></td><td>raw value</td><td>The literal value of a contact point (the address string, the dialable number). Sub-property of core:value, domain narrowed to contact:ContactPoint.</td></tr>
+      <tr><td><code>contact:region</code></td><td>region</td><td>State / province / region. vcard:region; schema:addressRegion.</td></tr>
+      <tr><td><code>contact:relatesContact</code></td><td>relates contact</td><td>Mediation tying a ContactRelationship relator to an agent playing the core:RelationshipParty role. Sub-property of core:relatesParty (no widening). Replaces the v0 core:relatesAgent + string core:relationshipRole.</td></tr>
+      <tr><td><code>contact:relationshipRole</code></td><td>relationship role</td><td>The coded role of a ContactRelationship (colleague / family / friend / acquaintance), a core:Category drawn from contact:RelationshipRoleScheme. NOT a sub-property of core:status (that is domain-restricted to core:Account); this is the relationship's own coded classifier. Mirrors vcard:RelatedType members.</td></tr>
+      <tr><td><code>contact:sector</code></td><td>Contacts sector</td><td>The Contacts data sector. The value an app's fedapp:sector names in its Client Identifier Document to declare it operates over contacts data. Backed by this sector ontology.</td></tr>
+      <tr><td><code>contact:streetAddress</code></td><td>street address</td><td>Street address line(s). vcard:street-address; schema:streetAddress.</td></tr>
+      <tr><td><code>contact:WorkType</code></td><td>work</td><td>Work/business use. vcard:Work.</td></tr>
+    </table>
+  </body>
+</html>

@@ -1,0 +1,106 @@
+# AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+#
+@prefix social:  <https://w3id.org/jeswr/sectors/social#> .
+@prefix socsh:   <https://w3id.org/jeswr/sectors/social/shapes#> .
+@prefix core:    <https://w3id.org/jeswr/core#> .
+@prefix sh:      <http://www.w3.org/ns/shacl#> .
+@prefix owl:     <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:     <http://www.w3.org/2001/XMLSchema#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix prof:    <http://www.w3.org/ns/dx/prof/> .
+
+# =============================================================================
+# Solid Social, Fediverse & Feed — SHACL DATA-MODEL PROFILE (R4 discipline)
+#
+# The NORMATIVE conformance artifact for the as:Note / CanonicalMessage shape:
+# the ontology licenses meaning, this shape checks shape. OPEN BY DEFAULT (no
+# sh:closed); sh:severity carries the RFC 2119 grade (Violation=MUST,
+# Warning=SHOULD, Info=MAY); IMMUTABLE version IRI; additive.
+# =============================================================================
+
+<https://w3id.org/jeswr/sectors/social/profile> a prof:Profile ;
+    dcterms:title "Solid Social data-model profile (version-independent)"@en ;
+    dcterms:hasVersion <https://w3id.org/jeswr/sectors/social/profile/1.0.0> ;
+    rdfs:comment "Version-independent IRI resolving to the current Social profile. "@en .
+
+<https://w3id.org/jeswr/sectors/social/profile/1.0.0> a prof:Profile ;
+    dcterms:title "Solid Social data-model profile 1.0.0"@en ;
+    dcterms:isVersionOf <https://w3id.org/jeswr/sectors/social/profile> ;
+    owl:versionInfo "1.0.0" ;
+    prof:isProfileOf <https://w3id.org/jeswr/sectors/social> ;
+    prof:hasToken "social-1.0.0" ;
+    rdfs:comment "IMMUTABLE version IRI. Open shapes; sh:Violation=MUST, sh:Warning=SHOULD. "@en .
+
+# -----------------------------------------------------------------------------
+# Note — the as:Note / CanonicalMessage shape used by chat-interop: a note MUST
+# carry a body; SHOULD name its author, posting time and feed; the reply edge and
+# media type are MAY.
+# -----------------------------------------------------------------------------
+
+socsh:NoteShape a sh:NodeShape ;
+    sh:targetClass social:Note ;
+    rdfs:label "Note shape"@en ;
+    sh:property [
+        sh:path social:content ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:severity sh:Violation ;          # MUST: a note has a body
+        sh:message "A social note MUST carry exactly one social:content body (the message text)."@en
+    ] ;
+    sh:property [
+        sh:path social:attributedTo ;
+        sh:class core:Agent ;
+        sh:maxCount 1 ;
+        sh:severity sh:Warning ;            # SHOULD: name the author
+        sh:message "A social note SHOULD be social:attributedTo its author (a core:Agent)."@en
+    ] ;
+    sh:property [
+        sh:path social:published ;
+        sh:datatype xsd:dateTime ;
+        sh:maxCount 1 ;
+        sh:severity sh:Warning ;            # SHOULD: record when it was posted
+        sh:message "A social note SHOULD record its social:published time (xsd:dateTime)."@en
+    ] ;
+    sh:property [
+        sh:path social:inFeed ;
+        sh:class social:Feed ;
+        sh:maxCount 1 ;
+        sh:severity sh:Warning ;            # SHOULD: which feed/room it belongs to
+        sh:message "A social note SHOULD name the social:Feed it belongs to."@en
+    ] ;
+    sh:property [
+        sh:path social:mediaType ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+        sh:severity sh:Info ;               # MAY: defaults to text/plain
+        sh:message "social:mediaType, if present, MUST be a single string (defaults to text/plain)."@en
+    ] ;
+    sh:property [
+        sh:path social:inReplyTo ;
+        sh:class social:Note ;
+        sh:maxCount 1 ;
+        sh:severity sh:Info ;               # MAY: the reply edge (AS2 direction only)
+        sh:message "social:inReplyTo, if present, MUST point at a single social:Note (the AS2 reply direction)."@en
+    ] .
+
+# -----------------------------------------------------------------------------
+# Feed — a feed/timeline/room SHOULD have a name and aggregate its notes.
+# -----------------------------------------------------------------------------
+
+socsh:FeedShape a sh:NodeShape ;
+    sh:targetClass social:Feed ;
+    rdfs:label "Feed shape"@en ;
+    sh:property [
+        sh:path dcterms:title ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:severity sh:Warning ;            # SHOULD: a feed/room has a name
+        sh:message "A social feed SHOULD have a dcterms:title (its display name)."@en
+    ] ;
+    sh:property [
+        sh:path core:hasPart ;
+        sh:severity sh:Info ;               # MAY: materialise its notes inline
+        sh:message "A social feed MAY aggregate its notes via core:hasPart."@en
+    ] .

@@ -1,0 +1,221 @@
+# AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+#
+@prefix ctsh:    <https://w3id.org/jeswr/sectors/contacts/shapes#> .
+@prefix contact: <https://w3id.org/jeswr/sectors/contacts#> .
+@prefix core:    <https://w3id.org/jeswr/core#> .
+@prefix sh:      <http://www.w3.org/ns/shacl#> .
+@prefix owl:     <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:     <http://www.w3.org/2001/XMLSchema#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix prof:    <http://www.w3.org/ns/dx/prof/> .
+
+# =============================================================================
+# Solid Contacts — SHACL data-model profile (F4; R4/R8 §4.5)
+#
+# The NORMATIVE conformance artifact: the ontology licenses meaning, THIS shape
+# checks shape. Discipline:
+#  - OPEN BY DEFAULT — no sh:closed (composes with downstream/jurisdictional
+#    profiles; child-conformance => parent-conformance, the §3.4 ⊆ rule).
+#  - sh:severity carries the RFC 2119 grade: Violation=MUST, Warning=SHOULD,
+#    Info=MAY. A conformance RESULT is read against severity, not pass/fail.
+#  - IMMUTABLE version IRI (.../contacts/profile/1.0.0); additive-only.
+#
+# v1.0.0 tracks the gUFO re-base of contacts.ttl.
+# =============================================================================
+
+<https://w3id.org/jeswr/sectors/contacts/profile/1.0.0>
+    a prof:Profile ;
+    dcterms:title "Solid Contacts data-model profile (gUFO re-base)"@en ;
+    dcterms:isVersionOf <https://w3id.org/jeswr/sectors/contacts/profile> ;
+    owl:versionInfo "1.0.0" ;
+    owl:versionIRI <https://w3id.org/jeswr/sectors/contacts/profile/1.0.0> ;
+    prof:isProfileOf <https://w3id.org/jeswr/sectors/contacts> ,
+                     <http://www.w3.org/2006/vcard/ns> ;
+    prof:hasToken "contacts-1.0.0" ;
+    prof:hasResource [
+        prof:hasRole <http://www.w3.org/ns/dx/prof/role/constraints> ;
+        prof:hasArtifact <https://w3id.org/jeswr/sectors/contacts/profile/1.0.0/shapes>
+    ] ;
+    rdfs:comment "Open-by-default SHACL profile for address-book data, re-based onto the gUFO Core. "@en .
+
+# -----------------------------------------------------------------------------
+# Contact card — a record ABOUT exactly one agent (card ≠ agent)
+# -----------------------------------------------------------------------------
+
+ctsh:ContactShape
+    a sh:NodeShape ;
+    sh:targetClass contact:Contact ;
+    rdfs:label "Contact shape"@en ;
+    # open shape: NO sh:closed — extensible by downstream profiles.
+
+    # MUST identify exactly one subject agent (keeps card ≠ agent honest).
+    sh:property [
+        sh:path contact:identifies ;
+        sh:class core:Agent ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:severity sh:Violation ;          # MUST
+        sh:message "A Contact MUST identify exactly one Person or Organization (contact:identifies)."@en ;
+    ] ;
+
+    # SHOULD carry at least one contact point (a usable card).
+    sh:property [
+        sh:path contact:hasContactPoint ;
+        sh:class contact:ContactPoint ;
+        sh:minCount 1 ;
+        sh:severity sh:Warning ;            # SHOULD
+        sh:message "A Contact SHOULD have at least one contact point (contact:hasContactPoint)."@en ;
+    ] .
+
+# -----------------------------------------------------------------------------
+# Contact point — every subtype MUST carry its literal value
+# -----------------------------------------------------------------------------
+
+ctsh:ContactPointShape
+    a sh:NodeShape ;
+    sh:targetClass contact:ContactPoint ;
+    rdfs:label "Contact point shape"@en ;
+
+    # MUST carry exactly one literal value.
+    sh:property [
+        sh:path contact:rawValue ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:severity sh:Violation ;          # MUST
+        sh:message "A ContactPoint MUST have exactly one literal value (contact:rawValue)."@en ;
+    ] ;
+
+    # SHOULD declare its use-type (work/home/mobile) from the scheme.
+    sh:property [
+        sh:path contact:contactPointType ;
+        sh:class core:Category ;
+        sh:maxCount 1 ;
+        sh:severity sh:Warning ;            # SHOULD
+        sh:message "A ContactPoint SHOULD declare a single use-type (work/home/mobile) from the Contact Point Type Scheme."@en ;
+    ] .
+
+# -----------------------------------------------------------------------------
+# Postal address — structured fields + optional Place link
+# -----------------------------------------------------------------------------
+
+ctsh:PostalAddressShape
+    a sh:NodeShape ;
+    sh:targetClass contact:PostalAddress ;
+    rdfs:label "Postal address shape"@en ;
+
+    # SHOULD give a locality (routability).
+    sh:property [
+        sh:path contact:locality ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:severity sh:Warning ;            # SHOULD
+        sh:message "A PostalAddress SHOULD give a locality (contact:locality)."@en ;
+    ] ;
+
+    # SHOULD give a country name.
+    sh:property [
+        sh:path contact:countryName ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:severity sh:Warning ;            # SHOULD
+        sh:message "A PostalAddress SHOULD give a country name (contact:countryName)."@en ;
+    ] ;
+
+    # MAY relate to a core:Place for geocoding.
+    sh:property [
+        sh:path core:atPlace ;
+        sh:class core:Place ;
+        sh:severity sh:Info ;               # MAY
+        sh:message "A PostalAddress MAY be related to a core:Place (core:atPlace) for geocoding."@en ;
+    ] .
+
+# -----------------------------------------------------------------------------
+# Contact relationship — reified Core relator with parties + a coded role
+# -----------------------------------------------------------------------------
+
+ctsh:ContactRelationshipShape
+    a sh:NodeShape ;
+    sh:targetClass contact:ContactRelationship ;
+    rdfs:label "Contact relationship shape"@en ;
+
+    # MUST relate at least two agents (the parties).
+    sh:property [
+        sh:path contact:relatesContact ;
+        sh:class core:Agent ;
+        sh:minCount 2 ;
+        sh:severity sh:Violation ;          # MUST
+        sh:message "A ContactRelationship MUST relate at least two agents (contact:relatesContact)."@en ;
+    ] ;
+
+    # SHOULD carry exactly one coded role from the scheme.
+    sh:property [
+        sh:path contact:relationshipRole ;
+        sh:class core:Category ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:severity sh:Warning ;            # SHOULD
+        sh:message "A ContactRelationship SHOULD carry exactly one role (colleague/family/friend) from the Relationship Role Scheme."@en ;
+    ] .
+
+# -----------------------------------------------------------------------------
+# Contact group / list
+# -----------------------------------------------------------------------------
+
+ctsh:ContactGroupShape
+    a sh:NodeShape ;
+    sh:targetClass contact:ContactGroup ;
+    rdfs:label "Contact group shape"@en ;
+
+    # SHOULD point its members at Contact cards.
+    sh:property [
+        sh:path contact:hasMemberContact ;
+        sh:class contact:Contact ;
+        sh:severity sh:Warning ;            # SHOULD
+        sh:message "A ContactGroup's members SHOULD be Contact cards (contact:hasMemberContact)."@en ;
+    ] .
+
+# =============================================================================
+# F4 coverage — a node shape per remaining instantiable class. Contact subtypes
+# and contact-point subtypes don't inherit sh:targetClass, so each re-states the
+# load-bearing MUST (identifies / rawValue).
+# =============================================================================
+
+# Contact-card subtypes: MUST identify exactly one subject agent.
+ctsh:PersonContactShape a sh:NodeShape ;
+    sh:targetClass contact:PersonContact ; rdfs:label "Person Contact shape"@en ;
+    sh:property [
+        sh:path contact:identifies ; sh:class core:Person ;
+        sh:minCount 1 ; sh:maxCount 1 ; sh:severity sh:Violation ;
+        sh:message "A PersonContact MUST identify exactly one core:Person (contact:identifies)."@en
+    ] .
+
+ctsh:OrganizationContactShape a sh:NodeShape ;
+    sh:targetClass contact:OrganizationContact ; rdfs:label "Organization Contact shape"@en ;
+    sh:property [
+        sh:path contact:identifies ; sh:class core:Organization ;
+        sh:minCount 1 ; sh:maxCount 1 ; sh:severity sh:Violation ;
+        sh:message "An OrganizationContact MUST identify exactly one core:Organization (contact:identifies)."@en
+    ] .
+
+# Contact-point subtypes: MUST carry their literal value (contact:rawValue).
+ctsh:ContactPointValueShape
+    a sh:NodeShape ; rdfs:label "Contact-point value shape"@en ;
+    sh:property [
+        sh:path contact:rawValue ; sh:datatype xsd:string ;
+        sh:minCount 1 ; sh:maxCount 1 ; sh:severity sh:Violation ;
+        sh:message "A contact point MUST have exactly one literal value (contact:rawValue)."@en
+    ] .
+
+ctsh:EmailAddressShape a sh:NodeShape ;
+    sh:targetClass contact:EmailAddress ; sh:node ctsh:ContactPointValueShape ;
+    rdfs:label "Email Address shape"@en .
+
+ctsh:PhoneNumberShape a sh:NodeShape ;
+    sh:targetClass contact:PhoneNumber ; sh:node ctsh:ContactPointValueShape ;
+    rdfs:label "Phone Number shape"@en .
+
+ctsh:OnlineHandleShape a sh:NodeShape ;
+    sh:targetClass contact:OnlineHandle ; sh:node ctsh:ContactPointValueShape ;
+    rdfs:label "Online Handle shape"@en .

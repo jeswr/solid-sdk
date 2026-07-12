@@ -1,0 +1,60 @@
+<!doctype html>
+<!-- AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>w3id.org/jeswr/sectors/collectibles# — Solid Federation Sector Ontology</title>
+    <style>
+      :root { color-scheme: light dark; }
+      body { font-family: system-ui, sans-serif; line-height: 1.6; max-width: 64rem; margin: 2rem auto; padding: 0 1rem; }
+      code { background: rgba(127,127,127,0.15); padding: 0.1em 0.35em; border-radius: 4px; }
+      .warn { border-left: 4px solid #d97706; padding: 0.5rem 1rem; background: rgba(217,119,6,0.08); border-radius: 4px; }
+      table { border-collapse: collapse; width: 100%; }
+      th, td { text-align: left; padding: 0.4rem 0.6rem; border-bottom: 1px solid rgba(127,127,127,0.3); vertical-align: top; }
+      a { color: #2563eb; }
+    </style>
+  </head>
+  <body>
+    <h1><code>https://w3id.org/jeswr/sectors/collectibles#</code></h1>
+    <p>Prefix <code>col:</code> · a gUFO-based ontology in the @jeswr Solid federation; imports the <a href="../core.html">Solid Core</a>.</p>
+    <p class="warn">⚠️ <strong>Experimental</strong> — AI-agent-generated (Claude Opus 4.8, @jeswr PSS agent); under active development, not production-hardened.</p>
+    <p>Other representations: <a href="collectibles.ttl">Turtle</a> · <a href="collectibles-context.jsonld">JSON-LD context</a> · <a href="../">index</a></p>
+    <h2>Terms (32)</h2>
+    <table>
+      <tr><th>Term</th><th>Label</th><th>Comment / definition</th></tr>
+      <tr><td><code>col:amount</code></td><td>amount</td><td>The assessed monetary value carried by a col:Valuation or col:Appraisal — a SEPARATE schema:MonetaryAmount node (schema:value + schema:currency), the CapNote-proven amount shape. No rdfs:domain: shared by Valuation and Appraisal (a domain union axiom would over-constrain). NEVER a schema:offers link (whose range is Offer/Demand only).</td></tr>
+      <tr><td><code>col:Appraisal</code></td><td>Appraisal</td><td>A FORMAL valuation of a collectible asset produced by a named appraiser (col:appraiser → a prov:Agent), typically for insurance or sale. A core:Record about the asset carrying the appraised amount (col:amount → a schema:MonetaryAmount node) and an appraisal date. Linked from the asset by col:hasAppraisal.</td></tr>
+      <tr><td><code>col:appraiser</code></td><td>appraiser</td><td>The agent (a prov:Agent / core:Agent, e.g. an appraisal house) who produced a formal appraisal.</td></tr>
+      <tr><td><code>col:coverageAmount</code></td><td>coverage amount</td><td>The insured value of an insurance policy — a separate schema:MonetaryAmount node.</td></tr>
+      <tr><td><code>col:datePrecision</code></td><td>date precision</td><td>The precision of a provenance-event or valuation date (col:precision-day … col:precision-circa) — the honest qualifier for a date whose exact day is unknown. No rdfs:domain: it qualifies events AND valuations.</td></tr>
+      <tr><td><code>col:DatePrecision</code></td><td>Date Precision</td><td>The precision of a provenance / valuation date when the exact day is unknown: day / month / year / circa. A coded value (core:Category) qualifying an event or valuation date — the honest way to record 'circa 1890' without inventing a false xsd:dateTime precision.</td></tr>
+      <tr><td><code>col:datePrecisionScheme</code></td><td>Date precision scheme</td><td>The coded precision levels for a provenance / valuation date.</td></tr>
+      <tr><td><code>col:eventType</code></td><td>event type</td><td>The coded kind of a provenance event (col:evt-creation … col:evt-restoration). Determines whether the event is the asset's prov:wasGeneratedBy (creation only) or merely prov:used it.</td></tr>
+      <tr><td><code>col:EventType</code></td><td>Event Type</td><td>The kind of a col:ProvenanceEvent: creation / acquisition / sale / transfer / exhibition / loan / restoration. A coded value (core:Category); the members are skos:Concepts in col:eventTypeScheme. Distinguishes which events are the asset's prov:wasGeneratedBy (only col:evt-creation) from those that merely prov:used it.</td></tr>
+      <tr><td><code>col:eventTypeScheme</code></td><td>Provenance event type scheme</td><td>The coded kinds of a col:ProvenanceEvent.</td></tr>
+      <tr><td><code>col:evt-acquisition</code></td><td>Acquisition</td><td>The current owner's acquisition of the asset (purchase, gift, inheritance).</td></tr>
+      <tr><td><code>col:evt-creation</code></td><td>Creation</td><td>The making of the asset by its creator — the ONE event that is the asset's prov:wasGeneratedBy.</td></tr>
+      <tr><td><code>col:evt-exhibition</code></td><td>Exhibition</td><td>A public showing of the asset at a gallery, museum or fair.</td></tr>
+      <tr><td><code>col:evt-loan</code></td><td>Loan</td><td>A temporary loan of the asset to an institution or another party.</td></tr>
+      <tr><td><code>col:evt-restoration</code></td><td>Restoration</td><td>A conservation or restoration treatment applied to the asset.</td></tr>
+      <tr><td><code>col:evt-sale</code></td><td>Sale</td><td>A sale of the asset from one party to another (an activity that prov:used the asset — never a generation).</td></tr>
+      <tr><td><code>col:evt-transfer</code></td><td>Transfer</td><td>A non-sale transfer of custody or ownership (a gift, a loan return, an estate transfer).</td></tr>
+      <tr><td><code>col:hasAppraisal</code></td><td>has appraisal</td><td>Relates a collectible asset to a formal col:Appraisal of it. Domainless — the asset is an external type.</td></tr>
+      <tr><td><code>col:hasInsurance</code></td><td>has insurance</td><td>Relates a collectible asset to the col:InsurancePolicy covering it. Domainless — the asset is an external type.</td></tr>
+      <tr><td><code>col:hasValuation</code></td><td>has valuation</td><td>Relates a collectible asset to a col:Valuation of it. No rdfs:domain: the asset is an external schema:CreativeWork/VisualArtwork/Product the sector does not re-type.</td></tr>
+      <tr><td><code>col:InsurancePolicy</code></td><td>Insurance Policy</td><td>An insurance policy covering one or more collectible assets — the policy number (col:policyNumber), the insurer (col:insurer → a prov:Agent), the insured value (col:coverageAmount → a schema:MonetaryAmount node), the premium (col:premium → a schema:MonetaryAmount node) and the renewal date (col:renewalDate). Linked from the asset by col:hasInsurance.</td></tr>
+      <tr><td><code>col:insurer</code></td><td>insurer</td><td>The agent (an insurer organization) underwriting an insurance policy.</td></tr>
+      <tr><td><code>col:policyNumber</code></td><td>policy number</td><td>The insurer's policy reference number of an insurance policy.</td></tr>
+      <tr><td><code>col:precision-circa</code></td><td>Circa</td><td>The date is approximate ('circa') — a best estimate, not an exact value.</td></tr>
+      <tr><td><code>col:precision-day</code></td><td>Day</td><td>The date is known to the exact day.</td></tr>
+      <tr><td><code>col:precision-month</code></td><td>Month</td><td>The date is known only to the month.</td></tr>
+      <tr><td><code>col:precision-year</code></td><td>Year</td><td>The date is known only to the year.</td></tr>
+      <tr><td><code>col:premium</code></td><td>premium</td><td>The premium payable for an insurance policy — a separate schema:MonetaryAmount node.</td></tr>
+      <tr><td><code>col:ProvenanceEvent</code></td><td>Provenance Event</td><td>A dated event in the ownership / custody / exhibition history of a collectible asset — a creation, acquisition, sale, transfer, exhibition, loan or restoration. An activity that prov:used the asset (a creation-type event is ALSO the asset's prov:wasGeneratedBy; a sale or exhibition of an existing work is NOT a generation). Its type is a col:eventType coded value; its acting party is a prov:Agent node via prov:wasAssociatedWith; its timing is prov:startedAtTime/prov:endedAtTime, with col:datePrecision qualifying a date-only precision.</td></tr>
+      <tr><td><code>col:renewalDate</code></td><td>renewal date</td><td>The date an insurance policy is next due for renewal.</td></tr>
+      <tr><td><code>col:sector</code></td><td>Collectibles sector</td><td>The Collectibles (art / collectibles provenance, valuation and insurance) data sector. The value an app's fedapp:sector names in its Client Identifier Document to declare it operates over collectible-asset provenance data — the sector the Provena product declares. Backed by this sector ontology.</td></tr>
+      <tr><td><code>col:Valuation</code></td><td>Valuation</td><td>An assessed market value of a collectible asset at a point in time — an owner-recorded or professionally-supplied estimate. A core:Record ABOUT the asset (via core:about), carrying the assessed amount on a separate schema:MonetaryAmount node (col:amount) and an as-of date (dcterms:date, precision qualified by col:datePrecision). Linked from the asset by col:hasValuation.</td></tr>
+    </table>
+  </body>
+</html>

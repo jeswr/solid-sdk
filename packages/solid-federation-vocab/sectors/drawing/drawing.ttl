@@ -1,0 +1,116 @@
+# AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+#
+@prefix drawing: <https://w3id.org/jeswr/sectors/drawing#> .
+@prefix core:    <https://w3id.org/jeswr/core#> .
+@prefix owl:     <http://www.w3.org/2002/07/owl#> .
+@prefix rdf:     <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:     <http://www.w3.org/2001/XMLSchema#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix skos:    <http://www.w3.org/2004/02/skos/core#> .
+@prefix vann:    <http://purl.org/vocab/vann/> .
+@prefix gufo:    <http://purl.org/nemo/gufo#> .
+
+# =============================================================================
+# Solid Drawing & Whiteboard sector ontology (KEY=drawing).
+#
+# The whiteboard / diagramming domain — the sector an Excalidraw-style fork
+# declares it operates in (fedapp:sector). v1.0.0, authored gUFO-rooted from the
+# outset (the 5-OSS-fork FOUNDATION, not an OntoUML re-base).
+#
+# SCOPE — this file authors the SECTOR ONLY: the domain marker, a thin gUFO-rooted
+# Scene class to hang the SHACL shape + alignments off, and the property spine the
+# fork actually needs to round-trip a scene to a pod. The detailed drawing vocab
+# (draw: = https://w3id.org/jeswr/drawing#, with draw:Scene rdfs:subClassOf
+# schema:CreativeWork, draw:sceneDocument, draw:schemaVersion, draw:thumbnail)
+# ships in the SEPARATE @jeswr/solid-drawing repo; the alignment HOOKS to those
+# forthcoming draw: terms live in drawing-alignments.ttl (Mode A, annotation-only,
+# no entailment) so they can be authored here without forward-referencing an
+# unpublished ontology in the reasoned closure.
+#
+# CONTRACT (R8 §4): imports the gUFO Core; roots its one domain class transitively
+# in a Core class and carries its gUFO meta-type; CONSTRAINS, never forks; reuses
+# schema.org/dct in the companion alignments; ships drawing.shacl.ttl; carries
+# owl:versionInfo + a version IRI. Open-world by default; the SHACL profile carries
+# the closed-world MUST/SHOULD.
+# =============================================================================
+
+<https://w3id.org/jeswr/sectors/drawing> a owl:Ontology ;
+    dcterms:title "Solid Drawing & Whiteboard Sector Ontology"@en ;
+    rdfs:label "Solid Drawing & Whiteboard Sector Ontology"@en ;
+    vann:preferredNamespacePrefix "drawing" ;
+    vann:preferredNamespaceUri "https://w3id.org/jeswr/sectors/drawing#" ;
+    owl:imports <https://w3id.org/jeswr/core> ;
+    owl:versionInfo "1.0.0" ;
+    owl:versionIRI <https://w3id.org/jeswr/sectors/drawing/1.0.0> ;
+    dcterms:description """The whiteboard / diagramming data sector — the domain a
+        federated Excalidraw-style fork operates in. Authors the sector marker and
+        a thin gUFO-rooted drawing:Scene (a core:InformationResource creative work)
+        with the round-trip property spine (the opaque scene document, a schema
+        version, an optional thumbnail). The detailed draw: vocabulary ships in the
+        separate @jeswr/solid-drawing repo; this file aligns to those forthcoming
+        terms and to schema:CreativeWork in the companion alignments file."""@en ;
+    dcterms:modified "2026-06-21"^^xsd:date ;
+    rdfs:comment "Foundation sector for the 5-OSS-fork initiative (Excalidraw)."@en .
+
+# -----------------------------------------------------------------------------
+# Annotation-property declarations (F5 DL hygiene — match the Core pattern).
+# -----------------------------------------------------------------------------
+dcterms:title       a owl:AnnotationProperty .
+dcterms:description a owl:AnnotationProperty .
+dcterms:modified    a owl:AnnotationProperty .
+vann:preferredNamespacePrefix a owl:AnnotationProperty .
+vann:preferredNamespaceUri    a owl:AnnotationProperty .
+skos:definition     a owl:AnnotationProperty .
+skos:scopeNote      a owl:AnnotationProperty .
+
+# =============================================================================
+# 1. SCENE  (gufo:SubKind rooting in core:InformationResource)
+# A whiteboard/diagram scene is an information object — a creative work. The
+# detailed shape (elements, app-state, files) is opaque scene-document JSON that
+# the fork serialises; the LD layer carries the creative-work metadata + the
+# pointer to that document. Aligns to draw:Scene / schema:CreativeWork.
+# =============================================================================
+
+drawing:Scene a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf core:InformationResource ;
+    rdfs:label "Scene"@en ;
+    skos:definition "A single whiteboard / diagram scene authored in a drawing app (an Excalidraw board) — a creative work whose detailed contents live in an opaque scene document. An information object about nothing external; the fork round-trips it to a pod. Aligns to draw:Scene (rdfs:subClassOf schema:CreativeWork) in the forthcoming @jeswr/solid-drawing vocabulary."@en ;
+    skos:scopeNote "gufo:SubKind under core:InformationResource (its identity principle). The detailed draw: element vocabulary lives in the separate @jeswr/solid-drawing repo."@en .
+
+# =============================================================================
+# Properties — the round-trip spine. Where one fits a Core property, sub-property
+# it (constrain, never widen); the opaque-document pointer is a plain property.
+# =============================================================================
+
+drawing:sceneDocument a owl:ObjectProperty ;
+    rdfs:domain drawing:Scene ;
+    rdfs:range core:InformationResource ;
+    rdfs:label "scene document"@en ;
+    skos:definition "The opaque serialised scene document (the app-native JSON of elements + app-state + embedded files) that this scene's detailed contents live in — a separate pod resource the LD scene metadata points at. A plain object property (the pointed-at document is itself a core:InformationResource). Aligns to the forthcoming draw:sceneDocument."@en .
+
+drawing:schemaVersion a owl:DatatypeProperty ;
+    rdfs:domain drawing:Scene ;
+    rdfs:range xsd:string ;
+    rdfs:label "schema version"@en ;
+    skos:definition "The version of the app-native scene-document schema this scene was serialised against (the Excalidraw file 'version'), so a reader can migrate an older document. Aligns to the forthcoming draw:schemaVersion."@en .
+
+drawing:thumbnail a owl:ObjectProperty ;
+    rdfs:subPropertyOf core:hasPart ;
+    rdfs:domain drawing:Scene ;
+    rdfs:range core:InformationResource ;
+    rdfs:label "thumbnail"@en ;
+    skos:definition "An optional rendered preview image of the scene (a PNG/SVG export resource), for listing a board without parsing its document. A sub-property of core:hasPart — the thumbnail is a derived part of the scene. Aligns to the forthcoming draw:thumbnail; schema:thumbnailUrl in the alignments."@en .
+
+# =============================================================================
+# SECTOR MARKER — the IRI an app's fedapp:sector points at to declare it operates
+# in this sector (https://w3id.org/jeswr/fed#sector). A skos:Concept in the
+# federation sector register; dereferences to this ontology.
+# =============================================================================
+
+<https://w3id.org/jeswr/sectors/drawing#sector>
+    a <http://www.w3.org/2004/02/skos/core#Concept> ;
+    rdfs:label "Drawing & Whiteboard sector"@en ;
+    rdfs:comment "The Drawing & Whiteboard data sector. The value an app's fedapp:sector names in its Client Identifier Document to declare it operates over whiteboard / diagramming data. Backed by this sector ontology."@en ;
+    rdfs:isDefinedBy <https://w3id.org/jeswr/sectors/drawing> ;
+    skos:prefLabel "Drawing & Whiteboard"@en .

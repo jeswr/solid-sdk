@@ -1,0 +1,257 @@
+# AUTHORED-BY Claude Fable 5 (PSS agent)
+#
+# Sample instances of every futures-sector class, used to VERIFY that
+# futures.shacl.ttl validates a conformant deliberation (no sh:Violation).
+# Validated with rdf-validate-shacl (data = this file + futures.ttl for the
+# subclass/coded-value typing; shapes = futures.shacl.ttl). Parsed for
+# well-formedness by the ontology gate (Layer 1).
+#
+# THE Need AND Resonance INSTANCES REPLICATE THE EXACT TRIPLE SHAPE THE RUNNING
+# unite STAGE-1 CLIENT EMITS (jeswr/unite app/src/lib/model.ts serializeNeed /
+# serializeResonance): one resource per statement, rdf:type + as:content (a
+# plain literal) + fut:needConcept + dct:created (xsd:dateTime) + dct:creator +
+# fut:inDeliberation (+ optional fut:intensity xsd:integer) for a Need;
+# rdf:type + fut:onStatement + fut:stance + dct:created + dct:creator +
+# fut:inDeliberation (+ optional fut:dimension) for a Resonance. The v0.2.0
+# Critique instance (16) likewise replicates serializeCritique's exact emit
+# shape; 17–19 exercise the scope-B InfraProposal / AdoptionObservation /
+# AdoptionDecision shapes.
+#
+@prefix fut:     <https://w3id.org/jeswr/sectors/futures#> .
+@prefix core:    <https://w3id.org/jeswr/core#> .
+@prefix as:      <https://www.w3.org/ns/activitystreams#> .
+@prefix dct:     <http://purl.org/dc/terms/> .
+@prefix prov:    <http://www.w3.org/ns/prov#> .
+@prefix sec:     <https://w3id.org/security#> .
+@prefix cred:    <https://www.w3.org/2018/credentials#> .
+@prefix xsd:     <http://www.w3.org/2001/XMLSchema#> .
+@prefix alice:   <https://alice.pod.example/unite/town-2040/> .
+@prefix bob:     <https://bob.pod.example/unite/town-2040/> .
+@prefix town:    <https://commons.example/deliberations/town-2040/> .
+
+# The deliberation the statements enter (lives in the community's space).
+town:deliberation a fut:Deliberation ;
+    dct:title "Our town in 2040" ;
+    fut:method fut:resonanceMapping ;
+    dct:created "2026-06-20T09:00:00Z"^^xsd:dateTime .
+
+# 1. LifeContext — "my current life" (author's pod, private by default).
+alice:context-01 a fut:LifeContext ;
+    as:content "Two jobs, no car, 90 minutes commuting each way on unreliable buses." ;
+    fut:expressesNeed <https://alice.pod.example/unite/town-2040/needs/n-7f3a2b1c.ttl#it> ;
+    dct:creator <https://alice.pod.example/profile/card#me> ;
+    dct:created "2026-06-21T18:02:11Z"^^xsd:dateTime .
+
+# 2. VisionStatement — "my ideal future".
+alice:vision-01 a fut:VisionStatement ;
+    dct:title "A town I can cross without a car" ;
+    as:content "By 2040 I can reach work, school and the clinic within thirty minutes without owning a car, and the air on the high street is clean." ;
+    fut:scope fut:community ;
+    fut:horizon "2040"^^xsd:gYear ;
+    fut:articulates alice:claim-01 ;
+    dct:creator <https://alice.pod.example/profile/card#me> ;
+    dct:created "2026-06-21T18:10:42Z"^^xsd:dateTime .
+
+# 3. Claim — the atomic, voteable deliberation unit (≤500 chars).
+alice:claim-01 a fut:Claim ;
+    as:content "Everyone should be able to reach daily essentials within thirty minutes without needing to own a car." ;
+    prov:wasDerivedFrom alice:vision-01 ;
+    fut:adoptedBy <https://alice.pod.example/profile/card#me> ;
+    dct:creator <https://alice.pod.example/profile/card#me> ;
+    dct:created "2026-06-21T18:12:05Z"^^xsd:dateTime ;
+    fut:inDeliberation town:deliberation .
+
+# 4. Need — EXACTLY the unite client's serializeNeed output shape.
+<https://alice.pod.example/unite/town-2040/needs/n-7f3a2b1c.ttl#it> a fut:Need ;
+    as:content "I need to get to work reliably without spending three hours a day travelling." ;
+    fut:needConcept fut:maxneef-subsistence ;
+    dct:created "2026-06-22T07:45:00Z"^^xsd:dateTime ;
+    dct:creator <https://alice.pod.example/profile/card#me> ;
+    fut:inDeliberation town:deliberation ;
+    fut:intensity 4 .
+
+# 5. Satisfier — a way of meeting the need (kept separate: the load-bearing split).
+bob:satisfier-01 a fut:Satisfier ;
+    as:content "A ten-minute-frequency orbital bus line linking the estates to the rail hub." ;
+    fut:satisfies <https://alice.pod.example/unite/town-2040/needs/n-7f3a2b1c.ttl#it> , fut:maxneef-subsistence ;
+    fut:existentialCategory fut:existential-having ;
+    dct:creator <https://bob.pod.example/profile/card#me> ;
+    dct:created "2026-06-22T12:30:00Z"^^xsd:dateTime ;
+    fut:inDeliberation town:deliberation .
+
+# 6. ValueStatement — the author holds a value (Schwartz seed concept).
+bob:value-01 a fut:ValueStatement ;
+    as:content "What matters most to me is that nobody is stranded — fairness in how the town moves." ;
+    fut:valueConcept fut:schwartz-universalism ;
+    dct:creator <https://bob.pod.example/profile/card#me> ;
+    dct:created "2026-06-22T12:35:00Z"^^xsd:dateTime ;
+    fut:inDeliberation town:deliberation .
+
+# 7. Resonance — EXACTLY the unite client's serializeResonance output shape
+#    (lives in the REACTOR's pod — Bob reacting to Alice's need).
+<https://bob.pod.example/unite/town-2040/resonances/r-0c9d4e2f.ttl#it> a fut:Resonance ;
+    fut:onStatement <https://alice.pod.example/unite/town-2040/needs/n-7f3a2b1c.ttl#it> ;
+    fut:stance fut:Resonates ;
+    dct:created "2026-06-23T08:15:30Z"^^xsd:dateTime ;
+    dct:creator <https://bob.pod.example/profile/card#me> ;
+    fut:inDeliberation town:deliberation ;
+    fut:dimension fut:IShareThis .
+
+# 8. BridgingEvidence — per-cluster endorsement statistics (k-anonymous).
+town:sf-01-evidence-c0 a fut:BridgingEvidence ;
+    fut:clusterLabel "cluster-0" ;
+    fut:resonatesCount "14"^^xsd:nonNegativeInteger ;
+    fut:conflictsCount "2"^^xsd:nonNegativeInteger ;
+    fut:unsureCount "3"^^xsd:nonNegativeInteger ;
+    fut:seenCount "19"^^xsd:nonNegativeInteger ;
+    fut:bridgingScore 0.75 .
+
+town:sf-01-evidence-c1 a fut:BridgingEvidence ;
+    fut:clusterLabel "cluster-1" ;
+    fut:resonatesCount "11"^^xsd:nonNegativeInteger ;
+    fut:conflictsCount "4"^^xsd:nonNegativeInteger ;
+    fut:unsureCount "2"^^xsd:nonNegativeInteger ;
+    fut:seenCount "17"^^xsd:nonNegativeInteger ;
+    fut:bridgingScore 0.63 .
+
+# 9. SharedFuture — the convergence artifact: provenance + per-cluster evidence
+#    + Data Integrity proof + the MANDATORY dissent annex.
+town:sf-01 a fut:SharedFuture ;
+    as:content "We converge on a town where daily essentials are reachable in thirty minutes without car ownership; how — buses, bikes, or closer services — remains an open portfolio." ;
+    prov:wasDerivedFrom alice:claim-01 ,
+        <https://alice.pod.example/unite/town-2040/needs/n-7f3a2b1c.ttl#it> ,
+        bob:satisfier-01 ;
+    prov:wasGeneratedBy town:synthesis-activity-01 ;
+    fut:bridgingEvidence town:sf-01-evidence-c0 , town:sf-01-evidence-c1 ;
+    fut:bridgingScore 0.47 ;
+    fut:endorsedBy <https://bob.pod.example/unite/town-2040/resonances/r-0c9d4e2f.ttl#it> ;
+    fut:dissent town:sf-01-dissent ;
+    sec:proof [
+        a sec:DataIntegrityProof ;
+        sec:cryptosuite "eddsa-rdfc-2022" ;
+        dct:created "2026-06-30T17:00:00Z"^^xsd:dateTime
+    ] ;
+    dct:created "2026-06-30T17:00:00Z"^^xsd:dateTime .
+
+# The synthesis activity — GenAI mediation is never invisible.
+town:synthesis-activity-01 a prov:Activity ;
+    dct:title "Mediated synthesis round 1" ;
+    prov:wasAssociatedWith <https://facilitator.example/agents/synth#agent> ;
+    prov:hadPlan town:synthesis-plan-01 .
+town:synthesis-plan-01 a prov:Plan ;
+    dct:title "synthesis prompt v3 / model claude-fable-5" .
+
+# 10. DissentRecord — the first-class minority report.
+town:sf-01-dissent a fut:DissentRecord ;
+    as:content "A minority of cluster-1 holds that fare-free buses, not proximity planning, is the only acceptable satisfier, and objects to the portfolio framing." ;
+    dct:created "2026-06-30T17:05:00Z"^^xsd:dateTime .
+
+# 11. ConvergenceMetrics — the published aggregate (open data, k-anonymous).
+town:metrics-01 a fut:ConvergenceMetrics ;
+    fut:clusterCount "2"^^xsd:nonNegativeInteger ;
+    fut:crossClusterConsensusRate 0.31 ;
+    fut:participantCount "36"^^xsd:nonNegativeInteger ;
+    fut:verificationTier "T1" ;
+    dct:created "2026-06-30T18:00:00Z"^^xsd:dateTime .
+
+# 12. AppProposal — Stage-1 co-design: a wf:Task that MUST trace to a need.
+town:proposal-01 a fut:AppProposal ;
+    dct:title "Journey-pooling app for the estates" ;
+    as:content "A Solid app matching neighbours' regular journeys so shared lifts fill the bus gaps." ;
+    fut:motivatedBy <https://alice.pod.example/unite/town-2040/needs/n-7f3a2b1c.ttl#it> ;
+    dct:creator <https://bob.pod.example/profile/card#me> ;
+    dct:created "2026-07-01T09:00:00Z"^^xsd:dateTime ;
+    fut:inDeliberation town:deliberation .
+
+# 13. SpecSynthesis — the converged app spec (inherits every SharedFuture MUST).
+town:spec-01 a fut:SpecSynthesis ;
+    as:content "The journey-pooling app: pod-held journey patterns, WAC-scoped sharing with named neighbours, no central movement database." ;
+    prov:wasDerivedFrom town:proposal-01 , town:sf-01 ;
+    prov:wasGeneratedBy town:synthesis-activity-01 ;
+    fut:bridgingEvidence town:sf-01-evidence-c0 , town:sf-01-evidence-c1 ;
+    fut:noDissentRecorded true ;
+    fut:acceptanceCriterion town:spec-01-ac1 ;
+    fut:implementationTracker <https://commons.example/trackers/journey-pooling#tracker> ;
+    sec:proof [
+        a sec:DataIntegrityProof ;
+        sec:cryptosuite "eddsa-rdfc-2022" ;
+        dct:created "2026-07-01T12:00:00Z"^^xsd:dateTime
+    ] ;
+    dct:created "2026-07-01T12:00:00Z"^^xsd:dateTime .
+
+# 14. AcceptanceCriterion — every criterion traces to the need it operationalises.
+town:spec-01-ac1 a fut:AcceptanceCriterion ;
+    as:content "A commuter without a car can arrange a recurring shared journey to the rail hub in under five minutes of setup." ;
+    fut:operationalises <https://alice.pod.example/unite/town-2040/needs/n-7f3a2b1c.ttl#it> .
+
+# 15. SharedFutureCredential — the signed, wire-verifiable form.
+town:sf-01-credential a fut:SharedFutureCredential ;
+    cred:credentialSubject town:sf-01 ;
+    cred:issuer <https://commons.example/profile#org> ;
+    dct:created "2026-06-30T17:10:00Z"^^xsd:dateTime ;
+    sec:proof [
+        a sec:DataIntegrityProof ;
+        sec:cryptosuite "eddsa-rdfc-2022" ;
+        dct:created "2026-06-30T17:10:00Z"^^xsd:dateTime
+    ] .
+
+# =============================================================================
+# v0.2.0 instances — the Convergence-Room critique unit + the scope-B
+# infrastructure-proposal and adoption machinery.
+# =============================================================================
+
+# 16. Critique — EXACTLY the unite client's serializeCritique output shape
+#     (lives in the CRITIC's own pod; standing critiques at endorsement time
+#     are the raw material of the mandatory dissent annex).
+<https://bob.pod.example/unite/town-2040/critiques/c-5a1b3c7d.ttl#it> a fut:Critique ;
+    as:content "The portfolio framing hides that the orbital bus line needs a depot the plan does not fund." ;
+    fut:onStatement town:sf-01 ;
+    dct:created "2026-06-29T19:20:00Z"^^xsd:dateTime ;
+    dct:creator <https://bob.pod.example/profile/card#me> ;
+    fut:inDeliberation town:deliberation .
+
+# 17. InfraProposal — a scope-B proposed change to a shared digital system:
+#     value-centric (motivatedBy), names the governed artifact (targetsSystem),
+#     declares blast radius (affectsRole), and — being breaking — carries its
+#     migration story.
+town:infra-01 a fut:InfraProposal ;
+    dct:title "Adopt futures sector 0.2.0" ;
+    as:content "Bump the deliberation vocabulary to 0.2.0 so critiques and infrastructure proposals are first-class data." ;
+    fut:motivatedBy <https://alice.pod.example/unite/town-2040/needs/n-7f3a2b1c.ttl#it> ;
+    fut:targetsSystem <https://w3id.org/jeswr/sectors/futures> ;
+    fut:proposalKind fut:SpecChange ;
+    fut:affectsRole fut:ImplementerRole , fut:OperatorRole ;
+    fut:breakingChange false ;
+    fut:referenceImplementation <https://github.com/jeswr/unite> ;
+    fut:indirectStakeholders "Communities running older clients that read town deliberation data but were not in this room." ;
+    dct:creator <https://bob.pod.example/profile/card#me> ;
+    dct:created "2026-07-02T10:00:00Z"^^xsd:dateTime ;
+    fut:inDeliberation town:deliberation .
+
+# 18. AdoptionObservation — one observed fedreg:acceptsSpec advertisement
+#     (a cache, never authoritative: re-checked at the observationSource).
+town:obs-01 a fut:AdoptionObservation ;
+    fut:observedParty <https://commons.example/profile#org> ;
+    fut:observedVersion <https://w3id.org/jeswr/sectors/futures/0.2.0> ;
+    fut:observedAt "2026-07-03T08:00:00Z"^^xsd:dateTime ;
+    fut:observationSource <https://commons.example/registry#registry> .
+
+# 19. AdoptionDecision — a converged recommendation (⊑ SharedFuture: carries
+#     provenance, bridging evidence, proof AND the dissent annex); ratification
+#     is MEASURED from evidence against the stated bar, never decreed.
+town:adopt-01 a fut:AdoptionDecision ;
+    as:content "We recommend adopting futures sector 0.2.0 for the town's deliberation data." ;
+    fut:proposesVersion <https://w3id.org/jeswr/sectors/futures/0.2.0> ;
+    fut:adoptionBar "≥2 independent implementations and ≥2 communities advertising the version via fedreg:acceptsSpec." ;
+    fut:adoptionEvidence town:obs-01 ;
+    fut:methodProvenance fut:resonanceMapping ;
+    prov:wasDerivedFrom town:infra-01 ;
+    prov:wasGeneratedBy town:synthesis-activity-01 ;
+    fut:bridgingEvidence town:sf-01-evidence-c0 , town:sf-01-evidence-c1 ;
+    fut:noDissentRecorded true ;
+    sec:proof [
+        a sec:DataIntegrityProof ;
+        sec:cryptosuite "eddsa-rdfc-2022" ;
+        dct:created "2026-07-03T09:00:00Z"^^xsd:dateTime
+    ] ;
+    dct:created "2026-07-03T09:00:00Z"^^xsd:dateTime .

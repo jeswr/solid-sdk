@@ -1,0 +1,239 @@
+# AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+#
+@prefix core:  <https://w3id.org/jeswr/core#> .
+@prefix sh:    <http://www.w3.org/ns/shacl#> .
+@prefix owl:   <http://www.w3.org/2002/07/owl#> .
+@prefix rdf:   <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:   <http://www.w3.org/2001/XMLSchema#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix gufo:  <http://purl.org/nemo/gufo#> .
+
+# =============================================================================
+# Solid Core Ontology — SHACL PROFILE (F4, R11 §2)
+#
+# The closed-world conformance contract for the instantiable Core classes. The
+# ontology (solid-core.ttl) licenses MEANING under the open-world assumption;
+# THIS file checks SHAPE. Every instantiable Core class has a node shape.
+#
+# DISCIPLINE:
+#  - OPEN BY DEFAULT: no sh:closed true — sectors and jurisdictions add their own
+#    properties (the constrain-don't-fork rule; R11 §3.4 jurisdictional profiles
+#    only ever TIGHTEN, so the base shape must stay open).
+#  - sh:severity sh:Violation = MUST (a hard contract breach).
+#  - sh:severity sh:Warning   = SHOULD (advisory; recommended but not required).
+#  - Relator shapes encode the gUFO mediation cardinality (a relator mediates
+#    ≥2 parties) as the MUST contract that the OWL min-cardinality mirrors.
+#
+# Jurisdictional profiles tighten these via sh:and against this base
+# (conformingSet(P@J) ⊆ conformingSet(G), R11 §3.4).
+# =============================================================================
+
+<https://w3id.org/jeswr/core/shapes> a owl:Ontology ;
+    dcterms:title "Solid Core Ontology — SHACL profile"@en ;
+    owl:versionInfo "1.0.1" ;
+    rdfs:comment "F4 node shapes for the instantiable gUFO-rebased Core classes. Open by default; MUST=Violation, SHOULD=Warning. v1.0.1: adds core:QuantityShape (numericValue MUST, unit SHOULD)."@en .
+
+# -----------------------------------------------------------------------------
+# AGENCY
+# -----------------------------------------------------------------------------
+
+core:PersonShape a sh:NodeShape ;
+    sh:targetClass core:Person ;
+    rdfs:label "Person shape"@en ;
+    sh:property [
+        sh:path core:identifiedBy ;
+        sh:class core:Identifier ;
+        sh:severity sh:Warning ;
+        sh:message "A Person SHOULD carry at least one Identifier (WebID, national ID, MRN)."@en ;
+        sh:minCount 0 ;
+    ] .
+
+core:OrganizationShape a sh:NodeShape ;
+    sh:targetClass core:Organization ;
+    rdfs:label "Organization shape"@en ;
+    sh:property [
+        sh:path core:identifiedBy ;
+        sh:class core:Identifier ;
+        sh:minCount 1 ;
+        sh:severity sh:Violation ;
+        sh:message "An Organization MUST carry at least one Identifier."@en ;
+    ] .
+
+core:SoftwareAgentShape a sh:NodeShape ;
+    sh:targetClass core:SoftwareAgent ;
+    rdfs:label "Software Agent shape"@en .
+
+core:GroupShape a sh:NodeShape ;
+    sh:targetClass core:Group ;
+    rdfs:label "Group shape"@en .
+
+# -----------------------------------------------------------------------------
+# IDENTITY
+# -----------------------------------------------------------------------------
+
+core:IdentifierShape a sh:NodeShape ;
+    sh:targetClass core:Identifier ;
+    rdfs:label "Identifier shape"@en ;
+    sh:property [
+        sh:path core:value ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:severity sh:Violation ;
+        sh:message "An Identifier MUST have exactly one literal value."@en ;
+    ] ;
+    sh:property [
+        sh:path core:inScheme ;
+        sh:class core:IdentifierScheme ;
+        sh:minCount 1 ;
+        sh:severity sh:Violation ;
+        sh:message "An Identifier MUST be in exactly one IdentifierScheme so it is interpretable."@en ;
+    ] .
+
+core:IdentifierSchemeShape a sh:NodeShape ;
+    sh:targetClass core:IdentifierScheme ;
+    rdfs:label "Identifier Scheme shape"@en ;
+    sh:property [
+        sh:path core:schemeAuthority ;
+        sh:class core:Agent ;
+        sh:minCount 1 ;
+        sh:severity sh:Warning ;
+        sh:message "An IdentifierScheme SHOULD declare its governing scheme authority."@en ;
+    ] .
+
+# -----------------------------------------------------------------------------
+# HOLDINGS — Account is a gufo:Relator; the shape enforces its mediation parties.
+# -----------------------------------------------------------------------------
+
+core:AccountShape a sh:NodeShape ;
+    sh:targetClass core:Account ;
+    rdfs:label "Account shape (relator)"@en ;
+    sh:property [
+        sh:path core:hasAccountHolder ;
+        sh:class core:AccountHolder ;
+        sh:minCount 1 ;
+        sh:severity sh:Violation ;
+        sh:message "An Account (relator) MUST mediate at least one AccountHolder."@en ;
+    ] ;
+    sh:property [
+        sh:path core:hasAccountProvider ;
+        sh:class core:AccountProvider ;
+        sh:minCount 1 ;
+        sh:severity sh:Violation ;
+        sh:message "An Account (relator) MUST mediate at least one AccountProvider."@en ;
+    ] ;
+    sh:property [
+        sh:path core:status ;
+        sh:class core:Category ;
+        sh:maxCount 1 ;
+        sh:severity sh:Warning ;
+        sh:message "An Account SHOULD carry at most one coded lifecycle status (Active/Frozen/Closed)."@en ;
+    ] .
+
+core:AssetShape a sh:NodeShape ;
+    sh:targetClass core:Asset ;
+    rdfs:label "Asset shape"@en .
+
+# -----------------------------------------------------------------------------
+# INFORMATION
+# -----------------------------------------------------------------------------
+
+core:InformationResourceShape a sh:NodeShape ;
+    sh:targetClass core:InformationResource ;
+    rdfs:label "Information Resource shape"@en ;
+    sh:property [
+        sh:path core:about ;
+        sh:severity sh:Warning ;
+        sh:message "An InformationResource SHOULD declare the entity it is about (subject/document split)."@en ;
+        sh:minCount 0 ;
+    ] .
+
+core:RecordShape a sh:NodeShape ;
+    sh:targetClass core:Record ;
+    rdfs:label "Record shape"@en ;
+    sh:property [
+        sh:path core:subject ;
+        sh:class core:Agent ;
+        sh:minCount 1 ;
+        sh:severity sh:Violation ;
+        sh:message "A Record MUST declare the Agent it is primarily about (the data subject) — required for access control and provenance."@en ;
+    ] .
+
+# -----------------------------------------------------------------------------
+# QUANTITY — a reified quantity value (value + unit). v1.0.1.
+# -----------------------------------------------------------------------------
+
+core:QuantityShape a sh:NodeShape ;
+    sh:targetClass core:Quantity ;
+    rdfs:label "Quantity shape"@en ;
+    sh:property [
+        sh:path core:numericValue ;
+        sh:datatype xsd:decimal ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:severity sh:Violation ;
+        sh:message "A Quantity MUST carry exactly one core:numericValue (xsd:decimal magnitude)."@en ;
+    ] ;
+    sh:property [
+        sh:path core:unit ;
+        sh:nodeKind sh:IRI ;
+        sh:maxCount 1 ;
+        sh:severity sh:Warning ;
+        sh:message "A Quantity SHOULD carry a core:unit (a qudt:Unit IRI)."@en ;
+    ] .
+
+# -----------------------------------------------------------------------------
+# ACTIVITY & EVENT
+# -----------------------------------------------------------------------------
+
+core:ActivityShape a sh:NodeShape ;
+    sh:targetClass core:Activity ;
+    rdfs:label "Activity shape"@en ;
+    sh:property [
+        sh:path core:performedBy ;
+        sh:class core:Agent ;
+        sh:minCount 1 ;
+        sh:severity sh:Warning ;
+        sh:message "An Activity SHOULD record the Agent that performed it (provenance)."@en ;
+    ] .
+
+core:EventShape a sh:NodeShape ;
+    sh:targetClass core:Event ;
+    rdfs:label "Event shape"@en .
+
+# -----------------------------------------------------------------------------
+# RELATIONSHIP — gufo:Relator; the shape enforces ≥2 mediated parties.
+# -----------------------------------------------------------------------------
+
+core:RelationshipShape a sh:NodeShape ;
+    sh:targetClass core:Relationship ;
+    rdfs:label "Relationship shape (relator)"@en ;
+    sh:property [
+        sh:path core:relatesParty ;
+        sh:class core:RelationshipParty ;
+        sh:minCount 2 ;
+        sh:severity sh:Violation ;
+        sh:message "A Relationship (relator) MUST mediate at least two RelationshipParty roles (a relator relates two or more parties)."@en ;
+    ] .
+
+# -----------------------------------------------------------------------------
+# PLACE
+# -----------------------------------------------------------------------------
+
+core:PlaceShape a sh:NodeShape ;
+    sh:targetClass core:Place ;
+    rdfs:label "Place shape"@en .
+
+# -----------------------------------------------------------------------------
+# CONTROLLED VOCABULARY
+# -----------------------------------------------------------------------------
+
+core:CategoryShape a sh:NodeShape ;
+    sh:targetClass core:Category ;
+    rdfs:label "Category shape"@en ;
+    sh:property [
+        sh:path core:inScheme ;
+        sh:severity sh:Warning ;
+        sh:message "A Category value SHOULD declare the scheme it is drawn from."@en ;
+        sh:minCount 0 ;
+    ] .

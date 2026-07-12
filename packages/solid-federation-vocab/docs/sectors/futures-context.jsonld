@@ -1,0 +1,309 @@
+{
+  "@context": {
+    "@version": 1.1,
+    "@protected": true,
+    "fut": "https://w3id.org/jeswr/sectors/futures#",
+    "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
+    "skos": "http://www.w3.org/2004/02/skos/core#",
+    "xsd": "http://www.w3.org/2001/XMLSchema#",
+    "id": "@id",
+    "type": "@type",
+    "acceptanceCriterion": {
+      "@id": "fut:acceptanceCriterion",
+      "@type": "@id"
+    },
+    "AcceptanceCriterion": "fut:AcceptanceCriterion",
+    "adoptedBy": {
+      "@id": "fut:adoptedBy",
+      "@type": "@id"
+    },
+    "adoptionBar": {
+      "@id": "fut:adoptionBar",
+      "@type": "xsd:string"
+    },
+    "AdoptionDecision": "fut:AdoptionDecision",
+    "adoptionEvidence": {
+      "@id": "fut:adoptionEvidence",
+      "@type": "@id"
+    },
+    "AdoptionObservation": "fut:AdoptionObservation",
+    "affectsRole": {
+      "@id": "fut:affectsRole",
+      "@type": "@id"
+    },
+    "aggregate": "fut:aggregate",
+    "AppProposal": "fut:AppProposal",
+    "articulates": {
+      "@id": "fut:articulates",
+      "@type": "@id"
+    },
+    "breakingChange": {
+      "@id": "fut:breakingChange",
+      "@type": "xsd:boolean"
+    },
+    "bridgingEvidence": {
+      "@id": "fut:bridgingEvidence",
+      "@type": "@id"
+    },
+    "BridgingEvidence": "fut:BridgingEvidence",
+    "bridgingScore": {
+      "@id": "fut:bridgingScore",
+      "@type": "xsd:decimal"
+    },
+    "Claim": "fut:Claim",
+    "clusterCount": {
+      "@id": "fut:clusterCount",
+      "@type": "xsd:nonNegativeInteger"
+    },
+    "clusterLabel": {
+      "@id": "fut:clusterLabel",
+      "@type": "xsd:string"
+    },
+    "community": "fut:community",
+    "Conflicts": "fut:Conflicts",
+    "conflictsCount": {
+      "@id": "fut:conflictsCount",
+      "@type": "xsd:nonNegativeInteger"
+    },
+    "consentActionScheme": "fut:consentActionScheme",
+    "ConvergenceMetrics": "fut:ConvergenceMetrics",
+    "Critique": "fut:Critique",
+    "crossClusterConsensusRate": {
+      "@id": "fut:crossClusterConsensusRate",
+      "@type": "xsd:decimal"
+    },
+    "decomposedBy": {
+      "@id": "fut:decomposedBy",
+      "@type": "@id"
+    },
+    "Deliberation": "fut:Deliberation",
+    "DeliberationMethod": "fut:DeliberationMethod",
+    "Deprecation": "fut:Deprecation",
+    "dimension": {
+      "@id": "fut:dimension",
+      "@type": "@id"
+    },
+    "dimensionScheme": "fut:dimensionScheme",
+    "dissent": {
+      "@id": "fut:dissent",
+      "@type": "@id"
+    },
+    "DissentRecord": "fut:DissentRecord",
+    "endorsedBy": {
+      "@id": "fut:endorsedBy",
+      "@type": "@id"
+    },
+    "existential-being": "fut:existential-being",
+    "existential-doing": "fut:existential-doing",
+    "existential-having": "fut:existential-having",
+    "existential-interacting": "fut:existential-interacting",
+    "existentialCategory": {
+      "@id": "fut:existentialCategory",
+      "@type": "@id"
+    },
+    "ExistentialCategory": "fut:ExistentialCategory",
+    "existentialScheme": "fut:existentialScheme",
+    "expressesNeed": {
+      "@id": "fut:expressesNeed",
+      "@type": "@id"
+    },
+    "governmentUse": "fut:governmentUse",
+    "horizon": {
+      "@id": "fut:horizon",
+      "@type": "xsd:gYear"
+    },
+    "horizonConcept": {
+      "@id": "fut:horizonConcept",
+      "@type": "@id"
+    },
+    "household": "fut:household",
+    "humanity": "fut:humanity",
+    "IAspireToThis": "fut:IAspireToThis",
+    "implementationTracker": {
+      "@id": "fut:implementationTracker",
+      "@type": "@id"
+    },
+    "ImplementerRole": "fut:ImplementerRole",
+    "inDeliberation": {
+      "@id": "fut:inDeliberation",
+      "@type": "@id"
+    },
+    "indirectStakeholders": {
+      "@id": "fut:indirectStakeholders",
+      "@type": "xsd:string"
+    },
+    "InfraProposal": "fut:InfraProposal",
+    "intensity": {
+      "@id": "fut:intensity",
+      "@type": "xsd:integer"
+    },
+    "IShareThis": "fut:IShareThis",
+    "IWouldSupportThis": "fut:IWouldSupportThis",
+    "kThreshold": "fut:kThreshold",
+    "LifeContext": "fut:LifeContext",
+    "maxneef-affection": "fut:maxneef-affection",
+    "maxneef-creation": "fut:maxneef-creation",
+    "maxneef-freedom": "fut:maxneef-freedom",
+    "maxneef-identity": "fut:maxneef-identity",
+    "maxneef-idleness": "fut:maxneef-idleness",
+    "maxneef-participation": "fut:maxneef-participation",
+    "maxneef-protection": "fut:maxneef-protection",
+    "maxneef-subsistence": "fut:maxneef-subsistence",
+    "maxneef-understanding": "fut:maxneef-understanding",
+    "maxneefScheme": "fut:maxneefScheme",
+    "mediatedSynthesis": "fut:mediatedSynthesis",
+    "metBy": {
+      "@id": "fut:metBy",
+      "@type": "xsd:string"
+    },
+    "method": {
+      "@id": "fut:method",
+      "@type": "@id"
+    },
+    "methodProvenance": {
+      "@id": "fut:methodProvenance",
+      "@type": "@id"
+    },
+    "methodScheme": "fut:methodScheme",
+    "migrationPath": {
+      "@id": "fut:migrationPath",
+      "@type": "xsd:string"
+    },
+    "miniPublic": "fut:miniPublic",
+    "motivatedBy": {
+      "@id": "fut:motivatedBy",
+      "@type": "@id"
+    },
+    "nation": "fut:nation",
+    "Need": "fut:Need",
+    "needConcept": {
+      "@id": "fut:needConcept",
+      "@type": "@id"
+    },
+    "NeedConcept": "fut:NeedConcept",
+    "NewSpec": "fut:NewSpec",
+    "noDissentRecorded": {
+      "@id": "fut:noDissentRecorded",
+      "@type": "xsd:boolean"
+    },
+    "observationSource": {
+      "@id": "fut:observationSource",
+      "@type": "@id"
+    },
+    "observedAt": {
+      "@id": "fut:observedAt",
+      "@type": "xsd:dateTime"
+    },
+    "observedParty": {
+      "@id": "fut:observedParty",
+      "@type": "@id"
+    },
+    "observedVersion": {
+      "@id": "fut:observedVersion",
+      "@type": "@id"
+    },
+    "onStatement": {
+      "@id": "fut:onStatement",
+      "@type": "@id"
+    },
+    "operationalises": {
+      "@id": "fut:operationalises",
+      "@type": "@id"
+    },
+    "OperatorRole": "fut:OperatorRole",
+    "participantCount": {
+      "@id": "fut:participantCount",
+      "@type": "xsd:nonNegativeInteger"
+    },
+    "ParticipantRole": "fut:ParticipantRole",
+    "proposalKind": {
+      "@id": "fut:proposalKind",
+      "@type": "@id"
+    },
+    "ProposalKind": "fut:ProposalKind",
+    "proposalKindScheme": "fut:proposalKindScheme",
+    "proposesVersion": {
+      "@id": "fut:proposesVersion",
+      "@type": "@id"
+    },
+    "quoteVerbatim": "fut:quoteVerbatim",
+    "referenceImplementation": {
+      "@id": "fut:referenceImplementation",
+      "@type": "@id"
+    },
+    "Resonance": "fut:Resonance",
+    "ResonanceDimension": "fut:ResonanceDimension",
+    "resonanceMapping": "fut:resonanceMapping",
+    "Resonates": "fut:Resonates",
+    "resonatesCount": {
+      "@id": "fut:resonatesCount",
+      "@type": "xsd:nonNegativeInteger"
+    },
+    "Satisfier": "fut:Satisfier",
+    "satisfies": {
+      "@id": "fut:satisfies",
+      "@type": "@id"
+    },
+    "schwartz-achievement": "fut:schwartz-achievement",
+    "schwartz-benevolence": "fut:schwartz-benevolence",
+    "schwartz-conformity": "fut:schwartz-conformity",
+    "schwartz-hedonism": "fut:schwartz-hedonism",
+    "schwartz-power": "fut:schwartz-power",
+    "schwartz-security": "fut:schwartz-security",
+    "schwartz-self-direction": "fut:schwartz-self-direction",
+    "schwartz-stimulation": "fut:schwartz-stimulation",
+    "schwartz-tradition": "fut:schwartz-tradition",
+    "schwartz-universalism": "fut:schwartz-universalism",
+    "scope": {
+      "@id": "fut:scope",
+      "@type": "@id"
+    },
+    "Scope": "fut:Scope",
+    "scopeScheme": "fut:scopeScheme",
+    "sector": "fut:sector",
+    "seenCount": {
+      "@id": "fut:seenCount",
+      "@type": "xsd:nonNegativeInteger"
+    },
+    "self": "fut:self",
+    "ServiceOperation": "fut:ServiceOperation",
+    "SharedFuture": "fut:SharedFuture",
+    "SharedFutureCredential": "fut:SharedFutureCredential",
+    "SpecChange": "fut:SpecChange",
+    "SpecSynthesis": "fut:SpecSynthesis",
+    "StakeholderRole": "fut:StakeholderRole",
+    "stakeholderRoleScheme": "fut:stakeholderRoleScheme",
+    "stance": {
+      "@id": "fut:stance",
+      "@type": "@id"
+    },
+    "Stance": "fut:Stance",
+    "stanceScheme": "fut:stanceScheme",
+    "synthesize": "fut:synthesize",
+    "targetsSystem": {
+      "@id": "fut:targetsSystem",
+      "@type": "@id"
+    },
+    "unmetBecause": {
+      "@id": "fut:unmetBecause",
+      "@type": "xsd:string"
+    },
+    "Unsure": "fut:Unsure",
+    "unsureCount": {
+      "@id": "fut:unsureCount",
+      "@type": "xsd:nonNegativeInteger"
+    },
+    "valueConcept": {
+      "@id": "fut:valueConcept",
+      "@type": "@id"
+    },
+    "ValueConcept": "fut:ValueConcept",
+    "valueScheme": "fut:valueScheme",
+    "ValueStatement": "fut:ValueStatement",
+    "verificationTier": {
+      "@id": "fut:verificationTier",
+      "@type": "xsd:string"
+    },
+    "VisionStatement": "fut:VisionStatement"
+  }
+}

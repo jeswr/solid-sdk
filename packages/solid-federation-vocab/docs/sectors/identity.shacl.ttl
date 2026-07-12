@@ -1,0 +1,302 @@
+# AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+#
+@prefix idsh:    <https://w3id.org/jeswr/sectors/identity/shapes#> .
+@prefix id:      <https://w3id.org/jeswr/sectors/identity#> .
+@prefix core:    <https://w3id.org/jeswr/core#> .
+@prefix sh:      <http://www.w3.org/ns/shacl#> .
+@prefix owl:     <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:     <http://www.w3.org/2001/XMLSchema#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix prof:    <http://www.w3.org/ns/dx/prof/> .
+
+# =============================================================================
+# Solid Identity & Profile — SHACL data-model profile (F4; R4/R8 §4.5)
+#
+# The NORMATIVE conformance artifact: the ontology licenses meaning, THIS shape
+# checks shape. Discipline:
+#  - OPEN BY DEFAULT — no sh:closed (composes with downstream/jurisdictional
+#    profiles; child-conformance => parent-conformance, the §3.4 ⊆ rule).
+#  - sh:severity carries the RFC 2119 grade: Violation=MUST, Warning=SHOULD,
+#    Info=MAY. A conformance RESULT is read against severity, not pass/fail.
+#  - IMMUTABLE version IRI (.../identity/profile/1.0.0); additive-only.
+#
+# v1.0.0 tracks the gUFO re-base of identity.ttl.
+# =============================================================================
+
+<https://w3id.org/jeswr/sectors/identity/profile/1.0.0>
+    a prof:Profile ;
+    dcterms:title "Solid Identity & Profile data-model profile (gUFO re-base)"@en ;
+    dcterms:isVersionOf <https://w3id.org/jeswr/sectors/identity/profile> ;
+    owl:versionInfo "1.0.0" ;
+    owl:versionIRI <https://w3id.org/jeswr/sectors/identity/profile/1.0.0> ;
+    prof:isProfileOf <https://w3id.org/jeswr/sectors/identity> ;
+    prof:hasToken "identity-1.0.0" ;
+    prof:hasResource [
+        prof:hasRole <http://www.w3.org/ns/dx/prof/role/constraints> ;
+        prof:hasArtifact <https://w3id.org/jeswr/sectors/identity/profile/1.0.0/shapes>
+    ] ;
+    rdfs:comment "Open-by-default SHACL profile for identity & verified-claim data, re-based onto the gUFO Core. "@en .
+
+# -----------------------------------------------------------------------------
+# NaturalPerson — the KYC/profile subject
+# -----------------------------------------------------------------------------
+
+idsh:NaturalPersonShape
+    a sh:NodeShape ;
+    sh:targetClass id:NaturalPerson ;
+    rdfs:label "Natural Person shape"@en ;
+    # open shape: NO sh:closed — extensible by downstream/jurisdictional profiles.
+
+    # MUST have at least one structured legal name (the KYC anchor).
+    sh:property [
+        sh:path id:hasLegalName ;
+        sh:class id:LegalName ;
+        sh:minCount 1 ;
+        sh:severity sh:Violation ;          # MUST
+        sh:message "A natural person MUST have at least one structured legal name (id:hasLegalName)."@en ;
+    ] ;
+
+    # SHOULD declare exactly one date of birth (the headline KYC-reuse attribute).
+    sh:property [
+        sh:path id:dateOfBirth ;
+        sh:datatype xsd:date ;
+        sh:maxCount 1 ;
+        sh:minCount 1 ;
+        sh:severity sh:Warning ;            # SHOULD
+        sh:message "A natural person SHOULD declare exactly one date of birth (id:dateOfBirth)."@en ;
+    ] ;
+
+    # SHOULD declare at least one nationality, referencing an id:Country.
+    sh:property [
+        sh:path id:nationality ;
+        sh:class id:Country ;
+        sh:minCount 1 ;
+        sh:severity sh:Warning ;            # SHOULD
+        sh:message "A natural person SHOULD declare at least one nationality referencing an id:Country."@en ;
+    ] ;
+
+    # MAY carry a place of birth (an id:Country).
+    sh:property [
+        sh:path id:placeOfBirth ;
+        sh:class id:Country ;
+        sh:maxCount 1 ;
+        sh:severity sh:Info ;               # MAY
+        sh:message "A natural person MAY carry a place of birth (id:placeOfBirth)."@en ;
+    ] .
+
+# -----------------------------------------------------------------------------
+# LegalName — structured name parts
+# -----------------------------------------------------------------------------
+
+idsh:LegalNameShape
+    a sh:NodeShape ;
+    sh:targetClass id:LegalName ;
+    rdfs:label "Legal Name shape"@en ;
+
+    # MUST have a family name (cross-culturally the most stable legal part;
+    # given name is SHOULD to accommodate mononymic persons).
+    sh:property [
+        sh:path id:familyName ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:severity sh:Violation ;          # MUST
+        sh:message "A legal name MUST have a family name (id:familyName)."@en ;
+    ] ;
+
+    sh:property [
+        sh:path id:givenName ;
+        sh:datatype xsd:string ;
+        sh:severity sh:Warning ;            # SHOULD
+        sh:message "A legal name SHOULD have a given name (id:givenName)."@en ;
+    ] ;
+
+    sh:property [
+        sh:path id:fullName ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+        sh:severity sh:Info ;               # MAY
+        sh:message "A legal name MAY carry a single formatted full name (id:fullName)."@en ;
+    ] .
+
+# -----------------------------------------------------------------------------
+# VerifiableAttribute — the trust-framework-anchored claim
+# (who asserted it + when — the "who do I trust to assert date-of-birth" unit)
+# -----------------------------------------------------------------------------
+
+idsh:VerifiableAttributeShape
+    a sh:NodeShape ;
+    sh:targetClass id:VerifiableAttribute ;
+    rdfs:label "Verifiable Attribute shape"@en ;
+
+    # MUST be about at least one subject (a core:Person) — core:about.
+    sh:property [
+        sh:path core:about ;
+        sh:class core:Person ;
+        sh:minCount 1 ;
+        sh:severity sh:Violation ;          # MUST
+        sh:message "A verifiable attribute MUST be core:about at least one person (the subject)."@en ;
+    ] ;
+
+    # MUST record who asserted it (the trust anchor).
+    sh:property [
+        sh:path id:assertedBy ;
+        sh:class core:Agent ;
+        sh:minCount 1 ;
+        sh:severity sh:Violation ;          # MUST
+        sh:message "A verifiable attribute MUST record the asserting agent (id:assertedBy)."@en ;
+    ] ;
+
+    # MUST record when it was asserted.
+    sh:property [
+        sh:path id:assertedAt ;
+        sh:datatype xsd:dateTime ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:severity sh:Violation ;          # MUST
+        sh:message "A verifiable attribute MUST record an assertion timestamp (id:assertedAt)."@en ;
+    ] ;
+
+    # MUST name the attribute it asserts.
+    sh:property [
+        sh:path id:attributeName ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:severity sh:Violation ;          # MUST
+        sh:message "A verifiable attribute MUST name the attribute it asserts (id:attributeName)."@en ;
+    ] ;
+
+    # SHOULD carry an assurance level (the trust dial).
+    sh:property [
+        sh:path id:assuranceLevel ;
+        sh:minCount 1 ;
+        sh:severity sh:Warning ;            # SHOULD
+        sh:message "A verifiable attribute SHOULD carry an assurance level (id:assuranceLevel)."@en ;
+    ] .
+
+# -----------------------------------------------------------------------------
+# HL7 Gender-Harmony FIVE slots (§3.5) — the global structural guarantee.
+# Each recorded value across ALL FIVE slots (GenderIdentity, SexParameterForClinicalUse,
+# RecordedSexOrGender, NameToUse, Pronouns) MUST carry its subject (core:about a person)
+# AND its provenance (id:assertedBy + id:assertedAt) — so no app can read a value without
+# reading WHOSE it is and WHO asserted it WHEN; the jurisdictional layer adds the
+# under-which-authority. One shared shape, applied to each slot via sh:node.
+# -----------------------------------------------------------------------------
+
+idsh:GenderHarmonySlotShape
+    a sh:NodeShape ;
+    rdfs:label "Gender-Harmony slot shape (subject + provenance)"@en ;
+
+    # MUST be about the person whose recorded value this is (the subject).
+    sh:property [
+        sh:path core:about ;
+        sh:class core:Person ;
+        sh:minCount 1 ;
+        sh:severity sh:Violation ;          # MUST
+        sh:message "A Gender-Harmony slot value MUST be core:about a person (whose value it is)."@en ;
+    ] ;
+
+    # MUST record who asserted it (provenance / trust anchor).
+    sh:property [
+        sh:path id:assertedBy ;
+        sh:class core:Agent ;
+        sh:minCount 1 ;
+        sh:severity sh:Violation ;          # MUST
+        sh:message "A Gender-Harmony slot value MUST record the asserting agent (id:assertedBy)."@en ;
+    ] ;
+
+    # MUST record when it was asserted (provenance).
+    sh:property [
+        sh:path id:assertedAt ;
+        sh:datatype xsd:dateTime ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:severity sh:Violation ;          # MUST
+        sh:message "A Gender-Harmony slot value MUST record an assertion timestamp (id:assertedAt)."@en ;
+    ] .
+
+# Each of the five slots targets the shared shape.
+idsh:GenderIdentityShape
+    a sh:NodeShape ; sh:targetClass id:GenderIdentity ;
+    sh:node idsh:GenderHarmonySlotShape ; rdfs:label "Gender Identity shape"@en .
+
+idsh:SexParameterForClinicalUseShape
+    a sh:NodeShape ; sh:targetClass id:SexParameterForClinicalUse ;
+    sh:node idsh:GenderHarmonySlotShape ; rdfs:label "Sex Parameter for Clinical Use shape"@en .
+
+idsh:RecordedSexOrGenderShape
+    a sh:NodeShape ; sh:targetClass id:RecordedSexOrGender ;
+    sh:node idsh:GenderHarmonySlotShape ; rdfs:label "Recorded Sex or Gender shape"@en .
+
+idsh:NameToUseShape
+    a sh:NodeShape ; sh:targetClass id:NameToUse ;
+    sh:node idsh:GenderHarmonySlotShape ; rdfs:label "Name to Use shape"@en .
+
+idsh:PronounsShape
+    a sh:NodeShape ; sh:targetClass id:Pronouns ;
+    sh:node idsh:GenderHarmonySlotShape ; rdfs:label "Pronouns shape"@en .
+
+# =============================================================================
+# F4 coverage — a node shape per remaining instantiable class.
+# Identifier sub-kinds MUST carry their literal value (core:value) and SHOULD
+# name their scheme; Country/CountryCode and the assertion act get shapes too.
+# =============================================================================
+
+# Shared shape for the identifier sub-kinds: MUST a value, SHOULD a scheme.
+idsh:IdentifierKindShape
+    a sh:NodeShape ;
+    rdfs:label "Identifier kind shape (value + scheme)"@en ;
+    sh:property [
+        sh:path core:value ; sh:minCount 1 ; sh:severity sh:Violation ;
+        sh:message "An identifier MUST carry its literal value (core:value)."@en
+    ] ;
+    sh:property [
+        sh:path core:inScheme ; sh:class core:IdentifierScheme ;
+        sh:severity sh:Warning ;
+        sh:message "An identifier SHOULD name its scheme via core:inScheme."@en
+    ] .
+
+idsh:NationalIdentifierShape a sh:NodeShape ;
+    sh:targetClass id:NationalIdentifier ; sh:node idsh:IdentifierKindShape ;
+    rdfs:label "National Identifier shape"@en .
+
+idsh:PassportNumberShape a sh:NodeShape ;
+    sh:targetClass id:PassportNumber ; sh:node idsh:IdentifierKindShape ;
+    rdfs:label "Passport Number shape"@en .
+
+idsh:TaxIdentifierShape a sh:NodeShape ;
+    sh:targetClass id:TaxIdentifier ; sh:node idsh:IdentifierKindShape ;
+    rdfs:label "Tax Identifier shape"@en .
+
+idsh:SocialSecurityNumberShape a sh:NodeShape ;
+    sh:targetClass id:SocialSecurityNumber ; sh:node idsh:IdentifierKindShape ;
+    rdfs:label "Social Security Number shape"@en .
+
+idsh:IdentityDocumentNumberShape a sh:NodeShape ;
+    sh:targetClass id:IdentityDocumentNumber ; sh:node idsh:IdentifierKindShape ;
+    rdfs:label "Identity Document Number shape"@en .
+
+idsh:CountryCodeShape a sh:NodeShape ;
+    sh:targetClass id:CountryCode ; rdfs:label "Country Code shape"@en ;
+    sh:property [
+        sh:path core:value ; sh:minCount 1 ; sh:severity sh:Violation ;
+        sh:message "A CountryCode MUST carry its ISO 3166 code (core:value)."@en
+    ] .
+
+# Country — a core:Place; SHOULD be identified by an ISO 3166 country code.
+idsh:CountryShape a sh:NodeShape ;
+    sh:targetClass id:Country ; rdfs:label "Country shape"@en ;
+    sh:property [
+        sh:path core:identifiedBy ; sh:class id:CountryCode ;
+        sh:severity sh:Warning ;
+        sh:message "A Country SHOULD be core:identifiedBy an id:CountryCode (an ISO 3166 code)."@en
+    ] .
+
+# AttributeAssertion — the act asserting a verifiable attribute.
+idsh:AttributeAssertionShape a sh:NodeShape ;
+    sh:targetClass id:AttributeAssertion ; rdfs:label "Attribute Assertion shape"@en ;
+    sh:property [
+        sh:path core:performedBy ; sh:class core:Agent ;
+        sh:minCount 1 ; sh:severity sh:Warning ;
+        sh:message "An AttributeAssertion SHOULD record core:performedBy (the asserting agent)."@en
+    ] .

@@ -1,0 +1,326 @@
+# AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+#
+@prefix col:     <https://w3id.org/jeswr/sectors/collectibles#> .
+@prefix core:    <https://w3id.org/jeswr/core#> .
+@prefix owl:     <http://www.w3.org/2002/07/owl#> .
+@prefix rdf:     <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:     <http://www.w3.org/2001/XMLSchema#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix skos:    <http://www.w3.org/2004/02/skos/core#> .
+@prefix vann:    <http://purl.org/vocab/vann/> .
+@prefix gufo:    <http://purl.org/nemo/gufo#> .
+@prefix schema:  <http://schema.org/> .
+@prefix prov:    <http://www.w3.org/ns/prov#> .
+
+# =============================================================================
+# Solid COLLECTIBLES sector ontology (KEY=collectibles).
+#
+# The provenance / valuation / insurance domain for high-value collectible
+# assets (art, antiques, wine, watches, cars) — the sector the `Provena`
+# revenue product (jeswr/product-4) operates in (fedapp:sector). It carries the
+# QUALIFIER terms that wrap an asset (typically a schema:VisualArtwork or other
+# schema:CreativeWork/Product in the product's pod) with the provenance-event,
+# valuation, appraisal and insurance records the product needs — REPLACING the
+# reserved `provena.example.org/vocab#` namespace (RFC 2606) and the two
+# NON-EXISTENT schema.org terms the product previously wrote (schema:artworkMedium
+# and schema:artworkSize both return HTTP 404; the real terms are schema:artMedium
+# and schema:width/height, applied by the product directly — see the ontology
+# review, full-solid-ecosystem docs/design/revenue-products-ontology-review.md §1).
+#
+# PROV-O IS PRIMARY, USED CORRECTLY (the review's three corrections):
+#   - a provenance event is a col:ProvenanceEvent (an ACTIVITY that prov:used the
+#     asset); only a creation-type event is the asset's prov:wasGeneratedBy — a
+#     sale/exhibition of an EXISTING artwork is not a generation.
+#   - attribution of an event to a party is prov:wasAssociatedWith → a
+#     prov:Agent NODE (never a string literal on prov:wasAttributedTo).
+#   - event timing is prov:startedAtTime / prov:endedAtTime (xsd:dateTime) on the
+#     activity — never prov:atTime (whose domain is prov:InstantaneousEvent), with
+#     col:datePrecision qualifying a date-only precision.
+# PROV-O is referenced directly (Mode A, futures-alignments-style); it is NOT
+# owl:imported into the reasoned closure. The linked.art / CIDOC-CRM art-market
+# profile is an ALIGNMENT REFERENCE only (collectibles-alignments.ttl), never
+# adopted — full CRM is far too heavy for a consumer product.
+#
+# gUFO META-TYPES (each class carries its own AND roots transitively in Core):
+#   ProvenanceEvent = gufo:EventType → root core:Activity (an act that used /
+#     generated the asset; aligned to prov:Activity in the alignments file).
+#   Valuation / Appraisal = gufo:SubKind → root core:Record (structured records
+#     ABOUT the asset carrying an assessed monetary value at a point in time).
+#   InsurancePolicy = gufo:SubKind → root core:InformationResource (a policy
+#     document held in the owner's pod).
+#   EventType / DatePrecision = gufo:Category → root core:Category (rigid
+#     non-sortals whose instances are the coded values, bound to skos:Concept).
+#
+# CONTRACT (sector contract R8 §4, F1–F7): imports the gUFO Core; roots every
+# class transitively in a Core class and carries its gUFO meta-type; CONSTRAINS,
+# never forks, the vocabularies it reuses (schema.org asset/amount terms, PROV
+# derivation/attribution, DCT). Open-world by default — the SHACL profile
+# (collectibles.shacl.ttl) carries the closed-world MUST/SHOULD contract. F5 DL
+# hygiene: external classes referenced in axioms are declared as punned owl terms.
+# =============================================================================
+
+<https://w3id.org/jeswr/sectors/collectibles> a owl:Ontology ;
+    dcterms:title "Solid Collectibles Sector Ontology"@en ;
+    rdfs:label "Solid Collectibles Sector Ontology"@en ;
+    vann:preferredNamespacePrefix "col" ;
+    vann:preferredNamespaceUri "https://w3id.org/jeswr/sectors/collectibles#" ;
+    owl:imports <https://w3id.org/jeswr/core> ;
+    owl:versionInfo "0.1.0" ;
+    owl:versionIRI <https://w3id.org/jeswr/sectors/collectibles/0.1.0> ;
+    dcterms:description """The provenance / valuation / insurance data sector for
+        high-value collectible assets (art, antiques, wine, watches, cars) — the
+        sector the Provena revenue product operates in. The asset itself stays a
+        schema:VisualArtwork / schema:CreativeWork / schema:Product in the pod;
+        this vocabulary adds the qualifier records that wrap it: PROV-O-correct
+        provenance events, assessed valuations and formal appraisals (each on a
+        dual-typed schema:MonetaryAmount value node), and insurance policies.
+        Replaces the reserved provena.example.org namespace and the non-existent
+        schema:artworkMedium/artworkSize terms. Aligns Mode-A to schema.org, PROV-O
+        and the linked.art (CIDOC-CRM) art-market profile in
+        collectibles-alignments.ttl."""@en ;
+    dcterms:modified "2026-07-03"^^xsd:date ;
+    rdfs:comment "Sector ontology for the Provena product (revenue-products ontology review §1). PROV-O primary, used correctly; linked.art alignment is reference-only, never adopted."@en .
+
+# -----------------------------------------------------------------------------
+# Annotation-property declarations (F5 DL hygiene — match the Core pattern).
+# -----------------------------------------------------------------------------
+dcterms:title       a owl:AnnotationProperty .
+dcterms:description a owl:AnnotationProperty .
+dcterms:modified    a owl:AnnotationProperty .
+vann:preferredNamespacePrefix a owl:AnnotationProperty .
+vann:preferredNamespaceUri    a owl:AnnotationProperty .
+skos:definition     a owl:AnnotationProperty .
+skos:scopeNote      a owl:AnnotationProperty .
+skos:notation       a owl:AnnotationProperty .
+
+# -----------------------------------------------------------------------------
+# External classes referenced in axioms below, declared (punned) so the DL
+# profile holds even when their host ontology is not in the reasoned closure
+# (the F5 fix the Core + sibling sectors apply). schema.org is NOT owl:imported;
+# specific terms are referenced and aligned in collectibles-alignments.ttl.
+# -----------------------------------------------------------------------------
+schema:MonetaryAmount a owl:Class ;
+    rdfs:label "schema.org MonetaryAmount"@en ;
+    rdfs:isDefinedBy <http://schema.org/> .
+
+skos:Concept a owl:Class ;
+    rdfs:label "SKOS Concept"@en ;
+    rdfs:isDefinedBy <http://www.w3.org/2004/02/skos/core#> .
+
+skos:ConceptScheme a owl:Class ;
+    rdfs:label "SKOS Concept Scheme"@en ;
+    rdfs:isDefinedBy <http://www.w3.org/2004/02/skos/core#> .
+
+# =============================================================================
+# 1. PROVENANCE EVENTS — gufo:EventType, root core:Activity. An act in the life
+#    of an asset (its creation, an acquisition, a sale, a transfer, an
+#    exhibition, a loan, a restoration). The asset is linked from the event by
+#    prov:used (a creation event additionally being the asset's
+#    prov:wasGeneratedBy); the acting party by prov:wasAssociatedWith → a
+#    prov:Agent node; timing by prov:startedAtTime / prov:endedAtTime.
+# =============================================================================
+
+col:ProvenanceEvent a owl:Class, gufo:EventType ;
+    rdfs:subClassOf core:Activity ;
+    rdfs:label "Provenance Event"@en ;
+    skos:definition "A dated event in the ownership / custody / exhibition history of a collectible asset — a creation, acquisition, sale, transfer, exhibition, loan or restoration. An activity that prov:used the asset (a creation-type event is ALSO the asset's prov:wasGeneratedBy; a sale or exhibition of an existing work is NOT a generation). Its type is a col:eventType coded value; its acting party is a prov:Agent node via prov:wasAssociatedWith; its timing is prov:startedAtTime/prov:endedAtTime, with col:datePrecision qualifying a date-only precision."@en ;
+    skos:scopeNote "gufo:EventType rooting in core:Activity; aligned Mode-A to prov:Activity in collectibles-alignments.ttl."@en .
+
+# =============================================================================
+# 2. VALUATION & APPRAISAL — gufo:SubKind, root core:Record. Records ABOUT the
+#    asset capturing an assessed monetary value at a point in time. The value is
+#    a SEPARATE dual-typed schema:MonetaryAmount node (schema:value +
+#    schema:currency), linked by col:amount — never a schema:offers link (whose
+#    range is Offer/Demand only; a valuation is not an offer).
+# =============================================================================
+
+col:Valuation a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf core:Record ;
+    rdfs:label "Valuation"@en ;
+    skos:definition "An assessed market value of a collectible asset at a point in time — an owner-recorded or professionally-supplied estimate. A core:Record ABOUT the asset (via core:about), carrying the assessed amount on a separate schema:MonetaryAmount node (col:amount) and an as-of date (dcterms:date, precision qualified by col:datePrecision). Linked from the asset by col:hasValuation."@en ;
+    skos:scopeNote "gufo:SubKind of core:Record (information object). Distinct from col:Appraisal, which is a FORMAL, appraiser-attributed assessment."@en .
+
+col:Appraisal a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf core:Record ;
+    rdfs:label "Appraisal"@en ;
+    skos:definition "A FORMAL valuation of a collectible asset produced by a named appraiser (col:appraiser → a prov:Agent), typically for insurance or sale. A core:Record about the asset carrying the appraised amount (col:amount → a schema:MonetaryAmount node) and an appraisal date. Linked from the asset by col:hasAppraisal."@en ;
+    skos:scopeNote "gufo:SubKind of core:Record. Specialised form of a valuation with an attributed appraiser; kept distinct so an app can require appraiser attribution on appraisals but not on owner estimates."@en .
+
+# =============================================================================
+# 3. INSURANCE — gufo:SubKind, root core:InformationResource. The insurance
+#    policy covering an asset, a document held in the owner's pod.
+# =============================================================================
+
+col:InsurancePolicy a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf core:InformationResource ;
+    rdfs:label "Insurance Policy"@en ;
+    skos:definition "An insurance policy covering one or more collectible assets — the policy number (col:policyNumber), the insurer (col:insurer → a prov:Agent), the insured value (col:coverageAmount → a schema:MonetaryAmount node), the premium (col:premium → a schema:MonetaryAmount node) and the renewal date (col:renewalDate). Linked from the asset by col:hasInsurance."@en ;
+    skos:scopeNote "gufo:SubKind of core:InformationResource. A document held in the owner's pod; the asset points at it via col:hasInsurance."@en .
+
+# =============================================================================
+# 4. CODED-VALUE CLASSES — gufo:Category, root core:Category. Rigid non-sortals
+#    whose instances are the coded values (bound to skos:Concept in the schemes
+#    in §6). Constrain core:Category; never widen it.
+# =============================================================================
+
+col:EventType a owl:Class, gufo:Category ;
+    rdfs:subClassOf core:Category ;
+    rdfs:label "Event Type"@en ;
+    skos:definition "The kind of a col:ProvenanceEvent: creation / acquisition / sale / transfer / exhibition / loan / restoration. A coded value (core:Category); the members are skos:Concepts in col:eventTypeScheme. Distinguishes which events are the asset's prov:wasGeneratedBy (only col:evt-creation) from those that merely prov:used it."@en ;
+    skos:scopeNote "gufo:Category of core:Category. Members are skos:Concepts in col:eventTypeScheme."@en .
+
+col:DatePrecision a owl:Class, gufo:Category ;
+    rdfs:subClassOf core:Category ;
+    rdfs:label "Date Precision"@en ;
+    skos:definition "The precision of a provenance / valuation date when the exact day is unknown: day / month / year / circa. A coded value (core:Category) qualifying an event or valuation date — the honest way to record 'circa 1890' without inventing a false xsd:dateTime precision."@en ;
+    skos:scopeNote "gufo:Category of core:Category. Members are skos:Concepts in col:datePrecisionScheme."@en .
+
+# =============================================================================
+# 5. PROPERTIES. Domained onto a col: class where a single class owns them;
+#    asset-side link properties (col:hasValuation/hasAppraisal/hasInsurance) are
+#    deliberately DOMAINLESS — the asset is an external schema:CreativeWork the
+#    sector does not re-type, so a domain axiom would force a foreign typing.
+# =============================================================================
+
+col:hasValuation a owl:ObjectProperty ;
+    rdfs:range col:Valuation ;
+    rdfs:label "has valuation"@en ;
+    skos:definition "Relates a collectible asset to a col:Valuation of it. No rdfs:domain: the asset is an external schema:CreativeWork/VisualArtwork/Product the sector does not re-type."@en .
+
+col:hasAppraisal a owl:ObjectProperty ;
+    rdfs:range col:Appraisal ;
+    rdfs:label "has appraisal"@en ;
+    skos:definition "Relates a collectible asset to a formal col:Appraisal of it. Domainless — the asset is an external type."@en .
+
+col:hasInsurance a owl:ObjectProperty ;
+    rdfs:range col:InsurancePolicy ;
+    rdfs:label "has insurance"@en ;
+    skos:definition "Relates a collectible asset to the col:InsurancePolicy covering it. Domainless — the asset is an external type."@en .
+
+col:eventType a owl:ObjectProperty ;
+    rdfs:domain col:ProvenanceEvent ;
+    rdfs:range col:EventType ;
+    rdfs:label "event type"@en ;
+    skos:definition "The coded kind of a provenance event (col:evt-creation … col:evt-restoration). Determines whether the event is the asset's prov:wasGeneratedBy (creation only) or merely prov:used it."@en .
+
+col:amount a owl:ObjectProperty ;
+    rdfs:range schema:MonetaryAmount ;
+    rdfs:label "amount"@en ;
+    skos:definition "The assessed monetary value carried by a col:Valuation or col:Appraisal — a SEPARATE schema:MonetaryAmount node (schema:value + schema:currency), the CapNote-proven amount shape. No rdfs:domain: shared by Valuation and Appraisal (a domain union axiom would over-constrain). NEVER a schema:offers link (whose range is Offer/Demand only)."@en .
+
+col:appraiser a owl:ObjectProperty ;
+    rdfs:domain col:Appraisal ;
+    rdfs:range core:Agent ;
+    rdfs:label "appraiser"@en ;
+    skos:definition "The agent (a prov:Agent / core:Agent, e.g. an appraisal house) who produced a formal appraisal."@en .
+
+col:policyNumber a owl:DatatypeProperty ;
+    rdfs:domain col:InsurancePolicy ;
+    rdfs:range xsd:string ;
+    rdfs:label "policy number"@en ;
+    skos:definition "The insurer's policy reference number of an insurance policy."@en .
+
+col:insurer a owl:ObjectProperty ;
+    rdfs:domain col:InsurancePolicy ;
+    rdfs:range core:Agent ;
+    rdfs:label "insurer"@en ;
+    skos:definition "The agent (an insurer organization) underwriting an insurance policy."@en .
+
+col:coverageAmount a owl:ObjectProperty ;
+    rdfs:domain col:InsurancePolicy ;
+    rdfs:range schema:MonetaryAmount ;
+    rdfs:label "coverage amount"@en ;
+    skos:definition "The insured value of an insurance policy — a separate schema:MonetaryAmount node."@en .
+
+col:premium a owl:ObjectProperty ;
+    rdfs:domain col:InsurancePolicy ;
+    rdfs:range schema:MonetaryAmount ;
+    rdfs:label "premium"@en ;
+    skos:definition "The premium payable for an insurance policy — a separate schema:MonetaryAmount node."@en .
+
+col:renewalDate a owl:DatatypeProperty ;
+    rdfs:domain col:InsurancePolicy ;
+    rdfs:range xsd:date ;
+    rdfs:label "renewal date"@en ;
+    skos:definition "The date an insurance policy is next due for renewal."@en .
+
+col:datePrecision a owl:ObjectProperty ;
+    rdfs:range col:DatePrecision ;
+    rdfs:label "date precision"@en ;
+    skos:definition "The precision of a provenance-event or valuation date (col:precision-day … col:precision-circa) — the honest qualifier for a date whose exact day is unknown. No rdfs:domain: it qualifies events AND valuations."@en .
+
+# =============================================================================
+# 6. CODED-VALUE SCHEMES — the canonical value sets (skos:Concept members). Each
+#    member is typed with its col: coded class AND skos:Concept, carries
+#    skos:prefLabel + skos:definition (F1 term hygiene) + skos:notation (the
+#    plain token a UI uses), and skos:inScheme its scheme. Seeds, not law —
+#    communities may cross-map (skos:closeMatch) their own value sets.
+# =============================================================================
+
+col:eventTypeScheme a skos:ConceptScheme ;
+    rdfs:label "Provenance event type scheme"@en ;
+    skos:definition "The coded kinds of a col:ProvenanceEvent."@en .
+
+col:evt-creation a col:EventType, skos:Concept ;
+    skos:inScheme col:eventTypeScheme ; skos:notation "creation" ;
+    skos:prefLabel "Creation"@en ;
+    skos:definition "The making of the asset by its creator — the ONE event that is the asset's prov:wasGeneratedBy."@en .
+col:evt-acquisition a col:EventType, skos:Concept ;
+    skos:inScheme col:eventTypeScheme ; skos:notation "acquisition" ;
+    skos:prefLabel "Acquisition"@en ;
+    skos:definition "The current owner's acquisition of the asset (purchase, gift, inheritance)."@en .
+col:evt-sale a col:EventType, skos:Concept ;
+    skos:inScheme col:eventTypeScheme ; skos:notation "sale" ;
+    skos:prefLabel "Sale"@en ;
+    skos:definition "A sale of the asset from one party to another (an activity that prov:used the asset — never a generation)."@en .
+col:evt-transfer a col:EventType, skos:Concept ;
+    skos:inScheme col:eventTypeScheme ; skos:notation "transfer" ;
+    skos:prefLabel "Transfer"@en ;
+    skos:definition "A non-sale transfer of custody or ownership (a gift, a loan return, an estate transfer)."@en .
+col:evt-exhibition a col:EventType, skos:Concept ;
+    skos:inScheme col:eventTypeScheme ; skos:notation "exhibition" ;
+    skos:prefLabel "Exhibition"@en ;
+    skos:definition "A public showing of the asset at a gallery, museum or fair."@en .
+col:evt-loan a col:EventType, skos:Concept ;
+    skos:inScheme col:eventTypeScheme ; skos:notation "loan" ;
+    skos:prefLabel "Loan"@en ;
+    skos:definition "A temporary loan of the asset to an institution or another party."@en .
+col:evt-restoration a col:EventType, skos:Concept ;
+    skos:inScheme col:eventTypeScheme ; skos:notation "restoration" ;
+    skos:prefLabel "Restoration"@en ;
+    skos:definition "A conservation or restoration treatment applied to the asset."@en .
+
+col:datePrecisionScheme a skos:ConceptScheme ;
+    rdfs:label "Date precision scheme"@en ;
+    skos:definition "The coded precision levels for a provenance / valuation date."@en .
+
+col:precision-day a col:DatePrecision, skos:Concept ;
+    skos:inScheme col:datePrecisionScheme ; skos:notation "day" ;
+    skos:prefLabel "Day"@en ;
+    skos:definition "The date is known to the exact day."@en .
+col:precision-month a col:DatePrecision, skos:Concept ;
+    skos:inScheme col:datePrecisionScheme ; skos:notation "month" ;
+    skos:prefLabel "Month"@en ;
+    skos:definition "The date is known only to the month."@en .
+col:precision-year a col:DatePrecision, skos:Concept ;
+    skos:inScheme col:datePrecisionScheme ; skos:notation "year" ;
+    skos:prefLabel "Year"@en ;
+    skos:definition "The date is known only to the year."@en .
+col:precision-circa a col:DatePrecision, skos:Concept ;
+    skos:inScheme col:datePrecisionScheme ; skos:notation "circa" ;
+    skos:prefLabel "Circa"@en ;
+    skos:definition "The date is approximate ('circa') — a best estimate, not an exact value."@en .
+
+# =============================================================================
+# SECTOR MARKER — the IRI an app's fedapp:sector names to declare it operates in
+# the collectibles (art/collectibles provenance) sector. A skos:Concept in the
+# federation sector register; dereferences to this ontology.
+# =============================================================================
+
+<https://w3id.org/jeswr/sectors/collectibles#sector>
+    a skos:Concept ;
+    rdfs:label "Collectibles sector"@en ;
+    rdfs:comment "The Collectibles (art / collectibles provenance, valuation and insurance) data sector. The value an app's fedapp:sector names in its Client Identifier Document to declare it operates over collectible-asset provenance data — the sector the Provena product declares. Backed by this sector ontology."@en ;
+    rdfs:isDefinedBy <https://w3id.org/jeswr/sectors/collectibles> ;
+    skos:prefLabel "Collectibles"@en .

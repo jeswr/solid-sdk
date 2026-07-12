@@ -1,0 +1,288 @@
+# AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+#
+@prefix contact: <https://w3id.org/jeswr/sectors/contacts#> .
+@prefix core:    <https://w3id.org/jeswr/core#> .
+@prefix owl:     <http://www.w3.org/2002/07/owl#> .
+@prefix rdf:     <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:     <http://www.w3.org/2001/XMLSchema#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix skos:    <http://www.w3.org/2004/02/skos/core#> .
+@prefix vann:    <http://purl.org/vocab/vann/> .
+@prefix gufo:    <http://purl.org/nemo/gufo#> .
+
+# =============================================================================
+# Solid Contacts (address-book) sector ontology — RE-BASED onto gUFO (KEY=contacts).
+#
+# v1.0.0 re-base of the v0 thin contacts sector, per R11 §4.2 (the CONTACTS row).
+# Every sector class now carries its own gUFO meta-type AND rdfs:subClassOf a
+# re-based Core class (contract rule 2): Contact=gufo:SubKind of core:Record (a
+# RECORD ABOUT an agent — the card is NOT the agent); the ContactPoint kinds
+# (Email/Phone/PostalAddress/OnlineHandle)=gufo:SubKind of core:Identifier;
+# PostalAddress relates to a core:Place; the inter-person link=gufo:Relator
+# specialising core:Relationship, carrying a relationshipRole core:Category
+# (colleague/family/friend) and mediating core:RelationshipParty roles;
+# ContactGroup=gufo:Kind (collective) of core:Group. RelationshipParty is reused
+# from the Core (core:RelationshipParty = gufo:RoleMixin) — not re-minted.
+#
+# AUTHORING PROVENANCE: authored as an OntoUML model (contacts.ontouml.json),
+# verified anti-pattern-free by OntoumlVerification.verify() (F3, 0 issues),
+# transformed to a gUFO-OWL backbone by ontouml-js Ontouml2Gufo
+# (contacts.gufo.ttl), then ENRICHED here with F1 definitions, the Core rooting
+# (rdfs:subClassOf core:* — the standalone OntoUML model used Core stubs in the
+# contact: namespace, replaced here by the real core: IRIs), and the property
+# spine. The ultimate-sortal Core roots (Record/Identifier/Relationship/Group)
+# could not be specialised inside OntoUML without minting a second ultimate
+# sortal, so ContactRelationship/ContactGroup are rooted onto core: here.
+#
+# CONTRACT (R8 §4 + R11 F1-F7) — admissible because: (1) imports the Core;
+# (2) every class roots in a Core class and carries its gUFO meta-type;
+# (3) constrains, never forks; (4) reuses vcard (the canonical contacts vocab) +
+# schema.org ContactPoint/PostalAddress in the companion contacts-alignments.ttl;
+# (5) ships contacts.shacl.ttl; (6) carries owl:versionInfo "1.0.0" + a version
+# IRI (gUFO re-base = new MAJOR — the v0 string core:relationshipRole is REPLACED
+# by a core:Category + the core:relatesParty mediation); (7) Core ∪ contacts is
+# DL-valid + reasoner-consistent (see verification report). Open-world by
+# default; the SHACL profile carries the closed-world MUST/SHOULD.
+# =============================================================================
+
+<https://w3id.org/jeswr/sectors/contacts> a owl:Ontology ;
+    dcterms:title "Solid Contacts Sector Ontology (gUFO re-base)"@en ;
+    rdfs:label "Solid Contacts Sector Ontology"@en ;
+    vann:preferredNamespacePrefix "contact" ;
+    vann:preferredNamespaceUri "https://w3id.org/jeswr/sectors/contacts#" ;
+    owl:imports <https://w3id.org/jeswr/core> ;
+    owl:versionInfo "1.0.0" ;
+    owl:versionIRI <https://w3id.org/jeswr/sectors/contacts/1.0.0> ;
+    dcterms:description """The address-book / contacts sector model for the Solid
+        federation, re-based onto the gUFO Core. A Contact is a core:Record ABOUT
+        a Person or Organization (the card distinct from the agent it names);
+        contact points (email/phone/postal/online) are core:Identifier sub-kinds;
+        the owner-to-contact link is a core:Relationship relator carrying a coded
+        role (colleague/family/friend) and mediating core:RelationshipParty
+        roles; lists are core:Group. v1.0.0 is a BREAKING re-base of v0 (the
+        meta-types and the role model change meaning), so a new MAJOR version.
+        Aligns thoroughly to vcard and to schema:ContactPoint/PostalAddress in
+        the companion alignments file."""@en ;
+    dcterms:modified "2026-06-13"^^xsd:date ;
+    rdfs:comment "Re-based per R11 §4.2."@en .
+
+# -----------------------------------------------------------------------------
+# Annotation-property declarations (F5: keep the merged closure unambiguously
+# OWL 2 DL — declare the dcterms:/vann: annotation properties used here).
+# -----------------------------------------------------------------------------
+dcterms:title       a owl:AnnotationProperty .
+dcterms:description a owl:AnnotationProperty .
+dcterms:modified    a owl:AnnotationProperty .
+vann:preferredNamespacePrefix a owl:AnnotationProperty .
+vann:preferredNamespaceUri    a owl:AnnotationProperty .
+skos:definition     a owl:AnnotationProperty .
+skos:scopeNote      a owl:AnnotationProperty .
+
+# =============================================================================
+# 1. THE CONTACT CARD  (gufo:SubKind of core:Record)
+# A Contact is the RECORD about an agent, NOT the agent — the Person-vs-Contact
+# distinction. It is core:about exactly the Person or Organization it names.
+# =============================================================================
+
+contact:Contact a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf core:Record ;
+    rdfs:label "Contact"@en ;
+    skos:definition "An address-book entry (a card): a core:Record that is core:about exactly the Person or Organization it names. The card is distinct from the real-world agent — reading the card is not being the agent. Aligns to vcard:Kind."@en ;
+    skos:scopeNote "gufo:SubKind of core:Record. Subject via contact:identifies (a sub-property of core:about)."@en .
+
+contact:PersonContact a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf contact:Contact ;
+    rdfs:label "Person Contact"@en ;
+    skos:definition "A Contact card whose subject is a core:Person. Aligns to vcard:Individual."@en ;
+    skos:scopeNote "gufo:SubKind of contact:Contact."@en .
+
+contact:OrganizationContact a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf contact:Contact ;
+    rdfs:label "Organization Contact"@en ;
+    skos:definition "A Contact card whose subject is a core:Organization. Aligns to vcard:Organization."@en ;
+    skos:scopeNote "gufo:SubKind of contact:Contact."@en .
+
+contact:identifies a owl:ObjectProperty ;
+    rdfs:subPropertyOf core:about ;
+    rdfs:domain contact:Contact ;
+    rdfs:range core:Agent ;
+    rdfs:label "identifies"@en ;
+    skos:definition "The Person or Organization a Contact card is about. Sub-property of core:about (range narrowed to core:Agent), never widening it. Keeps card ≠ agent."@en .
+
+# =============================================================================
+# 2. CONTACT POINTS  (gufo:SubKind of core:Identifier — typed channels)
+# Each locates/identifies the agent within a scheme (RFC 5322 e-mail, E.164
+# numbering, a postal scheme). PostalAddress MAY relate to a core:Place.
+# =============================================================================
+
+contact:ContactPoint a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf core:Identifier ;
+    rdfs:label "Contact Point"@en ;
+    skos:definition "A means of reaching an agent — an email address, phone number, postal address, or online handle. A core:Identifier (it locates the agent within a scheme). Aligns to schema:ContactPoint / the vcard channel value-types."@en ;
+    skos:scopeNote "gufo:SubKind of core:Identifier. Literal value via contact:rawValue (sub-property of core:value)."@en .
+
+contact:EmailAddress a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf contact:ContactPoint ;
+    rdfs:label "Email Address"@en ;
+    skos:definition "An e-mail address contact point. Aligns to vcard:Email / schema:email."@en ;
+    skos:scopeNote "gufo:SubKind of contact:ContactPoint."@en .
+
+contact:PhoneNumber a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf contact:ContactPoint ;
+    rdfs:label "Phone Number"@en ;
+    skos:definition "A telephone-number contact point. Aligns to vcard:Tel / schema:telephone."@en ;
+    skos:scopeNote "gufo:SubKind of contact:ContactPoint."@en .
+
+contact:PostalAddress a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf contact:ContactPoint ;
+    rdfs:label "Postal Address"@en ;
+    skos:definition "A postal/mailing address contact point. core:atPlace MAY relate it to a core:Place for geocoding. Aligns to vcard:Address / schema:PostalAddress."@en ;
+    skos:scopeNote "gufo:SubKind of contact:ContactPoint. Structured parts via contact:streetAddress/locality/region/postalCode/countryName; spatial anchor via core:atPlace."@en .
+
+contact:OnlineHandle a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf contact:ContactPoint ;
+    rdfs:label "Online Handle"@en ;
+    skos:definition "A messaging / social handle or URL contact point. Aligns to vcard:hasURL / vcard:hasInstantMessage."@en ;
+    skos:scopeNote "gufo:SubKind of contact:ContactPoint."@en .
+
+contact:hasContactPoint a owl:ObjectProperty ;
+    rdfs:subPropertyOf core:identifiedBy ;
+    rdfs:domain contact:Contact ;
+    rdfs:range contact:ContactPoint ;
+    rdfs:label "has contact point"@en ;
+    skos:definition "Relates a Contact to one of its contact points. Sub-property of core:identifiedBy (range narrowed to contact:ContactPoint), never widening it."@en .
+
+contact:contactPointType a owl:ObjectProperty ;
+    rdfs:domain contact:ContactPoint ;
+    rdfs:range core:Category ;
+    rdfs:label "contact point type"@en ;
+    skos:definition "The use of a contact point (work / home / mobile / other) as a coded value (core:Category). SHOULD draw from contact:ContactPointTypeScheme; aligns to vcard Work/Home/Cell types."@en .
+
+contact:rawValue a owl:DatatypeProperty ;
+    rdfs:subPropertyOf core:value ;
+    rdfs:domain contact:ContactPoint ;
+    rdfs:range xsd:string ;
+    rdfs:label "raw value"@en ;
+    skos:definition "The literal value of a contact point (the address string, the dialable number). Sub-property of core:value, domain narrowed to contact:ContactPoint."@en .
+
+# Structured postal-address parts (the schema:PostalAddress / vcard:Address fields)
+contact:streetAddress a owl:DatatypeProperty ;
+    rdfs:domain contact:PostalAddress ;
+    rdfs:range xsd:string ;
+    rdfs:label "street address"@en ;
+    skos:definition "Street address line(s). vcard:street-address; schema:streetAddress."@en .
+
+contact:locality a owl:DatatypeProperty ;
+    rdfs:domain contact:PostalAddress ;
+    rdfs:range xsd:string ;
+    rdfs:label "locality"@en ;
+    skos:definition "City / town. vcard:locality; schema:addressLocality."@en .
+
+contact:region a owl:DatatypeProperty ;
+    rdfs:domain contact:PostalAddress ;
+    rdfs:range xsd:string ;
+    rdfs:label "region"@en ;
+    skos:definition "State / province / region. vcard:region; schema:addressRegion."@en .
+
+contact:postalCode a owl:DatatypeProperty ;
+    rdfs:domain contact:PostalAddress ;
+    rdfs:range xsd:string ;
+    rdfs:label "postal code"@en ;
+    skos:definition "Postal / ZIP code. vcard:postal-code; schema:postalCode."@en .
+
+contact:countryName a owl:DatatypeProperty ;
+    rdfs:domain contact:PostalAddress ;
+    rdfs:range xsd:string ;
+    rdfs:label "country name"@en ;
+    skos:definition "Country name. vcard:country-name; schema:addressCountry."@en .
+
+# =============================================================================
+# 3. INTER-PERSON LINK  (gufo:Relator specialising core:Relationship)
+# A reified relationship carrying a coded role (colleague/family/friend) and an
+# optional time span, mediating core:RelationshipParty roles played by the
+# parties. REPLACES the v0 string core:relationshipRole with a core:Category +
+# the core:relatesParty mediation.
+# =============================================================================
+
+contact:ContactRelationship a owl:Class, gufo:Relator ;
+    rdfs:subClassOf core:Relationship ;
+    rdfs:label "Contact Relationship"@en ;
+    skos:definition "A reified relationship between the pod owner (or another agent) and a contacted agent, carrying a coded role (colleague/family/friend) via contact:relationshipRole and an optional core:validFrom/validUntil span. Reuses the Core relationship relator rather than minting a new link type; aligns to vcard:hasRelated / vcard:RelatedType."@en ;
+    skos:scopeNote "gufo:Relator specialising core:Relationship. Mediates ≥2 parties via contact:relatesContact (sub-property of core:relatesParty)."@en .
+
+contact:relatesContact a owl:ObjectProperty ;
+    rdfs:subPropertyOf core:relatesParty ;
+    rdfs:domain contact:ContactRelationship ;
+    rdfs:range core:RelationshipParty ;
+    rdfs:label "relates contact"@en ;
+    skos:definition "Mediation tying a ContactRelationship relator to an agent playing the core:RelationshipParty role. Sub-property of core:relatesParty (no widening). Replaces the v0 core:relatesAgent + string core:relationshipRole."@en .
+
+contact:relationshipRole a owl:ObjectProperty ;
+    rdfs:domain contact:ContactRelationship ;
+    rdfs:range core:Category ;
+    rdfs:label "relationship role"@en ;
+    skos:definition "The coded role of a ContactRelationship (colleague / family / friend / acquaintance), a core:Category drawn from contact:RelationshipRoleScheme. NOT a sub-property of core:status (that is domain-restricted to core:Account); this is the relationship's own coded classifier. Mirrors vcard:RelatedType members."@en .
+
+# Controlled vocabulary of relationship roles — core:Category coded values
+# (the gUFO non-sortal Mixin bound to skos:Concept in the alignments file, which
+# also carries the SKOS scheme membership; kept OUT of this DL-reasoned file so
+# the closure needs no SKOS import). Mirrors vcard:RelatedType members.
+contact:Colleague a core:Category ;
+    rdfs:label "colleague"@en ;
+    rdfs:comment "Work/professional relationship. vcard:Colleague / vcard:CoWorker."@en .
+
+contact:Family a core:Category ;
+    rdfs:label "family"@en ;
+    rdfs:comment "Family relationship. vcard:Kin / vcard:Child / vcard:Parent etc."@en .
+
+contact:Friend a core:Category ;
+    rdfs:label "friend"@en ;
+    rdfs:comment "Personal/friend relationship. vcard:Friend."@en .
+
+contact:Acquaintance a core:Category ;
+    rdfs:label "acquaintance"@en ;
+    rdfs:comment "Acquaintance relationship. vcard:Acquaintance."@en .
+
+# Controlled vocabulary of contact-point types (work/home/mobile/other) —
+# core:Category coded values (SKOS scheme membership in the alignments file).
+contact:WorkType a core:Category ;
+    rdfs:label "work"@en ;
+    rdfs:comment "Work/business use. vcard:Work."@en .
+
+contact:HomeType a core:Category ;
+    rdfs:label "home"@en ;
+    rdfs:comment "Home/personal use. vcard:Home."@en .
+
+contact:MobileType a core:Category ;
+    rdfs:label "mobile"@en ;
+    rdfs:comment "Mobile/cell use. vcard:Cell."@en .
+
+# =============================================================================
+# 4. ADDRESS-BOOK LISTS / GROUPS  (gufo:Kind, collective — specialising core:Group)
+# =============================================================================
+
+contact:ContactGroup a owl:Class, gufo:Kind ;
+    rdfs:subClassOf core:Group ;
+    rdfs:label "Contact Group"@en ;
+    skos:definition "A named address-book list / distribution group (Friends, Work, Family). A core:Group of the agents its member contacts are about. Aligns to vcard:Group."@en ;
+    skos:scopeNote "gufo:Kind over a collective (a core:Group). Members via contact:hasMemberContact."@en .
+
+contact:hasMemberContact a owl:ObjectProperty ;
+    rdfs:domain contact:ContactGroup ;
+    rdfs:range contact:Contact ;
+    rdfs:label "has member contact"@en ;
+    skos:definition "Relates an address-book group/list to a Contact card it includes. Aligns to vcard:hasMember."@en .
+
+# =============================================================================
+# SECTOR MARKER — the IRI an app's fedapp:sector points at to declare it operates
+# in this sector (https://w3id.org/jeswr/fed#sector). A skos:Concept in the
+# federation sector register; dereferences to this ontology.
+# =============================================================================
+
+<https://w3id.org/jeswr/sectors/contacts#sector>
+    a <http://www.w3.org/2004/02/skos/core#Concept> ;
+    rdfs:label "Contacts sector"@en ;
+    rdfs:comment "The Contacts data sector. The value an app's fedapp:sector names in its Client Identifier Document to declare it operates over contacts data. Backed by this sector ontology."@en ;
+    rdfs:isDefinedBy <https://w3id.org/jeswr/sectors/contacts> ;
+    skos:prefLabel "Contacts"@en .

@@ -1,0 +1,329 @@
+<!doctype html>
+<!-- AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>jeswr.org/fedcon — Solid Federation Vocabulary</title>
+    <style>
+      :root { color-scheme: light dark; }
+      body { font-family: system-ui, sans-serif; line-height: 1.6; max-width: 60rem; margin: 2rem auto; padding: 0 1rem; }
+      code { background: rgba(127,127,127,0.15); padding: 0.1em 0.35em; border-radius: 4px; }
+      .warn { border-left: 4px solid #d97706; padding: 0.5rem 1rem; background: rgba(217,119,6,0.08); border-radius: 4px; }
+      table { border-collapse: collapse; width: 100%; }
+      th, td { text-align: left; padding: 0.4rem 0.6rem; border-bottom: 1px solid rgba(127,127,127,0.3); vertical-align: top; }
+      a { color: #2563eb; }
+    </style>
+  </head>
+  <body>
+    <h1><code>https://jeswr.org/fedcon#</code></h1>
+    <p class="warn">⚠️ <strong>Experimental</strong> — AI-agent-generated (Claude Opus 4.8, @jeswr PSS agent); under active development, not production-hardened.</p>
+    <p>Other representations: <a href="fedcon.ttl">Turtle</a> · <a href="fedcon-context.jsonld">JSON-LD context</a> · <a href="./">index</a></p>
+    <h2>Terms</h2>
+    <table>
+      <tr><th>Term</th><th>Label</th><th>Comment</th></tr>
+      <tr><td><code>Admission</code></td><td>Concept Admission</td><td>A registry authority's signed decision on a concept hash — the
+        sibling of fedreg:Membership, and like it a fedreg:RegistryAssertion (so it
+        reuses the fedreg:assertedBy authority and fedreg:asserted timestamp spine;
+        RegistryAssertion is itself a dcat:CatalogRecord, inherited transitively).
+        It carries the concept (fedcon:concept), the fedcon:conceptStatus lifecycle
+        value, the fedcon:proposal it decides (full provenance: evidence + thread),
+        the fedcon:reviewWindow (machine-checkable against the policy minimum), the
+        governing fedcon:underPolicy, the MANDATORY dissent annex (fedcon:dissent /
+        fedcon:noDissentRecorded) and a fedcon:decisionRationale. Admission is
+        per-registry: the same hash may be Admitted in one registry and UnderReview
+        in another, simultaneously — there is no global state, and rejection removes
+        nothing (the hash still works locally and can be admitted elsewhere).</td></tr>
+      <tr><td><code>AdmissionPolicy</code></td><td>Admission Policy</td><td>A registry's governance-as-data document: who the admission
+        authorities are (WebIDs, checked against fedreg:assertedBy on admissions),
+        the minimum comment window (the design default is 7 days, the Wikidata
+        floor), the evidence expectation for promotions (e.g. '&gt;=3 independent
+        member attestations'), and the comment-write gate (open vs member-only).
+        Every fedcon:Admission links its governing policy via fedcon:underPolicy, so
+        a decision is auditable against the rules in force when it was made.
+        Thresholds are registry POLICY, never protocol constants — different
+        federations legitimately differ.</td></tr>
+      <tr><td><code>Admitted</code></td><td>Admitted</td><td>The registry authority has admitted the concept hash. Admission
+        adds discoverability, endorsement, codegen eligibility and migration
+        coordination; it never adds permission to EXIST — an unadmitted concept was
+        never broken. An Admitted status is what makes a concept eligible as a
+        codegen publish-plane input.</td></tr>
+      <tr><td><code>Announcement</code></td><td>Concept Announcement</td><td>A first-come-first-served, review-free notice that makes a
+        concept DISCOVERABLE without seeking endorsement: { fedcon:concept &lt;hash&gt; ;
+        fedcon:definition &lt;ref&gt; }, LDN-POSTed to any registry's inbox and indexed in
+        a 'seen concepts' listing (schema.org-pending-like: visible, usable,
+        explicitly UNENDORSED). It has no review path and no lifecycle status —
+        auto-accepted subject only to the syntactic caps. This is what lets other
+        agents FIND concepts to share an understanding of, before any governance
+        happens; an announced concept is never 'admitted' by being announced.</td></tr>
+      <tr><td><code>closed</code></td><td>closed</td><td>The instant (xsd:dateTime) a fedcon:ReviewWindow's comment window
+        closed — the point from which the authority may decide.</td></tr>
+      <tr><td><code>concept</code></td><td>concept</td><td>The content hash that IS the concept's identity — an opaque,
+        content-addressed IRI (e.g. urn:concept:&lt;multibase-hash&gt;) from the
+        content-addressed-concepts design. Used by fedcon:Proposal, by
+        fedcon:UsageAttestation AND by fedcon:Announcement, so NO rdfs:domain is
+        asserted (multiple rdfs:domain triples would be an RDFS conjunction, wrongly
+        forcing a subject to be all three classes at once). NO rdfs:range either:
+        the hash IRIs are opaque and external to this vocabulary — a consumer
+        validates them by scheme + determinism (recompute-and-compare against the
+        supplied definition), not by an RDFS range.</td></tr>
+      <tr><td><code>conceptDereferenceTemplate</code></td><td>concept dereference template</td><td>The canonical hydra:IriTemplate for a fedcon:conceptStore's
+        dereference route: GET &lt;base&gt;/i/{multibaseMultihash}, where the single
+        required variable is the multibase-encoded multihash (the content address) of
+        the urn:concept: record being fetched (federation-on-hashes design §2.2). A
+        concept-store dcat:DataService advertises this via dcat:endpointDescription so
+        the route is discoverable as Linked Data; the served record is verified by
+        recompute-and-compare against that content address, so the transport is
+        untrusted by construction.</td></tr>
+      <tr><td><code>conceptStatus</code></td><td>concept status</td><td>The lifecycle status of the admitted concept hash — one of the
+        fedcon:ConceptStatus coded values (Proposed / UnderReview / Admitted /
+        Rejected / Superseded / Deprecated / Withdrawn). This is the concept's
+        own state machine on a fedcon:Admission, distinct from the membership-shaped
+        fedreg:status.</td></tr>
+      <tr><td><code>ConceptStatus</code></td><td>Concept Status</td><td>The lifecycle state of a concept hash WITHIN one registry, on a
+        fedcon:Admission. The seven coded values fedcon:Proposed, fedcon:UnderReview,
+        fedcon:Admitted, fedcon:Rejected, fedcon:Superseded, fedcon:Deprecated and
+        fedcon:Withdrawn are instances of this class. Distinct from
+        fedreg:MembershipStatus (which is the membership lifecycle) — a concept
+        admission has its own state machine (proposed → under-review → admitted /
+        rejected, then superseded / deprecated).</td></tr>
+      <tr><td><code>conceptStore</code></td><td>concept store</td><td>Links a fedreg:Registry (a dcat:Catalog) to its CONCEPT STORE —
+        the dcat:DataService that SERVES the ownerless urn:concept: definition
+        records the registry has admitted, at GET &lt;base&gt;/i/{multibase-multihash}
+        (federation-on-hashes design §2.2). The store returns direct 200s only (no
+        redirects — a client fetches redirect:manual and treats any redirect as a
+        protocol failure), content-negotiated across text/turtle,
+        application/ld+json and application/n-quads, immutably cacheable, and
+        verifiable by recompute (a client hashes the served bytes and byte-compares,
+        so a hostile mirror can only WITHHOLD, never alter). The linked
+        dcat:DataService SHOULD advertise its dereference template as a
+        dcat:endpointDescription pointing at a hydra:IriTemplate (the canonical one
+        is fedcon:conceptDereferenceTemplate) so discovery is Linked-Data-native. A
+        registry MAY list several concept stores (mirrors); a pod-hosted mirror needs
+        zero server changes since a Solid pod already serves immutable resources with
+        content negotiation.</td></tr>
+      <tr><td><code>Concern</code></td><td>Concern</td><td>An assessing stance raising a concern short of outright
+        opposition — a reservation the authority should weigh and, where unresolved,
+        acknowledge in its rationale.</td></tr>
+      <tr><td><code>context</code></td><td>context</td><td>The OPTIONAL context in which the user uses the concept — a
+        sector or app IRI. NO rdfs:range is asserted (a sector marker or an app
+        client_id are both valid, from other vocabularies); the value discloses only
+        the using context, never the counterparties or content of exchanges.</td></tr>
+      <tr><td><code>currentSnapshot</code></td><td>current snapshot</td><td>Links a fedreg:Registry to its CURRENT fedcon:Snapshot — the
+        content-addressed release a client should adopt now (federation-on-hashes
+        design §2.3). A registry advertises at most one current snapshot; a client
+        follows fedcon:previousSnapshot back along the chain to verify the sequence
+        it is offered is not a downgrade of, or a fork away from, one it has already
+        seen.</td></tr>
+      <tr><td><code>decisionRationale</code></td><td>decision rationale</td><td>The authority's reasoned (xsd:string) justification for a
+        fedcon:Admission — it MUST respond to every unresolved Oppose in the thread.
+        Consensus is never COMPUTED: the rationale is the accountable human/authority
+        judgment, with the objections carried alongside it via fedcon:dissent.</td></tr>
+      <tr><td><code>Define</code></td><td>Define</td><td>Intent: register a concept that has no prior standing in this
+        registry. Expected to be rare in practice — the fast path (define, hash,
+        serve, use, with zero registry involvement) makes local definition strictly
+        easier — but supported so an agent that WANTS immediate review can have
+        it.</td></tr>
+      <tr><td><code>definition</code></td><td>definition</td><td>The concept's full definition — INLINE preferred (a graph node in
+        the same document, which minimises by-reference SSRF surface), or a
+        content-addressed URL that dereferences to bytes the receiver hash-verifies
+        against fedcon:concept. Used by both fedcon:Proposal and fedcon:Announcement,
+        so NO rdfs:domain is asserted; NO rdfs:range either (an inline graph node or
+        a content-addressed URL are both valid values, distinguished at ingest, not
+        by an RDFS range).</td></tr>
+      <tr><td><code>Deprecated</code></td><td>Deprecated</td><td>The authority discourages the concept with NO successor (rare).
+        A reasoned record, dissent-annexed like any decision. Distinct from
+        Superseded (which names a successor via fedcon:supersededBy).</td></tr>
+      <tr><td><code>dissent</code></td><td>dissent</td><td>The MANDATORY dissent annex of a fedcon:Admission: each unresolved
+        Oppose stance from the proposal thread, carried as an oa:Annotation (the Web
+        Annotation model is REUSED — no comment/annotation class is minted here). An
+        admission whose thread contains unresolved Oppose stances but which records
+        no fedcon:dissent is INVALID per the SHACL profile (unless it explicitly
+        asserts fedcon:noDissentRecorded true) — the record format itself refuses
+        manufactured consensus. A direct port of the unite fut:SharedFuture dissent
+        annex into registry governance.</td></tr>
+      <tr><td><code>evidence</code></td><td>evidence</td><td>On a Promote fedcon:Proposal: the usage attestations
+        (fedcon:UsageAttestation), inline or by reference, that evidence
+        cross-agent adoption — the forcing function for promotion. Presented to the
+        authority and the public; never auto-scored into a verdict.</td></tr>
+      <tr><td><code>Extend</code></td><td>Extend</td><td>Intent: register a NEW concept whose definition graph references
+        parent hashes (subclass / subproperty / refinement edges via fedcon:extends).
+        Extending never mutates a parent — hashes are immutable and concepts are
+        ownerless, so no permission is ever needed to extend. The intent exists so a
+        registry can INDEX the extension graph (who builds on what — itself
+        promotion-relevant evidence for the parent), not to gate anything.</td></tr>
+      <tr><td><code>extends</code></td><td>extends</td><td>On an Extend fedcon:Proposal: the parent concept hash(es) the new
+        concept's definition builds on (subclass / subproperty / refinement edges).
+        NO rdfs:range is asserted — the values are opaque content-addressed concept
+        hashes, external to this vocabulary, exactly like fedcon:concept. Extending
+        never mutates a parent (hashes are immutable) and never needs
+        permission.</td></tr>
+      <tr><td><code>intent</code></td><td>intent</td><td>The intent of a fedcon:Proposal — one of the fedcon:Intent coded
+        values (Define / Extend / Promote). Selects the record's semantics on a
+        single validation path.</td></tr>
+      <tr><td><code>Intent</code></td><td>Proposal Intent</td><td>The intent of a fedcon:Proposal. The three coded values
+        fedcon:Define, fedcon:Extend and fedcon:Promote are instances of this class.
+        The intent selects the record's semantics without needing three endpoints:
+        Define registers a concept with no prior standing, Extend indexes a new
+        concept whose definition references parent hashes (it never mutates a
+        parent — hashes are immutable), Promote seeks admission of an already-used
+        hash into a wider registry.</td></tr>
+      <tr><td><code>motivationText</code></td><td>motivation text</td><td>A free-text (xsd:string) explanation of why this concept and what
+        gap it fills, on a fedcon:Proposal — read by the commenting public and the
+        authority.</td></tr>
+      <tr><td><code>noDissentRecorded</code></td><td>no dissent recorded</td><td>The EXPLICIT (xsd:boolean) assertion that a fedcon:Admission's
+        review recorded no dissent to admit. Required (true) whenever an admission
+        carries no fedcon:dissent — silence is never treated as consensus. Mirrors
+        fut:noDissentRecorded from the unite futures sector, minted here so the
+        mandatory-annex rule (&gt;=1 fedcon:dissent OR fedcon:noDissentRecorded true) is
+        structurally enforceable in SHACL.</td></tr>
+      <tr><td><code>opened</code></td><td>opened</td><td>The instant (xsd:dateTime) a fedcon:ReviewWindow's comment window
+        opened.</td></tr>
+      <tr><td><code>Oppose</code></td><td>Oppose</td><td>An assessing stance opposing the proposal. It MUST carry a
+        non-empty rationale body (an unsupported Oppose is rejected at POST and
+        carries no weight). Every unresolved Oppose must be RESPONDED TO in the
+        admission's fedcon:decisionRationale and listed in its mandatory dissent
+        annex — objections travel with the outcome rather than being averaged
+        away.</td></tr>
+      <tr><td><code>previousSnapshot</code></td><td>previous snapshot</td><td>The prev-hash CHAIN link: the immediately-prior fedcon:Snapshot a
+        non-genesis snapshot extends (federation-on-hashes design §2.3, CAC §11
+        downgrade protection). Because a Snapshot is content-addressed, this link IS
+        the prior release's content hash, so the chain is tamper-evident: a client
+        recomputes and byte-compares each hop. The genesis snapshot
+        (fedcon:sequence 0) carries NO fedcon:previousSnapshot; every other snapshot
+        carries exactly one. The value may be cross-resource (the prior snapshot
+        lives in another document), so it is validated as a node reference, never by
+        requiring the prior snapshot's type in the same graph.</td></tr>
+      <tr><td><code>primeSet</code></td><td>prime set</td><td>The content-addressed PRIME-LEXICON SET of a fedcon:Snapshot — the
+        opaque content-addressed resource pinning the release's prime lexicon (the
+        primitive concept set the admitted concepts are expressed against). NO
+        rdfs:range is asserted: the value is an opaque content-addressed IRI external
+        to this vocabulary, like fedcon:concept / fedcon:profileBundle, verified by
+        recompute-and-compare rather than by an RDFS range.</td></tr>
+      <tr><td><code>priorAdmission</code></td><td>prior admission</td><td>On a Promote fedcon:Proposal: a fedcon:Admission in a narrower
+        registry where the concept already stands, cited as evidence of existing
+        endorsement.</td></tr>
+      <tr><td><code>profileBundle</code></td><td>profile bundle</td><td>The content-addressed PROFILE-1 BUNDLE of a fedcon:Snapshot — the
+        opaque content-addressed resource (e.g. a urn:concept:&lt;hash&gt; / a multibase
+        multihash IRI) the codegen projector lowers into the release's shapes,
+        labels and manifest. NO rdfs:range is asserted: the value is an opaque
+        content-addressed IRI external to this vocabulary, exactly like
+        fedcon:concept — a consumer validates it by recompute-and-compare, not by an
+        RDFS range.</td></tr>
+      <tr><td><code>Promote</code></td><td>Promote</td><td>Intent: seek admission of an already-used, byte-identical concept
+        hash into a wider registry. Nothing is re-minted, re-namespaced or
+        transferred — the concept definition does not change when it is promoted,
+        which is precisely why apps that adopted it pre-promotion need no migration.
+        Promotion changes only WHERE endorsement records exist; it carries the usage
+        attestations (fedcon:evidence) and any prior standing (fedcon:priorAdmission)
+        as the forcing-function evidence.</td></tr>
+      <tr><td><code>proposal</code></td><td>proposal</td><td>Links a fedcon:Admission to the fedcon:Proposal it decides — the
+        full provenance trail (the proposal's evidence and its comment thread).</td></tr>
+      <tr><td><code>Proposal</code></td><td>Proposal</td><td>A contribution proposal filed against a registry (LDN-POSTed as
+        RDF). One record type carries all three intents (fedcon:intent — Define /
+        Extend / Promote) so there is a single validation path. It ALWAYS references
+        the concept by its content hash (fedcon:concept), carries the definition
+        graph (fedcon:definition, inline preferred), the proposer
+        (prov:wasAttributedTo, which MUST match the DPoP-verified WebID), and — for a
+        Promote — the usage attestations (fedcon:evidence) and prior standing
+        (fedcon:priorAdmission). A proposal accretes mutable discussion state, so
+        unlike the ownerless concept it gets a stable minted registry URL.</td></tr>
+      <tr><td><code>Proposed</code></td><td>Proposed</td><td>A proposal has been filed but the registry has not yet opened
+        the comment window (e.g. pending the synchronous syntactic + structural
+        checks).</td></tr>
+      <tr><td><code>Rejected</code></td><td>Rejected</td><td>The authority declined admission (reasoned, dissent-annexed).
+        Rejection is per-registry and NON-terminal for the concept: the hash still
+        exists, still works locally, can be re-proposed with new evidence, and can be
+        admitted elsewhere. Rejection only withholds THIS registry's
+        endorsement.</td></tr>
+      <tr><td><code>reviewWindow</code></td><td>review window</td><td>The fedcon:ReviewWindow (opened / closed timestamps) of a
+        fedcon:Admission — machine-checkable against the governing policy's minimum
+        comment window.</td></tr>
+      <tr><td><code>ReviewWindow</code></td><td>Review Window</td><td>The public-comment window of a fedcon:Admission: a small
+        structured node carrying fedcon:opened and fedcon:closed timestamps. Its
+        span is machine-checkable against the governing policy's minimum (the design
+        default is 7 days) so a decision can be audited for having given the required
+        comment time before the authority acted.</td></tr>
+      <tr><td><code>sequence</code></td><td>sequence</td><td>The MONOTONIC generation counter (xsd:nonNegativeInteger) of a
+        fedcon:Snapshot: the genesis release is fedcon:sequence 0 (and carries no
+        fedcon:previousSnapshot); each successor increments it and links its
+        predecessor. Together with the prev-hash chain it is the downgrade-protection
+        substrate — a client that has adopted sequence k treats a snapshot offered as
+        'current' whose sequence is &lt; k (or whose chain does not extend the one it
+        holds) as a downgrade and rejects it.</td></tr>
+      <tr><td><code>since</code></td><td>since</td><td>The date (xsd:date) from which the signing user has been using
+        the attested concept.</td></tr>
+      <tr><td><code>Snapshot</code></td><td>Snapshot</td><td>A content-addressed sector RELEASE — the atomic adoption unit of
+        a federation's admitted concepts at one generation (federation-on-hashes
+        design §2.3). It gathers, at sequence k: the admitted concept set (0..*
+        fedcon:concept, the SAME opaque urn:concept: hashes the admission/proposal
+        records carry — REUSED, not re-minted), the content-addressed profile-1
+        bundle (fedcon:profileBundle) the codegen projector lowers to shapes/labels,
+        the prime-lexicon set (fedcon:primeSet), a monotonic generation counter
+        (fedcon:sequence) and the prev-hash chain link to the prior release
+        (fedcon:previousSnapshot). A Snapshot is ITSELF content-addressed — its own
+        multihash is the value a fedreg:StorageDescription MAY pin via
+        fedreg:acceptsSpec — so a client verifies it by recompute-and-compare, never
+        by trusting a mutable pointer. A Snapshot is SIGNED: it is bound to a W3C
+        Verifiable Credential per @jeswr/federation-trust (which composes solid-vc +
+        federation-registry) — the credential's credentialSubject references the
+        snapshot; that credential SHAPE is referenced here, never redefined
+        (rdfs:seeAlso). Snapshots + the sequence/previous chain give downgrade
+        protection: a client that has seen sequence k rejects an older or
+        fork-of-a-different-previous snapshot offered as 'current'.</td></tr>
+      <tr><td><code>stance</code></td><td>stance</td><td>The structured review stance an assessing comment carries — one
+        of the fedcon:Stance coded values (Support / Oppose / Concern). It DECORATES a
+        Web Annotation (rdfs:domain oa:Annotation, oa:motivatedBy oa:assessing); it
+        does not replace the free-text body. An Oppose stance without a non-empty
+        rationale body is rejected at POST (SHACL fcsh:OpposeStanceShape).</td></tr>
+      <tr><td><code>Stance</code></td><td>Review Stance</td><td>A structured review stance a commenter attaches to an assessing
+        Web Annotation via fedcon:stance. The three coded values fedcon:Support,
+        fedcon:Oppose and fedcon:Concern are instances of this class. A stance rides
+        on an oa:Annotation (oa:motivatedBy oa:assessing); it does not replace the
+        free-text comment body. An Oppose stance MUST carry a non-empty rationale
+        body (SHACL-checked / rejected at POST) — an unsupported Oppose carries no
+        weight, so it is not accepted as a stance record.</td></tr>
+      <tr><td><code>Superseded</code></td><td>Superseded</td><td>The registry admitted a successor hash and endorsed the upgrade
+        edge; this admission is flipped to Superseded with fedcon:supersededBy
+        pointing at the successor's admission, and the fedreg:acceptsSpec dual-read
+        migration window takes over. A superseded concept keeps verifying and keeps
+        working — supersession is a signpost, not a kill switch.</td></tr>
+      <tr><td><code>supersededBy</code></td><td>superseded by</td><td>On a Superseded fedcon:Admission: the successor concept's
+        fedcon:Admission (in the same registry) that the authority admitted and whose
+        upgrade edge it endorsed. The governance half of supersession; the CLAIM half
+        (fedcon:upgrades) is carried in the successor's own definition graph.</td></tr>
+      <tr><td><code>Support</code></td><td>Support</td><td>An assessing stance endorsing the proposal. Numbers inform the
+        authority's judgment; they never mechanically drive the transition.</td></tr>
+      <tr><td><code>underPolicy</code></td><td>under policy</td><td>Links a fedcon:Admission to the fedcon:AdmissionPolicy it was made
+        under, so the decision is auditable against the rules in force at the
+        time.</td></tr>
+      <tr><td><code>UnderReview</code></td><td>Under Review</td><td>The public comment window is open (minimum per the governing
+        policy — the design default is 7 days). Anyone may comment; the authority
+        weighs the thread and the executable structural-gate report before
+        deciding.</td></tr>
+      <tr><td><code>upgrades</code></td><td>upgrades</td><td>The AUTHOR's claim of succession, asserted WITHIN a successor
+        concept's OWN (hash-covered) definition graph: the prior concept hash this
+        one supersedes. NO rdfs:domain (it is asserted on an external,
+        hash-identified concept resource, not on any class of THIS vocabulary) and NO
+        rdfs:range (the value is an opaque content-addressed concept hash, like
+        fedcon:concept). The claim alone moves nothing — a registry endorses it via
+        fedcon:supersededBy on the prior admission.</td></tr>
+      <tr><td><code>UsageAttestation</code></td><td>Usage Attestation</td><td>A single using agent's SIGNED statement that IT uses a concept:
+        { fedcon:concept &lt;hash&gt; ; fedcon:user &lt;WebID&gt; ; fedcon:since &lt;date&gt; ;
+        fedcon:context? &lt;sector/app IRI&gt; }. The promotion evidence, gathered by the
+        users, never ABOUT them: nobody attests about anybody else — each peer that
+        consents signs its OWN attestation, so consent to disclosure is by
+        construction. An attestation names only its signer and the concept hash,
+        never the counterparties or content of exchanges. Presented to the authority
+        and the public as evidence; never auto-scored into a verdict.</td></tr>
+      <tr><td><code>user</code></td><td>user</td><td>The USING agent that signs a fedcon:UsageAttestation — a WebID.
+        NO rdfs:range is asserted (a WebID is any IRI naming an agent, from any
+        WebID vocabulary; pinning an RDFS range here would wrongly constrain it).
+        The attestation names only its signer and the concept hash — never the
+        counterparties of any exchange.</td></tr>
+      <tr><td><code>Withdrawn</code></td><td>Withdrawn</td><td>The proposer withdrew the proposal before a decision — the one
+        proposer-privileged lifecycle act (an authenticated POST referencing the
+        proposal). No endorsement was ever granted or refused.</td></tr>
+    </table>
+  </body>
+</html>

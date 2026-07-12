@@ -1,0 +1,128 @@
+# AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+#
+@prefix diet:    <https://w3id.org/jeswr/sectors/health/diet#> .
+@prefix health:  <https://w3id.org/jeswr/sectors/health#> .
+@prefix core:    <https://w3id.org/jeswr/core#> .
+@prefix owl:     <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix rdf:     <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix skos:    <http://www.w3.org/2004/02/skos/core#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+
+# External vocabularies (real IRIs — encouraged in an alignments file):
+@prefix schema:  <http://schema.org/> .                         # schema.org food/meal terms
+@prefix fhir:    <http://hl7.org/fhir/> .                        # FHIR R4/R5 resource concept IRIs (Mode A)
+@prefix sct:     <http://snomed.info/id/> .                      # SNOMED CT International concept IRIs
+@prefix loinc:   <https://loinc.org/> .                          # LOINC code concept IRIs
+@prefix chebi:   <http://purl.obolibrary.org/obo/CHEBI_> .       # ChEBI chemical-entity concept IRIs
+@prefix off:     <https://world.openfoodfacts.org/> .            # Open Food Facts taxonomy (allergen/additive)
+
+# =============================================================================
+# Solid Health / DIET sub-sector — ALIGNMENTS (v1.0.0).
+#
+# Bridges the diet-sub-sector terms (diet.ttl) to the external nutrition/clinical
+# standards the coeliac-app design names. EXTERNAL REUSE IS MODE A (as the parent
+# health sector): we do NOT MIREOT-import schema.org / SNOMED / LOINC / ChEBI —
+# we ALIGN via skos:closeMatch (annotation, NO entailment), so an external
+# concept that fuses concerns (or a coded value) can never collapse two distinct
+# Core/diet classes. Kept OUT of the reasoned closure (owl:imports diet only) so
+# the consistency engine reasons a clean core ∪ health ∪ diet without it.
+#
+# CITATIONS (verify terminology bindings against a licensed browser before any
+# clinical use — closeMatch is a non-entailing terminology hint, not a claim of
+# semantic identity):
+#   - schema.org: FoodEvent / NutritionInformation / Restaurant / MenuItem.
+#   - SNOMED CT International concept IDs for symptom clinical-findings.
+#   - LOINC 72514-3 (Pain severity 0–10 NRS) for the severity ordinal.
+#   - ChEBI chemical-entity IDs for the chemical/FODMAP trigger substances; FODMAP
+#     subgroup membership follows the Monash University FODMAP classification
+#     (https://www.monashfodmap.com/ — proprietary, cited as source, not imported).
+#   - Open Food Facts taxonomy IRIs for allergen/additive triggers (the tags the
+#     app's exposure derivation actually reads).
+# =============================================================================
+
+<https://w3id.org/jeswr/sectors/health/diet/alignments> a owl:Ontology ;
+    dcterms:title "Solid Health Diet sub-sector — external alignments"@en ;
+    owl:imports <https://w3id.org/jeswr/sectors/health/diet> ;
+    owl:versionInfo "1.0.0" ;
+    rdfs:comment "Optional Mode-A bridge: schema.org food/meal terms, SNOMED CT + LOINC symptom concepts, ChEBI + Monash-FODMAP trigger substances, and Open Food Facts allergen/additive taxonomy. External IRIs are real and governed by their bodies. Nothing is owl:imported into the reasoned closure."@en .
+
+dcterms:title a owl:AnnotationProperty .
+owl:versionInfo a owl:AnnotationProperty .
+
+# -----------------------------------------------------------------------------
+# schema.org — FoodEvent / NutritionInformation / Restaurant (Mode A). diet:Meal
+# is already rdfs:subClassOf schema:FoodEvent in diet.ttl (schema.org has no
+# `schema:Meal` — that IRI 404s); here we add the wider bridge.
+# -----------------------------------------------------------------------------
+diet:Meal      skos:closeMatch schema:FoodEvent .
+diet:FoodItem  skos:closeMatch schema:MenuItem , schema:NutritionInformation .   # a consumed food item / its nutrition facet
+diet:venue     skos:closeMatch schema:Restaurant , schema:FoodEstablishment .
+diet:Symptom   skos:closeMatch fhir:Observation .                                # the symptom-as-observation framing (health sector's Mode A)
+
+# -----------------------------------------------------------------------------
+# SNOMED CT International — symptom clinical-finding concepts (Mode A, closeMatch).
+# diet:Symptom is a clinical finding reported by the subject.
+# -----------------------------------------------------------------------------
+diet:Symptom        skos:closeMatch sct:404684003 .    # Clinical finding (finding)
+
+diet:bloating       skos:closeMatch sct:248490000 .    # Abdominal bloating
+diet:diarrhoea      skos:closeMatch sct:62315008 .     # Diarrhea
+diet:constipation   skos:closeMatch sct:14760008 .     # Constipation
+diet:abdominalPain  skos:closeMatch sct:21522001 .     # Abdominal pain
+diet:headache       skos:closeMatch sct:25064002 .     # Headache
+diet:fatigue        skos:closeMatch sct:84229001 .     # Fatigue
+diet:skinRash       skos:closeMatch sct:271807003 .    # Eruption of skin (rash)
+diet:wheezeBreathing skos:closeMatch sct:56018004 .    # Wheezing
+diet:anaphylaxis    skos:closeMatch sct:39579001 .     # Anaphylaxis
+diet:nausea         skos:closeMatch sct:422587007 .    # Nausea
+diet:reflux         skos:closeMatch sct:16331000 .     # Heartburn
+diet:jointPain      skos:closeMatch sct:57676002 .     # Arthralgia (joint pain)
+# NOTE: brain-fog and mood have no clean single SNOMED clinical-finding concept;
+# they are intentionally left un-bound rather than mapped to an approximate code.
+
+# -----------------------------------------------------------------------------
+# LOINC — the ordinal severity scale (Mode A). The measured-observation LOINC
+# bindings are inherited from the health sector; here only the symptom-severity
+# ordinal binds.
+# -----------------------------------------------------------------------------
+diet:severity skos:closeMatch loinc:72514-3 .          # Pain severity - 0-10 numeric rating scale
+
+# -----------------------------------------------------------------------------
+# TRIGGER CLASSES — chemical/FODMAP substances → ChEBI; allergen/additive
+# triggers → Open Food Facts taxonomy (the tags the exposure derivation reads).
+# FODMAP subgroup membership follows the Monash FODMAP classification (cited).
+# -----------------------------------------------------------------------------
+# Chemical / FODMAP substances (ChEBI):
+diet:lactose    skos:closeMatch chebi:17716 .          # lactose
+diet:fructose   skos:closeMatch chebi:28757 .          # fructose
+diet:fructan    skos:closeMatch chebi:24128 .          # fructan
+diet:galactan   skos:closeMatch chebi:28963 .          # galactan (GOS)
+diet:polyol     skos:closeMatch chebi:26191 .          # polyol (sorbitol/mannitol class)
+diet:histamine  skos:closeMatch chebi:18295 .          # histamine
+diet:caffeine   skos:closeMatch chebi:27732 .          # caffeine
+diet:sulphites  skos:closeMatch chebi:26833 .          # sulfite (E220–E228 SO2/sulphites)
+
+# FODMAP subgroup classification source (Monash University FODMAP program):
+diet:fructose rdfs:seeAlso <https://www.monashfodmap.com/> .
+diet:fructan  rdfs:seeAlso <https://www.monashfodmap.com/> .
+diet:galactan rdfs:seeAlso <https://www.monashfodmap.com/> .
+diet:polyol   rdfs:seeAlso <https://www.monashfodmap.com/> .
+
+# Allergen / substance triggers (Open Food Facts allergen taxonomy — the app's tags):
+diet:gluten  skos:closeMatch <https://world.openfoodfacts.org/allergen/en:gluten> , sct:414960007 .   # OFF en:gluten ; SNOMED Gluten (substance)
+diet:lactose skos:closeMatch <https://world.openfoodfacts.org/allergen/en:milk> .                     # OFF en:milk (lactose source)
+diet:nuts    skos:closeMatch <https://world.openfoodfacts.org/allergen/en:nuts> .                     # OFF en:nuts
+diet:soy     skos:closeMatch <https://world.openfoodfacts.org/allergen/en:soybeans> .                 # OFF en:soybeans
+diet:egg     skos:closeMatch <https://world.openfoodfacts.org/allergen/en:eggs> .                     # OFF en:eggs
+
+# Sulphite additive E-numbers (Open Food Facts additive taxonomy, E220–E228):
+diet:sulphites skos:closeMatch
+        <https://world.openfoodfacts.org/additive/en:e220> ,
+        <https://world.openfoodfacts.org/additive/en:e221> ,
+        <https://world.openfoodfacts.org/additive/en:e222> ,
+        <https://world.openfoodfacts.org/additive/en:e223> ,
+        <https://world.openfoodfacts.org/additive/en:e224> ,
+        <https://world.openfoodfacts.org/additive/en:e226> ,
+        <https://world.openfoodfacts.org/additive/en:e227> ,
+        <https://world.openfoodfacts.org/additive/en:e228> .

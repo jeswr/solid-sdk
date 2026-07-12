@@ -1,0 +1,95 @@
+# AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+#
+# Sample instances of every collectibles-sector class, used to VERIFY that
+# collectibles.shacl.ttl validates a conformant asset dossier (no sh:Violation).
+# Validate with rdf-validate-shacl (data = this file + collectibles.ttl for the
+# subclass/coded-value typing; shapes = collectibles.shacl.ttl). Parsed for
+# well-formedness by the ontology gate (Layer 1).
+#
+# THE INSTANCES MODEL THE ACTUAL Provena PRODUCT DATA (revenue-products ontology
+# review §1): one artwork asset (a schema:VisualArtwork carrying the CORRECT
+# schema:artMedium + schema:width/height terms — NOT the non-existent
+# schema:artworkMedium/artworkSize) wrapped with PROV-O-correct provenance events
+# (creation is the only prov:wasGeneratedBy; a sale/exhibition prov:used it),
+# an assessed valuation and a formal appraisal (each on a separate dual-typed
+# schema:MonetaryAmount node — never a schema:offers link), and an insurance
+# policy. Attribution is prov:wasAssociatedWith → an Agent NODE; timing is
+# prov:startedAtTime, never prov:atTime.
+#
+@prefix col:     <https://w3id.org/jeswr/sectors/collectibles#> .
+@prefix core:    <https://w3id.org/jeswr/core#> .
+@prefix schema:  <http://schema.org/> .
+@prefix prov:    <http://www.w3.org/ns/prov#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix xsd:     <http://www.w3.org/2001/XMLSchema#> .
+@prefix pod:     <https://collector.pod.example/provena/> .
+
+# The collectible asset — a schema:VisualArtwork with the CORRECT schema terms.
+pod:asset-monet-01 a schema:VisualArtwork ;
+    schema:name "Study of Water Lilies" ;
+    schema:creator <https://collector.pod.example/provena/agents/monet#agent> ;
+    schema:artMedium "Oil on canvas" ;
+    schema:width [ a schema:QuantitativeValue ; schema:value "92"^^xsd:decimal ; schema:unitCode "CMT" ] ;
+    schema:height [ a schema:QuantitativeValue ; schema:value "73"^^xsd:decimal ; schema:unitCode "CMT" ] ;
+    col:hasValuation pod:asset-monet-01-val-2026 ;
+    col:hasAppraisal pod:asset-monet-01-appraisal-2025 ;
+    col:hasInsurance pod:asset-monet-01-policy ;
+    prov:wasGeneratedBy pod:event-creation ;
+    prov:wasInfluencedBy pod:event-acquisition , pod:event-exhibition-tate .
+
+# Agent nodes (attribution targets — never string literals).
+<https://collector.pod.example/provena/agents/monet#agent> a prov:Agent ;
+    schema:name "Claude Monet" .
+<https://collector.pod.example/provena/agents/christies#agent> a prov:Agent ;
+    schema:name "Christie's" .
+<https://collector.pod.example/provena/agents/tate#agent> a prov:Agent ;
+    schema:name "Tate Modern" .
+
+# 1. ProvenanceEvent — creation: the ONE event that is prov:wasGeneratedBy.
+pod:event-creation a col:ProvenanceEvent ;
+    col:eventType col:evt-creation ;
+    prov:used pod:asset-monet-01 ;
+    prov:wasAssociatedWith <https://collector.pod.example/provena/agents/monet#agent> ;
+    prov:startedAtTime "1919-01-01T00:00:00Z"^^xsd:dateTime ;
+    dcterms:date "1919"^^xsd:gYear ;
+    col:datePrecision col:precision-year .
+
+# 2. ProvenanceEvent — acquisition (the current owner's purchase at auction).
+pod:event-acquisition a col:ProvenanceEvent ;
+    col:eventType col:evt-acquisition ;
+    prov:used pod:asset-monet-01 ;
+    prov:wasAssociatedWith <https://collector.pod.example/provena/agents/christies#agent> ;
+    prov:startedAtTime "2021-06-24T14:00:00Z"^^xsd:dateTime ;
+    col:datePrecision col:precision-day .
+
+# 3. ProvenanceEvent — exhibition (an activity that prov:used the asset, NOT a generation).
+pod:event-exhibition-tate a col:ProvenanceEvent ;
+    col:eventType col:evt-exhibition ;
+    prov:used pod:asset-monet-01 ;
+    prov:wasAssociatedWith <https://collector.pod.example/provena/agents/tate#agent> ;
+    prov:startedAtTime "2023-04-01T00:00:00Z"^^xsd:dateTime ;
+    prov:endedAtTime "2023-09-30T00:00:00Z"^^xsd:dateTime ;
+    col:datePrecision col:precision-day .
+
+# 4. Valuation — an assessed market value on a SEPARATE schema:MonetaryAmount node.
+pod:asset-monet-01-val-2026 a col:Valuation ;
+    core:about pod:asset-monet-01 ;
+    col:amount [ a schema:MonetaryAmount ; schema:value "4200000"^^xsd:decimal ; schema:currency "GBP" ] ;
+    dcterms:date "2026-01-15"^^xsd:date ;
+    col:datePrecision col:precision-day .
+
+# 5. Appraisal — a formal, appraiser-attributed valuation.
+pod:asset-monet-01-appraisal-2025 a col:Appraisal ;
+    core:about pod:asset-monet-01 ;
+    col:amount [ a schema:MonetaryAmount ; schema:value "3950000"^^xsd:decimal ; schema:currency "GBP" ] ;
+    col:appraiser <https://collector.pod.example/provena/agents/christies#agent> ;
+    dcterms:date "2025-11-02"^^xsd:date .
+
+# 6. InsurancePolicy — policy number, coverage + premium amounts, insurer, renewal.
+pod:asset-monet-01-policy a col:InsurancePolicy ;
+    core:about pod:asset-monet-01 ;
+    col:policyNumber "AXA-ART-2026-88421" ;
+    col:insurer <https://insurer.example/axa-art#org> ;
+    col:coverageAmount [ a schema:MonetaryAmount ; schema:value "4500000"^^xsd:decimal ; schema:currency "GBP" ] ;
+    col:premium [ a schema:MonetaryAmount ; schema:value "9800"^^xsd:decimal ; schema:currency "GBP" ] ;
+    col:renewalDate "2027-01-01"^^xsd:date .

@@ -1,0 +1,70 @@
+# AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+#
+@prefix eq:      <https://w3id.org/jeswr/sectors/equine#> .
+@prefix core:    <https://w3id.org/jeswr/core#> .
+@prefix owl:     <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix rdf:     <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix skos:    <http://www.w3.org/2004/02/skos/core#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+
+# External vocabularies (real IRIs — encouraged in an alignments file):
+@prefix schema:  <http://schema.org/> .                        # schema.org
+@prefix org:     <http://www.w3.org/ns/org#> .                 # W3C Organization ontology
+@prefix wd:      <http://www.wikidata.org/entity/> .           # Wikidata (animal anchor)
+
+# =============================================================================
+# Solid EQUINE sector — ALIGNMENTS (v0.1.0).
+#
+# Bridges the equine-sector terms (equine.ttl) to the external vocabularies the
+# domain uses. EXTERNAL REUSE IS MODE A: we do NOT MIREOT-import schema.org / org:
+# — we ALIGN via skos:closeMatch / skos:broadMatch (annotation, NO entailment), so
+# an external concept that fuses concerns can never collapse two distinct Core/eq
+# classes. Kept OUT of the reasoned closure (owl:imports equine only).
+#
+# THE ANIMAL ANCHOR IS DELIBERATELY THIN (review §2): schema.org has NO animal
+# class (schema:Animal returns 404), so eq:Horse roots in core:Asset and carries
+# only a broad DBpedia anchor here — no false schema.org animal mapping. The
+# REAL, EXTANT schema.org dual-types (Reservation / SportsEvent / MoneyTransfer)
+# are load-bearing rdfs:subClassOf edges in equine.ttl, not annotations here.
+# =============================================================================
+
+<https://w3id.org/jeswr/sectors/equine/alignments> a owl:Ontology ;
+    dcterms:title "Solid Equine sector — external alignments"@en ;
+    owl:imports <https://w3id.org/jeswr/sectors/equine> ;
+    owl:versionInfo "0.1.0" ;
+    rdfs:comment "Optional Mode-A bridge: the W3C Organization ontology for syndicates, schema.org for the price/amount predicates, and a broad DBpedia animal anchor for eq:Horse (schema.org has no animal class). External IRIs are real and governed by their bodies. Nothing is owl:imported into the reasoned closure."@en .
+
+dcterms:title a owl:AnnotationProperty .
+dcterms:source a owl:AnnotationProperty .
+owl:versionInfo a owl:AnnotationProperty .
+
+# -----------------------------------------------------------------------------
+# W3C Organization ontology — a syndicate is an org:Organization (Mode A; the
+# sector contract roots eq:Syndicate in core:Organization, not org:).
+# -----------------------------------------------------------------------------
+eq:Syndicate skos:closeMatch org:Organization .
+
+# -----------------------------------------------------------------------------
+# schema.org — the price/amount predicates (Mode A). The real, extant schema.org
+# CLASS dual-types (Reservation / SportsEvent / MoneyTransfer) are load-bearing
+# subClassOf edges in equine.ttl. Here only the predicate analogues are bridged.
+# eq:season replaces the MIS-DOMAINED schema:season (media-series only) — so it
+# is deliberately NOT mapped to schema:season.
+# -----------------------------------------------------------------------------
+eq:sharePct  skos:closeMatch schema:percentage .
+eq:finishPos rdfs:seeAlso schema:position .
+# A stud nomination prices via schema:totalPrice (the Reservation price property);
+# a prize distribution's amount is schema:amount (the MoneyTransfer property).
+eq:StudNomination rdfs:seeAlso schema:totalPrice .
+eq:PrizeDistribution rdfs:seeAlso schema:amount .
+
+# -----------------------------------------------------------------------------
+# Animal anchor — Wikidata only, broad (review §2: no schema.org animal class).
+# wd:Q726 is the Wikidata "horse" (Equus ferus caballus) entity — a real,
+# dereferenceable concept, deliberately used instead of a schema.org animal class
+# (which does not exist: schema:Animal returns HTTP 404).
+# -----------------------------------------------------------------------------
+eq:Horse skos:broadMatch wd:Q726 ;
+    dcterms:source "schema.org has no animal class (schema:Animal returns HTTP 404); eq:Horse roots in core:Asset and anchors only to the broad Wikidata horse concept (wd:Q726). No false schema.org animal mapping is asserted."@en ;
+    rdfs:seeAlso <http://www.wikidata.org/entity/Q726> .

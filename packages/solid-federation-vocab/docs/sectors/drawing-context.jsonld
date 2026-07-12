@@ -1,0 +1,26 @@
+{
+  "@context": {
+    "@version": 1.1,
+    "@protected": true,
+    "drawing": "https://w3id.org/jeswr/sectors/drawing#",
+    "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
+    "skos": "http://www.w3.org/2004/02/skos/core#",
+    "xsd": "http://www.w3.org/2001/XMLSchema#",
+    "id": "@id",
+    "type": "@type",
+    "Scene": "drawing:Scene",
+    "sceneDocument": {
+      "@id": "drawing:sceneDocument",
+      "@type": "@id"
+    },
+    "schemaVersion": {
+      "@id": "drawing:schemaVersion",
+      "@type": "xsd:string"
+    },
+    "sector": "drawing:sector",
+    "thumbnail": {
+      "@id": "drawing:thumbnail",
+      "@type": "@id"
+    }
+  }
+}

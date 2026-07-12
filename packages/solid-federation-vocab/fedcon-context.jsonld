@@ -1,0 +1,78 @@
+{
+  "@context": {
+    "@version": 1.1,
+    "@protected": true,
+
+    "fedcon": "https://jeswr.org/fedcon#",
+    "fedreg": "https://w3id.org/jeswr/fedreg#",
+    "oa": "http://www.w3.org/ns/oa#",
+    "prov": "http://www.w3.org/ns/prov#",
+    "dcat": "http://www.w3.org/ns/dcat#",
+    "dct": "http://purl.org/dc/terms/",
+    "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
+    "xsd": "http://www.w3.org/2001/XMLSchema#",
+
+    "id": "@id",
+    "type": "@type",
+
+    "Proposal": "fedcon:Proposal",
+    "Intent": "fedcon:Intent",
+    "UsageAttestation": "fedcon:UsageAttestation",
+    "Admission": "fedcon:Admission",
+    "ConceptStatus": "fedcon:ConceptStatus",
+    "AdmissionPolicy": "fedcon:AdmissionPolicy",
+    "Stance": "fedcon:Stance",
+    "Announcement": "fedcon:Announcement",
+    "ReviewWindow": "fedcon:ReviewWindow",
+    "Snapshot": "fedcon:Snapshot",
+
+    "Define": "fedcon:Define",
+    "Extend": "fedcon:Extend",
+    "Promote": "fedcon:Promote",
+
+    "ConceptProposed": "fedcon:Proposed",
+    "UnderReview": "fedcon:UnderReview",
+    "Admitted": "fedcon:Admitted",
+    "Rejected": "fedcon:Rejected",
+    "Superseded": "fedcon:Superseded",
+    "Deprecated": "fedcon:Deprecated",
+    "Withdrawn": "fedcon:Withdrawn",
+
+    "Support": "fedcon:Support",
+    "Oppose": "fedcon:Oppose",
+    "Concern": "fedcon:Concern",
+
+    "label": { "@id": "rdfs:label", "@language": "en" },
+    "comment": { "@id": "rdfs:comment", "@language": "en" },
+
+    "intent": { "@id": "fedcon:intent", "@type": "@vocab" },
+    "concept": { "@id": "fedcon:concept", "@type": "@id" },
+    "definition": { "@id": "fedcon:definition", "@type": "@id" },
+    "extends": { "@id": "fedcon:extends", "@type": "@id", "@container": "@set" },
+    "priorAdmission": { "@id": "fedcon:priorAdmission", "@type": "@id" },
+    "evidence": { "@id": "fedcon:evidence", "@type": "@id", "@container": "@set" },
+    "motivationText": { "@id": "fedcon:motivationText", "@type": "xsd:string" },
+    "user": { "@id": "fedcon:user", "@type": "@id" },
+    "since": { "@id": "fedcon:since", "@type": "xsd:date" },
+    "context": { "@id": "fedcon:context", "@type": "@id" },
+    "conceptStatus": { "@id": "fedcon:conceptStatus", "@type": "@vocab" },
+    "proposal": { "@id": "fedcon:proposal", "@type": "@id" },
+    "reviewWindow": { "@id": "fedcon:reviewWindow", "@type": "@id" },
+    "opened": { "@id": "fedcon:opened", "@type": "xsd:dateTime" },
+    "closed": { "@id": "fedcon:closed", "@type": "xsd:dateTime" },
+    "underPolicy": { "@id": "fedcon:underPolicy", "@type": "@id" },
+    "dissent": { "@id": "fedcon:dissent", "@type": "@id", "@container": "@set" },
+    "noDissentRecorded": { "@id": "fedcon:noDissentRecorded", "@type": "xsd:boolean" },
+    "decisionRationale": { "@id": "fedcon:decisionRationale", "@type": "xsd:string" },
+    "stance": { "@id": "fedcon:stance", "@type": "@vocab" },
+    "upgrades": { "@id": "fedcon:upgrades", "@type": "@id" },
+    "supersededBy": { "@id": "fedcon:supersededBy", "@type": "@id" },
+
+    "conceptStore": { "@id": "fedcon:conceptStore", "@type": "@id", "@container": "@set" },
+    "currentSnapshot": { "@id": "fedcon:currentSnapshot", "@type": "@id" },
+    "sequence": { "@id": "fedcon:sequence", "@type": "xsd:nonNegativeInteger" },
+    "previousSnapshot": { "@id": "fedcon:previousSnapshot", "@type": "@id" },
+    "profileBundle": { "@id": "fedcon:profileBundle", "@type": "@id" },
+    "primeSet": { "@id": "fedcon:primeSet", "@type": "@id" }
+  }
+}
