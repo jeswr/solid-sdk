@@ -1,0 +1,272 @@
+[
+  {
+    "id": "pod-drive",
+    "name": "Pod Drive",
+    "description": "File and folder browser over Solid LDP containers — a typed RDF model for containers and binary resources (size, mtime, content-type).",
+    "category": "Documents",
+    "deployedUrl": "https://drive.solid-test.jeswr.org",
+    "status": "live",
+    "repo": "https://github.com/jeswr/pod-drive",
+    "launch": "autologin"
+  },
+  {
+    "id": "pod-docs",
+    "name": "Pod Docs",
+    "description": "Typed RDF data layer for rich-text documents (with PROV history) stored in a Solid pod.",
+    "category": "Documents",
+    "deployedUrl": "https://docs.solid-test.jeswr.org",
+    "status": "live",
+    "repo": "https://github.com/jeswr/pod-docs",
+    "launch": "autologin"
+  },
+  {
+    "id": "pod-photos",
+    "name": "Pod Photos",
+    "description": "Solid photo and album app — a typed RDF data layer (schema:Photograph + EXIF→RDF + schema:ImageGallery) plus a React photo-gallery view.",
+    "category": "Media",
+    "deployedUrl": "https://photos.solid-test.jeswr.org",
+    "status": "live",
+    "repo": "https://github.com/jeswr/pod-photos",
+    "launch": "autologin"
+  },
+  {
+    "id": "pod-music",
+    "name": "Pod Music",
+    "description": "Typed RDF data layer for tracks, albums, artists, playlists and listen-history (Music Ontology + schema.org) in a Solid pod.",
+    "category": "Media",
+    "deployedUrl": "https://music.solid-test.jeswr.org",
+    "status": "live",
+    "repo": "https://github.com/jeswr/pod-music",
+    "launch": "autologin"
+  },
+  {
+    "id": "pod-mail",
+    "name": "Pod Mail",
+    "description": "Solid-native mail data layer — a typed RDF model for messages, threads and folders (schema:EmailMessage / SIOC).",
+    "category": "Comms",
+    "deployedUrl": "https://mail.solid-test.jeswr.org",
+    "status": "live",
+    "repo": "https://github.com/jeswr/pod-mail",
+    "launch": "autologin"
+  },
+  {
+    "id": "pod-chat",
+    "name": "Pod Chat",
+    "description": "Typed RDF data layer for ActivityStreams 2.0 chat rooms and messages, with actionable shared-task messages (wf:Task).",
+    "category": "Comms",
+    "deployedUrl": "https://chat.solid-test.jeswr.org",
+    "status": "live",
+    "repo": "https://github.com/jeswr/pod-chat",
+    "launch": "autologin"
+  },
+  {
+    "id": "pod-health",
+    "name": "Pod Health",
+    "description": "Personal-health data layer over a Solid pod — health records, vitals, conditions, medications, immunizations and GPX workouts (FHIR-aligned + QUDT).",
+    "category": "Health",
+    "deployedUrl": "https://health.solid-test.jeswr.org",
+    "status": "live",
+    "repo": "https://github.com/jeswr/pod-health",
+    "launch": "autologin"
+  },
+  {
+    "id": "solid-pod-manager",
+    "name": "Solid Pod Manager",
+    "description": "Standalone Solid consumer and management app — Files, Tasks, Bookmarks, Profile/Contacts/Type-index, Sharing (WAC), Issues, Inbox/Chat/Schedule, federation discovery, plus data integrations.",
+    "category": "Productivity",
+    "deployedUrl": "https://app.solid-test.jeswr.org",
+    "status": "live",
+    "repo": "https://github.com/jeswr/solid-pod-manager",
+    "launch": "prefill"
+  },
+  {
+    "id": "solid-issues",
+    "name": "Solid Issues",
+    "description": "Jira/Monday-parity issue tracker storing wf:Task data in your pod — boards, WIP limits, dependencies, automation, control charts and live notifications.",
+    "category": "Productivity",
+    "deployedUrl": "https://issues.solid-test.jeswr.org",
+    "status": "live",
+    "repo": "https://github.com/jeswr/solid-issues",
+    "launch": "autologin"
+  },
+  {
+    "id": "pod-money",
+    "name": "Pod Money",
+    "description": "Personal-finance data layer over a Solid pod — accounts, transactions, balances, holdings and categories on the fse finance (FIBO-slim) vocabulary.",
+    "category": "Finance",
+    "deployedUrl": "https://money.solid-test.jeswr.org",
+    "status": "live",
+    "repo": "https://github.com/jeswr/pod-money",
+    "launch": "autologin"
+  },
+  {
+    "id": "accessradar",
+    "name": "AccessRadar",
+    "description": "Web accessibility compliance SaaS — an axe-core scanner with AI remediation; auth and data are Solid-OIDC + Pod storage (no server DB).",
+    "category": "Finance",
+    "deployedUrl": null,
+    "status": "wip",
+    "repo": "https://github.com/jeswr/accessradar",
+    "launch": "none"
+  },
+  {
+    "id": "keystone",
+    "name": "Keystone",
+    "description": "Multi-entity family-office consolidation with a light general ledger (descriptive bookkeeping only).",
+    "category": "Finance",
+    "deployedUrl": null,
+    "status": "wip",
+    "repo": "https://github.com/jeswr/keystone",
+    "launch": "none"
+  },
+  {
+    "id": "capnote",
+    "name": "CapNote",
+    "description": "AI capital-call and distribution-notice document automation for family-office operations — PDF→structured fields, commitment tracker, cash-flow calendar.",
+    "category": "Finance",
+    "deployedUrl": null,
+    "status": "wip",
+    "repo": "https://github.com/jeswr/capnote",
+    "launch": "none"
+  },
+  {
+    "id": "provena",
+    "name": "Provena",
+    "description": "Collector-first, local-only art and passion-asset collection management — provenance chains, valuation/insurance/appraisal records and loan tracking.",
+    "category": "Finance",
+    "deployedUrl": null,
+    "status": "local-only",
+    "repo": null,
+    "launch": "none"
+  },
+  {
+    "id": "strongroom",
+    "name": "Strongroom",
+    "description": "Privacy-first, self-hostable family-office document and entity vault — encrypted records, granular per-person access control and a tamper-evident audit trail.",
+    "category": "Finance",
+    "deployedUrl": null,
+    "status": "local-only",
+    "repo": null,
+    "launch": "none"
+  },
+  {
+    "id": "furlong",
+    "name": "Furlong",
+    "description": "Thoroughbred and equestrian syndicate management — horse registry, fractional ownership, expense ledger, prize-money waterfall and owner statements; Solid pod data layer.",
+    "category": "Finance",
+    "deployedUrl": null,
+    "status": "wip",
+    "repo": "https://github.com/jeswr/furlong",
+    "launch": "none"
+  },
+  {
+    "id": "fdc3-solid",
+    "name": "FDC3 ⇄ Solid",
+    "description": "Open-standards demo persisting FDC3 desktop-interop contexts (fdc3.contact, fdc3.instrument) to a Solid pod as vcard + FIBO RDF and re-broadcasting them as FDC3 contexts.",
+    "category": "Demo",
+    "deployedUrl": null,
+    "status": "local-only",
+    "repo": "https://github.com/jeswr/fdc3-solid",
+    "launch": "none"
+  },
+  {
+    "id": "solid-access-manager",
+    "name": "Solid Access Manager",
+    "description": "Manage who can access your Solid pod data — a grant dashboard by resource and by agent, an access-request inbox, and a consent-receipt history.",
+    "category": "Productivity",
+    "deployedUrl": "https://solid-access-manager.vercel.app",
+    "status": "live",
+    "repo": "https://github.com/jeswr/solid-access-manager",
+    "launch": "none"
+  },
+  {
+    "id": "solid-catalog",
+    "name": "Solid App Catalog",
+    "description": "Browse the wider Solid app ecosystem — a catalog viewer over the community's collected directory of Solid apps.",
+    "category": "Productivity",
+    "deployedUrl": "https://solid-catalog.jeswr.org",
+    "status": "live",
+    "repo": "https://github.com/jeswr/solid-catalog",
+    "launch": "none"
+  },
+  {
+    "id": "solid-launch",
+    "name": "Solid App Launcher",
+    "description": "A lightweight launcher for the Solid app suite.",
+    "category": "Productivity",
+    "deployedUrl": "https://solid-launch-lime.vercel.app",
+    "status": "live",
+    "repo": "https://github.com/jeswr/solid-launch",
+    "launch": "none"
+  },
+  {
+    "id": "coeliac-app",
+    "name": "Coeliac Diary",
+    "description": "A coeliac and multi-intolerance health diary — log meals, symptoms and exposures and get elimination-protocol guidance, kept private in your own Solid pod.",
+    "category": "Health",
+    "deployedUrl": "https://coeliac-app.vercel.app",
+    "status": "live",
+    "repo": "https://github.com/jeswr/coeliac-app",
+    "launch": "none"
+  },
+  {
+    "id": "linkding",
+    "name": "Linkding for Solid",
+    "description": "Bookmarks and read-it-later stored per-resource in your Solid pod — a pod-backed fork of the Linkding bookmark manager.",
+    "category": "Productivity",
+    "deployedUrl": "https://linkding-solid.vercel.app",
+    "status": "live",
+    "repo": "https://github.com/jeswr/linkding",
+    "launch": "none"
+  },
+  {
+    "id": "elk",
+    "name": "Elk for Solid",
+    "description": "A nimble Mastodon web client that persists its settings, drafts and your own posts to your Solid pod — a pod-backed fork of Elk.",
+    "category": "Comms",
+    "deployedUrl": "https://elk-solid.vercel.app",
+    "status": "live",
+    "repo": "https://github.com/jeswr/elk",
+    "launch": "none"
+  },
+  {
+    "id": "excalidraw",
+    "name": "Excalidraw for Solid",
+    "description": "A hand-drawn-style whiteboard and diagram editor that saves your .excalidraw scenes to your Solid pod — a pod-backed fork of Excalidraw.",
+    "category": "Media",
+    "deployedUrl": "https://excalidraw-solid.vercel.app",
+    "status": "live",
+    "repo": "https://github.com/jeswr/excalidraw",
+    "launch": "none"
+  },
+  {
+    "id": "miniflux",
+    "name": "Miniflux for Solid",
+    "description": "A minimalist, fast RSS and feed reader that mirrors your saved entries and read-state to your Solid pod — a pod-backed fork of Miniflux (Go/Postgres core; pod-sync layer added).",
+    "category": "Comms",
+    "deployedUrl": null,
+    "status": "wip",
+    "repo": "https://github.com/jeswr/miniflux",
+    "launch": "none"
+  },
+  {
+    "id": "actual",
+    "name": "Actual Budget for Solid",
+    "description": "Envelope-budgeting and personal finance with a Solid pod as a sync target for its CRDT change-log — a pod-backed fork of Actual.",
+    "category": "Finance",
+    "deployedUrl": null,
+    "status": "wip",
+    "repo": "https://github.com/jeswr/actual",
+    "launch": "none"
+  },
+  {
+    "id": "web-scrobbler",
+    "name": "Web Scrobbler for Solid",
+    "description": "Scrobble your music-listening history from 100+ web players to your own Solid pod — a browser-extension fork of Web Scrobbler (installs from the browser's extension store).",
+    "category": "Media",
+    "deployedUrl": null,
+    "status": "wip",
+    "repo": "https://github.com/jeswr/web-scrobbler",
+    "launch": "none"
+  }
+]
