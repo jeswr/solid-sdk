@@ -44,20 +44,17 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
-    "lint": "biome check src test scripts && npm run check:lockfile-transport",
-    "lint:fix": "biome check --write src test scripts",
+    "lint": "biome check src test",
+    "lint:fix": "biome check --write src test",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest",
-    "check:dist": "node scripts/check-dist.mjs",
-    "check:lockfile-transport": "node scripts/check-lockfile-transport.mjs",
-    "gate": "npm run lint && npm run typecheck && npm run test && npm run build && npm run check:dist"
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@jeswr/fetch-rdf": "^0.1.0",
-    "@jeswr/guarded-fetch": "git+https://github.com/jeswr/guarded-fetch.git#bd4490927fd36d62f6b78a0021e8d40bbb572c3b",
-    "@jeswr/rdf-serialize": "git+https://github.com/jeswr/rdf-serialize.git#ef3dd85636b868ea336a45f79c0446ade0982e7b",
-    "@jeswr/solid-chat-interop": "git+https://github.com/jeswr/solid-chat-interop.git#main",
+    "@jeswr/guarded-fetch": "workspace:*",
+    "@jeswr/rdf-serialize": "workspace:*",
+    "@jeswr/solid-chat-interop": "workspace:*",
     "n3": "^2.0.3"
   },
   "peerDependencies": {

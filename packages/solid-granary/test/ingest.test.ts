@@ -142,7 +142,9 @@ describe("ingestGranary", () => {
       container: CONTAINER,
       conditional: "if-none-match",
     });
-    expect((calls[0]?.init.headers as Record<string, string>)["if-none-match"]).toBe("*");
+    expect((calls[0]?.init.headers as Record<string, string> | undefined)?.["if-none-match"]).toBe(
+      "*",
+    );
   });
 
   it("respects maxItems", async () => {

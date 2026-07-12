@@ -28,7 +28,9 @@ describe("fetchGranary", () => {
     const f = jsonFetch(rssFeed);
     await fetchGranary("https://granary.io/x", { fetch: f });
     const init = (f as unknown as { mock: { calls: [unknown, RequestInit][] } }).mock.calls[0]?.[1];
-    expect((init?.headers as Record<string, string>).accept).toContain("application/activity+json");
+    expect((init?.headers as Record<string, string> | undefined)?.accept).toContain(
+      "application/activity+json",
+    );
   });
 
   it("throws GranaryFetchError on a non-2xx status", async () => {

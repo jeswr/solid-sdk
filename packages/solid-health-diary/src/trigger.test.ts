@@ -131,9 +131,9 @@ describe("lag-profile validation (finite, non-negative, ordered)", () => {
     for (const p of ["lagWindowMin", "lagWindowMax", "lagMode"]) {
       const quads = store.getQuads(subject, DataFactory.namedNode(diet(p)), null, null);
       expect(quads).toHaveLength(1);
-      expect((quads[0]?.object as { datatype: { value: string } }).datatype.value).toBe(
-        "http://www.w3.org/2001/XMLSchema#decimal",
-      );
+      expect(
+        (quads[0]?.object as { datatype: { value: string } } | undefined)?.datatype.value,
+      ).toBe("http://www.w3.org/2001/XMLSchema#decimal");
     }
   });
 
