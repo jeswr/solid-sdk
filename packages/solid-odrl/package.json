@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "description": "ODRL usage-control policies for Solid resources + agent interactions (M3 of the agentic-Solid roadmap). Build an ODRL 2.2 Policy/Permission/Prohibition/Duty graph (the real W3C ODRL vocab, http://www.w3.org/ns/odrl/2/), serialise/parse it (Turtle/JSON-LD via the suite RDF libs), and evaluate it CLIENT-SIDE: given a policy + a request context (agent WebID, action, target, constraints like time/purpose) decide permit/deny/duty — pure, deterministic, testable. The expression + evaluation library; SERVER-SIDE enforcement (an authorizer beside WAC) is the CORE-PSS M5a item, NOT in this package. Experimental, AI-agent-generated.",
   "type": "module",
+  "securityCritical": true,
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
@@ -19,17 +20,13 @@
     "build:deps": "node scripts/build-deps.mjs",
     "build": "node scripts/build-dist.mjs",
     "build:dev": "npm run build:deps && tsc -p tsconfig.json",
-    "check:dist": "node scripts/check-dist-fresh.mjs",
-    "check:lockfile-transport": "node scripts/check-lockfile-transport.mjs",
-    "fix:lockfile-transport": "node scripts/normalize-lockfile.mjs",
     "api:report": "npm run build && api-extractor run --local -c config/api-extractor.json",
     "api:check": "npm run build && api-extractor run -c config/api-extractor.json",
     "typecheck": "npm run build:deps && tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json",
-    "lint": "biome check src test scripts && npm run check:lockfile-transport",
+    "lint": "biome check src test scripts",
     "lint:fix": "biome check --write src test scripts",
     "test": "npm run build:deps && vitest run",
-    "test:coverage": "npm run build:deps && vitest run --coverage",
-    "prepare": "npm run build"
+    "test:coverage": "npm run build:deps && vitest run --coverage"
   },
   "keywords": [
     "solid",
@@ -56,7 +53,7 @@
   },
   "homepage": "https://github.com/jeswr/solid-odrl#readme",
   "dependencies": {
-    "@jeswr/rdf-serialize": "git+https://github.com/jeswr/rdf-serialize.git#8ebdda44ab1da63ef91052a5b2f1e453c0a29c79",
+    "@jeswr/rdf-serialize": "workspace:*",
     "@rdfjs/wrapper": "^0.34.0",
     "@solid/object": "^0.6.0",
     "content-type": "^1.0.5",

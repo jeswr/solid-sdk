@@ -243,7 +243,7 @@ describe("actionProvenanceJsonLd — RDF+JSON-LD escaping parity", () => {
     const doc = actionProvenanceJsonLd(input);
     const activityNode = doc["@graph"] as Record<string, unknown>[];
     const activity = activityNode.find((n) => n["@id"] === ACTIVITY);
-    expect((activity?.wasAssociatedWith as { "@id": string })["@id"]).toBe(escaped);
+    expect((activity?.wasAssociatedWith as { "@id": string } | undefined)?.["@id"]).toBe(escaped);
     const json = JSON.stringify(doc);
     expect(json).not.toContain("act> <https://prov.example/wasAssociatedWith");
 

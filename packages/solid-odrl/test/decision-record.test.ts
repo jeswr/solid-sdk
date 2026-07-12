@@ -345,9 +345,9 @@ describe("decisionRecord — conflict path", () => {
     expect(literal(quads, REC, ODRLD_CONFLICT)).toBe("true");
     const conflictQuad = quads.find((q) => q.predicate.value === ODRLD_CONFLICT);
     expect(conflictQuad?.object.value).toBe("true");
-    expect((conflictQuad?.object as { datatype?: { value: string } }).datatype?.value).toBe(
-      "http://www.w3.org/2001/XMLSchema#boolean",
-    );
+    expect(
+      (conflictQuad?.object as { datatype?: { value: string } } | undefined)?.datatype?.value,
+    ).toBe("http://www.w3.org/2001/XMLSchema#boolean");
 
     // Both a Permission and a Prohibition deciding-rule node are present.
     const ruleNodes = children(quads, REC, ODRLD_DECIDING_RULE);
