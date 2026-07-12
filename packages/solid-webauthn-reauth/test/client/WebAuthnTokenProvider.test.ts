@@ -1,0 +1,367 @@
+// AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { WebAuthnTokenProvider } from "../../src/client/WebAuthnTokenProvider.js";
+import {
+  BUNDLE_VERSION,
+  decodeAssertionBundle,
+  TOKEN_EXCHANGE_GRANT_TYPE,
+  WEBAUTHN_ASSERTION_TOKEN_TYPE,
+} from "../../src/protocol/index.js";
+
+const OP = "https://op.example";
+const POD = "https://pod.example";
+const POD_HOST = "pod.example";
+const CLIENT_ID = "https://app.example/clientid.jsonld";
+
+const ASSERTION_OPTIONS = {
+  challenge: "Y2hhbGxlbmdl", // base64url 'challenge'
+  rpId: "app.example",
+  allowCredentials: [{ id: "Y3JlZC1pZA", type: "public-key" }],
+  userVerification: "required" as const,
+  timeout: 60000,
+};
+
+const ACCESS_TOKEN = "the.access.token";
+
+/** A `navigator.credentials.get` result, with ArrayBuffer fields as required. */
+function fakeCredential() {
+  const buf = (s: string) => new TextEncoder().encode(s).buffer;
+  return {
+    id: "Y3JlZC1pZA",
+    rawId: buf("cred-id"),
+    type: "public-key",
+    authenticatorAttachment: "platform",
+    response: {
+      authenticatorData: buf("authData"),
+      clientDataJSON: buf('{"type":"webauthn.get"}'),
+      signature: buf("sig"),
+      userHandle: buf("user"),
+    },
+    getClientExtensionResults: () => ({}),
+  };
+}
+
+/** Decode the `htu` claim from a DPoP proof JWT (header.payload.sig). */
+function dpopHtu(proof: string): string {
+  const payload = proof.split(".")[1] as string;
+  const json = Buffer.from(payload, "base64url").toString("utf8");
+  return (JSON.parse(json) as { htu: string }).htu;
+}
+
+let credentialsGet: ReturnType<typeof vi.fn>;
+
+beforeEach(() => {
+  // Make `browserSupportsWebAuthn()` pass.
+  vi.stubGlobal("PublicKeyCredential", () => {});
+
+  credentialsGet = vi.fn(async () => fakeCredential());
+  vi.stubGlobal("navigator", { credentials: { get: credentialsGet } });
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
+
+/**
+ * Install a `fetch` mock that answers the assertion-options request, then the
+ * token-exchange `POST`. Records every call for assertions.
+ */
+function mockFetch() {
+  const calls: { url: string; init: RequestInit | undefined }[] = [];
+  const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+    const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+    calls.push({ url, init });
+
+    if (url.includes("assertion-options")) {
+      return new Response(JSON.stringify(ASSERTION_OPTIONS), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    if (url.includes("/token")) {
+      return new Response(JSON.stringify({ access_token: ACCESS_TOKEN, token_type: "DPoP" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    throw new Error(`unexpected fetch: ${url}`);
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  return { calls, fetchMock };
+}
+
+describe("WebAuthnTokenProvider", () => {
+  const config = {
+    [POD_HOST]: {
+      issuer: OP,
+      assertionOptionsEndpoint: `${OP}/.oidc/webauthn/assertion-options`,
+      tokenEndpoint: `${OP}/.oidc/token`,
+    },
+  };
+
+  describe("matches", () => {
+    it("matches a configured host", async () => {
+      const provider = new WebAuthnTokenProvider(config);
+      expect(await provider.matches(new Request(`${POD}/resource`))).toBe(true);
+    });
+
+    it("does not match an unconfigured host", async () => {
+      const provider = new WebAuthnTokenProvider(config);
+      expect(await provider.matches(new Request("https://other.example/x"))).toBe(false);
+    });
+  });
+
+  describe("upgrade", () => {
+    it("runs options -> get -> token-exchange and sets the DPoP Authorization", async () => {
+      const { calls } = mockFetch();
+      const provider = new WebAuthnTokenProvider(config);
+
+      const upgraded = await provider.upgrade(new Request(`${POD}/resource`));
+
+      // (b) options fetched first, by POST (state-changing challenge issuance).
+      expect(calls[0]?.url).toContain("assertion-options");
+      expect(calls[0]?.init?.method).toBe("POST");
+
+      // (c) the WebAuthn ceremony ran with the challenge from options.
+      expect(credentialsGet).toHaveBeenCalledOnce();
+      const getArg = credentialsGet.mock.calls[0]?.[0] as {
+        publicKey: PublicKeyCredentialRequestOptions;
+      };
+      expect(getArg.publicKey.challenge).toBeInstanceOf(ArrayBuffer);
+
+      // (e) token exchange POSTed second with the RFC 8693 params + a DPoP proof.
+      const tokenCall = calls[1];
+      expect(tokenCall?.url).toContain("/token");
+      expect(tokenCall?.init?.method).toBe("POST");
+      const body = tokenCall?.init?.body as URLSearchParams;
+      expect(body.get("grant_type")).toBe(TOKEN_EXCHANGE_GRANT_TYPE);
+      expect(body.get("subject_token_type")).toBe(WEBAUTHN_ASSERTION_TOKEN_TYPE);
+      const tokenHeaders = new Headers(tokenCall?.init?.headers);
+      expect(tokenHeaders.get("DPoP")).toBeTruthy();
+
+      // (d) the subject_token is a well-formed, versioned assertion bundle.
+      const subjectToken = body.get("subject_token") as string;
+      const bundle = decodeAssertionBundle(subjectToken);
+      expect(bundle.version).toBe(BUNDLE_VERSION);
+      expect(bundle.credential.id).toBe("Y3JlZC1pZA");
+
+      // (f) upgraded request carries DPoP Authorization + a resource-bound proof.
+      expect(upgraded.headers.get("Authorization")).toBe(`DPoP ${ACCESS_TOKEN}`);
+      expect(upgraded.headers.get("DPoP")).toBeTruthy();
+      expect(upgraded.headers.get("DPoP")).not.toBe(tokenHeaders.get("DPoP"));
+      expect(upgraded.url).toBe(`${POD}/resource`);
+    });
+
+    it("defaults the options endpoint and discovers the token endpoint", async () => {
+      const calls: string[] = [];
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (input: string | URL | Request) => {
+          const url =
+            typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+          calls.push(url);
+          if (url.includes(".well-known/openid-configuration")) {
+            return new Response(
+              JSON.stringify({ issuer: OP, token_endpoint: `${OP}/discovered-token` }),
+              { status: 200, headers: { "content-type": "application/json" } },
+            );
+          }
+          if (url.includes("assertion-options")) {
+            return new Response(JSON.stringify(ASSERTION_OPTIONS), { status: 200 });
+          }
+          return new Response(JSON.stringify({ access_token: ACCESS_TOKEN, token_type: "DPoP" }), {
+            status: 200,
+          });
+        }),
+      );
+      const provider = new WebAuthnTokenProvider({ [POD_HOST]: { issuer: OP } });
+
+      await provider.upgrade(new Request(`${POD}/resource`));
+
+      expect(calls.some((u) => u === `${OP}/.oidc/webauthn/assertion-options`)).toBe(true);
+      expect(calls.some((u) => u === `${OP}/discovered-token`)).toBe(true);
+    });
+
+    it("falls back to the conventional token path when discovery fails", async () => {
+      const calls: string[] = [];
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (input: string | URL | Request) => {
+          const url =
+            typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+          calls.push(url);
+          if (url.includes(".well-known/openid-configuration")) {
+            return new Response("nope", { status: 404 });
+          }
+          if (url.includes("assertion-options")) {
+            return new Response(JSON.stringify(ASSERTION_OPTIONS), { status: 200 });
+          }
+          return new Response(JSON.stringify({ access_token: ACCESS_TOKEN, token_type: "DPoP" }), {
+            status: 200,
+          });
+        }),
+      );
+      const provider = new WebAuthnTokenProvider({ [POD_HOST]: { issuer: OP } });
+
+      await provider.upgrade(new Request(`${POD}/resource`));
+
+      expect(calls.some((u) => u === `${OP}/.oidc/token`)).toBe(true);
+    });
+
+    it("sends the configured Client ID Document URI as client_id", async () => {
+      const { calls } = mockFetch();
+      const provider = new WebAuthnTokenProvider({
+        [POD_HOST]: { ...config[POD_HOST], clientId: CLIENT_ID },
+      });
+
+      await provider.upgrade(new Request(`${POD}/resource`));
+
+      const body = calls[1]?.init?.body as URLSearchParams;
+      expect(body.get("client_id")).toBe(CLIENT_ID);
+    });
+
+    it("can be configured to GET the assertion options", async () => {
+      const { calls } = mockFetch();
+      const provider = new WebAuthnTokenProvider({
+        [POD_HOST]: { ...config[POD_HOST], assertionOptionsMethod: "GET" },
+      });
+
+      await provider.upgrade(new Request(`${POD}/resource`));
+
+      expect(calls[0]?.url).toContain("assertion-options");
+      expect(calls[0]?.init?.method).toBe("GET");
+    });
+
+    it("omits query and fragment from the DPoP htu (RFC 9449 §4.2)", async () => {
+      const { calls } = mockFetch();
+      const provider = new WebAuthnTokenProvider(config);
+
+      const upgraded = await provider.upgrade(new Request(`${POD}/resource?a=1#frag`));
+
+      expect(dpopHtu(upgraded.headers.get("DPoP") as string)).toBe(`${POD}/resource`);
+      const tokenHeaders = new Headers(calls[1]?.init?.headers);
+      expect(dpopHtu(tokenHeaders.get("DPoP") as string)).toBe(`${OP}/.oidc/token`);
+    });
+
+    it("throws when no configuration matches", async () => {
+      mockFetch();
+      const provider = new WebAuthnTokenProvider(config);
+      await expect(provider.upgrade(new Request("https://other.example/x"))).rejects.toThrow(
+        /No WebAuthn configuration/,
+      );
+    });
+
+    it("throws when the assertion-options request fails (before any ceremony)", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () => new Response("nope", { status: 500 })),
+      );
+      const provider = new WebAuthnTokenProvider(config);
+      await expect(provider.upgrade(new Request(`${POD}/resource`))).rejects.toThrow(
+        /Assertion-options request failed/,
+      );
+      expect(credentialsGet).not.toHaveBeenCalled();
+    });
+
+    it("rejects a non-DPoP (Bearer) token from the exchange", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (input: string | URL | Request) => {
+          const url =
+            typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+          if (url.includes("assertion-options")) {
+            return new Response(JSON.stringify(ASSERTION_OPTIONS), { status: 200 });
+          }
+          return new Response(
+            JSON.stringify({ access_token: ACCESS_TOKEN, token_type: "Bearer" }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          );
+        }),
+      );
+      const provider = new WebAuthnTokenProvider(config);
+      await expect(provider.upgrade(new Request(`${POD}/resource`))).rejects.toThrow(
+        /non-DPoP token/,
+      );
+    });
+
+    it("retries the token exchange once on a use_dpop_nonce challenge", async () => {
+      let tokenCalls = 0;
+      const nonces: (string | null)[] = [];
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+          const url =
+            typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+          if (url.includes("assertion-options")) {
+            return new Response(JSON.stringify(ASSERTION_OPTIONS), { status: 200 });
+          }
+          nonces.push(new Headers(init?.headers).get("DPoP"));
+          tokenCalls += 1;
+          if (tokenCalls === 1) {
+            return new Response(JSON.stringify({ error: "use_dpop_nonce" }), {
+              status: 400,
+              headers: {
+                "content-type": "application/json",
+                "DPoP-Nonce": "server-nonce",
+              },
+            });
+          }
+          return new Response(JSON.stringify({ access_token: ACCESS_TOKEN, token_type: "DPoP" }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        }),
+      );
+
+      const provider = new WebAuthnTokenProvider(config);
+      const upgraded = await provider.upgrade(new Request(`${POD}/resource`));
+
+      expect(tokenCalls).toBe(2);
+      expect(upgraded.headers.get("Authorization")).toBe(`DPoP ${ACCESS_TOKEN}`);
+      expect(nonces[0]).not.toBe(nonces[1]);
+    });
+
+    it("shares one DPoP key between the token-endpoint proof and the resource proof", async () => {
+      const { calls } = mockFetch();
+      const provider = new WebAuthnTokenProvider(config);
+
+      const upgraded = await provider.upgrade(new Request(`${POD}/resource`));
+
+      const jkt = (proof: string) => {
+        const header = proof.split(".")[0] as string;
+        const json = Buffer.from(header, "base64url").toString("utf8");
+        return JSON.stringify((JSON.parse(json) as { jwk: unknown }).jwk);
+      };
+      const tokenProof = new Headers(calls[1]?.init?.headers).get("DPoP") as string;
+      const resourceProof = upgraded.headers.get("DPoP") as string;
+      expect(jkt(tokenProof)).toBe(jkt(resourceProof));
+    });
+  });
+
+  describe("TokenProvider contract", () => {
+    it("accepts a pre-built TokenExchange (Strategy injection)", async () => {
+      const acquire = vi.fn(
+        async (_ctx: { request: Request; dpop: unknown }) =>
+          ({ access_token: ACCESS_TOKEN, token_type: "DPoP" }) as never,
+      );
+      const exchange = { matches: vi.fn(async () => true), acquire };
+      const provider = new WebAuthnTokenProvider(exchange);
+
+      expect(await provider.matches(new Request(`${POD}/r`))).toBe(true);
+      const upgraded = await provider.upgrade(new Request(`${POD}/r`));
+
+      expect(acquire).toHaveBeenCalledOnce();
+      const ctx = acquire.mock.calls[0]?.[0] as { dpop: unknown; request: Request };
+      expect(ctx.dpop).toBeTruthy();
+      expect(ctx.request.url).toBe(`${POD}/r`);
+      expect(upgraded.headers.get("Authorization")).toBe(`DPoP ${ACCESS_TOKEN}`);
+    });
+
+    it("exposes invalidate() as a no-op (stateless re-auth)", async () => {
+      const provider = new WebAuthnTokenProvider(config);
+      await expect(provider.invalidate(new Request(`${POD}/r`))).resolves.toBeUndefined();
+    });
+  });
+});
