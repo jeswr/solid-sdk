@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Signing in…</title>
+  </head>
+  <body>
+    <!-- OIDC redirect target for @solid/reactive-authentication. The opener
+         (the app window) reads location.href to complete the auth code flow.
+         callback.html is served from, and listed in redirect_uris under, the
+         SAME origin as the app, so the opener is same-origin — we target
+         `location.origin` explicitly (never "*") so the authorization response
+         (which carries the auth code) is delivered ONLY to our own origin, and
+         never to a window that may have navigated elsewhere. -->
+    <script>
+      if (window.opener) {
+        window.opener.postMessage(location.href, location.origin);
+      }
+    </script>
+  </body>
+</html>

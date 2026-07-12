@@ -1,0 +1,60 @@
+{
+  "comment": "Vendor-lock for Pod Manager shell files vendored into solid-issues (pss-rg3). Run scripts/check-pm-drift.mjs to detect upstream drift.",
+  "source": "/Users/jesght/Documents/GitHub/jeswr/solid-pod-manager",
+  "files": [
+    {
+      "src": "src/app/globals.css",
+      "dest": "src/app/globals.css",
+      "note": "Source tokens only (pss-0eb union): the PM's teal palette blocks (sidebar tokens + success/warning) were unioned into solid-issues' own globals.css rather than replaced wholesale. Drift check compares the PM source hash — if it changes, review what changed and apply the delta.",
+      "sha256": "d22dc1d83bfe1c6662473ae397912ccda452e47f785ee0149b148c5cdb95f6c1"
+    },
+    {
+      "src": "src/components/app-shell.tsx",
+      "dest": "src/components/app-shell.tsx",
+      "note": "Adapted: uses useSolidSession (not useSession), maps 'initialising' status (not 'loading'), wraps SidebarNav/BottomNav in Suspense for useSearchParams.",
+      "sha256": "c84bca994f8a13b736902fc5c5a3372eddd4f218bc430d0725f9dce61b6b976f"
+    },
+    {
+      "src": "src/components/sidebar-nav.tsx",
+      "dest": "src/components/sidebar-nav.tsx",
+      "note": "Adapted: isActive handles query-param-based views (/?view=board etc.) not just pathname segments.",
+      "sha256": "fc8c5c6085b62e71b321d1217b322c882df42c87489809ec9c9f1a7d610bc794"
+    },
+    {
+      "src": "src/components/brand.tsx",
+      "dest": "src/components/brand.tsx",
+      "note": "Adapted: uses CircleDot + 'Solid Issues' wordmark instead of ShieldCheck + 'Pod Manager'. Pending pss-70t (maintainer wordmark decision).",
+      "sha256": "7786cb2696f01ab7f3c9163e9157cc0308e7ea1369d5a014dfd5434ec6a1de84"
+    },
+    {
+      "src": "src/components/account-menu.tsx",
+      "dest": "src/components/account-menu.tsx",
+      "note": "Adapted: uses useSolidSession (not useSession); SolidProfile.name (not displayName); no avatarUrl field on SolidProfile so AvatarImage omitted.",
+      "sha256": "246a4494d4de874ed3aa34516b40a2f45c5fc6cd0c91af9bd46603e288c7a025"
+    },
+    {
+      "src": "src/components/theme-toggle.tsx",
+      "dest": "src/components/theme-toggle.tsx",
+      "note": "Verbatim (no adaptations needed).",
+      "sha256": "0dc72de295a37b8523dd417b1b1b68e6458a8e4b3ccc3a6aba0b3e200a06e0c7"
+    },
+    {
+      "src": "src/components/nav-items.ts",
+      "dest": "src/components/nav-items.ts",
+      "note": "Replaced: PM nav items are Pod Manager routes; solid-issues uses issue-tracker-specific destinations (Issues/Board/Backlog/Epics/Timeline/Calendar/Dashboard/Workload).",
+      "sha256": "579c67e013611320986170300634b120074f08b2455b6c59ba7e06b6462fb63f"
+    },
+    {
+      "src": "src/components/ui/sheet.tsx",
+      "dest": "src/components/ui/sheet.tsx",
+      "note": "Verbatim.",
+      "sha256": "54e255b2dec4b8ad7c71a571f17700694df1533ad5c78f8b472ddd802c658877"
+    },
+    {
+      "src": "src/components/ui/avatar.tsx",
+      "dest": "src/components/ui/avatar.tsx",
+      "note": "Verbatim (was already identical to PM version — no new AvatarBadge/Group exports used yet).",
+      "sha256": "fd03e439ae00bf718834132df24072b58a6019538329d4db47f874f247d428fc"
+    }
+  ]
+}

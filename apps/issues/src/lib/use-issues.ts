@@ -1,0 +1,510 @@
+"use client";
+
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
+import { Repository, type IssueRecord, type NewIssueInput, type IssuePatch, type SprintRecord, type ActivityRecord } from "@/lib/repository";
+import { watchContainer } from "@/lib/notifications";
+import { Announcer } from "@/lib/announce";
+import { ConflictError } from "@/lib/errors";
+import { RdfFetchError } from "@jeswr/fetch-rdf";
+import type { IssueState, StatusSlug } from "@/lib/issue";
+import type { OpenBlocker } from "@/lib/dependencies";
+import { readIssueCache, writeIssueCache } from "@/lib/issue-cache";
+import { PodSavedViews, type PodSavedView } from "@/lib/pod-saved-views";
+import type { IssueQuery } from "@/lib/filter";
+import type { View } from "@/lib/view";
+
+export type { IssueRecord, SprintRecord, ActivityRecord, WorklogRecord } from "@/lib/repository";
+
+function describe(e: unknown): string {
+  if (e instanceof ConflictError) return e.message;
+  if (e instanceof RdfFetchError) {
+    if (e.status === 401 || e.status === 403) return "You don't have access to this pod resource.";
+    return `Could not read the issue list (HTTP ${e.status ?? "?"}).`;
+  }
+  if (e instanceof Error) return e.message;
+  return "Unexpected error.";
+}
+
+/**
+ * Whether a background pod write is in flight, just landed, or failed — drives
+ * the non-intrusive global save indicator (pss-w29w). "saved" is shown briefly
+ * after a success then returns to "idle".
+ */
+export type SaveState = "idle" | "saving" | "saved" | "error";
+
+export interface UseIssues {
+  issues: IssueRecord[];
+  sprints: SprintRecord[];
+  loading: boolean;
+  /**
+   * True only while the FIRST load for a tracker is in flight with NO data yet to
+   * show. Once a cache hydrate or a fetch has produced issues, this is false even
+   * during a background revalidation — so the board never flashes a blank/loading
+   * state when cached data exists (pss-tvds).
+   */
+  initialLoading: boolean;
+  error: string | null;
+  /** Whether the signed-in user may create new issues in this tracker. */
+  canCreate: boolean;
+  /** Save indicator for optimistic board writes (pss-w29w). */
+  saveState: SaveState;
+  /**
+   * Optimistically replace the local issue list (e.g. slide a card across the
+   * board immediately), then persist via `persist`. On a persist failure the
+   * caller reverts with `setIssuesLocal` and the indicator shows "error".
+   */
+  setIssuesLocal: (updater: (issues: IssueRecord[]) => IssueRecord[]) => void;
+  /**
+   * Read the CURRENT rendered issue list synchronously (via a ref). For a
+   * deferred mutation (e.g. an inline status edit confirmed after a dependency
+   * warning) this returns the latest list, not a stale closure snapshot — so an
+   * optimistic edit is always computed against live state.
+   */
+  getIssues: () => IssueRecord[];
+  /**
+   * Run a pod write with the save indicator, WITHOUT the blocking full refresh
+   * that `update`/`setStatus` do — for optimistic board moves where the local
+   * state is already correct. Reconciles in the background on success; on failure
+   * rejects so the caller can revert. A live-sync/refresh still reconciles later.
+   */
+  persist: (write: (repo: Repository) => Promise<void>) => Promise<void>;
+  refresh: () => Promise<void>;
+  create: (input: Omit<NewIssueInput, "creator">) => Promise<void>;
+  update: (url: string, patch: IssuePatch) => Promise<void>;
+  setState: (url: string, state: IssueState) => Promise<void>;
+  setStatus: (url: string, status: StatusSlug) => Promise<void>;
+  addComment: (url: string, content: string, mentions?: string[]) => Promise<void>;
+  /**
+   * Fire an LDN assignment announce (#75 / 5u9) for an assignment made OUTSIDE the
+   * wired `update` path (create via `batch`, inline cell edits via `persist`). Pass
+   * the EXACT persisted transition — the new `assignee` and the `previousAssignee`
+   * it replaced — so the dedupe distinguishes a re-assignment from a double-fire.
+   * Fire-and-forget, self-skipping, transition-gated; a no-op signed out / cleared.
+   */
+  notifyAssignment: (input: {
+    issueUrl: string;
+    assignee?: string;
+    previousAssignee?: string;
+    issueTitle?: string;
+  }) => void;
+  /** F4: log work (seconds, optional note) against an issue, then refresh. */
+  logWork: (url: string, seconds: number, note?: string) => Promise<void>;
+  uploadAttachment: (url: string, file: { name: string; type: string; data: ArrayBuffer }) => Promise<void>;
+  removeAttachment: (url: string, fileUrl: string) => Promise<void>;
+  remove: (url: string) => Promise<void>;
+  createSprint: (title: string) => Promise<void>;
+  setSprintMembership: (sprintIri: string, issueUrl: string, member: boolean) => Promise<void>;
+  startSprint: (sprintIri: string) => Promise<void>;
+  completeSprint: (sprintIri: string, releaseUrls?: string[]) => Promise<void>;
+  /** Apply several operations against one Repository, then refresh once (bulk actions). */
+  batch: (fn: (repo: Repository) => Promise<void>) => Promise<void>;
+  /** Read an issue's provenance activity log (F3), newest first. */
+  activityLog: (url: string) => Promise<ActivityRecord[]>;
+  /**
+   * Dependency enforcement (#75 P1-4): the AUTHORITATIVE open-blocker check for an
+   * issue, read fresh from the pod. Advisory only — used to warn before a guarded
+   * transition; the caller may still proceed (override).
+   */
+  openBlockers: (url: string) => Promise<OpenBlocker[]>;
+  /**
+   * Fan out bounded reads of the F3 status-transition history for the given issues
+   * (for the three-band cumulative flow). Bounded: a few pages per issue, a few
+   * issues in flight at once.
+   */
+  statusHistory: (urls: string[]) => Promise<Map<string, { to: StatusSlug; at: Date }[]>>;
+  /** List the tracker's shareable, pod-persisted saved views (name-sorted). */
+  listSavedViews: () => Promise<PodSavedView[]>;
+  /** Save (or overwrite by name) a shareable saved view in the tracker config. */
+  saveView: (name: string, query: IssueQuery, view?: View) => Promise<PodSavedView>;
+  /** Remove a shareable saved view from the tracker config (by its IRI). */
+  removeView: (iri: string) => Promise<void>;
+}
+
+/**
+ * One fetched view of a tracker, tagged with BOTH the tracker it came from AND
+ * the authenticated WebID (`creator`) that fetched it. The render derives from a
+ * snapshot only when BOTH match the current (trackerUrl, creator) — so a view
+ * fetched by a previous user can never be shown to, or preserved for, a different
+ * later user on the same browser, even when the tracker URL is unchanged. This
+ * mirrors the WebID scoping of the durable cache (issue-cache.ts) in the live
+ * in-memory layer.
+ */
+interface TrackerSnapshot {
+  tracker: string | null;
+  /** The WebID that fetched this snapshot (null only for the empty snapshot). */
+  creator: string | null;
+  issues: IssueRecord[];
+  sprints: SprintRecord[];
+  canCreate: boolean;
+  error: string | null;
+}
+
+const EMPTY_SNAPSHOT: Omit<TrackerSnapshot, "tracker" | "creator"> = {
+  issues: [],
+  sprints: [],
+  canCreate: true,
+  error: null,
+};
+
+/**
+ * Loads and mutates the issues in a tracker (one document per issue). Mutations
+ * conditionally PUT the individual issue and refresh the list; a {@link ConflictError}
+ * (412) is rethrown for the caller to surface and retry.
+ */
+/**
+ * Seed the snapshot from the durable cache so the board paints instantly. The
+ * cache is WebID-scoped: without an authenticated WebID, or for a snapshot
+ * fetched by a different WebID, this is a MISS — so a previous user's data can
+ * never paint for the current one before authorization revalidates.
+ */
+function hydrate(webId: string | null, trackerUrl: string | null): TrackerSnapshot {
+  if (!trackerUrl || !webId) return { tracker: null, creator: null, ...EMPTY_SNAPSHOT };
+  const cached = readIssueCache(webId, trackerUrl);
+  if (!cached) return { tracker: null, creator: null, ...EMPTY_SNAPSHOT };
+  // Tag with BOTH the tracker and the WebID so the render shows the cached issues
+  // immediately (and only for this same identity); a background fetch reconciles.
+  // Sprints aren't cached (small, config-derived).
+  return { tracker: trackerUrl, creator: webId, issues: cached, sprints: [], canCreate: true, error: null };
+}
+
+export function useIssues(
+  trackerUrl: string | null,
+  creator: string | null,
+  ownStorageUrls: readonly string[] = [],
+): UseIssues {
+  // All fetched data lives in ONE snapshot tagged with its tracker, and the
+  // render derives from it only when the tag matches the current tracker. A
+  // read from a previously-open project can therefore never be rendered — or
+  // acted on — under the new one, no matter when it lands (no effect-ordering
+  // races, unlike a ref-based "is this stale?" check).
+  //
+  // The initial snapshot is hydrated SYNCHRONOUSLY from the durable cache
+  // (pss-tvds): a returning user sees their last board paint immediately, while
+  // the network fetch revalidates in the background (stale-while-revalidate).
+  const [snapshot, setSnapshot] = useState<TrackerSnapshot>(() => hydrate(creator, trackerUrl));
+  const [refreshing, setRefreshing] = useState(false);
+  const [saveState, setSaveState] = useState<SaveState>("idle");
+  // True until the first network fetch lands for the current tracker — used only
+  // to distinguish "we have nothing yet" from "we have cached/loaded data".
+  const [fetched, setFetched] = useState(false);
+
+  // A snapshot is the CURRENT view only when BOTH its tracker AND the WebID that
+  // fetched it match the active (trackerUrl, creator). If the identity changed
+  // while the tracker URL stayed the same, the previous user's snapshot is stale
+  // and is neither rendered nor preserved — it falls through to the empty view
+  // until an authorized fetch for the new identity lands.
+  const current = snapshot.tracker === trackerUrl && snapshot.creator === creator;
+  const issues = current ? snapshot.issues : [];
+  const sprints = current ? snapshot.sprints : [];
+  const canCreate = current ? snapshot.canCreate : true;
+  const error = current ? snapshot.error : null;
+  const loading = !current || refreshing;
+  // We have something to show iff the current snapshot carries issues (cache or a
+  // completed fetch). initialLoading is true ONLY when we have neither — so a
+  // cache-hydrated board is never treated as "loading" (pss-tvds).
+  const hasData = current && (snapshot.issues.length > 0 || fetched);
+  const initialLoading = !hasData && !error;
+
+  // A ref mirroring the CURRENT rendered issue list, so a deferred callback (e.g.
+  // an inline status edit confirmed after the dependency-warning dialog) can read
+  // the latest list SYNCHRONOUSLY rather than a stale closure snapshot. Updated in
+  // render so it always reflects what the user is looking at; `getIssues` exposes
+  // it without forcing callers to depend on the array identity.
+  const currentIssuesRef = useRef<IssueRecord[]>(issues);
+  currentIssuesRef.current = issues;
+  const getIssues = useCallback(() => currentIssuesRef.current, []);
+
+  // LDN inbox WRITES (#75 / 5u9): when an issue is ASSIGNED to someone, or a
+  // collaborator is @MENTIONED, POST an `as:Announce` into that collaborator's
+  // FOREIGN-pod inbox (SSRF-guarded, redirect-refusing — see announce.ts). Bound
+  // to the acting user (`creator`) so the notification's `as:actor` is them and
+  // self-notification is skipped; a fresh session-scoped de-dupe set per identity
+  // keeps the SAME assignment idempotent (mentions are per-comment). Non-blocking:
+  // the pod write always succeeds even if the notify fails; a failure surfaces as
+  // a non-intrusive toast, never a thrown error into the mutation.
+  // Loopback SSRF-policy relaxation for LOCAL development / e2e ONLY: when the app
+  // itself is served from localhost (the mandated local-CSS test topology, where a
+  // collaborator's pod is `http://localhost:<port>`), permit http/loopback targets
+  // so cross-pod announces are exercisable. A deployed (https) origin never sets
+  // this, so production stays strict https-only. Even under the relaxation, a
+  // NON-loopback private address (10.x, 169.254.169.254 metadata, …) is still
+  // refused by the guard — this only re-permits genuine loopback.
+  const devLoopback =
+    typeof location !== "undefined" &&
+    (location.hostname === "localhost" ||
+      location.hostname === "127.0.0.1" ||
+      location.hostname === "[::1]");
+  const announcer = useMemo(
+    () =>
+      creator
+        ? new Announcer({
+            actorWebId: creator,
+            onError: (message) => toast.error(message),
+            ...(devLoopback ? { guardOptions: { allowLoopback: true } } : {}),
+          })
+        : null,
+    [creator, devLoopback],
+  );
+
+  // Stable announce-assignment seam for mutation paths that write OUTSIDE the wired
+  // `update` (create via `batch`, inline cell edits via `persist` + raw
+  // `Repository.update`). Memoised so passing it into per-render controllers keeps
+  // them stable. Fire-and-forget, self-skipping, session-deduped; no-op signed out.
+  const notifyAssignment = useCallback(
+    (input: { issueUrl: string; assignee?: string; previousAssignee?: string; issueTitle?: string }) =>
+      announcer?.announceAssignment(input),
+    [announcer],
+  );
+
+  // Monotonic fetch sequence: a slow, older read (e.g. a live-sync refresh that
+  // started before a mutation's PUT) must never clobber state written by a newer
+  // one — only the latest in-flight fetch may apply its result.
+  const fetchSeq = useRef(0);
+
+  const fetchInto = useCallback(async () => {
+    if (!trackerUrl) return;
+    const seq = ++fetchSeq.current;
+    // The identity this fetch is for — stamped onto the snapshot so the result
+    // can never be rendered for a different later identity.
+    const forCreator = creator;
+    try {
+      const repo = new Repository(trackerUrl, undefined, forCreator ?? undefined);
+      const [{ issues: list, canCreate: cc }, sprintList] = await Promise.all([repo.list(), repo.listSprints()]);
+      if (seq !== fetchSeq.current) return; // a newer fetch superseded this one
+      setSnapshot({ tracker: trackerUrl, creator: forCreator, issues: list, sprints: sprintList, canCreate: cc, error: null });
+      setFetched(true);
+      // Persist the fresh list so the next reopen paints from it — scoped to the
+      // active WebID so it only ever rehydrates for this same identity.
+      writeIssueCache(forCreator, trackerUrl, list);
+    } catch (e) {
+      if (seq !== fetchSeq.current) return;
+      // Keep the last good data for THIS (tracker, identity) only; never carry
+      // another tracker's OR another user's data over. A creator mismatch starts
+      // a fresh error snapshot rather than annotating the previous user's view.
+      setSnapshot((prev) =>
+        prev.tracker === trackerUrl && prev.creator === forCreator
+          ? { ...prev, error: describe(e) }
+          : { tracker: trackerUrl, creator: forCreator, ...EMPTY_SNAPSHOT, error: describe(e) },
+      );
+    } finally {
+      if (seq === fetchSeq.current) setRefreshing(false);
+    }
+  }, [trackerUrl, creator]);
+
+  const refresh = useCallback(async () => {
+    if (trackerUrl) setRefreshing(true); // fetchInto no-ops without a tracker
+    await fetchInto();
+  }, [trackerUrl, fetchInto]);
+
+  // When the tracker OR the active identity changes, re-hydrate from that
+  // (WebID, tracker)'s cache (instant paint) and reset the first-load flag so the
+  // new board doesn't inherit the old one's "loaded" status. On a cache MISS
+  // (no entry for this identity/tracker, or no authenticated WebID) we install
+  // the EMPTY snapshot — never leave the previous identity's in-memory data
+  // standing for the new one to render before an authorized fetch lands.
+  useEffect(() => {
+    setFetched(false);
+    setSnapshot(hydrate(creator, trackerUrl));
+  }, [creator, trackerUrl]);
+
+  useEffect(() => {
+    // Client-side mount fetch; setState only runs after the await inside fetchInto.
+
+    void fetchInto();
+  }, [fetchInto]);
+
+  // Stable join of the own-storage roots so the live-sync effect doesn't re-run
+  // (and re-subscribe) when the caller passes a fresh array of the same values.
+  const ownStorageKey = ownStorageUrls.join("\n");
+
+  // Live-sync: refresh (debounced) when the tracker's container changes in the
+  // pod. The own-pod storage roots gate the WebSocket subscription's SSRF guard
+  // (notifications.ts) — a foreign subscription/socket URL degrades to polling.
+  useEffect(() => {
+    if (!trackerUrl) return;
+    const containerUrl = new Repository(trackerUrl).containerUrl;
+    const ownStorage = ownStorageKey ? ownStorageKey.split("\n") : [];
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const sync = watchContainer(
+      containerUrl,
+      () => {
+        if (timer) clearTimeout(timer);
+        timer = setTimeout(() => void fetchInto(), 800);
+      },
+      { ownStorageUrls: ownStorage },
+    );
+    return () => {
+      sync.close();
+      if (timer) clearTimeout(timer);
+    };
+  }, [trackerUrl, fetchInto, ownStorageKey]);
+
+  const mutate = useCallback(
+    async (apply: (r: Repository) => Promise<unknown>) => {
+      if (!trackerUrl) throw new Error("Not signed in.");
+      await apply(new Repository(trackerUrl, undefined, creator ?? undefined));
+      await refresh();
+    },
+    [trackerUrl, creator, refresh],
+  );
+
+  // Optimistic local edit of the issue list (board moves slide instantly).
+  const setIssuesLocal = useCallback(
+    (updater: (issues: IssueRecord[]) => IssueRecord[]) => {
+      setSnapshot((prev) => {
+        // Never edit another tracker's OR another user's snapshot.
+        if (prev.tracker !== trackerUrl || prev.creator !== creator) return prev;
+        const next = updater(prev.issues);
+        // Keep the cache in lock-step so a reopen mid-write paints the optimistic
+        // state — scoped to the active WebID (writeIssueCache no-ops without one).
+        if (trackerUrl) writeIssueCache(creator, trackerUrl, next);
+        return { ...prev, issues: next };
+      });
+    },
+    [creator, trackerUrl],
+  );
+
+  // A "saved" flash auto-clears back to idle so the indicator is non-intrusive.
+  const savedTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => { if (savedTimer.current) clearTimeout(savedTimer.current); }, []);
+  const flashSaved = useCallback(() => {
+    setSaveState("saved");
+    if (savedTimer.current) clearTimeout(savedTimer.current);
+    savedTimer.current = setTimeout(() => setSaveState("idle"), 1500);
+  }, []);
+
+  // Persist an optimistic board write: show "Saving…", run the pod write WITHOUT
+  // the blocking refresh, then a background reconcile (so a coupled change the
+  // server made — e.g. wf:Closed alongside the status — lands too). On failure,
+  // surface "error" and reject so the caller reverts the card.
+  const persist = useCallback(
+    async (write: (repo: Repository) => Promise<void>) => {
+      if (!trackerUrl) throw new Error("Not signed in.");
+      setSaveState("saving");
+      try {
+        await write(new Repository(trackerUrl, undefined, creator ?? undefined));
+        flashSaved();
+        void fetchInto(); // background reconcile; does not block the smooth move
+      } catch (e) {
+        setSaveState("error");
+        throw e;
+      }
+    },
+    [trackerUrl, creator, flashSaved, fetchInto],
+  );
+
+  // Read-only fetch of an issue's provenance activity log (F3), not part of the
+  // list snapshot — the detail view loads it on demand.
+  const activityLog = useCallback(
+    async (url: string) => {
+      if (!trackerUrl || !url) return [];
+      return new Repository(trackerUrl, undefined, creator ?? undefined).activityLog(url);
+    },
+    [trackerUrl, creator],
+  );
+
+  // Dependency enforcement (#75 P1-4): authoritative open-blocker check, read
+  // fresh from the pod. Not part of the list snapshot — the transition path calls
+  // it on demand to warn (never block) before starting/completing a blocked issue.
+  const openBlockers = useCallback(
+    async (url: string) => {
+      if (!trackerUrl || !url) return [];
+      return new Repository(trackerUrl, undefined, creator ?? undefined).openBlockers(url);
+    },
+    [trackerUrl, creator],
+  );
+
+  // Bounded fan-out of status-transition history for the three-band CFD.
+  const statusHistory = useCallback(
+    async (urls: string[]) => {
+      if (!trackerUrl || urls.length === 0) return new Map<string, { to: StatusSlug; at: Date }[]>();
+      return new Repository(trackerUrl, undefined, creator ?? undefined).dashboardStatusHistory(urls);
+    },
+    [trackerUrl, creator],
+  );
+
+  // Shareable, pod-persisted saved views (tracker-config reads/writes). These do
+  // NOT touch the issue list, so they bypass the blocking issue refresh in
+  // `mutate` — they operate directly on a fresh Repository.
+  const listSavedViews = useCallback(async () => {
+    if (!trackerUrl) return [];
+    return new PodSavedViews(new Repository(trackerUrl, undefined, creator ?? undefined)).list();
+  }, [trackerUrl, creator]);
+
+  const saveView = useCallback(
+    async (name: string, query: IssueQuery, view?: View) => {
+      if (!trackerUrl) throw new Error("Not signed in.");
+      return new PodSavedViews(new Repository(trackerUrl, undefined, creator ?? undefined)).save(name, query, view);
+    },
+    [trackerUrl, creator],
+  );
+
+  const removeView = useCallback(
+    async (iri: string) => {
+      if (!trackerUrl) throw new Error("Not signed in.");
+      await new PodSavedViews(new Repository(trackerUrl, undefined, creator ?? undefined)).remove(iri);
+    },
+    [trackerUrl, creator],
+  );
+
+  return {
+    issues,
+    sprints,
+    loading,
+    initialLoading,
+    error,
+    canCreate,
+    saveState,
+    setIssuesLocal,
+    getIssues,
+    persist,
+    refresh,
+    create: (input) => mutate((r) => r.create({ ...input, creator: creator ?? undefined })),
+    update: (url, patch) => {
+      // Snapshot the assignee BEFORE the write so we only announce a real change
+      // (transition-gated in the Announcer against `previousAssignee`).
+      const before = getIssues().find((i) => i.url === url);
+      return mutate(async (r) => {
+        await r.update(url, patch);
+        if ("assignee" in patch) {
+          announcer?.announceAssignment({
+            issueUrl: url,
+            issueTitle: patch.title ?? before?.title,
+            assignee: patch.assignee,
+            previousAssignee: before?.assignee,
+          });
+        }
+      });
+    },
+    setState: (url, state) => mutate((r) => r.setState(url, state)),
+    setStatus: (url, status) => mutate((r) => r.setStatus(url, status)),
+    addComment: (url, content, mentions) =>
+      mutate(async (r) => {
+        await r.addComment(url, content, creator ?? undefined, mentions);
+        if (mentions && mentions.length > 0) {
+          announcer?.announceMentions({
+            issueUrl: url,
+            issueTitle: getIssues().find((i) => i.url === url)?.title,
+            mentions,
+          });
+        }
+      }),
+    notifyAssignment,
+    logWork: (url, seconds, note) => mutate((r) => r.logWork(url, seconds, note)),
+    uploadAttachment: (url, file) => mutate(async (r) => void (await r.uploadAttachment(url, file))),
+    removeAttachment: (url, fileUrl) => mutate((r) => r.removeAttachment(url, fileUrl)),
+    remove: (url) => mutate((r) => r.remove(url)),
+    createSprint: (title) => mutate((r) => r.createSprint(title).then(() => undefined)),
+    setSprintMembership: (sprintIri, issueUrl, member) => mutate((r) => r.setSprintMembership(sprintIri, issueUrl, member)),
+    startSprint: (sprintIri) => mutate((r) => r.startSprint(sprintIri)),
+    completeSprint: (sprintIri, releaseUrls) => mutate((r) => r.completeSprint(sprintIri, releaseUrls)),
+    batch: (fn) => mutate(fn),
+    activityLog,
+    openBlockers,
+    statusHistory,
+    listSavedViews,
+    saveView,
+    removeView,
+  };
+}
