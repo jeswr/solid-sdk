@@ -1,0 +1,7 @@
+node_modules/
+coverage/
+*.tsbuildinfo
+.DS_Store
+temp/
+.smoke-analysis-out/
+# NOTE: dist/ is intentionally COMMITTED (GitHub-installable under ignore-scripts).

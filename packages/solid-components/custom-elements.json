@@ -1,0 +1,4671 @@
+{
+  "schemaVersion": "1.0.0",
+  "readme": "",
+  "modules": [
+    {
+      "kind": "javascript-module",
+      "path": "src/components/bookmark-form.ts",
+      "declarations": [
+        {
+          "kind": "class",
+          "description": "An editable `book:Bookmark` form element.",
+          "name": "JeswrBookmarkForm",
+          "cssParts": [
+            {
+              "description": "The inner editable <jeswr-shacl-form>.",
+              "name": "form"
+            },
+            {
+              "description": "Placeholder when no `src` is set.",
+              "name": "empty"
+            }
+          ],
+          "members": [
+            {
+              "kind": "method",
+              "name": "shapeTurtle",
+              "privacy": "protected",
+              "return": {
+                "type": {
+                  "text": "string"
+                }
+              },
+              "description": "The model's SHACL shape graph as inline Turtle.",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            },
+            {
+              "kind": "method",
+              "name": "applyFormDeltaToExisting",
+              "privacy": "protected",
+              "return": {
+                "type": {
+                  "text": "void"
+                }
+              },
+              "parameters": [
+                {
+                  "name": "formGraph",
+                  "type": {
+                    "text": "Store"
+                  }
+                },
+                {
+                  "name": "existing",
+                  "type": {
+                    "text": "Store"
+                  }
+                },
+                {
+                  "name": "resourceUrl",
+                  "type": {
+                    "text": "string"
+                  }
+                }
+              ],
+              "description": "Apply the form's edited values to the LOADED existing graph through the model's\nTYPED accessors. `formGraph` is shacl-form's `toRDF()` output (only the shaped\nnode's triples); `existing` is the loaded resource graph (every existing triple\nintact). Read the edited values from `formGraph` via the model's `parse*`, then\nwrite them onto `existing` via the model's typed setters — so only the shape's\npredicates change, dual-predicate writes happen, and untouched triples survive.\nMUST NOT hand-build a quad. Mutates `existing` in place (return is optional).",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "src",
+              "privacy": "public",
+              "type": {
+                "text": "string | undefined"
+              },
+              "description": "The resource URL to edit. Setting it (re)renders the bound form.",
+              "default": "undefined",
+              "attribute": "src",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "fetch",
+              "privacy": "public",
+              "type": {
+                "text": "typeof fetch | undefined"
+              },
+              "description": "The session-bound authenticated fetch (used for BOTH the read + the §10 write).",
+              "default": "undefined",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "publicFetch",
+              "privacy": "public",
+              "type": {
+                "text": "typeof fetch | undefined"
+              },
+              "description": "The credential-free fetch for a public/foreign DATA read (rare for an editor).",
+              "default": "undefined",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "base",
+              "privacy": "public",
+              "type": {
+                "text": "string | undefined"
+              },
+              "description": "The base URL writes are confined to (the DataWriter scope guard). Defaults to\nthe resource's own directory when unset, so a save can never leave the edited\nresource's container.",
+              "default": "undefined",
+              "attribute": "base",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "publicRead",
+              "privacy": "public",
+              "type": {
+                "text": "boolean"
+              },
+              "description": "Read the DATA graph with the credential-free `publicFetch` (a foreign/public\nresource) instead of the authenticated `fetch`. The credential boundary still\napplies: with `publicRead` set, `publicFetch` MUST be provided (the resolver\nfails closed otherwise). NOTE this affects only the data READ that POPULATES the\nform — a SAVE is always an authenticated own-origin write (there is no public\nwrite), so editing a public-read resource still needs `fetch` set to save.",
+              "default": "false",
+              "attribute": "public-read",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "resolveOptions",
+              "privacy": "public",
+              "type": {
+                "text": "ResolveOptions | undefined"
+              },
+              "description": "Resolver options forwarded to the §9 pre-fetch (max bytes / timeout / test stub).",
+              "default": "undefined",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            },
+            {
+              "kind": "method",
+              "name": "mergeSaveCallback",
+              "privacy": "protected",
+              "return": {
+                "type": {
+                  "text": "MergeSaveCallback"
+                }
+              },
+              "description": "The §10 merge-save callback handed to <jeswr-shacl-form>. Builds a DataWriter\nscoped to `base` (or the resource directory) and runs `saveMerged`, whose mutator\ndelegates to the subclass's applyFormDeltaToExisting on the LOADED graph.",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            },
+            {
+              "kind": "method",
+              "name": "dataSource",
+              "privacy": "protected",
+              "return": {
+                "type": {
+                  "text": "GraphSource | undefined"
+                }
+              },
+              "description": "Build the data-graph source for the inner form: the resource at `src`, read with\nthe authenticated `fetch` — OR, when `publicRead` is set, with the credential-free\n`publicFetch` (the resolver fails closed if `publicFetch` is then missing, so the\nsession token never leaks to a foreign read). Honours the same `public-read`\ncontract as the read elements.",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "#onChildState",
+              "privacy": "private",
+              "description": "Forward a child <jeswr-shacl-form>'s save state up so this element can reflect it.",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            },
+            {
+              "kind": "method",
+              "name": "save",
+              "return": {
+                "type": {
+                  "text": "Promise<boolean>"
+                }
+              },
+              "description": "Imperatively trigger a save on the inner editable form.",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            },
+            {
+              "kind": "method",
+              "name": "#onSave",
+              "privacy": "private",
+              "return": {
+                "type": {
+                  "text": "void"
+                }
+              },
+              "parameters": [
+                {
+                  "name": "e",
+                  "type": {
+                    "text": "CustomEvent<SaveEventDetail>"
+                  }
+                }
+              ],
+              "description": "Re-emit the inner form's save as THIS element's own event (so a consumer listens\non the per-class form, with this element as the event target) + mirror the state.\nSTOP the child's bubbling event first so a consumer listening on this element or\nan ancestor does NOT receive a DUPLICATE `jeswr-save` (the inner event bubbles +\ncomposes; we replace it with one re-targeted to this element).",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            }
+          ],
+          "superclass": {
+            "name": "AbstractFormElement",
+            "module": "/src/components/form-base.js"
+          },
+          "solid": {
+            "class": "https://w3id.org/jeswr/bookmark#Bookmark",
+            "mode": "edit",
+            "cardinality": "one"
+          },
+          "tagName": "jeswr-bookmark-form",
+          "customElement": true,
+          "attributes": [
+            {
+              "name": "src",
+              "type": {
+                "text": "string | undefined"
+              },
+              "description": "The resource URL to edit. Setting it (re)renders the bound form.",
+              "default": "undefined",
+              "fieldName": "src",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            },
+            {
+              "name": "base",
+              "type": {
+                "text": "string | undefined"
+              },
+              "description": "The base URL writes are confined to (the DataWriter scope guard). Defaults to\nthe resource's own directory when unset, so a save can never leave the edited\nresource's container.",
+              "default": "undefined",
+              "fieldName": "base",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            },
+            {
+              "name": "public-read",
+              "type": {
+                "text": "boolean"
+              },
+              "description": "Read the DATA graph with the credential-free `publicFetch` (a foreign/public\nresource) instead of the authenticated `fetch`. The credential boundary still\napplies: with `publicRead` set, `publicFetch` MUST be provided (the resolver\nfails closed otherwise). NOTE this affects only the data READ that POPULATES the\nform — a SAVE is always an authenticated own-origin write (there is no public\nwrite), so editing a public-read resource still needs `fetch` set to save.",
+              "default": "false",
+              "fieldName": "publicRead",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            }
+          ],
+          "events": [
+            {
+              "name": "jeswr-save",
+              "type": {
+                "text": "CustomEvent"
+              },
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            }
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "kind": "js",
+          "name": "JeswrBookmarkForm",
+          "declaration": {
+            "name": "JeswrBookmarkForm",
+            "module": "src/components/bookmark-form.ts"
+          }
+        },
+        {
+          "kind": "custom-element-definition",
+          "name": "jeswr-bookmark-form",
+          "declaration": {
+            "name": "JeswrBookmarkForm",
+            "module": "src/components/bookmark-form.ts"
+          }
+        }
+      ]
+    },
+    {
+      "kind": "javascript-module",
+      "path": "src/components/bookmark-list.ts",
+      "declarations": [
+        {
+          "kind": "class",
+          "description": "A read-only `book:Bookmark` list element.",
+          "name": "JeswrBookmarkList",
+          "cssParts": [
+            {
+              "description": "The <ul> wrapping the bookmarks.",
+              "name": "list"
+            },
+            {
+              "description": "One bookmark <li>.",
+              "name": "bookmark"
+            },
+            {
+              "description": "A bookmark's title (a link to its url).",
+              "name": "title"
+            },
+            {
+              "description": "A bookmark's tag list.",
+              "name": "tags"
+            },
+            {
+              "description": "A bookmark's metadata (created / archived).",
+              "name": "meta"
+            },
+            {
+              "description": "Placeholder when the graph holds no bookmarks.",
+              "name": "empty"
+            },
+            {
+              "description": "The error message when the read fails.",
+              "name": "error"
+            },
+            {
+              "description": "Placeholder shown while reading.",
+              "name": "loading"
+            }
+          ],
+          "members": [
+            {
+              "kind": "method",
+              "name": "loadFrom",
+              "privacy": "protected",
+              "return": {
+                "type": {
+                  "text": "Promise<{ graph: Store; baseUrl: string }>"
+                }
+              },
+              "parameters": [
+                {
+                  "name": "controller",
+                  "type": {
+                    "text": "DataController"
+                  }
+                },
+                {
+                  "name": "src",
+                  "type": {
+                    "text": "string"
+                  }
+                },
+                {
+                  "name": "publicRead",
+                  "type": {
+                    "text": "boolean"
+                  }
+                }
+              ],
+              "description": "Read this element's resource through the controller and return the parsed graph\nplus the base URL its subjects resolve against. A single-resource element calls\n`controller.read`; a container element calls `controller.listContainer`.",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            },
+            {
+              "kind": "method",
+              "name": "renderReady",
+              "privacy": "protected",
+              "return": {
+                "type": {
+                  "text": "TemplateResult"
+                }
+              },
+              "parameters": [
+                {
+                  "name": "graph",
+                  "type": {
+                    "text": "Store"
+                  }
+                }
+              ],
+              "description": "Render the parsed model once `status === \"ready\"` (the subject graph in `graph`).",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            },
+            {
+              "kind": "method",
+              "name": "#renderBookmark",
+              "privacy": "private",
+              "return": {
+                "type": {
+                  "text": "TemplateResult"
+                }
+              },
+              "parameters": [
+                {
+                  "name": "bookmark",
+                  "type": {
+                    "text": "Bookmark"
+                  }
+                }
+              ]
+            },
+            {
+              "kind": "field",
+              "name": "src",
+              "privacy": "public",
+              "type": {
+                "text": "string | undefined"
+              },
+              "description": "The resource / container URL to read. Setting it (re)reads through the seam.",
+              "default": "undefined",
+              "attribute": "src",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "fetch",
+              "privacy": "public",
+              "type": {
+                "text": "typeof fetch | undefined"
+              },
+              "description": "The session-bound authenticated fetch (the user's origin).",
+              "default": "undefined",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "publicFetch",
+              "privacy": "public",
+              "type": {
+                "text": "typeof fetch | undefined"
+              },
+              "description": "The credential-free fetch for foreign/public reads (no fallback — see DataSeam).",
+              "default": "undefined",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "publicRead",
+              "privacy": "public",
+              "type": {
+                "text": "boolean"
+              },
+              "description": "Read with the public (credential-free) fetch — for a foreign-origin `src`.",
+              "default": "false",
+              "attribute": "public-read",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "store",
+              "privacy": "public",
+              "type": {
+                "text": "Store | undefined"
+              },
+              "description": "A pre-parsed n3 Store to render directly, bypassing the network. When set it\ntakes precedence over `src` for the NEXT render. (The codegen/test seam — render\na graph already in hand with no fetch.) NOTE: deliberately named `store`, NOT\n`dataset`, because `HTMLElement.dataset` is a reserved DOM property (a\n`DOMStringMap`); shadowing it with an n3 Store would break the element type.",
+              "default": "undefined",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "#readToken",
+              "privacy": "private",
+              "type": {
+                "text": "number"
+              },
+              "default": "0",
+              "description": "A monotonically increasing token to drop the result of a superseded read.",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            },
+            {
+              "kind": "method",
+              "name": "inputProps",
+              "privacy": "protected",
+              "return": {
+                "type": {
+                  "text": "readonly string[]"
+                }
+              },
+              "description": "The input prop names this element re-reads on. Override to extend the base set.",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            },
+            {
+              "kind": "method",
+              "name": "#applyDirectStore",
+              "privacy": "private",
+              "return": {
+                "type": {
+                  "text": "Promise<void>"
+                }
+              },
+              "description": "Render the directly-set `store` (no network), or fall back to idle when cleared.",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            },
+            {
+              "kind": "method",
+              "name": "#read",
+              "privacy": "private",
+              "return": {
+                "type": {
+                  "text": "Promise<void>"
+                }
+              },
+              "description": "Read `src` through a DataController, classify any failure, drop a superseded result.",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            }
+          ],
+          "superclass": {
+            "name": "AbstractReadElement",
+            "module": "/src/components/shared.js"
+          },
+          "solid": {
+            "class": "https://w3id.org/jeswr/bookmark#Bookmark",
+            "mode": "view",
+            "cardinality": "container"
+          },
+          "tagName": "jeswr-bookmark-list",
+          "customElement": true,
+          "attributes": [
+            {
+              "name": "src",
+              "type": {
+                "text": "string | undefined"
+              },
+              "description": "The resource / container URL to read. Setting it (re)reads through the seam.",
+              "default": "undefined",
+              "fieldName": "src",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            },
+            {
+              "name": "public-read",
+              "type": {
+                "text": "boolean"
+              },
+              "description": "Read with the public (credential-free) fetch — for a foreign-origin `src`.",
+              "default": "false",
+              "fieldName": "publicRead",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            }
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "kind": "js",
+          "name": "JeswrBookmarkList",
+          "declaration": {
+            "name": "JeswrBookmarkList",
+            "module": "src/components/bookmark-list.ts"
+          }
+        },
+        {
+          "kind": "custom-element-definition",
+          "name": "jeswr-bookmark-list",
+          "declaration": {
+            "name": "JeswrBookmarkList",
+            "module": "src/components/bookmark-list.ts"
+          }
+        }
+      ]
+    },
+    {
+      "kind": "javascript-module",
+      "path": "src/components/collection.ts",
+      "declarations": [
+        {
+          "kind": "class",
+          "description": "A generic LDP container listing element.\n\n(No `@solid-class` for a NAMED model class: it binds the generic `ldp:Container` /\n`ldp:BasicContainer` — declared in the resolver map as the lowest-priority fallback\n— rather than a domain class. Advertised here so the CEM still records the binding.)",
+          "name": "JeswrCollection",
+          "cssParts": [
+            {
+              "description": "The <ul> of children.",
+              "name": "list"
+            },
+            {
+              "description": "One child <li>.",
+              "name": "child"
+            },
+            {
+              "description": "A child's link.",
+              "name": "link"
+            },
+            {
+              "description": "A child's container/type badge.",
+              "name": "type"
+            },
+            {
+              "description": "Placeholder when the container is empty.",
+              "name": "empty"
+            },
+            {
+              "description": "The error message when the read fails.",
+              "name": "error"
+            },
+            {
+              "description": "Placeholder shown while reading.",
+              "name": "loading"
+            }
+          ],
+          "members": [
+            {
+              "kind": "field",
+              "name": "typeIndex",
+              "privacy": "public",
+              "type": {
+                "text": "TypeIndexEntry[] | undefined"
+              },
+              "description": "Optional injected Solid Type Index registrations, so a child container that is a\nregistered `solid:instanceContainer` is labelled by its class. Phase-1 does not\nfetch the index itself (a documented follow-up); a consumer with the registrations\npasses them here.",
+              "default": "undefined"
+            },
+            {
+              "kind": "field",
+              "name": "#children",
+              "privacy": "private",
+              "type": {
+                "text": "ContainerChild[]"
+              },
+              "default": "[]",
+              "description": "The children of the last listing (kept so render uses the listing, not a re-scan)."
+            },
+            {
+              "kind": "method",
+              "name": "inputProps",
+              "privacy": "protected",
+              "return": {
+                "type": {
+                  "text": "readonly string[]"
+                }
+              },
+              "description": "The input prop names this element re-reads on. Override to extend the base set.",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            },
+            {
+              "kind": "method",
+              "name": "loadFrom",
+              "privacy": "protected",
+              "return": {
+                "type": {
+                  "text": "Promise<{ graph: Store; baseUrl: string }>"
+                }
+              },
+              "parameters": [
+                {
+                  "name": "controller",
+                  "type": {
+                    "text": "DataController"
+                  }
+                },
+                {
+                  "name": "src",
+                  "type": {
+                    "text": "string"
+                  }
+                },
+                {
+                  "name": "publicRead",
+                  "type": {
+                    "text": "boolean"
+                  }
+                }
+              ],
+              "description": "Read this element's resource through the controller and return the parsed graph\nplus the base URL its subjects resolve against. A single-resource element calls\n`controller.read`; a container element calls `controller.listContainer`.",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            },
+            {
+              "kind": "method",
+              "name": "renderReady",
+              "privacy": "protected",
+              "return": {
+                "type": {
+                  "text": "TemplateResult"
+                }
+              },
+              "parameters": [
+                {
+                  "name": "graph",
+                  "type": {
+                    "text": "Store"
+                  }
+                },
+                {
+                  "name": "baseUrl",
+                  "type": {
+                    "text": "string"
+                  }
+                }
+              ],
+              "description": "Render the parsed model once `status === \"ready\"` (the subject graph in `graph`).",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            },
+            {
+              "kind": "method",
+              "name": "#renderChild",
+              "privacy": "private",
+              "return": {
+                "type": {
+                  "text": "TemplateResult"
+                }
+              },
+              "parameters": [
+                {
+                  "name": "child",
+                  "type": {
+                    "text": "ContainerChild"
+                  }
+                },
+                {
+                  "name": "labels",
+                  "type": {
+                    "text": "ReadonlyMap<string, string>"
+                  }
+                }
+              ]
+            },
+            {
+              "kind": "field",
+              "name": "src",
+              "privacy": "public",
+              "type": {
+                "text": "string | undefined"
+              },
+              "description": "The resource / container URL to read. Setting it (re)reads through the seam.",
+              "default": "undefined",
+              "attribute": "src",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "fetch",
+              "privacy": "public",
+              "type": {
+                "text": "typeof fetch | undefined"
+              },
+              "description": "The session-bound authenticated fetch (the user's origin).",
+              "default": "undefined",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "publicFetch",
+              "privacy": "public",
+              "type": {
+                "text": "typeof fetch | undefined"
+              },
+              "description": "The credential-free fetch for foreign/public reads (no fallback — see DataSeam).",
+              "default": "undefined",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "publicRead",
+              "privacy": "public",
+              "type": {
+                "text": "boolean"
+              },
+              "description": "Read with the public (credential-free) fetch — for a foreign-origin `src`.",
+              "default": "false",
+              "attribute": "public-read",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "store",
+              "privacy": "public",
+              "type": {
+                "text": "Store | undefined"
+              },
+              "description": "A pre-parsed n3 Store to render directly, bypassing the network. When set it\ntakes precedence over `src` for the NEXT render. (The codegen/test seam — render\na graph already in hand with no fetch.) NOTE: deliberately named `store`, NOT\n`dataset`, because `HTMLElement.dataset` is a reserved DOM property (a\n`DOMStringMap`); shadowing it with an n3 Store would break the element type.",
+              "default": "undefined",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "#readToken",
+              "privacy": "private",
+              "type": {
+                "text": "number"
+              },
+              "default": "0",
+              "description": "A monotonically increasing token to drop the result of a superseded read.",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            },
+            {
+              "kind": "method",
+              "name": "#applyDirectStore",
+              "privacy": "private",
+              "return": {
+                "type": {
+                  "text": "Promise<void>"
+                }
+              },
+              "description": "Render the directly-set `store` (no network), or fall back to idle when cleared.",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            },
+            {
+              "kind": "method",
+              "name": "#read",
+              "privacy": "private",
+              "return": {
+                "type": {
+                  "text": "Promise<void>"
+                }
+              },
+              "description": "Read `src` through a DataController, classify any failure, drop a superseded result.",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            }
+          ],
+          "superclass": {
+            "name": "AbstractReadElement",
+            "module": "/src/components/shared.js"
+          },
+          "solid": {
+            "class": "http://www.w3.org/ns/ldp#Container",
+            "mode": "view",
+            "cardinality": "container"
+          },
+          "tagName": "jeswr-collection",
+          "customElement": true,
+          "attributes": [
+            {
+              "name": "src",
+              "type": {
+                "text": "string | undefined"
+              },
+              "description": "The resource / container URL to read. Setting it (re)reads through the seam.",
+              "default": "undefined",
+              "fieldName": "src",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            },
+            {
+              "name": "public-read",
+              "type": {
+                "text": "boolean"
+              },
+              "description": "Read with the public (credential-free) fetch — for a foreign-origin `src`.",
+              "default": "false",
+              "fieldName": "publicRead",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            }
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "kind": "js",
+          "name": "JeswrCollection",
+          "declaration": {
+            "name": "JeswrCollection",
+            "module": "src/components/collection.ts"
+          }
+        },
+        {
+          "kind": "custom-element-definition",
+          "name": "jeswr-collection",
+          "declaration": {
+            "name": "JeswrCollection",
+            "module": "src/components/collection.ts"
+          }
+        }
+      ]
+    },
+    {
+      "kind": "javascript-module",
+      "path": "src/components/contact-form.ts",
+      "declarations": [
+        {
+          "kind": "class",
+          "description": "An editable `vcard:Individual` contact form element.",
+          "name": "JeswrContactForm",
+          "cssParts": [
+            {
+              "description": "The inner editable <jeswr-shacl-form>.",
+              "name": "form"
+            },
+            {
+              "description": "Placeholder when no `src` is set.",
+              "name": "empty"
+            }
+          ],
+          "members": [
+            {
+              "kind": "method",
+              "name": "shapeTurtle",
+              "privacy": "protected",
+              "return": {
+                "type": {
+                  "text": "string"
+                }
+              },
+              "description": "The model's SHACL shape graph as inline Turtle.",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            },
+            {
+              "kind": "method",
+              "name": "applyFormDeltaToExisting",
+              "privacy": "protected",
+              "return": {
+                "type": {
+                  "text": "void"
+                }
+              },
+              "parameters": [
+                {
+                  "name": "formGraph",
+                  "type": {
+                    "text": "Store"
+                  }
+                },
+                {
+                  "name": "existing",
+                  "type": {
+                    "text": "Store"
+                  }
+                },
+                {
+                  "name": "resourceUrl",
+                  "type": {
+                    "text": "string"
+                  }
+                }
+              ],
+              "description": "Apply the form's edited values to the LOADED existing graph through the model's\nTYPED accessors. `formGraph` is shacl-form's `toRDF()` output (only the shaped\nnode's triples); `existing` is the loaded resource graph (every existing triple\nintact). Read the edited values from `formGraph` via the model's `parse*`, then\nwrite them onto `existing` via the model's typed setters — so only the shape's\npredicates change, dual-predicate writes happen, and untouched triples survive.\nMUST NOT hand-build a quad. Mutates `existing` in place (return is optional).",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "src",
+              "privacy": "public",
+              "type": {
+                "text": "string | undefined"
+              },
+              "description": "The resource URL to edit. Setting it (re)renders the bound form.",
+              "default": "undefined",
+              "attribute": "src",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "fetch",
+              "privacy": "public",
+              "type": {
+                "text": "typeof fetch | undefined"
+              },
+              "description": "The session-bound authenticated fetch (used for BOTH the read + the §10 write).",
+              "default": "undefined",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "publicFetch",
+              "privacy": "public",
+              "type": {
+                "text": "typeof fetch | undefined"
+              },
+              "description": "The credential-free fetch for a public/foreign DATA read (rare for an editor).",
+              "default": "undefined",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "base",
+              "privacy": "public",
+              "type": {
+                "text": "string | undefined"
+              },
+              "description": "The base URL writes are confined to (the DataWriter scope guard). Defaults to\nthe resource's own directory when unset, so a save can never leave the edited\nresource's container.",
+              "default": "undefined",
+              "attribute": "base",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "publicRead",
+              "privacy": "public",
+              "type": {
+                "text": "boolean"
+              },
+              "description": "Read the DATA graph with the credential-free `publicFetch` (a foreign/public\nresource) instead of the authenticated `fetch`. The credential boundary still\napplies: with `publicRead` set, `publicFetch` MUST be provided (the resolver\nfails closed otherwise). NOTE this affects only the data READ that POPULATES the\nform — a SAVE is always an authenticated own-origin write (there is no public\nwrite), so editing a public-read resource still needs `fetch` set to save.",
+              "default": "false",
+              "attribute": "public-read",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "resolveOptions",
+              "privacy": "public",
+              "type": {
+                "text": "ResolveOptions | undefined"
+              },
+              "description": "Resolver options forwarded to the §9 pre-fetch (max bytes / timeout / test stub).",
+              "default": "undefined",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            },
+            {
+              "kind": "method",
+              "name": "mergeSaveCallback",
+              "privacy": "protected",
+              "return": {
+                "type": {
+                  "text": "MergeSaveCallback"
+                }
+              },
+              "description": "The §10 merge-save callback handed to <jeswr-shacl-form>. Builds a DataWriter\nscoped to `base` (or the resource directory) and runs `saveMerged`, whose mutator\ndelegates to the subclass's applyFormDeltaToExisting on the LOADED graph.",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            },
+            {
+              "kind": "method",
+              "name": "dataSource",
+              "privacy": "protected",
+              "return": {
+                "type": {
+                  "text": "GraphSource | undefined"
+                }
+              },
+              "description": "Build the data-graph source for the inner form: the resource at `src`, read with\nthe authenticated `fetch` — OR, when `publicRead` is set, with the credential-free\n`publicFetch` (the resolver fails closed if `publicFetch` is then missing, so the\nsession token never leaks to a foreign read). Honours the same `public-read`\ncontract as the read elements.",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "#onChildState",
+              "privacy": "private",
+              "description": "Forward a child <jeswr-shacl-form>'s save state up so this element can reflect it.",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            },
+            {
+              "kind": "method",
+              "name": "save",
+              "return": {
+                "type": {
+                  "text": "Promise<boolean>"
+                }
+              },
+              "description": "Imperatively trigger a save on the inner editable form.",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            },
+            {
+              "kind": "method",
+              "name": "#onSave",
+              "privacy": "private",
+              "return": {
+                "type": {
+                  "text": "void"
+                }
+              },
+              "parameters": [
+                {
+                  "name": "e",
+                  "type": {
+                    "text": "CustomEvent<SaveEventDetail>"
+                  }
+                }
+              ],
+              "description": "Re-emit the inner form's save as THIS element's own event (so a consumer listens\non the per-class form, with this element as the event target) + mirror the state.\nSTOP the child's bubbling event first so a consumer listening on this element or\nan ancestor does NOT receive a DUPLICATE `jeswr-save` (the inner event bubbles +\ncomposes; we replace it with one re-targeted to this element).",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            }
+          ],
+          "superclass": {
+            "name": "AbstractFormElement",
+            "module": "/src/components/form-base.js"
+          },
+          "solid": {
+            "class": "http://www.w3.org/2006/vcard/ns#Individual",
+            "mode": "edit",
+            "cardinality": "one"
+          },
+          "tagName": "jeswr-contact-form",
+          "customElement": true,
+          "attributes": [
+            {
+              "name": "src",
+              "type": {
+                "text": "string | undefined"
+              },
+              "description": "The resource URL to edit. Setting it (re)renders the bound form.",
+              "default": "undefined",
+              "fieldName": "src",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            },
+            {
+              "name": "base",
+              "type": {
+                "text": "string | undefined"
+              },
+              "description": "The base URL writes are confined to (the DataWriter scope guard). Defaults to\nthe resource's own directory when unset, so a save can never leave the edited\nresource's container.",
+              "default": "undefined",
+              "fieldName": "base",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            },
+            {
+              "name": "public-read",
+              "type": {
+                "text": "boolean"
+              },
+              "description": "Read the DATA graph with the credential-free `publicFetch` (a foreign/public\nresource) instead of the authenticated `fetch`. The credential boundary still\napplies: with `publicRead` set, `publicFetch` MUST be provided (the resolver\nfails closed otherwise). NOTE this affects only the data READ that POPULATES the\nform — a SAVE is always an authenticated own-origin write (there is no public\nwrite), so editing a public-read resource still needs `fetch` set to save.",
+              "default": "false",
+              "fieldName": "publicRead",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            }
+          ],
+          "events": [
+            {
+              "name": "jeswr-save",
+              "type": {
+                "text": "CustomEvent"
+              },
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            }
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "kind": "js",
+          "name": "JeswrContactForm",
+          "declaration": {
+            "name": "JeswrContactForm",
+            "module": "src/components/contact-form.ts"
+          }
+        },
+        {
+          "kind": "custom-element-definition",
+          "name": "jeswr-contact-form",
+          "declaration": {
+            "name": "JeswrContactForm",
+            "module": "src/components/contact-form.ts"
+          }
+        }
+      ]
+    },
+    {
+      "kind": "javascript-module",
+      "path": "src/components/contact-list.ts",
+      "declarations": [
+        {
+          "kind": "class",
+          "description": "A read-only `vcard:Individual` contact-list element.",
+          "name": "JeswrContactList",
+          "cssParts": [
+            {
+              "description": "The <ul> wrapping the contacts.",
+              "name": "list"
+            },
+            {
+              "description": "One contact <li>.",
+              "name": "contact"
+            },
+            {
+              "description": "A contact's display name.",
+              "name": "name"
+            },
+            {
+              "description": "A contact's email list.",
+              "name": "emails"
+            },
+            {
+              "description": "A contact's phone list.",
+              "name": "phones"
+            },
+            {
+              "description": "A contact's WebID link.",
+              "name": "webid"
+            },
+            {
+              "description": "Placeholder when the graph holds no contacts.",
+              "name": "empty"
+            },
+            {
+              "description": "The error message when the read fails.",
+              "name": "error"
+            },
+            {
+              "description": "Placeholder shown while reading.",
+              "name": "loading"
+            }
+          ],
+          "members": [
+            {
+              "kind": "method",
+              "name": "loadFrom",
+              "privacy": "protected",
+              "return": {
+                "type": {
+                  "text": "Promise<{ graph: Store; baseUrl: string }>"
+                }
+              },
+              "parameters": [
+                {
+                  "name": "controller",
+                  "type": {
+                    "text": "DataController"
+                  }
+                },
+                {
+                  "name": "src",
+                  "type": {
+                    "text": "string"
+                  }
+                },
+                {
+                  "name": "publicRead",
+                  "type": {
+                    "text": "boolean"
+                  }
+                }
+              ],
+              "description": "Read this element's resource through the controller and return the parsed graph\nplus the base URL its subjects resolve against. A single-resource element calls\n`controller.read`; a container element calls `controller.listContainer`.",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            },
+            {
+              "kind": "method",
+              "name": "renderReady",
+              "privacy": "protected",
+              "return": {
+                "type": {
+                  "text": "TemplateResult"
+                }
+              },
+              "parameters": [
+                {
+                  "name": "graph",
+                  "type": {
+                    "text": "Store"
+                  }
+                }
+              ],
+              "description": "Render the parsed model once `status === \"ready\"` (the subject graph in `graph`).",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            },
+            {
+              "kind": "method",
+              "name": "#renderContact",
+              "privacy": "private",
+              "return": {
+                "type": {
+                  "text": "TemplateResult"
+                }
+              },
+              "parameters": [
+                {
+                  "name": "contact",
+                  "type": {
+                    "text": "Contact"
+                  }
+                }
+              ]
+            },
+            {
+              "kind": "method",
+              "name": "#renderEmails",
+              "privacy": "private",
+              "return": {
+                "type": {
+                  "text": "TemplateResult | null"
+                }
+              },
+              "parameters": [
+                {
+                  "name": "emails",
+                  "type": {
+                    "text": "string[]"
+                  }
+                }
+              ]
+            },
+            {
+              "kind": "method",
+              "name": "#renderPhones",
+              "privacy": "private",
+              "return": {
+                "type": {
+                  "text": "TemplateResult | null"
+                }
+              },
+              "parameters": [
+                {
+                  "name": "phones",
+                  "type": {
+                    "text": "string[]"
+                  }
+                }
+              ]
+            },
+            {
+              "kind": "field",
+              "name": "src",
+              "privacy": "public",
+              "type": {
+                "text": "string | undefined"
+              },
+              "description": "The resource / container URL to read. Setting it (re)reads through the seam.",
+              "default": "undefined",
+              "attribute": "src",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "fetch",
+              "privacy": "public",
+              "type": {
+                "text": "typeof fetch | undefined"
+              },
+              "description": "The session-bound authenticated fetch (the user's origin).",
+              "default": "undefined",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "publicFetch",
+              "privacy": "public",
+              "type": {
+                "text": "typeof fetch | undefined"
+              },
+              "description": "The credential-free fetch for foreign/public reads (no fallback — see DataSeam).",
+              "default": "undefined",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "publicRead",
+              "privacy": "public",
+              "type": {
+                "text": "boolean"
+              },
+              "description": "Read with the public (credential-free) fetch — for a foreign-origin `src`.",
+              "default": "false",
+              "attribute": "public-read",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "store",
+              "privacy": "public",
+              "type": {
+                "text": "Store | undefined"
+              },
+              "description": "A pre-parsed n3 Store to render directly, bypassing the network. When set it\ntakes precedence over `src` for the NEXT render. (The codegen/test seam — render\na graph already in hand with no fetch.) NOTE: deliberately named `store`, NOT\n`dataset`, because `HTMLElement.dataset` is a reserved DOM property (a\n`DOMStringMap`); shadowing it with an n3 Store would break the element type.",
+              "default": "undefined",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "#readToken",
+              "privacy": "private",
+              "type": {
+                "text": "number"
+              },
+              "default": "0",
+              "description": "A monotonically increasing token to drop the result of a superseded read.",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            },
+            {
+              "kind": "method",
+              "name": "inputProps",
+              "privacy": "protected",
+              "return": {
+                "type": {
+                  "text": "readonly string[]"
+                }
+              },
+              "description": "The input prop names this element re-reads on. Override to extend the base set.",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            },
+            {
+              "kind": "method",
+              "name": "#applyDirectStore",
+              "privacy": "private",
+              "return": {
+                "type": {
+                  "text": "Promise<void>"
+                }
+              },
+              "description": "Render the directly-set `store` (no network), or fall back to idle when cleared.",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            },
+            {
+              "kind": "method",
+              "name": "#read",
+              "privacy": "private",
+              "return": {
+                "type": {
+                  "text": "Promise<void>"
+                }
+              },
+              "description": "Read `src` through a DataController, classify any failure, drop a superseded result.",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            }
+          ],
+          "superclass": {
+            "name": "AbstractReadElement",
+            "module": "/src/components/shared.js"
+          },
+          "solid": {
+            "class": "http://www.w3.org/2006/vcard/ns#Individual",
+            "mode": "view",
+            "cardinality": "container"
+          },
+          "tagName": "jeswr-contact-list",
+          "customElement": true,
+          "attributes": [
+            {
+              "name": "src",
+              "type": {
+                "text": "string | undefined"
+              },
+              "description": "The resource / container URL to read. Setting it (re)reads through the seam.",
+              "default": "undefined",
+              "fieldName": "src",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            },
+            {
+              "name": "public-read",
+              "type": {
+                "text": "boolean"
+              },
+              "description": "Read with the public (credential-free) fetch — for a foreign-origin `src`.",
+              "default": "false",
+              "fieldName": "publicRead",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            }
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "kind": "js",
+          "name": "JeswrContactList",
+          "declaration": {
+            "name": "JeswrContactList",
+            "module": "src/components/contact-list.ts"
+          }
+        },
+        {
+          "kind": "custom-element-definition",
+          "name": "jeswr-contact-list",
+          "declaration": {
+            "name": "JeswrContactList",
+            "module": "src/components/contact-list.ts"
+          }
+        }
+      ]
+    },
+    {
+      "kind": "javascript-module",
+      "path": "src/components/form-base.ts",
+      "declarations": [
+        {
+          "kind": "variable",
+          "name": "BASE_FORM_INPUT_PROPS",
+          "type": {
+            "text": "[\n  \"src\",\n  \"fetch\",\n  \"publicFetch\",\n  \"base\",\n  \"publicRead\",\n  \"resolveOptions\",\n]"
+          },
+          "default": "[ \"src\", \"fetch\", \"publicFetch\", \"base\", \"publicRead\", \"resolveOptions\", ]",
+          "description": "The input props the base re-renders the editable form on."
+        },
+        {
+          "kind": "class",
+          "description": "Base class for the per-class editable form elements. It mounts the inner\n<jeswr-shacl-form> (the §9-hardened editable wrapper) bound to the model's shape +\nthe resource at `src`, and wires the §10 merge save. A subclass implements:\n  - shapeTurtle: the model's SHACL shape, as inline Turtle.\n  - applyFormDeltaToExisting: read the edited values from the form graph\n    (via the model's `parse*`) and apply them to the LOADED existing graph (via the\n    model's typed setters). MUST go through the model's typed accessors — no quad\n    hand-built. Mutates the existing graph in place (or returns a Store).",
+          "name": "AbstractFormElement",
+          "members": [
+            {
+              "kind": "field",
+              "name": "src",
+              "privacy": "public",
+              "type": {
+                "text": "string | undefined"
+              },
+              "description": "The resource URL to edit. Setting it (re)renders the bound form.",
+              "default": "undefined",
+              "attribute": "src"
+            },
+            {
+              "kind": "field",
+              "name": "fetch",
+              "privacy": "public",
+              "type": {
+                "text": "typeof fetch | undefined"
+              },
+              "description": "The session-bound authenticated fetch (used for BOTH the read + the §10 write).",
+              "default": "undefined"
+            },
+            {
+              "kind": "field",
+              "name": "publicFetch",
+              "privacy": "public",
+              "type": {
+                "text": "typeof fetch | undefined"
+              },
+              "description": "The credential-free fetch for a public/foreign DATA read (rare for an editor).",
+              "default": "undefined"
+            },
+            {
+              "kind": "field",
+              "name": "base",
+              "privacy": "public",
+              "type": {
+                "text": "string | undefined"
+              },
+              "description": "The base URL writes are confined to (the DataWriter scope guard). Defaults to\nthe resource's own directory when unset, so a save can never leave the edited\nresource's container.",
+              "default": "undefined",
+              "attribute": "base"
+            },
+            {
+              "kind": "field",
+              "name": "publicRead",
+              "privacy": "public",
+              "type": {
+                "text": "boolean"
+              },
+              "description": "Read the DATA graph with the credential-free `publicFetch` (a foreign/public\nresource) instead of the authenticated `fetch`. The credential boundary still\napplies: with `publicRead` set, `publicFetch` MUST be provided (the resolver\nfails closed otherwise). NOTE this affects only the data READ that POPULATES the\nform — a SAVE is always an authenticated own-origin write (there is no public\nwrite), so editing a public-read resource still needs `fetch` set to save.",
+              "default": "false",
+              "attribute": "public-read"
+            },
+            {
+              "kind": "field",
+              "name": "resolveOptions",
+              "privacy": "public",
+              "type": {
+                "text": "ResolveOptions | undefined"
+              },
+              "description": "Resolver options forwarded to the §9 pre-fetch (max bytes / timeout / test stub).",
+              "default": "undefined"
+            },
+            {
+              "kind": "method",
+              "name": "shapeTurtle",
+              "privacy": "protected",
+              "return": {
+                "type": {
+                  "text": "string"
+                }
+              },
+              "description": "The model's SHACL shape graph as inline Turtle."
+            },
+            {
+              "kind": "method",
+              "name": "applyFormDeltaToExisting",
+              "privacy": "protected",
+              "return": {
+                "type": {
+                  "text": "void | Promise<void>"
+                }
+              },
+              "parameters": [
+                {
+                  "name": "formGraph",
+                  "type": {
+                    "text": "Store"
+                  }
+                },
+                {
+                  "name": "existing",
+                  "type": {
+                    "text": "Store"
+                  }
+                },
+                {
+                  "name": "resourceUrl",
+                  "type": {
+                    "text": "string"
+                  }
+                }
+              ],
+              "description": "Apply the form's edited values to the LOADED existing graph through the model's\nTYPED accessors. `formGraph` is shacl-form's `toRDF()` output (only the shaped\nnode's triples); `existing` is the loaded resource graph (every existing triple\nintact). Read the edited values from `formGraph` via the model's `parse*`, then\nwrite them onto `existing` via the model's typed setters — so only the shape's\npredicates change, dual-predicate writes happen, and untouched triples survive.\nMUST NOT hand-build a quad. Mutates `existing` in place (return is optional)."
+            },
+            {
+              "kind": "method",
+              "name": "mergeSaveCallback",
+              "privacy": "protected",
+              "return": {
+                "type": {
+                  "text": "MergeSaveCallback"
+                }
+              },
+              "description": "The §10 merge-save callback handed to <jeswr-shacl-form>. Builds a DataWriter\nscoped to `base` (or the resource directory) and runs `saveMerged`, whose mutator\ndelegates to the subclass's applyFormDeltaToExisting on the LOADED graph."
+            },
+            {
+              "kind": "method",
+              "name": "dataSource",
+              "privacy": "protected",
+              "return": {
+                "type": {
+                  "text": "GraphSource | undefined"
+                }
+              },
+              "description": "Build the data-graph source for the inner form: the resource at `src`, read with\nthe authenticated `fetch` — OR, when `publicRead` is set, with the credential-free\n`publicFetch` (the resolver fails closed if `publicFetch` is then missing, so the\nsession token never leaks to a foreign read). Honours the same `public-read`\ncontract as the read elements."
+            },
+            {
+              "kind": "field",
+              "name": "#onChildState",
+              "privacy": "private",
+              "description": "Forward a child <jeswr-shacl-form>'s save state up so this element can reflect it."
+            },
+            {
+              "kind": "method",
+              "name": "save",
+              "return": {
+                "type": {
+                  "text": "Promise<boolean>"
+                }
+              },
+              "description": "Imperatively trigger a save on the inner editable form."
+            },
+            {
+              "kind": "method",
+              "name": "#onSave",
+              "privacy": "private",
+              "return": {
+                "type": {
+                  "text": "void"
+                }
+              },
+              "parameters": [
+                {
+                  "name": "e",
+                  "type": {
+                    "text": "CustomEvent<SaveEventDetail>"
+                  }
+                }
+              ],
+              "description": "Re-emit the inner form's save as THIS element's own event (so a consumer listens\non the per-class form, with this element as the event target) + mirror the state.\nSTOP the child's bubbling event first so a consumer listening on this element or\nan ancestor does NOT receive a DUPLICATE `jeswr-save` (the inner event bubbles +\ncomposes; we replace it with one re-targeted to this element)."
+            }
+          ],
+          "events": [
+            {
+              "name": "jeswr-save",
+              "type": {
+                "text": "CustomEvent"
+              }
+            }
+          ],
+          "attributes": [
+            {
+              "name": "src",
+              "type": {
+                "text": "string | undefined"
+              },
+              "description": "The resource URL to edit. Setting it (re)renders the bound form.",
+              "default": "undefined",
+              "fieldName": "src"
+            },
+            {
+              "name": "base",
+              "type": {
+                "text": "string | undefined"
+              },
+              "description": "The base URL writes are confined to (the DataWriter scope guard). Defaults to\nthe resource's own directory when unset, so a save can never leave the edited\nresource's container.",
+              "default": "undefined",
+              "fieldName": "base"
+            },
+            {
+              "name": "public-read",
+              "type": {
+                "text": "boolean"
+              },
+              "description": "Read the DATA graph with the credential-free `publicFetch` (a foreign/public\nresource) instead of the authenticated `fetch`. The credential boundary still\napplies: with `publicRead` set, `publicFetch` MUST be provided (the resolver\nfails closed otherwise). NOTE this affects only the data READ that POPULATES the\nform — a SAVE is always an authenticated own-origin write (there is no public\nwrite), so editing a public-read resource still needs `fetch` set to save.",
+              "default": "false",
+              "fieldName": "publicRead"
+            }
+          ],
+          "superclass": {
+            "name": "LitElement",
+            "package": "lit"
+          },
+          "customElement": true
+        },
+        {
+          "kind": "function",
+          "name": "defaultBaseFor",
+          "return": {
+            "type": {
+              "text": "string"
+            }
+          },
+          "parameters": [
+            {
+              "name": "resourceUrl",
+              "type": {
+                "text": "string"
+              }
+            }
+          ],
+          "description": "The default DataWriter scope base for a resource: its containing directory (the\npath up to + including the last `/`). So a save of `…/tasks/1` is confined to\n`…/tasks/`. Falls back to the resource origin on a parse failure (still\nsame-origin-confined). Pure; no network."
+        },
+        {
+          "kind": "function",
+          "name": "findEditedSubject",
+          "return": {
+            "type": {
+              "text": "string"
+            }
+          },
+          "parameters": [
+            {
+              "name": "formGraph",
+              "type": {
+                "text": "QuadScanStore"
+              },
+              "description": "shacl-form's toRDF() output."
+            },
+            {
+              "name": "typeIri",
+              "type": {
+                "text": "string"
+              },
+              "description": "the model class IRI (wf:Task / vcard:Individual / book:Bookmark)."
+            },
+            {
+              "name": "conventional",
+              "type": {
+                "text": "string"
+              },
+              "description": "the model's conventional subject for `src` (`#it` / `#this`)."
+            },
+            {
+              "name": "namedNode",
+              "type": {
+                "text": "(value: string) => unknown"
+              },
+              "description": "the n3 DataFactory.namedNode (passed in by the subclass)."
+            }
+          ],
+          "description": "Find the EDITED subject in shacl-form's `toRDF()` form graph — the node whose\nfield values the merge reads. shacl-form in EDIT mode binds the form to a subject\nthat is NOT necessarily the resource's conventional subject (it commonly MINTS a\nfresh IRI, observed under the real upstream), so we must locate the form's typed\nsubject rather than assume `${url}#it`. Returns the first NamedNode subject typed\nwith `typeIri` in the form graph, preferring `conventional` if IT is the typed one,\nelse `conventional` as a last resort (an empty form graph). A direct quad scan\n(existence query — no triple built), via a `namedNode` factory so the n3 term\nconstruction lives at the call site (each form imports n3's DataFactory once).\n\nIMPORTANT — this is the READ subject (in the form graph). The merge WRITES onto the\nresource's `conventional` subject in the EXISTING graph (so the saved triples land\non `${url}#it`/`#this`, not on shacl-form's minted IRI). See each per-class form."
+        }
+      ],
+      "exports": [
+        {
+          "kind": "js",
+          "name": "BASE_FORM_INPUT_PROPS",
+          "declaration": {
+            "name": "BASE_FORM_INPUT_PROPS",
+            "module": "src/components/form-base.ts"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "AbstractFormElement",
+          "declaration": {
+            "name": "AbstractFormElement",
+            "module": "src/components/form-base.ts"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "defaultBaseFor",
+          "declaration": {
+            "name": "defaultBaseFor",
+            "module": "src/components/form-base.ts"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "findEditedSubject",
+          "declaration": {
+            "name": "findEditedSubject",
+            "module": "src/components/form-base.ts"
+          }
+        }
+      ]
+    },
+    {
+      "kind": "javascript-module",
+      "path": "src/components/message-list.ts",
+      "declarations": [
+        {
+          "kind": "class",
+          "description": "A read-only `as:Note` chat-message list element.\n\n(No `@solid-shape`: the chat-interop SHACL shape is an anonymous `sh:NodeShape`\nwith `sh:targetClass as:Note`, so there is no canonical shape IRI to advertise.\nThe `@solid-class` target class is the binding key the resolver maps on.)",
+          "name": "JeswrMessageList",
+          "cssParts": [
+            {
+              "description": "The <ul> wrapping the messages.",
+              "name": "list"
+            },
+            {
+              "description": "One message <li>.",
+              "name": "message"
+            },
+            {
+              "description": "A message's body text (escaped — never markup).",
+              "name": "content"
+            },
+            {
+              "description": "A message's author (a WebID link when http(s), else text).",
+              "name": "author"
+            },
+            {
+              "description": "A message's published timestamp.",
+              "name": "time"
+            },
+            {
+              "description": "A message's \"in reply to\" indicator.",
+              "name": "reply"
+            },
+            {
+              "description": "Placeholder when the graph holds no messages.",
+              "name": "empty"
+            },
+            {
+              "description": "The error message when the read fails.",
+              "name": "error"
+            },
+            {
+              "description": "Placeholder shown while reading.",
+              "name": "loading"
+            }
+          ],
+          "members": [
+            {
+              "kind": "method",
+              "name": "loadFrom",
+              "privacy": "protected",
+              "return": {
+                "type": {
+                  "text": "Promise<{ graph: Store; baseUrl: string }>"
+                }
+              },
+              "parameters": [
+                {
+                  "name": "controller",
+                  "type": {
+                    "text": "DataController"
+                  }
+                },
+                {
+                  "name": "src",
+                  "type": {
+                    "text": "string"
+                  }
+                },
+                {
+                  "name": "publicRead",
+                  "type": {
+                    "text": "boolean"
+                  }
+                }
+              ],
+              "description": "Read this element's resource through the controller and return the parsed graph\nplus the base URL its subjects resolve against. A single-resource element calls\n`controller.read`; a container element calls `controller.listContainer`.",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            },
+            {
+              "kind": "method",
+              "name": "renderReady",
+              "privacy": "protected",
+              "return": {
+                "type": {
+                  "text": "TemplateResult"
+                }
+              },
+              "parameters": [
+                {
+                  "name": "graph",
+                  "type": {
+                    "text": "Store"
+                  }
+                }
+              ],
+              "description": "Render the parsed model once `status === \"ready\"` (the subject graph in `graph`).",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            },
+            {
+              "kind": "method",
+              "name": "#renderMessage",
+              "privacy": "private",
+              "return": {
+                "type": {
+                  "text": "TemplateResult"
+                }
+              },
+              "parameters": [
+                {
+                  "name": "message",
+                  "type": {
+                    "text": "CanonicalMessage"
+                  }
+                }
+              ]
+            },
+            {
+              "kind": "field",
+              "name": "src",
+              "privacy": "public",
+              "type": {
+                "text": "string | undefined"
+              },
+              "description": "The resource / container URL to read. Setting it (re)reads through the seam.",
+              "default": "undefined",
+              "attribute": "src",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "fetch",
+              "privacy": "public",
+              "type": {
+                "text": "typeof fetch | undefined"
+              },
+              "description": "The session-bound authenticated fetch (the user's origin).",
+              "default": "undefined",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "publicFetch",
+              "privacy": "public",
+              "type": {
+                "text": "typeof fetch | undefined"
+              },
+              "description": "The credential-free fetch for foreign/public reads (no fallback — see DataSeam).",
+              "default": "undefined",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "publicRead",
+              "privacy": "public",
+              "type": {
+                "text": "boolean"
+              },
+              "description": "Read with the public (credential-free) fetch — for a foreign-origin `src`.",
+              "default": "false",
+              "attribute": "public-read",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "store",
+              "privacy": "public",
+              "type": {
+                "text": "Store | undefined"
+              },
+              "description": "A pre-parsed n3 Store to render directly, bypassing the network. When set it\ntakes precedence over `src` for the NEXT render. (The codegen/test seam — render\na graph already in hand with no fetch.) NOTE: deliberately named `store`, NOT\n`dataset`, because `HTMLElement.dataset` is a reserved DOM property (a\n`DOMStringMap`); shadowing it with an n3 Store would break the element type.",
+              "default": "undefined",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "#readToken",
+              "privacy": "private",
+              "type": {
+                "text": "number"
+              },
+              "default": "0",
+              "description": "A monotonically increasing token to drop the result of a superseded read.",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            },
+            {
+              "kind": "method",
+              "name": "inputProps",
+              "privacy": "protected",
+              "return": {
+                "type": {
+                  "text": "readonly string[]"
+                }
+              },
+              "description": "The input prop names this element re-reads on. Override to extend the base set.",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            },
+            {
+              "kind": "method",
+              "name": "#applyDirectStore",
+              "privacy": "private",
+              "return": {
+                "type": {
+                  "text": "Promise<void>"
+                }
+              },
+              "description": "Render the directly-set `store` (no network), or fall back to idle when cleared.",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            },
+            {
+              "kind": "method",
+              "name": "#read",
+              "privacy": "private",
+              "return": {
+                "type": {
+                  "text": "Promise<void>"
+                }
+              },
+              "description": "Read `src` through a DataController, classify any failure, drop a superseded result.",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            }
+          ],
+          "superclass": {
+            "name": "AbstractReadElement",
+            "module": "/src/components/shared.js"
+          },
+          "solid": {
+            "class": "https://www.w3.org/ns/activitystreams#Note",
+            "mode": "view",
+            "cardinality": "container"
+          },
+          "tagName": "jeswr-message-list",
+          "customElement": true,
+          "attributes": [
+            {
+              "name": "src",
+              "type": {
+                "text": "string | undefined"
+              },
+              "description": "The resource / container URL to read. Setting it (re)reads through the seam.",
+              "default": "undefined",
+              "fieldName": "src",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            },
+            {
+              "name": "public-read",
+              "type": {
+                "text": "boolean"
+              },
+              "description": "Read with the public (credential-free) fetch — for a foreign-origin `src`.",
+              "default": "false",
+              "fieldName": "publicRead",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            }
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "kind": "js",
+          "name": "JeswrMessageList",
+          "declaration": {
+            "name": "JeswrMessageList",
+            "module": "src/components/message-list.ts"
+          }
+        },
+        {
+          "kind": "custom-element-definition",
+          "name": "jeswr-message-list",
+          "declaration": {
+            "name": "JeswrMessageList",
+            "module": "src/components/message-list.ts"
+          }
+        }
+      ]
+    },
+    {
+      "kind": "javascript-module",
+      "path": "src/components/profile-card.ts",
+      "declarations": [
+        {
+          "kind": "class",
+          "description": "A read-only WebID profile card.\n\n(No `@solid-class`: a WebID profile has no single canonical `rdf:type` — it is\nidentified by being a `solid:oidcIssuer`-bearing / `foaf:Person` subject — so this\nelement is bound by IRI, not auto-resolved by `<solid-view>` on rdf:type. It is the\ncomposition target a contact's WebID link or an explicit `src` points at.)",
+          "name": "JeswrProfileCard",
+          "cssParts": [
+            {
+              "description": "The profile card wrapper.",
+              "name": "card"
+            },
+            {
+              "description": "The avatar image.",
+              "name": "photo"
+            },
+            {
+              "description": "The display name.",
+              "name": "name"
+            },
+            {
+              "description": "The organisation / role line.",
+              "name": "org"
+            },
+            {
+              "description": "The homepage link.",
+              "name": "website"
+            },
+            {
+              "description": "The WebID link.",
+              "name": "webid"
+            },
+            {
+              "description": "Placeholder when the profile holds no renderable fields.",
+              "name": "empty"
+            },
+            {
+              "description": "The error message when the read fails.",
+              "name": "error"
+            },
+            {
+              "description": "Placeholder shown while reading.",
+              "name": "loading"
+            }
+          ],
+          "members": [
+            {
+              "kind": "method",
+              "name": "loadFrom",
+              "privacy": "protected",
+              "return": {
+                "type": {
+                  "text": "Promise<{ graph: Store; baseUrl: string }>"
+                }
+              },
+              "parameters": [
+                {
+                  "name": "controller",
+                  "type": {
+                    "text": "DataController"
+                  }
+                },
+                {
+                  "name": "src",
+                  "type": {
+                    "text": "string"
+                  }
+                },
+                {
+                  "name": "publicRead",
+                  "type": {
+                    "text": "boolean"
+                  }
+                }
+              ],
+              "description": "Read this element's resource through the controller and return the parsed graph\nplus the base URL its subjects resolve against. A single-resource element calls\n`controller.read`; a container element calls `controller.listContainer`.",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            },
+            {
+              "kind": "method",
+              "name": "renderReady",
+              "privacy": "protected",
+              "return": {
+                "type": {
+                  "text": "TemplateResult"
+                }
+              },
+              "parameters": [
+                {
+                  "name": "graph",
+                  "type": {
+                    "text": "Store"
+                  }
+                },
+                {
+                  "name": "baseUrl",
+                  "type": {
+                    "text": "string"
+                  }
+                }
+              ],
+              "description": "Render the parsed model once `status === \"ready\"` (the subject graph in `graph`).",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "src",
+              "privacy": "public",
+              "type": {
+                "text": "string | undefined"
+              },
+              "description": "The resource / container URL to read. Setting it (re)reads through the seam.",
+              "default": "undefined",
+              "attribute": "src",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "fetch",
+              "privacy": "public",
+              "type": {
+                "text": "typeof fetch | undefined"
+              },
+              "description": "The session-bound authenticated fetch (the user's origin).",
+              "default": "undefined",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "publicFetch",
+              "privacy": "public",
+              "type": {
+                "text": "typeof fetch | undefined"
+              },
+              "description": "The credential-free fetch for foreign/public reads (no fallback — see DataSeam).",
+              "default": "undefined",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "publicRead",
+              "privacy": "public",
+              "type": {
+                "text": "boolean"
+              },
+              "description": "Read with the public (credential-free) fetch — for a foreign-origin `src`.",
+              "default": "false",
+              "attribute": "public-read",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "store",
+              "privacy": "public",
+              "type": {
+                "text": "Store | undefined"
+              },
+              "description": "A pre-parsed n3 Store to render directly, bypassing the network. When set it\ntakes precedence over `src` for the NEXT render. (The codegen/test seam — render\na graph already in hand with no fetch.) NOTE: deliberately named `store`, NOT\n`dataset`, because `HTMLElement.dataset` is a reserved DOM property (a\n`DOMStringMap`); shadowing it with an n3 Store would break the element type.",
+              "default": "undefined",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "#readToken",
+              "privacy": "private",
+              "type": {
+                "text": "number"
+              },
+              "default": "0",
+              "description": "A monotonically increasing token to drop the result of a superseded read.",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            },
+            {
+              "kind": "method",
+              "name": "inputProps",
+              "privacy": "protected",
+              "return": {
+                "type": {
+                  "text": "readonly string[]"
+                }
+              },
+              "description": "The input prop names this element re-reads on. Override to extend the base set.",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            },
+            {
+              "kind": "method",
+              "name": "#applyDirectStore",
+              "privacy": "private",
+              "return": {
+                "type": {
+                  "text": "Promise<void>"
+                }
+              },
+              "description": "Render the directly-set `store` (no network), or fall back to idle when cleared.",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            },
+            {
+              "kind": "method",
+              "name": "#read",
+              "privacy": "private",
+              "return": {
+                "type": {
+                  "text": "Promise<void>"
+                }
+              },
+              "description": "Read `src` through a DataController, classify any failure, drop a superseded result.",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            }
+          ],
+          "superclass": {
+            "name": "AbstractReadElement",
+            "module": "/src/components/shared.js"
+          },
+          "solid": {
+            "mode": "view",
+            "cardinality": "one"
+          },
+          "tagName": "jeswr-profile-card",
+          "customElement": true,
+          "attributes": [
+            {
+              "name": "src",
+              "type": {
+                "text": "string | undefined"
+              },
+              "description": "The resource / container URL to read. Setting it (re)reads through the seam.",
+              "default": "undefined",
+              "fieldName": "src",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            },
+            {
+              "name": "public-read",
+              "type": {
+                "text": "boolean"
+              },
+              "description": "Read with the public (credential-free) fetch — for a foreign-origin `src`.",
+              "default": "false",
+              "fieldName": "publicRead",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            }
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "kind": "js",
+          "name": "JeswrProfileCard",
+          "declaration": {
+            "name": "JeswrProfileCard",
+            "module": "src/components/profile-card.ts"
+          }
+        },
+        {
+          "kind": "custom-element-definition",
+          "name": "jeswr-profile-card",
+          "declaration": {
+            "name": "JeswrProfileCard",
+            "module": "src/components/profile-card.ts"
+          }
+        }
+      ]
+    },
+    {
+      "kind": "javascript-module",
+      "path": "src/components/shacl-form-edit.ts",
+      "declarations": [
+        {
+          "kind": "class",
+          "description": "An EDITABLE SHACL form. Drive it imperatively:\n\n  const el = document.createElement(\"jeswr-shacl-form\");\n  el.fetch = session.fetch;          // the user's authenticated fetch\n  el.shapes = { kind: \"inline\", text: shapesTurtle };\n  el.values = { kind: \"trusted\", url: resourceUrl, seam: \"auth\" };\n  el.mergeSave = async (formGraph) => { ...§10 merge write... };\n  document.body.append(el);\n  // user edits, then:\n  await el.save();",
+          "name": "JeswrShaclForm",
+          "cssParts": [
+            {
+              "description": "The inner editable <shacl-form>.",
+              "name": "form"
+            },
+            {
+              "description": "The save-button row.",
+              "name": "actions"
+            },
+            {
+              "description": "The save <button>.",
+              "name": "save"
+            },
+            {
+              "description": "The saving/saved/error indicator.",
+              "name": "status"
+            },
+            {
+              "description": "The advisory client-validation warning.",
+              "name": "warning"
+            },
+            {
+              "description": "The error message shown when a graph fails to load/parse.",
+              "name": "error"
+            },
+            {
+              "description": "Placeholder shown when no shape/data is set.",
+              "name": "empty"
+            },
+            {
+              "description": "Placeholder shown while graphs are being pre-fetched.",
+              "name": "loading"
+            }
+          ],
+          "members": [
+            {
+              "kind": "field",
+              "name": "shapes",
+              "privacy": "public",
+              "type": {
+                "text": "GraphSource | undefined"
+              },
+              "description": "The SHACL shapes graph source. Required before anything renders.",
+              "default": "undefined"
+            },
+            {
+              "kind": "field",
+              "name": "values",
+              "privacy": "public",
+              "type": {
+                "text": "GraphSource | undefined"
+              },
+              "description": "The data graph source to edit against the shapes. Required to render.",
+              "default": "undefined"
+            },
+            {
+              "kind": "field",
+              "name": "shapeSubject",
+              "privacy": "public",
+              "type": {
+                "text": "string | undefined"
+              },
+              "description": "Optionally pin which node shape to edit (shacl-form's `data-shape-subject`).",
+              "default": "undefined",
+              "attribute": "shape-subject"
+            },
+            {
+              "kind": "field",
+              "name": "fetch",
+              "privacy": "public",
+              "type": {
+                "text": "typeof fetch | undefined"
+              },
+              "description": "The session-bound authenticated fetch (for `trusted`+`auth` sources).",
+              "default": "undefined"
+            },
+            {
+              "kind": "field",
+              "name": "publicFetch",
+              "privacy": "public",
+              "type": {
+                "text": "typeof fetch | undefined"
+              },
+              "description": "The pristine credential-free fetch (for `trusted`+`public` sources).",
+              "default": "undefined"
+            },
+            {
+              "kind": "field",
+              "name": "resolveOptions",
+              "privacy": "public",
+              "type": {
+                "text": "ResolveOptions | undefined"
+              },
+              "description": "Resolver options forwarded to the pre-fetch (max bytes / timeout / test stub).",
+              "default": "undefined"
+            },
+            {
+              "kind": "field",
+              "name": "mergeSave",
+              "privacy": "public",
+              "type": {
+                "text": "MergeSaveCallback | undefined"
+              },
+              "description": "The §10 merge-save callback. When set, JeswrShaclForm.save delegates to\nit (the per-class forms wire it to a DataWriter merge). When UNSET, `save()`\nthrows — this base element refuses to do a naive write itself.",
+              "default": "undefined"
+            },
+            {
+              "kind": "field",
+              "name": "showSaveButton",
+              "privacy": "public",
+              "type": {
+                "text": "boolean"
+              },
+              "description": "Whether to render the built-in save button (default true).",
+              "default": "true",
+              "attribute": "show-save-button"
+            },
+            {
+              "kind": "field",
+              "name": "#renderToken",
+              "privacy": "private",
+              "type": {
+                "text": "number"
+              },
+              "default": "0",
+              "description": "A monotonically increasing token to drop the result of a superseded resolve."
+            },
+            {
+              "kind": "field",
+              "name": "#saveToken",
+              "privacy": "private",
+              "type": {
+                "text": "number"
+              },
+              "default": "0",
+              "description": "A monotonically increasing token so a stale save can't flip a newer one's state."
+            },
+            {
+              "kind": "method",
+              "name": "#resolve",
+              "privacy": "private",
+              "return": {
+                "type": {
+                  "text": "Promise<void>"
+                }
+              },
+              "description": "Pre-fetch + §9-harden both graphs through the SHARED pipeline (the SAME one the\nread view uses). Fail-closed: empty shapes / any error → the error view with no\npartially-applied inline graph, so a mounted <shacl-form> never sees bad input."
+            },
+            {
+              "kind": "method",
+              "name": "save",
+              "return": {
+                "type": {
+                  "text": ""
+                }
+              },
+              "description": "SAVE — the §10 merge write. Reads the edited graph from shacl-form (`toRDF()` —\nonly the shaped node's triples), runs an ADVISORY client validation (warn,\nnever block), then delegates the actual write to JeswrShaclForm.mergeSave\n(the per-class forms wire a DataWriter §10 merge). Optimistic state:\nsaving → saved on success, → error + a surfaced message on failure (revert)."
+            },
+            {
+              "kind": "method",
+              "name": "#emit",
+              "privacy": "private",
+              "return": {
+                "type": {
+                  "text": "void"
+                }
+              },
+              "parameters": [
+                {
+                  "name": "type",
+                  "type": {
+                    "text": "string"
+                  }
+                },
+                {
+                  "name": "detail",
+                  "type": {
+                    "text": "unknown"
+                  }
+                }
+              ],
+              "description": "Fire a CustomEvent (composed so a consuming app outside the light DOM hears it)."
+            },
+            {
+              "kind": "method",
+              "name": "#renderActions",
+              "privacy": "private",
+              "description": "The save button + the saving/saved/error indicator."
+            },
+            {
+              "kind": "method",
+              "name": "#statusIndicator",
+              "privacy": "private",
+              "description": "The non-button saving/saved/error text (escaped — Lit text interpolation)."
+            }
+          ],
+          "events": [
+            {
+              "name": "type",
+              "type": {
+                "text": "CustomEvent"
+              }
+            },
+            {
+              "description": "after a successful save (detail: SaveEventDetail).",
+              "name": "jeswr-save"
+            },
+            {
+              "description": "after a failed save (detail: { error }).",
+              "name": "jeswr-save-error"
+            }
+          ],
+          "attributes": [
+            {
+              "name": "shape-subject",
+              "type": {
+                "text": "string | undefined"
+              },
+              "description": "Optionally pin which node shape to edit (shacl-form's `data-shape-subject`).",
+              "default": "undefined",
+              "fieldName": "shapeSubject"
+            },
+            {
+              "name": "show-save-button",
+              "type": {
+                "text": "boolean"
+              },
+              "description": "Whether to render the built-in save button (default true).",
+              "default": "true",
+              "fieldName": "showSaveButton"
+            }
+          ],
+          "superclass": {
+            "name": "LitElement",
+            "package": "lit"
+          },
+          "tagName": "jeswr-shacl-form",
+          "customElement": true
+        }
+      ],
+      "exports": [
+        {
+          "kind": "js",
+          "name": "JeswrShaclForm",
+          "declaration": {
+            "name": "JeswrShaclForm",
+            "module": "src/components/shacl-form-edit.ts"
+          }
+        },
+        {
+          "kind": "custom-element-definition",
+          "name": "jeswr-shacl-form",
+          "declaration": {
+            "name": "JeswrShaclForm",
+            "module": "src/components/shacl-form-edit.ts"
+          }
+        }
+      ]
+    },
+    {
+      "kind": "javascript-module",
+      "path": "src/components/shacl-view.ts",
+      "declarations": [
+        {
+          "kind": "class",
+          "description": "A read-only SHACL view. Drive it imperatively (the codegen-friendly path):\n\n  const el = document.createElement(\"jeswr-shacl-view\");\n  el.fetch = session.fetch;          // the user's authenticated fetch\n  el.publicFetch = pristineFetch;    // the credential-free fetch\n  el.shapes = { kind: \"inline\", text: shapesTurtle };\n  el.values = { kind: \"trusted\", url: resourceUrl, seam: \"auth\" };\n  document.body.append(el);\n\nSetting `.shapes` / `.values` / a fetch triggers a re-render. The wrapper never\nexposes a `*-url` attribute and never lets shacl-form fetch.",
+          "name": "JeswrShaclView",
+          "cssParts": [
+            {
+              "description": "The inner <shacl-form> element (read-only view).",
+              "name": "form"
+            },
+            {
+              "description": "The error message shown when a graph fails to load/parse.",
+              "name": "error"
+            },
+            {
+              "description": "Placeholder shown when no shape/data is set.",
+              "name": "empty"
+            },
+            {
+              "description": "Placeholder shown while graphs are being pre-fetched.",
+              "name": "loading"
+            }
+          ],
+          "members": [
+            {
+              "kind": "field",
+              "name": "shapes",
+              "privacy": "public",
+              "type": {
+                "text": "GraphSource | undefined"
+              },
+              "description": "The SHACL shapes graph source. Required before anything renders.",
+              "default": "undefined"
+            },
+            {
+              "kind": "field",
+              "name": "values",
+              "privacy": "public",
+              "type": {
+                "text": "GraphSource | undefined"
+              },
+              "description": "The data graph source to render against the shapes. Required to render.",
+              "default": "undefined"
+            },
+            {
+              "kind": "field",
+              "name": "shapeSubject",
+              "privacy": "public",
+              "type": {
+                "text": "string | undefined"
+              },
+              "description": "Optionally pin which node shape to render (shacl-form's `data-shape-subject`).\nA plain string IRI — set on the inner element verbatim, NOT a URL to fetch.",
+              "default": "undefined",
+              "attribute": "shape-subject"
+            },
+            {
+              "kind": "field",
+              "name": "fetch",
+              "privacy": "public",
+              "type": {
+                "text": "typeof fetch | undefined"
+              },
+              "description": "The session-bound authenticated fetch (for `trusted`+`auth` sources).",
+              "default": "undefined"
+            },
+            {
+              "kind": "field",
+              "name": "publicFetch",
+              "privacy": "public",
+              "type": {
+                "text": "typeof fetch | undefined"
+              },
+              "description": "The pristine credential-free fetch (for `trusted`+`public` sources).",
+              "default": "undefined"
+            },
+            {
+              "kind": "field",
+              "name": "resolveOptions",
+              "privacy": "public",
+              "type": {
+                "text": "ResolveOptions | undefined"
+              },
+              "description": "Resolver options forwarded to the pre-fetch (max bytes / timeout / a test\nloader stub for guarded-fetch). Never includes a fetch — those come from the\nseam properties above so the credential boundary stays explicit.",
+              "default": "undefined"
+            },
+            {
+              "kind": "field",
+              "name": "#renderToken",
+              "privacy": "private",
+              "type": {
+                "text": "number"
+              },
+              "default": "0",
+              "description": "A monotonically increasing token to drop the result of a superseded resolve."
+            },
+            {
+              "kind": "method",
+              "name": "#resolve",
+              "privacy": "private",
+              "return": {
+                "type": {
+                  "text": "Promise<void>"
+                }
+              },
+              "description": "Pre-fetch + serialise both graphs, then drop them into state so render()\ninlines them onto <shacl-form>. Fail-closed: any error → the error view, with\nno partially-applied inline graph."
+            }
+          ],
+          "attributes": [
+            {
+              "name": "shape-subject",
+              "type": {
+                "text": "string | undefined"
+              },
+              "description": "Optionally pin which node shape to render (shacl-form's `data-shape-subject`).\nA plain string IRI — set on the inner element verbatim, NOT a URL to fetch.",
+              "default": "undefined",
+              "fieldName": "shapeSubject"
+            }
+          ],
+          "superclass": {
+            "name": "LitElement",
+            "package": "lit"
+          },
+          "tagName": "jeswr-shacl-view",
+          "customElement": true
+        }
+      ],
+      "exports": [
+        {
+          "kind": "js",
+          "name": "JeswrShaclView",
+          "declaration": {
+            "name": "JeswrShaclView",
+            "module": "src/components/shacl-view.ts"
+          }
+        },
+        {
+          "kind": "custom-element-definition",
+          "name": "jeswr-shacl-view",
+          "declaration": {
+            "name": "JeswrShaclView",
+            "module": "src/components/shacl-view.ts"
+          }
+        }
+      ]
+    },
+    {
+      "kind": "javascript-module",
+      "path": "src/components/shapes.ts",
+      "declarations": [
+        {
+          "kind": "variable",
+          "name": "TASK_SHAPE_TTL",
+          "default": "` @prefix sh: <http://www.w3.org/ns/shacl#> . @prefix wf: <http://www.w3.org/2005/01/wf/flow#> . @prefix dct: <http://purl.org/dc/terms/> . @prefix schema: <http://schema.org/> . @prefix xsd: <http://www.w3.org/2001/XMLSchema#> . [] a sh:NodeShape ; sh:targetClass wf:Task ; sh:property [ sh:path dct:title ; sh:name \"Title\" ; sh:order 1 ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ; sh:property [ sh:path wf:description ; sh:name \"Description\" ; sh:order 2 ; sh:datatype xsd:string ; sh:maxCount 1 ] ; sh:property [ sh:path wf:assignee ; sh:name \"Assignee\" ; sh:order 3 ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:pattern \"^https?://\" ] ; sh:property [ sh:path wf:dateDue ; sh:name \"Due date\" ; sh:order 4 ; sh:datatype xsd:dateTime ; sh:maxCount 1 ] ; sh:property [ sh:path schema:priority ; sh:name \"Priority\" ; sh:order 5 ; sh:datatype xsd:string ; sh:maxCount 1 ; sh:in ( \"high\" \"medium\" \"low\" ) ] . `",
+          "description": "The editable `wf:Task` shape (a subset of"
+        },
+        {
+          "kind": "variable",
+          "name": "BOOKMARK_SHAPE_TTL",
+          "default": "` @prefix sh: <http://www.w3.org/ns/shacl#> . @prefix book: <https://w3id.org/jeswr/bookmark#> . @prefix schema: <http://schema.org/> . @prefix dct: <http://purl.org/dc/terms/> . @prefix xsd: <http://www.w3.org/2001/XMLSchema#> . [] a sh:NodeShape ; sh:targetClass book:Bookmark ; sh:property [ sh:path schema:url ; sh:name \"URL\" ; sh:order 1 ; sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ; sh:pattern \"^https?://\" ] ; sh:property [ sh:path dct:title ; sh:name \"Title\" ; sh:order 2 ; sh:datatype xsd:string ; sh:maxCount 1 ] ; sh:property [ sh:path dct:description ; sh:name \"Description\" ; sh:order 3 ; sh:datatype xsd:string ; sh:maxCount 1 ] ; sh:property [ sh:path book:notes ; sh:name \"Notes\" ; sh:order 4 ; sh:datatype xsd:string ; sh:maxCount 1 ] ; sh:property [ sh:path book:archived ; sh:name \"Archived\" ; sh:order 5 ; sh:datatype xsd:boolean ; sh:maxCount 1 ] ; sh:property [ sh:path schema:keywords ; sh:name \"Tags\" ; sh:order 6 ; sh:datatype xsd:string ] . `",
+          "description": "The editable `book:Bookmark` shape (aligned to"
+        },
+        {
+          "kind": "variable",
+          "name": "CONTACT_SHAPE_TTL",
+          "default": "` @prefix sh: <http://www.w3.org/ns/shacl#> . @prefix vcard: <http://www.w3.org/2006/vcard/ns#> . @prefix xsd: <http://www.w3.org/2001/XMLSchema#> . [] a sh:NodeShape ; sh:targetClass vcard:Individual ; sh:property [ sh:path vcard:fn ; sh:name \"Name\" ; sh:order 1 ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ; sh:property [ sh:path vcard:organization-name ; sh:name \"Organisation\" ; sh:order 2 ; sh:datatype xsd:string ; sh:maxCount 1 ] ; sh:property [ sh:path vcard:note ; sh:name \"Note\" ; sh:order 3 ; sh:datatype xsd:string ; sh:maxCount 1 ] . `",
+          "description": "`vcard:fn` etc. — the editable `vcard:Individual` shape (FLAT string fields)."
+        }
+      ],
+      "exports": [
+        {
+          "kind": "js",
+          "name": "TASK_SHAPE_TTL",
+          "declaration": {
+            "name": "TASK_SHAPE_TTL",
+            "module": "src/components/shapes.ts"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "BOOKMARK_SHAPE_TTL",
+          "declaration": {
+            "name": "BOOKMARK_SHAPE_TTL",
+            "module": "src/components/shapes.ts"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "CONTACT_SHAPE_TTL",
+          "declaration": {
+            "name": "CONTACT_SHAPE_TTL",
+            "module": "src/components/shapes.ts"
+          }
+        }
+      ]
+    },
+    {
+      "kind": "javascript-module",
+      "path": "src/components/shared.ts",
+      "declarations": [
+        {
+          "kind": "variable",
+          "name": "BASE_INPUT_PROPS",
+          "type": {
+            "text": "[\"src\", \"fetch\", \"publicFetch\", \"publicRead\"]"
+          },
+          "default": "[\"src\", \"fetch\", \"publicFetch\", \"publicRead\"]",
+          "description": "The set of property names whose change should (re)trigger a read. A subclass\nEXTENDS this list (spread it, never duplicate it) so it inherits every base input\nand cannot silently drift. The base watches `src` / `fetch` / `publicFetch` /\n`publicRead`: `publicRead` MUST be here — it selects which fetch (`publicFetch` vs\nthe authed `fetch`) `loadFrom` reads with, so toggling `public-read` after the\ninitial load has to re-read through the now-correct credential path."
+        },
+        {
+          "kind": "class",
+          "description": "Base class for the read-only data-binding elements. Holds the DataController seam,\nthe load lifecycle (idle/loading/ready/error with a supersede token), and the\nshared render branches (loading / error / empty). A subclass implements\nAbstractReadElement.loadFrom (how to read its resource — `read` vs\n`listContainer`) and AbstractReadElement.renderReady (how to render the\nparsed model).\n\nDrive it imperatively (the codegen-friendly path):\n\n  const el = document.createElement(\"jeswr-task-list\");\n  el.fetch = session.fetch;        // the user's authenticated fetch\n  el.src = \"https://alice.example/tasks/\";\n  document.body.append(el);\n\n…or render a pre-parsed graph with no network (tests / SSR-of-a-cached-graph):\n\n  el.dataset = store;              // an n3 Store already in hand",
+          "name": "AbstractReadElement",
+          "members": [
+            {
+              "kind": "field",
+              "name": "src",
+              "privacy": "public",
+              "type": {
+                "text": "string | undefined"
+              },
+              "description": "The resource / container URL to read. Setting it (re)reads through the seam.",
+              "default": "undefined",
+              "attribute": "src"
+            },
+            {
+              "kind": "field",
+              "name": "fetch",
+              "privacy": "public",
+              "type": {
+                "text": "typeof fetch | undefined"
+              },
+              "description": "The session-bound authenticated fetch (the user's origin).",
+              "default": "undefined"
+            },
+            {
+              "kind": "field",
+              "name": "publicFetch",
+              "privacy": "public",
+              "type": {
+                "text": "typeof fetch | undefined"
+              },
+              "description": "The credential-free fetch for foreign/public reads (no fallback — see DataSeam).",
+              "default": "undefined"
+            },
+            {
+              "kind": "field",
+              "name": "publicRead",
+              "privacy": "public",
+              "type": {
+                "text": "boolean"
+              },
+              "description": "Read with the public (credential-free) fetch — for a foreign-origin `src`.",
+              "default": "false",
+              "attribute": "public-read"
+            },
+            {
+              "kind": "field",
+              "name": "store",
+              "privacy": "public",
+              "type": {
+                "text": "Store | undefined"
+              },
+              "description": "A pre-parsed n3 Store to render directly, bypassing the network. When set it\ntakes precedence over `src` for the NEXT render. (The codegen/test seam — render\na graph already in hand with no fetch.) NOTE: deliberately named `store`, NOT\n`dataset`, because `HTMLElement.dataset` is a reserved DOM property (a\n`DOMStringMap`); shadowing it with an n3 Store would break the element type.",
+              "default": "undefined"
+            },
+            {
+              "kind": "field",
+              "name": "#readToken",
+              "privacy": "private",
+              "type": {
+                "text": "number"
+              },
+              "default": "0",
+              "description": "A monotonically increasing token to drop the result of a superseded read."
+            },
+            {
+              "kind": "method",
+              "name": "inputProps",
+              "privacy": "protected",
+              "return": {
+                "type": {
+                  "text": "readonly string[]"
+                }
+              },
+              "description": "The input prop names this element re-reads on. Override to extend the base set."
+            },
+            {
+              "kind": "method",
+              "name": "#applyDirectStore",
+              "privacy": "private",
+              "return": {
+                "type": {
+                  "text": "Promise<void>"
+                }
+              },
+              "description": "Render the directly-set `store` (no network), or fall back to idle when cleared."
+            },
+            {
+              "kind": "method",
+              "name": "#read",
+              "privacy": "private",
+              "return": {
+                "type": {
+                  "text": "Promise<void>"
+                }
+              },
+              "description": "Read `src` through a DataController, classify any failure, drop a superseded result."
+            },
+            {
+              "kind": "method",
+              "name": "loadFrom",
+              "privacy": "protected",
+              "return": {
+                "type": {
+                  "text": "Promise<{ graph: Store; baseUrl: string }>"
+                }
+              },
+              "parameters": [
+                {
+                  "name": "controller",
+                  "type": {
+                    "text": "DataController"
+                  }
+                },
+                {
+                  "name": "src",
+                  "type": {
+                    "text": "string"
+                  }
+                },
+                {
+                  "name": "publicRead",
+                  "type": {
+                    "text": "boolean"
+                  }
+                }
+              ],
+              "description": "Read this element's resource through the controller and return the parsed graph\nplus the base URL its subjects resolve against. A single-resource element calls\n`controller.read`; a container element calls `controller.listContainer`."
+            },
+            {
+              "kind": "method",
+              "name": "renderReady",
+              "privacy": "protected",
+              "return": {
+                "type": {
+                  "text": "TemplateResult"
+                }
+              },
+              "parameters": [
+                {
+                  "name": "graph",
+                  "type": {
+                    "text": "Store"
+                  }
+                },
+                {
+                  "name": "baseUrl",
+                  "type": {
+                    "text": "string"
+                  }
+                }
+              ],
+              "description": "Render the parsed model once `status === \"ready\"` (the subject graph in `graph`)."
+            }
+          ],
+          "attributes": [
+            {
+              "name": "src",
+              "type": {
+                "text": "string | undefined"
+              },
+              "description": "The resource / container URL to read. Setting it (re)reads through the seam.",
+              "default": "undefined",
+              "fieldName": "src"
+            },
+            {
+              "name": "public-read",
+              "type": {
+                "text": "boolean"
+              },
+              "description": "Read with the public (credential-free) fetch — for a foreign-origin `src`.",
+              "default": "false",
+              "fieldName": "publicRead"
+            }
+          ],
+          "superclass": {
+            "name": "LitElement",
+            "package": "lit"
+          },
+          "customElement": true
+        },
+        {
+          "kind": "function",
+          "name": "safeHref",
+          "return": {
+            "type": {
+              "text": "string | undefined"
+            }
+          },
+          "parameters": [
+            {
+              "name": "value",
+              "type": {
+                "text": "string | undefined"
+              }
+            }
+          ],
+          "description": "An http(s)-only href filter for any IRI bound to an `<a href>`. Pod data is\nuntrusted: a `javascript:` / `data:` value must NEVER reach an href. Returns the\nIRI when it is a well-formed http(s) URL, else `undefined` (the caller renders the\nvalue as escaped TEXT instead of a link). Mirrors the data models' http(s) filter."
+        },
+        {
+          "kind": "function",
+          "name": "safeMailto",
+          "return": {
+            "type": {
+              "text": "string | undefined"
+            }
+          },
+          "parameters": [
+            {
+              "name": "value",
+              "type": {
+                "text": "string | undefined"
+              }
+            }
+          ],
+          "description": "A `mailto:` filter for an email href. The contact model already returns canonical\n`mailto:` IRIs, but this is the belt-and-braces filter at the DOM boundary so a\nmalformed value renders as text, not a link."
+        },
+        {
+          "kind": "function",
+          "name": "safeTel",
+          "return": {
+            "type": {
+              "text": "string | undefined"
+            }
+          },
+          "parameters": [
+            {
+              "name": "value",
+              "type": {
+                "text": "string | undefined"
+              }
+            }
+          ],
+          "description": "A `tel:` filter for a phone href, same belt-and-braces rationale as safeMailto."
+        },
+        {
+          "kind": "function",
+          "name": "stripScheme",
+          "return": {
+            "type": {
+              "text": "string"
+            }
+          },
+          "parameters": [
+            {
+              "name": "value",
+              "type": {
+                "text": "string"
+              }
+            }
+          ],
+          "description": "Strip a leading `mailto:` / `tel:` scheme for display text (the raw address)."
+        },
+        {
+          "kind": "function",
+          "name": "formatDate",
+          "return": {
+            "type": {
+              "text": "string"
+            }
+          },
+          "parameters": [
+            {
+              "name": "date",
+              "type": {
+                "text": "Date | undefined"
+              }
+            }
+          ],
+          "description": "Format a Date for display, or empty string for undefined. Locale-default, date only."
+        }
+      ],
+      "exports": [
+        {
+          "kind": "js",
+          "name": "BASE_INPUT_PROPS",
+          "declaration": {
+            "name": "BASE_INPUT_PROPS",
+            "module": "src/components/shared.ts"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "AbstractReadElement",
+          "declaration": {
+            "name": "AbstractReadElement",
+            "module": "src/components/shared.ts"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "safeHref",
+          "declaration": {
+            "name": "safeHref",
+            "module": "src/components/shared.ts"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "safeMailto",
+          "declaration": {
+            "name": "safeMailto",
+            "module": "src/components/shared.ts"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "safeTel",
+          "declaration": {
+            "name": "safeTel",
+            "module": "src/components/shared.ts"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "stripScheme",
+          "declaration": {
+            "name": "stripScheme",
+            "module": "src/components/shared.ts"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "formatDate",
+          "declaration": {
+            "name": "formatDate",
+            "module": "src/components/shared.ts"
+          }
+        }
+      ]
+    },
+    {
+      "kind": "javascript-module",
+      "path": "src/components/solid-view.ts",
+      "declarations": [
+        {
+          "kind": "class",
+          "description": "",
+          "name": "SolidView",
+          "members": [
+            {
+              "kind": "field",
+              "name": "src",
+              "privacy": "public",
+              "type": {
+                "text": "string | undefined"
+              },
+              "description": "The resource URL to render. Setting it re-resolves.",
+              "default": "undefined",
+              "attribute": "src"
+            },
+            {
+              "kind": "field",
+              "name": "classIri",
+              "privacy": "public",
+              "type": {
+                "text": "string | undefined"
+              },
+              "description": "Optionally PIN the RDF class to render as, skipping the type probe entirely (the\ncodegen \"I know it's a wf:Task\" path). A plain class IRI string. When set, the\nresolver maps it directly and no network probe is done before mount.",
+              "default": "undefined",
+              "attribute": "class-iri"
+            },
+            {
+              "kind": "field",
+              "name": "mode",
+              "privacy": "public",
+              "type": {
+                "text": "ComponentMode"
+              },
+              "description": "Constrain resolution to a mode (Phase-1 is always `view`).",
+              "default": "\"view\"",
+              "attribute": "mode"
+            },
+            {
+              "kind": "field",
+              "name": "fetch",
+              "privacy": "public",
+              "type": {
+                "text": "typeof fetch | undefined"
+              },
+              "description": "The session-bound authenticated fetch.",
+              "default": "undefined"
+            },
+            {
+              "kind": "field",
+              "name": "publicFetch",
+              "privacy": "public",
+              "type": {
+                "text": "typeof fetch | undefined"
+              },
+              "description": "The credential-free fetch for foreign/public reads (no fallback — see DataSeam).",
+              "default": "undefined"
+            },
+            {
+              "kind": "field",
+              "name": "publicRead",
+              "privacy": "public",
+              "type": {
+                "text": "boolean"
+              },
+              "description": "Probe + read with the public (credential-free) fetch — for a foreign-origin `src`.",
+              "default": "false",
+              "attribute": "public-read"
+            },
+            {
+              "kind": "field",
+              "name": "#token",
+              "privacy": "private",
+              "type": {
+                "text": "number"
+              },
+              "default": "0",
+              "description": "A supersede token so a stale probe never mounts over a newer one."
+            },
+            {
+              "kind": "method",
+              "name": "#resolve",
+              "privacy": "private",
+              "return": {
+                "type": {
+                  "text": "Promise<void>"
+                }
+              }
+            },
+            {
+              "kind": "method",
+              "name": "#applyResolution",
+              "privacy": "private",
+              "return": {
+                "type": {
+                  "text": "void"
+                }
+              },
+              "parameters": [
+                {
+                  "name": "token",
+                  "type": {
+                    "text": "number"
+                  }
+                },
+                {
+                  "name": "entry",
+                  "type": {
+                    "text": "ComponentEntry | undefined"
+                  }
+                },
+                {
+                  "name": "types",
+                  "optional": true,
+                  "type": {
+                    "text": "Set<string>"
+                  }
+                }
+              ],
+              "description": "Apply a resolution: lazy-load + mount the element, or fall back to unsupported."
+            },
+            {
+              "kind": "method",
+              "name": "#ensureRegistered",
+              "privacy": "private",
+              "return": {
+                "type": {
+                  "text": "Promise<void>"
+                }
+              },
+              "parameters": [
+                {
+                  "name": "importSpec",
+                  "type": {
+                    "text": "string"
+                  }
+                },
+                {
+                  "name": "token",
+                  "type": {
+                    "text": "number"
+                  }
+                }
+              ],
+              "description": "Lazy-import the element's module so its `customElements.define` has run."
+            },
+            {
+              "kind": "method",
+              "name": "#renderResolved",
+              "privacy": "private",
+              "return": {
+                "type": {
+                  "text": "TemplateResult"
+                }
+              },
+              "description": "Mount the resolved child element, forwarding the seam + src as properties."
+            }
+          ],
+          "attributes": [
+            {
+              "name": "src",
+              "type": {
+                "text": "string | undefined"
+              },
+              "description": "The resource URL to render. Setting it re-resolves.",
+              "default": "undefined",
+              "fieldName": "src"
+            },
+            {
+              "name": "class-iri",
+              "type": {
+                "text": "string | undefined"
+              },
+              "description": "Optionally PIN the RDF class to render as, skipping the type probe entirely (the\ncodegen \"I know it's a wf:Task\" path). A plain class IRI string. When set, the\nresolver maps it directly and no network probe is done before mount.",
+              "default": "undefined",
+              "fieldName": "classIri"
+            },
+            {
+              "name": "mode",
+              "type": {
+                "text": "ComponentMode"
+              },
+              "description": "Constrain resolution to a mode (Phase-1 is always `view`).",
+              "default": "\"view\"",
+              "fieldName": "mode"
+            },
+            {
+              "name": "public-read",
+              "type": {
+                "text": "boolean"
+              },
+              "description": "Probe + read with the public (credential-free) fetch — for a foreign-origin `src`.",
+              "default": "false",
+              "fieldName": "publicRead"
+            }
+          ],
+          "superclass": {
+            "name": "LitElement",
+            "package": "lit"
+          },
+          "tagName": "solid-view",
+          "customElement": true
+        }
+      ],
+      "exports": [
+        {
+          "kind": "js",
+          "name": "SolidView",
+          "declaration": {
+            "name": "SolidView",
+            "module": "src/components/solid-view.ts"
+          }
+        },
+        {
+          "kind": "custom-element-definition",
+          "name": "solid-view",
+          "declaration": {
+            "name": "SolidView",
+            "module": "src/components/solid-view.ts"
+          }
+        }
+      ]
+    },
+    {
+      "kind": "javascript-module",
+      "path": "src/components/task-form.ts",
+      "declarations": [
+        {
+          "kind": "class",
+          "description": "An editable `wf:Task` form element.",
+          "name": "JeswrTaskForm",
+          "cssParts": [
+            {
+              "description": "The inner editable <jeswr-shacl-form>.",
+              "name": "form"
+            },
+            {
+              "description": "Placeholder when no `src` is set.",
+              "name": "empty"
+            }
+          ],
+          "members": [
+            {
+              "kind": "method",
+              "name": "shapeTurtle",
+              "privacy": "protected",
+              "return": {
+                "type": {
+                  "text": "string"
+                }
+              },
+              "description": "The model's SHACL shape graph as inline Turtle.",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            },
+            {
+              "kind": "method",
+              "name": "applyFormDeltaToExisting",
+              "privacy": "protected",
+              "return": {
+                "type": {
+                  "text": "void"
+                }
+              },
+              "parameters": [
+                {
+                  "name": "formGraph",
+                  "type": {
+                    "text": "Store"
+                  }
+                },
+                {
+                  "name": "existing",
+                  "type": {
+                    "text": "Store"
+                  }
+                },
+                {
+                  "name": "resourceUrl",
+                  "type": {
+                    "text": "string"
+                  }
+                }
+              ],
+              "description": "Apply the edited task fields from the form graph onto the existing graph, via the\nmodel's typed `Task` accessor on each. Reads through `new Task(readSubject,\nformGraph)` (the form's edited node, which shacl-form may have minted) and writes\nthrough `new Task(writeSubject, existing)` (the resource's conventional `#it`) —\nso the saved triples land on `${url}#it` regardless of shacl-form's minted IRI.\nOnly the shape's predicates change; the `description` setter writes BOTH\nwf:description + dct:description (the dual-predicate contract); every untouched\ntriple on `existing` (and on OTHER subjects) is preserved.",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "src",
+              "privacy": "public",
+              "type": {
+                "text": "string | undefined"
+              },
+              "description": "The resource URL to edit. Setting it (re)renders the bound form.",
+              "default": "undefined",
+              "attribute": "src",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "fetch",
+              "privacy": "public",
+              "type": {
+                "text": "typeof fetch | undefined"
+              },
+              "description": "The session-bound authenticated fetch (used for BOTH the read + the §10 write).",
+              "default": "undefined",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "publicFetch",
+              "privacy": "public",
+              "type": {
+                "text": "typeof fetch | undefined"
+              },
+              "description": "The credential-free fetch for a public/foreign DATA read (rare for an editor).",
+              "default": "undefined",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "base",
+              "privacy": "public",
+              "type": {
+                "text": "string | undefined"
+              },
+              "description": "The base URL writes are confined to (the DataWriter scope guard). Defaults to\nthe resource's own directory when unset, so a save can never leave the edited\nresource's container.",
+              "default": "undefined",
+              "attribute": "base",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "publicRead",
+              "privacy": "public",
+              "type": {
+                "text": "boolean"
+              },
+              "description": "Read the DATA graph with the credential-free `publicFetch` (a foreign/public\nresource) instead of the authenticated `fetch`. The credential boundary still\napplies: with `publicRead` set, `publicFetch` MUST be provided (the resolver\nfails closed otherwise). NOTE this affects only the data READ that POPULATES the\nform — a SAVE is always an authenticated own-origin write (there is no public\nwrite), so editing a public-read resource still needs `fetch` set to save.",
+              "default": "false",
+              "attribute": "public-read",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "resolveOptions",
+              "privacy": "public",
+              "type": {
+                "text": "ResolveOptions | undefined"
+              },
+              "description": "Resolver options forwarded to the §9 pre-fetch (max bytes / timeout / test stub).",
+              "default": "undefined",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            },
+            {
+              "kind": "method",
+              "name": "mergeSaveCallback",
+              "privacy": "protected",
+              "return": {
+                "type": {
+                  "text": "MergeSaveCallback"
+                }
+              },
+              "description": "The §10 merge-save callback handed to <jeswr-shacl-form>. Builds a DataWriter\nscoped to `base` (or the resource directory) and runs `saveMerged`, whose mutator\ndelegates to the subclass's applyFormDeltaToExisting on the LOADED graph.",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            },
+            {
+              "kind": "method",
+              "name": "dataSource",
+              "privacy": "protected",
+              "return": {
+                "type": {
+                  "text": "GraphSource | undefined"
+                }
+              },
+              "description": "Build the data-graph source for the inner form: the resource at `src`, read with\nthe authenticated `fetch` — OR, when `publicRead` is set, with the credential-free\n`publicFetch` (the resolver fails closed if `publicFetch` is then missing, so the\nsession token never leaks to a foreign read). Honours the same `public-read`\ncontract as the read elements.",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "#onChildState",
+              "privacy": "private",
+              "description": "Forward a child <jeswr-shacl-form>'s save state up so this element can reflect it.",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            },
+            {
+              "kind": "method",
+              "name": "save",
+              "return": {
+                "type": {
+                  "text": "Promise<boolean>"
+                }
+              },
+              "description": "Imperatively trigger a save on the inner editable form.",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            },
+            {
+              "kind": "method",
+              "name": "#onSave",
+              "privacy": "private",
+              "return": {
+                "type": {
+                  "text": "void"
+                }
+              },
+              "parameters": [
+                {
+                  "name": "e",
+                  "type": {
+                    "text": "CustomEvent<SaveEventDetail>"
+                  }
+                }
+              ],
+              "description": "Re-emit the inner form's save as THIS element's own event (so a consumer listens\non the per-class form, with this element as the event target) + mirror the state.\nSTOP the child's bubbling event first so a consumer listening on this element or\nan ancestor does NOT receive a DUPLICATE `jeswr-save` (the inner event bubbles +\ncomposes; we replace it with one re-targeted to this element).",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            }
+          ],
+          "superclass": {
+            "name": "AbstractFormElement",
+            "module": "/src/components/form-base.js"
+          },
+          "solid": {
+            "class": "http://www.w3.org/2005/01/wf/flow#Task",
+            "mode": "edit",
+            "cardinality": "one"
+          },
+          "tagName": "jeswr-task-form",
+          "customElement": true,
+          "attributes": [
+            {
+              "name": "src",
+              "type": {
+                "text": "string | undefined"
+              },
+              "description": "The resource URL to edit. Setting it (re)renders the bound form.",
+              "default": "undefined",
+              "fieldName": "src",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            },
+            {
+              "name": "base",
+              "type": {
+                "text": "string | undefined"
+              },
+              "description": "The base URL writes are confined to (the DataWriter scope guard). Defaults to\nthe resource's own directory when unset, so a save can never leave the edited\nresource's container.",
+              "default": "undefined",
+              "fieldName": "base",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            },
+            {
+              "name": "public-read",
+              "type": {
+                "text": "boolean"
+              },
+              "description": "Read the DATA graph with the credential-free `publicFetch` (a foreign/public\nresource) instead of the authenticated `fetch`. The credential boundary still\napplies: with `publicRead` set, `publicFetch` MUST be provided (the resolver\nfails closed otherwise). NOTE this affects only the data READ that POPULATES the\nform — a SAVE is always an authenticated own-origin write (there is no public\nwrite), so editing a public-read resource still needs `fetch` set to save.",
+              "default": "false",
+              "fieldName": "publicRead",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            }
+          ],
+          "events": [
+            {
+              "name": "jeswr-save",
+              "type": {
+                "text": "CustomEvent"
+              },
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            }
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "kind": "js",
+          "name": "JeswrTaskForm",
+          "declaration": {
+            "name": "JeswrTaskForm",
+            "module": "src/components/task-form.ts"
+          }
+        },
+        {
+          "kind": "custom-element-definition",
+          "name": "jeswr-task-form",
+          "declaration": {
+            "name": "JeswrTaskForm",
+            "module": "src/components/task-form.ts"
+          }
+        }
+      ]
+    },
+    {
+      "kind": "javascript-module",
+      "path": "src/components/task-list.ts",
+      "declarations": [
+        {
+          "kind": "class",
+          "description": "A read-only `wf:Task` list element.\n\n(No `@solid-shape`: the model's SHACL shape is an anonymous `sh:NodeShape` with a\n`sh:targetClass wf:Task`, so there is no canonical shape IRI to advertise. The\n`@solid-class` target class is the binding key the resolver maps on.)",
+          "name": "JeswrTaskList",
+          "cssParts": [
+            {
+              "description": "The <ul> wrapping the tasks.",
+              "name": "list"
+            },
+            {
+              "description": "One task <li>.",
+              "name": "task"
+            },
+            {
+              "description": "A task's title.",
+              "name": "title"
+            },
+            {
+              "description": "A task's open/closed state badge.",
+              "name": "state"
+            },
+            {
+              "description": "A task's metadata row (assignee / due / priority).",
+              "name": "meta"
+            },
+            {
+              "description": "Placeholder when the graph holds no tasks.",
+              "name": "empty"
+            },
+            {
+              "description": "The error message when the read fails.",
+              "name": "error"
+            },
+            {
+              "description": "Placeholder shown while reading.",
+              "name": "loading"
+            }
+          ],
+          "members": [
+            {
+              "kind": "method",
+              "name": "loadFrom",
+              "privacy": "protected",
+              "return": {
+                "type": {
+                  "text": "Promise<{ graph: Store; baseUrl: string }>"
+                }
+              },
+              "parameters": [
+                {
+                  "name": "controller",
+                  "type": {
+                    "text": "DataController"
+                  }
+                },
+                {
+                  "name": "src",
+                  "type": {
+                    "text": "string"
+                  }
+                },
+                {
+                  "name": "publicRead",
+                  "type": {
+                    "text": "boolean"
+                  }
+                }
+              ],
+              "description": "Read this element's resource through the controller and return the parsed graph\nplus the base URL its subjects resolve against. A single-resource element calls\n`controller.read`; a container element calls `controller.listContainer`.",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            },
+            {
+              "kind": "method",
+              "name": "renderReady",
+              "privacy": "protected",
+              "return": {
+                "type": {
+                  "text": "TemplateResult"
+                }
+              },
+              "parameters": [
+                {
+                  "name": "graph",
+                  "type": {
+                    "text": "Store"
+                  }
+                }
+              ],
+              "description": "Render the parsed model once `status === \"ready\"` (the subject graph in `graph`).",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            },
+            {
+              "kind": "method",
+              "name": "#renderTask",
+              "privacy": "private",
+              "return": {
+                "type": {
+                  "text": "TemplateResult"
+                }
+              },
+              "parameters": [
+                {
+                  "name": "task",
+                  "type": {
+                    "text": "Task"
+                  }
+                }
+              ]
+            },
+            {
+              "kind": "field",
+              "name": "src",
+              "privacy": "public",
+              "type": {
+                "text": "string | undefined"
+              },
+              "description": "The resource / container URL to read. Setting it (re)reads through the seam.",
+              "default": "undefined",
+              "attribute": "src",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "fetch",
+              "privacy": "public",
+              "type": {
+                "text": "typeof fetch | undefined"
+              },
+              "description": "The session-bound authenticated fetch (the user's origin).",
+              "default": "undefined",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "publicFetch",
+              "privacy": "public",
+              "type": {
+                "text": "typeof fetch | undefined"
+              },
+              "description": "The credential-free fetch for foreign/public reads (no fallback — see DataSeam).",
+              "default": "undefined",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "publicRead",
+              "privacy": "public",
+              "type": {
+                "text": "boolean"
+              },
+              "description": "Read with the public (credential-free) fetch — for a foreign-origin `src`.",
+              "default": "false",
+              "attribute": "public-read",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "store",
+              "privacy": "public",
+              "type": {
+                "text": "Store | undefined"
+              },
+              "description": "A pre-parsed n3 Store to render directly, bypassing the network. When set it\ntakes precedence over `src` for the NEXT render. (The codegen/test seam — render\na graph already in hand with no fetch.) NOTE: deliberately named `store`, NOT\n`dataset`, because `HTMLElement.dataset` is a reserved DOM property (a\n`DOMStringMap`); shadowing it with an n3 Store would break the element type.",
+              "default": "undefined",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "#readToken",
+              "privacy": "private",
+              "type": {
+                "text": "number"
+              },
+              "default": "0",
+              "description": "A monotonically increasing token to drop the result of a superseded read.",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            },
+            {
+              "kind": "method",
+              "name": "inputProps",
+              "privacy": "protected",
+              "return": {
+                "type": {
+                  "text": "readonly string[]"
+                }
+              },
+              "description": "The input prop names this element re-reads on. Override to extend the base set.",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            },
+            {
+              "kind": "method",
+              "name": "#applyDirectStore",
+              "privacy": "private",
+              "return": {
+                "type": {
+                  "text": "Promise<void>"
+                }
+              },
+              "description": "Render the directly-set `store` (no network), or fall back to idle when cleared.",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            },
+            {
+              "kind": "method",
+              "name": "#read",
+              "privacy": "private",
+              "return": {
+                "type": {
+                  "text": "Promise<void>"
+                }
+              },
+              "description": "Read `src` through a DataController, classify any failure, drop a superseded result.",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            }
+          ],
+          "superclass": {
+            "name": "AbstractReadElement",
+            "module": "/src/components/shared.js"
+          },
+          "solid": {
+            "class": "http://www.w3.org/2005/01/wf/flow#Task",
+            "mode": "view",
+            "cardinality": "container"
+          },
+          "tagName": "jeswr-task-list",
+          "customElement": true,
+          "attributes": [
+            {
+              "name": "src",
+              "type": {
+                "text": "string | undefined"
+              },
+              "description": "The resource / container URL to read. Setting it (re)reads through the seam.",
+              "default": "undefined",
+              "fieldName": "src",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            },
+            {
+              "name": "public-read",
+              "type": {
+                "text": "boolean"
+              },
+              "description": "Read with the public (credential-free) fetch — for a foreign-origin `src`.",
+              "default": "false",
+              "fieldName": "publicRead",
+              "inheritedFrom": {
+                "name": "AbstractReadElement",
+                "module": "src/components/shared.ts"
+              }
+            }
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "kind": "js",
+          "name": "JeswrTaskList",
+          "declaration": {
+            "name": "JeswrTaskList",
+            "module": "src/components/task-list.ts"
+          }
+        },
+        {
+          "kind": "custom-element-definition",
+          "name": "jeswr-task-list",
+          "declaration": {
+            "name": "JeswrTaskList",
+            "module": "src/components/task-list.ts"
+          }
+        }
+      ]
+    },
+    {
+      "kind": "javascript-module",
+      "path": "src/index.ts",
+      "declarations": [],
+      "exports": [
+        {
+          "kind": "js",
+          "name": "JeswrBookmarkForm",
+          "declaration": {
+            "name": "JeswrBookmarkForm",
+            "module": "./components/bookmark-form.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "JeswrBookmarkList",
+          "declaration": {
+            "name": "JeswrBookmarkList",
+            "module": "./components/bookmark-list.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "JeswrCollection",
+          "declaration": {
+            "name": "JeswrCollection",
+            "module": "./components/collection.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "JeswrContactForm",
+          "declaration": {
+            "name": "JeswrContactForm",
+            "module": "./components/contact-form.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "JeswrContactList",
+          "declaration": {
+            "name": "JeswrContactList",
+            "module": "./components/contact-list.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "AbstractFormElement",
+          "declaration": {
+            "name": "AbstractFormElement",
+            "module": "./components/form-base.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "defaultBaseFor",
+          "declaration": {
+            "name": "defaultBaseFor",
+            "module": "./components/form-base.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "findEditedSubject",
+          "declaration": {
+            "name": "findEditedSubject",
+            "module": "./components/form-base.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "JeswrMessageList",
+          "declaration": {
+            "name": "JeswrMessageList",
+            "module": "./components/message-list.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "JeswrProfileCard",
+          "declaration": {
+            "name": "JeswrProfileCard",
+            "module": "./components/profile-card.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "JeswrShaclForm",
+          "declaration": {
+            "name": "JeswrShaclForm",
+            "module": "./components/shacl-form-edit.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "JeswrShaclView",
+          "declaration": {
+            "name": "JeswrShaclView",
+            "module": "./components/shacl-view.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "AbstractReadElement",
+          "declaration": {
+            "name": "AbstractReadElement",
+            "module": "./components/shared.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "formatDate",
+          "declaration": {
+            "name": "formatDate",
+            "module": "./components/shared.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "safeHref",
+          "declaration": {
+            "name": "safeHref",
+            "module": "./components/shared.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "safeMailto",
+          "declaration": {
+            "name": "safeMailto",
+            "module": "./components/shared.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "safeTel",
+          "declaration": {
+            "name": "safeTel",
+            "module": "./components/shared.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "stripScheme",
+          "declaration": {
+            "name": "stripScheme",
+            "module": "./components/shared.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "SolidView",
+          "declaration": {
+            "name": "SolidView",
+            "module": "./components/solid-view.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "JeswrTaskForm",
+          "declaration": {
+            "name": "JeswrTaskForm",
+            "module": "./components/task-form.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "JeswrTaskList",
+          "declaration": {
+            "name": "JeswrTaskList",
+            "module": "./components/task-list.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "DataController",
+          "declaration": {
+            "name": "DataController",
+            "module": "./data-controller.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "DataWriter",
+          "declaration": {
+            "name": "DataWriter",
+            "module": "./data-writer.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "UnconditionalOverwriteError",
+          "declaration": {
+            "name": "UnconditionalOverwriteError",
+            "module": "./data-writer.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "WriteConflictError",
+          "declaration": {
+            "name": "WriteConflictError",
+            "module": "./data-writer.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "WriteFailedError",
+          "declaration": {
+            "name": "WriteFailedError",
+            "module": "./data-writer.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "WriteScopeError",
+          "declaration": {
+            "name": "WriteScopeError",
+            "module": "./data-writer.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "AccessDeniedError",
+          "declaration": {
+            "name": "AccessDeniedError",
+            "module": "./errors.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "classifyReadError",
+          "declaration": {
+            "name": "classifyReadError",
+            "module": "./errors.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "DataControllerError",
+          "declaration": {
+            "name": "DataControllerError",
+            "module": "./errors.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "DataFormatError",
+          "declaration": {
+            "name": "DataFormatError",
+            "module": "./errors.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "NetworkError",
+          "declaration": {
+            "name": "NetworkError",
+            "module": "./errors.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "NotFoundError",
+          "declaration": {
+            "name": "NotFoundError",
+            "module": "./errors.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "collectTypes",
+          "declaration": {
+            "name": "collectTypes",
+            "module": "./resolver.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "RESOLVER_ENTRIES",
+          "declaration": {
+            "name": "RESOLVER_ENTRIES",
+            "module": "./resolver.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "resolveComponent",
+          "declaration": {
+            "name": "resolveComponent",
+            "module": "./resolver.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "resolveComponentForClass",
+          "declaration": {
+            "name": "resolveComponentForClass",
+            "module": "./resolver.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "serializeTurtle",
+          "declaration": {
+            "name": "serializeTurtle",
+            "module": "./serialize.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "countTurtleQuads",
+          "declaration": {
+            "name": "countTurtleQuads",
+            "module": "./shacl-view-fetch.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "EMPTY_SHAPES_MESSAGE",
+          "declaration": {
+            "name": "EMPTY_SHAPES_MESSAGE",
+            "module": "./shacl-view-fetch.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "neutraliseValuesTurtle",
+          "declaration": {
+            "name": "neutraliseValuesTurtle",
+            "module": "./shacl-view-fetch.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "resolveAndHarden",
+          "declaration": {
+            "name": "resolveAndHarden",
+            "module": "./shacl-view-fetch.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "resolveGraphToTurtle",
+          "declaration": {
+            "name": "resolveGraphToTurtle",
+            "module": "./shacl-view-fetch.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "VALUES_SUBJECT_SENTINEL",
+          "declaration": {
+            "name": "VALUES_SUBJECT_SENTINEL",
+            "module": "./shacl-view-fetch.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "AS_NOTE",
+          "declaration": {
+            "name": "AS_NOTE",
+            "module": "./vocab.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "BOOKMARK_CLASS",
+          "declaration": {
+            "name": "BOOKMARK_CLASS",
+            "module": "./vocab.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "LDP_BASIC_CONTAINER",
+          "declaration": {
+            "name": "LDP_BASIC_CONTAINER",
+            "module": "./vocab.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "LDP_CONTAINER",
+          "declaration": {
+            "name": "LDP_CONTAINER",
+            "module": "./vocab.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "RDF_TYPE",
+          "declaration": {
+            "name": "RDF_TYPE",
+            "module": "./vocab.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "TASK_CLASS",
+          "declaration": {
+            "name": "TASK_CLASS",
+            "module": "./vocab.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "VCARD_ADDRESS_BOOK",
+          "declaration": {
+            "name": "VCARD_ADDRESS_BOOK",
+            "module": "./vocab.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "VCARD_INDIVIDUAL",
+          "declaration": {
+            "name": "VCARD_INDIVIDUAL",
+            "module": "./vocab.js"
+          }
+        }
+      ]
+    }
+  ]
+}
