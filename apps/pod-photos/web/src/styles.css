@@ -1,0 +1,342 @@
+/* AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+   Host chrome + the pod-photos-* classes the @jeswr/pod-photos <PhotoGallery>
+   emits (the component ships no styles of its own — the host owns the look).
+
+   THEME: Tailwind v4 + the shared @jeswr/app-shell tokens drive light/dark. The
+   import order is load-bearing — `@import "tailwindcss"` FIRST, then the suite
+   OKLCH tokens + the `@theme inline` mapping (`@jeswr/app-shell/styles.css`) so
+   the shell components' utilities (bg-popover, text-muted-foreground, the `dark:`
+   variant, …) resolve to the suite palette. `@source` makes Tailwind scan the
+   app-shell package so the classes its <ThemeToggle/> + <AccountMenu/> emit are
+   actually generated (a node_modules package is otherwise outside the content
+   scan). The path is relative to THIS file. */
+@import "tailwindcss";
+@import "@jeswr/app-shell/styles.css";
+@source "../node_modules/@jeswr/app-shell/dist";
+
+/* The host chrome below predates the shared tokens and uses its own variable
+   names (--bg / --ink / --accent / …). Map them onto the app-shell OKLCH tokens so
+   the WHOLE pod-photos UI (login card, header, gallery grid, breadcrumb) follows
+   the theme — the `.dark` class the ThemeProvider toggles on <html> flips the OKLCH
+   vars, and these aliases inherit it for free.
+
+   CSS-ISOLATION RELAXATION (#80 / solid-elements pilot #115): the host's brand
+   `--accent` can now alias DIRECTLY onto app-shell's OWN `--accent` token again.
+   The earlier adopter workaround renamed it to a host-only `--host-accent` to avoid
+   CLOBBERING the shell components' subtle hover/selected SURFACE token — but
+   @jeswr/app-shell #80 made the shell self-isolating: its components read
+   SHELL-PRIVATE `--as-*` tokens (mirrored from hardcoded OKLCH literals in the
+   package's tokens.css, NOT from these public `--accent`/`--muted`), so re-aliasing
+   the public tokens no longer affects the shell at all. Verified against app-shell
+   `5a7484d` (the merged main with the #80 fix). `--border` is the SAME name as the
+   app-shell token, so it is already unified — do NOT re-alias it to itself.
+
+   POD-PHOTOS DEVIATION (intentional, kept): `--muted` is NOT re-aliased to the text
+   token. Unlike the other adopters, pod-photos legitimately consumes the app-shell
+   `--muted` SURFACE token directly for the thumbnail/placeholder backgrounds
+   (`.pod-photos-thumb*`), so the host keeps its OWN `--muted-text`
+   (→ `--muted-foreground`) for muted TEXT and leaves `--muted` as the shell's
+   surface token. This is correct semantic use of the surface token, NOT the old
+   isolation workaround. */
+:root {
+  --bg: var(--background);
+  --surface: var(--card);
+  --ink: var(--foreground);
+  --muted-text: var(--muted-foreground);
+  --accent: var(--primary);
+  --accent-ink: var(--primary-foreground);
+  --danger: var(--destructive);
+  --ok: var(--success);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  color: var(--ink);
+  background: var(--bg);
+}
+
+a {
+  color: var(--accent);
+}
+
+/* ── Login ─────────────────────────────────────────────────────────────── */
+.login-screen {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 1.5rem;
+}
+.login-card {
+  width: 100%;
+  max-width: 28rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  padding: 2rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+.login-card h1 {
+  margin: 0 0 0.25rem;
+  font-size: 1.5rem;
+}
+.login-sub {
+  color: var(--muted-text);
+  margin: 0 0 1.25rem;
+  font-size: 0.95rem;
+}
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.login-form label {
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+.login-form input {
+  padding: 0.6rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  font-size: 0.95rem;
+}
+.login-error {
+  color: var(--danger);
+  font-size: 0.9rem;
+  margin-top: 0.75rem;
+}
+.login-hint {
+  color: var(--muted-text);
+  font-size: 0.85rem;
+  margin-top: 1rem;
+}
+
+/* CSS-ISOLATION RELAXATION (#80 / solid-elements adoption #115): the host's
+   filled-button base, the simpler pre-workaround form — but SCOPED to
+   `:not([data-app-shell-control])` (the #121 safe form).
+
+   WHY THE `:not(...)` SCOPE (roborev Medium, addressed): this rule is UNLAYERED, so
+   it out-ranks Tailwind's layered utilities. @jeswr/app-shell #80 makes the shell
+   self-isolating for COLOUR — its UNLAYERED reset re-asserts each control's
+   background/border/text via `[data-app-shell-control]`, which out-ranks a bare
+   `button {}`. BUT that reset DELIBERATELY does NOT touch the BOX MODEL
+   (padding/border-radius/font-size/sizing) — the shell components set those per
+   instance via LAYERED `className` utilities (e.g. ThemeToggle's `size-9`,
+   AccountMenu's `h-auto px-2 py-1.5`), which an unlayered `button { padding;
+   border-radius; font-size }` WOULD clobber, distorting the icon/menu buttons. So a
+   bare `button {}` is NOT fully safe even under #80. The `:not([data-app-shell-control])`
+   scope excludes every app-shell control from the host base entirely, so the shell's
+   box model survives unimpeded — strictly safer than the bare form, while the host's
+   OWN buttons (and the pod-photos-* component buttons, which carry no app-shell
+   marker) still get the filled base + their outline overrides below.
+
+   The solid-elements P0 components (<jeswr-loading> etc.) are immune for a different
+   reason: they live in shadow DOM, which this light-DOM rule cannot pierce. The
+   css-isolation.test.tsx guard pins the colour-isolation contract; this `:not(...)`
+   scope additionally protects the box model. Verified against app-shell `5a7484d`. */
+button:not([data-app-shell-control]) {
+  cursor: pointer;
+  border: none;
+  border-radius: 0.5rem;
+  padding: 0.6rem 0.9rem;
+  font-size: 0.95rem;
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+button:not([data-app-shell-control]):disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* ── App shell ─────────────────────────────────────────────────────────── */
+.app-shell {
+  max-width: 64rem;
+  margin: 0 auto;
+  padding: 1.25rem;
+}
+.app-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border);
+}
+.app-brand {
+  font-weight: 700;
+  font-size: 1.1rem;
+}
+/* Right-aligned header controls: the app-shell <FeedbackButton/> + <ThemeToggle/>
+   + <AccountMenu/>. `margin-left: auto` pushes the trio to the top-right; the
+   app-shell components bring their own (Tailwind-utility) styling, so this only
+   handles placement. */
+.app-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-left: auto;
+}
+/* The host's OWN outline buttons (the gallery breadcrumb / error retry / folder
+   tiles + the legacy logout): override the filled `button:not([data-app-shell-control])`
+   base above with a transparent, bordered look. They inherit cursor/radius/padding/
+   font-size from the base, so each only declares its override deltas. (The header
+   replaced the bare logout button with the app-shell AccountMenu; `button.app-logout`
+   remains for any host-owned secondary action.) `button.app-logout` matches the
+   scoped base's specificity (0,1,1) and wins by source order. */
+button.app-logout {
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--border);
+}
+/* The fallback banner is theme-aware: a soft tint derived from the suite
+   `--warning` token (via color-mix over the card surface) with token-coloured
+   text + border. Because the tokens flip on `.dark`, the banner stays legible in
+   BOTH modes — no hard-coded light surface. */
+.app-note {
+  background: color-mix(in oklab, var(--warning) 16%, var(--card));
+  border: 1px solid color-mix(in oklab, var(--warning) 40%, var(--card));
+  color: var(--foreground);
+  border-radius: 0.5rem;
+  padding: 0.6rem 0.8rem;
+  font-size: 0.85rem;
+  margin: 0.75rem 0;
+}
+.app-main {
+  margin-top: 1rem;
+}
+.app-loading {
+  display: block;
+  color: var(--muted-text);
+  font-style: italic;
+  padding: 2rem 0;
+}
+
+/* ── PhotoGallery (pod-photos-*) ───────────────────────────────────────── */
+.pod-photos-title {
+  font-size: 1.25rem;
+  margin: 0 0 1rem;
+}
+
+.pod-photos-breadcrumb {
+  margin-bottom: 1rem;
+}
+.pod-photos-breadcrumb ol {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 0.9rem;
+}
+.pod-photos-breadcrumb li:not(:last-child)::after {
+  content: "/";
+  color: var(--muted-text);
+  margin-left: 0.35rem;
+}
+/* A link-style button: override the filled `button:not([data-app-shell-control])`
+   base back to a bare inline link (no fill, no border, no padding). Equal
+   specificity (0,1,1), wins by source order. */
+.pod-photos-breadcrumb button {
+  background: transparent;
+  color: var(--accent);
+  border: none;
+  padding: 0;
+  border-radius: 0;
+  font: inherit;
+}
+.pod-photos-breadcrumb [aria-current="page"] {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.pod-photos-loading,
+.pod-photos-empty {
+  display: block;
+  color: var(--muted-text);
+}
+.pod-photos-error {
+  color: var(--danger);
+}
+/* The retry button: override the filled `button:not([data-app-shell-control])`
+   base to a transparent, bordered outline (inheriting cursor/radius/padding/
+   font-size from the base). Equal specificity (0,1,1), wins by source order. */
+.pod-photos-error button {
+  margin-top: 0.5rem;
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--border);
+}
+
+/* Folders */
+.pod-photos-folders {
+  list-style: none;
+  margin: 0 0 1.25rem;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+/* A surface tile: override the filled `button:not([data-app-shell-control])` base
+   to a bordered card look (inheriting cursor from the base). Selected as
+   `button.pod-photos-folder-link` to match the scoped base's specificity (0,1,1)
+   and win by source order — a bare `.pod-photos-folder-link` (0,1,0) would lose the
+   background/padding to the base. */
+button.pod-photos-folder-link {
+  background: var(--surface);
+  color: var(--accent);
+  border: 1px solid var(--border);
+  padding: 0.5rem 0.8rem;
+  font: inherit;
+}
+
+/* Photo grid */
+.pod-photos-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+  gap: 1rem;
+}
+.pod-photos-tile figure {
+  margin: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0.6rem;
+  overflow: hidden;
+}
+.pod-photos-thumb {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  /* the app-shell `--muted` SURFACE token (a theme-aware neutral) so the
+     loading/placeholder tint follows light/dark — correct semantic use of the
+     surface token (NOT the host's `--muted-text`). */
+  background: var(--muted);
+}
+.pod-photos-thumb-missing {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  font-size: 2rem;
+  background: var(--muted);
+}
+.pod-photos-caption {
+  display: block;
+  padding: 0.55rem 0.7rem;
+  font-size: 0.85rem;
+}
+.pod-photos-name {
+  font-weight: 600;
+  word-break: break-word;
+}
+.pod-photos-dimensions {
+  color: var(--muted-text);
+}
