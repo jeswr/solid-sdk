@@ -1,0 +1,50 @@
+{
+  "$schema": "https://raw.githubusercontent.com/jeswr/full-solid-ecosystem/main/tracking/schema/suite.schema.json",
+  "id": "solid-dav-bridge",
+  "kind": "package",
+  "name": "Solid DAV Bridge",
+  "repo": "https://github.com/jeswr/solid-dav-bridge",
+  "category": "interop",
+  "maturity": "alpha",
+  "visibility": "public",
+  "stack": {
+    "lang": "TypeScript (ESM, NodeNext)",
+    "runtime": "Node >=24",
+    "task-model": "@jeswr/solid-task-model (git pin, committed dist — ./contacts buildPerson)",
+    "fetch-rdf": "@jeswr/fetch-rdf ^0.1 (via task-model)",
+    "guarded-fetch": "@jeswr/guarded-fetch (git, committed dist)",
+    "rdf": "n3 ^2 (n3.Writer + DataFactory for schema:Event)",
+    "test": "vitest ^4.x",
+    "lint": "@biomejs/biome ^2.x",
+    "node": ">=24"
+  },
+  "dependsOn": [
+    "solid-task-model",
+    "fetch-rdf",
+    "guarded-fetch"
+  ],
+  "federation": {
+    "sectors": [
+      "calendar",
+      "contacts",
+      "interop"
+    ],
+    "produces": [
+      "calendar",
+      "contacts"
+    ],
+    "consumes": [],
+    "note": "OSS-integration target #10 — a STANDARD-PROTOCOL READ/import bridge from CalDAV (RFC 4791) iCalendar (RFC 5545) calendars + CardDAV (RFC 6352) vCard (RFC 6350) address books into a Solid pod as the suite's established RDF models: VEVENT → schema:Event (typed quads + n3.Writer, NO hand-built RDF) keeping the W3C RDF-iCal ical: vocab for fields schema.org lacks (RRULE carried RAW as ical:rrule, NOT expanded in phase 1; subject typed both schema:Event AND ical:Vevent); vCard → vcard:AddressBook via @jeswr/solid-task-model's ./contacts buildPerson (SolidOS-readable structured vcard:hasEmail/hasTelephone nodes, never hand-built triples). PURE MAPPERS (veventToEvent/vcardToContact) are fixture-tested with no network; a minimal in-house RFC 5545/6350 content-line parser (line unfolding + property/param parsing) keeps the committed dist self-contained under ignore-scripts=true with no inlined third-party parser. importCalendar/importAddressBook accept EITHER already-fetched text OR a davUrl routed through @jeswr/guarded-fetch (https-only, block private/loopback/metadata, DNS-pin, cap+timeout, NO auto-redirect). DAV Basic/Bearer credential turned into an Authorization header only — NEVER logged, NEVER in a URL, NEVER re-sent cross-origin. Imports land OWNER-ONLY (never auto-shares, never writes a broadening ACL — inherits the required owner-private container); stable per-UID slug for idempotent re-sync. Untrusted-input hardened: unparseable date drops that field, non-http(s) IRI dropped, malformed entry drops the bad field rather than aborting the import. READ/import-only phase 1; write-back + sync-collection/ctag incremental + RRULE expansion are follow-ups; live DAV creds = needs:user. GitHub-installable now (committed self-contained dist/, ignore-scripts=true); npm publish deferred."
+  },
+  "status": {
+    "generatedAt": "2026-07-03T05:14:33.832Z",
+    "commit": "94c96c8d10a90ed5d92cce2a9922a358990e49e7",
+    "version": "0.0.1",
+    "gate": {
+      "lint": "skip",
+      "typecheck": "skip",
+      "test": "skip",
+      "build": "skip"
+    }
+  }
+}
