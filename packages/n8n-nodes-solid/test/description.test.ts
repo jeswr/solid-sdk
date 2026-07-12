@@ -23,7 +23,7 @@ describe("Solid node description", () => {
 
   it("exposes Resource and Container resources", () => {
     const resourceProp = d.properties.find((p) => p.name === "resource");
-    const values = (resourceProp?.options as { value: string }[]).map((o) => o.value);
+    const values = (resourceProp?.options as { value: string }[] | undefined)?.map((o) => o.value);
     expect(values).toEqual(["resource", "container"]);
   });
 
@@ -33,8 +33,8 @@ describe("Solid node description", () => {
         p.name === "operation" &&
         (p.displayOptions?.show?.resource as string[] | undefined)?.includes("resource"),
     );
-    const values = (op?.options as { value: string }[]).map((o) => o.value);
-    expect(values.sort()).toEqual(["create", "delete", "read", "update"]);
+    const values = (op?.options as { value: string }[] | undefined)?.map((o) => o.value);
+    expect(values?.sort()).toEqual(["create", "delete", "read", "update"]);
   });
 
   it("offers List on Container", () => {
@@ -43,7 +43,7 @@ describe("Solid node description", () => {
         p.name === "operation" &&
         (p.displayOptions?.show?.resource as string[] | undefined)?.includes("container"),
     );
-    const values = (op?.options as { value: string }[]).map((o) => o.value);
+    const values = (op?.options as { value: string }[] | undefined)?.map((o) => o.value);
     expect(values).toEqual(["list"]);
   });
 

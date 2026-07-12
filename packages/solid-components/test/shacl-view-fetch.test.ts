@@ -247,7 +247,7 @@ describe("resolveGraphToTurtle — §9 fix(4) no-network RDF types (inline + tru
 // `dct:conformsTo` → a non-http (urn:) profile reference (legit, derives the
 // values subject so data renders).
 describe("neutraliseValuesTurtle — drops ONLY dct:conformsTo http(s) import targets (NARROWED)", () => {
-  const HOSTILE = `
+  const Hostile = `
 @prefix dct: <http://purl.org/dc/terms/> .
 @prefix ex: <https://ex.example/> .
 <https://victim.example/x>
@@ -258,7 +258,7 @@ describe("neutraliseValuesTurtle — drops ONLY dct:conformsTo http(s) import ta
 `;
 
   it("drops conformsTo→http(s) but KEEPS rdf:type (incl. http) — the HIGH fix", async () => {
-    const out = await neutraliseValuesTurtle(HOSTILE);
+    const out = await neutraliseValuesTurtle(Hostile);
     // The conformsTo → http import vector is gone.
     expect(out).not.toContain("169.254.169.254");
     expect(out).not.toContain("conformsTo");
@@ -330,7 +330,7 @@ describe("countTurtleQuads — the empty-shapes fail-closed signal (fix 1)", () 
 // precondition). On a RAW hostile data graph it fires real unguarded fetches to
 // the SSRF targets; on the NEUTRALISED graph it fires none.
 describe("§9 EXECUTION PROOF — upstream loadGraphs auto-import (the HIGH)", () => {
-  const HOSTILE = `
+  const Hostile = `
 @prefix dct: <http://purl.org/dc/terms/> .
 <https://victim.example/x>
   dct:conformsTo <http://169.254.169.254/latest/meta-data/iam/security-credentials/> ;
@@ -351,7 +351,7 @@ describe("§9 EXECUTION PROOF — upstream loadGraphs auto-import (the HIGH)", (
     try {
       // loadOwlImports:false ⇒ `data-ignore-owl-imports` is SET; the auto-import
       // is a DIFFERENT path, so it still fires.
-      await loadGraphs({ shapes: "", values: HOSTILE, loadOwlImports: false } as never);
+      await loadGraphs({ shapes: "", values: Hostile, loadOwlImports: false } as never);
       // It fetched BOTH the cloud-metadata IAM endpoint and the internal IP, unguarded.
       expect(calls).toContain("http://169.254.169.254/latest/meta-data/iam/security-credentials/");
       expect(calls).toContain("http://192.168.0.1/internal-shape");
@@ -361,7 +361,7 @@ describe("§9 EXECUTION PROOF — upstream loadGraphs auto-import (the HIGH)", (
   });
 
   it("NEUTRALISED data + empty shapes → the upstream auto-import fetches NOTHING (the narrowed conformsTo strip removes the auto-DERIVATION source, so the kept rdf:type→http is never followed)", async () => {
-    const neutralised = await neutraliseValuesTurtle(HOSTILE);
+    const neutralised = await neutraliseValuesTurtle(Hostile);
     // Sanity: the narrowed neutralisation KEEPS the rdf:type→http object (the High
     // fix) but DROPS conformsTo. Without a conformsTo, upstream's
     // `findConformsToValuesSubject` derives NO values subject, so the auto-import
@@ -388,7 +388,7 @@ describe("§9 EXECUTION PROOF — upstream loadGraphs auto-import (the HIGH)", (
   // (a) the edge fires on EMPTY shapes (the threat is real), and (b) the IDENTICAL
   // data with a NON-empty shapes graph fetches NOTHING (fix 1 removes the
   // `countQuads(loaded-shapes) === 0` precondition).
-  const CONFORMS_URN_TYPE_HTTP = `
+  const ConformsUrnTypeHttp = `
 @prefix dct: <http://purl.org/dc/terms/> .
 <https://victim.example/x>
   dct:conformsTo <urn:benign:profile> ;
@@ -398,7 +398,7 @@ describe("§9 EXECUTION PROOF — upstream loadGraphs auto-import (the HIGH)", (
   it("the conformsTo→urn + rdf:type→http edge DOES fetch on EMPTY shapes (neutralise alone is not complete — the urn conformsTo survives + derives a subject)", async () => {
     // This graph survives the narrowed neutralisation unchanged (urn conformsTo
     // kept, rdf:type kept), so it isolates the edge fix (1) must cover.
-    const neutralised = await neutraliseValuesTurtle(CONFORMS_URN_TYPE_HTTP);
+    const neutralised = await neutraliseValuesTurtle(ConformsUrnTypeHttp);
     expect(neutralised).toContain("urn:benign:profile");
     expect(neutralised).toContain("169.254.169.254");
     const { spy, calls } = spyFetch();
@@ -413,7 +413,7 @@ describe("§9 EXECUTION PROOF — upstream loadGraphs auto-import (the HIGH)", (
   });
 
   it("the SAME edge with a NON-empty shapes graph fetches NOTHING — fix (1) is the closer", async () => {
-    const neutralised = await neutraliseValuesTurtle(CONFORMS_URN_TYPE_HTTP);
+    const neutralised = await neutraliseValuesTurtle(ConformsUrnTypeHttp);
     const { spy, calls } = spyFetch();
     try {
       // Identical hostile data, but a NON-empty shapes graph (what the element ALWAYS

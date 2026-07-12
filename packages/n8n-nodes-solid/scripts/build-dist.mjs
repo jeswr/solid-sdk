@@ -1,7 +1,7 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 /**
- * build-dist — produce the committed, self-contained `dist/` for a GitHub-branch
- * install under `ignore-scripts=true` AND for n8n's community-node loader.
+ * build-dist — produce the self-contained `dist/` used by n8n's community-node
+ * loader and by the generated read-only mirror repository.
  *
  * MODULE FORMAT — CommonJS (load-bearing). n8n loads a community node + its
  * credential by `require()`-ing the build paths in `package.json`'s `n8n` field —
@@ -15,8 +15,7 @@
  * external is constrained by the CJS format: an ESM-ONLY dependency cannot be
  * `require()`d, so it MUST be bundled in.
  *   - INLINED (bundled into dist):
- *       - `@jeswr/fetch-rdf` — off-npm; a consumer under `ignore-scripts=true`
- *         cannot resolve/build it, so it is inlined to make dist self-contained.
+ *       - `@jeswr/fetch-rdf` — inlined to keep the CommonJS dist self-contained.
  *       - `@solid/object` + `@rdfjs/wrapper` — ESM-ONLY (`"type":"module"`, no CJS
  *         export). A CJS `require()` of them would FAIL, so they are bundled in.
  *   - EXTERNAL (resolved by the consumer / provided by the n8n runtime):
@@ -42,8 +41,8 @@ const outdir = join(root, "dist");
 /**
  * Everything that stays EXTERNAL (resolved by the consumer / provided by the n8n
  * runtime, not inlined). Only CJS-importable runtime deps + the peer dep are here;
- * the off-npm `@jeswr/fetch-rdf` and the ESM-ONLY `@solid/object`/`@rdfjs/wrapper`
- * are INLINED by virtue of being ABSENT from this list (see the header).
+ * `@jeswr/fetch-rdf` and the ESM-ONLY `@solid/object`/`@rdfjs/wrapper` are INLINED
+ * by virtue of being ABSENT from this list (see the header).
  */
 const EXTERNAL = [
   // CJS runtime deps — kept external, resolved from our `dependencies`:
@@ -55,14 +54,7 @@ const EXTERNAL = [
 ];
 
 async function main(buildDir = outdir) {
-  // 1. Ensure @jeswr/fetch-rdf's dist exists in node_modules so esbuild can
-  //    resolve + inline it (ignore-scripts skipped its prepare on install).
-  execFileSync("node", [join(root, "scripts", "build-deps.mjs")], {
-    cwd: root,
-    stdio: ["ignore", "ignore", "inherit"],
-  });
-
-  // 2. Clean target then bundle BOTH entry points as CommonJS (esbuild owns .js).
+  // 1. Clean target then bundle BOTH entry points as CommonJS (esbuild owns .js).
   rmSync(buildDir, { recursive: true, force: true });
   await build({
     entryPoints: {
@@ -86,11 +78,11 @@ async function main(buildDir = outdir) {
     logLevel: "warning",
   });
 
-  // 3. Copy the node SVG icon next to the emitted node file (n8n loads it via the
+  // 2. Copy the node SVG icon next to the emitted node file (n8n loads it via the
   //    `icon: "file:solid.svg"` reference, resolved relative to the node module).
   cpSync(join(root, "nodes", "Solid", "solid.svg"), join(buildDir, "nodes", "Solid", "solid.svg"));
 
-  // 4. Emit the .d.ts declarations (declaration-only — esbuild already wrote JS).
+  // 3. Emit the .d.ts declarations (declaration-only — esbuild already wrote JS).
   execFileSync(
     "node",
     [

@@ -115,8 +115,9 @@ export function composeIssueTitle(category: FeedbackCategory, description: strin
       .split("\n")
       .map((l) => l.trim())
       .find(Boolean) ?? "";
-  const MAX = 80;
-  const trimmed = firstLine.length > MAX ? `${firstLine.slice(0, MAX - 1)}…` : firstLine;
+  const maxLength = 80;
+  const trimmed =
+    firstLine.length > maxLength ? `${firstLine.slice(0, maxLength - 1)}…` : firstLine;
   return trimmed ? `${prefix} ${trimmed}` : prefix;
 }
 

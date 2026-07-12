@@ -1,6 +1,7 @@
 {
   "name": "@jeswr/solid-elements",
   "version": "0.1.0",
+  "securityCritical": true,
   "description": "Framework-agnostic W3C Web Components (Lit 3) for the Solid app suite — presentation-only chrome (theme toggle, account menu, feedback button, empty/error/loading states) that inherits the @jeswr/app-shell OKLCH theme through CSS custom properties. Includes ergonomic React (@lit/react) wrappers.",
   "author": "Claude Opus 4.8 (@jeswr PSS agent)",
   "license": "MIT",
@@ -42,14 +43,12 @@
     "test": "vitest run && npm run check:manifest",
     "manifest": "cem analyze",
     "check:manifest": "node scripts/check-manifest.mjs",
-    "check:dist": "node scripts/check-dist.mjs",
     "api:report": "node scripts/api-report.mjs --local",
-    "api:check": "node scripts/api-report.mjs",
-    "prepublishOnly": "npm run build"
+    "api:check": "node scripts/api-report.mjs"
   },
   "peerDependencies": {
     "@jeswr/fetch-rdf": "^0.1.0",
-    "@jeswr/solid-session-restore": "*",
+    "@jeswr/solid-session-restore": "workspace:*",
     "@solid/object": "^0.6.0",
     "@solid/reactive-authentication": "^0.1.3",
     "dpop": "^2.1.1",
@@ -95,7 +94,7 @@
     "@biomejs/biome": "^2.5.0",
     "@custom-elements-manifest/analyzer": "^0.11.0",
     "@jeswr/fetch-rdf": "^0.1.0",
-    "@jeswr/solid-session-restore": "github:jeswr/solid-session-restore#main",
+    "@jeswr/solid-session-restore": "workspace:*",
     "@solid/object": "^0.6.0",
     "@solid/reactive-authentication": "^0.1.3",
     "@testing-library/dom": "^10.4.0",
@@ -104,6 +103,7 @@
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "comment-parser": "^1.2.4",
     "dpop": "^2.1.1",
     "jsdom": "^26.1.0",
     "n3": "^1.17.0",

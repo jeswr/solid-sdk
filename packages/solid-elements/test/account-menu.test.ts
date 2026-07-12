@@ -77,7 +77,7 @@ describe("<jeswr-account-menu>", () => {
     el.appendChild(item);
     document.body.appendChild(el);
     await el.updateComplete;
-    (el.shadowRoot?.querySelector(".trigger") as HTMLButtonElement).click();
+    el.shadowRoot?.querySelector<HTMLButtonElement>(".trigger")?.click();
     await el.updateComplete;
     const slot = el.shadowRoot?.querySelector("slot") as HTMLSlotElement;
     const assigned = slot.assignedElements();
@@ -90,7 +90,7 @@ describe("<jeswr-account-menu>", () => {
     const removeSpy = vi.spyOn(document, "removeEventListener");
 
     // Open: registers exactly one document-level pointerdown listener.
-    (el.shadowRoot?.querySelector(".trigger") as HTMLButtonElement).click();
+    el.shadowRoot?.querySelector<HTMLButtonElement>(".trigger")?.click();
     await el.updateComplete;
     expect(el.shadowRoot?.querySelector(".menu")).not.toBeNull();
     const pointerAdds = addSpy.mock.calls.filter(([type]) => type === "pointerdown");
@@ -109,12 +109,12 @@ describe("<jeswr-account-menu>", () => {
 
   it("emits sign-out on the sign-out action and closes", async () => {
     const el = await mount({ name: "Ada" });
-    (el.shadowRoot?.querySelector(".trigger") as HTMLButtonElement).click();
+    el.shadowRoot?.querySelector<HTMLButtonElement>(".trigger")?.click();
     await el.updateComplete;
     const fired = new Promise<void>((resolve) => {
       el.addEventListener("sign-out", () => resolve(), { once: true });
     });
-    (el.shadowRoot?.querySelector(".item") as HTMLButtonElement).click();
+    el.shadowRoot?.querySelector<HTMLButtonElement>(".item")?.click();
     await fired;
     await el.updateComplete;
     expect(el.shadowRoot?.querySelector(".menu")).toBeNull();

@@ -29,15 +29,12 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json && node scripts/copy-css.mjs",
-    "lint": "biome check src test scripts && npm run check:lockfile-transport",
+    "lint": "biome check src test scripts",
     "lint:fix": "biome check --write src test scripts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "check:dist": "node scripts/check-dist.mjs",
-    "check:lockfile-transport": "node scripts/check-lockfile-transport.mjs",
     "api:report": "api-extractor run --local",
-    "api:check": "api-extractor run",
-    "prepublishOnly": "npm run build"
+    "api:check": "api-extractor run"
   },
   "peerDependencies": {
     "react": ">=18",

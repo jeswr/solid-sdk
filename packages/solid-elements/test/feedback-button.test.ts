@@ -24,7 +24,7 @@ async function mount(
 }
 
 async function openAndType(el: JeswrFeedbackButton, text: string) {
-  (el.shadowRoot?.querySelector(".trigger") as HTMLButtonElement).click();
+  el.shadowRoot?.querySelector<HTMLButtonElement>(".trigger")?.click();
   await el.updateComplete;
   const ta = el.shadowRoot?.querySelector("textarea") as HTMLTextAreaElement;
   ta.value = text;
@@ -48,7 +48,7 @@ describe("<jeswr-feedback-button> registration + open/close", () => {
   });
   it("opens a dialog with aria-modal and closes on Escape", async () => {
     const el = await mount({ repo: "jeswr/x", appName: "X" });
-    (el.shadowRoot?.querySelector(".trigger") as HTMLButtonElement).click();
+    el.shadowRoot?.querySelector<HTMLButtonElement>(".trigger")?.click();
     await el.updateComplete;
     const dialog = el.shadowRoot?.querySelector('[role="dialog"]');
     expect(dialog?.getAttribute("aria-modal")).toBe("true");
@@ -58,9 +58,9 @@ describe("<jeswr-feedback-button> registration + open/close", () => {
   });
   it("closes when the backdrop is clicked", async () => {
     const el = await mount({ repo: "jeswr/x", appName: "X" });
-    (el.shadowRoot?.querySelector(".trigger") as HTMLButtonElement).click();
+    el.shadowRoot?.querySelector<HTMLButtonElement>(".trigger")?.click();
     await el.updateComplete;
-    (el.shadowRoot?.querySelector(".backdrop") as HTMLButtonElement).click();
+    el.shadowRoot?.querySelector<HTMLButtonElement>(".backdrop")?.click();
     await el.updateComplete;
     expect(el.shadowRoot?.querySelector('[role="dialog"]')).toBeNull();
   });
@@ -75,7 +75,7 @@ describe("<jeswr-feedback-button> default (zero-infra) mechanism", () => {
     vi.stubGlobal("open", openSpy);
     const el = await mount({ repo: "jeswr/pod-mail", appName: "Pod Mail", appVersion: "1.0.0" });
     await openAndType(el, "The save button fails");
-    (el.shadowRoot?.querySelector('button[type="submit"]') as HTMLButtonElement).click();
+    el.shadowRoot?.querySelector<HTMLButtonElement>('button[type="submit"]')?.click();
     await el.updateComplete;
 
     expect(openSpy).toHaveBeenCalledTimes(1);
@@ -99,7 +99,7 @@ describe("<jeswr-feedback-button> default (zero-infra) mechanism", () => {
       el.addEventListener("feedback-submit", (e) => resolve((e as CustomEvent).detail), {
         once: true,
       });
-      (el.shadowRoot?.querySelector('button[type="submit"]') as HTMLButtonElement).click();
+      el.shadowRoot?.querySelector<HTMLButtonElement>('button[type="submit"]')?.click();
     });
     expect(detail.repo).toBe("jeswr/x");
     expect(detail.labels).toEqual(["user-feedback", "bug"]);
@@ -111,7 +111,7 @@ describe("<jeswr-feedback-button> default (zero-infra) mechanism", () => {
     vi.stubGlobal("open", openSpy);
     const el = await mount({ repo: "evil.com/x?y", appName: "X" });
     await openAndType(el, "Hello");
-    (el.shadowRoot?.querySelector('button[type="submit"]') as HTMLButtonElement).click();
+    el.shadowRoot?.querySelector<HTMLButtonElement>('button[type="submit"]')?.click();
     await el.updateComplete;
     expect(openSpy).not.toHaveBeenCalled();
     expect(el.shadowRoot?.querySelector(".err")).not.toBeNull();
@@ -121,7 +121,7 @@ describe("<jeswr-feedback-button> default (zero-infra) mechanism", () => {
     const openSpy = vi.fn();
     vi.stubGlobal("open", openSpy);
     const el = await mount({ repo: "jeswr/x", appName: "X" });
-    (el.shadowRoot?.querySelector(".trigger") as HTMLButtonElement).click();
+    el.shadowRoot?.querySelector<HTMLButtonElement>(".trigger")?.click();
     await el.updateComplete;
     const submit = el.shadowRoot?.querySelector('button[type="submit"]') as HTMLButtonElement;
     expect(submit.disabled).toBe(true);
@@ -133,7 +133,7 @@ describe("<jeswr-feedback-button> proxy (submit hook) mechanism", () => {
     const submit = vi.fn(async () => ({ url: "https://github.com/jeswr/x/issues/42", number: 42 }));
     const el = await mount({ repo: "jeswr/x", appName: "X", submit });
     await openAndType(el, "Proxy please");
-    (el.shadowRoot?.querySelector('button[type="submit"]') as HTMLButtonElement).click();
+    el.shadowRoot?.querySelector<HTMLButtonElement>('button[type="submit"]')?.click();
     // Let the microtask + re-render settle.
     await el.updateComplete;
     await Promise.resolve();
@@ -151,7 +151,7 @@ describe("<jeswr-feedback-button> proxy (submit hook) mechanism", () => {
     });
     const el = await mount({ repo: "jeswr/x", appName: "X", submit });
     await openAndType(el, "Will fail");
-    (el.shadowRoot?.querySelector('button[type="submit"]') as HTMLButtonElement).click();
+    el.shadowRoot?.querySelector<HTMLButtonElement>('button[type="submit"]')?.click();
     await el.updateComplete;
     await Promise.resolve();
     await el.updateComplete;
@@ -169,13 +169,13 @@ describe("<jeswr-feedback-button> privacy (WebID consent default OFF)", () => {
       el.addEventListener("feedback-submit", (e) => resolve((e as CustomEvent).detail), {
         once: true,
       });
-      (el.shadowRoot?.querySelector('button[type="submit"]') as HTMLButtonElement).click();
+      el.shadowRoot?.querySelector<HTMLButtonElement>('button[type="submit"]')?.click();
     });
     expect(noConsent.diagnostics.webId).toBeUndefined();
     expect(noConsent.body).not.toContain("Reporter WebID");
 
     // Re-open, tick consent → WebID included.
-    (el.shadowRoot?.querySelector(".trigger") as HTMLButtonElement).click();
+    el.shadowRoot?.querySelector<HTMLButtonElement>(".trigger")?.click();
     await el.updateComplete;
     const ta = el.shadowRoot?.querySelector("textarea") as HTMLTextAreaElement;
     ta.value = "Hi again";
@@ -189,7 +189,7 @@ describe("<jeswr-feedback-button> privacy (WebID consent default OFF)", () => {
       el.addEventListener("feedback-submit", (e) => resolve((e as CustomEvent).detail), {
         once: true,
       });
-      (el.shadowRoot?.querySelector('button[type="submit"]') as HTMLButtonElement).click();
+      el.shadowRoot?.querySelector<HTMLButtonElement>('button[type="submit"]')?.click();
     });
     expect(withConsent.diagnostics.webId).toBe("https://id.example/me");
     expect(withConsent.body).toContain("Reporter WebID: https://id.example/me");
@@ -199,7 +199,7 @@ describe("<jeswr-feedback-button> privacy (WebID consent default OFF)", () => {
 describe("<jeswr-feedback-button> focus trap", () => {
   it("focuses the textarea when opened and traps Tab within the dialog", async () => {
     const el = await mount({ repo: "jeswr/x", appName: "X" });
-    (el.shadowRoot?.querySelector(".trigger") as HTMLButtonElement).click();
+    el.shadowRoot?.querySelector<HTMLButtonElement>(".trigger")?.click();
     await el.updateComplete;
     const ta = el.shadowRoot?.querySelector("textarea") as HTMLTextAreaElement;
     expect(el.shadowRoot?.activeElement).toBe(ta);

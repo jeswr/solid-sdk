@@ -297,7 +297,7 @@ describe("custom-elements.json — kind:js exports match dist runtime", () => {
 
   // The known type-only symbols re-exported by the barrel (`export type` / inline
   // `type X`). None may appear as a `kind: js` export.
-  const TYPE_ONLY = [
+  const TypeOnly = [
     "FeedbackCategory",
     "FeedbackDiagnostics",
     "FeedbackPayload",
@@ -319,7 +319,7 @@ describe("custom-elements.json — kind:js exports match dist runtime", () => {
   });
 
   it("advertises NO type-only symbol as a `kind: js` export", () => {
-    const leaked = TYPE_ONLY.filter((name) => manifestJsNames.includes(name));
+    const leaked = TypeOnly.filter((name) => manifestJsNames.includes(name));
     expect(leaked).toEqual([]);
   });
 

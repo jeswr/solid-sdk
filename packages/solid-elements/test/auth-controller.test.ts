@@ -1905,8 +1905,8 @@ describe("createReactiveAuthController — silent-restore pointer gated on a dur
     };
   }
 
-  const REMEMBERED_KEY = "test-app.remembered-account"; // the silent-restore pointer
-  const RECENT_KEY = "test-app.recent-accounts"; // the logout-surviving returning-user list
+  const RememberedKey = "test-app.remembered-account"; // the silent-restore pointer
+  const RecentKey = "test-app.recent-accounts"; // the logout-surviving returning-user list
 
   it("does NOT write the silent-restore pointer when the OP issued NO refresh_token, but DOES remember the recent account", async () => {
     // The roborev finding: login wrote the silent-restore pointer even when persist
@@ -1921,8 +1921,8 @@ describe("createReactiveAuthController — silent-restore pointer gated on a dur
         callbackUri: "https://app.example/callback",
         clientId: "https://app.example/clientid.jsonld",
         store,
-        rememberedAccountsKey: REMEMBERED_KEY,
-        recentAccountsKey: RECENT_KEY,
+        rememberedAccountsKey: RememberedKey,
+        recentAccountsKey: RecentKey,
       });
       const result = await controller.login("https://alice.pod.example/profile/card#me");
       expect(result.webId).toBe("https://alice.pod.example/profile/card#me");
@@ -1931,7 +1931,7 @@ describe("createReactiveAuthController — silent-restore pointer gated on a dur
       expect(store.puts).toEqual([]);
       // The SILENT-RESTORE pointer was NOT written — a next-load auto-restore would only
       // fall back, so we must not claim the account is restorable.
-      expect(ls.map.get(REMEMBERED_KEY)).toBeUndefined();
+      expect(ls.map.get(RememberedKey)).toBeUndefined();
       // But the RECENT-ACCOUNT entry IS remembered (the logout-surviving affordance is
       // fine without a restorable credential — it just powers the picker / no-arg login).
       expect(controller.recentAccounts()).toEqual([
@@ -1940,7 +1940,7 @@ describe("createReactiveAuthController — silent-restore pointer gated on a dur
           displayName: "https://alice.pod.example/profile/card#me",
         },
       ]);
-      expect(ls.map.get(RECENT_KEY)).toBeDefined();
+      expect(ls.map.get(RecentKey)).toBeDefined();
     } finally {
       ls.restore();
     }
@@ -1965,17 +1965,17 @@ describe("createReactiveAuthController — silent-restore pointer gated on a dur
         callbackUri: "https://app.example/callback",
         clientId: "https://app.example/clientid.jsonld",
         store: throwingStore,
-        rememberedAccountsKey: REMEMBERED_KEY,
-        recentAccountsKey: RECENT_KEY,
+        rememberedAccountsKey: RememberedKey,
+        recentAccountsKey: RecentKey,
       });
       const result = await controller.login("https://alice.pod.example/profile/card#me");
       // Login still SUCCEEDS with a live session (a durable-write failure is non-fatal).
       expect(result.webId).toBe("https://alice.pod.example/profile/card#me");
       expect(controller.webId).toBe("https://alice.pod.example/profile/card#me");
       // The store write failed → nothing restorable → NO silent-restore pointer.
-      expect(ls.map.get(REMEMBERED_KEY)).toBeUndefined();
+      expect(ls.map.get(RememberedKey)).toBeUndefined();
       // Recent account still remembered.
-      expect(ls.map.get(RECENT_KEY)).toBeDefined();
+      expect(ls.map.get(RecentKey)).toBeDefined();
       expect(controller.recentAccounts()[0]?.webId).toBe(
         "https://alice.pod.example/profile/card#me",
       );
@@ -1996,14 +1996,14 @@ describe("createReactiveAuthController — silent-restore pointer gated on a dur
         callbackUri: "https://app.example/callback",
         clientId: "https://app.example/clientid.jsonld",
         store,
-        rememberedAccountsKey: REMEMBERED_KEY,
-        recentAccountsKey: RECENT_KEY,
+        rememberedAccountsKey: RememberedKey,
+        recentAccountsKey: RecentKey,
       });
       await controller.login("https://alice.pod.example/profile/card#me");
       // A credential was durably stored …
       expect(store.map.get("https://idp.example/")?.refreshToken).toBe("refresh-token");
       // … so the silent-restore pointer IS written (next-load auto-restore is valid).
-      const pointer = JSON.parse(ls.map.get(REMEMBERED_KEY) as string);
+      const pointer = JSON.parse(ls.map.get(RememberedKey) as string);
       expect(pointer).toEqual({
         webId: "https://alice.pod.example/profile/card#me",
         issuer: "https://idp.example/",
@@ -2025,7 +2025,7 @@ describe("createReactiveAuthController — silent-restore pointer gated on a dur
     // Pre-seed a pointer to a DIFFERENT account (bob) on the same issuer, as a prior
     // restorable login would have left.
     ls.map.set(
-      REMEMBERED_KEY,
+      RememberedKey,
       JSON.stringify({
         webId: "https://bob.pod.example/profile/card#me",
         issuer: "https://idp.example/",
@@ -2037,15 +2037,15 @@ describe("createReactiveAuthController — silent-restore pointer gated on a dur
         callbackUri: "https://app.example/callback",
         clientId: "https://app.example/clientid.jsonld",
         store,
-        rememberedAccountsKey: REMEMBERED_KEY,
-        recentAccountsKey: RECENT_KEY,
+        rememberedAccountsKey: RememberedKey,
+        recentAccountsKey: RecentKey,
       });
       // Login resolves to alice (webIdClaim default) but the OP issues no refresh_token.
       await controller.login("https://alice.pod.example/profile/card#me");
       expect(controller.webId).toBe("https://alice.pod.example/profile/card#me"); // live
       // The STALE pointer (to bob) is GONE — next load will fall back to login, NOT
       // silently restore bob.
-      expect(ls.map.get(REMEMBERED_KEY)).toBeUndefined();
+      expect(ls.map.get(RememberedKey)).toBeUndefined();
     } finally {
       ls.restore();
     }
@@ -2076,7 +2076,7 @@ describe("createReactiveAuthController — silent-restore pointer gated on a dur
     const ls = installKeyedLocalStorage();
     // The pointer also points at bob (the prior restorable account).
     ls.map.set(
-      REMEMBERED_KEY,
+      RememberedKey,
       JSON.stringify({
         webId: "https://bob.pod.example/profile/card#me",
         issuer: "https://idp.example/",
@@ -2088,8 +2088,8 @@ describe("createReactiveAuthController — silent-restore pointer gated on a dur
         callbackUri: "https://app.example/callback",
         clientId: "https://app.example/clientid.jsonld",
         store,
-        rememberedAccountsKey: REMEMBERED_KEY,
-        recentAccountsKey: RECENT_KEY,
+        rememberedAccountsKey: RememberedKey,
+        recentAccountsKey: RecentKey,
       });
       // Login resolves to alice on the SAME issuer, but issues no refresh_token.
       await controller.login("https://alice.pod.example/profile/card#me");
@@ -2097,7 +2097,7 @@ describe("createReactiveAuthController — silent-restore pointer gated on a dur
       // Bob's stale credential for this issuer is GONE (not left to be redeemed).
       expect(map.get("https://idp.example/")).toBeUndefined();
       // And the stale pointer is cleared too.
-      expect(ls.map.get(REMEMBERED_KEY)).toBeUndefined();
+      expect(ls.map.get(RememberedKey)).toBeUndefined();
     } finally {
       ls.restore();
     }
@@ -2125,8 +2125,8 @@ describe("createReactiveAuthController — silent-restore pointer gated on a dur
         callbackUri: "https://app.example/callback",
         clientId: "https://app.example/clientid.jsonld",
         store,
-        rememberedAccountsKey: REMEMBERED_KEY,
-        recentAccountsKey: RECENT_KEY,
+        rememberedAccountsKey: RememberedKey,
+        recentAccountsKey: RecentKey,
       });
       // First login (alice) WITH a refresh token → persists alice's credential.
       loginRefreshToken = "alice-refresh";
@@ -2158,17 +2158,17 @@ describe("createReactiveAuthController — silent-restore pointer gated on a dur
         callbackUri: "https://app.example/callback",
         clientId: "https://app.example/clientid.jsonld",
         // no `store` → in-memory MemorySessionStore fallback (non-durable)
-        rememberedAccountsKey: REMEMBERED_KEY,
-        recentAccountsKey: RECENT_KEY,
+        rememberedAccountsKey: RememberedKey,
+        recentAccountsKey: RecentKey,
       });
       const result = await controller.login("https://alice.pod.example/profile/card#me");
       expect(result.webId).toBe("https://alice.pod.example/profile/card#me");
       expect(controller.webId).toBe("https://alice.pod.example/profile/card#me"); // live this load
       // The silent-restore pointer is NOT written — the in-memory credential won't survive
       // a reload, so next load must fall back to login, not attempt a doomed restore.
-      expect(ls.map.get(REMEMBERED_KEY)).toBeUndefined();
+      expect(ls.map.get(RememberedKey)).toBeUndefined();
       // The recent account IS still remembered (logout-surviving affordance).
-      expect(ls.map.get(RECENT_KEY)).toBeDefined();
+      expect(ls.map.get(RecentKey)).toBeDefined();
     } finally {
       ls.restore();
     }
@@ -2206,15 +2206,15 @@ describe("createReactiveAuthController — silent-restore pointer gated on a dur
     refreshGrantCalls = 0;
     const ls = installKeyedLocalStorage();
     // Seed a CORRUPT (unparseable) value under the silent-restore pointer key.
-    ls.map.set(REMEMBERED_KEY, "{not-valid-json:::");
+    ls.map.set(RememberedKey, "{not-valid-json:::");
     try {
       const controller = createReactiveAuthController({
         authFlow,
         callbackUri: "https://app.example/callback",
         clientId: "https://app.example/clientid.jsonld",
         store,
-        rememberedAccountsKey: REMEMBERED_KEY,
-        recentAccountsKey: RECENT_KEY,
+        rememberedAccountsKey: RememberedKey,
+        recentAccountsKey: RecentKey,
       });
       const outcome = await controller.restore();
       // (a) FAIL CLOSED: no session is pinned; the outcome is login.
@@ -2223,7 +2223,7 @@ describe("createReactiveAuthController — silent-restore pointer gated on a dur
       // No restore grant was attempted (the corrupt pointer yields no issuer/WebID).
       expect(refreshGrantCalls).toBe(0);
       // (b) The CORRUPT pointer is CLEARED so the next load won't re-attempt it.
-      expect(ls.map.get(REMEMBERED_KEY)).toBeUndefined();
+      expect(ls.map.get(RememberedKey)).toBeUndefined();
     } finally {
       ls.restore();
     }
@@ -2245,8 +2245,8 @@ describe("createReactiveAuthController — silent-restore pointer gated on a dur
         callbackUri: "https://app.example/callback",
         clientId: "https://app.example/clientid.jsonld",
         // no `store` → in-memory MemorySessionStore fallback (non-durable)
-        rememberedAccountsKey: REMEMBERED_KEY,
-        recentAccountsKey: RECENT_KEY,
+        rememberedAccountsKey: RememberedKey,
+        recentAccountsKey: RecentKey,
         publicFetch: ok200RecordingFetch(),
       });
       // First login (establishes a prior session + previousIssuer for the second).
@@ -2258,7 +2258,7 @@ describe("createReactiveAuthController — silent-restore pointer gated on a dur
       await controller.login("https://alice.pod.example/profile/card#me");
       expect(controller.webId).toBe("https://alice.pod.example/profile/card#me");
       // The pointer is suppressed (non-durable), as the Low fix requires …
-      expect(ls.map.get(REMEMBERED_KEY)).toBeUndefined();
+      expect(ls.map.get(RememberedKey)).toBeUndefined();
       // … BUT the in-memory credential was NOT deleted by the same-issuer cleanup: a
       // refresh of the expired token SUCCEEDS (it redeemed the in-memory refresh token).
       refreshGrantCalls = 0;
@@ -2294,7 +2294,7 @@ describe("createReactiveAuthController — silent-restore pointer gated on a dur
     };
     const ls = installKeyedLocalStorage();
     ls.map.set(
-      REMEMBERED_KEY,
+      RememberedKey,
       JSON.stringify({
         webId: "https://alice.pod.example/profile/card#me",
         issuer: "https://idp.example/",
@@ -2306,8 +2306,8 @@ describe("createReactiveAuthController — silent-restore pointer gated on a dur
         callbackUri: "https://app.example/callback",
         clientId: "https://app.example/clientid.jsonld",
         store,
-        rememberedAccountsKey: REMEMBERED_KEY,
-        recentAccountsKey: RECENT_KEY,
+        rememberedAccountsKey: RememberedKey,
+        recentAccountsKey: RecentKey,
       });
       // Gate the restore grant so two concurrent restore() calls would BOTH be in flight if
       // they ran independently.

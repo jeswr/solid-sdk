@@ -38,7 +38,7 @@ const root = process.cwd();
 const manifestPath = join(root, "custom-elements.json");
 const distIndexUrl = pathToFileURL(join(root, "dist", "index.js")).href;
 
-let RESOLVER_ENTRIES: readonly ComponentEntry[];
+let ResolverEntries: readonly ComponentEntry[];
 let distExportNames: Set<string>;
 
 interface CemDeclaration {
@@ -69,7 +69,7 @@ beforeAll(async () => {
   // are the real committed pipeline's, with no mutation of the working tree.
   cem = JSON.parse(readFileSync(manifestPath, "utf8")) as Cem;
   const mod = await import(distIndexUrl);
-  RESOLVER_ENTRIES = mod.RESOLVER_ENTRIES as readonly ComponentEntry[];
+  ResolverEntries = mod.RESOLVER_ENTRIES as readonly ComponentEntry[];
   distExportNames = new Set(Object.keys(mod));
 });
 
@@ -106,7 +106,7 @@ describe("custom-elements.json — CEM accuracy", () => {
   });
 
   it("each @solid-class edge in the manifest has a matching resolver-map entry", () => {
-    const mapClasses = new Set(RESOLVER_ENTRIES.map((e) => e.targetClass));
+    const mapClasses = new Set(ResolverEntries.map((e) => e.targetClass));
     for (const d of classDecls()) {
       const cls = d.solid?.class;
       if (!cls) continue;
@@ -137,16 +137,16 @@ describe("custom-elements.json — CEM accuracy", () => {
     // routes to <jeswr-contact-list> (which advertises vcard:Individual), and
     // ldp:BasicContainer routes to <jeswr-collection> (which advertises ldp:Container).
     // Both are VIEW-mode aliases. These are the KNOWN, justified map-only aliases.
-    const ALLOWED_MAP_ONLY: Record<string, string> = {
+    const AllowedMapOnly: Record<string, string> = {
       "http://www.w3.org/2006/vcard/ns#AddressBook view": "jeswr-contact-list",
       "http://www.w3.org/ns/ldp#BasicContainer view": "jeswr-collection",
     };
-    for (const entry of RESOLVER_ENTRIES) {
+    for (const entry of ResolverEntries) {
       const key = `${entry.targetClass} ${entry.mode}`;
       const manifestTag = tagByClassMode.get(key);
       if (manifestTag === undefined) {
         expect(
-          ALLOWED_MAP_ONLY[key],
+          AllowedMapOnly[key],
           `resolver class ${entry.targetClass} (${entry.mode}) is map-only — it must be a KNOWN alias`,
         ).toBe(entry.tagName);
         continue;

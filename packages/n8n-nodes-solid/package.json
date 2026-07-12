@@ -1,6 +1,7 @@
 {
   "name": "n8n-nodes-solid",
   "version": "0.1.0",
+  "securityCritical": true,
   "description": "n8n community node to read and write a Solid pod over LDP inside automation workflows. Resource Read/Create/Update/Delete + Container List (ldp:contains parsed via @jeswr/fetch-rdf). Pod-scoped, http(s)-only, token never logged. Experimental, AI-agent-generated.",
   "keywords": [
     "n8n-community-node-package",
@@ -46,29 +47,25 @@
     ]
   },
   "scripts": {
-    "build:deps": "node scripts/build-deps.mjs",
     "build": "node scripts/build-dist.mjs",
-    "check:dist": "node scripts/check-dist-fresh.mjs",
-    "check:lockfile-transport": "node scripts/check-lockfile-transport.mjs",
-    "typecheck": "npm run build:deps && tsc -p tsconfig.json --noEmit",
-    "lint": "biome check nodes credentials src test scripts && npm run check:lockfile-transport",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "biome check nodes credentials src test scripts",
     "lint:fix": "biome check --write nodes credentials src test scripts",
-    "test": "npm run build:deps && vitest run",
-    "test:coverage": "npm run build:deps && vitest run --coverage",
-    "prepare": "npm run build"
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage"
   },
   "peerDependencies": {
     "n8n-workflow": ">=1.82.0 <3"
   },
   "dependencies": {
-    "@jeswr/guarded-fetch": "github:jeswr/guarded-fetch#bd4490927fd36d62f6b78a0021e8d40bbb572c3b",
+    "@jeswr/guarded-fetch": "workspace:*",
     "content-type": "^1.0.5",
     "jsonld-streaming-parser": "^5.0.0",
     "n3": "^2.0.3"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.0.0",
-    "@jeswr/fetch-rdf": "github:jeswr/fetch-rdf#main",
+    "@jeswr/fetch-rdf": "^0.1.0",
     "@rdfjs/types": "^2.0.1",
     "@rdfjs/wrapper": "^0.34.0",
     "@solid/object": "^0.6.0",

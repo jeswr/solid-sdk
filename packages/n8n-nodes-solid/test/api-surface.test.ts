@@ -26,7 +26,6 @@
 // SHIPS; loading dist makes the snapshot the real public module surface and keeps
 // it consistent with the `check:dist` freshness contract.
 
-import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";

@@ -26,7 +26,11 @@
     "solid-agent-notify",
     "@jeswr/solid-memory",
     "@jeswr/solid-chat-interop",
-    "@jeswr/solid-task-model"
+    "@jeswr/solid-task-model",
+    "n8n-nodes-solid",
+    "@jeswr/app-shell",
+    "@jeswr/solid-elements",
+    "@jeswr/solid-components"
   ],
   "dependsOn": [],
   "federation": null

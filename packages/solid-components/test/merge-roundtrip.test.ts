@@ -217,10 +217,10 @@ describe("§10 contact merge — preserves the structured emails when editing th
   it("editing the name keeps the structured vcard:hasEmail blank node + webid", () => {
     const url = "https://pod.example/contacts/alice";
     const subj = `${url}#this`;
-    const VCARD = "http://www.w3.org/2006/vcard/ns#";
+    const Vcard = "http://www.w3.org/2006/vcard/ns#";
     const existing = parseTurtle(
       `
-      @prefix vcard: <${VCARD}> .
+      @prefix vcard: <${Vcard}> .
       <${subj}> a vcard:Individual ;
         vcard:fn "Alice" ;
         vcard:hasEmail [ a vcard:Home ; vcard:value <mailto:alice@example.com> ] ;
@@ -229,23 +229,23 @@ describe("§10 contact merge — preserves the structured emails when editing th
       url,
     );
     const formGraph = parseTurtle(
-      `@prefix vcard: <${VCARD}> . <urn:m> a vcard:Individual ; vcard:fn "Alice Smith" .`,
+      `@prefix vcard: <${Vcard}> . <urn:m> a vcard:Individual ; vcard:fn "Alice Smith" .`,
       url,
     );
     const el = document.createElement("test-contact-form") as TestContactForm;
     el.runMerge(formGraph, existing, url);
 
     // The name was updated.
-    expect(existing.getObjects(subj, `${VCARD}fn`, null).map((o) => o.value)).toEqual([
+    expect(existing.getObjects(subj, `${Vcard}fn`, null).map((o) => o.value)).toEqual([
       "Alice Smith",
     ]);
     // The structured email blank node (NOT in the form's flat shape) survived: the
     // hasEmail edge + its value triple are still present (the §10 merge preserved them).
-    const emailNodes = existing.getObjects(subj, `${VCARD}hasEmail`, null);
+    const emailNodes = existing.getObjects(subj, `${Vcard}hasEmail`, null);
     expect(emailNodes).toHaveLength(1);
-    const values = existing.getObjects(emailNodes[0], `${VCARD}value`, null).map((o) => o.value);
+    const values = existing.getObjects(emailNodes[0], `${Vcard}value`, null).map((o) => o.value);
     expect(values).toContain("mailto:alice@example.com");
     // The WebID structured node survived too.
-    expect(existing.getObjects(subj, `${VCARD}url`, null)).toHaveLength(1);
+    expect(existing.getObjects(subj, `${Vcard}url`, null)).toHaveLength(1);
   });
 });

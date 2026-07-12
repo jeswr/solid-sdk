@@ -100,7 +100,7 @@ describe("<jeswr-theme-toggle> co-operation with localStorage + .dark", () => {
       el.addEventListener("theme-change", (e) => resolve((e as CustomEvent).detail), {
         once: true,
       });
-      (el.shadowRoot?.querySelector("button") as HTMLButtonElement).click();
+      el.shadowRoot?.querySelector<HTMLButtonElement>("button")?.click();
     });
     expect(detail.theme).toBeDefined();
     expect(["light", "dark"]).toContain(detail.resolvedTheme);

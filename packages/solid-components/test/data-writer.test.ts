@@ -265,7 +265,8 @@ describe("DataWriter.putTurtle — the explicit conditional write", () => {
 
   it("allows a conditional If-Match PUT", async () => {
     const fetch = vi.fn(async (_u: string, init?: RequestInit) => {
-      expect((init?.headers as Record<string, string>)["If-Match"]).toBe('"v1"');
+      const headers = init?.headers as Record<string, string> | undefined;
+      expect(headers?.["If-Match"]).toBe('"v1"');
       return statusRes(205, '"v2"');
     });
     const dw = new DataWriter({ fetch: fetch as unknown as typeof globalThis.fetch });
@@ -448,7 +449,8 @@ describe("DataWriter.delete — conditional", () => {
 
   it("sends If-Match + tolerates a 404 (already gone)", async () => {
     const fetch = vi.fn(async (_u: string, init?: RequestInit) => {
-      expect((init?.headers as Record<string, string>)["If-Match"]).toBe('"v1"');
+      const headers = init?.headers as Record<string, string> | undefined;
+      expect(headers?.["If-Match"]).toBe('"v1"');
       return statusRes(404);
     });
     const dw = new DataWriter({ fetch: fetch as unknown as typeof globalThis.fetch });

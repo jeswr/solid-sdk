@@ -253,7 +253,7 @@ describe("<jeswr-shacl-view> §9 SSRF discipline", () => {
   // ABSENCE let the original build pass with the latent HIGH.
 
   /** A hostile data graph: a conformsTo + rdf:type pointing at SSRF targets. */
-  const HOSTILE_DATA = `
+  const HostileData = `
 @prefix dct: <http://purl.org/dc/terms/> .
 @prefix ex: <https://attacker.example/> .
 <https://victim.example/x>
@@ -263,7 +263,7 @@ describe("<jeswr-shacl-view> §9 SSRF discipline", () => {
 `;
 
   /** Same idea but the import target is a PREFIXED IRI (shacl-form expands it). */
-  const HOSTILE_DATA_PREFIXED = `
+  const HostileDataPrefixed = `
 @prefix dct: <http://purl.org/dc/terms/> .
 @prefix internal: <http://10.0.0.5/> .
 <https://victim.example/y> dct:conformsTo internal:shape ; a internal:Type .
@@ -283,7 +283,7 @@ describe("<jeswr-shacl-view> §9 SSRF discipline", () => {
       const el = await mount();
       // EMPTY shapes graph (the auto-import precondition) + the hostile data graph.
       el.shapes = { kind: "inline", text: "" };
-      el.values = { kind: "inline", text: HOSTILE_DATA };
+      el.values = { kind: "inline", text: HostileData };
       // Let the element resolve + (try to) render + let any shacl-form async load run.
       for (let i = 0; i < 60; i++) {
         await el.updateComplete;
@@ -310,7 +310,7 @@ describe("<jeswr-shacl-view> §9 SSRF discipline", () => {
       const el = await mount();
       // A VALID, non-empty shapes graph this time (so it mounts) + hostile data.
       el.shapes = { kind: "inline", text: SHAPES };
-      el.values = { kind: "inline", text: HOSTILE_DATA };
+      el.values = { kind: "inline", text: HostileData };
       const form = await waitForForm(el);
       for (let i = 0; i < 60; i++) {
         await Promise.resolve();
@@ -345,7 +345,7 @@ describe("<jeswr-shacl-view> §9 SSRF discipline", () => {
     try {
       const el = await mount();
       el.shapes = { kind: "inline", text: "" }; // empty → auto-import precondition.
-      el.values = { kind: "inline", text: HOSTILE_DATA_PREFIXED };
+      el.values = { kind: "inline", text: HostileDataPrefixed };
       for (let i = 0; i < 60; i++) {
         await el.updateComplete;
         await Promise.resolve();
@@ -407,7 +407,7 @@ describe("<jeswr-shacl-view> §9 SSRF discipline", () => {
   // derived/pinned values subject, shacl-form view mode binds to a fresh blank
   // node and shows nothing — a pre-existing wrapper limitation, not the High.)
   it("RENDERS a benign instance (rdf:type survives → view is NOT blank) — the HIGH regression guard", async () => {
-    const PERSON_SHAPES = `
+    const PersonShapes = `
 @prefix sh: <http://www.w3.org/ns/shacl#> .
 @prefix ex: <https://ex.example/> .
 ex:PersonShape a sh:NodeShape ;
@@ -416,14 +416,14 @@ ex:PersonShape a sh:NodeShape ;
 `;
     // Benign data: `a ex:Person` (the type triple that MUST survive) + a non-http
     // conformsTo profile reference (kept, derives the values subject) + a literal.
-    const PERSON_DATA = `
+    const PersonData = `
 @prefix dct: <http://purl.org/dc/terms/> .
 @prefix ex: <https://ex.example/> .
 ex:alice dct:conformsTo <urn:profile:person> ; a ex:Person ; ex:name "Alice" .
 `;
     const el = await mount();
-    el.shapes = { kind: "inline", text: PERSON_SHAPES };
-    el.values = { kind: "inline", text: PERSON_DATA };
+    el.shapes = { kind: "inline", text: PersonShapes };
+    el.values = { kind: "inline", text: PersonData };
     const form = await waitForForm(el);
 
     // 1. The rdf:type triple SURVIVES neutralisation in the inlined data-values
