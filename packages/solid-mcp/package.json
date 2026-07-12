@@ -23,17 +23,13 @@
     "build:deps": "node scripts/build-deps.mjs",
     "build": "node scripts/build-dist.mjs",
     "build:dev": "npm run build:deps && tsc -p tsconfig.build.json",
-    "check:dist": "node scripts/check-dist-fresh.mjs",
-    "check:lockfile-transport": "node scripts/check-lockfile-transport.mjs",
-    "fix:lockfile-transport": "node scripts/normalize-lockfile.mjs",
     "api:report": "npm run build && api-extractor run --local",
     "api:check": "npm run build && api-extractor run",
     "typecheck": "npm run build:deps && tsc -p tsconfig.json --noEmit",
-    "lint": "biome check src test scripts && npm run check:lockfile-transport",
+    "lint": "biome check src test scripts",
     "lint:fix": "biome check --write src test scripts",
     "test": "npm run build:deps && vitest run",
-    "test:coverage": "npm run build:deps && vitest run --coverage",
-    "prepare": "npm run build"
+    "test:coverage": "npm run build:deps && vitest run --coverage"
   },
   "keywords": [
     "mcp",
@@ -58,7 +54,7 @@
   },
   "homepage": "https://github.com/jeswr/solid-mcp#readme",
   "dependencies": {
-    "@jeswr/guarded-fetch": "github:jeswr/guarded-fetch#bd4490927fd36d62f6b78a0021e8d40bbb572c3b",
+    "@jeswr/guarded-fetch": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@rdfjs/types": "^2.0.1",
     "@rdfjs/wrapper": "^0.34.0",

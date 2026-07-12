@@ -86,9 +86,8 @@ describe("veventToEvent", () => {
     expect(start?.object.value).toBe("2026-12-25");
     expect(start?.object.termType).toBe("Literal");
     // the literal datatype is xsd:date
-    expect((start?.object as { datatype?: { value: string } }).datatype?.value).toBe(
-      "http://www.w3.org/2001/XMLSchema#date",
-    );
+    const startObject = start?.object as { datatype?: { value: string } } | undefined;
+    expect(startObject?.datatype?.value).toBe("http://www.w3.org/2001/XMLSchema#date");
   });
 
   it("carries a TZID for a local (non-UTC) DATE-TIME", () => {

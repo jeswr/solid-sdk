@@ -45,22 +45,19 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
-    "check:dist": "node scripts/check-dist.mjs",
-    "check:lockfile-transport": "node scripts/check-lockfile-transport.mjs",
     "api:report": "npm run build && api-extractor run --local",
     "api:check": "npm run build && api-extractor run --local && git diff --exit-code -- etc/",
-    "lint": "biome check src test scripts && npm run check:lockfile-transport",
-    "lint:fix": "biome check --write src test scripts",
+    "lint": "biome check src test",
+    "lint:fix": "biome check --write src test",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest",
-    "gate": "npm run lint && npm run typecheck && npm run test && npm run build && npm run check:dist && npm run api:check && npm run check:lockfile-transport"
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@jeswr/fetch-rdf": "^0.1.0",
-    "@jeswr/guarded-fetch": "git+https://github.com/jeswr/guarded-fetch.git#bd4490927fd36d62f6b78a0021e8d40bbb572c3b",
-    "@jeswr/rdf-serialize": "git+https://github.com/jeswr/rdf-serialize.git#ef3dd85636b868ea336a45f79c0446ade0982e7b",
-    "@jeswr/solid-task-model": "git+https://github.com/jeswr/solid-task-model.git#fa88a345a5ed03b26b46efd57d448ebd9ca8a826",
+    "@jeswr/guarded-fetch": "workspace:*",
+    "@jeswr/rdf-serialize": "workspace:*",
+    "@jeswr/solid-task-model": "workspace:*",
     "n3": "^2.0.3"
   },
   "peerDependencies": {

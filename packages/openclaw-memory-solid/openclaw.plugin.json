@@ -26,7 +26,10 @@
   },
   "tools": [
     { "name": "memory_store", "description": "Store a memory in the user's Solid pod." },
-    { "name": "memory_recall", "description": "Recall stored memories matching a free-text query." },
+    {
+      "name": "memory_recall",
+      "description": "Recall stored memories matching a free-text query."
+    },
     { "name": "memory_search", "description": "Alias of memory_recall (documented)." },
     { "name": "memory_get", "description": "Fetch a single memory by its id (pod URL)." },
     { "name": "memory_forget", "description": "Forget (delete) a memory by its id (pod URL)." }

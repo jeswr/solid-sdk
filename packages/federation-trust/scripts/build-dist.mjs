@@ -37,11 +37,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const outdir = join(root, "dist");
 
 /** The off-npm `@jeswr/*` packages we INLINE (everything else stays external). */
-const INLINE = new Set([
-  "@jeswr/solid-vc",
-  "@jeswr/federation-registry",
-  "@jeswr/fetch-rdf",
-]);
+const INLINE = new Set(["@jeswr/solid-vc", "@jeswr/federation-registry", "@jeswr/fetch-rdf"]);
 
 /**
  * Known transitive externals the inlined `@jeswr/*` code (and the RDF stack) pull
@@ -77,14 +73,7 @@ function externals() {
 }
 
 async function main(buildDir = outdir) {
-  // 1. Ensure off-npm deps' dist exist so esbuild can resolve + inline them
-  //    (ignore-scripts skipped their prepare on install).
-  execFileSync("node", [join(root, "scripts", "build-deps.mjs")], {
-    cwd: root,
-    stdio: ["ignore", "ignore", "inherit"],
-  });
-
-  // 2. Clean target then bundle the runtime JS (esbuild owns dist/index.js).
+  // 1. Clean target then bundle the runtime JS (esbuild owns dist/index.js).
   rmSync(buildDir, { recursive: true, force: true });
   await build({
     entryPoints: [join(root, "src", "index.ts")],
@@ -100,7 +89,7 @@ async function main(buildDir = outdir) {
     logLevel: "warning",
   });
 
-  // 3. Emit the .d.ts declarations (declaration-only — esbuild already wrote JS).
+  // 2. Emit the .d.ts declarations (declaration-only — esbuild already wrote JS).
   execFileSync(
     "node",
     [

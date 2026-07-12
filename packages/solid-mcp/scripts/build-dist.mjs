@@ -61,8 +61,8 @@ const EXTERNAL = [
 ];
 
 async function main(buildDir = outdir) {
-  // 1. Ensure @jeswr/fetch-rdf's dist exists in node_modules so esbuild can
-  //    resolve + inline it (ignore-scripts skipped its prepare on install).
+  // 1. Ensure the pinned off-npm dependency has build output. The workspace owns
+  //    the lockfile, so build-deps reads the exact pin from this package manifest.
   execFileSync("node", [join(root, "scripts", "build-deps.mjs")], {
     cwd: root,
     stdio: ["ignore", "ignore", "inherit"],

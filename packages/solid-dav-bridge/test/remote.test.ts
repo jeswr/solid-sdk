@@ -16,6 +16,10 @@ function textFetch(body: string, status = 200) {
   return { fetchFn, calls };
 }
 
+function requestHeaders(call: { init: RequestInit } | undefined): Headers {
+  return new Headers(call?.init.headers);
+}
+
 describe("fetchDav", () => {
   it("returns the raw DAV body from an endpoint", async () => {
     const { fetchFn } = textFetch(veventWithRrule);
@@ -26,7 +30,7 @@ describe("fetchDav", () => {
   it("sends a calendar/vcard-preferring Accept header by default", async () => {
     const { fetchFn, calls } = textFetch(veventWithRrule);
     await fetchDav("https://dav.example.com/cal/", { fetch: fetchFn });
-    expect((calls[0]?.init.headers as Record<string, string>).accept).toContain("text/calendar");
+    expect(requestHeaders(calls[0]).get("accept")).toContain("text/calendar");
   });
 
   it("sets a Basic Authorization header from a basic credential", async () => {
@@ -35,7 +39,7 @@ describe("fetchDav", () => {
       fetch: fetchFn,
       davAuth: { type: "basic", username: "alice", password: "s3cr3t" },
     });
-    const auth = (calls[0]?.init.headers as Record<string, string>).authorization;
+    const auth = requestHeaders(calls[0]).get("authorization");
     // base64("alice:s3cr3t") === "YWxpY2U6czNjcjN0"
     expect(auth).toBe("Basic YWxpY2U6czNjcjN0");
   });
@@ -46,7 +50,7 @@ describe("fetchDav", () => {
       fetch: fetchFn,
       davAuth: { type: "bearer", token: "tok-123" },
     });
-    expect((calls[0]?.init.headers as Record<string, string>).authorization).toBe("Bearer tok-123");
+    expect(requestHeaders(calls[0]).get("authorization")).toBe("Bearer tok-123");
   });
 
   it("CRED SAFETY: the credential never appears in the URL or in a DavFetchError", async () => {
@@ -73,7 +77,7 @@ describe("fetchDav", () => {
       body: "<calendar-query/>",
     });
     expect(calls[0]?.init.method).toBe("REPORT");
-    expect((calls[0]?.init.headers as Record<string, string>)["content-type"]).toContain("xml");
+    expect(requestHeaders(calls[0]).get("content-type")).toContain("xml");
     expect(String(calls[0]?.init.body)).toContain("calendar-query");
   });
 

@@ -16,20 +16,15 @@
     "README.md"
   ],
   "scripts": {
-    "build:deps": "node scripts/build-deps.mjs",
     "build": "node scripts/build-dist.mjs",
-    "build:dev": "npm run build:deps && tsc -p tsconfig.json",
-    "check:dist": "node scripts/check-dist-fresh.mjs",
-    "check:lockfile-transport": "node scripts/check-lockfile-transport.mjs",
-    "check": "npm run check:dist && npm run check:lockfile-transport",
+    "build:dev": "tsc -p tsconfig.json",
     "api:report": "npm run build && api-extractor run --local",
     "api:check": "npm run build && api-extractor run --local && git diff --exit-code -- etc/",
-    "typecheck": "npm run build:deps && tsc -p tsconfig.json --noEmit",
-    "lint": "biome check src test scripts && npm run check:lockfile-transport",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "biome check src test scripts",
     "lint:fix": "biome check --write src test scripts",
-    "test": "npm run build:deps && vitest run",
-    "test:coverage": "npm run build:deps && vitest run --coverage",
-    "prepare": "npm run build"
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage"
   },
   "keywords": [
     "solid",

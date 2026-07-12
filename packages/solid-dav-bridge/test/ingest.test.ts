@@ -227,7 +227,7 @@ describe("importCalendar", () => {
       icsText: veventWithRrule,
       conditional: "if-none-match",
     });
-    expect((calls[0]?.init.headers as Record<string, string>)["if-none-match"]).toBe("*");
+    expect(new Headers(calls[0]?.init.headers).get("if-none-match")).toBe("*");
   });
 
   it("respects maxItems", async () => {
