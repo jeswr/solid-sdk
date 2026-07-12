@@ -31,6 +31,7 @@ const ROOT = join(fileURLToPath(import.meta.url), "..", "..");
 const DEP_DIR = join(ROOT, "node_modules", "@jeswr", "fetch-rdf");
 const DEP_DIST = join(DEP_DIR, "dist", "index.js");
 const LOCKFILE = join(ROOT, "..", "..", "pnpm-lock.yaml");
+const LOCKFILE_IMPORTER = "packages/solid-a2a";
 const FETCH_RDF_GIT = "https://github.com/jeswr/fetch-rdf.git";
 
 /**
@@ -44,9 +45,9 @@ function run(file, args, cwd) {
 }
 
 /**
- * Read the exact git commit used by the workspace lockfile. pnpm records GitHub
- * tarballs as `.../tar.gz/<sha>`; accept one unique full SHA and fail closed on
- * a missing or ambiguous resolution.
+ * Read the exact git commit used by this package's workspace importer. Scoping
+ * the lookup to the importer prevents another package's independent fetch-rdf
+ * revision from making this build ambiguous or selecting the wrong source.
  */
 function resolvedFetchRdfRef() {
   if (!existsSync(LOCKFILE)) {
@@ -58,8 +59,22 @@ function resolvedFetchRdfRef() {
   } catch {
     return undefined;
   }
+  const lines = lock.split("\n");
+  const importerStart = lines.indexOf(`  ${LOCKFILE_IMPORTER}:`);
+  if (importerStart === -1) {
+    return undefined;
+  }
+  const importerLines = [];
+  for (const line of lines.slice(importerStart + 1)) {
+    if (/^ {2}\S/.test(line)) {
+      break;
+    }
+    importerLines.push(line);
+  }
   const refs = [
-    ...lock.matchAll(/codeload\.github\.com\/jeswr\/fetch-rdf\/tar\.gz\/([0-9a-f]{40})/g),
+    ...importerLines
+      .join("\n")
+      .matchAll(/codeload\.github\.com\/jeswr\/fetch-rdf\/tar\.gz\/([0-9a-f]{40})/g),
   ].map((match) => match[1]);
   const uniqueRefs = [...new Set(refs)];
   if (uniqueRefs.length !== 1) {
@@ -80,8 +95,8 @@ function main() {
   const ref = resolvedFetchRdfRef();
   if (!ref) {
     console.error(
-      "[build-deps] could not resolve one valid @jeswr/fetch-rdf commit from the " +
-        "workspace pnpm-lock.yaml; refusing a non-reproducible build. Run `pnpm install`.",
+      `[build-deps] could not resolve one valid @jeswr/fetch-rdf commit for ${LOCKFILE_IMPORTER} ` +
+        "from pnpm-lock.yaml; refusing a non-reproducible build. Run `pnpm install`.",
     );
     process.exit(1);
   }
