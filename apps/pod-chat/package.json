@@ -1,6 +1,7 @@
 {
-  "name": "@jeswr/pod-chat",
+  "name": "@jeswr/app-pod-chat",
   "version": "0.0.1",
+  "private": true,
   "description": "Pod Chat — the typed RDF data layer for ActivityStreams 2.0 chat rooms and messages (with actionable shared-task messages) stored in a Solid pod. Experimental, AI-agent-generated.",
   "type": "module",
   "license": "MIT",
@@ -57,6 +58,7 @@
     }
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.5.1",
     "@rdfjs/types": "^2.0.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",

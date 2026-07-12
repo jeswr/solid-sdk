@@ -39,7 +39,7 @@
  *     4. every `workspace:` dependency is either declared inlined
  *        (package.json "mirrorPublish": { "inlined": [...] } — esbuild-inlined into
  *        dist/) or has a --dep-sha mirror pin; anything else throws
- *     5. (--execute only) the FULL workspace gate (`pnpm run gate`) passes at HEAD —
+ *     5. (--execute only) the FULL workspace gate (`pnpm run gate:full`) passes at HEAD —
  *        a mirror never publishes past a red workspace
  *     6. (--execute only) HEAD is an ancestor of origin/main, so the Mirror-Of trailer
  *        always references a publicly resolvable monorepo sha
@@ -425,7 +425,7 @@ function main() {
   // 5. --execute integrity gates
   // 5a. the FULL workspace gate — a mirror never publishes past a red workspace
   console.log("[mirror-publish] full workspace gate …");
-  run("pnpm", ["run", "gate"], { cwd: repoRoot, stdio: "inherit" });
+  run("pnpm", ["run", "gate:full"], { cwd: repoRoot, stdio: "inherit" });
   assertCleanTree(repoRoot, "after the workspace gate — the gate mutated tracked files");
 
   // 5b. the Mirror-Of sha must be publicly resolvable

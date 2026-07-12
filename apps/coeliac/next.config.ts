@@ -1,6 +1,10 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import type { NextConfig } from "next";
+
+const APP_ROOT = path.dirname(fileURLToPath(import.meta.url));
+const SUITE_ROOT = path.resolve(APP_ROOT, "..", "..");
 
 const suitePackages = [
   "@jeswr/app-shell",
@@ -26,12 +30,14 @@ const nextConfig: NextConfig = {
   // the `@jeswr/solid-elements` alias (import-only export conditions the RSC
   // graph does not match) needs porting.
   turbopack: {
-    root: __dirname,
+    // pnpm's linked dependencies resolve into the suite-level virtual store,
+    // so Turbopack must be allowed to follow them outside this app directory.
+    root: SUITE_ROOT,
     // Root-relative paths — Turbopack does not accept absolute filesystem paths here.
     resolveAlias: {
-      "@jeswr/solid-elements/react": "./node_modules/@jeswr/solid-elements/dist/react/index.js",
-      "@jeswr/solid-elements/auth": "./node_modules/@jeswr/solid-elements/dist/auth/index.js",
-      "@jeswr/solid-elements": "./node_modules/@jeswr/solid-elements/dist/index.js",
+      "@jeswr/solid-elements/react": "./packages/solid-elements/dist/react/index.js",
+      "@jeswr/solid-elements/auth": "./packages/solid-elements/dist/auth/index.js",
+      "@jeswr/solid-elements": "./packages/solid-elements/dist/index.js",
     },
   },
   // Kept for `next build --webpack` / tooling that still selects webpack.

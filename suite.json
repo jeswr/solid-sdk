@@ -1,8 +1,8 @@
 {
   "$schema": "https://raw.githubusercontent.com/jeswr/full-solid-ecosystem/main/tracking/schema/suite.schema.json",
   "id": "solid-sdk",
-  "kind": "library",
-  "name": "Solid SDK monorepo",
+  "kind": "suite",
+  "name": "Solid SDK suite workspace",
   "repo": "https://github.com/jeswr/solid-sdk",
   "category": "infrastructure",
   "maturity": "alpha",
@@ -10,9 +10,9 @@
   "stack": {
     "language": "TypeScript",
     "runtime": "Node >=24",
-    "workspace": "pnpm workspaces (content-addressed store; internal deps workspace:*)",
+    "workspace": "pnpm + Turborepo suite workspace (packages are libraries; apps are private deployables; internal deps workspace:*)",
     "lint": "Biome",
-    "test": "vitest",
+    "test": "vitest orchestrated and cached by Turborepo",
     "publish": "per-package read-only mirror repos via scripts/mirror-publish.mjs; npm publish deferred (needs:user)"
   },
   "packages": [
@@ -56,6 +56,73 @@
     "@jeswr/solid-webauthn-reauth",
     "@jeswr/unstorage-solid",
     "@jeswr/y-solid"
+  ],
+  "applications": [
+    {
+      "slug": "access-manager",
+      "name": "@jeswr/app-access-manager",
+      "kind": "application"
+    },
+    {
+      "slug": "app-store",
+      "name": "@jeswr/app-store",
+      "kind": "application"
+    },
+    {
+      "slug": "coeliac",
+      "name": "@jeswr/app-coeliac",
+      "kind": "application"
+    },
+    {
+      "slug": "issues",
+      "name": "@jeswr/app-issues",
+      "kind": "application"
+    },
+    {
+      "slug": "pod-chat",
+      "name": "@jeswr/app-pod-chat",
+      "kind": "application"
+    },
+    {
+      "slug": "pod-docs",
+      "name": "@jeswr/app-pod-docs",
+      "kind": "application"
+    },
+    {
+      "slug": "pod-drive",
+      "name": "@jeswr/app-pod-drive",
+      "kind": "application"
+    },
+    {
+      "slug": "pod-health",
+      "name": "@jeswr/app-pod-health",
+      "kind": "application"
+    },
+    {
+      "slug": "pod-mail",
+      "name": "@jeswr/app-pod-mail",
+      "kind": "application"
+    },
+    {
+      "slug": "pod-manager",
+      "name": "@jeswr/app-pod-manager",
+      "kind": "application"
+    },
+    {
+      "slug": "pod-money",
+      "name": "@jeswr/app-pod-money",
+      "kind": "application"
+    },
+    {
+      "slug": "pod-music",
+      "name": "@jeswr/app-pod-music",
+      "kind": "application"
+    },
+    {
+      "slug": "pod-photos",
+      "name": "@jeswr/app-pod-photos",
+      "kind": "application"
+    }
   ],
   "dependsOn": [],
   "federation": null

@@ -9,6 +9,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
+const WORKSPACE_ROOT = join(ROOT, "..", "..");
 // Accept an AUTHORED-BY marker naming ANY model (the suite tags provenance by the
 // model that actually authored a file — older files carry "Claude Opus 4.8", newer
 // ones "Claude Sonnet 5", etc.). Still requires a concrete model token after the
@@ -22,7 +23,7 @@ const fail = (m) => {
 };
 const ok = (m) => console.log(`  ✓ ${m}`);
 
-const REQUIRED = [
+const PACKAGE_REQUIRED = [
   "fedapp.ttl",
   "fedreg.ttl",
   "fedcon.ttl",
@@ -31,14 +32,15 @@ const REQUIRED = [
   "fedreg-context.jsonld",
   "fedcon-context.jsonld",
   "task-context.jsonld",
-  "suite.json",
-  ".npmrc",
-  ".roborev.toml",
 ];
 console.log("Required files:");
-for (const f of REQUIRED) {
+for (const f of PACKAGE_REQUIRED) {
   if (existsSync(join(ROOT, f))) ok(f);
   else fail(`missing ${f}`);
+}
+for (const f of ["suite.json", ".npmrc", ".roborev.toml"]) {
+  if (existsSync(join(WORKSPACE_ROOT, f))) ok(`workspace/${f}`);
+  else fail(`missing workspace/${f}`);
 }
 
 console.log("\nAUTHORED-BY markers:");

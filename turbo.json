@@ -1,0 +1,23 @@
+{
+  "$schema": "https://turborepo.dev/schema.json",
+  "globalDependencies": ["biome.json", "tsconfig.base.json"],
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**", ".next/**", "!.next/cache/**", "out/**"]
+    },
+    "lint": {
+      "dependsOn": ["//#lint:root"]
+    },
+    "typecheck": {
+      "dependsOn": ["build"]
+    },
+    "test": {
+      "dependsOn": ["typecheck"]
+    },
+    "//#lint:root": {
+      "cache": false
+    },
+    "//#test:root": {}
+  }
+}

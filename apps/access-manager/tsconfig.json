@@ -14,7 +14,7 @@
     "isolatedModules": true,
     "skipLibCheck": true,
     "noEmit": true,
-    "types": ["vite/client"]
+    "types": ["vite/client", "@testing-library/jest-dom/vitest"]
   },
   "include": ["src", "test", "vite.config.ts", "vitest.config.ts"]
 }

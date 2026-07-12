@@ -1,5 +1,5 @@
 {
-  "name": "coeliac-app",
+  "name": "@jeswr/app-coeliac",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -16,12 +16,12 @@
     "gate": "npm run lint && npm run typecheck && npm run test && npm run build"
   },
   "dependencies": {
-    "@jeswr/app-shell": "git+https://github.com/jeswr/app-shell.git#e2ad58b166e9c2e5f0e30d88029847abc05b42e2",
+    "@jeswr/app-shell": "workspace:*",
     "@jeswr/fetch-rdf": "^0.1.0",
-    "@jeswr/guarded-fetch": "git+https://github.com/jeswr/guarded-fetch.git#bd4490927fd36d62f6b78a0021e8d40bbb572c3b",
-    "@jeswr/solid-elements": "git+https://github.com/jeswr/solid-elements.git#2c00745d3b834a7f645b1ca17b6ff8ffac3b1a8e",
-    "@jeswr/solid-health-diary": "git+https://github.com/jeswr/solid-health-diary.git#6d5e0f368df22f3b8194b1f34220b608bd80dad7",
-    "@jeswr/solid-session-restore": "git+https://github.com/jeswr/solid-session-restore.git#38e78dbececbf0dd12c9ceac288a6eef6c624377",
+    "@jeswr/guarded-fetch": "workspace:*",
+    "@jeswr/solid-elements": "workspace:*",
+    "@jeswr/solid-health-diary": "workspace:*",
+    "@jeswr/solid-session-restore": "workspace:*",
     "@lit/react": "^1.0.8",
     "@rdfjs/wrapper": "^0.34.0",
     "@solid/object": "^0.6.0",
@@ -33,7 +33,7 @@
     "oauth4webapi": "^3.8.6",
     "react": "19.1.0",
     "react-dom": "19.1.0",
-    "solid-offline": "git+https://github.com/jeswr/solid-offline.git#b1c29914677f6b11fd5853f1be4edd5b9e24ec74",
+    "solid-offline": "workspace:*",
     "ulid": "^3.0.0",
     "zxing-wasm": "^3.1.0"
   },

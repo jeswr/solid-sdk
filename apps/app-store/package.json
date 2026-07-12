@@ -1,0 +1,7 @@
+{
+  "name": "@jeswr/app-store",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Solid App Store application workspace",
+  "type": "module"
+}

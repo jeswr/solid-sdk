@@ -1,4 +1,6 @@
 # AUTHORED-BY Claude Fable 5
 packages:
   - "packages/*"
+  - "apps/*"
+  - "apps/*/web"
   - "tools/*"

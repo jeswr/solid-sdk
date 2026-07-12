@@ -70,6 +70,21 @@
           "semicolons": "always"
         }
       }
+    },
+    {
+      "includes": ["apps/pod-*/**"],
+      "css": {
+        "parser": {
+          "tailwindDirectives": true
+        }
+      },
+      "linter": {
+        "rules": {
+          "style": {
+            "useNamingConvention": "off"
+          }
+        }
+      }
     }
   ]
 }

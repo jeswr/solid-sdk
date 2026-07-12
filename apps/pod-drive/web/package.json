@@ -22,10 +22,10 @@
     "test:e2e:extension": "playwright test --config tests/extension/playwright.config.ts"
   },
   "dependencies": {
-    "@jeswr/app-shell": "github:jeswr/app-shell#7f46437612182f96a5b6726036fb555d1bdb81ec",
+    "@jeswr/app-shell": "workspace:*",
     "@jeswr/fetch-rdf": "^0.1.0",
-    "@jeswr/solid-elements": "github:jeswr/solid-elements#f4f7a40c9cdc6854f0b45254f9632294f8810505",
-    "@jeswr/solid-session-restore": "github:jeswr/solid-session-restore#0be31ede651446b9155ae823db73ddc03238a292",
+    "@jeswr/solid-elements": "workspace:*",
+    "@jeswr/solid-session-restore": "workspace:*",
     "@lit/react": "^1.0.8",
     "@radix-ui/react-avatar": "^1.2.0",
     "@radix-ui/react-dropdown-menu": "^2.1.18",
@@ -41,6 +41,7 @@
     "react-dom": "^19.2.0"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.5.1",
     "@playwright/test": "^1.60.0",
     "@rdfjs/types": "^2.0.1",
     "@tailwindcss/vite": "^4.3.1",

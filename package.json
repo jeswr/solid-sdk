@@ -2,7 +2,7 @@
   "name": "@jeswr/solid-sdk-workspace",
   "private": true,
   "version": "0.0.0",
-  "description": "The @jeswr Solid SDK monorepo — reusable TypeScript packages for Solid apps and agents",
+  "description": "The @jeswr Solid suite workspace — reusable SDK packages and private deployable applications",
   "type": "module",
   "license": "MIT",
   "author": "Jesse Wright <63333554+jeswr@users.noreply.github.com>",
@@ -15,20 +15,25 @@
     "node": ">=24"
   },
   "scripts": {
-    "lint": "biome check . && pnpm run check:lockfile-transport && pnpm run check:fetch",
+    "lint": "pnpm run lint:root && turbo run lint --affected --concurrency=4",
+    "lint:root": "biome check scripts test guardrails skills package.json turbo.json vitest.config.ts && pnpm run check:lockfile-transport && pnpm run check:app-workspace && pnpm run check:fetch",
     "lint:fix": "biome check --write .",
     "check:lockfile-transport": "node scripts/check-lockfile-transport.mjs",
+    "check:app-workspace": "node scripts/check-app-workspace.mjs",
     "check:fetch": "pnpm --filter solid-agent-notify run check:fetch",
     "check:packages": "node guardrails/scripts/check-packages.mjs --ecosystem npm",
-    "typecheck": "pnpm -r --if-present run typecheck",
-    "test": "vitest run && pnpm -r --if-present run test",
-    "build": "pnpm -r --if-present run build",
-    "gate": "pnpm run lint && pnpm run build && pnpm run typecheck && pnpm run test",
+    "typecheck": "turbo run typecheck --affected --concurrency=4",
+    "test": "turbo run test test:root --affected --concurrency=4",
+    "test:root": "vitest run",
+    "build": "turbo run build --affected --concurrency=4",
+    "gate": "pnpm run lint:root && turbo run lint build typecheck test test:root --affected --concurrency=4",
+    "gate:full": "turbo run lint lint:root build typecheck test test:root --concurrency=4",
     "mirror-publish": "node scripts/mirror-publish.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.1",
     "@types/node": "^25.9.2",
+    "turbo": "^2.10.4",
     "typescript": "^6.0.3",
     "vitest": "^4.1.9"
   }

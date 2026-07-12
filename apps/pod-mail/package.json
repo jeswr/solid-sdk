@@ -1,6 +1,7 @@
 {
-  "name": "@jeswr/pod-mail",
+  "name": "@jeswr/app-pod-mail",
   "version": "0.0.1",
+  "private": true,
   "description": "Pod Mail — a Solid-native mail data layer. Typed RDF model for messages, threads and folders stored in a Solid pod (schema:EmailMessage / SIOC). Experimental, AI-agent-generated.",
   "type": "module",
   "license": "MIT",
@@ -56,6 +57,7 @@
     }
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.5.1",
     "@rdfjs/types": "^2.0.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",

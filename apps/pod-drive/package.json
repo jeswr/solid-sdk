@@ -1,5 +1,5 @@
 {
-  "name": "@jeswr/pod-drive",
+  "name": "@jeswr/app-pod-drive",
   "version": "0.0.1",
   "private": true,
   "type": "module",
@@ -55,6 +55,7 @@
     }
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.5.1",
     "@rdfjs/types": "^2.0.0",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
