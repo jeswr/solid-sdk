@@ -1,0 +1,28 @@
+{
+  "@context": [
+    "https://www.w3.org/ns/solid/oidc-context.jsonld",
+    "https://w3id.org/jeswr/fed"
+  ],
+
+  "client_id": "https://pod-chat.jeswr.org/clientid.jsonld",
+  "client_name": "Pod Chat",
+  "client_uri": "https://pod-chat.jeswr.org/",
+  "redirect_uris": ["https://pod-chat.jeswr.org/callback"],
+  "scope": "openid webid offline_access",
+  "grant_types": ["authorization_code", "refresh_token"],
+  "response_types": ["code"],
+  "token_endpoint_auth_method": "none",
+
+  "type": "App",
+  "sector": "https://w3id.org/jeswr/sectors/social#sector",
+  "access": ["Read", "Write", "Append"],
+  "produces": [
+    "https://w3id.org/jeswr/pod-chat#ChatRoom",
+    "https://www.w3.org/ns/activitystreams#Note"
+  ],
+  "consumes": [
+    "https://w3id.org/jeswr/pod-chat#ChatRoom",
+    "https://www.w3.org/ns/activitystreams#Note",
+    "http://www.w3.org/2005/01/wf/flow#Task"
+  ]
+}
