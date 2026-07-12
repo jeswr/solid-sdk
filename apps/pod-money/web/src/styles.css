@@ -1,0 +1,265 @@
+/* AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+   Host chrome + the pod-money-* classes the <AccountsView> emits (the component
+   ships no styles of its own — the host owns the look).
+
+   THEME: Tailwind v4 + the shared @jeswr/app-shell tokens drive light/dark. The
+   import order is load-bearing — `@import "tailwindcss"` FIRST, then the suite
+   OKLCH tokens + the `@theme inline` mapping (`@jeswr/app-shell/styles.css`) so
+   the shell components' utilities (bg-popover, text-muted-foreground, the `dark:`
+   variant, …) resolve to the suite palette. `@source` makes Tailwind scan the
+   app-shell package so the classes its <ThemeToggle/> + <AccountMenu/> emit are
+   actually generated (a node_modules package is otherwise outside the content
+   scan). The path is relative to THIS file. */
+@import "tailwindcss";
+@import "@jeswr/app-shell/styles.css";
+@source "../node_modules/@jeswr/app-shell/dist";
+
+/* The host chrome below predates the shared tokens and uses its own variable
+   names (--bg/--ink/…). Map them onto the app-shell OKLCH tokens so the WHOLE
+   pod-money UI (login card, header, accounts table) follows the theme — the
+   `.dark` class the ThemeProvider toggles on <html> flips the OKLCH vars, and
+   these aliases inherit it for free.
+
+   CSS-ISOLATION RELAXATION (#80 / solid-elements adoption #115, D-parity rollout
+   #67/#68/#70): the host vars can now alias DIRECTLY onto app-shell's OWN tokens
+   (`--accent`/`--accent-ink`→`--primary`) again. The earlier adopter workaround
+   renamed them to host-only names (`--host-accent`/`--host-accent-ink`) to avoid
+   CLOBBERING the shell components' hover/focus surfaces — but @jeswr/app-shell #80
+   made the shell self-isolating: its components' ghost/outline hover surfaces read
+   SHELL-PRIVATE `--as-accent`/`--as-accent-foreground` tokens (hardcoded OKLCH
+   literals in the package's tokens.css, NOT the public `--accent`), so re-aliasing
+   the public token no longer affects the shell at all. Verified against app-shell
+   `5a7484d` (the merged main with the #80 fix). `--border` is the SAME name as the
+   app-shell token, so it is already unified — do NOT re-alias it to itself. */
+:root {
+  --bg: var(--background);
+  --surface: var(--card);
+  --ink: var(--foreground);
+  --muted: var(--muted-foreground);
+  --accent: var(--primary);
+  --accent-ink: var(--primary-foreground);
+  --danger: var(--destructive);
+  --ok: var(--success);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  color: var(--ink);
+  background: var(--bg);
+}
+
+a {
+  color: var(--accent);
+}
+
+/* ── Login ─────────────────────────────────────────────────────────────── */
+.login-screen {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 1.5rem;
+}
+.login-card {
+  width: 100%;
+  max-width: 28rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  padding: 2rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+.login-card h1 {
+  margin: 0 0 0.25rem;
+  font-size: 1.5rem;
+}
+.login-sub {
+  color: var(--muted);
+  margin: 0 0 1.25rem;
+  font-size: 0.95rem;
+}
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.login-form label {
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+.login-form input {
+  padding: 0.6rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  font-size: 0.95rem;
+}
+.login-error {
+  color: var(--danger);
+  font-size: 0.9rem;
+  margin-top: 0.75rem;
+}
+.login-hint {
+  color: var(--muted);
+  font-size: 0.85rem;
+  margin-top: 1rem;
+}
+
+/* CSS-ISOLATION RELAXATION (#80 / solid-elements adoption #115, D-parity rollout
+   #67/#68/#70): the host's filled-button base, the simpler pre-workaround form —
+   but SCOPED to `:where(:not([data-app-shell-control]))`.
+
+   WHY THE EXCLUSION (roborev Medium, addressed): this rule is UNLAYERED, so it
+   out-ranks Tailwind's layered utilities. @jeswr/app-shell #80 makes the shell
+   self-isolating for COLOUR — its UNLAYERED reset re-asserts each control's
+   background/border/text via `[data-app-shell-control]`, which out-ranks a bare
+   `button {}`. BUT that reset DELIBERATELY does NOT touch the BOX MODEL
+   (padding/border-radius/font-size/sizing) — the shell components set those per
+   instance via LAYERED `className` utilities (e.g. ThemeToggle's `size-9`,
+   AccountMenu's `h-auto px-2 py-1.5`), which an unlayered `button { padding;
+   border-radius; font-size }` WOULD clobber, distorting the icon/menu buttons. So a
+   bare `button {}` is NOT fully safe even under #80. Excluding every app-shell
+   control from the host base entirely protects the shell's box model unimpeded.
+
+   WHY `:where(...)` NOT a bare `:not(...)`: `:where()` has ZERO specificity, so the
+   exclusion adds none — this base stays at specificity (0,0,1), IDENTICAL to the
+   original bare `button {}`. That matters: the host's CLASS-only overrides below
+   (`.pod-money-account-link` at (0,1,0): a transparent table link-button; the
+   `.pod-money-back-link` outline button) must keep WINNING for
+   background/border/padding. A bare `button:not([data-app-shell-control])` would
+   raise this base to (0,1,1) — an attribute selector's specificity leaks through
+   `:not()` — and REPAINT those overrides filled. `:where()` excludes the shell
+   controls while leaving the host overrides in charge.
+
+   The solid-elements P0 components (<jeswr-loading> etc.) are immune for a different
+   reason: they live in shadow DOM, which this light-DOM rule cannot pierce. The
+   css-isolation.test.tsx guard pins both the colour-isolation contract and this
+   zero-specificity selector form. Verified against app-shell `5a7484d`. */
+button:where(:not([data-app-shell-control])) {
+  cursor: pointer;
+  border: none;
+  border-radius: 0.5rem;
+  padding: 0.6rem 0.9rem;
+  font-size: 0.95rem;
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+button:where(:not([data-app-shell-control])):disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* ── App shell ─────────────────────────────────────────────────────────── */
+.app-shell {
+  max-width: 56rem;
+  margin: 0 auto;
+  padding: 1.25rem;
+}
+.app-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border);
+}
+.app-brand {
+  font-weight: 700;
+  font-size: 1.1rem;
+}
+/* Right-aligned header controls: the app-shell <FeedbackButton/> + <ThemeToggle/>
+   + <AccountMenu/>. `margin-left: auto` pushes the trio to the top-right; the
+   app-shell components bring their own (Tailwind-utility) styling, so this only
+   handles placement. */
+.app-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-left: auto;
+}
+/* The fallback banners are theme-aware: a soft tint derived from the suite
+   `--warning` token (via color-mix over the card surface) with token-coloured
+   text + border. Because the tokens flip on `.dark`, the banners stay legible in
+   BOTH modes — no hard-coded light surfaces. */
+.app-note {
+  background: color-mix(in oklab, var(--warning) 16%, var(--card));
+  border: 1px solid color-mix(in oklab, var(--warning) 40%, var(--card));
+  color: var(--foreground);
+  border-radius: 0.5rem;
+  padding: 0.6rem 0.8rem;
+  font-size: 0.85rem;
+  margin: 0.75rem 0;
+}
+.app-main {
+  margin-top: 1rem;
+}
+
+/* ── AccountsView (pod-money-*) ────────────────────────────────────────── */
+.pod-money-title {
+  font-size: 1.25rem;
+  margin: 0 0 1rem;
+}
+
+.pod-money-loading,
+.pod-money-empty {
+  color: var(--muted);
+}
+.pod-money-error {
+  color: var(--danger);
+}
+.pod-money-error button {
+  margin-top: 0.5rem;
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--border);
+}
+
+.pod-money-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--surface);
+}
+.pod-money-table th,
+.pod-money-table td {
+  text-align: left;
+  padding: 0.6rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.92rem;
+}
+/* Amounts read more naturally right-aligned + tabular. */
+.pod-money-amount {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.pod-money-table th:last-child,
+.pod-money-table td.pod-money-amount {
+  text-align: right;
+}
+
+/* The account name is a button that drills into transactions. */
+.pod-money-account-link {
+  background: transparent;
+  color: var(--accent);
+  border: none;
+  padding: 0;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+
+/* The "← Accounts" breadcrumb back link. */
+.pod-money-back {
+  margin-bottom: 0.75rem;
+}
+.pod-money-back-link {
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--border);
+}
+.pod-money-account-heading {
+  font-size: 1.1rem;
+  margin: 0 0 1rem;
+}
