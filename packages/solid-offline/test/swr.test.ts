@@ -7,9 +7,9 @@
  * and the opaque-response skip.
  */
 import { afterEach, describe, expect, it } from 'vitest';
-import { NEGATIVE_CACHE_TTL_MS, keyRequest } from '../src/cache-policy.js';
+import { keyRequest, NEGATIVE_CACHE_TTL_MS } from '../src/cache-policy.js';
 import { MetadataStore } from '../src/metadata-store.js';
-import { type SwrDeps, handleFetch } from '../src/swr.js';
+import { handleFetch, type SwrDeps } from '../src/swr.js';
 import {
   MockBroadcaster,
   MockByteCache,

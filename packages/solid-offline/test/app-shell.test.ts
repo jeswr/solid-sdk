@@ -20,19 +20,19 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 import {
-  type ResolvedAppShellConfig,
-  type ShellCache,
-  type ShellCacheStorage,
-  type ShellDeps,
   assetConfigCandidates,
   cleanupOldShellCaches,
   handleNavigation,
   handlePrecachedAsset,
   isPrecachedAsset,
   precacheAppShell,
+  type ResolvedAppShellConfig,
   resolveAppShellConfig,
   resolveAssetShellConfig,
   resolveServingShellConfig,
+  type ShellCache,
+  type ShellCacheStorage,
+  type ShellDeps,
   sameShellConfig,
   shellBucketComplete,
   shellCacheName,

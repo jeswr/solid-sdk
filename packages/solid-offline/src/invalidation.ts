@@ -28,13 +28,13 @@
  */
 
 import {
-  IGNORE_VARY,
   deleteVariantBytes,
+  IGNORE_VARY,
   metadataFromResponse,
   putCanonicalBytes,
   resLike,
 } from './cache-coherence.js';
-import { type RequestLike, classifyResponse, computeVaryKey, keyRequest } from './cache-policy.js';
+import { classifyResponse, computeVaryKey, keyRequest, type RequestLike } from './cache-policy.js';
 import type { MetadataStore } from './metadata-store.js';
 import type { Broadcaster, ByteCache } from './swr.js';
 import type { CacheMetadata, NotificationFrame } from './types.js';

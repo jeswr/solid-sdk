@@ -32,14 +32,14 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import {
+  createStatusSurface,
   type OfflineStatusSnapshot,
   type OfflineStatusSurface,
   type StatusSurfaceOptions,
-  createStatusSurface,
 } from './status.js';
 import type { UpdatedEvent } from './types.js';
 
-export type { OfflineStatusSnapshot, ResourceFreshness, OfflineStatusSurface } from './status.js';
+export type { OfflineStatusSnapshot, OfflineStatusSurface, ResourceFreshness } from './status.js';
 
 /**
  * Subscribe a component to the offline status surface. Pass a surface you already

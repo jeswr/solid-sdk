@@ -6,9 +6,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   type ConnectivityTarget,
+  createStatusSurface,
   type OfflineStatusSurface,
   type StatusChannel,
-  createStatusSurface,
 } from '../src/status.js';
 import type { UpdatedEvent } from '../src/types.js';
 

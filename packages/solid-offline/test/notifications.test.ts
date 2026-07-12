@@ -16,15 +16,15 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  type NotificationsDeps,
-  type SocketLike,
-  type Timers,
   backoffDelay,
   createNotificationsClient,
   discoverSubscriptionUrl,
+  type NotificationsDeps,
   parseFrame,
+  type SocketLike,
   storageDescriptionFromLink,
   subscribe,
+  type Timers,
 } from '../src/notifications.js';
 import type { NotificationFrame } from '../src/types.js';
 

@@ -16,7 +16,7 @@
  */
 import { afterEach, describe, expect, it } from 'vitest';
 import { computeCacheKey, keyRequest } from '../src/cache-policy.js';
-import { type InvalidateDeps, handleNotification, resyncSweep } from '../src/invalidation.js';
+import { handleNotification, type InvalidateDeps, resyncSweep } from '../src/invalidation.js';
 import { MetadataStore } from '../src/metadata-store.js';
 import type { NotificationFrame } from '../src/types.js';
 import {

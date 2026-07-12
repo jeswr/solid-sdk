@@ -25,12 +25,12 @@
  */
 
 import {
-  type Seed,
-  type SeedKind,
   aclUrlFor,
   containerChildren,
   deriveSeeds,
   isContainer,
+  type Seed,
+  type SeedKind,
   typeIndexTargets,
   userCanRead,
 } from './warmer-rdf.js';

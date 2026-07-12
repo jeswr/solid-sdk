@@ -34,5 +34,29 @@
     "indentStyle": "space",
     "indentWidth": 2,
     "lineWidth": 100
-  }
+  },
+  "overrides": [
+    {
+      "includes": ["packages/solid-offline/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noNonNullAssertion": "off",
+            "useNamingConvention": "off",
+            "useNodejsImportProtocol": "error"
+          },
+          "suspicious": {
+            "noExplicitAny": "warn"
+          }
+        }
+      },
+      "javascript": {
+        "formatter": {
+          "quoteStyle": "single",
+          "trailingCommas": "all",
+          "semicolons": "always"
+        }
+      }
+    }
+  ]
 }

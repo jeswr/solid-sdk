@@ -14,26 +14,26 @@
  */
 
 import {
-  type ResolvedAppShellConfig,
-  type ShellCacheStorage,
-  type ShellDeps,
   assetConfigCandidates,
   cleanupOldShellCaches,
   handleNavigation,
   handlePrecachedAsset,
   isPrecachedAsset,
   precacheAppShell,
+  type ResolvedAppShellConfig,
   resolveAppShellConfig,
   resolveAssetShellConfig,
   resolveServingShellConfig,
+  type ShellCacheStorage,
+  type ShellDeps,
   sameShellConfig,
   shellBucketComplete,
   shellCacheName,
 } from './app-shell.js';
-import { type InvalidateDeps, handleNotification, resyncSweep } from './invalidation.js';
+import { handleNotification, type InvalidateDeps, resyncSweep } from './invalidation.js';
 import { MetadataStore } from './metadata-store.js';
 import { cacheNameForWebId, isScopeChange } from './scope.js';
-import { type Broadcaster, type ByteCache, type SwrDeps, handleFetch } from './swr.js';
+import { type Broadcaster, type ByteCache, handleFetch, type SwrDeps } from './swr.js';
 import type { AppShellConfig, PageToWorkerMessage } from './types.js';
 
 declare const self: ServiceWorkerGlobalScope & {

@@ -12,7 +12,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { keyRequest } from '../src/cache-policy.js';
 import { MetadataStore } from '../src/metadata-store.js';
-import { type SwrDeps, handleFetch } from '../src/swr.js';
+import { handleFetch, type SwrDeps } from '../src/swr.js';
 import {
   MockBroadcaster,
   MockByteCache,

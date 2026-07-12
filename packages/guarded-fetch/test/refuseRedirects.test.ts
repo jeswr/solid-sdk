@@ -196,7 +196,7 @@ describe("refuseRedirects — input normalisation + credential passthrough", () 
     await f(target);
     // The input is passed THROUGH untouched (a URL), not reconstructed to a string.
     expect(String(inner.mock.calls[0]?.[0])).toBe(URL_A);
-    expect((inner.mock.calls[0]?.[1] as RequestInit).redirect).toBe("manual");
+    expect(inner.mock.calls[0]?.[1]?.redirect).toBe("manual");
   });
 
   it("passes a Request input THROUGH untouched, forwarding method + credential headers", async () => {
@@ -215,7 +215,7 @@ describe("refuseRedirects — input normalisation + credential passthrough", () 
     expect(passed.url).toBe(URL_A);
     expect(passed.method).toBe("POST");
     expect(passed.headers.get("authorization")).toBe("DPoP tok");
-    expect((inner.mock.calls[0]?.[1] as RequestInit).redirect).toBe("manual");
+    expect(inner.mock.calls[0]?.[1]?.redirect).toBe("manual");
   });
 
   it("does NOT drop policy-bearing Request fields (mode / integrity / cache)", async () => {
@@ -249,7 +249,7 @@ describe("refuseRedirects — input normalisation + credential passthrough", () 
     expect(passed.integrity).toBe("sha256-abc");
     expect(passed.cache).toBe("no-store");
     expect(passed.headers.get("authorization")).toBe("DPoP tok");
-    expect((inner.mock.calls[0]?.[1] as RequestInit).redirect).toBe("manual");
+    expect(inner.mock.calls[0]?.[1]?.redirect).toBe("manual");
   });
 
   it("forwards an init's credential header to the underlying (authed) fetch unchanged", async () => {

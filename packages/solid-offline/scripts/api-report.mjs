@@ -36,7 +36,7 @@
  * ────────────────────────────────────────────────────────────────────────────
  */
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -266,4 +266,4 @@ const invokedAsScript =
   process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 if (invokedAsScript) main();
 
-export { exportNamesFromDts, normalizeChunkHashes, entryPointsFromExports };
+export { entryPointsFromExports, exportNamesFromDts, normalizeChunkHashes };

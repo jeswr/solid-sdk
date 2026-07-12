@@ -8,10 +8,10 @@ import { describe, expect, it } from 'vitest';
 import {
   ANONYMOUS_SCOPE,
   CACHE_PREFIX,
+  cacheNameForWebId,
   DB_PREFIX,
   DEFAULT_CACHE_NAME,
   DEFAULT_DB_NAME,
-  cacheNameForWebId,
   dbNameForWebId,
   isScopeChange,
   scopeFor,

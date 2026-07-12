@@ -15,6 +15,14 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  createWarmController,
+  DEFAULT_WARM_BUDGET,
+  onIdle,
+  resolveBudget,
+  type WarmDeps,
+  warm,
+} from '../src/warmer.js';
+import {
   aclFromLinkHeader,
   aclUrlFor,
   containerChildren,
@@ -23,14 +31,6 @@ import {
   typeIndexTargets,
   userCanRead,
 } from '../src/warmer-rdf.js';
-import {
-  DEFAULT_WARM_BUDGET,
-  type WarmDeps,
-  createWarmController,
-  onIdle,
-  resolveBudget,
-  warm,
-} from '../src/warmer.js';
 
 const BASE = 'https://alice.example';
 const WEBID = `${BASE}/profile/card#me`;

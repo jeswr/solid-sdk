@@ -3,7 +3,7 @@
  * DB naming (§7 cache scoping).
  */
 import { afterEach, describe, expect, it } from 'vitest';
-import { DEFAULT_DB_NAME, MetadataStore, dbNameForWebId } from '../src/metadata-store.js';
+import { DEFAULT_DB_NAME, dbNameForWebId, MetadataStore } from '../src/metadata-store.js';
 import { DB_PREFIX } from '../src/scope.js';
 import type { CacheMetadata } from '../src/types.js';
 

@@ -3,11 +3,8 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
-  CANONICAL_RDF_ACCEPT,
-  NEGATIVE_CACHE_TTL_MS,
-  type RequestLike,
-  type ResponseLike,
   aclStatusFor,
+  CANONICAL_RDF_ACCEPT,
   canonicalAccept,
   classifyResponse,
   computeCacheKey,
@@ -15,6 +12,9 @@ import {
   isCacheableMethod,
   isNeverCacheEndpoint,
   keyRequest,
+  NEGATIVE_CACHE_TTL_MS,
+  type RequestLike,
+  type ResponseLike,
 } from '../src/cache-policy.js';
 
 function req(url: string, method = 'GET', headers: Record<string, string> = {}): RequestLike {
@@ -49,12 +49,12 @@ describe('isNeverCacheEndpoint', () => {
     expect(isNeverCacheEndpoint(url)).toBe(true);
   });
 
-  it.each(['https://pod.example/alice/profile/card', 'https://pod.example/alice/notes/today'])(
-    'does NOT flag ordinary resources %s',
-    (url) => {
-      expect(isNeverCacheEndpoint(url)).toBe(false);
-    },
-  );
+  it.each([
+    'https://pod.example/alice/profile/card',
+    'https://pod.example/alice/notes/today',
+  ])('does NOT flag ordinary resources %s', (url) => {
+    expect(isNeverCacheEndpoint(url)).toBe(false);
+  });
 
   it('is conservative (never-cache) for unparseable URLs', () => {
     expect(isNeverCacheEndpoint('::::not a url')).toBe(true);

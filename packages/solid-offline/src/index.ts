@@ -16,8 +16,8 @@
  */
 
 import { type PurgeResult, purgeForWebId } from './logout.js';
-import { type NotificationsClient, createNotificationsClient } from './notifications.js';
-import { type OfflineStatusSurface, createStatusSurface } from './status.js';
+import { createNotificationsClient, type NotificationsClient } from './notifications.js';
+import { createStatusSurface, type OfflineStatusSurface } from './status.js';
 import type {
   NotificationFrame,
   NotificationsClientConfig,
@@ -28,36 +28,12 @@ import type {
   WarmConfig,
 } from './types.js';
 import {
-  type WarmController,
-  type WarmResult,
   createWarmController,
   resolveBudget,
+  type WarmController,
+  type WarmResult,
 } from './warmer.js';
 
-export type {
-  OfflineClient,
-  OfflineClientConfig,
-  UpdatedEvent,
-  CacheMetadata,
-  WarmConfig,
-  WarmBudget,
-  AppShellConfig,
-} from './types.js';
-// P4 — app-shell precache pure logic (consumable by apps + the SW, unit-tested).
-export {
-  resolveAppShellConfig,
-  sameShellConfig,
-  shellCacheName,
-  shellBucketComplete,
-  resolveServingShellConfig,
-  resolveAssetShellConfig,
-  assetConfigCandidates,
-  precacheAppShell,
-  cleanupOldShellCaches,
-  isPrecachedAsset,
-  handleNavigation,
-  handlePrecachedAsset,
-} from './app-shell.js';
 export type {
   ResolvedAppShellConfig,
   ShellCache,
@@ -66,73 +42,95 @@ export type {
   ShellResult,
   ShellServeSource,
 } from './app-shell.js';
+// P4 — app-shell precache pure logic (consumable by apps + the SW, unit-tested).
 export {
-  warm,
-  createWarmController,
-  resolveBudget,
-  DEFAULT_WARM_BUDGET,
-  onIdle,
-} from './warmer.js';
-export type {
-  WarmDeps,
-  WarmVisit,
-  WarmController,
-  WarmResult,
-  ResolvedWarmBudget,
-} from './warmer.js';
-export {
-  deriveSeeds,
-  containerChildren,
-  typeIndexTargets,
-  parseWacAllow,
-  userCanRead,
-} from './warmer-rdf.js';
-export {
-  createNotificationsClient,
-  discoverSubscriptionUrl,
-  subscribe,
-  parseFrame,
-  backoffDelay,
-  storageDescriptionFromLink,
-} from './notifications.js';
+  assetConfigCandidates,
+  cleanupOldShellCaches,
+  handleNavigation,
+  handlePrecachedAsset,
+  isPrecachedAsset,
+  precacheAppShell,
+  resolveAppShellConfig,
+  resolveAssetShellConfig,
+  resolveServingShellConfig,
+  sameShellConfig,
+  shellBucketComplete,
+  shellCacheName,
+} from './app-shell.js';
+export type { InvalidateDeps, InvalidateOutcome, SweepResult } from './invalidation.js';
+export { handleNotification, resyncSweep } from './invalidation.js';
+export type { CacheStorageLike, PurgeDeps, PurgeResult } from './logout.js';
+export { purgeForWebId } from './logout.js';
 export type {
   NotificationsClient,
   NotificationsConfig,
   NotificationsDeps,
-  SocketLike,
   SocketFactory,
+  SocketLike,
 } from './notifications.js';
-export type {
-  NotificationFrame,
-  NotificationActivityType,
-  NotificationsClientConfig,
-  PageToWorkerMessage,
-} from './types.js';
-export { handleNotification, resyncSweep } from './invalidation.js';
-export type { InvalidateDeps, InvalidateOutcome, SweepResult } from './invalidation.js';
+export {
+  backoffDelay,
+  createNotificationsClient,
+  discoverSubscriptionUrl,
+  parseFrame,
+  storageDescriptionFromLink,
+  subscribe,
+} from './notifications.js';
 // P5 — WebID cache scoping (§7), logout-purge, and the status surface.
 export {
-  scopeHash,
-  scopeFor,
-  dbNameForWebId,
-  cacheNameForWebId,
-  isScopeChange,
-  DEFAULT_DB_NAME,
-  DEFAULT_CACHE_NAME,
-  DB_PREFIX,
-  CACHE_PREFIX,
   ANONYMOUS_SCOPE,
+  CACHE_PREFIX,
+  cacheNameForWebId,
+  DB_PREFIX,
+  DEFAULT_CACHE_NAME,
+  DEFAULT_DB_NAME,
+  dbNameForWebId,
+  isScopeChange,
+  scopeFor,
+  scopeHash,
 } from './scope.js';
-export { purgeForWebId } from './logout.js';
-export type { PurgeResult, PurgeDeps, CacheStorageLike } from './logout.js';
+export type {
+  OfflineStatusSnapshot,
+  OfflineStatusSurface,
+  ResourceFreshness,
+  StatusListener,
+  StatusSurfaceOptions,
+} from './status.js';
 export { createStatusSurface } from './status.js';
 export type {
-  OfflineStatusSurface,
-  OfflineStatusSnapshot,
-  ResourceFreshness,
-  StatusSurfaceOptions,
-  StatusListener,
-} from './status.js';
+  AppShellConfig,
+  CacheMetadata,
+  NotificationActivityType,
+  NotificationFrame,
+  NotificationsClientConfig,
+  OfflineClient,
+  OfflineClientConfig,
+  PageToWorkerMessage,
+  UpdatedEvent,
+  WarmBudget,
+  WarmConfig,
+} from './types.js';
+export type {
+  ResolvedWarmBudget,
+  WarmController,
+  WarmDeps,
+  WarmResult,
+  WarmVisit,
+} from './warmer.js';
+export {
+  createWarmController,
+  DEFAULT_WARM_BUDGET,
+  onIdle,
+  resolveBudget,
+  warm,
+} from './warmer.js';
+export {
+  containerChildren,
+  deriveSeeds,
+  parseWacAllow,
+  typeIndexTargets,
+  userCanRead,
+} from './warmer-rdf.js';
 
 const DEFAULTS = {
   workerUrl: '/solid-offline-worker.js',

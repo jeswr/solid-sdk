@@ -37,13 +37,13 @@
  */
 
 import {
-  NEGATIVE_CACHE_TTL_MS,
-  type RequestLike,
-  type ResponseLike,
   aclStatusFor,
   computeCacheKey,
   computeVaryKey,
   keyRequest,
+  NEGATIVE_CACHE_TTL_MS,
+  type RequestLike,
+  type ResponseLike,
 } from './cache-policy.js';
 import type { CacheMetadata } from './types.js';
 

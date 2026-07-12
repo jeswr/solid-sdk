@@ -18,17 +18,17 @@
  */
 
 import {
-  IGNORE_VARY,
   deleteVariantBytes,
+  IGNORE_VARY,
   metadataFromResponse,
   putCanonicalBytes,
   resLike,
 } from './cache-coherence.js';
 import {
-  type RequestLike,
   classifyResponse,
   computeVaryKey,
   keyRequest,
+  type RequestLike,
   requestCacheDirective,
 } from './cache-policy.js';
 import type { MetadataStore } from './metadata-store.js';
