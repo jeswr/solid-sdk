@@ -5,16 +5,11 @@
 // (dist/example-clientid.ttl) is the reference an app embeds in its
 // clientid.jsonld — and proves the typed-builder path round-trips.
 
-import { writeFileSync, mkdirSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { Store, DataFactory, Writer } from "n3";
-import {
-  TermWrapper,
-  SetFrom,
-  NamedNodeAs,
-  NamedNodeFrom,
-} from "@rdfjs/wrapper";
+import { fileURLToPath } from "node:url";
+import { NamedNodeAs, NamedNodeFrom, SetFrom, TermWrapper } from "@rdfjs/wrapper";
+import { DataFactory, Store, Writer } from "n3";
 
 const FEDAPP = "https://w3id.org/jeswr/fed#";
 const ACL = "http://www.w3.org/ns/auth/acl#";
@@ -30,16 +25,36 @@ class FedAppDoc extends TermWrapper {
     return SetFrom.subjectPredicate(this, RDF_TYPE, NamedNodeAs.string, NamedNodeFrom.string);
   }
   get sector() {
-    return SetFrom.subjectPredicate(this, `${FEDAPP}sector`, NamedNodeAs.string, NamedNodeFrom.string);
+    return SetFrom.subjectPredicate(
+      this,
+      `${FEDAPP}sector`,
+      NamedNodeAs.string,
+      NamedNodeFrom.string,
+    );
   }
   get access() {
-    return SetFrom.subjectPredicate(this, `${FEDAPP}access`, NamedNodeAs.string, NamedNodeFrom.string);
+    return SetFrom.subjectPredicate(
+      this,
+      `${FEDAPP}access`,
+      NamedNodeAs.string,
+      NamedNodeFrom.string,
+    );
   }
   get consumes() {
-    return SetFrom.subjectPredicate(this, `${FEDAPP}consumes`, NamedNodeAs.string, NamedNodeFrom.string);
+    return SetFrom.subjectPredicate(
+      this,
+      `${FEDAPP}consumes`,
+      NamedNodeAs.string,
+      NamedNodeFrom.string,
+    );
   }
   get produces() {
-    return SetFrom.subjectPredicate(this, `${FEDAPP}produces`, NamedNodeAs.string, NamedNodeFrom.string);
+    return SetFrom.subjectPredicate(
+      this,
+      `${FEDAPP}produces`,
+      NamedNodeAs.string,
+      NamedNodeFrom.string,
+    );
   }
 }
 

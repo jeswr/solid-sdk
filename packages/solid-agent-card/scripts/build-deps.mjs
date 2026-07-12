@@ -9,10 +9,10 @@
 // source, compile it with the local TypeScript, and drop the built `dist/` into
 // `node_modules/@jeswr/fetch-rdf`.
 //
-// REPRODUCIBILITY: the clone is pinned to the EXACT git commit resolved in
-// `package-lock.json` (not a moving `main`), so the built dep always matches the
-// lockfile-resolved version — `npm ci` on CI and a dev `npm install` build the
-// same source. Building from `main` would silently drift from the lockfile.
+// REPRODUCIBILITY: the clone is pinned to the EXACT git commit resolved in the
+// workspace `pnpm-lock.yaml` (not a moving `main`), so the built dep always
+// matches the lockfile-resolved version. Building from `main` would silently
+// drift from the lockfile.
 //
 // DURABLE FIX (bead pss-ront): this whole `build:deps` hack exists ONLY because
 // `@jeswr/fetch-rdf` does not publish a usable `dist/`. Once fetch-rdf ships a
@@ -31,7 +31,7 @@ import { fileURLToPath } from "node:url";
 const ROOT = join(fileURLToPath(import.meta.url), "..", "..");
 const DEP_DIR = join(ROOT, "node_modules", "@jeswr", "fetch-rdf");
 const DEP_DIST = join(DEP_DIR, "dist", "index.js");
-const LOCKFILE = join(ROOT, "package-lock.json");
+const LOCKFILE = join(ROOT, "..", "..", "pnpm-lock.yaml");
 const FETCH_RDF_GIT = "https://github.com/jeswr/fetch-rdf.git";
 
 function run(cmd, cwd) {
@@ -39,34 +39,39 @@ function run(cmd, cwd) {
 }
 
 /**
- * Read the EXACT git commit `@jeswr/fetch-rdf` resolves to from
- * `package-lock.json`, so the clone is pinned (reproducible) rather than tracking
- * a moving `main`. The lock's `resolved` is a git URL ending `#<commit-or-ref>`
- * (e.g. `git+ssh://…/fetch-rdf.git#<sha>`). Returns the ref after `#`, or
- * `undefined` if it cannot be determined (caller then refuses to build from an
- * unpinned source — failing closed beats a silently non-reproducible build).
+ * Read the exact git commit `@jeswr/fetch-rdf` resolves to from this package's
+ * importer in the workspace `pnpm-lock.yaml`. pnpm records GitHub dependencies
+ * as a codeload tarball URL ending in the resolved 40-character commit. Returns
+ * that commit, or `undefined` if it cannot be determined (caller then refuses
+ * to build from an unpinned source).
  */
 function resolvedFetchRdfRef() {
   if (!existsSync(LOCKFILE)) {
     return undefined;
   }
-  let lock;
+  let lockfile;
   try {
-    lock = JSON.parse(readFileSync(LOCKFILE, "utf8"));
+    lockfile = readFileSync(LOCKFILE, "utf8");
   } catch {
     return undefined;
   }
-  const entry = lock.packages?.["node_modules/@jeswr/fetch-rdf"];
-  const resolved = entry?.resolved;
-  if (typeof resolved !== "string") {
+
+  const importerStart = lockfile.indexOf("\n  packages/solid-agent-card:\n");
+  if (importerStart === -1) {
     return undefined;
   }
-  const hash = resolved.lastIndexOf("#");
-  if (hash === -1) {
+  const nextImporter = lockfile.indexOf("\n  packages/", importerStart + 1);
+  const importer = lockfile.slice(
+    importerStart,
+    nextImporter === -1 ? lockfile.length : nextImporter,
+  );
+  const resolved = importer.match(
+    /'@jeswr\/fetch-rdf':\n\s+specifier: [^\n]+\n\s+version: \S*\/([0-9a-f]{40})\s*$/m,
+  );
+  if (!resolved?.[1]) {
     return undefined;
   }
-  const ref = resolved.slice(hash + 1).trim();
-  return ref.length > 0 ? ref : undefined;
+  return resolved[1];
 }
 
 function main() {
@@ -74,18 +79,16 @@ function main() {
     return; // already built (or workspace-symlinked) — nothing to do.
   }
   if (!existsSync(DEP_DIR)) {
-    console.error(
-      "[build-deps] @jeswr/fetch-rdf is not installed. Run `npm install` first.",
-    );
+    console.error("[build-deps] @jeswr/fetch-rdf is not installed. Run `npm install` first.");
     process.exit(1);
   }
 
   const ref = resolvedFetchRdfRef();
   if (!ref) {
     console.error(
-      "[build-deps] could not resolve the @jeswr/fetch-rdf git commit from package-lock.json; " +
+      "[build-deps] could not resolve the @jeswr/fetch-rdf git commit from pnpm-lock.yaml; " +
         "refusing to build from an unpinned source (a non-reproducible build). " +
-        "Run `npm install` to (re)generate the lockfile.",
+        "Run `pnpm install` to (re)generate the workspace lockfile.",
     );
     process.exit(1);
   }

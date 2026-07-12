@@ -148,9 +148,9 @@ mdsh:PlaybackEventShape
     ] ;
     sh:property [
         sh:path media:playedVia ;           # source-service attribution (fedcon)
-        sh:nodeKind sh:IRI ;
+        sh:nodeKind sh:BlankNodeOrIRI ;     # matches the ontology: a service IRI OR a labelled node (roborev on bc54846)
         sh:severity sh:Info ;               # MAY: the service a play came from (no account needed)
-        sh:message "media:playedVia, if present, MUST reference the service/platform a play occurred on by IRI."@en ;
+        sh:message "media:playedVia, if present, MUST reference the service/platform a play occurred on (an IRI, or a labelled node for services without a stable IRI)."@en ;
     ] ;
     sh:property [
         sh:path media:msPlayed ;

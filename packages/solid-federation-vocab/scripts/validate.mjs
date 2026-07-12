@@ -10,11 +10,11 @@
 // This is the repo's test gate. RDF here goes through n3 / jsonld — never a
 // bespoke parser (suite house rule).
 
-import { readFileSync, readdirSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { Parser } from "n3";
+import { fileURLToPath } from "node:url";
 import jsonld from "jsonld";
+import { Parser } from "n3";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -77,7 +77,8 @@ for (const file of ttlFiles) {
       }
     }
   }
-  if (termCount > 0) ok(`${termCount} term(s) each carry rdfs:label + rdfs:comment + rdfs:isDefinedBy`);
+  if (termCount > 0)
+    ok(`${termCount} term(s) each carry rdfs:label + rdfs:comment + rdfs:isDefinedBy`);
 
   // Ontology node sanity.
   const ontology = [...subjects].find(([, i]) => i.types.has(OWL_ONTOLOGY));
@@ -85,7 +86,9 @@ for (const file of ttlFiles) {
   else ok(`ontology node: ${ontology[0]}`);
 }
 
-const ctxFiles = readdirSync(ROOT).filter((f) => f.endsWith("context.jsonld") || f === "context.jsonld");
+const ctxFiles = readdirSync(ROOT).filter(
+  (f) => f.endsWith("context.jsonld") || f === "context.jsonld",
+);
 if (ctxFiles.length === 0) fail("no *context.jsonld files found");
 
 for (const file of ctxFiles) {
@@ -132,8 +135,12 @@ for (const file of ctxFiles) {
 {
   console.log("\nJSON-LD composed context: fedreg-context.jsonld + fedcon-context.jsonld");
   try {
-    const fedreg = JSON.parse(readFileSync(join(ROOT, "fedreg-context.jsonld"), "utf8"))["@context"];
-    const fedcon = JSON.parse(readFileSync(join(ROOT, "fedcon-context.jsonld"), "utf8"))["@context"];
+    const fedreg = JSON.parse(readFileSync(join(ROOT, "fedreg-context.jsonld"), "utf8"))[
+      "@context"
+    ];
+    const fedcon = JSON.parse(readFileSync(join(ROOT, "fedcon-context.jsonld"), "utf8"))[
+      "@context"
+    ];
     const admission = {
       "@context": [fedreg, fedcon],
       id: "https://registry.example/admissions/x",
@@ -150,7 +157,9 @@ for (const file of ctxFiles) {
     if (statusIri !== "https://jeswr.org/fedcon#Proposed")
       fail(`ConceptProposed did not expand to fedcon:Proposed (got ${statusIri})`);
     else if (assertedByIri !== "https://registry.example/card#me")
-      fail(`reused fedreg:assertedBy did not expand in the composed context (got ${assertedByIri})`);
+      fail(
+        `reused fedreg:assertedBy did not expand in the composed context (got ${assertedByIri})`,
+      );
     else ok("fedreg + fedcon @protected contexts compose + expand (no protected-term clash)");
   } catch (err) {
     fail(`composed fedreg+fedcon context expansion failed: ${err.message}`);

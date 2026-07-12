@@ -24,10 +24,10 @@
 //
 // Layers 1 + 2 are pure n3 + always run.
 
-import { readFileSync, readdirSync, existsSync, statSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-import { dirname, join, relative } from "node:path";
 import { execFileSync } from "node:child_process";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { dirname, join, relative } from "node:path";
+import { fileURLToPath } from "node:url";
 import { Parser } from "n3";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -63,7 +63,11 @@ const ONTOLOGIES = [
   { dir: "social", file: "social.ttl", ns: "https://w3id.org/jeswr/sectors/social#" },
   { dir: "bookmarks", file: "bookmarks.ttl", ns: "https://w3id.org/jeswr/sectors/bookmarks#" },
   { dir: "futures", file: "futures.ttl", ns: "https://w3id.org/jeswr/sectors/futures#" },
-  { dir: "collectibles", file: "collectibles.ttl", ns: "https://w3id.org/jeswr/sectors/collectibles#" },
+  {
+    dir: "collectibles",
+    file: "collectibles.ttl",
+    ns: "https://w3id.org/jeswr/sectors/collectibles#",
+  },
   { dir: "equine", file: "equine.ttl", ns: "https://w3id.org/jeswr/sectors/equine#" },
 ];
 
@@ -115,10 +119,7 @@ for (const { dir, file, ns } of ONTOLOGIES) {
   let hasOntologyNode = false;
   for (const q of quads) {
     if (q.subject.termType !== "NamedNode") continue;
-    if (
-      q.predicate.value === RDF_TYPE &&
-      q.object.value === `${OWL}Ontology`
-    ) {
+    if (q.predicate.value === RDF_TYPE && q.object.value === `${OWL}Ontology`) {
       hasOntologyNode = true;
     }
     if (!q.subject.value.startsWith(ns)) continue;
@@ -166,9 +167,7 @@ for (const { dir, file, ns } of ONTOLOGIES) {
 // bar so the same rule is visible in the ontology gate.) Note fedcon: mints under
 // https://jeswr.org/fedcon# — the one root vocab NOT under w3id.org/jeswr.
 // =============================================================================
-console.log(
-  "\nLayer 2b — root governance-vocab term hygiene (fedapp / fedreg / fedcon / task):",
-);
+console.log("\nLayer 2b — root governance-vocab term hygiene (fedapp / fedreg / fedcon / task):");
 const ROOT_VOCABS = [
   { file: "fedapp.ttl", ns: "https://w3id.org/jeswr/fed#" },
   { file: "fedreg.ttl", ns: "https://w3id.org/jeswr/fedreg#" },
@@ -274,10 +273,7 @@ if (!robot || (robot.kind === "jar" && !hasJava())) {
       continue;
     }
     const out = join(cwd, ".reasoned.tmp.ttl");
-    const args =
-      robot.kind === "jar"
-        ? ["-jar", robot.path]
-        : [];
+    const args = robot.kind === "jar" ? ["-jar", robot.path] : [];
     const robotArgs = [
       "reason",
       "--reasoner",

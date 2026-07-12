@@ -4,9 +4,9 @@
 // provenance marker, the JSON-LD contexts are valid JSON, and the required
 // vocabulary files exist. Fast, dependency-free — the first gate to run.
 
-import { readFileSync, readdirSync, existsSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 // Accept an AUTHORED-BY marker naming ANY model (the suite tags provenance by the
@@ -44,7 +44,9 @@ for (const f of REQUIRED) {
 console.log("\nAUTHORED-BY markers:");
 const marked = [
   ...readdirSync(ROOT).filter((f) => f.endsWith(".ttl")),
-  ...readdirSync(join(ROOT, "scripts")).filter((f) => f.endsWith(".mjs")).map((f) => `scripts/${f}`),
+  ...readdirSync(join(ROOT, "scripts"))
+    .filter((f) => f.endsWith(".mjs"))
+    .map((f) => `scripts/${f}`),
 ];
 for (const rel of marked) {
   const txt = readFileSync(join(ROOT, rel), "utf8");

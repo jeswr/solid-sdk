@@ -12,15 +12,15 @@
 // RDF goes through n3 only (suite house rule: never a bespoke serialiser).
 
 import {
-  readFileSync,
-  readdirSync,
-  writeFileSync,
-  mkdirSync,
   copyFileSync,
   existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  writeFileSync,
 } from "node:fs";
-import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { Parser, Writer } from "n3";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -33,9 +33,7 @@ mkdirSync(DOCS, { recursive: true });
 // fedcon.shacl.ttl): like the sector .shacl.ttl profiles they are copied VERBATIM
 // as sidecars (below), never merged into the reasoned vocab.nt dump nor given their
 // own HTML/context — mirroring the sectors/ convention.
-const ttlFiles = readdirSync(ROOT).filter(
-  (f) => f.endsWith(".ttl") && !f.endsWith(".shacl.ttl"),
-);
+const ttlFiles = readdirSync(ROOT).filter((f) => f.endsWith(".ttl") && !f.endsWith(".shacl.ttl"));
 const jsonldFiles = readdirSync(ROOT).filter((f) => f.endsWith(".jsonld"));
 
 // 1 + 2 — parse all Turtle, re-serialise via n3.Writer.
@@ -62,12 +60,19 @@ console.log(`dist/vocab.nt — ${allQuads.length} triples (n3.Writer)`);
 // namespace-slug name (fed.ttl / task.ttl) so the served path matches the IRI
 // the w3id redirect resolves (…/fed → fed.ttl). The descriptive source name
 // (fedapp.ttl) is kept too for humans browsing the repo.
-const TTL_SLUG = { "fedapp.ttl": "fed.ttl", "fedreg.ttl": "fedreg.ttl", "task.ttl": "task.ttl", "fedcon.ttl": "fedcon.ttl" };
+const TTL_SLUG = {
+  "fedapp.ttl": "fed.ttl",
+  "fedreg.ttl": "fedreg.ttl",
+  "task.ttl": "task.ttl",
+  "fedcon.ttl": "fedcon.ttl",
+};
 for (const file of ttlFiles) {
   copyFileSync(join(ROOT, file), join(DOCS, file));
   const slug = TTL_SLUG[file];
   if (slug && slug !== file) copyFileSync(join(ROOT, file), join(DOCS, slug));
-  console.log(`docs/${file}${slug && slug !== file ? ` (+ docs/${slug})` : ""} (served by GitHub Pages)`);
+  console.log(
+    `docs/${file}${slug && slug !== file ? ` (+ docs/${slug})` : ""} (served by GitHub Pages)`,
+  );
 }
 for (const file of jsonldFiles) {
   copyFileSync(join(ROOT, file), join(DOCS, file));
@@ -81,7 +86,10 @@ const RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
 const OWL_ONTOLOGY = "http://www.w3.org/2002/07/owl#Ontology";
 
 const esc = (s) =>
-  String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+  String(s).replace(
+    /[&<>"]/g,
+    (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c],
+  );
 
 // `slug` is the PUBLIC namespace slug / route (fed, task, fedcon) — NOT the source
 // filename (fedapp.ttl). `ctx` is the matching JSON-LD context filename. `base` is
@@ -180,18 +188,73 @@ mkdirSync(DOCS_SECTORS, { recursive: true });
 // [srcRel, route, prefix, ns] — route is the w3id path segment (== served slug).
 const ONTOS = [
   ["sectors/core/core.ttl", "core", "core", "https://w3id.org/jeswr/core#"],
-  ["sectors/identity/identity.ttl", "sectors/identity", "id", "https://w3id.org/jeswr/sectors/identity#"],
-  ["sectors/finance/finance.ttl", "sectors/finance", "fin", "https://w3id.org/jeswr/sectors/finance#"],
-  ["sectors/health/health.ttl", "sectors/health", "health", "https://w3id.org/jeswr/sectors/health#"],
-  ["sectors/health/diet/diet.ttl", "sectors/health/diet", "diet", "https://w3id.org/jeswr/sectors/health/diet#"],
+  [
+    "sectors/identity/identity.ttl",
+    "sectors/identity",
+    "id",
+    "https://w3id.org/jeswr/sectors/identity#",
+  ],
+  [
+    "sectors/finance/finance.ttl",
+    "sectors/finance",
+    "fin",
+    "https://w3id.org/jeswr/sectors/finance#",
+  ],
+  [
+    "sectors/health/health.ttl",
+    "sectors/health",
+    "health",
+    "https://w3id.org/jeswr/sectors/health#",
+  ],
+  [
+    "sectors/health/diet/diet.ttl",
+    "sectors/health/diet",
+    "diet",
+    "https://w3id.org/jeswr/sectors/health/diet#",
+  ],
   ["sectors/media/media.ttl", "sectors/media", "media", "https://w3id.org/jeswr/sectors/media#"],
-  ["sectors/scheduling/scheduling.ttl", "sectors/scheduling", "sched", "https://w3id.org/jeswr/sectors/scheduling#"],
-  ["sectors/contacts/contacts.ttl", "sectors/contacts", "contact", "https://w3id.org/jeswr/sectors/contacts#"],
-  ["sectors/drawing/drawing.ttl", "sectors/drawing", "drawing", "https://w3id.org/jeswr/sectors/drawing#"],
-  ["sectors/social/social.ttl", "sectors/social", "social", "https://w3id.org/jeswr/sectors/social#"],
-  ["sectors/bookmarks/bookmarks.ttl", "sectors/bookmarks", "bookmark", "https://w3id.org/jeswr/sectors/bookmarks#"],
-  ["sectors/futures/futures.ttl", "sectors/futures", "fut", "https://w3id.org/jeswr/sectors/futures#"],
-  ["sectors/collectibles/collectibles.ttl", "sectors/collectibles", "col", "https://w3id.org/jeswr/sectors/collectibles#"],
+  [
+    "sectors/scheduling/scheduling.ttl",
+    "sectors/scheduling",
+    "sched",
+    "https://w3id.org/jeswr/sectors/scheduling#",
+  ],
+  [
+    "sectors/contacts/contacts.ttl",
+    "sectors/contacts",
+    "contact",
+    "https://w3id.org/jeswr/sectors/contacts#",
+  ],
+  [
+    "sectors/drawing/drawing.ttl",
+    "sectors/drawing",
+    "drawing",
+    "https://w3id.org/jeswr/sectors/drawing#",
+  ],
+  [
+    "sectors/social/social.ttl",
+    "sectors/social",
+    "social",
+    "https://w3id.org/jeswr/sectors/social#",
+  ],
+  [
+    "sectors/bookmarks/bookmarks.ttl",
+    "sectors/bookmarks",
+    "bookmark",
+    "https://w3id.org/jeswr/sectors/bookmarks#",
+  ],
+  [
+    "sectors/futures/futures.ttl",
+    "sectors/futures",
+    "fut",
+    "https://w3id.org/jeswr/sectors/futures#",
+  ],
+  [
+    "sectors/collectibles/collectibles.ttl",
+    "sectors/collectibles",
+    "col",
+    "https://w3id.org/jeswr/sectors/collectibles#",
+  ],
   ["sectors/equine/equine.ttl", "sectors/equine", "eq", "https://w3id.org/jeswr/sectors/equine#"],
 ];
 
@@ -271,7 +334,7 @@ function contextFor(prefix, ns, terms) {
 
 /** HTML term table for an ontology (the text/html conneg target). */
 function ontologyHtml(route, prefix, ns, terms, depth) {
-  const up = "../".repeat(depth); // relative path back to docs/ root
+  const up = "../".repeat(depth) || "./"; // relative path back to docs/ root
   const slug = route.split("/").pop();
   const rows = terms
     .map(

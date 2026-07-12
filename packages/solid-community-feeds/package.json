@@ -1,6 +1,7 @@
 {
   "name": "@jeswr/solid-community-feeds",
   "version": "0.1.0",
+  "securityCritical": true,
   "description": "Framework-agnostic read client that normalizes Solid community channels — Matrix rooms (Client-Server API) and the Solid forum (Discourse) — into ONE unified channel→thread→message feed model. SSRF-safe, injectable fetch, no live network in tests. Experimental, AI-agent-generated.",
   "type": "module",
   "main": "./dist/index.js",
@@ -17,13 +18,11 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
-    "check:dist": "node scripts/check-dist-fresh.mjs",
-    "check:lockfile-transport": "node scripts/check-lockfile-transport.mjs",
     "api:report": "api-extractor run --local",
     "api:check": "api-extractor run",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "lint": "biome check src test scripts && npm run check:lockfile-transport",
-    "lint:fix": "biome check --write src test scripts",
+    "lint": "biome check src test",
+    "lint:fix": "biome check --write src test",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "prepare": "npm run build"
@@ -50,7 +49,7 @@
   },
   "homepage": "https://github.com/jeswr/solid-community-feeds#readme",
   "dependencies": {
-    "@jeswr/guarded-fetch": "github:jeswr/guarded-fetch#184f060d95cc29ef7a01e8bc28fb04bb24b5af76"
+    "@jeswr/guarded-fetch": "workspace:*"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.0.0",

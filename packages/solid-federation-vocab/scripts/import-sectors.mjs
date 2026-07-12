@@ -20,15 +20,13 @@
 // sectors/ files are the source of truth in THIS repo; the upstream tree is the
 // origin of the modelling. Run: `node scripts/import-sectors.mjs <fse-onto-dir>`.
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 // Default upstream location; override with argv[2].
-const SRC =
-  process.argv[2] ||
-  join(ROOT, "..", "full-solid-ecosystem", "federation", "ontologies");
+const SRC = process.argv[2] || join(ROOT, "..", "full-solid-ecosystem", "federation", "ontologies");
 
 if (!existsSync(SRC)) {
   console.error(`source ontology dir not found: ${SRC}`);
