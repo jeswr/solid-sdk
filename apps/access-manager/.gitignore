@@ -1,0 +1,7 @@
+node_modules/
+dist/
+dist-pages/
+coverage/
+*.local
+.DS_Store
+.vercel

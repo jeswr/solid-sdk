@@ -1,0 +1,15 @@
+<!doctype html>
+<!-- AUTHORED-BY Claude Fable 5 -->
+<!-- The reactive-auth popup contract: relay the authorization response to the opener. -->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Signing in…</title>
+  </head>
+  <body>
+    <p>Completing sign-in…</p>
+    <script>
+      opener.postMessage(location.href);
+    </script>
+  </body>
+</html>
