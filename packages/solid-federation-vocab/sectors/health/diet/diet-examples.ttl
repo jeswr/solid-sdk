@@ -1,0 +1,117 @@
+# AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+#
+# Sample instances of every DESIGN §2.2 entity, used to VERIFY that diet.shacl.ttl
+# validates a conformant diary (no sh:Violation). Validated with rdf-validate-shacl
+# (data = this file + diet.ttl for the coded-value class typing; shapes =
+# diet.shacl.ttl). Parsed for well-formedness by the ontology gate (Layer 1).
+#
+@prefix diet:   <https://w3id.org/jeswr/sectors/health/diet#> .
+@prefix health: <https://w3id.org/jeswr/sectors/health#> .
+@prefix core:   <https://w3id.org/jeswr/core#> .
+@prefix schema: <http://schema.org/> .
+@prefix ex:     <https://example.org/alice/health/diary/> .
+@prefix xsd:    <http://www.w3.org/2001/XMLSchema#> .
+
+# The pod owner (the Patient a symptom is about).
+ex:me a core:Person, health:Patient .
+
+# 1. Meal — WHAT (a food item) + WHEN (ingestion time) + eating-out context.
+ex:meal-01 a diet:Meal ;
+    schema:startTime "2026-07-02T08:15:00Z"^^xsd:dateTime ;
+    diet:context diet:home ;
+    diet:portion diet:normal ;
+    diet:hasItem ex:food-01 ;
+    diet:note "Porridge with a handful of dried apricots." .
+
+# 2. FoodItem — a scanned product with clean allergen/additive tags but a
+#    high-risk OFF category (dried fruit) — the possible-undeclared sulphite case.
+ex:food-01 a diet:FoodItem ;
+    schema:name "Dried apricots" ;
+    diet:offBarcode "3273220001234" ;
+    diet:offRef <https://world.openfoodfacts.org/product/3273220001234> ;
+    diet:ingredientsText "Dried apricots." ;
+    diet:offCategory "en:dried-apricots" ;
+    diet:sourceConfidence diet:off .
+
+# 3. Exposure — derived: possible-undeclared sulphites from the dried-fruit
+#    category despite clean tags, with provenance back to the FoodItem.
+ex:exposure-01 a diet:Exposure ;
+    diet:trigger diet:sulphites ;
+    diet:exposureLevel diet:possibleUndeclared ;
+    diet:derivedFrom ex:food-01 .
+
+# 4. Symptom — a wheeze/breathing symptom (emergency-flagged type) with onset.
+ex:symptom-01 a diet:Symptom ;
+    diet:symptomType diet:wheezeBreathing ;
+    diet:severity 6 ;
+    schema:startTime "2026-07-02T09:30:00Z"^^xsd:dateTime ;
+    health:patient ex:me ;
+    diet:note "Chest tightness ~1h after breakfast." .
+
+# 5. TriggerClass — the canonical scheme concept (defined in diet.ttl); shown
+#    with its evidence-prior lag profile for reference.
+#    (diet:sulphites already carries diet:lagWindowMin/Max/lagMode in diet.ttl.)
+
+# 6. EliminationProtocol — a sulphites protocol in its washout phase.
+ex:protocol-01 a diet:EliminationProtocol ;
+    diet:targetTrigger diet:sulphites ;
+    diet:phase diet:washout ;
+    diet:phaseStarted "2026-07-01T00:00:00Z"^^xsd:dateTime ;
+    diet:phasePlannedEnd "2026-07-04T00:00:00Z"^^xsd:dateTime ;
+    diet:challengeStep 0 .
+
+# 7. ToleranceConclusion — a time-boxed secondary-lactose conclusion.
+ex:conclusion-lactose a diet:ToleranceConclusion ;
+    diet:aboutTrigger diet:lactose ;
+    diet:verdict diet:reacts ;
+    diet:confidence diet:suspected ;
+    diet:reviewAfter "2027-01-02"^^xsd:date ;
+    diet:derivedFrom ex:exposure-01 , ex:symptom-01 .
+
+# 8. GeneticSummary — interpreted summary only (raw file never stored). Consent
+#    is a MUST (fail-closed); the coded rollup here is risk-haplotype-PRESENT,
+#    which is NOT a diagnosis (DQ2/DQ8 is common), so no coverage claim is needed.
+ex:genetics a diet:GeneticSummary ;
+    diet:consentGiven true ;
+    diet:enteredManually false ;
+    diet:sourceType diet:consumerArray ;
+    diet:coverageComplete false ;
+    diet:coeliacGeneticRisk diet:riskHaplotypePresent ;
+    diet:geneticInterpretation "Carrying DQ2.5 does NOT mean you have coeliac (30–40% of people carry DQ2/DQ8); it cannot diagnose you. Diagnosis needs serology + biopsy while eating gluten. This consumer chip may not tag every risk allele — a null result is not reassurance." ;
+    diet:hlaMarker ex:marker-dq25 .
+
+# 8b. HlaMarker — one rsID row, with the machine-readable risk-haplotype tag +
+#     structured presence call (additive to the free-text interpretation).
+ex:marker-dq25 a diet:HlaMarker ;
+    diet:rsid "rs2187668" ;
+    diet:genotype "AG" ;
+    diet:riskHaplotype diet:DQ2_5 ;
+    diet:markerPresence diet:markerPresent ;
+    diet:markerInterpretation "rs2187668 present → DQ2.5 risk haplotype." .
+
+# 8c. GeneticSummary (negative case) — a clinical HLA report with COMPLETE
+#     coverage that found no risk haplotype: the NPV-only 'risk-haplotype-absent'
+#     rollup is sound ONLY because diet:coverageComplete = true (the
+#     GeneticRiskCoverageShape safety invariant). 'Unlikely', never 'you don't
+#     have coeliac'.
+ex:genetics-negative a diet:GeneticSummary ;
+    diet:consentGiven true ;
+    diet:enteredManually false ;
+    diet:sourceType diet:clinicalReport ;
+    diet:coverageComplete true ;
+    diet:coeliacGeneticRisk diet:riskHaplotypeAbsent ;
+    diet:geneticInterpretation "No DQ2/DQ8 risk haplotype was found on a complete HLA-DQ typing → coeliac is very unlikely (strong negative predictive value). This is NOT a statement that you don't have coeliac; discuss with a clinician." ;
+    diet:hlaMarker ex:marker-dq8-absent .
+
+# 8d. HlaMarker — an absent DQ8 tag SNP (only meaningful because coverage is complete).
+ex:marker-dq8-absent a diet:HlaMarker ;
+    diet:rsid "rs7454108" ;
+    diet:genotype "TT" ;
+    diet:riskHaplotype diet:DQ8 ;
+    diet:markerPresence diet:markerAbsent ;
+    diet:markerInterpretation "rs7454108 absent → no DQ8 risk haplotype tagged." .
+
+# 9. DietPlan — the working exclusion set + why.
+ex:plan a diet:DietPlan ;
+    diet:excludes diet:lactose ;
+    diet:restsOn ex:conclusion-lactose .

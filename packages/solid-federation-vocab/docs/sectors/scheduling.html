@@ -1,0 +1,65 @@
+<!doctype html>
+<!-- AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>w3id.org/jeswr/sectors/scheduling# — Solid Federation Sector Ontology</title>
+    <style>
+      :root { color-scheme: light dark; }
+      body { font-family: system-ui, sans-serif; line-height: 1.6; max-width: 64rem; margin: 2rem auto; padding: 0 1rem; }
+      code { background: rgba(127,127,127,0.15); padding: 0.1em 0.35em; border-radius: 4px; }
+      .warn { border-left: 4px solid #d97706; padding: 0.5rem 1rem; background: rgba(217,119,6,0.08); border-radius: 4px; }
+      table { border-collapse: collapse; width: 100%; }
+      th, td { text-align: left; padding: 0.4rem 0.6rem; border-bottom: 1px solid rgba(127,127,127,0.3); vertical-align: top; }
+      a { color: #2563eb; }
+    </style>
+  </head>
+  <body>
+    <h1><code>https://w3id.org/jeswr/sectors/scheduling#</code></h1>
+    <p>Prefix <code>sched:</code> · a gUFO-based ontology in the @jeswr Solid federation; imports the <a href="../core.html">Solid Core</a>.</p>
+    <p class="warn">⚠️ <strong>Experimental</strong> — AI-agent-generated (Claude Opus 4.8, @jeswr PSS agent); under active development, not production-hardened.</p>
+    <p>Other representations: <a href="scheduling.ttl">Turtle</a> · <a href="scheduling-context.jsonld">JSON-LD context</a> · <a href="../">index</a></p>
+    <h2>Terms (37)</h2>
+    <table>
+      <tr><th>Term</th><th>Label</th><th>Comment / definition</th></tr>
+      <tr><td><code>sched:Accepted</code></td><td>Accepted</td><td>The attendee has accepted the invitation. iCalendar PARTSTAT=ACCEPTED; schema RsvpResponseYes.</td></tr>
+      <tr><td><code>sched:Attendance</code></td><td>Attendance</td><td>A reified link between a CalendarEvent and an attending agent that carries the RSVP/participation status, role and response time. A core:Relationship relator: it mediates an Attendee role and bundles status + provenance. Aligns to iCalendar ATTENDEE and schema:RsvpAction.</td></tr>
+      <tr><td><code>sched:attendanceFor</code></td><td>attendance for</td><td>The event an Attendance record concerns.</td></tr>
+      <tr><td><code>sched:AttendanceScheme</code></td><td>Attendance Status Scheme</td><td>The canonical scheme of RSVP/participation status values for scheduling (ACCEPTED / DECLINED / TENTATIVE / NEEDS-ACTION).</td></tr>
+      <tr><td><code>sched:attendanceStatus</code></td><td>attendance status</td><td>The RSVP/participation state of an Attendance, a coded value from sched:AttendanceScheme. Aligns to iCalendar PARTSTAT and schema:rsvpResponse.</td></tr>
+      <tr><td><code>sched:AttendanceStatus</code></td><td>Attendance Status</td><td>A controlled-vocabulary value for an RSVP state (accepted, declined, tentative, needs-action). Roots in core:Category (the federation's shared coded-value root, equivalent to skos:Concept) so values come from a managed scheme; the sched:AttendanceScheme provides the canonical set. Mirrors iCalendar PARTSTAT and schema RsvpResponseType.</td></tr>
+      <tr><td><code>sched:attendee</code></td><td>attendee</td><td>An agent invited to / participating in an event (the direct shortcut). Specialises core:hadParticipant; aligns to iCalendar ATTENDEE and schema:attendee. The reified RSVP-bearing form is sched:Attendance.</td></tr>
+      <tr><td><code>sched:Attendee</code></td><td>Attendee</td><td>The role an agent plays when invited to / participating in an event, as captured by an Attendance relator. Anti-rigid and cross-kind (any Agent kind may play it). Specialises core:RelationshipParty in usage; aligns to iCalendar ATTENDEE.</td></tr>
+      <tr><td><code>sched:Calendar</code></td><td>Calendar</td><td>A named collection of calendar entries (events, tasks) — an information resource the Calendar app manages. Aligns to iCalendar VCALENDAR and schema:Schedule's host context.</td></tr>
+      <tr><td><code>sched:CalendarEvent</code></td><td>Calendar Event</td><td>A scheduled occurrence located in time and (optionally) place that agents participate in — a meeting, appointment, concert. The gufo:Event sub-type the Calendar app holds; aligns to iCalendar VEVENT and schema:Event.</td></tr>
+      <tr><td><code>sched:completed</code></td><td>completed</td><td>Whether a task has been completed.</td></tr>
+      <tr><td><code>sched:completedAt</code></td><td>completed at</td><td>When a task was completed. Specialises core:timestamp; aligns to iCalendar COMPLETED.</td></tr>
+      <tr><td><code>sched:count</code></td><td>count</td><td>Total number of occurrences the rule generates (mutually exclusive with until). Aligns to iCalendar COUNT.</td></tr>
+      <tr><td><code>sched:Declined</code></td><td>Declined</td><td>The attendee has declined the invitation. iCalendar PARTSTAT=DECLINED; schema RsvpResponseNo.</td></tr>
+      <tr><td><code>sched:description</code></td><td>description</td><td>Longer free-text description of a calendar entry. Aligns to iCalendar DESCRIPTION and schema:description.</td></tr>
+      <tr><td><code>sched:dueTime</code></td><td>due time</td><td>When a task is due. Specialises core:validUntil; aligns to iCalendar DUE.</td></tr>
+      <tr><td><code>sched:endTime</code></td><td>end time</td><td>Clock end of an entry. Specialises core:validUntil; aligns to iCalendar DTEND and schema:endDate.</td></tr>
+      <tr><td><code>sched:eventLocation</code></td><td>event location</td><td>The venue of an event. Specialises core:atPlace; aligns to iCalendar LOCATION and schema:location.</td></tr>
+      <tr><td><code>sched:frequency</code></td><td>frequency</td><td>Recurrence frequency (DAILY, WEEKLY, MONTHLY, YEARLY). Aligns to iCalendar FREQ and schema:repeatFrequency.</td></tr>
+      <tr><td><code>sched:hasAttendee</code></td><td>has attendee</td><td>Mediation tying an Attendance relator to the agent playing the Attendee role. Specialises core:relatesParty (replaces the v0 core:relatesAgent + core:relationshipRole).</td></tr>
+      <tr><td><code>sched:hasReminder</code></td><td>has reminder</td><td>Attaches a reminder/alarm to a calendar entry. Specialises core:hasPart; aligns to iCalendar (VALARM nested in VEVENT/VTODO).</td></tr>
+      <tr><td><code>sched:inCalendar</code></td><td>in calendar</td><td>The calendar a calendar entry belongs to. Specialises core:partOf. No rdfs:domain — entries are events (core:Event/Activity), which are gUFO-disjoint from one another only via meta-type; intended usage (a CalendarEvent or Task) is enforced in SHACL. Aligns to schema:partOfSeries.</td></tr>
+      <tr><td><code>sched:interval</code></td><td>interval</td><td>How many frequency units between occurrences (every N). Aligns to iCalendar INTERVAL.</td></tr>
+      <tr><td><code>sched:NeedsAction</code></td><td>Needs Action</td><td>The invitation awaits the attendee's response. iCalendar PARTSTAT=NEEDS-ACTION (the default).</td></tr>
+      <tr><td><code>sched:organizer</code></td><td>organizer</td><td>The agent that organises/owns an entry (a CalendarEvent or Task; usage enforced in SHACL). Aligns to iCalendar ORGANIZER and schema:organizer; close to core:performedBy (see alignments).</td></tr>
+      <tr><td><code>sched:recurrence</code></td><td>recurrence</td><td>The recurrence rule that makes an entry repeat. Domain is a calendar entry (CalendarEvent or Task; usage enforced in SHACL). Aligns to iCalendar RRULE and schema:eventSchedule.</td></tr>
+      <tr><td><code>sched:RecurrenceRule</code></td><td>Recurrence Rule</td><td>A specification (frequency, interval, by-day/by-month, count/until) that generates a series of recurring entries. An information object describing a series, not an occurrence itself. Aligns to iCalendar RRULE and schema:Schedule.</td></tr>
+      <tr><td><code>sched:Reminder</code></td><td>Reminder</td><td>An alarm attached to a calendar entry that fires at, before, or after a reference time to notify an agent. An information object, not the firing event. Aligns to iCalendar VALARM.</td></tr>
+      <tr><td><code>sched:respondedAt</code></td><td>responded at</td><td>When the attendee last set their RSVP. Specialises core:timestamp.</td></tr>
+      <tr><td><code>sched:sector</code></td><td>Scheduling sector</td><td>The Scheduling data sector. The value an app's fedapp:sector names in its Client Identifier Document to declare it operates over scheduling data. Backed by this sector ontology.</td></tr>
+      <tr><td><code>sched:startTime</code></td><td>start time</td><td>Clock start of an entry. Specialises core:validFrom; aligns to iCalendar DTSTART and schema:startDate. For full interval modelling use core:atTime → time:Interval (OWL-Time).</td></tr>
+      <tr><td><code>sched:summary</code></td><td>summary</td><td>Short title/subject of a calendar entry (a CalendarEvent or Task). Usage enforced in SHACL. Aligns to iCalendar SUMMARY and schema:name.</td></tr>
+      <tr><td><code>sched:Task</code></td><td>Task</td><td>A to-do item: something to be done over time, optionally with a due date and completion state. Rooted in core:Activity (it acts/generates over time, it is not merely an occurrence); aligns to iCalendar VTODO and schema:PlanAction.</td></tr>
+      <tr><td><code>sched:Tentative</code></td><td>Tentative</td><td>The attendee has tentatively accepted the invitation. iCalendar PARTSTAT=TENTATIVE; schema RsvpResponseMaybe.</td></tr>
+      <tr><td><code>sched:triggerOffset</code></td><td>trigger offset</td><td>Relative offset (e.g. -PT15M for 15 minutes before) from the entry's start at which a reminder fires. Aligns to iCalendar TRIGGER (relative form).</td></tr>
+      <tr><td><code>sched:triggerTime</code></td><td>trigger time</td><td>Absolute time a reminder fires. Aligns to iCalendar TRIGGER (absolute form).</td></tr>
+      <tr><td><code>sched:until</code></td><td>until</td><td>The last date/time at which the recurrence may produce an occurrence. Aligns to iCalendar UNTIL.</td></tr>
+    </table>
+  </body>
+</html>

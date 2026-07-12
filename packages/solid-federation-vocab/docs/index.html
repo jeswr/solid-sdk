@@ -1,0 +1,155 @@
+<!doctype html>
+<!-- AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>w3id.org/jeswr — Solid Federation Vocabularies</title>
+    <style>
+      :root { color-scheme: light dark; }
+      body { font-family: system-ui, -apple-system, sans-serif; line-height: 1.6; max-width: 52rem; margin: 2rem auto; padding: 0 1rem; }
+      code { background: rgba(127,127,127,0.15); padding: 0.1em 0.35em; border-radius: 4px; }
+      h1 { margin-bottom: 0.2em; }
+      .warn { border-left: 4px solid #d97706; padding: 0.5rem 1rem; background: rgba(217,119,6,0.08); border-radius: 4px; }
+      table { border-collapse: collapse; width: 100%; }
+      th, td { text-align: left; padding: 0.4rem 0.6rem; border-bottom: 1px solid rgba(127,127,127,0.3); }
+      a { color: #2563eb; }
+    </style>
+  </head>
+  <body>
+    <h1>Solid Federation Vocabularies</h1>
+    <p><code>https://w3id.org/jeswr/</code> — the home for the federation
+      app-registration vocabulary and the shared cross-app task / issue model
+      used across the @jeswr Solid app suite.</p>
+
+    <p class="warn">⚠️ <strong>Experimental</strong> — AI-agent-generated
+      (Claude Opus 4.8, @jeswr PSS agent); under active development, not
+      production-hardened.</p>
+
+    <h2>Vocabularies</h2>
+    <table>
+      <tr><th>Namespace</th><th>Prefix</th><th>Representations</th></tr>
+      <tr>
+        <td><a href="https://w3id.org/jeswr/fed">…/fed#</a></td>
+        <td><code>fedapp:</code></td>
+        <td><a href="fedapp.ttl">Turtle</a> · <a href="context.jsonld">JSON-LD context</a> · <a href="fed.html">HTML</a></td>
+      </tr>
+      <tr>
+        <td><a href="https://w3id.org/jeswr/fedreg">…/fedreg#</a></td>
+        <td><code>fedreg:</code></td>
+        <td><a href="fedreg.ttl">Turtle</a> · <a href="fedreg-context.jsonld">JSON-LD context</a> · <a href="fedreg.html">HTML</a></td>
+      </tr>
+      <tr>
+        <td><a href="https://jeswr.org/fedcon">jeswr.org/fedcon#</a></td>
+        <td><code>fedcon:</code></td>
+        <td><a href="fedcon.ttl">Turtle</a> · <a href="fedcon-context.jsonld">JSON-LD context</a> · <a href="fedcon.html">HTML</a> · <a href="fedcon.shacl.ttl">SHACL</a></td>
+      </tr>
+      <tr>
+        <td><a href="https://w3id.org/jeswr/task">…/task#</a></td>
+        <td><code>tm:</code> (re-uses <code>wf:</code>/<code>dct:</code>/<code>as:</code>)</td>
+        <td><a href="task.ttl">Turtle</a> · <a href="task-context.jsonld">JSON-LD context</a> · <a href="task.html">HTML</a></td>
+      </tr>
+    </table>
+
+    <h2>Domain ontologies — the gUFO Core + sectors</h2>
+    <p>A foundational <strong>Solid Core</strong> ontology (re-based onto
+      <a href="https://nemo-ufes.github.io/gufo/">gUFO</a>, the gentle OWL-2-DL
+      implementation of the Unified Foundational Ontology) and the
+      <strong>sector ontologies</strong> that import and constrain it. These are
+      the IRIs an app's <code>fedapp:sector</code> points at
+      (<code>…/sectors/&lt;sector&gt;#sector</code>). Each reuses real vocabularies
+      (FIBO for finance, FHIR-mode-A + QUDT for health, vCard for contacts,
+      schema.org for media, iCalendar for scheduling, eIDAS/ISO for identity) and
+      passes a HermiT consistency gate (0 unsatisfiable classes).</p>
+    <table>
+      <tr><th>Namespace</th><th>Prefix</th><th>Reuses</th><th>Representations</th></tr>
+      <tr>
+        <td><a href="https://w3id.org/jeswr/core">…/core#</a></td>
+        <td><code>core:</code></td>
+        <td>gUFO foundation</td>
+        <td><a href="core.ttl">Turtle</a> · <a href="core-context.jsonld">JSON-LD</a> · <a href="core.html">HTML</a></td>
+      </tr>
+      <tr>
+        <td><a href="https://w3id.org/jeswr/sectors/identity">…/sectors/identity#</a></td>
+        <td><code>id:</code></td>
+        <td>eIDAS, ISO 3166, vCard, HL7 Gender-Harmony</td>
+        <td><a href="sectors/identity.ttl">Turtle</a> · <a href="sectors/identity-context.jsonld">JSON-LD</a> · <a href="sectors/identity.html">HTML</a></td>
+      </tr>
+      <tr>
+        <td><a href="https://w3id.org/jeswr/sectors/finance">…/sectors/finance#</a></td>
+        <td><code>fin:</code></td>
+        <td>FIBO (slim), ISO 4217/20022</td>
+        <td><a href="sectors/finance.ttl">Turtle</a> · <a href="sectors/finance-context.jsonld">JSON-LD</a> · <a href="sectors/finance.html">HTML</a></td>
+      </tr>
+      <tr>
+        <td><a href="https://w3id.org/jeswr/sectors/health">…/sectors/health#</a></td>
+        <td><code>health:</code></td>
+        <td>FHIR (Mode A), SNOMED/LOINC, QUDT/UCUM</td>
+        <td><a href="sectors/health.ttl">Turtle</a> · <a href="sectors/health-context.jsonld">JSON-LD</a> · <a href="sectors/health.html">HTML</a></td>
+      </tr>
+      <tr>
+        <td><a href="https://w3id.org/jeswr/sectors/media">…/sectors/media#</a></td>
+        <td><code>media:</code></td>
+        <td>schema.org, ODRL</td>
+        <td><a href="sectors/media.ttl">Turtle</a> · <a href="sectors/media-context.jsonld">JSON-LD</a> · <a href="sectors/media.html">HTML</a></td>
+      </tr>
+      <tr>
+        <td><a href="https://w3id.org/jeswr/sectors/scheduling">…/sectors/scheduling#</a></td>
+        <td><code>sched:</code></td>
+        <td>iCalendar RFC 5545, schema.org, OWL-Time</td>
+        <td><a href="sectors/scheduling.ttl">Turtle</a> · <a href="sectors/scheduling-context.jsonld">JSON-LD</a> · <a href="sectors/scheduling.html">HTML</a></td>
+      </tr>
+      <tr>
+        <td><a href="https://w3id.org/jeswr/sectors/contacts">…/sectors/contacts#</a></td>
+        <td><code>contact:</code></td>
+        <td>vCard, schema.org ContactPoint</td>
+        <td><a href="sectors/contacts.ttl">Turtle</a> · <a href="sectors/contacts-context.jsonld">JSON-LD</a> · <a href="sectors/contacts.html">HTML</a></td>
+      </tr>
+      <tr>
+        <td><a href="https://w3id.org/jeswr/sectors/drawing">…/sectors/drawing#</a></td>
+        <td><code>drawing:</code></td>
+        <td>schema.org CreativeWork; @jeswr/solid-drawing (Mode A) — Excalidraw</td>
+        <td><a href="sectors/drawing.ttl">Turtle</a> · <a href="sectors/drawing-context.jsonld">JSON-LD</a> · <a href="sectors/drawing.html">HTML</a></td>
+      </tr>
+      <tr>
+        <td><a href="https://w3id.org/jeswr/sectors/social">…/sectors/social#</a></td>
+        <td><code>social:</code></td>
+        <td>ActivityStreams 2.0, SIOC, @jeswr/solid-chat-interop — Elk + Miniflux + pod-chat</td>
+        <td><a href="sectors/social.ttl">Turtle</a> · <a href="sectors/social-context.jsonld">JSON-LD</a> · <a href="sectors/social.html">HTML</a></td>
+      </tr>
+      <tr>
+        <td><a href="https://w3id.org/jeswr/sectors/bookmarks">…/sectors/bookmarks#</a></td>
+        <td><code>bookmark:</code></td>
+        <td>schema.org, DCT, SKOS; @jeswr/solid-bookmark (Mode A) — Linkding</td>
+        <td><a href="sectors/bookmarks.ttl">Turtle</a> · <a href="sectors/bookmarks-context.jsonld">JSON-LD</a> · <a href="sectors/bookmarks.html">HTML</a></td>
+      </tr>
+      <tr>
+        <td><a href="https://w3id.org/jeswr/sectors/futures">…/sectors/futures#</a></td>
+        <td><code>fut:</code></td>
+        <td>ActivityStreams 2.0, PROV-O, ODRL 2.2, VC 2.0, wf:/@jeswr/solid-task-model (Mode A) — unite (participatory democracy)</td>
+        <td><a href="sectors/futures.ttl">Turtle</a> · <a href="sectors/futures-context.jsonld">JSON-LD</a> · <a href="sectors/futures.html">HTML</a></td>
+      </tr>
+      <tr>
+        <td><a href="https://w3id.org/jeswr/sectors/collectibles">…/sectors/collectibles#</a></td>
+        <td><code>col:</code></td>
+        <td>schema.org (art terms), PROV-O, linked.art/CIDOC-CRM (ref only) — Provena</td>
+        <td><a href="sectors/collectibles.ttl">Turtle</a> · <a href="sectors/collectibles-context.jsonld">JSON-LD</a> · <a href="sectors/collectibles.html">HTML</a></td>
+      </tr>
+      <tr>
+        <td><a href="https://w3id.org/jeswr/sectors/equine">…/sectors/equine#</a></td>
+        <td><code>eq:</code></td>
+        <td>schema.org (real dual-types), W3C org:, Wikidata — Furlong</td>
+        <td><a href="sectors/equine.ttl">Turtle</a> · <a href="sectors/equine-context.jsonld">JSON-LD</a> · <a href="sectors/equine.html">HTML</a></td>
+      </tr>
+    </table>
+
+    <h2>Content negotiation</h2>
+    <p>The w3id.org redirect honours the <code>Accept</code> header:
+      <code>text/turtle</code> → the <code>.ttl</code>;
+      <code>application/ld+json</code> → the <code>.jsonld</code> context;
+      <code>text/html</code> (default browser) → this human-readable page.</p>
+
+    <p>Source &amp; docs:
+      <a href="https://github.com/jeswr/solid-federation-vocab">github.com/jeswr/solid-federation-vocab</a></p>
+  </body>
+</html>

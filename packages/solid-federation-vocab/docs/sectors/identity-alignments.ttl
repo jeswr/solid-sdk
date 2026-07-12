@@ -1,0 +1,139 @@
+# AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+#
+@prefix id:      <https://w3id.org/jeswr/sectors/identity#> .
+@prefix core:    <https://w3id.org/jeswr/core#> .
+@prefix owl:     <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix skos:    <http://www.w3.org/2004/02/skos/core#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix vcard:   <http://www.w3.org/2006/vcard/ns#> .
+@prefix schema:  <https://schema.org/> .
+@prefix cred:    <https://www.w3.org/2018/credentials#> .
+
+# eIDAS 2.0 PID attributes are NOT RDF properties with dereferenceable IRIs:
+# the Architecture & Reference Framework defines them as snake_case claim names
+# under the document-type / namespace "eu.europa.ec.eudi.pid.1". We reference
+# them via a stable urn: pattern so the closeMatch is an auditable, reviewable
+# claim (NO entailment) — never an owl equivalence to a non-existent RDF term.
+@prefix eidas:   <urn:eu.europa.ec.eudi.pid.1:> .
+
+# =============================================================================
+# Solid Identity & Profile — ALIGNMENTS
+#
+# Bridges the Solid-canonical identity terms (id:) to the named external sector
+# standards REQUIRED by the brief: vcard, schema:Person, ISO 3166 country codes,
+# and the eIDAS 2.0 PID attribute set.
+#
+# SEPARATED from identity.ttl on purpose (R8 §2): loading this file pulls
+# external entailments into the reasoner; the consistency engine can omit it to
+# reason over a clean, self-contained sector + core.
+#
+# Alignment policy (R8 §3/§4, mirrors the core alignments file):
+#  - owl:equivalentClass / owl:equivalentProperty ONLY where genuinely
+#    co-extensional AND the external term is stable.
+#  - rdfs:subClassOf / rdfs:subPropertyOf where the direction is safe and one of
+#    the pair is strictly broader/narrower.
+#  - skos:closeMatch (annotation, NO entailment) where the match is approximate,
+#    where external axioms are too strong to import, or where the external
+#    "term" is a non-RDF attribute name (eIDAS PID).
+# We deliberately do NOT widen any Core property domain/range here, and do NOT
+# collapse two distinct Core classes (contract §3).
+# =============================================================================
+
+<https://w3id.org/jeswr/sectors/identity/alignments> a owl:Ontology ;
+    dcterms:title "Solid Identity & Profile — external alignments (gUFO re-base)"@en ;
+    owl:imports <https://w3id.org/jeswr/sectors/identity> ;
+    owl:versionInfo "1.0.0" ;
+    owl:versionIRI <https://w3id.org/jeswr/sectors/identity/alignments/1.0.0> ;
+    rdfs:comment "Mode-A thin alignments (separate file, not in the reasoned closure) to vcard / schema.org / ISO 3166 / eIDAS 2.0 PID. Reuse-before-mint. "@en .
+
+dcterms:title a owl:AnnotationProperty .
+
+# -----------------------------------------------------------------------------
+# Person & structured name — vcard + schema.org
+# -----------------------------------------------------------------------------
+
+# id:NaturalPerson is a core:Person, which core-alignments already equates to
+# foaf:Person/schema:Person and closeMatches vcard:Individual. We add the
+# narrower direction for the sector subclass (safe one-way subclassing).
+id:NaturalPerson rdfs:subClassOf schema:Person ;
+                 skos:closeMatch vcard:Individual .
+
+# Structured legal name ~ vcard:Name (a structured name object).
+id:LegalName     skos:closeMatch vcard:Name .
+
+id:hasLegalName  skos:closeMatch vcard:hasName .
+
+# Name parts: schema.org has direct RDF properties (equivalentProperty-safe
+# where co-extensional); vcard uses hyphenated names (closeMatch).
+id:givenName      owl:equivalentProperty schema:givenName ;
+                  skos:closeMatch vcard:given-name , eidas:given_name .
+id:familyName     owl:equivalentProperty schema:familyName ;
+                  skos:closeMatch vcard:family-name , eidas:family_name .
+id:additionalName owl:equivalentProperty schema:additionalName ;
+                  skos:closeMatch vcard:additional-name .
+id:honorificPrefix owl:equivalentProperty schema:honorificPrefix ;
+                  skos:closeMatch vcard:honorific-prefix .
+id:honorificSuffix owl:equivalentProperty schema:honorificSuffix ;
+                  skos:closeMatch vcard:honorific-suffix .
+id:fullName       skos:closeMatch schema:name , vcard:fn .
+
+# -----------------------------------------------------------------------------
+# Profile attributes — schema.org + vcard + eIDAS PID
+# -----------------------------------------------------------------------------
+
+id:dateOfBirth   owl:equivalentProperty schema:birthDate ;
+                 skos:closeMatch vcard:bday , eidas:birth_date .
+id:placeOfBirth  skos:closeMatch schema:birthPlace , eidas:birth_place , eidas:birth_country .
+id:nationality   skos:closeMatch schema:nationality , eidas:nationality .
+
+# -----------------------------------------------------------------------------
+# HL7 Gender-Harmony five slots (R11 §3.5) — the structure is ADOPTED, not
+# minted. closeMatch (no entailment) to the Gender-Harmony logical model and to
+# the nearest schema.org/eIDAS terms. The single legacy 'sex/gender' field
+# (v0 id:sex, schema:gender, eIDAS gender) is DELIBERATELY split — there is no
+# canonical id:gender. Value-sets are a jurisdictional phase, not here.
+# -----------------------------------------------------------------------------
+@prefix gh: <https://build.fhir.org/ig/HL7/fhir-gender-harmony/model.html#> .
+id:GenderIdentity            skos:closeMatch gh:GenderIdentity .
+id:SexParameterForClinicalUse skos:closeMatch gh:SexParameterForClinicalUse .
+id:RecordedSexOrGender       skos:closeMatch gh:RecordedSexOrGender , schema:gender , eidas:gender .
+id:NameToUse                 skos:closeMatch gh:NameToUse .
+id:Pronouns                  skos:closeMatch gh:Pronouns .
+
+# -----------------------------------------------------------------------------
+# Country — ISO 3166 + schema.org
+#
+# ISO 3166 has no single official RDF vocabulary; the de-facto reusable IRIs are
+# the Library-of-Congress / lexvo / DBpedia country resources and the ISO 3166
+# code lists. We closeMatch the ISO 3166 standard concept and schema:Country.
+# -----------------------------------------------------------------------------
+
+id:Country       owl:equivalentClass schema:Country ;
+                 skos:closeMatch <https://www.iso.org/iso-3166-country-codes.html> ,
+                                 vcard:Location .
+id:CountryCode   skos:closeMatch <https://www.iso.org/standard/72482.html> .
+
+# -----------------------------------------------------------------------------
+# Identifier kinds — schema.org + eIDAS PID document/number attributes
+# -----------------------------------------------------------------------------
+
+id:NationalIdentifier   skos:closeMatch eidas:personal_administrative_number ,
+                                        eidas:administrative_number .
+id:PassportNumber       skos:closeMatch eidas:document_number .
+id:IdentityDocumentNumber skos:closeMatch eidas:document_number .
+id:TaxIdentifier        skos:closeMatch schema:taxID .
+id:IssuingAuthority     skos:closeMatch eidas:issuing_authority , schema:GovernmentOrganization .
+
+# -----------------------------------------------------------------------------
+# Verifiable attribute / claim — W3C Verifiable Credentials Data Model
+#
+# A verifiable attribute is the unit a VC carries; closeMatch (not equivalent)
+# because a VC bundles many claims, signatures and metadata, whereas
+# id:VerifiableAttribute is a single attestable attribute.
+# -----------------------------------------------------------------------------
+
+id:VerifiableAttribute skos:closeMatch cred:VerifiableCredential , schema:PropertyValue .
+id:assertedBy          skos:closeMatch cred:issuer .
+id:assertedAt          skos:closeMatch cred:issuanceDate .
+id:assuranceLevel      skos:closeMatch eidas:trust_framework .

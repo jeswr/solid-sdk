@@ -1,0 +1,136 @@
+# AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+#
+# Sample instances of the v1.2.0 finance-module classes (double-entry ledger +
+# private equity), used to VERIFY that finance.shacl.ttl validates conformant
+# Keystone / CapNote pod data (no sh:Violation). Validate with pyshacl /
+# rdf-validate-shacl (data = this file + finance.ttl for the coded-value typing;
+# shapes = finance.shacl.ttl). Parsed for well-formedness by the ontology gate
+# (Layer 1).
+#
+# THE INSTANCES MODEL THE ACTUAL PRODUCT DATA (revenue-products ontology review
+# §4–§5):
+#   - Keystone's general ledger: a chart-of-accounts (fin:LedgerAccount with a
+#     coded fin:accountClass + fin:accountCode) and a BALANCED double-entry
+#     journal entry (fin:JournalEntry) of two fin:LedgerEntry postings — one
+#     fin:Debit, one fin:Credit, equal amounts — each posting via fin:postsTo /
+#     fin:entrySide / fin:hasMonetaryAmount / fin:partOfJournalEntry. Ownership %
+#     is the HONEST fin:sharePct (a plain xsd:decimal — NOT a range-violating
+#     bare-literal qudt:quantityValue), and the legal seat is fin:jurisdiction
+#     (NOT the GovernmentService-scoped schema:jurisdiction).
+#   - CapNote's private equity: a fin:Fund (dual-typed the byte-verified FIBO
+#     PrivateEquityFund), a per-LP fin:Commitment (committed / called / remaining
+#     amounts), a capital-call fin:Notice and a distribution fin:Notice — every
+#     amount a dual-typed fin:MonetaryAmount node (the CapNote-proven shape),
+#     replacing the non-dereferencing capnote.app/vocab# and keystone/ns# 404
+#     namespaces with shared fin: terms.
+#
+@prefix fin:     <https://w3id.org/jeswr/sectors/finance#> .
+@prefix core:    <https://w3id.org/jeswr/core#> .
+@prefix schema:  <http://schema.org/> .
+@prefix fibo-sec-fund-fund: <https://spec.edmcouncil.org/fibo/ontology/SEC/Funds/Funds/> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix xsd:     <http://www.w3.org/2001/XMLSchema#> .
+@prefix ks:      <https://acme.pod.example/keystone/> .
+@prefix cn:      <https://gp.pod.example/capnote/> .
+
+# =============================================================================
+# KEYSTONE — double-entry general ledger (review §4).
+# =============================================================================
+
+# Chart-of-accounts nodes (fin:LedgerAccount): coded class + code (+ parent code).
+ks:coa-1200 a fin:LedgerAccount ;
+    dcterms:title "Accounts Receivable" ;
+    fin:accountClass fin:class-asset ;
+    fin:accountCode "1200" ;
+    fin:parentAccountCode "1000" .
+
+ks:coa-4000 a fin:LedgerAccount ;
+    dcterms:title "Sales Revenue" ;
+    fin:accountClass fin:class-income ;
+    fin:accountCode "4000" ;
+    fin:parentAccountCode "4000" .
+
+# A BALANCED journal entry: debit AR 1000, credit Sales Revenue 1000.
+ks:je-2026-0042 a fin:JournalEntry ;
+    dcterms:title "Invoice #INV-2026-0042 raised" ;
+    dcterms:date "2026-06-30"^^xsd:date .
+
+ks:je-2026-0042-l-debit a fin:LedgerEntry ;
+    fin:partOfJournalEntry ks:je-2026-0042 ;
+    fin:entrySide fin:Debit ;
+    fin:postsTo ks:coa-1200 ;
+    fin:hasMonetaryAmount [ a fin:MonetaryAmount, schema:MonetaryAmount ;
+        fin:amount "1000.00"^^xsd:decimal ; fin:currency "GBP" ;
+        schema:value "1000.00"^^xsd:decimal ; schema:currency "GBP" ] .
+
+ks:je-2026-0042-l-credit a fin:LedgerEntry ;
+    fin:partOfJournalEntry ks:je-2026-0042 ;
+    fin:entrySide fin:Credit ;
+    fin:postsTo ks:coa-4000 ;
+    fin:hasMonetaryAmount [ a fin:MonetaryAmount, schema:MonetaryAmount ;
+        fin:amount "1000.00"^^xsd:decimal ; fin:currency "GBP" ;
+        schema:value "1000.00"^^xsd:decimal ; schema:currency "GBP" ] .
+
+# An ownership stake — the HONEST fin:sharePct (plain xsd:decimal, not qudt) +
+# fin:jurisdiction (neutral, not the GovernmentService-scoped schema:jurisdiction).
+ks:holding-acme-in-subco a core:Record ;
+    dcterms:title "Acme Holdings' stake in SubCo Ltd" ;
+    fin:sharePct "25.0"^^xsd:decimal ;
+    fin:jurisdiction "GB" .
+
+# =============================================================================
+# CAPNOTE — private equity: fund, commitment, capital call + distribution (review §5).
+# =============================================================================
+
+# A private-equity fund — dual-typed the byte-verified FIBO PrivateEquityFund.
+cn:fund-orchard-iii a fin:Fund, fibo-sec-fund-fund:PrivateEquityFund ;
+    dcterms:title "Orchard Capital Fund III, L.P." ;
+    fin:generalPartner <https://gp.pod.example/capnote/profile/card#gp> ;
+    fin:vintageYear "2024"^^xsd:gYear ;
+    fin:jurisdiction "KY" .
+
+# The GP role node (an Agent playing the General Partner role).
+<https://gp.pod.example/capnote/profile/card#gp> a fin:GeneralPartner ;
+    schema:name "Orchard Capital Management LLC" .
+
+# A limited partner's standing commitment: committed / called / remaining.
+cn:commitment-lp-meridian a fin:Commitment ;
+    fin:fund cn:fund-orchard-iii ;
+    fin:limitedPartner <https://lp.pod.example/profile/card#lp> ;
+    fin:sharePct "8.0"^^xsd:decimal ;
+    fin:commitmentAmount [ a fin:MonetaryAmount, schema:MonetaryAmount ;
+        fin:amount "5000000"^^xsd:decimal ; fin:currency "USD" ;
+        schema:value "5000000"^^xsd:decimal ; schema:currency "USD" ] ;
+    fin:calledToDate [ a fin:MonetaryAmount, schema:MonetaryAmount ;
+        fin:amount "2000000"^^xsd:decimal ; fin:currency "USD" ;
+        schema:value "2000000"^^xsd:decimal ; schema:currency "USD" ] ;
+    fin:remainingCommitment [ a fin:MonetaryAmount, schema:MonetaryAmount ;
+        fin:amount "3000000"^^xsd:decimal ; fin:currency "USD" ;
+        schema:value "3000000"^^xsd:decimal ; schema:currency "USD" ] .
+
+# The LP role node.
+<https://lp.pod.example/profile/card#lp> a fin:LimitedPartner ;
+    schema:name "Meridian Family Office" .
+
+# A capital-call notice — drawing down committed capital (fin:callAmount).
+cn:call-2026-q2 a fin:Notice, schema:Invoice ;
+    dcterms:title "Capital Call #7 — Orchard III" ;
+    fin:noticeType fin:notice-capital-call ;
+    fin:fund cn:fund-orchard-iii ;
+    fin:generalPartner <https://gp.pod.example/capnote/profile/card#gp> ;
+    dcterms:issued "2026-04-15"^^xsd:date ;
+    schema:paymentDueDate "2026-04-29"^^xsd:date ;
+    fin:callAmount [ a fin:MonetaryAmount, schema:MonetaryAmount ;
+        fin:amount "500000"^^xsd:decimal ; fin:currency "USD" ;
+        schema:value "500000"^^xsd:decimal ; schema:currency "USD" ] .
+
+# A distribution notice — returning proceeds (fin:distributionAmount).
+cn:dist-2026-q2 a fin:Notice ;
+    dcterms:title "Distribution #3 — Orchard III" ;
+    fin:noticeType fin:notice-distribution ;
+    fin:fund cn:fund-orchard-iii ;
+    fin:generalPartner <https://gp.pod.example/capnote/profile/card#gp> ;
+    dcterms:issued "2026-06-10"^^xsd:date ;
+    fin:distributionAmount [ a fin:MonetaryAmount, schema:MonetaryAmount ;
+        fin:amount "750000"^^xsd:decimal ; fin:currency "USD" ;
+        schema:value "750000"^^xsd:decimal ; schema:currency "USD" ] .

@@ -1,0 +1,348 @@
+# AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+#
+@prefix id:      <https://w3id.org/jeswr/sectors/identity#> .
+@prefix core:    <https://w3id.org/jeswr/core#> .
+@prefix owl:     <http://www.w3.org/2002/07/owl#> .
+@prefix rdf:     <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:     <http://www.w3.org/2001/XMLSchema#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix skos:    <http://www.w3.org/2004/02/skos/core#> .
+@prefix vann:    <http://purl.org/vocab/vann/> .
+@prefix gufo:    <http://purl.org/nemo/gufo#> .
+
+# =============================================================================
+# Solid Identity & Profile sector ontology — RE-BASED onto gUFO (KEY=identity).
+#
+# v1.0.0 re-base of the v0 thin identity sector, per R11 §4.2 (the IDENTITY row)
+# and §3.5 (the HL7 Gender-Harmony five-slot structure). Every sector class now
+# carries its own gUFO meta-type AND rdfs:subClassOf a re-based Core class
+# (contract rule 2): NaturalPerson=gufo:SubKind of core:Person; the identifier
+# kinds=gufo:SubKind rooting in core:Identifier; IssuingAuthority=gufo:RoleMixin
+# of core:Organization; VerifiableAttribute=gufo:SubKind of core:Record;
+# LegalName=gufo:Kind; the five gender slots=gufo:Kind. DataSubject is reused
+# from the Core (core:DataSubject = gufo:RoleMixin) — not re-minted.
+#
+# AUTHORING PROVENANCE: authored as an OntoUML model (identity.ontouml.json),
+# verified anti-pattern-free by OntoumlVerification.verify() (F3, 0 issues),
+# transformed to a gUFO-OWL backbone by ontouml-js Ontouml2Gufo
+# (identity.gufo.ttl), then ENRICHED here with F1 definitions, the Core rooting
+# (rdfs:subClassOf core:* — the standalone OntoUML model used Core stubs in the
+# id: namespace which are replaced here by the real core: IRIs), the property
+# spine, and the verifiable-claim structure.
+#
+# CONTRACT (R8 §4 + R11 F1-F7) — admissible because: (1) imports the Core;
+# (2) every class roots in a Core class and carries its gUFO meta-type;
+# (3) constrains, never forks; (4) reuses vcard/schema/ISO 3166/eIDAS in the
+# companion identity-alignments.ttl; (5) ships identity.shacl.ttl; (6) carries
+# owl:versionInfo "1.0.0" + a version IRI (gUFO re-base = new MAJOR);
+# (7) Core ∪ identity is DL-valid + reasoner-consistent (see verification report).
+# Open-world by default; the SHACL profile carries the closed-world MUST/SHOULD.
+# =============================================================================
+
+<https://w3id.org/jeswr/sectors/identity> a owl:Ontology ;
+    dcterms:title "Solid Identity & Profile Ontology (gUFO re-base)"@en ;
+    rdfs:label "Solid Identity & Profile Ontology"@en ;
+    vann:preferredNamespacePrefix "id" ;
+    vann:preferredNamespaceUri "https://w3id.org/jeswr/sectors/identity#" ;
+    owl:imports <https://w3id.org/jeswr/core> ;
+    owl:versionInfo "1.0.0" ;
+    owl:versionIRI <https://w3id.org/jeswr/sectors/identity/1.0.0> ;
+    dcterms:description """Personal identity & profile attributes for KYC reuse,
+        tell-us-once, and verified claims, re-based onto the gUFO Core. Roots in
+        core:Person (NaturalPerson SubKind), core:Identifier (the identifier
+        kinds), core:Organization (IssuingAuthority RoleMixin) and core:Record
+        (VerifiableAttribute SubKind). Adds the HL7 Gender-Harmony five-slot
+        structure as global abstract slots (§3.5) — no canonical 'the gender'.
+        v1.0.0 is a BREAKING re-base of v0 (the meta-types change meaning), so a
+        new MAJOR version. Aligns to vcard, schema:Person, ISO 3166 and the
+        eIDAS 2.0 PID attribute set in the companion alignments file."""@en ;
+    dcterms:modified "2026-06-13"^^xsd:date ;
+    rdfs:comment "Re-based per R11 §4.2/§3.5."@en .
+
+# -----------------------------------------------------------------------------
+# Annotation-property declarations (F5: keep the merged closure unambiguously
+# OWL 2 DL — declare the dcterms:/vann: annotation properties used here).
+# -----------------------------------------------------------------------------
+dcterms:title       a owl:AnnotationProperty .
+dcterms:description a owl:AnnotationProperty .
+dcterms:modified    a owl:AnnotationProperty .
+vann:preferredNamespacePrefix a owl:AnnotationProperty .
+vann:preferredNamespaceUri    a owl:AnnotationProperty .
+skos:definition     a owl:AnnotationProperty .
+skos:scopeNote      a owl:AnnotationProperty .
+
+# =============================================================================
+# 1. NATURAL PERSON  (gufo:SubKind of core:Person)
+# The human KYC subject. A sub-kind, NOT a redefinition of core:Person. Plays
+# the Core's core:DataSubject role-mixin (reused, not re-minted).
+# =============================================================================
+
+id:NaturalPerson a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf core:Person ;
+    rdfs:label "Natural Person"@en ;
+    skos:definition "A human being whose identity attributes are subject to KYC / identity-reuse. The identity-preserving sub-kind of core:Person carrying the sector's profile attributes."@en ;
+    skos:scopeNote "gufo:SubKind of the core:Person kind. Plays core:DataSubject (gufo:RoleMixin) when personal data is about it."@en .
+
+# =============================================================================
+# 2. LEGAL NAME  (gufo:Kind — structured name, an information object)
+# Modelled as its own kind (mirroring vcard:Name) so name parts have a home and
+# multiple historical/birth/married names can coexist for one person.
+# =============================================================================
+
+id:LegalName a owl:Class, gufo:Kind ;
+    rdfs:subClassOf core:InformationResource ;
+    rdfs:label "Legal Name"@en ;
+    skos:definition "A structured rendering of a person's legal name with separable parts (given, family, additional, honorifics). An information object about a person, distinct from the person; aligns to vcard:Name."@en ;
+    skos:scopeNote "gufo:Kind (information object) under core:InformationResource."@en .
+
+id:hasLegalName a owl:ObjectProperty ;
+    rdfs:subPropertyOf core:identifiedBy ;
+    rdfs:domain core:Person ;
+    rdfs:range id:LegalName ;
+    rdfs:label "has legal name"@en ;
+    skos:definition "Relates a person to a structured legal name. A sub-property of core:identifiedBy — a name is a (weak) identifier of a person."@en .
+
+id:givenName a owl:DatatypeProperty ;
+    rdfs:domain id:LegalName ;
+    rdfs:range xsd:string ;
+    rdfs:label "given name"@en ;
+    skos:definition "Given/first name part. eIDAS PID given_name; vcard:given-name; schema:givenName."@en .
+
+id:familyName a owl:DatatypeProperty ;
+    rdfs:domain id:LegalName ;
+    rdfs:range xsd:string ;
+    rdfs:label "family name"@en ;
+    skos:definition "Family/last/surname part. eIDAS PID family_name; vcard:family-name; schema:familyName."@en .
+
+id:additionalName a owl:DatatypeProperty ;
+    rdfs:domain id:LegalName ;
+    rdfs:range xsd:string ;
+    rdfs:label "additional name"@en ;
+    skos:definition "Middle/additional name part. vcard:additional-name; schema:additionalName."@en .
+
+id:honorificPrefix a owl:DatatypeProperty ;
+    rdfs:domain id:LegalName ;
+    rdfs:range xsd:string ;
+    rdfs:label "honorific prefix"@en ;
+    skos:definition "Title preceding the name (Dr, Mrs). vcard:honorific-prefix; schema:honorificPrefix."@en .
+
+id:honorificSuffix a owl:DatatypeProperty ;
+    rdfs:domain id:LegalName ;
+    rdfs:range xsd:string ;
+    rdfs:label "honorific suffix"@en ;
+    skos:definition "Suffix following the name (PhD, Jr). vcard:honorific-suffix; schema:honorificSuffix."@en .
+
+id:fullName a owl:DatatypeProperty ;
+    rdfs:domain id:LegalName ;
+    rdfs:range xsd:string ;
+    rdfs:label "full name"@en ;
+    skos:definition "The complete formatted name as a single string. vcard:fn; schema:name."@en .
+
+# =============================================================================
+# 3. PROFILE ATTRIBUTES on the person (date/place of birth, nationality)
+# Literal/object attributes of the person; tied to eIDAS PID in the alignments
+# file. 'sex' is intentionally NOT a property here — see §6 (the gender slots):
+# the re-base replaces a single 'sex' field with the five Gender-Harmony slots.
+# =============================================================================
+
+id:dateOfBirth a owl:DatatypeProperty ;
+    rdfs:domain core:Person ;
+    rdfs:range xsd:date ;
+    rdfs:label "date of birth"@en ;
+    skos:definition "The person's date of birth. eIDAS PID birth_date; vcard:bday; schema:birthDate."@en .
+
+id:placeOfBirth a owl:ObjectProperty ;
+    rdfs:subPropertyOf core:atPlace ;
+    rdfs:range id:Country ;
+    rdfs:label "place of birth"@en ;
+    skos:definition "The country where the person was born. Sub-property of core:atPlace (which carries no rdfs:domain — endurants and events are gUFO-disjoint; intended usage is on a person, enforced in SHACL). eIDAS PID birth_place/birth_country; schema:birthPlace."@en .
+
+id:nationality a owl:ObjectProperty ;
+    rdfs:domain core:Person ;
+    rdfs:range id:Country ;
+    rdfs:label "nationality"@en ;
+    skos:definition "A country of which the person is a national. May be multi-valued. eIDAS PID nationality; schema:nationality."@en .
+
+# =============================================================================
+# 4. COUNTRY & COUNTRY CODE (ISO 3166)
+# A country is a core:Place; an ISO 3166 code is a core:Identifier sub-kind.
+# =============================================================================
+
+id:Country a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf core:Place ;
+    rdfs:label "Country"@en ;
+    skos:definition "A sovereign state / country — the value of nationality and birth/residence country. A core:Place sub-kind identified by an ISO 3166 country code; aligns to schema:Country."@en ;
+    skos:scopeNote "gufo:SubKind of the core:Place kind."@en .
+
+id:CountryCode a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf core:Identifier ;
+    rdfs:label "Country Code"@en ;
+    skos:definition "An ISO 3166 country code (alpha-2 / alpha-3 / numeric) identifying a Country within the ISO 3166 scheme."@en ;
+    skos:scopeNote "gufo:SubKind of the core:Identifier kind."@en .
+
+# =============================================================================
+# 5. IDENTIFIER KINDS  (gufo:SubKind rooting in core:Identifier)
+# Each specialises core:Identifier. Their schemes are core:IdentifierScheme
+# governed (core:schemeAuthority) by an IssuingAuthority — no new property needed
+# (Core provides identifiedBy / inScheme / schemeAuthority / value).
+# =============================================================================
+
+id:NationalIdentifier a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf core:Identifier ;
+    rdfs:label "National Identifier"@en ;
+    skos:definition "A state-issued national identity number (national ID card number, personal administrative number). eIDAS PID personal_administrative_number / document_number."@en ;
+    skos:scopeNote "gufo:SubKind of core:Identifier."@en .
+
+id:PassportNumber a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf core:Identifier ;
+    rdfs:label "Passport Number"@en ;
+    skos:definition "A passport document number issued by a state passport authority."@en ;
+    skos:scopeNote "gufo:SubKind of core:Identifier."@en .
+
+id:TaxIdentifier a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf core:Identifier ;
+    rdfs:label "Tax Identifier"@en ;
+    skos:definition "A taxpayer identification number (TIN, NINO, SSN-as-tax-id) issued by a revenue/tax authority."@en ;
+    skos:scopeNote "gufo:SubKind of core:Identifier."@en .
+
+id:SocialSecurityNumber a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf core:Identifier ;
+    rdfs:label "Social Security Number"@en ;
+    skos:definition "A social-security / national-insurance number issued by a social-security authority."@en ;
+    skos:scopeNote "gufo:SubKind of core:Identifier."@en .
+
+id:IdentityDocumentNumber a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf core:Identifier ;
+    rdfs:label "Identity Document Number"@en ;
+    skos:definition "The document number of any physical identity document (ID card, residence permit). eIDAS PID document_number."@en ;
+    skos:scopeNote "gufo:SubKind of core:Identifier."@en .
+
+# =============================================================================
+# 6. ISSUING AUTHORITY  (gufo:RoleMixin of core:Organization)
+# The role an organization plays when it issues identity documents/identifiers
+# or attests identity attributes (passport office, tax authority, KYC provider).
+# Anti-rigid, cross-played by any Organization kind — hence RoleMixin, the trust
+# anchor of the scheme it is core:schemeAuthority of.
+# =============================================================================
+
+id:IssuingAuthority a owl:Class, gufo:RoleMixin ;
+    rdfs:subClassOf core:Organization ;
+    rdfs:label "Issuing Authority"@en ;
+    skos:definition "The role of an organization that issues identity documents/identifiers or attests identity attributes (passport office, tax authority, KYC provider). The core:schemeAuthority of its identifier scheme. eIDAS PID issuing_authority."@en ;
+    skos:scopeNote "gufo:RoleMixin (anti-rigid) played by core:Organization. Reuses core:schemeAuthority for scheme governance."@en .
+
+# =============================================================================
+# 7. VERIFIABLE ATTRIBUTE  (gufo:SubKind of core:Record) — the trust anchor
+# A reified, attestable claim about a person: it is core:about a core:Person, it
+# was asserted by a core:Agent (the trust anchor) at a time, with an assurance
+# level under a trust framework. This is the "who do I trust to assert DOB" model.
+# =============================================================================
+
+id:VerifiableAttribute a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf core:Record ;
+    rdfs:label "Verifiable Attribute"@en ;
+    skos:definition "A reified, attestable claim about a person's identity attribute (e.g. date-of-birth = 1990-01-01) recording who asserted it and when. A core:Record about a core:Person; the unit a verifiable credential / KYC attestation carries. Aligns to cred:VerifiableCredential."@en ;
+    skos:scopeNote "gufo:SubKind of core:Record. Subject via core:about/core:subject; asserter via id:assertedBy; trust dial via id:assuranceLevel + id:underTrustFramework."@en .
+
+id:AttributeAssertion a owl:Class, gufo:EventType ;
+    rdfs:subClassOf core:Activity ;
+    rdfs:label "Attribute Assertion"@en ;
+    skos:definition "The act of asserting/attesting a verifiable attribute — performed by the asserting agent at a time. A core:Activity that ties the claim to provenance and the trust framework."@en ;
+    skos:scopeNote "gufo:EventType (its instances are gufo:Event perdurants), under core:Activity."@en .
+
+id:assertedBy a owl:ObjectProperty ;
+    rdfs:domain id:VerifiableAttribute ;
+    rdfs:range core:Agent ;
+    rdfs:label "asserted by"@en ;
+    skos:definition "The agent (an IssuingAuthority, an attribute provider, or the subject in a self-asserted claim) that asserted this attribute. The trust anchor: a relying party trusts a claim insofar as it trusts this asserter."@en .
+
+id:assertionActivity a owl:ObjectProperty ;
+    rdfs:domain id:VerifiableAttribute ;
+    rdfs:range id:AttributeAssertion ;
+    rdfs:label "assertion activity"@en ;
+    skos:definition "Links a verifiable attribute to the assertion activity that produced it, carrying performer (core:performedBy) and time (core:atTime)."@en .
+
+id:assertedAt a owl:DatatypeProperty ;
+    rdfs:subPropertyOf core:timestamp ;
+    rdfs:domain id:VerifiableAttribute ;
+    rdfs:range xsd:dateTime ;
+    rdfs:label "asserted at"@en ;
+    skos:definition "When the attribute was asserted. Sub-property of core:timestamp."@en .
+
+id:attributeName a owl:DatatypeProperty ;
+    rdfs:domain id:VerifiableAttribute ;
+    rdfs:range xsd:string ;
+    rdfs:label "attribute name"@en ;
+    skos:definition "The name of the asserted attribute, SHOULD be an eIDAS PID identifier where applicable (\"birth_date\", \"family_name\", \"nationality\")."@en .
+
+id:attributeValue a owl:DatatypeProperty ;
+    rdfs:domain id:VerifiableAttribute ;
+    rdfs:label "attribute value"@en ;
+    skos:definition "The asserted value of the attribute (literal). Range deliberately left open — the value datatype depends on the attribute."@en .
+
+id:assuranceLevel a owl:ObjectProperty ;
+    rdfs:domain id:VerifiableAttribute ;
+    rdfs:range core:Category ;
+    rdfs:label "assurance level"@en ;
+    skos:definition "The level of identity assurance under a trust framework (eIDAS LoA low/substantial/high). A coded value (core:Category, aligned to skos:Concept). The dial a relying party reads for 'who do I trust to assert date-of-birth'."@en .
+
+id:underTrustFramework a owl:ObjectProperty ;
+    rdfs:domain id:VerifiableAttribute ;
+    rdfs:range core:Category ;
+    rdfs:label "under trust framework"@en ;
+    skos:definition "The trust framework / scheme under which this attribute was asserted (ties to the R3/R4 trust-framework layer). A coded value (core:Category) pending the trust vocabulary's class IRIs."@en .
+
+# =============================================================================
+# 8. HL7 GENDER-HARMONY FIVE-SLOT STRUCTURE (R11 §3.5) — GLOBAL abstract slots
+#
+# Adopt the STRUCTURE only. The single 'sex/gender' field is split into FIVE
+# independent, 0..n, time-bounded, context-tagged slots. This file asserts NO
+# canonical "the person's gender" — there is no id:gender property. Each slot is
+# an information-bearing recorded attribute (gufo:Kind under core:Record). The
+# value-sets, change-process rules and jurisdiction-tagging are a JURISDICTIONAL
+# (T2) phase, NOT modelled here — only the global abstract structure.
+# =============================================================================
+
+id:GenderIdentity a owl:Class, gufo:Kind ;
+    rdfs:subClassOf core:Record ;
+    rdfs:label "Gender Identity"@en ;
+    skos:definition "A person's own internal sense of their gender, as recorded. HL7 Gender-Harmony slot. Global abstract slot: 0..n, time-bounded; value-sets are jurisdiction/context-scoped (later phase). NOT the person's canonical gender."@en ;
+    skos:scopeNote "gufo:Kind (recorded attribute) under core:Record. Asserted via the VerifiableAttribute structure; about a core:Person via core:about."@en .
+
+id:SexParameterForClinicalUse a owl:Class, gufo:Kind ;
+    rdfs:subClassOf core:Record ;
+    rdfs:label "Sex Parameter for Clinical Use"@en ;
+    skos:definition "A context-specific parameter summarising sex-related biological attributes for a clinical decision. HL7 Gender-Harmony slot. Global abstract slot, 0..n, observation-linked; explicitly sex-for-clinical-use, not gender, not legal."@en ;
+    skos:scopeNote "gufo:Kind (recorded attribute) under core:Record."@en .
+
+id:RecordedSexOrGender a owl:Class, gufo:Kind ;
+    rdfs:subClassOf core:Record ;
+    rdfs:label "Recorded Sex or Gender"@en ;
+    skos:definition "A sex or gender value as recorded on a document or in a register by some authority. HL7 Gender-Harmony slot (RSG). Global abstract slot, 0..n; each instance is jurisdiction/document-scoped (the reified scoped-claim hook of §3.5)."@en ;
+    skos:scopeNote "gufo:Kind (recorded attribute) under core:Record. The slot a jurisdictional legal-gender claim binds to."@en .
+
+id:NameToUse a owl:Class, gufo:Kind ;
+    rdfs:subClassOf core:Record ;
+    rdfs:label "Name to Use"@en ;
+    skos:definition "The name a person wishes to be addressed by in a given context, independent of legal name. HL7 Gender-Harmony slot. Global abstract slot, 0..n, context-tagged."@en ;
+    skos:scopeNote "gufo:Kind (recorded attribute) under core:Record. Distinct from id:LegalName."@en .
+
+id:Pronouns a owl:Class, gufo:Kind ;
+    rdfs:subClassOf core:Record ;
+    rdfs:label "Pronouns"@en ;
+    skos:definition "The pronouns a person wishes used for them in a given context. HL7 Gender-Harmony slot. Global abstract slot, 0..n, context-tagged."@en ;
+    skos:scopeNote "gufo:Kind (recorded attribute) under core:Record."@en .
+
+# =============================================================================
+# SECTOR MARKER — the IRI an app's fedapp:sector points at to declare it operates
+# in this sector (https://w3id.org/jeswr/fed#sector). A skos:Concept in the
+# federation sector register; dereferences to this ontology.
+# =============================================================================
+
+<https://w3id.org/jeswr/sectors/identity#sector>
+    a <http://www.w3.org/2004/02/skos/core#Concept> ;
+    rdfs:label "Identity & Profile sector"@en ;
+    rdfs:comment "The Identity & Profile data sector. The value an app's fedapp:sector names in its Client Identifier Document to declare it operates over identity & profile data. Backed by this sector ontology."@en ;
+    rdfs:isDefinedBy <https://w3id.org/jeswr/sectors/identity> ;
+    skos:prefLabel "Identity & Profile"@en .

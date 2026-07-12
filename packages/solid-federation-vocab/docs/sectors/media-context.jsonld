@@ -1,0 +1,91 @@
+{
+  "@context": {
+    "@version": 1.1,
+    "@protected": true,
+    "media": "https://w3id.org/jeswr/sectors/media#",
+    "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
+    "skos": "http://www.w3.org/2004/02/skos/core#",
+    "xsd": "http://www.w3.org/2001/XMLSchema#",
+    "id": "@id",
+    "type": "@type",
+    "Album": "media:Album",
+    "Artist": "media:Artist",
+    "completionFraction": {
+      "@id": "media:completionFraction",
+      "@type": "xsd:decimal"
+    },
+    "consumedWork": {
+      "@id": "media:consumedWork",
+      "@type": "@id"
+    },
+    "CreativeWork": "media:CreativeWork",
+    "durationSeconds": {
+      "@id": "media:durationSeconds",
+      "@type": "xsd:decimal"
+    },
+    "hasLicense": {
+      "@id": "media:hasLicense",
+      "@type": "@id"
+    },
+    "inAlbum": {
+      "@id": "media:inAlbum",
+      "@type": "@id"
+    },
+    "inPlaylist": {
+      "@id": "media:inPlaylist",
+      "@type": "@id"
+    },
+    "isrc": {
+      "@id": "media:isrc",
+      "@type": "xsd:string"
+    },
+    "licensedWork": {
+      "@id": "media:licensedWork",
+      "@type": "@id"
+    },
+    "licenseTerms": {
+      "@id": "media:licenseTerms",
+      "@type": "xsd:string"
+    },
+    "ListeningActivity": "media:ListeningActivity",
+    "ListeningHistory": "media:ListeningHistory",
+    "loved": {
+      "@id": "media:loved",
+      "@type": "xsd:boolean"
+    },
+    "MediaAccount": "media:MediaAccount",
+    "msPlayed": {
+      "@id": "media:msPlayed",
+      "@type": "xsd:integer"
+    },
+    "MusicComposition": "media:MusicComposition",
+    "MusicGroup": "media:MusicGroup",
+    "MusicRecording": "media:MusicRecording",
+    "onAccount": {
+      "@id": "media:onAccount",
+      "@type": "@id"
+    },
+    "performedByArtist": {
+      "@id": "media:performedByArtist",
+      "@type": "@id"
+    },
+    "PlaybackEvent": "media:PlaybackEvent",
+    "playedVia": {
+      "@id": "media:playedVia",
+      "@type": "@id"
+    },
+    "playedWork": {
+      "@id": "media:playedWork",
+      "@type": "@id"
+    },
+    "Playlist": "media:Playlist",
+    "PodcastEpisode": "media:PodcastEpisode",
+    "recordingOf": {
+      "@id": "media:recordingOf",
+      "@type": "@id"
+    },
+    "sector": "media:sector",
+    "Track": "media:Track",
+    "UsageLicense": "media:UsageLicense"
+  }
+}

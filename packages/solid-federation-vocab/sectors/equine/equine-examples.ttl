@@ -1,0 +1,134 @@
+# AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+#
+# Sample instances of every equine-sector class, used to VERIFY that
+# equine.shacl.ttl validates a conformant ownership dossier (no sh:Violation).
+# Validate with rdf-validate-shacl (data = this file + equine.ttl for the
+# subclass/coded-value typing; shapes = equine.shacl.ttl). Parsed for
+# well-formedness by the ontology gate (Layer 1).
+#
+# THE INSTANCES MODEL THE ACTUAL Furlong PRODUCT DATA (revenue-products ontology
+# review §2): a racehorse (eq:Horse, NOT the non-existent schema:Animal) with a
+# coded sex + status and pedigree links; an ownership share held via a syndicate
+# with a racing manager; a stud share + a stud nomination priced via
+# schema:totalPrice (NOT schema:price); a race result; a prize distribution
+# (schema:amount, NOT the non-existent schema:prize); and an expense invoice
+# (schema:Invoice + schema:totalPaymentDue, coded eq:expenseCategory). Every
+# private predicate is a SHARED eq: term, not a per-resource #flg. fragment IRI.
+#
+@prefix eq:      <https://w3id.org/jeswr/sectors/equine#> .
+@prefix core:    <https://w3id.org/jeswr/core#> .
+@prefix schema:  <http://schema.org/> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix xsd:     <http://www.w3.org/2001/XMLSchema#> .
+@prefix pod:     <https://owner.pod.example/furlong/> .
+@prefix rr:      <https://racing.example/races/> .
+
+# 1. Horse — a colt in training, with pedigree links (external studbook IRIs).
+pod:horse-galway-star a eq:Horse ;
+    schema:name "Galway Star" ;
+    eq:sex eq:sex-colt ;
+    eq:status eq:status-in-training ;
+    eq:colour "bay" ;
+    eq:country "IRE" ;
+    eq:sire <https://studbook.example/horses/frankel> ;
+    eq:dam <https://studbook.example/horses/galway-bay> .
+
+# A stallion at stud (for the stud share + nomination below).
+pod:horse-desert-king a eq:Horse ;
+    schema:name "Desert King" ;
+    eq:sex eq:sex-stallion ;
+    eq:status eq:status-at-stud ;
+    eq:country "GB" .
+
+# 2. Syndicate + OwnershipShare — a 12.5% share held via a syndicate, managed.
+pod:syndicate-oaktree a eq:Syndicate ;
+    schema:name "Oaktree Racing Syndicate" .
+
+pod:share-galway-star-oaktree a eq:OwnershipShare ;
+    eq:horse pod:horse-galway-star ;
+    eq:sharePct "12.5"^^xsd:decimal ;
+    eq:syndicate pod:syndicate-oaktree ;
+    eq:owner <https://owner.pod.example/profile/card#me> ;
+    eq:managedBy <https://manager.example/profile#me> ;
+    eq:mgmtPct "5.0"^^xsd:decimal ;
+    eq:mgmtFlat [ a schema:MonetaryAmount ; schema:value "500.00"^^xsd:decimal ; schema:currency "GBP" ] .
+
+# 2b. A SYNDICATE-ONLY OwnershipShare — held purely via the syndicate, no direct
+#     eq:horse (the syndicate owns the horses). Exercises the relaxed
+#     eqsh:OwnershipShareShape (eq:horse OPTIONAL).
+pod:share-oaktree-pooled a eq:OwnershipShare ;
+    eq:sharePct "5.0"^^xsd:decimal ;
+    eq:syndicate pod:syndicate-oaktree ;
+    eq:owner <https://owner.pod.example/profile/card#me> .
+
+# 3. StudShare — a breeding-rights share in the stallion.
+pod:studshare-desert-king a eq:StudShare ;
+    eq:horse pod:horse-desert-king ;
+    eq:sharePct "2.5"^^xsd:decimal ;
+    eq:season "2026" ;
+    eq:studStatus eq:stud-covered .
+
+# 4. StudNomination — booking a mare to the stallion; priced via schema:totalPrice.
+pod:nomination-2026-01 a eq:StudNomination ;
+    eq:horse pod:horse-desert-king ;
+    eq:mareName "Silver Lace" ;
+    eq:season "2026" ;
+    eq:nominator <https://owner.pod.example/profile/card#me> ;
+    schema:totalPrice [ a schema:MonetaryAmount ; schema:value "18000"^^xsd:decimal ; schema:currency "GBP" ] .
+
+# 4b. A StudNomination recorded BEFORE the mare is chosen — no eq:mareName yet.
+#     Exercises the relaxed eqsh:StudNominationShape (eq:mareName OPTIONAL).
+pod:nomination-2026-02 a eq:StudNomination ;
+    eq:horse pod:horse-desert-king ;
+    eq:season "2026" ;
+    eq:nominator <https://owner.pod.example/profile/card#me> ;
+    eq:studStatus eq:nomination-pending .    # coded booking-workflow status (eq:nominationStatusScheme)
+
+# 5. RaceResult — the horse won race rr:ascot-2026-r3.
+pod:result-galway-star-ascot a eq:RaceResult ;
+    eq:horse pod:horse-galway-star ;
+    eq:forRace rr:ascot-2026-r3 ;
+    eq:finishPos "1"^^xsd:positiveInteger ;
+    dcterms:date "2026-06-20"^^xsd:date .
+
+# 5b. An INLINE RaceResult — the race is recorded as a schema:name only, with NO
+#     external eq:forRace IRI (the actual Furlong write path: race_name is an
+#     inline string, no race registry IRI). Exercises the relaxed
+#     eqsh:RaceResultShape (eq:forRace OPTIONAL).
+pod:result-galway-star-york a eq:RaceResult ;
+    eq:horse pod:horse-galway-star ;
+    schema:name "York — Ebor Handicap 2026" ;
+    eq:finishPos "3"^^xsd:positiveInteger ;
+    dcterms:date "2026-08-22"^^xsd:date .
+
+# 6. PrizeDistribution — the owner's share of the prize (schema:amount).
+pod:prize-galway-star-ascot a eq:PrizeDistribution ;
+    schema:amount [ a schema:MonetaryAmount ; schema:value "56000"^^xsd:decimal ; schema:currency "GBP" ] ;
+    schema:recipient <https://owner.pod.example/profile/card#me> ;
+    eq:recipientType eq:recipient-owner ;
+    eq:jockeyPct "8.5"^^xsd:decimal ;
+    eq:trainerPct "10.0"^^xsd:decimal ;
+    dcterms:date "2026-06-25"^^xsd:date .
+
+# 7. Expense invoice — schema:Invoice + schema:totalPaymentDue, coded category.
+pod:invoice-training-2026-06 a schema:Invoice ;
+    schema:about pod:horse-galway-star ;
+    eq:expenseCategory eq:expense-training-fees ;
+    schema:totalPaymentDue [ a schema:MonetaryAmount ; schema:value "3200"^^xsd:decimal ; schema:currency "GBP" ] ;
+    dcterms:date "2026-06-30"^^xsd:date .
+
+# 7b. An insurance expense — exercises the new eq:expense-insurance category.
+pod:invoice-insurance-2026-06 a schema:Invoice ;
+    schema:about pod:horse-galway-star ;
+    eq:expenseCategory eq:expense-insurance ;
+    schema:totalPaymentDue [ a schema:MonetaryAmount ; schema:value "1400"^^xsd:decimal ; schema:currency "GBP" ] ;
+    dcterms:date "2026-06-28"^^xsd:date .
+
+# 8. A PrizeDistribution paying the racing MANAGER — exercises the new coded
+#    eq:recipient-manager (the recipient kind previously written as an uncoded
+#    literal fallback).
+pod:prize-galway-star-ascot-manager a eq:PrizeDistribution ;
+    schema:amount [ a schema:MonetaryAmount ; schema:value "2800"^^xsd:decimal ; schema:currency "GBP" ] ;
+    schema:recipient <https://manager.example/profile#me> ;
+    eq:recipientType eq:recipient-manager ;
+    dcterms:date "2026-06-25"^^xsd:date .

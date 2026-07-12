@@ -1,0 +1,206 @@
+{
+  "@context": {
+    "@version": 1.1,
+    "@protected": true,
+    "fin": "https://w3id.org/jeswr/sectors/finance#",
+    "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
+    "skos": "http://www.w3.org/2004/02/skos/core#",
+    "xsd": "http://www.w3.org/2001/XMLSchema#",
+    "id": "@id",
+    "type": "@type",
+    "accountClass": {
+      "@id": "fin:accountClass",
+      "@type": "@id"
+    },
+    "AccountClass": "fin:AccountClass",
+    "accountClassScheme": "fin:accountClassScheme",
+    "accountCode": {
+      "@id": "fin:accountCode",
+      "@type": "xsd:string"
+    },
+    "AccountCustodian": "fin:AccountCustodian",
+    "ActiveFinancialAccount": "fin:ActiveFinancialAccount",
+    "allocated": {
+      "@id": "fin:allocated",
+      "@type": "@id"
+    },
+    "amount": {
+      "@id": "fin:amount",
+      "@type": "xsd:decimal"
+    },
+    "Balance": "fin:Balance",
+    "Bank": "fin:Bank",
+    "Budget": "fin:Budget",
+    "BudgetCategory": "fin:BudgetCategory",
+    "callAmount": {
+      "@id": "fin:callAmount",
+      "@type": "@id"
+    },
+    "calledToDate": {
+      "@id": "fin:calledToDate",
+      "@type": "@id"
+    },
+    "CardPayment": "fin:CardPayment",
+    "categoryConcept": {
+      "@id": "fin:categoryConcept",
+      "@type": "@id"
+    },
+    "class-asset": "fin:class-asset",
+    "class-equity": "fin:class-equity",
+    "class-expense": "fin:class-expense",
+    "class-income": "fin:class-income",
+    "class-liability": "fin:class-liability",
+    "ClosedFinancialAccount": "fin:ClosedFinancialAccount",
+    "Commitment": "fin:Commitment",
+    "commitmentAmount": {
+      "@id": "fin:commitmentAmount",
+      "@type": "@id"
+    },
+    "Counterparty": "fin:Counterparty",
+    "Credit": "fin:Credit",
+    "creditAccount": {
+      "@id": "fin:creditAccount",
+      "@type": "@id"
+    },
+    "CreditAccount": "fin:CreditAccount",
+    "currency": {
+      "@id": "fin:currency",
+      "@type": "xsd:string"
+    },
+    "CurrentAccount": "fin:CurrentAccount",
+    "Debit": "fin:Debit",
+    "debitAccount": {
+      "@id": "fin:debitAccount",
+      "@type": "@id"
+    },
+    "distributionAmount": {
+      "@id": "fin:distributionAmount",
+      "@type": "@id"
+    },
+    "entrySide": {
+      "@id": "fin:entrySide",
+      "@type": "@id"
+    },
+    "EntrySide": "fin:EntrySide",
+    "entrySideScheme": "fin:entrySideScheme",
+    "FinancialAccount": "fin:FinancialAccount",
+    "FinancialInstitution": "fin:FinancialInstitution",
+    "FinancialInstrument": "fin:FinancialInstrument",
+    "FrozenFinancialAccount": "fin:FrozenFinancialAccount",
+    "fund": {
+      "@id": "fin:fund",
+      "@type": "@id"
+    },
+    "Fund": "fin:Fund",
+    "generalPartner": {
+      "@id": "fin:generalPartner",
+      "@type": "@id"
+    },
+    "GeneralPartner": "fin:GeneralPartner",
+    "hasCategory": {
+      "@id": "fin:hasCategory",
+      "@type": "@id"
+    },
+    "hasCounterparty": {
+      "@id": "fin:hasCounterparty",
+      "@type": "@id"
+    },
+    "hasMonetaryAmount": {
+      "@id": "fin:hasMonetaryAmount",
+      "@type": "@id"
+    },
+    "heldInAccount": {
+      "@id": "fin:heldInAccount",
+      "@type": "@id"
+    },
+    "Holding": "fin:Holding",
+    "inCategory": {
+      "@id": "fin:inCategory",
+      "@type": "@id"
+    },
+    "InvestmentAccount": "fin:InvestmentAccount",
+    "JournalEntry": "fin:JournalEntry",
+    "jurisdiction": {
+      "@id": "fin:jurisdiction",
+      "@type": "xsd:string"
+    },
+    "LedgerAccount": "fin:LedgerAccount",
+    "LedgerEntry": "fin:LedgerEntry",
+    "limitedPartner": {
+      "@id": "fin:limitedPartner",
+      "@type": "@id"
+    },
+    "LimitedPartner": "fin:LimitedPartner",
+    "MonetaryAmount": "fin:MonetaryAmount",
+    "Notice": "fin:Notice",
+    "notice-capital-call": "fin:notice-capital-call",
+    "notice-distribution": "fin:notice-distribution",
+    "noticeType": {
+      "@id": "fin:noticeType",
+      "@type": "@id"
+    },
+    "NoticeType": "fin:NoticeType",
+    "noticeTypeScheme": "fin:noticeTypeScheme",
+    "ofInstrument": {
+      "@id": "fin:ofInstrument",
+      "@type": "@id"
+    },
+    "parentAccountCode": {
+      "@id": "fin:parentAccountCode",
+      "@type": "xsd:string"
+    },
+    "partOfJournalEntry": {
+      "@id": "fin:partOfJournalEntry",
+      "@type": "@id"
+    },
+    "payee": {
+      "@id": "fin:payee",
+      "@type": "@id"
+    },
+    "Payee": "fin:Payee",
+    "payer": {
+      "@id": "fin:payer",
+      "@type": "@id"
+    },
+    "Payer": "fin:Payer",
+    "Payment": "fin:Payment",
+    "postingTime": {
+      "@id": "fin:postingTime",
+      "@type": "xsd:dateTime"
+    },
+    "postsTo": {
+      "@id": "fin:postsTo",
+      "@type": "@id"
+    },
+    "quantity": {
+      "@id": "fin:quantity",
+      "@type": "xsd:decimal"
+    },
+    "remainingCommitment": {
+      "@id": "fin:remainingCommitment",
+      "@type": "@id"
+    },
+    "SavingsAccount": "fin:SavingsAccount",
+    "sector": "fin:sector",
+    "Security": "fin:Security",
+    "sharePct": {
+      "@id": "fin:sharePct",
+      "@type": "xsd:decimal"
+    },
+    "snapshot": {
+      "@id": "fin:snapshot",
+      "@type": "@id"
+    },
+    "syncLog": {
+      "@id": "fin:syncLog",
+      "@type": "@id"
+    },
+    "Transaction": "fin:Transaction",
+    "TransactionRecord": "fin:TransactionRecord",
+    "Transfer": "fin:Transfer",
+    "vintageYear": {
+      "@id": "fin:vintageYear",
+      "@type": "xsd:gYear"
+    }
+  }
+}

@@ -1,0 +1,559 @@
+# AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+#
+@prefix core:    <https://w3id.org/jeswr/core#> .
+@prefix owl:     <http://www.w3.org/2002/07/owl#> .
+@prefix rdf:     <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:     <http://www.w3.org/2001/XMLSchema#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix skos:    <http://www.w3.org/2004/02/skos/core#> .
+@prefix time:    <http://www.w3.org/2006/time#> .
+@prefix vann:    <http://purl.org/vocab/vann/> .
+@prefix gufo:    <http://purl.org/nemo/gufo#> .
+@prefix qudt:    <http://qudt.org/schema/qudt/> .
+
+# =============================================================================
+# Solid Core Ontology (SCO) — RE-BASED onto gUFO (UFO foundation).
+#
+# This is the v1 re-base of the v0 thin Solid Core, per recommendation R11
+# (spec/recommendations/11-foundation-tiering-formalisation.md §1.3). Every
+# cross-sector root is now typed with a gUFO meta-type — gufo:Kind / SubKind /
+# Category / Relator / Role(Mixin) / Phase / Event / Situation / Mixin — instead
+# of a bare owl:Class rooted at a bespoke core:Entity. This carries real
+# ontological force: rigid-vs-anti-rigid discipline, reified relators, and
+# role/phase separation that keep independently-authored sector and jurisdiction
+# models non-overlapping (R11 §1.1).
+#
+# AUTHORING PROVENANCE: this file was AUTHORED as an OntoUML model
+# (solid-core.ontouml.json), verified anti-pattern-free by
+# OntoumlVerification.verify() (F3 gate, 0 issues), transformed to gUFO-OWL by
+# ontouml-js Ontouml2Gufo (solid-core.gufo.ttl backbone), then ENRICHED here
+# with F1 definitions, domains/ranges, annotation-property declarations, and the
+# property spine the v0 carried. The backbone's structural axioms (mediation
+# cardinalities, phase partitions, subclass spine) are preserved verbatim.
+#
+# The consistency engine resolves gUFO owl:imports to local files via imports/catalog-v001.xml (OASIS XML).
+#
+# FORMALISATION GATE (R11 §2): F1 definition, F2 gUFO stereotype, F3 OntoUML
+# well-formedness, F4 SHACL shape (solid-core.shacl.ttl), F5 OWL 2 DL validity,
+# F6 reasoner consistency over the pinned closure. All pass — see the track
+# verification report.
+#
+# DESIGN STANCE: open-world by default; SHACL profiles (solid-core.shacl.ttl)
+# carry the closed-world MUST/SHOULD contract. This file licenses meaning; the
+# shape checks conformance. External vocabulary bridges (gist/PROV/Org/vCard/
+# SKOS/schema.org) live in the SEPARATE optional solid-core-alignments.ttl.
+# =============================================================================
+
+<https://w3id.org/jeswr/core> a owl:Ontology ;
+    dcterms:title "Solid Core Ontology (gUFO re-base)"@en ;
+    rdfs:label "Solid Core Ontology"@en ;
+    vann:preferredNamespacePrefix "core" ;
+    vann:preferredNamespaceUri "https://w3id.org/jeswr/core#" ;
+    owl:versionInfo "1.0.1" ;
+    owl:versionIRI <https://w3id.org/jeswr/core/1.0.1> ;
+    owl:imports <http://purl.org/nemo/gufo#> ;
+    dcterms:description """The foundational ontology of the Solid data
+        federation, re-based onto gUFO (the gentle OWL-2-DL implementation of
+        the Unified Foundational Ontology). Every sector and jurisdiction
+        ontology imports and constrains-but-never-forks these terms. v1 is a
+        BREAKING re-base of v0: the meta-types change the meaning of every root
+        (e.g. core:Relationship and core:Account are now gufo:Relator, not bare
+        classes), so this is a new MAJOR version. The single mandatory import is
+        now gUFO + this thin profile. External vocabularies are reached via the
+        companion alignments file, never re-derived."""@en ;
+    dcterms:modified "2026-06-13"^^xsd:date ;
+    rdfs:comment "Re-based per R11 §1.3. v1.0.1 ADDITIVE: adds core:Quantity (a foundational reified quantity value) + core:numericValue/core:unit; no existing term changed."@en .
+
+# -----------------------------------------------------------------------------
+# Annotation-property declarations (F5: the v0 DL-authoring gap — ROBOT
+# validate-profile flagged undeclared dcterms:/vann: as untyped). Declared so
+# the merged closure is unambiguously OWL 2 DL.
+# -----------------------------------------------------------------------------
+dcterms:title       a owl:AnnotationProperty .
+dcterms:description a owl:AnnotationProperty .
+dcterms:modified    a owl:AnnotationProperty .
+vann:preferredNamespacePrefix a owl:AnnotationProperty .
+vann:preferredNamespaceUri    a owl:AnnotationProperty .
+skos:definition     a owl:AnnotationProperty .
+skos:scopeNote      a owl:AnnotationProperty .
+
+# -----------------------------------------------------------------------------
+# External classes referenced in domains/ranges, declared so the DL profile is
+# satisfied even when their host ontology is not in the reasoned closure
+# (W3C OWL-Time is a Mode-C vendored import; declaring the punned class is the
+# F5 fix R11 §4 calls for).
+# -----------------------------------------------------------------------------
+time:TemporalEntity a owl:Class ;
+    rdfs:label "Temporal Entity"@en ;
+    rdfs:isDefinedBy <http://www.w3.org/2006/time#> .
+
+# QUDT Unit — range of core:unit; declared (punned) so the DL profile holds even
+# when the QUDT slim is not in the reasoned closure (the F5 pattern, R11 §4).
+qudt:Unit a owl:Class ;
+    rdfs:label "QUDT Unit"@en ;
+    rdfs:isDefinedBy <http://qudt.org/schema/qudt/> .
+
+# =============================================================================
+# AGENCY — who can act, hold, and be attributed
+# R11 §1.3:  Agent = gufo:Category (rigid, cross-kind);
+#            Person/Organization/SoftwareAgent = gufo:Kind; Group = collective Kind.
+# =============================================================================
+
+core:Agent a owl:Class, gufo:Category ;
+    rdfs:subClassOf gufo:Object ;
+    rdfs:label "Agent"@en ;
+    skos:definition "An entity that can act, hold assets and accounts, and bear attributed responsibility — a Person, Organization, SoftwareAgent, or Group. A rigid, cross-kind category: it spans several kinds without itself supplying a principle of identity."@en ;
+    skos:scopeNote "gufo:Category — rigid non-sortal. Members get their identity from the Person/Organization/SoftwareAgent/Group kind they instantiate."@en .
+
+core:Person a owl:Class, gufo:Kind ;
+    rdfs:subClassOf gufo:FunctionalComplex, core:Agent ;
+    rdfs:label "Person"@en ;
+    skos:definition "A person able to act as an agent — the bearer of identity for human (natural) and, by sub-kinding, legal-person agency. The subject of most personal data in a Solid pod."@en ;
+    skos:scopeNote "gufo:Kind — supplies a rigid principle of identity. Specialised by the NaturalPerson sub-kind."@en .
+
+core:Organization a owl:Class, gufo:Kind ;
+    rdfs:subClassOf gufo:FunctionalComplex, core:Agent ;
+    rdfs:label "Organization"@en ;
+    skos:definition "A legal or social organization able to act as an agent — a company, public body, or association. Aligns to W3C Org in the alignments file."@en ;
+    skos:scopeNote "gufo:Kind. Specialised by the LegalPerson sub-kind for regulated legal-entity contexts."@en .
+
+core:SoftwareAgent a owl:Class, gufo:Kind ;
+    rdfs:subClassOf gufo:FunctionalComplex, core:Agent ;
+    rdfs:label "Software Agent"@en ;
+    skos:definition "A non-human agent that acts on a principal's behalf — an application or an AI agent. The acting party recorded in a write receipt (governance plane L1)."@en ;
+    skos:scopeNote "gufo:Kind."@en .
+
+core:Group a owl:Class, gufo:Kind ;
+    rdfs:subClassOf gufo:VariableCollection, core:Agent ;
+    rdfs:label "Group"@en ;
+    skos:definition "A collection of agents treated as one acting or holding party (a household, a team). A collective with possibly-varying membership."@en ;
+    skos:scopeNote "gufo:Kind over a gufo:VariableCollection (collective nature)."@en .
+
+core:NaturalPerson a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf core:Person ;
+    rdfs:label "Natural Person"@en ;
+    skos:definition "A human being recognised as a person. The identity-preserving sub-kind of Person that bears life-stage phases (Minor/Adult) and is the data subject of personal-data sectors."@en ;
+    skos:scopeNote "gufo:SubKind of the Person kind."@en .
+
+core:LegalPerson a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf core:Organization ;
+    rdfs:label "Legal Person"@en ;
+    skos:definition "An organization recognised as a bearer of legal rights and duties (a registered company, an incorporated body). The sub-kind specialised by jurisdiction-scoped legal-entity profiles."@en ;
+    skos:scopeNote "gufo:SubKind of the Organization kind."@en .
+
+# =============================================================================
+# IDENTITY — naming agents and entities across services
+# R11 §1.3:  Identifier / IdentifierScheme = gufo:Object (information object);
+#            scheme values also bind to skos:Concept (alignments).
+# =============================================================================
+
+core:Identifier a owl:Class, gufo:Kind ;
+    rdfs:subClassOf gufo:FunctionalComplex ;
+    rdfs:label "Identifier"@en ;
+    skos:definition "A value that identifies an entity within some scheme (an account number, NI number, ISIN, patient MRN). The anchor for KYC and identity reuse."@en ;
+    skos:scopeNote "gufo:Kind (information object). Its literal value carried by core:value; its scheme by core:inScheme."@en .
+
+core:IdentifierScheme a owl:Class, gufo:Kind ;
+    rdfs:subClassOf gufo:FunctionalComplex ;
+    rdfs:label "Identifier Scheme"@en ;
+    skos:definition "The authority and namespace within which an Identifier is unique and meaningful (ISO 6166 for ISINs, an NHS numbering scheme)."@en ;
+    skos:scopeNote "gufo:Kind (information object). Governed by an Agent via core:schemeAuthority."@en .
+
+core:identifiedBy a owl:ObjectProperty ;
+    rdfs:label "identified by"@en ;
+    rdfs:domain gufo:Endurant ;
+    rdfs:range core:Identifier ;
+    skos:definition "Relates an endurant to one of its identifiers."@en .
+
+core:inScheme a owl:ObjectProperty ;
+    rdfs:label "in scheme"@en ;
+    rdfs:domain core:Identifier ;
+    rdfs:range core:IdentifierScheme ;
+    skos:definition "The scheme an identifier belongs to and within which it is unique."@en .
+
+core:schemeAuthority a owl:ObjectProperty ;
+    rdfs:label "scheme authority"@en ;
+    rdfs:domain core:IdentifierScheme ;
+    rdfs:range core:Agent ;
+    skos:definition "The agent (usually an Organization) that governs a scheme — who may issue identifiers in it. Ties to the trust framework."@en .
+
+core:value a owl:DatatypeProperty ;
+    rdfs:label "value"@en ;
+    rdfs:domain core:Identifier ;
+    skos:definition "The literal value of an identifier."@en .
+
+# =============================================================================
+# HOLDINGS — assets, accounts, ownership and custody
+# R11 §1.3:  Asset = gufo:Object kind;
+#            Account = gufo:Relator (a standing relationship, not a thing),
+#            status carried by gufo:Phase (Active/Frozen/Closed).
+# =============================================================================
+
+core:Asset a owl:Class, gufo:Kind ;
+    rdfs:subClassOf gufo:FunctionalComplex ;
+    rdfs:label "Asset"@en ;
+    skos:definition "Something of value that can be owned or held — financial (a holding), informational (a licensed track), or physical."@en ;
+    skos:scopeNote "gufo:Kind (object)."@en .
+
+core:Account a owl:Class, gufo:Relator ;
+    rdfs:subClassOf gufo:Relator ;
+    rdfs:label "Account"@en ;
+    skos:definition "A standing relationship between an account-holder agent and a provider agent through which assets, records, or activity are managed (a bank account, a streaming account). A reified relator, not a thing — it carries parties, time, jurisdiction, and lifecycle status."@en ;
+    skos:scopeNote "gufo:Relator. Mediates AccountHolder and AccountProvider (≥1 each, see the mediation axioms). Lifecycle status via the ActiveAccount/FrozenAccount/ClosedAccount phase partition."@en .
+
+core:owns a owl:ObjectProperty ;
+    rdfs:label "owns"@en ;
+    rdfs:domain core:Agent ;
+    rdfs:range core:Asset ;
+    skos:definition "The agent that holds title to an asset. Distinct from custody (who physically holds it)."@en .
+
+core:custodian a owl:ObjectProperty ;
+    rdfs:label "custodian"@en ;
+    rdfs:domain gufo:Endurant ;
+    rdfs:range core:Agent ;
+    skos:definition "The agent that holds or controls an entity without necessarily owning it (a bank holding funds, a pod provider holding data)."@en .
+
+core:status a owl:ObjectProperty ;
+    rdfs:label "status"@en ;
+    rdfs:domain core:Account ;
+    rdfs:range core:Category ;
+    skos:definition "The coded lifecycle status of an account, drawn from a managed scheme. The phase partition (Active/Frozen/Closed) is the ontological backbone; this property carries the operational coded value used in data and SHACL value-set binding."@en .
+
+# =============================================================================
+# INFORMATION — records, datasets, documents about subjects
+# R11 §1.3:  InformationResource / Record = gufo:Object (information object);
+#            keep the subject-vs-document split.
+# =============================================================================
+
+core:InformationResource a owl:Class, gufo:Kind ;
+    rdfs:subClassOf gufo:FunctionalComplex ;
+    rdfs:label "Information Resource"@en ;
+    skos:definition "A document, dataset, or record — an information object, as opposed to the real-world thing it is about."@en ;
+    skos:scopeNote "gufo:Kind (information object). The document side of the document-vs-subject split."@en .
+
+core:Record a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf core:InformationResource ;
+    rdfs:label "Record"@en ;
+    skos:definition "A structured information resource capturing facts about a subject at or over a time (a transaction record, a lab result, a calendar entry)."@en ;
+    skos:scopeNote "gufo:SubKind of InformationResource."@en .
+
+core:about a owl:ObjectProperty ;
+    rdfs:label "about"@en ;
+    rdfs:domain core:InformationResource ;
+    rdfs:range gufo:Endurant ;
+    skos:definition "The real-world entity an information resource describes. Keeping subject distinct from document is essential for provenance and access control."@en .
+
+core:subject a owl:ObjectProperty ;
+    rdfs:subPropertyOf core:about ;
+    rdfs:label "subject"@en ;
+    rdfs:domain core:Record ;
+    rdfs:range core:Agent ;
+    skos:definition "The agent a record is primarily about (the data subject)."@en .
+
+# =============================================================================
+# QUANTITY — a reified quantity VALUE (value + unit). v1.0.1, ADDITIVE.
+# R11 §1.3 follow-up: cross-sector foundational concept for measured magnitudes —
+# monetary amounts (fin:MonetaryAmount), vital-sign values (health observations).
+# Modelled like qudt:QuantityValue: a gufo:Kind whose instances are value objects
+# rooting in gufo:Object (NOT gufo:Quantity, which in gUFO is an amount-of-matter).
+# =============================================================================
+
+core:Quantity a owl:Class, gufo:Kind ;
+    rdfs:subClassOf gufo:Object ;
+    rdfs:label "Quantity"@en ;
+    skos:definition "A reified quantity value: a numeric magnitude paired with a unit of measure (a monetary amount, a heart-rate reading, a duration). A value object, modelled on qudt:QuantityValue — the cross-sector root every measured/valued quantity specialises. Not an Agent, Account, Asset, or Event."@en ;
+    skos:scopeNote "gufo:Kind (Object value). Magnitude via core:numericValue; unit via core:unit (a qudt:Unit). Sectors subclass this for typed quantities (e.g. fin:MonetaryAmount, health observation values)."@en .
+
+core:numericValue a owl:DatatypeProperty ;
+    rdfs:label "numeric value"@en ;
+    rdfs:domain core:Quantity ;
+    rdfs:range xsd:decimal ;
+    skos:definition "The numeric magnitude of a quantity value (xsd:decimal; an xsd:double sub-value is admissible where higher-range precision is needed). The unit is carried separately by core:unit."@en .
+
+core:unit a owl:ObjectProperty ;
+    rdfs:label "unit"@en ;
+    rdfs:domain core:Quantity ;
+    rdfs:range qudt:Unit ;
+    skos:definition "The unit of measure of a quantity value, a qudt:Unit (reusing QUDT before minting). For a monetary amount the 'unit' is an ISO 4217 currency; sectors MAY bind a currency/UCUM code alongside via their own property."@en .
+
+# =============================================================================
+# ACTIVITY & EVENT — things that happen, and participation in them
+# R11 §1.3:  Activity and Event = gufo:Event (perdurants).
+# =============================================================================
+
+core:Activity a owl:Class, gufo:EventType ;
+    rdfs:subClassOf gufo:Event ;
+    rdfs:label "Activity"@en ;
+    skos:definition "Something that occurs over time and acts upon or generates entities (a payment, a data import, an appointment). Aligns to prov:Activity."@en ;
+    skos:scopeNote "gufo:EventType — its instances are gufo:Event perdurants."@en .
+
+core:Event a owl:Class, gufo:EventType ;
+    rdfs:subClassOf gufo:Event ;
+    rdfs:label "Event"@en ;
+    skos:definition "An occurrence located in time and (optionally) place that agents may participate in or observe (a concert, a transaction posting)."@en ;
+    skos:scopeNote "gufo:EventType — its instances are gufo:Event perdurants."@en .
+
+core:performedBy a owl:ObjectProperty ;
+    rdfs:label "performed by"@en ;
+    rdfs:domain core:Activity ;
+    rdfs:range core:Agent ;
+    skos:definition "The agent that carried out an activity."@en .
+
+core:hadParticipant a owl:ObjectProperty ;
+    rdfs:label "had participant"@en ;
+    rdfs:domain core:Event ;
+    rdfs:range core:Agent ;
+    skos:definition "An agent that took part in an event."@en .
+
+# =============================================================================
+# SITUATION — jurisdiction-relative recognition (Part 3 hook)
+# R11 §1.3 / §3.5:  recognition contexts = gufo:Situation; the legal-gender /
+# legal-adult facts are reified jurisdiction-scoped claims grounded as relators
+# obtaining in such a situation.
+# =============================================================================
+
+core:RecognitionSituation a owl:Class, gufo:SituationType ;
+    rdfs:subClassOf gufo:Situation ;
+    rdfs:label "Recognition Situation"@en ;
+    skos:definition "A situation in which a fact about a person holds relative to a recognising authority or jurisdiction — 'person-as-recognised-by-government-X'. The foundational grounding for the reified, jurisdiction-scoped claims of §3.5 (legal gender, legal adulthood)."@en ;
+    skos:scopeNote "gufo:Situation. Jurisdictional sub-federations specialise this with their value sets and authorities."@en .
+
+# =============================================================================
+# TEMPORAL & SPATIAL location (reuse W3C Time + a thin Place)
+# =============================================================================
+
+core:Place a owl:Class, gufo:Kind ;
+    rdfs:subClassOf gufo:FunctionalComplex ;
+    rdfs:label "Place"@en ;
+    skos:definition "A spatial location. Reuse W3C Basic Geo / GeoSPARQL for coordinates via the alignments file."@en ;
+    skos:scopeNote "gufo:Kind."@en .
+
+core:atTime a owl:ObjectProperty ;
+    rdfs:label "at time"@en ;
+    rdfs:range time:TemporalEntity ;
+    skos:definition "Associates an entity (typically an Event, Activity, or Record) with a W3C Time temporal entity (instant or interval). No rdfs:domain: it spans both endurants and events/situations, which gUFO holds disjoint, so a domain axiom would force inconsistent typing — intended usage is enforced in SHACL instead."@en .
+
+core:timestamp a owl:DatatypeProperty ;
+    rdfs:label "timestamp"@en ;
+    rdfs:range xsd:dateTime ;
+    skos:definition "A simple instant when literal-level precision is enough (e.g. record creation)."@en .
+
+core:validFrom a owl:DatatypeProperty ;
+    rdfs:label "valid from"@en ;
+    rdfs:range xsd:dateTime ;
+    skos:definition "Start of an entity's validity or applicability period."@en .
+
+core:validUntil a owl:DatatypeProperty ;
+    rdfs:label "valid until"@en ;
+    rdfs:range xsd:dateTime ;
+    skos:definition "End of an entity's validity or applicability period."@en .
+
+core:atPlace a owl:ObjectProperty ;
+    rdfs:label "at place"@en ;
+    rdfs:range core:Place ;
+    skos:definition "The place an entity (endurant or event) is located at or associated with. No rdfs:domain — endurants and events are disjoint in gUFO; intended usage is enforced in SHACL."@en .
+
+# =============================================================================
+# RELATIONSHIP — reified relationships between agents
+# R11 §1.3:  Relationship = gufo:Relator (the central upgrade). Employment,
+# Delegation, Agreement, KYC, Consent subclass this in sectors, carrying
+# parties + time + jurisdiction + provenance. The v0 string-valued
+# core:relationshipRole is REPLACED by proper gufo:Role(Mixin)s below.
+# =============================================================================
+
+core:Relationship a owl:Class, gufo:Relator ;
+    rdfs:subClassOf gufo:Relator ;
+    rdfs:label "Relationship"@en ;
+    skos:definition "A reified relationship between agents, carrying the parties, a time span, a jurisdiction, and provenance (employment, family, agency/delegation). The central gUFO upgrade: sector relationships (Employment, Delegation, Agreement, KYC, Consent) subclass this relator."@en ;
+    skos:scopeNote "gufo:Relator. Mediates ≥1 RelationshipParty role (the mediation axiom)."@en .
+
+# =============================================================================
+# ROLES — derived from relators; replace the v0 string relationshipRole.
+# R11 §1.3:  account-holder, custodian, data-subject, relationship-party etc.
+# = gufo:Role (or gufo:RoleMixin when cross-kind). Here all are cross-kind
+# (any Agent kind can play them), so gufo:RoleMixin.
+# =============================================================================
+
+core:AccountHolder a owl:Class, gufo:RoleMixin ;
+    rdfs:subClassOf core:Agent ;
+    rdfs:label "Account Holder"@en ;
+    skos:definition "The role of the agent to whom an account belongs, played contingently and relationally while the Account relator mediates that agent."@en ;
+    skos:scopeNote "gufo:RoleMixin (cross-kind, anti-rigid). Derived from the Account relator via the hasAccountHolder mediation."@en .
+
+core:AccountProvider a owl:Class, gufo:RoleMixin ;
+    rdfs:subClassOf core:Agent ;
+    rdfs:label "Account Provider"@en ;
+    skos:definition "The role of the agent (usually an Organization) that provides and administers an account."@en ;
+    skos:scopeNote "gufo:RoleMixin. Derived from the Account relator via the hasAccountProvider mediation."@en .
+
+core:Custodian a owl:Class, gufo:RoleMixin ;
+    rdfs:subClassOf core:Agent ;
+    rdfs:label "Custodian"@en ;
+    skos:definition "The role of an agent that holds or controls an entity without necessarily owning it."@en ;
+    skos:scopeNote "gufo:RoleMixin."@en .
+
+core:Owner a owl:Class, gufo:RoleMixin ;
+    rdfs:subClassOf core:Agent ;
+    rdfs:label "Owner"@en ;
+    skos:definition "The role of an agent that holds title to an asset."@en ;
+    skos:scopeNote "gufo:RoleMixin."@en .
+
+core:DataSubject a owl:Class, gufo:RoleMixin ;
+    rdfs:subClassOf core:Agent ;
+    rdfs:label "Data Subject"@en ;
+    skos:definition "The role of the agent whom personal data is about — the data subject of a record, in the GDPR/personal-data sense."@en ;
+    skos:scopeNote "gufo:RoleMixin (cross-kind, anti-rigid)."@en .
+
+core:RelationshipParty a owl:Class, gufo:RoleMixin ;
+    rdfs:subClassOf core:Agent ;
+    rdfs:label "Relationship Party"@en ;
+    skos:definition "The role of an agent party to a reified Relationship. Sector role-mixins (Employer, Delegate, Patient, Customer) specialise this."@en ;
+    skos:scopeNote "gufo:RoleMixin. Derived from the Relationship relator via the relatesParty mediation. Replaces the v0 string-valued core:relationshipRole."@en .
+
+core:SchemeAuthority a owl:Class, gufo:RoleMixin ;
+    rdfs:subClassOf core:Agent ;
+    rdfs:label "Scheme Authority"@en ;
+    skos:definition "The role of an agent that governs an identifier scheme — who may issue identifiers within it."@en ;
+    skos:scopeNote "gufo:RoleMixin."@en .
+
+# --- mediation properties (relator → role, sub-properties of gufo:mediates) ---
+
+core:hasAccountHolder a owl:ObjectProperty ;
+    rdfs:subPropertyOf gufo:mediates ;
+    rdfs:domain core:Account ;
+    rdfs:range core:AccountHolder ;
+    rdfs:label "has account holder"@en ;
+    skos:definition "Mediation tying an Account relator to the agent playing the AccountHolder role."@en .
+
+core:hasAccountProvider a owl:ObjectProperty ;
+    rdfs:subPropertyOf gufo:mediates ;
+    rdfs:domain core:Account ;
+    rdfs:range core:AccountProvider ;
+    rdfs:label "has account provider"@en ;
+    skos:definition "Mediation tying an Account relator to the agent playing the AccountProvider role."@en .
+
+core:relatesParty a owl:ObjectProperty ;
+    rdfs:subPropertyOf gufo:mediates ;
+    rdfs:domain core:Relationship ;
+    rdfs:range core:RelationshipParty ;
+    rdfs:label "relates party"@en ;
+    skos:definition "Mediation tying a Relationship relator to an agent playing a RelationshipParty role. Replaces v0 core:relatesAgent + core:relationshipRole."@en .
+
+# --- relator mediation axioms (B2: ported verbatim from the Ontouml2Gufo backbone
+# solid-core.gufo.ttl). Each relator mediates >=1 of its role(s); the inverse
+# someValuesFrom ties a role-player back to the mediating relator. Dropping these
+# left the relators with no mediation force; restored to match the header's
+# "structural axioms ... preserved verbatim" claim. ---
+
+core:AccountHolder rdfs:subClassOf [
+  rdf:type owl:Restriction;
+  owl:onProperty [ owl:inverseOf core:hasAccountHolder ];
+  owl:someValuesFrom core:Account
+] .
+core:Account rdfs:subClassOf [
+  rdf:type owl:Restriction;
+  owl:onProperty core:hasAccountHolder;
+  owl:minQualifiedCardinality "1"^^xsd:nonNegativeInteger;
+  owl:onClass core:AccountHolder
+] .
+core:AccountProvider rdfs:subClassOf [
+  rdf:type owl:Restriction;
+  owl:onProperty [ owl:inverseOf core:hasAccountProvider ];
+  owl:someValuesFrom core:Account
+] .
+core:Account rdfs:subClassOf [
+  rdf:type owl:Restriction;
+  owl:onProperty core:hasAccountProvider;
+  owl:minQualifiedCardinality "1"^^xsd:nonNegativeInteger;
+  owl:onClass core:AccountProvider
+] .
+core:RelationshipParty rdfs:subClassOf [
+  rdf:type owl:Restriction;
+  owl:onProperty [ owl:inverseOf core:relatesParty ];
+  owl:someValuesFrom core:Relationship
+] .
+core:Relationship rdfs:subClassOf [
+  rdf:type owl:Restriction;
+  owl:onProperty core:relatesParty;
+  owl:minQualifiedCardinality "1"^^xsd:nonNegativeInteger;
+  owl:onClass core:RelationshipParty
+] .
+
+# =============================================================================
+# PHASES — status / life-stage. R11 §1.3: status/life-stage enums = gufo:Phase
+# (ontologically distinct from roles). Account-status phases partition the
+# Account relator; life-stage phases partition NaturalPerson.
+# =============================================================================
+
+core:ActiveAccount a owl:Class, gufo:Phase ;
+    rdfs:subClassOf core:Account ;
+    rdfs:label "Active Account"@en ;
+    skos:definition "The phase of an Account that is open and operable."@en ;
+    skos:scopeNote "gufo:Phase of the Account relator. Member of the accountStatus partition."@en .
+
+core:FrozenAccount a owl:Class, gufo:Phase ;
+    rdfs:subClassOf core:Account ;
+    rdfs:label "Frozen Account"@en ;
+    skos:definition "The phase of an Account that is temporarily suspended (e.g. for a compliance hold)."@en ;
+    skos:scopeNote "gufo:Phase of the Account relator. Member of the accountStatus partition."@en .
+
+core:ClosedAccount a owl:Class, gufo:Phase ;
+    rdfs:subClassOf core:Account ;
+    rdfs:label "Closed Account"@en ;
+    skos:definition "The phase of an Account that has been terminated."@en ;
+    skos:scopeNote "gufo:Phase of the Account relator. Member of the accountStatus partition."@en .
+
+core:Minor a owl:Class, gufo:Phase ;
+    rdfs:subClassOf core:NaturalPerson ;
+    rdfs:label "Minor"@en ;
+    skos:definition "The life-stage phase of a natural person below the age of majority. Age of majority is a jurisdiction-scoped value (R11 §3) — this is the global abstract slot."@en ;
+    skos:scopeNote "gufo:Phase of NaturalPerson. Member of the lifeStage partition."@en .
+
+core:Adult a owl:Class, gufo:Phase ;
+    rdfs:subClassOf core:NaturalPerson ;
+    rdfs:label "Adult"@en ;
+    skos:definition "The life-stage phase of a natural person at or above the age of majority. Where the boundary lies is a jurisdiction-scoped profile."@en ;
+    skos:scopeNote "gufo:Phase of NaturalPerson. Member of the lifeStage partition."@en .
+
+# --- phase partitions (preserved from the OntoUML source / Ontouml2Gufo backbone) ---
+# B2/M1: DISJOINT, complete partitions. Ontouml2Gufo emits only owl:unionOf for an
+# anti-rigid (Phase) partition (completeness), dropping pairwise disjointness — so an
+# individual typed ActiveAccount AND ClosedAccount (or Minor AND Adult) stayed consistent.
+# owl:disjointUnionOf gives both in one axiom: union (complete) + pairwise disjoint,
+# matching how finance.ttl asserts its FinancialAccount status partition.
+
+core:Account owl:disjointUnionOf
+    ( core:ActiveAccount core:FrozenAccount core:ClosedAccount ) .
+
+core:NaturalPerson owl:disjointUnionOf
+    ( core:Minor core:Adult ) .
+
+# =============================================================================
+# CONTROLLED VOCABULARY — coded values shared by every sector
+# R11 §1.3: Category = keep; gUFO non-sortal Mixin + skos:Concept (alignments).
+# =============================================================================
+
+core:Category a owl:Class, gufo:Mixin ;
+    rdfs:subClassOf gufo:Object ;
+    rdfs:label "Category"@en ;
+    skos:definition "A controlled-vocabulary value: a status, type, role, or classification drawn from a managed scheme (an RSVP state, an account type, a clinical code). The shared root every sector's enumerations hang off; aligned to skos:Concept in the alignments file."@en ;
+    skos:scopeNote "gufo:Mixin — a non-sortal whose instances are coded values. Bound to skos:Concept in solid-core-alignments.ttl."@en .
+
+# =============================================================================
+# MEREOLOGY — part/whole, shared by every sector (sub-properties of the gUFO
+# parthood spine where applicable; kept transitive for the thin profile).
+# =============================================================================
+
+core:partOf a owl:ObjectProperty, owl:TransitiveProperty ;
+    rdfs:label "part of"@en ;
+    rdfs:domain gufo:Endurant ;
+    rdfs:range gufo:Endurant ;
+    skos:definition "Transitive part-whole relation between endurants."@en .
+
+core:hasPart a owl:ObjectProperty, owl:TransitiveProperty ;
+    owl:inverseOf core:partOf ;
+    rdfs:label "has part"@en ;
+    rdfs:domain gufo:Endurant ;
+    rdfs:range gufo:Endurant ;
+    skos:definition "Inverse of core:partOf."@en .

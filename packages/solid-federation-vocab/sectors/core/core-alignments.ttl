@@ -1,0 +1,154 @@
+# AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+#
+@prefix core:    <https://w3id.org/jeswr/core#> .
+@prefix owl:     <http://www.w3.org/2002/07/owl#> .
+@prefix rdf:     <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:     <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos:    <http://www.w3.org/2004/02/skos/core#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix prov:    <http://www.w3.org/ns/prov#> .
+@prefix foaf:    <http://xmlns.com/foaf/0.1/> .
+@prefix org:     <http://www.w3.org/ns/org#> .
+@prefix vcard:   <http://www.w3.org/2006/vcard/ns#> .
+@prefix schema:  <https://schema.org/> .
+@prefix adms:    <http://www.w3.org/ns/adms#> .
+@prefix dcat:    <http://www.w3.org/ns/dcat#> .
+@prefix gist:    <https://w3id.org/semanticarts/ns/ontology/gist/> .
+
+# =============================================================================
+# Solid Core Ontology — ALIGNMENTS (gUFO re-base, v1)
+#
+# Bridges the re-based SCO to widely-deployed W3C/community vocabularies AND to
+# gist (now the SKOS mapping/discovery layer per R11 §1.3 — gist is NOT imported
+# into the reasoned closure, only mapped to). SEPARATED from solid-core.ttl on
+# purpose: importing this file pulls external entailments into the reasoner. The
+# consistency engine loads it for cross-vocabulary recognition but can omit it to
+# reason over the clean gUFO-rooted core.
+#
+# ALIGNMENT POLICY (R11 §2 Mode-A "thin alignment", reuse table):
+#  - skos:exactMatch / skos:closeMatch (ANNOTATION, no entailment) is the DEFAULT
+#    and the only mechanism used for gist (discovery target, R11 O7).
+#  - owl:equivalentClass / owl:equivalentProperty ONLY where the two terms are
+#    genuinely co-extensional AND the external term is stable. Note: under the
+#    gUFO re-base several v0 equivalences are SOFTENED to skos:closeMatch because
+#    the external term (e.g. foaf:Person) lacks the kind/role/phase distinction
+#    and a hard owl:equivalentClass would import an over-strong identity claim.
+#  - rdfs:subClassOf where SCO is safely the broader/narrower of the pair.
+# This is the auditable seam: every equivalence here is a reviewable claim.
+# =============================================================================
+
+<https://w3id.org/jeswr/core/alignments> a owl:Ontology ;
+    dcterms:title "Solid Core Ontology — alignments (gist + W3C bridges)"@en ;
+    owl:versionInfo "1.0.0" ;
+    owl:imports <https://w3id.org/jeswr/core> ;
+    rdfs:comment "Optional Mode-A bridge to gist (discovery) + foaf/schema/prov/org/vcard/adms/dcat. "@en .
+
+# Declare the annotation properties used here so this file is self-describing.
+skos:exactMatch a owl:AnnotationProperty .
+skos:closeMatch a owl:AnnotationProperty .
+
+# Declare the external terms used in HARD owl:equivalent* axioms, so this file is
+# DL-valid standalone (the external host ontologies are NOT in the reasoned
+# closure under Mode-A — without these typings OWL-API drops the punned triple).
+prov:Agent         a owl:Class .
+prov:SoftwareAgent a owl:Class .
+prov:Activity      a owl:Class .
+foaf:topic         a owl:ObjectProperty .
+
+# -----------------------------------------------------------------------------
+# gist mapping layer (R11 §1.3 / O7 — gist moves to discovery; never imported)
+# gist is a flat business vocabulary; we map by skos:*Match only, never
+# owl:equivalentClass (it has no kind/role/phase meta-types to honour).
+# -----------------------------------------------------------------------------
+core:Agent           skos:closeMatch gist:Agent .
+core:Person          skos:closeMatch gist:Person .
+core:Organization    skos:closeMatch gist:Organization .
+core:Account         skos:closeMatch gist:Account .
+core:Asset           skos:closeMatch gist:Artifact .
+core:Identifier      skos:closeMatch gist:ID .
+core:IdentifierScheme skos:closeMatch gist:IdentifierScheme .
+core:InformationResource skos:closeMatch gist:Content .
+core:Event           skos:closeMatch gist:Event .
+core:Activity        skos:closeMatch gist:Task .
+core:Place           skos:closeMatch gist:Place .
+core:Category        skos:closeMatch gist:Category .
+core:Relationship    skos:closeMatch gist:Agreement .
+
+# -----------------------------------------------------------------------------
+# Agency — PROV/FOAF/Org/schema/vCard
+# Person/Org softened to closeMatch under the re-base (the external terms ignore
+# the kind/role distinction the gUFO Core now enforces).
+# -----------------------------------------------------------------------------
+core:Agent        owl:equivalentClass prov:Agent ;
+                  skos:closeMatch foaf:Agent .
+core:Person       skos:closeMatch foaf:Person , schema:Person , vcard:Individual .
+core:Organization skos:closeMatch org:Organization , foaf:Organization ,
+                                  schema:Organization , vcard:Organization .
+core:SoftwareAgent owl:equivalentClass prov:SoftwareAgent ;
+                  skos:closeMatch foaf:Agent .
+core:Group        skos:closeMatch foaf:Group , org:OrganizationalUnit .
+
+# Roles bridge to PROV roles / Org membership-role / vCard.
+core:AccountHolder    skos:closeMatch vcard:Agent .
+core:Custodian        skos:closeMatch prov:Agent .
+core:DataSubject      skos:closeMatch foaf:Person .
+core:RelationshipParty skos:closeMatch org:Member .
+
+# -----------------------------------------------------------------------------
+# Identity
+# -----------------------------------------------------------------------------
+core:Identifier  skos:closeMatch adms:Identifier , schema:PropertyValue .
+core:inScheme    skos:closeMatch skos:inScheme .
+core:value       skos:closeMatch skos:notation , schema:value .
+
+# -----------------------------------------------------------------------------
+# Holdings
+# -----------------------------------------------------------------------------
+core:Account     skos:closeMatch foaf:OnlineAccount , schema:Account .
+core:owns        skos:closeMatch schema:owns .
+core:Asset       skos:closeMatch dcat:Resource .
+
+# -----------------------------------------------------------------------------
+# Information
+# -----------------------------------------------------------------------------
+core:InformationResource skos:closeMatch foaf:Document , schema:CreativeWork , dcat:Resource .
+core:Record      skos:closeMatch schema:CreativeWork .
+core:about       owl:equivalentProperty foaf:topic ;
+                 skos:closeMatch schema:about , dcterms:subject .
+core:subject     skos:closeMatch dcterms:subject .
+
+# -----------------------------------------------------------------------------
+# Activity & Event
+# core:Activity is a gufo:EventType (perdurant) — equivalentClass prov:Activity
+# is safe (both are processes); schema:Event softened to closeMatch.
+# -----------------------------------------------------------------------------
+core:Activity    owl:equivalentClass prov:Activity .
+core:Event       skos:closeMatch schema:Event .
+core:performedBy skos:closeMatch prov:wasAssociatedWith .
+core:hadParticipant skos:closeMatch schema:performer .
+
+# -----------------------------------------------------------------------------
+# Place
+# -----------------------------------------------------------------------------
+core:Place       skos:closeMatch schema:Place , vcard:Location .
+core:atPlace     skos:closeMatch schema:location .
+
+# -----------------------------------------------------------------------------
+# Relationship (now a gufo:Relator)
+# -----------------------------------------------------------------------------
+core:Relationship skos:closeMatch vcard:RelatedTo , org:Membership .
+core:relatesParty skos:closeMatch org:member .
+
+# -----------------------------------------------------------------------------
+# Controlled vocabulary — Category is a gufo:Mixin whose instances are coded
+# values; bind those to skos:Concept (this is the FHIR concept-IRI pattern).
+# -----------------------------------------------------------------------------
+core:Category    skos:closeMatch skos:Concept , schema:Enumeration .
+
+# -----------------------------------------------------------------------------
+# Temporal
+# -----------------------------------------------------------------------------
+core:validFrom   skos:closeMatch schema:validFrom , dcat:startDate .
+core:validUntil  skos:closeMatch schema:validThrough , dcat:endDate .
+core:timestamp   skos:closeMatch dcterms:date .

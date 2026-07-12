@@ -1,0 +1,85 @@
+# AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+#
+@prefix bookmark: <https://w3id.org/jeswr/sectors/bookmarks#> .
+@prefix bmsh:     <https://w3id.org/jeswr/sectors/bookmarks/shapes#> .
+@prefix core:     <https://w3id.org/jeswr/core#> .
+@prefix sh:       <http://www.w3.org/ns/shacl#> .
+@prefix owl:      <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs:     <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:      <http://www.w3.org/2001/XMLSchema#> .
+@prefix dcterms:  <http://purl.org/dc/terms/> .
+@prefix skos:     <http://www.w3.org/2004/02/skos/core#> .
+@prefix schema:   <http://schema.org/> .
+@prefix prof:     <http://www.w3.org/ns/dx/prof/> .
+
+# =============================================================================
+# Solid Bookmarks & Read-it-later — SHACL DATA-MODEL PROFILE (R4 discipline)
+#
+# The NORMATIVE conformance artifact: the ontology licenses meaning, this shape
+# checks shape. OPEN BY DEFAULT (no sh:closed); sh:severity carries the RFC 2119
+# grade (Violation=MUST, Warning=SHOULD, Info=MAY); IMMUTABLE version IRI; additive.
+# =============================================================================
+
+<https://w3id.org/jeswr/sectors/bookmarks/profile> a prof:Profile ;
+    dcterms:title "Solid Bookmarks data-model profile (version-independent)"@en ;
+    dcterms:hasVersion <https://w3id.org/jeswr/sectors/bookmarks/profile/1.0.0> ;
+    rdfs:comment "Version-independent IRI resolving to the current Bookmarks profile. "@en .
+
+<https://w3id.org/jeswr/sectors/bookmarks/profile/1.0.0> a prof:Profile ;
+    dcterms:title "Solid Bookmarks data-model profile 1.0.0"@en ;
+    dcterms:isVersionOf <https://w3id.org/jeswr/sectors/bookmarks/profile> ;
+    owl:versionInfo "1.0.0" ;
+    prof:isProfileOf <https://w3id.org/jeswr/sectors/bookmarks> ;
+    prof:hasToken "bookmarks-1.0.0" ;
+    rdfs:comment "IMMUTABLE version IRI. Open shapes; sh:Violation=MUST, sh:Warning=SHOULD. "@en .
+
+# -----------------------------------------------------------------------------
+# Bookmark — MUST point at a target URL; SHOULD carry a title; the archived flag,
+# notes, description and tags are MAY (reusing schema:url, dct:*, skos:Concept).
+# -----------------------------------------------------------------------------
+
+bmsh:BookmarkShape a sh:NodeShape ;
+    sh:targetClass bookmark:Bookmark ;
+    rdfs:label "Bookmark shape"@en ;
+    sh:property [
+        sh:path schema:url ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:nodeKind sh:IRI ;
+        sh:severity sh:Violation ;          # MUST: a bookmark points at a target
+        sh:message "A bookmark MUST reference exactly one schema:url (the saved target resource, an IRI)."@en
+    ] ;
+    sh:property [
+        sh:path dcterms:title ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+        sh:severity sh:Warning ;            # SHOULD: a human-readable title
+        sh:message "A bookmark SHOULD carry a dcterms:title."@en
+    ] ;
+    sh:property [
+        sh:path bookmark:archived ;
+        sh:datatype xsd:boolean ;
+        sh:maxCount 1 ;
+        sh:severity sh:Info ;               # MAY: the read/archived flag
+        sh:message "bookmark:archived, if present, MUST be a single xsd:boolean."@en
+    ] ;
+    sh:property [
+        sh:path bookmark:notes ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+        sh:severity sh:Info ;               # MAY: free-text notes
+        sh:message "bookmark:notes, if present, MUST be a single string."@en
+    ] ;
+    sh:property [
+        sh:path dcterms:description ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+        sh:severity sh:Info ;               # MAY: the resource's own description
+        sh:message "dcterms:description, if present, MUST be a single string."@en
+    ] ;
+    sh:property [
+        sh:path bookmark:hasTag ;
+        sh:class skos:Concept ;
+        sh:severity sh:Info ;               # MAY: tags as skos:Concept
+        sh:message "bookmark:hasTag values, if present, MUST be skos:Concept tags."@en
+    ] .

@@ -1,0 +1,41 @@
+# AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+#
+@prefix bookmark: <https://w3id.org/jeswr/sectors/bookmarks#> .
+@prefix core:     <https://w3id.org/jeswr/core#> .
+@prefix owl:      <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs:     <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix skos:     <http://www.w3.org/2004/02/skos/core#> .
+@prefix dcterms:  <http://purl.org/dc/terms/> .
+@prefix schema:   <http://schema.org/> .
+# The forthcoming detailed bookmark vocabulary (ships in @jeswr/solid-bookmark).
+@prefix book:     <https://w3id.org/jeswr/bookmark#> .
+
+# =============================================================================
+# Bookmarks Sector Ontology — ALIGNMENTS (Mode A: annotation-only bridges)
+#
+# Annotation-only (skos:*Match) bridges to (a) the FORTHCOMING detailed book:
+# vocabulary in the separate @jeswr/solid-bookmark repo and (b) schema.org /
+# Dublin Core Terms / SKOS. NO entailment — data authored against book: / schema
+# is recognised without inheriting any axioms, and importing this file never
+# changes the reasoned closure's consistency. The HOOK to book: is deliberately
+# Mode A so this sector can be authored + shipped now without forward-referencing
+# an unpublished ontology in its owl:imports closure (Phase B publishes book: in
+# its own repo). Every line is a reviewable claim; nothing is silently inherited.
+# =============================================================================
+
+<https://w3id.org/jeswr/sectors/bookmarks/alignments> a owl:Ontology ;
+    dcterms:title "Solid Bookmarks Sector Ontology — book: + schema.org Mode-A alignments"@en ;
+    owl:imports <https://w3id.org/jeswr/sectors/bookmarks> ;
+    rdfs:comment "Annotation-only (skos:*Match) bridges to the forthcoming @jeswr/solid-bookmark book: vocabulary and to schema.org / DCT / SKOS. No entailment. "@en .
+
+# --- Bookmark <-> book:Bookmark (the forthcoming detail vocab) + schema ---
+# closeMatch (not exact) to book:Bookmark: the detail vocab may carry structure
+# this thin sector class does not. schema:BookmarkAction is the schema.org root
+# (a bookmark is the saved result of a bookmark action).
+bookmark:Bookmark  skos:closeMatch book:Bookmark ;
+                   skos:closeMatch schema:BookmarkAction .
+
+# --- the round-trip properties <-> the forthcoming book: terms + schema/dct/skos ---
+bookmark:archived  skos:closeMatch book:archived .
+bookmark:notes     skos:closeMatch book:notes .
+bookmark:hasTag    skos:closeMatch schema:keywords .

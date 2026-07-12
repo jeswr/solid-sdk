@@ -1,0 +1,108 @@
+<!doctype html>
+<!-- AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>w3id.org/jeswr/sectors/equine# — Solid Federation Sector Ontology</title>
+    <style>
+      :root { color-scheme: light dark; }
+      body { font-family: system-ui, sans-serif; line-height: 1.6; max-width: 64rem; margin: 2rem auto; padding: 0 1rem; }
+      code { background: rgba(127,127,127,0.15); padding: 0.1em 0.35em; border-radius: 4px; }
+      .warn { border-left: 4px solid #d97706; padding: 0.5rem 1rem; background: rgba(217,119,6,0.08); border-radius: 4px; }
+      table { border-collapse: collapse; width: 100%; }
+      th, td { text-align: left; padding: 0.4rem 0.6rem; border-bottom: 1px solid rgba(127,127,127,0.3); vertical-align: top; }
+      a { color: #2563eb; }
+    </style>
+  </head>
+  <body>
+    <h1><code>https://w3id.org/jeswr/sectors/equine#</code></h1>
+    <p>Prefix <code>eq:</code> · a gUFO-based ontology in the @jeswr Solid federation; imports the <a href="../core.html">Solid Core</a>.</p>
+    <p class="warn">⚠️ <strong>Experimental</strong> — AI-agent-generated (Claude Opus 4.8, @jeswr PSS agent); under active development, not production-hardened.</p>
+    <p>Other representations: <a href="equine.ttl">Turtle</a> · <a href="equine-context.jsonld">JSON-LD context</a> · <a href="../">index</a></p>
+    <h2>Terms (80)</h2>
+    <table>
+      <tr><th>Term</th><th>Label</th><th>Comment / definition</th></tr>
+      <tr><td><code>eq:colour</code></td><td>colour</td><td>The coat colour of a horse (e.g. &quot;bay&quot;, &quot;chestnut&quot;, &quot;grey&quot;) — free text, as colours vary by registry.</td></tr>
+      <tr><td><code>eq:country</code></td><td>country</td><td>The country of foaling of a horse, as an ISO 3166 / studbook country code (e.g. &quot;GB&quot;, &quot;IRE&quot;, &quot;AUS&quot;).</td></tr>
+      <tr><td><code>eq:dam</code></td><td>dam</td><td>The mother of a horse (a pedigree link to another eq:Horse — possibly an external studbook IRI).</td></tr>
+      <tr><td><code>eq:expense-agistment</code></td><td>Agistment</td><td>Spelling/agistment (grazing and keep) fees.</td></tr>
+      <tr><td><code>eq:expense-entry-fees</code></td><td>Entry fees</td><td>Race entry and declaration fees.</td></tr>
+      <tr><td><code>eq:expense-farrier</code></td><td>Farrier</td><td>Farrier (shoeing) fees.</td></tr>
+      <tr><td><code>eq:expense-insurance</code></td><td>Insurance</td><td>Bloodstock mortality / veterinary insurance premiums.</td></tr>
+      <tr><td><code>eq:expense-other</code></td><td>Other</td><td>Any horse-keeping expense not covered by a more specific category — the catch-all an app maps an uncoded expense category onto instead of writing an uncoded literal.</td></tr>
+      <tr><td><code>eq:expense-registration</code></td><td>Registration</td><td>Studbook registration, naming, microchipping and colours-registration fees.</td></tr>
+      <tr><td><code>eq:expense-sales</code></td><td>Sales</td><td>Sales-ring and bloodstock costs — sales-entry fees, agent commission, and purchase costs.</td></tr>
+      <tr><td><code>eq:expense-training-fees</code></td><td>Training fees</td><td>Trainer's day-rate and preparation fees.</td></tr>
+      <tr><td><code>eq:expense-transport</code></td><td>Transport</td><td>Horse transport to and from races and yards.</td></tr>
+      <tr><td><code>eq:expense-veterinary</code></td><td>Veterinary</td><td>Veterinary treatment and examinations.</td></tr>
+      <tr><td><code>eq:expenseCategory</code></td><td>expense category</td><td>The coded category (a coded eq:ExpenseCategory value) of a horse-keeping expense invoice (a schema:Invoice — the correct term Furlong keeps). No rdfs:domain — attached to the external invoice resource.</td></tr>
+      <tr><td><code>eq:ExpenseCategory</code></td><td>Expense Category</td><td>The kind of a horse-keeping expense (training-fees / veterinary / transport / entry-fees / agistment / farrier / insurance / registration / sales / other). A coded value classifying a schema:Invoice expense; members are skos:Concepts in eq:expenseCategoryScheme. A seed set, not law — an app maps its own expense categories onto these (falling back to eq:expense-other rather than an uncoded literal).</td></tr>
+      <tr><td><code>eq:expenseCategoryScheme</code></td><td>Horse expense category scheme</td><td>The coded expense-category values for eq:expenseCategory.</td></tr>
+      <tr><td><code>eq:finishPos</code></td><td>finishing position</td><td>The finishing position of the horse in the race (1 = win). A positive integer.</td></tr>
+      <tr><td><code>eq:forRace</code></td><td>for race</td><td>The race a result is for — an IRI identifying the race (a fixtures/registry IRI). No rdfs:range: the race is an external entity referenced by IRI.</td></tr>
+      <tr><td><code>eq:horse</code></td><td>horse</td><td>The horse an ownership share, stud share or race result concerns. No rdfs:domain — shared by eq:OwnershipShare, eq:StudShare and eq:RaceResult.</td></tr>
+      <tr><td><code>eq:Horse</code></td><td>Horse</td><td>A horse — typically a racehorse or breeding animal — held as an owned asset. schema.org has NO animal class (schema:Animal returns 404), so eq:Horse roots in core:Asset and aligns to external animal ontologies (Mode A) only. Its sex is a coded eq:sex value; status a coded eq:status value; pedigree via eq:sire/eq:dam; foaling country via eq:country.</td></tr>
+      <tr><td><code>eq:HorseStatus</code></td><td>Horse Status</td><td>The current racing/management status of a horse (in-training / racing / spelling / retired / at-stud / broodmare). A coded value; members are skos:Concepts in eq:horseStatusScheme.</td></tr>
+      <tr><td><code>eq:horseStatusScheme</code></td><td>Horse status scheme</td><td>The coded racing/management status values for eq:status.</td></tr>
+      <tr><td><code>eq:jockeyPct</code></td><td>jockey percentage</td><td>The percentage (0–100) of a prize distribution allocated to the jockey.</td></tr>
+      <tr><td><code>eq:managedBy</code></td><td>managed by</td><td>The racing manager acting for an ownership share on the owners' behalf.</td></tr>
+      <tr><td><code>eq:mareName</code></td><td>mare name</td><td>The name of the mare a stud nomination sends to the stallion. A literal because the mare is often not a pod-held eq:Horse.</td></tr>
+      <tr><td><code>eq:mgmtFlat</code></td><td>flat management fee</td><td>A flat (fixed) management fee a racing manager charges an ownership share — the fixed-fee alternative (or complement) to the percentage eq:mgmtPct. A schema:MonetaryAmount node (schema:value + schema:currency), matching the sector's other monetary values (prize schema:amount, nomination schema:totalPrice, expense schema:totalPaymentDue) so a federated consumer reads the currency unambiguously — a bare decimal cannot be compared across pods/currencies. (eq:mgmtPct / eq:sharePct / eq:jockeyPct / eq:trainerPct stay plain decimals: they are unit-free percentages, not monetary amounts.)</td></tr>
+      <tr><td><code>eq:mgmtPct</code></td><td>management percentage</td><td>The percentage (0–100) a racing manager takes from an ownership share's prize returns.</td></tr>
+      <tr><td><code>eq:nomination-cancelled</code></td><td>Cancelled</td><td>The nomination was cancelled before a covering took place.</td></tr>
+      <tr><td><code>eq:nomination-confirmed</code></td><td>Confirmed</td><td>The stud has confirmed the nomination (a covering slot is booked) but the mare has not yet been covered.</td></tr>
+      <tr><td><code>eq:nomination-foaled</code></td><td>Foaled</td><td>The nomination resulted in a live foal.</td></tr>
+      <tr><td><code>eq:nomination-pending</code></td><td>Pending</td><td>A stud nomination has been requested but not yet confirmed by the stallion's stud.</td></tr>
+      <tr><td><code>eq:nomination-served</code></td><td>Served</td><td>The mare has been served (covered) under the nomination this season.</td></tr>
+      <tr><td><code>eq:nominationStatusScheme</code></td><td>Stud nomination status scheme</td><td>The coded booking-workflow status values for eq:studStatus on an eq:StudNomination.</td></tr>
+      <tr><td><code>eq:nominator</code></td><td>nominator</td><td>The agent who made a stud nomination (the mare's owner or their agent).</td></tr>
+      <tr><td><code>eq:owner</code></td><td>owner</td><td>The agent (person or organization) holding an ownership share.</td></tr>
+      <tr><td><code>eq:OwnershipShare</code></td><td>Ownership Share</td><td>A fractional-ownership record: a share (eq:sharePct, an xsd:decimal percentage) of a horse (eq:horse) held by an owner (eq:owner) or via a syndicate (eq:syndicate), optionally managed by a racing manager (eq:managedBy, eq:mgmtPct). A core:Record about the ownership relation.</td></tr>
+      <tr><td><code>eq:PrizeDistribution</code></td><td>Prize Distribution</td><td>A distribution of race prize money to a recipient. Dual-typed schema:MoneyTransfer (correct, extant — replacing the NON-EXISTENT schema:prize): the amount is schema:amount; the split between owner/trainer/jockey is carried by eq:jockeyPct / eq:trainerPct and the recipient kind by eq:recipientType. (schema:recipient is an advisory domain stretch on MoneyTransfer — documented, kept, since domainIncludes is non-restrictive.)</td></tr>
+      <tr><td><code>eq:RaceResult</code></td><td>Race Result</td><td>A horse's result in a race: the race (eq:forRace), the finishing position (eq:finishPos) and the horse (eq:horse). Dual-typed schema:SportsEvent (the correct, extant schema.org term — kept from Furlong). Prize money flows through a linked eq:PrizeDistribution.</td></tr>
+      <tr><td><code>eq:recipient-breeder</code></td><td>Breeder</td><td>The breeder's prize/bonus share where a scheme pays one.</td></tr>
+      <tr><td><code>eq:recipient-jockey</code></td><td>Jockey</td><td>The prize share paid to the jockey.</td></tr>
+      <tr><td><code>eq:recipient-manager</code></td><td>Manager</td><td>The prize share paid to the racing manager (their management cut of the owners' prize returns). The recipient kind the Furlong distribution waterfall pays alongside owner/trainer/jockey — previously written as an uncoded literal fallback for want of this concept.</td></tr>
+      <tr><td><code>eq:recipient-owner</code></td><td>Owner</td><td>The prize share paid to the horse's owners.</td></tr>
+      <tr><td><code>eq:recipient-stable-staff</code></td><td>Stable staff</td><td>The stable-staff share of a prize.</td></tr>
+      <tr><td><code>eq:recipient-trainer</code></td><td>Trainer</td><td>The prize share paid to the trainer.</td></tr>
+      <tr><td><code>eq:recipientType</code></td><td>recipient type</td><td>The kind of party (a coded eq:RecipientType value) a prize distribution pays.</td></tr>
+      <tr><td><code>eq:RecipientType</code></td><td>Recipient Type</td><td>The kind of party a prize distribution pays (owner / trainer / jockey / manager / breeder / stable-staff). A coded value qualifying an eq:PrizeDistribution's recipient; members are skos:Concepts in eq:recipientTypeScheme.</td></tr>
+      <tr><td><code>eq:recipientTypeScheme</code></td><td>Prize recipient type scheme</td><td>The coded recipient-kind values for eq:recipientType.</td></tr>
+      <tr><td><code>eq:season</code></td><td>season</td><td>The breeding (or racing) season a stud share / nomination applies to, as a season label (e.g. &quot;2026&quot; or &quot;2026/2027&quot;). Replaces the MIS-DOMAINED schema:season (declared only on media series).</td></tr>
+      <tr><td><code>eq:sector</code></td><td>Equine sector</td><td>The Equine (racehorse ownership, breeding, prize distribution) data sector. The value an app's fedapp:sector names in its Client Identifier Document to declare it operates over equine-ownership data — the sector the Furlong product declares. Backed by this sector ontology.</td></tr>
+      <tr><td><code>eq:sex</code></td><td>sex</td><td>The sex/entirety of a horse (a coded eq:Sex value).</td></tr>
+      <tr><td><code>eq:Sex</code></td><td>Sex</td><td>The sex/entirety class of a horse (colt / filly / gelding / mare / stallion). A coded value (core:Category); members are skos:Concepts in eq:sexScheme.</td></tr>
+      <tr><td><code>eq:sex-colt</code></td><td>Colt</td><td>An entire male horse aged four or under.</td></tr>
+      <tr><td><code>eq:sex-filly</code></td><td>Filly</td><td>A female horse aged four or under.</td></tr>
+      <tr><td><code>eq:sex-gelding</code></td><td>Gelding</td><td>A castrated male horse.</td></tr>
+      <tr><td><code>eq:sex-mare</code></td><td>Mare</td><td>A female horse aged five or over.</td></tr>
+      <tr><td><code>eq:sex-stallion</code></td><td>Stallion</td><td>An entire male horse aged five or over, typically at stud.</td></tr>
+      <tr><td><code>eq:sexScheme</code></td><td>Horse sex scheme</td><td>The coded sex/entirety values for eq:sex.</td></tr>
+      <tr><td><code>eq:sharePct</code></td><td>share percentage</td><td>The fractional-ownership percentage (0–100) an OwnershipShare or StudShare represents. A plain xsd:decimal — honest, not a qudt QuantityValue.</td></tr>
+      <tr><td><code>eq:sire</code></td><td>sire</td><td>The father of a horse (a pedigree link to another eq:Horse — possibly an external studbook IRI).</td></tr>
+      <tr><td><code>eq:status</code></td><td>status</td><td>The current racing/management status of a horse (a coded eq:HorseStatus value). Replaces Furlong's per-resource #flg.status IRI.</td></tr>
+      <tr><td><code>eq:status-at-stud</code></td><td>At stud</td><td>The (male) horse is standing at stud for breeding.</td></tr>
+      <tr><td><code>eq:status-broodmare</code></td><td>Broodmare</td><td>The (female) horse is retired to breeding as a broodmare.</td></tr>
+      <tr><td><code>eq:status-in-training</code></td><td>In training</td><td>The horse is in a training yard preparing to race.</td></tr>
+      <tr><td><code>eq:status-racing</code></td><td>Racing</td><td>The horse is actively racing.</td></tr>
+      <tr><td><code>eq:status-retired</code></td><td>Retired</td><td>The horse has retired from racing.</td></tr>
+      <tr><td><code>eq:status-spelling</code></td><td>Spelling</td><td>The horse is resting/turned out between preparations.</td></tr>
+      <tr><td><code>eq:stud-barren</code></td><td>Barren</td><td>A mare that failed to conceive this season.</td></tr>
+      <tr><td><code>eq:stud-covered</code></td><td>Covered</td><td>A mare that has been covered by a stallion this season, pregnancy not yet confirmed.</td></tr>
+      <tr><td><code>eq:stud-in-foal</code></td><td>In foal</td><td>A mare confirmed pregnant.</td></tr>
+      <tr><td><code>eq:stud-maiden</code></td><td>Maiden</td><td>A mare that has not yet been bred.</td></tr>
+      <tr><td><code>eq:stud-retired-from-stud</code></td><td>Retired from stud</td><td>A broodmare or stud share retired from breeding (no longer covered / standing).</td></tr>
+      <tr><td><code>eq:stud-slipped</code></td><td>Slipped</td><td>A mare that lost the pregnancy (aborted/slipped the foal).</td></tr>
+      <tr><td><code>eq:StudNomination</code></td><td>Stud Nomination</td><td>A booking to send a mare (eq:mareName) to a stallion (eq:horse) for covering in a breeding season (eq:season), made by a nominator (eq:nominator). A booking, so dual-typed schema:Reservation — its price is schema:totalPrice (the Reservation price property; schema:price is NOT declared on Reservation).</td></tr>
+      <tr><td><code>eq:StudShare</code></td><td>Stud Share</td><td>A breeding-rights share in a stallion at stud: a fractional share (eq:sharePct) of a horse (eq:horse), typically carrying a nomination entitlement per breeding season (eq:season) and a stud status (eq:studStatus). A core:Record distinct from an eq:OwnershipShare (racing ownership) — stud shares confer breeding rights.</td></tr>
+      <tr><td><code>eq:studStatus</code></td><td>stud status</td><td>A coded eq:StudStatus value. On an eq:Horse (a broodmare) or an eq:StudShare it is the BREEDING status (eq:studStatusScheme); on an eq:StudNomination it is the BOOKING-WORKFLOW status (eq:nominationStatusScheme). No rdfs:domain — shared by those three classes.</td></tr>
+      <tr><td><code>eq:StudStatus</code></td><td>Stud Status</td><td>A coded status carried by eq:studStatus. Two value sets share this class: the BREEDING status of a broodmare or stud share (maiden / covered / in-foal / barren / slipped / retired-from-stud, in eq:studStatusScheme) and the BOOKING-WORKFLOW status of a stud nomination (pending / confirmed / served / foaled / cancelled, in eq:nominationStatusScheme). Members are skos:Concepts in one of those two schemes.</td></tr>
+      <tr><td><code>eq:studStatusScheme</code></td><td>Stud status scheme</td><td>The coded breeding-status values for eq:studStatus.</td></tr>
+      <tr><td><code>eq:syndicate</code></td><td>syndicate</td><td>The syndicate through which a share is held. No rdfs:domain — an OwnershipShare or a StudShare may be held via a syndicate.</td></tr>
+      <tr><td><code>eq:Syndicate</code></td><td>Syndicate</td><td>A racing/breeding syndicate — an organization of members who jointly own one or more horses through fractional shares. Aligned Mode-A to org:Organization (equine-alignments.ttl); members and their percentages are carried by eq:OwnershipShare records.</td></tr>
+      <tr><td><code>eq:trainerPct</code></td><td>trainer percentage</td><td>The percentage (0–100) of a prize distribution allocated to the trainer.</td></tr>
+    </table>
+  </body>
+</html>

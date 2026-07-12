@@ -289,6 +289,31 @@ importers:
         specifier: ^4.1.8
         version: 4.1.10(@types/node@20.19.43)(@vitest/coverage-v8@4.1.10)(jsdom@25.0.1)(vite@8.1.4(@types/node@20.19.43)(esbuild@0.28.1))
 
+  packages/solid-community-feeds:
+    dependencies:
+      '@jeswr/guarded-fetch':
+        specifier: workspace:*
+        version: link:../guarded-fetch
+    devDependencies:
+      '@biomejs/biome':
+        specifier: ^2.0.0
+        version: 2.5.3
+      '@microsoft/api-extractor':
+        specifier: ^7.58.9
+        version: 7.58.9(@types/node@22.20.1)
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.20.1
+      '@vitest/coverage-v8':
+        specifier: ^3.2.6
+        version: 3.2.7(vitest@3.2.7(@types/node@22.20.1)(jsdom@25.0.1)(lightningcss@1.32.0))
+      typescript:
+        specifier: ^5.6.0
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.6
+        version: 3.2.7(@types/node@22.20.1)(jsdom@25.0.1)(lightningcss@1.32.0)
+
   packages/solid-dpop:
     dependencies:
       jose:
@@ -415,6 +440,55 @@ importers:
       vitest:
         specifier: ^4.1.8
         version: 4.1.10(@types/node@20.19.43)(@vitest/coverage-v8@4.1.10)(jsdom@25.0.1)(vite@8.1.4(@types/node@20.19.43)(esbuild@0.28.1))
+
+  packages/solid-drawing:
+    dependencies:
+      '@jeswr/fetch-rdf':
+        specifier: ^0.1.0
+        version: 0.1.0
+      '@rdfjs/wrapper':
+        specifier: ^0.34.0
+        version: 0.34.0
+      n3:
+        specifier: ^2.0.3
+        version: 2.1.1
+    devDependencies:
+      '@biomejs/biome':
+        specifier: ^2.0.0
+        version: 2.5.3
+      '@rdfjs/types':
+        specifier: ^2.0.1
+        version: 2.0.1
+      '@types/n3':
+        specifier: ^1.26.1
+        version: 1.26.1
+      '@types/node':
+        specifier: ^20
+        version: 20.19.43
+      '@zazuko/env-node':
+        specifier: ^3.0.0
+        version: 3.1.0(@rdfjs/types@2.0.1)(@types/clownface@2.0.10)(@types/rdf-dataset-ext@1.0.8)(@types/rdfjs__data-model@2.0.9)(@types/rdfjs__dataset@2.0.7)(@types/rdfjs__environment@1.0.0)(@types/rdfjs__fetch-lite@3.0.11)(@types/rdfjs__formats@4.0.1)(@types/rdfjs__namespace@2.0.10)(@types/rdfjs__term-map@2.0.10)(@types/rdfjs__term-set@2.0.9)(@types/rdfjs__traverser@0.1.5)
+      rdf-validate-shacl:
+        specifier: ^0.6.5
+        version: 0.6.5
+      typescript:
+        specifier: ^5
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.6
+        version: 3.2.7(@types/node@20.19.43)(jsdom@25.0.1)(lightningcss@1.32.0)
+
+  packages/solid-federation-vocab:
+    devDependencies:
+      '@rdfjs/wrapper':
+        specifier: ^0.34.0
+        version: 0.34.0
+      jsonld:
+        specifier: ^9.0.0
+        version: 9.0.0
+      n3:
+        specifier: ^1.17.4
+        version: 1.26.0
 
   packages/solid-offline:
     dependencies:
@@ -2684,6 +2758,11 @@ packages:
 
   '@jeswr/fetch-rdf@0.1.0':
     resolution: {integrity: sha512-bdugw+QynGEUTUYERuVDY0sMfEiCehx54ahvXVUY/KThq1r6w+uHH0kbhg8s36gvdW3xNDaqAbbnGbRDR9qgkw==}
+    engines: {node: '>=20'}
+
+  '@jeswr/fetch-rdf@https://codeload.github.com/jeswr/fetch-rdf/tar.gz/a8359a3764cb6b3c763e09ea211542a5dc7edc33':
+    resolution: {tarball: https://codeload.github.com/jeswr/fetch-rdf/tar.gz/a8359a3764cb6b3c763e09ea211542a5dc7edc33}
+    version: 0.1.0
     engines: {node: '>=20'}
 
   '@jeswr/prefixcc@1.2.1':
@@ -10593,6 +10672,12 @@ snapshots:
       jsonld-streaming-parser: 5.0.1
       n3: 2.1.1
 
+  '@jeswr/fetch-rdf@https://codeload.github.com/jeswr/fetch-rdf/tar.gz/a8359a3764cb6b3c763e09ea211542a5dc7edc33':
+    dependencies:
+      content-type: 1.0.5
+      jsonld-streaming-parser: 5.0.1
+      n3: 2.1.1
+
   '@jeswr/prefixcc@1.2.1':
     dependencies:
       cross-fetch: 3.2.0
@@ -11728,6 +11813,14 @@ snapshots:
       magic-string: 0.30.21
     optionalDependencies:
       vite: 5.4.21(@types/node@22.20.1)(lightningcss@1.32.0)
+
+  '@vitest/mocker@3.2.7(vite@7.3.6(@types/node@20.19.43)(lightningcss@1.32.0))':
+    dependencies:
+      '@vitest/spy': 3.2.7
+      estree-walker: 3.0.3
+      magic-string: 0.30.21
+    optionalDependencies:
+      vite: 7.3.6(@types/node@20.19.43)(lightningcss@1.32.0)
 
   '@vitest/mocker@3.2.7(vite@7.3.6(@types/node@22.20.1)(lightningcss@1.32.0))':
     dependencies:
@@ -14658,6 +14751,27 @@ snapshots:
       - supports-color
       - terser
 
+  vite-node@3.2.4(@types/node@20.19.43)(lightningcss@1.32.0):
+    dependencies:
+      cac: 6.7.14
+      debug: 4.4.3
+      es-module-lexer: 1.7.0
+      pathe: 2.0.3
+      vite: 7.3.6(@types/node@20.19.43)(lightningcss@1.32.0)
+    transitivePeerDependencies:
+      - '@types/node'
+      - jiti
+      - less
+      - lightningcss
+      - sass
+      - sass-embedded
+      - stylus
+      - sugarss
+      - supports-color
+      - terser
+      - tsx
+      - yaml
+
   vite-node@3.2.4(@types/node@22.20.1)(lightningcss@1.32.0):
     dependencies:
       cac: 6.7.14
@@ -14686,6 +14800,19 @@ snapshots:
       rollup: 4.62.2
     optionalDependencies:
       '@types/node': 22.20.1
+      fsevents: 2.3.3
+      lightningcss: 1.32.0
+
+  vite@7.3.6(@types/node@20.19.43)(lightningcss@1.32.0):
+    dependencies:
+      esbuild: 0.28.1
+      fdir: 6.5.0(picomatch@4.0.5)
+      picomatch: 4.0.5
+      postcss: 8.5.17
+      rollup: 4.62.2
+      tinyglobby: 0.2.17
+    optionalDependencies:
+      '@types/node': 20.19.43
       fsevents: 2.3.3
       lightningcss: 1.32.0
 
@@ -14797,6 +14924,48 @@ snapshots:
       - sugarss
       - supports-color
       - terser
+
+  vitest@3.2.7(@types/node@20.19.43)(jsdom@25.0.1)(lightningcss@1.32.0):
+    dependencies:
+      '@types/chai': 5.2.3
+      '@vitest/expect': 3.2.7
+      '@vitest/mocker': 3.2.7(vite@7.3.6(@types/node@20.19.43)(lightningcss@1.32.0))
+      '@vitest/pretty-format': 3.2.7
+      '@vitest/runner': 3.2.7
+      '@vitest/snapshot': 3.2.7
+      '@vitest/spy': 3.2.7
+      '@vitest/utils': 3.2.7
+      chai: 5.3.3
+      debug: 4.4.3
+      expect-type: 1.4.0
+      magic-string: 0.30.21
+      pathe: 2.0.3
+      picomatch: 4.0.5
+      std-env: 3.10.0
+      tinybench: 2.9.0
+      tinyexec: 0.3.2
+      tinyglobby: 0.2.17
+      tinypool: 1.1.1
+      tinyrainbow: 2.0.0
+      vite: 7.3.6(@types/node@20.19.43)(lightningcss@1.32.0)
+      vite-node: 3.2.4(@types/node@20.19.43)(lightningcss@1.32.0)
+      why-is-node-running: 2.3.0
+    optionalDependencies:
+      '@types/node': 20.19.43
+      jsdom: 25.0.1
+    transitivePeerDependencies:
+      - jiti
+      - less
+      - lightningcss
+      - msw
+      - sass
+      - sass-embedded
+      - stylus
+      - sugarss
+      - supports-color
+      - terser
+      - tsx
+      - yaml
 
   vitest@3.2.7(@types/node@22.20.1)(jsdom@25.0.1)(lightningcss@1.32.0):
     dependencies:
