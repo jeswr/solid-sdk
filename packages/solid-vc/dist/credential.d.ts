@@ -1,0 +1,107 @@
+import type { DatasetCore, Quad } from "@rdfjs/types";
+import type { AgentAuthorization, BitstringStatusListEntry, Credential, RelatedResource } from "./types.js";
+import { type CredentialNode } from "./wrappers.js";
+/**
+ * Return a {@link Credential} whose `credentialSubject` id(s) are normalised EXACTLY
+ * as the signed RDF graph normalises them ({@link subjectWithNormalizedId} on the
+ * single subject or each element of a subject array): a blank id is stripped
+ * (anonymous), a present non-blank id must be absolute (throws). `issue()` runs the
+ * returned VC through this so the SIGNED graph (a blank node for a blank id) and the
+ * RETURNED object agree — a whitespace-only `id` can never survive in the returned VC
+ * as a present relative JSON-LD `@id`. Idempotent, and a no-op for a credential whose
+ * subjects all carry a valid absolute id or no id.
+ */
+export declare function normalizeCredentialSubjects(credential: Credential): Credential;
+/** Normalise a credential's one-or-many `credentialStatus` to an array. */
+export declare function credentialStatusesOf(credentialStatus: Credential["credentialStatus"]): readonly BitstringStatusListEntry[];
+/**
+ * Lower a structured {@link Credential} (the UNSIGNED claim graph — no proof) to
+ * RDF quads via the typed write path. The credential gets an `@id` (a random
+ * `urn:uuid:` when omitted) so it is an addressable named node the proof can bind
+ * to. `validFrom` defaults to now ONLY at the {@link issue} step, not here — this
+ * is a pure projection of exactly what the caller supplied.
+ */
+export declare function credentialToRdf(credential: Credential): Quad[];
+/** Serialise a credential's claim graph to Turtle (default) or another n3 format. */
+export declare function credentialToTurtle(credential: Credential, format?: string): Promise<string>;
+/**
+ * Build the VC 2.0 JSON-LD document for a credential's claim graph (no proof): a
+ * deterministic projection kept in lock-step with the RDF quads, with the pinned
+ * inline `@context`. A consumer can parse it back via `@jeswr/fetch-rdf`.
+ */
+export declare function credentialToJsonLd(credential: Credential): Record<string, unknown>;
+/**
+ * Read the credential METADATA (issuer / validity / types / id) back from a
+ * parsed credential node. The full `credentialSubject` claim graph is intentionally
+ * NOT projected back to a structured object here (it is arbitrary RDF); verification
+ * works over the quads directly. Callers that need typed claims use the M-specific
+ * helpers (e.g. {@link agentAuthorizationFromRdf}).
+ */
+export declare function credentialMetaFromNode(node: CredentialNode): {
+    id: string;
+    issuer: string | undefined;
+    validFrom: string | undefined;
+    validUntil: string | undefined;
+    types: string[];
+};
+/** Parse a credential graph (Turtle/JSON-LD string) into an RDF dataset. */
+export declare function parseCredentialRdf(body: string, contentType?: string): Promise<DatasetCore>;
+/** Find the first credential node in a parsed dataset, or `undefined`. */
+export declare function credentialFromRdf(dataset: DatasetCore): CredentialNode | undefined;
+/**
+ * Build the structured {@link Credential} for the headline M4 case — "principal
+ * authorizes agent for action(s) over target under ODRL policy" — as an
+ * `AgentAuthorizationCredential`. The issuer IS the principal (a WebID signs that
+ * it delegates to the agent). Compose with `@jeswr/solid-agent-card` (the `agent`
+ * IRI) and `@jeswr/solid-odrl` (the `policy` IRI).
+ */
+export declare function buildAgentAuthorizationCredential(auth: AgentAuthorization): Credential;
+/**
+ * Build a POLICY-CONTENT-BOUND `AgentAuthorizationCredential` (the G1 binding):
+ * like {@link buildAgentAuthorizationCredential}, but the exact ODRL
+ * Agreement/policy content is cryptographically bound into the (to-be-signed)
+ * claim graph as a VCDM 2.0 `relatedResource` entry — the policy IRI plus the
+ * `digestMultibase` of the content's RDFC-1.0 canonical form (see
+ * {@link digestRdfContent}). A verifier recomputes the digest over the policy it
+ * is presented and compares fail-closed ({@link verifyRelatedResources} / the
+ * `presentedResources` option of `verifyCredential`), so a substituted or
+ * mutated policy behind the (mutable) `svc:policy` IRI can no longer verify.
+ *
+ * FAIL-CLOSED requirements (both throw):
+ *  - `policyContent` requires `policy` (the digest must bind to a named
+ *    resource IRI — there is nothing to hang an anonymous digest on);
+ *  - the content must parse to a NON-EMPTY graph (digestRdfContent's guard).
+ *
+ * Async because RDFC-1.0 canonicalization is async. When `policyContent` is
+ * absent this degrades to exactly {@link buildAgentAuthorizationCredential}
+ * (the bare-IRI form — which binds only the pointer, not the content; the
+ * accountable-agent-runtime marks that form `policyIntegrityProvisional`).
+ */
+export declare function buildBoundAgentAuthorizationCredential(auth: AgentAuthorization): Promise<Credential>;
+/**
+ * Read the `relatedResource` digest bindings back from a parsed credential node
+ * — the typed inverse of the {@link credentialToRdf} relatedResource lowering.
+ * Returns one entry per `cred:relatedResource` object IRI, with its
+ * `sec:digestMultibase` / media type when present. An entry WITHOUT a digest is
+ * still returned (so a caller can see it) — but the VERIFIER treats a presented
+ * resource whose entry lacks a digest as unbound and fails closed.
+ */
+export declare function relatedResourcesFromNode(node: CredentialNode): RelatedResource[];
+/**
+ * Read the Bitstring status entries back from a parsed credential node — the
+ * typed inverse of the {@link credentialToRdf} `credentialStatus` lowering.
+ * Returns one entry per `cred:credentialStatus` object (IRI or blank node)
+ * that is a well-formed `status:BitstringStatusListEntry` (type + non-empty
+ * purpose + integer-string index + an IRI list URL). A malformed / alien-typed
+ * entry is SKIPPED here (this is a reader, not the gate) — but note the
+ * VERIFIER does the opposite: `resolveBitstringStatus` treats a present entry
+ * it cannot make sense of as `unreachable`, fail-closed.
+ */
+export declare function credentialStatusFromNode(node: CredentialNode): BitstringStatusListEntry[];
+/**
+ * Read the agent-authorization claim back from a parsed credential node — the
+ * typed inverse of {@link buildAgentAuthorizationCredential}. Returns `undefined`
+ * if the node is not an `AgentAuthorizationCredential` with the required terms.
+ */
+export declare function agentAuthorizationFromRdf(node: CredentialNode): Pick<AgentAuthorization, "principal" | "agent" | "action" | "target" | "policy"> | undefined;
+//# sourceMappingURL=credential.d.ts.map
