@@ -50,3 +50,20 @@ rebuild byte-compare, and a publicly-resolvable monorepo sha are all preconditio
 See [`AGENTS.md`](AGENTS.md) for the repo charter (conventions, merge rules, provenance).
 Package imports happen per the phased plan in `decisions/0001` — history-preserving
 `git filter-repo` grafts, dependency-leaves first.
+
+<!-- AUTHORED-BY Codex GPT-5 -->
+## Agent skills
+
+Reusable agent guidance lives with the code it describes:
+
+- A skill for a workspace package is [`packages/<package>/SKILL.md`](packages/solid-dpop/SKILL.md).
+  Keeping it beside the implementation makes API and security guidance reviewable in the same
+  change as the package.
+- Cross-cutting guidance is in [`skills/<skill>/SKILL.md`](skills/solid-server-matrix/SKILL.md).
+  This also temporarily holds guidance for external suite packages that have not yet been imported
+  into this workspace (`@jeswr/fetch-rdf`, `@solid/object`, notifications, and Client Identifier
+  Documents). Move such a skill beside its package when that package joins the monorepo.
+
+Every skill has trigger-oriented YAML frontmatter and a concise body. Update the relevant skill when
+a package's public API, security boundary, or recommended workflow changes; avoid copying package
+guidance back into a central catch-all document.

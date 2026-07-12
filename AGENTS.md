@@ -53,6 +53,22 @@ packages outside the phased plan (pilot → consumption-proof go/no-go → bulk,
    reviews every commit (`.roborev.toml`: codex / gpt-5.6-sol, min severity low); the hook
    is installed — read verdicts, address findings.
 
+<!-- AUTHORED-BY Codex GPT-5 -->
+## Local agent skills
+
+Treat this repository as a local skill catalog in addition to any globally installed skills:
+
+- Before working on a package, check `packages/<name>/SKILL.md`. When it exists and the task
+  touches that package's documented surface, read it completely before acting.
+- For cross-cutting work, scan `skills/*/SKILL.md` frontmatter descriptions for a matching
+  trigger and read every matching skill completely before acting.
+- Package-local skills take precedence for package API details; top-level skills supply shared
+  workflows and guidance for suite packages not yet imported here.
+
+This routing is mandatory because colocated skills are intentionally kept beside their code rather
+than copied into a global agent configuration. Keep the README's skill-layout note and this routing
+rule in sync when the layout changes.
+
 ## Merge rule (path-disjoint relaxation — proposed in ADR §9.2)
 
 Branches whose diffs touch **disjoint `packages/<name>` path sets** may merge without a full
