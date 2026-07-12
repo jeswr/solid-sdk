@@ -1,0 +1,279 @@
+/* AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+   Host chrome + the pod-drive-* classes the @jeswr/pod-drive <FileBrowser>
+   emits (the component ships no styles of its own — the host owns the look).
+
+   THEME: Tailwind v4 + the shared @jeswr/app-shell tokens drive light/dark. The
+   import order is load-bearing — `@import "tailwindcss"` FIRST, then the suite
+   OKLCH tokens + the `@theme inline` mapping (`@jeswr/app-shell/styles.css`) so
+   the shell components' utilities (bg-popover, text-muted-foreground, the `dark:`
+   variant, …) resolve to the suite palette. `@source` makes Tailwind scan the
+   app-shell package so the classes its <ThemeToggle/> + <AccountMenu/> emit are
+   actually generated (a node_modules package is otherwise outside the content
+   scan). The path is relative to THIS file. */
+@import "tailwindcss";
+@import "@jeswr/app-shell/styles.css";
+@source "../node_modules/@jeswr/app-shell/dist";
+
+/* The host chrome below predates the shared tokens and uses its own variable
+   names (--bg/--ink/…). Map them onto the app-shell OKLCH tokens so the WHOLE
+   pod-drive UI (login card, header, file table) follows the theme — the `.dark`
+   class the ThemeProvider toggles on <html> flips the OKLCH vars, and these
+   aliases inherit it for free.
+
+   SOLID-ELEMENTS ADOPTION (#115 / D-parity rollout #67/#68/#70): the <Loading>
+   Web Component themes itself off these SAME app-shell tokens through its shadow
+   boundary (its `--jeswr-*` shadow vars fall back to `--primary`/`--border`/
+   `--muted-foreground`), so the host token mapping below also drives the element. */
+:root {
+  --bg: var(--background);
+  --surface: var(--card);
+  --ink: var(--foreground);
+  --muted: var(--muted-foreground);
+  /* The host's "accent" is its action/brand colour (filled buttons + links), which
+     is the app-shell `--primary` token. pod-drive keeps these under their OWN names
+     (`--action` / `--action-ink`) rather than re-aliasing app-shell's public
+     `--accent`/`--primary`.
+
+     CSS-ISOLATION (#80 / solid-elements adoption #115, D-parity rollout #67/#68/#70):
+     VERIFIED against the pinned app-shell `5a7484d` dist this app installs — the shell
+     is SELF-ISOLATING. Its controls re-assert their colour through an UNLAYERED
+     `[data-app-shell-control]` reset (reset.css) reading SHELL-PRIVATE `--as-*` tokens
+     (`--as-accent`/`--as-background`/`--as-foreground`/…), which are HARDCODED OKLCH
+     literals (flipped on `.dark`) INDEPENDENT of the public `--accent`/`--primary`. So
+     a host that re-aliased `--accent`→`--primary` would NOT affect the shell controls.
+     pod-drive nonetheless keeps the distinct `--action` names (no behavioural
+     difference, zero churn vs. its prior shape) — and, regardless, app-shell's
+     `--accent` is left untouched. `--action` (= `--primary`, the saturated brand
+     colour) is NOT the soft app-shell `--accent` hover tint. css-isolation.test.tsx
+     pins the shell's `--as-*`/`data-app-shell-control` isolation contract so a future
+     app-shell bump that regressed it would fail here, not in production. */
+  --action: var(--primary);
+  --action-ink: var(--primary-foreground);
+  /* NOTE: the host's `--border` is the SAME name as the app-shell token, so it is
+     already unified — do NOT re-alias it (a self-reference would be invalid, and we
+     must NOT clobber app-shell's own `--border`). The other host vars use distinct
+     names, so they alias safely. */
+  --danger: var(--destructive);
+  --ok: var(--success);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  color: var(--ink);
+  background: var(--bg);
+}
+
+a {
+  color: var(--action);
+}
+
+/* ── Login ─────────────────────────────────────────────────────────────── */
+.login-screen {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 1.5rem;
+}
+.login-card {
+  width: 100%;
+  max-width: 28rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  padding: 2rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+.login-card h1 {
+  margin: 0 0 0.25rem;
+  font-size: 1.5rem;
+}
+.login-sub {
+  color: var(--muted);
+  margin: 0 0 1.25rem;
+  font-size: 0.95rem;
+}
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.login-form label {
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+.login-form input {
+  padding: 0.6rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  font-size: 0.95rem;
+}
+.login-error {
+  color: var(--danger);
+  font-size: 0.9rem;
+  margin-top: 0.75rem;
+}
+.login-hint {
+  color: var(--muted);
+  font-size: 0.85rem;
+  margin-top: 1rem;
+}
+
+/* Host filled-button look — the ONLY two filled host buttons are the login submit
+   (`.login-form button`) and the file-browser error/retry (`.pod-drive-error
+   button`); every other host button (breadcrumb, folder-link) is explicitly
+   transparent below. We KEEP this HOST-SCOPED to those host-owned containers rather
+   than relaxing to a bare global `button {…}` element rule.
+
+   CSS-ISOLATION (#80 / solid-elements adoption #115, D-parity rollout #67/#68/#70):
+   app-shell `5a7484d` made the shell SELF-ISOLATING — its controls carry
+   `data-app-shell-control` + an UNLAYERED reset that re-asserts their COLOUR/border/
+   fill (via shell-private `--as-*` tokens), so a host's bare `button { background }`
+   no longer leaks the host fill onto them. BUT that reset DELIBERATELY does NOT lock
+   the BOX MODEL (padding / border-radius / font-size / width / height — see the
+   package's reset.css: "The BOX MODEL … is NOT touched … an app's aggressive element
+   reset that also relayouts every button is out of scope"). A bare unlayered
+   `button { padding; border-radius; font-size }` would therefore still out-rank the
+   shell controls' LAYERED Tailwind sizing utilities and distort the ghost header trio
+   (ThemeToggle / AccountMenu), the FeedbackButton trigger, AND the dialog's portaled
+   controls — none of which live under a host class. So pod-drive KEEPS the safer
+   host-scope (the strictly-safer form vs. the bare global `button {}` some siblings
+   adopted). The filled colour is the host `--action` token (= app-shell `--primary`),
+   not the soft app-shell `--accent` hover tint. css-isolation.test.tsx pins this
+   contract so a future app-shell bump can't regress it silently. */
+.login-form button,
+.pod-drive-error button {
+  cursor: pointer;
+  border: none;
+  border-radius: 0.5rem;
+  padding: 0.6rem 0.9rem;
+  font-size: 0.95rem;
+  background: var(--action);
+  color: var(--action-ink);
+}
+.login-form button:disabled,
+.pod-drive-error button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* ── App shell ─────────────────────────────────────────────────────────── */
+.app-shell {
+  max-width: 56rem;
+  margin: 0 auto;
+  padding: 1.25rem;
+}
+.app-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border);
+}
+.app-brand {
+  font-weight: 700;
+  font-size: 1.1rem;
+}
+/* Right-aligned header controls: the app-shell <FeedbackButton/> + <ThemeToggle/>
+   + <AccountMenu/>. `margin-left: auto` pushes the trio to the top-right; the
+   app-shell components bring their own (Tailwind-utility) styling, so this only
+   handles placement. */
+.app-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-left: auto;
+}
+/* The fallback/error banners are theme-aware: a soft tint derived from the
+   suite `--warning` / `--destructive` tokens (via color-mix over the card surface)
+   with token-coloured text + border. Because the tokens flip on `.dark`, the
+   banners stay legible in BOTH modes — no hard-coded light surfaces. */
+.app-note {
+  background: color-mix(in oklab, var(--warning) 16%, var(--card));
+  border: 1px solid color-mix(in oklab, var(--warning) 40%, var(--card));
+  color: var(--foreground);
+  border-radius: 0.5rem;
+  padding: 0.6rem 0.8rem;
+  font-size: 0.85rem;
+  margin: 0.75rem 0;
+}
+.app-main {
+  margin-top: 1rem;
+}
+
+/* ── FileBrowser (pod-drive-*) ────────────────────────────────────────── */
+.pod-drive-title {
+  font-size: 1.25rem;
+  margin: 0 0 1rem;
+}
+
+.pod-drive-breadcrumb ol {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
+  font-size: 0.9rem;
+}
+.pod-drive-breadcrumb li:not(:last-child)::after {
+  content: "/";
+  color: var(--muted);
+  margin-left: 0.35rem;
+}
+.pod-drive-breadcrumb button {
+  background: transparent;
+  color: var(--action);
+  border: none;
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+}
+.pod-drive-breadcrumb [aria-current="page"] {
+  color: var(--muted);
+}
+
+.pod-drive-loading,
+.pod-drive-empty {
+  color: var(--muted);
+}
+.pod-drive-error {
+  color: var(--danger);
+}
+.pod-drive-error button {
+  margin-top: 0.5rem;
+}
+
+.pod-drive-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--surface);
+}
+.pod-drive-table th,
+.pod-drive-table td {
+  text-align: left;
+  padding: 0.6rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.92rem;
+}
+.pod-drive-folder-link {
+  background: transparent;
+  color: var(--action);
+  border: none;
+  padding: 0;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+.pod-drive-file-link {
+  color: var(--action);
+  text-decoration: none;
+}
+.pod-drive-file-link:hover {
+  text-decoration: underline;
+}
