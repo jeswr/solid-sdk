@@ -1,4 +1,4 @@
-// AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
+// AUTHORED-BY Codex GPT-5
 /**
  * `importRoom` — the (thin) orchestration that pages a Matrix room's history and
  * writes each message into a Solid pod as an owner-private SolidOS LongChat
@@ -27,6 +27,7 @@
  */
 
 import { createNodeGuardedFetch, type NodePinningOptions } from "@jeswr/guarded-fetch/node";
+import { serialize } from "@jeswr/rdf-serialize";
 import {
   type CanonicalMessage,
   longChatMessageSubject,
@@ -247,7 +248,7 @@ export async function buildOwnerOnlyAclTurtle(
   if (safeOwner === undefined) {
     throw new Error("owner-only ACL: ownerWebId must be a safe absolute http(s) IRI.");
   }
-  const { DataFactory, Store, Writer } = await import("n3");
+  const { DataFactory, Store } = await import("n3");
   const { namedNode } = DataFactory;
   const Acl = "http://www.w3.org/ns/auth/acl#";
   const RdfType = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
@@ -260,10 +261,10 @@ export async function buildOwnerOnlyAclTurtle(
   store.addQuad(auth, namedNode(`${Acl}mode`), namedNode(`${Acl}Read`));
   store.addQuad(auth, namedNode(`${Acl}mode`), namedNode(`${Acl}Write`));
   store.addQuad(auth, namedNode(`${Acl}mode`), namedNode(`${Acl}Control`));
-  const writer = new Writer({ format: "text/turtle", prefixes: { acl: Acl } });
-  writer.addQuads([...store]);
-  return new Promise<string>((resolve, reject) => {
-    writer.end((error, result) => (error ? reject(error) : resolve(result)));
+  return serialize([...store], {
+    format: "text/turtle",
+    prefixes: { acl: Acl },
+    emptyAsEmptyString: false,
   });
 }
 
