@@ -1,4 +1,4 @@
-// AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
+// AUTHORED-BY Codex GPT-5
 /**
  * `importCalendar` / `importAddressBook` — read CalDAV iCalendar VEVENTs / CardDAV
  * vCards and write them into a Solid pod as owner-private RDF resources.
@@ -28,9 +28,10 @@
  */
 
 import { assertWithinPodScope, normalizePodBase } from "@jeswr/guarded-fetch";
+import { serialize } from "@jeswr/rdf-serialize";
 import { serializePerson } from "@jeswr/solid-task-model/contacts";
 import type { Quad } from "@rdfjs/types";
-import { Store, Writer } from "n3";
+import { Store } from "n3";
 import { findComponents, parseComponents } from "./ical.js";
 import { type MappedContact, type MappedEvent, vcardToContact, veventToEvent } from "./map.js";
 import { type DavAuth, fetchDav } from "./remote.js";
@@ -184,14 +185,14 @@ function resourceUrl(container: string, slug: string): string {
   }
 }
 
-/** Serialise event quads to Turtle via n3.Writer (typed quads — never hand-built strings). */
+/** Serialise event quads to Turtle via the shared serializer (never hand-built strings). */
 function eventToTurtle(quads: Quad[]): Promise<string> {
-  const writer = new Writer({ prefixes: { ...EVENT_PREFIXES } });
   // Use a fresh Store so blank nodes are emitted as `[ … ]` where appropriate.
   const store = new Store(quads);
-  writer.addQuads([...store]);
-  return new Promise<string>((resolve, reject) => {
-    writer.end((error, result) => (error ? reject(error) : resolve(result)));
+  return serialize([...store], {
+    format: "text/turtle",
+    prefixes: { ...EVENT_PREFIXES },
+    emptyAsEmptyString: false,
   });
 }
 
