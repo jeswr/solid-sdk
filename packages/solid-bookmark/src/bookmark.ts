@@ -1,18 +1,19 @@
-// AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
+// AUTHORED-BY Codex GPT-5
 /**
  * The bookmark / read-it-later model — typed read/write accessors over a single
  * `book:Bookmark` resource (the data model for a Linkding→Solid fork).
  *
  * **Typed accessors, never hand-built triples (house rule).** Reads/writes go
  * through `@rdfjs/wrapper`'s `OptionalFrom`/`OptionalAs`/`SetFrom` mappers on an
- * n3 `Store` — no quad is ever hand-concatenated. Serialisation is `n3.Writer`;
- * parsing of a fetched body is `@jeswr/fetch-rdf`'s `parseRdf`.
+ * n3 `Store` — no quad is ever hand-concatenated. Serialisation uses the shared
+ * `@jeswr/rdf-serialize`; parsing uses `@jeswr/fetch-rdf`'s `parseRdf`.
  *
  * See {@link ./vocab.ts} for the vocabulary rationale (mint only `book:Bookmark`,
  * `book:archived`, `book:notes`; reuse `schema:url`/`schema:keywords` + Dublin
  * Core for the rest) and the tags decision (`schema:keywords` literals, not SKOS).
  */
 
+import { serialize } from "@jeswr/rdf-serialize";
 import type { DatasetCore } from "@rdfjs/types";
 import {
   LiteralAs,
@@ -24,7 +25,7 @@ import {
   SetFrom,
   TermWrapper,
 } from "@rdfjs/wrapper";
-import { DataFactory, Store, Writer } from "n3";
+import { DataFactory, Store } from "n3";
 import { httpIriOrUndefined } from "./iri.js";
 import {
   BOOK_ARCHIVED,
@@ -217,10 +218,10 @@ export function buildBookmark(resourceUrl: string, data: BookmarkData): Store {
 
 /** Serialise a `Store` to Turtle with the bookmark prefixes (pretty output). */
 export function storeToTurtle(store: Store): Promise<string> {
-  const writer = new Writer({ prefixes: { ...PREFIXES } });
-  writer.addQuads([...store]);
-  return new Promise<string>((resolve, reject) => {
-    writer.end((error, result) => (error ? reject(error) : resolve(result)));
+  return serialize([...store], {
+    format: "text/turtle",
+    prefixes: { ...PREFIXES },
+    emptyAsEmptyString: false,
   });
 }
 

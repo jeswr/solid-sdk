@@ -2769,6 +2769,9 @@ importers:
       '@jeswr/fetch-rdf':
         specifier: ^0.1.0
         version: 0.1.0
+      '@jeswr/rdf-serialize':
+        specifier: workspace:*
+        version: link:../rdf-serialize
       '@rdfjs/wrapper':
         specifier: ^0.34.0
         version: 0.34.0
