@@ -115,7 +115,7 @@
     "@types/react-dom": "^19.0.0",
     "@ulb-darmstadt/shacl-form": "^3.0.7",
     "comment-parser": "^1.2.4",
-    "esbuild": "^0.25.0",
+    "esbuild": "^0.28.1",
     "jsdom": "^26.1.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",

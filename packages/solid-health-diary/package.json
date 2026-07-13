@@ -69,7 +69,7 @@
     "@types/n3": "^1.26.1",
     "@types/node": "^20",
     "@zazuko/env-node": "^3.0.0",
-    "esbuild": "^0.25.0",
+    "esbuild": "^0.28.1",
     "rdf-validate-shacl": "^0.6.5",
     "typescript": "^5",
     "vitest": "^4.1.8"
