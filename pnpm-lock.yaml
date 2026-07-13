@@ -2625,6 +2625,9 @@ importers:
       '@jeswr/guarded-fetch':
         specifier: workspace:*
         version: link:../guarded-fetch
+      '@jeswr/rdf-serialize':
+        specifier: workspace:*
+        version: link:../rdf-serialize
       '@rdfjs/wrapper':
         specifier: ^0.34.0
         version: 0.34.0

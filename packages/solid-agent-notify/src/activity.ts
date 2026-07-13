@@ -1,13 +1,14 @@
-// AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+// AUTHORED-BY Codex GPT-5
 /**
  * activity.ts — the typed ActivityStreams 2.0 (AS2.0) notification model + a
- * Turtle serialiser, built via TYPED `@rdfjs/wrapper` accessors and an n3 `Store`
- * (house rule: never hand-concat / hand-build RDF triples).
+ * Turtle serialiser, built via TYPED `@rdfjs/wrapper` accessors, an n3 `Store`,
+ * and the shared RDF serializer (house rule: never hand-concat / hand-build RDF triples).
  *
  * The plain {@link ActivityNotification} shape is what callers build (no RDF
  * terms); {@link buildActivity} turns it into an n3 `Store`; {@link ActivityDoc}
  * is the typed view used both to write (send) and read (inbox parse).
  */
+import { serialize } from "@jeswr/rdf-serialize";
 import {
   LiteralAs,
   LiteralFrom,
@@ -18,7 +19,7 @@ import {
   SetFrom,
   TermWrapper,
 } from "@rdfjs/wrapper";
-import { DataFactory, Store, Writer } from "n3";
+import { DataFactory, Store } from "n3";
 import { AS, RDF_TYPE } from "./config.js";
 
 /** AS2.0 activity verbs this package emits. (Reads accept any `as:*` type.) */
@@ -259,12 +260,9 @@ export function buildActivity(notification: ActivityNotification, subject = "#it
 
 /** Serialise an n3 Store to Turtle with the `as:` prefix. */
 export function serializeTurtle(store: Store): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const writer = new Writer({ prefixes: { as: AS } });
-    for (const quad of store) writer.addQuad(quad);
-    writer.end((error, result) => {
-      if (error) reject(error);
-      else resolve(result);
-    });
+  return serialize([...store], {
+    format: "text/turtle",
+    prefixes: { as: AS },
+    emptyAsEmptyString: false,
   });
 }
