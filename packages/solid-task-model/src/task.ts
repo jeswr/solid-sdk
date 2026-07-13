@@ -1,4 +1,4 @@
-// AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
+// AUTHORED-BY Codex GPT-5
 /**
  * The shared federated Task/Issue model — typed read/write accessors over a
  * single `wf:Task` resource.
@@ -13,10 +13,11 @@
  * **Typed accessors, never hand-built triples (house rule).** Reads/writes go
  * through `@rdfjs/wrapper`'s `OptionalFrom`/`OptionalAs`/`SetFrom` mappers on an
  * n3 `Store`, mirroring how solid-issues (`Issue` in `src/lib/issue.ts`) and the
- * Pod Manager (`IssueDoc` in `src/lib/issues.ts`) already do it. Serialisation is
- * `n3.Writer`; parsing of a fetched body is `@jeswr/fetch-rdf`'s `parseRdf`.
+ * Pod Manager (`IssueDoc` in `src/lib/issues.ts`) already do it. Serialisation uses
+ * `@jeswr/rdf-serialize`; parsing uses `@jeswr/fetch-rdf`'s `parseRdf`.
  */
 
+import { serialize } from "@jeswr/rdf-serialize";
 import type { DatasetCore } from "@rdfjs/types";
 import {
   LiteralAs,
@@ -28,7 +29,7 @@ import {
   SetFrom,
   TermWrapper,
 } from "@rdfjs/wrapper";
-import { DataFactory, Store, Writer } from "n3";
+import { DataFactory, Store } from "n3";
 import { httpIriOrUndefined, isHttpIri } from "./iri.js";
 import { dct, PREFIXES, prov, rdf, schema, TASK_CLASS, WF_CLOSED, WF_OPEN, wf } from "./vocab.js";
 
@@ -396,7 +397,7 @@ export function buildTask(resourceUrl: string, data: TaskData): Store {
 }
 
 /**
- * Serialise a task to Turtle (via `n3.Writer`, with the model's prefixes). Builds
+ * Serialise a task to Turtle with the model's prefixes. Builds
  * the store with {@link buildTask}, then writes it — never hand-concatenates RDF.
  */
 export async function serializeTask(resourceUrl: string, data: TaskData): Promise<string> {
@@ -405,10 +406,10 @@ export async function serializeTask(resourceUrl: string, data: TaskData): Promis
 
 /** Serialise any n3 `Store` to Turtle with the model's prefixes. */
 export function storeToTurtle(store: Store): Promise<string> {
-  const writer = new Writer({ prefixes: { ...PREFIXES } });
-  writer.addQuads([...store]);
-  return new Promise<string>((resolve, reject) => {
-    writer.end((error, result) => (error ? reject(error) : resolve(result)));
+  return serialize([...store], {
+    format: "text/turtle",
+    prefixes: { ...PREFIXES },
+    emptyAsEmptyString: false,
   });
 }
 
