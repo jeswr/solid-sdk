@@ -50,6 +50,7 @@
   },
   "homepage": "https://github.com/jeswr/federation-registry#readme",
   "dependencies": {
+    "@jeswr/rdf-serialize": "workspace:*",
     "@rdfjs/types": "^2.0.1",
     "@rdfjs/wrapper": "^0.34.0",
     "content-type": "^1.0.5",

@@ -2183,6 +2183,9 @@ importers:
 
   packages/federation-registry:
     dependencies:
+      '@jeswr/rdf-serialize':
+        specifier: workspace:*
+        version: link:../rdf-serialize
       '@rdfjs/types':
         specifier: ^2.0.1
         version: 2.0.1

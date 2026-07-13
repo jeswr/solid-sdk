@@ -1,4 +1,4 @@
-// AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+// AUTHORED-BY Codex GPT-5
 /**
  * build-dist — produce the committed, self-contained `dist/` for GitHub-branch
  * installs under `ignore-scripts=true`.
@@ -15,12 +15,12 @@
  *
  * Externalisation contract (the load-bearing part):
  *   - INLINED  (bundled into dist): `@jeswr/fetch-rdf` only — the one off-npm dep.
- *   - EXTERNAL (resolved from npm by the consumer): everything else —
- *       `n3`, `@solid/object`, `@rdfjs/wrapper`, `@rdfjs/types`, AND
+ *   - EXTERNAL (resolved by the consumer): everything else —
+ *       `@jeswr/rdf-serialize`, `n3`, `@solid/object`, `@rdfjs/wrapper`, `@rdfjs/types`, AND
  *       fetch-rdf's OWN runtime deps `jsonld-streaming-parser` + `content-type`
- *       (all npm-published; we add them to our `dependencies` so the consumer
- *       resolves them). We deliberately do NOT bundle these — keeping them
- *       external means a single shared copy + normal npm dedupe/audit.
+ *       (`@jeswr/rdf-serialize` is SHA-pinned by mirror publishing; the rest are
+ *       npm-published). We deliberately do NOT bundle these — keeping them external
+ *       means a single shared copy + normal package-manager dedupe/audit.
  *
  * `tsc` still emits the `.d.ts` declarations (declarations carry no fetch-rdf
  * type import — verified — so they are already self-contained). esbuild owns the
@@ -69,6 +69,7 @@ function sanitizeDist(buildDir) {
  * list. fetch-rdf's own runtime deps stay external too (they are on npm).
  */
 const EXTERNAL = [
+  "@jeswr/rdf-serialize",
   "n3",
   "@solid/object",
   "@rdfjs/wrapper",

@@ -1,12 +1,12 @@
-// AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+// AUTHORED-BY Codex GPT-5
 //
-// Turtle / N-Triples serialisation of a federation registry graph via n3.Writer —
-// the single sanctioned serialiser (never hand-concatenated RDF). JSON-LD is not
-// produced here: callers who need JSON-LD already have the quads and the published
+// Turtle / N-Triples serialisation of a federation registry graph via the shared
+// suite serializer (never hand-concatenated RDF). JSON-LD is not produced here:
+// callers who need JSON-LD already have the quads and the published
 // `fedreg-context.jsonld`.
 
+import { legacySerialize } from "@jeswr/rdf-serialize";
 import type { Quad } from "@rdfjs/types";
-import { Writer } from "n3";
 import { DCAT, FEDAPP, FEDREG } from "./vocab.js";
 
 /** Prefixes emitted in the serialised Turtle for readability. */
@@ -25,17 +25,7 @@ const PREFIXES = {
  * `application/n-quads`, `application/trig`) to choose another n3 format.
  */
 export function serialize(quads: readonly Quad[], format = "text/turtle"): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const writer = new Writer({ format, prefixes: PREFIXES });
-    writer.addQuads(quads as Quad[]);
-    writer.end((error: Error | null, result: string) => {
-      if (error) {
-        reject(error);
-      } else {
-        resolve(result);
-      }
-    });
-  });
+  return legacySerialize(quads, format, PREFIXES, false);
 }
 
 /**
