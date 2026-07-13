@@ -2874,6 +2874,9 @@ importers:
 
   packages/solid-components:
     dependencies:
+      '@jeswr/rdf-serialize':
+        specifier: workspace:*
+        version: link:../rdf-serialize
       '@types/n3':
         specifier: ^1.26.1
         version: 1.26.1

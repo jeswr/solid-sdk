@@ -65,12 +65,18 @@
     "custom-elements-manifest"
   ],
   "dependencies": {
+    "@jeswr/rdf-serialize": "workspace:*",
     "@types/n3": "^1.26.1",
     "lit": "^3.3.1",
     "n3": "^1.17.0"
   },
   "overrides": {
     "@jeswr/solid-task-model": "$@jeswr/solid-task-model"
+  },
+  "mirrorPublish": {
+    "inlined": [
+      "@jeswr/rdf-serialize"
+    ]
   },
   "peerDependencies": {
     "@jeswr/guarded-fetch": "workspace:*",

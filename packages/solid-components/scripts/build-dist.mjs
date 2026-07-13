@@ -1,4 +1,4 @@
-// AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+// AUTHORED-BY Codex GPT-5
 /**
  * build-dist — produce the committed, self-contained `dist/` for GitHub-branch
  * installs under `ignore-scripts=true` (§8 of the package spec).
@@ -23,6 +23,7 @@
  *     - @jeswr/fetch-rdf (the canonical parser; ships a usable npm dist now, but
  *       inlining keeps dist/ self-contained regardless) + its runtime deps
  *       (jsonld-streaming-parser, content-type)
+ *     - @jeswr/rdf-serialize (the canonical serializer) + its n3 runtime
  *     - lit (so the element renders with no lit peer install)
  *
  *   STUBBED (aliased to a tiny throwing no-op — keeps the heavy OPTIONAL widget
