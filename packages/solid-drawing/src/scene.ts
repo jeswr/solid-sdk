@@ -1,4 +1,4 @@
-// AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
+// AUTHORED-BY Codex GPT-5
 /**
  * Typed build / serialise / parse helpers for a `draw:Scene` descriptor.
  *
@@ -9,15 +9,16 @@
  * resource — this package never parses or shreds it into triples.
  *
  * **RDF discipline (the suite house rule).** Quads are built through the rdf-js
- * `DataFactory` and an `n3.Store`, serialised with `n3.Writer`, and parsed back
- * with `@jeswr/fetch-rdf`'s `parseRdf` (the suite's vetted parser). NOTHING here
- * hand-concatenates triple strings, and there is no bespoke RDF parser. This
+ * `DataFactory` and an `n3.Store`, serialised with `@jeswr/rdf-serialize`, and
+ * parsed with `@jeswr/fetch-rdf`'s `parseRdf` (the suite's vetted parser). NOTHING
+ * here hand-concatenates triple strings, and there is no bespoke RDF parser. This
  * mirrors how `@jeswr/solid-task-model` (`Task` in `src/task.ts`) and
  * `solid-issues` build their RDF.
  */
 
+import { serialize } from "@jeswr/rdf-serialize";
 import type { DatasetCore, NamedNode, Quad_Object } from "@rdfjs/types";
-import { DataFactory, type Quad, Store, Writer } from "n3";
+import { DataFactory, type Quad, Store } from "n3";
 import { safeHttpIri, safeSubjectBaseIri } from "./iri.js";
 import {
   DCT_CREATED,
@@ -174,17 +175,17 @@ export function buildScene(resourceUrl: string, data: SceneData): Store {
   return store;
 }
 
-/** Serialise any `n3.Store` to Turtle with the model's prefixes (via `n3.Writer`). */
+/** Serialise any `n3.Store` to Turtle with the model's prefixes. */
 export function storeToTurtle(store: Store): Promise<string> {
-  const writer = new Writer({ prefixes: { ...PREFIXES } });
-  writer.addQuads([...store]);
-  return new Promise<string>((resolve, reject) => {
-    writer.end((error, result) => (error ? reject(error) : resolve(result)));
+  return serialize([...store], {
+    format: "text/turtle",
+    prefixes: { ...PREFIXES },
+    emptyAsEmptyString: false,
   });
 }
 
 /**
- * Serialise a scene to Turtle (via `n3.Writer`, with the model's prefixes).
+ * Serialise a scene to Turtle with the model's prefixes.
  *
  * `async` so that a synchronous failure in {@link buildScene} (an invalid required
  * `sceneDocument`) surfaces as a REJECTED promise, not a synchronous throw — a
