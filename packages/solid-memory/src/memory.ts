@@ -1,4 +1,4 @@
-// AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
+// AUTHORED-BY Codex GPT-5
 /**
  * The typed agent-memory model — typed read/write accessors over a single
  * `mem:MemoryItem` resource.
@@ -14,10 +14,11 @@
  *
  * **Typed accessors, never hand-built triples (house rule).** Reads/writes go
  * through `@rdfjs/wrapper`'s `OptionalFrom`/`OptionalAs`/`SetFrom` mappers on an
- * n3 `Store`, mirroring `@jeswr/solid-task-model`'s `Task`. Serialisation is
- * `n3.Writer`; parsing of a fetched body is `@jeswr/fetch-rdf`'s `parseRdf`.
+ * n3 `Store`, mirroring `@jeswr/solid-task-model`'s `Task`. Serialisation uses
+ * `@jeswr/rdf-serialize`; parsing uses `@jeswr/fetch-rdf`'s `parseRdf`.
  */
 
+import { serialize } from "@jeswr/rdf-serialize";
 import type { DatasetCore } from "@rdfjs/types";
 import {
   LiteralAs,
@@ -29,7 +30,7 @@ import {
   SetFrom,
   TermWrapper,
 } from "@rdfjs/wrapper";
-import { DataFactory, Store, Writer } from "n3";
+import { DataFactory, Store } from "n3";
 import { httpIriOrUndefined } from "./iri.js";
 import { dct, MEM_EMBEDDING_REF, MEMORY_CLASS, PREFIXES, prov, rdf, schema } from "./vocab.js";
 
@@ -314,7 +315,7 @@ export function buildMemory(resourceUrl: string, data: MemoryData): Store {
 }
 
 /**
- * Serialise a memory to Turtle (via `n3.Writer`, with the model's prefixes).
+ * Serialise a memory to Turtle with the model's prefixes.
  * Builds the store with {@link buildMemory}, then writes it — never
  * hand-concatenates RDF.
  */
@@ -324,10 +325,10 @@ export async function serializeMemory(resourceUrl: string, data: MemoryData): Pr
 
 /** Serialise any n3 `Store` to Turtle with the model's prefixes. */
 export function storeToTurtle(store: Store): Promise<string> {
-  const writer = new Writer({ prefixes: { ...PREFIXES } });
-  writer.addQuads([...store]);
-  return new Promise<string>((resolve, reject) => {
-    writer.end((error, result) => (error ? reject(error) : resolve(result)));
+  return serialize([...store], {
+    format: "text/turtle",
+    prefixes: { ...PREFIXES },
+    emptyAsEmptyString: false,
   });
 }
 

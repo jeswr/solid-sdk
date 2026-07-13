@@ -1,4 +1,4 @@
-// AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
+// AUTHORED-BY Codex GPT-5
 /**
  * `MemoryStore` — a Solid-pod CRUD store for `mem:MemoryItem` resources under a
  * single container, with conditional writes and a fail-closed scope guard.
@@ -25,6 +25,7 @@
  */
 
 import { parseRdf } from "@jeswr/fetch-rdf";
+import { serialize } from "@jeswr/rdf-serialize";
 import {
   NamedNodeAs,
   NamedNodeFrom,
@@ -34,7 +35,7 @@ import {
   TermWrapper,
 } from "@rdfjs/wrapper";
 import { ContainerDataset } from "@solid/object";
-import { DataFactory, Store, Writer } from "n3";
+import { DataFactory, Store } from "n3";
 import {
   buildMemory,
   type MemoryData,
@@ -526,12 +527,12 @@ export class MemoryStore {
     return store;
   }
 
-  /** Serialise the registration store to Turtle (n3.Writer with the model prefixes). */
+  /** Serialise the registration store to Turtle with the model prefixes. */
   serializeTypeRegistration(): Promise<string> {
-    const writer = new Writer({ prefixes: { ...PREFIXES, solid: SOLID } });
-    writer.addQuads([...this.buildTypeRegistration()]);
-    return new Promise<string>((resolve, reject) => {
-      writer.end((error, result) => (error ? reject(error) : resolve(result)));
+    return serialize([...this.buildTypeRegistration()], {
+      format: "text/turtle",
+      prefixes: { ...PREFIXES, solid: SOLID },
+      emptyAsEmptyString: false,
     });
   }
 
