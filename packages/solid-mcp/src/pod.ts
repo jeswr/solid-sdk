@@ -1,16 +1,17 @@
-// AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+// AUTHORED-BY Codex GPT-5
 /**
  * Pod operations over the injected authenticated `fetch`, all pod-scope-guarded.
  *
  * RDF discipline (house rule): we NEVER hand-build or hand-parse RDF. Container
  * listings are parsed via `@jeswr/fetch-rdf` (`fetchRdf`) + `@solid/object`
  * (`ContainerDataset`), and any RDF representation we hand back to a client is
- * re-serialised with `n3.Writer` over the parsed quads.
+ * re-serialised with `@jeswr/rdf-serialize` over the parsed quads.
  */
 import { fetchRdf } from "@jeswr/fetch-rdf";
 import { isContainerUrl } from "@jeswr/guarded-fetch";
+import { serialize } from "@jeswr/rdf-serialize";
 import { ContainerDataset } from "@solid/object";
-import { DataFactory, Writer } from "n3";
+import { DataFactory } from "n3";
 import {
   podScopedUrlOrUndefined,
   requirePodScopedUrl,
@@ -52,7 +53,7 @@ export interface ReadResult {
 
 /** The result of reading an RDF resource as Turtle. */
 export interface ReadRdfResult {
-  /** A canonical Turtle serialisation of the resource graph (via n3.Writer). */
+  /** A canonical Turtle serialisation of the resource graph. */
   turtle: string;
   /** The parsed dataset, for callers that want to query it (e.g. search). */
   dataset: import("n3").Store;
@@ -194,8 +195,8 @@ export async function readResource(config: SolidMcpConfig, url: string): Promise
 }
 
 /**
- * Fetch an RDF resource (pod-scoped) and return a canonical Turtle view (via
- * n3.Writer — never hand-concatenated) plus the parsed dataset.
+ * Fetch an RDF resource (pod-scoped) and return a canonical Turtle view (never
+ * hand-concatenated) plus the parsed dataset.
  */
 export async function readRdf(config: SolidMcpConfig, url: string): Promise<ReadRdfResult> {
   const target = requirePodScopedUrl(config, url);
@@ -204,15 +205,11 @@ export async function readRdf(config: SolidMcpConfig, url: string): Promise<Read
   return { turtle, dataset };
 }
 
-/** Serialise an n3.Store to Turtle via n3.Writer (no hand-built triples). */
+/** Serialise an n3.Store to Turtle via the shared serializer (no hand-built triples). */
 function serializeTurtle(dataset: import("n3").Store): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const writer = new Writer({ format: "text/turtle" });
-    writer.addQuads(dataset.getQuads(null, null, null, null));
-    writer.end((err, result) => {
-      if (err) reject(err);
-      else resolve(result);
-    });
+  return serialize(dataset.getQuads(null, null, null, null), {
+    format: "text/turtle",
+    emptyAsEmptyString: false,
   });
 }
 

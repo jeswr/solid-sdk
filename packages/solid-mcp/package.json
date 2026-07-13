@@ -55,6 +55,7 @@
   "homepage": "https://github.com/jeswr/solid-mcp#readme",
   "dependencies": {
     "@jeswr/guarded-fetch": "workspace:*",
+    "@jeswr/rdf-serialize": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@rdfjs/types": "^2.0.1",
     "@rdfjs/wrapper": "^0.34.0",

@@ -1,4 +1,4 @@
-// AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+// AUTHORED-BY Codex GPT-5
 /**
  * build-dist — produce the committed, self-contained `dist/` for GitHub-branch
  * installs under `ignore-scripts=true`.
@@ -16,8 +16,8 @@
  *   - INLINED  (bundled into dist): the off-npm `@jeswr/fetch-rdf` — by virtue of
  *       being ABSENT from the EXTERNAL list below.
  *   - EXTERNAL (resolved by the consumer): everything else —
- *       `@modelcontextprotocol/sdk`, `zod`, `n3`, `@solid/object`,
- *       `@rdfjs/wrapper`, `@rdfjs/types`, AND fetch-rdf's OWN npm runtime deps
+ *       `@jeswr/rdf-serialize`, `@modelcontextprotocol/sdk`, `zod`, `n3`,
+ *       `@solid/object`, `@rdfjs/wrapper`, `@rdfjs/types`, AND fetch-rdf's OWN npm runtime deps
  *       `jsonld-streaming-parser` + `content-type` (all npm-published; we add the
  *       latter two to our `dependencies` so the consumer resolves them).
  *
@@ -45,6 +45,7 @@ const outdir = join(root, "dist");
  * this list. fetch-rdf's own runtime deps stay external (npm-published).
  */
 const EXTERNAL = [
+  "@jeswr/rdf-serialize",
   "@modelcontextprotocol/sdk",
   "zod",
   "n3",
