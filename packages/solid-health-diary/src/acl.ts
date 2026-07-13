@@ -1,4 +1,4 @@
-// AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
+// AUTHORED-BY Codex GPT-5
 /**
  * Owner-only, fail-closed WAC ACL — the ONE reviewed home for the "every health
  * resource is private" invariant (DESIGN §2.3 / §9).
@@ -14,11 +14,13 @@
  * permissively). No `acl:agentClass` / `foaf:Agent` / public grant is ever
  * emitted — `src/acl.test.ts` proves that by parsing the output.
  *
- * Built with `n3.Writer` + typed quads — **never hand-concatenated triples**
- * (house rule). Browser-safe: only `n3` + the WHATWG `URL` global.
+ * Built with the shared RDF serializer + typed quads — **never hand-concatenated
+ * triples** (house rule). Browser-safe: only suite RDF packages, `n3`, and the
+ * WHATWG `URL` global.
  */
 
-import { DataFactory, Store, Writer } from "n3";
+import { serialize } from "@jeswr/rdf-serialize";
+import { DataFactory, Store } from "n3";
 import { httpIriOrUndefined } from "./iri.js";
 import { ACL, acl, FOAF, RDF_TYPE } from "./vocab.js";
 
@@ -111,10 +113,10 @@ export async function buildOwnerOnlyAcl(resourceUrl: string, ownerWebId: string)
   store.addQuad(auth, namedNode(acl("mode")), namedNode(acl("Write")));
   store.addQuad(auth, namedNode(acl("mode")), namedNode(acl("Control")));
 
-  const writer = new Writer({ format: "text/turtle", prefixes: { acl: ACL, foaf: FOAF } });
-  writer.addQuads([...store]);
-  return new Promise<string>((resolve, reject) => {
-    writer.end((error, result) => (error ? reject(error) : resolve(result)));
+  return serialize([...store], {
+    format: "text/turtle",
+    prefixes: { acl: ACL, foaf: FOAF },
+    emptyAsEmptyString: false,
   });
 }
 

@@ -1,23 +1,24 @@
-// AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
+// AUTHORED-BY Codex GPT-5
 /**
  * The ONE reviewed home for turning an n3 `Store` into Turtle and for parsing a
  * fetched body into a dataset — so every entity module serialises/parses the same
- * way and the house rules ("serialise via `n3.Writer`", "parse via
+ * way and the house rules ("serialise via `@jeswr/rdf-serialize`", "parse via
  * `@jeswr/fetch-rdf`, never a bespoke parser") have a single audit point.
  *
- * Browser-safe: imports only `n3` and (lazily) `@jeswr/fetch-rdf` — no `node:*`.
+ * Browser-safe: imports only suite RDF packages and `n3` types — no `node:*`.
  */
 
+import { serialize } from "@jeswr/rdf-serialize";
 import type { DatasetCore } from "@rdfjs/types";
-import { type Store, Writer } from "n3";
+import type { Store } from "n3";
 import { PREFIXES } from "./vocab.js";
 
-/** Serialise any n3 `Store` to Turtle with the model's prefixes (via `n3.Writer`). */
+/** Serialise any n3 `Store` to Turtle with the model's prefixes. */
 export function storeToTurtle(store: Store): Promise<string> {
-  const writer = new Writer({ prefixes: { ...PREFIXES } });
-  writer.addQuads([...store]);
-  return new Promise<string>((resolve, reject) => {
-    writer.end((error, result) => (error ? reject(error) : resolve(result)));
+  return serialize([...store], {
+    format: "text/turtle",
+    prefixes: { ...PREFIXES },
+    emptyAsEmptyString: false,
   });
 }
 
