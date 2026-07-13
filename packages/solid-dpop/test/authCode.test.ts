@@ -411,12 +411,12 @@ describe("exchangeCode — DPoP-bound authorization_code grant", () => {
     expect(body.get("code_verifier")).toBe("the-verifier");
     expect(body.get("client_id")).toBe("pub-1");
 
-    const dpop = captured?.init?.headers?.["dpop"];
+    const dpop = captured?.init?.headers?.dpop;
     expect(dpop).toBeTruthy();
     expect(decodeProtectedHeader(dpop as string).typ).toBe("dpop+jwt");
     const payload = decodeJwt(dpop as string);
-    expect(payload["htm"]).toBe("POST");
-    expect(payload["htu"]).toBe(META.token_endpoint);
+    expect(payload.htm).toBe("POST");
+    expect(payload.htu).toBe(META.token_endpoint);
   });
 
   it("retries once with the server nonce on a 400 use_dpop_nonce challenge (RFC 9449 §8)", async () => {
@@ -448,7 +448,7 @@ describe("exchangeCode — DPoP-bound authorization_code grant", () => {
     };
     let auth: string | undefined;
     const fetchImpl: FetchLike = async (_url, init) => {
-      auth = init?.headers?.["authorization"];
+      auth = init?.headers?.authorization;
       return new Response(tokenJson(), { headers: { "content-type": "application/json" } });
     };
     await exchangeCode({

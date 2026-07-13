@@ -155,7 +155,7 @@ export function createStatusSurface(options: StatusSurfaceOptions = {}): Offline
 
   const onMessage = (event: MessageEvent): void => {
     const data = event.data as UpdatedEvent | undefined;
-    if (!data || data.event !== 'updated') return;
+    if (data?.event !== 'updated') return;
     // A newer version exists for this URL. Only flag resources the consumer is
     // already tracking — we don't want to grow the map for every change in the
     // pod, only the ones a view is actually showing.

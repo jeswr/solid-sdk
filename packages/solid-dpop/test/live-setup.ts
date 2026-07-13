@@ -129,17 +129,17 @@ export async function setup(): Promise<void> {
     }
   }
 
-  process.env["CSS_AUTHCODE_BASE"] = BASE;
-  process.env["CSS_AUTHCODE_POD"] = POD;
-  process.env["CSS_AUTHCODE_ISSUER"] = BASE;
-  process.env["CSS_AUTHCODE_ACCOUNT_URL"] = new URL(".account/", BASE).toString();
-  process.env["CSS_AUTHCODE_EMAIL"] = EMAIL;
-  process.env["CSS_AUTHCODE_PASSWORD"] = PASSWORD;
+  process.env.CSS_AUTHCODE_BASE = BASE;
+  process.env.CSS_AUTHCODE_POD = POD;
+  process.env.CSS_AUTHCODE_ISSUER = BASE;
+  process.env.CSS_AUTHCODE_ACCOUNT_URL = new URL(".account/", BASE).toString();
+  process.env.CSS_AUTHCODE_EMAIL = EMAIL;
+  process.env.CSS_AUTHCODE_PASSWORD = PASSWORD;
 
   const login = await loginAndResolveWebId();
   if (login) {
-    process.env["CSS_AUTHCODE_COOKIE"] = login.cookie;
-    process.env["CSS_AUTHCODE_WEBID"] = login.webId;
+    process.env.CSS_AUTHCODE_COOKIE = login.cookie;
+    process.env.CSS_AUTHCODE_WEBID = login.webId;
   }
 }
 

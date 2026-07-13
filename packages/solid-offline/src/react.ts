@@ -144,7 +144,7 @@ function makeUpdatedStore(url: string | undefined, channelName: string) {
 
   const onMessage = (event: MessageEvent) => {
     const data = event.data as UpdatedEvent | undefined;
-    if (!data || data.event !== 'updated' || data.url !== url) return;
+    if (data?.event !== 'updated' || data.url !== url) return;
     version += 1;
     for (const l of listeners) l();
   };

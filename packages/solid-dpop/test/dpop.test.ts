@@ -70,7 +70,7 @@ describe("createDpopProof — header (RFC 9449 §4.2)", () => {
     expect(jwk?.kty).toBe("EC");
     expect(jwk?.crv).toBe("P-256");
     // The embedded JWK MUST be the PUBLIC key only — no private `d`.
-    expect((jwk as Record<string, unknown>)["d"]).toBeUndefined();
+    expect((jwk as Record<string, unknown>).d).toBeUndefined();
   });
 
   it("embedded jwk thumbprint equals the keypair thumbprint (this is the jkt)", async () => {
@@ -93,11 +93,11 @@ describe("createDpopProof — payload + signature", () => {
     const header = decodeProtectedHeader(proof);
     const pub = await importJWK(header.jwk as JWK, "ES256");
     const { payload } = await jwtVerify(proof, pub, { typ: "dpop+jwt" });
-    expect(payload["htm"]).toBe("PUT"); // method uppercased
-    expect(payload["htu"]).toBe("https://pod.example/data/x"); // query stripped
-    expect(typeof payload["jti"]).toBe("string");
-    expect(typeof payload["iat"]).toBe("number");
-    expect(payload["ath"]).toBeUndefined(); // no token => no ath
+    expect(payload.htm).toBe("PUT"); // method uppercased
+    expect(payload.htu).toBe("https://pod.example/data/x"); // query stripped
+    expect(typeof payload.jti).toBe("string");
+    expect(typeof payload.iat).toBe("number");
+    expect(payload.ath).toBeUndefined(); // no token => no ath
   });
 
   it("includes ath when an access token is supplied, matching the token hash", async () => {
@@ -112,7 +112,7 @@ describe("createDpopProof — payload + signature", () => {
     const header = decodeProtectedHeader(proof);
     const pub = await importJWK(header.jwk as JWK, "ES256");
     const { payload } = await jwtVerify(proof, pub, { typ: "dpop+jwt" });
-    expect(payload["ath"]).toBe(accessTokenHash(token));
+    expect(payload.ath).toBe(accessTokenHash(token));
   });
 
   it("includes the server nonce when supplied (RFC 9449 §8)", async () => {
@@ -126,16 +126,16 @@ describe("createDpopProof — payload + signature", () => {
     const header = decodeProtectedHeader(proof);
     const pub = await importJWK(header.jwk as JWK, "ES256");
     const { payload } = await jwtVerify(proof, pub, { typ: "dpop+jwt" });
-    expect(payload["nonce"]).toBe("n-0S6_WzA2Mj");
+    expect(payload.nonce).toBe("n-0S6_WzA2Mj");
   });
 
   it("omits ath when no token is supplied (decodeJwt convenience check)", async () => {
     const kp = await generateDpopKeyPair();
     const proof = await createDpopProof({ keyPair: kp, htm: "get", htu: "https://pod/x?q=2#f" });
     const payload = decodeJwt(proof);
-    expect(payload["htm"]).toBe("GET");
-    expect(payload["htu"]).toBe("https://pod/x");
-    expect(payload["ath"]).toBeUndefined();
+    expect(payload.htm).toBe("GET");
+    expect(payload.htu).toBe("https://pod/x");
+    expect(payload.ath).toBeUndefined();
   });
 
   it("generates a unique jti per proof (single-use)", async () => {
@@ -145,7 +145,7 @@ describe("createDpopProof — payload + signature", () => {
     const pub = await importJWK(decodeProtectedHeader(a).jwk as JWK, "ES256");
     const { payload: payA } = await jwtVerify(a, pub, { typ: "dpop+jwt" });
     const { payload: payB } = await jwtVerify(b, pub, { typ: "dpop+jwt" });
-    expect(payA["jti"]).not.toBe(payB["jti"]);
+    expect(payA.jti).not.toBe(payB.jti);
   });
 
   it("a proof signed by key A does NOT verify under key B (binding integrity)", async () => {

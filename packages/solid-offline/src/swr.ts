@@ -522,7 +522,7 @@ async function revalidate(
   record: CacheMetadata | undefined,
   deps: SwrDeps,
 ): Promise<RevalidateOutcome> {
-  if (!record || !record.etag) {
+  if (!record?.etag) {
     // No ETag to revalidate against → nothing safe to do conditionally.
     return { kind: 'skipped' };
   }

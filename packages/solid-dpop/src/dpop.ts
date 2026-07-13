@@ -145,10 +145,10 @@ export async function createDpopProof(params: DpopProofParams): Promise<string> 
     jti: randomUUID(),
   };
   if (accessToken !== undefined) {
-    payload["ath"] = accessTokenHash(accessToken);
+    payload.ath = accessTokenHash(accessToken);
   }
   if (nonce !== undefined) {
-    payload["nonce"] = nonce;
+    payload.nonce = nonce;
   }
 
   const { SignJWT } = await loadJose();

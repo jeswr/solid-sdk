@@ -38,7 +38,7 @@ async function main(): Promise<void> {
 
   const res = await authedFetch(session, undefined, "GET", resource);
   process.stdout.write(`\nGET ${resource} -> ${res.status}\n`);
-  process.stdout.write((await res.text()).slice(0, 500) + "\n");
+  process.stdout.write(`${(await res.text()).slice(0, 500)}\n`);
 
   if (session.refreshToken) {
     await refreshSession(session);

@@ -1,388 +1,66 @@
+<!-- AUTHORED-BY Codex GPT-5 -->
+
 # solid-offline
 
-> ⚠️ **Experimental — AI-agent-generated.** This package was created by an AI coding agent (Claude Opus 4.8, @jeswr's PSS agent) and is under active development. It is not yet production-hardened — review before relying on it.
+An offline-first service-worker layer for Solid apps with stale-while-revalidate caching, bounded
+warming, notification invalidation, and optional React hooks.
 
-Offline-first drop-in layer for Solid apps. A service worker intercepts `fetch`,
-caches the user's documents **never-authoritatively**, and (in later phases)
-proactively warms the cache and subscribes to change notifications so app reads
-usually hit the pre-fetched cache.
-
-Built strictly to the canonical design
-(`prod-solid-server/docs/offline-first-architecture.md`). **This package
-currently implements P0 (scaffold + SW registration), P1 (read cache), P2
-(page-driven proactive warmer), P3 (notification-driven invalidation), and P5
-(React/vanilla DX hooks + status surface + WebID-scoped cache + mandatory
-logout-purge).** In-place viewer (P4) and offline writes (v2) are **not** built
-yet.
+> Experimental. Cached pod data is never authoritative and must be revalidated against the pod.
 
 ## Install
 
 ```sh
-npm install solid-offline n3
+npm install github:jeswr/solid-offline#main
 ```
 
-`npm` publish is currently deferred — install directly from the GitHub branch:
+Requires Node.js 22 or newer for package tooling. Install `react` separately only when using the
+`solid-offline/react` entry.
 
-```sh
-npm install github:jeswr/solid-offline#main n3
-```
-
-> **Maintainer note:** the built `dist/` is **committed** so the package is
-> installable from a GitHub branch (`npm install github:jeswr/solid-offline#main`)
-> even under `ignore-scripts=true`, where no build step runs in the consumer.
-> **Rebuild `dist/` (`npm run build`) before committing any source change** so the
-> committed output never drifts from `src/`. This is **enforced**, not just
-> conventional: `npm run check:dist` (part of `npm run gate`) rebuilds into a
-> scratch dir and fails on any drift between the committed `dist/` and `src/`.
-> Once npm publish is enabled this can be reverted to a publish-time build with
-> `dist/` re-gitignored.
-
-## Use (page client)
+## Minimal usage
 
 ```ts
 import { createOfflineClient } from 'solid-offline';
 
+declare const authenticatedFetch: typeof fetch; // Supplied by your Solid session.
+
 const offline = createOfflineClient({
   webId: 'https://alice.example/profile/card#me',
-  // P2: page-driven warmer. Defaults: 500 resources / 50 MB / depth 6 / concurrency 4.
-  warm: { seeds: 'auto', budget: { maxResources: 500, maxBytes: 50_000_000 } },
-  // Pass your DPoP-decorated fetch so the warmed reads are authenticated.
-  // The service worker itself NEVER authenticates (design decision 1).
-  fetch: session.fetch,
-  // P3: page-side WebSocketChannel2023 client. `true` derives topics from the
-  // warmed containers; pass an object to set explicit containers/resources/caps.
+  fetch: authenticatedFetch,
+  warm: { seeds: 'auto' },
   notifications: true,
-  // P4: precache the app SHELL so the app BOOTS with no network after the first
-  // visit. Pass the static URLs your build emits (the HTML + hashed JS/CSS) +
-  // a navigation fallback + a version (bump per deploy). Omit to disable.
-  appShell: {
-    precache: ['/index.html', '/assets/index-abc123.js', '/assets/index-def456.css'],
-    fallback: '/index.html',
-    version: 'abc123', // your build hash
-  },
   workerUrl: '/solid-offline-worker.js',
 });
 
-await offline.register(); // also schedules the first warm on idle + starts notifications
+await offline.register();
 
-// Or trigger / await a warm explicitly:
-const result = await offline.warm();
-// → { warmed, visited, bytes, pruned, budgetHit, visits }
-
-// React to background cache updates (the SW broadcasts these after revalidation):
-offline.onUpdated(({ url, etag }) => {
-  // re-render the view of `url` — it changed on the server
-});
-
-// P5 (§7): MANDATORY on sign-out — purge this WebID's Cache API + IndexedDB.
+// Mandatory when this identity signs out.
 await offline.logout();
 ```
 
-## What P4 does (app-shell precache — the app BOOTS offline)
-
-P1–P3 make the user's *pod data* available offline. P4 is the other half: it makes
-the app's STATIC SHELL — the HTML document the browser loads plus the JS/CSS it
-pulls — serve from the SW cache, so the app **paints with no network after the
-first visit**. Together they deliver the goal: a Solid app works *completely*
-offline after first use.
-
-- **Pass the shell URLs your build emits.** `appShell.precache` is the list of
-  same-origin static URLs (the HTML document(s) + every hashed JS/CSS asset). A
-  vite SPA emits one `index.html` + `/assets/*`; a Next static export emits
-  per-route HTML + `/_next/static/**`. The list comes from your build tool
-  (`vite-plugin-pwa` / a workbox manifest / a tiny `dist/` or `out/` glob) — this
-  package is framework-agnostic and doesn't care which produced it.
-- **Precached at `install`, cleaned up at `activate`.** The shell lives in its
-  OWN, versioned Cache bucket (`solid-offline-shell-<version>`). Bump `version`
-  (or derive it from your build hash) per deploy; the old bucket is dropped at
-  activate. A single bad URL does NOT abort the precache — the rest still cache.
-- **Navigations = network-first, cache-fallback.** A document request is served
-  fresh when online (a deploy ships immediately); offline it serves the cached
-  route HTML, else the configured `fallback` (the SPA single document / Next
-  index), so the app boots and client routing takes over. Only a first-ever
-  offline visit (nothing cached) surfaces the network error — there's genuinely
-  nothing to serve. **The shell cache holds + serves ONLY the app's declared public
-  shell docs:** a navigation is WRITTEN only on an EXACT configured-URL match (a
-  `precache` entry / the `fallback` — a personalizing query variant like
-  `/index.html?user=alice` is served live but never stored), and the offline READ is
-  keyed by the canonical configured URL (an unknown/poisoned route is never read from
-  cache — it goes straight to the public fallback). So a private/authenticated page
-  can't leak into the logout-surviving shell cache.
-- **A new deploy updates the shell — safely.** Bump `version` (or re-send `appShell`
-  with a changed `precache`/`version`) and the worker precaches the NEW version into
-  its own bucket FIRST, then promotes its shell config only once the new shell can
-  boot, then cleans up the old bucket — so the active worker never pins an old shell
-  AND a slow/partial precache never strands offline navigations on an empty cache.
-- **Precached assets = cache-first.** Hashed JS/CSS/fonts are immutable under a
-  fixed URL (a new deploy emits new filenames), so a cache hit is authoritative
-  and the network is never touched.
-- **Identity-independent; survives logout.** The shell is the app's own *public*
-  static assets, so it lives OUTSIDE the WebID-scoped pod-data cache and is NOT
-  purged by `logout()`. Each request is routed to EXACTLY ONE layer — navigations
-  + precached assets → the shell handler, everything else (pod reads) → the P1–P3
-  SWR engine — so the two never fight over a request.
-
-**Build-time injection (optional, earlier precache).** The page `config` arrives
-*after* the SW activates, so the very first precache otherwise happens one
-round-trip in. To precache at `install` instead, have your build emit the manifest
-into the worker's global *before* importing the worker:
+Put the following in a separate worker source file and configure your build to emit it as
+`/solid-offline-worker.js` on the same origin and scope as the app:
 
 ```js
-// solid-offline-worker.js (your generated SW entry)
-self.__SOLID_OFFLINE_SHELL__ = {
-  precache: ['/index.html', '/assets/index-abc123.js'],
-  fallback: '/index.html',
-  version: 'abc123',
-};
 import 'solid-offline/worker';
 ```
 
-If absent, the SW adopts the `appShell` from the first `config` message instead.
+## Key API
 
-The pure logic (`resolveAppShellConfig`, `precacheAppShell`,
-`cleanupOldShellCaches`, `isPrecachedAsset`, `handleNavigation`,
-`handlePrecachedAsset`) is exported and unit-tested with a mocked CacheStorage +
-fetch that **simulate offline** (fetch rejects / `navigator.onLine` false) — the
-strict offline-boot tests in `test/app-shell.test.ts`.
+- Page client: `createOfflineClient`, `createStatusSurface`, `createWarmController`, `warm`.
+- Cache policy and invalidation: `classifyResponse`, `handleNotification`, `resyncSweep`.
+- Identity cleanup: `purgeForWebId`; `offline.logout()` purges both Cache API and IndexedDB data.
+- Worker entry: `solid-offline/worker`.
+- React entry: `useOfflineStatus` and `useOfflineResource` from `solid-offline/react`.
 
-## What P3 does (notification invalidation, §5 of the design)
+The service worker stores no credentials. Authenticated warming happens in the page through the
+caller-supplied fetch, and cache state is scoped by WebID.
 
-Live correctness without polling, joined to the server via the change frame's
-ETag (`state`).
+## Links
 
-- **The WebSocket lives in the PAGE, never the SW** (decision 5: the SW is
-  event-driven and terminated, so it can't hold a socket). The page discovers the
-  subscription service (the `storageDescription` Link rel → `notify:subscription`,
-  with a `/.well-known/solid` fallback), subscribes **per-container** (capped by
-  `maxChannels`) + **per-resource** for hot resources, opens the `receiveFrom`
-  socket, and `postMessage`s each change frame to the SW. The page holds the auth;
-  the SW only invalidates.
-- **Invalidation pipeline (in the SW).** On a frame, the SW looks the resource up
-  in the P1 metadata store and:
-  - **ETag short-circuit** — if `frame.state` equals the ETag we already hold, the
-    change is one *we* caused; it's a free no-op (no fetch, no broadcast).
-  - else **revalidate** with `If-None-Match` (`Create`/`Update`) or **re-fetch the
-    container listing** (`Add`/`Remove`, where membership can't be confirmed by a
-    bare ETag), or **purge** (`Delete`/403/404), then update Cache + metadata and
-    `BroadcastChannel` `{url, event:'updated'}` to every tab.
-- **Reconnect = exponential backoff + re-subscribe** (channels are one-shot). While
-  disconnected the SW slow-polls the warmed set with `If-None-Match`; on every
-  (re)connect the page asks the SW to run **one ETag-resync sweep** — a flat
-  conditional-GET pass over the whole warmed set (mostly cheap `304`s) that catches
-  up on frames missed while down.
-
-The SW's invalidation/resync GETs are **unauthenticated** (the SW holds no key).
-For a private resource a resync GET may `401`/`403` and purge the entry; the
-page's own authenticated read/warm then re-populates it. A SharedWorker token
-authority (v2 / P6) removes this asymmetry.
-
-The page client (`createNotificationsClient`, `discoverSubscriptionUrl`,
-`subscribe`, `parseFrame`, `backoffDelay`) and the SW pipeline
-(`handleNotification`, `resyncSweep`) are exported and unit-tested with a fake
-WebSocket + fake fetch + the real `fake-indexeddb` metadata store.
-
-## What P5 does (DX hooks + status + WebID-scoping + logout-purge, §7)
-
-DX surface for app code, plus the §7 privacy controls.
-
-### WebID-scoped cache (a different identity never reads another's cache)
-
-Both persistent stores are namespaced by a short, stable hash of the WebID:
-
-- the IndexedDB metadata DB → `solid-offline:<webId-hash>`
-- the Cache API bytes cache → `solid-offline-cache:<webId-hash>`
-
-(See `scope.ts`; `dbNameForWebId` / `cacheNameForWebId` are exported.) The hash is
-a *namespacing discriminator*, not a security boundary — origin isolation is the
-real boundary. Scoping by identity on top of that lets two identities share a
-device/origin without observing each other's bytes or metadata, and lets purge
-target exactly one identity.
-
-### Mandatory logout-purge
-
-On sign-out you **must** drop everything the offline layer cached for that
-identity (parallels the credential wipe):
-
-```ts
-await offline.logout(); // deletes the Cache API cache + IndexedDB DB for this WebID, then close()s
-```
-
-Or call the primitive directly: `purgeForWebId(webId, { caches, indexedDB })`.
-It is best-effort but total: a missing store is a success, and a failure on one
-half does not stop the other (the outcome is reported back).
-
-### Status surface (offline / stale / pending) — framework-agnostic
-
-```ts
-const status = offline.status; // or createStatusSurface({ channelName })
-status.subscribe(() => render(status.getSnapshot()));
-// snapshot: { online, pending, stale, updated, resources: { [url]: 'fresh'|'stale'|'pending'|'updated' } }
-status.markPending(url); status.markStale(url); status.markFresh(url);
-```
-
-It listens to the same `BroadcastChannel` the SW broadcasts `updated` on, so any
-tab's revalidation flips status in every tab. It is a plain `subscribe`/
-`getSnapshot` store (referentially stable snapshots) so it drives
-`useSyncExternalStore` directly.
-
-### React hooks (`solid-offline/react`) — optional
-
-`react` is an **optional peer dependency**; the core imports nothing from React.
-
-```tsx
-import { useOfflineStatus, useOfflineResource } from 'solid-offline/react';
-
-function Connectivity() {
-  const { online, pending, stale } = useOfflineStatus(offline.status);
-  return <span>{online ? 'online' : 'offline'} · {pending} pending · {stale} stale</span>;
-}
-
-function Doc({ url }: { url: string }) {
-  // Reads THROUGH your fetch (so the SW caches it), re-reads on an `updated`
-  // broadcast for `url`, and surfaces stale/pending/outdated.
-  const { data, pending, stale, outdated, reload } = useOfflineResource(url, {
-    fetch: session.fetch,
-    select: (r) => r.text(),
-  });
-  // ...
-}
-```
-
-Both hooks are THIN (`useSyncExternalStore` over the BroadcastChannel — tear-free
-under React 18 concurrency); they own no caching/fetch policy — that stays the
-SW's job. Unit-tested in `jsdom` with real React + `@testing-library/react`.
-
-## What P2 does (page-driven warmer, §3 of the design)
-
-After login, on idle (`requestIdleCallback`, with a `setTimeout` fallback), the
-**page** crawls the user's documents and pulls them through its own
-(DPoP-decorated) `fetch`, so the P1 service worker intercepts and caches them.
-**The SW never authenticates** (decision 1) — the warmer just *causes* the right
-authenticated reads to flow through it.
-
-- **Seeds, in priority order:** WebID profile → `pim:storage` root →
-  **Type Index** (public + private) → ACLs → inbox. **Type-Index-first**
-  (decision 6) so the index-named resources warm before generic BFS expansion.
-- **Bounded BFS over `ldp:contains`** with dedup (cycles can't loop).
-- **ACL-aware.** It reads `WAC-Allow` on listings; a subtree the user can't read
-  is pruned without wasted fetches, and a `403`/`404` on a child is **caught,
-  negative-cached, and its subtree pruned — never surfaced as an error**.
-- **Budget (decision 6 defaults):** `maxResources: 500`, `maxBytes: 50_000_000`,
-  `maxDepth: 6`, `concurrency: 4`. The crawl stops cleanly at any limit.
-- **Large binaries** (`image/*`, `video/*`, …, or `Content-Length` over ~5 MB)
-  are **listing/metadata-warmed only** — their bytes are fetched lazily on first
-  real read.
-- **Reconnect (refactored in P3).** When notifications are enabled, an `online`
-  event runs the dedicated **ETag-resync sweep** (a flat conditional-GET pass over
-  the warmed set) instead of re-issuing the full BFS — the gap P2 flagged. Without
-  notifications it falls back to the P2 full re-warm.
-
-The warmer's pure logic (seed derivation, BFS + dedup, budget enforcement, ACL
-pruning + negative-cache, Type-Index-first ordering, concurrency cap) is
-exported (`warm`, `createWarmController`, `deriveSeeds`, …) and exhaustively unit
-tested with a URL-routed mock fetch + Turtle fixtures.
-
-## Use (service worker — P0/P1)
-
-Ship a one-line worker at the path you passed as `workerUrl` (it must be served
-from your origin so its scope covers your pod reads):
-
-```js
-// /solid-offline-worker.js
-import 'solid-offline/worker';
-```
-
-(Or bundle `solid-offline/worker` into a standalone classic worker if you don't
-serve ES-module workers.)
-
-## What P1 does (read cache, §2 of the design)
-
-On a cacheable **GET/HEAD**:
-
-- **Two stores.** Response **bytes** go in the Cache API; a metadata record
-  `{url, etag, contentType, fetchedAt, vary, aclStatus, lastState, status}` goes
-  in IndexedDB (the queryable, revalidatable client analogue of the server's
-  QLever index).
-- **Cache key = (url, varyKey).** `varyKey` is computed from the response `Vary`
-  against the request headers. RDF reads are normalized to a canonical
-  `Accept: text/turtle` so all RDF variants share one entry; `Origin` is ignored
-  for keying (same-origin SW).
-- **stale-while-revalidate, never-authoritative.**
-  - hit + online → serve cached bytes **immediately** and fire a background
-    `fetch(url, { If-None-Match: etag })`. `304` confirms (touch `fetchedAt`);
-    `200` replaces the entry and broadcasts `{url, event:'updated'}`.
-  - hit + offline → serve cached bytes **with `X-Offline: stale`**.
-  - miss → network, cache iff cacheable.
-- **Never cache:** `Cache-Control: no-store`/`private`; non-GET/HEAD; 4xx/5xx
-  **except** a short-TTL negative cache of 403/404 (crawl pruning + no-leak
-  parity); auth/token/OIDC/`.well-known`/subscription/WS-upgrade endpoints;
-  opaque cross-origin responses (unreadable ETag).
-
-### The never-authoritative invariant
-
-A value served from the cache is **always provisional** — it is only trusted
-once a conditional revalidation confirms its ETag. This mirrors the server rule
-(`prod-solid-server/CLAUDE.md`: *"the cache is never authoritative; cache by
-(key, etag); validate against the ETag."*). It is enforced structurally in
-`src/swr.ts`: every online hit fires a conditional revalidation, every offline
-hit is tagged `X-Offline: stale`, and the engine never fabricates a response the
-cache cannot back.
-
-## Verified vs assumed
-
-- **Verified headlessly** (`npm test`, via `vitest` +
-  `fake-indexeddb` + Cache/fetch/WebSocket mocks): the cacheable/never-cache
-  classifier, cache-key/varyKey computation, the full SWR decision tree
-  (hit→serve+revalidate, 304 vs 200, offline→stale, miss→network+store,
-  never-cache passthrough), negative-cache TTL for 403/404, opaque-response skip,
-  the IndexedDB metadata store, **the P2 warmer** (seed derivation +
-  Type-Index-first ordering, BFS + dedup, budget enforcement, ACL/WAC pruning +
-  negative-cache, large-binary skip, concurrency cap, ACL Link-header derivation,
-  idle/reconnect triggers), **the P3 notifications + invalidation** (endpoint
-  discovery (Link rel + `/.well-known/solid` fallback), the subscribe POST →
-  `receiveFrom`, frame parsing, message→SW forwarding, the **ETag short-circuit**
-  no-op, Update→revalidate→broadcast (200 vs 304), Add/Remove→listing re-fetch,
-  Delete/403/404 purge, reconnect backoff + re-subscribe, disconnected slow-poll,
-  and the reconnect ETag-resync sweep (incl. URL dedup + negative-entry skip)),
-  and **the P4 app-shell** (precache into the versioned bucket with per-URL 404
-  tolerance, stale-bucket cleanup that spares the pod-data caches, precached-asset
-  matching by pathname, and the offline-boot navigation path: cached-route serve,
-  fallback serve for an unknown route, graceful degrade on a failed-network /
-  stale-`onLine` fetch, online revalidate + cache refresh, asset cache-first, and
-  a first-ever-offline-visit surfacing the network error).
-- **Assumed / not verified headlessly:** the real ServiceWorker lifecycle
-  (`install`/`activate`/`claim`/`fetch`/`message` events), the Cache API against a
-  real browser, `navigator.serviceWorker.register`, and a **live
-  WebSocketChannel2023 socket** against a real prod-solid-server (discovery /
-  subscribe / frame delivery are exercised against a fake socket + fake fetch
-  only). `src/worker.ts` and `src/index.ts` are thin adapters over the tested
-  decision logic; a full end-to-end run needs a real browser (or Playwright) and a
-  live pod — integration work deferred to the later phases.
-
-## Scripts
-
-| Script | What |
-|---|---|
-| `npm run build` | tsup → ESM bundles for `index` + `worker` + `react` (+ d.ts) |
-| `npm run typecheck` | `tsc --noEmit` |
-| `npm run lint` | Biome |
-| `npm test` | Vitest (headless) |
-| `npm run test:coverage` | Vitest + v8 coverage |
-| `npm run check:dist` | the committed `dist/` matches a fresh build |
-| `npm run api:report` | regenerate `etc/solid-offline.api.md` (after `build`) |
-| `npm run api:check` | fail if the committed API report is stale (part of `gate`) |
-| `npm run gate` | lint → typecheck → test → check:dist → build → api:check |
-
-## Public API surface
-
-The full public type surface of every entry point (`.`, `./worker`, `./react`) is
-snapshotted in [`etc/solid-offline.api.md`](etc/solid-offline.api.md) — generated from
-the built `dist/*.d.ts`. "What is the API?" is a one-file read, and any change to the
-public contract (a new/removed/renamed export, a changed signature) shows up as a diff
-in that file. `npm run gate` runs `api:check`, which fails if the committed report is
-stale; after an intended API change, regenerate it with `npm run build && npm run api:report`
-and commit the diff.
+- [Source](https://github.com/jeswr/solid-offline)
+- [Issues](https://github.com/jeswr/solid-offline/issues)
+- [Service Worker API](https://developer.mozilla.org/docs/Web/API/Service_Worker_API)
 
 ## License
 
-MIT
+MIT © Jesse Wright

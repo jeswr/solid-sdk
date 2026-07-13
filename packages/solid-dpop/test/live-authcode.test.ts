@@ -44,11 +44,11 @@ import {
   startLoopbackListener,
 } from "../src/index.js";
 
-const base = process.env["CSS_AUTHCODE_BASE"];
-const issuer = process.env["CSS_AUTHCODE_ISSUER"] ?? base;
-const pod = process.env["CSS_AUTHCODE_POD"];
-const cookie = process.env["CSS_AUTHCODE_COOKIE"];
-const webId = process.env["CSS_AUTHCODE_WEBID"];
+const base = process.env.CSS_AUTHCODE_BASE;
+const issuer = process.env.CSS_AUTHCODE_ISSUER ?? base;
+const pod = process.env.CSS_AUTHCODE_POD;
+const cookie = process.env.CSS_AUTHCODE_COOKIE;
+const webId = process.env.CSS_AUTHCODE_WEBID;
 const ready = Boolean(base && issuer && pod && cookie && webId);
 
 if (!ready) {

@@ -72,13 +72,13 @@ describe("acquireToken (client-credentials + DPoP)", () => {
 
     const tokenCall = calls.find((c) => c.url === TOKEN_ENDPOINT);
     expect(tokenCall).toBeTruthy();
-    const dpop = tokenCall?.init?.headers?.["dpop"];
+    const dpop = tokenCall?.init?.headers?.dpop;
     expect(dpop).toBeTruthy();
     const header = decodeProtectedHeader(dpop as string);
     expect(header.typ).toBe("dpop+jwt");
     const payload = decodeJwt(dpop as string);
-    expect(payload["htm"]).toBe("POST");
-    expect(payload["htu"]).toBe(TOKEN_ENDPOINT);
+    expect(payload.htm).toBe("POST");
+    expect(payload.htu).toBe(TOKEN_ENDPOINT);
   });
 
   it("retries once with the server nonce on a 400 use_dpop_nonce challenge (RFC 9449 §8)", async () => {
@@ -113,11 +113,11 @@ describe("authedFetch", () => {
     };
     const res = await authedFetch(session, creds, "GET", "https://pod.example/r", {}, fetchImpl);
     expect(res.status).toBe(200);
-    expect(captured?.headers?.["authorization"]).toBe("DPoP live-token");
-    const proof = captured?.headers?.["dpop"];
+    expect(captured?.headers?.authorization).toBe("DPoP live-token");
+    const proof = captured?.headers?.dpop;
     const payload = decodeJwt(proof as string);
-    expect(payload["ath"]).toBeTruthy();
-    expect(payload["htu"]).toBe("https://pod.example/r");
+    expect(payload.ath).toBeTruthy();
+    expect(payload.htu).toBe("https://pod.example/r");
   });
 });
 
