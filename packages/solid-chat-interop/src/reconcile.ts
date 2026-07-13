@@ -1,4 +1,4 @@
-// AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
+// AUTHORED-BY Codex GPT-5
 /**
  * The public RECONCILER — read either chat shape into the canonical model, write
  * the canonical model into either shape.
@@ -19,8 +19,9 @@
  *    parser) and serialising via `n3.Writer` (never hand-concatenated triples).
  */
 
+import { serialize } from "@jeswr/rdf-serialize";
 import type { DatasetCore } from "@rdfjs/types";
-import { type Store, Writer } from "n3";
+import type { Store } from "n3";
 import { type As2MessageDoc, as2MessageSubject, buildAs2Message, parseAs2Message } from "./as2.js";
 import type { CanonicalMessage } from "./canonical.js";
 import {
@@ -187,12 +188,12 @@ export function canonicalToLongChat(msg: CanonicalMessage, subject: string): Sto
 
 // --- Serialised-string-level entry points -----------------------------------
 
-/** Serialise an n3 `Store` to Turtle via `n3.Writer` with the reconciler's prefixes. */
+/** Serialise an n3 `Store` to Turtle via the shared serializer with reconciler prefixes. */
 export function storeToTurtle(store: Store): Promise<string> {
-  const writer = new Writer({ format: "text/turtle", prefixes: { ...PREFIXES } });
-  writer.addQuads([...store]);
-  return new Promise<string>((resolve, reject) => {
-    writer.end((error, result) => (error ? reject(error) : resolve(result)));
+  return serialize([...store], {
+    format: "text/turtle",
+    prefixes: { ...PREFIXES },
+    emptyAsEmptyString: false,
   });
 }
 
