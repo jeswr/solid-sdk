@@ -1,0 +1,14 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>.
+@prefix sh: <http://www.w3.org/ns/shacl#>.
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#>.
+@prefix ex: <https://example.test/vocab#>.
+
+_:ia5ddc612aec4934b ex:postalCode "28559".
+<urn:synthetic:person-c8e8712b/0#applicant> a ex:Person;
+    ex:address _:ia5ddc612aec4934b;
+    ex:asOf "2025-10-09"^^xsd:date;
+    ex:fixed "v1";
+    ex:name "Ppkjg";
+    ex:score 347;
+    ex:status "review";
+    ex:tag "1X0cqX", "7Q3BuY", "azWzlK".

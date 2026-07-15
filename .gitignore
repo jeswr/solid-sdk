@@ -1,5 +1,6 @@
 # Dependencies — one pnpm store, never committed
 node_modules/
+.pnpm-store/
 .turbo/
 
 # Built output is NOT committed in the monorepo (ADR 0001 §4.4):
