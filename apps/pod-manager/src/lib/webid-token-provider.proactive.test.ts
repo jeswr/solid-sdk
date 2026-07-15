@@ -83,6 +83,9 @@ interface Harness {
  * Build a proactive-enabled provider. `setTimeoutFn`/`clearTimeoutFn` bind to
  * the (faked) globals so vitest's `advanceTimersByTime` drives the scheduler.
  */
+/** Every provider built this run — torn down in afterEach (see below). */
+const providers: WebIdDPoPTokenProvider[] = [];
+
 function makeProvider(visibility = new FakeVisibility()): Harness {
   const getCode = vi.fn((url: URL) => as.authorize(url));
   const provider = new WebIdDPoPTokenProvider(CALLBACK, getCode, async () => WEBID, {
@@ -93,6 +96,7 @@ function makeProvider(visibility = new FakeVisibility()): Harness {
     setTimeoutFn: (h, ms) => setTimeout(h, ms),
     clearTimeoutFn: (t) => clearTimeout(t),
   });
+  providers.push(provider);
   return { provider, getCode, visibility };
 }
 
@@ -111,14 +115,36 @@ const refreshGrants = () =>
   as.tokenRequests.filter((r) => r.get("grant_type") === "refresh_token");
 
 /**
- * Advance the fake clock and fully drain the proactive refresh chain it kicks
- * off. The refresh grant chains several awaits (oauth4webapi discovery cache,
- * the grant request, ES256 verify), so a single `advanceTimersByTimeAsync` does
- * not always flush them all in one pass — drain a few extra microtask rounds.
+ * Advance the fake clock (draining a few extra microtask rounds). This moves
+ * TIME but cannot guarantee the refresh chain it kicks off has SETTLED: the
+ * chain interleaves fake-timer hops with REAL async work — ES256 DPoP signing
+ * and JWT verification run on Node's WebCrypto threadpool in wall-clock time,
+ * which no amount of fake-clock advancement flushes. Positive assertions must
+ * follow {@link settleRefreshGrants}; `tick` alone is only sound for NEGATIVE
+ * assertions (nothing armed → nothing to settle).
  */
 async function tick(ms: number): Promise<void> {
   await vi.advanceTimersByTimeAsync(ms);
   for (let i = 0; i < 5; i++) await vi.advanceTimersByTimeAsync(0);
+}
+
+/**
+ * Deterministically wait until exactly `count` refresh grants have landed at
+ * the fake AS. `vi.waitFor` polls in REAL time — so the chain's WebCrypto work
+ * completes between attempts regardless of machine speed — while auto-advancing
+ * the fake clock by its interval each attempt (vitest's documented fake-timer
+ * integration), so a near-due re-armed timer still fires without real sleeps.
+ *
+ * This replaced a fixed-count microtask drain that was machine-speed-dependent:
+ * fast locally, but on slower CI runners the crypto had not landed within the
+ * fixed rounds — the test observed 0 grants, and the still-in-flight chain then
+ * leaked its token request onto the NEXT test's fresh AS (global fetch is
+ * re-stubbed per test; oauth4webapi resolves `fetch` at call time).
+ */
+async function settleRefreshGrants(count: number): Promise<void> {
+  await vi.waitFor(() => expect(refreshGrants()).toHaveLength(count), {
+    timeout: 10_000,
+  });
 }
 
 beforeEach(async () => {
@@ -127,6 +153,11 @@ beforeEach(async () => {
 });
 
 afterEach(() => {
+  // Tear down every provider FIRST (idempotent): #destroyed stops any late
+  // rescheduling, so a chain that outlives its test cannot arm new cycles
+  // against the next test's fake AS. (Each test also settles its own chain via
+  // settleRefreshGrants before asserting — teardown is defence-in-depth.)
+  for (const provider of providers.splice(0)) provider.teardown();
   vi.unstubAllGlobals();
   vi.useRealTimers();
 });
@@ -144,9 +175,11 @@ describe("proactive refresh: scheduling", () => {
     // (≈60s). Advance past it WITHOUT any upgrade()/invalidate().
     await tick(65_000);
 
-    // A proactive refresh ran purely from the timer.
-    expect(getCode).toHaveBeenCalledTimes(1); // no popup/authorize
+    // A proactive refresh ran purely from the timer — exactly one, and stable.
+    await settleRefreshGrants(1);
+    await tick(0);
     expect(refreshGrants()).toHaveLength(1);
+    expect(getCode).toHaveBeenCalledTimes(1); // no popup/authorize
     expect(as.tokenRequests.at(-1)?.get("grant_type")).toBe("refresh_token");
   });
 
@@ -156,11 +189,11 @@ describe("proactive refresh: scheduling", () => {
     await provider.login(ISSUER);
 
     await tick(65_000); // cycle 1
-    expect(refreshGrants()).toHaveLength(1);
+    await settleRefreshGrants(1);
 
     await tick(65_000); // cycle 2 (from rotated token)
+    await settleRefreshGrants(2);
     const grants = refreshGrants();
-    expect(grants).toHaveLength(2);
     expect(grants[1]?.get("refresh_token")).not.toBe(grants[0]?.get("refresh_token"));
     expect(getCode).toHaveBeenCalledTimes(1); // still never a popup
   });
@@ -171,6 +204,7 @@ describe("proactive refresh: scheduling", () => {
     await provider.login(ISSUER);
 
     await tick(65_000);
+    await settleRefreshGrants(1);
     const grantsAfterProactive = refreshGrants().length;
     expect(grantsAfterProactive).toBe(1);
 
@@ -278,8 +312,7 @@ describe("proactive refresh: visibility lifecycle", () => {
 
     // Returning to the tab: ALWAYS re-evaluate expiry (don't trust the timer).
     visibility.show();
-    await tick(0); // let the immediate refresh settle
-    expect(refreshGrants()).toHaveLength(1);
+    await settleRefreshGrants(1); // the immediate refresh settles (real time)
     expect(getCode).toHaveBeenCalledTimes(1); // no popup on resume
   });
 
@@ -296,7 +329,7 @@ describe("proactive refresh: visibility lifecycle", () => {
     expect(refreshGrants()).toHaveLength(0); // not yet — re-armed, not fired
 
     await tick(60_000); // now reach the window
-    expect(refreshGrants()).toHaveLength(1);
+    await settleRefreshGrants(1);
   });
 });
 
@@ -346,13 +379,12 @@ describe("proactive refresh: failure handling", () => {
     as.activeRefreshTokens.clear(); // revoked → invalid_grant on the proactive grant
 
     await tick(65_000); // the proactive refresh fires & fails
-    const grantsAfterFail = refreshGrants().length;
-    expect(grantsAfterFail).toBe(1); // it tried once
+    await settleRefreshGrants(1); // it tried exactly once
     expect(getCode).toHaveBeenCalledTimes(1); // and crucially NO popup/authorize
 
     // Scheduling STOPPED: no further attempts no matter how long we wait.
     await tick(10 * 60_000);
-    expect(refreshGrants()).toHaveLength(grantsAfterFail);
+    expect(refreshGrants()).toHaveLength(1);
     expect(getCode).toHaveBeenCalledTimes(1);
   });
 
@@ -373,13 +405,22 @@ describe("proactive refresh: failure handling", () => {
       return realFetch(input, init);
     }) as typeof fetch);
 
-    await tick(65_000); // first proactive attempt → fails (retry armed)
-    // Backoff base 2s, then 4s — advance through both retries.
-    await tick(2_000);
-    await tick(4_000);
-
-    // It eventually succeeded after the bounded retries — no popup throughout.
-    expect(refreshGrants().length).toBeGreaterThanOrEqual(1);
+    await tick(65_000); // the first proactive attempt fires
+    // Drive the retry cycle (2s then 4s backoff) to completion. How much of the
+    // cascade already ran inside the tick above is machine-speed-dependent (each
+    // attempt needs REAL time for its DPoP signing before it can reject), so no
+    // intermediate state is asserted — advance the fake clock in 1s hops, with
+    // real time between attempts for the chain's WebCrypto work, until the
+    // healed attempt lands. Exactly one grant reaches the AS (the rejected
+    // attempts never got past the stub) and no popup throughout.
+    await vi.waitFor(
+      async () => {
+        await vi.advanceTimersByTimeAsync(1_000);
+        expect(failures).toBe(0);
+        expect(refreshGrants()).toHaveLength(1);
+      },
+      { timeout: 10_000 },
+    );
     expect(getCode).toHaveBeenCalledTimes(1);
   });
 
