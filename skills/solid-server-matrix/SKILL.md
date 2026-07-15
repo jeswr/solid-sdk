@@ -36,3 +36,9 @@ Probe capabilities at runtime. Hostname tables are hints, not a protocol contrac
 - Reload loses auth: restore from the DPoP-bound refresh credential rather than relying only on memory or an IdP cookie.
 
 Test at least one WAC and one ACP deployment for access-control work, and retain targeted legacy coverage only where supported interoperability requires it.
+
+## Agent persona
+
+When this work is delegated to a sub-agent, spawn the `solid-app-builder` persona from
+[`.claude/agents/solid-app-builder.md`](../../.claude/agents/solid-app-builder.md) — it routes through this skill.
+Orchestration: `.claude/agents/solid-app-orchestration.md`.

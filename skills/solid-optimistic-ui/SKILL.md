@@ -34,3 +34,9 @@ persist(write).catch(() => {
 - Clear the durable pending marker only after the write resolves; retain it for retry after failure.
 
 Use `role="status"` and `aria-live="polite"` for Saving/Saved/Error feedback. Avoid modal progress and avoid blocking the user's next action.
+
+## Agent persona
+
+When this work is delegated to a sub-agent, spawn the `solid-frontend-dev` persona from
+[`.claude/agents/solid-frontend-dev.md`](../../.claude/agents/solid-frontend-dev.md) — it routes through this skill.
+Orchestration: `.claude/agents/solid-app-orchestration.md`.

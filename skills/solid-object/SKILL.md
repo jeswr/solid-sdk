@@ -35,3 +35,9 @@ const storages = [...(agent?.storageUrls ?? [])];
 - Use one `DataFactory` consistently.
 - These wrappers are primarily readers. Implement writes in explicit `TermWrapper` subclasses, serialize the complete dataset, and persist conditionally.
 - Never hand-parse `.acl` or `.acr` documents when the typed models cover the operation.
+
+## Agent persona
+
+When this work is delegated to a sub-agent, spawn the `solid-data-modeler` persona from
+[`.claude/agents/solid-data-modeler.md`](../../.claude/agents/solid-data-modeler.md) — it routes through this skill.
+Orchestration: `.claude/agents/solid-app-orchestration.md`.
