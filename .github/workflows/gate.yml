@@ -15,7 +15,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # diff-aware --filter '...[origin/main]' needs history
+          fetch-depth: 0 # diff-aware --affected needs history
+      # turbo --affected reads GITHUB_BASE_REF ("main") on pull_request events, but a
+      # PR checkout has no local `main` ref (only origin/main + the merge ref), so base
+      # resolution fails and turbo falls back to running EVERY task. Pin the documented
+      # TURBO_SCM_BASE override to the PR's base SHA — always resolvable under
+      # fetch-depth: 0. Push builds on main intentionally keep the full run.
+      - name: Resolve --affected base (pull requests)
+        if: github.event_name == 'pull_request'
+        run: echo "TURBO_SCM_BASE=${{ github.event.pull_request.base.sha }}" >> "$GITHUB_ENV"
       - uses: pnpm/action-setup@v4 # reads packageManager from package.json
       - uses: actions/setup-node@v4
         with:
