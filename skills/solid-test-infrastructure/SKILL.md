@@ -31,3 +31,9 @@ Use two layers:
 - Match exact RDF namespace schemes in fixtures so a successful empty query cannot pass the test accidentally.
 
 In ESM packages, keep Playwright config/setup ESM-safe: use relative module paths, derive paths from `import.meta.url`, and avoid `require`/`__dirname`. Keep test helpers reviewable text—write escaped separators rather than literal NUL bytes.
+
+## Agent persona
+
+When this work is delegated to a sub-agent, spawn the `solid-test-engineer` persona from
+[`.claude/agents/solid-test-engineer.md`](../../.claude/agents/solid-test-engineer.md) — it routes through this skill.
+Orchestration: `.claude/agents/solid-app-orchestration.md`.

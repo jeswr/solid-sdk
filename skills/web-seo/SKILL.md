@@ -33,3 +33,9 @@ Do not invent ORCID, Wikidata, affiliation, or profile identifiers. Validate JSO
 ## Human follow-up
 
 List backlinks, Search Console/Bing verification, sitemap submission, and knowledge-graph/profile consistency as explicit maintainer actions. Report eligibility and validation results; never promise a ranking position.
+
+## Agent persona
+
+When this work is delegated to a sub-agent, spawn the `solid-frontend-dev` persona from
+[`.claude/agents/solid-frontend-dev.md`](../../.claude/agents/solid-frontend-dev.md) — it routes through this skill.
+Orchestration: `.claude/agents/solid-app-orchestration.md`.

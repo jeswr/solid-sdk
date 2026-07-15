@@ -28,3 +28,9 @@ If an element navigates, use `<a href>`. Use `<button>` for an action. Do not em
 ```
 
 Search reviews for `role="link"`, `window.location`, `onclick`, non-native `tabindex`, nested anchors, `target="_blank"`, and vague link text. Prefer native HTML before adding ARIA.
+
+## Agent persona
+
+When this work is delegated to a sub-agent, spawn the `solid-frontend-dev` persona from
+[`.claude/agents/solid-frontend-dev.md`](../../.claude/agents/solid-frontend-dev.md) — it routes through this skill.
+Orchestration: `.claude/agents/solid-app-orchestration.md`.

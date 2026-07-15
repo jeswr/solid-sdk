@@ -37,3 +37,9 @@ Keep the profile publicly readable and protect the private index itself through 
 - Scheme-filter every RDF-derived URL before rendering it as a link or image.
 
 When interoperating with a deployed application, verify the actual predicates its shipping code reads and writes; a vocabulary document alone may not reflect de-facto data.
+
+## Agent persona
+
+When this work is delegated to a sub-agent, spawn the `solid-data-modeler` persona from
+[`.claude/agents/solid-data-modeler.md`](../../.claude/agents/solid-data-modeler.md) — it routes through this skill.
+Orchestration: `.claude/agents/solid-app-orchestration.md`.

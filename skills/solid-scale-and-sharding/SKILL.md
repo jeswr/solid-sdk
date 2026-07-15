@@ -32,3 +32,9 @@ Keep containers to hundreds rather than thousands of direct members when practic
 - Prefer conditional whole-document `PUT` through typed RDF models until a sanctioned patch builder is available.
 
 Before introducing a shard, document which permission, interop, or measured performance constraint requires it and how callers discover every shard.
+
+## Agent persona
+
+When this work is delegated to a sub-agent, spawn the `solid-app-builder` persona from
+[`.claude/agents/solid-app-builder.md`](../../.claude/agents/solid-app-builder.md) — it routes through this skill.
+Orchestration: `.claude/agents/solid-app-orchestration.md`.

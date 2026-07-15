@@ -38,3 +38,9 @@ A Client Identifier Document is a dereferenceable JSON-LD document whose URL is 
 Static localhost identity works only when the local identity provider can dereference it and permits loopback HTTP. A remote identity provider cannot fetch the developer's localhost; use dynamic registration or a public HTTPS deployment for that combination.
 
 Debug exact URL equality first for “client_id must match” errors and the published `redirect_uris` for redirect mismatch errors.
+
+## Agent persona
+
+When this work is delegated to a sub-agent, spawn the `solid-frontend-dev` persona from
+[`.claude/agents/solid-frontend-dev.md`](../../.claude/agents/solid-frontend-dev.md) — it routes through this skill.
+Orchestration: `.claude/agents/solid-app-orchestration.md`.

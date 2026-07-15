@@ -32,3 +32,9 @@ Read `Updates-Via`, open the socket with subprotocol `solid-0.1`, send `sub <abs
 - Keep notification JSON-LD protocol bodies separate from pod RDF mutation rules.
 
 If this package is later imported as `packages/solid-notifications`, move this skill alongside it.
+
+## Agent persona
+
+When this work is delegated to a sub-agent, spawn the `solid-frontend-dev` persona from
+[`.claude/agents/solid-frontend-dev.md`](../../.claude/agents/solid-frontend-dev.md) — it routes through this skill.
+Orchestration: `.claude/agents/solid-app-orchestration.md`.

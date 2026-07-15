@@ -25,3 +25,9 @@ For existing direct consumers, treat `ReactiveFetchManager` as an app-lifetime s
 - Keep proactive token attachment restricted to proven resource origins. Never include a foreign service or issuer solely because it returned a 401.
 
 Do not fork token-provider or session-provider files into another app. When touching an existing fork, migrate it toward `@jeswr/solid-auth-core` and keep cross-account, stale-operation, pristine-fetch, and login-stall tests adversarial.
+
+## Agent persona
+
+When this work is delegated to a sub-agent, spawn the `solid-frontend-dev` persona from
+[`.claude/agents/solid-frontend-dev.md`](../../.claude/agents/solid-frontend-dev.md) — it routes through this skill.
+Orchestration: `.claude/agents/solid-app-orchestration.md`.

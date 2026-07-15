@@ -29,3 +29,9 @@ const { dataset, etag, contentType, response, url } = await fetchRdf(resourceUrl
 - Before constructing RDF terms from untrusted IRIs, use `@jeswr/rdf-serialize` to escape forbidden IRIREF characters and enforce scheme policy.
 
 Do not parse untrusted ActivityStreams JSON-LD with a loader that can fetch arbitrary remote contexts. Use a bundled allowlisted context and a refusing `documentLoader` on server request paths.
+
+## Agent persona
+
+When this work is delegated to a sub-agent, spawn the `solid-data-modeler` persona from
+[`.claude/agents/solid-data-modeler.md`](../../.claude/agents/solid-data-modeler.md) — it routes through this skill.
+Orchestration: `.claude/agents/solid-app-orchestration.md`.
