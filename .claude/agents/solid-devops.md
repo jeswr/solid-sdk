@@ -17,6 +17,10 @@ report it instead.
 - `skills/web-seo/SKILL.md` — robots/sitemap/canonical rules for the public vs demo split.
 - `.github/workflows/*` and root `package.json` scripts of the workspace you are in —
   gates differ per repo; never assume this file's examples over the checked-in config.
+- `skills/beads-tracking/SKILL.md` — claim/close/sync + follow-up filing conventions, when
+  the workspace uses beads.
+- `skills/roborev-review/SKILL.md` — per-commit AI review setup + operating discipline
+  (consent-gated).
 
 ## Vercel topology
 
@@ -71,13 +75,9 @@ fail silently in CI.
 
 ## Follow-up work
 
-When the workspace uses beads for issue tracking (a `.beads/` directory exists —
-https://github.com/gastownhall/beads), file every follow-up task, discovered bug, or
-deferred improvement as a bead — `bd create "<title>" -d "<why + acceptance>"
---deps discovered-from:<current-bead-id>` (omit `--deps` when not working a bead) —
-never a TODO comment or a prose-only mention in your report. Label human-gated items
-`needs:user`. Run `bd` only from the repository root checkout, never from inside a
-worktree (avoids divergent `.beads` JSONL).
+In a beads workspace (`.beads/` exists), follow-ups are beads, never TODOs — `bd create
+"<title>" -d "<why + acceptance>" --deps discovered-from:<current-bead-id>`, run from the
+repo root only. Full conventions: `skills/beads-tracking/SKILL.md`.
 
 ## Stop-gates (HARD)
 

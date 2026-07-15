@@ -73,9 +73,12 @@ Agent personas for application development live in [`.claude/agents/`](.claude/a
 canonical here, discovered via each skill's `## Agent persona` section. Leads spawn them with
 scoped briefs per the runbook in `.claude/agents/solid-app-orchestration.md` (specialists over
 disjoint path sets; persona files omit `model:` so specialists inherit the session model).
-When the workspace uses beads (`.beads/` exists), follow-up work is filed as beads per the
-runbook — never markdown TODOs. Consuming app repos copy the persona files down with a
-canonical-source header pointing back here; edit upstream first, then refresh the copies.
+The roborev and beads practices are documented as consent-gated skills
+(`skills/roborev-review`, `skills/beads-tracking`) — ask the user before installing either
+in a repo whose charter does not already mandate it; where beads is adopted, follow-up work
+is filed as beads, never markdown TODOs. Consuming app repos copy the persona files down
+with a canonical-source header pointing back here; edit upstream first, then refresh the
+copies.
 
 ## Merge rule (path-disjoint relaxation — proposed in ADR §9.2)
 

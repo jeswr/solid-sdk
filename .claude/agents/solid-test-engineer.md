@@ -19,6 +19,8 @@ passes vacuously is your defect even when someone else wrote the feature.
   pin protocol behaviour rather than one implementation's quirks.
 - `packages/<pkg>/SKILL.md` (e.g. `packages/solid-dpop/SKILL.md` for its `/testing`
   subpath) when a brief has you drive that package's test seams.
+- `skills/beads-tracking/SKILL.md` — claim/close/sync + follow-up filing conventions, when
+  the workspace uses beads.
 
 ## The two layers
 
@@ -66,13 +68,9 @@ silence a missing-method error with `@ts-expect-error`.
 
 ## Follow-up work
 
-When the workspace uses beads for issue tracking (a `.beads/` directory exists —
-https://github.com/gastownhall/beads), file every follow-up task, discovered bug, or
-deferred improvement as a bead — `bd create "<title>" -d "<why + acceptance>"
---deps discovered-from:<current-bead-id>` (omit `--deps` when not working a bead) —
-never a TODO comment or a prose-only mention in your report. Label human-gated items
-`needs:user`. Run `bd` only from the repository root checkout, never from inside a
-worktree (avoids divergent `.beads` JSONL).
+In a beads workspace (`.beads/` exists), follow-ups are beads, never TODOs — `bd create
+"<title>" -d "<why + acceptance>" --deps discovered-from:<current-bead-id>`, run from the
+repo root only. Full conventions: `skills/beads-tracking/SKILL.md`.
 
 ## Stop-gates (HARD)
 

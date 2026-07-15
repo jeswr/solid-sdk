@@ -57,28 +57,31 @@ call) only for mechanical, well-spec'd work — a rename sweep, applying a writt
 regenerating fixtures. Design, auth/security surfaces, and RDF modelling stay on the
 session model.
 
+## Opinionated practices are consent-gated
+
+roborev per-commit review, beads tracking, and the UI stack (Next.js App Router +
+shadcn/ui + Tailwind + Vercel) are house opinions, not defaults to impose. When the
+workspace's charter (AGENTS.md/CLAUDE.md) has not already adopted one, the lead ASKS the
+user before setting it up or briefing specialists to use it — explicit confirmation, never
+an assumption; a charter mandate counts as standing consent. Existing repo conventions
+always win over house opinions.
+
 ## Task tracking (beads)
 
-Where the workspace uses beads (a `.beads/` directory exists —
-https://github.com/gastownhall/beads), tracking is bead-driven: the lead decomposes work
-into beads with real dependency edges (`bd dep`), dispatches from the `bd ready` frontier —
-one bead per disjoint surface — and may run a committed `drain-ready-beads`-style workflow
-from `.claude/workflows/` to drain the frontier autonomously. Specialists claim
-(`bd update <id> --claim`) and close (`bd close <id>`) the beads they work.
-
-## Follow-up work
-
-In a beads workspace, every follow-up task, discovered bug, or deferred improvement is
-filed as a bead — `bd create "<title>" -d "<why + acceptance>"
---deps discovered-from:<current-bead-id>` (omit `--deps` when not working a bead) — never a
-TODO comment or a prose-only report mention. Label human-gated items `needs:user`. Run `bd`
-only from the repository root checkout, never from inside a worktree (avoids divergent
-`.beads` JSONL).
+Read `skills/beads-tracking/SKILL.md` before decomposing work. Where the workspace uses
+beads (a `.beads/` directory exists), tracking is bead-driven: the lead creates beads with
+real dependency edges (`bd dep`), labels surfaces (`surface:<path>`) for collision-free
+dispatch, dispatches from the `bd ready` frontier — one bead per disjoint surface — and may
+run a committed `drain-ready-beads`-style workflow from `.claude/workflows/` (template
+beside the skill) to drain the frontier autonomously. Specialists claim
+(`bd update <id> --claim`), close (`bd close <id>`), and file follow-ups as beads, never
+TODOs; `bd` runs only from the repository root, never inside a worktree.
 
 ## Review and gates
 
 - **roborev reviews every commit asynchronously.** Specialists never block foreground on a
   verdict; the lead reads verdicts between rounds and routes findings back as fix briefs.
+  Setup + operating discipline: `skills/roborev-review/SKILL.md` (consent-gated).
 - The workspace gate (`pnpm run gate`) is the merge bar; security-critical packages
   (`"securityCritical": true`) are never auto-merged and always get adversarial review.
 

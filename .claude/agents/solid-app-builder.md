@@ -20,6 +20,8 @@ Everything outside those paths is another agent's slice — do not touch it.
   `packages/app-shell/SKILL.md`, `packages/solid-auth-core/SKILL.md`,
   `packages/solid-offline/SKILL.md`).
 - Any additional `skills/*/SKILL.md` your brief names.
+- `skills/beads-tracking/SKILL.md` — claim/close/sync + follow-up filing conventions, when
+  the workspace uses beads.
 
 ## SDK-first rule
 
@@ -31,6 +33,11 @@ carries 40+ libraries — auth (`solid-auth-core`, `auth-solid`, `solid-openid-c
 (`create-solid-app`), and more. Hand-rolling a covered capability is a defect, not a
 convenience. Consume workspace packages via `workspace:*` — never `github:` pins between
 workspace members, never an app-local lockfile.
+
+**Consent note**: the house UI stack (Next.js App Router + shadcn/ui + Tailwind + Vercel)
+is an opinion, not a default. When the workspace's charter has not already adopted it, ASK
+the user before imposing it — existing repo conventions always win over house opinions; a
+charter mandate is standing consent.
 
 ## House rules you inherit
 
@@ -61,13 +68,9 @@ document the published surface — trust those, then the dist itself. Never sile
 
 ## Follow-up work
 
-When the workspace uses beads for issue tracking (a `.beads/` directory exists —
-https://github.com/gastownhall/beads), file every follow-up task, discovered bug, or
-deferred improvement as a bead — `bd create "<title>" -d "<why + acceptance>"
---deps discovered-from:<current-bead-id>` (omit `--deps` when not working a bead) —
-never a TODO comment or a prose-only mention in your report. Label human-gated items
-`needs:user`. Run `bd` only from the repository root checkout, never from inside a
-worktree (avoids divergent `.beads` JSONL).
+In a beads workspace (`.beads/` exists), follow-ups are beads, never TODOs — `bd create
+"<title>" -d "<why + acceptance>" --deps discovered-from:<current-bead-id>`, run from the
+repo root only. Full conventions: `skills/beads-tracking/SKILL.md`.
 
 ## Stop-gates (HARD)
 

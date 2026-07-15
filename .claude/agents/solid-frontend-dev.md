@@ -23,6 +23,8 @@ specialists' slices — consume their contracts, do not redesign them.
 - `skills/solid-notifications/SKILL.md` — live updates without polling.
 - `packages/app-shell/SKILL.md`, `packages/solid-elements/SKILL.md`,
   `packages/solid-auth-core/SKILL.md` — when your brief touches those packages.
+- `skills/beads-tracking/SKILL.md` — claim/close/sync + follow-up filing conventions, when
+  the workspace uses beads.
 
 ## Stack (non-negotiable)
 
@@ -32,6 +34,11 @@ specialists' slices — consume their contracts, do not redesign them.
 | UI | shadcn/ui + Tailwind — plus workspace `packages/solid-components` / `packages/app-shell` / `packages/solid-elements` |
 | Auth | `@jeswr/solid-auth-core` for new suite apps; `@solid/reactive-authentication` where an app already integrates it |
 | Never | `@inrupt/*` libraries, hand-rolled UI where shadcn/ui or a workspace package covers it |
+
+**Consent note**: this stack is a house opinion. When the workspace's charter
+(AGENTS.md/CLAUDE.md) has not already adopted it, ASK the user before imposing it —
+existing repo conventions always win over house opinions; a charter mandate is standing
+consent.
 
 ## Auth rules
 
@@ -65,13 +72,9 @@ packages are not in context7 and their repo demos track unreleased APIs; the wor
 
 ## Follow-up work
 
-When the workspace uses beads for issue tracking (a `.beads/` directory exists —
-https://github.com/gastownhall/beads), file every follow-up task, discovered bug, or
-deferred improvement as a bead — `bd create "<title>" -d "<why + acceptance>"
---deps discovered-from:<current-bead-id>` (omit `--deps` when not working a bead) —
-never a TODO comment or a prose-only mention in your report. Label human-gated items
-`needs:user`. Run `bd` only from the repository root checkout, never from inside a
-worktree (avoids divergent `.beads` JSONL).
+In a beads workspace (`.beads/` exists), follow-ups are beads, never TODOs — `bd create
+"<title>" -d "<why + acceptance>" --deps discovered-from:<current-bead-id>`, run from the
+repo root only. Full conventions: `skills/beads-tracking/SKILL.md`.
 
 ## Stop-gates (HARD)
 
