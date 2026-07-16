@@ -51,6 +51,7 @@
     "solid-offline",
     "@jeswr/solid-openid-client",
     "@jeswr/solid-session-restore",
+    "@jeswr/solid-seed",
     "@jeswr/synthetic-rdf",
     "@jeswr/solid-task-model",
     "@jeswr/solid-vc",
