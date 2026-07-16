@@ -43,8 +43,9 @@ The main entry contains no Node built-ins.
 ## Modes and groups
 
 - `create` uses `If-None-Match: *` and treats existing state as an error.
-- `ensure` skips an existing standalone resource. For an expander group it first requires all
-  members to exist or none to exist; partial groups fail before writes.
+- `ensure` skips an existing primary resource but creates or rewrites its requested ACL so access
+  policy converges. For an expander group it first requires every primary resource and requested
+  ACL sidecar to exist or none to exist; partial groups fail before writes.
 - `replace` unconditionally rewrites every selected resource and ACL.
 
 One `ResourceExpander` is called once per run and becomes a stable `group-<layout-index>` unit.
