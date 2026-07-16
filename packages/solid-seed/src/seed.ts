@@ -295,6 +295,21 @@ async function put(
   await response.body?.cancel();
 }
 
+async function writeAcl(
+  pod: MaterializedPod,
+  resource: MaterializedResource,
+  conditional: boolean,
+): Promise<void> {
+  if (resource.aclBody === undefined) return;
+  await put(
+    pod.target,
+    `${resource.outcome.url}.acl`,
+    resource.aclBody,
+    DEFAULT_CONTENT_TYPE,
+    conditional,
+  );
+}
+
 async function writeResource(
   pod: MaterializedPod,
   resource: MaterializedResource,
@@ -320,19 +335,7 @@ async function writeResource(
     }
   }
   if (resource.aclBody !== undefined) {
-    try {
-      await put(
-        pod.target,
-        `${resource.outcome.url}.acl`,
-        resource.aclBody,
-        DEFAULT_CONTENT_TYPE,
-        conditional,
-      );
-    } catch (error) {
-      if (!(mode === "ensure" && error instanceof HttpFailure && error.status === 412)) {
-        throw error;
-      }
-    }
+    await writeAcl(pod, resource, mode === "create");
   }
   return outcome;
 }
@@ -391,7 +394,20 @@ async function processGroup(
       .filter((_, index) => present[index] !== true)
       .map((document) => document.path);
     if (mode === "ensure" && existing.length === documents.length) {
-      for (const resource of action.resources) resource.outcome.status = "skipped";
+      for (const resource of action.resources) {
+        try {
+          await writeAcl(pod, resource, false);
+          resource.outcome.status = "skipped";
+        } catch (cause) {
+          failResource(
+            `ACL convergence failed in expander group ${group.id} at ${resource.spec.path}`,
+            completed,
+            pod,
+            resource,
+            cause,
+          );
+        }
+      }
       group.status = "skipped";
       return;
     }

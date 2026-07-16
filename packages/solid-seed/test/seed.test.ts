@@ -121,13 +121,17 @@ describe("pod layouts and modes", () => {
 });
 
 describe("expander groups", () => {
-  function groupLayout(pod: MemoryPod, expansionCount: { value: number }): PodLayout {
+  function groupLayout(
+    pod: MemoryPod,
+    expansionCount: { value: number },
+    publicRead = true,
+  ): PodLayout {
     const issueOnce: ResourceExpander = () => {
       expansionCount.value += 1;
       return ["vc", "anchor", "witness"].map((name) => ({
         path: `/credentials/${name}`,
         source: { body: `issued-${name}` },
-        access: { publicRead: true },
+        access: { publicRead },
       }));
     };
     return { pods: [{ account: { target: pod }, resources: [issueOnce] }] };
@@ -200,6 +204,27 @@ describe("expander groups", () => {
       message: expect.stringContaining("missing members: /credentials/anchor.acl"),
       manifest: { pods: [{ groups: [{ id: "group-0", status: "partial" }] }] },
     });
+  });
+
+  it("converges ACL policy while skipping an all-present group", async () => {
+    const pod = new MemoryPod("https://pod.example");
+    await seedPods({ layout: groupLayout(pod, { value: 0 }) });
+
+    const ensured = await seedPods({
+      layout: groupLayout(pod, { value: 0 }, false),
+      mode: "ensure",
+    });
+    expect(ensured.pods[0]?.groups[0]?.status).toBe("skipped");
+    const aclUrl = "https://pod.example/credentials/anchor.acl";
+    const body = pod.resources.get(aclUrl)?.body;
+    const dataset = new Store(
+      new Parser({ format: "text/turtle", baseIRI: aclUrl }).parse(body as string),
+    );
+    expect(
+      [...new AclResource(dataset, DataFactory).authorizations].some(
+        (authorization) => authorization.accessibleToAny,
+      ),
+    ).toBe(false);
   });
 
   it("reports a mid-group abort and converges after a replace re-run", async () => {
@@ -365,6 +390,44 @@ describe("RDF rebasing and typed ACLs", () => {
       pods: [{ resources: [{ path: "/private/report", status: "skipped" }] }],
     });
     expect(pod.resources.has("https://pod.example/private/report.acl")).toBe(true);
+    expect(pod.putRecords("/private/report.acl").at(-1)?.headers.get("if-none-match")).toBeNull();
+  });
+
+  it("removes stale standalone ACL grants while leaving the existing resource unchanged", async () => {
+    const pod = new MemoryPod("https://pod.example");
+    const layout = (publicRead: boolean): PodLayout => ({
+      pods: [
+        {
+          account: { target: pod },
+          resources: [
+            {
+              path: "/private/report",
+              source: { body: "stable report" },
+              access: { publicRead },
+            },
+          ],
+        },
+      ],
+    });
+    await seedPods({ layout: layout(true) });
+
+    const ensured = await seedPods({ layout: layout(false), mode: "ensure" });
+
+    expect(ensured.pods[0]?.resources[0]?.status).toBe("skipped");
+    expect(pod.resources.get("https://pod.example/private/report")?.body).toBe("stable report");
+    const aclUrl = "https://pod.example/private/report.acl";
+    const body = pod.resources.get(aclUrl)?.body;
+    expect(body).toBeDefined();
+    const dataset = new Store(
+      new Parser({ format: "text/turtle", baseIRI: aclUrl }).parse(body as string),
+    );
+    expect(
+      [...new AclResource(dataset, DataFactory).authorizations].some(
+        (authorization) => authorization.accessibleToAny,
+      ),
+    ).toBe(false);
+    expect(pod.putRecords("/private/report.acl")).toHaveLength(2);
+    expect(pod.putRecords("/private/report.acl").at(-1)?.headers.get("if-none-match")).toBeNull();
   });
 
   it("rejects an ACL agent IRI that could escape Turtle serialization", async () => {
