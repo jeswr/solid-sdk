@@ -1,0 +1,77 @@
+{
+  "name": "@jeswr/synthetic-rdf",
+  "version": "0.1.0",
+  "description": "Shape-driven deterministic synthetic RDF generation from SHACL, with coordinate-keyed PRNG streams, pinned persona overrides, and an injected independent validator.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Jesse Wright <63333554+jeswr@users.noreply.github.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jeswr/solid-sdk.git",
+    "directory": "packages/synthetic-rdf"
+  },
+  "homepage": "https://github.com/jeswr/solid-sdk/tree/main/packages/synthetic-rdf#readme",
+  "bugs": {
+    "url": "https://github.com/jeswr/solid-sdk/issues"
+  },
+  "keywords": [
+    "rdf",
+    "rdfjs",
+    "shacl",
+    "synthetic-data",
+    "deterministic",
+    "solid"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./validate": {
+      "types": "./dist/validate.d.ts",
+      "import": "./dist/validate.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "SKILL.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "lint": "node scripts/check-browser-safe.mjs && biome check src test scripts",
+    "lint:fix": "biome check --write src test",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.test.json",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@jeswr/rdf-serialize": "workspace:*",
+    "@rdfjs/types": "^2.0.1",
+    "n3": "2.0.3"
+  },
+  "peerDependencies": {
+    "shacl-engine": "^1.1.2"
+  },
+  "peerDependenciesMeta": {
+    "shacl-engine": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.1",
+    "@types/n3": "^1.26.1",
+    "esbuild": "^0.28.1",
+    "shacl-engine": "^1.1.2",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.9"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

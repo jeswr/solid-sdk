@@ -3603,6 +3603,37 @@ importers:
         specifier: ^4.0.0
         version: 4.1.10(@types/node@24.13.3)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1)(vite@8.1.4(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0))
 
+  packages/synthetic-rdf:
+    dependencies:
+      '@jeswr/rdf-serialize':
+        specifier: workspace:*
+        version: link:../rdf-serialize
+      '@rdfjs/types':
+        specifier: ^2.0.1
+        version: 2.0.1
+      n3:
+        specifier: 2.0.3
+        version: 2.0.3
+    devDependencies:
+      '@biomejs/biome':
+        specifier: ^2.5.1
+        version: 2.5.3
+      '@types/n3':
+        specifier: ^1.26.1
+        version: 1.26.1
+      esbuild:
+        specifier: ^0.28.1
+        version: 0.28.1
+      shacl-engine:
+        specifier: ^1.1.2
+        version: 1.1.2
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: ^4.1.9
+        version: 4.1.10(@types/node@26.1.1)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1)(vite@8.1.4(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0))
+
   packages/unstorage-solid:
     dependencies:
       '@rdfjs/types':
