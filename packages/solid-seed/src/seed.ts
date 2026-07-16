@@ -303,6 +303,7 @@ async function writeResource(
   if (resource.body === undefined)
     throw new Error(`resource ${resource.spec.path} has no materialized body`);
   const conditional = mode !== "replace";
+  let outcome: "created" | "skipped" | "replaced" = mode === "replace" ? "replaced" : "created";
   try {
     await put(
       pod.target,
@@ -312,19 +313,28 @@ async function writeResource(
       conditional,
     );
   } catch (error) {
-    if (mode === "ensure" && error instanceof HttpFailure && error.status === 412) return "skipped";
-    throw error;
+    if (mode === "ensure" && error instanceof HttpFailure && error.status === 412) {
+      outcome = "skipped";
+    } else {
+      throw error;
+    }
   }
   if (resource.aclBody !== undefined) {
-    await put(
-      pod.target,
-      `${resource.outcome.url}.acl`,
-      resource.aclBody,
-      DEFAULT_CONTENT_TYPE,
-      conditional,
-    );
+    try {
+      await put(
+        pod.target,
+        `${resource.outcome.url}.acl`,
+        resource.aclBody,
+        DEFAULT_CONTENT_TYPE,
+        conditional,
+      );
+    } catch (error) {
+      if (!(mode === "ensure" && error instanceof HttpFailure && error.status === 412)) {
+        throw error;
+      }
+    }
   }
-  return mode === "replace" ? "replaced" : "created";
+  return outcome;
 }
 
 function currentManifest(completed: readonly PodManifest[], current: PodManifest): SeedManifest {
@@ -350,11 +360,21 @@ async function processGroup(
 ): Promise<void> {
   const group = action.group as GroupOutcome;
   if (mode !== "replace") {
+    const documents = action.resources.flatMap((resource) => [
+      { resource, path: resource.spec.path, url: resource.outcome.url },
+      ...(resource.aclBody === undefined
+        ? []
+        : [
+            {
+              resource,
+              path: `${resource.spec.path}.acl`,
+              url: `${resource.outcome.url}.acl`,
+            },
+          ]),
+    ]);
     let present: boolean[];
     try {
-      present = await Promise.all(
-        action.resources.map((resource) => exists(pod.target, resource.outcome.url)),
-      );
+      present = await Promise.all(documents.map((document) => exists(pod.target, document.url)));
     } catch (cause) {
       failResource(
         `preflight for expander group ${group.id} failed`,
@@ -364,20 +384,29 @@ async function processGroup(
         cause,
       );
     }
-    const existing = action.resources
+    const existing = documents
       .filter((_, index) => present[index])
-      .map((value) => value.spec.path);
-    if (mode === "ensure" && existing.length === action.resources.length) {
+      .map((document) => document.path);
+    const missing = documents
+      .filter((_, index) => present[index] !== true)
+      .map((document) => document.path);
+    if (mode === "ensure" && existing.length === documents.length) {
       for (const resource of action.resources) resource.outcome.status = "skipped";
       group.status = "skipped";
       return;
     }
     if (existing.length > 0) {
-      for (const [index, resource] of action.resources.entries()) {
-        if (present[index]) resource.outcome.status = "failed";
+      for (const resource of action.resources) {
+        if (
+          documents.some(
+            (document, index) => document.resource === resource && present[index] === true,
+          )
+        ) {
+          resource.outcome.status = "failed";
+        }
       }
       failResource(
-        `${mode} preflight found an inconsistent expander group ${group.id}; existing members: ${existing.join(", ")}`,
+        `${mode} preflight found an inconsistent expander group ${group.id}; existing members: ${existing.join(", ")}; missing members: ${missing.join(", ")}`,
         completed,
         pod,
         undefined,
@@ -425,10 +454,20 @@ async function processPod(
 /** Provision targets and seed every pod in layout order. */
 export async function seedPods(options: SeedOptions): Promise<SeedManifest> {
   const mode = options.mode ?? "create";
-  const completed: PodManifest[] = [];
+  const materialized: MaterializedPod[] = [];
   for (const podSpec of options.layout.pods) {
     const target = await targetFor(podSpec, options.provisioner);
-    const pod = await materializePod(target, podSpec, options, completed);
+    const pod = await materializePod(
+      target,
+      podSpec,
+      options,
+      materialized.map((value) => value.manifest),
+    );
+    materialized.push(pod);
+  }
+
+  const completed: PodManifest[] = [];
+  for (const pod of materialized) {
     await processPod(completed, pod, mode);
     completed.push(pod.manifest);
   }

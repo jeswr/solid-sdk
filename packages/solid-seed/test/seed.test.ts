@@ -127,6 +127,7 @@ describe("expander groups", () => {
       return ["vc", "anchor", "witness"].map((name) => ({
         path: `/credentials/${name}`,
         source: { body: `issued-${name}` },
+        access: { publicRead: true },
       }));
     };
     return { pods: [{ account: { target: pod }, resources: [issueOnce] }] };
@@ -189,6 +190,18 @@ describe("expander groups", () => {
     expect(pod.putRecords()).toHaveLength(1);
   });
 
+  it("treats a missing group ACL as inconsistent instead of skipping the group", async () => {
+    const pod = new MemoryPod("https://pod.example");
+    const layout = groupLayout(pod, { value: 0 });
+    await seedPods({ layout });
+    pod.resources.delete("https://pod.example/credentials/anchor.acl");
+
+    await expect(seedPods({ layout, mode: "ensure" })).rejects.toMatchObject({
+      message: expect.stringContaining("missing members: /credentials/anchor.acl"),
+      manifest: { pods: [{ groups: [{ id: "group-0", status: "partial" }] }] },
+    });
+  });
+
   it("reports a mid-group abort and converges after a replace re-run", async () => {
     const pod = new MemoryPod("https://pod.example");
     const count = { value: 0 };
@@ -223,7 +236,7 @@ describe("expander groups", () => {
     ]);
     expect(
       [...pod.resources.entries()]
-        .filter(([url]) => url.includes("/credentials/"))
+        .filter(([url]) => url.includes("/credentials/") && !url.endsWith(".acl"))
         .map(([url, resource]) => [new URL(url).pathname, resource.body]),
     ).toEqual([
       ["/credentials/vc", "issued-vc"],
@@ -263,6 +276,26 @@ describe("RDF rebasing and typed ACLs", () => {
       "Unmapped placeholder-base IRI",
     );
     expect(pod.putRecords()).toHaveLength(0);
+  });
+
+  it("materializes every pod before the first write", async () => {
+    const first = new MemoryPod("https://one.example");
+    const second = new MemoryPod("https://two.example");
+    const layout: PodLayout = {
+      pods: [
+        {
+          account: { target: first },
+          resources: [{ path: "/ready", source: { body: "must remain unwritten" } }],
+        },
+        { account: { target: second }, resources: instanceResources() },
+      ],
+    };
+
+    await expect(seedPods({ layout, data: generatedData(true) })).rejects.toThrow(
+      "Unmapped placeholder-base IRI",
+    );
+    expect(first.putRecords()).toHaveLength(0);
+    expect(second.putRecords()).toHaveLength(0);
   });
 
   it("authors ACLs through typed wrappers and always preserves owner control", async () => {
@@ -307,6 +340,31 @@ describe("RDF rebasing and typed ACLs", () => {
     });
     expect(agent).toMatchObject({ canRead: true, canAppend: true, canWrite: false });
     expect(publicRule).toMatchObject({ canRead: true, canWrite: false });
+  });
+
+  it("repairs a missing standalone ACL while ensuring an existing resource", async () => {
+    const pod = new MemoryPod("https://pod.example");
+    const layout: PodLayout = {
+      pods: [
+        {
+          account: { target: pod },
+          resources: [
+            {
+              path: "/private/report",
+              source: { body: "report" },
+              access: { publicRead: true },
+            },
+          ],
+        },
+      ],
+    };
+    await seedPods({ layout });
+    pod.resources.delete("https://pod.example/private/report.acl");
+
+    await expect(seedPods({ layout, mode: "ensure" })).resolves.toMatchObject({
+      pods: [{ resources: [{ path: "/private/report", status: "skipped" }] }],
+    });
+    expect(pod.resources.has("https://pod.example/private/report.acl")).toBe(true);
   });
 
   it("rejects an ACL agent IRI that could escape Turtle serialization", async () => {
