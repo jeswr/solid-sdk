@@ -50,6 +50,7 @@
     "@jeswr/solid-odrl",
     "solid-offline",
     "@jeswr/solid-openid-client",
+    "@jeswr/solid-pod-guard",
     "@jeswr/solid-session-restore",
     "@jeswr/solid-seed",
     "@jeswr/synthetic-rdf",

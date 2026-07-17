@@ -1,0 +1,74 @@
+{
+  "name": "@jeswr/solid-pod-guard",
+  "version": "0.1.0",
+  "securityCritical": true,
+  "description": "The authenticated-caller boundary for server-side Solid pod routes: DPoP-bound Solid-OIDC authentication, a fixed fail-closed route pipeline (401 before validation, pod/webid overrides rejected, 503 unconfigured), bidirectional pim:storage owner binding (forward claim + origin allowlist + owner-only-writable backward acknowledgment, never pick-first), and a client-credentials DPoP service identity. Node-only. Extracted verbatim from a reviewed reference implementation.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Jesse Wright <63333554+jeswr@users.noreply.github.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jeswr/solid-pod-guard.git"
+  },
+  "homepage": "https://github.com/jeswr/solid-pod-guard#readme",
+  "bugs": {
+    "url": "https://github.com/jeswr/solid-pod-guard/issues"
+  },
+  "keywords": [
+    "solid",
+    "solid-oidc",
+    "dpop",
+    "webid",
+    "pim-storage",
+    "pod",
+    "ssrf",
+    "authorization",
+    "client-credentials",
+    "security"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "SKILL.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "lint": "biome check src test",
+    "lint:fix": "biome check --write src test",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.test.json",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@jeswr/fetch-rdf": "^0.1.0",
+    "@jeswr/guarded-fetch": "workspace:*",
+    "@jeswr/solid-api-auth": "workspace:*",
+    "@rdfjs/types": "^2.0.1",
+    "@solid/object": "^0.6.0",
+    "jose": "^6.2.3",
+    "n3": "^2.1.1"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.1",
+    "@jeswr/solid-server": "file:vendor/jeswr-solid-server-0.1.0.tgz",
+    "@types/n3": "^1.26.1",
+    "@types/node": "^25.9.2",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.9"
+  },
+  "engines": {
+    "node": ">=22.12"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
