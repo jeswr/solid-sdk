@@ -22,6 +22,7 @@ import {
   type PodRouteGuard,
   resolveAuthorizedPod,
 } from "../src/index.js";
+import { assertAllowedPodBase } from "../src/pod.js";
 import { type DevOidcIssuer, startDevOidcIssuer } from "./dev-issuer.js";
 import { type SolidTestServer, startSolidServer } from "./harness.js";
 import { seedPod } from "./seed.js";
@@ -213,6 +214,130 @@ describe("param overrides are rejected loudly (L2.4)", () => {
     expect(body.error).toBe("malformed_request");
     expect(body.detail).toBe(detail);
     expect(profileFetches).toBe(0);
+  });
+
+  test.each([
+    ["nested in an object", { options: { pod: "https://victim.example/" } }],
+    ["nested in an array", { list: [{ webid: "https://victim.example/profile#me" }] }],
+    ["deeply nested", { a: { b: [{ c: { pod: "https://victim.example/" } }] } }],
+  ])("a body override %s is rejected 400 (recursive scan)", async (_label, payload) => {
+    const request = await authedRequest(borrower, "POST", "/pod", {
+      body: JSON.stringify(payload),
+    });
+    const response = await guard.handle(request, echoHandler);
+    expect(response.status).toBe(400);
+    const body = (await response.json()) as { error: string };
+    expect(body.error).toBe("param_rejected");
+  });
+});
+
+describe("body DoS containment (size cap enforced while the stream is consumed)", () => {
+  test("an oversized body is rejected 413 BEFORE any pod IO", async () => {
+    let profileFetches = 0;
+    const counting = createPodRouteGuard({
+      config,
+      ownerSeams: {
+        profileFetch: (input, init) => {
+          profileFetches += 1;
+          return fetch(input, { ...init, redirect: "error" });
+        },
+      },
+    });
+    const request = await authedRequest(borrower, "POST", "/pod", {
+      body: JSON.stringify({ pad: "a".repeat(70_000) }),
+    });
+    const response = await counting.handle(request, echoHandler);
+    expect(response.status).toBe(413);
+    expect(((await response.json()) as { error: string }).error).toBe("body_too_large");
+    expect(profileFetches).toBe(0);
+  });
+
+  test("an oversized CHUNKED body (no content-length) is rejected 413 while streaming", async () => {
+    // The Content-Length precheck cannot be the only control: a chunked body
+    // omits the header, so the cap must trip while the stream is consumed.
+    const headers: Record<string, string> = await borrower.authHeaders("POST", apiUrl("/pod"));
+    headers["content-type"] = "application/json";
+    const chunk = new Uint8Array(16 * 1024).fill(0x61);
+    let pushed = 0;
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (pushed >= 8) {
+          controller.close();
+          return;
+        }
+        pushed += 1;
+        controller.enqueue(chunk);
+      },
+    });
+    const request = new Request(apiUrl("/pod"), {
+      method: "POST",
+      headers,
+      body: stream,
+      duplex: "half",
+    } as RequestInit & { duplex: "half" });
+    expect(request.headers.get("content-length")).toBeNull();
+    const response = await guard.handle(request, echoHandler);
+    expect(response.status).toBe(413);
+    expect(((await response.json()) as { error: string }).error).toBe("body_too_large");
+  });
+});
+
+describe("pod base URLs never carry a query or fragment (profile-card confusion)", () => {
+  const allowConfig: PodGuardConfig = {
+    trustedOidcIssuers: [],
+    allowedPodOrigins: ["https://pods.example"],
+  };
+
+  function rejectionOf(pod: string): PodAccessError {
+    try {
+      assertAllowedPodBase(pod, allowConfig);
+    } catch (error) {
+      return error as PodAccessError;
+    }
+    throw new Error(`expected ${pod} to be rejected`);
+  }
+
+  test.each([
+    ["a query", "https://pods.example/alex?x=1"],
+    ["a bare query separator", "https://pods.example/alex?"],
+    ["a fragment", "https://pods.example/alex#x"],
+    ["a bare fragment separator", "https://pods.example/alex#"],
+    ["a fragment mimicking the card path", "https://pods.example/alex#y/profile/card"],
+  ])("a pod base carrying %s is rejected 400", (_label, pod) => {
+    const rejection = rejectionOf(pod);
+    expect(rejection).toBeInstanceOf(PodAccessError);
+    expect(rejection.status).toBe(400);
+    expect(rejection.message).toBe("pod URL must not carry a query or fragment");
+  });
+
+  test("a validated base composes the profile-card IRI as exactly <base>profile/card", () => {
+    const base = assertAllowedPodBase("https://pods.example/alex", allowConfig);
+    expect(base).toBe("https://pods.example/alex/");
+    expect(`${base}profile/card`).toBe("https://pods.example/alex/profile/card");
+  });
+
+  test("a forward claim with a fragment on an ALLOWLISTED origin can never bind (403)", async () => {
+    // Without the query/fragment rejection this claim would validate (same
+    // origin), and the composed `<base>profile/card` would dereference — with
+    // the fragment stripped on the wire — to a resource that is NOT the
+    // owner-only-writable profile card. It must never become a candidate.
+    const confused = await startDevOidcIssuer({ storage: `${podBase}#attack` });
+    try {
+      const scoped = createPodRouteGuard({
+        config: configWith({ issuers: [confused.issuer] }),
+      });
+      const response = await scoped.handle(
+        await authedRequest(confused, "GET", "/pod"),
+        echoHandler,
+      );
+      expect(response.status).toBe(403);
+      const body = (await response.json()) as { detail: string };
+      expect(body.detail).toContain(
+        "no pim:storage claimed by the caller's WebID is in the pod allowlist",
+      );
+    } finally {
+      await confused.stop();
+    }
   });
 });
 

@@ -53,6 +53,18 @@ export function assertAllowedPodBase(pod: string, config: PodGuardConfig): strin
   if (url.username !== "" || url.password !== "") {
     throw new PodAccessError(400, "pod URL must not carry userinfo");
   }
+  // SECURITY: a pod base must be a plain origin+path. A query or fragment
+  // survives into `url.href` and so into every IRI composed on the base —
+  // `<base>profile/card` on a fragment-carrying base dereferences to a
+  // DIFFERENT resource than the owner-only-writable profile card (the
+  // fragment is stripped on the wire), which would let an attacker-authored
+  // `pim:storage` claim on an allowlisted host defeat the backward
+  // acknowledgment. `url.href.includes(...)` rather than `url.search`/`url.hash`
+  // so a bare trailing `?`/`#` (empty search/hash, but preserved in href)
+  // cannot slip through either.
+  if (url.href.includes("?") || url.href.includes("#")) {
+    throw new PodAccessError(400, "pod URL must not carry a query or fragment");
+  }
   const httpsOk = url.protocol === "https:";
   const loopbackOk =
     url.protocol === "http:" && config.allowInsecureLoopback === true && isLoopback(url);
@@ -101,9 +113,13 @@ export async function readPodResource(
     return { dataset, etag };
   } catch (error) {
     if (error instanceof RdfFetchError && error.status === 404) return undefined;
-    throw new PodAccessError(
-      502,
-      `could not read ${iri.replace(base, "<pod>/")}: ${(error as Error).message}`,
+    // Transport/parser detail stays SERVER-SIDE only: the underlying message
+    // can carry parser input fragments, redirect targets, or network
+    // internals, none of which belong in a client-facing response.
+    console.warn(
+      `[solid-pod-guard] pod read failed for ${iri.replace(base, "<pod>/")}: ` +
+        `${(error as Error).message}`,
     );
+    throw new PodAccessError(502, `could not read ${iri.replace(base, "<pod>/")}`);
   }
 }

@@ -11,8 +11,8 @@
  *   1. requires a DPoP-bound Solid-OIDC caller (`@jeswr/solid-api-auth`;
  *      anonymous ⇒ 401 + `WWW-Authenticate`) — NO simulated bypass exists in
  *      server code, in any runtime mode;
- *   2. REJECTS caller-supplied `pod`/`webid` (query or body) with 400 — the
- *      identity and the pod are never request inputs;
+ *   2. REJECTS caller-supplied `pod`/`webid` (query, or body at ANY depth)
+ *      with 400 — the identity and the pod are never request inputs;
  *   3. derives the authorized pod from the TOKEN WebID via the bidirectional
  *      `pim:storage` binding (`resolveAuthorizedPod`, L2);
  *   4. hands `{ webid, podBase }` to the app handler, which additionally
@@ -21,9 +21,11 @@
  *
  * Fail-closed invariants (do NOT weaken): unconfigured issuer allowlist ⇒
  * 503; any binding failure ⇒ 403; malformed payloads ⇒ 400 before any pod IO;
- * unexpected errors ⇒ 500, never a pass. Handler order is strict and NOT
- * configurable: authenticate (anonymous ⇒ 401, even with malformed params) →
- * reject overrides → validate the body → ONLY THEN the pod binding + IO.
+ * oversized bodies ⇒ 413 and a stalled body ⇒ 408, both enforced while the
+ * stream is consumed (DoS containment); unexpected errors ⇒ 500, never a
+ * pass. Handler order is strict and NOT configurable: authenticate
+ * (anonymous ⇒ 401, even with malformed params) → reject overrides →
+ * validate the body → ONLY THEN the pod binding + IO.
  */
 import {
   apiAuthErrorToResponse,
@@ -80,6 +82,33 @@ export interface PodRouteGuard {
 }
 
 const OVERRIDE_PARAMS = ["pod", "webid"] as const;
+
+/**
+ * DoS containment for the OPTIONAL JSON body (which is consumed BEFORE the
+ * rate limiter's post-verification accounting can help): a hard byte cap
+ * enforced while the stream is consumed, plus a read deadline. Guarded routes
+ * carry small JSON control payloads only — these are deliberately fixed, not
+ * options (a configurable cap on a security boundary is a knob to weaken it).
+ */
+const MAX_BODY_BYTES = 64 * 1024;
+const BODY_READ_DEADLINE_MS = 10_000;
+
+/**
+ * Whether an override key (`pod`/`webid`) appears ANYWHERE in the parsed JSON
+ * value — nested objects and arrays included, so `{"options":{"pod":…}}` is
+ * rejected exactly like a top-level override. `JSON.parse` output is acyclic
+ * by construction, so plain recursion terminates.
+ */
+function containsOverrideKey(value: unknown): boolean {
+  if (Array.isArray(value)) return value.some(containsOverrideKey);
+  if (typeof value === "object" && value !== null) {
+    for (const [key, nested] of Object.entries(value)) {
+      if (OVERRIDE_PARAMS.some((name) => name === key)) return true;
+      if (containsOverrideKey(nested)) return true;
+    }
+  }
+  return false;
+}
 
 /** Loud 400 for any attempt to name the pod/identity in the request. */
 function overrideRejection(where: "query" | "body"): Response {
@@ -180,9 +209,76 @@ export function createPodRouteGuard(options: PodGuardOptions): PodRouteGuard {
     return undefined;
   }
 
-  /** Step 3 — parse an OPTIONAL JSON body, rejecting pod/webid keys. */
+  /**
+   * Consume the raw body under the size cap + deadline. The `Content-Length`
+   * precheck is an optimization only — a chunked body may omit or lie about
+   * it, so the cap is ALSO enforced while the stream is consumed.
+   */
+  async function readBoundedBody(request: Request): Promise<string | Response> {
+    const oversize = () =>
+      Response.json(
+        {
+          simulated: true,
+          error: "body_too_large",
+          detail: `body must not exceed ${MAX_BODY_BYTES} bytes`,
+        },
+        { status: 413 },
+      );
+    const declared = Number(request.headers.get("content-length") ?? "");
+    if (Number.isFinite(declared) && declared > MAX_BODY_BYTES) return oversize();
+    if (request.body === null) return "";
+    const reader = request.body.getReader();
+    let timedOut = false;
+    const deadline = setTimeout(() => {
+      timedOut = true;
+      // Cancelling resolves the pending read as done — the loop exits and the
+      // timeout is surfaced below instead of a silently truncated body.
+      void reader.cancel().catch(() => {});
+    }, BODY_READ_DEADLINE_MS);
+    const chunks: Uint8Array[] = [];
+    let total = 0;
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        total += value.byteLength;
+        if (total > MAX_BODY_BYTES) {
+          await reader.cancel().catch(() => {});
+          return oversize();
+        }
+        chunks.push(value);
+      }
+    } catch {
+      return Response.json(
+        { simulated: true, error: "malformed_request", detail: "body could not be read" },
+        { status: 400 },
+      );
+    } finally {
+      clearTimeout(deadline);
+    }
+    if (timedOut) {
+      return Response.json(
+        {
+          simulated: true,
+          error: "body_timeout",
+          detail: "body was not received before the read deadline",
+        },
+        { status: 408 },
+      );
+    }
+    const merged = new Uint8Array(total);
+    let offset = 0;
+    for (const chunk of chunks) {
+      merged.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    return new TextDecoder().decode(merged);
+  }
+
+  /** Step 3 — parse an OPTIONAL JSON body, rejecting pod/webid keys at ANY depth. */
   async function readBody(request: Request): Promise<Record<string, unknown> | Response> {
-    const raw = await request.text();
+    const raw = await readBoundedBody(request);
+    if (raw instanceof Response) return raw;
     if (raw.trim() === "") return {};
     let parsed: unknown;
     try {
@@ -200,7 +296,7 @@ export function createPodRouteGuard(options: PodGuardOptions): PodRouteGuard {
       );
     }
     const body = parsed as Record<string, unknown>;
-    if (OVERRIDE_PARAMS.some((name) => name in body)) return overrideRejection("body");
+    if (containsOverrideKey(body)) return overrideRejection("body");
     return body;
   }
 

@@ -35,9 +35,14 @@ export async function GET(request: Request) {
 
 1. **authenticate** — anonymous is ALWAYS 401 (+ `WWW-Authenticate`), even with
    malformed params; an empty `trustedOidcIssuers` is 503, never open.
-2. **reject overrides** — any `pod`/`webid` in query or body is 400
-   (`param_rejected`): identity and pod are never request inputs.
-3. **validate body** — optional JSON object; malformed ⇒ 400 before ANY pod IO.
+2. **reject overrides** — any `pod`/`webid` in the query, or ANYWHERE in the
+   body (nested objects/arrays included), is 400 (`param_rejected`): identity
+   and pod are never request inputs.
+3. **validate body** — optional JSON object; malformed ⇒ 400 before ANY pod
+   IO. DoS containment is built in and fixed: a 64 KiB size cap enforced
+   while the stream is consumed (⇒ 413 `body_too_large`; a `Content-Length`
+   precheck is an optimization only, chunked bodies are capped mid-stream)
+   plus a 10 s read deadline (⇒ 408 `body_timeout`).
 4. **bind pod** — `resolveAuthorizedPod`; any violation ⇒ 403 (`pod_binding`),
    allowlist unset ⇒ 503, unreachable profile ⇒ 502.
 5. only then your handler. A thrown `PodAccessError` lowers to its status;
@@ -54,7 +59,11 @@ replay.
 
 1. FORWARD claim: the WebID's own profile must claim `<webid> pim:storage <pod>`.
 2. ALLOWLIST: claims filter through `allowedPodOrigins`; **exactly one** must
-   survive — zero or several ⇒ 403, never pick-first.
+   survive — zero or several ⇒ 403, never pick-first. A pod base must be a
+   plain origin+path: a query or fragment is rejected outright, because
+   `<base>profile/card` composed on a fragment-carrying base dereferences —
+   fragment stripped on the wire — to a DIFFERENT resource than the
+   owner-only-writable profile card (a card-confusion attack on step 3).
 3. BACKWARD acknowledgment: `<pod>profile/card` (owner-only-writable) must
    assert the SAME triple. The forward claim is attacker-authored (anyone can
    put any IRI in their own profile) and an origin allowlist cannot separate
