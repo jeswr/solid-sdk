@@ -3452,6 +3452,49 @@ importers:
         specifier: ^4.0.0
         version: 4.1.10(@types/node@24.13.3)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1)(vite@8.1.4(@types/node@24.13.3)(esbuild@0.25.12)(jiti@2.7.0))
 
+  packages/solid-pod-guard:
+    dependencies:
+      '@jeswr/fetch-rdf':
+        specifier: ^0.1.0
+        version: 0.1.0
+      '@jeswr/guarded-fetch':
+        specifier: workspace:*
+        version: link:../guarded-fetch
+      '@jeswr/solid-api-auth':
+        specifier: workspace:*
+        version: link:../solid-api-auth
+      '@rdfjs/types':
+        specifier: ^2.0.1
+        version: 2.0.1
+      '@solid/object':
+        specifier: ^0.6.0
+        version: 0.6.0
+      jose:
+        specifier: ^6.2.3
+        version: 6.2.3
+      n3:
+        specifier: ^2.1.1
+        version: 2.1.1
+    devDependencies:
+      '@biomejs/biome':
+        specifier: ^2.5.1
+        version: 2.5.3
+      '@jeswr/solid-server':
+        specifier: file:vendor/jeswr-solid-server-0.1.0.tgz
+        version: file:packages/solid-pod-guard/vendor/jeswr-solid-server-0.1.0.tgz
+      '@types/n3':
+        specifier: ^1.26.1
+        version: 1.26.1
+      '@types/node':
+        specifier: ^25.9.2
+        version: 25.9.5
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: ^4.1.9
+        version: 4.1.10(@types/node@25.9.5)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1)(vite@8.1.4(@types/node@25.9.5)(esbuild@0.28.1)(jiti@2.7.0))
+
   packages/solid-seed:
     dependencies:
       '@jeswr/rdf-serialize':
@@ -6064,6 +6107,12 @@ packages:
     resolution: {tarball: https://codeload.github.com/jeswr/solid-odrl/tar.gz/db97922d82f2ec016b7ef705827cf85429458668}
     version: 0.1.0
     engines: {node: '>=24'}
+
+  '@jeswr/solid-server@file:packages/solid-pod-guard/vendor/jeswr-solid-server-0.1.0.tgz':
+    resolution: {integrity: sha512-cMh1ckDWspn8GqHJWhL1obqCNBa8x52fNUIrQfd3Z1LYNVLE5coN51NJymFyLXteEoc2stexlz8s5bQsCM6O+A==, tarball: file:packages/solid-pod-guard/vendor/jeswr-solid-server-0.1.0.tgz}
+    version: 0.1.0
+    engines: {node: '>=18'}
+    hasBin: true
 
   '@jeswr/solid-server@file:packages/solid-seed/vendor/jeswr-solid-server-0.1.0.tgz':
     resolution: {integrity: sha512-cMh1ckDWspn8GqHJWhL1obqCNBa8x52fNUIrQfd3Z1LYNVLE5coN51NJymFyLXteEoc2stexlz8s5bQsCM6O+A==, tarball: file:packages/solid-seed/vendor/jeswr-solid-server-0.1.0.tgz}
@@ -18143,6 +18192,12 @@ snapshots:
       content-type: 1.0.5
       jsonld-streaming-parser: 5.0.1
       n3: 2.1.1
+
+  '@jeswr/solid-server@file:packages/solid-pod-guard/vendor/jeswr-solid-server-0.1.0.tgz':
+    dependencies:
+      '@solid/access-token-verifier': 2.1.1
+    transitivePeerDependencies:
+      - encoding
 
   '@jeswr/solid-server@file:packages/solid-seed/vendor/jeswr-solid-server-0.1.0.tgz':
     dependencies:
