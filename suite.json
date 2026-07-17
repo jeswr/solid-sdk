@@ -53,6 +53,7 @@
     "@jeswr/solid-pod-guard",
     "@jeswr/solid-session-restore",
     "@jeswr/solid-seed",
+    "@jeswr/solid-showcase",
     "@jeswr/solid-showcase-kit",
     "@jeswr/synthetic-rdf",
     "@jeswr/solid-task-model",

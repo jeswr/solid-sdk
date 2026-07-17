@@ -1,0 +1,569 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "walkthrough.v1.json",
+  "title": "WalkthroughDocument",
+  "type": "object",
+  "properties": {
+    "version": {
+      "type": "number",
+      "const": 1
+    },
+    "site": {
+      "type": "object",
+      "properties": {
+        "appName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "organization": {
+          "type": "string",
+          "minLength": 1
+        },
+        "heroTitle": {
+          "type": "string"
+        },
+        "heroLead": {
+          "type": "string"
+        },
+        "heroParagraph": {
+          "type": "string"
+        },
+        "startCtaLabel": {
+          "type": "string"
+        },
+        "exploreCtaLabel": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "appName",
+        "organization",
+        "heroTitle",
+        "heroLead",
+        "heroParagraph"
+      ],
+      "additionalProperties": false
+    },
+    "branding": {
+      "type": "object",
+      "properties": {
+        "convener": {
+          "type": "string",
+          "minLength": 1
+        },
+        "domainNegations": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1
+        },
+        "aboutHref": {
+          "type": "string"
+        },
+        "consentCookiePrefix": {
+          "type": "string",
+          "pattern": "^[a-z0-9-]+-$"
+        },
+        "illustrativeTag": {
+          "type": "string"
+        },
+        "bannedMarks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "pattern": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "pattern",
+              "reason"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "convener",
+        "domainNegations",
+        "description"
+      ],
+      "additionalProperties": false
+    },
+    "persona": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "descriptor": {
+          "type": "string"
+        },
+        "fields": {
+          "minItems": 1,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "label": {
+                "type": "string"
+              },
+              "value": {
+                "type": "string"
+              },
+              "copyable": {
+                "type": "boolean"
+              },
+              "note": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "label",
+              "value"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "footnote": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "descriptor",
+        "fields"
+      ],
+      "additionalProperties": false
+    },
+    "anchors": {
+      "maxItems": 6,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "source": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "url": {
+                "type": "string",
+                "format": "uri",
+                "pattern": "^https:\\/\\/.*"
+              }
+            },
+            "required": [
+              "name",
+              "url"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "id",
+          "value",
+          "label",
+          "detail",
+          "source"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "registry": {
+      "type": "object",
+      "properties": {
+        "apps": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "slug": {
+                "type": "string",
+                "pattern": "^[a-z0-9-]+$"
+              },
+              "appName": {
+                "type": "string"
+              },
+              "modelledOn": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string",
+                "pattern": "^\\/"
+              },
+              "zoneEnv": {
+                "type": "string",
+                "pattern": "^[A-Z][A-Z0-9_]*$"
+              },
+              "healthPath": {
+                "type": "string",
+                "pattern": "^\\/"
+              },
+              "theme": {
+                "type": "object",
+                "properties": {
+                  "hue": {
+                    "type": "number"
+                  },
+                  "primary": {
+                    "type": "string"
+                  },
+                  "accent": {
+                    "type": "string"
+                  },
+                  "primaryForeground": {
+                    "type": "string"
+                  },
+                  "accentForeground": {
+                    "type": "string"
+                  },
+                  "role": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "hue",
+                  "primary",
+                  "accent",
+                  "role"
+                ],
+                "additionalProperties": false
+              },
+              "honesty": {
+                "type": "object",
+                "properties": {
+                  "real": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "simulated": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "real",
+                  "simulated"
+                ],
+                "additionalProperties": false
+              },
+              "podRoutes": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^\\/"
+                }
+              }
+            },
+            "required": [
+              "slug",
+              "appName",
+              "modelledOn",
+              "path",
+              "healthPath"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "launcherOrder": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "roles": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "slug": {
+                "type": "string"
+              },
+              "roleNumber": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "role": {
+                "type": "string"
+              },
+              "modelledOn": {
+                "type": "string"
+              },
+              "membership": {
+                "type": "string"
+              },
+              "summary": {
+                "type": "string"
+              },
+              "scene": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "apps": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "center": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "slug",
+              "role",
+              "modelledOn",
+              "membership",
+              "summary",
+              "apps"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "center": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "apps",
+        "launcherOrder",
+        "roles",
+        "center"
+      ],
+      "additionalProperties": false
+    },
+    "chapters": {
+      "minItems": 1,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "slug": {
+            "type": "string",
+            "pattern": "^[a-z0-9-]+$"
+          },
+          "scene": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "title": {
+            "type": "string"
+          },
+          "anchor": {
+            "type": "string",
+            "minLength": 10
+          },
+          "lead": {
+            "type": "string"
+          },
+          "steps": {
+            "minItems": 2,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "title": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "body": {
+                  "type": "string"
+                },
+                "tryLive": {
+                  "type": "object",
+                  "properties": {
+                    "app": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "app",
+                    "label"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "title",
+                "body",
+                "tryLive"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "underneath": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 20
+            }
+          },
+          "underneathRequired": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "slug",
+          "scene",
+          "title",
+          "anchor",
+          "lead",
+          "steps"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "editorial": {
+      "type": "object",
+      "properties": {
+        "maxLeadWords": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "maxStepWords": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "minSteps": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 9007199254740991
+        },
+        "minUnderneathChars": {
+          "type": "integer",
+          "minimum": 20,
+          "maximum": 9007199254740991
+        }
+      },
+      "additionalProperties": false
+    },
+    "compliance": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "nonAffiliation": {
+          "type": "string",
+          "minLength": 20
+        },
+        "checks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "rule": {
+                "type": "string"
+              },
+              "citation": {
+                "type": "string"
+              },
+              "citationUrl": {
+                "type": "string",
+                "format": "uri",
+                "pattern": "^https:\\/\\/.*"
+              },
+              "scene": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "chapterSlug": {
+                "type": "string"
+              },
+              "observe": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "rule",
+              "citation",
+              "citationUrl",
+              "scene",
+              "chapterSlug",
+              "observe"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "title",
+        "nonAffiliation",
+        "checks"
+      ],
+      "additionalProperties": false
+    },
+    "deploy": {
+      "type": "object",
+      "properties": {
+        "slug": {
+          "type": "string",
+          "pattern": "^[a-z0-9-]+$"
+        },
+        "envPrefix": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Z0-9_]*$"
+        }
+      },
+      "required": [
+        "slug",
+        "envPrefix"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "version",
+    "site",
+    "branding",
+    "persona",
+    "anchors",
+    "registry",
+    "chapters",
+    "deploy"
+  ],
+  "additionalProperties": false
+}
