@@ -229,6 +229,22 @@ describe("param overrides are rejected loudly (L2.4)", () => {
     const body = (await response.json()) as { error: string };
     expect(body.error).toBe("param_rejected");
   });
+
+  test("a pathologically nested body (30k deep, under the size cap) is rejected 400 — no crash", async () => {
+    // The 64 KiB size cap bounds representable nesting at ~32k levels, so
+    // 30k-deep is the pathological case the cap still admits — the ITERATIVE
+    // override scan must reject it on its depth budget in a controlled 400,
+    // never blow the call stack into a 500.
+    const depth = 30_000;
+    const raw = `{"a":${"[".repeat(depth)}${"]".repeat(depth)}}`;
+    expect(raw.length).toBeLessThan(64 * 1024);
+    const request = await authedRequest(borrower, "POST", "/pod", { body: raw });
+    const response = await guard.handle(request, echoHandler);
+    expect(response.status).toBe(400);
+    const body = (await response.json()) as { error: string; detail: string };
+    expect(body.error).toBe("param_rejected");
+    expect(body.detail).toContain("nesting/node budget");
+  });
 });
 
 describe("body DoS containment (size cap enforced while the stream is consumed)", () => {
@@ -279,6 +295,35 @@ describe("body DoS containment (size cap enforced while the stream is consumed)"
     const response = await guard.handle(request, echoHandler);
     expect(response.status).toBe(413);
     expect(((await response.json()) as { error: string }).error).toBe("body_too_large");
+  });
+
+  test("a source whose cancel NEVER SETTLES still gets a prompt 413 (no hang)", async () => {
+    // The reject path must not await the stream's cancellation algorithm — a
+    // malicious source can make cancel() pend forever, and that must never
+    // hold the 413 hostage past the read deadline.
+    const headers: Record<string, string> = await borrower.authHeaders("POST", apiUrl("/pod"));
+    headers["content-type"] = "application/json";
+    const chunk = new Uint8Array(16 * 1024).fill(0x61);
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        controller.enqueue(chunk);
+      },
+      cancel() {
+        return new Promise<void>(() => {}); // cancellation never settles
+      },
+    });
+    const request = new Request(apiUrl("/pod"), {
+      method: "POST",
+      headers,
+      body: stream,
+      duplex: "half",
+    } as RequestInit & { duplex: "half" });
+    const started = Date.now();
+    const response = await guard.handle(request, echoHandler);
+    expect(response.status).toBe(413);
+    expect(((await response.json()) as { error: string }).error).toBe("body_too_large");
+    // Prompt: well inside the 10 s read deadline, not gated on cancel settling.
+    expect(Date.now() - started).toBeLessThan(5_000);
   });
 });
 

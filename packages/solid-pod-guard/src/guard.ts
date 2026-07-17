@@ -92,22 +92,43 @@ const OVERRIDE_PARAMS = ["pod", "webid"] as const;
  */
 const MAX_BODY_BYTES = 64 * 1024;
 const BODY_READ_DEADLINE_MS = 10_000;
+/**
+ * Structural budgets for the override scan. A legitimate route body is a
+ * small, flat-ish JSON control payload; anything deeper/bigger is rejected
+ * 400 rather than traversed. The 64 KiB size cap bounds representable
+ * nesting at ~32k levels, so a 64-level budget is generous for real payloads
+ * while keeping the scan's work trivially small.
+ */
+const MAX_BODY_DEPTH = 64;
+const MAX_BODY_NODES = 25_000;
 
 /**
- * Whether an override key (`pod`/`webid`) appears ANYWHERE in the parsed JSON
- * value — nested objects and arrays included, so `{"options":{"pod":…}}` is
- * rejected exactly like a top-level override. `JSON.parse` output is acyclic
- * by construction, so plain recursion terminates.
+ * Scan the parsed JSON body for an override key (`pod`/`webid`) ANYWHERE —
+ * nested objects and arrays included, so `{"options":{"pod":…}}` is rejected
+ * exactly like a top-level override. ITERATIVE by design (explicit
+ * work-stack): a pathologically nested body must exhaust the budget and be
+ * rejected in a controlled way, never blow the call stack into a 500.
  */
-function containsOverrideKey(value: unknown): boolean {
-  if (Array.isArray(value)) return value.some(containsOverrideKey);
-  if (typeof value === "object" && value !== null) {
-    for (const [key, nested] of Object.entries(value)) {
-      if (OVERRIDE_PARAMS.some((name) => name === key)) return true;
-      if (containsOverrideKey(nested)) return true;
+function scanForOverrideKeys(root: unknown): "clean" | "override" | "over-budget" {
+  const stack: { value: unknown; depth: number }[] = [{ value: root, depth: 0 }];
+  let nodes = 0;
+  for (;;) {
+    const entry = stack.pop();
+    if (entry === undefined) return "clean";
+    nodes += 1;
+    if (entry.depth > MAX_BODY_DEPTH || nodes > MAX_BODY_NODES) return "over-budget";
+    const { value, depth } = entry;
+    if (Array.isArray(value)) {
+      for (const item of value) stack.push({ value: item, depth: depth + 1 });
+      continue;
+    }
+    if (typeof value === "object" && value !== null) {
+      for (const [key, nested] of Object.entries(value)) {
+        if (OVERRIDE_PARAMS.some((name) => name === key)) return "override";
+        stack.push({ value: nested, depth: depth + 1 });
+      }
     }
   }
-  return false;
 }
 
 /** Loud 400 for any attempt to name the pod/identity in the request. */
@@ -243,7 +264,10 @@ export function createPodRouteGuard(options: PodGuardOptions): PodRouteGuard {
         if (done) break;
         total += value.byteLength;
         if (total > MAX_BODY_BYTES) {
-          await reader.cancel().catch(() => {});
+          // Fire-and-forget: the reject must NOT wait on the source's
+          // cancellation algorithm — a malicious source whose cancel never
+          // settles would otherwise hold the 413 hostage.
+          reader.cancel().catch(() => {});
           return oversize();
         }
         chunks.push(value);
@@ -296,7 +320,20 @@ export function createPodRouteGuard(options: PodGuardOptions): PodRouteGuard {
       );
     }
     const body = parsed as Record<string, unknown>;
-    if (containsOverrideKey(body)) return overrideRejection("body");
+    const scan = scanForOverrideKeys(body);
+    if (scan === "override") return overrideRejection("body");
+    if (scan === "over-budget") {
+      return Response.json(
+        {
+          simulated: true,
+          error: "param_rejected",
+          detail:
+            "the body exceeds the nesting/node budget — not a legitimate route body " +
+            "(both are fixed, see SKILL.md)",
+        },
+        { status: 400 },
+      );
+    }
     return body;
   }
 

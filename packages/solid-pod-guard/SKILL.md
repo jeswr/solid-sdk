@@ -37,7 +37,10 @@ export async function GET(request: Request) {
    malformed params; an empty `trustedOidcIssuers` is 503, never open.
 2. **reject overrides** — any `pod`/`webid` in the query, or ANYWHERE in the
    body (nested objects/arrays included), is 400 (`param_rejected`): identity
-   and pod are never request inputs.
+   and pod are never request inputs. The scan is iterative with a fixed
+   structural budget (64 nesting levels / 25k nodes); a body beyond it is not
+   a legitimate route body and is rejected 400 (`param_rejected`) rather than
+   traversed.
 3. **validate body** — optional JSON object; malformed ⇒ 400 before ANY pod
    IO. DoS containment is built in and fixed: a 64 KiB size cap enforced
    while the stream is consumed (⇒ 413 `body_too_large`; a `Content-Length`
