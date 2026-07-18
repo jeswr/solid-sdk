@@ -1,0 +1,20 @@
+# npm publish allowlist is `files` in package.json (dist, template, README, SKILL, LICENSE).
+# This file keeps dev-only artifacts out of the tarball belt-and-braces.
+#
+# NOTE on the template's own dotfiles: npm STRIPS certain dotfiles from a published
+# tarball regardless of this file — a nested `template/.gitignore` (always dropped),
+# `template/.npmrc` (registry-auth hygiene), and `.env*`-matched files. They therefore
+# ship under NON-dotfile shim names (`gitignore`, `npmrc`, `env.example`, plus
+# `github/` for `.github/`) that survive pack; src/scaffold.ts renames them to the real
+# dotfiles at scaffold time (DOTFILE_RENAMES). scripts/build.mjs guards both halves.
+node_modules
+*.tsbuildinfo
+.DS_Store
+*.log
+src
+test
+scripts
+biome.json
+vitest.config.ts
+tsconfig.json
+.npmrc

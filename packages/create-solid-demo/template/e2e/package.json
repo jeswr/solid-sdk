@@ -1,0 +1,19 @@
+{
+  "name": "@__CSD_SLUG__/e2e",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test:e2e": "playwright test"
+  },
+  "devDependencies": {
+    "@__CSD_SLUG__/app-tour": "workspace:*",
+    "@axe-core/playwright": "^4.12.1",
+    "@jeswr/solid-showcase": "^0.1.0",
+    "@jeswr/solid-showcase-kit": "^0.1.0",
+    "@playwright/test": "^1.59.1",
+    "@types/node": "^25.9.2",
+    "typescript": "^6.0.3"
+  }
+}
