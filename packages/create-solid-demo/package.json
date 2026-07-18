@@ -1,0 +1,45 @@
+{
+  "name": "create-solid-demo",
+  "version": "0.1.0",
+  "description": "Scaffold a domain-generic multistakeholder pod-data walkthrough: a pnpm+turbo monorepo whose tour shell renders a JSON walkthrough document via @jeswr/solid-showcase, with per-app skeletons on @jeswr/solid-showcase-kit, a @jeswr/solid-pod-guard sample route, and seeds wired to @jeswr/synthetic-rdf + @jeswr/solid-seed.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Jesse Wright <63333554+jeswr@users.noreply.github.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jeswr/create-solid-demo.git"
+  },
+  "homepage": "https://github.com/jeswr/create-solid-demo#readme",
+  "bugs": {
+    "url": "https://github.com/jeswr/create-solid-demo/issues"
+  },
+  "keywords": ["solid", "scaffolder", "walkthrough", "demo", "pnpm", "turborepo", "npx"],
+  "bin": {
+    "create-solid-demo": "./dist/bin.mjs"
+  },
+  "files": ["dist", "template", "README.md", "SKILL.md", "LICENSE"],
+  "engines": {
+    "node": ">=20.12"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "lint": "biome check src test scripts",
+    "lint:fix": "biome check --write src test scripts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.1",
+    "@jeswr/solid-pod-guard": "workspace:*",
+    "@jeswr/solid-seed": "workspace:*",
+    "@jeswr/solid-showcase": "workspace:*",
+    "@jeswr/solid-showcase-kit": "workspace:*",
+    "@jeswr/synthetic-rdf": "workspace:*",
+    "@types/node": "^25.9.2",
+    "@types/react": "^19.0.0",
+    "esbuild": "^0.28.1",
+    "react": "^19.2.0",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.9"
+  }
+}

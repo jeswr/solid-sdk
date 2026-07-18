@@ -1,0 +1,2 @@
+# Supply-chain hardening (suite house rule): no dependency lifecycle script ever runs.
+ignore-scripts=true

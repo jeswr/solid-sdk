@@ -1,0 +1,25 @@
+{
+  "name": "@__CSD_SLUG__/seeds",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "seed": "node run.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@__CSD_SLUG__/data-model": "workspace:*",
+    "@jeswr/solid-seed": "^0.1.0",
+    "@jeswr/synthetic-rdf": "^0.1.0",
+    "n3": "^2.0.3",
+    "shacl-engine": "^1.1.2"
+  },
+  "devDependencies": {
+    "@rdfjs/types": "^2.0.1",
+    "@types/n3": "^1.26.1",
+    "@types/node": "^25.9.2",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.9"
+  }
+}

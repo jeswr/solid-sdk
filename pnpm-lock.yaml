@@ -2127,6 +2127,45 @@ importers:
         specifier: ^4.1.8
         version: 4.1.10(@types/node@24.13.3)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1)(vite@8.1.4(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0))
 
+  packages/create-solid-demo:
+    devDependencies:
+      '@biomejs/biome':
+        specifier: ^2.5.1
+        version: 2.5.3
+      '@jeswr/solid-pod-guard':
+        specifier: workspace:*
+        version: link:../solid-pod-guard
+      '@jeswr/solid-seed':
+        specifier: workspace:*
+        version: link:../solid-seed
+      '@jeswr/solid-showcase':
+        specifier: workspace:*
+        version: link:../solid-showcase
+      '@jeswr/solid-showcase-kit':
+        specifier: workspace:*
+        version: link:../solid-showcase-kit
+      '@jeswr/synthetic-rdf':
+        specifier: workspace:*
+        version: link:../synthetic-rdf
+      '@types/node':
+        specifier: ^25.9.2
+        version: 25.9.5
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.2.17
+      esbuild:
+        specifier: ^0.28.1
+        version: 0.28.1
+      react:
+        specifier: ^19.2.0
+        version: 19.2.7
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: ^4.1.9
+        version: 4.1.10(@types/node@25.9.5)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1)(vite@8.1.4(@types/node@25.9.5)(esbuild@0.28.1)(jiti@2.7.0))
+
   packages/federation-client:
     dependencies:
       '@jeswr/federation-registry':

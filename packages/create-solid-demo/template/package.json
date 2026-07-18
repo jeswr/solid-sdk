@@ -1,0 +1,27 @@
+{
+  "name": "__CSD_SLUG__-walkthrough",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.4.1",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "lint:iris": "node scripts/lint-iris.mjs",
+    "check:insignia": "node scripts/check-insignia.mjs",
+    "seed": "pnpm --filter @__CSD_SLUG__/seeds run seed",
+    "e2e": "pnpm --filter @__CSD_SLUG__/e2e run test:e2e"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.4",
+    "@jeswr/solid-showcase-kit": "^0.1.0",
+    "turbo": "^2.10.4",
+    "typescript": "^6.0.3"
+  }
+}
