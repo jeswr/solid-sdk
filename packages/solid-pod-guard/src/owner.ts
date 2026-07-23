@@ -51,26 +51,58 @@ export interface OwnerBindingSeams {
 const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
 /**
- * Dev-only TLS-terminator stand-in: WebID claims are hard-required to be
- * `https:`, but the loopback dev issuer actually listens on plain HTTP — map
- * `https://<loopback>` onto `http://<loopback>` (same host/port). Loopback
- * hosts only; everything else passes through untouched.
+ * Dev-only TLS-terminator stand-in for loopback WebID profile fetches. WebIDs
+ * are hard-required `https:`, but a loopback dev issuer may listen on EITHER
+ * the plain-HTTP stand-in (the historical dev case — TLS termination is faked)
+ * OR a REAL TLS listener (issuers whose own OIDC verifier demands genuine TLS,
+ * e.g. sparq's `@solid/access-token-verifier`, which has no loopback-http
+ * exception on its pod-direct path). So for a `https://<loopback>` target we
+ * try the `http://<loopback>` stand-in FIRST (same host/port — the long-
+ * standing behaviour, unchanged for plain-HTTP dev issuers) and fall back to
+ * the `https:` the WebID actually claims ONLY if the downgraded request fails
+ * at the connection layer. Loopback hosts only; non-loopback and non-https
+ * targets pass through untouched.
+ *
+ * SECURITY: reachable ONLY under `allowInsecureLoopback` (dev/e2e) — production
+ * uses the DNS-pinned SSRF-guarded fetch and never enters here. This fetch
+ * carries NO token/credential: it reads the caller's PUBLIC WebID profile
+ * document. The fallback only ever targets the SAME loopback host/port over the
+ * WebID's own claimed https — it opens no new host and leaks no secret.
+ *
+ * @internal exported for unit testing only; not part of the package API.
  */
-function loopbackMappedFetch(base: typeof fetch): typeof fetch {
-  return (input, init) => {
+export function loopbackMappedFetch(base: typeof fetch): typeof fetch {
+  return async (input, init) => {
     const raw = input instanceof Request ? input.url : String(input);
+    let url: URL;
     try {
-      const url = new URL(raw);
-      if (url.protocol === "https:" && LOOPBACK_HOSTS.has(url.hostname)) {
-        url.protocol = "http:";
-        return input instanceof Request
-          ? base(new Request(url.href, input), init)
-          : base(url.href, init);
-      }
+      url = new URL(raw);
     } catch {
       // Not an absolute URL — let the underlying fetch produce the error.
+      return base(input, init);
     }
-    return base(input, init);
+    if (url.protocol !== "https:" || !LOOPBACK_HOSTS.has(url.hostname)) {
+      // Not a loopback https target — pass through untouched.
+      return base(input, init);
+    }
+    const mapped = new URL(url.href);
+    mapped.protocol = "http:";
+    const httpHref = mapped.href;
+    try {
+      // Primary: the plain-HTTP stand-in (unchanged historical behaviour).
+      return await (input instanceof Request
+        ? base(new Request(httpHref, input), init)
+        : base(httpHref, init));
+    } catch (httpError) {
+      // The stand-in isn't there — the issuer serves REAL TLS. Honor the
+      // https the WebID claims (same host/port). If that also fails, surface
+      // the original downgraded-request error (fail closed).
+      try {
+        return await base(input, init);
+      } catch {
+        throw httpError;
+      }
+    }
   };
 }
 
