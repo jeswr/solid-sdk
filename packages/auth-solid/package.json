@@ -65,7 +65,7 @@
     "jose": "^6.0.0"
   },
   "devDependencies": {
-    "@auth/core": "^0.41.2",
+    "@auth/core": "^0.41.3",
     "@biomejs/biome": "^2.4.16",
     "@types/node": "^24.0.0",
     "esbuild": "^0.25.0",
