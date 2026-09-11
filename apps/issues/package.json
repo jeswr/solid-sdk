@@ -62,6 +62,6 @@
     "rdf-validate-shacl": "^0.6.5",
     "tailwindcss": "^4",
     "typescript": "^5",
-    "vitest": "^4.1.8"
+    "vitest": "^4.1.11"
   }
 }
