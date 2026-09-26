@@ -11,8 +11,12 @@
                 "@key-value-kit/storage/memory": "https://cdn.jsdelivr.net/npm/@key-value-kit/storage@0.1.0-alpha.0/dist/memory.js",
                 "@key-value-kit/storage/indexeddb": "https://cdn.jsdelivr.net/npm/@key-value-kit/storage@0.1.0-alpha.0/dist/indexeddb.js",
                 "idb-keyval": "https://cdn.jsdelivr.net/npm/idb-keyval@6.3.0/dist/index.js",
-                "oauth4webapi": "https://cdn.jsdelivr.net/npm/oauth4webapi@3.8.6/+esm",
+                "oauth4webapi": "https://cdn.jsdelivr.net/npm/oauth4webapi@3.8.8/+esm",
                 "dpop": "https://cdn.jsdelivr.net/npm/dpop@2.1.1/+esm",
+                "jose": "https://cdn.jsdelivr.net/npm/jose@6.2.12/+esm",
+                "multiformats": "https://cdn.jsdelivr.net/npm/multiformats@14.0.5/+esm",
+                "multiformats/bases/base58": "https://cdn.jsdelivr.net/npm/multiformats@14.0.5/bases/base58/+esm",
+                "http-link-header": "https://cdn.jsdelivr.net/npm/http-link-header@1.1.4/+esm",
                 "n3": "https://esm.sh/n3@2.0.3",
                 "@rdfjs/wrapper": "https://cdn.jsdelivr.net/npm/@rdfjs/wrapper@0.34.0/+esm"
               }
@@ -23,63 +27,54 @@
                 CachingAuthorizationServerProvider,
                 CachingClientProvider,
                 CachingIssuerProvider,
-                // ClientIdClientProvider,
+                CredentialBoundary,
                 DPoPTokenProvider,
                 DynamicRegistrationClientProvider,
                 ReactiveFetchManager,
-                XASProvider
+                XASProvider,
+                storageContextKey,
             } from "./dist/mod.js"
             import "./dist/registerElements.js"
 
             /* Reactive fetch infrastructure */
             const ui = document.querySelector("authorization-code-flow")
             const issuerUi = document.querySelector("idp-picker")
-            const issuerProvider = new CachingIssuerProvider(issuerUi)
-            const asProvider = new XASProvider(issuerProvider)
-            const cachingASProvider = new CachingAuthorizationServerProvider(asProvider)
+            const context = storageContextKey()
+            const issuerProvider = new CachingIssuerProvider(issuerUi, undefined, context)
+            const asProvider = new CachingAuthorizationServerProvider(new XASProvider(issuerProvider), undefined, context)
             const callbackUri = new URL("/callback.html", location.href).toString()
-            const clientProvider = new DynamicRegistrationClientProvider
-            // const clientProvider = new ClientIdClientProvider(new URL("./id.jsonld", location.href))
-            const cachingClientProvider = new CachingClientProvider(clientProvider)
+            const clientProvider = new CachingClientProvider(new DynamicRegistrationClientProvider())
+            // const clientProvider = new CachingClientProvider(new ClientIdClientProvider(new URL("./id.jsonld", location.href)))
 
-            const dPoPTokenProvider = new DPoPTokenProvider(callbackUri, ui, cachingASProvider, cachingClientProvider)
+            const dPoPTokenProvider = new DPoPTokenProvider(callbackUri, ui, asProvider, clientProvider)
 
-            const fetch = new ReactiveFetchManager([dPoPTokenProvider]).fetch
+            // Only these demo storages may ever receive credentials.
+            const buttons = [...document.querySelectorAll("button.fetch")]
+            const boundary = new CredentialBoundary(buttons.map(b => new URL("./", b.value).href).filter(u => u.startsWith("https:")))
+            const manager = new ReactiveFetchManager({providers: [dPoPTokenProvider], boundary})
+            const fetch = manager.fetch
 
             /* Page functionality: Buttons */
             document.addEventListener("DOMContentLoaded", () =>
-                document.querySelectorAll("button.fetch").forEach(button =>
+                buttons.forEach(button =>
                     button.addEventListener("click", async e =>
                         await f(e.target.value))))
+            document.querySelector("#logout").addEventListener("click", () => manager.logout())
 
-            /* Page functionality: Onload */
             async function f(uri) {
                 console.log(`Start fetch to ${uri}`)
 
                 try {
-                    // const response = await fetch(uri, {signal: AbortSignal.timeout(5000)})
                     const response = await fetch(uri)
-                    console.log(`Fetch succeeded to ${uri}`, response)
+                    console.log(`Fetch ${response.status} for ${uri}`, response)
                 } catch (e) {
                     console.error(`Fetch failed to ${uri}`, e)
                 }
             }
-
-            document.addEventListener("DOMContentLoaded", async () => {
-                await Promise.all([
-                    f("https://echo.free.beeceptor.com/"),
-                    // f("https://langsamu.solidcommunity.net/settings/"),
-                    f("https://storage.inrupt.com/d5e2efbd-1dd6-4c45-b6a3-e61a05bb9d49/"),
-                    f("https://langsamu.datapod.igrant.io/settings/"),
-                    f("https://langsamu.solidweb.app/settings/"),
-                    f("https://teamid.live/langsamu/settings/"),
-                    f("https://langsamu.solidweb.org/settings/"),
-                    // f("http://localhost:3000/a/profile/"),
-                ])
-            })
         </script>
     </head>
     <body>
+        <button id="logout">Log out</button>
         <button class="fetch" value="https://echo.free.beeceptor.com/">echo</button>
         <button class="fetch" value="https://langsamu.solidcommunity.net/settings/">solidcommunity.net (CSS)</button>
         <button class="fetch" value="https://storage.inrupt.com/d5e2efbd-1dd6-4c45-b6a3-e61a05bb9d49/">PodSpaces (ESS)</button>

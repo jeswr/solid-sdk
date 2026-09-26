@@ -17,8 +17,14 @@ export async function serve(handler) {
             const body = chunks.length === 0 || req.method === "GET" || req.method === "HEAD" ? undefined : Buffer.concat(chunks)
             const request = new Request(url, {method: req.method, headers: req.headers, body})
             state.requests.push(request.clone())
-            const response = await handler(request, state)
-            res.writeHead(response.status, [...response.headers].flat())
+            const response = req.method === "OPTIONS" ? new Response(null, {status: 204}) : await handler(request, state)
+            // Permissive CORS so the same servers work for browser smoke tests.
+            const headers = new Headers(response.headers)
+            headers.set("access-control-allow-origin", "*")
+            headers.set("access-control-allow-headers", "authorization, dpop, content-type")
+            headers.set("access-control-allow-methods", "GET, HEAD, POST, PUT, PATCH, DELETE")
+            headers.set("access-control-expose-headers", "www-authenticate, link, dpop-nonce, location")
+            res.writeHead(response.status, [...headers].flat())
             res.end(Buffer.from(await response.arrayBuffer()))
         } catch (error) {
             res.writeHead(500, {"content-type": "text/plain"})

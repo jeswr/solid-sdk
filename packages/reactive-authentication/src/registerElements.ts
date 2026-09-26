@@ -17,9 +17,7 @@
  * @module
  */
 
-import { AuthorizationCodeFlow } from "./AuthorizationCodeFlow.js"
-import { IdpPicker } from "./IdpPicker.js"
-import { WebIdPicker } from "./WebIdPicker.js"
+import { AuthorizationCodeFlow, IdpPicker, WebIdPicker } from "./elements.js"
 
 customElements.define("authorization-code-flow", AuthorizationCodeFlow)
 customElements.define("idp-picker", IdpPicker)

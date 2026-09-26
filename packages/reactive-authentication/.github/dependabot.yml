@@ -5,6 +5,12 @@ updates:
     directory: "/"
     schedule:
       interval: "daily"
+    ignore:
+      # TypeScript 7 (native compiler) ships no stable JavaScript compiler API, and typedoc@0.28 (latest)
+      # declares peer typescript <=6.0.x (TypeStrong/typedoc#3098). Revisit when typedoc supports 7.
+      # See docs/upstream-resolution.md (#34).
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:

@@ -1,105 +1,101 @@
-import * as oauth from "oauth4webapi"
-import { AuthorizationServer } from "oauth4webapi"
+import type { KeyValueStore } from "@key-value-kit/core"
 import * as DPoP from "dpop"
+import * as oauth from "oauth4webapi"
+import type { AuthorizationServerProvider } from "./AuthorizationServerProvider.js"
+import type { ChallengeContext } from "./challenge.js"
+import { generateDPoPKey, withDPoPNonceRetry } from "./dpopNonce.js"
+import { FencedCache, type FenceTicket, type Stamped } from "./FencedCache.js"
+import { clientAuthFor } from "./serverQuirks.js"
+import type { SessionFence } from "./SessionFence.js"
+import { oauthOptions, type HttpOptions } from "./transport.js"
 import type { TokenProvider } from "./TokenProvider.js"
 
-export class ClientCredentialsTokenProvider implements TokenProvider {
-    constructor(private clientId: string, private clientSecret: string) {
-    }
+/** A DPoP-bound client credentials access token (structured-cloneable; the key is non-extractable). */
+export type ClientCredentialsToken = {accessToken: string, dpopKey: CryptoKeyPair, expiresAt?: number}
 
-    async #getIssuer(request: Request): Promise<URL> {
-        if (request.url.includes(".solidcommunity.net")) {
-            return new URL("https://solidcommunity.net")
-        } else if (request.url.includes("datapod.igrant.io")) {
-            return new URL("https://datapod.igrant.io")
-        } else if (request.url.includes(".solidweb.app")) {
-            return new URL("https://solidweb.app")
-        } else if (request.url.includes("storage.inrupt.com")) {
-            return new URL("https://login.inrupt.com")
-        } else if (request.url.includes("teamid.live")) {
-            return new URL("https://teamid.live")
-        } else if (request.url.includes(".solidweb.org")) {
-            return new URL("https://solidweb.org")
-        } else if (request.url.includes("localhost:3000")) {
-            return new URL("http://localhost:3000")
-        } else {
-            throw new Error(`Unknown issuer ${request.url}`)
-        }
-    }
-
-    async matches(request: Request): Promise<boolean> {
-        return true
-    }
-
-    async upgrade(request: Request): Promise<Request> {
-        const issuer = await this.#getIssuer(request)
-
-        const discoveryResponse = await oauth.discoveryRequest(issuer, {
-            signal: request.signal
-        })
-        const authorizationServer = await oauth.processDiscoveryResponse(issuer, discoveryResponse)
-
-        const clientRegistration: oauth.Client = {client_id: this.clientId, client_secret: this.clientSecret}
-
-        const dpopKey = await oauth.generateKeyPair("ES256", {extractable: false}) // TODO: Align with dpop_signing_alg_values_supported and fallback
-        const dpop = oauth.DPoP({}, dpopKey)
-
-        const tokenResponse = await oauth.clientCredentialsGrantRequest(authorizationServer, clientRegistration, this.getClientAuth(authorizationServer, clientRegistration), {scope: "webid"}, {
-            DPoP: dpop,
-            signal: request.signal
-        })
-
-        const tokenResult = await oauth.processClientCredentialsResponse(authorizationServer, clientRegistration, tokenResponse)
-
-        const headers = new Headers(request.headers)
-
-        headers.set("DPoP", await DPoP.generateProof(dpopKey, request.url, request.method, undefined, tokenResult.access_token))
-        headers.set("Authorization", ["DPoP", tokenResult.access_token].join(" "))
-
-        return new Request(request, {headers})
-    }
-
-    private getClientAuth(authorizationServer: AuthorizationServer, client: oauth.OmitSymbolProperties<oauth.Client>): oauth.ClientAuth {
-        const clientSecret = client.client_secret as string
-
-        // if (authorizationServer.token_endpoint_auth_methods_supported?.includes("client_secret_jwt")) {
-        //     return oauth.ClientSecretJwt(clientSecret)
-        // }
-
-        // if (authorizationServer.token_endpoint_auth_methods_supported?.includes("client_secret_post")) {
-        //     return oauth.ClientSecretPost(clientSecret)
-        // }
-
-        if (authorizationServer.token_endpoint_auth_methods_supported?.includes("client_secret_basic")) {
-            const clientSecretBasic = clientSecretBasicFor(authorizationServer.issuer)
-            return clientSecretBasic(clientSecret)
-        }
-
-        throw new Error("Could not find client authentication method in authorization server metadata")
-    }
+export interface ClientCredentialsOptions {
+    /** @defaultValue "webid" */
+    readonly scope?: string
+    readonly http?: HttpOptions
+    /** Apply the compatibility exceptions in `serverQuirks.ts` for the listed issuers. @defaultValue true */
+    readonly serverQuirks?: boolean
+    readonly fence?: SessionFence
+    /** Required with a supplied store. */
+    readonly namespace?: string
+    /** Token cache (memory by default). Requires `namespace` and a `fence` shared by every instance using it. */
+    readonly tokenStore?: KeyValueStore<Stamped<ClientCredentialsToken>>
 }
 
 /**
- * A variation of the original from oauth4webapi that does not url encode Id and secret.
- *
- * @remarks PodSpaces (ESS) seems to fail when spec is followed.
- *
- * @see Original code at https://github.com/panva/oauth4webapi/blob/b914d175a58a1738b65a360dc2f28d6c0f88a720/src/index.ts#L1777
- * @see Spec https://www.rfc-editor.org/rfc/rfc6749.html#section-2.3.1
+ * OAuth 2.0 client credentials grant with DPoP-bound tokens, for scripts and services acting as themselves
+ * (e.g. Community Solid Server client credentials). Tokens are cached per issuer and client in a
+ * {@link FencedCache}, so {@link forget} also cancels grants in progress.
  */
-function NoUrlEncodeClientSecretBasic(clientSecret: string): oauth.ClientAuth {
-    return function (_, client, __, headers) {
-        console.debug("Using non-conforming (no url encoding) client secret basic token authentication")
-        headers.set("Authorization", `Basic ${btoa(`${client.client_id}:${clientSecret}`)}`);
-    };
-}
+export class ClientCredentialsTokenProvider implements TokenProvider {
+    readonly #asProvider: AuthorizationServerProvider
+    readonly #client: oauth.Client
+    readonly #options: ClientCredentialsOptions
+    readonly #tokens: FencedCache<ClientCredentialsToken>
+    readonly #issued = new Map<string, string>()
 
-function clientSecretBasicFor(issuer: string): (clientSecret: string) => oauth.ClientAuth {
-    // TODO: Better fingerprinting ESS
-    if (issuer.includes("login.inrupt.com")) {
-        console.debug("Using token authentication workaround for ESS")
-        return NoUrlEncodeClientSecretBasic
+    constructor(asProvider: AuthorizationServerProvider, clientId: string, clientSecret: string, options: ClientCredentialsOptions = {}) {
+        this.#asProvider = asProvider
+        this.#client = {client_id: clientId, client_secret: clientSecret, token_endpoint_auth_method: "client_secret_basic"}
+        this.#options = options
+        this.#tokens = new FencedCache("client-credentials", {
+            ...(options.namespace === undefined ? {} : {namespace: options.namespace}),
+            ...(options.tokenStore === undefined ? {} : {store: options.tokenStore}),
+            ...(options.fence === undefined ? {} : {fence: options.fence}),
+        })
     }
 
-    return oauth.ClientSecretBasic
+    async matches(_: Request, challenge?: ChallengeContext): Promise<boolean> {
+        const challenges = challenge?.challenges ?? []
+        return challenges.length === 0 || challenges.some(c => c.scheme === "dpop" || c.scheme === "bearer")
+    }
+
+    async upgrade(request: Request, challenge?: ChallengeContext): Promise<Request> {
+        const ticket = await this.#tokens.ticket(request.signal)
+        const as = await this.#asProvider.getAuthorizationServer(request, challenge)
+        const key = await this.#tokens.key([as.issuer, this.#client.client_id, this.#options.scope ?? "webid"])
+        const token = await this.#tokens.locked(key, ticket, async () => {
+            const cached = await this.#tokens.read(key, ticket)
+            if (cached !== undefined && (cached.expiresAt === undefined || Date.now() < cached.expiresAt - 30_000)) return cached
+            await this.#tokens.remove(key)
+            return await this.#tokens.write(key, await this.#grant(as, ticket), ticket)
+        })
+
+        const url = new URL(request.url)
+        url.search = url.hash = ""
+        const proof = await DPoP.generateProof(token.dpopKey, url.href, request.method, challenge?.response.headers.get("DPoP-Nonce") ?? undefined, token.accessToken)
+        await this.#tokens.assertCurrent(ticket)
+        this.#issued.set(token.accessToken, key)
+        const headers = new Headers(request.headers)
+        headers.set("DPoP", proof)
+        headers.set("Authorization", `DPoP ${token.accessToken}`)
+        return new Request(request, {headers})
+    }
+
+    async invalidate(upgraded: Request): Promise<void> {
+        const rejected = upgraded.headers.get("Authorization")?.replace(/^DPoP /, "")
+        const key = rejected === undefined ? undefined : this.#issued.get(rejected)
+        if (key !== undefined) await this.#tokens.removeIf(key, token => token.accessToken === rejected)
+    }
+
+    async forget(): Promise<void> {
+        this.#issued.clear()
+        await this.#tokens.forget()
+    }
+
+    async #grant(as: oauth.AuthorizationServer, ticket: FenceTicket): Promise<ClientCredentialsToken> {
+        const dpopKey = await generateDPoPKey(as)
+        const dpop = oauth.DPoP(this.#client, dpopKey)
+        const result = await withDPoPNonceRetry(async () => {
+            const response = await oauth.clientCredentialsGrantRequest(as, this.#client, clientAuthFor(as.issuer, this.#client, this.#options.serverQuirks ?? true), {scope: this.#options.scope ?? "webid"}, {...oauthOptions(this.#options.http, ticket.signal), DPoP: dpop})
+            return await oauth.processClientCredentialsResponse(as, this.#client, response)
+        })
+        const token: ClientCredentialsToken = {accessToken: result.access_token, dpopKey}
+        if (result.expires_in !== undefined) token.expiresAt = Date.now() + result.expires_in * 1000
+        return token
+    }
 }

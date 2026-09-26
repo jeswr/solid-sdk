@@ -1,19 +1,22 @@
-import type { IssuerProvider } from "./IssuerProvider.js"
 import * as oauth from "oauth4webapi"
 import type { AuthorizationServerProvider } from "./AuthorizationServerProvider.js"
+import type { ChallengeContext } from "./challenge.js"
+import type { IssuerProvider } from "./IssuerProvider.js"
+import { oauthOptions, type HttpOptions } from "./transport.js"
 
+/** Obtains an issuer for the request and performs OpenID Connect discovery on it. */
 export class XASProvider implements AuthorizationServerProvider {
     readonly #issuerProvider: IssuerProvider
+    readonly #http: HttpOptions | undefined
 
-    constructor(issuerProvider: IssuerProvider) {
+    constructor(issuerProvider: IssuerProvider, http?: HttpOptions) {
         this.#issuerProvider = issuerProvider
+        this.#http = http
     }
 
-    async getAuthorizationServer(request: Request): Promise<oauth.AuthorizationServer> {
-        const issuer = await this.#issuerProvider.getIssuer(request)
-        const discoveryResponse = await oauth.discoveryRequest(issuer, {signal: request.signal})
-        const authorizationServer = await oauth.processDiscoveryResponse(issuer, discoveryResponse)
-
-        return authorizationServer
+    async getAuthorizationServer(request: Request, challenge?: ChallengeContext): Promise<oauth.AuthorizationServer> {
+        const issuer = await this.#issuerProvider.getIssuer(request, challenge)
+        const discoveryResponse = await oauth.discoveryRequest(issuer, oauthOptions(this.#http, request.signal))
+        return await oauth.processDiscoveryResponse(issuer, discoveryResponse)
     }
 }

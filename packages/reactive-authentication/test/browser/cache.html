@@ -6,18 +6,18 @@
 <pre id="result">Running…</pre>
 <script type="importmap">
 {"imports": {
-  "@key-value-kit/core": "../node_modules/@key-value-kit/core/dist/index.js",
-  "@key-value-kit/storage/memory": "../node_modules/@key-value-kit/storage/dist/memory.js",
-  "@key-value-kit/storage/indexeddb": "../node_modules/@key-value-kit/storage/dist/indexeddb.js",
-  "@key-value-kit/storage/web-storage": "../node_modules/@key-value-kit/storage/dist/web-storage.js",
-  "idb-keyval": "../node_modules/idb-keyval/dist/index.js"
+  "@key-value-kit/core": "/node_modules/@key-value-kit/core/dist/index.js",
+  "@key-value-kit/storage/memory": "/node_modules/@key-value-kit/storage/dist/memory.js",
+  "@key-value-kit/storage/indexeddb": "/node_modules/@key-value-kit/storage/dist/indexeddb.js",
+  "@key-value-kit/storage/web-storage": "/node_modules/@key-value-kit/storage/dist/web-storage.js",
+  "idb-keyval": "/node_modules/idb-keyval/dist/index.js"
 }}
 </script>
 <script type="module">
 import { createIndexedDbStore } from "@key-value-kit/storage/indexeddb"
 import { createWebStorageStore } from "@key-value-kit/storage/web-storage"
 import { withCodec } from "@key-value-kit/core"
-import { createBrowserCaches } from "../dist/createBrowserCaches.js"
+import { createBrowserCaches } from "/dist/createBrowserCaches.js"
 
 const result = document.querySelector("#result")
 const assert = (condition, message) => { if (!condition) throw new Error(message) }

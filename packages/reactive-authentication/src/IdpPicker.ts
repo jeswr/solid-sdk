@@ -1,10 +1,8 @@
-import { SimpleDataset } from "./SimpleDataset.js"
-import { NamedNodeAs, OptionalFrom, TermWrapper } from "@rdfjs/wrapper"
-import { DataFactory, Parser } from "n3"
-import type { Quad } from "@rdfjs/types"
-import { ReactiveAuthenticationError } from "./ReactiveAuthenticationError.js"
 import { IssuerRequestCancelledError } from "./IssuerRequestCancelledError.js"
-import { IssuerProvider } from "./IssuerProvider.js"
+import type { IssuerProvider } from "./IssuerProvider.js"
+import { ReactiveAuthenticationError } from "./ReactiveAuthenticationError.js"
+import type { HttpOptions } from "./transport.js"
+import { issuersFromWebId } from "./webId.js"
 import type { WebIdPicker } from "./WebIdPicker.js"
 
 const onlyOnce = {once: true}
@@ -62,7 +60,11 @@ export class IdpPicker extends HTMLElement implements IssuerProvider {
     #code!: HTMLElement
     #webIdButton!: HTMLButtonElement
     #webIdPicker: WebIdPicker | null = null
+    #suggestion = ""
     #request?: Request
+
+    /** Network options for WebID profile retrieval (non-reactive transport by default). */
+    http?: HttpOptions
 
     /** @ignore */
     connectedCallback() {
@@ -90,10 +92,15 @@ export class IdpPicker extends HTMLElement implements IssuerProvider {
         this.#webIdButton.disabled = this.#webIdButton.hidden = this.#webIdPicker === null
     }
 
+    /** Pre-fills the input, e.g. with an issuer hint from the application URL, leaving confirmation to the user. */
+    suggest(issuer: URL): void {
+        this.#suggestion = issuer.href
+    }
+
     async getIssuer(request: Request): Promise<URL> {
         return await navigator.locks.request("IdpPicker.getIssuer", async _ => {
             this.#request = request
-            this.#input.value = ""
+            this.#input.value = this.#suggestion
             this.#code.innerText = request.url
             this.#dialog.returnValue = ""
             this.#dialog.showModal()
@@ -125,41 +132,12 @@ export class IdpPicker extends HTMLElement implements IssuerProvider {
         this.#webIdButton.disabled = true
         try {
             const webid = await this.#webIdPicker!.getWebId(this.#request!)
-            const issuer = await issuerFromWebId(webid, this.#request!.signal)
+            const [issuer] = await issuersFromWebId(webid, this.#request!.signal, this.http)
+            if (issuer === undefined) throw new ReactiveAuthenticationError("WebID profile lacks OIDC issuer")
             this.#input.value = issuer.href
         } finally {
             this.#webIdButton.disabled = false
             this.#input.focus()
         }
     }
-}
-
-class WebIdAgent extends TermWrapper {
-    get oidcIssuer(): URL | undefined {
-        return OptionalFrom.subjectPredicate(this, "http://www.w3.org/ns/solid/terms#oidcIssuer", NamedNodeAs.url)
-    }
-}
-
-async function issuerFromWebId(webId: URL, signal: AbortSignal): Promise<URL> {
-    const response = await fetch(webId, {headers: {accept: "text/turtle"}, signal})
-    if (!response.ok) {
-        throw new ReactiveAuthenticationError("WebID profile could not be retrieved")
-    }
-
-    const text = await response.text()
-    const parser = new Parser({baseIRI: response.url || webId.href}) // Base is from response if redirected, from WebID otherwise
-    let quads: Quad[]
-    try {
-        quads = parser.parse(text)
-    } catch (error) {
-        throw new ReactiveAuthenticationError("WebID profile could not be parsed", error)
-    }
-
-    const agent = new WebIdAgent(webId.href, new SimpleDataset(quads), DataFactory)
-    const issuer = agent.oidcIssuer
-    if (issuer === undefined) {
-        throw new ReactiveAuthenticationError("WebID profile lacks OIDC issuer")
-    }
-
-    return issuer
 }

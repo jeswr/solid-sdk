@@ -1,0 +1,13 @@
+{
+  "$schema": "https://context7.com/schema/context7.json",
+  "projectTitle": "Reactive Authentication",
+  "description": "Reactive fetch authentication for Solid-OIDC and W3C Linked Web Storage: upgrade requests with credentials after a 401, inside an explicit credential boundary.",
+  "folders": ["docs", "examples"],
+  "excludeFolders": ["test", "dist", "node_modules", ".implementation-context"],
+  "rules": [
+    "Always construct ReactiveFetchManager with an explicit CredentialBoundary listing the storages that may receive credentials.",
+    "Import custom elements from @solid/reactive-authentication/elements or registerElements; the main entry point has no DOM dependency.",
+    "Supply a namespace (and a SessionFence with a persistent store) whenever credential caches or session stores are persisted.",
+    "Use allowInsecureRequests / allowInsecureHttp only for local development servers."
+  ]
+}

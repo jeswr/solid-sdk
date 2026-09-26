@@ -124,7 +124,10 @@ export class AuthorizationCodeFlow extends HTMLElement implements CodeProvider {
     #switchModal!: HTMLDialogElement
     #authorizationWindow?: WindowProxy | null
     #authorizationUri?: URL
-    #cancelCodeRequest?: (reason?: any) => void
+    #cancelCodeRequest: ((reason?: any) => void) | undefined
+
+    /** How often to check whether the user closed the popup. @defaultValue 500 ms */
+    closedPollMs = 500
 
     /** @ignore */
     connectedCallback() {
@@ -141,26 +144,19 @@ export class AuthorizationCodeFlow extends HTMLElement implements CodeProvider {
     }
 
     /**
-     * a {@link GetCodeCallback} that provides an authorization code by directing the user to the authorization endpoint URI in a popup and waiting for the code in a redirect back.
+     * A {@link CodeProvider} that directs the user to the authorization endpoint in a popup and waits for the
+     * redirect back.
      *
-     * @remarks Only one flow runs at a time. Any number of calls
+     * @remarks Only one flow runs at a time (a Web Lock shared by all tabs); waiting for it can be aborted.
+     * The callback page must `postMessage` its URL to the opener. Only messages from the popup window itself
+     * whose origin (and whose reported URL's origin) equals the `redirect_uri` origin are accepted. Closing
+     * the popup or pressing cancel rejects with {@link CodeRequestCancelledError}; every outcome removes
+     * listeners and closes the popup.
      *
      * @param {URL} authorizationUri - The endpoint that the user should be directed to for authorization.
      * @param {AbortSignal} signal - An abort signal that can be used to cancel the authorization flow.
      *
-     * @return {Promise<string>} A promise that resolves with the authorization code received from the popup window.
-     *
-     * @example Using manually
-     * ```html
-     * <authorization-code-flow></authorization-code-flow>
-     * <script>
-     *   const authorizationUri = new URL("http://example.com/authorize")
-     *   const ui = document.querySelector("authorization-code-flow")
-     *   const signal = new AbortController().signal
-     *
-     *   const code = await ui.getCode(authorizationUri, signal)
-     * </script>
-     * ```
+     * @return A promise that resolves with the redirect URL received from the popup window.
      *
      * @example Using with a token provider
      * ```html
@@ -168,55 +164,60 @@ export class AuthorizationCodeFlow extends HTMLElement implements CodeProvider {
      * <script>
      *   const callbackUri = "http://localhost:8080/callback.html"
      *   const ui = document.querySelector("authorization-code-flow")
-     *
-     *   const provider = new DPoPTokenProvider(callbackUri, ui.getCode.bind(ui))
-     *   new ReactiveFetchManager([provider])
+     *   const provider = new DPoPTokenProvider(callbackUri, ui, asProvider, clientProvider)
      * </script>
      * ```
      */
     async getCode(authorizationUri: URL, signal: AbortSignal): Promise<Disposable & { readonly value: string }> {
-        // One flow at a time, fellas
-        return await navigator.locks.request("AuthorizationCodeFlow.getCode", async _ => {
+        const redirect = authorizationUri.searchParams.get("redirect_uri")
+        if (redirect === null) throw new TypeError("Authorization request lacks redirect_uri")
+        const callbackOrigin = new URL(redirect).origin
+
+        return await navigator.locks.request("AuthorizationCodeFlow.getCode", {signal}, async () => {
             signal.throwIfAborted()
-
             this.#authorizationUri = authorizationUri
+            const {promise, reject, resolve} = Promise.withResolvers<string>()
+            const view = this.ownerDocument.defaultView
 
-            const {promise: responseFromPopup, reject: cancelCodeRequest, resolve: respondWithCode} = Promise.withResolvers<string>()
-
-            this.#cancelCodeRequest = cancelCodeRequest
-
-            const onMessage = (message: MessageEvent) => {
-                if (message.source !== this.#authorizationWindow) {
-                    return
-                }
-
-                this.ownerDocument.defaultView?.removeEventListener("message", onMessage)
+            const cleanup = () => {
+                view?.removeEventListener("message", onMessage)
                 signal.removeEventListener("abort", onAbort)
-                this.#switchModal.close()
-                respondWithCode(message.data)
-            }
-
-            const onAbort = () => {
-                this.ownerDocument.defaultView?.removeEventListener("message", onMessage)
+                clearInterval(poll)
                 this.#newModal.close()
                 this.#switchModal.close()
-                this.#authorizationWindow?.close()
-                cancelCodeRequest(signal.reason)
+                this.#cancelCodeRequest = undefined
             }
+            const fail = (reason: unknown) => {
+                cleanup()
+                this.#authorizationWindow?.close()
+                reject(reason)
+            }
+            const onMessage = (message: MessageEvent) => {
+                if (message.source === null || message.source !== this.#authorizationWindow) return
+                if (message.origin !== callbackOrigin || !isCallback(message.data, callbackOrigin)) return
+                cleanup()
+                resolve(message.data)
+            }
+            const onAbort = () => fail(signal.reason)
+            const poll = setInterval(() => {
+                if (this.#authorizationWindow?.closed === true) fail(new CodeRequestCancelledError(authorizationUri))
+            }, this.closedPollMs)
 
+            this.#cancelCodeRequest = fail
             signal.addEventListener("abort", onAbort, onlyOnce)
-            this.ownerDocument.defaultView?.addEventListener("message", onMessage)
+            view?.addEventListener("message", onMessage)
 
             this.#openAuthorizationWindow()
-
             if (this.#authorizationWindow === null) {
                 this.#interactionNeeded()
             }
 
-            return new ValueWithCleanup(await responseFromPopup, () => this.#authorizationWindow?.close())
+            const value = await promise
+            return new ValueWithCleanup(value, () => this.#authorizationWindow?.close())
         })
     }
 
+    /** Closes the popup, if open. */
     cleanup(): void {
         this.#authorizationWindow?.close()
     }
@@ -232,7 +233,7 @@ export class AuthorizationCodeFlow extends HTMLElement implements CodeProvider {
                 this.#authorizationWindow?.focus()
                 break
             case "cancel":
-                this.#cancel()
+                this.#cancelCodeRequest?.call(undefined, new CodeRequestCancelledError(this.#authorizationUri!))
                 break
         }
     }
@@ -244,15 +245,19 @@ export class AuthorizationCodeFlow extends HTMLElement implements CodeProvider {
 
     #openAuthorizationWindow() {
         this.#authorizationWindow = open(this.#authorizationUri, authorizationWindowName)
+        if (this.#authorizationWindow === null) return
         this.#newModal.close()
         this.#switchModal.showModal()
     }
+}
 
-    #cancel() {
-        this.#newModal.close()
-        this.#switchModal.close()
-        this.#authorizationWindow?.close()
-        this.#cancelCodeRequest?.call(undefined, new CodeRequestCancelledError(this.#authorizationUri!))
+/** The callback reports its own URL: a bounded string on the expected origin. */
+function isCallback(data: unknown, origin: string): data is string {
+    if (typeof data !== "string" || data.length > 8192) return false
+    try {
+        return new URL(data).origin === origin
+    } catch {
+        return false
     }
 }
 

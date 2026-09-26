@@ -55,7 +55,7 @@ interface Session {
  * Request bodies are buffered once (bounded) so every attempt can replay them. Credentialed attempts do not
  * follow redirects automatically: each hop restarts the algorithm for the new URL, so credentials are only
  * attached to URLs inside the boundary. Browsers hide the target of such redirects (`opaqueredirect`); a
- * credentialed request is never repeated to discover it (see {@link #followRedirect}).
+ * credentialed request is never repeated to discover it.
  *
  * The session generation and fence signal are captured when {@link fetch} is called, so logout during any
  * later wait (network, provider selection, user interaction) prevents credentials from being attached.

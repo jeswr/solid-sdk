@@ -8,7 +8,7 @@ import { CachingClientProvider } from "../dist/CachingClientProvider.js"
 for (const [Provider, method, args, result, stored, key] of [
     [CachingIssuerProvider, "getIssuer", [new Request("https://pod.example/a")], new URL("https://idp.example"), "https://idp.example/", "https://pod.example/a"],
     [CachingAuthorizationServerProvider, "getAuthorizationServer", [new Request("https://pod.example/a")], { issuer: "https://idp.example" }, { issuer: "https://idp.example" }, "https://pod.example/a"],
-    [CachingClientProvider, "getClient", [{ issuer: "https://idp.example" }, "https://app.example/cb", new AbortController().signal], { client_id: "app" }, { client_id: "app" }, "https://idp.example"],
+    [CachingClientProvider, "getClient", [{ issuer: "https://idp.example" }, "https://app.example/cb", new AbortController().signal], { client_id: "app" }, { client_id: "app" }, JSON.stringify(["https://idp.example", "https://app.example/cb"])],
 ]) {
     test(`${Provider.name}: injected async cache, reconstruction, invalidation, failure retry`, async () => {
         const cache = createMemoryStore()

@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Reactive authentication: service worker flow</title>
+<script src="/test/browser/.bundle/page.js"></script>
+<authorization-code-flow></authorization-code-flow>
+<pre id="result">Waiting…</pre>
+<script type="module">
+const q = new URLSearchParams(location.search)
+const scriptUrl = new URL(`/test/browser/.bundle/sw.js?op=${encodeURIComponent(q.get("op"))}&rs=${encodeURIComponent(q.get("rs"))}`, location.href)
+const element = document.querySelector("authorization-code-flow")
+const interactions = []
+// Records which authorization requests this tab was asked to run.
+const codeProvider = {getCode: (url, signal) => { interactions.push(url.href); return element.getCode(url, signal) }}
+const manager = new RA.ReactiveFetchWorkerManager({codeProvider, scriptUrl, scope: "/test/browser/"})
+await manager.register()
+if (!navigator.serviceWorker.controller) {
+    await new Promise(resolve => navigator.serviceWorker.addEventListener("controllerchange", resolve, {once: true}))
+}
+window.__ready = true
+window.run = async path => {
+    try {
+        // A plain fetch: the service worker intercepts and authenticates it.
+        const inside = await fetch(`${q.get("rs")}${path}`)
+        const outside = await fetch(`${q.get("rs")}/alice-evil/worker`)
+        window.__result = {inside: [inside.status, await inside.text()], outside: outside.status, interactions: interactions.length}
+    } catch (e) {
+        window.__result = {error: String(e.stack ?? e)}
+    }
+    document.querySelector("#result").textContent = JSON.stringify(window.__result)
+}
+</script>
+</html>

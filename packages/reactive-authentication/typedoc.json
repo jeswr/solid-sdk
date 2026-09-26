@@ -1,7 +1,12 @@
 {
     "entryPoints": [
         "./src/mod.ts",
-        "./src/registerElements.ts"
+        "./src/elements.ts",
+        "./src/registerElements.ts",
+        "./src/service-worker.ts"
+    ],
+    "projectDocuments": [
+        "./docs/*.md"
     ],
     "out": "./_site",
     "highlightLanguages": [
