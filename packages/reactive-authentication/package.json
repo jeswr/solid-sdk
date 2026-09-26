@@ -12,14 +12,18 @@
   "types": "./dist/mod.d.ts",
   "exports": {
     ".": "./dist/mod.js",
-    "./registerElements": "./dist/registerElements.js"
+    "./elements": "./dist/elements.js",
+    "./registerElements": "./dist/registerElements.js",
+    "./service-worker": "./dist/service-worker.js"
   },
   "sideEffects": [
-    "./dist/registerElements.js",
-    "./dist/reactive-fetch-worker.js"
+    "./dist/registerElements.js"
   ],
   "files": [
-    "dist"
+    "dist",
+    "LICENSE",
+    "README.md",
+    "docs"
   ],
   "repository": {
     "type": "git",
@@ -27,7 +31,10 @@
   },
   "scripts": {
     "build": "tsc",
-    "test": "npm run build && node --test test/*.test.js"
+    "test": "npm run build && node --test --test-concurrency=1 test/*.test.js",
+    "test:browser": "npm run build && node test/browser/run.js",
+    "docs": "typedoc",
+    "check": "npm test && npm run test:browser && npm pack --dry-run && npm audit --omit=dev --audit-level=moderate"
   },
   "license": "MIT",
   "dependencies": {
@@ -35,16 +42,26 @@
     "@key-value-kit/storage": "0.1.0-alpha.0",
     "@rdfjs/wrapper": "^0.34",
     "dpop": "^2",
+    "http-link-header": "^1.1.4",
+    "jose": "^6.2.12",
+    "multiformats": "^14.0.5",
     "n3": "^2",
     "oauth4webapi": "^3"
   },
   "devDependencies": {
+    "@noble/curves": "^2.4.0",
     "@rdfjs/types": "^2",
+    "@types/http-link-header": "^1.0.7",
     "@types/n3": "^1",
+    "@types/node": "^24.19.0",
+    "@xmldom/xmldom": "^0.9.12",
     "fake-indexeddb": "^6.2.5",
+    "playwright": "^1.63.0",
     "typedoc": "^0.28.18",
     "typedoc-plugin-mdn-links": "^5.1.1",
-    "typescript": "^6"
+    "typescript": "^6",
+    "xml-crypto": "^6.3.2",
+    "xpath": "^0.0.34"
   },
   "engines": {
     "node": ">=24.5.0"
