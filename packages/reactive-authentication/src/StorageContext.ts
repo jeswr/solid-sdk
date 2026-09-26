@@ -5,7 +5,7 @@ import type { ChallengeContext } from "./challenge.js"
 import type { ContextKey } from "./ContextKey.js"
 import { LWS_STORAGE_DESCRIPTION_TYPE, LWS_STORAGE_REL, SOLID_STORAGE_DESCRIPTION_REL } from "./lws/constants.js"
 import { secureFetch, type HttpOptions } from "./transport.js"
-import { isWithin, parseHttpUrl, withoutFragment } from "./url.js"
+import { hasAmbiguousPath, isWithin, parseHttpUrl, withoutFragment } from "./url.js"
 import { storagesFromDescription } from "./webId.js"
 
 const RDF_TYPE = "type"
@@ -163,28 +163,54 @@ async function solidContext(resource: string, descriptionUrl: string, options: S
     return undefined
 }
 
+/**
+ * The storage root when the response for the requested `url` advertises `Link: <pim:Storage>; rel="type"`
+ * (Solid Protocol §4.1: storages identify themselves). Only containers (path ending in `/`) qualify; the
+ * response must be for `url` itself (query included), and the root is returned canonically, without query
+ * or fragment.
+ */
+export function selfIdentifiedSolidRoot(url: string, response: Response): string | undefined {
+    const requested = parseHttpUrl(url)
+    if (requested === undefined || !requested.pathname.endsWith("/") || hasAmbiguousPath(requested)) return undefined
+    const target = withoutFragment(requested)
+    if (!describes(response, target)) return undefined
+    const typed = parseLinks(response.headers.get("Link"), target).some(l => l.rel === RDF_TYPE && l.href === PIM_STORAGE)
+    return typed ? `${requested.origin}${requested.pathname}` : undefined
+}
+
+/** A clean container URL (no query, fragment, credentials or ambiguous path, path ending in `/`), or `undefined`. */
+function containerUrl(candidate: string): string | undefined {
+    const url = parseHttpUrl(candidate)
+    if (url === undefined || url.search !== "" || url.hash !== "" || !url.pathname.endsWith("/") || hasAmbiguousPath(url)) return undefined
+    return url.href
+}
+
 /** Candidate roots on the resource's origin that contain it, most specific first. */
 function containingRoots(resource: string, candidates: string[]): string[] {
     return candidates
-        .map(c => parseHttpUrl(c)?.href)
-        .filter((c): c is string => c !== undefined && c.endsWith("/") && isWithin(resource, c))
+        .map(containerUrl)
+        .filter((c): c is string => c !== undefined && isWithin(resource, c))
         .sort((a, b) => b.length - a.length)
 }
 
 /** Whether a response describes `url` itself: not redirected, not an opaque or redirect response. */
-function describes(response: Response, url: string): boolean {
+export function describes(response: Response, url: string): boolean {
     if (response.redirected || response.type === "opaqueredirect" || (response.status >= 300 && response.status < 400)) return false
     return response.url === "" || withoutFragment(response.url) === url
 }
 
-async function head(url: string, options: StorageContextOptions): Promise<Response | undefined> {
-    const init: RequestInit = {method: "HEAD", redirect: "manual"}
+/**
+ * An unauthenticated discovery `HEAD`: no cookies or caller headers (`credentials: "omit"`), redirects not
+ * followed, HTTPS unless insecure requests are allowed, non-reactive transport. `undefined` on network failure.
+ */
+export async function head(url: string, options: StorageContextOptions): Promise<Response | undefined> {
+    const init: RequestInit = {method: "HEAD", redirect: "manual", credentials: "omit"}
     if (options.signal !== undefined) init.signal = options.signal
     return await secureFetch(new URL(url), init, options.http).catch(() => undefined)
 }
 
 async function get(url: URL, accept: string, options: StorageContextOptions): Promise<Response | undefined> {
-    const init: RequestInit = {headers: {accept}, redirect: "manual"}
+    const init: RequestInit = {headers: {accept}, redirect: "manual", credentials: "omit"}
     if (options.signal !== undefined) init.signal = options.signal
     const response = await secureFetch(url, init, options.http)
     return response.ok && describes(response, url.href) ? response : undefined

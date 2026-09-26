@@ -24,10 +24,11 @@ are in `@solid/reactive-authentication/elements`.
 
 ## The reactive algorithm (`ReactiveAuthenticationClient`)
 
-1. Requests outside the boundary pass through natively (no buffering, never upgraded).
+1. Requests outside the boundary that are not discovery candidates pass through natively (no buffering, never upgraded).
 2. Capture the fence generation and signal, then buffer the body (bounded, abortable) so it can be replayed.
 3. Send unauthenticated. A 401 at the end of a native redirect chain is re-targeted only for GET/HEAD.
-4. If the URL is in the boundary, the first provider whose `matches(request, challenge)` is true upgrades it.
+4. If the URL is in the boundary — or a discovering boundary verifies its root from this 401 — the first
+   provider whose `matches(request, challenge)` is true upgrades it.
 5. Credentialed attempts use `redirect: "manual"`: a readable redirect restarts the algorithm for the next hop
    (caller credentials stripped across origins, body headers dropped on POST→GET); an `opaqueredirect`
    (browsers) is returned as-is — a write is never repeated to discover a hidden target.
@@ -37,7 +38,9 @@ are in `@solid/reactive-authentication/elements`.
 ## Invariants to review
 
 - **Boundary before disclosure.** Nothing is attached outside `CredentialBoundary` (origin + path segment,
-  encoded separators/dots rejected). Discovery never widens it.
+  encoded separators/dots rejected). A static boundary is never widened by discovery; the opt-in
+  `AutomaticCredentialBoundary` admits a root only after verified evidence, before any provider runs, and
+  never after the fetch's session was superseded (`Boundary.discover`).
 - **One consumption per rotating refresh token.** Session reads, refresh and writes happen under a Web Lock per
   credential context; with a session store, only the durable record is refreshed; records are removed before
   their token is consumed and replacements are written durable-first.

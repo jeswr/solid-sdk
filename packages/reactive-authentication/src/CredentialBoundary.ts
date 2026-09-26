@@ -1,5 +1,29 @@
 import { hasAmbiguousPath, isWithin, parseHttpUrl } from "./url.js"
 
+/**
+ * Decides which URLs may receive credentials. {@link CredentialBoundary} is a static list; a boundary may
+ * also learn from responses (e.g. {@link AutomaticCredentialBoundary}).
+ *
+ * `allows` must only be true for URLs already authorized — never optimistically before discovery.
+ */
+export interface Boundary {
+    /** Whether credentials may be sent to `url` now. */
+    allows(url: string | URL): boolean
+
+    /**
+     * Whether `url` is not yet authorized but may become so through {@link discover}. Such requests are not
+     * passed through natively: they are buffered for replay so a 401 can still be authenticated.
+     */
+    isCandidate?(url: string | URL): boolean
+
+    /**
+     * Called with the unauthenticated 401 for a candidate URL, before any provider runs. May use the response
+     * (e.g. its Link headers) and its own non-reactive requests; resolves whether `url` is now allowed.
+     * Must not authorize anything once `signal` is aborted.
+     */
+    discover?(url: string, response: Response, context: {method: string, signal: AbortSignal}): Promise<boolean>
+}
+
 export interface CredentialBoundaryOptions {
     /**
      * Permit `http:` entries. Only for local development: credentials sent over plain HTTP can be read
@@ -19,7 +43,7 @@ export interface CredentialBoundaryOptions {
  * Discovery (WebID profiles, storage descriptions, challenges) never adds entries on its own: the
  * application decides what to trust, and can widen the boundary at runtime with {@link add}.
  */
-export class CredentialBoundary {
+export class CredentialBoundary implements Boundary {
     readonly #entries = new Set<string>()
     readonly #allowInsecureHttp: boolean
     readonly #unrestricted: boolean

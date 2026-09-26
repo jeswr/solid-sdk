@@ -49,7 +49,20 @@ from the signed reference) and multiformats/@noble/curves, independently of the 
   interchangeable. Evidence counts only if the response is for the resource itself (no redirect, `anchor`
   respected), the description is same-origin, and the root confirms the binding with its own Link headers
   (LWS: same storage; Solid: `rel="type"` `pim:Storage` and the same description). Otherwise the exact URL is
-  the context. Discovery never widens the credential boundary.
+  the context. Storage-context discovery never widens a static `CredentialBoundary`.
+- **Automatic credential boundary** (opt-in `AutomaticCredentialBoundary`): on a 401 for an eligible URL,
+  the same validated evidence (LWS description → `StorageRoot`; Solid description → confirmed `pim:Storage`
+  root) from that first response's Link headers — or the URL typed `pim:Storage` itself — admits the root.
+  Otherwise Solid ancestor traversal (Solid Protocol §4.1: "moving up the URI path hierarchy until the
+  response includes a Link header field with `rel="type"` targeting `pim:Storage`") probes each parent with an
+  unauthenticated, non-redirected `HEAD`, nearest first, within a budget; a root's own type Link suffices there.
+  No verified root: no login, no credentials. Limitations: servers that do not expose `Link` via CORS, or
+  answer `HEAD` on private containers without it, cannot be discovered; writes may cost one extra target
+  `HEAD` (not in `"headers-only"` mode, which disables the fallback target probe and ancestor traversal but still
+  fetches an advertised description and `HEAD`-confirms its root); discovered roots are memory-only (`lifetimeMs`,
+  `maxRoots`) and cover their descendants until expiry or `delete`/`clear`, without re-discovering nested
+  storages meanwhile; storage descriptions must be same-origin (separately hosted LWS descriptions need a
+  static boundary); `eligible` is enforced on every check.
 - **Solid-OIDC token audience.** Solid-OIDC access tokens are not storage-bound (the ID token audience
   includes `solid`). Sessions are nevertheless keyed per verified storage, so a storage only receives tokens
   obtained for it; the credential boundary decides which URLs may receive any token.

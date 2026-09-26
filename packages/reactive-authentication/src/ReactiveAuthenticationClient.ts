@@ -1,5 +1,5 @@
 import { challengeContext, type ChallengeContext } from "./challenge.js"
-import type { CredentialBoundary } from "./CredentialBoundary.js"
+import type { Boundary } from "./CredentialBoundary.js"
 import { ReactiveAuthenticationError } from "./ReactiveAuthenticationError.js"
 import type { SessionFence } from "./SessionFence.js"
 import { SessionSupersededError } from "./SessionSupersededError.js"
@@ -10,8 +10,11 @@ export interface ReactiveAuthenticationOptions {
     /** Providers consulted in order for each challenge. */
     readonly providers: Iterable<TokenProvider>
 
-    /** URLs that may receive credentials. Requests outside it are never upgraded. */
-    readonly boundary: CredentialBoundary
+    /**
+     * URLs that may receive credentials: a static `CredentialBoundary`, or a boundary that discovers
+     * roots from 401 responses (e.g. `AutomaticCredentialBoundary`). Requests outside it are never upgraded.
+     */
+    readonly boundary: Boundary
 
     /** Transport for all attempts. Defaults to {@link nonReactiveFetch}. */
     readonly fetch?: FetchFunction
@@ -23,8 +26,9 @@ export interface ReactiveAuthenticationOptions {
     readonly maxRedirects?: number
 
     /**
-     * Largest request body buffered for replay. Larger bodies reject with {@link ReactiveAuthenticationError};
-     * requests outside the boundary are never buffered.
+     * Largest request body buffered for replay. Larger bodies reject with {@link ReactiveAuthenticationError}.
+     * Bodies are buffered for URLs the boundary allows and for discovery candidates it may still authorize;
+     * excluded URLs (neither) are never buffered.
      * @defaultValue 16 MiB
      */
     readonly maxReplayBodyBytes?: number
@@ -62,7 +66,7 @@ interface Session {
  */
 export class ReactiveAuthenticationClient {
     readonly #providers: TokenProvider[]
-    readonly #boundary: CredentialBoundary
+    readonly #boundary: Boundary
     readonly #fetch: FetchFunction
     readonly #fence: SessionFence | undefined
     readonly #maxRedirects: number
@@ -77,7 +81,7 @@ export class ReactiveAuthenticationClient {
         this.#maxReplayBodyBytes = options.maxReplayBodyBytes ?? 16 * 1024 * 1024
     }
 
-    get boundary(): CredentialBoundary {
+    get boundary(): Boundary {
         return this.#boundary
     }
 
@@ -88,8 +92,9 @@ export class ReactiveAuthenticationClient {
     async fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
         const request = new Request(input, init)
 
-        // Nothing can be upgraded outside the boundary, so such requests (and their streams) pass through natively.
-        if (!this.#boundary.allows(request.url)) return await this.#fetch(request)
+        // Excluded URLs (neither allowed nor discovery candidates) can never be upgraded, so they and their
+        // streams pass through natively; candidates are buffered in case discovery authorizes them.
+        if (!this.#eligible(request.url)) return await this.#fetch(request)
 
         const session = this.#session(request.signal)
         const generation = await this.#fence?.generation()
@@ -116,8 +121,25 @@ export class ReactiveAuthenticationClient {
         return await this.#authenticate(attempt, response, session, hops)
     }
 
+    #eligible(url: string): boolean {
+        return this.#boundary.allows(url) || this.#boundary.isCandidate?.(url) === true
+    }
+
+    /**
+     * Whether the challenged URL may receive credentials, letting a discovering boundary learn from this 401
+     * first (no provider has run yet). Discovery is bound to the captured session: after logout it fails.
+     */
+    async #authorized(attempt: Attempt, response: Response, session: Session): Promise<boolean> {
+        if (this.#boundary.allows(attempt.url)) return true
+        const boundary = this.#boundary
+        if (boundary.discover === undefined || boundary.isCandidate?.(attempt.url) !== true) return false
+        const allowed = await boundary.discover(attempt.url, response, {method: attempt.method, signal: session.signal})
+        await this.#assertCurrent(session)
+        return allowed && boundary.allows(attempt.url)
+    }
+
     async #authenticate(attempt: Attempt, response: Response, session: Session, hops: number): Promise<Response> {
-        if (!this.#boundary.allows(attempt.url)) return response
+        if (!await this.#authorized(attempt, response, session)) return response
 
         let challenge = challengeContext(response)
         const provider = await this.#findProvider(attempt.request(session.signal), challenge)
@@ -196,7 +218,7 @@ class Attempt {
         private readonly template: Request,
         private readonly body: Blob | null,
         private readonly target: string = template.url,
-        private readonly method: string = template.method,
+        readonly method: string = template.method,
         private readonly headers: Headers = new Headers(template.headers),
     ) {
     }

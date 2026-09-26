@@ -163,5 +163,6 @@ async function prune(scope: ServiceWorkerGlobalScope, perClient: Map<string, unk
 
 export function shouldIntercept(request: Request, options: Pick<ServiceWorkerOptions, "boundary" | "navigations">): boolean {
     if (request.mode === "navigate" && options.navigations !== true) return false
-    return options.boundary.allows(request.url)
+    // Unknown URLs a discovering boundary may still authorize must reach the reactive algorithm.
+    return options.boundary.allows(request.url) || options.boundary.isCandidate?.(request.url) === true
 }

@@ -6,7 +6,8 @@
 //                  own authorization interaction through the message bridge.
 // 3. popup.html  — popup lifecycle: forged callbacks from another origin or source are ignored, a queued
 //                  flow can be aborted, closing the popup cancels, a genuine callback resolves.
-// 4. cache.html  — IndexedDB/Web Storage persistence across a reload, non-extractable keys still sign.
+// 4. auto.html   — automatic boundary: roots from a storage description and from ancestor traversal.
+// 5. cache.html  — IndexedDB/Web Storage persistence across a reload, non-extractable keys still sign.
 import { build } from "esbuild"
 import { readFile } from "node:fs/promises"
 import { extname, join, normalize } from "node:path"
@@ -38,6 +39,10 @@ const rs = await startSolidStorage(op, {
     // A page on the storage origin that impersonates the callback by messaging its opener.
     handle: async request => {
         const url = new URL(request.url)
+        // A storage root that only identifies itself (no description link on its resources).
+        if (url.pathname === "/pods/bob/" && !request.headers.has("authorization")) {
+            return new Response(null, {status: 401, headers: {"www-authenticate": "DPoP", link: `<http://www.w3.org/ns/pim/space#Storage>; rel="type"`}})
+        }
         if (url.pathname !== "/popup-evil") return undefined
         const forged = JSON.stringify(`${url.searchParams.get("redirect_uri")}?code=evil`)
         return new Response(`<script>setInterval(() => opener?.postMessage(${forged}, "*"), 100)</script>`, {headers: {"content-type": "text/html"}})
@@ -85,6 +90,17 @@ try {
         const [a, b] = await Promise.all(tabs.map(tab => resultOf(tab)))
         report("sw", a.inside?.[0] === 200 && b.inside?.[0] === 200 && a.outside === 401 && b.outside === 401 && a.interactions === 1 && b.interactions === 1, {a, b})
         for (const tab of tabs) await tab.close()
+    }
+
+    {
+        // A fresh context: the service worker registered above would otherwise answer these requests.
+        const isolated = await browser.newContext()
+        const page = await isolated.newPage()
+        page.on("pageerror", e => console.error(`[auto] ${e}`))
+        await page.goto(`${appOrigin}/test/browser/auto.html?${query}`)
+        const r = await resultOf(page)
+        report("auto-boundary", r.described === 200 && r.walked === 200 && r.none === 401 && JSON.stringify(r.roots) === JSON.stringify(["/alice/", "/pods/bob/"]), r)
+        await isolated.close()
     }
 
     {

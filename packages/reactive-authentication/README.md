@@ -77,7 +77,9 @@ More examples: [LWS suites, service worker, client credentials, custom protocols
 - **Credential boundary.** `new CredentialBoundary([...])` lists containers (trailing `/`, matched by origin and
   path segment) and exact resources that may receive credentials. Anything else — third-party URLs found in
   data, look-alike hosts, `/alice-evil/`, encoded traversal such as `/alice/%2e%2e%2f` — is fetched without
-  credentials and never upgraded. Widen it at runtime with `boundary.add()`. Discovery never widens it.
+  credentials and never upgraded. Widen it at runtime with `boundary.add()`; storage discovery never widens a
+  static boundary. Alternatively opt into an [automatic boundary](#automatic-credential-boundary) that
+  admits verified storage roots.
 - **Providers** decide whether they can answer a challenge (`matches(request, challenge)`) and attach
   credentials (`upgrade`). Optional `invalidate` renews rejected credentials; `forget` logs out.
 - **Reactive algorithm.** Bodies are buffered (bounded, abortable) for replay; one retry for DPoP nonces and
@@ -91,6 +93,53 @@ More examples: [LWS suites, service worker, client credentials, custom protocols
   exact URL; see [protocols](docs/protocols.md#discovery-and-trust).
 - **Identity.** `provider.identity(request)` reports validated ID token claims (issuer, subject, `webid`,
   `azp`), optionally checked against the WebID profile (`verifyWebId: true`). Tokens are never exposed.
+
+## Automatic credential boundary
+
+Applications that cannot list storages in advance can opt into `AutomaticCredentialBoundary`. No roots are
+configured; when an eligible URL answers `401`, the boundary tries to establish its storage root **before**
+any login or credential use, and only then lets providers authenticate:
+
+```js
+import { AutomaticCredentialBoundary, DPoPTokenProvider, ReactiveFetchManager } from "@solid/reactive-authentication"
+
+const boundary = new AutomaticCredentialBoundary({
+    eligible: url => url.hostname.endsWith(".solidcommunity.net"), // optional: which URLs may be discovered
+    // traversal: "headers-only",                                  // never walk up the path
+    // shouldTraverse: ({method, url}) => method === "GET",        // decide per 401
+    // maxProbes: 4,                                               // HEAD budget per discovery (default 8)
+})
+const provider = new DPoPTokenProvider(callback, codeUi, asProvider, clientProvider, undefined, {context: boundary.contextKey})
+const manager = new ReactiveFetchManager({providers: [provider], boundary})
+await manager.fetch("https://alice.solidcommunity.net/private/notes.ttl") // discovers https://alice.solidcommunity.net/
+```
+
+1. **Link headers of that first 401** (no second request for the target): LWS `rel="https://www.w3.org/ns/lws#storage"`
+   → storage description (`id`, type `Storage`) → its `StorageRoot` endpoint; Solid `storageDescription` →
+   `pim:Storage` root; or the URL itself typed `Link: <http://www.w3.org/ns/pim/space#Storage>; rel="type"`.
+   Roots must confirm the binding, be on the same origin and contain the URL.
+2. In the default `"ancestors"` mode (and when `shouldTraverse` agrees), a write whose 401 has no Link headers
+   gets one unauthenticated `HEAD` of the target. `traversal: "headers-only"` disables this fallback target
+   probe and ancestor traversal; it still fetches a storage description the 401 advertises and `HEAD`-confirms
+   that description's root.
+3. **Solid ancestor traversal** (default; disable with `traversal: "headers-only"`): unauthenticated `HEAD`s
+   of each parent container, nearest first, up to the origin root and `maxProbes`, stopping at the first
+   container typed `pim:Storage`.
+
+Discovery requests send no cookies, caller headers or credentials, never follow redirects, and require HTTPS
+(`allowInsecureHttp` for local development). Without a verified root the `401` is returned and nothing is
+disclosed. Roots are kept in memory for `lifetimeMs` (default one hour, at most `maxRoots`), and can be
+inspected (`roots`) or dropped (`delete`, `clear`); in-flight discoveries are discarded after `clear` or
+logout. Responses that are not `401` pass through without discovery. `boundary.contextKey` gives providers
+the same roots for session grouping. A discovered root bounds *where* credentials may go; it is not user
+consent to sign in there — use `eligible` or `approve(root, url)` to add such a policy. Servers that hide
+Link headers from CORS or refuse unauthenticated `HEAD` cannot be discovered (fail closed). `eligible` is
+checked on every request, so a discovered root never authorizes URLs the predicate excludes.
+
+Limitations: storage descriptions must be on the resource's origin, so separately hosted LWS storage
+descriptions are not accepted automatically (use a static `CredentialBoundary` for them). A remembered root
+covers all its descendants until `lifetimeMs` elapses or it is removed with `delete(root)`/`clear()`; a more
+specific storage advertised under it later is not re-discovered in the meantime.
 
 ## Solid-OIDC with UMA authorization servers
 

@@ -11,6 +11,7 @@
 // Core
 export * from "./challenge.js"
 export * from "./CredentialBoundary.js"
+export * from "./AutomaticCredentialBoundary.js"
 export * from "./ReactiveAuthenticationClient.js"
 export * from "./ReactiveFetchManager.js"
 export * from "./ReactiveFetchWorkerManager.js"
