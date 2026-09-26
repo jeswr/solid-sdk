@@ -14,8 +14,8 @@ algorithm is shared by pages, workers and Node.js.
 | --- | --- | --- |
 | Reactive core | `ReactiveAuthenticationClient`, `ReactiveFetchManager`, `challenge`, `CredentialBoundary`, `url`, `transport` | Replay, boundary, redirects, bounded retries, provider selection, global registration |
 | Session safety | `SessionFence`, `FencedCache`, `locks` | Logout generations, shared/exclusive Web Locks, BroadcastChannel, secret-free lock/cache keys |
-| Credential acquisition | `authorizationCodeGrant`, `OidcSession`, `credentials/*` | Obtaining ID/access tokens or subject credentials |
-| Exchange / presentation | `DPoPTokenProvider`, `SolidUmaTokenProvider`, `ClientCredentialsTokenProvider`, `lws/*` | Turning credentials into request headers |
+| Credential acquisition | `authorizationCodeGrant`, `OidcSession`, `credentials/*`, `oauth/*Source` (generic OAuth, Google GIS, MSAL) | Obtaining ID/access tokens or subject credentials |
+| Exchange / presentation | `DPoPTokenProvider`, `SolidUmaTokenProvider`, `ClientCredentialsTokenProvider`, `lws/*`, `oauth/OAuthBearerTokenProvider` | Turning credentials into request headers |
 | Discovery and caching | `IssuerProvider`s, `XASProvider`, `ClientProvider`s, `Caching*Provider`, `StorageContext`, `createBrowserCaches` | Issuer, metadata, client registration, storage grouping; Key Value Kit stores |
 | Browser integration | `elements` (`AuthorizationCodeFlow`, `IdpPicker`, `WebIdPicker`), `ReactiveFetchWorkerManager`, `service-worker` | Popup UI, pickers, service worker interception and page bridge |
 
@@ -56,6 +56,13 @@ are in `@solid/reactive-authentication/elements`.
 - **Shared stores need shared fences.** Any supplied credential store (OIDC cache or session store, LWS, UMA or
   client-credentials tokens) requires a namespace and a `SessionFence` shared by every instance using it.
 - **Invalidation is compare-and-remove** under the key's lock, so a late 401 never deletes a replacement.
+- **Standard OAuth tokens stay on their API.** `OAuthBearerTokenProvider` checks its own `resources` in
+  `matches` and `upgrade`, ignores challenge parameters, answers only Bearer/unspecified challenges, and drops
+  stale `DPoP` headers. Generic sessions reuse `OidcSession` with DPoP, `offline_access`, `prompt=none` and
+  Solid quirks off, S256 required, Bearer-only tokens and the exact redirect URI checked. The Bearer provider
+  supersedes its fence before letting the source clean up, so a provider and source may share one fence.
+  SDK adapters (GIS, MSAL) cannot cancel SDK promises; abort/logout settle callers at once and discard late
+  results, and at most one interactive popup runs per SDK client/source.
 - **Compatibility exceptions** are limited to exact issuer origins and can be disabled (see protocols).
 
 ## Review order

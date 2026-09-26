@@ -7,7 +7,9 @@
 // 3. popup.html  — popup lifecycle: forged callbacks from another origin or source are ignored, a queued
 //                  flow can be aborted, closing the popup cancels, a genuine callback resolves.
 // 4. auto.html   — automatic boundary: roots from a storage description and from ancestor traversal.
-// 5. cache.html  — IndexedDB/Web Storage persistence across a reload, non-extractable keys still sign.
+// 5. google.html — Google token-model adapter with a mock GIS SDK: interaction required before a click, the
+//                  SDK request made inside the click's user activation, reactive Bearer requests, abort.
+// 6. cache.html  — IndexedDB/Web Storage persistence across a reload, non-extractable keys still sign.
 import { build } from "esbuild"
 import { readFile } from "node:fs/promises"
 import { extname, join, normalize } from "node:path"
@@ -101,6 +103,22 @@ try {
         const r = await resultOf(page)
         report("auto-boundary", r.described === 200 && r.walked === 200 && r.none === 401 && JSON.stringify(r.roots) === JSON.stringify(["/alice/", "/pods/bob/"]), r)
         await isolated.close()
+    }
+
+    {
+        const bearerApi = await serve(request => request.headers.get("authorization") === "Bearer g-browser"
+            ? new Response("drive ok")
+            : new Response(null, {status: 401, headers: {"www-authenticate": "Bearer"}}))
+        const isolated = await browser.newContext()
+        const page = await isolated.newPage()
+        page.on("pageerror", e => console.error(`[google] ${e}`))
+        await page.goto(`${appOrigin}/test/browser/google.html?api=${encodeURIComponent(bearerApi.url)}`)
+        await page.waitForFunction(() => window.__ready === true)
+        await page.click("#connect")
+        const r = await resultOf(page)
+        report("google-adapter", r.beforeClick === "interaction_required" && r.activation === true && r.afterClick === 200 && r.aborted === "AbortError" && r.stillUsesOriginal === 200, r)
+        await isolated.close()
+        await bearerApi.close()
     }
 
     {

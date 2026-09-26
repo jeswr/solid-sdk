@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Signing in…</title>
+<!--
+  MSAL.js v5 popup redirect page. Register its exact URL (e.g. https://app.example/microsoft-redirect.html) as a
+  "Single-page application" redirect URI and pass it as `redirectUri`. It must do nothing but hand the response
+  back to the opening window; bundle it with your app (it imports from @azure/msal-browser).
+  https://learn.microsoft.com/en-us/entra/msal/javascript/browser/login-user#redirecturi-considerations
+-->
+<script type="module">
+import { broadcastResponseToMainFrame } from "@azure/msal-browser/redirect-bridge"
+broadcastResponseToMainFrame()
+</script>
+</html>

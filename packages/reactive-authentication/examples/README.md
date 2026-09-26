@@ -13,4 +13,9 @@ service-worker example needs a bundler (the browser smoke tests bundle `test/bro
 | [`lws-did-key.js`](lws-did-key.js) | LWS self-issued JWT with a `did:key` identifier |
 | [`lws-saml.js`](lws-saml.js) | LWS SAML 2.0 suite through an application-provided SAML stack |
 | [`client-credentials.js`](client-credentials.js) | A script acting as itself with client credentials (e.g. Community Solid Server) |
+| [`google-api.html`](google-api.html) | Google APIs through Google Identity Services (token model, click-driven popup) |
+| [`microsoft-graph.html`](microsoft-graph.html) | Microsoft Graph `User.Read` through MSAL.js |
+| [`microsoft-redirect.html`](microsoft-redirect.html) | The dedicated MSAL v5 popup redirect page (`broadcastResponseToMainFrame`) |
+| [`oauth-generic.html`](oauth-generic.html) | Any OAuth 2.0 / OpenID Connect provider (Auth0, Keycloak…) with PKCE |
+| [`oauth-server.js`](oauth-server.js) | Server-side confidential client, one per application session (your framework routes the callback) |
 | [`custom-protocol.js`](custom-protocol.js) | Plugging any other authentication protocol into the reactive fetch |

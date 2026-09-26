@@ -24,7 +24,7 @@ upstream: no upstream issue or PR was commented on, closed or merged, and nothin
 | [15](https://github.com/solid-contrib/reactive-authentication/issues/15) | Refresh-only SessionStore | `sessionStore` persists refresh token + non-extractable DPoP key + client, never access/ID tokens; restore via refresh grant without a window, folded into `upgrade` plus `restore(request)`; `invalid_grant` clears | `OidcSession.ts`, `DPoPTokenProvider.restore` | `persistence.test.js`, `solid-oidc.test.js` "refresh-only persistence …", browser `cache` | — |
 | [5](https://github.com/solid-contrib/reactive-authentication/issues/5) | Issuer hints in the application URL | Both forms: the requested `#autologin/<WebID>` (raw or percent-encoded, WebID fragments kept, HTTPS only) and OIDC third-party-initiated login (`iss`, `login_hint`, `target_link_uri`). Used once; the WebID must be approved **before** its profile is fetched, then exactly one of its `solid:oidcIssuer`s; rejected, unreachable or ambiguous hints fall back to the picker (`IdpPicker.suggest` pre-fills) | `IssuerHint.ts` (`readWebIdHint`, `WebIdHintIssuerProvider`, `readIssuerHint`, `HintIssuerProvider`), `WebIdIssuerProvider.ts` | `components.test.js` "issue #5 …" (encoded/raw/fragment/malformed/rejected/ambiguous/once-only) and "issuer hints …" | —
 | [3](https://github.com/solid-contrib/reactive-authentication/issues/3) | Set up Context7 | `context7.json` with docs/examples folders and usage rules | `context7.json` | — | Registering/indexing on context7.com is external |
-| [2](https://github.com/solid-contrib/reactive-authentication/issues/2) | Create tests | 106 Node tests with real local servers + 7 Chromium smoke checks, in CI | `test/` | `npm test`, `npm run test:browser` | — |
+| [2](https://github.com/solid-contrib/reactive-authentication/issues/2) | Create tests | 128 Node tests with real local servers + 8 Chromium smoke checks, in CI | `test/` | `npm test`, `npm run test:browser` | — |
 
 ## Pull requests
 
@@ -46,6 +46,13 @@ upstream: no upstream issue or PR was commented on, closed or merged, and nothin
   token). Evidence: `test/uma.test.js`.
 - **Retained server compatibility exceptions** are limited to exact issuer origins and can be disabled with
   `serverQuirks: false` (see [protocols](protocols.md#retained-compatibility-exceptions)); `test/quirks.test.js`.
+
+- **Standard OAuth / OIDC** (`OAuthBearerTokenProvider`, `OAuthCodeSource`, `GoogleTokenSource`,
+  `MsalTokenSource`): Google, Microsoft and generic providers. Evidence: `test/oauth.test.js`,
+  `test/oauth-sdk.test.js`, `test/types/msal.ts`, `test/types/google.ts`, browser `google-adapter`.
+- Authorization responses must now arrive at the configured redirect URI (origin, path and fixed query
+  parameters; no credentials or fragment), and authorization endpoints must be HTTPS unless insecure requests
+  are opted into — for every flow, Solid included.
 
 ## Deliberate migration changes
 

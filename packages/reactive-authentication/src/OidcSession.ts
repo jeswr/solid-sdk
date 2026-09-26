@@ -94,6 +94,31 @@ export interface OidcSessionOptions {
     /** @see AuthorizationCodeGrantOptions.serverQuirks */
     readonly serverQuirks?: boolean
 
+    /**
+     * Bind tokens to a DPoP key (Solid-OIDC). Generic OAuth/OIDC sources turn this off: no DPoP proof is
+     * sent to their authorization servers. (A non-extractable key is still generated for the record type.)
+     * @defaultValue true
+     */
+    readonly dpop?: boolean
+
+    /**
+     * Add `offline_access` when the server advertises it (`"auto"`, the Solid default), or never (`false`).
+     * @defaultValue "auto"
+     */
+    readonly offlineAccess?: "auto" | false
+
+    /** @see AuthorizationCodeGrantOptions.prompt */
+    readonly prompt?: string
+
+    /** @see AuthorizationCodeGrantOptions.silentFirst */
+    readonly silentFirst?: boolean
+
+    /** @see AuthorizationCodeGrantOptions.requireS256 */
+    readonly requireS256?: boolean
+
+    /** Extra token endpoint parameters for code and refresh grants (e.g. RFC 8707 `resource`). */
+    readonly tokenParameters?: Readonly<Record<string, string>>
+
     /** Revoke refresh tokens known to this instance on {@link OidcSession.forget} when supported. @defaultValue true */
     readonly revokeOnForget?: boolean
 }
@@ -244,7 +269,9 @@ export class OidcSession {
 
     async #authorize(as: oauth.AuthorizationServer, signal: AbortSignal): Promise<Fresh> {
         const client = await this.#clientProvider.getClient(as, this.#callbackUri, signal)
-        const dpopKey = await generateDPoPKey(as)
+        // Without DPoP the key is never used; it is still generated (locally, ES256, independent of server DPoP
+        // metadata) because the stored record type requires one — keeping DPoPTokenCacheEntry unchanged.
+        const dpopKey = this.#options.dpop === false ? await oauth.generateKeyPair("ES256", {extractable: false}) : await generateDPoPKey(as)
         const processed = await authorizationCodeGrant({
             authorizationServer: as,
             client,
@@ -252,8 +279,12 @@ export class OidcSession {
             codeProvider: this.#codeProvider,
             scopes: this.#scopes(as),
             signal,
-            dpop: oauth.DPoP(client, dpopKey),
+            ...(this.#options.dpop === false ? {} : {dpop: oauth.DPoP(client, dpopKey)}),
             ...optional("http", this.#options.http),
+            ...optional("silentFirst", this.#options.silentFirst),
+            ...optional("prompt", this.#options.prompt),
+            ...optional("requireS256", this.#options.requireS256),
+            ...optional("tokenParameters", this.#options.tokenParameters),
             ...optional("parameters", this.#options.authorizationParameters),
             ...optional("consentForOfflineAccess", this.#options.consentForOfflineAccess),
             ...optional("serverQuirks", this.#options.serverQuirks),
@@ -265,11 +296,12 @@ export class OidcSession {
     /** Refresh grant; `undefined` when the grant is no longer valid. */
     async #refresh(record: RefreshSessionRecord, signal: AbortSignal): Promise<Fresh | undefined> {
         const {authorizationServer: as, client, dpopKey} = record
-        const dpop = oauth.DPoP(client, dpopKey)
+        const bound = this.#options.dpop === false ? {} : {DPoP: oauth.DPoP(client, dpopKey)}
+        const additional = this.#options.tokenParameters === undefined ? {} : {additionalParameters: this.#options.tokenParameters}
         let processed: oauth.TokenEndpointResponse
         try {
             processed = await withDPoPNonceRetry(async () => {
-                const response = await oauth.refreshTokenGrantRequest(as, client, clientAuthFor(as.issuer, client, this.#options.serverQuirks ?? true), record.refreshToken, {...oauthOptions(this.#options.http, signal), DPoP: dpop})
+                const response = await oauth.refreshTokenGrantRequest(as, client, clientAuthFor(as.issuer, client, this.#options.serverQuirks ?? true), record.refreshToken, {...oauthOptions(this.#options.http, signal), ...bound, ...additional})
                 return await oauth.processRefreshTokenResponse(as, client, response)
             })
         } catch (e) {
@@ -374,7 +406,7 @@ export class OidcSession {
 
     #scopes(as: oauth.AuthorizationServer): string[] {
         const scopes = [...(this.#options.scopes ?? ["openid", "webid"])]
-        if (!scopes.includes("offline_access") && supportsOfflineAccess(as)) scopes.push("offline_access")
+        if (this.#options.offlineAccess !== false && !scopes.includes("offline_access") && supportsOfflineAccess(as)) scopes.push("offline_access")
         return scopes
     }
 

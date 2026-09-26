@@ -67,3 +67,10 @@ export * from "./credentials/OidcIdTokenSource.js"
 export * from "./credentials/SelfIssuedJwtSource.js"
 export * from "./credentials/didKey.js"
 export * from "./credentials/SamlAssertionSource.js"
+
+// Standard OAuth 2.0 / OpenID Connect
+export * from "./oauth/AccessTokenSource.js"
+export * from "./oauth/OAuthBearerTokenProvider.js"
+export * from "./oauth/OAuthCodeSource.js"
+export * from "./oauth/GoogleTokenSource.js"
+export * from "./oauth/MsalTokenSource.js"
