@@ -28,3 +28,8 @@ installReactiveAuthentication(self, {
 
 self.addEventListener("install", event => event.waitUntil(self.skipWaiting()))
 self.addEventListener("activate", event => event.waitUntil(self.clients.claim()))
+// A page this active worker does not control (after a hard reload, or — in Firefox under automation — a tab opened
+// after activation) asks to be claimed. The library's own messages use dedicated MessageChannel ports.
+self.addEventListener("message", event => {
+    if (event.data === "claim") event.waitUntil(self.clients.claim())
+})

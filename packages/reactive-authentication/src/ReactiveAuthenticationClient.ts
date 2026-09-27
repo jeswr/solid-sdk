@@ -280,8 +280,14 @@ function stripOnUrlChange(headers: Headers, from: string, to: string): Headers {
     return copy
 }
 
-/** Reads the body so it can be replayed, honouring abort and the size limit. */
+/**
+ * Reads the body so it can be replayed, honouring abort (including logout, through `signal`) and the size limit.
+ *
+ * Runtimes without request body streams — Firefox does not implement `Request.prototype.body`, so it reads
+ * `undefined` there — are read with the standard `blob()` instead (see {@link bufferWithoutStreams}).
+ */
 async function bufferBody(request: Request, signal: AbortSignal, maxBytes: number): Promise<Blob | null> {
+    if (request.body === undefined) return await bufferWithoutStreams(request, signal, maxBytes)
     if (request.body === null) return null
 
     const reader = request.body.getReader()
@@ -298,7 +304,7 @@ async function bufferBody(request: Request, signal: AbortSignal, maxBytes: numbe
             size += value.byteLength
             if (size > maxBytes) {
                 await reader.cancel().catch(() => undefined)
-                throw new ReactiveAuthenticationError(`Request body exceeds ${maxBytes} bytes and cannot be buffered for replay; authenticate first with a smaller request or raise maxReplayBodyBytes`)
+                throw bodyTooLarge(maxBytes)
             }
             chunks.push(value as Uint8Array<ArrayBuffer>)
         }
@@ -306,8 +312,44 @@ async function bufferBody(request: Request, signal: AbortSignal, maxBytes: numbe
         signal.removeEventListener("abort", onAbort)
     }
 
+    return withContentType(chunks, request)
+}
+
+/**
+ * `blob()` for runtimes without request body streams. Their request bodies cannot be streams, so they are already
+ * in memory: reading them whole costs a copy, and the size limit is enforced on the result. An abort settles at once
+ * (the read itself cannot be cancelled; its late result is dropped). Without `body`, "no body" and an empty body are
+ * indistinguishable; both replay as no body, which Fetch sends the same way for POST and PUT (`Content-Length: 0`).
+ */
+async function bufferWithoutStreams(request: Request, signal: AbortSignal, maxBytes: number): Promise<Blob | null> {
+    signal.throwIfAborted()
+    if (request.method === "GET" || request.method === "HEAD") return null
+    let onAbort: (() => void) | undefined
+    const aborted = new Promise<never>((_, reject) => {
+        onAbort = () => reject(signal.reason)
+        signal.addEventListener("abort", onAbort, {once: true})
+    })
+    const reading = request.blob()
+    reading.catch(() => undefined) // if the abort wins, the late read must not go unhandled
+    let blob: Blob
+    try {
+        blob = await Promise.race([reading, aborted])
+    } finally {
+        signal.removeEventListener("abort", onAbort!)
+    }
+    signal.throwIfAborted()
+    if (blob.size > maxBytes) throw bodyTooLarge(maxBytes)
+    return blob.size === 0 ? null : withContentType([blob], request)
+}
+
+/** The buffered body typed as the request declared (replays rebuild requests from it). */
+function withContentType(parts: BlobPart[], request: Request): Blob {
     const type = request.headers.get("content-type")
-    return new Blob(chunks, type === null ? {} : {type})
+    return new Blob(parts, type === null ? {} : {type})
+}
+
+function bodyTooLarge(maxBytes: number): ReactiveAuthenticationError {
+    return new ReactiveAuthenticationError(`Request body exceeds ${maxBytes} bytes and cannot be buffered for replay; authenticate first with a smaller request or raise maxReplayBodyBytes`)
 }
 
 function withRedirect(request: Request, redirect: RequestRedirect): Request {

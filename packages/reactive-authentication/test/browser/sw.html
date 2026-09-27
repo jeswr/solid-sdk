@@ -15,7 +15,11 @@ const codeProvider = {getCode: (url, signal) => { interactions.push(url.href); r
 const manager = new RA.ReactiveFetchWorkerManager({codeProvider, scriptUrl, scope: "/test/browser/"})
 await manager.register()
 if (!navigator.serviceWorker.controller) {
-    await new Promise(resolve => navigator.serviceWorker.addEventListener("controllerchange", resolve, {once: true}))
+    const controlled = new Promise(resolve => navigator.serviceWorker.addEventListener("controllerchange", resolve, {once: true}))
+    // Activation claims pages open at that time; a page opened after it (Firefox under automation does not hand
+    // such navigations to the worker) asks the active worker to claim it.
+    navigator.serviceWorker.ready.then(registration => registration.active?.postMessage("claim"))
+    await controlled
 }
 window.__ready = true
 window.run = async path => {

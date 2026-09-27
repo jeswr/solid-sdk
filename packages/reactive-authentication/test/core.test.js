@@ -167,6 +167,75 @@ test("replay buffering honours abort for never-ending bodies and enforces its si
     await assert.rejects(client.fetch("https://s.example/x", {method: "PUT", body: big, duplex: "half"}), ReactiveAuthenticationError)
 })
 
+/**
+ * Runs `body` as in a runtime without request body streams: Firefox does not implement `Request.prototype.body`
+ * (it reads `undefined`), while `blob()` and friends work. Restores the real getter afterwards.
+ */
+async function withoutRequestBodyStreams(body) {
+    const original = Object.getOwnPropertyDescriptor(Request.prototype, "body")
+    Object.defineProperty(Request.prototype, "body", {configurable: true, get: () => undefined})
+    try {
+        assert.equal(new Request("https://s.example/", {method: "PUT", body: "x"}).body, undefined)
+        return await body()
+    } finally {
+        Object.defineProperty(Request.prototype, "body", original)
+    }
+}
+
+test("without request body streams (Firefox), challenged writes replay their body with its type, size bound and abort", () => withoutRequestBodyStreams(async () => {
+    const seen = []
+    const fetch = async request => {
+        seen.push({method: request.method, auth: request.headers.get("authorization"), type: request.headers.get("content-type"), text: await request.text()})
+        return request.headers.has("authorization") ? new Response("ok") : unauthorized()
+    }
+    const client = new ReactiveAuthenticationClient({providers: [tokenProvider()], boundary: boundaryFor("https://s.example/"), fetch, maxReplayBodyBytes: 8})
+
+    const put = await client.fetch("https://s.example/x", {method: "PUT", body: "replayed", headers: {"content-type": "text/plain"}})
+    assert.equal(put.status, 200)
+    assert.deepEqual(seen.map(s => [s.method, s.auth, s.type, s.text]), [["PUT", null, "text/plain", "replayed"], ["PUT", "Bearer t0k3n", "text/plain", "replayed"]])
+
+    seen.length = 0
+    const bytes = await client.fetch("https://s.example/b", {method: "POST", body: new Uint8Array([1, 2, 3])})
+    assert.equal(bytes.status, 200)
+    assert.equal(seen.at(-1).text, "\u0001\u0002\u0003", "binary bodies replay byte for byte")
+
+    seen.length = 0
+    assert.equal((await client.fetch("https://s.example/get")).status, 200)
+    assert.equal((await client.fetch("https://s.example/empty", {method: "PUT", body: ""})).status, 200)
+    assert.deepEqual(seen.map(s => s.text), ["", "", "", ""], "no body, and an empty body, replay as no body")
+
+    seen.length = 0
+    await assert.rejects(client.fetch("https://s.example/big", {method: "PUT", body: "123456789"}), ReactiveAuthenticationError)
+    const controller = new AbortController()
+    controller.abort(new Error("stop"))
+    await assert.rejects(client.fetch("https://s.example/x", {method: "PUT", body: "a", signal: controller.signal}), /stop/)
+    assert.equal(seen.length, 0, "an oversized or aborted body is never sent")
+}))
+
+test("without request body streams, logout while the body is being read prevents any upgrade", () => withoutRequestBodyStreams(async () => {
+    const gate = Promise.withResolvers()
+    const reading = Promise.withResolvers()
+    const blob = Request.prototype.blob
+    Request.prototype.blob = function () {
+        reading.resolve()
+        return gate.promise.then(() => blob.call(this))
+    }
+    try {
+        const provider = tokenProvider()
+        let sent = 0
+        const manager = new ReactiveFetchManager({providers: [provider], boundary: boundaryFor("https://s.example/"), fetch: async () => (sent++, unauthorized())})
+        const pending = manager.fetch("https://s.example/x", {method: "PUT", body: "late"})
+        await reading.promise
+        await manager.logout()
+        gate.resolve()
+        await assert.rejects(pending, SessionSupersededError)
+        assert.equal(sent, 0)
+        assert.equal(provider.upgrades, 0)
+    } finally {
+        Request.prototype.blob = blob
+    }
+}))
+
 test("logout while the initial fetch, provider matching or body buffering is pending prevents any upgrade", async () => {
     for (const phase of ["fetch", "matches", "body"]) {
         const gate = Promise.withResolvers()

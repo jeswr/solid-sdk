@@ -36,7 +36,7 @@ node interop/run.js --suite local --target css-local --no-stack
 | Target | Server and provisioning | Outcome |
 | --- | --- | --- |
 | `css-local` | Community Solid Server 7.2.0 (Docker Hub image, pinned digest), memory backend, WAC. `alice`/`bob` accounts and pods seeded by `--seedConfig`. | 9/9 PASS |
-| `css-local-browser` | Same server; the library runs in the browser page. | 5/5 PASS (Chromium, WebKit) |
+| `css-local-browser` | Same server; the library runs in the browser page. | 5/5 PASS (Chromium, Firefox on Linux, WebKit) |
 | `css-local-client-id` | Same server, with a Solid-OIDC Client Identifier Document (`ClientIdClientProvider`) instead of dynamic registration. The document is published on the CSS server root, which the disposable default configuration leaves publicly writable, outside the accounts' pods, because CSS must fetch it itself. | 5/5 PASS |
 | `css-local-client-credentials` | Same server, with `ClientCredentialsTokenProvider` and no browser. A disposable credential for alice is created through the CSS account API (password login, then `controls.account.clientCredentials`) and deleted at the end. | 5/5 PASS |
 | `keycloak-*` | Keycloak 26.7.4 (quay.io, pinned digest), `start-dev --import-realm` with `interop/local/keycloak/realm-interop.json`. | All supported scenarios PASS |
@@ -85,6 +85,13 @@ The local API (`interop/lib/resourceServers.js`) validates Keycloak's tokens as 
   each distinct URL on CSS its own session, because CSS's 401 responses carry no storage Link headers.
 
 ## Findings
+
+- **Library bug, fixed (Firefox).** Firefox does not implement `Request.prototype.body`, so it reads `undefined`.
+  Replay buffering called `request.body.getReader()` and threw a `TypeError` for every challenged write.
+  - Without request body streams, bodies are now read with the standard `blob()`. The size bound still applies
+    (checked on the result), and abort and logout still settle immediately.
+  - Regression tests in `test/core.test.js` remove the getter to reproduce this in Node.
+  - Firefox 155 on Linux now passes the browser suite and `css-local-browser`.
 
 - **Library bug, fixed.** The fixed 30 s expiry skew made access tokens shorter-lived than 30 s unusable on arrival.
   Against Keycloak's 5 s tokens, six concurrent requests spent six refresh grants. The skew is now

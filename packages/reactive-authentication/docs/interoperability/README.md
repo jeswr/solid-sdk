@@ -55,7 +55,7 @@ never print them.
 | --- | --- | --- |
 | Node.js (library in Node) | `solid-oidc`, `oauth-code`, `lws` and `solid-uma` adapters. A real browser (Playwright) is only the user agent for the provider's login pages; the redirect lands on a loopback listener. | CSS (dynamic registration and a Client Identifier Document) and Keycloak (public, `client_secret_basic`, `client_secret_post`, plain OAuth, short-lived, no-audience): all pass |
 | Node.js, no browser at all | `client-credentials` adapter (`ClientCredentialsTokenProvider`: a script acting as its WebID with DPoP-bound client-credentials tokens) | CSS: 5/5 pass (a disposable credential is created through the CSS account API and deleted afterwards) |
-| Browser (library in the page) | `solid-browser` adapter (`<authorization-code-flow>` popup, WebCrypto DPoP keys, CORS); `google-gis` and `msal-browser` adapters; the browser suite in `test/browser/` (service worker, Web Locks, BroadcastChannel, IndexedDB persistence). | Chromium 153 and WebKit 26.6 pass against real CSS; Firefox (CI only, see limits) |
+| Browser (library in the page) | `solid-browser` adapter (`<authorization-code-flow>` popup, WebCrypto DPoP keys, CORS); `google-gis` and `msal-browser` adapters; the browser suite in `test/browser/` (service worker, Web Locks, BroadcastChannel, IndexedDB persistence). | Chromium 153, Firefox 155 and WebKit 26.6 pass against real CSS (Firefox on Linux; see limits) |
 | Node.js versions | `npm test` on 24.5.0 (the minimum), the latest 24 and 26, on Linux, macOS and Windows (CI). | Node 24.5.0, 25.1.0 and 26.10.0 (macOS) |
 
 Not claimed: Bun, Deno, React Native or other mobile runtimes, and Electron. None of them is tested.
@@ -173,7 +173,8 @@ The adapter specs in `interop/lib/manifest.js` list each adapter's scenarios and
 
 ## Evidence (2026-09-27, macOS arm64, Node 25.1.0, Docker 27.4.0)
 
-- `npm test`: 183/183 pass, none skipped (library plus harness tests), on Node 25.1.0, 24.5.0 and 26.10.0.
+- `npm test`: 185/185 pass, none skipped (library plus harness tests). Earlier 183-test revisions passed on Node
+  25.1.0, 24.5.0 and 26.10.0.
 - TypeDoc (`--emit none`), `npm pack --dry-run` and `npm audit --omit=dev` (0 vulnerabilities) pass.
 - `npm run interop:local` (strict): PASS 44, FAIL 0, UNSUPPORTED 8 (declared).
   - Covers CSS in three profiles (dynamic registration, Client Identifier Document, client credentials) and
@@ -181,6 +182,10 @@ The adapter specs in `interop/lib/manifest.js` list each adapter's scenarios and
 - `npm run interop:local:incompatible`: all four declared incompatibilities reproduced (UNSUPPORTED 25, UNTESTED 11
   for unverified capabilities). The same run with `--strict` fails, as documented.
 - `npm run interop:local:browser`: 5/5 on Chromium 153 and on WebKit 26.6.
+- Firefox 155 on Linux (Playwright 1.63 container):
+  - browser suite 9/9;
+  - SDK regressions 2/2, wiring check and Solid browser adapter self-test pass;
+  - `css-local-browser` 5/5 against a real CSS container.
 - Browser suite: 9/9 on Chromium and on WebKit. `npm run test:browser:regressions` (2/2), the offline wiring check
   and the Solid browser adapter self-test pass on both.
 - Live targets were not run, because no credentials are configured.
@@ -192,9 +197,9 @@ The adapter specs in `interop/lib/manifest.js` list each adapter's scenarios and
 
 ## Limits
 
-- Firefox is exercised in CI on Linux only. On the development host (macOS, Darwin 27), Playwright's Firefox
-  build 1543 exits at launch with "Could not find profile folder". The sandbox and the temporary directory were
-  both ruled out as causes.
+- Firefox is exercised on Linux (CI and the Playwright container). On the development host (macOS, Darwin 27),
+  Playwright's Firefox build 1543 exits at launch with "Could not find profile folder". The sandbox and the
+  temporary directory were both ruled out as causes.
 - Solid Nextcloud and NSS images are built from their upstream Dockerfiles at pinned commits, with floating base
   images pinned by digest. Package installation inside those builds (`apt-get`, `composer`) still resolves at
   build time, so rebuilt images may differ in patch versions. PHP Solid Server's packages come from the frozen
