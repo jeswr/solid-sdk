@@ -4,3 +4,10 @@
 /dist/
 /test/browser/.bundle/
 /.implementation-context/
+
+# Interoperability harness: generated test CA, reports and test-only browser sessions (never committed)
+interop/.local-tls/
+interop/reports/
+interop/.auth/
+interop/browser/.bundle/
+interop/runtime/.bundle/

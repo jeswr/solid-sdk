@@ -1,4 +1,5 @@
-// Real-browser smoke tests (Chromium via Playwright) against the same local mock servers as the Node tests:
+// Real-browser smoke tests (Playwright: `--browser chromium|firefox|webkit`, default chromium) against the same
+// local mock servers as the Node tests. Engine capabilities the library relies on are reported first:
 // 1. page.html   — ReactiveFetchManager registered globally, <authorization-code-flow> popup, DPoP-bound
 //                  requests with body replay, and no credentials outside the boundary.
 //                  An authenticated write answered by a redirect yields the opaque response, written once.
@@ -14,7 +15,8 @@ import { build } from "esbuild"
 import { readFile } from "node:fs/promises"
 import { extname, join, normalize } from "node:path"
 import { fileURLToPath } from "node:url"
-import { chromium } from "playwright"
+import { parseArgs } from "node:util"
+import * as playwright from "playwright"
 import { serve } from "../helpers/http.js"
 import { startOpenIdProvider, startSolidStorage } from "../helpers/openid.js"
 
@@ -55,11 +57,38 @@ const rs = await startSolidStorage(op, {
 })
 const appOrigin = app.url // 127.0.0.1 is a potentially trustworthy origin, so service workers work over HTTP
 
-const browser = await chromium.launch()
+const {values: {browser: engine}} = parseArgs({options: {browser: {type: "string", default: "chromium"}}})
+if (!["chromium", "firefox", "webkit"].includes(engine)) throw new Error(`Unknown browser ${engine}`)
+const browser = await playwright[engine].launch()
+console.log(`Browser: ${engine} ${browser.version()}`)
 const failures = []
 try {
     const context = await browser.newContext()
     const query = `op=${encodeURIComponent(op.issuer)}&rs=${encodeURIComponent(rs.url)}`
+
+    {
+        // Engine capabilities the library relies on, reported explicitly; a missing one fails by name instead of
+        // letting a dependent scenario be skipped silently.
+        const page = await context.newPage()
+        await page.goto(`${appOrigin}/package.json`)
+        const capabilities = await page.evaluate(async () => {
+            let es256 = false
+            try {
+                const key = await crypto.subtle.generateKey({name: "ECDSA", namedCurve: "P-256"}, false, ["sign", "verify"])
+                es256 = key.privateKey.extractable === false && (await crypto.subtle.sign({name: "ECDSA", hash: "SHA-256"}, key.privateKey, new Uint8Array(1))).byteLength === 64
+            } catch {}
+            return {
+                secureContext: isSecureContext, es256NonExtractable: es256, webLocks: typeof navigator.locks?.request === "function",
+                broadcastChannel: typeof BroadcastChannel === "function", indexedDB: typeof indexedDB?.open === "function",
+                serviceWorker: typeof navigator.serviceWorker?.register === "function", abortSignalAny: typeof AbortSignal.any === "function",
+                promiseWithResolvers: typeof Promise.withResolvers === "function",
+            }
+        })
+        const missing = Object.entries(capabilities).filter(([, available]) => !available).map(([name]) => name)
+        console.log(`${missing.length === 0 ? "PASS" : "FAIL"} capabilities (${engine}): ${JSON.stringify(capabilities)}`)
+        if (missing.length > 0) failures.push(`capabilities: ${missing.join(", ")}`)
+        await page.close()
+    }
 
     const report = (name, ok, detail) => {
         console.log(`${ok ? "PASS" : "FAIL"} ${name}: ${typeof detail === "string" ? detail : JSON.stringify(detail)}`)

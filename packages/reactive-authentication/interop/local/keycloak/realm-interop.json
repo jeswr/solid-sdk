@@ -1,0 +1,191 @@
+{
+  "realm": "interop",
+  "enabled": true,
+  "displayName": "reactive-authentication interop (disposable, local only)",
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "accessTokenLifespan": 300,
+  "ssoSessionIdleTimeout": 1800,
+  "ssoSessionMaxLifespan": 36000,
+  "revokeRefreshToken": true,
+  "refreshTokenMaxReuse": 0,
+  "users": [
+    {
+      "id": "6f1d6d59-6b8f-4d0a-9b5e-1c3a0a7e0001",
+      "username": "alice",
+      "email": "alice@interop.test",
+      "emailVerified": true,
+      "firstName": "Alice",
+      "lastName": "Interop",
+      "enabled": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "alice-local-only",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "default-roles-interop",
+        "offline_access"
+      ]
+    }
+  ],
+  "clients": [
+    {
+      "clientId": "ra-public",
+      "name": "Public SPA-style client (PKCE S256, rotating refresh tokens, interop-api audience)",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "implicitFlowEnabled": false,
+      "redirectUris": [
+        "http://127.0.0.1:39398/callback"
+      ],
+      "webOrigins": [
+        "+"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "+"
+      },
+      "defaultClientScopes": [
+        "basic",
+        "profile",
+        "email",
+        "roles"
+      ],
+      "optionalClientScopes": [
+        "offline_access"
+      ],
+      "protocolMappers": [
+        {
+          "name": "interop-api audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.custom.audience": "interop-api",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "ra-confidential",
+      "name": "Confidential server-side client (client_secret_basic + PKCE S256)",
+      "enabled": true,
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "ra-confidential-local-only-secret",
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "implicitFlowEnabled": false,
+      "redirectUris": [
+        "http://127.0.0.1:39398/callback"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256"
+      },
+      "defaultClientScopes": [
+        "basic",
+        "profile",
+        "email",
+        "roles"
+      ],
+      "optionalClientScopes": [
+        "offline_access"
+      ],
+      "protocolMappers": [
+        {
+          "name": "interop-api audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.custom.audience": "interop-api",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "ra-short",
+      "name": "Public client with 5 s access tokens (below the library's 30 s expiry skew: every use renews)",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "implicitFlowEnabled": false,
+      "redirectUris": [
+        "http://127.0.0.1:39398/callback"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "access.token.lifespan": "5"
+      },
+      "defaultClientScopes": [
+        "basic",
+        "profile",
+        "email",
+        "roles"
+      ],
+      "optionalClientScopes": [
+        "offline_access"
+      ],
+      "protocolMappers": [
+        {
+          "name": "interop-api audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.custom.audience": "interop-api",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "ra-no-audience",
+      "name": "Public client whose tokens lack the interop-api audience",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "implicitFlowEnabled": false,
+      "redirectUris": [
+        "http://127.0.0.1:39398/callback"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256"
+      },
+      "defaultClientScopes": [
+        "basic",
+        "profile",
+        "email",
+        "roles"
+      ]
+    },
+    {
+      "clientId": "interop-api",
+      "name": "The local resource server (token introspection only)",
+      "enabled": true,
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "interop-api-local-only-secret",
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "implicitFlowEnabled": false,
+      "serviceAccountsEnabled": false
+    }
+  ]
+}

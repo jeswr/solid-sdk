@@ -12,6 +12,7 @@ const b64url = buffer => Buffer.from(buffer).toString("base64url")
  * @param {string} [options.clientSecret] require client_secret_basic
  * @param {number} [options.expiresIn]
  * @param {boolean} [options.refresh] issue rotating refresh tokens (default true)
+ * @param {boolean} [options.rotate] rotate refresh tokens on use (default true); false keeps the same one
  * @param {{nonce?: boolean, issuer?: boolean, audience?: boolean, state?: boolean, redirect?: string}} [options.tamper]
  * @param {string} [options.tokenType] token_type to issue (default Bearer)
  */
@@ -82,6 +83,11 @@ export async function startOAuthProvider(options = {}) {
                     if (record.used) {
                         stats.reuse++
                         return json({error: "invalid_grant"}, 400)
+                    }
+                    if (options.rotate === false) {
+                        // Non-rotating provider: a new access token, the same refresh token.
+                        const {refresh_token: _, ...renewed} = await issue(issuer, client, record.scope, record.aud, undefined, false)
+                        return json({...renewed, refresh_token: form.refresh_token})
                     }
                     record.used = true
                     return json(await issue(issuer, client, record.scope, record.aud, undefined, false))

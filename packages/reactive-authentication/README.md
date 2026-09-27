@@ -255,6 +255,8 @@ a warning: `{allowInsecureRequests: true}` for components making OAuth/discovery
 - [Protocol support, sources and draft limitations](docs/protocols.md)
 - [Architecture and review guide](docs/architecture.md)
 - [Upstream issue and PR resolution](docs/upstream-resolution.md)
+- [Interoperability testing](docs/interoperability/README.md): real local servers (CSS, Keycloak, NSS, Solid
+  Nextcloud, PHP Solid Server, Manas), hosted pod providers, OAuth/OIDC providers, Google/Microsoft SDKs and LWS
 - API reference: `npm run docs` (TypeDoc)
 
 ## Development
@@ -262,7 +264,8 @@ a warning: `{allowInsecureRequests: true}` for components making OAuth/discovery
 ```batch
 npm install
 npm test               # build + Node tests against local mock servers
-npm run test:browser   # Chromium smoke tests (npx playwright install chromium)
+npm run test:browser   # browser smoke tests; -- --browser firefox|webkit (npx playwright install <engine>)
+npm run interop:local  # real CSS and Keycloak in disposable Docker containers (see docs/interoperability)
 npm run docs
 ```
 
