@@ -1,7 +1,8 @@
 import assert from "node:assert/strict"
 import { after, before, test } from "node:test"
 import { createMemoryStore } from "@key-value-kit/storage/memory"
-import { CredentialBoundary, OAuthBearerTokenProvider, OAuthCodeSource, ReactiveFetchManager } from "../dist/mod.js"
+import { accessTokenUsable, CredentialBoundary, idTokenUsable, OAuthBearerTokenProvider, OAuthCodeSource, ReactiveFetchManager } from "../dist/mod.js"
+import { withMockedDate } from "./helpers/clock.js"
 import { insecure, transport } from "./helpers/http.js"
 import { startApi, startOAuthProvider } from "./helpers/oauth.js"
 import { automaticCodeProvider } from "./helpers/openid.js"
@@ -78,8 +79,8 @@ test("explicit trusted metadata works for servers without discovery; a confident
     }
 })
 
-test("expiry and rejection renew via the refresh token; concurrent requests never reuse a rotated refresh token", async () => {
-    const short = await startOAuthProvider({expiresIn: 20}) // below the session's 30 s skew
+test("expiry and rejection renew via the refresh token; concurrent requests never reuse a rotated refresh token", () => withMockedDate(async advance => {
+    const short = await startOAuthProvider({expiresIn: 20})
     const shortApi = await startApi(short)
     try {
         const code = automaticCodeProvider()
@@ -87,8 +88,10 @@ test("expiry and rejection renew via the refresh token; concurrent requests neve
         const bearer = new OAuthBearerTokenProvider(source, {resources: new CredentialBoundary([`${shortApi.url}/`], {allowInsecureHttp: true})})
         const manager = new ReactiveFetchManager({providers: [bearer], boundary: new CredentialBoundary([`${shortApi.url}/`], {allowInsecureHttp: true}), fetch: transport})
         assert.equal((await manager.fetch(`${shortApi.url}/1`)).status, 200)
+        advance(21_000) // expired
         const responses = await Promise.all(Array.from({length: 4}, (_, i) => manager.fetch(`${shortApi.url}/${i}`)))
         assert.ok(responses.every(r => r.status === 200))
+        assert.equal(short.stats.refresh, 1, "one refresh grant for concurrent requests")
         assert.equal(short.stats.reuse, 0, "rotating refresh tokens consumed once")
         assert.equal(code.calls, 1)
 
@@ -101,7 +104,57 @@ test("expiry and rejection renew via the refresh token; concurrent requests neve
         await shortApi.close()
         await short.close()
     }
-})
+}))
+
+test("tokens shorter-lived than the expiry skew are reused, and concurrent renewals share one refresh grant", () => withMockedDate(async advance => {
+    // Found against Keycloak (5 s access tokens): a fixed 30 s skew made every token unusable on arrival, so
+    // six concurrent requests spent six refresh grants in turn. The skew is now min(30 s, lifetime / 2).
+    const short = await startOAuthProvider({expiresIn: 20})
+    const shortApi = await startApi(short)
+    try {
+        const source = new OAuthCodeSource({issuer: short.issuer, clientId: "c", redirectUri, scopes: ["read"], resource: shortApi.url, codeProvider: automaticCodeProvider(), http: insecure})
+        const bearer = new OAuthBearerTokenProvider(source, {resources: new CredentialBoundary([`${shortApi.url}/`], {allowInsecureHttp: true})})
+        const manager = new ReactiveFetchManager({providers: [bearer], boundary: new CredentialBoundary([`${shortApi.url}/`], {allowInsecureHttp: true}), fetch: transport})
+        const burst = async label => (await Promise.all(Array.from({length: 6}, (_, i) => manager.fetch(`${shortApi.url}/${label}-${i}`).then(r => r.status))))
+        assert.equal((await manager.fetch(`${shortApi.url}/first`)).status, 200)
+        assert.deepEqual(await burst("fresh"), Array(6).fill(200))
+        advance(9_000) // still within the first half of the 20 s lifetime
+        assert.deepEqual(await burst("still-fresh"), Array(6).fill(200))
+        assert.equal(short.stats.refresh, 0, "a token within the first half of its lifetime is reused")
+
+        advance(2_000) // 11 s: past half the lifetime
+        assert.deepEqual(await burst("renewed"), Array(6).fill(200))
+        assert.equal(short.stats.refresh, 1, "one refresh grant for six concurrent requests")
+        assert.equal(short.stats.reuse, 0)
+    } finally {
+        await shortApi.close()
+        await short.close()
+    }
+}))
+
+test("expiry skew: 30 s for ordinary tokens, half the lifetime for short ones; ID tokens follow the same rule", () => withMockedDate(async advance => {
+    const entry = lifetime => {
+        const created = Date.now()
+        return {created, expiresAt: created + lifetime, idTokenExpiresAt: created + lifetime, tokenResult: {id_token: "x"}}
+    }
+    const long = entry(3_600_000)
+    advance(3_569_000) // 31 s before expiry
+    assert.equal(accessTokenUsable(long), true)
+    assert.equal(idTokenUsable(long), true)
+    advance(2_000) // 29 s before expiry
+    assert.equal(accessTokenUsable(long), false)
+    assert.equal(idTokenUsable(long), false)
+    assert.equal(accessTokenUsable(long, true), true, "a just-issued token is always usable")
+
+    const short = entry(20_000)
+    advance(9_999)
+    assert.equal(accessTokenUsable(short), true)
+    assert.equal(idTokenUsable(short), true)
+    advance(2)
+    assert.equal(accessTokenUsable(short), false)
+    assert.equal(idTokenUsable(short), false)
+    assert.equal(accessTokenUsable({...short, expiresAt: undefined}), true, "no stated expiry: usable until rejected")
+}))
 
 test("logout forgets the session; accounts sharing a cache and namespace stay isolated", async () => {
     const {manager, code} = oauthClient()

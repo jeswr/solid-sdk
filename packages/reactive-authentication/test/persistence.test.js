@@ -4,6 +4,7 @@ import "fake-indexeddb/auto"
 import { createBrowserCaches } from "../dist/mod.js"
 import { startOpenIdProvider, startSolidStorage } from "./helpers/openid.js"
 import { solidClient } from "./helpers/solid.js"
+import { withMockedDate } from "./helpers/clock.js"
 
 let op, rs
 before(async () => {
@@ -55,17 +56,19 @@ test("a failing delete before refresh prevents consuming the refresh token", asy
     first.caches.fence.close(); second.caches.fence.close()
 })
 
-test("invalid_grant falls back to a new authorization; other refresh errors propagate and leave nothing usable", async () => {
+test("invalid_grant falls back to a new authorization; other refresh errors propagate and leave nothing usable", () => withMockedDate(async advance => {
     const namespace = `app-${crypto.randomUUID()}`
     const first = load(namespace)
     assert.equal((await first.manager.fetch(`${rs.url}/alice/g`)).status, 200)
 
     op.failRefresh("invalid_grant")
     try {
+        advance(21_000) // expired: the next request must refresh
         assert.equal((await first.manager.fetch(`${rs.url}/alice/g`)).status, 200)
         assert.equal(first.code.calls, 2, "re-authorized after invalid_grant")
 
         op.failRefresh("temporarily_unavailable")
+        advance(21_000)
         await assert.rejects(first.manager.fetch(`${rs.url}/alice/g`), e => e.error === "temporarily_unavailable")
         op.failRefresh(undefined)
         assert.equal((await first.manager.fetch(`${rs.url}/alice/g`)).status, 200)
@@ -74,7 +77,7 @@ test("invalid_grant falls back to a new authorization; other refresh errors prop
         op.failRefresh(undefined)
         first.caches.fence.close()
     }
-})
+}))
 
 test("logout through the persistent fence clears IndexedDB records for later loads", async () => {
     const namespace = `app-${crypto.randomUUID()}`

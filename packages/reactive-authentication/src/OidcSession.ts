@@ -443,13 +443,22 @@ function refreshRecordOf(entry: DPoPTokenCacheEntry | null, generation: number |
  * expiry skew), a cached one until shortly before expiry (unknown expiry: until the server rejects it).
  */
 export function accessTokenUsable(entry: DPoPTokenCacheEntry, justIssued = false): boolean {
-    return justIssued || entry.expiresAt === undefined || Date.now() < entry.expiresAt - expirySkewMs
+    return justIssued || entry.expiresAt === undefined || Date.now() < entry.expiresAt - skew(entry.created, entry.expiresAt)
 }
 
 /** Whether the session holds an ID token that can be presented as a credential. */
 export function idTokenUsable(entry: DPoPTokenCacheEntry, justIssued = false): boolean {
     if (entry.tokenResult.id_token === undefined || entry.idTokenExpiresAt === undefined) return false
-    return justIssued || Date.now() < entry.idTokenExpiresAt - expirySkewMs
+    return justIssued || Date.now() < entry.idTokenExpiresAt - skew(entry.created, entry.idTokenExpiresAt)
+}
+
+/**
+ * How long before expiry a token counts as expired: {@link expirySkewMs}, or half the lifetime of tokens issued
+ * for less than twice that — otherwise such tokens would never be reused, and every request (even concurrent
+ * ones waiting for the same session) would spend a refresh grant.
+ */
+function skew(created: number, expiresAt: number): number {
+    return Math.min(expirySkewMs, Math.max(0, (expiresAt - created) / 2))
 }
 
 async function clearStore<T extends {}>(store: KeyValueStore<T>, keys: Iterable<string>): Promise<void> {

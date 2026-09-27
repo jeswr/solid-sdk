@@ -4,6 +4,7 @@ import { createMemoryStore } from "@key-value-kit/storage/memory"
 import { SessionSupersededError } from "../dist/mod.js"
 import { startOpenIdProvider, startSolidStorage, automaticCodeProvider } from "./helpers/openid.js"
 import { callback, deferred, sharedFences, solidClient } from "./helpers/solid.js"
+import { withMockedDate } from "./helpers/clock.js"
 
 let op, rs
 before(async () => {
@@ -104,23 +105,26 @@ test("a rejected token is renewed once by refresh grant, and a persistent reject
     }
 })
 
-test("concurrent requests with rotating refresh tokens consume each refresh token once", async () => {
-    const op2 = await startOpenIdProvider({expiresIn: 20}) // below the 30 s skew: every use refreshes
+test("concurrent requests with rotating refresh tokens consume each refresh token once", () => withMockedDate(async advance => {
+    const op2 = await startOpenIdProvider({expiresIn: 20})
     const rs2 = await startSolidStorage(op2)
     try {
         const {manager} = solidClient(op2, rs2)
         assert.equal((await manager.fetch(`${rs2.url}/alice/0`)).status, 200)
-        const responses = await Promise.all(Array.from({length: 6}, (_, i) => manager.fetch(`${rs2.url}/alice/${i}`)))
-        assert.ok(responses.every(r => r.status === 200))
-        assert.equal(op2.stats.reuse, 0)
-        assert.equal(op2.stats.refresh, 6)
+        for (let round = 1; round <= 3; round++) {
+            advance(21_000) // the access token has expired
+            const responses = await Promise.all(Array.from({length: 6}, (_, i) => manager.fetch(`${rs2.url}/alice/${round}-${i}`)))
+            assert.ok(responses.every(r => r.status === 200))
+            assert.equal(op2.stats.refresh, round, "six concurrent requests share one refresh grant")
+        }
+        assert.equal(op2.stats.reuse, 0, "no rotated refresh token was presented twice")
     } finally {
         await rs2.close()
         await op2.close()
     }
-})
+}))
 
-test("review #1: with a shared session store, stale in-memory refresh tokens are never replayed across tabs", async () => {
+test("review #1: with a shared session store, stale in-memory refresh tokens are never replayed across tabs", () => withMockedDate(async advance => {
     const op2 = await startOpenIdProvider({expiresIn: 20})
     const rs2 = await startSolidStorage(op2)
     try {
@@ -132,8 +136,11 @@ test("review #1: with a shared session store, stale in-memory refresh tokens are
 
         assert.equal((await a.manager.fetch(`${rs2.url}/alice/1`)).status, 200) // A: R1 in memory and durable
         assert.equal((await b.manager.fetch(`${rs2.url}/alice/2`)).status, 200) // B: consumes durable R1 -> R2
+        advance(21_000) // A's in-memory access token (and the R1 beside it) is now stale
         assert.equal((await a.manager.fetch(`${rs2.url}/alice/3`)).status, 200) // A must use durable R2, not memory R1
+        advance(21_000)
         assert.equal((await b.manager.fetch(`${rs2.url}/alice/4`)).status, 200)
+        assert.equal(op2.stats.refresh, 3, "B restored, then A and B each renewed from the durable record")
         assert.equal(op2.stats.reuse, 0)
         assert.equal(a.code.calls + b.code.calls, 1, "B restored without a window")
         fenceA.close(); fenceB.close()
@@ -141,7 +148,7 @@ test("review #1: with a shared session store, stale in-memory refresh tokens are
         await rs2.close()
         await op2.close()
     }
-})
+}))
 
 test("review #2: logout in one tab makes other tabs' in-memory credentials unusable", async () => {
     const [fenceA, fenceB] = sharedFences()
@@ -222,12 +229,13 @@ test("review #4: manager.logout() while the initial response is pending never at
     assert.equal(code.calls, 0)
 })
 
-test("review #6: refresh with an ID token but no rotation keeps identity and refresh token; subject changes are rejected", async () => {
+test("review #6: refresh with an ID token but no rotation keeps identity and refresh token; subject changes are rejected", () => withMockedDate(async advance => {
     const op2 = await startOpenIdProvider({expiresIn: 20, rotate: false, refreshIdToken: true, webId: "https://id.example/alice#me"})
     const rs2 = await startSolidStorage(op2)
     try {
         const {manager, provider} = solidClient(op2, rs2)
         assert.equal((await manager.fetch(`${rs2.url}/alice/1`)).status, 200)
+        advance(21_000)
         assert.equal((await manager.fetch(`${rs2.url}/alice/2`)).status, 200)
         const identity = await provider.identity(new Request(`${rs2.url}/alice/2`))
         assert.equal(identity.webId, "https://id.example/alice#me")
@@ -236,13 +244,14 @@ test("review #6: refresh with an ID token but no rotation keeps identity and ref
         const refreshToken = op2.stats.token.at(-1).refresh_token
 
         op2.setSubject("mallory")
+        advance(21_000)
         await assert.rejects(manager.fetch(`${rs2.url}/alice/3`), /different subject/)
         assert.equal(op2.stats.token.at(-1).refresh_token, refreshToken, "unrotated refresh token was kept")
     } finally {
         await rs2.close()
         await op2.close()
     }
-})
+}))
 
 test("identity: WebID verification against the profile (exact issuer match)", async () => {
     let listed
