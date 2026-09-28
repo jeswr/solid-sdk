@@ -52,7 +52,7 @@
   },
   "homepage": "https://github.com/jeswr/guarded-fetch#readme",
   "dependencies": {
-    "undici": "8.5.0"
+    "undici": "8.10.2"
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18.0",
