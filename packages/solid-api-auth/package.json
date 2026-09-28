@@ -58,7 +58,7 @@
     "@jeswr/fetch-rdf": "^0.1.0",
     "jose": "^6.2.3",
     "oauth4webapi": "^3.8.6",
-    "undici": "8.5.0"
+    "undici": "8.10.2"
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18.0",
