@@ -7,8 +7,14 @@ export const viewport: Viewport = { colorScheme: "light dark" };
 export const metadata: Metadata = { title: "Solid Suite · Component fixtures" };
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" suppressHydrationWarning data-density="comfortable" data-theme="system">
-      <body className={`${onest.variable} ${sourceSerif.variable} ${sourceCode.variable}`}>
+    <html
+      lang="en"
+      className={`${onest.variable} ${sourceSerif.variable} ${sourceCode.variable}`}
+      suppressHydrationWarning
+      data-density="comfortable"
+      data-theme="system"
+    >
+      <body>
         <Providers>
           <a className="skip-link" href="#main-content">
             Skip to main content

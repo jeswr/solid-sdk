@@ -240,7 +240,7 @@ schsh:RecurrenceRuleShape
     sh:property [
         sh:path schema:byMonthDay ;
         sh:datatype xsd:integer ;
-        sh:or ( [ sh:minInclusive 1 ; sh:maxInclusive 31 ] [ sh:in ( -1 ) ] ) ;
+        sh:or ( [ sh:minInclusive 1 ; sh:maxInclusive 31 ] [ sh:minInclusive -1 ; sh:maxInclusive -1 ] ) ;
         sh:message "By-month-day values must be integers from 1 to 31, or -1 (last day)."@en ;
     ] ;
 

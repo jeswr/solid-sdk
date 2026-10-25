@@ -73,7 +73,14 @@
     "name": "--border-strong",
     "light": "oklch(0.80 0.012 240)",
     "dark": "oklch(1 0 0 / 24%)",
-    "use": "inputs, focused cards",
+    "use": "focused cards",
+    "category": "colour"
+  },
+  {
+    "name": "--input",
+    "light": "oklch(0.63 0.012 240)",
+    "dark": "oklch(1 0 0 / 36%)",
+    "use": "input, select, checkbox and radio boundaries",
     "category": "colour"
   },
   {
@@ -148,7 +155,7 @@
   },
   {
     "name": "--warning-foreground",
-    "light": "oklch(0.25 0.05 70)",
+    "light": "oklch(0.20 0.05 70)",
     "dark": "oklch(0.20 0.04 70)",
     "use": "",
     "category": "colour"

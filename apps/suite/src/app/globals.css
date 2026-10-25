@@ -200,7 +200,6 @@ ul {
 input,
 button {
   font: inherit;
-  border: 1px solid var(--border-strong);
   border-radius: var(--radius-md);
   background: var(--surface);
   color: var(--foreground);
@@ -211,6 +210,13 @@ button {
 .small-control {
   min-height: var(--control-h-sm);
   margin-top: var(--space-2);
+}
+input,
+select {
+  border: 1px solid var(--input);
+}
+button {
+  border: 1px solid var(--border-strong);
 }
 .density-grid-card {
   height: var(--row-h-grid-card);

@@ -3,10 +3,43 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import ts from "typescript";
+
+/** Let the parser distinguish trivia from JSX text, strings, templates and regexes. */
+function withoutScriptComments(source, extension) {
+  const file = ts.createSourceFile(`tokens${extension}`, source, ts.ScriptTarget.Latest, true);
+  const scanner = ts.createScanner(ts.ScriptTarget.Latest, false);
+  const result = source.split("");
+  function visit(node) {
+    if (node.kind >= ts.SyntaxKind.FirstToken && node.kind <= ts.SyntaxKind.LastToken) {
+      // Scan only a parsed token's leading trivia, including the EOF token's trivia.
+      // A standalone scanner cannot disambiguate JSX or regex/template rescans.
+      scanner.setText(source, node.pos, node.getStart(file) - node.pos);
+      for (
+        let kind = scanner.scan();
+        kind !== ts.SyntaxKind.EndOfFileToken;
+        kind = scanner.scan()
+      ) {
+        if (
+          kind === ts.SyntaxKind.SingleLineCommentTrivia ||
+          kind === ts.SyntaxKind.MultiLineCommentTrivia
+        ) {
+          for (let i = scanner.getTokenPos(); i < scanner.getTextPos(); i++) {
+            if (source[i] !== "\n" && source[i] !== "\r") result[i] = " ";
+          }
+        }
+      }
+    } else {
+      for (const child of node.getChildren(file)) visit(child);
+    }
+  }
+  visit(file);
+  return result.join("");
+}
 
 /** Blank comments while retaining offsets/lines and colour literals inside strings. */
 export function withoutComments(source, extension = ".ts") {
-  const lineComments = /^\.[cm]?[jt]sx?$/.test(extension);
+  if (/^\.[cm]?[jt]sx?$/.test(extension)) return withoutScriptComments(source, extension);
   let result = "";
   let quote = "";
   for (let i = 0; i < source.length; ) {
@@ -21,20 +54,14 @@ export function withoutComments(source, extension = ".ts") {
       result += char;
       i++;
     } else {
-      const end = source.startsWith("/*", i)
-        ? "*/"
-        : source.startsWith("<!--", i)
-          ? "-->"
-          : lineComments && source.startsWith("//", i)
-            ? "\n"
-            : null;
+      const end = source.startsWith("/*", i) ? "*/" : source.startsWith("<!--", i) ? "-->" : null;
       if (!end) {
         result += char;
         i++;
         continue;
       }
       const stop = source.indexOf(end, i + 2);
-      const next = stop < 0 ? source.length : stop + (end === "\n" ? 0 : end.length);
+      const next = stop < 0 ? source.length : stop + end.length;
       result += source.slice(i, next).replace(/[^\n]/g, " ");
       i = next;
     }

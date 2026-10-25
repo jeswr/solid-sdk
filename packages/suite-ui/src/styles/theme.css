@@ -10,7 +10,6 @@
   --muted-foreground: var(--foreground-muted);
   --accent: var(--primary-soft);
   --accent-foreground: var(--primary-soft-foreground);
-  --input: var(--border-strong);
   --secondary: var(--surface-2);
   --secondary-foreground: var(--foreground);
 }

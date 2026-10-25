@@ -43,7 +43,6 @@ test("Tailwind theme exposes all colour tokens and the normative shadcn aliases"
     "muted-foreground": "foreground-muted",
     accent: "primary-soft",
     "accent-foreground": "primary-soft-foreground",
-    input: "border-strong",
     secondary: "surface-2",
     "secondary-foreground": "foreground",
   })) {
