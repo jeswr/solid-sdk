@@ -1,7 +1,16 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import assert from "node:assert/strict";
+import { createMemoryStore } from "@key-value-kit/storage/memory";
 import { test } from "vitest";
-import { GoogleTokenSource, MsalTokenSource, OAuthBearerTokenProvider } from "../src/mod.js";
+import {
+  CredentialBoundary,
+  GoogleTokenSource,
+  MsalTokenSource,
+  OAuthBearerTokenProvider,
+  ReactiveFetchManager,
+  SessionFence,
+} from "../src/mod.js";
+import { serve, transport } from "./helpers/http.js";
 
 const signal = () => new AbortController().signal;
 function google() {
@@ -16,6 +25,78 @@ function google() {
       callback({ successful: false });
     },
   };
+}
+
+for (const stage of ["initial token", "renewal token", "fence verification"]) {
+  test(`Bearer resource revocation during ${stage} prevents the outstanding credentialed send`, async () => {
+    const server = await serve(
+      (request) =>
+        new Response(null, {
+          status:
+            request.headers.has("authorization") &&
+            (stage !== "renewal token" ||
+              request.headers.get("authorization") === "Bearer access-2")
+              ? 200
+              : 401,
+          headers: { "www-authenticate": "Bearer" },
+        }),
+    );
+    const started = Promise.withResolvers();
+    const gate = Promise.withResolvers();
+    const generations = createMemoryStore();
+    let reads = 0;
+    const fence = new SessionFence(`oauth-resources-${crypto.randomUUID()}`, {
+      broadcast: false,
+      store: {
+        ...generations,
+        getItem: async (key) => {
+          if (++reads === 2 && stage === "fence verification") {
+            started.resolve();
+            await gate.promise;
+          }
+          return await generations.getItem(key);
+        },
+      },
+    });
+    const root = `${server.url}/`;
+    const resources = new CredentialBoundary([root], { allowInsecureHttp: true });
+    const boundary = new CredentialBoundary([root], { allowInsecureHttp: true });
+    const pauseAt = stage === "renewal token" ? 2 : 1;
+    let tokens = 0;
+    const source = {
+      id: "revocable-api",
+      getAccessToken: async () => {
+        const current = ++tokens;
+        if (current === pauseAt && stage !== "fence verification") {
+          started.resolve();
+          await gate.promise;
+        }
+        return { token: `access-${current}` };
+      },
+    };
+    const provider = new OAuthBearerTokenProvider(source, { resources, fence });
+    const manager = new ReactiveFetchManager({ providers: [provider], boundary, fetch: transport });
+    try {
+      const pending = manager.fetch(`${root}private`, { method: "PUT", body: "write" });
+      const rejected = assert.rejects(pending, /not a resource of revocable-api/);
+      await started.promise;
+      resources.delete(root);
+      assert.equal(boundary.allows(`${root}private`), true, "the manager still permits the API");
+      gate.resolve();
+      await rejected;
+      assert.equal(tokens, pauseAt);
+      assert.equal(server.requests.length, pauseAt, "no request sent after provider revocation");
+      assert.equal(
+        server.requests.filter((request) => request.headers.has("authorization")).length,
+        pauseAt - 1,
+      );
+      assert.equal(await provider.matches(new Request(`${root}private`)), false);
+    } finally {
+      gate.resolve();
+      fence.close();
+      await server.close();
+    }
+  });
 }
 
 test("Google rejects empty scopes and aborted UI, and exposes a working interaction action", async () => {
