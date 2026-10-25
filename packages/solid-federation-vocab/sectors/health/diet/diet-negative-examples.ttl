@@ -14,7 +14,7 @@
 # out-of-band (this repo has no rdf-validate-shacl dep — the automated SHACL gate
 # lives in the health-diary vitest over the byte-identical shape).
 #
-@prefix diet:   <https://w3id.org/jeswr/sectors/health/diet#> .
+@prefix diet:   <https://jeswr.org/ns/sectors/health/diet#> .
 @prefix ex:     <https://example.org/alice/health/diary/> .
 @prefix xsd:    <http://www.w3.org/2001/XMLSchema#> .
 

@@ -24,8 +24,8 @@
 #     replacing the non-dereferencing capnote.app/vocab# and keystone/ns# 404
 #     namespaces with shared fin: terms.
 #
-@prefix fin:     <https://w3id.org/jeswr/sectors/finance#> .
-@prefix core:    <https://w3id.org/jeswr/core#> .
+@prefix fin:     <https://jeswr.org/ns/sectors/finance#> .
+@prefix core:    <https://jeswr.org/ns/core#> .
 @prefix schema:  <http://schema.org/> .
 @prefix fibo-sec-fund-fund: <https://spec.edmcouncil.org/fibo/ontology/SEC/Funds/Funds/> .
 @prefix dcterms: <http://purl.org/dc/terms/> .

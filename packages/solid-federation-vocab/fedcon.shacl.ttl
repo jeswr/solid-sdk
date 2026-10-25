@@ -2,7 +2,7 @@
 #
 @prefix fedcon:  <https://jeswr.org/fedcon#> .
 @prefix fcsh:    <https://jeswr.org/fedcon/shapes#> .
-@prefix fedreg:  <https://w3id.org/jeswr/fedreg#> .
+@prefix fedreg:  <https://jeswr.org/ns/fedreg#> .
 @prefix oa:      <http://www.w3.org/ns/oa#> .
 @prefix prov:    <http://www.w3.org/ns/prov#> .
 @prefix sh:      <http://www.w3.org/ns/shacl#> .
@@ -22,7 +22,7 @@
 # Info=MAY); IMMUTABLE version IRI; additive.
 #
 # Rooted at https://jeswr.org/fedcon/profile (the jeswr.org namespace of fedcon:,
-# NOT w3id.org/jeswr like the sector profiles). This is a BEST-EFFORT structural
+# NOT jeswr.org/ns like the sector profiles). This is a BEST-EFFORT structural
 # encoding of the contribution-api-design: several rules (recompute-and-compare
 # the concept hash, cross-graph "respond to every unresolved Oppose", the
 # per-registry evidence threshold) are genuinely SERVICE-SIDE and cannot be

@@ -39,7 +39,7 @@ for (const file of ttlFiles) {
   const ttl = readFileSync(join(ROOT, file), "utf8");
   let quads;
   try {
-    quads = new Parser({ baseIRI: `https://w3id.org/jeswr/${file}` }).parse(ttl);
+    quads = new Parser({ baseIRI: `https://jeswr.org/ns/${file}` }).parse(ttl);
   } catch (err) {
     fail(`parse error: ${err.message}`);
     continue;
@@ -71,7 +71,7 @@ for (const file of ttlFiles) {
   let termCount = 0;
   for (const [iri, info] of subjects) {
     if (info.types.has(OWL_ONTOLOGY)) continue; // ontology node — checked separately
-    if (info.types.size === 0 && !iri.startsWith("https://w3id.org/jeswr/")) continue;
+    if (info.types.size === 0 && !iri.startsWith("https://jeswr.org/ns/")) continue;
     termCount += 1;
     for (const required of [`${RDFS}label`, `${RDFS}comment`, `${RDFS}isDefinedBy`]) {
       if (!info.preds.has(required)) {
@@ -155,7 +155,7 @@ for (const file of ctxFiles) {
     const expanded = await jsonld.expand(admission);
     const [node] = expanded;
     const statusIri = node?.["https://jeswr.org/fedcon#conceptStatus"]?.[0]?.["@id"];
-    const assertedByIri = node?.["https://w3id.org/jeswr/fedreg#assertedBy"]?.[0]?.["@id"];
+    const assertedByIri = node?.["https://jeswr.org/ns/fedreg#assertedBy"]?.[0]?.["@id"];
     if (statusIri !== "https://jeswr.org/fedcon#Proposed")
       fail(`ConceptProposed did not expand to fedcon:Proposed (got ${statusIri})`);
     else if (assertedByIri !== "https://registry.example/card#me")
@@ -172,10 +172,10 @@ for (const file of ctxFiles) {
 // xsd:string values. Explicitly typed all-day value objects must still win.
 console.log("\nJSON-LD: temporal context compatibility");
 for (const [file, ns, properties] of [
-  ["core-context.jsonld", "https://w3id.org/jeswr/core#", ["validFrom", "validUntil"]],
+  ["core-context.jsonld", "https://jeswr.org/ns/core#", ["validFrom", "validUntil"]],
   [
     "sectors/scheduling-context.jsonld",
-    "https://w3id.org/jeswr/sectors/scheduling#",
+    "https://jeswr.org/ns/sectors/scheduling#",
     ["startTime", "endTime", "dueTime", "until"],
   ],
 ]) {

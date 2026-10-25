@@ -42,12 +42,13 @@
 # these terms (rdfs:subClassOf) in finance-alignments.ttl.
 # =============================================================================
 
-<https://w3id.org/jeswr/sectors/finance/imports/fibo-slim> a owl:Ontology ;
+<https://jeswr.org/ns/sectors/finance/imports/fibo-slim> a owl:Ontology ;
+    dcterms:description "Version 2.0.0 rebases this ontology from its legacy w3id namespace to https://jeswr.org/ns/ (DECISIONS V1)."@en ;
     dcterms:title "FIBO slim MIREOT module for the Solid finance sector"@en ;
-    owl:versionInfo "fibo-2026-06-13-slim" ;
-    owl:versionIRI <https://w3id.org/jeswr/sectors/finance/imports/fibo-slim/2026-06-13> ;
+    owl:versionInfo "2.0.0" ;
+    owl:versionIRI <https://jeswr.org/ns/sectors/finance/imports/fibo-slim/2.0.0> ;
     dcterms:source <https://spec.edmcouncil.org/fibo/ontology/> ;
-    dcterms:modified "2026-06-13"^^<http://www.w3.org/2001/XMLSchema#date> ;
+    dcterms:modified "2026-10-25"^^<http://www.w3.org/2001/XMLSchema#date> ;
     rdfs:comment "Slim Mode-B MIREOT extract of FIBO (robot extract --method mireot), version-pinned to the 2026-06-13 master/latest snapshot. Curated to be self-contained: dangling OMG-Commons/BE upper references removed."@en .
 
 # Annotation-property declarations (F5 DL hygiene): the title/source/modified and the FIBO

@@ -7,7 +7,8 @@ import { execFileSync } from "node:child_process";
 import { writeFileSync } from "node:fs";
 import { basename, dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
-import { DataFactory, Parser, Writer } from "n3";
+import { NamedNodeAs, NamedNodeFrom, SetFrom, TermWrapper } from "@rdfjs/wrapper";
+import { DataFactory, Parser, Store, Writer } from "n3";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const WORKSPACE = join(ROOT, "..", "..");
@@ -17,7 +18,27 @@ const newRoot = "https://jeswr.org/ns/";
 const RDF = "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
 const RDFS = "http://www.w3.org/2000/01/rdf-schema#";
 const OWL = "http://www.w3.org/2002/07/owl#";
-const { namedNode, quad } = DataFactory;
+class LegacyAlignment extends TermWrapper {
+  get equivalentClass() {
+    return SetFrom.subjectPredicate(
+      this,
+      `${OWL}equivalentClass`,
+      NamedNodeAs.string,
+      NamedNodeFrom.string,
+    );
+  }
+  get equivalentProperty() {
+    return SetFrom.subjectPredicate(
+      this,
+      `${OWL}equivalentProperty`,
+      NamedNodeAs.string,
+      NamedNodeFrom.string,
+    );
+  }
+  get sameAs() {
+    return SetFrom.subjectPredicate(this, `${OWL}sameAs`, NamedNodeAs.string, NamedNodeFrom.string);
+  }
+}
 const git = (...args) => execFileSync("git", args, { cwd: WORKSPACE, encoding: "utf8" });
 const packagePath = relative(WORKSPACE, ROOT);
 const files = git("ls-tree", "-r", "--name-only", sourceRef, "--", packagePath)
@@ -49,6 +70,7 @@ for (const file of files) {
 }
 
 const writer = new Writer({ prefixes: { owl: OWL } });
+const mappings = new Store();
 const counts = { equivalentClass: 0, equivalentProperty: 0, sameAs: 0 };
 for (const [iri, types] of [...terms].sort(([a], [b]) => a.localeCompare(b))) {
   if (types.size === 0) throw new Error(`${iri}: no declared type; cannot classify legacy term`);
@@ -63,15 +85,11 @@ for (const [iri, types] of [...terms].sort(([a], [b]) => a.localeCompare(b))) {
           ].some((type) => types.has(type))
         ? "equivalentProperty"
         : "sameAs";
-  writer.addQuad(
-    quad(
-      namedNode(iri),
-      namedNode(`${OWL}${relation}`),
-      namedNode(newRoot + iri.slice(oldRoot.length)),
-    ),
-  );
+  const term = new LegacyAlignment(iri, mappings, DataFactory);
+  term[relation].add(newRoot + iri.slice(oldRoot.length));
   counts[relation] += 1;
 }
+writer.addQuads(mappings.getQuads(null, null, null, null));
 const turtle = await new Promise((resolve, reject) => {
   writer.end((error, result) => (error ? reject(error) : resolve(result)));
 });
