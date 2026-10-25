@@ -9,7 +9,7 @@
     "start": "next start -p 3210",
     "lint": "biome check src test e2e *.ts *.mjs",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
+    "test": "vitest run --coverage",
     "test:e2e": "pnpm --filter @jeswr/suite-ui run build && playwright test"
   },
   "dependencies": {
