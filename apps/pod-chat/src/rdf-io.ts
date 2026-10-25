@@ -8,7 +8,8 @@
  */
 import { type FetchedRdf, fetchRdf } from "@jeswr/fetch-rdf";
 import type { DatasetCore } from "@rdfjs/types";
-import { Writer } from "n3";
+import { DataFactory, Writer } from "n3";
+import { canonicalizeChatDataset } from "./canonical-vocab.js";
 import { ResourceDeleteError, ResourceWriteError } from "./errors.js";
 
 /**
@@ -43,7 +44,7 @@ export function serializeTurtle(
 ): Promise<string> {
   return new Promise((resolve, reject) => {
     const writer = new Writer({ format: "text/turtle", prefixes });
-    for (const quad of dataset) writer.addQuad(quad);
+    for (const quad of canonicalizeChatDataset(dataset, DataFactory)) writer.addQuad(quad);
     writer.end((err, result) => (err ? reject(err) : resolve(result)));
   });
 }
