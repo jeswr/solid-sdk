@@ -132,6 +132,21 @@ describe("content lines and values", () => {
     expect(first(wrap("FN;ENCODING=QUOTED-PRINTABLE:Soft=\n fold", "3.0")).fn).toBe("Softfold");
   });
 
+  it("recognizes QP only in headers and allows folded and quoted parameter headers", () => {
+    const card = first(
+      wrap(
+        "NOTE:Literal ;ENCODING=QUOTED-PRINTABLE:value=\nEMAIL;TYPE=\n HOME:fiction@example.org",
+      ),
+    );
+    expect(card.note).toBe("Literal ;ENCODING=QUOTED-PRINTABLE:value=");
+    expect(card.emails[0]?.parameters.TYPE).toEqual(["home"]);
+    expect(first(serializeVCards([card]))).toEqual(card);
+    const qp = first(
+      wrap('NOTE;LABEL="Example: header";ENCODING="QUOTED-PRINTABLE":soft=\nbreak', "3.0"),
+    );
+    expect(qp.note).toBe("softbreak");
+  });
+
   it("unescapes delimiters, escaped backslashes and uppercase newlines exactly once", () => {
     const card = first(
       wrap(String.raw`N:One\,Two;A\\,B\;C;;;\n

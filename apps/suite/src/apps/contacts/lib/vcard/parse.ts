@@ -51,7 +51,9 @@ function logicalLines(text: string): string[] {
   for (const line of text.replace(/^\uFEFF/, "").split(/\r\n|\r|\n/)) {
     const previous = lines.at(-1);
     // Legacy v3 exports use MIME soft breaks, sometimes with an extra fold space.
-    const soft = previous?.endsWith("=") && /;ENCODING="?QUOTED-PRINTABLE"?(?:;|:)/i.test(previous);
+    const header = previous?.match(/^(?:[^":]|"[^"]*")*:/)?.[0];
+    const soft =
+      previous?.endsWith("=") && /;ENCODING="?QUOTED-PRINTABLE"?(?:;|:)/i.test(header ?? "");
     if (previous !== undefined && (soft || /^[ \t]/.test(line))) {
       lines[lines.length - 1] =
         (soft ? previous.slice(0, -1) : previous) + line.replace(/^[ \t]/, "");
