@@ -1,0 +1,8 @@
+# AUTHORED-BY Codex GPT-6.1-Sol
+@prefix ex: <https://example.org/scheduling/> .
+@prefix sched: <https://w3id.org/jeswr/sectors/scheduling#> .
+@prefix core: <https://w3id.org/jeswr/core#> .
+@prefix schema: <https://schema.org/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+ex:rule a sched:RecurrenceRule ; sched:frequency "WEEKLY" ; schema:byDay [] .

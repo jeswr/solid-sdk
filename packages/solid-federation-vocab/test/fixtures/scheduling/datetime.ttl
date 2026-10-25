@@ -1,0 +1,21 @@
+# AUTHORED-BY Codex GPT-6.1-Sol
+@prefix ex: <https://example.org/scheduling/> .
+@prefix sched: <https://w3id.org/jeswr/sectors/scheduling#> .
+@prefix core: <https://w3id.org/jeswr/core#> .
+@prefix schema: <https://schema.org/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+ex:event a sched:CalendarEvent ;
+    sched:summary "Timed event" ;
+    sched:startTime "2026-11-01T09:00:00Z"^^xsd:dateTime ;
+    sched:endTime "2026-11-01T10:00:00Z"^^xsd:dateTime ;
+    sched:organizer ex:organizer .
+ex:organizer a core:Agent .
+ex:task a sched:Task ;
+    sched:summary "Timed task" ;
+    sched:dueTime "2026-11-01T09:00:00Z"^^xsd:dateTime .
+ex:rule a sched:RecurrenceRule ;
+    sched:frequency "DAILY" ;
+    sched:until "2027-01-01T09:00:00Z"^^xsd:dateTime .
+ex:period core:validFrom "2026-11-01T09:00:00Z"^^xsd:dateTime ;
+    core:validUntil "2026-11-02T09:00:00Z"^^xsd:dateTime .
