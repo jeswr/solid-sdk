@@ -25,7 +25,7 @@ function docTtl(opts: {
   modified?: string;
 }): string {
   const lines = [
-    "@prefix pd: <https://w3id.org/jeswr/pod-docs#> .",
+    "@prefix pd: <https://jeswr.org/ns/pod-docs#> .",
     "@prefix dct: <http://purl.org/dc/terms/> .",
     "<#it> a pd:Document ;",
   ];
@@ -242,7 +242,7 @@ function writeStub(opts: {
   const documents = opts.documents ?? {};
   const indexBody = `
     @prefix solid: <http://www.w3.org/ns/solid/terms#> .
-    @prefix pd: <https://w3id.org/jeswr/pod-docs#> .
+    @prefix pd: <https://jeswr.org/ns/pod-docs#> .
     <> a solid:TypeIndex .
     <#reg> a solid:TypeRegistration ; solid:forClass pd:Document ;
       solid:instanceContainer <${CONTAINER}> .

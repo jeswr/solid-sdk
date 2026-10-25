@@ -20,6 +20,7 @@
  * the body string is a separate ADR; this layer is format-agnostic.
  */
 
+import { canonicalize, LEGACY_NAMESPACES } from "@jeswr/suite-vocab";
 import type { DatasetCore } from "@rdfjs/types";
 import {
   LiteralAs,
@@ -33,6 +34,22 @@ import {
 } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
 import { DCT, DEFAULT_FORMAT, DOCUMENT_CLASS, PD, PROV, RDF_TYPE } from "./vocab.js";
+
+/** Read canonical predicates first, accepting the legacy namespace on old documents. */
+function readDocumentValue<T>(
+  anchor: TermWrapper,
+  predicate: string,
+  as: (term: TermWrapper) => T,
+): T | undefined {
+  const canonical = OptionalFrom.subjectPredicate(anchor, predicate, as);
+  if (canonical !== undefined) return canonical;
+  for (const [legacy, base] of Object.entries(LEGACY_NAMESPACES)) {
+    if (!predicate.startsWith(base)) continue;
+    const value = OptionalFrom.subjectPredicate(anchor, legacy + predicate.slice(base.length), as);
+    if (value !== undefined) return value;
+  }
+  return undefined;
+}
 
 /** A single saved revision as the UI consumes it (plain, serialisable). */
 export interface Revision {
@@ -82,13 +99,13 @@ export class RevisionDoc extends TermWrapper {
     return this;
   }
   get body(): string | undefined {
-    return OptionalFrom.subjectPredicate(this, PD.body, LiteralAs.string);
+    return readDocumentValue(this, PD.body, LiteralAs.string);
   }
   set body(v: string | undefined) {
     OptionalAs.object(this, PD.body, v, LiteralFrom.string);
   }
   get format(): string | undefined {
-    return OptionalFrom.subjectPredicate(this, PD.format, LiteralAs.string);
+    return readDocumentValue(this, PD.format, LiteralAs.string);
   }
   set format(v: string | undefined) {
     OptionalAs.object(this, PD.format, v, LiteralFrom.string);
@@ -129,13 +146,13 @@ export class DocumentDoc extends TermWrapper {
     OptionalAs.object(this, DCT.title, v, LiteralFrom.string);
   }
   get body(): string | undefined {
-    return OptionalFrom.subjectPredicate(this, PD.body, LiteralAs.string);
+    return readDocumentValue(this, PD.body, LiteralAs.string);
   }
   set body(v: string | undefined) {
     OptionalAs.object(this, PD.body, v, LiteralFrom.string);
   }
   get format(): string | undefined {
-    return OptionalFrom.subjectPredicate(this, PD.format, LiteralAs.string);
+    return readDocumentValue(this, PD.format, LiteralAs.string);
   }
   set format(v: string | undefined) {
     OptionalAs.object(this, PD.format, v, LiteralFrom.string);
@@ -160,7 +177,7 @@ export class DocumentDoc extends TermWrapper {
   }
   /** The head of the revision chain (`pd:currentRevision`). */
   get currentRevision(): string | undefined {
-    return OptionalFrom.subjectPredicate(this, PD.currentRevision, NamedNodeAs.string);
+    return readDocumentValue(this, PD.currentRevision, NamedNodeAs.string);
   }
   set currentRevision(v: string | undefined) {
     OptionalAs.object(this, PD.currentRevision, v, NamedNodeFrom.string);
@@ -210,7 +227,7 @@ function readRevisions(doc: DocumentDoc, dataset: DatasetCore): Revision[] {
  */
 export function parseDocument(resourceUrl: string, dataset: DatasetCore): PodDocument | undefined {
   const doc = new DocumentDoc(documentSubject(resourceUrl), dataset, DataFactory);
-  if (!doc.types.has(DOCUMENT_CLASS)) return undefined;
+  if (![...doc.types].some((type) => canonicalize(type) === DOCUMENT_CLASS)) return undefined;
   return {
     title: doc.title ?? "",
     body: doc.body ?? "",

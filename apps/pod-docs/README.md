@@ -15,10 +15,15 @@ federation metadata. A framework-agnostic **React view** ships as the optional
 the rich-text **editor engine** that interprets a body for a given format is a deliberate follow-up
 (see below).
 
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+Suite vocabulary writes use `https://jeswr.org/ns/` only, via `@jeswr/suite-vocab`.
+Readers accept legacy namespace aliases; Type Index discovery matches both canonical and
+legacy class IRIs. Standard vocabularies keep their published namespaces.
+
 ## What it does
 
 - **A typed document model** (`src/document.ts`). A Pod-Docs document is one pod resource,
-  subject `<resource>#it`, typed `pd:Document` (`https://w3id.org/jeswr/pod-docs#Document`):
+  subject `<resource>#it`, typed `pd:Document` (`https://jeswr.org/ns/pod-docs#Document`):
   `dct:title`, `dct:created` / `dct:modified`, `dct:creator`, and a `pd:body` + `pd:format`
   rich-text body. The body format (`text/html`, `text/markdown`, …) is opaque to this layer —
   the **editor engine** that interprets it is a separate ADR.
