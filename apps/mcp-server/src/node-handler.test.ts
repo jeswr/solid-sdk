@@ -46,6 +46,7 @@ function requestFixture(method = "GET", body?: string) {
   ];
   if (body) request.push(Buffer.from(body));
   request.push(null);
+  request.complete = true;
   return request;
 }
 
@@ -131,6 +132,7 @@ describe("Node/Web scaffold adapter", () => {
   });
   it.each(["request", "response"])("aborts the handler when the %s disconnects", async (source) => {
     const started = Promise.withResolvers<void>();
+    const cancel = vi.fn();
     let signal: AbortSignal | undefined;
     vi.mocked(handler).mockImplementationOnce(async (request) => {
       signal = request.signal;
@@ -138,7 +140,7 @@ describe("Node/Web scaffold adapter", () => {
       await new Promise<void>((resolve) =>
         request.signal.addEventListener("abort", () => resolve(), { once: true }),
       );
-      return new Response(null, { status: 204 });
+      return new Response(new ReadableStream({ cancel }));
     });
     const request = requestFixture();
     const response = new ResponseFixture();
@@ -150,7 +152,9 @@ describe("Node/Web scaffold adapter", () => {
     expect(signal?.aborted).toBe(true);
     expect(request.listenerCount("aborted")).toBe(0);
     expect(response.listenerCount("close")).toBe(0);
-    expect(response.status).toBe(source === "request" ? 204 : 0);
+    expect(response.status).toBe(0);
+    expect(response.chunks).toEqual([]);
+    expect(cancel).toHaveBeenCalledOnce();
   });
 
   it("removes disconnect listeners after a successful response", async () => {
@@ -178,5 +182,52 @@ describe("Node/Web scaffold adapter", () => {
     await invoke(requestFixture(), response);
     expect(response.status).toBe(0);
     expect(cancel).toHaveBeenCalledOnce();
+  });
+  it("does not write an error response after a request abort", async () => {
+    const started = Promise.withResolvers<void>();
+    vi.mocked(handler).mockImplementationOnce(async (request) => {
+      started.resolve();
+      await new Promise<void>((resolve) =>
+        request.signal.addEventListener("abort", () => resolve(), { once: true }),
+      );
+      throw new Error("cancelled fixture work");
+    });
+    const request = requestFixture();
+    const response = new ResponseFixture();
+    const pending = invoke(request, response);
+    await started.promise;
+    request.emit("aborted");
+    await pending;
+    expect(response.status).toBe(0);
+    expect(response.chunks).toEqual([]);
+  });
+
+  it("cancels an active response stream immediately on request abort", async () => {
+    const firstChunk = Promise.withResolvers<void>();
+    const cancel = vi.fn();
+    const response = new ResponseFixture();
+    const originalWrite = response._write.bind(response);
+    response._write = (chunk, encoding, callback) => {
+      originalWrite(chunk, encoding, callback);
+      firstChunk.resolve();
+    };
+    vi.mocked(handler).mockResolvedValueOnce(
+      new Response(
+        new ReadableStream({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode("first"));
+          },
+          cancel,
+        }),
+      ),
+    );
+    const request = requestFixture();
+    const pending = invoke(request, response);
+    await firstChunk.promise;
+    request.emit("aborted");
+    await pending;
+    expect(Buffer.concat(response.chunks).toString()).toBe("first");
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(response.destroyed).toBe(true);
   });
 });

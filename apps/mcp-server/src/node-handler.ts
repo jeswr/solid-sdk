@@ -32,7 +32,7 @@ export async function nodeHandler(
     }
     const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
     const result = await handler(new Request(url, init));
-    if (response.destroyed) {
+    if (controller.signal.aborted || response.destroyed) {
       await result.body?.cancel();
       return;
     }
@@ -46,10 +46,10 @@ export async function nodeHandler(
       await result.body?.cancel();
       response.end();
     } else {
-      await pipeline(Readable.fromWeb(result.body), response);
+      await pipeline(Readable.fromWeb(result.body), response, { signal: controller.signal });
     }
   } catch {
-    if (response.destroyed) return;
+    if (controller.signal.aborted || response.destroyed) return;
     if (response.headersSent) {
       response.destroy();
     } else {
