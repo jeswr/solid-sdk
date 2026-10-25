@@ -307,3 +307,75 @@ grant scope through the existing Agent accessor; an unadvertised import destinat
 still grants no scope. No open questions or design changes. Full-workspace green
 verification remains blocked by the unrelated remote-cloning helper. All commits
 remain in this checkout on `lane/sst-k9mk`; nothing was pushed, published, or merged.
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+## Fix round 4 — 2026-10-25
+
+Resumed at `35beb020` and addressed the medium redirected-WebID finding.
+The referenced `briefs/sst-k9mk.md` is absent from this checkout; the supplied
+fix brief and the earlier reports above supplied the lane context.
+
+### Commits
+
+- `c031f558` — `fix: pin connector registration to resolved profiles`: retain
+  the final profile document URL returned by Pod Manager's existing profile
+  load and pass it into the connector writer from both API and file imports.
+  Pin registration's authenticated profile reads and conditional updates to
+  that document, preserve the original WebID as the RDF subject, and retain
+  exact-document Type Index access within advertised storages. Authenticated
+  profile and index operations continue to refuse redirects. Add bootstrap,
+  reuse, host propagation, write-redirect, and unsafe-profile regressions;
+  update the connector README, skill, and fixture callers.
+- The final report-only commit updates this file last.
+
+### Validation
+
+Runtime: Node `24.22.1`, pnpm `10.4.1`. No dependencies, manifests, or lockfiles
+changed; lifecycle scripts remained ignored.
+
+```sh
+pnpm exec turbo run build --filter=@jeswr/pod-connectors...
+pnpm --filter @jeswr/pod-connectors exec vitest run src/core/pod-writer.test.ts
+pnpm --filter @jeswr/app-pod-manager exec vitest run src/lib/profile.test.ts
+GIT_ALLOW_PROTOCOL=file TURBO_SCM_BASE=917d3be9c7967622829adc43c1aaabb0964ec993 pnpm run gate --env-mode=loose
+pnpm run lint:root
+GIT_ALLOW_PROTOCOL=file pnpm run gate:full --env-mode=loose
+```
+
+- Dependency-first build: **PASS**.
+- Focused regressions: **PASS, 30 PodWriter tests and 6 profile tests**. The
+  canonical-profile regression fails against the previous Type Index write
+  implementation with a refused 302 from the WebID. The fixed source was
+  restored byte-for-byte, and all 30 PodWriter tests passed again.
+- The canonical-document cases cover a different profile origin and a query
+  string, bootstrap and idempotent reuse, preservation of the WebID subject,
+  conditional profile updates, and no registration request to the redirecting
+  WebID. Redirects on profile writes, index creation, and index updates are
+  refused even when their destination is inside advertised storage. No
+  unauthenticated profile fetch was added.
+- Affected gate: **PASS, 11/11 tasks (0 cached)**. Both touched projects pass
+  lint, build, typecheck, and tests: connectors **269 tests in 41 files**;
+  Pod Manager **916 passed, 1 existing skip, 67 files**. Root tests: **26 passed**.
+- Root lint: **PASS**, both within the affected gate and as a separate command.
+- Full-workspace gate: **BLOCKED/FAIL**, 23 successful tasks, 132 scheduled,
+  5 cached. The unchanged `@jeswr/unstorage-solid#build` helper attempted an
+  HTTPS clone of fetch-rdf; `GIT_ALLOW_PROTOCOL=file` refused it with
+  `fatal: transport 'https' not allowed`. `--env-mode=loose` propagates that
+  restriction to task subprocesses. No remote source was fetched, and no
+  unrelated build helper or generated source was changed.
+
+Existing non-fatal Biome and guarded-fetch webpack warnings remain.
+`git diff --check` passed. `roborev` and its post-commit hook remain unavailable
+in this sandbox; the supplied finding was checked directly against the fix
+and regressions.
+
+### Scope and open questions
+
+The requested connector fix is complete. Conservative compatibility choice:
+the connector writer requires the host-resolved profile document URL, while
+legacy direct `ensureTypeRegistrations` callers retain their existing WebID
+document default. Every registration operation is pinned to its selected
+profile/index document; advertised-storage validation remains unchanged.
+No open implementation questions. Full-workspace green verification remains
+blocked by the unrelated remote-cloning helper. All commits remain on
+`lane/sst-k9mk` in this checkout; nothing was pushed, published, or merged.
