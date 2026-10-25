@@ -165,6 +165,13 @@ describe("ChatGPT tool contracts", () => {
 });
 
 describe("fetch representations and byte cap", () => {
+  it("uses the hostname as the title when the pod root has no path segment", async () => {
+    const root = "https://alice.example/";
+    const pod = makeFakePod({ [root]: { contentType: "text/plain", body: "Hello" } });
+    expect((await fetchDocument({ fetch: pod.fetch, podRoot: root }, root)).title).toBe(
+      "alice.example",
+    );
+  });
   it.each([
     [
       "application/trig",

@@ -51,6 +51,7 @@ export class SearchBudget {
         throw new Error("Search deadline reached.");
       }
       const { bytes, truncated } = await limitedBody(response, signal);
+      signal.throwIfAborted();
       if (!this.active || truncated) throw new Error("Search response limit reached.");
       if (mediaType(response.headers.get("content-type")) === "application/ld+json") {
         assertLocalJsonLd(new TextDecoder().decode(bytes));

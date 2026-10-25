@@ -23,6 +23,7 @@ export async function limitedBody(
   const chunks: Uint8Array[] = [];
   let size = 0;
   try {
+    if (signal?.aborted) abort();
     signal?.throwIfAborted();
     for (;;) {
       const { value, done } = await reader.read();

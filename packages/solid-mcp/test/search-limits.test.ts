@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { search } from "../src/pod.js";
+import { SearchBudget } from "../src/search-budget.js";
 import { containerTurtle, makeFakePod, poisonedContainerTurtle } from "./fake-pod.js";
 
 const POD = "https://alice.example/pod/";
@@ -10,6 +11,35 @@ const SOLID = "http://www.w3.org/ns/solid/terms#";
 afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
+});
+
+describe("search fetch cancellation", () => {
+  it("merges caller cancellation for Request and URL inputs", async () => {
+    const caller = new AbortController();
+    const request = new Request(POD, { signal: caller.signal });
+    const fetch = vi.fn(async () => new Response(null));
+    const budget = new SearchBudget(1, 1000);
+    const wrapped = budget.wrap(fetch);
+    await wrapped(request);
+    await wrapped(new URL(POD), { signal: caller.signal });
+    const signal = (fetch.mock.calls as unknown as Array<[unknown, RequestInit]>)[0]?.[1].signal;
+    caller.abort();
+    expect(signal?.aborted).toBe(true);
+    budget.stop();
+    await expect(wrapped(POD)).rejects.toThrow(/budget exhausted/);
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("cancels a response when an injected fetch ignores an already aborted caller", async () => {
+    const caller = new AbortController();
+    caller.abort();
+    const cancel = vi.fn();
+    const fetch = vi.fn(async () => new Response(new ReadableStream({ cancel })));
+    const budget = new SearchBudget(1, 1000);
+    await expect(budget.wrap(fetch)(POD, { signal: caller.signal })).rejects.toThrow();
+    expect(cancel).toHaveBeenCalledOnce();
+    budget.stop();
+  });
 });
 
 describe("one bounded search across discovery and scanning", () => {
