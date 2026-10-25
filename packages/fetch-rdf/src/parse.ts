@@ -18,35 +18,33 @@
  * @packageDocumentation
  */
 
-import contentType from 'content-type';
-import { Store, StreamParser } from 'n3';
-import { JsonLdParser } from 'jsonld-streaming-parser';
-import type { Quad } from '@rdfjs/types';
-import { RdfFetchError } from './errors.js';
-import type { ParseRdfOptions } from './types.js';
+import type { Quad } from "@rdfjs/types";
+import contentType from "content-type";
+import { JsonLdParser } from "jsonld-streaming-parser";
+import { Store, StreamParser } from "n3";
+import { RdfFetchError } from "./errors.js";
+import type { ParseRdfOptions } from "./types.js";
 
 /** Media types this dispatch helper recognises. Anything else triggers
  * an {@link RdfFetchError} rather than a silent best-effort parse. */
 export const SUPPORTED_RDF_MEDIA_TYPES = [
-  'text/turtle',
-  'application/n-triples',
-  'application/n-quads',
-  'application/trig',
-  'application/ld+json',
+  "text/turtle",
+  "application/n-triples",
+  "application/n-quads",
+  "application/trig",
+  "application/ld+json",
 ] as const;
 
 /** The set of media types routed to the n3 parser. */
 const N3_FAMILY = new Set<string>([
-  'text/turtle',
-  'application/n-triples',
-  'application/n-quads',
-  'application/trig',
+  "text/turtle",
+  "application/n-triples",
+  "application/n-quads",
+  "application/trig",
 ]);
 
 /** The set of media types routed to the JSON-LD streaming parser. */
-const JSON_LD_FAMILY = new Set<string>([
-  'application/ld+json',
-]);
+const JSON_LD_FAMILY = new Set<string>(["application/ld+json"]);
 
 /** A body we can stream-parse: either a raw string (already in memory)
  * or a web `ReadableStream` of UTF-8 bytes (typically `Response.body`). */
@@ -60,13 +58,13 @@ export type RdfBody = string | ReadableStream<Uint8Array>;
  * methods from this surface so nothing in this module reaches for a
  * Node-only API like `node:stream` or `node:stream/promises`. */
 interface QuadTransform {
-  on(event: 'data', listener: (quad: Quad) => void): this;
-  on(event: 'end', listener: () => void): this;
-  on(event: 'error', listener: (err: Error) => void): this;
-  once(event: 'drain', listener: () => void): this;
-  once(event: 'error', listener: (err: Error) => void): this;
-  off(event: 'drain', listener: () => void): this;
-  off(event: 'error', listener: (err: Error) => void): this;
+  on(event: "data", listener: (quad: Quad) => void): this;
+  on(event: "end", listener: () => void): this;
+  on(event: "error", listener: (err: Error) => void): this;
+  once(event: "drain", listener: () => void): this;
+  once(event: "error", listener: (err: Error) => void): this;
+  off(event: "drain", listener: () => void): this;
+  off(event: "error", listener: (err: Error) => void): this;
   write(chunk: string): boolean;
   end(chunk?: string): void;
   destroy(error?: Error): void;
@@ -97,15 +95,15 @@ export async function parseRdf(
   contentTypeHeader: string | null,
   options: ParseRdfOptions = {},
 ): Promise<Store> {
-  const rawHeader = contentTypeHeader ?? 'text/turtle';
+  const rawHeader = contentTypeHeader ?? "text/turtle";
   let mediaType: string;
   try {
     mediaType = contentType.parse(rawHeader).type;
   } catch (cause) {
-    throw new RdfFetchError(
-      `Invalid Content-Type header: "${rawHeader}".`,
-      { cause, contentType: rawHeader },
-    );
+    throw new RdfFetchError(`Invalid Content-Type header: "${rawHeader}".`, {
+      cause,
+      contentType: rawHeader,
+    });
   }
 
   const baseIRI = options.baseIRI;
@@ -122,7 +120,7 @@ export async function parseRdf(
     }) as unknown as QuadTransform;
   } else {
     throw new RdfFetchError(
-      `Unsupported RDF media type: "${mediaType}". Supported: ${SUPPORTED_RDF_MEDIA_TYPES.join(', ')}.`,
+      `Unsupported RDF media type: "${mediaType}". Supported: ${SUPPORTED_RDF_MEDIA_TYPES.join(", ")}.`,
       { contentType: rawHeader, ...(baseIRI !== undefined && { url: baseIRI }) },
     );
   }
@@ -134,7 +132,7 @@ export async function parseRdf(
   } catch (cause) {
     if (cause instanceof RdfFetchError) throw cause;
     throw new RdfFetchError(
-      `Failed to parse ${mediaType} body${baseIRI ? ` at ${baseIRI}` : ''}.`,
+      `Failed to parse ${mediaType} body${baseIRI ? ` at ${baseIRI}` : ""}.`,
       { cause, contentType: rawHeader, ...(baseIRI !== undefined && { url: baseIRI }) },
     );
   }
@@ -159,11 +157,11 @@ export function extractMediaType(headerValue: string | null): string | null {
 function collectIntoStore(parser: QuadTransform): Promise<Store> {
   return new Promise<Store>((resolve, reject) => {
     const store = new Store();
-    parser.on('data', (quad) => {
+    parser.on("data", (quad) => {
       store.addQuad(quad);
     });
-    parser.on('error', reject);
-    parser.on('end', () => {
+    parser.on("error", reject);
+    parser.on("end", () => {
       resolve(store);
     });
   });
@@ -188,7 +186,7 @@ function collectIntoStore(parser: QuadTransform): Promise<Store> {
  *    pulling bytes off the network instead of draining the rest of
  *    the response. */
 async function pumpBody(parser: QuadTransform, body: RdfBody): Promise<void> {
-  if (typeof body === 'string') {
+  if (typeof body === "string") {
     parser.end(body);
     return;
   }
@@ -197,7 +195,7 @@ async function pumpBody(parser: QuadTransform, body: RdfBody): Promise<void> {
   const onParserError = (err: Error) => {
     parserError = err;
   };
-  parser.on('error', onParserError);
+  parser.on("error", onParserError);
 
   const reader = body.getReader();
   try {
@@ -226,7 +224,7 @@ async function pumpBody(parser: QuadTransform, body: RdfBody): Promise<void> {
     }
     throw err;
   } finally {
-    parser.off('error', onParserError);
+    parser.off("error", onParserError);
     reader.releaseLock();
   }
 }
@@ -235,8 +233,8 @@ async function pumpBody(parser: QuadTransform, body: RdfBody): Promise<void> {
 function waitForDrain(parser: QuadTransform): Promise<void> {
   return new Promise<void>((resolve, reject) => {
     const cleanup = () => {
-      parser.off('drain', onDrain);
-      parser.off('error', onError);
+      parser.off("drain", onDrain);
+      parser.off("error", onError);
     };
     const onDrain = () => {
       cleanup();
@@ -246,7 +244,7 @@ function waitForDrain(parser: QuadTransform): Promise<void> {
       cleanup();
       reject(err);
     };
-    parser.once('drain', onDrain);
-    parser.once('error', onError);
+    parser.once("drain", onDrain);
+    parser.once("error", onError);
   });
 }

@@ -24,15 +24,15 @@ export const N_QUADS_SAMPLE = `<http://example.org/alice> <http://xmlns.com/foaf
 `;
 
 export const JSON_LD_SAMPLE = JSON.stringify({
-  '@context': {
-    foaf: 'http://xmlns.com/foaf/0.1/',
-    name: 'foaf:name',
-    knows: { '@id': 'foaf:knows', '@type': '@id' },
+  "@context": {
+    foaf: "http://xmlns.com/foaf/0.1/",
+    name: "foaf:name",
+    knows: { "@id": "foaf:knows", "@type": "@id" },
   },
-  '@id': 'http://example.org/alice',
-  '@type': 'foaf:Person',
-  name: 'Alice',
-  knows: 'http://example.org/bob',
+  "@id": "http://example.org/alice",
+  "@type": "foaf:Person",
+  name: "Alice",
+  knows: "http://example.org/bob",
 });
 
 /** Build a `Response`-shaped object suitable for handing to a mock fetch.
@@ -53,8 +53,8 @@ export function makeResponse(
 ): Response {
   const status = init.status ?? 200;
   const headers = new Headers();
-  if (init.contentType !== undefined) headers.set('content-type', init.contentType);
-  if (init.etag !== undefined) headers.set('etag', init.etag);
+  if (init.contentType !== undefined) headers.set("content-type", init.contentType);
+  if (init.etag !== undefined) headers.set("etag", init.etag);
   // The web `Response` constructor doesn't expose `url` — undici/Node/whatwg
   // all derive it from the request. We use `Object.defineProperty` so the
   // mock looks like a real fetched Response.
@@ -63,13 +63,13 @@ export function makeResponse(
     // Mirror the real fetch behaviour: most servers send a Content-Type.
     // If the caller didn't pin one, default to text/turtle so RDF tests
     // are well-defined; explicit `omitContentType: true` opts out.
-    res.headers.set('content-type', 'text/turtle');
+    res.headers.set("content-type", "text/turtle");
   }
   if (init.omitContentType === true) {
-    res.headers.delete('content-type');
+    res.headers.delete("content-type");
   }
   if (init.url !== undefined) {
-    Object.defineProperty(res, 'url', { value: init.url, configurable: true });
+    Object.defineProperty(res, "url", { value: init.url, configurable: true });
   }
   return res;
 }

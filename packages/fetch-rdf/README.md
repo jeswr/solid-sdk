@@ -1,3 +1,7 @@
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+
+> Experimental — AI-agent-generated. Maintained in `jeswr/solid-sdk`; the standalone repository is a read-only build mirror.
+
 # @jeswr/fetch-rdf
 
 Canonical fetch + parse helpers for Solid RDF resources.

@@ -24,6 +24,7 @@
     "@jeswr/federation-client",
     "@jeswr/federation-registry",
     "@jeswr/federation-trust",
+    "@jeswr/fetch-rdf",
     "@jeswr/guarded-fetch",
     "@jeswr/matrix-chat-to-pod",
     "n8n-nodes-solid",

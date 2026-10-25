@@ -42,7 +42,7 @@ export class RdfFetchError extends Error {
 
   constructor(message: string, options: RdfFetchErrorOptions = {}) {
     super(message);
-    this.name = 'RdfFetchError';
+    this.name = "RdfFetchError";
     if (options.cause !== undefined) this.cause = options.cause;
     if (options.status !== undefined) this.status = options.status;
     if (options.url !== undefined) this.url = options.url;

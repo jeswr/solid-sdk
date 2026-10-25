@@ -4,7 +4,7 @@
  * @packageDocumentation
  */
 
-import type { Store } from 'n3';
+import type { Store } from "n3";
 
 /** Options for {@link parseRdf}. */
 export interface ParseRdfOptions {

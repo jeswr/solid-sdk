@@ -9,9 +9,9 @@
  * @packageDocumentation
  */
 
-import { parseRdf } from './parse.js';
-import { RdfFetchError } from './errors.js';
-import type { FetchRdfOptions, FetchedRdf } from './types.js';
+import { RdfFetchError } from "./errors.js";
+import { parseRdf } from "./parse.js";
+import type { FetchedRdf, FetchRdfOptions } from "./types.js";
 
 /**
  * `Accept` header sent on every request. Turtle preferred (q=1.0
@@ -22,7 +22,7 @@ import type { FetchRdfOptions, FetchedRdf } from './types.js';
  * exported from `./parse`), so any other `Accept` would be inviting a
  * parse failure.
  */
-const ACCEPT = 'text/turtle, application/ld+json;q=0.9';
+const ACCEPT = "text/turtle, application/ld+json;q=0.9";
 
 /**
  * Fetch an RDF resource and parse it.
@@ -38,16 +38,13 @@ const ACCEPT = 'text/turtle, application/ld+json;q=0.9';
  *   `contentType` fields are populated where known so callers can
  *   branch without string-matching the message.
  */
-export async function fetchRdf(
-  url: string,
-  options: FetchRdfOptions = {},
-): Promise<FetchedRdf> {
+export async function fetchRdf(url: string, options: FetchRdfOptions = {}): Promise<FetchedRdf> {
   const fetchImpl = options.fetch ?? globalThis.fetch;
 
   const headers = new Headers(options.headers);
   // Always force the canonical Solid `Accept`; any caller-supplied
   // `accept` in `headers` is ignored.
-  headers.set('accept', ACCEPT);
+  headers.set("accept", ACCEPT);
 
   let response: Response;
   try {
@@ -56,30 +53,28 @@ export async function fetchRdf(
       ...(options.signal !== undefined && { signal: options.signal }),
     });
   } catch (cause) {
-    throw new RdfFetchError(
-      `Network error fetching ${url}: ${errorMessage(cause)}`,
-      { cause, url },
-    );
+    throw new RdfFetchError(`Network error fetching ${url}: ${errorMessage(cause)}`, {
+      cause,
+      url,
+    });
   }
 
   if (!response.ok) {
     throw new RdfFetchError(
-      `HTTP ${response.status} ${response.statusText || ''} fetching ${url}.`.trim(),
+      `HTTP ${response.status} ${response.statusText || ""} fetching ${url}.`.trim(),
       {
         status: response.status,
         url: response.url || url,
-        contentType: response.headers.get('content-type') ?? undefined,
+        contentType: response.headers.get("content-type") ?? undefined,
       },
     );
   }
 
   // `response.body` is null when there's no body (e.g. 204) — fall back
   // to an empty string so parseRdf still returns an (empty) dataset.
-  const dataset = await parseRdf(
-    response.body ?? '',
-    response.headers.get('content-type'),
-    { baseIRI: response.url || url },
-  );
+  const dataset = await parseRdf(response.body ?? "", response.headers.get("content-type"), {
+    baseIRI: response.url || url,
+  });
   return { dataset, headers: response.headers };
 }
 

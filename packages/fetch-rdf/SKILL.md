@@ -1,19 +1,21 @@
 ---
 name: solid-fetch-rdf
-description: Use when fetching or parsing RDF with the external @jeswr/fetch-rdf dependency, handling RdfFetchError, retaining ETags for conditional writes, or choosing the sanctioned Solid RDF read path.
+description: Use when fetching or parsing RDF with @jeswr/fetch-rdf, handling RdfFetchError, retaining ETags for conditional writes, or choosing the sanctioned Solid RDF read path.
 ---
 <!-- AUTHORED-BY Codex GPT-5 -->
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 
 # Read RDF with `@jeswr/fetch-rdf`
 
-`@jeswr/fetch-rdf` is currently an external workspace dependency, not a package directory in this monorepo. Use it for Solid RDF GET and parse operations; move this skill beside `packages/fetch-rdf` when that package is imported.
+`@jeswr/fetch-rdf` lives in `packages/fetch-rdf`. Workspace consumers use `workspace:*`; the standalone `jeswr/fetch-rdf` repository is a read-only build mirror.
 
 ```ts
 import { fetchRdf, RdfFetchError } from "@jeswr/fetch-rdf";
 
-const { dataset, etag, contentType, response, url } = await fetchRdf(resourceUrl, {
+const { dataset, headers } = await fetchRdf(resourceUrl, {
   fetch: authenticatedFetch,
 });
+const etag = headers.get("etag");
 ```
 
 ## Rules
