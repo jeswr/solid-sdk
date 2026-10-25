@@ -127,8 +127,15 @@ describe("fetch-backed PodWriter", () => {
     ).toThrow();
   });
 
-  it("bootstraps and reuses the same Type Index registration", async () => {
+  it.each([
+    "pim",
+    "solid",
+  ])("bootstraps and reuses a Type Index with only %s:storage", async (prefix) => {
     const pod = createMemoryPod();
+    await pod.fetch(TEST_PROFILE_DOC, {
+      method: "PUT",
+      body: pod.get(TEST_PROFILE_DOC)!.replace("pim:storage", `${prefix}:storage`),
+    });
     const port = writer(pod.fetch);
     const registrations = [{ forClass: doc.forClass, container: port.resolve("media/") }];
     const first = await port.registerType(registrations);

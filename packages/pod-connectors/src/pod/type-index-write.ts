@@ -71,7 +71,7 @@ export async function ensureTypeRegistrations(opts: {
   let bootstrapped = false;
   const indexTarget = indexUrl ?? new URL("settings/privateTypeIndex.ttl", podRoot).href;
   // The profile's trusted storage roots are independent of the import destination.
-  const storageRoots = new Agent(webId, profileDs, DataFactory).pimStorage;
+  const storageRoots = new Agent(webId, profileDs, DataFactory).storageUrls;
   const indexStorage = [...storageRoots].find((root) =>
     isWithinPodScope(root, indexTarget, { allowRoot: false }),
   );
