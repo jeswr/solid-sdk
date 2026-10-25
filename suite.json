@@ -65,7 +65,10 @@
     "@jeswr/storage-capabilities",
     "@jeswr/storage-client",
     "@jeswr/pod-auth",
-    "@jeswr/pod-notifications"
+    "@jeswr/pod-notifications",
+    "@jeswr/pod-access",
+    "@jeswr/rdf-engine",
+    "@jeswr/storage-conformance"
   ],
   "applications": [
     {
