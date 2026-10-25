@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 > **Experimental — AI-agent-generated.** Canonical source: `solid-sdk/packages/personal-agent`; the standalone repository becomes a read-only mirror when publishing is enabled.
 
@@ -116,6 +117,13 @@ import {
 | **Outbox executor** | `runOutboxOnce({ verifier, senders, proposals, outbox, ownerWebId, … })` | Deterministic, no-LLM; the enforcement point + the send. `senders` is the credential seam. |
 
 ## What runs today vs. what needs credentials / deploy
+
+The live Actor's injected authenticated fetch must use credentials that lack `acl:Control`
+(and equivalent ACP control rights). The live Actor accepts only validated Turtle proposal
+records at their proposal URLs. Its gate discovers ACL/ACP targets on the proposals
+container and destination resource before each write and refuses access-control resources,
+containers, non-RDF content, and failed discovery. Direct `createGate`/`buildActorOptions`
+callers must inject `discoveryFetch` to enable writes.
 
 **Runs today (all tested, hermetic — no credentials, no network):**
 - The full Reader → Actor → outbox flow over doubled I/O (`src/e2e.test.ts`): an untrusted email with

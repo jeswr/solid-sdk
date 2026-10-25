@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
+// AUTHORED-BY Codex GPT-6
 /**
  * Build the fail-closed Claude Agent SDK `query()` option set for the Actor (§3.3). This
  * is the trust boundary that must be audited — one option object:
@@ -14,6 +15,8 @@
  * The shape is defined STRUCTURALLY (no hard dependency on the optional Agent SDK) so it is
  * pure + unit-testable; the live Actor (`claude-actor.ts`) fills the real MCP configs.
  */
+
+import type { PodFetch } from "../config.js";
 import {
   createGate,
   type Gate,
@@ -54,11 +57,18 @@ export interface BuildActorOptionsConfig {
   readonly mcpServers: Record<string, unknown>;
   /** Override the gate (defaults to {@link createGate} over `proposalsContainer`). */
   readonly gate?: Gate;
+  /** Read fetch for access-control discovery before proposal writes. */
+  readonly discoveryFetch?: PodFetch;
 }
 
 /** Assemble the Actor's fail-closed option set. */
 export function buildActorOptions(config: BuildActorOptionsConfig): ActorOptions {
-  const gate = config.gate ?? createGate({ proposalsContainer: config.proposalsContainer });
+  const gate =
+    config.gate ??
+    createGate({
+      proposalsContainer: config.proposalsContainer,
+      discoveryFetch: config.discoveryFetch,
+    });
   return {
     mcpServers: config.mcpServers,
     allowedTools: [...POD_READ_TOOLS, PROPOSAL_WRITE_TOOL],

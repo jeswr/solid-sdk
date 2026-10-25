@@ -1,19 +1,64 @@
-// AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
-import { describe, expect, it } from "vitest";
+// AUTHORED-BY Codex GPT-6
+import { parseRdf } from "@jeswr/fetch-rdf";
+import { describe, expect, it, vi } from "vitest";
+import type { PodFetch } from "../config.js";
+import { parseProposal, serializeProposal } from "../pod/proposals.js";
 import { createGate, POD_READ_TOOLS, PROPOSAL_WRITE_TOOL } from "./gate.js";
+import { buildActorOptions } from "./options.js";
 
 const proposals = "https://pod.example/agent/proposals/";
-const gate = createGate({ proposalsContainer: proposals });
+const target = `${proposals}p1.ttl`;
+const LDP = "http://www.w3.org/ns/ldp#";
+const ACP = "http://www.w3.org/ns/solid/acp#accessControl";
 
-describe("createGate — the Actor canUseTool fence (fail-closed)", () => {
-  it("allows every read-only pod tool", () => {
-    for (const tool of POD_READ_TOOLS) {
-      expect(gate(tool, {}).behavior).toBe("allow");
-    }
+async function writeInput() {
+  return {
+    url: target,
+    contentType: "text/turtle",
+    content: await serializeProposal(
+      {
+        id: "p1",
+        channel: "email",
+        recipient: "alice@example.com",
+        odrlAction: "distribute",
+        status: "pending",
+        friction: "low",
+        bodyText: "Hello",
+        proposedAt: "2026-10-25T10:00:00Z",
+      },
+      { resourceUrl: target },
+    ),
+  };
+}
+
+function discovery(
+  options: {
+    containerLink?: string;
+    resourceLink?: string;
+    containerBody?: string;
+    resourceBody?: string;
+    status?: number;
+    contentType?: string;
+  } = {},
+) {
+  return vi.fn<PodFetch>(async (input, init) => {
+    expect(init?.redirect).toBe("manual");
+    const container = String(input) === proposals;
+    return new Response(container ? (options.containerBody ?? "") : (options.resourceBody ?? ""), {
+      status: options.status ?? (container || options.resourceBody !== undefined ? 200 : 404),
+      headers: {
+        "content-type": options.contentType ?? "text/turtle",
+        link: (container ? options.containerLink : options.resourceLink) ?? "",
+      },
+    });
   });
+}
 
-  it("denies every dangerous built-in and any unknown tool", () => {
-    const denied = [
+describe("createGate — validated proposals without control rights", () => {
+  it("allows pod reads and denies built-ins and unknown tools", async () => {
+    const gate = createGate({ proposalsContainer: proposals });
+    for (const tool of POD_READ_TOOLS) expect((await gate(tool, {})).behavior).toBe("allow");
+    for (const tool of [
       "Bash",
       "Write",
       "Edit",
@@ -25,62 +70,181 @@ describe("createGate — the Actor canUseTool fence (fail-closed)", () => {
       "WebSearch",
       "Task",
       "NotebookEdit",
-      "mcp__pod__solid_write", // write on the READ-ONLY pod server is not the proposals server
-      "mcp__evil__anything",
-      "totally_unknown_tool",
-    ];
-    for (const tool of denied) {
-      expect(gate(tool, { command: "rm -rf /", url: `${proposals}p.ttl` }).behavior).toBe("deny");
+      "mcp__pod__solid_write",
+      "unknown",
+    ]) {
+      expect((await gate(tool, await writeInput())).behavior).toBe("deny");
     }
   });
 
-  it("allows a proposals-scoped write", () => {
-    const decision = gate(PROPOSAL_WRITE_TOOL, {
-      url: `${proposals}p1.ttl`,
-      content: "<> a <urn:x> .",
-      contentType: "text/turtle",
+  it("allows a validated proposal and serializes only that record", async () => {
+    const fetch = discovery();
+    const gate = createGate({ proposalsContainer: proposals, discoveryFetch: fetch });
+    const input = await writeInput();
+    input.content += '\n<urn:unrelated> <urn:predicate> "discard" .';
+    const verdict = await gate(PROPOSAL_WRITE_TOOL, input);
+    expect(verdict.behavior).toBe("allow");
+    if (verdict.behavior !== "allow") throw new Error("expected allow");
+    const written = await parseRdf(String(verdict.updatedInput?.content), "text/turtle", {
+      baseIRI: target,
     });
-    expect(decision.behavior).toBe("allow");
+    expect(parseProposal(written)?.id).toBe("p1");
+    expect(verdict.updatedInput?.content).not.toContain("urn:unrelated");
+    expect(fetch.mock.calls.map(([url]) => String(url))).toEqual([proposals, target]);
   });
 
-  it("denies a write targeting another container or origin", () => {
+  it.each([
+    ".acl",
+    ".acr",
+    ".ACL",
+    "%2eacl",
+    ".acr?x=1",
+    ".acl#it",
+  ])("denies an access-control path ending %s", async (suffix) => {
+    const fetch = discovery();
+    const gate = createGate({ proposalsContainer: proposals, discoveryFetch: fetch });
     expect(
-      gate(PROPOSAL_WRITE_TOOL, { url: "https://pod.example/agent/inbox/x.ttl" }).behavior,
+      (await gate(PROPOSAL_WRITE_TOOL, { ...(await writeInput()), url: target + suffix })).behavior,
     ).toBe("deny");
-    expect(gate(PROPOSAL_WRITE_TOOL, { url: "https://evil.example/x.ttl" }).behavior).toBe("deny");
+    expect(fetch).not.toHaveBeenCalled();
   });
 
-  it("denies a write that resolves out of the container via ../ traversal", () => {
-    expect(gate(PROPOSAL_WRITE_TOOL, { url: `${proposals}../inbox/secret.ttl` }).behavior).toBe(
-      "deny",
+  it.each([
+    "container",
+    "resource",
+  ] as const)("denies a nonstandard Link acl target discovered on the %s", async (source) => {
+    const link = '<p1.ttl>; title="ACL, unusual name"; rel="alternate acl"';
+    const fetch = discovery(
+      source === "container" ? { containerLink: link } : { resourceLink: link },
     );
+    const gate = createGate({ proposalsContainer: proposals, discoveryFetch: fetch });
+    expect((await gate(PROPOSAL_WRITE_TOOL, await writeInput())).behavior).toBe("deny");
   });
 
-  it("denies a write carrying no in-scope target URL", () => {
-    expect(gate(PROPOSAL_WRITE_TOOL, { content: "x" }).behavior).toBe("deny");
-    expect(gate(PROPOSAL_WRITE_TOOL, {}).behavior).toBe("deny");
+  it.each([
+    "container",
+    "resource",
+  ] as const)("denies an ACP accessControl link discovered on the %s", async (source) => {
+    const link = `<p1.ttl>; rel="${ACP}"`;
+    const fetch = discovery(
+      source === "container" ? { containerLink: link } : { resourceLink: link },
+    );
+    expect(
+      (
+        await createGate({ proposalsContainer: proposals, discoveryFetch: fetch })(
+          PROPOSAL_WRITE_TOOL,
+          await writeInput(),
+        )
+      ).behavior,
+    ).toBe("deny");
   });
 
-  it("denies a write mixing an in-scope decoy with an out-of-scope URL (ALL must be in scope)", () => {
-    const decision = gate(PROPOSAL_WRITE_TOOL, {
-      url: `${proposals}p1.ttl`,
-      exfil: "https://evil.example/steal",
+  it.each([
+    "container",
+    "resource",
+  ] as const)("denies an ACP RDF target discovered on the %s", async (source) => {
+    const body = `<> <${ACP}> <p1.ttl> .`;
+    const fetch = discovery(
+      source === "container" ? { containerBody: body } : { resourceBody: body },
+    );
+    expect(
+      (
+        await createGate({ proposalsContainer: proposals, discoveryFetch: fetch })(
+          PROPOSAL_WRITE_TOOL,
+          await writeInput(),
+        )
+      ).behavior,
+    ).toBe("deny");
+  });
+
+  it("denies non-RDF, malformed RDF, arbitrary RDF, and a proposal at the wrong URL", async () => {
+    const gate = createGate({ proposalsContainer: proposals, discoveryFetch: discovery() });
+    const valid = await writeInput();
+    for (const input of [
+      { ...valid, contentType: "text/plain" },
+      { ...valid, content: "malformed" },
+      { ...valid, content: "<> a <urn:x> ." },
+      { ...valid, url: `${proposals}other.ttl` },
+      { url: target },
+      {},
+      { content: "x" },
+    ])
+      expect((await gate(PROPOSAL_WRITE_TOOL, input)).behavior).toBe("deny");
+  });
+
+  it("denies container URLs, container RDF, and existing containers with resource-like URLs", async () => {
+    const gate = createGate({ proposalsContainer: proposals, discoveryFetch: discovery() });
+    const valid = await writeInput();
+    expect((await gate(PROPOSAL_WRITE_TOOL, { ...valid, url: proposals })).behavior).toBe("deny");
+    expect(
+      (await gate(PROPOSAL_WRITE_TOOL, { ...valid, url: `${proposals}nested/` })).behavior,
+    ).toBe("deny");
+    for (const type of ["Container", "BasicContainer", "DirectContainer", "IndirectContainer"]) {
+      const body = `<> a <${LDP}${type}> .`;
+      expect(
+        (await gate(PROPOSAL_WRITE_TOOL, { ...valid, content: valid.content + body })).behavior,
+      ).toBe("deny");
+      for (const fetch of [
+        discovery({ resourceBody: body }),
+        discovery({ resourceLink: `<${LDP}${type}>; rel="type"` }),
+      ]) {
+        expect(
+          (
+            await createGate({ proposalsContainer: proposals, discoveryFetch: fetch })(
+              PROPOSAL_WRITE_TOOL,
+              valid,
+            )
+          ).behavior,
+        ).toBe("deny");
+      }
+    }
+  });
+
+  it("denies outside scope, traversal, decoys, and nested outside URLs", async () => {
+    const gate = createGate({ proposalsContainer: proposals, discoveryFetch: discovery() });
+    const valid = await writeInput();
+    for (const input of [
+      { ...valid, url: "https://pod.example/agent/inbox/x.ttl" },
+      { ...valid, url: "https://evil.example/x.ttl" },
+      { ...valid, url: `${proposals}../inbox/x.ttl` },
+      { ...valid, decoy: "https://evil.example/x" },
+      { ...valid, meta: { links: ["https://evil.example/x"] } },
+    ])
+      expect((await gate(PROPOSAL_WRITE_TOOL, input)).behavior).toBe("deny");
+  });
+
+  it("fails closed without discovery or when discovery fails", async () => {
+    const valid = await writeInput();
+    const unavailable: PodFetch = async () => {
+      throw new Error("offline");
+    };
+    for (const fetch of [
+      undefined,
+      unavailable,
+      discovery({ status: 403 }),
+      discovery({ status: 302 }),
+      discovery({ contentType: "text/html" }),
+      discovery({ containerBody: "invalid" }),
+    ]) {
+      expect(
+        (
+          await createGate({ proposalsContainer: proposals, discoveryFetch: fetch })(
+            PROPOSAL_WRITE_TOOL,
+            valid,
+          )
+        ).behavior,
+      ).toBe("deny");
+    }
+  });
+
+  it("wires discovery into the SDK callback", async () => {
+    const options = buildActorOptions({
+      proposalsContainer: proposals,
+      mcpServers: {},
+      discoveryFetch: discovery(),
     });
-    expect(decision.behavior).toBe("deny");
-  });
-
-  it("denies a write hiding an out-of-scope URL in a nested field or array", () => {
-    expect(
-      gate(PROPOSAL_WRITE_TOOL, {
-        url: `${proposals}p1.ttl`,
-        meta: { link: "https://evil.example/x" },
-      }).behavior,
-    ).toBe("deny");
-    expect(
-      gate(PROPOSAL_WRITE_TOOL, {
-        url: `${proposals}p1.ttl`,
-        links: ["https://evil.example/y"],
-      }).behavior,
-    ).toBe("deny");
+    expect((await options.canUseTool(PROPOSAL_WRITE_TOOL, await writeInput())).behavior).toBe(
+      "allow",
+    );
   });
 });
