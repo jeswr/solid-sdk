@@ -2342,6 +2342,9 @@ importers:
       '@rdfjs/types':
         specifier: ^2.0.1
         version: 2.0.1
+      '@types/n3':
+        specifier: ^1.16.0
+        version: 1.26.1
       content-type:
         specifier: ^1.0.5
         version: 1.0.5
@@ -2358,9 +2361,6 @@ importers:
       '@types/content-type':
         specifier: ^1.1.8
         version: 1.1.9
-      '@types/n3':
-        specifier: ^1.16.0
-        version: 1.26.1
       '@types/node':
         specifier: ^25.9.2
         version: 25.9.5

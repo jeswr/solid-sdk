@@ -44,6 +44,7 @@
   },
   "homepage": "https://github.com/jeswr/fetch-rdf#readme",
   "dependencies": {
+    "@types/n3": "^1.16.0",
     "content-type": "^1.0.5",
     "jsonld-streaming-parser": "^5.0.0",
     "n3": "^2.0.3",
@@ -51,7 +52,6 @@
   },
   "devDependencies": {
     "@types/content-type": "^1.1.8",
-    "@types/n3": "^1.16.0",
     "@types/node": "^25.9.2",
     "typescript": "^6.0.3",
     "vitest": "^4.1.9",
