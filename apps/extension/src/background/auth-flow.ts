@@ -16,12 +16,9 @@
 
 import * as jose from 'jose';
 import { isPublishedClientIdReachable, PUBLISHED_CLIENT_ID_URL } from './client-id';
-import {
-  createDpopProof,
-  exportDpopKeyPair,
-  generateDpopKeyPair,
-  importDpopKeyPair,
-} from './core/dpop';
+import { createDpopProof, dpopThumbprint, generateDpopKeyPair } from './core/dpop';
+import { DpopKeyDb } from './core/dpop-key-db';
+import { loadSessionDpopKeyPair, persistDpopKeyPair } from './core/dpop-key-store';
 import { isLoopbackHost } from './core/origin-policy';
 import { parseWebIdProfile, selectIssuer } from './core/webid';
 import {
@@ -231,6 +228,10 @@ async function completeLogin(callbackUrl: string): Promise<StoredSession> {
     throw new Error('Issuer mismatch in the authorization response — aborting login.');
   }
 
+  // Generate the keypair EARLY (needed to sign the token-exchange DPoP proof itself), but do
+  // NOT persist it until the exchange actually succeeds — see below. A failed/retried login
+  // must never clobber an existing, still-valid session's key in this single-record store
+  // (roborev round-1 Medium).
   const keyPair = await generateDpopKeyPair();
   const dpopProof = await createDpopProof({
     keyPair,
@@ -264,11 +265,17 @@ async function completeLogin(callbackUrl: string): Promise<StoredSession> {
   const webId = (idToken.webid as string) || (idToken.sub as string);
   if (!webId) throw new Error('No WebID in the ID token.');
 
+  // The exchange succeeded — `keyPair` is now genuinely bound to a real token set. ONLY now
+  // persist it (overwriting whatever was there) and record its thumbprint on the session.
+  const keyDb = await DpopKeyDb.open();
+  await persistDpopKeyPair(keyDb, keyPair);
+  keyDb.close();
+
   const session: StoredSession = {
     webId,
     accessToken: tokens.access_token,
     refreshToken: tokens.refresh_token ?? null,
-    dpopKeyPair: await exportDpopKeyPair(keyPair),
+    dpopJkt: await dpopThumbprint(keyPair.publicKey),
     issuer: params.issuer,
     tokenEndpoint: params.tokenEndpoint,
     clientId: params.clientId,
@@ -282,12 +289,21 @@ async function completeLogin(callbackUrl: string): Promise<StoredSession> {
 
 /**
  * Refresh an expiring session via the DPoP-bound refresh-token grant, reusing the SAME
- * keypair (CSS binds the refresh token to the original `jkt`, so a regenerated key fails).
- * One retry on a server DPoP-nonce challenge.
+ * persisted keypair (CSS binds the refresh token to the original `jkt`, so a regenerated
+ * key fails) — `loadSessionDpopKeyPair` verifies the persisted key's thumbprint against
+ * `session.dpopJkt` and returns it unchanged in the normal case. It throws
+ * `DpopKeyUnavailableError` (propagated to the caller, handled like any other refresh
+ * failure — see `service-worker.ts` `ensureSession`) if the persisted key is missing or
+ * doesn't match a CURRENT-shape session; it mints a NEW key ONLY for the one-time legacy
+ * migration (a pre-hardening session with no recorded `dpopJkt`), which deliberately
+ * invalidates this grant — see `dpop-key-store.ts`. One retry on a server DPoP-nonce
+ * challenge.
  */
 export async function refreshSession(session: StoredSession): Promise<StoredSession> {
   if (!session.refreshToken) throw new Error('No refresh token; re-login required.');
-  const keyPair = await importDpopKeyPair(session.dpopKeyPair);
+  const keyDb = await DpopKeyDb.open();
+  const keyPair = await loadSessionDpopKeyPair(keyDb, session);
+  keyDb.close();
 
   const grant = async (nonce?: string): Promise<Response> => {
     const proof = await createDpopProof({

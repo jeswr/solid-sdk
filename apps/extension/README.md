@@ -2,15 +2,16 @@
 
 A Manifest V3 browser extension that brings **Solid sign-in to the browser itself**. It
 injects a `window.solid` API into every page (a DPoP-authenticated `fetch`, the user's
-`webId`, `login`/`logout`/`setClientId`) and pins a top-right account menu whose icon is the
-signed-in WebID's avatar. The UI is built with [`@jeswr/solid-elements`](https://github.com/jeswr/solid-elements)
+`webId`, `login`/`logout`/`setClientId`, and per-data-class access grants) and provides a
+toolbar account menu whose icon is the signed-in WebID's avatar. The UI is built with
+[`@jeswr/solid-elements`](https://github.com/jeswr/solid-elements)
 so it is visually consistent with [Pod Manager](https://github.com/jeswr/solid-pod-manager)
 and the rest of the [@jeswr Solid app suite](https://github.com/jeswr).
 
-> **Scope:** this repo is the extension **CORE** — auth, `window.solid`, and the account
-> popup. **Access management** (an access-request JS API, consent/data-type UI, queued
-> requests) is a separate, design-first track and is intentionally **not** implemented
-> here; only a clearly-marked, feature-detectable seam is left (see below).
+> **Scope:** auth, `window.solid`, popup/side-panel account UI, a gated shared replica,
+> and per-data-class consent through `requestAccess` / `listGrants` / `revokeGrant` /
+> `resolveClass` are implemented. Class resolution currently uses Solid Type Indexes;
+> SAI registration discovery, SHACL validation, and offline write queues remain follow-ups.
 
 ## Architecture
 
@@ -30,9 +31,16 @@ Four contexts, with the access token held in exactly one of them (the service wo
 - **The page never sees a credential.** `window.solid` (MAIN world) can only `postMessage`
   to the content script, which relays to the worker. The page gets back the WebID and
   proxied `Response`s — never the access or refresh token.
-- **The service worker is the sole token holder.** Tokens + the DPoP keypair live in
-  `chrome.storage.local`, which is unreachable from any web page — satisfying the suite's
-  "DPoP refresh token in non-page-reachable secure storage" invariant.
+- **The service worker is the sole token holder.** Tokens live in `chrome.storage.local`
+  and the DPoP private key lives as a **non-extractable** `CryptoKey` in the worker's own
+  IndexedDB (`core/dpop-key-db.ts`) — neither is reachable from any web page, satisfying
+  the suite's "DPoP refresh token in non-page-reachable secure storage" invariant, and the
+  private key additionally cannot be exported to JWK by ANY code (not even a compromised
+  extension context — `crypto.subtle.exportKey` on it always rejects).
+- **Every proxied pod read/write is gated before cache access or egress.** The worker
+  cross-checks the content script's origin stamp against Chrome's sender, then checks
+  origin grants and, for class-only origins, the pinned targets, modes, and expiry.
+  Ungranted pages receive `webId: null`.
 
 ### The credential boundary (security heart)
 
@@ -40,10 +48,11 @@ Because `solid.fetch` is callable from **any** page, the worker must never hand 
 origin the user's token. `core/origin-policy.ts` + `core/authenticated-fetch.ts` enforce,
 fail-closed:
 
-- The token is attached **only** to an origin in the allowed set (the WebID's origin ∪ the
-  issuer's origin ∪ user-configured pod origins). A request to any other origin
-  (`solid.fetch("https://evil.example/")`) is sent as a **plain, credential-free fetch** —
-  the token-leak attack is impossible.
+- The token is attached **only** to a target origin in the allowed set (the WebID's origin ∪
+  the issuer's origin ∪ user-configured pod origins), after the requesting app passes its
+  access gate. An explicit `solid.fetch` from an ungranted origin returns 403 before any
+  cache read or pod egress. Foreign targets are allowed only on the requesting app's own
+  origin, without the Solid token; unrelated third-party targets return 403.
 - **Cleartext guard:** the token never rides over `http:` (loopback excepted, for dev CSS).
 - The resource token is never attached to the issuer's `/token` endpoint.
 - Page-supplied `Authorization` / `DPoP` headers are **stripped** (no header injection).
@@ -63,9 +72,37 @@ interface SolidExtension {
   setClientId(clientId: string): void;          // declare this origin's Client ID Document
   login(webId: string): Promise<void>;
   logout(): Promise<void>;
-  requestAccess?(request: unknown): Promise<never>; // SEAM — not implemented (see below)
+  requestAccess(request: AccessRequestArgs): Promise<{ ok: boolean; grants: SolidGrant[] }>;
+  listGrants(): Promise<SolidGrant[]>;
+  revokeGrant(grantId: string): Promise<boolean>;
+  resolveClass(classIRI: string): Promise<{
+    shape: string | null;
+    targets: Array<{ url: string; kind: 'instance' | 'container' }>;
+  }>;
+}
+
+interface AccessRequestArgs {
+  readonly classes: readonly string[];
+  readonly modes: readonly string[]; // read, append, write (case-insensitive)
+  readonly purpose?: string;
+  readonly duration?: string;       // required at runtime: positive ISO-8601, e.g. P30D
+}
+
+interface SolidGrant {
+  readonly grantId: string;
+  readonly dataClass: string;
+  readonly modes: readonly string[];
+  readonly purpose: string | null;
+  readonly expiresAt: number;        // epoch milliseconds
+  readonly targets: ReadonlyArray<{ url: string; kind: 'instance' | 'container' }>;
 }
 ```
+
+Presence can also be detected using the `solid-extension:ready` event or the sticky
+`<html data-solid-extension="1">` marker. These carry no identity. The best-effort global
+`fetch` patch routes cross-origin HTTP(S) requests through the worker; requests the worker
+does not authorize fall back to the page's captured native fetch with normal CORS behavior.
+Explicit `solid.fetch` calls retain the worker's denial response.
 
 ## Auth + session
 
@@ -81,10 +118,12 @@ interface SolidExtension {
   `chromiumapp.org` redirect into it) is a **needs:user** step; until then the unreachable
   placeholder transparently falls back to dynamic registration, so login keeps working. A page
   may still declare its own Client ID Document via `solid.setClientId(...)`.
-- **Session:** the access + refresh token + the DPoP keypair (as JWK — an MV3 worker is
-  killed aggressively and a non-extractable key would be lost on suspension, breaking the
-  `jkt`-bound refresh) are persisted in `chrome.storage.local`. The worker proactively
-  refreshes ~30 s before expiry via the DPoP refresh grant, reusing the **same** keypair.
+- **Session:** the access + refresh token are persisted in `chrome.storage.local`; the
+  DPoP keypair is persisted separately as a **non-extractable** `CryptoKey` object directly
+  in IndexedDB (`core/dpop-key-db.ts`) — non-extractable `CryptoKey`s are structured-clone
+  serialisable, so the object survives the MV3 worker's aggressive kill/restart cycle
+  without ever being exported to JWK. The worker proactively refreshes ~30 s before expiry
+  via the DPoP refresh grant, reusing the **same** persisted keypair (`jkt`-bound refresh).
 - **Silent restore:** reopening the browser re-hydrates the session from the persisted
   refresh token (no popup). The restore decision logic is the suite's audited
   [`@jeswr/solid-session-restore`](https://github.com/jeswr/solid-session-restore) (fail-closed,
@@ -111,25 +150,71 @@ toolbar icon → **"Open Solid side panel"** (a left-click still opens the quick
 ignores open-on-action-click while a `default_popup` is set, so both surfaces coexist via the
 context-menu entry).
 
-## Offline
+## Shared replica
 
-Offline of **arbitrary third-party pods** is **out of scope** (it is a fork-only concern for
-this extension — a generic offline layer for any pod is the [`@jeswr/solid-offline`](https://github.com/jeswr/solid-offline)
-SW track, not this one). The extension does no forced caching of third-party pod data; the
-worker's in-memory session/nonce caches are best-effort accelerators only.
+Granted pod reads use the extension-owned replica: bytes in CacheStorage, metadata and
+DPoP nonces in IndexedDB, keyed by WebID and grant scope. Cached reads revalidate against
+the pod and remain subject to the access gate on every hit. Writes go through to the pod
+synchronously; logout purges the replica before further serving. Offline write queues and
+central WebSocket invalidation are follow-ups.
 
-## Access management — the SEAM (NOT implemented)
+## Per-data-class access management
 
-The access-request JS API, the consent / data-type UI, and queued-request handling are a
-**separate, design-first track** and are deliberately excluded from this core. The only thing
-left here is a non-breaking seam: `window.solid.requestAccess?` is **declared** (so it is
-feature-detectable) but **throws** "not implemented". Do **not** wire access management onto
-this stub without the access-management design — adding the real method later is non-breaking.
+After signing in through the extension, an app can request access from a click or keypress:
+
+```js
+document.querySelector('#share-contacts').addEventListener('click', async () => {
+  const { ok, grants } = await window.solid.requestAccess({
+    classes: ['https://schema.org/Person'],
+    modes: ['read'],
+    purpose: 'Display your contacts',
+    duration: 'P30D',
+  });
+  if (!ok) return; // no classes approved
+
+  const current = await window.solid.listGrants();
+  const { shape, targets } = await window.solid.resolveClass(grants[0].dataClass);
+  // Use solid.fetch within the grant's pinned targets. Later, to withdraw access:
+  await window.solid.revokeGrant(grants[0].grantId);
+});
+```
+
+- **`requestAccess`** opens a consent window in extension chrome showing the verified app
+  origin, classes, modes, purpose, expiry, and resolved targets. It requires transient user
+  activation and is limited to three admitted requests per origin per minute (best-effort
+  in-memory throttle, reset on worker restart). At least one valid HTTP(S) class IRI and
+  recognized mode are required. `duration` is optional in the TypeScript shape but mandatory
+  at runtime: a positive ISO-8601 duration, capped at 365 days. Years/months use 365/30 days.
+  Approval returns one grant per approved class; denying all returns `{ ok: false, grants: [] }`.
+  Invalid requests, missing activation/session, or throttling reject the promise.
+- **`listGrants`** returns only this origin's non-expired class grants for the active WebID;
+  no session or an unverifiable origin yields `[]`. Summaries contain no WebID or credential.
+- **`revokeGrant`** removes this origin's class grant and returns whether it was removed.
+  Removal precedes replica-slice purging, so even a purge failure cannot keep access live.
+  Cached bytes still covered by another live read grant of the same origin are retained.
+  This cannot withdraw a separate legacy whole-pod origin grant.
+- **`resolveClass`** walks the WebID's public/private Solid Type Indexes for `solid:forClass`
+  and returns `solid:instance` / `solid:instanceContainer` targets on allowed pod origins.
+  It requires a verified, granted origin and an active session. Class-only origins can
+  resolve only classes they currently hold; legacy full-grant origins can resolve any class.
+  It returns `shape: null` today: SAI discovery and SHACL validation are not implemented.
+  An unknown/unreachable class resolves to an empty target set.
+
+Class-only origins are confined to the targets pinned at consent, the granted modes, and
+expiry, including on cache hits. Instances cover an exact resource path; containers cover
+their path and descendants. GET/HEAD require `read`, POST requires `append`, and
+PUT/PATCH/DELETE require `write`; `write` also satisfies `append`, but does not imply `read`.
+Empty target sets authorize nothing. Re-resolution does not widen an existing grant.
+`purpose` is an audit/display value, not an enforced usage restriction. Legacy whole-pod
+origin grants remain broader and take precedence over class grants: successful page login
+and a verified `setClientId` call create those grants, and credential origins are granted
+automatically. To request only class-scoped access, sign in through the extension UI and
+call `requestAccess` without first opting the app into whole-pod access.
 
 ## Build & load the unpacked extension
 
 ```bash
-npm install            # @jeswr deps are pinned git+https (keyless npm ci); ignore-scripts=true
+npm ci --ignore-scripts # install the locked dependencies; @jeswr deps are pinned git+https
 npm run build          # webpack -> dist/
 ```
 
@@ -146,14 +231,15 @@ Then in Chrome:
 npm run gate           # lint (biome) + typecheck (tsc) + test (vitest) + build (webpack)
 npm run lint           # biome over src test e2e scripts
 npm run typecheck      # tsc --noEmit
-npm test               # vitest — the security-critical core (51 cases), no server needed
+npm test               # vitest — mocked security-critical core, no server needed
 npm run build          # webpack bundle to dist/
 npm run test:e2e       # build + Playwright against a LOCAL Community Solid Server
 ```
 
 The unit suite stubs `fetch` / `chrome.*` and needs no server. The Playwright e2e suite
 boots a **local** Community Solid Server (`e2e/setup`) and a local test site — **never** the
-live deploy — and drives the real extension in headed Chromium.
+live deploy — and drives the real extension in headed Chromium. CI uses Node.js 24 and
+runs the gate before the local-server e2e suite.
 
 ## License
 

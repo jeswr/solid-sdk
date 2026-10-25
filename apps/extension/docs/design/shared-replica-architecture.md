@@ -56,8 +56,9 @@ ONE replica per `(WebID, pod-origin)` in the extension SW's own storage, with
   byte copy per resource, not per content-type-variant-per-app.
 - **Metadata** (ETag, fetchedAt, max-age, variant set, the OWNING grant-scope) → `IndexedDB`
   via `@jeswr/solid-offline` `MetadataStore` (`metadata-store.ts`).
-- **Session + DPoP key + grant table** → `chrome.storage.local` (page-unreachable; already
-  the home of the keypair today).
+- **Session tokens + grant table** → `chrome.storage.local` (page-unreachable). **UPDATE:**
+  the DPoP private key itself has since moved OFF `chrome.storage.local` entirely — it is a
+  non-extractable `CryptoKey` in its own IndexedDB store (`core/dpop-key-db.ts`); see §4.2.
 - **DPoP nonce cache** → MOVED from the in-memory `nonceByOrigin` Map (service-worker.ts:59)
   to IndexedDB, so a cold SW wake does not pay the §8 nonce round-trip on every first request.
 
@@ -158,14 +159,26 @@ written.** This is a pre-existing exposure worth a tracked security bead on
 
 ### 4.2 Key custody — the strongest property (PRESERVED, do not touch)
 
-Refuted by all reviewers. The DPoP keypair lives only as JWK in `chrome.storage.local`,
-reachable only from extension contexts; `createDpopProof` (`dpop.ts`) exports ONLY the
-public components (kty/crv/x/y, never `d`); the page receives only a WebID + a reconstructed
-Response; page-supplied `Authorization`/`DPoP` headers are stripped (`authenticated-fetch.ts`
-`HOP_BY_HOP`). Residual LOW: the key is generated **extractable** (an MV3 necessity — a
-non-extractable key is lost on SW suspension, breaking the jkt-bound refresh) and co-located
-with the refresh token in `chrome.storage.local`, so any extension-context compromise
-exfiltrates both from one store. Not page-reachable; a concentrated single point worth noting.
+Refuted by all reviewers. `createDpopProof` (`dpop.ts`) exports ONLY the public components
+(kty/crv/x/y, never `d`); the page receives only a WebID + a reconstructed Response;
+page-supplied `Authorization`/`DPoP` headers are stripped (`authenticated-fetch.ts`
+`HOP_BY_HOP`).
+
+**UPDATE (security hardening, closes the residual LOW noted below at design time):** the
+DPoP private key is now generated **non-extractable** and persisted as a live `CryptoKey`
+object directly in the worker's own IndexedDB (`core/dpop-key-db.ts` /
+`core/dpop-key-store.ts`), never as JWK in `chrome.storage.local`. Non-extractable
+`CryptoKey`s are structured-clone serialisable per the WebCrypto spec, so the key survives
+the MV3 SW's kill/restart cycle — the original "extractable is an MV3 necessity" assumption
+conflated the key OBJECT's in-memory lifetime with whether the material could be durably
+persisted; it can, without ever being exportable. The original text below is kept for the
+historical record: ~~The DPoP keypair lives only as JWK in `chrome.storage.local`, reachable
+only from extension contexts. Residual LOW: the key is generated **extractable** (an MV3
+necessity — a non-extractable key is lost on SW suspension, breaking the jkt-bound refresh)
+and co-located with the refresh token in `chrome.storage.local`, so any extension-context
+compromise exfiltrates both from one store. Not page-reachable; a concentrated single point
+worth noting.~~ The private key no longer lives in `chrome.storage.local` at all, and no
+extension-context code (compromised or not) can ever export it.
 
 ### 4.3 Other verified findings (graft the mitigation into the recommendation)
 

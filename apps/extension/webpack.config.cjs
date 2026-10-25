@@ -13,6 +13,7 @@ module.exports = {
     'sidepanel/sidepanel': './src/sidepanel/sidepanel.ts',
     'content/content-script': './src/content/content-script.ts',
     'inject/inject': './src/inject/inject.ts',
+    'consent/consent': './src/consent/consent.ts',
   },
   output: {
     path: path.resolve(__dirname, 'dist'),
@@ -42,6 +43,8 @@ module.exports = {
         { from: 'src/popup/popup.css', to: 'popup/popup.css' },
         { from: 'src/sidepanel/sidepanel.html', to: 'sidepanel/sidepanel.html' },
         { from: 'src/sidepanel/sidepanel.css', to: 'sidepanel/sidepanel.css' },
+        { from: 'src/consent/consent.html', to: 'consent/consent.html' },
+        { from: 'src/consent/consent.css', to: 'consent/consent.css' },
         { from: 'src/icons', to: 'icons' },
         // The static Solid-OIDC Client Identifier Document (see client-id.ts). Shipped so a
         // build can be hosted with the doc alongside; the in-flow client_id points at the

@@ -77,12 +77,113 @@ export interface SetClientIdRequest {
   readonly clientId: string;
 }
 
+// --- Per-data-class access management (Phase 2, design §4.2) ---------------------------
+
+/**
+ * A page's token-free view of a class grant it holds — the enforceable substance (targets +
+ * modes + expiry) plus the consent anchors (dataClass + purpose). NO credential, NO webId.
+ */
+export interface GrantSummary {
+  readonly grantId: string;
+  readonly dataClass: string;
+  readonly modes: readonly string[];
+  readonly purpose: string | null;
+  readonly expiresAt: number;
+  readonly targets: ReadonlyArray<{ url: string; kind: 'instance' | 'container' }>;
+}
+
+/** `window.solid.requestAccess(...)` — a typed, per-class access request (triggers consent). */
+export interface RequestAccessRequest {
+  readonly type: 'SOLID_REQUEST_ACCESS';
+  readonly requestId: string;
+  readonly classes: readonly string[];
+  readonly modes: readonly string[];
+  readonly purpose?: string;
+  readonly duration?: string;
+  /** Page-supplied origin stamp — cross-checked against the browser-attested sender. */
+  readonly stampedOrigin?: string;
+  /**
+   * Whether the call carried a genuine transient user activation, read in the ISOLATED content
+   * script (`navigator.userActivation.isActive`) — page-unforgeable. Drives the anti-spam gesture
+   * requirement (residual c); an autonomous (non-gesture) call is rejected before consent.
+   */
+  readonly userActivated?: boolean;
+}
+
+/** `window.solid.listGrants()` — the grants THIS origin currently holds. */
+export interface ListGrantsRequest {
+  readonly type: 'SOLID_LIST_GRANTS';
+  readonly requestId: string;
+  readonly stampedOrigin?: string;
+}
+
+/** `window.solid.revokeGrant(grantId)` — revoke one of THIS origin's grants. */
+export interface RevokeGrantRequest {
+  readonly type: 'SOLID_REVOKE_GRANT';
+  readonly requestId: string;
+  readonly grantId: string;
+  readonly stampedOrigin?: string;
+}
+
+/** `window.solid.resolveClass(classIRI)` — read-only introspection of a class → targets. */
+export interface ResolveClassRequest {
+  readonly type: 'SOLID_RESOLVE_CLASS';
+  readonly requestId: string;
+  readonly classIRI: string;
+  readonly stampedOrigin?: string;
+}
+
+/** The worker's reply to any of the four access-management requests (correlated by requestId). */
+export interface AccessResponse {
+  readonly requestId: string;
+  readonly ok?: boolean;
+  readonly grants?: readonly GrantSummary[];
+  readonly shape?: string | null;
+  readonly targets?: ReadonlyArray<{ url: string; kind: 'instance' | 'container' }>;
+  readonly error?: string;
+}
+
+/** The consent window asks the worker for the pending record to render (extension context only). */
+export interface GetPendingConsentRequest {
+  readonly type: 'SOLID_GET_PENDING_CONSENT';
+  readonly consentId: string;
+}
+
+/** The consent surface → worker decision (from the extension's own consent window only). */
+export interface ConsentDecisionMessage {
+  readonly type: 'SOLID_CONSENT_DECISION';
+  readonly consentId: string;
+  /** The data-class IRIs the user APPROVED (a subset of the requested set); [] ⇒ denied all. */
+  readonly approvedClasses: readonly string[];
+}
+
+/** What the consent window renders — a token-free view of the pending request. */
+export interface PendingConsentView {
+  readonly consentId: string;
+  readonly origin: string;
+  readonly webId: string;
+  readonly classes: ReadonlyArray<{
+    readonly dataClass: string;
+    readonly modes: readonly string[];
+    readonly purpose: string | null;
+    readonly expiresAt: number;
+    readonly targets: ReadonlyArray<{ url: string; kind: 'instance' | 'container' }>;
+    readonly shape: string | null;
+  }>;
+}
+
 export type WorkerRequest =
   | FetchRequest
   | LoginRequest
   | LogoutRequest
   | GetStateRequest
-  | SetClientIdRequest;
+  | SetClientIdRequest
+  | RequestAccessRequest
+  | ListGrantsRequest
+  | RevokeGrantRequest
+  | ResolveClassRequest
+  | GetPendingConsentRequest
+  | ConsentDecisionMessage;
 
 // --- Responses (worker -> caller) -----------------------------------------------------
 

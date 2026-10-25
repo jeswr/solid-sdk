@@ -32,6 +32,7 @@
  * whole orchestration is unit-testable without a packed extension or a live pod.
  */
 
+import { type PinnedTarget, targetsCover } from './class-grant';
 import type { ReplicaMetadata } from './replica-db';
 import {
   CANONICAL_RDF_ACCEPT,
@@ -403,6 +404,73 @@ export async function purgeReplica(
 
   // Nonces are always cleared on logout (a new identity must never reuse a prior nonce).
   await db.clearNonces();
+  return { bytesDropped, metaDropped };
+}
+
+/**
+ * PER-DATA-CLASS REPLICA-SLICE PURGE (access-management Phase 2, residual b): when a class grant
+ * is REVOKED or EXPIRES, synchronously drop exactly the replicated bytes + metadata for the
+ * resources that grant resolved to — leaving every OTHER class's (and every other grant-scope's)
+ * data resident. Closes the data-retention gap where a revoked class's bytes lingered in the
+ * extension's replica until logout.
+ *
+ * The slice is `(webId, grantScope, targets)`:
+ *   - `webId` scopes to the identity the grant was minted under (never touches another user's rows);
+ *   - `grantScope` is the requesting-app origin the bytes were cached under (`ReplicaScope.grantScope`
+ *     === the class-only origin, see `gateAccess`), so another origin's replica is untouched;
+ *   - `targets` are the grant's PINNED resolved targets; only a row whose `resourceUrl` falls WITHIN
+ *     one of them (`targetsCover`, the same fail-closed containment test the gate uses) is dropped.
+ *   - `retainTargets` (optional) are the targets of the OTHER live grants the same `(webId,
+ *     grantScope)` still holds; a row still covered by one of them is KEPT even if it also falls in
+ *     the revoked slice, so revoking ONE of two overlapping grants never evicts data the surviving
+ *     grant still authorises (it would otherwise force a needless re-fetch). Precise purge.
+ *
+ * FAIL-CLOSED CONTRACT (the caller's, not this function's): the grant's REMOVAL from the store is
+ * the authoritative deny and MUST happen before this purge, so a purge failure can NEVER leave
+ * access live — it degrades only to "bytes linger until logout" (the prior state), with access
+ * already revoked. This function is therefore BEST-EFFORT-THOROUGH: it purges as much of the slice
+ * as it can, tolerating a per-row failure (so one unremovable row cannot abort the rest of the
+ * slice), and returns the counts dropped. An empty target set covers nothing → a no-op.
+ */
+export async function purgeReplicaSlice(
+  cache: ReplicaByteCache,
+  db: ReplicaMetaStore,
+  slice: {
+    webId: string;
+    grantScope: string;
+    targets: readonly PinnedTarget[];
+    retainTargets?: readonly PinnedTarget[];
+  },
+): Promise<{ bytesDropped: number; metaDropped: number }> {
+  let bytesDropped = 0;
+  let metaDropped = 0;
+  // An empty / unresolved target set authorises nothing and therefore replicated nothing → no-op.
+  if (slice.targets.length === 0) return { bytesDropped, metaDropped };
+  const retain = slice.retainTargets ?? [];
+
+  const rows = await db.getMetadataByWebId(slice.webId);
+  for (const row of rows) {
+    // Another grant-scope's (app origin's) partition — never touched by this class's revoke.
+    if (row.grantScope !== slice.grantScope) continue;
+    // A resource outside this grant's pinned targets belongs to another class — left intact.
+    if (!targetsCover(slice.targets, row.resourceUrl)) continue;
+    // A resource STILL covered by another live grant of the same (webId, grantScope) is retained —
+    // revoking one of two overlapping grants must not evict what the survivor still authorises.
+    if (retain.length > 0 && targetsCover(retain, row.resourceUrl)) continue;
+    // Drop the bytes AND the metadata INDEPENDENTLY + best-effort: a failure of either half must
+    // not abort the rest of the slice, and the byte half's failure must not skip the metadata
+    // half (else a stale, un-servable row would dangle). The grant is already removed by the
+    // caller (the fail-closed deny), so any residual here is only an un-servable leftover the
+    // logout purge will sweep — never live access.
+    const keyReq = new Request(replicaKeyUrlFor(row));
+    if (await cache.delete(keyReq, IGNORE_VARY).catch(() => false)) bytesDropped++;
+    try {
+      await db.deleteMetadata(row.key);
+      metaDropped++;
+    } catch {
+      // leave the now grant-less row for the logout purge.
+    }
+  }
   return { bytesDropped, metaDropped };
 }
 

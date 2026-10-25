@@ -24,6 +24,13 @@ interface PageMessage {
   webId?: string;
   clientId?: string;
   autoDivert?: boolean;
+  // Access-management (Phase 2) payload fields.
+  classes?: string[];
+  modes?: string[];
+  purpose?: string;
+  duration?: string;
+  classIRI?: string;
+  grantId?: string;
 }
 
 function toPage(message: Record<string, unknown>): void {
@@ -112,6 +119,73 @@ window.addEventListener('message', (event) => {
           error: response?.error ?? null,
         });
       });
+      break;
+
+    // --- Access management (Phase 2) — all origin-sensitive, so the REAL page origin is
+    // stamped HERE (ISOLATED world), never page-supplied. The worker cross-checks it against
+    // the browser-attested sender.origin. Responses relay back verbatim keyed by requestId.
+    case 'SOLID_REQUEST_ACCESS':
+      chrome.runtime.sendMessage(
+        {
+          type: 'SOLID_REQUEST_ACCESS',
+          requestId: data.requestId,
+          classes: data.classes ?? [],
+          modes: data.modes ?? [],
+          purpose: data.purpose,
+          duration: data.duration,
+          stampedOrigin: window.location.origin,
+          // Stamp the browser-attested transient user activation, read HERE in the ISOLATED world
+          // (the page cannot forge the isolated `navigator`). `isActive` is TRUE only within ~5s of
+          // a genuine gesture, so an autonomous `requestAccess` loop reports false and is rejected
+          // by the SW's anti-spam gate (residual c). Optional-chained so a context without the
+          // User Activation API fails closed (undefined → false → gesture required).
+          userActivated: navigator.userActivation?.isActive === true,
+        },
+        (response) => {
+          toPage({ type: 'SOLID_ACCESS_RESPONSE', ...(response ?? { error: 'No response' }) });
+        },
+      );
+      break;
+
+    case 'SOLID_LIST_GRANTS':
+      chrome.runtime.sendMessage(
+        {
+          type: 'SOLID_LIST_GRANTS',
+          requestId: data.requestId,
+          stampedOrigin: window.location.origin,
+        },
+        (response) => {
+          toPage({ type: 'SOLID_ACCESS_RESPONSE', ...(response ?? { error: 'No response' }) });
+        },
+      );
+      break;
+
+    case 'SOLID_REVOKE_GRANT':
+      chrome.runtime.sendMessage(
+        {
+          type: 'SOLID_REVOKE_GRANT',
+          requestId: data.requestId,
+          grantId: data.grantId,
+          stampedOrigin: window.location.origin,
+        },
+        (response) => {
+          toPage({ type: 'SOLID_ACCESS_RESPONSE', ...(response ?? { error: 'No response' }) });
+        },
+      );
+      break;
+
+    case 'SOLID_RESOLVE_CLASS':
+      chrome.runtime.sendMessage(
+        {
+          type: 'SOLID_RESOLVE_CLASS',
+          requestId: data.requestId,
+          classIRI: data.classIRI,
+          stampedOrigin: window.location.origin,
+        },
+        (response) => {
+          toPage({ type: 'SOLID_ACCESS_RESPONSE', ...(response ?? { error: 'No response' }) });
+        },
+      );
       break;
   }
 });

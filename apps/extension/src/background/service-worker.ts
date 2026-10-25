@@ -19,11 +19,20 @@
  */
 
 import type {
+  AccessResponse,
   ActionResult,
+  ConsentDecisionMessage,
   FetchRequest,
   FetchResponse,
+  GetPendingConsentRequest,
   GetStateRequest,
+  GrantSummary,
+  ListGrantsRequest,
   LoginRequest,
+  PendingConsentView,
+  RequestAccessRequest,
+  ResolveClassRequest,
+  RevokeGrantRequest,
   SessionState,
   SetClientIdRequest,
   WorkerRequest,
@@ -31,15 +40,34 @@ import type {
 import { setSignedInIcon, setSignedOutIcon } from './action-icon';
 import { initiateLogin, refreshSession } from './auth-flow';
 import { authenticatedFetch, type FetchSession } from './core/authenticated-fetch';
-import { importDpopKeyPair } from './core/dpop';
+import {
+  type ClassGrant,
+  decideClassAccess,
+  grantsForSession,
+  liveGrantOrigins,
+  modeSatisfies,
+  type PinnedTarget,
+  pruneExpiredGrants,
+} from './core/class-grant';
+import { normaliseAccessRequest } from './core/class-request';
+import { resolveClassTargets } from './core/class-resolve';
+import { buildPendingConsent, consentDecisionToGrants, type PendingConsent } from './core/consent';
+import { DpopKeyDb } from './core/dpop-key-db';
+import { DpopKeyUnavailableError, loadSessionDpopKeyPair } from './core/dpop-key-store';
 import { computeAllowedOrigins, isValidClientIdUrl } from './core/origin-policy';
 import {
   type EgressPort,
   purgeReplica,
+  purgeReplicaSlice,
   type ReplicaByteCache,
   SharedReplica,
 } from './core/replica';
 import { ReplicaDb } from './core/replica-db';
+import {
+  decideRequestAccess,
+  type RequestAccessDenyReason,
+  type ThrottleState,
+} from './core/request-access-throttle';
 import {
   computeGrantedOrigins,
   decideRequestingOrigin,
@@ -52,16 +80,21 @@ import { SingleFlight } from './core/single-flight';
 import { parseWebIdProfile } from './core/webid';
 import { registerGlobalFetchInjection } from './global-fetch-register';
 import {
+  clearClassGrants,
   clearProfile,
   clearSession,
   grantOrigin,
+  loadClassGrants,
   loadClientIds,
   loadGrantedOrigins,
   loadPodOrigins,
   loadProfile,
   loadRecentAccounts,
   loadSession,
+  pruneExpiredClassGrants,
+  revokeClassGrant,
   type StoredSession,
+  saveClassGrant,
   saveClientId,
   saveProfile,
 } from './session-store';
@@ -91,9 +124,69 @@ async function getReplicaDb(): Promise<ReplicaDb> {
   return replicaDbHandle;
 }
 
+/**
+ * The DPoP keypair IndexedDB handle — the non-extractable `CryptoKeyPair`'s durable home
+ * (see `core/dpop-key-db.ts`). Re-derivable on every SW wake, same as the replica DB above.
+ */
+let dpopKeyDbHandle: DpopKeyDb | null = null;
+
+/** Lazily open (once per wake) the DPoP key DB. */
+async function getDpopKeyDb(): Promise<DpopKeyDb> {
+  if (!dpopKeyDbHandle) dpopKeyDbHandle = await DpopKeyDb.open();
+  return dpopKeyDbHandle;
+}
+
 /** The named Cache bucket for replica bytes (re-opened lazily; available in the SW context). */
 function getReplicaCache(): Promise<ReplicaByteCache> {
   return caches.open(REPLICA_CACHE_NAME) as Promise<ReplicaByteCache>;
+}
+
+/**
+ * Purge the replica slice of each GONE (revoked / expired) class grant (access-management residual
+ * b). `retainPool` are the grants that SURVIVE — a resource still covered by a surviving grant of
+ * the SAME `(webId, origin)` is KEPT, so revoking/expiring one of two overlapping grants never
+ * evicts data the survivor still authorises. Best-effort (a failure only leaves now grant-less
+ * bytes to the logout purge); the replica stores are opened only when something is actually gone.
+ *
+ * The replica caches only GET (READ) representations, and this codebase treats `write` as NOT
+ * implying `read` (see `modeSatisfies`). So ONLY a surviving grant that satisfies READ justifies
+ * retaining cached bytes — a surviving write-only / append-only grant does NOT authorise reading
+ * them, so its overlap must NOT keep readable bytes resident after the read grant is gone.
+ */
+async function purgeGrantSlices(gone: readonly ClassGrant[], retainPool: readonly ClassGrant[]) {
+  if (gone.length === 0) return;
+  try {
+    const [cache, db] = await Promise.all([getReplicaCache(), getReplicaDb()]);
+    for (const g of gone) {
+      const retainTargets = retainPool
+        .filter(
+          (r) => r.webId === g.webId && r.origin === g.origin && modeSatisfies(r.modes, 'read'),
+        )
+        .flatMap((r) => r.targets);
+      await purgeReplicaSlice(cache, db, {
+        webId: g.webId,
+        grantScope: g.origin,
+        targets: g.targets,
+        retainTargets,
+      });
+    }
+  } catch {
+    // Best-effort: the grants are already gone (denied); their un-servable bytes are swept by the
+    // synchronous logout purge if this failed.
+  }
+}
+
+/**
+ * Prune expired class grants AND purge each expired grant's replica slice (access-management
+ * residual b). Returns the LIVE grants (the same value the callers previously got from
+ * `pruneExpiredClassGrants`). The store prune is the authoritative deny; the byte purge is
+ * best-effort. The surviving `live` grants are the retain-pool so an expiring grant that overlaps a
+ * still-live one does not evict the survivor's data.
+ */
+async function pruneAndPurgeExpiredGrants(now: number): Promise<ClassGrant[]> {
+  const { live, expired } = await pruneExpiredClassGrants(now);
+  await purgeGrantSlices(expired, live);
+  return live;
 }
 /**
  * Single-flight refresh: concurrent near-expiry requests must NOT each start a refresh
@@ -133,7 +226,26 @@ async function ensureSession(): Promise<{ session: StoredSession; keyPair: Crypt
   }
 
   if (!cachedSession) return null;
-  if (!cachedKeyPair) cachedKeyPair = await importDpopKeyPair(cachedSession.dpopKeyPair);
+  if (!cachedKeyPair) {
+    try {
+      cachedKeyPair = await loadSessionDpopKeyPair(await getDpopKeyDb(), cachedSession);
+    } catch (err) {
+      if (err instanceof DpopKeyUnavailableError) {
+        // The persisted DPoP key is missing or doesn't match THIS session specifically
+        // (IndexedDB eviction, a browser bug, or a stale in-memory session object) —
+        // unrecoverable in place. Tear down for a clean re-login rather than silently
+        // signing with the wrong (or a freshly-minted, orphaned) key, which would just
+        // produce confusing 401s.
+        await teardownSession();
+      }
+      // Either the confirmed-broken-session teardown above, or a TRANSIENT/unexpected
+      // failure (IndexedDB open error, a bug) — in the transient case we deliberately do
+      // NOT tear down (the stored session/tokens are left intact), we just fail THIS one
+      // call soft, matching every caller's existing "no ctx ⇒ not authenticated" handling.
+      // `cachedKeyPair` stays null either way, so the very next call retries cleanly.
+      return null;
+    }
+  }
   return { session: cachedSession, keyPair: cachedKeyPair };
 }
 
@@ -161,7 +273,18 @@ async function teardownSession(): Promise<void> {
     // the store never opened). The WebID-scoped key means a future session cannot read them.
   }
 
-  await Promise.all([clearSession(), clearProfile()]);
+  // Class grants are bound to the departing session's WebID (ClassGrant.webId) and its resolved,
+  // pinned pod targets — they MUST NOT survive into a different identity's session. Clear them on
+  // logout (fail-closed; the WebID binding already prevents cross-identity use, this removes them
+  // entirely). The coarse per-origin grant store (login opt-ins) intentionally survives logout.
+  // The persisted DPoP keypair is likewise session-bound (a fresh one is minted per login /
+  // legacy-migration rotation) — drop it too so no departed session's key lingers in IndexedDB.
+  await Promise.all([
+    clearSession(),
+    clearProfile(),
+    clearClassGrants(),
+    getDpopKeyDb().then((db) => db.clear()),
+  ]);
   await setSignedOutIcon();
 }
 
@@ -200,41 +323,91 @@ const DENY_MESSAGE = {
 } as const;
 
 /**
- * The grant + foreign-fetch half of the per-requesting-origin gate, run BEFORE any pod
- * egress or cache read (the dual-origin/opaque half already ran in {@link handleFetch}). It
- * re-reads the grant store and re-runs the FULL decision (idempotent on the same inputs) so
- * the single audited `decideRequestingOrigin` is the one boundary. Fail-closed on DENY.
- *
- * NOTE: the per-origin gate is applied to EVERY fetch up-front. Once a shared replica /
- * cache exists (Phase 1) this same gate must be the first check on a cache hit too — it is
- * deliberately separated here so a future cached-response path cannot bypass it.
+ * The per-data-class deny messages — DISTINGUISHABLE strings the page can surface (design
+ * item 2), separate from the coarse per-origin deny reasons above. A class-scoped origin whose
+ * request falls outside its pinned target set (wrong resource / wrong mode / no live grant)
+ * gets one of these, so the app can tell "you were denied because this is outside your grant"
+ * from a plain forbidden-origin.
  */
-async function gateRequestingOrigin(
+const CLASS_DENY_MESSAGE = {
+  'out-of-grant-scope': 'Out of grant scope',
+  'no-class-grant': 'No access grant for this data',
+} as const;
+
+/** Whether a request URL's origin is one of the session's credential (pod) origins. */
+function originInSet(allowed: ReadonlySet<string>, url: string): boolean {
+  const o = originOf(url);
+  return o !== null && allowed.has(o);
+}
+
+/**
+ * The FULL access gate — re-run BEFORE any pod egress or cache read (incl. on a cache hit, via
+ * the replica's injected gate). Two layers, both fail-closed, both re-reading durable storage on
+ * EVERY request (no load-bearing in-memory gate state → a cold SW wake is fail-CLOSED):
+ *
+ *   1. The Phase-0/1 PER-ORIGIN gate (`decideRequestingOrigin`): dual-origin agreement, opaque
+ *      → deny, default-deny per-origin grant, same-origin-or-deny foreign fetch. The granted set
+ *      is the login/`setClientId` grants ∪ the session credential origins ∪ the origins holding a
+ *      live class grant for the ACTIVE WebID (so a class-only origin passes this layer and is then
+ *      confined by layer 2). A DENY here is unchanged from Phase-0.
+ *   2. The Phase-2 PER-DATA-CLASS gate (`decideClassAccess`): runs ONLY for a pod (credential)
+ *      target AND ONLY for an origin that is present solely because it holds class grants (a
+ *      FULL-grant origin — a login/credential origin — BYPASSES it, preserving the legacy
+ *      whole-pod behaviour → backwards compatibility, design item 5). The request URL + method
+ *      must fall within a non-expired grant's PINNED resolved target set with a satisfying mode,
+ *      else DENY with a distinguishable class reason.
+ *
+ * `webId` is the active session WebID (the grant session boundary). Fail-closed on DENY.
+ */
+async function gateAccess(
   message: FetchRequest,
   requestingOrigin: string,
   sender: MessageSender | undefined,
   allowedTargetOrigins: ReadonlySet<string>,
-): Promise<{ requestingOrigin: string } | { error: FetchResponse }> {
-  // The grant set is re-read from durable storage on EVERY request (no load-bearing
-  // in-memory gate state), so a cold SW wake is fail-CLOSED: if nothing has loaded yet the
-  // grant set is empty and every origin is denied — never a serve-while-loading window.
+  webId: string,
+): Promise<{ grantScope: string } | { deny: Response }> {
+  const now = Date.now();
   const explicitGrants = await loadGrantedOrigins();
+  // Opportunistically prune expired grants on the fetch path (design item 3: expired → pruned) AND
+  // purge each expired grant's replica slice (residual b — no bytes linger past expiry).
+  const liveGrants = await pruneAndPurgeExpiredGrants(now);
+  const classOrigins = [...liveGrantOrigins(liveGrants, now, webId)];
+
   const decision = decideRequestingOrigin(sender, message.stampedOrigin, message.url, {
-    explicitGrants,
+    explicitGrants: [...explicitGrants, ...classOrigins],
     credentialOrigins: allowedTargetOrigins,
   });
-  // Defence-in-depth: the re-resolved origin must match the one resolved earlier in this
-  // request (it always will for identical inputs); a divergence is treated as DENY.
+  // Defence-in-depth: the re-resolved origin must match the one resolved earlier this request.
   if (decision.deny !== null || decision.requestingOrigin !== requestingOrigin) {
     return {
-      error: {
-        requestId: message.requestId,
-        status: 403,
-        error: decision.deny ? DENY_MESSAGE[decision.deny] : DENY_MESSAGE['forbidden-origin'],
-      },
+      deny: denyResponse(
+        decision.deny ? DENY_MESSAGE[decision.deny] : DENY_MESSAGE['forbidden-origin'],
+      ),
     };
   }
-  return { requestingOrigin: decision.requestingOrigin };
+
+  // Layer 2 — the per-class gate. Only pod (credential) targets are class-scoped; a same-origin
+  // foreign target carries no pod token and is governed by the foreign-fetch policy above.
+  if (originInSet(allowedTargetOrigins, message.url)) {
+    // A FULL-grant origin (explicit login/setClientId grant OR a credential/pod origin) keeps
+    // whole-pod access — the legacy behaviour. Only a CLASS-ONLY origin is confined to its pins.
+    // NB the full-grant set is built via computeGrantedOrigins so the login-grant strings are
+    // NORMALISED (host-lowercased) to match the browser-attested `requestingOrigin` — and it
+    // DELIBERATELY excludes the class-grant origins (they are the ones we mean to confine).
+    const fullGrant = computeGrantedOrigins({
+      explicitGrants,
+      credentialOrigins: allowedTargetOrigins,
+    });
+    if (!fullGrant.has(requestingOrigin)) {
+      const forSession = grantsForSession(liveGrants, requestingOrigin, webId);
+      const reason = decideClassAccess(forSession, message.url, message.method, now);
+      if (reason !== null) {
+        return { deny: denyResponse(CLASS_DENY_MESSAGE[reason]) };
+      }
+    }
+  }
+
+  return { grantScope: requestingOrigin };
 }
 
 const READ_METHODS = new Set(['GET', 'HEAD']);
@@ -279,18 +452,8 @@ async function handleFetch(
     // decision (idempotent) and returns the verified grant-scope on ALLOW; the replica never
     // touches the cache or the pod before this resolves to ALLOW, so a warm cache can never
     // bypass the per-origin gate.
-    const gate = async (): Promise<{ grantScope: string } | { deny: Response }> => {
-      const decision = await gateRequestingOrigin(
-        message,
-        requestingOrigin,
-        sender,
-        fetchSession.allowedOrigins,
-      );
-      if ('error' in decision) {
-        return { deny: denyResponse(decision.error.error ?? DENY_MESSAGE['forbidden-origin']) };
-      }
-      return { grantScope: decision.requestingOrigin };
-    };
+    const gate = (): Promise<{ grantScope: string } | { deny: Response }> =>
+      gateAccess(message, requestingOrigin, sender, fetchSession.allowedOrigins, ctx.session.webId);
 
     const origin = originOf(message.url);
     const db = await getReplicaDb();
@@ -592,6 +755,343 @@ async function handleSetClientId(
   }
 }
 
+// --- Per-data-class access management (Phase 2, design §4) ----------------------------
+//
+// The consent flow is orchestrated here: `requestAccess` resolves each class to targets,
+// opens the UNSPOOFABLE consent window (extension chrome), and awaits the user's decision;
+// the window posts `SOLID_CONSENT_DECISION` back, which mints + persists the approved grants.
+// The pending state lives in module-level maps (best-effort, MV3-appropriate): if the SW is
+// killed while the window is open, the window reads `null` and denies (fail-closed) and the
+// `requestAccess` promise times out — no grant is minted without a live approval.
+
+/** Pending consent requests awaiting a decision (consentId → record). */
+const pendingConsents = new Map<string, PendingConsent>();
+/** Resolvers for the awaiting `requestAccess` calls (consentId → resolve(approvedClasses)). */
+const consentResolvers = new Map<string, (approved: string[]) => void>();
+const CONSENT_TIMEOUT_MS = 5 * 60_000;
+
+/**
+ * Per-origin `requestAccess` throttle state (residual c). Best-effort module state (re-derived —
+ * i.e. reset — on an MV3 SW restart, which merely refreshes the window; acceptable for an
+ * annoyance/DoS mitigation, never a security boundary). Keyed by the browser-attested requesting
+ * origin so an origin cannot evade its own limit by lying about its identity.
+ */
+const requestAccessThrottle = new Map<string, ThrottleState>();
+
+/** Distinguishable page-surfaced messages for a throttled `requestAccess` (residual c). */
+const REQUEST_ACCESS_DENY_MESSAGE: Record<RequestAccessDenyReason, string> = {
+  'user-gesture-required': 'requestAccess requires a user action (click) — it cannot be automated.',
+  'rate-limited': 'Too many access requests from this app — please wait a moment and try again.',
+};
+
+/** A token-free public summary of a grant (design §4.2 return shape). */
+function grantSummary(g: ClassGrant): GrantSummary {
+  return {
+    grantId: g.grantId,
+    dataClass: g.dataClass,
+    modes: g.modes,
+    purpose: g.purpose,
+    expiresAt: g.expiresAt,
+    targets: g.targets.map((t) => ({ url: t.url, kind: t.kind })),
+  };
+}
+
+function isHttpIri(value: unknown): value is string {
+  if (typeof value !== 'string') return false;
+  try {
+    const u = new URL(value);
+    return u.protocol === 'https:' || u.protocol === 'http:';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The POD-ONLY origin set for class resolution — the WebID origin ∪ configured pod origins. It
+ * confines both the type-index REF fetches and the resolved TARGETS: the full credential set
+ * (`buildFetchSession().allowedOrigins`) ALSO includes the ISSUER origin, and a hostile WebID
+ * profile pointing a type-index ref at the issuer would otherwise trigger an authenticated SW
+ * fetch to an issuer *path* (token-to-issuer-path leak, roborev round-2 Medium).
+ *
+ * The exclusion is `includeIssuerOrigin: false` — the issuer is not added as a SEPARATE candidate.
+ * It is DELIBERATELY *not* an unconditional `delete(issuerOrigin)` (roborev round-3): in the
+ * ubiquitous CSS single-origin deployment the pod IS served from the issuer origin
+ * (`webId origin === issuer origin`), and unconditionally removing that origin would drop EVERY
+ * legitimate pod ref/target and break class resolution entirely there. So the issuer origin is
+ * allowed ONLY when it coincides with a genuine pod origin (the WebID origin, or an origin the
+ * user explicitly configured as a pod) — where sending the token to that origin is already normal
+ * pod access (and the token *endpoint* itself stays protected by `isTokenEndpoint` in
+ * authenticated-fetch). A issuer origin DISTINCT from every pod origin is excluded, which is the
+ * profile-controlled attack this guards. (Verified by the CSS-single-origin + distinct-issuer tests.)
+ */
+async function podOriginsFor(session: StoredSession): Promise<ReadonlySet<string>> {
+  const podOrigins = await loadPodOrigins();
+  return computeAllowedOrigins({
+    webId: session.webId,
+    podOrigins,
+    includeIssuerOrigin: false,
+    allowInsecureLoopback: ALLOW_INSECURE_LOOPBACK,
+  });
+}
+
+/** The class resolver's authed fetch — the SW's DPoP egress, surfaced as `{ ok, text }`. */
+function makeResolveFetch(
+  session: FetchSession,
+): (url: string) => Promise<{ ok: boolean; text: string }> {
+  return async (url: string) => {
+    try {
+      const { response } = await authenticatedFetch(session, {
+        url,
+        method: 'GET',
+        headers: { Accept: 'text/turtle' },
+        body: null,
+        nonce: undefined,
+      });
+      return { ok: response.ok, text: response.ok ? await response.text() : '' };
+    } catch {
+      return { ok: false, text: '' };
+    }
+  };
+}
+
+/** Open the consent window and resolve with the approved class IRIs (or [] on deny/timeout). */
+function openConsentAndAwait(consentId: string): Promise<string[]> {
+  return new Promise<string[]>((resolve) => {
+    let settled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const finish = (approved: string[]): void => {
+      if (settled) return;
+      settled = true;
+      if (timer) clearTimeout(timer);
+      resolve(approved);
+    };
+    consentResolvers.set(consentId, finish);
+    timer = setTimeout(() => finish([]), CONSENT_TIMEOUT_MS);
+    const url = chrome.runtime.getURL(
+      `consent/consent.html?consentId=${encodeURIComponent(consentId)}`,
+    );
+    try {
+      chrome.windows.create({ url, type: 'popup', width: 460, height: 640 }, () => {
+        if (chrome.runtime.lastError) finish([]);
+      });
+    } catch {
+      finish([]);
+    }
+  });
+}
+
+async function handleRequestAccess(
+  message: RequestAccessRequest,
+  sender: MessageSender | undefined,
+): Promise<AccessResponse> {
+  const requestId = message.requestId;
+  const requestingOrigin = resolveRequestingOrigin(sender, message.stampedOrigin);
+  if (requestingOrigin === null) {
+    return { requestId, error: 'Could not verify the requesting origin.' };
+  }
+
+  // (residual c) Anti-spam gate — BEFORE any session work, class resolution (pod fetches), or the
+  // consent window: require a genuine user gesture (browser-attested via the ISOLATED content
+  // script's `navigator.userActivation`, page-unforgeable) AND rate-limit consecutive prompts per
+  // origin. A blocked call does NO pod fetch and opens NO consent window.
+  const throttleDecision = decideRequestAccess(
+    requestAccessThrottle.get(requestingOrigin),
+    Date.now(),
+    message.userActivated === true,
+  );
+  requestAccessThrottle.set(requestingOrigin, throttleDecision.nextState);
+  if (!throttleDecision.allow) {
+    // `reason` is always present on a deny; fall back defensively.
+    const reason = throttleDecision.reason ?? 'rate-limited';
+    return { requestId, error: REQUEST_ACCESS_DENY_MESSAGE[reason] };
+  }
+
+  const ctx = await ensureSession();
+  if (!ctx) return { requestId, error: 'Not authenticated' };
+
+  const now = Date.now();
+  const spec = normaliseAccessRequest(
+    {
+      classes: message.classes,
+      modes: message.modes,
+      purpose: message.purpose,
+      duration: message.duration,
+    },
+    now,
+  );
+  if ('error' in spec) return { requestId, error: spec.error };
+
+  // Resolve each requested class to its concrete, pinned targets (confined to POD origins —
+  // excludes the issuer, so a hostile profile can't steer resolution at the issuer).
+  const fetchSession = await buildFetchSession(ctx.session, ctx.keyPair);
+  const resolveFetch = makeResolveFetch(fetchSession);
+  const podOrigins = await podOriginsFor(ctx.session);
+  const resolved = new Map<string, { targets: readonly PinnedTarget[]; shape: string | null }>();
+  for (const cls of spec.classes) {
+    const targets = await resolveClassTargets(cls, {
+      webId: ctx.session.webId,
+      fetch: resolveFetch,
+      allowedOrigins: podOrigins,
+    });
+    resolved.set(cls, { targets, shape: null });
+  }
+
+  const consentId = crypto.randomUUID();
+  const pending = buildPendingConsent(
+    consentId,
+    requestingOrigin,
+    ctx.session.webId,
+    spec,
+    resolved,
+    now,
+  );
+  pendingConsents.set(consentId, pending);
+
+  let approvedClasses: string[];
+  try {
+    approvedClasses = await openConsentAndAwait(consentId);
+  } finally {
+    pendingConsents.delete(consentId);
+    consentResolvers.delete(consentId);
+  }
+
+  const grants = consentDecisionToGrants(pending, approvedClasses, () => crypto.randomUUID());
+  for (const g of grants) await saveClassGrant(g);
+  return { requestId, ok: grants.length > 0, grants: grants.map(grantSummary) };
+}
+
+/** The consent window (extension chrome only) asks for the pending record to render. */
+function handleGetPendingConsent(
+  message: GetPendingConsentRequest,
+  sender: MessageSender | undefined,
+): PendingConsentView | null {
+  if (!isExtensionContext(sender)) return null; // only the extension's own window may read it.
+  const pending = pendingConsents.get(message.consentId);
+  if (!pending) return null;
+  return {
+    consentId: pending.consentId,
+    origin: pending.origin,
+    webId: pending.webId,
+    classes: pending.classes.map((c) => ({
+      dataClass: c.dataClass,
+      modes: c.modes,
+      purpose: c.purpose,
+      expiresAt: c.expiresAt,
+      targets: c.targets.map((t) => ({ url: t.url, kind: t.kind })),
+      shape: c.shape,
+    })),
+  };
+}
+
+/** The consent window's decision. ONLY the extension's own window may decide (fail-closed). */
+function handleConsentDecision(
+  message: ConsentDecisionMessage,
+  sender: MessageSender | undefined,
+): void {
+  if (!isExtensionContext(sender)) return;
+  const resolver = consentResolvers.get(message.consentId);
+  if (!resolver) return;
+  consentResolvers.delete(message.consentId);
+  const pending = pendingConsents.get(message.consentId);
+  // Defence in depth: only classes actually shown in this pending request can be approved.
+  const requested = new Set(pending?.classes.map((c) => c.dataClass) ?? []);
+  const approved = message.approvedClasses.filter((c) => requested.has(c));
+  resolver(approved);
+}
+
+async function handleListGrants(
+  message: ListGrantsRequest,
+  sender: MessageSender | undefined,
+): Promise<AccessResponse> {
+  const requestId = message.requestId;
+  const requestingOrigin = resolveRequestingOrigin(sender, message.stampedOrigin);
+  if (requestingOrigin === null) return { requestId, grants: [] };
+  const ctx = await ensureSession();
+  if (!ctx) return { requestId, grants: [] };
+  const now = Date.now();
+  const live = await pruneAndPurgeExpiredGrants(now);
+  const mine = grantsForSession(live, requestingOrigin, ctx.session.webId);
+  return { requestId, grants: mine.map(grantSummary) };
+}
+
+async function handleRevokeGrant(
+  message: RevokeGrantRequest,
+  sender: MessageSender | undefined,
+): Promise<AccessResponse> {
+  const requestId = message.requestId;
+  const requestingOrigin = resolveRequestingOrigin(sender, message.stampedOrigin);
+  if (requestingOrigin === null) {
+    return { requestId, ok: false, error: 'Could not verify the requesting origin.' };
+  }
+  // A page may revoke only its OWN origin's grant (revokeClassGrant enforces the origin match).
+  // The REMOVAL is the authoritative deny (fail-closed) and happens FIRST; the replica-slice purge
+  // below is best-effort AFTER it — so a purge failure can never leave access live (residual b).
+  const removed = await revokeClassGrant(message.grantId, requestingOrigin);
+  if (removed.length > 0) {
+    // Synchronously purge exactly the revoked class's replicated bytes + metadata (the resources it
+    // resolved to), leaving every other class/origin intact — and RETAINING any resource still
+    // covered by another live grant of the same origin (the surviving grants are the retain-pool).
+    // Access is already revoked above, so a failure here only leaves now-grant-less bytes for the
+    // logout purge — never live access.
+    const now = Date.now();
+    const survivors = pruneExpiredGrants(await loadClassGrants(), now);
+    await purgeGrantSlices(removed, survivors);
+  }
+  return { requestId, ok: removed.length > 0 };
+}
+
+async function handleResolveClass(
+  message: ResolveClassRequest,
+  sender: MessageSender | undefined,
+): Promise<AccessResponse> {
+  const requestId = message.requestId;
+  const requestingOrigin = resolveRequestingOrigin(sender, message.stampedOrigin);
+  if (requestingOrigin === null) {
+    return { requestId, error: 'Could not verify the requesting origin.' };
+  }
+  if (!isHttpIri(message.classIRI)) {
+    return { requestId, error: 'resolveClass: an https: class IRI is required.' };
+  }
+  const ctx = await ensureSession();
+  if (!ctx) return { requestId, error: 'Not authenticated' };
+
+  const fetchSession = await buildFetchSession(ctx.session, ctx.keyPair);
+  // Only a GRANTED origin (full OR class) may introspect — never leak the pod's type-index
+  // layout to an arbitrary, un-opted-in page.
+  const now = Date.now();
+  const explicitGrants = await loadGrantedOrigins();
+  const live = await pruneAndPurgeExpiredGrants(now);
+  const classOrigins = [...liveGrantOrigins(live, now, ctx.session.webId)];
+  const granted = computeGrantedOrigins({
+    explicitGrants: [...explicitGrants, ...classOrigins],
+    credentialOrigins: fetchSession.allowedOrigins,
+  });
+  if (!isRequestingOriginGranted(granted, requestingOrigin)) {
+    return { requestId, error: 'Origin not granted access' };
+  }
+  // CLASS-SCOPED introspection: a FULL-grant origin (login/credential) may resolve any class, but
+  // a CLASS-ONLY origin may resolve ONLY a class it actually holds a live grant for — otherwise a
+  // narrow "finance" grant could enumerate the pod's "health" target URLs (private-structure leak,
+  // roborev Medium). Fail-closed.
+  const fullGrant = computeGrantedOrigins({
+    explicitGrants,
+    credentialOrigins: fetchSession.allowedOrigins,
+  });
+  if (!fullGrant.has(requestingOrigin)) {
+    const mine = grantsForSession(live, requestingOrigin, ctx.session.webId);
+    if (!mine.some((g) => g.dataClass === message.classIRI)) {
+      return { requestId, error: 'No access grant for this data class' };
+    }
+  }
+
+  const targets = await resolveClassTargets(message.classIRI, {
+    webId: ctx.session.webId,
+    fetch: makeResolveFetch(fetchSession),
+    allowedOrigins: await podOriginsFor(ctx.session),
+  });
+  return { requestId, shape: null, targets: targets.map((t) => ({ url: t.url, kind: t.kind })) };
+}
+
 chrome.runtime.onMessage.addListener(
   (message: WorkerRequest, sender, sendResponse: (r: unknown) => void) => {
     switch (message.type) {
@@ -615,6 +1115,25 @@ chrome.runtime.onMessage.addListener(
       case 'SOLID_SET_CLIENT_ID':
         handleSetClientId(message, sender).then(sendResponse);
         return true;
+      case 'SOLID_REQUEST_ACCESS':
+        handleRequestAccess(message, sender).then(sendResponse);
+        return true;
+      case 'SOLID_LIST_GRANTS':
+        handleListGrants(message, sender).then(sendResponse);
+        return true;
+      case 'SOLID_REVOKE_GRANT':
+        handleRevokeGrant(message, sender).then(sendResponse);
+        return true;
+      case 'SOLID_RESOLVE_CLASS':
+        handleResolveClass(message, sender).then(sendResponse);
+        return true;
+      case 'SOLID_GET_PENDING_CONSENT':
+        sendResponse(handleGetPendingConsent(message, sender));
+        return false;
+      case 'SOLID_CONSENT_DECISION':
+        handleConsentDecision(message, sender);
+        sendResponse({ ok: true });
+        return false;
       default:
         return false;
     }

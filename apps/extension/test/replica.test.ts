@@ -11,6 +11,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import {
   type EgressPort,
   purgeReplica,
+  purgeReplicaSlice,
   type ReplicaByteCache,
   type ReplicaMetaStore,
   SharedReplica,
@@ -491,6 +492,160 @@ describe('purgeReplica — synchronous-before-serve logout purge', () => {
     const purged = await purgeReplica(throwingCache, db, null);
     expect(purged.bytesDropped).toBe(0);
     expect(db.noncesCleared).toBe(1);
+  });
+});
+
+// --- Per-class replica-slice purge (access-management residual b) ----------------------
+
+const FINANCE = 'https://alice.pod.example/finance/statement.ttl';
+const HEALTH = 'https://alice.pod.example/health/record.ttl';
+const FINANCE_TARGETS = [{ url: 'https://alice.pod.example/finance/', kind: 'container' as const }];
+
+/** Populate the replica with a resource's bytes+metadata under (webId, grantScope) via a read. */
+async function seedResource(
+  cache: FakeCache,
+  db: FakeMetaStore,
+  webId: string,
+  grantScope: string,
+  url: string,
+): Promise<void> {
+  const egress = scriptedEgress([
+    () => new Response(`bytes-of-${url}`, { status: 200, headers: { etag: 'W/"e"' } }),
+  ]);
+  await new SharedReplica({ gate: allow(grantScope), egress, cache, db, webId }).read(
+    url,
+    'GET',
+    { Accept: 'text/turtle' },
+    undefined,
+  );
+}
+
+describe('purgeReplicaSlice — per-class revoke/expiry byte purge (residual b)', () => {
+  it('drops exactly the revoked class slice; other classes remain resident', async () => {
+    const cache = new FakeCache();
+    const db = new FakeMetaStore();
+    await seedResource(cache, db, WEBID_A, SCOPE_PM, FINANCE);
+    await seedResource(cache, db, WEBID_A, SCOPE_PM, HEALTH);
+    expect(cache.bytes.size).toBe(2);
+    expect(db.rows.size).toBe(2);
+
+    const purged = await purgeReplicaSlice(cache, db, {
+      webId: WEBID_A,
+      grantScope: SCOPE_PM,
+      targets: FINANCE_TARGETS,
+    });
+
+    expect(purged).toEqual({ bytesDropped: 1, metaDropped: 1 });
+    // ZERO bytes of the finance class resident; health untouched.
+    const remaining = [...db.rows.values()];
+    expect(remaining).toHaveLength(1);
+    expect(remaining[0]?.resourceUrl).toBe(HEALTH);
+    expect(cache.bytes.size).toBe(1);
+  });
+
+  it("leaves ANOTHER app-origin's (grantScope) copy of the same resource intact", async () => {
+    const cache = new FakeCache();
+    const db = new FakeMetaStore();
+    // Two different app origins each cached the SAME finance resource under their own grant-scope.
+    await seedResource(cache, db, WEBID_A, SCOPE_PM, FINANCE);
+    await seedResource(cache, db, WEBID_A, SCOPE_B, FINANCE);
+    expect(cache.bytes.size).toBe(2);
+
+    // Revoke only SCOPE_PM's finance grant.
+    const purged = await purgeReplicaSlice(cache, db, {
+      webId: WEBID_A,
+      grantScope: SCOPE_PM,
+      targets: FINANCE_TARGETS,
+    });
+
+    expect(purged.metaDropped).toBe(1);
+    const remaining = [...db.rows.values()];
+    expect(remaining).toHaveLength(1);
+    expect(remaining[0]?.grantScope).toBe(SCOPE_B); // appB's copy survives
+  });
+
+  it("never touches another user's (webId) rows", async () => {
+    const cache = new FakeCache();
+    const db = new FakeMetaStore();
+    await seedResource(cache, db, WEBID_A, SCOPE_PM, FINANCE);
+    await seedResource(cache, db, WEBID_B, SCOPE_PM, FINANCE);
+
+    await purgeReplicaSlice(cache, db, {
+      webId: WEBID_A,
+      grantScope: SCOPE_PM,
+      targets: FINANCE_TARGETS,
+    });
+
+    const remaining = [...db.rows.values()];
+    expect(remaining).toHaveLength(1);
+    expect(remaining[0]?.webId).toBe(WEBID_B);
+  });
+
+  it('RETAINS a resource still covered by another live (overlapping) grant of the same scope', async () => {
+    const cache = new FakeCache();
+    const db = new FakeMetaStore();
+    await seedResource(cache, db, WEBID_A, SCOPE_PM, FINANCE);
+    // Revoke one grant whose targets cover finance/, but a SURVIVING grant also covers finance/.
+    const purged = await purgeReplicaSlice(cache, db, {
+      webId: WEBID_A,
+      grantScope: SCOPE_PM,
+      targets: FINANCE_TARGETS,
+      retainTargets: [{ url: 'https://alice.pod.example/finance/', kind: 'container' }],
+    });
+    // The resource is KEPT — the survivor still authorises it (no needless eviction).
+    expect(purged).toEqual({ bytesDropped: 0, metaDropped: 0 });
+    expect(db.rows.size).toBe(1);
+    expect(cache.bytes.size).toBe(1);
+  });
+
+  it('purges a NON-overlapping resource even when retainTargets cover a DIFFERENT resource', async () => {
+    const cache = new FakeCache();
+    const db = new FakeMetaStore();
+    await seedResource(cache, db, WEBID_A, SCOPE_PM, FINANCE);
+    const purged = await purgeReplicaSlice(cache, db, {
+      webId: WEBID_A,
+      grantScope: SCOPE_PM,
+      targets: FINANCE_TARGETS,
+      // A surviving grant covers only health/, not the finance resource → finance is still purged.
+      retainTargets: [{ url: 'https://alice.pod.example/health/', kind: 'container' }],
+    });
+    expect(purged).toEqual({ bytesDropped: 1, metaDropped: 1 });
+    expect(db.rows.size).toBe(0);
+  });
+
+  it('an empty target set purges NOTHING (fail-safe no-op)', async () => {
+    const cache = new FakeCache();
+    const db = new FakeMetaStore();
+    await seedResource(cache, db, WEBID_A, SCOPE_PM, FINANCE);
+    const purged = await purgeReplicaSlice(cache, db, {
+      webId: WEBID_A,
+      grantScope: SCOPE_PM,
+      targets: [],
+    });
+    expect(purged).toEqual({ bytesDropped: 0, metaDropped: 0 });
+    expect(db.rows.size).toBe(1);
+  });
+
+  it('tolerates a per-row cache-delete failure and still purges the rest of the slice', async () => {
+    const db = new FakeMetaStore();
+    await seedResource(new FakeCache(), db, WEBID_A, SCOPE_PM, FINANCE);
+    // A cache whose delete always throws — the metadata half must still be dropped (best-effort).
+    const throwingCache: ReplicaByteCache = {
+      match: async () => undefined,
+      put: async () => {},
+      delete: async () => {
+        throw new Error('cache delete failed');
+      },
+      keys: async () => [],
+    };
+    const purged = await purgeReplicaSlice(throwingCache, db, {
+      webId: WEBID_A,
+      grantScope: SCOPE_PM,
+      targets: FINANCE_TARGETS,
+    });
+    // The byte delete threw (0 counted) but the row was still removed — no abort.
+    expect(purged.bytesDropped).toBe(0);
+    expect(db.rows.size).toBe(0);
   });
 });
 

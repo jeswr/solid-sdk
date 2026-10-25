@@ -7,9 +7,7 @@ import {
   canonicalHtu,
   createDpopProof,
   DPOP_ALG,
-  exportDpopKeyPair,
   generateDpopKeyPair,
-  importDpopKeyPair,
 } from '../src/background/core/dpop';
 
 describe('canonicalHtu', () => {
@@ -97,19 +95,29 @@ describe('createDpopProof', () => {
   });
 });
 
-describe('keypair export/import round-trip (service-worker persistence)', () => {
-  it('re-imported key produces proofs verifiable against the original public key', async () => {
+describe('generateDpopKeyPair — non-extractable private key (security hardening)', () => {
+  it('the private key is non-extractable: exportKey(jwk) rejects', async () => {
     const keyPair = await generateDpopKeyPair();
-    const stored = await exportDpopKeyPair(keyPair);
-    expect(stored.privateKey.d).toBeTypeOf('string'); // extractable private key persisted
-    const reimported = await importDpopKeyPair(stored);
+    expect(keyPair.privateKey.extractable).toBe(false);
+    await expect(crypto.subtle.exportKey('jwk', keyPair.privateKey)).rejects.toThrow();
+  });
 
+  it('the public key stays extractable (needed for the proof header + jkt)', async () => {
+    const keyPair = await generateDpopKeyPair();
+    expect(keyPair.publicKey.extractable).toBe(true);
+    await expect(crypto.subtle.exportKey('jwk', keyPair.publicKey)).resolves.toMatchObject({
+      kty: 'EC',
+      crv: 'P-256',
+    });
+  });
+
+  it('a non-extractable keypair still signs+verifies a DPoP proof', async () => {
+    const keyPair = await generateDpopKeyPair();
     const proof = await createDpopProof({
-      keyPair: reimported,
+      keyPair,
       htm: 'GET',
       htu: 'https://pod.example/x',
     });
-    // verify against the ORIGINAL public key — same jkt survives a SW restart.
     await expect(jose.jwtVerify(proof, keyPair.publicKey)).resolves.toBeTruthy();
   });
 });

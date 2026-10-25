@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Solid — Access request</title>
+  <link rel="stylesheet" href="consent.css" />
+</head>
+<body>
+  <main class="card">
+    <h1 class="title">Access request</h1>
+    <p class="lede">
+      <strong id="origin">An app</strong> is asking to access data in your pod
+      <span id="webid" class="muted"></span>.
+    </p>
+
+    <section id="classes" class="classes" aria-label="Requested data classes"></section>
+
+    <p id="empty-note" class="note" hidden>
+      This request resolved to <strong>no matching resources</strong> in your pod. Approving it
+      grants access to nothing (it is safe to deny).
+    </p>
+
+    <div class="actions">
+      <button id="deny" type="button" class="btn btn-secondary">Deny all</button>
+      <button id="approve" type="button" class="btn btn-primary">Approve selected</button>
+    </div>
+
+    <p id="error" class="error" role="alert" hidden></p>
+  </main>
+  <script type="module" src="consent.js"></script>
+</body>
+</html>

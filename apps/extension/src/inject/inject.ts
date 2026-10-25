@@ -26,10 +26,40 @@ declare global {
   }
 }
 
+/** A token-free view of a per-data-class grant (the enforceable substance + consent anchors). */
+interface SolidGrant {
+  readonly grantId: string;
+  readonly dataClass: string;
+  readonly modes: readonly string[];
+  readonly purpose: string | null;
+  readonly expiresAt: number;
+  readonly targets: ReadonlyArray<{ url: string; kind: 'instance' | 'container' }>;
+}
+
+/** The `requestAccess` argument (design §4.2). `duration` is an ISO-8601 duration, e.g. "P30D". */
+interface AccessRequestArgs {
+  readonly classes: readonly string[];
+  readonly modes: readonly string[];
+  readonly purpose?: string;
+  readonly duration?: string;
+}
+
+/** The worker's reply to an access-management call, as relayed to the page. */
+interface AccessResponseData {
+  readonly requestId: string;
+  readonly ok?: boolean;
+  readonly grants?: SolidGrant[];
+  readonly shape?: string | null;
+  readonly targets?: Array<{ url: string; kind: 'instance' | 'container' }>;
+  readonly error?: string;
+}
+
 /**
- * The `window.solid` API surface. Deliberately small + stable so the access-management
- * track (a later `requestAccess(...)` method — see the SEAM below) slots in without a
- * breaking change.
+ * The `window.solid` API surface — Phase-0 core (fetch/login/logout/setClientId) PLUS the
+ * Phase-2 per-data-class access-management methods (design §4.2). Every access-management call
+ * is a token-free `postMessage` to the service worker (the sole boundary); the page never sees
+ * a credential — only a grant handle + a capability to `fetch` within the granted, PINNED,
+ * resolved target set.
  */
 interface SolidExtension {
   /** The authenticated user's WebID, or null when signed out. */
@@ -43,13 +73,23 @@ interface SolidExtension {
   /** Clear the session (app-local logout). */
   logout(): Promise<void>;
 
-  // --- ACCESS-MANAGEMENT SEAM (NOT IMPLEMENTED) -------------------------------------
-  // The access-request JS API (requestAccess / consent UI / queued-request handling) is
-  // a SEPARATE, design-first track and is intentionally out of scope for this core. The
-  // method is declared here so adding it later is non-breaking, but calling it throws so
-  // a consumer can feature-detect. Do NOT wire access management onto this stub without
-  // the access-management design.
-  requestAccess?(request: unknown): Promise<never>;
+  // --- Per-data-class access management (Phase 2, design §4.2) -----------------------
+  /**
+   * Request type-level access to one or more data classes. Triggers the extension's
+   * unspoofable consent window; on approval the class is resolved to concrete pod targets that
+   * are PINNED into the grant, and subsequent `fetch` calls are confined to that pinned set.
+   * Resolves with the minted grants (one per approved class); an empty `grants` ⇒ denied.
+   */
+  requestAccess(request: AccessRequestArgs): Promise<{ ok: boolean; grants: SolidGrant[] }>;
+  /** The grants THIS origin currently holds (non-expired), for the active session. */
+  listGrants(): Promise<SolidGrant[]>;
+  /** Revoke one of THIS origin's grants; effective on the next request. Returns whether removed. */
+  revokeGrant(grantId: string): Promise<boolean>;
+  /** Read-only introspection: resolve a data-class IRI to its pod targets (for the app's UX). */
+  resolveClass(classIRI: string): Promise<{
+    shape: string | null;
+    targets: Array<{ url: string; kind: 'instance' | 'container' }>;
+  }>;
 }
 
 type Pending<T> = { resolve: (v: T) => void; reject: (e: Error) => void };
@@ -106,6 +146,8 @@ function installSolidInjection(): void {
 
   const pendingFetches = new Map<string, PendingFetch>();
   const pendingActions = new Map<string, Pending<void>>();
+  /** Pending access-management calls (requestAccess/listGrants/revokeGrant/resolveClass). */
+  const pendingAccess = new Map<string, Pending<AccessResponseData>>();
 
   let currentWebId: string | null = null;
 
@@ -151,11 +193,31 @@ function installSolidInjection(): void {
         else pending.resolve();
         break;
       }
+      case 'SOLID_ACCESS_RESPONSE': {
+        const pending = pendingAccess.get(data.requestId);
+        if (!pending) return;
+        pendingAccess.delete(data.requestId);
+        if (data.error) pending.reject(new Error(data.error));
+        else pending.resolve(data as AccessResponseData);
+        break;
+      }
       case 'SOLID_STATE_UPDATE':
         currentWebId = data.webId ?? null;
         break;
     }
   });
+
+  /** Send an access-management request and await the worker's correlated reply. */
+  function accessRequest(
+    type: string,
+    extra: Record<string, unknown> = {},
+  ): Promise<AccessResponseData> {
+    return new Promise((resolve, reject) => {
+      const requestId = crypto.randomUUID();
+      pendingAccess.set(requestId, { resolve, reject });
+      postToContent({ type, requestId, ...extra });
+    });
+  }
 
   function postToContent(message: Record<string, unknown>): void {
     window.postMessage({ channel: CHANNEL, dir: 'to-content', ...message }, window.location.origin);
@@ -239,13 +301,26 @@ function installSolidInjection(): void {
     logout() {
       return action('SOLID_LOGOUT');
     },
-    requestAccess() {
-      return Promise.reject(
-        new Error(
-          'window.solid.requestAccess is not implemented: access management is a separate, ' +
-            'design-first track and is not part of the core extension.',
-        ),
-      );
+    async requestAccess(request: AccessRequestArgs) {
+      const res = await accessRequest('SOLID_REQUEST_ACCESS', {
+        classes: request?.classes ?? [],
+        modes: request?.modes ?? [],
+        purpose: request?.purpose,
+        duration: request?.duration,
+      });
+      return { ok: res.ok === true, grants: res.grants ?? [] };
+    },
+    async listGrants() {
+      const res = await accessRequest('SOLID_LIST_GRANTS');
+      return res.grants ?? [];
+    },
+    async revokeGrant(grantId: string) {
+      const res = await accessRequest('SOLID_REVOKE_GRANT', { grantId });
+      return res.ok === true;
+    },
+    async resolveClass(classIRI: string) {
+      const res = await accessRequest('SOLID_RESOLVE_CLASS', { classIRI });
+      return { shape: res.shape ?? null, targets: res.targets ?? [] };
     },
   };
 

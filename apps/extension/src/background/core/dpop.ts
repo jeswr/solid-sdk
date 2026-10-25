@@ -53,54 +53,36 @@ export async function accessTokenHash(accessToken: string): Promise<string> {
   return jose.base64url.encode(new Uint8Array(digest));
 }
 
-/** The persisted, JSON-serialisable form of a DPoP keypair (a private + public JWK pair). */
-export interface StoredDpopKeyPair {
-  readonly publicKey: JsonWebKey;
-  readonly privateKey: JsonWebKey;
+/**
+ * RFC 7638 JWK thumbprint (`jkt`) of a DPoP public key — the value a DPoP-bound access/
+ * refresh token's `cnf.jkt` claim is checked against server-side. Recorded on `StoredSession`
+ * at key-mint time so a later SW wake can tell "the persisted key still matches what THIS
+ * session expects" from "the persisted key was unexpectedly lost or replaced" (see
+ * `dpop-key-store.ts` `loadSessionDpopKeyPair`) — the two call for different handling: the
+ * latter must never be silently papered over with a freshly-minted, unrelated key.
+ */
+export async function dpopThumbprint(publicKey: CryptoKey): Promise<string> {
+  const jwk = (await crypto.subtle.exportKey('jwk', publicKey)) as jose.JWK;
+  return jose.calculateJwkThumbprint(jwk, 'sha256');
 }
 
 /**
- * Generate a fresh DPoP keypair as **extractable** Web Crypto keys.
+ * Generate a fresh DPoP keypair as **non-extractable** Web Crypto keys.
  *
- * NOTE: this keypair is exported as JWK to `chrome.storage` and re-imported on each
- * service-worker wake-up — an MV3 service worker is killed/restarted aggressively, and
- * a non-extractable key is LOST on suspension, breaking every subsequent refresh (CSS
- * binds the refresh token to the original `jkt`). Extractability is therefore a
- * deliberate, documented requirement of the service-worker context, not a weakness; the
- * key never leaves the (page-unreachable) extension storage. The popup-page restore path
- * uses the suite's non-extractable IndexedDB key instead.
+ * SECURITY (hardened — see `core/dpop-key-db.ts` for the full rationale): the private key
+ * is `extractable: false`, so `crypto.subtle.exportKey(...)` on it always rejects — the
+ * private scalar can never be serialised out of Web Crypto, not even by code running in
+ * this same service-worker context. Persistence across the MV3 service-worker's aggressive
+ * kill/restart cycle is handled by `core/dpop-key-store.ts`, which writes the live
+ * `CryptoKeyPair` object directly into IndexedDB (structured-clone-safe for non-extractable
+ * keys per the WebCrypto spec) rather than exporting it to JWK. Only the PUBLIC key is ever
+ * exported (e.g. for the DPoP proof header's `jwk` — see {@link createDpopProof} below).
  */
 export async function generateDpopKeyPair(): Promise<CryptoKeyPair> {
-  return crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: DPOP_CURVE }, true, [
+  return crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: DPOP_CURVE }, false, [
     'sign',
     'verify',
   ]);
-}
-
-/** Export a keypair to a JSON-serialisable JWK pair for `chrome.storage` persistence. */
-export async function exportDpopKeyPair(keyPair: CryptoKeyPair): Promise<StoredDpopKeyPair> {
-  const publicKey = await crypto.subtle.exportKey('jwk', keyPair.publicKey);
-  const privateKey = await crypto.subtle.exportKey('jwk', keyPair.privateKey);
-  return { publicKey, privateKey };
-}
-
-/** Reconstruct a Web Crypto keypair from a {@link StoredDpopKeyPair}. */
-export async function importDpopKeyPair(stored: StoredDpopKeyPair): Promise<CryptoKeyPair> {
-  const publicKey = await crypto.subtle.importKey(
-    'jwk',
-    stored.publicKey,
-    { name: 'ECDSA', namedCurve: DPOP_CURVE },
-    true,
-    ['verify'],
-  );
-  const privateKey = await crypto.subtle.importKey(
-    'jwk',
-    stored.privateKey,
-    { name: 'ECDSA', namedCurve: DPOP_CURVE },
-    true,
-    ['sign'],
-  );
-  return { publicKey, privateKey };
 }
 
 export interface DpopProofParams {

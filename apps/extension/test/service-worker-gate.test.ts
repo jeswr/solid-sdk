@@ -15,9 +15,50 @@
 //   - SOLID_GET_STATE withholds the WebID (PII) from a non-granted page, exposes to granted
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { exportDpopKeyPair, generateDpopKeyPair } from '../src/background/core/dpop';
+import { generateDpopKeyPair } from '../src/background/core/dpop';
+import type { StoredDpopKeyRecord } from '../src/background/core/dpop-key-db';
 import type { ReplicaMetadata } from '../src/background/core/replica-db';
 import type { StoredSession } from '../src/background/session-store';
+
+// --- An in-memory DpopKeyDb double (Phase-2 security hardening) -----------------------
+// The DPoP private key is no longer carried inline on `StoredSession` — it lives as a
+// non-extractable `CryptoKeyPair` in its own IndexedDB store (`core/dpop-key-db.ts`). Fake it
+// the same way as the replica DB below: a module-level single-record store so a simulated SW
+// "restart" (fresh module import) re-opens the SAME durable key.
+let idbDpopKey: StoredDpopKeyRecord | undefined;
+/** Set to simulate a TRANSIENT failure (IndexedDB open error, a bug) on EVERY `get()` until
+ *  explicitly cleared (not one-shot — a real cold-wake failure would keep failing `get()`
+ *  calls until the underlying condition clears, not just the first one). */
+let idbDpopKeyGetError: Error | null = null;
+class FakeDpopKeyDb {
+  static async open() {
+    return new FakeDpopKeyDb();
+  }
+  async get() {
+    if (idbDpopKeyGetError) throw idbDpopKeyGetError;
+    return idbDpopKey;
+  }
+  async put(record: StoredDpopKeyRecord) {
+    idbDpopKey = record;
+  }
+  async clear() {
+    idbDpopKey = undefined;
+  }
+  close() {}
+}
+vi.mock('../src/background/core/dpop-key-db', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/background/core/dpop-key-db')>();
+  return { ...actual, DpopKeyDb: FakeDpopKeyDb };
+});
+
+/** Persist a keypair into the fake DPoP key store, as `mintAndPersistDpopKeyPair` would. */
+async function seedDpopKeyPair(keyPair: CryptoKeyPair): Promise<void> {
+  idbDpopKey = {
+    privateKey: keyPair.privateKey,
+    publicKey: keyPair.publicKey,
+    publicJwk: (await crypto.subtle.exportKey('jwk', keyPair.publicKey)) as JsonWebKey,
+  };
+}
 
 // --- In-memory replica stores (Phase 1) -----------------------------------------------
 // The fetch path now routes through the shared replica, which opens IndexedDB (metadata +
@@ -205,11 +246,11 @@ function sendMessage(
 
 async function seedSession(overrides: Partial<StoredSession> = {}): Promise<void> {
   const keyPair = await generateDpopKeyPair();
+  await seedDpopKeyPair(keyPair);
   const session: StoredSession = {
     webId: 'https://alice.pod.example/profile/card#me',
     accessToken: 'access-token-xyz',
     refreshToken: 'refresh-xyz',
-    dpopKeyPair: await exportDpopKeyPair(keyPair),
     issuer: 'https://idp.example/',
     tokenEndpoint: 'https://idp.example/token',
     clientId: 'https://pm.example/clientid.jsonld',
@@ -219,8 +260,17 @@ async function seedSession(overrides: Partial<StoredSession> = {}): Promise<void
   storage.set('solid:session', session);
 }
 
-/** Fresh module + chrome per test (the worker registers listeners + state at import). */
+/**
+ * Fresh module + chrome per test (the worker registers listeners + state at import). Drop
+ * any PRIOR module instance's registered listener first — this matters when a single test
+ * calls `loadWorker()` more than once to model an SW restart mid-test (e.g. the transient
+ * DPoP-key-store-failure test below): without clearing it, the stale listener stays in
+ * `messageListeners` alongside the new one, and `sendMessage`/`sendFetch` would dispatch to
+ * whichever handles first — silently serving the OLD (already-cached-key) instance's
+ * response instead of exercising the new one.
+ */
 async function loadWorker(): Promise<void> {
+  messageListeners.length = 0;
   vi.resetModules();
   await import('../src/background/service-worker');
   // Let the import-time ensureSession()/icon promise settle.
@@ -233,6 +283,8 @@ beforeEach(() => {
   cacheStore.clear();
   idbMeta.clear();
   idbNonces.clear();
+  idbDpopKey = undefined;
+  idbDpopKeyGetError = null;
 });
 
 describe('service-worker per-requesting-origin gate (wired)', () => {
@@ -252,6 +304,41 @@ describe('service-worker per-requesting-origin gate (wired)', () => {
     expect(podCall).toBeDefined();
     const headers = podCall?.init?.headers as Record<string, string>;
     expect(headers.Authorization).toBe('DPoP access-token-xyz');
+  });
+
+  it('a TRANSIENT DPoP-key-store failure fails ONE request soft — no destructive teardown', async () => {
+    // roborev round-1 (b64367d) Medium: ensureSession() must not conflate an unexpected
+    // IndexedDB/crypto failure with a genuinely broken session (DpopKeyUnavailableError) —
+    // the former must fail this one request without clearing the stored session/tokens, so
+    // a later, working request still succeeds without a fresh login.
+    await seedSession();
+    storage.set('solid:granted-origins', ['https://pm.example']);
+    await loadWorker(); // normal cold wake: caches the keypair once
+
+    // A fresh SW "restart" (new module instance, empty in-memory caches) that happens to hit
+    // a transient DB-open failure on its cold-wake key load — set BEFORE the restart so it
+    // also covers the import-time `ensureSession()` call `loadWorker()` triggers.
+    idbDpopKeyGetError = new Error('simulated IndexedDB open failure');
+    await loadWorker();
+    const failed = await sendFetch(
+      { url: 'https://alice.pod.example/private/notes.ttl', stampedOrigin: 'https://pm.example' },
+      { origin: 'https://pm.example', url: 'https://pm.example/app.html' },
+    );
+    expect(failed.status).not.toBe(200);
+    // No pod egress happened for the failed attempt.
+    expect(fetchCalls.some((c) => c.url.startsWith('https://alice.pod.example'))).toBe(false);
+    // Crucially: the session was NOT torn down — it is still in storage, untouched.
+    expect(storage.get('solid:session')).toBeDefined();
+
+    // The transient condition clears (no restart needed — `cachedKeyPair` was never
+    // populated by the failed attempts, so the very next call retries the DB read).
+    idbDpopKeyGetError = null;
+    const ok = await sendFetch(
+      { url: 'https://alice.pod.example/private/notes.ttl', stampedOrigin: 'https://pm.example' },
+      { origin: 'https://pm.example', url: 'https://pm.example/app.html' },
+    );
+    expect(ok.status).toBe(200);
+    expect(fetchCalls.some((c) => c.url.startsWith('https://alice.pod.example'))).toBe(true);
   });
 
   it('a credential-origin app (served FROM the pod) reads without a separate grant', async () => {
@@ -470,14 +557,14 @@ describe('login GRANTS the requesting origin ONLY on success (privilege-escalati
 
   it('a SUCCESSFUL login GRANTS the verified origin and a subsequent fetch SUCCEEDS', async () => {
     // Mock initiateLogin to succeed, returning a fresh session, so we exercise the success path
-    // where the grant SHOULD now be persisted.
+    // where the grant SHOULD now be persisted. The real `completeLogin` would also have called
+    // `mintAndPersistDpopKeyPair` — seed the fake DPoP key store the same way.
     const keyPair = await generateDpopKeyPair();
-    const exported = await exportDpopKeyPair(keyPair);
+    await seedDpopKeyPair(keyPair);
     const session: StoredSession = {
       webId: 'https://alice.pod.example/profile/card#me',
       accessToken: 'access-token-xyz',
       refreshToken: 'refresh-xyz',
-      dpopKeyPair: exported,
       issuer: 'https://idp.example/',
       tokenEndpoint: 'https://idp.example/token',
       clientId: 'https://newapp.example/clientid.jsonld',
@@ -516,12 +603,11 @@ describe('login GRANTS the requesting origin ONLY on success (privilege-escalati
 
   it('does NOT grant a FORGED login origin even on success (sender ≠ stamp)', async () => {
     const keyPair = await generateDpopKeyPair();
-    const exported = await exportDpopKeyPair(keyPair);
+    await seedDpopKeyPair(keyPair);
     const session: StoredSession = {
       webId: 'https://alice.pod.example/profile/card#me',
       accessToken: 'access-token-xyz',
       refreshToken: 'refresh-xyz',
-      dpopKeyPair: exported,
       issuer: 'https://idp.example/',
       tokenEndpoint: 'https://idp.example/token',
       clientId: 'https://newapp.example/clientid.jsonld',

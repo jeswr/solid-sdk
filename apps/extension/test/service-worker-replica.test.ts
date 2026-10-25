@@ -13,9 +13,40 @@
 //   - the cross-user cache-key guard (same URL+ETag, different WebID → not served)
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { exportDpopKeyPair, generateDpopKeyPair } from '../src/background/core/dpop';
+import { generateDpopKeyPair } from '../src/background/core/dpop';
+import type { StoredDpopKeyRecord } from '../src/background/core/dpop-key-db';
 import type { ReplicaMetadata } from '../src/background/core/replica-db';
 import type { StoredSession } from '../src/background/session-store';
+
+// --- An in-memory DpopKeyDb double (see service-worker-gate.test.ts for the rationale) --
+let idbDpopKey: StoredDpopKeyRecord | undefined;
+class FakeDpopKeyDb {
+  static async open() {
+    return new FakeDpopKeyDb();
+  }
+  async get() {
+    return idbDpopKey;
+  }
+  async put(record: StoredDpopKeyRecord) {
+    idbDpopKey = record;
+  }
+  async clear() {
+    idbDpopKey = undefined;
+  }
+  close() {}
+}
+vi.mock('../src/background/core/dpop-key-db', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/background/core/dpop-key-db')>();
+  return { ...actual, DpopKeyDb: FakeDpopKeyDb };
+});
+
+async function seedDpopKeyPair(keyPair: CryptoKeyPair): Promise<void> {
+  idbDpopKey = {
+    privateKey: keyPair.privateKey,
+    publicKey: keyPair.publicKey,
+    publicJwk: (await crypto.subtle.exportKey('jwk', keyPair.publicKey)) as JsonWebKey,
+  };
+}
 
 // --- An in-memory ReplicaDb double (mocked module) ------------------------------------
 //
@@ -210,11 +241,11 @@ function sendMessage(
 
 async function seedSession(overrides: Partial<StoredSession> = {}): Promise<void> {
   const keyPair = await generateDpopKeyPair();
+  await seedDpopKeyPair(keyPair);
   const session: StoredSession = {
     webId: 'https://alice.pod.example/profile/card#me',
     accessToken: 'access-token-xyz',
     refreshToken: 'refresh-xyz',
-    dpopKeyPair: await exportDpopKeyPair(keyPair),
     issuer: 'https://idp.example/',
     tokenEndpoint: 'https://idp.example/token',
     clientId: 'https://pm.example/clientid.jsonld',
@@ -241,6 +272,7 @@ beforeEach(() => {
   cacheStore.clear();
   idbMeta.clear();
   idbNonces.clear();
+  idbDpopKey = undefined;
 });
 
 describe('Phase-1 shared replica (wired into the service worker)', () => {
