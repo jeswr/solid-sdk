@@ -20,6 +20,11 @@ Both flags may be true for ACP grants composed from own and ancestor policies.
 - Owner: editor plus WAC Control, or Read+Write on the own ACR itself for ACP.
   This is a permission summary, not proof of legal ownership; existing owner rows are immutable.
 
+ACP permissions on the ACR are supported only as part of a named owner's full
+Read+Write access to both the resource and its ACR. Management-only principals,
+partial ACR permissions and all anonymous ACR permissions throw `SharingError` in
+both projection and diff planning. Empty ACR grants confer no permissions.
+
 `link` represents anonymous access, not a secret bearer capability. Its Read also appears
 as `public: "viewer"`; link Editor is still publicly readable. To restrict anonymous access,
 set both fields to `"none"`. Requesting public Viewer without link access produces the same

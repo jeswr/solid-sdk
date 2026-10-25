@@ -351,12 +351,69 @@ describe("ACP policies", () => {
       },
     ]);
   });
-  it("requires data Write for owner and removes unpaired policy permissions when revoking a viewer", () => {
+  it.each(
+    [[], ["Read"], ["Write"], ["Read", "Write"]].flatMap((accessModes) =>
+      [["Read"], ["Write"], ["Append"], ["Read", "Write"]].flatMap((policyModes) =>
+        [ALICE, PUBLIC].flatMap((principal) =>
+          principal === ALICE && accessModes.length === 2 && policyModes.length === 2
+            ? []
+            : [{ principal, accessModes, policyModes }],
+        ),
+      ),
+    ),
+  )("rejects unrepresentable ACP management: $principal $accessModes / $policyModes", ({
+    principal,
+    accessModes,
+    policyModes,
+  }) => {
+    const doc = document("acp");
+    policy(doc, principal, accessModes);
+    policy(doc, principal, policyModes, doc.source);
+    expect(() => readSharing(input(doc))).toThrow("ACP management permissions");
+    expect(() => diffSharing(input(doc), restricted)).toThrow("ACP management permissions");
+  });
+  it("validates management-only principals even alongside a representable owner", () => {
+    const doc = document("acp");
+    policy(doc, ALICE, ["Read", "Write"]);
+    policy(doc, ALICE, ["Read", "Write"], doc.source);
+    policy(doc, BOB, ["Read", "Write"], doc.source);
+    expect(() => readSharing(input(doc))).toThrow("ACP management permissions");
+    expect(() => diffSharing(input(doc), select(ALICE, "owner"))).toThrow(
+      "ACP management permissions",
+    );
+  });
+  it("combines split ACR permissions into an immutable owner", () => {
+    const doc = document("acp");
+    policy(doc, ALICE, ["Read", "Write"]);
+    policy(doc, ALICE, ["Read"], doc.source);
+    policy(doc, ALICE, ["Write", "Append"], doc.source);
+    const state = readSharing(input(doc));
+    expect(state.people).toEqual([
+      { webId: ALICE, role: "owner", inherited: false, explicit: true, sources: [doc.source] },
+    ]);
+    expect(diffSharing(input(doc), state)).toEqual([]);
+    expect(() => diffSharing(input(doc), restricted)).toThrow("Owner rows");
+  });
+  it("ignores empty ACR permissions", () => {
     const doc = document("acp");
     policy(doc, ALICE, ["Read"]);
-    policy(doc, ALICE, ["Read", "Write"], doc.source);
-    expect(readSharing(input(doc)).people[0]?.role).toBe("viewer");
-    expect(diffSharing(input(doc), restricted)).toHaveLength(2);
+    policy(doc, ALICE, [], doc.source);
+    policy(doc, BOB, [], doc.source);
+    policy(doc, PUBLIC, [], doc.source);
+    expect(readSharing(input(doc)).people).toEqual([
+      { webId: ALICE, role: "viewer", inherited: false, explicit: true, sources: [doc.source] },
+    ]);
+    expect(diffSharing(input(doc), restricted)).toEqual([
+      {
+        model: "acp",
+        source: doc.source,
+        resource: FILE,
+        principal: { kind: "webid", webId: ALICE },
+        add: [],
+        remove: ["Read"],
+        inherited: false,
+      },
+    ]);
   });
   it("combines own and ancestor member grants and records both origins", () => {
     const own = document("acp");

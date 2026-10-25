@@ -27,6 +27,23 @@ function origin(grants: Grant[]): AccessOrigin {
 }
 function project(input: SharingInput, grants: Grant[], comments: Grant[]): SharingState {
   const data = grants.filter((grant) => grant.resource === input.access.resource);
+  const management = grants.filter(
+    (grant) => grant.document.model === "acp" && grant.resource === grant.document.source,
+  );
+  for (const principal of new Set(management.map((grant) => grant.principal))) {
+    const policyModes = allowed(management.filter((grant) => grant.principal === principal));
+    if (policyModes.size === 0) continue;
+    const access = allowed(forPrincipal(data, principal, input.access.resource));
+    if (
+      principal === PUBLIC ||
+      !policyModes.has("Read") ||
+      !policyModes.has("Write") ||
+      !access.has("Read") ||
+      !access.has("Write")
+    ) {
+      throw new SharingError("ACP management permissions cannot be expressed as a sharing role");
+    }
+  }
   const principals = [...new Set(data.map((grant) => grant.principal))]
     .filter((p) => p !== PUBLIC)
     .sort();
