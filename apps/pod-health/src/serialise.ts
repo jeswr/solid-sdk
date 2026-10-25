@@ -36,6 +36,9 @@ export function toTurtle(dataset: DatasetCore): Promise<string> {
     const writer = new Writer({ prefixes: { ...PREFIXES } });
     try {
       for (const quad of canonicalizeHealthDataset(dataset, DataFactory) as Iterable<Quad>) {
+        if (quad.graph.termType !== "DefaultGraph") {
+          throw new Error("Turtle serialization requires the default graph");
+        }
         writer.addQuad(quad);
       }
       // n3.Writer's `end` callback yields the serialised Turtle, or an error if

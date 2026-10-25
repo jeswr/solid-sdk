@@ -42,6 +42,7 @@ describe("canonical and legacy health vocabulary", () => {
     expect([...document.codeableConcepts][0]?.code).toBe("8867-4");
     expect(document.codeableConcept("urn:code").scheme).toBe("http://loinc.org");
     const output = await toTurtle(document);
+    expect(() => new Parser({ format: "text/turtle" }).parse(output)).not.toThrow();
     expect(output).not.toContain("TBD.example");
     expect(output).not.toContain("w3id.org/jeswr");
   });
@@ -72,7 +73,17 @@ describe("canonical and legacy health vocabulary", () => {
     const workout = [...document.workouts][0];
     assert(workout);
     expect(document.orderedPoints(workout)[0]?.sequence).toBe(0);
-    const output = await toTurtle(document);
+    await expect(toTurtle(document)).rejects.toThrow(
+      "Turtle serialization requires the default graph",
+    );
+    const defaultGraph = document.match(
+      undefined,
+      undefined,
+      undefined,
+      DataFactory.defaultGraph(),
+    );
+    const output = await toTurtle(defaultGraph);
+    expect(() => new Parser({ format: "text/turtle" }).parse(output)).not.toThrow();
     expect(output).toContain(`"${health}Observation"`);
   });
 
