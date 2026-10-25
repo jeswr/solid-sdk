@@ -65,7 +65,7 @@ export async function nodeHandler(
       closeUnreadRequest();
       response.writeHead(500, { "content-type": "text/plain" });
       response.end("Internal server error\n");
-      await finished(response, { cleanup: true });
+      await finished(response, { cleanup: true }).catch(() => {});
     }
   } finally {
     request.off("aborted", abort);

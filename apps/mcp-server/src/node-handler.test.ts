@@ -207,6 +207,20 @@ describe("Node/Web scaffold adapter", () => {
     expect(response.status).toBe(500);
     expect(Buffer.concat(response.chunks).toString()).toBe("Internal server error\n");
   });
+
+  it("finalizes an unread request if the client disconnects during the error response", async () => {
+    const finishing = Promise.withResolvers<void>();
+    const response = new ResponseFixture();
+    response._final = () => finishing.resolve();
+    vi.mocked(handler).mockRejectedValueOnce(new Error("fixture failure"));
+    const request = requestFixture("POST", "partial body", false);
+    const pending = invoke(request, response);
+    await finishing.promise;
+    response.destroy();
+    await pending;
+    expect(request.destroyed).toBe(true);
+    expect(request.listenerCount("aborted")).toBe(0);
+  });
   it.each(["request", "response"])("aborts the handler when the %s disconnects", async (source) => {
     const started = Promise.withResolvers<void>();
     const cancel = vi.fn();
