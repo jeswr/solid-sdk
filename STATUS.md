@@ -5,6 +5,57 @@
 
 Updated: 2026-10-25. Branch: `lane/sst-8xm.58`.
 
+## JSON-LD base fix after review of cadf5e3e
+
+Status: the supplied relative-identifier regression and named-graph preservation
+are fixed. Exact native JSON-LD base-option semantics remain blocked by the
+pinned Sparq binding, as described below. The referenced brief files remain
+absent; this round follows the finding supplied in the lane instruction.
+
+Commits:
+
+- `58b8f249` — `fix: resolve JSON-LD identifiers against document base`: supply
+  `baseIri` through an enclosing JSON-LD `@base` context while retaining the
+  dataset loader. Regression tests cover the exact `#me` / Alice example,
+  relative subject/object/graph identifiers, mixed default and named graphs with
+  UTF-8 input, explicit document base overrides/clearing, and unchanged JSON
+  literal values with aliased keywords. The first two tests failed against
+  cadf5e3e, returning empty datasets, and pass with the fix. The fake is unchanged.
+- `docs: record JSON-LD base fix verification` — final STATUS.md-only commit.
+
+Final checks passed on Node v24.22.1 / pnpm 10.4.1 before the final commit:
+
+| Command | Result |
+| --- | --- |
+| `pnpm --filter @jeswr/rdf-engine run lint` | PASS; 20 files checked |
+| `pnpm --filter @jeswr/rdf-engine run build` | PASS |
+| `pnpm --filter @jeswr/rdf-engine run typecheck` | PASS |
+| `pnpm --filter @jeswr/rdf-engine run test` | PASS; 59 tests across 6 files |
+| `pnpm run lint:root` | PASS; Biome and all root guards |
+| `git diff --check` | PASS |
+
+Coverage: statements 99.51%, branches 97.61%, functions 100%, lines 99.46%; all
+existing 90% thresholds pass. No workspace manifest depends on rdf-engine, so
+there is no dependent gate. The requested package gates and root lint were run;
+no whole-workspace gate was run.
+
+Conservative compatibility choice and remaining limitation: Sparq 0.1.5 exposes
+`Store.loadDataset(text, format)` without a base argument. Its
+`Store.loadWithBase(text, format, base)` accepts the native base option but folds
+named graphs into the default graph. The fix uses the dataset loader with a
+JSON-LD `@base` wrapper, preserving original document content. This handles the
+requested regression without changing dependencies or implementing a JSON-LD
+processor. It is not equivalent to the native base option for a document that
+resets its context with `@context: null`: that reset clears the wrapper's inherited
+base, whereas the native loader retains its supplied document base. Full parity
+requires an upstream dataset/base binding or permission to broaden the parser
+implementation; that scope decision remains open for the dispatcher.
+
+`roborev` is unavailable, so no automated review verdict was produced. Tracker
+operations remain with the dispatcher because this is a dedicated worktree.
+No dependencies, lockfile, tracker state or other checkout changed. No push, PR,
+branch switch, fetch or merge occurred. STATUS.md was edited last.
+
 ## Fix round after review of 1658b267
 
 Status: all three supplied review findings are addressed. No implementation blocker
