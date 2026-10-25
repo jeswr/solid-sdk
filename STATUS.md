@@ -19,6 +19,8 @@ No push, fetch, PR, deployment or publication was performed.
 | `83342e97` | Forward client disconnects through Request.signal and clean up listeners. |
 | `ecbbe6c1` | Preserve generic default representations; negotiate RDF explicitly for RDF/profile reads through optional PodReadOptions. |
 | `3f116c79` | Cancel abandoned responses and active pipelines; suppress response/error writes after disconnects. |
+| `e1ef28d2` | Record the original lane implementation and validation report. |
+| `ee335a1c` | Restore the Turtle fallback for headerless RDF resources and profiles; add four regression cases across legacy configuration and fetch-backed PodPort injection. |
 
 This final documentation commit adds this report and records the remaining conservative choice.
 
@@ -94,3 +96,41 @@ The pre-existing pinned fetch-rdf dependency lacked dist output under ignore-scr
 Conservative choices and options are recorded in [QUESTIONS.md](QUESTIONS.md): preserve search input/output while renaming, keep app composition as a 501 scaffold, retain optional final representation URL metadata, add optional read representation preferences, and retain the existing canonical RDF Accept value.
 
 No MCP-01 implementation is unfinished. Full-workspace gate failures above remain outside this lane's authorized path scope. OAuth, PKG builders, capture CLI behavior, HTTP transport and new tools are scaffolds/future MCP tasks as specified, rather than implemented features in this lane.
+
+## Review follow-up — missing Content-Type
+
+Addressed the supplied Codex review of `e1ef28d2775a`: both `parseRdf` calls now
+receive `contentType || null`, preserving fetch-rdf's Turtle fallback when the
+fetch adapter reports a missing header as an empty string. The four new fixture
+cases cover headerless resource parsing (including relative IRIs and Turtle
+serialization) and off-pod configured profile Type Index discovery through both
+legacy configuration and an injected fetch-backed PodPort. The empty root listing
+ensures the discovery assertion cannot pass through the ordinary container scan.
+
+Regression verification:
+
+- `pnpm --filter @jeswr/solid-mcp run test -- test/pod-port.test.ts`: before the
+  implementation fix, all four new cases failed and the existing 176 tests passed.
+- Re-ran all five exact per-project lint/build/typecheck/test command chains in
+  the Validation section: PASS for every project; solid-mcp has 180 passing tests,
+  mcp-server has 12, and the three new package scaffolds retain allowed empty tests.
+- The first solid-mcp lint invocation found formatting in the new tests; formatted
+  that file with Biome and the complete command chain then passed.
+- `pnpm run lint:root`: PASS.
+- `TURBO_SCM_BASE=61048c43eb845a6d244fb90ec9b10ee0b0a7d1f4 pnpm run gate`:
+  PASS, 24/24 tasks, 14 cached, 24.633 seconds.
+- `pnpm run gate:full`: FAIL, 277/290 tasks successful, 181 cached,
+  4m54.739s. Unchanged `apps/app-store/web/src/auth/restore-latch.test.tsx:213`
+  exceeded its 5000ms timeout in the runtime-init rejection / restoring-state
+  fixture (204 other App Store tests passed). The earlier solid-elements timeout
+  passed in this run. No files in either project were changed by this follow-up.
+- `git diff --check`: PASS. The final diff against the reviewed head contains only
+  `packages/solid-mcp/src/pod.ts`, `packages/solid-mcp/test/pod-port.test.ts` and
+  `STATUS.md`; no generated assets or dist output were added.
+- Roborev 5824 (general) and 5825 (security) reviewed `ee335a1c`: no issues found.
+
+No dependency or manifest changes; `check:packages` was not needed for this fix.
+Only the reported fallback, its regression tests and this status report changed.
+The final documentation commit records this follow-up and is queued for asynchronous
+review after creation. The supplied review finding is resolved; the unrelated
+full-workspace timeout remains outside this follow-up's scope.
