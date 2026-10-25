@@ -16,6 +16,11 @@ breadcrumb, and renders empty / loading / error / access-denied states. The full
 coverage ratchet against every well-known server remain deliberate, tracked follow-ups (see
 [Roadmap](#roadmap)).
 
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+Suite vocabulary writes use `https://jeswr.org/ns/` only, via `@jeswr/suite-vocab`.
+Readers accept legacy namespace aliases; Type Index discovery matches both canonical and
+legacy class IRIs. Standard vocabularies keep their published namespaces.
+
 ## What the data layer does
 
 `@jeswr/pod-drive` (the package in `src/`) is a pure, auth-agnostic data layer:

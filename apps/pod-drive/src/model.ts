@@ -18,6 +18,7 @@
 // TermAs.instance) — never hand-parsed quads. Reads never throw on absent /
 // wrong-typed data: a missing posix:size reports `undefined`.
 
+import { canonicalize } from "@jeswr/suite-vocab";
 import type { DatasetCore, Term } from "@rdfjs/types";
 import { LiteralAs, OptionalFrom, SetFrom, TermAs, TermFrom } from "@rdfjs/wrapper";
 import { Container, ContainerDataset, Resource } from "@solid/object";
@@ -102,7 +103,7 @@ export class DriveResource extends Resource {
 
   /** True when this resource is registered as a Pod Drive root container. */
   get isDriveRoot(): boolean {
-    return this.type.has(PODDRIVE.DriveRoot);
+    return [...this.type].some((type) => canonicalize(type) === PODDRIVE.DriveRoot);
   }
 }
 
