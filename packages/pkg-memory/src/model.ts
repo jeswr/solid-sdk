@@ -306,11 +306,16 @@ export async function buildNanopublications(
         node(prov, quote).link(type, `${NS.oa}TextQuoteSelector`).text(`${NS.oa}exact`, ev.quote);
       }
       if (ev.timestamp) {
-        dateTime(ev.timestamp);
-        times.push(ev.timestamp);
+        times.push(dateTime(ev.timestamp));
       }
     }
-    const earliest = times.sort()[0];
+    const earliest = times.sort(
+      (a, b) =>
+        Date.parse(a) - Date.parse(b) ||
+        // Date.parse compares milliseconds; normalized fractions retain the
+        // reference's six-digit precision for instants within one millisecond.
+        (a.match(/\.\d{6}/)?.[0] ?? "").localeCompare(b.match(/\.\d{6}/)?.[0] ?? ""),
+    )[0];
     if (earliest) a.text(`${NS.prov}generatedAtTime`, dateTime(earliest), `${NS.xsd}dateTime`);
     for (const old of c.supersedes ?? []) {
       const previous = ref(old);

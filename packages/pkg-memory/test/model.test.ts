@@ -14,6 +14,7 @@ import {
   parseNanopublications,
   serializeNanopublications,
 } from "../src/index.js";
+import { graph, NS, RdfNode } from "../src/rdf.js";
 import { exampleBuildOptions } from "../src/testing.js";
 
 const fixture = (name: string) => readFile(new URL(`./fixtures/${name}`, import.meta.url), "utf8");
@@ -218,6 +219,53 @@ it("records optional source, entity and evidence metadata without filesystem or 
   const noTimes = batch();
   noTimes.claims[0]!.supersedes = ["one"];
   await expect(buildNanopublications(noTimes, { owner })).resolves.toBeDefined();
+});
+
+it.each([
+  [["2026-10-25T10:00:00+02:00", "2026-10-25T09:00:00Z"], "2026-10-25T10:00:00+02:00"],
+  [["2026-10-25T23:30:00-02:00", "2026-10-26T00:15:00Z"], "2026-10-26T00:15:00+00:00"],
+  [
+    ["2026-10-25T08:00:00.000900Z", "2026-10-25T08:00:00.000100Z"],
+    "2026-10-25T08:00:00.000100+00:00",
+  ],
+  [
+    ["2026-10-25T10:00:00.123457+02:00", "2026-10-25T08:00:00.123456Z"],
+    "2026-10-25T08:00:00.123456+00:00",
+  ],
+  [["2026-10-25T08:00:00.000001Z", "2026-10-25T08:00:00Z"], "2026-10-25T08:00:00+00:00"],
+])("uses the earliest evidence instant for generation and invalidation: %j", async (times, earliest) => {
+  for (const ordered of [times, [...times].reverse()]) {
+    const input = batch();
+    input.sources = [{ id: "doc", kind: "document", url: "https://example.org/document" }];
+    input.claims.push({
+      id: "replacement",
+      assertion: createFactAssertion(owner, { template: "email", value: "avery@example.org" }),
+      epistemic: "Documented",
+      supersedes: ["one"],
+      evidence: ordered.map((timestamp, i) => ({
+        source: "doc",
+        timestamp,
+        ...(i === 0 ? { message_id: "synthetic-message" } : {}),
+      })),
+    });
+    const built = await buildNanopublications(input, options);
+    const parsed = await parseNanopublications(await serializeNanopublications(built));
+    for (const result of [built, parsed]) {
+      const replacement = result.nanopubs.find((n) => n.identifier === "test/replacement")!;
+      const previous = result.nanopubs.find((n) => n.identifier === "test/one")!;
+      expect(
+        new RdfNode(
+          replacement.assertionId,
+          graph(result.dataset, replacement.provenanceId),
+        ).oneDateTime(`${NS.prov}generatedAtTime`),
+      ).toBe(earliest);
+      expect(
+        new RdfNode(previous.assertionId, graph(result.dataset, previous.provenanceId)).oneDateTime(
+          `${NS.prov}invalidatedAtTime`,
+        ),
+      ).toBe(earliest);
+    }
+  }
 });
 
 it("supports bare and already-qualified contact values and minimal/temporal template variants", async () => {
