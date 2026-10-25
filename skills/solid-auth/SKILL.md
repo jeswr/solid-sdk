@@ -27,6 +27,8 @@ profile caches). Use **Context7** for exact `oauth4webapi` APIs. 🔒 = security
 Verifying Solid-OIDC / DPoP-bound access tokens; resolving/validating WebID profiles; implementing
 replay protection; defending against issuer compromise or SSRF; wiring trusted issuers / Keycloak.
 
+<!-- AUTHORED-BY Codex GPT-6 -->
+
 ## 🔒 Verify with oauth4webapi — never hand-roll
 
 `oauth4webapi.validateJwtAccessToken(as, request, audience, opts)` does the RFC 6750/9068/9449 core:
@@ -37,10 +39,13 @@ discovery — otherwise an attacker-controlled `iss` makes you fetch an SSRF dis
 
 ```ts
 if (!trustedIssuers.has(unverifiedIss)) throw challenge("invalid_token", "Untrusted issuer.");
-const { claims } = await oauth.validateJwtAccessToken(as, request, audience, {
-  requireDPoP: dpop, signingAlgorithms: SIGNING_ALGS, clockTolerance: 5,
+const claims = await oauth.validateJwtAccessToken(as, request, audience, {
+  requireDPoP: dpop, signingAlgorithms: SIGNING_ALGS, [oauth.clockTolerance]: 5,
 });
 ```
+
+The result is the claims object itself ([return contract](https://github.com/panva/oauth4webapi/blob/main/docs/functions/validateJwtAccessToken.md));
+`clockTolerance` is a symbol-keyed option ([options](https://github.com/panva/oauth4webapi/blob/main/docs/interfaces/ValidateJWTAccessTokenOptions.md)).
 
 ## 🔒 Asymmetric algorithms only
 

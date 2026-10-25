@@ -153,29 +153,36 @@ export function GET(request: Request): Response {
 A static-export site can instead ship a real file at the exact path, served with
 `application/ld+json` (configure your host's MIME mapping for `.jsonld`).
 
-## Wiring into the bundled provider
+<!-- AUTHORED-BY Codex GPT-6 -->
 
-The published `@solid/reactive-authentication` **`DPoPTokenProvider` (0.1.2) has no static
-client_id hook** — its constructor is `(callbackUri, getCodeCallback)`, full stop, and it always
-dynamically registers. Use the bundled
-[`WebIdDPoPTokenProvider`](../solid-reactive-authentication/references/webid-token-provider.ts.md) (companion
-skill `solid-reactive-authentication`), which adds an optional `clientId`:
+## Wiring into the shared auth core
+
+Use [`@jeswr/solid-auth-core`](../../packages/solid-auth-core/SKILL.md) for new integrations.
+Its `createSolidAuth()` supports a static `clientId` and enforces the resource-origin boundary
+in both provider `matches()` and `upgrade()`. The legacy bundled provider reference does not
+enforce that boundary and must not be copied into a new integration.
 
 ```ts
-import { WebIdDPoPTokenProvider, promptWebIdDialog } from "@/lib/webid-token-provider";
+import { createSolidAuth } from "@jeswr/solid-auth-core";
 
-new ReactiveFetchManager([
-  new WebIdDPoPTokenProvider(
-    new URL("/callback.html", location.href).toString(),
-    ui.getCode.bind(ui),
-    promptWebIdDialog,
-    {
-      clientId: new URL("/clientid.jsonld", location.href).toString(), // ← static client id
-      allowInsecureLoopback: true,  // local CSS over HTTP; remote issuers stay HTTPS-strict
-    },
-  ),
-]);
+// Create once for the app lifetime. podRoot is the user's configured storage root.
+const auth = createSolidAuth({
+  callbackUri: new URL("/callback.html", location.href).toString(),
+  clientId: new URL("/clientid.jsonld", location.href).toString(),
+  authFlow: { getCode: (...args) => ui.getCode(...args) },
+  allowedOrigins: [new URL(podRoot).origin],
+  includeWebIdOrigin: false,
+  includeIssuerOrigin: false,
+});
+
+await auth.login(webId);
+await auth.authenticatedFetch(resourceUrl);
 ```
+
+Allow only the intended pod resource origin(s); do not add an origin merely because it hosts
+the WebID or issuer. An empty allowed set attaches credentials to nothing. Use `auth.publicFetch`
+for foreign/public requests; internal OIDC HTTP stays pinned to pristine fetch. For local CSS
+over loopback HTTP only, explicitly set `allowInsecureLoopback: true`.
 
 When `clientId` is set the provider **skips dynamic registration** and authenticates as a public
 client whose `client_id` is that URL with `token_endpoint_auth_method: "none"`. When `clientId`
@@ -208,6 +215,6 @@ hours if you expect it to work.
 | Wrong / no Content-Type | Some OPs reject the doc (CSS tolerates it) | Serve `application/ld+json`. |
 | HTTP in production | *"SSL is required for client_id authentication unless working locally."* | Use HTTPS for any non-`localhost` client id. |
 | Stale cache after editing the doc | OP keeps using the old metadata | Lower `cache-control max-age`; bump it back up once stable. |
-| Using published `DPoPTokenProvider` and expecting static client_id | Always dynamically registers; no name on consent | 0.1.2 has no hook — use the bundled `WebIdDPoPTokenProvider` with `clientId`. |
+| Using published `DPoPTokenProvider` and expecting static client_id | Always dynamically registers; no name on consent | 0.1.2 has no hook — use `createSolidAuth` from `@jeswr/solid-auth-core` with `clientId` and explicit resource origins. |
 | Static `localhost` client id against a **live** IdP | Login fails — the IdP cannot fetch your document | Impossible combination; use dynamic registration until the app is deployed (see the matrix above). |
 | Dropped doc in `public/*.jsonld` | 404 in `next dev` | Use a route handler (recipe above). |

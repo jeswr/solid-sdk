@@ -9,7 +9,7 @@ description: Use when discovering or registering Solid data by RDF class, readin
 **Use the Solid Type Index**
 The Type Index advertises where data of a given RDF class lives. It is a discovery hint, not an authorization grant.
 ### Read
-1. Fetch the WebID/profile and locate `solid:publicTypeIndex` or `solid:privateTypeIndex`.
+1. Fetch the WebID profile for `solid:publicTypeIndex`; follow its `pim:preferencesFile` link and read `solid:privateTypeIndex` from the Preferences Document (with the WebID as subject).
 2. Fetch the index and find `solid:TypeRegistration` subjects whose `solid:forClass` matches the desired class.
 3. Read either `solid:instance` for one resource or `solid:instanceContainer` for a collection.
 4. Fetch the discovered location and apply its real access controls.
@@ -19,7 +19,7 @@ The Type Index advertises where data of a given RDF class lives. It is a discove
 - Serialize the full dataset with `n3.Writer` and use conditional `PUT` with explicit Turtle content type.
 - On `412`, re-fetch, reapply the registration, and retry according to the caller's bounded conflict policy.
 ### Bootstrap missing indexes
-Do not assume the server seeded them. When an index is genuinely absent, create a `solid:TypeIndex` plus `solid:ListedDocument` (public) or `solid:UnlistedDocument` (private), then link it from the profile/preferences resource. Never overwrite an index or preferences document that was merely unreadable.
+Do not assume the server seeded them. When an index is genuinely absent, create a `solid:TypeIndex` plus `solid:ListedDocument` (public) or `solid:UnlistedDocument` (private). Link the public index from the WebID Profile Document and the private index from the Preferences Document, discovering or creating the latter via `pim:preferencesFile`. Use conditional writes. Never overwrite an index or preferences document that was merely unreadable.
 Keep the profile publicly readable and protect the private index itself through the effective access-control system.
 ### Search and security
 - Validate every profile-linked index and registered location against the user's advertised storage roots before attaching credentials.
@@ -63,7 +63,7 @@ IRIs (verified against the spec):
 | Term | IRI suffix on `solid:` | Role |
 |---|---|---|
 | `solid:publicTypeIndex` | `publicTypeIndex` | profile → public index doc |
-| `solid:privateTypeIndex` | `privateTypeIndex` | profile → private index doc |
+| `solid:privateTypeIndex` | `privateTypeIndex` | Preferences Document (WebID subject) → private index doc |
 | `solid:TypeIndex` | `TypeIndex` | `rdf:type` of an index document |
 | `solid:ListedDocument` | `ListedDocument` | extra `rdf:type` on a **public** index |
 | `solid:UnlistedDocument` | `UnlistedDocument` | extra `rdf:type` on a **private** index |
@@ -79,8 +79,8 @@ container of many) — not both.
 ## Read path: discover an index, then a class
 
 1. Fetch the WebID profile (`AGENTS.md` §Reading data); read `solid:publicTypeIndex`
-   / `solid:privateTypeIndex` off the WebID subject. (The private index typically
-   sits behind `pim:preferencesFile` and needs auth to read.)
+   and `pim:preferencesFile` off the WebID subject. Fetch the linked Preferences Document
+   with auth and read `solid:privateTypeIndex` off the same WebID subject there.
 2. Fetch the index document; find `solid:TypeRegistration` subjects whose
    `solid:forClass` matches the class you want; read `solid:instance` /
    `solid:instanceContainer`.
@@ -111,15 +111,48 @@ and if absent, create-and-link.
 
 ## Create-and-link recipe (when an index is absent)
 
-1. Choose a location near the profile — convention: `<podRoot>settings/publicTypeIndex.ttl`
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+1. Read the profile and, for a private index, discover `pim:preferencesFile`
+   (`http://www.w3.org/ns/pim/space#preferencesFile`) on the WebID subject. Validate that
+   URL against the user's advertised storage roots before an authenticated fetch.
+   If no preferences link exists, choose `<podRoot>settings/prefs.ttl` and read it first.
+   Reuse an existing document; only a confirmed `404` permits creating one with
+   `If-None-Match: *`. A `401`, `403`, network error, or parse error is not absence.
+2. Choose a location near the profile — convention: `<podRoot>settings/publicTypeIndex.ttl`
    and `<podRoot>settings/privateTypeIndex.ttl` (the spec's examples use
    `/settings/`).
-2. **PUT** the index document, typed `solid:TypeIndex` **and**
-   `solid:ListedDocument` (public) / `solid:UnlistedDocument` (private).
-3. **PUT** the profile with the `solid:publicTypeIndex` / `solid:privateTypeIndex`
-   triple added (conditional PUT, keep the ETag — `AGENTS.md` §Writing data).
-   The base WebID card must stay world-readable; protect the private index via
-   WAC instead of locking the card.
+3. **PUT** the confirmed-missing index document with `If-None-Match: *`, typed
+   `solid:TypeIndex` **and** `solid:ListedDocument` (public) / `solid:UnlistedDocument`
+   (private). Only bootstrap with Write and Control access to the root storage.
+4. For a **public** index, add `solid:publicTypeIndex` on the WebID subject in the
+   **WebID Profile Document**. For a **private** index, add `solid:privateTypeIndex`
+   on the WebID subject in the **Preferences Document**. Persist the full modified
+   dataset with `If-Match` using that document's ETag; create genuinely absent documents
+   with `If-None-Match: *`. On `412`, re-fetch and reconcile without dropping other data;
+   stop if a safe conditional update is unavailable.
+5. If the preferences link was missing, conditionally update the profile to add
+   `<webId> pim:preferencesFile <preferencesUrl>` only after the preferences document
+   has been persisted. Keep the WebID card world-readable; restrict preferences and the
+   private index to the owner through the effective access-control system.
+
+The [bootstrap specification](https://solid.github.io/type-indexes/#supplying-missing-type-index-documents)
+requires the public pointer in the profile and the private pointer in preferences. For example,
+the profile at `https://pod.example/profile/card` contains:
+
+```turtle
+@prefix solid: <http://www.w3.org/ns/solid/terms#> .
+@prefix pim: <http://www.w3.org/ns/pim/space#> .
+<#me> solid:publicTypeIndex </settings/publicTypeIndex.ttl> ;
+    pim:preferencesFile </settings/prefs.ttl> .
+```
+
+The Preferences Document at `https://pod.example/settings/prefs.ttl` contains:
+
+```turtle
+@prefix solid: <http://www.w3.org/ns/solid/terms#> .
+<https://pod.example/profile/card#me> solid:privateTypeIndex </settings/privateTypeIndex.ttl> .
+```
 
 Spec-exact shapes ([type-indexes](https://solid.github.io/type-indexes/)):
 

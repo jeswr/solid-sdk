@@ -122,6 +122,8 @@ const { dataset, etag } = await fetchRdf(resourceUrl);
 - **No wrapping.** Feed `dataset` to `@solid/object` / your `TermWrapper` subclasses
   (`new WebIdDataset(dataset, DataFactory)`) — see the `solid-object` skill.
 
+<!-- AUTHORED-BY Codex GPT-6 -->
+
 ### Writing to a pod location safely — the scope guard comes from a library, not a re-derivation
 
 _(Any library/app that writes to a **user-configured** pod location — a base URL / container the
@@ -137,10 +139,25 @@ unparseable URL) was independently re-derived — and separately roborev-hardene
 bypasses — in roughly **eight** different `@jeswr` libraries (an RxDB replication driver, a Yjs
 provider, an n8n node, an MCP server, and several app-side write helpers each shipping their own
 `assertWithinBase`). Don't add a ninth hand-rolled copy: use
-**[`@jeswr/guarded-fetch`](../../packages/guarded-fetch/README.md)'s `podScope(base)`** instead —
+**[`@jeswr/guarded-fetch`](../../packages/guarded-fetch/README.md)'s `assertWithinPodScope(base, target)`** instead —
 it centralises exactly this check (plus the URL-hygiene cases most first-pass hand-rolled copies
 missed). Reserve a bespoke re-derivation for a genuine gap in guarded-fetch's coverage; check
 there first, and contribute the gap back rather than forking a local copy.
+
+Use the returned canonical URL as the request target, or wrap the authenticated fetch so
+every request and redirect hop is checked:
+
+```ts
+import { assertWithinPodScope, createPodScopedFetch } from "@jeswr/guarded-fetch";
+
+const target = assertWithinPodScope(podBase, resourceUrl);
+const scopedFetch = createPodScopedFetch(podBase, { fetch: authenticatedFetch });
+await scopedFetch(target, {
+  method: "PUT",
+  headers: { "content-type": "text/turtle", "if-match": etag },
+  body: turtle,
+});
+```
 
 ## Gotchas
 
@@ -154,7 +171,7 @@ there first, and contribute the gap back rather than forking a local copy.
 | A foreign pod's claim about *you* is **untrusted** | `fetchRdf` returns whatever the bytes say. A resource in someone else's pod asserting "this task is assigned to *you*" / "*you* are a member" is an unverified claim — anyone can write that triple. Before acting on cross-pod data, verify provenance: authorised source **and** the data resides in that source's own `pim:storage`. See "Receiver-side: trusting cross-pod claims" below. (Learned building the Pod Manager assigned-to-me view, jeswr/solid-pod-manager.) |
 | A search-index's links (`hydra:next`, `foaf:img`) are attacker-controlled | An external Hydra/TPF index returns index-controlled URLs. Follow `hydra:next` verbatim but **same-origin-only**; fetch through a **pristine fetch + `credentials:"omit"`** (the `registerGlobally()`-patched global retries a `401` with a token — `omit` covers cookies but NOT that DPoP retry); reject non-`https:` image IRIs before an `<img src>`; for existence use a non-redirecting JSON mode and fail closed on 3xx/error. See "Consuming an external Hydra / TPF search index safely" below. (Learned building the solid-webid-index consumer client, 2026-06.) |
 | A bespoke `safeFetch`/SSRF guard was hand-rolled (again) | Seven-plus independent copies were found across the suite, each re-deriving private-IP classification, origin checks, and redirect handling. Use **[`@jeswr/guarded-fetch`](../../packages/guarded-fetch/README.md)** instead of writing another one — it also refuses to silently follow a redirect (`redirect: "manual"`), which a from-scratch guard easily misses even when its origin/scheme checks are otherwise correct |
-| A pod-scope write guard (`assertWithinBase`) was hand-rolled (again) | Roughly eight independent copies were found (RxDB/Yjs/n8n/MCP-server/app write-helper libraries), each separately roborev-hardened for the same bypasses (scheme-relative, embedded-credentials, unparseable-URL). Use **`@jeswr/guarded-fetch`'s `podScope(base)`** rather than re-deriving the containment check — see "Writing to a pod location safely" above |
+| A pod-scope write guard (`assertWithinBase`) was hand-rolled (again) | Roughly eight independent copies were found (RxDB/Yjs/n8n/MCP-server/app write-helper libraries), each separately roborev-hardened for the same bypasses (scheme-relative, embedded-credentials, unparseable-URL). Use **`@jeswr/guarded-fetch`'s `assertWithinPodScope(base, target)` or `createPodScopedFetch(base, options)`** rather than re-deriving the containment check — see "Writing to a pod location safely" above |
 | `n3.Writer` does NOT escape IRIs or strip control chars when serialising untrusted RDF | When you serialise a term value that came from **untrusted input** (a parsed foreign RDF `@id`, a JSON/HTTP field, a user-supplied URL) through `n3.Writer`, the value is emitted **verbatim** between `<…>`. A value containing a Turtle-`IRIREF`-forbidden char (`>` `<` `"` `{` `}` `|` `^` backtick `\` space or a C0 control) **breaks out of the angle brackets** and can inject forged triples — one intended quad can serialise into two, the second attacker-chosen (verified repro: [rdfjs/N3.js#659](https://github.com/rdfjs/N3.js/issues/659)). A boolean `new URL()`/`isHttpIri` check is **not** sufficient: it validates the string but forwards the raw value, so the breakout chars survive. Filter every IRI through **[`@jeswr/rdf-serialize`](../../packages/rdf-serialize/README.md)** before building the `NamedNode`: use **`safeHttpIri`** for a field that must be http(s) — it percent-encodes the forbidden set **and drops non-http(s) schemes** (returns `undefined`, so the caller omits the triple); use **`escapeIri`** for a scheme-agnostic subject/object (a legitimate `urn:`/`did:` id) — it only percent-encodes the forbidden set and does **not** enforce a scheme, so don't rely on it for scheme filtering. Both are lexical (RDF identity is lexical: they preserve the value byte-for-byte apart from the escaped chars). The same `Writer` also emits raw `ESC`/`DEL`/C1 controls (`U+001A`,`U+001B`,`U+001F`,`U+007F`,`U+0080`–`U+009F`) inside literals — strip those from untrusted text bodies before writing. (~40 cumulative adversarial rounds across ~20 `@jeswr` libs re-derived this before it was consolidated; don't hand-roll copy N+1.) |
 
 ## Receiver-side: parsing AS2 LDN notifications safely
