@@ -167,5 +167,78 @@ Generated local `web/public/clientid.jsonld` and `callback.html` files created d
 were removed before the final commit; build output remains ignored. The final tracked changes
 are limited to the requested package/apps, workspace metadata/lockfile, and the two lane reports.
 
-Validation remains blocked at the repository gate and the two noted web UI suites; no blocking
-namespace-design question remains beyond the conservative scope choices above.
+Original validation was blocked at the repository gate and the two noted web UI suites.
+The fix-round results below supersede those historical validation results.
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+## Fix round 1 — latest lane report
+
+Branch: `lane/sst-618`; required affected-gate base:
+`6b46636d065fd49f4a07d86c92cacad8ef4bea96`.
+
+### Commits and review finding
+
+- `447f624b` — `fix: clear legacy document predicate aliases`: address the medium finding
+  from review `@a606ab20`. One shared write helper clears every recognised predicate spelling
+  for the subject before writing the canonical value; `undefined` clears them all. Document
+  body/format/currentRevision and revision body/format use it. Reads and writes share the
+  alias enumeration, preserving canonical-first reads.
+- Final documentation commit — `docs: resolve VOC-03 questions and record fix validation`:
+  resolve QUESTIONS.md items 1–3 as directed and update this report last.
+
+Conservative scope: the helper stays in Pod Docs, shared by DocumentDoc and RevisionDoc.
+Drive has no matching alias-aware setters; Health normalizes vocabulary before typed access,
+so neither needs a setter change. No package API, namespace, registration lifecycle, dependency,
+manifest, lockfile, or UI changes.
+
+### Validation
+
+Commands ran inside this checkout with `export PATH="$PWD/node_modules/.bin:$PATH"`.
+An initial build without that absolute PATH failed to locate `tsc`; rerunning with PATH fixed
+succeeded. The initial regression run reproduced the bug in all five setters (20 failures).
+Final tests add 30 cases for legacy-only and mixed-value clearing, set-then-clear,
+canonical-only replacement/serialization, and preservation of unrelated subjects/properties.
+
+All commands in the following package gate passed (log `/tmp/sst-618-fix-docs-gate.log`):
+
+```sh
+pnpm --filter @jeswr/suite-vocab run build
+pnpm --filter @jeswr/app-pod-docs run lint
+pnpm --filter @jeswr/app-pod-docs run build
+pnpm --filter @jeswr/app-pod-docs run typecheck
+pnpm --filter @jeswr/app-pod-docs run test
+pnpm --filter @jeswr/app-pod-docs run coverage
+```
+
+Pod Docs: 198/198 tests passed; coverage 100% statements, functions and lines, 98.66% branches.
+`pnpm exec biome check apps/pod-docs/src/document.ts apps/pod-docs/src/legacy-vocab.test.ts`
+and `git diff --check` passed.
+
+- `pnpm run lint:root` — PASS; log `/tmp/sst-618-fix-lint-root.log`.
+- `TURBO_SCM_BASE=6b46636d065fd49f4a07d86c92cacad8ef4bea96 pnpm run gate` — PASS,
+  33/33 Turbo tasks, including suite-vocab, all three lane apps/web hosts, and 26 root tests.
+  Web tests: Docs 136/136, Drive 173/173, Health 181/181; the earlier timeouts did not recur.
+  Log `/tmp/sst-618-fix-gate.log`.
+- `pnpm run gate:full` — FAIL in unchanged `@jeswr/unstorage-solid#build`. Its existing
+  dependency-build script cloned fetch-rdf into a temporary directory and invoked
+  `npm install --ignore-scripts`; npm failed with `EROFS` writing `/home/runner/.npm/_cacache`.
+  That script removes its temporary clone in `finally`. No retry of the clone/install path,
+  dependency installation workaround, or unrelated source change was attempted.
+  23 tasks completed before cancellation; log `/tmp/sst-618-fix-gate-full.log`.
+
+### Remaining work and resolved decisions
+
+The requested fix and regressions are complete. Full-workspace validation remains blocked
+by the unrelated dependency builder/cache restriction. `roborev` is not installed and there
+is no post-commit review hook in this checkout, so automated review of these commits remains
+for integration; no reviewer tooling/configuration was installed or changed.
+
+QUESTIONS.md items 1–3 are resolved: canonical `ph:` is
+`https://jeswr.org/ns/pod-health#` with its legacy read alias; no `./testing` export;
+Type-Index re-registration stays explicit. No new open questions. The prior OIDC-only
+generator scope disposition (item 4) is unchanged.
+
+No dependencies added (`check:packages` not applicable), no screenshots (no UI changes), no
+pushes, PRs, branch switches, merges, mirror publishing or other-checkout edits. The full
+gate's unexpected dependency clone is recorded above. The six generated web metadata files
+were removed; dist/build/cache output remains ignored. STATUS.md was the last report edited.
