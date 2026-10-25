@@ -20,7 +20,7 @@ import {
 import { withMockedDate } from "./helpers/clock.js";
 import { insecure, transport } from "./helpers/http.js";
 import { automaticCodeProvider, startOpenIdProvider, startSolidStorage } from "./helpers/openid.js";
-import { callback, solidClient } from "./helpers/solid.js";
+import { callback, deferred, solidClient } from "./helpers/solid.js";
 
 let op, rs;
 beforeAll(async () => {
@@ -32,6 +32,102 @@ afterAll(async () => {
   await op.close();
 });
 afterEach(() => vi.unstubAllGlobals());
+
+for (const method of ["upgrade", "restore"]) {
+  for (const stage of ["issuer", "context"]) {
+    test(`DPoP ${method} remains fenced across logout during ${stage} resolution`, async () => {
+      const gate = deferred();
+      const started = deferred();
+      let paused = false;
+      let discoveryRequest;
+      const wait = async (request, at) => {
+        if (paused && stage === at) {
+          discoveryRequest = request;
+          started.resolve();
+          await gate.promise; // Deliberately ignores abort, like a late discovery result.
+        }
+      };
+      const as = new XASProvider({ getIssuer: async () => new URL(op.issuer) }, insecure);
+      const code = automaticCodeProvider();
+      const provider = new DPoPTokenProvider(
+        callback,
+        code,
+        {
+          getAuthorizationServer: async (request, challenge) => {
+            await wait(request, "issuer");
+            return await as.getAuthorizationServer(request, challenge);
+          },
+        },
+        new DynamicRegistrationClientProvider(insecure),
+        undefined,
+        {
+          http: insecure,
+          context: async (request) => {
+            await wait(request, "context");
+            return "fixed";
+          },
+        },
+      );
+      const request = new Request(`${rs.url}/alice/fence`);
+      await provider.upgrade(request);
+      const tokens = op.stats.token.length;
+      const flows = code.calls;
+      paused = true;
+      const pending = provider[method](request);
+      const rejected = assert.rejects(pending, { name: "SessionSupersededError" });
+      await started.promise;
+      await provider.forget();
+      assert.equal(discoveryRequest.signal.aborted, true);
+      gate.resolve();
+      await rejected;
+      paused = false;
+      assert.equal(await provider.identity(request), undefined);
+      assert.equal(op.stats.token.length, tokens, "late discovery cannot acquire a new token");
+      assert.equal(code.calls, flows, "late discovery cannot open a new flow");
+      assert.equal(await provider.restore(request), undefined);
+      assert.ok((await provider.upgrade(request)).headers.has("dpop"));
+      await provider.forget();
+    });
+  }
+
+  test(`DPoP ${method} preserves its generation when a peer logs out without a broadcast`, async () => {
+    const store = createMemoryStore();
+    const namespace = `discovery-${crypto.randomUUID()}`;
+    const fence = new SessionFence(namespace, { store, broadcast: false });
+    const peer = new SessionFence(namespace, { store, broadcast: false });
+    const gate = deferred();
+    const started = deferred();
+    const code = automaticCodeProvider();
+    const provider = new DPoPTokenProvider(
+      callback,
+      code,
+      new XASProvider({ getIssuer: async () => new URL(op.issuer) }, insecure),
+      new DynamicRegistrationClientProvider(insecure),
+      undefined,
+      {
+        http: insecure,
+        fence,
+        context: async () => {
+          started.resolve();
+          await gate.promise;
+          return "fixed";
+        },
+      },
+    );
+    const request = new Request(`${rs.url}/alice/peer-fence`);
+    const pending = provider[method](request);
+    const rejected = assert.rejects(pending, { name: "SessionSupersededError" });
+    await started.promise;
+    await peer.supersede();
+    assert.equal(fence.signal.aborted, false, "no local abort can mask a lost generation");
+    gate.resolve();
+    await rejected;
+    assert.equal(code.calls, 0);
+    assert.equal(await provider.identity(request), undefined);
+    fence.close();
+    peer.close();
+  });
+}
 
 test("client credentials without an advertised expiry remain cached and can be invalidated", async () => {
   let issued = 0;

@@ -13,6 +13,7 @@ import {
   OidcSession,
   type OidcSessionOptions,
 } from "./OidcSession.js";
+import { SessionFence } from "./SessionFence.js";
 import { storageContextKey } from "./StorageContext.js";
 import type { TokenProvider } from "./TokenProvider.js";
 
@@ -41,6 +42,7 @@ export interface DPoPTokenProviderOptions extends Omit<OidcSessionOptions, "cach
 export class DPoPTokenProvider implements TokenProvider {
   readonly #asProvider: AuthorizationServerProvider;
   readonly #session: OidcSession;
+  readonly #fence: SessionFence;
   readonly #context: ContextKey;
   readonly #issued = new Map<string, { issuer: string; context: string }>();
 
@@ -53,18 +55,19 @@ export class DPoPTokenProvider implements TokenProvider {
     options: DPoPTokenProviderOptions = {},
   ) {
     this.#asProvider = asProvider;
+    this.#fence =
+      options.fence ?? new SessionFence(`local-${crypto.randomUUID()}`, { broadcast: false });
     this.#context =
       options.context ??
       storageContextKey({
         mappings: createMemoryStore(),
         ...(options.http === undefined ? {} : { http: options.http }),
       });
-    this.#session = new OidcSession(
-      callbackUri,
-      codeProvider,
-      clientProvider,
-      cache === undefined ? options : { ...options, cache },
-    );
+    this.#session = new OidcSession(callbackUri, codeProvider, clientProvider, {
+      ...options,
+      fence: this.#fence,
+      ...(cache === undefined ? {} : { cache }),
+    });
   }
 
   /**
@@ -80,9 +83,21 @@ export class DPoPTokenProvider implements TokenProvider {
   }
 
   async upgrade(request: Request, challenge?: ChallengeContext): Promise<Request> {
+    const signal = AbortSignal.any([request.signal, this.#fence.signal]);
+    const generation = await this.#fence.generation();
+    signal.throwIfAborted();
+    request = new Request(request, { signal });
     const as = await this.#asProvider.getAuthorizationServer(request, challenge);
+    signal.throwIfAborted();
     const context = await this.#context(request, challenge);
-    const entry = (await this.#session.get(as, context, request.signal, accessTokenUsable))!;
+    const entry = (await this.#session.get(
+      as,
+      context,
+      signal,
+      accessTokenUsable,
+      true,
+      generation,
+    ))!;
     const accessToken = entry.tokenResult.access_token;
     this.#remember(accessToken, { issuer: as.issuer, context });
 
@@ -117,10 +132,24 @@ export class DPoPTokenProvider implements TokenProvider {
    * refresh token), reporting its identity; `undefined` when there is none.
    */
   async restore(request: Request): Promise<Identity | undefined> {
+    const signal = AbortSignal.any([request.signal, this.#fence.signal]);
+    const generation = await this.#fence.generation();
+    signal.throwIfAborted();
+    request = new Request(request, { signal });
     const as = await this.#asProvider.getAuthorizationServer(request);
+    signal.throwIfAborted();
     const context = await this.#context(request);
-    return (await this.#session.get(as, context, request.signal, accessTokenUsable, false))
-      ?.identity;
+    const entry = await this.#session.get(
+      as,
+      context,
+      signal,
+      accessTokenUsable,
+      false,
+      generation,
+    );
+    signal.throwIfAborted();
+    await this.#fence.assertCurrent(generation);
+    return entry?.identity;
   }
 
   /** The validated identity of the session a request would use, if established. Never starts a flow. */
