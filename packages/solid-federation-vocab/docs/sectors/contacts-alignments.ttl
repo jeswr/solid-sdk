@@ -1,3 +1,4 @@
+# AUTHORED-BY Codex GPT-6.1-Sol
 # AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 #
 @prefix contact: <https://w3id.org/jeswr/sectors/contacts#> .
@@ -5,6 +6,7 @@
 @prefix owl:     <http://www.w3.org/2002/07/owl#> .
 @prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
 @prefix skos:    <http://www.w3.org/2004/02/skos/core#> .
+@prefix xsd:     <http://www.w3.org/2001/XMLSchema#> .
 @prefix dcterms: <http://purl.org/dc/terms/> .
 @prefix vcard:   <http://www.w3.org/2006/vcard/ns#> .
 @prefix schema:  <https://schema.org/> .
@@ -36,11 +38,13 @@
 <https://w3id.org/jeswr/sectors/contacts/alignments> a owl:Ontology ;
     dcterms:title "Solid Contacts Sector Ontology — vcard & schema.org alignments (gUFO re-base)"@en ;
     owl:imports <https://w3id.org/jeswr/sectors/contacts> ;
-    owl:versionInfo "1.0.0" ;
-    owl:versionIRI <https://w3id.org/jeswr/sectors/contacts/alignments/1.0.0> ;
+    owl:versionInfo "1.1.0" ;
+    dcterms:modified "2026-10-25"^^xsd:date ;
+    owl:versionIRI <https://w3id.org/jeswr/sectors/contacts/alignments/1.1.0> ;
     rdfs:comment "Mode-A thin alignments (separate file, not in the reasoned closure) to vcard (the canonical contacts vocab) and schema.org. Reuse-before-mint. "@en .
 
 dcterms:title a owl:AnnotationProperty .
+dcterms:modified a owl:AnnotationProperty .
 
 # -----------------------------------------------------------------------------
 # Cards / kinds — vcard:Kind is the carrier; schema:ContactPoint the web view.
@@ -59,24 +63,27 @@ contact:OrganizationContact
     skos:closeMatch vcard:Organization , schema:Organization .
 
 # -----------------------------------------------------------------------------
-# Contact points — value-types. subClassOf where safe (our class is the narrower
-# Solid view of the vcard value-type); closeMatch to schema.org properties.
+# Contact points — explicit closeMatch to vCard alongside the existing bridges.
+# vCard has no generic contact-point class; match its channel properties, just
+# as OnlineHandle does below. vCard remains the application write model (V10).
 # -----------------------------------------------------------------------------
 
 contact:ContactPoint
-    skos:closeMatch schema:ContactPoint .
+    skos:closeMatch schema:ContactPoint , vcard:hasEmail , vcard:hasTelephone ,
+        vcard:hasAddress , vcard:hasURL , vcard:hasInstantMessage .
 
 contact:EmailAddress
     rdfs:subClassOf vcard:Email ;
-    skos:closeMatch schema:email .
+    skos:closeMatch vcard:Email , schema:email .
 
 contact:PhoneNumber
     rdfs:subClassOf vcard:Tel ;
-    skos:closeMatch schema:telephone .
+    skos:closeMatch vcard:Tel , schema:telephone .
 
 contact:PostalAddress
     rdfs:subClassOf vcard:Address ;
-    owl:equivalentClass schema:PostalAddress .
+    owl:equivalentClass schema:PostalAddress ;
+    skos:closeMatch vcard:Address .
 
 contact:OnlineHandle
     skos:closeMatch vcard:hasURL , vcard:hasInstantMessage .

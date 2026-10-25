@@ -1,3 +1,4 @@
+# AUTHORED-BY Codex GPT-6.1-Sol
 # AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 #
 @prefix core:  <https://w3id.org/jeswr/core#> .
@@ -31,7 +32,8 @@
 
 <https://w3id.org/jeswr/core/shapes> a owl:Ontology ;
     dcterms:title "Solid Core Ontology — SHACL profile"@en ;
-    owl:versionInfo "1.0.1" ;
+    owl:versionInfo "1.1.0" ;
+    dcterms:modified "2026-10-25"^^xsd:date ;
     rdfs:comment "F4 node shapes for the instantiable gUFO-rebased Core classes. Open by default; MUST=Violation, SHOULD=Warning. v1.0.1: adds core:QuantityShape (numericValue MUST, unit SHOULD)."@en .
 
 # -----------------------------------------------------------------------------
@@ -236,4 +238,21 @@ core:CategoryShape a sh:NodeShape ;
         sh:severity sh:Warning ;
         sh:message "A Category value SHOULD declare the scheme it is drawn from."@en ;
         sh:minCount 0 ;
+    ] .
+
+# -----------------------------------------------------------------------------
+# VALIDITY — optional dates on any subject using the shared temporal spine.
+# -----------------------------------------------------------------------------
+core:ValidityShape a sh:NodeShape ;
+    sh:targetSubjectsOf core:validFrom, core:validUntil ;
+    rdfs:label "Validity dates shape"@en ;
+    sh:property [
+        sh:path core:validFrom ;
+        sh:or ( [ sh:datatype xsd:date ] [ sh:datatype xsd:dateTime ] ) ;
+        sh:message "Validity starts must be dates (all-day) or dateTimes."@en ;
+    ] ;
+    sh:property [
+        sh:path core:validUntil ;
+        sh:or ( [ sh:datatype xsd:date ] [ sh:datatype xsd:dateTime ] ) ;
+        sh:message "Validity ends must be dates (all-day) or dateTimes."@en ;
     ] .

@@ -120,14 +120,8 @@
       "@id": "core:unit",
       "@type": "@id"
     },
-    "validFrom": {
-      "@id": "core:validFrom",
-      "@type": "xsd:dateTime"
-    },
-    "validUntil": {
-      "@id": "core:validUntil",
-      "@type": "xsd:dateTime"
-    },
+    "validFrom": "core:validFrom",
+    "validUntil": "core:validUntil",
     "value": "core:value"
   }
 }

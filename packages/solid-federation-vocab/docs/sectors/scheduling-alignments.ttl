@@ -1,3 +1,4 @@
+# AUTHORED-BY Codex GPT-6.1-Sol
 # AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 #
 @prefix sched:   <https://w3id.org/jeswr/sectors/scheduling#> .
@@ -5,6 +6,7 @@
 @prefix owl:     <http://www.w3.org/2002/07/owl#> .
 @prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
 @prefix skos:    <http://www.w3.org/2004/02/skos/core#> .
+@prefix xsd:     <http://www.w3.org/2001/XMLSchema#> .
 @prefix dcterms: <http://purl.org/dc/terms/> .
 @prefix cal:     <http://www.w3.org/2002/12/cal/ical#> .
 @prefix schema:  <https://schema.org/> .
@@ -36,11 +38,13 @@
 <https://w3id.org/jeswr/sectors/scheduling/alignments> a owl:Ontology ;
     dcterms:title "Solid Scheduling — external alignments (gUFO re-base)"@en ;
     owl:imports <https://w3id.org/jeswr/sectors/scheduling> ;
-    owl:versionInfo "1.0.0" ;
-    owl:versionIRI <https://w3id.org/jeswr/sectors/scheduling/alignments/1.0.0> ;
+    owl:versionInfo "1.1.0" ;
+    dcterms:modified "2026-10-25"^^xsd:date ;
+    owl:versionIRI <https://w3id.org/jeswr/sectors/scheduling/alignments/1.1.0> ;
     rdfs:comment "Mode-A thin alignments (separate file, not in the reasoned closure) to iCalendar (RFC 5545 / W3C cal:), schema.org and W3C OWL-Time. Reuse-before-mint. "@en .
 
 dcterms:title a owl:AnnotationProperty .
+dcterms:modified a owl:AnnotationProperty .
 
 # --- Classes: Calendar entries ------------------------------------------------
 sched:CalendarEvent  skos:closeMatch cal:Vevent , schema:Event .
@@ -88,11 +92,12 @@ sched:attendanceStatus skos:closeMatch schema:rsvpResponse .
 sched:respondedAt      skos:closeMatch schema:dateModified .
 
 # --- Properties: recurrence --------------------------------------------------
-# iCalendar FREQ / INTERVAL / COUNT / UNTIL are sub-parts of the RRULE value in
-# cal:, not first-class property IRIs; schema:repeatFrequency is the nearest
-# first-class external term for the frequency.
+# RRULE components have approximate matches in cal: and schema:Schedule.
 sched:recurrence skos:closeMatch cal:rrule , schema:eventSchedule .
-sched:frequency  skos:closeMatch schema:repeatFrequency .
+sched:frequency  skos:closeMatch schema:repeatFrequency , cal:freq .
+sched:interval   skos:closeMatch cal:interval .
+sched:count      skos:closeMatch schema:repeatCount , cal:count .
+sched:until      skos:closeMatch cal:until .
 
 # --- Properties: reminder ----------------------------------------------------
 sched:triggerTime   skos:closeMatch cal:trigger .

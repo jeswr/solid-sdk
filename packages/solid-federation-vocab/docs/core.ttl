@@ -1,3 +1,4 @@
+# AUTHORED-BY Codex GPT-6.1-Sol
 # AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 #
 @prefix core:    <https://w3id.org/jeswr/core#> .
@@ -50,8 +51,8 @@
     rdfs:label "Solid Core Ontology"@en ;
     vann:preferredNamespacePrefix "core" ;
     vann:preferredNamespaceUri "https://w3id.org/jeswr/core#" ;
-    owl:versionInfo "1.0.1" ;
-    owl:versionIRI <https://w3id.org/jeswr/core/1.0.1> ;
+    owl:versionInfo "1.1.0" ;
+    owl:versionIRI <https://w3id.org/jeswr/core/1.1.0> ;
     owl:imports <http://purl.org/nemo/gufo#> ;
     dcterms:description """The foundational ontology of the Solid data
         federation, re-based onto gUFO (the gentle OWL-2-DL implementation of
@@ -62,7 +63,7 @@
         classes), so this is a new MAJOR version. The single mandatory import is
         now gUFO + this thin profile. External vocabularies are reached via the
         companion alignments file, never re-derived."""@en ;
-    dcterms:modified "2026-06-13"^^xsd:date ;
+    dcterms:modified "2026-10-25"^^xsd:date ;
     rdfs:comment "Re-based per R11 §1.3. v1.0.1 ADDITIVE: adds core:Quantity (a foundational reified quantity value) + core:numericValue/core:unit; no existing term changed."@en .
 
 # -----------------------------------------------------------------------------
@@ -340,13 +341,15 @@ core:timestamp a owl:DatatypeProperty ;
     skos:definition "A simple instant when literal-level precision is enough (e.g. record creation)."@en .
 
 core:validFrom a owl:DatatypeProperty ;
+    skos:scopeNote "an xsd:date value means all-day"@en ;
     rdfs:label "valid from"@en ;
-    rdfs:range xsd:dateTime ;
+    rdfs:range [ a rdfs:Datatype ; owl:unionOf ( xsd:date xsd:dateTime ) ] ;
     skos:definition "Start of an entity's validity or applicability period."@en .
 
 core:validUntil a owl:DatatypeProperty ;
+    skos:scopeNote "an xsd:date value means all-day"@en ;
     rdfs:label "valid until"@en ;
-    rdfs:range xsd:dateTime ;
+    rdfs:range [ a rdfs:Datatype ; owl:unionOf ( xsd:date xsd:dateTime ) ] ;
     skos:definition "End of an entity's validity or applicability period."@en .
 
 core:atPlace a owl:ObjectProperty ;

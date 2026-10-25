@@ -1,3 +1,4 @@
+# AUTHORED-BY Codex GPT-6.1-Sol
 # AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 #
 @prefix sched:   <https://w3id.org/jeswr/sectors/scheduling#> .
@@ -43,7 +44,7 @@
 # (2) every class roots in a Core class and carries its gUFO meta-type;
 # (3) constrains, never forks; (4) reuses iCalendar/schema.org/OWL-Time in the
 # companion scheduling-alignments.ttl; (5) ships scheduling.shacl.ttl;
-# (6) carries owl:versionInfo "1.0.0" + a version IRI (gUFO re-base = new MAJOR);
+# (6) carries owl:versionInfo "1.1.0" + a version IRI (gUFO re-base = new MAJOR);
 # (7) Core ∪ scheduling is DL-valid + reasoner-consistent (see verification).
 # Open-world by default; the SHACL profile carries the closed-world MUST/SHOULD.
 # =============================================================================
@@ -54,8 +55,8 @@
     vann:preferredNamespacePrefix "sched" ;
     vann:preferredNamespaceUri "https://w3id.org/jeswr/sectors/scheduling#" ;
     owl:imports <https://w3id.org/jeswr/core> ;
-    owl:versionInfo "1.0.0" ;
-    owl:versionIRI <https://w3id.org/jeswr/sectors/scheduling/1.0.0> ;
+    owl:versionInfo "1.1.0" ;
+    owl:versionIRI <https://w3id.org/jeswr/sectors/scheduling/1.1.0> ;
     dcterms:description """Calendars and scheduling (the Calendar app), re-based
         onto the gUFO Core. Roots CalendarEvent in core:Event, Task/ToDo in
         core:Activity, Calendar/RecurrenceRule/Reminder in core:InformationResource
@@ -66,7 +67,7 @@
         meaning, and the v0 string-role relationship is replaced by a relator), so
         a new MAJOR version. Aligns to iCalendar RFC 5545, schema:Event/Schedule
         and W3C OWL-Time in the companion alignments file."""@en ;
-    dcterms:modified "2026-06-13"^^xsd:date ;
+    dcterms:modified "2026-10-25"^^xsd:date ;
     rdfs:comment "Re-based per R11 §4.2."@en .
 
 # -----------------------------------------------------------------------------
@@ -241,20 +242,23 @@ sched:description a owl:DatatypeProperty ;
 # --- Temporal: reuse Core validFrom/validUntil for clock start/end ---
 sched:startTime a owl:DatatypeProperty ;
     rdfs:subPropertyOf core:validFrom ;
-    rdfs:range xsd:dateTime ;
+    rdfs:range [ a rdfs:Datatype ; owl:unionOf ( xsd:date xsd:dateTime ) ] ;
+    skos:scopeNote "an xsd:date value means all-day"@en ;
     rdfs:label "start time"@en ;
     skos:definition "Clock start of an entry. Specialises core:validFrom; aligns to iCalendar DTSTART and schema:startDate. For full interval modelling use core:atTime → time:Interval (OWL-Time)."@en .
 
 sched:endTime a owl:DatatypeProperty ;
     rdfs:subPropertyOf core:validUntil ;
-    rdfs:range xsd:dateTime ;
+    rdfs:range [ a rdfs:Datatype ; owl:unionOf ( xsd:date xsd:dateTime ) ] ;
+    skos:scopeNote "an xsd:date value means all-day"@en ;
     rdfs:label "end time"@en ;
     skos:definition "Clock end of an entry. Specialises core:validUntil; aligns to iCalendar DTEND and schema:endDate."@en .
 
 sched:dueTime a owl:DatatypeProperty ;
     rdfs:subPropertyOf core:validUntil ;
     rdfs:domain sched:Task ;
-    rdfs:range xsd:dateTime ;
+    rdfs:range [ a rdfs:Datatype ; owl:unionOf ( xsd:date xsd:dateTime ) ] ;
+    skos:scopeNote "an xsd:date value means all-day"@en ;
     rdfs:label "due time"@en ;
     skos:definition "When a task is due. Specialises core:validUntil; aligns to iCalendar DUE."@en .
 
@@ -341,7 +345,8 @@ sched:count a owl:DatatypeProperty ;
 
 sched:until a owl:DatatypeProperty ;
     rdfs:domain sched:RecurrenceRule ;
-    rdfs:range xsd:dateTime ;
+    rdfs:range [ a rdfs:Datatype ; owl:unionOf ( xsd:date xsd:dateTime ) ] ;
+    skos:scopeNote "an xsd:date value means all-day"@en ;
     rdfs:label "until"@en ;
     skos:definition "The last date/time at which the recurrence may produce an occurrence. Aligns to iCalendar UNTIL."@en .
 
