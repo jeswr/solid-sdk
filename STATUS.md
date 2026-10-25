@@ -226,3 +226,80 @@ Review/remaining work:
 - Full-workspace validation remains blocked by existing network-dependent builds.
   No push, PR, branch switch, merge or other checkout mutation was performed.
 - Open questions: none.
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+## Final fix round — literal ESM loads and agent identifier restrictions
+
+Resumed on `lane/sst-z1d` from `63fbaa47055ee8aa93b90f306e17f40221acb494`.
+This round supersedes the earlier raw-fetch/static-ORIGINS policy above.
+
+Commits:
+
+- `6b706fbf` — `fix: allow only literal ESM loads in agent code`: accept literal
+  static ESM imports/re-exports and literal `import()` calls, preserving dependency
+  direction checks. Reject CommonJS loader references, wrapped/aliased `require`
+  and `createRequire`, `module.require`, bracket member/destructuring forms and
+  import-equals. Reject non-literal dynamic imports, including template strings,
+  concatenations, expression wrappers and URL objects.
+- The final `docs: record sst-z1d allowlist validation` commit updates this report last.
+
+Agent code now rejects identifiers `fetch`, `globalThis`, `global`, `window` and
+`self`, including aliases, exports, destructuring, type references and wrapped
+expressions. Ordinary property keys and member names on another object remain
+allowed. Static ORIGINS declarations no longer authorize raw fetch. Removed the
+origin discovery, raw-fetch escape analysis and associated wrapper helpers; no
+alias data-flow tracking remains.
+
+The policy applies to agent packages, the daemon and the existing agent UI paths,
+including their tests/configuration. Converted all ten scaffold export test files
+from `createRequire` to explicit static ESM namespace imports. Their assertions
+still verify every manifest export, declaration file, resolved runtime path and
+empty runtime namespace; the imported subpath inventory must match the manifest.
+No production package API, manifests or dependencies changed.
+
+Conservative interpretation / missing context:
+
+- `briefs/sst-z1d.md` and the earlier fix briefs are absent from this checkout.
+  Used the supplied final fix brief, existing checker/tests and earlier reports.
+- No sanctioned guarded-fetch adapter file or exception exists in this checkout.
+  No adapter path or exemption was invented. The existing `guarded-fetch` package
+  remains outside the agent identifier policy. Asked for an exact adapter path;
+  none was supplied during this round. A future exception needs that concrete path.
+- Applied the brief's sole-exception wording to tests as well as implementation
+  files, instead of retaining the previous test exemption for capability checks.
+
+Validation on the final implementation:
+
+- `pnpm exec biome check scripts/check-agent-layers.mjs test/agent-layers.test.mjs`
+  and Biome checks of all ten updated export tests — PASS, no remaining warnings.
+- `pnpm run lint:root` — PASS, also rerun successfully within the affected gate.
+- `TURBO_SCM_BASE=63fbaa47055ee8aa93b90f306e17f40221acb494 pnpm run gate --cache=local:rw --env-mode=loose`
+  — PASS: **42 successful / 42 total**, no cached tasks, 22.47 seconds. Covers
+  lint/build/typecheck/test for all nine touched packages and the daemon, plus
+  root lint/test. All **172 root tests** (144 layer cases) and **62 scaffold tests**
+  pass with default timeouts. The first attempt exposed a strict TypeScript error
+  in the migrated tests; corrected it before this successful run.
+- `pnpm run gate:full --cache=local:rw --env-mode=loose` — BLOCKED by unchanged
+  `@jeswr/unstorage-solid#build`: its external dependency clone was refused with
+  `fatal: transport 'https' not allowed`. **30 tasks succeeded**, 19 cached, before
+  cancellation. Unchanged Pod Manager also attempted a non-loopback connection,
+  refused by the temporary network guard. The root suite passes in this run too.
+- `git diff --check` — PASS.
+
+All gates used the existing temporary `/tmp/sst-z1d-network-guard.cjs` preload,
+`GIT_ALLOW_PROTOCOL=file`, `TURBO_TELEMETRY_DISABLED=1` and `DO_NOT_TRACK=1`.
+The preload reapplies Git's restriction in child Node processes; loose environment
+mode preserves caller restrictions. Remote caching was disabled. No remote fetch
+or clone completed, and no live provider/pod request or dependency installation ran.
+
+Review / remaining constraints:
+
+- Read and applied the colocated skills and `skills/solid-test-infrastructure` for
+  the test migration, and `skills/roborev-review` for the review workflow. The
+  `roborev` executable is unavailable; dispatcher automated review remains external.
+- Implementation is complete under the conservative adapter interpretation above.
+  Full-workspace validation remains blocked by pre-existing network-dependent builds.
+- No pushes, PRs, branch switches, merges, other checkout changes or tracker changes
+  were performed. Open question: the exact sanctioned adapter path, if an exception
+  is required in this checkout.
