@@ -379,6 +379,55 @@ it("rejects no nanopubs and invalid annotation targets", async () => {
   }
 });
 
+it.each([
+  ["TextQuoteSelector", "exact", "quote"],
+  ["FragmentSelector", "value", "locator"],
+] as const)("rejects multiple %s values regardless of triple order", async (type, predicate, field) => {
+  for (const values of [
+    ["first", "second"],
+    ["second", "first"],
+    ["same", "same"],
+    ["", "second"],
+  ]) {
+    const built = await buildNanopublications(batch(), options);
+    const n = built.nanopubs[0]!;
+    const provenance = df.namedNode(n.provenanceId);
+    const target = built.dataset.getQuads(
+      null,
+      df.namedNode(`${NS.oa}hasTarget`),
+      null,
+      provenance,
+    )[0]!.object;
+    built.dataset.removeQuads(
+      built.dataset.getQuads(target, df.namedNode(`${NS.oa}hasSelector`), null, provenance),
+    );
+    for (const value of values) {
+      const selector = df.blankNode();
+      built.dataset.addQuad(
+        target as never,
+        df.namedNode(`${NS.oa}hasSelector`),
+        selector,
+        provenance,
+      );
+      built.dataset.addQuad(
+        selector,
+        df.namedNode(`${NS.rdf}type`),
+        df.namedNode(`${NS.oa}${type}`),
+        provenance,
+      );
+      built.dataset.addQuad(
+        selector,
+        df.namedNode(`${predicate === "value" ? NS.rdf : NS.oa}${predicate}`),
+        df.literal(value),
+        provenance,
+      );
+    }
+    await expect(parseNanopublications(await serializeNanopublications(built))).rejects.toThrow(
+      `Multiple evidence ${field} selectors`,
+    );
+  }
+});
+
 it("does not borrow mandatory metadata from another graph", async () => {
   const trig = await altered((ds, id, a) => {
     const status = ds.getQuads(

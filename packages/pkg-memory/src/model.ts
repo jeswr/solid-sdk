@@ -419,10 +419,14 @@ function readNanopublications(dataset: Store): Nanopublications {
       for (const selector of target.terms(`${NS.oa}hasSelector`)) {
         const selection = new RdfNode(selector, p);
         const types = iriValues(selection, `${NS.rdf}type`);
-        if (types.includes(`${NS.oa}TextQuoteSelector`))
+        if (types.includes(`${NS.oa}TextQuoteSelector`)) {
+          if (result.quote !== undefined) throw new Error("Multiple evidence quote selectors");
           result.quote = selection.oneText(`${NS.oa}exact`);
-        if (types.includes(`${NS.oa}FragmentSelector`))
+        }
+        if (types.includes(`${NS.oa}FragmentSelector`)) {
+          if (result.locator !== undefined) throw new Error("Multiple evidence locator selectors");
           result.locator = selection.oneText(`${NS.rdf}value`);
+        }
       }
       return result;
     });
