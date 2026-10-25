@@ -118,13 +118,24 @@ export function createSourceAuth(
   if (!token) {
     throw new IntegrationSyncError(adapterId, "Live import requires a token — authorize first.");
   }
-  const origins = new Set(allowedOrigins.map((origin) => new URL(origin).origin));
+  const origins = new Set(
+    allowedOrigins.map((origin) => {
+      const url = new URL(origin);
+      if (url.protocol !== "https:" || url.username || url.password) {
+        throw new IntegrationSyncError(
+          adapterId,
+          "Source API origins must use HTTPS without userinfo.",
+        );
+      }
+      return url.origin;
+    }),
+  );
   const sourceFetch = refuseRedirects(fetchImpl);
   const impl = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const url = new URL(
       typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
     );
-    if (!origins.has(url.origin) || url.username || url.password) {
+    if (url.protocol !== "https:" || !origins.has(url.origin) || url.username || url.password) {
       throw new IntegrationSyncError(
         adapterId,
         "Source request is outside the allowed API origins.",

@@ -291,6 +291,16 @@ it("restricts bearer credentials to allowed origins and refuses source redirects
   await expect(auth.fetch("https://user:password@source.test/items")).rejects.toBeInstanceOf(
     IntegrationSyncError,
   );
+  await expect(auth.fetch("http://source.test/items")).rejects.toBeInstanceOf(IntegrationSyncError);
+  expect(() =>
+    createSourceAuth(
+      "toy",
+      toyAdapter,
+      { accessToken: "fixture-token", tokenType: "Bearer" },
+      transport,
+      ["http://source.test"],
+    ),
+  ).toThrow();
   expect(transport).toHaveBeenCalledOnce();
   transport.mockResolvedValueOnce(
     new Response(null, { status: 302, headers: { location: "https://foreign.test/leak" } }),
