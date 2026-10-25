@@ -5,7 +5,7 @@
 The typed RDF **data layer** for rich-text documents — with full provenance history —
 stored in a [Solid](https://solidproject.org) pod. One concrete app in the `@jeswr`
 Solid suite (ADR-0013: every app built in parallel), federation-registry-ready via the
-[`fedapp:`](https://w3id.org/jeswr/fed) vocabulary.
+[`fedapp:`](https://jeswr.org/ns/fed) vocabulary.
 
 This package is the **non-throwaway core**: a typed model over quads, read/write/list against
 a Solid pod, type-index registration, and a `clientid.jsonld` that declares the app's

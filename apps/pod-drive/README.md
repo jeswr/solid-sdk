@@ -80,7 +80,7 @@ legacy class IRIs. Standard vocabularies keep their published namespaces.
 ## Federation registry readiness
 
 `public/clientid.jsonld` is a Solid-OIDC Client Identifier Document that also publishes the
-[`fedapp:`](https://w3id.org/jeswr/fed) block (from `jeswr/solid-federation-vocab`): the app is a
+[`fedapp:`](https://jeswr.org/ns/fed) block (from `jeswr/solid-federation-vocab`): the app is a
 `fedapp:App` operating in the `documents` sector, requesting `acl:Read`/`Write`/`Append`, and
 declaring it `fedapp:declaresShape poddrive:DriveRoot` and consumes/produces LDP `Container` /
 `Resource`. This makes the app discoverable to a federation registry once that lands — membership

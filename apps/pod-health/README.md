@@ -30,7 +30,7 @@ other apps can discover it.
 | The vocabulary (single home for every IRI) | `src/vocab.ts` | never hand-concatenate IRIs at a call site |
 
 A federation-registry-ready Client Identifier Document lives at `public/clientid.jsonld`: it
-publishes the `fedapp:` block from [`https://w3id.org/jeswr/fed`](https://github.com/jeswr/solid-federation-vocab)
+publishes the `fedapp:` block from [`https://jeswr.org/ns/fed`](https://github.com/jeswr/solid-federation-vocab)
 (sector = health, the consumed/produced classes) alongside the Solid-OIDC client metadata.
 
 ## Namespace note

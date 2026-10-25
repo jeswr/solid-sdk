@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { readFileSync } from "node:fs";
-import { NS } from "@jeswr/suite-vocab";
+import { LEGACY_NAMESPACES, NS } from "@jeswr/suite-vocab";
 import { DataFactory, Parser, Store } from "n3";
 import { expect, it } from "vitest";
 
@@ -50,4 +50,18 @@ it.each([
       ).toContain("container holding");
     }
   }
+});
+
+it.each([
+  ["pod-docs/clientid.jsonld", NS.POD_DOCS],
+  ["pod-drive/public/clientid.jsonld", NS.POD_DRIVE],
+  ["pod-health/public/clientid.jsonld", NS.HEALTH],
+])("publishes canonical federation metadata in %s", (path, namespace) => {
+  const metadata = JSON.parse(readFileSync(new URL(`../../${path}`, import.meta.url), "utf8"));
+  const serialized = JSON.stringify(metadata);
+  for (const legacy of Object.keys(LEGACY_NAMESPACES)) {
+    expect(serialized).not.toContain(legacy);
+  }
+  expect(metadata["@context"][1].fedapp).toBe(NS.FED);
+  expect(serialized).toContain(namespace);
 });
