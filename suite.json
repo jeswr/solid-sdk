@@ -61,7 +61,16 @@
     "@jeswr/solid-vc",
     "@jeswr/solid-webauthn-reauth",
     "@jeswr/unstorage-solid",
-    "@jeswr/y-solid"
+    "@jeswr/y-solid",
+    "@jeswr/agent-model",
+    "@jeswr/agent-channels",
+    "@jeswr/agent-mandate",
+    "@jeswr/agent-executor",
+    "@jeswr/agent-audit",
+    "@jeswr/agent-model-gateway",
+    "@jeswr/agent-credentials",
+    "@jeswr/agent-memory",
+    "@jeswr/agent-registry"
   ],
   "applications": [
     {
@@ -127,6 +136,11 @@
     {
       "slug": "pod-photos",
       "name": "@jeswr/app-pod-photos",
+      "kind": "application"
+    },
+    {
+      "slug": "agent-daemon",
+      "name": "@jeswr/app-agent-daemon",
       "kind": "application"
     }
   ],
