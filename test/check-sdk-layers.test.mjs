@@ -33,10 +33,11 @@ describe("SDK layer guard", () => {
       encoding: "utf8",
     });
     const result = spawnSync(process.execPath, [guard], { cwd: tmpdir(), encoding: "utf8" });
-    expect(result.status).toBe(baseline.status);
+    expect(baseline.status).toBe(0);
+    expect(result.status).toBe(0);
     expect(result.stdout).toBe(baseline.stdout);
     expect(result.stderr).toBe(baseline.stderr);
-    expect(result.stdout + result.stderr).toMatch(/SDK layer guard (passed|failed)/);
+    expect(result.stdout).toContain("SDK layer guard passed");
   });
 
   it("allows the seven storage-client dependencies, public app surfaces and plumbing", () => {
@@ -211,6 +212,13 @@ describe("SDK layer guard", () => {
     "workspace:*",
     "workspace:^",
     "workspace:~",
+    "workspace:0.1.0",
+    "workspace:^0.1.0",
+    "workspace:~0.1.0",
+    "workspace:>=0.1 <1",
+    "workspace:1.0.0 - 2.0.0",
+    "workspace:1.x || >=2.0.0 <3",
+    "workspace:1.2.3-beta.1+build.5",
     "^1.0.0",
     ">=1.0.0 <2.0.0",
     "1.0.0 - 2.0.0",
@@ -258,10 +266,10 @@ describe("SDK layer guard", () => {
         peerDependencies: { storage: spec },
       },
       "apps/example/package.json": {
-        optionalDependencies: { storage: spec },
+        optionalDependencies: { "@sparq-org/sparq": spec },
       },
       "tools/example/package.json": {
-        dependencies: { storage: spec },
+        dependencies: { "@jeswr/pod-auth": spec },
       },
     });
     expect(result.status).toBe(1);
@@ -269,11 +277,59 @@ describe("SDK layer guard", () => {
       "packages/storage-client/package.json dependencies.n3: unresolvable dependency alias",
     );
     expect(result.stderr).toContain("peerDependencies.storage: unresolvable dependency alias");
-    expect(result.stderr).toContain("optionalDependencies.storage: unresolvable dependency alias");
     expect(result.stderr).toContain(
-      "tools/example/package.json dependencies.storage: unresolvable dependency alias",
+      "optionalDependencies.@sparq-org/sparq: unresolvable dependency alias",
+    );
+    expect(result.stderr).toContain(
+      "tools/example/package.json dependencies.@jeswr/pod-auth: unresolvable dependency alias",
     );
     if (spec) expect(result.stderr).not.toContain(spec);
+  });
+
+  it.each([
+    "github:example/unrelated#private-ref",
+    "file:../unrelated",
+    "link:../unrelated",
+  ])("ignores unrelated %s edges in unrestricted manifests", (spec) => {
+    const result = scan({
+      "packages/example/package.json": {
+        name: "@jeswr/example",
+        dependencies: { unrelated: spec },
+      },
+      "apps/example/package.json": { peerDependencies: { unrelated: spec } },
+      "apps/example/web/package.json": { optionalDependencies: { unrelated: spec } },
+      "tools/example/package.json": { dependencies: { unrelated: spec } },
+    });
+    expect(result.status).toBe(0);
+  });
+
+  it.each([
+    "dependencies",
+    "peerDependencies",
+    "optionalDependencies",
+  ])("rejects unresolved restricted package keys in %s", (field) => {
+    const result = scan({
+      "packages/example/package.json": {
+        name: "@jeswr/example",
+        [field]: {
+          "@jeswr/storage-client": "github:jeswr/storage-client#private-ref",
+          "@jeswr/pod-auth": "file:../pod-auth",
+        },
+      },
+      "apps/example/web/package.json": {
+        [field]: { "@jeswr/storage-client/solid": "file:../storage-client" },
+      },
+    });
+    expect(result.status).toBe(1);
+    for (const name of [
+      "@jeswr/storage-client",
+      "@jeswr/pod-auth",
+      "@jeswr/storage-client/solid",
+    ]) {
+      expect(result.stderr).toContain(`${field}.${name}: unresolvable dependency alias`);
+    }
+    expect(result.stderr).not.toContain("github:");
+    expect(result.stderr).not.toContain("file:");
   });
 
   it("leaves development dependencies outside the guard", () => {

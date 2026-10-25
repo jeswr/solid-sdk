@@ -65,8 +65,11 @@ on `@sparq-org/sparq` or the `@jeswr/storage-client/solid` and `/lws` backends;
 `@jeswr/storage-client` may depend only on `@jeswr/storage-capabilities`, `@jeswr/fetch-rdf`,
 `@jeswr/rdf-serialize`, `@jeswr/guarded-fetch`, `@solid/object`, `@rdfjs/wrapper`, and `n3`;
 `@jeswr/pod-auth` cannot depend on `@jeswr/storage-client`. The guard checks resolved npm
-and workspace alias targets and rejects unresolvable dependency aliases without printing
-their specs. It reports violating manifest paths, fields, and dependency names. Development
+and workspace alias targets; workspace versions and ranges target the dependency key.
+It rejects unresolvable dependency aliases in storage-client and pod-auth manifests,
+and for restricted package keys in any scanned manifest, without printing their specs.
+Unrelated file, link, and repository specs in unrestricted manifests are ignored.
+It reports violating manifest paths, fields, and dependency names. Development
 dependencies and source import restrictions are outside this manifest check's scope.
 Fixture tests run through `pnpm run test:root`; `--root <directory>` selects
 an isolated workspace for testing the script.

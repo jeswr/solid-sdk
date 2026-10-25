@@ -1,68 +1,58 @@
 <!-- AUTHORED-BY Codex GPT-6 -->
 
-# Lane status — sst-8xm.29 (T-003), fix round 1
+# Lane status — sst-8xm.29 (T-003), fix round 2
 
 Updated: 2026-10-25. Branch: `lane/sst-8xm.29`;
 base: `219cdd5a1579a95a6408f272fe6344e72e2e8664`.
 
 ## Outcome and commits
 
-The original implementation remains in `9b2a5fb9` (`feat: enforce SDK dependency
-layers`), with its earlier completion report in `ff525448`.
+The original implementation is `9b2a5fb9` (`feat: enforce SDK dependency layers`),
+with its earlier completion report in `ff525448`. Fix round 1 is `e28fd187`
+(`fix: resolve workspace aliases in the layer guard`).
 
-This revision, `fix: resolve workspace aliases in the layer guard`, addresses
-the medium finding from review @ff525448:
+This revision, `fix: scope fail-closed alias checks to layered packages`, implements
+the fix-round-2 decision and addresses the medium workspace-range finding @e28fd187:
 
-- Resolve npm aliases, ranged workspace aliases, and bare workspace aliases before
-  applying rules. Only the target determines whether an edge is allowed.
-- Plain `workspace:*`, `workspace:^`, and `workspace:~` specs retain the dependency
-  key as their target, as do ordinary versions, ranges, and tags.
-- Fail closed with `unresolvable dependency alias` for other protocols, paths,
-  repository shorthands, and malformed specs; dependency specs are never printed.
-- Check `dependencies`, `peerDependencies`, and `optionalDependencies`; development
-  dependencies remain outside scope. Update the AGENTS.md guard documentation.
-- Expand fixtures from 11 to 41 layer-guard tests, covering allowed aliases,
-  disguised forbidden targets, every checked field, and unresolved aliases.
-  The real-tree test checks working-directory independence for both passing and
-  failing scans; the root lint command enforces the real-tree policy verdict.
+- Limit unresolved-spec failures to storage-client and pod-auth manifests, plus
+  restricted dependency keys in any scanned manifest (including their subpaths).
+  Ignore unrelated file, link, and repository specs in unrestricted manifests.
+  The five existing declarations identified in round 1 now pass without changes.
+- Resolve workspace semver versions and ranges against the dependency key before
+  considering aliases. Cover exact, caret, tilde, comparator, hyphen, union,
+  wildcard, and prerelease/build ranges. Retain npm and workspace alias resolution.
+- Preserve dependency, peer, and optional coverage, target-based layer rules,
+  spec-redacted diagnostics, and the exclusion of development dependencies.
+- Expand layer-guard fixtures from 41 to 54 tests. The real-tree test now requires
+  a passing scan both inside and outside the checkout. Update AGENTS.md to describe
+  the narrowed policy.
 
 ## Validation
 
-- `pnpm run test:root` — **PASS**, 3 files and 67 tests, including all 41
+- `pnpm run lint:root` — **PASS**, including the layer guard on 76 real manifests,
+  Biome, lockfile transport, app-workspace, and raw-fetch checks.
+- `pnpm run test:root -- test/check-sdk-layers.test.mjs` — **PASS**, 3 files and
+  all 80 root tests (the separator causes Vitest to run the whole root suite).
+- `pnpm exec vitest run test/check-sdk-layers.test.mjs` — **PASS**, all 54
   layer-guard tests. The test configuration does not measure script coverage.
-- `pnpm run lint:root` — **FAIL**, exit 1 at `check:sdk-layers`. Biome, lockfile
-  transport, and app-workspace checks pass. The stricter guard rejects five
-  existing declarations listed below.
-- `pnpm run check:fetch` — **PASS**, run separately because lint stops before it.
 - `git diff --check` — **PASS**.
-- The gate scope is `lint:root` plus root script tests, as requested by the fix
-  brief. No package sources changed; broader workspace gates were not run.
-
-## Existing declarations blocking lint
-
-The fail-closed rule applies conservatively to every manifest the guard scans,
-including tools and packages without additional layer-specific restrictions.
-It exposes these existing declarations:
-
-| Manifest | Dependency | Protocol |
-| --- | --- | --- |
-| `apps/pod-manager/package.json` | `@solid/reactive-authentication` | `file:` |
-| `packages/agent-authz-verifier/package.json` | `@jeswr/solid-odrl` | `github:` |
-| `packages/agent-authz-verifier/package.json` | `@jeswr/solid-vc` | `github:` |
-| `packages/federation-trust/package.json` | `@jeswr/federation-registry` | `github:` |
-| `packages/federation-trust/package.json` | `@jeswr/solid-vc` | `github:` |
-
-These manifests are unchanged: dependency migration is outside this fix brief.
-They need dispatcher follow-up before the stricter real-tree gate can pass.
+- `pnpm run gate` and `pnpm run gate:full` — **FAIL**, exit 1 in the unchanged
+  `@jeswr/unstorage-solid` build. Its dependency-build helper invokes a remote
+  clone into `/tmp`, then `npm install --ignore-scripts`; npm fails with `EROFS`
+  when writing `/home/runner/.npm/_cacache`. The gate's remote-clone side effect
+  was discovered from its output; no further gate retries were made after that
+  discovery. Logs: `/tmp/sst-8xm.29-gate.log` and
+  `/tmp/sst-8xm.29-gate-full.log`. No package sources or dependencies were changed
+  to work around this unrelated build/environment limitation.
 
 ## Review, unfinished work, and open questions
 
 `roborev status` is unavailable (exit 127, command not found). The dispatcher
 must obtain the charter's per-commit automated review.
 
-The requested guard fix and regression fixtures are complete. Remaining blockers
-are the five existing declarations and unavailable automated review. There are
-no open design questions. STATUS.md was updated after implementation and tests.
-No dependencies were added, and no pushes, PRs, fetches, branch switches, or
-changes to other checkouts were performed. Bead integration and closure remain
-with the dispatcher.
+The requested guard fix and regression fixtures are complete, and the requested
+real-tree root lint passes. Full-workspace verification and automated review
+remain incomplete for the reasons above. There are no open design questions.
+STATUS.md was updated last, after implementation and validation. No dependencies
+were added; no pushes, PRs, branch switches, or merges were performed. Bead
+integration and closure remain with the dispatcher.
