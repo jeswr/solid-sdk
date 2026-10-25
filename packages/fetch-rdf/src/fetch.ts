@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 /**
  * fetchRdf — GET an RDF resource and parse the body in one call.
  *
@@ -57,31 +58,43 @@ export async function fetchRdf(url: string, options: FetchRdfOptions = {}): Prom
     });
   }
 
-  if (!response.ok) {
-    throw new RdfFetchError(
-      `HTTP ${response.status} ${response.statusText || ""} fetching ${url}.`.trim(),
-      {
-        status: response.status,
-        url: response.url || url,
-        contentType: response.headers.get("content-type") ?? undefined,
-      },
-    );
-  }
+  try {
+    if (!response.ok) {
+      throw new RdfFetchError(
+        `HTTP ${response.status} ${response.statusText || ""} fetching ${url}.`.trim(),
+        {
+          status: response.status,
+          url: response.url || url,
+          contentType: response.headers.get("content-type") ?? undefined,
+        },
+      );
+    }
 
-  // `response.body` is null when there's no body (e.g. 204) — fall back
-  // to an empty string so parseRdf still returns an (empty) dataset.
-  const dataset = await parseRdf(response.body ?? "", response.headers.get("content-type"), {
-    baseIRI: response.url || url,
-    ...(options.documentLoader !== undefined && { documentLoader: options.documentLoader }),
-  });
-  return {
-    dataset,
-    headers: response.headers,
-    etag: response.headers.get("etag"),
-    url: response.url || url,
-    contentType: extractMediaType(response.headers.get("content-type")),
-    response,
-  };
+    // `response.body` is null when there's no body (e.g. 204) — fall back
+    // to an empty string so parseRdf still returns an (empty) dataset.
+    const dataset = await parseRdf(response.body ?? "", response.headers.get("content-type"), {
+      baseIRI: response.url || url,
+      ...(options.documentLoader !== undefined && { documentLoader: options.documentLoader }),
+    });
+    return {
+      dataset,
+      headers: response.headers,
+      etag: response.headers.get("etag"),
+      url: response.url || url,
+      contentType: extractMediaType(response.headers.get("content-type")),
+      response,
+    };
+  } catch (cause) {
+    // Header/status checks can reject before the parser owns the stream.
+    // Parsing also tears down its reader; cancellation here is best-effort
+    // so an absent, locked, or errored body cannot hide the original failure.
+    try {
+      await response.body?.cancel();
+    } catch {
+      // Preserve the response/parse error if cleanup fails.
+    }
+    throw cause;
+  }
 }
 
 function errorMessage(cause: unknown): string {
