@@ -169,7 +169,7 @@ export class ReactiveAuthenticationClient {
       const upgraded = await provider.upgrade(attempt.request(session.signal), challenge);
       await discard(challenge.response);
 
-      const result = await this.#send(withRedirect(upgraded, "manual"), session);
+      const result = await this.#send(withRedirect(upgraded, "manual"), session, true);
       if (redirectStatuses.has(result.status) || result.type === "opaqueredirect") {
         return await this.#followRedirect(attempt, result, session, hops);
       }
@@ -217,8 +217,11 @@ export class ReactiveAuthenticationClient {
     );
   }
 
-  async #send(request: Request, session: Session): Promise<Response> {
+  async #send(request: Request, session: Session, credentialed = false): Promise<Response> {
     await this.#assertCurrent(session);
+    if (credentialed && !this.#boundary.allows(request.url)) {
+      throw new ReactiveAuthenticationError(`Credential boundary no longer allows ${request.url}`);
+    }
     return await this.#fetch(request);
   }
 
