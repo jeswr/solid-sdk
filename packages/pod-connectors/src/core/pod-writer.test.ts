@@ -1,5 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+
 import { RdfFetchError } from "@jeswr/fetch-rdf";
+import { PodScopeError } from "@jeswr/guarded-fetch";
 import { Store } from "n3";
 import { describe, expect, it, vi } from "vitest";
 import { ResourceWriteError } from "../pod/resource.js";
@@ -67,6 +69,53 @@ describe("fetch-backed PodWriter", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
+  it.each([
+    "read",
+    "write",
+  ] as const)("confines every %s redirect hop to the connector root", async (operation) => {
+    const seen: string[] = [];
+    const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
+      const url = String(input);
+      seen.push(url);
+      expect(init?.redirect).toBe("manual");
+      return new Response(null, {
+        status: 307,
+        headers: { location: seen.length === 1 ? "next.ttl" : `${TEST_POD_ROOT}private/other.ttl` },
+      });
+    });
+    const port = writer(fetch);
+    const failure = await (operation === "read" ? port.read(doc.slug) : port.write(doc)).catch(
+      (error: unknown) => error,
+    );
+    expect(failure instanceof RdfFetchError ? failure.cause : failure).toBeInstanceOf(
+      PodScopeError,
+    );
+    expect(seen).toEqual([port.resolve(doc.slug), port.resolve("media/next.ttl")]);
+    expect(
+      fetch.mock.calls.every(
+        ([, init]) => (init?.method ?? "GET") === (operation === "write" ? "PUT" : "GET"),
+      ),
+    ).toBe(true);
+  });
+
+  it.each([
+    "read",
+    "write",
+  ] as const)("follows %s redirects within the connector root", async (operation) => {
+    const pod = createMemoryPod();
+    const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
+      if (String(input).endsWith("items.ttl")) {
+        return new Response(null, { status: 307, headers: { location: "next.ttl" } });
+      }
+      return pod.fetch(input, init);
+    });
+    const port = writer(fetch);
+    await port.write({ ...doc, slug: "media/next.ttl" });
+    if (operation === "read") expect((await port.read(doc.slug))?.etag).toBe('"v1"');
+    else await port.write(doc);
+    expect(fetch.mock.calls.at(-1)?.[0]).toBe(port.resolve("media/next.ttl"));
+  });
+
   it("refuses an unsafe adapter id", () => {
     expect(() =>
       createFetchPodWriter({
@@ -87,6 +136,43 @@ describe("fetch-backed PodWriter", () => {
     expect(pod.get(first.indexUrl)).toContain(doc.forClass);
     expect(await port.registerType(registrations)).toMatchObject({ indexUrl: first.indexUrl });
     expect(pod.putCount).toBe(putCount);
+  });
+
+  it.each([
+    "profile",
+    "index",
+  ])("refuses redirects from the %s to unrelated Pod documents", async (target) => {
+    const pod = createMemoryPod();
+    const port = writer(pod.fetch);
+    const { indexUrl } = await port.registerType([]);
+    const profileUrl = TEST_WEBID.split("#")[0];
+    const redirectUrl = target === "profile" ? profileUrl : indexUrl;
+    const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
+      if (String(input).split("#")[0] === redirectUrl) {
+        return new Response(null, {
+          status: 307,
+          headers: { location: `${TEST_POD_ROOT}private/other.ttl` },
+        });
+      }
+      return pod.fetch(input, init);
+    });
+    await expect(
+      writer(fetch).registerType([{ forClass: doc.forClass, container: port.resolve("media/") }]),
+    ).rejects.toThrow();
+    expect(fetch.mock.calls.map(([input]) => String(input))).not.toContain(
+      `${TEST_POD_ROOT}private/other.ttl`,
+    );
+  });
+
+  it("updates an existing profile-linked index outside the connector root", async () => {
+    const pod = createMemoryPod();
+    const port = writer(pod.fetch);
+    const first = await port.registerType([]);
+    const result = await port.registerType([
+      { forClass: doc.forClass, container: port.resolve("media/") },
+    ]);
+    expect(result).toMatchObject({ indexUrl: first.indexUrl, added: 1, bootstrapped: false });
+    expect(pod.get(result.indexUrl)).toContain(doc.forClass);
   });
 
   it("refuses a profile-linked foreign Type Index before sending Pod credentials", async () => {

@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * Type-Index write path — make sure a set of `(forClass, container)` pairs is
  * registered, bootstrapping a private index when the profile has none (CSS
@@ -7,6 +8,7 @@
  * All RDF goes through the typed wrappers in `type-index.ts` — never inline
  * quads (house rule).
  */
+import { assertWithinPodScope, refuseRedirects } from "@jeswr/guarded-fetch";
 import { DataFactory, Store } from "n3";
 import { freshRdf } from "./rdf-read.js";
 import { ResourceWriteError, writeResource } from "./resource.js";
@@ -43,8 +45,8 @@ const PREFIXES = { solid: "http://www.w3.org/ns/solid/terms#" };
  * falls back to the public one; bootstraps `settings/privateTypeIndex.ttl`
  * under the pod root — and links it from the profile — when neither exists.
  *
- * @param fetchImpl - test-only override; **omit in production** so the
- *   auth-patched global fetch runs.
+ * Connector hosts supply the Pod transport explicitly. Only the profile document and
+ * its selected, Pod-scoped index are accessible; redirects are refused.
  */
 export async function ensureTypeRegistrations(opts: {
   webId: string;
@@ -52,14 +54,34 @@ export async function ensureTypeRegistrations(opts: {
   registrations: DesiredRegistration[];
   fetchImpl?: typeof fetch;
 }): Promise<EnsureRegistrationsResult> {
-  const { webId, podRoot, registrations, fetchImpl } = opts;
+  const { webId, podRoot, registrations } = opts;
+  const profileFetch = refuseRedirects(opts.fetchImpl);
 
   // Read-modify-write: both reads MUST revalidate — a heuristically cached
   // copy would carry a stale ETag into If-Match (spurious 412 on the write).
-  const { dataset: profileDs, etag: profileEtag } = await freshRdf(webId, fetchImpl);
+  const { dataset: profileDs, etag: profileEtag } = await freshRdf(webId, profileFetch);
   const links = typeIndexLinks(webId, profileDs);
   let indexUrl = links.privateIndex ?? links.publicIndex;
   let bootstrapped = false;
+  // Bind index access to the one profile-linked document (or bootstrap target).
+  // A valid Pod URL alone does not grant access to unrelated Pod documents.
+  const selectedIndex = documentUrl(
+    assertWithinPodScope(
+      podRoot,
+      indexUrl ?? new URL("settings/privateTypeIndex.ttl", podRoot).href,
+      {
+        allowRoot: false,
+      },
+    ),
+  );
+  const fetchImpl: typeof fetch = (input, init) => {
+    const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+    if (documentUrl(url) !== selectedIndex) {
+      throw new Error("Type Index request is outside the selected document.");
+    }
+    assertWithinPodScope(podRoot, url, { allowRoot: false });
+    return profileFetch(input, init);
+  };
 
   if (!indexUrl) {
     indexUrl = new URL("settings/privateTypeIndex.ttl", podRoot).toString();
@@ -69,7 +91,7 @@ export async function ensureTypeRegistrations(opts: {
     anchor.privateIndex = indexUrl;
     await writeResource(documentUrl(webId), profileDs, {
       etag: profileEtag,
-      fetchImpl,
+      fetchImpl: profileFetch,
     });
     bootstrapped = true;
   }

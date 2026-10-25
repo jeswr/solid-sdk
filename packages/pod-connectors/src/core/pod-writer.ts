@@ -23,19 +23,7 @@ export function createFetchPodWriter(options: FetchPodWriterOptions): PodWriter 
   if (!/^[a-z0-9-]+$/.test(adapterId))
     throw new IntegrationSyncError(adapterId, "Invalid adapter id.");
   const root = assertWithinPodScope(podRoot, new URL(`integrations/${adapterId}/`, podRoot).href);
-  const podFetch = createPodScopedFetch(podRoot, { fetch: options.fetch });
-  // A profile can be hosted outside the Pod. Only that exact document may use
-  // the host transport outside the active storage, with redirects refused.
-  const profileUrl = new URL(webId);
-  profileUrl.hash = "";
-  const registrationFetch: typeof fetch = (input, init) => {
-    const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
-    const target = new URL(url);
-    target.hash = "";
-    return target.href === profileUrl.href
-      ? options.fetch(input, { ...init, redirect: "error" })
-      : podFetch(input, init);
-  };
+  const podFetch = createPodScopedFetch(root, { fetch: options.fetch, allowRoot: false });
   const resolve = (slug: string): string => {
     try {
       return assertWithinPodScope(root, new URL(slug, root).href, { allowRoot: false });
@@ -77,7 +65,7 @@ export function createFetchPodWriter(options: FetchPodWriterOptions): PodWriter 
         webId,
         podRoot,
         registrations: [...registrations],
-        fetchImpl: registrationFetch,
+        fetchImpl: options.fetch,
       }),
   };
 }
