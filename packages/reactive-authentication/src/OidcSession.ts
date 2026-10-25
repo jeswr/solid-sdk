@@ -184,6 +184,7 @@ export class OidcSession {
    * Returns a usable session for the authorization server and credential context: cached, refreshed,
    * or (when `interactive`) newly authorized. Returns `undefined` only when not interactive and no
    * session could be restored.
+   * Pass `expectedGeneration` when the operation began before discovery or context resolution.
    */
   async get(
     as: oauth.AuthorizationServer,
@@ -191,10 +192,11 @@ export class OidcSession {
     signal: AbortSignal,
     usable: (entry: DPoPTokenCacheEntry, justIssued: boolean) => boolean,
     interactive = true,
+    expectedGeneration?: number,
   ): Promise<DPoPTokenCacheEntry | undefined> {
     const fence = this.#fence;
     const combined = AbortSignal.any([signal, fence.signal]);
-    const generation = await fence.generation();
+    const generation = expectedGeneration ?? (await fence.generation());
     const key = await this.#key(as.issuer, context);
     const store = this.#options.sessionStore;
 
