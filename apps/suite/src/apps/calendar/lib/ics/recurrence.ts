@@ -120,6 +120,11 @@ export function readRule(value: string): RecurrenceRule {
 }
 
 export function validateUntil(rule: RecurrenceRule, start: string, tzid?: string): void {
+  requireIcs(
+    start.length !== 10 ||
+      (rule.bySecond === undefined && rule.byMinute === undefined && rule.byHour === undefined),
+    "DATE recurrence cannot have clock selectors",
+  );
   if (rule.until === undefined) return;
   requireIcs(
     (start.length === 10) === (rule.until.length === 10),

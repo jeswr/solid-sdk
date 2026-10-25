@@ -53,7 +53,10 @@ function property(line: string): Property {
   }
   requireIcs(index < line.length && !quoted, "missing property separator");
   const segments = line.slice(0, index).match(/(?:"[^"]*"|[^;])+/g);
-  requireIcs(segments, "missing property name");
+  requireIcs(
+    segments && segments.join(";") === line.slice(0, index),
+    "missing property name or empty parameter",
+  );
   const name = segments.shift() as string;
   requireIcs(/^[a-z\d-]+$/i.test(name), "invalid property name");
   const params = new Map<string, string>();
@@ -65,8 +68,8 @@ function property(line: string): Property {
       equal > 0 && /^[A-Z\d-]+$/.test(key) && value && !params.has(key),
       "invalid parameter",
     );
+    requireIcs(/^(?:"[^"]*"|[^"]+)$/.test(value), "invalid quoted parameter");
     if (value.startsWith('"')) {
-      requireIcs(value.endsWith('"'), "unterminated parameter");
       value = value.slice(1, -1);
     }
     params.set(key, value);

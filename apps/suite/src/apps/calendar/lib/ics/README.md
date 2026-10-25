@@ -1,6 +1,6 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 
-Pure RFC 5545 VEVENT boundary: `importICal(text)` and `exportICal({ events, timezones? })`.
+Pure [RFC 5545](https://www.rfc-editor.org/rfc/rfc5545) VEVENT boundary: `importICal(text)` and `exportICal({ events, timezones? })`.
 No dependencies, I/O, recurrence expansion, randomness, or host timezone conversion.
 
 Events use `name`, ISO `start`/`end`, `location`, `description`, `recurrence`, and
