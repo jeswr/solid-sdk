@@ -26,24 +26,21 @@ protocol plugs in through the `TokenProvider` interface. See the
 
 ## Install
 
-Requires Node.js 24.5 or later to build and test (Web Locks).
+Requires Node.js 24.5 or later to build and test (Web Locks). From the `solid-sdk` workspace root:
 
 ```batch
-git clone https://github.com/jeswr/reactive-authentication-ai.git
-cd reactive-authentication-ai
-npm install
-npm run build                 # compiles to dist/
-npm pack                      # produces solid-reactive-authentication-<version>.tgz in this directory
+pnpm install --ignore-scripts
+pnpm --filter @jeswr/reactive-authentication run build
 ```
 
-Then, in your application, install the tarball (or the checkout directory) by its local path:
+Workspace consumers declare the package with a workspace dependency:
 
-```batch
-npm install /path/to/reactive-authentication-ai/solid-reactive-authentication-<version>.tgz
+```json
+"@jeswr/reactive-authentication": "workspace:*"
 ```
 
-The package name is still `@jeswr/reactive-authentication`, so imports below work once the tarball built from this repository is
-installed; do not expect them to work against the npm release.
+The imported package is private pending suite conformance. Its four exports are `.`, `./elements`,
+`./registerElements`, and `./service-worker`; it is not published to npm.
 
 ## Quick start (Solid-OIDC in a page)
 
@@ -166,8 +163,8 @@ scopes and audience are fixed configuration. Rejected tokens are renewed once; l
 
 | Source | Use for | Notes |
 | --- | --- | --- |
-| `GoogleTokenSource(google.accounts.oauth2, {clientId, scopes})` | Google APIs in the browser | Wraps [Google Identity Services' token model](https://developers.google.com/identity/oauth2/web/guides/use-token-model). No refresh tokens in browsers: call `authorize()` **from a click** (it calls `requestAccessToken` synchronously; one authorization at a time, abortable); reactive retries reuse the cached token or throw `InteractionRequiredError`. Each authorization has its own SDK callbacks, so late or stale callbacks are ignored. Partial scope grants, popup failures, OAuth errors and responses without a Bearer token and positive lifetime reject with `AuthorizationFailedError`. `loginHint` is advisory, not account enforcement. With `revokeOnForget`, `forget()` clears local state first, then reports Google's revocation outcome. Types checked against `@types/google.accounts` in `npm test`. |
-| `MsalTokenSource(msal, {scopes})` | Microsoft Graph / Entra ID APIs | Wraps your `PublicClientApplication` (not a dependency of this library; types checked against `@azure/msal-browser` 5 in `npm test`). `acquireTokenSilent` first, `forceRefresh` only after the token it handed out was rejected; only interaction-required errors become `InteractionRequiredError`, for a click-driven `authorize()` (one popup per MSAL instance). The `account` selector is authoritative and yours to update after the user picks an account (e.g. `loginPopup` + `setActiveAccount`); results for another account, empty tokens and invalid expiries are refused; abort/logout settle immediately and discard late SDK results. MSAL owns the cache and tenant/issuer validation. MSAL v5 popups need a dedicated redirect page calling `broadcastResponseToMainFrame()` ([`microsoft-redirect.html`](examples/microsoft-redirect.html)). |
+| `GoogleTokenSource(google.accounts.oauth2, {clientId, scopes})` | Google APIs in the browser | Wraps [Google Identity Services' token model](https://developers.google.com/identity/oauth2/web/guides/use-token-model). No refresh tokens in browsers: call `authorize()` **from a click** (it calls `requestAccessToken` synchronously; one authorization at a time, abortable); reactive retries reuse the cached token or throw `InteractionRequiredError`. Each authorization has its own SDK callbacks, so late or stale callbacks are ignored. Partial scope grants, popup failures, OAuth errors and responses without a Bearer token and positive lifetime reject with `AuthorizationFailedError`. `loginHint` is advisory, not account enforcement. With `revokeOnForget`, `forget()` clears local state first, then reports Google's revocation outcome. Types checked against `@types/google.accounts` in the package `typecheck` script. |
+| `MsalTokenSource(msal, {scopes})` | Microsoft Graph / Entra ID APIs | Wraps your `PublicClientApplication` (not a dependency of this library; types checked against `@azure/msal-browser` 5 in the package `typecheck` script). `acquireTokenSilent` first, `forceRefresh` only after the token it handed out was rejected; only interaction-required errors become `InteractionRequiredError`, for a click-driven `authorize()` (one popup per MSAL instance). The `account` selector is authoritative and yours to update after the user picks an account (e.g. `loginPopup` + `setActiveAccount`); results for another account, empty tokens and invalid expiries are refused; abort/logout settle immediately and discard late SDK results. MSAL owns the cache and tenant/issuer validation. MSAL v5 popups need a dedicated redirect page calling `broadcastResponseToMainFrame()` ([`microsoft-redirect.html`](examples/microsoft-redirect.html)). |
 | `OAuthCodeSource({issuer \| authorizationServer, clientId, redirectUri, scopes, resource?, audience?, prompt?, codeProvider})` | Any OAuth 2.0 / OIDC provider | Authorization code + S256 PKCE for a registered client: HTTPS authorization endpoint, state, issuer and exact redirect-URI checks (fixed query parameters kept, no fragment); Bearer tokens only; refresh (rotating or not) when issued. Plain OAuth needs no `openid` and gets no automatic `prompt`, even with `offline_access`; with `openid`, nonce, issuer and audience of the ID token are validated and `identity()` reports its claims. `resource`, `audience` and `prompt` are options (not `parameters`), and every token-affecting setting keys the cache. Operations are bound to logout from their start, discovery included. `clientSecret` is for server-side code only and refused in browsers and workers. |
 
 Register the app with the provider first: its redirect URI (Entra ID: type *Single-page application*, so the
@@ -263,20 +260,24 @@ a warning: `{allowInsecureRequests: true}` for components making OAuth/discovery
 - [Upstream issue and PR resolution](docs/upstream-resolution.md)
 - [Interoperability testing](docs/interoperability/README.md): real local servers (CSS, Keycloak, NSS, Solid
   Nextcloud, PHP Solid Server, Manas), hosted pod providers, OAuth/OIDC providers, Google/Microsoft SDKs and LWS
-- API reference: `npm run docs` (TypeDoc)
+- API reference: `pnpm --filter @jeswr/reactive-authentication run docs` (TypeDoc)
 
 ## Development
 
-```batch
-npm install
-npm test               # build + Node tests against local mock servers
-npm run test:browser   # browser smoke tests; -- --browser firefox|webkit (npx playwright install <engine>)
-npm run interop:local  # real CSS and Keycloak in disposable Docker containers (see docs/interoperability)
-npm run docs
+```sh
+pnpm --filter @jeswr/reactive-authentication run lint
+pnpm --filter @jeswr/reactive-authentication run build
+pnpm --filter @jeswr/reactive-authentication run typecheck
+pnpm --filter @jeswr/reactive-authentication run test  # Vitest, local fixtures, 100% coverage required
+pnpm --filter @jeswr/reactive-authentication run test:browser
+pnpm --filter @jeswr/reactive-authentication run test:browser:regressions
 ```
 
-The demo (`index.html`) runs from any static server on the repository root after `npm run build`, e.g.
-`npx http-server`, then [localhost:8080](http://localhost:8080).
+Install the matching browser with `pnpm --filter @jeswr/reactive-authentication exec playwright install chromium`.
+Browser tests use local mock servers. Live interoperability and Docker-backed local-server suites remain
+explicit commands (see `docs/interoperability`); they are not part of the unit gate.
+
+The demo (`index.html`) runs from a static server rooted at this package directory after building.
 
 Requires Node.js 24.5 or later (Web Locks). TypeScript stays on 6.x until typedoc supports TypeScript 7
 (see [#34](docs/upstream-resolution.md)).
