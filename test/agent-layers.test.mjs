@@ -40,6 +40,43 @@ describe("agent layer boundaries (DESIGN §2.2)", () => {
   ])("also enforces SDK isolation outside agent projects: %s", (source) => {
     expect(scan("apps/pod-mail/web/src/index.ts", source).join("\n")).toContain("gateway-only");
   });
+  it.each([
+    "(require)(TARGET);",
+    "(require as Loader)(TARGET);",
+    "(require satisfies Loader)(TARGET);",
+    "(<Loader>require)(TARGET);",
+    "require!(TARGET);",
+    "module.require(TARGET);",
+    "(module.require as Loader)(TARGET);",
+    'module["require"](TARGET);',
+    'module[("require" as const)!](TARGET);',
+    "module[`require`](TARGET);",
+    'module["requ\\u0069re"](TARGET);',
+    "(requ\\u0069re)(TARGET);",
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: source fixture for prefilter coverage
+    "const label = `value ${name}`; (require)(TARGET);",
+  ])("checks wrapped and member loader targets outside agent projects: %s", (source) => {
+    for (const [target, reason] of [
+      ["openai", "gateway-only"],
+      ["@anthropic-ai/sdk", "gateway-only"],
+      ["@jeswr/agent-channels/gmail/send", "executor-only"],
+      ["../../../../packages/agent-channels/src/gmail/send.js", "executor-only"],
+    ]) {
+      expect(
+        scan(
+          "apps/pod-mail/web/src/index.ts",
+          source.replace("TARGET", JSON.stringify(target)),
+        ).join("\n"),
+      ).toContain(reason);
+    }
+    expect(scan("apps/pod-mail/web/src/index.ts", source.replace("TARGET", '"fs"'))).toEqual([]);
+    // Normalizing a loader for suite-wide target checks must not permit it in agent code.
+    expect(
+      scan("packages/agent-model-gateway/src/index.ts", source.replace("TARGET", '"openai"')).join(
+        "\n",
+      ),
+    ).toContain("CommonJS");
+  });
   it("allows test tooling without exempting configuration files from SDK restrictions", () => {
     expect(
       scan(
@@ -235,6 +272,12 @@ describe("agent layer boundaries (DESIGN §2.2)", () => {
         '// import "@jeswr/agent-audit";\nconst example = \'import "openai"\';',
       ),
     ).toEqual([]);
+    expect(
+      scan(
+        "apps/pod-mail/web/src/index.ts",
+        '// module.require("openai");\nconst example = \'(require)("@jeswr/agent-channels/gmail/send")\';',
+      ),
+    ).toEqual([]);
   });
 
   it("ignores generated, dependency and seeded-fixture directories", () => {
@@ -345,6 +388,14 @@ describe("agent module load allowlist", () => {
     "//example.test/module.js",
     "C:/tmp/module.js",
     "C:\\tmp\\module.js",
+    "./local%2ejs",
+    "./%2e%2e/local.js",
+    "./local%2fmodule.js",
+    "./local%5cmodule.js",
+    "./local%zz.js",
+    "./local\t.js",
+    "./local\n.js",
+    "./local\r.js",
     "",
   ])("rejects specifiers outside bare packages and relative paths: %s", (specifier) => {
     const literal = JSON.stringify(specifier);
@@ -372,6 +423,24 @@ describe("agent module load allowlist", () => {
     expect(scan("packages/agent-model/src/index.ts", source).join("\n")).toContain(
       "agent module specifier must be a bare package name or relative path",
     );
+  });
+
+  it.each([
+    ["apps/agent-daemon/src/index.ts", "../../../packages/agent-channels/src/gmail/%73end.js"],
+    ["packages/agent-model-gateway/src/index.ts", "../../agent-%61udit/src/index.js"],
+    ["packages/agent-model-gateway/src/index.ts", "../../agent-audit/src/%69ndex.js"],
+    ["apps/pod-mail/web/src/index.ts", "../../../../packages/agent-channels/src/gmail/%73end.js"],
+  ])("rejects encoded boundary targets in %s before filesystem normalization", (path, target) => {
+    const literal = JSON.stringify(target);
+    for (const source of [
+      `import ${literal};`,
+      `export * from ${literal};`,
+      `await import(${literal});`,
+      `type Value = import(${literal}).Value;`,
+    ])
+      expect(scan(path, source).join("\n")).toContain(
+        "URL-encoded module specifiers are forbidden",
+      );
   });
 
   it.each([

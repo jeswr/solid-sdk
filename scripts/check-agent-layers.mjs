@@ -55,7 +55,7 @@ function allowedModuleSpecifier(specifier) {
   // Check the decoded literal before path normalization can hide a URL/query/fragment.
   // Schemes (including node:) and absolute paths are outside the agent allowlist.
   return (
-    !/[:?#\\]/.test(specifier) &&
+    !/[:%?#\\\s\p{Cc}]/u.test(specifier) &&
     (/^\.{1,2}\//.test(specifier) ||
       /^(?:@[a-z0-9_~-][a-z0-9._~-]*\/)?[a-z0-9_~-][a-z0-9._~-]*(?:\/[^/]+)*$/i.test(specifier))
   );
@@ -154,25 +154,38 @@ function isPropertyName(node) {
   );
 }
 
+function isRequire(expression) {
+  const node = ts.skipOuterExpressions(expression);
+  if (ts.isIdentifier(node)) return node.text === "require";
+  if (ts.isPropertyAccessExpression(node)) return node.name.text === "require";
+  if (ts.isElementAccessExpression(node)) {
+    const key = ts.skipOuterExpressions(node.argumentExpression);
+    return ts.isStringLiteralLike(key) && key.text === "require";
+  }
+  return false;
+}
+
+function needsImportCheck(root, file, text) {
+  // preProcessFile misses wrapped/member require calls. Conservatively include
+  // loader spellings, escapes and percent encodings, even inside templates.
+  // The AST pass distinguishes actual references from comments/string examples.
+  if (/require|\\|%/.test(text)) return true;
+  return ts.preProcessFile(text, true, true).importedFiles.some(({ fileName }) => {
+    const target = importTarget(root, file, fileName);
+    return (
+      modelSdks.includes(packageName(target)) ||
+      /^@jeswr\/agent-channels\/.+\/send(?:\/|$)/.test(target)
+    );
+  });
+}
+
 function sourceFailures(root, file) {
   const ctx = context(root, file);
   const text = readFileSync(file, "utf8");
   const agentSource =
     ctx.project?.startsWith("agent-") || ctx.ui || ctx.path.startsWith("apps/agent-daemon/");
-  // Existing apps include large generated modules. Preprocess their import tokens
-  // before building an AST; only agent code needs the detailed capability checks.
-  // TypeScript's scanner also decodes escaped specifiers, unlike a text search.
-  if (
-    !agentSource &&
-    !ts.preProcessFile(text, true, true).importedFiles.some(({ fileName }) => {
-      const target = importTarget(root, file, fileName);
-      return (
-        modelSdks.includes(packageName(target)) ||
-        /^@jeswr\/agent-channels\/.+\/send(?:\/|$)/.test(target)
-      );
-    })
-  )
-    return [];
+  // Existing apps include large generated modules; avoid an AST when possible.
+  if (!agentSource && !needsImportCheck(root, file, text)) return [];
   const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true);
   const failures = [];
   const report = (node, message) =>
@@ -187,6 +200,12 @@ function sourceFailures(root, file) {
     }
     if (agentSource && !allowedModuleSpecifier(value))
       report(node, `agent module specifier must be a bare package name or relative path: ${value}`);
+    // ESM decodes percent escapes and removes URL whitespace before resolution.
+    // Reject encoded targets outright rather than interpreting them as paths.
+    if (value.includes("%")) {
+      report(node, `URL-encoded module specifiers are forbidden: ${value}`);
+      return;
+    }
     for (const failure of importFailures(ctx, importTarget(root, file, value), typeOnly))
       report(node, `${failure}: ${value}`);
   }
@@ -227,10 +246,7 @@ function sourceFailures(root, file) {
     } else if (ts.isImportTypeNode(node) && ts.isLiteralTypeNode(node.argument)) {
       checkImport(node, node.argument.literal, true);
     } else if (ts.isCallExpression(node)) {
-      if (
-        node.expression.kind === ts.SyntaxKind.ImportKeyword ||
-        (ts.isIdentifier(node.expression) && node.expression.text === "require")
-      )
+      if (node.expression.kind === ts.SyntaxKind.ImportKeyword || isRequire(node.expression))
         checkImport(node, node.arguments[0]);
     }
     ts.forEachChild(node, visit);
