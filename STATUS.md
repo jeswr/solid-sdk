@@ -250,3 +250,60 @@ the import Pod's existing settings path and must pass the same storage check.
 No open implementation questions. Full-workspace green verification remains
 blocked by the unrelated remote-cloning helper. All changes and commits stay in
 this checkout on `lane/sst-k9mk`; nothing was pushed, published, or merged.
+
+## Fix round 3 — 2026-10-25
+
+Resumed at `6b97c8d5` and addressed the medium storage-predicate finding.
+
+### Commits
+
+- `d9abe0e7` — `fix: accept solid storage for Type Index scope`: use
+  `Agent.storageUrls` to validate against both WebID-advertised `pim:storage`
+  and `solid:storage` roots. Preserve containment, exact-document access,
+  redirect refusal, bootstrap location, and conditional writes. Update the
+  README and package skill to describe both predicates.
+- The final report-only commit updates this file last.
+
+### Validation
+
+Runtime: Node `24.22.1`, pnpm `10.4.1`. No dependencies, manifests, or lockfiles
+changed; `check:packages` was not applicable. Lifecycle scripts remained ignored.
+
+```sh
+pnpm exec turbo run build --filter=@jeswr/pod-connectors...
+pnpm --filter @jeswr/pod-connectors exec vitest run src/core/pod-writer.test.ts
+pnpm --filter @jeswr/pod-connectors run lint && pnpm --filter @jeswr/pod-connectors run build && pnpm --filter @jeswr/pod-connectors run typecheck && pnpm --filter @jeswr/pod-connectors run test
+pnpm --filter @jeswr/app-pod-manager run test
+pnpm run lint:root
+GIT_ALLOW_PROTOCOL=file TURBO_SCM_BASE=917d3be9c7967622829adc43c1aaabb0964ec993 pnpm run gate --env-mode=loose
+GIT_ALLOW_PROTOCOL=file pnpm run gate:full --env-mode=loose
+```
+
+- Dependency-first build: **PASS**.
+- The new solid-only regression failed with `PodScopeError` before the fix.
+  After the fix, the complete connector suite passes, including bootstrap and
+  reuse with only `solid:storage`, plus the existing containment and redirect
+  regressions.
+- Pod connectors lint/build/typecheck/tests: **PASS, 263 tests in 41 files**.
+- Pod Manager tests: **PASS, 915 passed, 1 existing skip, 67 files**.
+- Root lint: **PASS**.
+- Affected gate: **PASS, 11/11 tasks (0 cached)**, including Pod Manager's lint,
+  production build, typecheck and tests, plus 26 root tests.
+- Full-workspace gate: **BLOCKED/FAIL**, 3 successful tasks, 30 scheduled, then
+  the unchanged `@jeswr/unstorage-solid#build` helper attempted an HTTPS clone
+  of fetch-rdf. `GIT_ALLOW_PROTOCOL=file` blocked it with
+  `fatal: transport 'https' not allowed`, honoring the lane's remote-fetch ban.
+  No remote source was fetched. The unrelated generated vocabulary file changed
+  by the full gate was restored; no unrelated source changes are included.
+
+Existing non-fatal Biome and guarded-fetch webpack warnings remain. `git diff
+--check` passed. `roborev` and its post-commit hook remain unavailable in this
+sandbox; the supplied finding was verified directly against the fix and tests.
+
+### Scope and open questions
+
+The requested implementation is complete. Both advertised storage predicates now
+grant scope through the existing Agent accessor; an unadvertised import destination
+still grants no scope. No open questions or design changes. Full-workspace green
+verification remains blocked by the unrelated remote-cloning helper. All commits
+remain in this checkout on `lane/sst-k9mk`; nothing was pushed, published, or merged.
