@@ -2,6 +2,7 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { describe, expect, it, vi } from "vitest";
+import { readResource } from "../src/pod.js";
 import type { PodPort } from "../src/pod-port.js";
 import { createSolidMcpServer } from "../src/server.js";
 import { createPodToolRegistry } from "../src/tools.js";
@@ -85,6 +86,35 @@ describe("tool registry over a fetch-free portable pod", () => {
       ]);
       expect(await client.readResource({ uri: FILE })).toMatchObject({
         contents: [{ text: "hello" }],
+      });
+    } finally {
+      await client.close();
+    }
+  });
+
+  it("normalizes injected media types and renders parameterized JSON-LD as Turtle", async () => {
+    const pod = portablePod();
+    pod.read.mockResolvedValue({
+      body: new TextEncoder().encode(
+        JSON.stringify({ "@id": FILE, "http://schema.org/name": "Portable RDF" }),
+      ),
+      contentType: " APPLICATION/LD+JSON; charset=utf-8 ",
+      etag: '"rdf"',
+    });
+    expect(await readResource(pod, FILE)).toMatchObject({
+      contentType: "application/ld+json",
+      text: expect.stringContaining("Portable RDF"),
+      etag: '"rdf"',
+    });
+    const client = await connect(pod);
+    try {
+      for (const name of ["pod_read", "solid_read"]) {
+        expect(await client.callTool({ name, arguments: { url: FILE } })).toMatchObject({
+          content: [{ text: expect.stringContaining(' "Portable RDF"') }],
+        });
+      }
+      expect(await client.readResource({ uri: FILE })).toMatchObject({
+        contents: [{ mimeType: "text/turtle", text: expect.stringContaining(' "Portable RDF"') }],
       });
     } finally {
       await client.close();

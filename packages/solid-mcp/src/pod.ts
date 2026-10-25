@@ -139,7 +139,8 @@ export async function listContainer(source: PodSource, url: string): Promise<Pod
 export async function readResource(source: PodSource, url: string): Promise<ReadResult> {
   const pod = asPodPort(source);
   const target = requirePodScopedUrl({ podRoot: pod.root }, url);
-  const { body, contentType, etag } = await pod.read(target);
+  const { body, contentType: rawContentType, etag } = await pod.read(target);
+  const contentType = (rawContentType.split(";").shift() ?? "").trim().toLowerCase();
   const result: ReadResult = { ...(contentType ? { contentType } : {}), ...(etag ? { etag } : {}) };
   if (isTextualContentType(contentType)) {
     result.text = new TextDecoder().decode(body);
