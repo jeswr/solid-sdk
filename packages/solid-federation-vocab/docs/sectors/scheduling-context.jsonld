@@ -44,8 +44,14 @@
       "@id": "sched:description",
       "@type": "xsd:string"
     },
-    "dueTime": "sched:dueTime",
-    "endTime": "sched:endTime",
+    "dueTime": {
+      "@id": "sched:dueTime",
+      "@type": "xsd:dateTime"
+    },
+    "endTime": {
+      "@id": "sched:endTime",
+      "@type": "xsd:dateTime"
+    },
     "eventLocation": {
       "@id": "sched:eventLocation",
       "@type": "@id"
@@ -86,7 +92,10 @@
       "@type": "xsd:dateTime"
     },
     "sector": "sched:sector",
-    "startTime": "sched:startTime",
+    "startTime": {
+      "@id": "sched:startTime",
+      "@type": "xsd:dateTime"
+    },
     "summary": {
       "@id": "sched:summary",
       "@type": "xsd:string"
@@ -101,6 +110,9 @@
       "@id": "sched:triggerTime",
       "@type": "xsd:dateTime"
     },
-    "until": "sched:until"
+    "until": {
+      "@id": "sched:until",
+      "@type": "xsd:dateTime"
+    }
   }
 }

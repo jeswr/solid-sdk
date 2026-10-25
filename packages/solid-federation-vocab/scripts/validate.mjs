@@ -168,6 +168,40 @@ for (const file of ctxFiles) {
   }
 }
 
+// The widened OWL range must not turn existing compact dateTime strings into
+// xsd:string values. Explicitly typed all-day value objects must still win.
+console.log("\nJSON-LD: temporal context compatibility");
+for (const [file, ns, properties] of [
+  ["core-context.jsonld", "https://w3id.org/jeswr/core#", ["validFrom", "validUntil"]],
+  [
+    "sectors/scheduling-context.jsonld",
+    "https://w3id.org/jeswr/sectors/scheduling#",
+    ["startTime", "endTime", "dueTime", "until"],
+  ],
+]) {
+  const context = JSON.parse(readFileSync(join(ROOT, "docs", file), "utf8"))["@context"];
+  for (const property of properties) {
+    for (const [value, datatype] of [
+      ["2026-11-01T09:00:00Z", "dateTime"],
+      [{ "@value": "2026-11-01", "@type": "xsd:date" }, "date"],
+    ]) {
+      try {
+        const [expanded] = await jsonld.expand({
+          "@context": context,
+          id: "https://example.org/temporal",
+          [property]: value,
+        });
+        const actual = expanded?.[`${ns}${property}`]?.[0]?.["@type"];
+        if (actual !== `http://www.w3.org/2001/XMLSchema#${datatype}`)
+          fail(`${file}: ${property} expected xsd:${datatype}, got ${actual}`);
+        else ok(`${file}: ${property} preserves xsd:${datatype}`);
+      } catch (err) {
+        fail(`${file}: ${property} expansion failed: ${err.message}`);
+      }
+    }
+  }
+}
+
 // Exercise the actual profiles, including advisory constraints: a wrong datatype
 // must produce a result even when the profile grades it Warning or Info.
 console.log("\nSHACL: core validity and scheduling fixtures");

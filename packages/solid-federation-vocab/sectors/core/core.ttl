@@ -64,7 +64,7 @@
         now gUFO + this thin profile. External vocabularies are reached via the
         companion alignments file, never re-derived."""@en ;
     dcterms:modified "2026-10-25"^^xsd:date ;
-    rdfs:comment "Re-based per R11 §1.3. v1.0.1 ADDITIVE: adds core:Quantity (a foundational reified quantity value) + core:numericValue/core:unit; no existing term changed."@en .
+    rdfs:comment "Re-based per R11 §1.3. v1.1.0 widens core:validFrom/core:validUntil to date or dateTime; date values mean all-day. v1.0.1 added core:Quantity + core:numericValue/core:unit."@en .
 
 # -----------------------------------------------------------------------------
 # Annotation-property declarations (F5: the v0 DL-authoring gap — ROBOT

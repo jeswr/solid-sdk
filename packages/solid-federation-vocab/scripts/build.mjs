@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
 // Build the served artifacts. The vocabulary source files (*.ttl + *.jsonld) are
@@ -21,7 +22,7 @@ import {
 } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { Parser, Writer } from "n3";
+import { Parser, Store, Writer } from "n3";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const DIST = join(ROOT, "dist");
@@ -271,6 +272,8 @@ const XSD = "http://www.w3.org/2001/XMLSchema#";
 /** Parse an ontology .ttl and index its OWN-namespace terms. */
 function indexOntology(ttl, route, ns) {
   const quads = new Parser({ baseIRI: `https://w3id.org/jeswr/${route}` }).parse(ttl);
+  const store = new Store(quads);
+  const lists = store.extractLists();
   const byS = new Map();
   for (const q of quads) {
     if (q.subject.termType !== "NamedNode") continue;
@@ -282,6 +285,21 @@ function indexOntology(ttl, route, ns) {
       e.comment = q.object.value;
     if (q.predicate.value === RDFS_RANGE && q.object.termType === "NamedNode" && !e.range)
       e.range = q.object.value;
+    if (q.predicate.value === RDFS_RANGE && q.object.termType === "BlankNode" && !e.range) {
+      const [head] = store.getObjects(q.object, "http://www.w3.org/2002/07/owl#unionOf", null);
+      const members = head ? lists[head.value] : undefined;
+      // Preserve the established compact-JSON-LD dateTime default for the widened
+      // date|dateTime range. All-day values use explicit @value/@type xsd:date.
+      if (
+        members?.length === 2 &&
+        members.every(
+          (term) =>
+            term.termType === "NamedNode" && [`${XSD}date`, `${XSD}dateTime`].includes(term.value),
+        )
+      ) {
+        e.range = `${XSD}dateTime`;
+      }
+    }
     byS.set(q.subject.value, e);
   }
   // own-namespace named terms (classes / properties / individuals), not the ontology node

@@ -68,7 +68,7 @@
         a new MAJOR version. Aligns to iCalendar RFC 5545, schema:Event/Schedule
         and W3C OWL-Time in the companion alignments file."""@en ;
     dcterms:modified "2026-10-25"^^xsd:date ;
-    rdfs:comment "Re-based per R11 §4.2."@en .
+    rdfs:comment "Re-based per R11 §4.2. v1.1.0 allows date or dateTime for entry start/end/due and recurrence until; date values mean all-day. The companion SHACL profile adds schema.org recurrence selectors."@en .
 
 # -----------------------------------------------------------------------------
 # Annotation-property declarations (F5: keep the merged closure unambiguously

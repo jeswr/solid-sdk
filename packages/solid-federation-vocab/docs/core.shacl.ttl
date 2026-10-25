@@ -34,7 +34,7 @@
     dcterms:title "Solid Core Ontology — SHACL profile"@en ;
     owl:versionInfo "1.1.0" ;
     dcterms:modified "2026-10-25"^^xsd:date ;
-    rdfs:comment "F4 node shapes for the instantiable gUFO-rebased Core classes. Open by default; MUST=Violation, SHOULD=Warning. v1.0.1: adds core:QuantityShape (numericValue MUST, unit SHOULD)."@en .
+    rdfs:comment "F4 node shapes for the instantiable gUFO-rebased Core classes. Open by default; MUST=Violation, SHOULD=Warning. v1.1.0 validates optional validity dates as date or dateTime. v1.0.1 added core:QuantityShape (numericValue MUST, unit SHOULD)."@en .
 
 # -----------------------------------------------------------------------------
 # AGENCY
