@@ -71,7 +71,9 @@ test("touch pointers force comfortable density and 44px controls", async ({
     viewport: testInfo.project.use.viewport ?? { width: 375, height: 900 },
     colorScheme: testInfo.project.use.colorScheme ?? "light",
     reducedMotion: "reduce",
-    baseURL: testInfo.project.use.baseURL,
+    ...(testInfo.project.use.baseURL !== undefined
+      ? { baseURL: testInfo.project.use.baseURL }
+      : {}),
   });
   const page = await context.newPage();
   await page.goto("/dev/components/tokens");
