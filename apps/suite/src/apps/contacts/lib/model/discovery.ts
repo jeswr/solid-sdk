@@ -99,12 +99,19 @@ export async function registerAddressBook(model: ContactsModel, indexUrl: string
  * and PM flat individuals, including registrations for a flat contacts/ container.
  * Results are hints; the later hooks decide whether to display or migrate the flat contacts.
  */
-export async function discoverContacts(model: ContactsModel, indexUrl: string, limit = 200) {
+export async function discoverContacts(
+  model: ContactsModel,
+  indexUrl: string,
+  limit = 200,
+  signal = AbortSignal.timeout(10_000),
+) {
   if (!Number.isInteger(limit) || limit < 1)
     throw new TypeError("A positive discovery limit is required.");
+  signal.throwIfAborted();
   const index = await model.transport.read(
     indexUrl,
     (dataset) => new TypeIndexDataset(dataset, DataFactory),
+    signal,
   );
   const sources = new Set<string>();
   const books = new Set<string>();
@@ -115,6 +122,7 @@ export async function discoverContacts(model: ContactsModel, indexUrl: string, l
   let remaining = limit;
   let incomplete = false;
   const read = async (url: string) => {
+    signal.throwIfAborted();
     const target = model.transport.url(url);
     if (sources.has(target)) return undefined;
     if (remaining === 0) {
@@ -124,7 +132,7 @@ export async function discoverContacts(model: ContactsModel, indexUrl: string, l
     remaining--;
     sources.add(target);
     try {
-      return await model.transport.read(target, (dataset) => dataset);
+      return await model.transport.read(target, (dataset) => dataset, signal);
     } catch (error) {
       // Stale/deleted registrations are expected. Unreadable resources are never writable empties.
       if (error instanceof RdfFetchError && error.status === 404) return undefined;
@@ -134,8 +142,14 @@ export async function discoverContacts(model: ContactsModel, indexUrl: string, l
   const collect = async (url: string) => {
     const snapshot = await read(url);
     if (!snapshot) return;
-    for (const book of new ContactsDataset(snapshot.dataset, DataFactory).books) books.add(book.id);
-    for (const contact of flatContacts(snapshot.dataset)) flat.set(contact.id, contact);
+    for (const book of new ContactsDataset(snapshot.dataset, DataFactory).books) {
+      if (books.size + flat.size >= limit && !books.has(book.id)) incomplete = true;
+      else books.add(book.id);
+    }
+    for (const contact of flatContacts(snapshot.dataset)) {
+      if (books.size + flat.size >= limit && !flat.has(contact.id)) incomplete = true;
+      else flat.set(contact.id, contact);
+    }
   };
   for (const registration of index.data.registrations) {
     if (!registration.classes.has(BOOK_CLASS) && !registration.classes.has(CONTACT_CLASS)) continue;

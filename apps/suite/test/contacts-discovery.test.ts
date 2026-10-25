@@ -196,3 +196,27 @@ test("interrupted multi-card imports expose completed ids without silently dupli
     ).toHaveLength(1);
   }
 });
+
+test("discovery caps results within a single document and supports cancellation before credentialed I/O", async () => {
+  const { model, pod } = await setup();
+  pod.seed(
+    INDEX,
+    `${prefixes} <#a> a solid:TypeRegistration; solid:forClass vcard:Individual; solid:instance <${PM}> .`,
+  );
+  pod.seed(
+    PM,
+    `${fixture("pm")} <#second> a vcard:Individual; vcard:fn "Other" . <#book> a vcard:AddressBook . <#another-book> a vcard:AddressBook .`,
+  );
+  const result = await discoverContacts(model, INDEX, 1);
+  expect(result.books.length + result.flat.length).toBe(1);
+  expect(result.incomplete).toBe(true);
+  pod.seed(PM, `${fixture("pm")} <#second> a vcard:Individual; vcard:fn "Other" .`);
+  const onlyPeople = await discoverContacts(model, INDEX, 1);
+  expect(onlyPeople.flat).toHaveLength(1);
+  expect(onlyPeople.incomplete).toBe(true);
+  const before = pod.requests.length;
+  await expect(
+    discoverContacts(model, INDEX, 200, AbortSignal.abort(new Error("cancelled"))),
+  ).rejects.toThrow("cancelled");
+  expect(pod.requests).toHaveLength(before);
+});

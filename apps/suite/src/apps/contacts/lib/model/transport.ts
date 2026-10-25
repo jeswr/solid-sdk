@@ -56,9 +56,16 @@ export class ContactsTransport {
     return documentUrl(assertWithinPodScope(this.podRoot, value, { allowRoot: false }));
   }
 
-  async read<T>(url: string, parse: (dataset: DatasetCore) => T): Promise<Snapshot<T>> {
+  async read<T>(
+    url: string,
+    parse: (dataset: DatasetCore) => T,
+    signal?: AbortSignal,
+  ): Promise<Snapshot<T>> {
     const target = this.url(url);
-    const result = await fetchRdf(target, { fetch: this.fetch });
+    const result = await fetchRdf(target, {
+      fetch: this.fetch,
+      ...(signal === undefined ? {} : { signal }),
+    });
     return { url: target, etag: result.etag, dataset: result.dataset, data: parse(result.dataset) };
   }
 
