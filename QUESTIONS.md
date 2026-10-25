@@ -17,3 +17,10 @@
    Taken: dual-IRI discovery and canonical explicit registration; Docs' existing ensure call
    adds a canonical registration alongside the legacy one. Drive/Health callers keep control
    of persistence; no new implicit network writes.
+
+4. Review 5799 asks for federation fields in the web hosts' generated Client Identifier
+   Documents; those generators currently publish only OIDC fields. VOC-03 / DECISIONS V11
+   require canonical vocabulary constants and app data-layer migration, not new deployed
+   federation-advertisement behavior. Options: add that publisher behavior now, or retain
+   the existing generator shape. Taken: retain OIDC-only generators; the existing package
+   metadata artifacts are canonicalized. No generator emits a legacy suite IRI.
