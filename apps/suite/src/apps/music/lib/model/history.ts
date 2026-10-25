@@ -1,9 +1,10 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+import { normalizePodBase } from "@jeswr/guarded-fetch";
 import { LiteralFrom, OptionalAs } from "@rdfjs/wrapper";
 import type { Store } from "n3";
 import type { Track } from "./entities";
 import { MusicNode } from "./rdf";
-import { nonNegative, validDate } from "./validation";
+import { httpIri, nonNegative, validDate } from "./validation";
 import { M, NS, S } from "./vocab";
 
 export interface Playback {
@@ -79,8 +80,6 @@ export class PlaybackEvent extends MusicNode {
   }
 }
 
-import { httpIri } from "./validation";
-
 export function readHistory(dataset: Store): Playback[] {
   const result: Playback[] = [];
   for (const subject of dataset.getSubjects(null, null, null)) {
@@ -109,8 +108,6 @@ export function monthKey(date: Date): string {
 export function historyShard(musicBase: string, date: Date): string {
   return new URL(`history/${monthKey(date)}.ttl`, normalizePodBase(musicBase)).href;
 }
-
-import { normalizePodBase } from "@jeswr/guarded-fetch";
 
 export type ArtistPeriod = "Today" | "1W" | "1M" | "1Y";
 

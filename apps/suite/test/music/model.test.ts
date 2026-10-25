@@ -90,9 +90,9 @@ describe("three-model reads", () => {
 
   it("reads sparse, multiply typed, blank-linked and malformed foreign records", async () => {
     const dataset = await parse(`
-      <#z> a s:MusicRecording, media:Track; s:name <#bad>, " "; dct:title "Z";
+      <#z> a s:MusicRecording, media:Track; s:name <#malformed>, " "; dct:title "Z";
         s:byArtist [ foaf:name "Blank artist" ], <#unlabelled>, "";
-        s:duration <#bad>, "invalid"; media:durationSeconds 1.5;
+        s:duration <#malformed>, "invalid"; media:durationSeconds 1.5;
         s:image [ s:url <#ignored> ]; s:thumbnailUrl "https://images.test/fallback.jpg";
         s:url "https://open.spotify.com/track/fallback".
       <#a> a s:MusicRecording; s:name "A".
@@ -109,7 +109,6 @@ describe("three-model reads", () => {
     expect(z.artists).toEqual([
       { iri: undefined, name: "Blank artist" },
       { iri: `${base}#unlabelled`, name: undefined },
-      { name: "" },
     ]);
     expect(z.album).toBeUndefined();
     expect(z.imageUrl).toBe("https://images.test/fallback.jpg");
@@ -307,6 +306,7 @@ describe("ordered playlists and liked songs", () => {
     expect(new Playlist(playlistIri, parsed).tracks).toEqual(playlist.tracks);
     playlist.setTracks([]);
     expect(playlist.tracks).toEqual([]);
+    expect(dataset.size).toBe(2); // only the playlist types remain
   });
 
   it("migrates flat entries and skips malformed ListItems while sorting valid positions", async () => {
@@ -333,6 +333,30 @@ describe("ordered playlists and liked songs", () => {
     expect(syncLikedPlaylist(dataset, playlist.value, tracks).tracks).toEqual([]);
     const numeric = await parse(`<#t> media:loved "1".`);
     expect(new Track(`${base}#t`, numeric).loved).toBe(true);
+  });
+});
+
+describe("editing foreign metadata", () => {
+  it("retains shared blank entries and named ListItems while collecting private blank entries", async () => {
+    const dataset = await parse(`<#p> s:itemListElement _:shared, <#named>, "malformed".
+      <#other> s:itemListElement _:shared.
+      _:shared a s:ListItem; s:position 1; s:item <#a>.
+      <#named> a s:ListItem; s:position 2; s:item <#b>.`);
+    new Playlist(`${base}#p`, dataset).setTracks([trackIri]);
+    expect(new Playlist(`${base}#other`, dataset).tracks).toEqual([`${base}#a`]);
+    expect(new MusicNode(`${base}#named`, dataset).iris(`${S}item`)).toEqual([`${base}#b`]);
+    const playlist = new Playlist(`${base}#p`, dataset);
+    const size = dataset.size;
+    for (let i = 0; i < 5; i += 1) playlist.setTracks([trackIri]);
+    expect(dataset.size).toBe(size);
+  });
+
+  it("removes the legacy mo:isrc when explicitly clearing the field", async () => {
+    const dataset = await fixture("mo");
+    const track = readLibrary(dataset).tracks[0] as Track;
+    expect(track.isrc).toBe("GB123");
+    track.isrc = undefined;
+    expect(track.isrc).toBeUndefined();
   });
 });
 

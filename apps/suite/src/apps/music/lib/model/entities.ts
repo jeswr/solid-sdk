@@ -1,8 +1,9 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { LiteralFrom, NamedNodeAs, NamedNodeFrom, OptionalAs, SetFrom } from "@rdfjs/wrapper";
+import type { Store } from "n3";
 import { MusicNode } from "./rdf";
 import { durationSeconds, httpIri, nonNegative } from "./validation";
-import { M, MO, S } from "./vocab";
+import { M, MO, NS, S } from "./vocab";
 
 export interface MusicReference {
   iri?: string | undefined;
@@ -19,7 +20,12 @@ export class Recording extends MusicNode {
 
   private references(...predicates: string[]): MusicReference[] {
     const refs = this.objects(...predicates)
-      .filter((term) => ["NamedNode", "BlankNode", "Literal"].includes(term.termType))
+      .filter(
+        (term) =>
+          term.termType === "NamedNode" ||
+          term.termType === "BlankNode" ||
+          (term.termType === "Literal" && term.value.trim().length > 0),
+      )
       .map((term): MusicReference => {
         if (term.termType === "Literal") return { name: term.value };
         const node = new MusicNode(term, this.dataset as Store);
@@ -63,9 +69,6 @@ export class Recording extends MusicNode {
     this.writeIri(`${M}performedByArtist`, checked);
   }
 }
-
-import type { Store } from "n3";
-import { NS } from "./vocab";
 
 export class Artist extends Recording {
   stampType(): this {
@@ -122,6 +125,7 @@ export class Track extends Recording {
   }
   set isrc(value: string | undefined) {
     this.clear(`${M}isrc`);
+    this.clear(`${MO}isrc`);
     this.writeString(`${M}isrc`, value);
   }
 }

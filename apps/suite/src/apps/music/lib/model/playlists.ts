@@ -4,7 +4,7 @@ import type { Store } from "n3";
 import { Recording, type Track } from "./entities";
 import { DataFactory, MusicNode } from "./rdf";
 import { httpIri, InvalidMusicError } from "./validation";
-import { M, MO, S } from "./vocab";
+import { M, MO, NS, S } from "./vocab";
 
 /** Ported Pod Music ListItem ordering; duplicates are deliberately retained. */
 export class Playlist extends Recording {
@@ -27,9 +27,18 @@ export class Playlist extends Recording {
 
   setTracks(iris: readonly string[]): this {
     const checked = iris.map(httpIri); // validate before mutating any existing entry
-    // Clear membership, leaving foreign/shared entry subjects untouched. Detached entries
-    // are harmless; whole-document rewrites must not delete another playlist's metadata.
+    const oldEntries = this.objects(`${S}itemListElement`);
     this.clear(`${S}itemListElement`);
+    // Collect only unreferenced blank entries. Named or shared entries may carry
+    // metadata owned by another resource; repeated edits must not grow orphan lists.
+    const dataset = this.dataset as Store;
+    for (const entry of oldEntries) {
+      if (entry.termType !== "BlankNode") continue;
+      const term = DataFactory.blankNode(entry.value);
+      if (dataset.getQuads(null, null, term, null).length === 0) {
+        dataset.removeQuads(dataset.getQuads(term, null, null, null));
+      }
+    }
     this.clear(`${S}track`);
     this.clear(`${MO}track`);
     const links = SetFrom.subjectPredicate(
@@ -41,7 +50,7 @@ export class Playlist extends Recording {
     for (const [index, iri] of checked.entries()) {
       const entry = new MusicNode(DataFactory.blankNode(), this.dataset as Store);
       // Blank entries use the typed rdf:type set directly (entity stamp requires an IRI).
-      entry.writeIri(`${RDF}type`, `${S}ListItem`);
+      entry.writeIri(`${NS.RDF}type`, `${S}ListItem`);
       OptionalAs.object(entry, `${S}position`, index + 1, LiteralFrom.integer);
       entry.writeIri(`${S}item`, iri);
       links.add(entry);
@@ -73,10 +82,6 @@ export class Playlist extends Recording {
     return this.setTracks(tracks);
   }
 }
-
-import { NS } from "./vocab";
-
-const RDF = NS.RDF;
 
 /** Interop mirror; the media:loved flags on tracks remain the source of truth. */
 export function syncLikedPlaylist(dataset: Store, iri: string, tracks: readonly Track[]): Playlist {
