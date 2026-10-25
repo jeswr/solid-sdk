@@ -26,6 +26,7 @@
     "@jeswr/federation-trust",
     "@jeswr/guarded-fetch",
     "@jeswr/matrix-chat-to-pod",
+    "@jeswr/mcp-oauth",
     "n8n-nodes-solid",
     "@jeswr/openclaw-memory-solid",
     "@jeswr/rdf-serialize",
