@@ -3,7 +3,7 @@
 
 # @jeswr/storage-capabilities
 
-> **Experimental — AI-agent-generated.** Vocabulary, type contracts, and header parsing are implemented.
+> **Experimental — AI-agent-generated.** Vocabulary, type contracts, header parsing, and LWS CID parsing are implemented.
 
 Storage description discovery and feature flags. Design of record: SDK core `ADR-002-capabilities.md` and ADR-001 D4 in
 `solid-suite-planning/specs/sdk-core/`.
@@ -16,6 +16,24 @@ The package root exports the ADR-002 type contracts, including `StorageDescripti
 `@jeswr/storage-capabilities/vocab` exports `LWS`, `DID`, `SEC`, `DCT`, `NOTIFY`, `SOLID`,
 `PIM`, `ACQ`, `ACL`, `ACP`, and `SSD` objects with full IRI values (for example, `LWS.Storage`).
 The package's TypeScript configuration includes DOM types for the ADR's Web Crypto `JsonWebKey` contract.
+
+`parseLwsDescription(json, storageUrl, requestUrl)` accepts an already decoded compact CID object,
+including bodies served as `application/lws+cid`, `application/cid`, or `application/ld+json`.
+It validates the normalised storage id, the Storage type, and exactly one StorageRoot. Both the
+description URL and root must share the request URL's scheme and authority (ADR-002 §Security).
+It maps services, capabilities, and JWK-backed verification methods, expands bare LWS
+type/subscriptionType terms, and preserves unknown types and raw extra keys. Verification method
+types and key material retain their cryptographic vocabulary. Scalar subscriptionType values stay
+scalar; list values stay lists. Malformed descriptions throw `CapabilitiesError` with
+`code: 'description-invalid'`; foreign description/root authorities throw `code: 'root-mismatch'`.
+Errors carry the supplied storage URL. URL normalisation keeps path case and trailing slashes.
+
+The parser sets `fetchedAt` to `Date.now()`, `etag` to `null`, and `maxAgeMs` to 3,600,000. The later
+resolver supplies HTTP cache metadata, injected clocks, body-size limits, and fetching. Parsing
+uses the compact CID shape directly and does not fetch or expand JSON-LD contexts.
+`@jeswr/storage-capabilities/testing` exports `sparqLwsCid`, a representative public example of
+the sparq service set documented in ADR-002 and SDK-core STATUS.md, covered by a snapshot test.
+It is not a recorded server response.
 
 Internal helpers for the later discovery implementation:
 
@@ -38,8 +56,8 @@ Internal helpers for the later discovery implementation:
   8 KiB (UTF-8, including joining commas) are treated as absent while retaining raw evidence.
   Links with a different anchor context are ignored for access control.
 
-Discovery, network probing, feature derivation, caches, and testing fixtures arrive in later tasks.
-The `@jeswr/storage-capabilities/cache` and `@jeswr/storage-capabilities/testing` entry points remain reserved.
+Discovery, network probing, feature derivation, caches, and other server fixtures arrive in later tasks.
+The `@jeswr/storage-capabilities/cache` entry point remains reserved.
 
 From the workspace root:
 
@@ -51,5 +69,5 @@ pnpm --filter @jeswr/storage-capabilities run test
 ```
 
 Tests cover the RFC 8288 §3.5 examples, quoted parameters, anchors, relation lists, repeated fields,
-malformed input, and parsing every probe observation. Coverage thresholds are 100% for branches,
+malformed input, parsing every probe observation, and CID mapping/validation. Coverage thresholds are 100% for branches,
 functions, lines, and statements.
