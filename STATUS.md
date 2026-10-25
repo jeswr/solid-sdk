@@ -367,3 +367,59 @@ existing remote-dependent build. Read the local review/test guidance and address
 the supplied review; `roborev` remains unavailable, so dispatcher automated review
 is external. No push, PR, branch switch, merge, other checkout mutation or tracker
 change was performed. No new open questions; the prior adapter-path caveat remains.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+
+## Fix round 3 — URL targets and suite-wide loader checks
+
+Resumed on `lane/sst-z1d` at `fc46a5ba870790d56ed19c18050d5e881bd5c783`.
+Read the original and all fix briefs and the complete supplied review at
+`lanes/reviews/solid-sdk-lane-sst-z1d-fc46a5ba8707.md` in the tracker checkout.
+Addressed only its two findings; no packages, APIs, manifests or dependencies changed.
+
+Commits:
+
+- `89dafe07` — `fix: close agent layer import bypasses`: reject percent-encoded
+  module targets before filesystem normalization, including relative send/audit
+  references and encoded dot segments/separators. Reject whitespace and control
+  characters in agent specifiers that URL resolution could reinterpret. Normalize
+  parentheses, TypeScript wrappers and literal member keys for suite-wide
+  `require` target checks. Keep the prefilter conservative for escaped loader names
+  and calls after template expressions; comments and string examples remain inert.
+  Add 25 regression cases, including valid controls and continued CommonJS rejection
+  in agent code.
+- The final `docs: record sst-z1d fix3 validation` commit updates this report last.
+
+Conservative interpretation: reject encoded URL targets outright rather than
+canonicalizing them. The agent allowlist still permits only the existing literal
+ESM forms. Normalizing CommonJS targets in other projects does not admit those
+loaders in agent code or extend the agent allowlist. Other projects retain their
+existing policy for dynamic targets; their literal targets receive the suite-wide
+send-subpath and model-SDK restrictions requested by the review.
+
+Validation:
+
+- `pnpm exec vitest run test/agent-layers.test.mjs` — PASS: **215 layer tests**.
+  The initial regression run failed on the supplied gaps before implementation.
+- `pnpm exec biome check scripts/check-agent-layers.mjs test/agent-layers.test.mjs`
+  — PASS; also covered by the successful root gate below.
+- `pnpm run lint:root` — PASS within the affected gate, including the real-workspace
+  layer scan. No package-specific gates apply because only root scripts/tests changed.
+- `TURBO_SCM_BASE=fc46a5ba870790d56ed19c18050d5e881bd5c783 pnpm run gate --cache=local:rw --env-mode=loose`
+  — PASS: root lint and **243 root tests** across four files; **1 successful / 1
+  total** Turbo task, uncached, 2.899 seconds.
+- `pnpm run gate:full --cache=local:rw --env-mode=loose` — BLOCKED by unchanged
+  `@jeswr/unstorage-solid#build`: its dependency clone was refused with
+  `fatal: transport 'https' not allowed`. **8 tasks succeeded** before failure.
+- `git diff --check` — PASS. No dependency additions; `check:packages` not applicable.
+
+Verification used the existing `/tmp/sst-z1d-network-guard.cjs` preload,
+`GIT_ALLOW_PROTOCOL=file`, `TURBO_TELEMETRY_DISABLED=1` and `DO_NOT_TRACK=1`.
+Remote caching was disabled. No remote fetch/clone completed and no provider/pod
+calls ran. Logs: `/tmp/sst-z1d-fix3-gate.log`, `/tmp/sst-z1d-fix3-full.log`.
+
+Implementation is complete. The full gate remains blocked by the existing
+network-dependent build. `roborev` is unavailable and no post-commit hook is
+installed; dispatcher automated review remains external. No push, PR, branch
+switch, merge, other checkout mutation or tracker change was performed.
+Open questions: none for this fix round.
