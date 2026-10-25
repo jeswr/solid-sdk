@@ -17,7 +17,13 @@
     "next": "16.2.7",
     "next-themes": "^0.4.6",
     "react": "19.2.7",
-    "react-dom": "19.2.7"
+    "react-dom": "19.2.7",
+    "@jeswr/solid-task-model": "workspace:*",
+    "@jeswr/suite-vocab": "workspace:*",
+    "@jeswr/fetch-rdf": "^0.1.0",
+    "@rdfjs/wrapper": "^0.34.0",
+    "@rdfjs/types": "^2.0.1",
+    "n3": "^2.0.3"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
@@ -29,6 +35,8 @@
     "@types/react-dom": "19.2.3",
     "typescript": "^6.0.3",
     "vitest": "^4.1.9",
-    "@biomejs/biome": "^2.5.1"
+    "@biomejs/biome": "^2.5.1",
+    "@types/n3": "^1.26.1",
+    "@vitest/coverage-v8": "^4.1.9"
   }
 }
