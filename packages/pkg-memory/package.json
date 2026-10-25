@@ -1,0 +1,39 @@
+{
+  "name": "@jeswr/pkg-memory",
+  "version": "0.1.0",
+  "private": true,
+  "description": "PKG nanopublication memory and purpose filtering (MCP-03 to MCP-07).",
+  "type": "module",
+  "license": "MIT",
+  "sideEffects": false,
+  "securityCritical": true,
+  "engines": {
+    "node": ">=24"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./testing": {
+      "types": "./dist/testing.d.ts",
+      "default": "./dist/testing.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "SKILL.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "biome check .",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.1",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.9"
+  }
+}

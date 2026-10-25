@@ -61,7 +61,10 @@
     "@jeswr/solid-vc",
     "@jeswr/solid-webauthn-reauth",
     "@jeswr/unstorage-solid",
-    "@jeswr/y-solid"
+    "@jeswr/y-solid",
+    "@jeswr/pkg-memory",
+    "@jeswr/mcp-oauth",
+    "@jeswr/agent-session-capture"
   ],
   "applications": [
     {
@@ -127,6 +130,11 @@
     {
       "slug": "pod-photos",
       "name": "@jeswr/app-pod-photos",
+      "kind": "application"
+    },
+    {
+      "slug": "mcp-server",
+      "name": "@jeswr/app-mcp-server",
       "kind": "application"
     }
   ],
