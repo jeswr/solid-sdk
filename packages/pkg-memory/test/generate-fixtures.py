@@ -46,6 +46,19 @@ cases = [
     ('typed', '_:a schema:value "0001"^^xsd:integer, "1"^^xsd:boolean, "2026-01-01T00:00:00.1Z"^^xsd:dateTime . _:b schema:value "false"^^xsd:boolean .'),
     ('unequal-regular', '_:a schema:knows _:b . _:b schema:knows _:c . _:c schema:knows _:a . _:d schema:knows _:e . _:e schema:knows _:f . _:f schema:knows _:g . _:g schema:knows _:d .'),
     ('self-loop', '_:a schema:knows _:a . _:b schema:knows _:b .'),
+    ('decimal', '_:a schema:value "0002.00"^^xsd:decimal, "+0003."^^xsd:decimal, ".00500"^^xsd:decimal, "-.50"^^xsd:decimal, "-000.00"^^xsd:decimal, " 000123456789012345678901234567890.123456789000 "^^xsd:decimal .'),
+    ('derived-integers', ' '.join(f'_:a schema:value "{value}"^^xsd:{kind} .' for kind, value in [
+        ('integer', ' +0009007199254740993 '), ('nonPositiveInteger', '-0002'),
+        ('negativeInteger', '-0003'), ('long', '+0004'), ('int', '-0005'),
+        ('short', '0006'), ('byte', '+0007'), ('nonNegativeInteger', '-0000'),
+        ('unsignedLong', '00018446744073709551615'), ('unsignedInt', '0008'),
+        ('unsignedShort', '0009'), ('unsignedByte', '0010'), ('positiveInteger', '+0011'),
+    ])),
+    ('floating-point', ' '.join(f'_:a schema:value "{value}"^^xsd:{kind} .' for kind in ['float', 'double'] for value in [
+        '0002.00', '-000.0', '0', '.1250', '1e-4', '1e-5', '1e-12', '1e15', '1e16',
+        '1e20', '-2.5e30', 'INF', '-INF', '+INF', 'NaN', '1e999', '-1e999',
+    ])),
+    ('invalid-numerics', '_:a schema:value "not-a-number"^^xsd:decimal, "1.2"^^xsd:int, "invalid"^^xsd:float, "invalid"^^xsd:double .'),
 ]
 rows = []
 for name, assertion in cases:

@@ -22,4 +22,6 @@ python3 ../generate-fixtures.py /path/to/knowledge-graph/pipeline/np_builder.py
 
 `canonical.json` adds independent RDFlib oracles for symmetric/disconnected
 blank nodes, cycles, language and typed literals, multiline strings and Unicode
-ordering. These do not contain person records.
+ordering. Numeric cases cover exact decimal scale, signed zero, all derived
+integer datatypes, floating-point notation and non-finite values, and unchanged
+invalid numeric literals. These do not contain person records.

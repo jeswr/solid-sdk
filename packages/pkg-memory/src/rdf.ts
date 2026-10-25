@@ -118,8 +118,37 @@ export function dateTime(value: string): string {
 export function normalizeLiteral(term: Literal): Literal {
   if (term.datatype.value === `${NS.xsd}dateTime`)
     return df.literal(dateTime(term.value), term.datatype);
-  if (term.datatype.value === `${NS.xsd}integer` && /^[+-]?\d+$/.test(term.value)) {
-    return df.literal(BigInt(term.value).toString(), term.datatype);
+  const datatype = term.datatype.value.replace(NS.xsd, "");
+  const value = term.value.trim();
+  if (
+    term.datatype.value.startsWith(NS.xsd) &&
+    /^(integer|nonPositiveInteger|negativeInteger|long|int|short|byte|nonNegativeInteger|unsignedLong|unsignedInt|unsignedShort|unsignedByte|positiveInteger)$/.test(
+      datatype,
+    ) &&
+    /^[+-]?\d+$/.test(value)
+  ) {
+    return df.literal(BigInt(value).toString(), term.datatype);
+  }
+  if (term.datatype.value === `${NS.xsd}decimal` && /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(value)) {
+    // Decimal's fixed-point spelling retains scale and signed zero, without
+    // passing through a JS number (which would round arbitrary-precision values).
+    const [integer, fraction] = value.replace(/^\+/, "").split(".");
+    const whole = (integer as string).replace(/^(-?)0+(?=\d)/, "$1").replace(/^-?$/, "$&0");
+    return df.literal(whole + (fraction ? `.${fraction}` : ""), term.datatype);
+  }
+  if (
+    [`${NS.xsd}float`, `${NS.xsd}double`].includes(term.datatype.value) &&
+    /^(?:[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?|[+-]?INF|NaN)$/.test(value)
+  ) {
+    const number = Number(value.replace("INF", "Infinity"));
+    let normalized: string;
+    if (Number.isNaN(number)) normalized = "nan";
+    else if (!Number.isFinite(number)) normalized = number < 0 ? "-inf" : "inf";
+    else if (Object.is(number, -0)) normalized = "-0.0";
+    else if (number !== 0 && (Math.abs(number) < 1e-4 || Math.abs(number) >= 1e16))
+      normalized = number.toExponential().replace(/e([+-])(\d)$/, "e$10$2");
+    else normalized = Number.isInteger(number) ? `${number}.0` : String(number);
+    return df.literal(normalized, term.datatype);
   }
   if (
     term.datatype.value === `${NS.xsd}boolean` &&
