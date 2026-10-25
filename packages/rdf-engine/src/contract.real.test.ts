@@ -1,4 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
+import { Store } from "n3";
 import { afterEach, beforeEach, expect, test } from "vitest";
 import { createRdfEngine } from "./node.js";
 import type { RdfEngine } from "./types.js";
@@ -32,6 +34,16 @@ test("JSON-LD parse and serialize preserve literal types, language and named gra
   expect(await engine.canonicalize(await engine.parse(output, "application/ld+json"))).toBe(
     await engine.canonicalize(data),
   );
+});
+
+test("JSON-LD blank nodes are scoped to each parsed document", async () => {
+  const input = JSON.stringify({ "@id": "_:s", "https://example/p": { "@id": "_:s" } });
+  const first = await engine.parse(input, "application/ld+json");
+  const second = await engine.parse(input, "application/ld+json");
+  const union = new Store([...first, ...second]);
+  expect(union.size).toBe(2);
+  expect(new Set([...union].map((quad) => quad.subject.value)).size).toBe(2);
+  expect([...union].every((quad) => quad.subject.equals(quad.object))).toBe(true);
 });
 
 const shapes = `@prefix sh: <http://www.w3.org/ns/shacl#> .

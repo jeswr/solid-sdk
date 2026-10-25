@@ -1,4 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
+import { Store } from "n3";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { createRdfEngine } from "./node.js";
 import { createFakeRdfEngine } from "./testing.js";
@@ -59,6 +61,38 @@ for (const [name, factory] of [
         expect([...data][0]?.graph.value).toBe(
           format === "application/trig" ? "https://example/g" : "",
         );
+      }
+    });
+
+    test.each(
+      sources.map(([format]) => format),
+    )("scopes labelled blank nodes to each parsed %s document", async (format) => {
+      const input = "_:s <https://example/p> _:s .";
+      const first = await engine.parse(input, format);
+      const second = await engine.parse(input, format);
+      const union = new Store([...first, ...second]);
+      expect(union.size).toBe(2);
+      expect(new Set([...union].map((quad) => quad.subject.value)).size).toBe(2);
+      for (const quad of union) {
+        expect(quad.subject.termType).toBe("BlankNode");
+        expect(quad.subject.equals(quad.object)).toBe(true);
+      }
+    });
+
+    test.each([
+      ["application/trig", "_:s <p> _:o . _:s { _:o <p> _:s . }"],
+      ["application/n-quads", "_:s <https://example/p> _:o .\n_:o <https://example/p> _:s _:s ."],
+    ] as const)("preserves blank-node links across graph scopes in %s", async (format, input) => {
+      const first = await engine.parse(input, format, { baseIri: "https://example/" });
+      const second = await engine.parse(input, format, { baseIri: "https://example/" });
+      expect(new Store([...first, ...second]).size).toBe(4);
+      for (const data of [first, second]) {
+        const defaultQuad = [...data].find((quad) => quad.graph.termType === "DefaultGraph");
+        const namedQuad = [...data].find((quad) => quad.graph.termType === "BlankNode");
+        expect(defaultQuad?.subject.equals(namedQuad?.object)).toBe(true);
+        expect(defaultQuad?.object.equals(namedQuad?.subject)).toBe(true);
+        expect(defaultQuad?.subject.equals(namedQuad?.graph)).toBe(true);
+        expect(defaultQuad?.subject.equals(defaultQuad?.object)).toBe(false);
       }
     });
 

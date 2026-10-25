@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import type { Quad, Term } from "@rdfjs/types";
+// AUTHORED-BY Codex GPT-6
+import type { BlankNode, Quad, Term } from "@rdfjs/types";
 import type * as Wasm from "@sparq-org/sparq/wasm-node";
 import { DataFactory, Store } from "n3";
 import { createLocalIndex } from "./local-index.js";
@@ -15,17 +16,25 @@ type JsonTerm = {
   datatype?: string;
   "xml:lang"?: string;
 };
-function term(value: JsonTerm): Term {
-  if (value.type === "uri") return DataFactory.namedNode(value.value);
-  if (value.type === "bnode") return DataFactory.blankNode(value.value);
-  return DataFactory.literal(
-    value.value,
-    value["xml:lang"] || (value.datatype ? DataFactory.namedNode(value.datatype) : undefined),
-  );
-}
-
 /** Materialize both graph scopes; no WASM handle escapes a document operation. */
 function dataset(store: Wasm.Store): Store {
+  // Labels identify nodes only within this document, including across its graph scopes.
+  const blankNodes = new Map<string, BlankNode>();
+  function term(value: JsonTerm): Term {
+    if (value.type === "uri") return DataFactory.namedNode(value.value);
+    if (value.type === "bnode") {
+      let node = blankNodes.get(value.value);
+      if (!node) {
+        node = DataFactory.blankNode();
+        blankNodes.set(value.value, node);
+      }
+      return node;
+    }
+    return DataFactory.literal(
+      value.value,
+      value["xml:lang"] || (value.datatype ? DataFactory.namedNode(value.datatype) : undefined),
+    );
+  }
   const result = new Store();
   for (const query of [
     "SELECT ?s ?p ?o WHERE { ?s ?p ?o }",

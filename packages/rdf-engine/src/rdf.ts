@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import type { Quad, Term } from "@rdfjs/types";
 import { DataFactory, Parser, Store, Writer } from "n3";
 import type { ParseOptions, QuadSource, RdfMediaType, SerializeOptions } from "./types.js";
@@ -24,9 +25,7 @@ export function decode(input: string | Uint8Array): string {
 }
 
 export function parseN3(input: string, format: RdfMediaType, opts?: ParseOptions): Store {
-  return new Store(
-    new Parser({ format, baseIRI: opts?.baseIri, blankNodePrefix: "" }).parse(input),
-  );
+  return new Store(new Parser({ format, baseIRI: opts?.baseIri }).parse(input));
 }
 
 export function writeN3(data: QuadSource, format: RdfMediaType, opts?: SerializeOptions): string {
