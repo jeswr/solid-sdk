@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /**
  * Type-Index write path — make sure a set of `(forClass, container)` pairs is
  * registered, bootstrapping a private index when the profile has none (CSS
@@ -56,16 +57,28 @@ const PREFIXES = { solid: "http://www.w3.org/ns/solid/terms#" };
  */
 export async function ensureTypeRegistrations(opts: {
   webId: string;
+  /** Host-resolved document URL; legacy direct callers default to the WebID document. */
+  profileDocumentUrl?: string;
   podRoot: string;
   registrations: DesiredRegistration[];
   fetchImpl?: typeof fetch;
 }): Promise<EnsureRegistrationsResult> {
   const { webId, podRoot, registrations } = opts;
-  const profileFetch = refuseRedirects(opts.fetchImpl);
+  const profileDocument = documentUrl(opts.profileDocumentUrl ?? webId);
+  const profileUrl = new URL(profileDocument);
+  if (
+    !["http:", "https:"].includes(profileUrl.protocol) ||
+    profileUrl.username ||
+    profileUrl.password
+  ) {
+    throw new PodScopeError("Profile document must be an HTTP(S) URL without credentials.");
+  }
+  const authenticatedFetch = refuseRedirects(opts.fetchImpl);
+  const profileFetch = documentFetch(profileDocument, authenticatedFetch);
 
   // Read-modify-write: both reads MUST revalidate — a heuristically cached
   // copy would carry a stale ETag into If-Match (spurious 412 on the write).
-  const { dataset: profileDs, etag: profileEtag } = await freshRdf(webId, profileFetch);
+  const { dataset: profileDs, etag: profileEtag } = await freshRdf(profileDocument, profileFetch);
   const links = typeIndexLinks(webId, profileDs);
   let indexUrl = links.privateIndex ?? links.publicIndex;
   let bootstrapped = false;
@@ -83,13 +96,11 @@ export async function ensureTypeRegistrations(opts: {
   const selectedIndex = documentUrl(
     assertWithinPodScope(indexStorage, indexTarget, { allowRoot: false }),
   );
+  const indexFetch = documentFetch(selectedIndex, authenticatedFetch);
   const fetchImpl: typeof fetch = (input, init) => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
-    if (documentUrl(url) !== selectedIndex) {
-      throw new Error("Type Index request is outside the selected document.");
-    }
     assertWithinPodScope(indexStorage, url, { allowRoot: false });
-    return profileFetch(input, init);
+    return indexFetch(input, init);
   };
 
   if (!indexUrl) {
@@ -98,7 +109,7 @@ export async function ensureTypeRegistrations(opts: {
     // Link it from the profile (read-modify-write, ETag-guarded).
     const anchor = new ProfileTypeIndexAnchor(webId, profileDs, DataFactory);
     anchor.privateIndex = indexUrl;
-    await writeResource(documentUrl(webId), profileDs, {
+    await writeResource(profileDocument, profileDs, {
       etag: profileEtag,
       fetchImpl: profileFetch,
     });
@@ -131,6 +142,17 @@ export async function ensureTypeRegistrations(opts: {
     });
   }
   return { indexUrl, added, bootstrapped };
+}
+
+/** Pin authenticated access to exactly one document, independently of its RDF subjects. */
+function documentFetch(document: string, fetchImpl: typeof fetch): typeof fetch {
+  return (input, init) => {
+    const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+    if (documentUrl(url) !== document) {
+      throw new PodScopeError("Type Index request is outside the selected document.");
+    }
+    return fetchImpl(input, init);
+  };
 }
 
 /** Mint a fresh, empty private type index. Tolerates "already exists" (412). */

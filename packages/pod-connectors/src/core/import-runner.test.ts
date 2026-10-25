@@ -1,11 +1,12 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 
 import { DataFactory, Store } from "n3";
 import { describe, expect, it } from "vitest";
 import { IntegrationSyncError } from "./errors.js";
 import { createSourceAuth, runImport } from "./import-runner.js";
 import { createFetchPodWriter } from "./pod-writer.js";
-import { createMemoryPod, TEST_POD_ROOT, TEST_WEBID } from "./testing.js";
+import { createMemoryPod, TEST_POD_ROOT, TEST_PROFILE_DOC, TEST_WEBID } from "./testing.js";
 import type { ImportContext, IntegrationAdapter } from "./types.js";
 import { CLASSES, MusicRecording } from "./vocab.js";
 
@@ -56,6 +57,7 @@ describe("runImport (demo mode, memory pod)", () => {
       podWriter: createFetchPodWriter({
         adapterId: "toy",
         webId: TEST_WEBID,
+        profileDocumentUrl: TEST_PROFILE_DOC,
         podRoot: TEST_POD_ROOT,
         fetch: pod.fetch,
       }),
@@ -88,6 +90,7 @@ describe("runImport (demo mode, memory pod)", () => {
       podWriter: createFetchPodWriter({
         adapterId: "toy",
         webId: TEST_WEBID,
+        profileDocumentUrl: TEST_PROFILE_DOC,
         podRoot: TEST_POD_ROOT,
         fetch: pod.fetch,
       }),
@@ -112,6 +115,7 @@ describe("runImport (demo mode, memory pod)", () => {
         podWriter: createFetchPodWriter({
           adapterId: "toy",
           webId: TEST_WEBID,
+          profileDocumentUrl: TEST_PROFILE_DOC,
           podRoot: TEST_POD_ROOT,
           fetch: pod.fetch,
         }),
@@ -134,6 +138,7 @@ describe("runImport (demo mode, memory pod)", () => {
       podWriter: createFetchPodWriter({
         adapterId: "toy",
         webId: TEST_WEBID,
+        profileDocumentUrl: TEST_PROFILE_DOC,
         podRoot: TEST_POD_ROOT,
         fetch: pod.fetch,
       }),
@@ -215,6 +220,7 @@ it("retains read preconditions and surfaces a concurrent 412 without clobbering 
   const port = createFetchPodWriter({
     adapterId: "toy",
     webId: TEST_WEBID,
+    profileDocumentUrl: TEST_PROFILE_DOC,
     podRoot: TEST_POD_ROOT,
     fetch: pod.fetch,
   });
@@ -245,6 +251,7 @@ it("uses create-only semantics after an absent read and passes explicit conditio
   const port = createFetchPodWriter({
     adapterId: "toy",
     webId: TEST_WEBID,
+    profileDocumentUrl: TEST_PROFILE_DOC,
     podRoot: TEST_POD_ROOT,
     fetch: pod.fetch,
   });
@@ -317,6 +324,7 @@ it("forwards explicit file-import write conditions to the Pod port", async () =>
   const port = createFetchPodWriter({
     adapterId: "toy",
     webId: TEST_WEBID,
+    profileDocumentUrl: TEST_PROFILE_DOC,
     podRoot: TEST_POD_ROOT,
     fetch: pod.fetch,
   });

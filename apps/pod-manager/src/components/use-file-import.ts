@@ -12,6 +12,7 @@
  * `File` through.
  */
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { createFetchPodWriter } from "@jeswr/pod-connectors";
 import { useCallback, useState } from "react";
 import { NoStorageError } from "@/lib/errors";
@@ -38,7 +39,7 @@ export function useFileImport(adapter: FileImportAdapter | undefined) {
 
   const importFile = useCallback(
     async (file: File) => {
-      if (!adapter || !webId) return;
+      if (!adapter || !webId || !profile) return;
       const podRoot = activeStorage ?? profile?.storages[0];
       if (!podRoot) {
         setState({ phase: "error", error: new NoStorageError(webId), fileName: file.name });
@@ -49,7 +50,13 @@ export function useFileImport(adapter: FileImportAdapter | undefined) {
         const report = await runFileImport({
           adapter,
           file,
-          podWriter: createFetchPodWriter({ adapterId: adapter.metadata.id, webId, podRoot, fetch: podFetch }),
+          podWriter: createFetchPodWriter({
+            adapterId: adapter.metadata.id,
+            webId,
+            profileDocumentUrl: profile.profileDocumentUrl,
+            podRoot,
+            fetch: podFetch,
+          }),
           onProgress: (progress) =>
             setState((s) => ({ ...s, phase: "importing", progress })),
         });

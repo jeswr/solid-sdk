@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 
 /**
  * Test doubles for the integrations framework (imported by vitest only).
@@ -170,6 +171,7 @@ export async function demoImport(
     podWriter: createFetchPodWriter({
       adapterId: adapter.metadata.id,
       webId: TEST_WEBID,
+      profileDocumentUrl: TEST_PROFILE_DOC,
       podRoot: TEST_POD_ROOT,
       fetch: pod.fetch,
     }),
@@ -200,6 +202,7 @@ export async function sparseImport(
     podWriter: createFetchPodWriter({
       adapterId: adapter.metadata.id,
       webId: TEST_WEBID,
+      profileDocumentUrl: TEST_PROFILE_DOC,
       podRoot: TEST_POD_ROOT,
       fetch: pod.fetch,
     }),
@@ -257,6 +260,7 @@ export async function fileImport(
     podWriter: createFetchPodWriter({
       adapterId: adapter.metadata.id,
       webId: TEST_WEBID,
+      profileDocumentUrl: TEST_PROFILE_DOC,
       podRoot: TEST_POD_ROOT,
       fetch: pod.fetch,
     }),

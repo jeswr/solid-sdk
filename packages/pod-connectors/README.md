@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 # @jeswr/pod-connectors
 
 > Experimental — AI-agent-generated. Security-critical; private until conformance is gate-green.
@@ -18,6 +19,7 @@ const report = await runImport({
   podWriter: createFetchPodWriter({
     adapterId: adapter.metadata.id,
     webId,
+    profileDocumentUrl, // final profile document URL from the host's existing profile load
     podRoot,
     fetch: authenticatedPodFetch,
   }),
@@ -38,7 +40,11 @@ confines document reads, writes and every redirect hop to the connector containe
 Index operations separately validate the profile-selected index against the WebID's advertised
 `pim:storage` and `solid:storage` roots, independently of the import destination,
 allow only that document (or the bootstrap target), and refuse redirects. The profile
-read/update also refuses redirects. Deterministic document paths and Type Index bootstrap
+read/update is pinned to the host-supplied canonical `profileDocumentUrl`, resolved after
+redirects during the host's existing profile load. The WebID remains the RDF subject.
+Registration never dereferences the redirecting WebID or makes an unauthenticated profile
+request, and all authenticated profile and Type Index operations refuse redirects.
+Deterministic document paths and Type Index bootstrap
 behavior are preserved. The runner
 retains read preconditions for subsequent writes; explicit write conditions override them.
 

@@ -12,6 +12,7 @@
  * "Import again" syncs incrementally where the platform supports it.
  */
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { createFetchPodWriter, createSourceAuth } from "@jeswr/pod-connectors";
 import { useCallback, useRef, useState } from "react";
 import { NoStorageError } from "@/lib/errors";
@@ -46,7 +47,7 @@ export function useConnect(adapter: IntegrationAdapter | undefined) {
   const live = adapter ? adapter.metadata.tier !== "B" && isLive(adapter) : false;
 
   const start = useCallback(async () => {
-    if (!adapter || !webId) return;
+    if (!adapter || !webId || !profile) return;
     const podRoot = activeStorage ?? profile?.storages[0];
     if (!podRoot) {
       setState({ phase: "error", error: new NoStorageError(webId) });
@@ -63,7 +64,13 @@ export function useConnect(adapter: IntegrationAdapter | undefined) {
       setState({ phase: "importing" });
       const report = await runImport({
         adapter,
-        podWriter: createFetchPodWriter({ adapterId: adapter.metadata.id, webId, podRoot, fetch: podFetch }),
+        podWriter: createFetchPodWriter({
+          adapterId: adapter.metadata.id,
+          webId,
+          profileDocumentUrl: profile.profileDocumentUrl,
+          podRoot,
+          fetch: podFetch,
+        }),
         mode: live ? "live" : "demo",
         sourceAuth: live ? createSourceAuth(adapter.metadata.id, adapter, token, sourceFetch) : undefined,
         cursor: cursorRef.current,

@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { RdfFetchError } from "@jeswr/fetch-rdf";
 import { assertWithinPodScope, createPodScopedFetch } from "@jeswr/guarded-fetch";
 import { freshRdf } from "../pod/rdf-read.js";
@@ -12,6 +13,8 @@ import { VOCAB_PREFIXES } from "./vocab.js";
 export interface FetchPodWriterOptions {
   readonly adapterId: string;
   readonly webId: string;
+  /** Canonical profile document URL resolved by the host when loading the WebID. */
+  readonly profileDocumentUrl: string;
   readonly podRoot: string;
   /** Host's authenticated Pod transport; resolved at call time by the host. */
   readonly fetch: typeof fetch;
@@ -63,6 +66,7 @@ export function createFetchPodWriter(options: FetchPodWriterOptions): PodWriter 
     registerType: (registrations) =>
       ensureTypeRegistrations({
         webId,
+        profileDocumentUrl: options.profileDocumentUrl,
         podRoot,
         registrations: [...registrations],
         fetchImpl: options.fetch,

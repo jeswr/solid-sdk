@@ -1,7 +1,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 
 import { RdfFetchError } from "@jeswr/fetch-rdf";
-import { PodScopeError } from "@jeswr/guarded-fetch";
+import { PodScopeError, RedirectRefusedError } from "@jeswr/guarded-fetch";
 import { Store } from "n3";
 import { describe, expect, it, vi } from "vitest";
 import { ResourceWriteError } from "../pod/resource.js";
@@ -19,6 +20,7 @@ function writer(fetch: typeof globalThis.fetch) {
   return createFetchPodWriter({
     adapterId: "toy",
     webId: TEST_WEBID,
+    profileDocumentUrl: TEST_PROFILE_DOC,
     podRoot: TEST_POD_ROOT,
     fetch,
   });
@@ -121,6 +123,7 @@ describe("fetch-backed PodWriter", () => {
       createFetchPodWriter({
         adapterId: "../other",
         webId: TEST_WEBID,
+        profileDocumentUrl: TEST_PROFILE_DOC,
         podRoot: TEST_POD_ROOT,
         fetch: vi.fn(),
       }),
@@ -171,6 +174,98 @@ describe("fetch-backed PodWriter", () => {
     );
   });
 
+  it("pins bootstrap and reuse to the host-resolved profile document, preserving the WebID subject", async () => {
+    const pod = createMemoryPod();
+    // The canonical document can be outside storage and on a different origin from the WebID.
+    const profileDocumentUrl = "https://profiles.test/alice/card?view=public";
+    await pod.fetch(profileDocumentUrl, { method: "PUT", body: pod.get(TEST_PROFILE_DOC) });
+    const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
+      if (String(input).split("#")[0] === TEST_PROFILE_DOC) {
+        return new Response(null, { status: 302, headers: { location: profileDocumentUrl } });
+      }
+      return pod.fetch(input, init);
+    });
+    const port = createFetchPodWriter({
+      adapterId: "toy",
+      webId: TEST_WEBID,
+      profileDocumentUrl,
+      podRoot: TEST_POD_ROOT,
+      fetch,
+    });
+    const registrations = [{ forClass: doc.forClass, container: port.resolve("media/") }];
+    const first = await port.registerType(registrations);
+    expect(first).toMatchObject({ added: 1, bootstrapped: true });
+    const putCount = pod.putCount;
+    expect(await port.registerType(registrations)).toMatchObject({ added: 0, bootstrapped: false });
+    expect(pod.putCount).toBe(putCount);
+    expect(pod.get(first.indexUrl)).toContain(doc.forClass);
+    const { typeIndexLinks } = await import("../pod/type-index.js");
+    expect(typeIndexLinks(TEST_WEBID, pod.dataset(profileDocumentUrl)).privateIndex).toBe(
+      first.indexUrl,
+    );
+    expect(typeIndexLinks(TEST_WEBID, pod.dataset(TEST_PROFILE_DOC)).privateIndex).toBeUndefined();
+    const profileCalls = fetch.mock.calls.filter(([input]) => String(input) === profileDocumentUrl);
+    expect(profileCalls.map(([, init]) => init?.method ?? "GET")).toEqual(["GET", "PUT", "GET"]);
+    expect(new Headers(profileCalls[1][1]?.headers).get("if-match")).toBe('"v1"');
+    expect(fetch.mock.calls.every(([, init]) => init?.redirect === "manual")).toBe(true);
+    expect(fetch.mock.calls.map(([input]) => String(input).split("#")[0])).not.toContain(
+      TEST_PROFILE_DOC,
+    );
+  });
+
+  it.each([
+    "profile",
+    "index-create",
+    "index-update",
+  ])("refuses an authenticated %s write redirect even within advertised storage", async (target) => {
+    const pod = createMemoryPod();
+    const profileDocumentUrl = `${TEST_POD_ROOT}profile/canonical`;
+    await pod.fetch(profileDocumentUrl, { method: "PUT", body: pod.get(TEST_PROFILE_DOC) });
+    const options = {
+      adapterId: "toy",
+      webId: TEST_WEBID,
+      profileDocumentUrl,
+      podRoot: TEST_POD_ROOT,
+    };
+    const indexUrl = `${TEST_POD_ROOT}settings/privateTypeIndex.ttl`;
+    if (target === "index-update") {
+      await createFetchPodWriter({ ...options, fetch: pod.fetch }).registerType([]);
+    }
+    const redirectFrom = target === "profile" ? profileDocumentUrl : indexUrl;
+    const redirectTo = `${TEST_POD_ROOT}private/other.ttl`;
+    const before = pod.get(redirectFrom);
+    const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
+      expect(init?.redirect).toBe("manual");
+      if (String(input) === redirectFrom && init?.method === "PUT") {
+        return new Response(null, { status: 307, headers: { location: redirectTo } });
+      }
+      return pod.fetch(input, init);
+    });
+    const port = createFetchPodWriter({ ...options, fetch });
+    await expect(
+      port.registerType([{ forClass: doc.forClass, container: port.resolve("media/") }]),
+    ).rejects.toBeInstanceOf(RedirectRefusedError);
+    expect(pod.get(redirectFrom)).toBe(before);
+    expect(fetch.mock.calls.map(([input]) => String(input))).not.toContain(redirectTo);
+    expect(pod.get(redirectTo)).toBeUndefined();
+  });
+
+  it.each([
+    "file:///profile",
+    "https://user:pass@profile.test/card",
+  ])("rejects an unsafe canonical profile document before transport: %s", async (profileDocumentUrl) => {
+    const fetch = vi.fn<typeof globalThis.fetch>();
+    const port = createFetchPodWriter({
+      adapterId: "toy",
+      webId: TEST_WEBID,
+      profileDocumentUrl,
+      podRoot: TEST_POD_ROOT,
+      fetch,
+    });
+    await expect(port.registerType([])).rejects.toBeInstanceOf(PodScopeError);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
   it("updates an existing profile-linked index outside the connector root", async () => {
     const pod = createMemoryPod();
     const port = writer(pod.fetch);
@@ -197,6 +292,7 @@ describe("fetch-backed PodWriter", () => {
     const port = createFetchPodWriter({
       adapterId: "toy",
       webId: TEST_WEBID,
+      profileDocumentUrl: TEST_PROFILE_DOC,
       podRoot: secondRoot,
       fetch,
     });
@@ -230,6 +326,7 @@ describe("fetch-backed PodWriter", () => {
     const port = createFetchPodWriter({
       adapterId: "toy",
       webId: TEST_WEBID,
+      profileDocumentUrl: TEST_PROFILE_DOC,
       podRoot: secondRoot,
       fetch,
     });
