@@ -1,12 +1,13 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+import { readFileSync } from "node:fs";
 import { expect, test } from "vitest";
-import {
-  contrast,
-  contrastIssues,
-  documentedPairs,
-  evaluateContrast,
-  oklchToSrgb,
-} from "../scripts/contrast.mjs";
+import { contrast, documentedPairs, evaluateContrast, oklchToSrgb } from "../scripts/contrast.mjs";
+import { parseTokens } from "../scripts/token-css.mjs";
+
+const themes = () =>
+  parseTokens(
+    readFileSync(new URL("../packages/suite-ui/src/styles/tokens.css", import.meta.url), "utf8"),
+  );
 
 test("WCAG reference extremes and neutral inverse conversion", () => {
   expect(contrast("oklch(1 0 0)", "oklch(0 0 0)")).toBeCloseTo(21, 5);
@@ -26,33 +27,29 @@ test("documented pairs cover text, aliases, tiles, links and UI boundaries", () 
   expect(pairs).toContainEqual({ fg: "--glyph", bg: "--app-home", minimum: 3 });
   expect(pairs).toContainEqual({ fg: "--foreground-subtle", bg: "--surface-3", minimum: 3 });
 });
-test("only an exact documented theme/pair/measurement exempts a failure", () => {
-  const values = Object.fromEntries(
-    [
-      "background",
-      "surface",
-      "surface-2",
-      "surface-3",
-      "foreground",
-      "foreground-muted",
-      "foreground-subtle",
-      "primary",
-      "rail",
-      "rail-foreground",
-      "ring",
-      "border-strong",
-    ].map((n) => [`--${n}`, "oklch(1 0 0)"]),
-  );
-  const known = contrastIssues("<!-- contrast-issue: light|--ring|--background|1.000 -->");
-  const rows = evaluateContrast({ light: values, dark: values }, known);
-  expect(rows.filter((r) => r.status === "KNOWN SPEC ISSUE")).toHaveLength(1);
-  const near = contrastIssues("<!-- contrast-issue: light|--ring|--background|1.004 -->");
-  expect(
-    evaluateContrast({ light: values }, near).some((r) => r.status === "KNOWN SPEC ISSUE"),
-  ).toBe(false);
-  expect(rows.filter((r) => r.status === "FAIL").length).toBeGreaterThan(0);
-  values["--ring"] = "oklch(0.8 0 0)";
-  expect(
-    evaluateContrast({ light: values }, known).some((r) => r.status === "KNOWN SPEC ISSUE"),
-  ).toBe(false);
+test("amended input boundaries and warning text meet contrast in both themes without exceptions", () => {
+  const rows = evaluateContrast(themes());
+  expect(rows.filter((row) => row.status !== "PASS")).toEqual([]);
+  for (const theme of ["light", "dark"]) {
+    for (const [fg, bg, minimum] of [
+      ["--input", "--background", 3],
+      ["--input", "--surface", 3],
+      ["--warning-foreground", "--warning", 4.5],
+    ]) {
+      const row = rows.find((r) => r.theme === theme && r.fg === fg && r.bg === bg);
+      expect(row).toMatchObject({ minimum, status: "PASS" });
+      expect(row.ratio).toBeGreaterThanOrEqual(minimum);
+    }
+  }
+});
+
+test("input and warning contrast regressions fail the gate", () => {
+  const values = themes();
+  for (const theme of Object.values(values)) {
+    theme["--input"] = theme["--background"];
+    theme["--warning-foreground"] = theme["--warning"];
+  }
+  const failures = evaluateContrast(values).filter((row) => row.status === "FAIL");
+  expect(failures).toHaveLength(6);
+  expect(failures.every((row) => ["--input", "--warning-foreground"].includes(row.fg))).toBe(true);
 });

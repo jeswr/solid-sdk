@@ -1,5 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-/** Frozen transcription of 01-design-system §2.1–2.7; CSS remains the runtime source. */
+/** 01-design-system §2.1–2.7 and Amendment 2026-10-25; CSS remains the runtime source. */
 export interface SuiteToken {
   readonly name: `--${string}`;
   readonly light: string;
@@ -92,7 +92,14 @@ export const tokens = [
     name: "--border-strong",
     light: "oklch(0.80 0.012 240)",
     dark: "oklch(1 0 0 / 24%)",
-    use: "inputs, focused cards",
+    use: "focused cards",
+    category: "colour",
+  },
+  {
+    name: "--input",
+    light: "oklch(0.63 0.012 240)",
+    dark: "oklch(1 0 0 / 36%)",
+    use: "input, select, checkbox and radio boundaries",
     category: "colour",
   },
   {
@@ -167,7 +174,7 @@ export const tokens = [
   },
   {
     name: "--warning-foreground",
-    light: "oklch(0.25 0.05 70)",
+    light: "oklch(0.20 0.05 70)",
     dark: "oklch(0.20 0.04 70)",
     use: "",
     category: "colour",

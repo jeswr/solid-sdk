@@ -54,34 +54,19 @@ export function documentedPairs(values) {
   for (const bg of ["--background", "--surface"]) add("--primary", bg);
   add("--rail-foreground", "--rail");
   add("--ring", "--background", 3);
-  add("--border-strong", "--background", 3);
+  for (const bg of ["--background", "--surface"]) add("--input", bg, 3);
   for (const name of Object.keys(values)) if (/^--app-[a-z]+$/.test(name)) add("--glyph", name, 3);
   return pairs;
 }
-export function contrastIssues(markdown) {
-  return new Map(
-    [
-      ...markdown.matchAll(
-        /<!-- contrast-issue: (light|dark)\|(--[\w-]+)\|(--[\w-]+)\|([\d.]+) -->/g,
-      ),
-    ].map(([, theme, fg, bg, ratio]) => [`${theme}|${fg}|${bg}`, Number(ratio)]),
-  );
-}
-export function evaluateContrast(themes, known = new Map()) {
+export function evaluateContrast(themes) {
   return Object.entries(themes).flatMap(([theme, values]) =>
     documentedPairs(values).map((pair) => {
       const ratio = contrast(values[pair.fg], values[pair.bg]);
-      const recorded = known.get(`${theme}|${pair.fg}|${pair.bg}`);
       return {
         theme,
         ...pair,
         ratio,
-        status:
-          ratio >= pair.minimum
-            ? "PASS"
-            : recorded !== undefined && recorded === Number(ratio.toFixed(3))
-              ? "KNOWN SPEC ISSUE"
-              : "FAIL",
+        status: ratio >= pair.minimum ? "PASS" : "FAIL",
       };
     }),
   );
