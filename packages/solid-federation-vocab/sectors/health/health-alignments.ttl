@@ -1,7 +1,7 @@
 # AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 #
-@prefix health:  <https://w3id.org/jeswr/sectors/health#> .
-@prefix core:    <https://w3id.org/jeswr/core#> .
+@prefix health:  <https://jeswr.org/ns/sectors/health#> .
+@prefix core:    <https://jeswr.org/ns/core#> .
 @prefix owl:     <http://www.w3.org/2002/07/owl#> .
 @prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
 @prefix rdf:     <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
@@ -52,10 +52,12 @@
 #    FHIR since fhir.ttl is not imported and its axioms are not in the closure).
 # =============================================================================
 
-<https://w3id.org/jeswr/sectors/health/alignments> a owl:Ontology ;
+<https://jeswr.org/ns/sectors/health/alignments> a owl:Ontology ;
+    dcterms:description "Version 2.0.0 rebases this ontology from its legacy w3id namespace to https://jeswr.org/ns/ (DECISIONS V1)."@en ;
+    owl:versionIRI <https://jeswr.org/ns/sectors/health/alignments/2.0.0> ;
     dcterms:title "Solid Health Sector Ontology — external alignments (gUFO re-base)"@en ;
-    owl:imports <https://w3id.org/jeswr/sectors/health> ;
-    owl:versionInfo "1.0.0" ;
+    owl:imports <https://jeswr.org/ns/sectors/health> ;
+    owl:versionInfo "2.0.0" ;
     rdfs:comment "Optional Mode-A bridge to FHIR R4/R5, SNOMED CT, LOINC + Mode-B QUDT/UCUM unit binding + IDMP-O. External IRIs are real and subject to their bodies' governance. fhir.ttl is deliberately NOT imported."@en .
 
 dcterms:title a owl:AnnotationProperty .

@@ -1,0 +1,4 @@
+# AUTHORED-BY Codex GPT-6.1-Sol
+.next/
+next-env.d.ts
+*.tsbuildinfo
