@@ -59,7 +59,7 @@ test("keyboard navigation, real density heights and reduced motion", async ({ pa
     await page
       .locator("html")
       .evaluate((el) => getComputedStyle(el).getPropertyValue("--duration-base").trim()),
-  ).toBe("0ms");
+  ).toMatch(/^0m?s$/); // minified builds emit 0s
   await expectAccessible(page);
 });
 
@@ -71,9 +71,10 @@ test("touch pointers force comfortable density and 44px controls", async ({
     viewport: testInfo.project.use.viewport ?? { width: 375, height: 900 },
     colorScheme: testInfo.project.use.colorScheme ?? "light",
     reducedMotion: "reduce",
+    baseURL: testInfo.project.use.baseURL,
   });
   const page = await context.newPage();
-  await page.goto("http://127.0.0.1:3210/dev/components/tokens");
+  await page.goto("/dev/components/tokens");
   expect(await page.evaluate(() => matchMedia("(pointer: coarse)").matches)).toBe(true);
   const compact = page.locator('[data-density="compact"]');
   expect(
