@@ -46,6 +46,7 @@ const outdir = join(root, "dist");
  */
 const EXTERNAL = [
   "@jeswr/rdf-serialize",
+  "@jeswr/solid-dpop",
   "@modelcontextprotocol/sdk",
   "zod",
   "n3",

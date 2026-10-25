@@ -3323,6 +3323,9 @@ importers:
       '@jeswr/rdf-serialize':
         specifier: workspace:*
         version: link:../rdf-serialize
+      '@jeswr/solid-dpop':
+        specifier: workspace:*
+        version: link:../solid-dpop
       '@modelcontextprotocol/sdk':
         specifier: ^1.29.0
         version: 1.29.0(zod@4.4.3)
