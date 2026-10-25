@@ -222,6 +222,8 @@ describe("workspace dependency paths", () => {
       "/home/other/packages/fetch-rdf/dist/parse.js",
       "/home/workspace/packages/fetch-rdf/private/secret.ts",
       "/home/workspace/packages/orphan.ts",
+      "/home/workspace/src/orphan.ts",
+      "/home/workspace/dist/orphan.js",
     ]) {
       expect(() => sanitizeJs(`// ${path}`, root)).toThrow(/host path/);
       expect(() => sanitizeMap({ sources: [path] }, root)).toThrow(/host path/);

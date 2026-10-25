@@ -138,7 +138,7 @@ export function pkgRelativePath(p, packageRoot, baseDir = packageRoot) {
     // Workspace dependencies (and their source maps) are siblings under packages/.
     // Classify by that root, never an arbitrary /packages/ substring in a host path.
     if (basename(dirname(packageRoot)) === "packages") {
-      const workspace = /^\.\.\/([^/]+)\/((?:dist|src)\/.+)$/.exec(rel);
+      const workspace = /^\.\.\/([a-z0-9][a-z0-9._-]*)\/((?:dist|src)\/.+)$/.exec(rel);
       if (workspace) return `${workspace[1]}/${workspace[2]}`;
     }
     if (!escapes) {
