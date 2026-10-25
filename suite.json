@@ -68,7 +68,8 @@
     "@jeswr/pod-notifications",
     "@jeswr/pod-access",
     "@jeswr/rdf-engine",
-    "@jeswr/storage-conformance"
+    "@jeswr/storage-conformance",
+    "@jeswr/suite-ui"
   ],
   "applications": [
     {
@@ -134,6 +135,11 @@
     {
       "slug": "pod-photos",
       "name": "@jeswr/app-pod-photos",
+      "kind": "application"
+    },
+    {
+      "slug": "suite",
+      "name": "@jeswr/app-suite",
       "kind": "application"
     }
   ],
