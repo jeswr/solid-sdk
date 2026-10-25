@@ -70,12 +70,19 @@ export function assertSecureUrl(url: URL, http: HttpOptions | undefined): void {
   );
 }
 
-/** Fetches a URL with the non-reactive transport, enforcing HTTPS unless insecure requests are allowed. */
+/**
+ * Fetches a URL with the non-reactive transport, enforcing HTTPS unless insecure requests are allowed.
+ * Rejects automatic redirects so a subsequent hop cannot bypass the scheme check. Manual mode is
+ * preserved for discovery callers that inspect redirect responses without following them.
+ */
 export async function secureFetch(
   url: URL,
   init: RequestInit,
   http: HttpOptions | undefined,
 ): Promise<Response> {
   assertSecureUrl(url, http);
-  return await transportOf(http)(url, init);
+  return await transportOf(http)(url, {
+    ...init,
+    redirect: init.redirect === "manual" ? "manual" : "error",
+  });
 }
