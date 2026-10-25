@@ -6,7 +6,7 @@
   "excludeFolders": ["test", "dist", "node_modules", ".implementation-context"],
   "rules": [
     "Always construct ReactiveFetchManager with a boundary: an explicit CredentialBoundary listing the storages that may receive credentials, or an opt-in AutomaticCredentialBoundary that admits only verified Solid/LWS storage roots.",
-    "Import custom elements from @solid/reactive-authentication/elements or registerElements; the main entry point has no DOM dependency.",
+    "Import custom elements from @jeswr/reactive-authentication/elements or registerElements; the main entry point has no DOM dependency.",
     "Supply a namespace (and a SessionFence with a persistent store) whenever credential caches or session stores are persisted.",
     "Use allowInsecureRequests / allowInsecureHttp only for local development servers."
   ]

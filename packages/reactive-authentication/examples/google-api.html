@@ -4,12 +4,12 @@
 <title>Google Drive API with Google Identity Services</title>
 <!-- Google's SDK; register a Web application OAuth client with this page's origin as an authorized JavaScript origin. -->
 <script src="https://accounts.google.com/gsi/client" async></script>
-<button id="connect">Connect Google Drive</button>
+<button type="button" id="connect">Connect Google Drive</button>
 <pre id="output"></pre>
 <script type="module">
 import {
     CredentialBoundary, GoogleTokenSource, InteractionRequiredError, OAuthBearerTokenProvider, ReactiveFetchManager,
-} from "@solid/reactive-authentication"
+} from "@jeswr/reactive-authentication"
 
 await new Promise(resolve => addEventListener("load", resolve, {once: true})) // GIS script loaded
 const button = document.querySelector("#connect")

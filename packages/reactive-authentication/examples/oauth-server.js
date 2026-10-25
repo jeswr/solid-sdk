@@ -1,9 +1,14 @@
 // Server-side (Node.js) confidential client, e.g. a Google "Web application" client or a backend-for-frontend.
 // The client secret stays on the server. Tokens belong to one user, so create one client per application
 // session — never a process-wide singleton, which would hand the first user's tokens to everyone.
-import { CredentialBoundary, OAuthBearerTokenProvider, OAuthCodeSource, ReactiveFetchManager } from "@solid/reactive-authentication"
+import {
+  CredentialBoundary,
+  OAuthBearerTokenProvider,
+  OAuthCodeSource,
+  ReactiveFetchManager,
+} from "@jeswr/reactive-authentication";
 
-const drive = new CredentialBoundary(["https://www.googleapis.com/drive/"])
+const drive = new CredentialBoundary(["https://www.googleapis.com/drive/"]);
 
 /**
  * One OAuth client per application session.
@@ -16,16 +21,19 @@ const drive = new CredentialBoundary(["https://www.googleapis.com/drive/"])
  *   state on success, error and timeout. The library still checks state, PKCE, issuer and the redirect URI.
  */
 export function createGoogleClient(sessionId, codeProvider) {
-    const source = new OAuthCodeSource({
-        issuer: "https://accounts.google.com",
-        clientId: process.env.GOOGLE_CLIENT_ID,
-        clientSecret: process.env.GOOGLE_CLIENT_SECRET, // refused in browsers and workers
-        redirectUri: "https://app.example/oauth/callback",
-        scopes: ["openid", "email", "https://www.googleapis.com/auth/drive.readonly"],
-        parameters: {access_type: "offline"},          // Google issues refresh tokens this way
-        account: sessionId,
-        codeProvider,
-    })
-    const manager = new ReactiveFetchManager({providers: [new OAuthBearerTokenProvider(source, {resources: drive})], boundary: drive})
-    return {manager, source, logout: () => manager.logout()}
+  const source = new OAuthCodeSource({
+    issuer: "https://accounts.google.com",
+    clientId: process.env.GOOGLE_CLIENT_ID,
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET, // refused in browsers and workers
+    redirectUri: "https://app.example/oauth/callback",
+    scopes: ["openid", "email", "https://www.googleapis.com/auth/drive.readonly"],
+    parameters: { access_type: "offline" }, // Google issues refresh tokens this way
+    account: sessionId,
+    codeProvider,
+  });
+  const manager = new ReactiveFetchManager({
+    providers: [new OAuthBearerTokenProvider(source, { resources: drive })],
+    boundary: drive,
+  });
+  return { manager, source, logout: () => manager.logout() };
 }

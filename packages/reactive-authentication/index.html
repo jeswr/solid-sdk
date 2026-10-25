@@ -31,8 +31,8 @@
                 DPoPTokenProvider,
                 DynamicRegistrationClientProvider,
                 ReactiveFetchManager,
-                XASProvider,
                 storageContextKey,
+                XASProvider,
             } from "./dist/mod.js"
             import "./dist/registerElements.js"
 
@@ -56,9 +56,10 @@
 
             /* Page functionality: Buttons */
             document.addEventListener("DOMContentLoaded", () =>
-                buttons.forEach(button =>
+                buttons.forEach(button => {
                     button.addEventListener("click", async e =>
-                        await f(e.target.value))))
+                        await f(e.target.value))
+                }))
             document.querySelector("#logout").addEventListener("click", () => manager.logout())
 
             async function f(uri) {
@@ -74,17 +75,17 @@
         </script>
     </head>
     <body>
-        <button id="logout">Log out</button>
-        <button class="fetch" value="https://echo.free.beeceptor.com/">echo</button>
-        <button class="fetch" value="https://langsamu.solidcommunity.net/settings/">solidcommunity.net (CSS)</button>
-        <button class="fetch" value="https://storage.inrupt.com/d5e2efbd-1dd6-4c45-b6a3-e61a05bb9d49/">PodSpaces (ESS)</button>
-        <button class="fetch" value="https://langsamu.datapod.igrant.io/settings/">datapod.igrant.io (NSS 5.7.4)</button>
-        <button class="fetch" value="https://langsamu.solidweb.app/settings/">solidweb.app (JSS)</button>
-        <button class="fetch" value="https://teamid.live/langsamu/settings/">teamid.live (CSS)</button>
-        <button class="fetch" value="https://langsamu.solidweb.org/settings/">solidweb.org (NSS 6.0.0)</button>
-        <button class="fetch" value="https://langsamu.privatedatapod.com/settings/">privatedatapod (CSS)</button>
-        <button class="fetch" value="https://solidweb.me/langsamu/profile/">solidweb.me (CSS)</button>
-        <button class="fetch" value="http://localhost:3000/a/profile/">localhost (CSS)</button>
+        <button type="button" id="logout">Log out</button>
+        <button type="button" class="fetch" value="https://echo.free.beeceptor.com/">echo</button>
+        <button type="button" class="fetch" value="https://langsamu.solidcommunity.net/settings/">solidcommunity.net (CSS)</button>
+        <button type="button" class="fetch" value="https://storage.inrupt.com/d5e2efbd-1dd6-4c45-b6a3-e61a05bb9d49/">PodSpaces (ESS)</button>
+        <button type="button" class="fetch" value="https://langsamu.datapod.igrant.io/settings/">datapod.igrant.io (NSS 5.7.4)</button>
+        <button type="button" class="fetch" value="https://langsamu.solidweb.app/settings/">solidweb.app (JSS)</button>
+        <button type="button" class="fetch" value="https://teamid.live/langsamu/settings/">teamid.live (CSS)</button>
+        <button type="button" class="fetch" value="https://langsamu.solidweb.org/settings/">solidweb.org (NSS 6.0.0)</button>
+        <button type="button" class="fetch" value="https://langsamu.privatedatapod.com/settings/">privatedatapod (CSS)</button>
+        <button type="button" class="fetch" value="https://solidweb.me/langsamu/profile/">solidweb.me (CSS)</button>
+        <button type="button" class="fetch" value="http://localhost:3000/a/profile/">localhost (CSS)</button>
         <authorization-code-flow>
             <span slot="new-text">USER INTERACTION NEEDED TO LAUNCH AUTHORIZATION CODE FLOW IN NEW WINDOW.</span>
             <span slot="new-open">OPEN</span>

@@ -20,7 +20,7 @@ algorithm is shared by pages, workers and Node.js.
 | Browser integration | `elements` (`AuthorizationCodeFlow`, `IdpPicker`, `WebIdPicker`), `ReactiveFetchWorkerManager`, `service-worker` | Popup UI, pickers, service worker interception and page bridge |
 
 The main entry point (`mod.ts`) has no DOM dependency and imports in Node.js, SSR and workers; custom elements
-are in `@solid/reactive-authentication/elements`.
+are in `@jeswr/reactive-authentication/elements`.
 
 ## The reactive algorithm (`ReactiveAuthenticationClient`)
 

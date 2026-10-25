@@ -4,30 +4,37 @@
  * Scheme and parameter names are lower-cased because they are case-insensitive.
  */
 export interface AuthenticationChallenge {
-    readonly scheme: string
-    readonly params: Readonly<Record<string, string>>
-    readonly token68?: string
+  readonly scheme: string;
+  readonly params: Readonly<Record<string, string>>;
+  readonly token68?: string;
 }
 
 /** The response that triggered an upgrade and the challenges it carries. */
 export interface ChallengeContext {
-    readonly response: Response
-    readonly challenges: readonly AuthenticationChallenge[]
+  readonly response: Response;
+  readonly challenges: readonly AuthenticationChallenge[];
 }
 
 export function challengeContext(response: Response): ChallengeContext {
-    return {response, challenges: parseChallenges(response.headers.get("WWW-Authenticate"))}
+  return { response, challenges: parseChallenges(response.headers.get("WWW-Authenticate")) };
 }
 
 /** Finds the first challenge that carries all the given parameters, optionally restricted to a scheme. */
-export function findChallenge(context: ChallengeContext | undefined, params: string[], scheme?: string): AuthenticationChallenge | undefined {
-    return context?.challenges.find(c =>
-        (scheme === undefined || c.scheme === scheme) && params.every(p => c.params[p] !== undefined))
+export function findChallenge(
+  context: ChallengeContext | undefined,
+  params: string[],
+  scheme?: string,
+): AuthenticationChallenge | undefined {
+  return context?.challenges.find(
+    (c) =>
+      (scheme === undefined || c.scheme === scheme) &&
+      params.every((p) => c.params[p] !== undefined),
+  );
 }
 
-const token = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+/
-const token68 = /^[A-Za-z0-9\-._~+/]+=*/
-const whitespace = /^[ \t]*/
+const token = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+/;
+const token68 = /^[A-Za-z0-9\-._~+/]+=*/;
+const whitespace = /^[ \t]*/;
 
 /**
  * Parses a `WWW-Authenticate` field value into challenges.
@@ -40,113 +47,119 @@ const whitespace = /^[ \t]*/
  * Callers must treat missing parameters as "no usable challenge" rather than guess.
  */
 export function parseChallenges(header: string | null): AuthenticationChallenge[] {
-    const challenges: AuthenticationChallenge[] = []
-    if (header === null) return challenges
+  const challenges: AuthenticationChallenge[] = [];
+  if (header === null) return challenges;
 
-    const input = new Cursor(header)
-    while (!input.done) {
-        input.skip(/^[ \t,]*/)
-        const scheme = input.take(token)
-        if (scheme === undefined) break
+  const input = new Cursor(header);
+  while (!input.done) {
+    input.skip(/^[ \t,]*/);
+    const scheme = input.take(token);
+    if (scheme === undefined) break;
 
-        const params: Record<string, string> = Object.create(null)
-        let t68: string | undefined
-        input.skip(whitespace)
+    const params: Record<string, string> = Object.create(null);
+    let t68: string | undefined;
+    input.skip(whitespace);
 
-        const paramsStart = input.position
-        const candidate = input.take(token68)
-        input.skip(whitespace)
-        if (candidate !== undefined && !input.peek("=") && (input.done || input.peek(","))) {
-            t68 = candidate
-        } else {
-            input.position = paramsStart
-            const outcome = parseParams(input, params)
-            if (outcome === "malformed") break
-            if (outcome === "ambiguous") continue
-        }
-
-        challenges.push(t68 === undefined ? {scheme: scheme.toLowerCase(), params} : {scheme: scheme.toLowerCase(), params, token68: t68})
+    const paramsStart = input.position;
+    const candidate = input.take(token68);
+    input.skip(whitespace);
+    if (candidate !== undefined && !input.peek("=") && (input.done || input.peek(","))) {
+      t68 = candidate;
+    } else {
+      input.position = paramsStart;
+      const outcome = parseParams(input, params);
+      if (outcome === "malformed") break;
+      if (outcome === "ambiguous") continue;
     }
 
-    return challenges
+    challenges.push(
+      t68 === undefined
+        ? { scheme: scheme.toLowerCase(), params }
+        : { scheme: scheme.toLowerCase(), params, token68: t68 },
+    );
+  }
+
+  return challenges;
 }
 
-function parseParams(input: Cursor, params: Record<string, string>): "ok" | "ambiguous" | "malformed" {
-    let ambiguous = false
-    while (!input.done) {
-        const start = input.position
-        input.skip(/^[ \t,]*/)
-        const name = input.take(token)
-        input.skip(whitespace)
-        if (name === undefined || !input.peek("=")) {
-            // Not an auth-param: the next challenge starts here.
-            input.position = start
-            return ambiguous ? "ambiguous" : "ok"
-        }
-
-        input.advance(1)
-        input.skip(whitespace)
-        const value = input.peek("\"") ? input.quoted() : input.take(token)
-        if (value === undefined) return "malformed"
-
-        const key = name.toLowerCase()
-        // RFC 9110: each parameter name MUST only occur once per challenge.
-        if (Object.hasOwn(params, key)) ambiguous = true
-        params[key] = value
-        input.skip(whitespace)
-        if (input.done) break
-        if (!input.peek(",")) return "malformed"
-        input.advance(1)
+function parseParams(
+  input: Cursor,
+  params: Record<string, string>,
+): "ok" | "ambiguous" | "malformed" {
+  let ambiguous = false;
+  while (!input.done) {
+    const start = input.position;
+    input.skip(/^[ \t,]*/);
+    const name = input.take(token);
+    input.skip(whitespace);
+    if (name === undefined || !input.peek("=")) {
+      // Not an auth-param: the next challenge starts here.
+      input.position = start;
+      return ambiguous ? "ambiguous" : "ok";
     }
-    return ambiguous ? "ambiguous" : "ok"
+
+    input.advance(1);
+    input.skip(whitespace);
+    const value = input.peek('"') ? input.quoted() : input.take(token);
+    if (value === undefined) return "malformed";
+
+    const key = name.toLowerCase();
+    // RFC 9110: each parameter name MUST only occur once per challenge.
+    if (Object.hasOwn(params, key)) ambiguous = true;
+    params[key] = value;
+    input.skip(whitespace);
+    if (input.done) break;
+    if (!input.peek(",")) return "malformed";
+    input.advance(1);
+  }
+  return ambiguous ? "ambiguous" : "ok";
 }
 
 class Cursor {
-    position = 0
+  position = 0;
 
-    constructor(private readonly text: string) {
-    }
+  constructor(private readonly text: string) {}
 
-    get length() {
-        return this.text.length
-    }
+  get length() {
+    return this.text.length;
+  }
 
-    get done() {
-        return this.position >= this.text.length
-    }
+  get done() {
+    return this.position >= this.text.length;
+  }
 
-    peek(char: string) {
-        return this.text[this.position] === char
-    }
+  peek(char: string) {
+    return this.text[this.position] === char;
+  }
 
-    advance(n: number) {
-        this.position += n
-    }
+  advance(n: number) {
+    this.position += n;
+  }
 
-    skip(pattern: RegExp) {
-        this.take(pattern)
-    }
+  skip(pattern: RegExp) {
+    this.take(pattern);
+  }
 
-    take(pattern: RegExp): string | undefined {
-        const match = pattern.exec(this.text.slice(this.position))
-        if (match === null || match[0].length === 0) return undefined
-        this.position += match[0].length
-        return match[0]
-    }
+  take(pattern: RegExp): string | undefined {
+    const match = pattern.exec(this.text.slice(this.position));
+    if (match === null || match[0].length === 0) return undefined;
+    this.position += match[0].length;
+    return match[0];
+  }
 
-    quoted(): string | undefined {
-        let value = ""
-        for (let i = this.position + 1; i < this.text.length; i++) {
-            const char = this.text[i]
-            if (char === "\\" && i + 1 < this.text.length) {
-                value += this.text[++i]
-            } else if (char === "\"") {
-                this.position = i + 1
-                return value
-            } else {
-                value += char
-            }
-        }
-        return undefined
+  quoted(): string | undefined {
+    let value = "";
+    for (let i = this.position + 1; i < this.text.length; i++) {
+      const char = this.text[i];
+      if (char === "\\" && i + 1 < this.text.length) {
+        value += this.text[++i];
+      } else if (char === '"') {
+        this.position = i + 1;
+        return value;
+      } else {
+        value += char;
+      }
     }
+    return undefined;
+  }
 }

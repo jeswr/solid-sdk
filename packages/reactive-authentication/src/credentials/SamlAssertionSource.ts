@@ -1,32 +1,32 @@
-import { base64url } from "jose"
-import { TokenType } from "../lws/constants.js"
-import { ReactiveAuthenticationError } from "../ReactiveAuthenticationError.js"
-import type { CredentialRequest, CredentialSource, SubjectCredential } from "./CredentialSource.js"
+import { base64url } from "jose";
+import { TokenType } from "../lws/constants.js";
+import { ReactiveAuthenticationError } from "../ReactiveAuthenticationError.js";
+import type { CredentialRequest, CredentialSource, SubjectCredential } from "./CredentialSource.js";
 
 /** A signed SAML 2.0 assertion obtained from an identity provider by an established SAML stack. */
 export interface SamlAssertion {
-    /** The signed `<saml:Assertion>` XML, exactly as issued (re-serializing breaks the signature). */
-    readonly xml: string
+  /** The signed `<saml:Assertion>` XML, exactly as issued (re-serializing breaks the signature). */
+  readonly xml: string;
 
-    /** The LWS client identifier: the assertion's `SubjectConfirmationData/@Recipient`. */
-    readonly clientId: string
+  /** The LWS client identifier: the assertion's `SubjectConfirmationData/@Recipient`. */
+  readonly clientId: string;
 
-    /** `NotOnOrAfter` of the assertion (ms since epoch), if known. */
-    readonly expiresAt?: number
+  /** `NotOnOrAfter` of the assertion (ms since epoch), if known. */
+  readonly expiresAt?: number;
 }
 
 export interface SamlAssertionSourceOptions {
-    /** Stable, secret-free identifier of the SAML identity context (e.g. IdP entity ID and NameID). */
-    readonly id: string
+  /** Stable, secret-free identifier of the SAML identity context (e.g. IdP entity ID and NameID). */
+  readonly id: string;
 
-    /**
-     * Obtains an assertion whose audience includes the authorization server — typically by calling the
-     * application's own SAML service provider backend (e.g. built with samlify, node-saml or Shibboleth).
-     */
-    readonly obtainAssertion: (request: CredentialRequest) => Promise<SamlAssertion>
+  /**
+   * Obtains an assertion whose audience includes the authorization server — typically by calling the
+   * application's own SAML service provider backend (e.g. built with samlify, node-saml or Shibboleth).
+   */
+  readonly obtainAssertion: (request: CredentialRequest) => Promise<SamlAssertion>;
 
-    /** @defaultValue 256 KiB */
-    readonly maxBytes?: number
+  /** @defaultValue 256 KiB */
+  readonly maxBytes?: number;
 }
 
 /**
@@ -39,31 +39,31 @@ export interface SamlAssertionSourceOptions {
  * demonstrate it with xml-crypto in a mock authorization server.
  */
 export class SamlAssertionSource implements CredentialSource {
-    readonly #options: SamlAssertionSourceOptions
+  readonly #options: SamlAssertionSourceOptions;
 
-    constructor(options: SamlAssertionSourceOptions) {
-        this.#options = options
+  constructor(options: SamlAssertionSourceOptions) {
+    this.#options = options;
+  }
+
+  get id(): string {
+    return `saml:${this.#options.id}`;
+  }
+
+  async getCredential(request: CredentialRequest): Promise<SubjectCredential> {
+    const assertion = await this.#options.obtainAssertion(request);
+    const bytes = new TextEncoder().encode(assertion.xml);
+    if (bytes.length === 0 || bytes.length > (this.#options.maxBytes ?? 256 * 1024)) {
+      throw new ReactiveAuthenticationError("SAML assertion is empty or too large");
+    }
+    if (!/<(?:\w+:)?Assertion[\s>]/.test(assertion.xml)) {
+      throw new ReactiveAuthenticationError("SAML credential is not an Assertion element");
     }
 
-    get id(): string {
-        return `saml:${this.#options.id}`
-    }
-
-    async getCredential(request: CredentialRequest): Promise<SubjectCredential> {
-        const assertion = await this.#options.obtainAssertion(request)
-        const bytes = new TextEncoder().encode(assertion.xml)
-        if (bytes.length === 0 || bytes.length > (this.#options.maxBytes ?? 256 * 1024)) {
-            throw new ReactiveAuthenticationError("SAML assertion is empty or too large")
-        }
-        if (!/<(?:\w+:)?Assertion[\s>]/.test(assertion.xml)) {
-            throw new ReactiveAuthenticationError("SAML credential is not an Assertion element")
-        }
-
-        return {
-            token: base64url.encode(bytes),
-            tokenType: TokenType.saml2,
-            clientId: assertion.clientId,
-            ...(assertion.expiresAt === undefined ? {} : {expiresAt: assertion.expiresAt}),
-        }
-    }
+    return {
+      token: base64url.encode(bytes),
+      tokenType: TokenType.saml2,
+      clientId: assertion.clientId,
+      ...(assertion.expiresAt === undefined ? {} : { expiresAt: assertion.expiresAt }),
+    };
+  }
 }

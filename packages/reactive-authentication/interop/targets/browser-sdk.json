@@ -13,10 +13,26 @@
         "url": "https://developers.google.com/identity/oauth2/web/guides/use-token-model"
       },
       "env": [
-        {"name": "RA_INTEROP_GOOGLE_CLIENT_ID", "description": "Client ID of a test 'Web application' OAuth client whose authorized JavaScript origins include http://localhost:<port>"},
-        {"name": "RA_INTEROP_GOOGLE_PORT", "description": "Port of the page origin http://localhost:<port> registered with the client (default 39440)", "optional": true},
-        {"name": "RA_INTEROP_GOOGLE_EXPECTED_EMAIL", "description": "Email of the dedicated test account (required): userinfo's email must match it (compared in memory, never printed); also sent as login_hint", "pii": true},
-        {"name": "RA_INTEROP_GOOGLE_STORAGE_STATE", "description": "Path of a Playwright storageState file of the dedicated test account (outside the repository or under interop/.auth/; never committed). Without --headed it selects session mode: the GIS popup must complete with prompt=none or the scenario fails closed", "optional": true, "pii": true}
+        {
+          "name": "RA_INTEROP_GOOGLE_CLIENT_ID",
+          "description": "Client ID of a test 'Web application' OAuth client whose authorized JavaScript origins include http://localhost:<port>"
+        },
+        {
+          "name": "RA_INTEROP_GOOGLE_PORT",
+          "description": "Port of the page origin http://localhost:<port> registered with the client (default 39440)",
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_GOOGLE_EXPECTED_EMAIL",
+          "description": "Email of the dedicated test account (required): userinfo's email must match it (compared in memory, never printed); also sent as login_hint",
+          "pii": true
+        },
+        {
+          "name": "RA_INTEROP_GOOGLE_STORAGE_STATE",
+          "description": "Path of a Playwright storageState file of the dedicated test account (outside the repository or under interop/.auth/; never committed). Without --headed it selects session mode: the GIS popup must complete with prompt=none or the scenario fails closed",
+          "optional": true,
+          "pii": true
+        }
       ],
       "config": {
         "label": "Google",
@@ -25,9 +41,9 @@
         "scopes": ["https://www.googleapis.com/auth/userinfo.email"],
         "api": {
           "url": "https://www.googleapis.com/oauth2/v3/userinfo",
-          "identity": {"field": "email", "expected": "${RA_INTEROP_GOOGLE_EXPECTED_EMAIL}"}
+          "identity": { "field": "email", "expected": "${RA_INTEROP_GOOGLE_EXPECTED_EMAIL}" }
         },
-        "login": {"recipe": "manual"},
+        "login": { "recipe": "manual" },
         "storageState": "${RA_INTEROP_GOOGLE_STORAGE_STATE}"
       },
       "capabilities": {
@@ -46,11 +62,32 @@
         "url": "https://learn.microsoft.com/en-us/entra/msal/javascript/browser/about-msal-browser"
       },
       "env": [
-        {"name": "RA_INTEROP_MSAL_CLIENT_ID", "description": "Application (client) ID of a test Entra app registration with the SPA redirect URI http://localhost:<port>/redirect.html"},
-        {"name": "RA_INTEROP_MSAL_AUTHORITY", "description": "Authority, e.g. https://login.microsoftonline.com/<test-tenant-id> (default: https://login.microsoftonline.com/organizations)", "optional": true, "pii": true},
-        {"name": "RA_INTEROP_MSAL_PORT", "description": "Port of the page origin http://localhost:<port> (default 39441)", "optional": true},
-        {"name": "RA_INTEROP_MSAL_EXPECTED_UPN", "description": "userPrincipalName of the dedicated test account (required): Graph /me must match it (compared in memory, never printed); also sent as loginHint", "pii": true},
-        {"name": "RA_INTEROP_MSAL_STORAGE_STATE", "description": "Path of a Playwright storageState file of the dedicated test account (outside the repository or under interop/.auth/; never committed). Without --headed it selects session mode: the MSAL popup must complete with prompt=none or the scenario fails closed", "optional": true, "pii": true}
+        {
+          "name": "RA_INTEROP_MSAL_CLIENT_ID",
+          "description": "Application (client) ID of a test Entra app registration with the SPA redirect URI http://localhost:<port>/redirect.html"
+        },
+        {
+          "name": "RA_INTEROP_MSAL_AUTHORITY",
+          "description": "Authority, e.g. https://login.microsoftonline.com/<test-tenant-id> (default: https://login.microsoftonline.com/organizations)",
+          "optional": true,
+          "pii": true
+        },
+        {
+          "name": "RA_INTEROP_MSAL_PORT",
+          "description": "Port of the page origin http://localhost:<port> (default 39441)",
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_MSAL_EXPECTED_UPN",
+          "description": "userPrincipalName of the dedicated test account (required): Graph /me must match it (compared in memory, never printed); also sent as loginHint",
+          "pii": true
+        },
+        {
+          "name": "RA_INTEROP_MSAL_STORAGE_STATE",
+          "description": "Path of a Playwright storageState file of the dedicated test account (outside the repository or under interop/.auth/; never committed). Without --headed it selects session mode: the MSAL popup must complete with prompt=none or the scenario fails closed",
+          "optional": true,
+          "pii": true
+        }
       ],
       "config": {
         "label": "Microsoft",
@@ -61,9 +98,12 @@
         "prompt": "select_account",
         "api": {
           "url": "https://graph.microsoft.com/v1.0/me",
-          "identity": {"field": "userPrincipalName", "expected": "${RA_INTEROP_MSAL_EXPECTED_UPN}"}
+          "identity": {
+            "field": "userPrincipalName",
+            "expected": "${RA_INTEROP_MSAL_EXPECTED_UPN}"
+          }
         },
-        "login": {"recipe": "manual"},
+        "login": { "recipe": "manual" },
         "storageState": "${RA_INTEROP_MSAL_STORAGE_STATE}"
       },
       "capabilities": {

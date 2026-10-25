@@ -1,13 +1,11 @@
 {
+  "$comment": "AUTHORED-BY Codex GPT-6.1-Sol",
+  "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "target": "es2022",
+    "target": "ES2023",
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
-    "lib": [
-      "DOM",
-      "ESNext",
-      "WebWorker"
-    ],
+    "lib": ["DOM", "ESNext", "WebWorker"],
     "allowSyntheticDefaultImports": true,
     "esModuleInterop": true,
     "allowJs": true,
@@ -26,13 +24,8 @@
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
     "declaration": true,
-    "declarationMap": true,
+    "declarationMap": true
   },
-  "include": [
-    "src/**/*"
-  ],
-  "exclude": [
-    "node_modules",
-    "dist"
-  ]
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist"]
 }

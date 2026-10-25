@@ -1,4 +1,4 @@
-import * as oauth from "oauth4webapi"
+import * as oauth from "oauth4webapi";
 
 /*
  * Compatibility exceptions for deployed servers that deviate from the specifications, retained from upstream.
@@ -10,19 +10,19 @@ import * as oauth from "oauth4webapi"
  * - NSS deployments (`https://datapod.igrant.io`, `https://solidweb.org`): ID tokens without `nonce`.
  */
 
-const ESS = new Set(["https://login.inrupt.com"])
-const NSS_WITHOUT_NONCE = new Set(["https://datapod.igrant.io", "https://solidweb.org"])
+const ESS = new Set(["https://login.inrupt.com"]);
+const NSS_WITHOUT_NONCE = new Set(["https://datapod.igrant.io", "https://solidweb.org"]);
 
 function originOf(issuer: string): string | undefined {
-    try {
-        return new URL(issuer).origin
-    } catch {
-        return undefined
-    }
+  try {
+    return new URL(issuer).origin;
+  } catch {
+    return undefined;
+  }
 }
 
 function isEss(issuer: string, enabled: boolean): boolean {
-    return enabled && ESS.has(originOf(issuer) ?? "")
+  return enabled && ESS.has(originOf(issuer) ?? "");
 }
 
 /**
@@ -32,13 +32,21 @@ function isEss(issuer: string, enabled: boolean): boolean {
  * @see Bug repro at https://gist.github.com/langsamu/ac55045a6ddc5893000b722429146b3a#file-iss_missing_error_callback-html
  * @see Spec https://www.rfc-editor.org/rfc/rfc9207.html#name-response-parameter-iss
  */
-export function isEssMissingIssInteractionNeeded(e: unknown, issuer: string, enabled = true): boolean {
-    if (!isEss(issuer, enabled)) return false
-    try {
-        return ((((e as oauth.OperationProcessingError).cause as any).parameters) as URLSearchParams).get("error") === "interaction_required"
-    } catch {
-        return false
-    }
+export function isEssMissingIssInteractionNeeded(
+  e: unknown,
+  issuer: string,
+  enabled = true,
+): boolean {
+  if (!isEss(issuer, enabled)) return false;
+  try {
+    return (
+      (((e as oauth.OperationProcessingError).cause as any).parameters as URLSearchParams).get(
+        "error",
+      ) === "interaction_required"
+    );
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -51,29 +59,39 @@ export function isEssMissingIssInteractionNeeded(e: unknown, issuer: string, ena
  * @see Spec https://www.rfc-editor.org/rfc/rfc6749.html#section-2.3.1
  */
 function noUrlEncodeClientSecretBasic(clientSecret: string): oauth.ClientAuth {
-    return (_, client, __, headers) => {
-        headers.set("Authorization", `Basic ${btoa(`${client.client_id}:${clientSecret}`)}`)
-    }
+  return (_, client, __, headers) => {
+    headers.set("Authorization", `Basic ${btoa(`${client.client_id}:${clientSecret}`)}`);
+  };
 }
 
 /** Client authentication per the client's registered `token_endpoint_auth_method`. */
-export function clientAuthFor(issuer: string, client: oauth.Client, quirks = true): oauth.ClientAuth {
-    const secret = client.client_secret as string | undefined
-    switch (client.token_endpoint_auth_method) {
-        case "client_secret_basic":
-            // TODO: Eliminate once ESS bug fixed
-            return isEss(issuer, quirks) ? noUrlEncodeClientSecretBasic(secret!) : oauth.ClientSecretBasic(secret!)
-        case "client_secret_post":
-            return oauth.ClientSecretPost(secret!)
-        default:
-            return secret === undefined ? oauth.None() : oauth.ClientSecretBasic(secret)
-    }
+export function clientAuthFor(
+  issuer: string,
+  client: oauth.Client,
+  quirks = true,
+): oauth.ClientAuth {
+  const secret = client.client_secret as string | undefined;
+  switch (client.token_endpoint_auth_method) {
+    case "client_secret_basic":
+      // TODO: Eliminate once ESS bug fixed
+      return isEss(issuer, quirks)
+        ? noUrlEncodeClientSecretBasic(secret!)
+        : oauth.ClientSecretBasic(secret!);
+    case "client_secret_post":
+      return oauth.ClientSecretPost(secret!);
+    default:
+      return secret === undefined ? oauth.None() : oauth.ClientSecretBasic(secret);
+  }
 }
 
 /** NSS deployments that do not echo the ID token `nonce`. */
-export function expectedNonce(issuer: string, nonce: string, quirks = true): string | typeof oauth.expectNoNonce {
-    if (quirks && NSS_WITHOUT_NONCE.has(originOf(issuer) ?? "")) {
-        return oauth.expectNoNonce
-    }
-    return nonce
+export function expectedNonce(
+  issuer: string,
+  nonce: string,
+  quirks = true,
+): string | typeof oauth.expectNoNonce {
+  if (quirks && NSS_WITHOUT_NONCE.has(originOf(issuer) ?? "")) {
+    return oauth.expectNoNonce;
+  }
+  return nonce;
 }

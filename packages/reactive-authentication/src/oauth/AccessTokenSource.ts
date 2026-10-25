@@ -1,19 +1,19 @@
-import { ReactiveAuthenticationError } from "../ReactiveAuthenticationError.js"
+import { ReactiveAuthenticationError } from "../ReactiveAuthenticationError.js";
 
 /** An opaque OAuth access token. Its contents are never inspected: it proves nothing about identity. */
 export interface AccessToken {
-    readonly token: string
-    /** Expiry (ms since epoch), when known. */
-    readonly expiresAt?: number
+  readonly token: string;
+  /** Expiry (ms since epoch), when known. */
+  readonly expiresAt?: number;
 }
 
 export interface AccessTokenRequest {
-    readonly signal: AbortSignal
-    /**
-     * The resource server rejected `rejectedToken`: return a different token (refresh, force-refresh the SDK
-     * cache), never the rejected one.
-     */
-    readonly rejectedToken?: string
+  readonly signal: AbortSignal;
+  /**
+   * The resource server rejected `rejectedToken`: return a different token (refresh, force-refresh the SDK
+   * cache), never the rejected one.
+   */
+  readonly rejectedToken?: string;
 }
 
 /**
@@ -22,13 +22,13 @@ export interface AccessTokenRequest {
  * their own token caches.
  */
 export interface AccessTokenSource {
-    /** Stable, secret-free identity of the configuration (provider, client, scopes, account). */
-    readonly id: string
+  /** Stable, secret-free identity of the configuration (provider, client, scopes, account). */
+  readonly id: string;
 
-    getAccessToken(request: AccessTokenRequest): Promise<AccessToken>
+  getAccessToken(request: AccessTokenRequest): Promise<AccessToken>;
 
-    /** Local logout: drop tokens and ignore results of operations already in progress. */
-    forget?(): Promise<void>
+  /** Local logout: drop tokens and ignore results of operations already in progress. */
+  forget?(): Promise<void>;
 }
 
 /**
@@ -37,16 +37,24 @@ export interface AccessTokenSource {
  * then retry the request.
  */
 export class InteractionRequiredError extends ReactiveAuthenticationError {
-    constructor(readonly source: string, readonly authorize: () => Promise<unknown>, cause?: unknown) {
-        super(`User interaction required to obtain an access token (${source})`, cause)
-        this.name = "InteractionRequiredError"
-    }
+  constructor(
+    readonly source: string,
+    readonly authorize: () => Promise<unknown>,
+    cause?: unknown,
+  ) {
+    super(`User interaction required to obtain an access token (${source})`, cause);
+    this.name = "InteractionRequiredError";
+  }
 }
 
 /** The user closed the popup, it could not open, or the provider reported an OAuth error. */
 export class AuthorizationFailedError extends ReactiveAuthenticationError {
-    constructor(readonly code: string, message: string, cause?: unknown) {
-        super(message, cause)
-        this.name = "AuthorizationFailedError"
-    }
+  constructor(
+    readonly code: string,
+    message: string,
+    cause?: unknown,
+  ) {
+    super(message, cause);
+    this.name = "AuthorizationFailedError";
+  }
 }

@@ -1,8 +1,11 @@
-import { ReactiveAuthenticationError } from "./ReactiveAuthenticationError.js"
+import { ReactiveAuthenticationError } from "./ReactiveAuthenticationError.js";
 
 export class CodeRequestCancelledError extends ReactiveAuthenticationError {
-    constructor(public authorizationRequest: URL, cause?: any) {
-        super("Code request cancelled", cause)
-        this.name = "CodeRequestCancelledError"
-    }
+  constructor(
+    public authorizationRequest: URL,
+    cause?: unknown,
+  ) {
+    super("Code request cancelled", cause);
+    this.name = "CodeRequestCancelledError";
+  }
 }

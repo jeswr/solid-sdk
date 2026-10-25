@@ -3,13 +3,13 @@
 <meta charset="utf-8">
 <title>Microsoft Graph with MSAL.js</title>
 <!-- Register an Entra ID app with a "Single-page application" redirect URI (enables CORS for the SPA). -->
-<button id="sign-in">Sign in with Microsoft</button>
+<button type="button" id="sign-in">Sign in with Microsoft</button>
 <pre id="output"></pre>
 <script type="module">
 import { PublicClientApplication } from "@azure/msal-browser" // your application's dependency, not this library's
 import {
     CredentialBoundary, InteractionRequiredError, MsalTokenSource, OAuthBearerTokenProvider, ReactiveFetchManager,
-} from "@solid/reactive-authentication"
+} from "@jeswr/reactive-authentication"
 
 // redirectUri: the dedicated MSAL v5 redirect page (microsoft-redirect.html), registered as an SPA redirect URI.
 const msal = new PublicClientApplication({auth: {

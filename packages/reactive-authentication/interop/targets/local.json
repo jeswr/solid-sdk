@@ -211,10 +211,7 @@
         "label": "local Keycloak (ra-public)",
         "issuer": "http://127.0.0.1:${RA_INTEROP_KEYCLOAK_PORT:-39380}/realms/interop",
         "clientId": "ra-public",
-        "scopes": [
-          "openid",
-          "profile"
-        ],
+        "scopes": ["openid", "profile"],
         "redirectUri": "http://127.0.0.1:39398/callback",
         "insecure": true,
         "login": {
@@ -271,10 +268,7 @@
         "label": "local Keycloak (ra-confidential)",
         "issuer": "http://127.0.0.1:${RA_INTEROP_KEYCLOAK_PORT:-39380}/realms/interop",
         "clientId": "ra-confidential",
-        "scopes": [
-          "openid",
-          "profile"
-        ],
+        "scopes": ["openid", "profile"],
         "redirectUri": "http://127.0.0.1:39398/callback",
         "insecure": true,
         "login": {
@@ -332,10 +326,7 @@
         "label": "local Keycloak (ra-confidential, client_secret_post)",
         "issuer": "http://127.0.0.1:${RA_INTEROP_KEYCLOAK_PORT:-39380}/realms/interop",
         "clientId": "ra-confidential",
-        "scopes": [
-          "openid",
-          "profile"
-        ],
+        "scopes": ["openid", "profile"],
         "redirectUri": "http://127.0.0.1:39398/callback",
         "insecure": true,
         "login": {
@@ -394,9 +385,7 @@
         "label": "local Keycloak (ra-public)",
         "issuer": "http://127.0.0.1:${RA_INTEROP_KEYCLOAK_PORT:-39380}/realms/interop",
         "clientId": "ra-public",
-        "scopes": [
-          "profile"
-        ],
+        "scopes": ["profile"],
         "redirectUri": "http://127.0.0.1:39398/callback",
         "insecure": true,
         "login": {
@@ -451,10 +440,7 @@
         "label": "local Keycloak (ra-short)",
         "issuer": "http://127.0.0.1:${RA_INTEROP_KEYCLOAK_PORT:-39380}/realms/interop",
         "clientId": "ra-short",
-        "scopes": [
-          "openid",
-          "profile"
-        ],
+        "scopes": ["openid", "profile"],
         "redirectUri": "http://127.0.0.1:39398/callback",
         "insecure": true,
         "login": {
@@ -518,10 +504,7 @@
         "label": "local Keycloak (ra-no-audience)",
         "issuer": "http://127.0.0.1:${RA_INTEROP_KEYCLOAK_PORT:-39380}/realms/interop",
         "clientId": "ra-no-audience",
-        "scopes": [
-          "openid",
-          "profile"
-        ],
+        "scopes": ["openid", "profile"],
         "redirectUri": "http://127.0.0.1:39398/callback",
         "insecure": true,
         "login": {
@@ -560,9 +543,7 @@
         "shortLivedTokens": "this client keeps the realm's 300 s access tokens; keycloak-short-lived covers expiry",
         "audienceRestriction": "tokens of this client carry the interop-api audience; keycloak-no-audience covers the negative case"
       },
-      "scenarios": [
-        "oauth.audience-mismatch"
-      ]
+      "scenarios": ["oauth.audience-mismatch"]
     },
     {
       "id": "nextcloud-local",

@@ -6,8 +6,8 @@
      the opener, see ../callback.html) and allow this origin for CORS on the token endpoint. -->
 <authorization-code-flow></authorization-code-flow>
 <script type="module">
-import "@solid/reactive-authentication/registerElements"
-import { CredentialBoundary, OAuthBearerTokenProvider, OAuthCodeSource, ReactiveFetchManager } from "@solid/reactive-authentication"
+import "@jeswr/reactive-authentication/registerElements"
+import { CredentialBoundary, OAuthBearerTokenProvider, OAuthCodeSource, ReactiveFetchManager } from "@jeswr/reactive-authentication"
 
 const source = new OAuthCodeSource({
     issuer: "https://tenant.example.auth0.com/",       // discovered; or authorizationServer: {...} for servers without discovery

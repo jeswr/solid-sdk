@@ -57,7 +57,7 @@ upstream: no upstream issue or PR was commented on, closed or merged, and nothin
 ## Deliberate migration changes
 
 - `ReactiveFetchManager` / `ReactiveAuthenticationClient` take an options object with a required `boundary`.
-- Custom elements moved to `@solid/reactive-authentication/elements` (main entry point is DOM-free).
+- Custom elements moved to `@jeswr/reactive-authentication/elements` (main entry point is DOM-free).
 - `BearerTokenProvider` (hard-coded issuers, callback, always-insecure HTTP) and the non-functional
   `reactive-fetch-worker` script were removed; use `DPoPTokenProvider` and `installReactiveAuthentication`.
 - `ClientCredentialsTokenProvider(asProvider, clientId, secret, options)` replaces hard-coded issuer mapping.
