@@ -2,7 +2,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 
-import { globSync, readFileSync } from "node:fs";
+import { globSync, readFileSync, realpathSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
@@ -116,6 +116,9 @@ export function isSupportedSpec(spec) {
 }
 
 function checkLayers(root) {
+  if (typeof globSync !== "function") {
+    throw new Error("SDK layer guard requires node:fs.globSync; use Node.js >=24.");
+  }
   const failures = [];
   const manifests = globSync(
     [
@@ -166,7 +169,8 @@ function checkLayers(root) {
   console.log(`SDK layer guard passed (${manifests.length} manifests scanned).`);
 }
 
-if (import.meta.main) {
+// import.meta.main is unavailable in Node 24.0 and 24.1. Resolve symlinked entry paths too.
+if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
     // --root supports isolated fixture workspaces; normal lint always uses this checkout.
     const { values } = parseArgs({ options: { root: { type: "string" } } });

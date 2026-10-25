@@ -2,7 +2,7 @@
 // AUTHORED-BY Codex GPT-6
 
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -16,7 +16,7 @@ afterEach(() => {
   for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 
-function scan(manifests) {
+function scan(manifests, prelude = "") {
   const root = mkdtempSync(join(tmpdir(), "sdk-layers-"));
   dirs.push(root);
   for (const [path, manifest] of Object.entries(manifests)) {
@@ -24,10 +24,73 @@ function scan(manifests) {
     mkdirSync(dirname(destination), { recursive: true });
     writeFileSync(destination, JSON.stringify(manifest));
   }
-  return spawnSync(process.execPath, [guard, "--root", root], { encoding: "utf8" });
+  let entry = guard;
+  if (prelude) {
+    entry = join(root, "check-sdk-layers.mjs");
+    const source = readFileSync(guard, "utf8").replace(/^#!.*\n/, "");
+    writeFileSync(entry, `${prelude}\n${source}`);
+  }
+  return spawnSync(process.execPath, [entry, "--root", root], { encoding: "utf8" });
 }
 
 describe("SDK layer guard", () => {
+  it("scans valid manifests without import.meta.main (Node 24.0/24.1)", () => {
+    const result = scan(
+      { "apps/example/package.json": { dependencies: { "@jeswr/pod-auth": "workspace:*" } } },
+      "delete import.meta.main;",
+    );
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("SDK layer guard passed (1 manifests scanned).");
+    expect(result.stderr).toBe("");
+  });
+
+  it("rejects forbidden dependencies without import.meta.main (Node 24.0/24.1)", () => {
+    const result = scan(
+      { "apps/example/package.json": { dependencies: { "@sparq-org/sparq": "0.1.5" } } },
+      "delete import.meta.main;",
+    );
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("apps/example/package.json dependencies.@sparq-org/sparq");
+    expect(result.stderr).toContain("apps must use the protocol-neutral SDK surface");
+    expect(result.stdout).toBe("");
+  });
+
+  it("fails clearly when the manifest glob API is missing", () => {
+    const result = scan(
+      {},
+      `delete import.meta.main;
+import fs from "node:fs";
+import { syncBuiltinESMExports } from "node:module";
+fs.globSync = undefined;
+syncBuiltinESMExports();`,
+    );
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("SDK layer guard requires node:fs.globSync; use Node.js >=24.");
+    expect(result.stdout).toBe("");
+  });
+
+  it("runs through a symlinked CLI entry point", () => {
+    const root = mkdtempSync(join(tmpdir(), "sdk-layers-"));
+    dirs.push(root);
+    const entry = join(root, "guard.mjs");
+    symlinkSync(guard, entry);
+    const result = spawnSync(process.execPath, [entry, "--root", root], { encoding: "utf8" });
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("SDK layer guard passed (0 manifests scanned).");
+    expect(result.stderr).toBe("");
+  });
+
+  it("imports the spec validator without running the CLI", () => {
+    const result = spawnSync(
+      process.execPath,
+      ["--input-type=module", "--eval", `await import(${JSON.stringify(guard)});`],
+      { encoding: "utf8" },
+    );
+    expect(result.status).toBe(0);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toBe("");
+  });
+
   it("scans the same current tree when invoked outside the checkout", () => {
     const baseline = spawnSync(process.execPath, [guard], {
       cwd: dirname(dirname(guard)),
