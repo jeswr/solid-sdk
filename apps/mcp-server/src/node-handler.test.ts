@@ -1,5 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { IncomingMessage, type ServerResponse } from "node:http";
+import { createServer, IncomingMessage, type ServerResponse } from "node:http";
 import { Socket } from "node:net";
 import { Writable } from "node:stream";
 import { describe, expect, it, vi } from "vitest";
@@ -30,7 +30,7 @@ class ResponseFixture extends Writable {
   }
 }
 
-function requestFixture(method = "GET", body?: string) {
+function requestFixture(method = "GET", body?: string, complete = true) {
   // Unconnected socket: no real HTTP service, accounts or network.
   const request = new IncomingMessage(new Socket());
   request.method = method;
@@ -45,8 +45,8 @@ function requestFixture(method = "GET", body?: string) {
     "application/json",
   ];
   if (body) request.push(Buffer.from(body));
-  request.push(null);
-  request.complete = true;
+  if (complete) request.push(null);
+  request.complete = complete;
   return request;
 }
 
@@ -72,6 +72,83 @@ describe("Node/Web scaffold adapter", () => {
     expect(response.headers.get("x-fixture")).toBe("yes");
     expect(response.headers.get("set-cookie")).toEqual(["a=1"]);
     expect(Buffer.concat(response.chunks).toString()).toBe("created");
+    expect(response.headers.get("connection")).toBeUndefined();
+  });
+
+  it.each([
+    "response",
+    "empty response",
+    "handler error",
+    "locked body",
+  ])("finalizes an unread request after a %s", async (mode) => {
+    const adapted: {
+      body?: ReadableStream<Uint8Array>;
+      reader?: ReadableStreamDefaultReader<Uint8Array>;
+    } = {};
+    vi.mocked(handler).mockImplementationOnce(async (request) => {
+      if (!request.body) throw new Error("missing fixture body");
+      adapted.body = request.body;
+      if (mode === "locked body") adapted.reader = request.body.getReader();
+      if (mode === "handler error") throw new Error("fixture failure");
+      return new Response(mode === "empty response" ? null : "done");
+    });
+    const request = requestFixture("POST", "partial body", false);
+    const response = await invoke(request);
+    expect(response.writableFinished).toBe(true);
+    expect(response.headers.get("connection")).toBe("close");
+    expect(request.destroyed).toBe(true);
+    if (adapted.reader) {
+      // Already buffered data may be delivered, but the destroyed source must terminate.
+      await adapted.reader.read();
+      await expect(adapted.reader.read()).rejects.toThrow();
+      adapted.reader.releaseLock();
+    } else {
+      expect((await adapted.body?.getReader().read())?.done).toBe(true);
+    }
+  });
+
+  it("closes an unread POST connection with a pipelined second request without hanging", async () => {
+    vi.mocked(handler).mockResolvedValue(new Response("done"));
+    const server = createServer((request, response) => void nodeHandler(request, response));
+    const socket = new Socket();
+    try {
+      await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+      const address = server.address();
+      if (address === null || typeof address === "string") throw new Error("missing fixture port");
+      const chunks: Buffer[] = [];
+      socket.setTimeout(2000, () => socket.destroy(new Error("fixture connection stalled")));
+      socket.on("data", (chunk) => chunks.push(chunk));
+      const closed = new Promise<void>((resolve, reject) => {
+        socket.once("close", () => resolve());
+        socket.once("error", reject);
+      });
+      socket.connect(address.port, "127.0.0.1", () => {
+        // Exceed both adapters' read-ahead buffers so an unread source remains paused.
+        const body = Buffer.alloc(256 * 1024, "x");
+        socket.write(
+          Buffer.concat([
+            Buffer.from(
+              `POST /first HTTP/1.1\r\nHost: localhost\r\nContent-Length: ${body.length}\r\nConnection: keep-alive\r\n\r\n`,
+            ),
+            body,
+            Buffer.from(
+              "GET /second HTTP/1.1\r\nHost: localhost\r\nConnection: keep-alive\r\n\r\n",
+            ),
+          ]),
+        );
+      });
+      await closed;
+      const response = Buffer.concat(chunks).toString();
+      expect(response).toMatch(/^HTTP\/1\.1 200/);
+      expect(response).toMatch(/connection: close\r\n/i);
+      expect(response).toContain("done");
+    } finally {
+      socket.destroy();
+      await new Promise<void>((resolve, reject) =>
+        server.close((error) => (error ? reject(error) : resolve())),
+      );
+      vi.mocked(handler).mockReset();
+    }
   });
 
   it("streams a response before the producer closes it", async () => {

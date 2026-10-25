@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { Readable } from "node:stream";
-import { pipeline } from "node:stream/promises";
+import { finished, pipeline } from "node:stream/promises";
 import { handler } from "./handler.js";
 
 /** Adapt Node HTTP requests to the Web handler without buffering either body. */
@@ -10,6 +10,12 @@ export async function nodeHandler(
   response: ServerResponse,
 ): Promise<void> {
   const controller = new AbortController();
+  let body: ReadableStream<Uint8Array> | undefined;
+  const closeUnreadRequest = () => {
+    if (body && !request.readableEnded && !response.headersSent) {
+      response.setHeader("connection", "close");
+    }
+  };
   const abort = () => controller.abort();
   const close = () => {
     if (!response.writableFinished) abort();
@@ -27,7 +33,8 @@ export async function nodeHandler(
     const method = request.method ?? "GET";
     const init: RequestInit & { duplex?: "half" } = { method, headers, signal: controller.signal };
     if (method !== "GET" && method !== "HEAD") {
-      init.body = Readable.toWeb(request) as ReadableStream<Uint8Array>;
+      body = Readable.toWeb(request) as ReadableStream<Uint8Array>;
+      init.body = body;
       init.duplex = "half";
     }
     const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
@@ -41,10 +48,12 @@ export async function nodeHandler(
     }
     const cookies = result.headers.getSetCookie();
     if (cookies.length > 0) response.setHeader("set-cookie", cookies);
+    closeUnreadRequest();
     response.writeHead(result.status, result.statusText);
     if (method === "HEAD" || result.body === null) {
       await result.body?.cancel();
       response.end();
+      await finished(response, { cleanup: true });
     } else {
       await pipeline(Readable.fromWeb(result.body), response, { signal: controller.signal });
     }
@@ -53,11 +62,20 @@ export async function nodeHandler(
     if (response.headersSent) {
       response.destroy();
     } else {
+      closeUnreadRequest();
       response.writeHead(500, { "content-type": "text/plain" });
       response.end("Internal server error\n");
+      await finished(response, { cleanup: true });
     }
   } finally {
     request.off("aborted", abort);
     response.off("close", close);
+    if (body) {
+      const unread = !request.readableEnded;
+      // Cancel any read-ahead bytes too. A handler may retain a reader lock;
+      // destroying the source still terminates that stream without draining it.
+      await body.cancel().catch(() => {});
+      if (unread) request.destroy();
+    }
   }
 }
