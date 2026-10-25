@@ -13,13 +13,21 @@
     "test:e2e": "pnpm --filter @jeswr/suite-ui run build && playwright test"
   },
   "dependencies": {
+    "@jeswr/fetch-rdf": "^0.1.0",
+    "@jeswr/rdf-serialize": "workspace:*",
     "@jeswr/suite-ui": "workspace:*",
+    "@jeswr/suite-vocab": "workspace:*",
+    "@rdfjs/wrapper": "^0.34.0",
+    "n3": "^2.0.3",
     "next": "16.2.7",
     "next-themes": "^0.4.6",
     "react": "19.2.7",
     "react-dom": "19.2.7"
   },
   "devDependencies": {
+    "@rdfjs/types": "^2.0.1",
+    "@types/n3": "^1.26.1",
+    "@vitest/coverage-v8": "^4.1.10",
     "@tailwindcss/postcss": "^4",
     "tailwindcss": "^4",
     "@playwright/test": "1.61.1",
