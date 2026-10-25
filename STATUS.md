@@ -1,84 +1,69 @@
 <!-- AUTHORED-BY Codex GPT-6 -->
 
-# Lane sst-8xm.30 — T-004, fix round 3
+# Lane sst-8xm.30 — T-004, fix round 4
 
-Date: 2026-10-25. Branch: `lane/sst-8xm.30`. Resumed from `d7030277`.
+Date: 2026-10-25. Branch: `lane/sst-8xm.30`. Resumed from `ee3012b5`.
 
-Both supplied review findings are fixed. Fetch-rdf's lint, build, typecheck,
-and tests pass, as does standalone root lint. The full-workspace gate fails
-on the same federation-trust characterization snapshot mismatch recorded at
-the previous lane head; a green full-workspace gate is not claimed.
+The sole finding in `solid-sdk-lane-sst-8xm.30-ee3012b5dfe7.md` is fixed.
+Unsuccessful JSON-LD context responses now have their unread bodies cancelled
+before the document loader rejects. Cleanup is awaited and best-effort; its
+failure preserves the original typed HTTP error, status, URL, and message.
 
 ## Commits this round
 
-- `c7bfd3f8 fix: cancel rejected RDF response bodies` — wrap response handling
-  in guarded cleanup that awaits `response.body?.cancel()` before rethrowing
-  the original failure. This covers HTTP status and content-type rejection,
-  plus parser and context-policy failures. Cancellation failures cannot mask
-  the original error.
-- `a0b9c645 fix: ship N3 types with fetch-rdf` — move the existing `@types/n3`
-  range (`^1.16.0`, locked at `1.26.1`) into production dependencies and update
-  the lockfile without changing the resolution. Add an isolated downstream
-  declaration fixture with no direct consumer dependency on `@types/n3`.
-- Final report commit: `docs: report third fetch-rdf fix validation` — update
-  this STATUS.md after all implementation, checks, and artifact cleanup.
+- `83b9da89 fix: cancel rejected context response bodies` — add guarded
+  cancellation and six regression cases for unsuccessful context responses.
+- Final report commit: `docs: report fourth fetch-rdf fix validation` — update
+  this STATUS.md after implementation, validation, and generated-artifact cleanup.
 
 ## Regression coverage
 
-Eight cancellation tests record underlying stream cancellation for non-2xx
-responses, unsupported and malformed content types, and remote-context policy
-refusal. They also prove cleanup is awaited and that rejected cancellation
-or a locked body preserves the HTTP error. Existing null-body error and
-successful parsing cases remain passing.
-
-The declaration fixture copies the built package into a temporary consumer
-outside the workspace and links only the package's production dependencies.
-The consumer has no `@types/n3` dependency or workspace ambient types. It
-checks both `fetchRdf` and `parseRdf` results, including N3 Store methods.
-Like the workspace, it uses `skipLibCheck: true` to tolerate transitive Node
-type-version conflicts. Negative type assertions prove the Stores are typed;
-removing the production `@types/n3` link makes those assertions fail, so
-unresolved declarations cannot silently pass as `any`. The fixture is part
-of the normal fetch-rdf test gate and removes its temporary files.
+Tests record underlying stream cancellation for HTTP 404 and 503, prove the
+loader waits for delayed cleanup, and preserve the HTTP error when cancellation
+rejects, the body is locked, or the response has no body. Existing successful
+context parsing, allowlist, redirect policy, and injected-transport cases pass.
 
 ## Validation
 
 PASS (exit 0):
 
 ```sh
-pnpm run check:packages @types/n3
-pnpm install --lockfile-only --offline --frozen-lockfile --ignore-scripts
-pnpm exec turbo run lint build typecheck test \
-  --filter=@jeswr/fetch-rdf --concurrency=4 --continue=always
+pnpm exec turbo run lint build typecheck test --filter=@jeswr/fetch-rdf --concurrency=4 --continue=always
+pnpm --filter @jeswr/fetch-rdf run test:coverage
 pnpm run lint:root
-git diff d7030277 --check
+git diff ee3012b5 --check
 ```
 
-Scoped Turbo gate: **5/5 tasks successful**, including root lint. Fetch-rdf:
-**6 test files / 56 tests pass** (47 existing tests plus 9 new tests).
-Root tests also pass in the full gate: **2 files / 26 tests**.
+Scoped gate: **5/5 tasks successful**, including root lint. Fetch-rdf:
+**6 test files / 62 tests pass**, including six new regression cases.
+Coverage passes the configured 90% thresholds: statements **95.41%**,
+branches **95.29%**, functions **90.47%**, lines **98.24%**.
+The initial gate found formatting issues in the two edited files; formatting
+was corrected and the complete scoped gate then passed.
 
-The charter-required `pnpm run gate:full` was run before the final commit.
-FAIL (exit 1): **227 successful / 278 total tasks**, 4 cached. It stops at
-`@jeswr/federation-trust#test`: 53 tests pass and one characterization snapshot
-fails at `test/characterization.test.ts:196`. The serialized `delegateKey` JWK
-has property order `kty, crv, x`; the snapshot expects `crv, x, kty`. This is
-the exact mismatch already documented at `d7030277`. No federation-trust
-source or snapshot was changed. Tasks left unfinished by this fail-fast gate
-are not claimed to pass.
+FAIL (exit 1):
+
+```sh
+pnpm exec turbo run build typecheck test --filter=...@jeswr/fetch-rdf --concurrency=4
+```
+
+The dependant gate reports **90 successful / 136 total tasks**, 3 cached,
+and stops at `@jeswr/federation-trust#test`: 53 tests pass and one
+characterization snapshot fails at `test/characterization.test.ts:196`.
+The serialized `delegateKey` JWK has property order `kty, crv, x`; the snapshot
+expects `crv, x, kty`. This is the same failure recorded at the previous lane
+head. Unfinished dependant tasks are not claimed to pass. Federation-trust
+source and snapshots were left unchanged. The full-workspace gate was not run,
+following the original lane brief's explicit instruction to use scoped gates.
 
 ## Scope and remaining limitations
 
-No requested implementation work or open design questions remain. The
-conservative interpretation of the finding is cleanup for all existing
-response rejection paths: fetch-rdf currently has no size-limit rejection
-or size-policy option, and this round introduces neither.
-
-The referenced original brief and `.fix1.md` remain absent from this checkout;
-the supplied fix brief and previous STATUS.md provided context. Roborev is
-unavailable on PATH, so no automated per-commit verdict was obtained. Manual
-review checked error preservation, cancellation ownership, and fixture isolation.
+No requested implementation work or open questions remain. The only code and
+test changes are in fetch-rdf's context loader and its existing test file.
+No dependencies were added or changed, so `check:packages` was not applicable.
+Roborev is unavailable on PATH; no local automated per-commit verdict was
+obtained. Manual review checked cleanup ordering and HTTP-error preservation.
 
 No push, PR, branch switch, remote fetch/merge, or other checkout changes were
-made. No new package or dependency version was introduced. Untracked generated
-web public artifacts from the full gate were removed. STATUS.md was edited last.
+made. Generated web public artifacts from dependant builds were removed.
+STATUS.md was edited last.
