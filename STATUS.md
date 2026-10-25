@@ -1,152 +1,124 @@
-<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- AUTHORED-BY Codex GPT-6 -->
 
-# sst-ito — A-002 fix round 1
+# sst-b8c.1 — A-002H personal-agent pilot hardening
 
-Updated: 2026-10-25. Branch: `lane/sst-ito`; integration base: `61048c43`.
-Resumed from `44067f16`; the imports were not repeated.
+Branch: `lane/sst-b8c.1`. Supplied integration base:
+`12643bf0bf1d66802271494c02b42964ac86eebe`.
+All three requested defects are fixed. The additional authorization audit is below,
+including two residual findings listed under the brief's fix-or-list allowance.
 
-All four requested fixes are implemented. Both imported packages pass their full tests,
-coverage, lint, build, typecheck, and focused Turbo gate. Root lint and root tests pass.
-**Repository-wide validation remains blocked:** both affected and full gates stop at an
-unchanged federation-trust snapshot mismatch. This report is updated and committed last,
-after the validation attempts.
+## Implementation commits
 
-## Commits
-
-The existing import commits remain: `783a6730` (personal-agent history), `9a99b8a4`
-(legacy-bridge history), `bccc018e` (drop standalone artifacts), `5fccd959`
-(workspace integration), and `44067f16` (previous validation report).
-
-| Fix-round commit | Change |
+| Commit | Change |
 | --- | --- |
-| `ae60152e` | Derive send authorization from the executor's operation; reject and audit mismatched proposal labels. |
-| `8cc8b95d` | Validate Actor proposal writes and exclude ACL/ACP resources, containers, and non-RDF content; document credentials without control rights. |
-| `2367aa2d` | Apply the bridge calibration/reliability gate and preserve confirmation requirements through proposal storage and execution. |
-| `3a170d71` | Record explicit domain ownership and compact only exact conversation/task owner matches. |
-| This commit | Replace the previous validation report with fix-round results. |
+| `f19517cd` | Remove proposal-write pre-approval; gate writes inside the real MCP handler and a mandatory `PreToolUse` hook. Test pre-approved SDK permission ordering and direct MCP dispatch. |
+| `58e14e94` | Recompute confirmation requirements at execution from the configured, Actor-unwritable Reader inbox. Require confirmation for absent, ambiguous, uncalibrated, security-bearing, or mismatched provenance. |
+| `30cbaf03` | Record request operation/version/basis/direction; correlate deliveries before transitions and handler dispatch. Select the handler from the recorded request. |
+| `6a6875b5` | Bind confirmation digests to `derivedFrom`; reject ambiguous assertions and stricter duplicate assessments of offered data. |
 
-## Behavior and conservative choices
+## Trust boundaries and conservative choices
 
-- The outbox currently performs message sends, including scheduling replies. Its required
-  ODRL action is therefore `distribute`, independent of the proposal's action label.
-  Mismatches are prohibited even after owner confirmation and recorded in rejected outbox
-  receipts. A `read` permission cannot authorize a send.
-- The live Actor gate accepts only a parsed proposal at its expected proposal URL and
-  serializes the validated record before allowing the write. It denies `.acl`/`.acr`
-  paths, discovered `Link rel="acl"` and ACP `accessControl` targets (headers or RDF),
-  container URLs/types, arbitrary or malformed RDF, non-RDF writes, and failed discovery.
-  Access-control resource comparisons discard fragments. The live Actor injects its read
-  fetch for discovery; direct gate/options callers must provide `discoveryFetch`.
-- Actor writes remain Turtle-only, matching the existing proposal serializer. This also
-  avoids loading remote JSON-LD contexts at the untrusted input boundary. The README
-  requires the live Actor's injected authenticated fetch credentials to lack `acl:Control`
-  and equivalent ACP control rights.
-- Existing deterministic candidate filtering is retained. The bridge reliability gate
-  marks selected self-reported, missing/unknown-calibration, intermediate-confidence, or
-  security-bearing signals as confirmation-required; audit-only signals are excluded.
-  A proposal containing any selected confirmation-required signal carries the flag.
-  RDF storage and the content digest preserve it, and the executor requires a matching
-  owner confirmation even under an autonomous-send mandate.
-- New conversation/task-owned domain entries store `{ owner, value }`. Cleanup compares
-  the owner ID exactly; keys and message/effect ID substrings no longer establish ownership.
-  Legacy entries without ownership remain readable and are retained. Shared operation
-  snapshots explicitly remain unowned because they combine several conversations' state.
-- No dependencies, lockfile entries, package names/exports, or securityCritical flags were
-  changed in this round. No timeout or enforcement-budget changes were made.
+The live write handler independently validates and reserializes the proposal before PUT,
+even if SDK permission callbacks/hooks are bypassed. The hook runs before pre-approval;
+`allowedTools` contains only read tools. Tests use the real in-memory MCP client/server
+and a stub of the relevant SDK permission order, following the
+[SDK permission documentation](https://code.claude.com/docs/en/agent-sdk/permissions).
+No SDK model/provider was invoked.
 
-## Package validation
+`ExecutorConfig.inbox` is an optional trusted Reader-container setting. Omitting it,
+overlapping it with proposals, or failing provenance verification requires confirmation.
+The executor reconstructs the pilot's exact deterministic scheduling reply, normalizes it
+through proposal persistence, and compares all send-affecting fields. This conservative
+choice keeps arbitrary LLM drafts behind owner confirmation even with a broad permit.
+An Actor-written flag can add confirmation but cannot remove the requirement.
+
+Reader records must have unambiguous calibration, confidence, assertion and source linkage.
+The bridge's canonical schema omits `securityBearing` when false. Security-bearing or
+lower-reliability duplicate assessments cannot be hidden by selecting the first record.
+Provenance reads stay inside the configured inbox, require Turtle and refuse redirects;
+Actor-supplied source IRIs are never fetched directly.
+
+Delivery correlation supports public/represented/grant invocations, direct delivery under
+an accepted agreement, and explicit invocations of a different operation under an agreement.
+It rejects wrong references, operation IDs/versions, bases, directions and duplicate deliveries.
+Signed runtime regression tests show invalid deliveries preserve conversation state and
+call neither the requested nor an unrelated handler.
+
+Compatibility is fail-closed: pre-change confirmation digests require owner re-confirmation.
+Legacy conversation snapshots without recorded requests reject deliveries rather than
+infer their authorization basis.
+
+## Authorization audit: actor, outbox and mandate
+
+| Surface | Finding / disposition |
+| --- | --- |
+| Actor options, gate, live adapter and proposal server | Fixed pre-approval bypass. Both mandatory hook and implementation enforce proposal/ACL/ACP/container validation. Read-only MCP scope and credentials without control rights remain required. |
+| Actor derivation, interpretation reads and deterministic runner | Their results are proposal intents. The executor now independently reloads Reader records and validates exact content, calibration and all assessments of offered data; Actor-selected confidence filters or flags cannot grant autonomy. |
+| Executor action, channel, recipient, purpose, spend and reply target | The concrete send action remains `distribute`, with mismatched labels prohibited. Autonomous intents must match the trusted reconstruction. Confirmed intents bind channel, recipient, purpose, spend and both source/reply pointers in the digest. See the residual policy-claims finding below. |
+| Executor status and idempotency | Terminal Actor statuses can suppress a proposal; `confirmed`/timestamps cannot authorize sending. Actor-unwritable receipts and create-only claims remain the idempotency authority. Reconstructed proposal IDs prevent autonomous duplicate sends under invented IDs. |
+| Confirmation digest / carrier / receipt | Fixed the omitted `derivedFrom` binding, including its fallback use as the mandate target. Body, recipient, channel, purpose, spend, offered times, action and reply linkage are content-locked; provenance cannot be swapped after owner approval. |
+| `outbox/confirm.ts:classifyFriction` | **Residual:** Actor-supplied `inReplyTo` and `spend` still determine acknowledgement strength. A forged reply anchor can make a novel recipient low-friction despite recomputing the advisory `friction` field. A real owner acknowledgement is still required; this does not enable an unconfirmed send. |
+| `mandate/evaluate.ts:buildRequestContext` | **Residual:** arbitrary owner-confirmed drafts still use declared purpose/spend/reply target for scoped policy constraints and prohibitions. The declarations are digest-bound, but their semantics are not independently attested. A misleading purpose can change scoped-prohibition matching. Autonomous drafts are restricted by trusted reconstruction. |
+| Mandate loader/verifier, default policy and types | Owner signature, issuer, policy-content binding and scoped policy fetching remain authoritative. Actor input cannot replace the verifier/configuration or write the mandate through the live tools. Default outbound policy remains confirmation-required. |
+| Sender seam and public exports | Send credentials stay in injected deterministic sender closures. No new credential access or public entrypoint changes. |
+
+The two residual findings are listed rather than introducing a new confirmation API or
+semantic authorization design outside this brief. Resolving them needs trusted inputs for
+known-thread/spend classification and policy claims on arbitrary drafts. This lane does
+not claim they are resolved or that the stack is ready for a live channel run.
+
+## Validation
 
 Host: Node `v24.22.1`, pnpm `10.4.1`, Vitest `4.1.10`.
-Tests use synthetic fixtures, injected I/O, in-memory stores, and loopback services.
-No live provider/model, credential store, provisioning, or send script was invoked.
+All package tests use synthetic fixtures, injected I/O, in-memory stores and loopback services.
 
-For both packages, `run lint`, `run build`, and `run typecheck` passed.
-The dependency-first build passed all eight dependency tasks.
-
-| Package | Tests | Coverage run |
-| --- | --- | --- |
-| personal-agent | PASS: 482 tests, 55 files | PASS: 482 tests, 55 files |
-| agentic-legacy-bridge | PASS: 650 tests, 37 files | PASS: 650 tests, 37 files |
-
-Coverage includes every non-test TypeScript file under each package's `src/`:
-
-| Package | Statements | Branches | Functions | Lines |
-| --- | --- | --- | --- | --- |
-| personal-agent | 86.88% | 74.56% | 90.39% | 89.46% |
-| agentic-legacy-bridge | 93.95% | 86.75% | 97.32% | 96.30% |
-
-These are complete passing-suite baselines, replacing the previous partial personal-agent
-coverage. Both securityCritical flags remain unset because coverage is below 100%.
-**Test-only timeout increases: none.** All tests and coverage ran with existing defaults.
-
-Regression coverage includes non-send permissions, confirmed action-label mismatches and
-their receipts; ACL/ACP targets advertised on both containers and resources; permitted
-proposal writes and every requested write rejection; calibrated versus uncalibrated
-derivation and confirmation-only execution; and conversation/task prefix collisions
-(`urn:case:1` versus `urn:case:10`) with unowned-state retention.
-
-Commands, with `GIT_ALLOW_PROTOCOL=file`:
-
-```sh
-pnpm --filter @jeswr/personal-agent run test
-pnpm --filter @jeswr/personal-agent run test:coverage
-pnpm --filter @jeswr/agentic-legacy-bridge run test
-pnpm --filter @jeswr/agentic-legacy-bridge run test:coverage
-pnpm run lint:root
-pnpm run test:root
-pnpm exec turbo run lint build typecheck test --filter=@jeswr/personal-agent --filter=@jeswr/agentic-legacy-bridge --concurrency=4 --env-mode=loose
-```
-
-The focused package gate passed **16/16 tasks** (nine cached), in 1m8.652s.
-Root lint passed all workspace, lockfile-transport, and raw-fetch guards.
-Root tests passed **28 tests in two files**.
-
-## Repository gates and remaining blocker
-
-Both gates were run after the final implementation commit and before this report commit:
-
-```sh
-TURBO_TELEMETRY_DISABLED=1 NEXT_TELEMETRY_DISABLED=1 ASTRO_TELEMETRY_DISABLED=1 GIT_ALLOW_PROTOCOL=file npm_config_cache=/tmp/sst-ito-npm-cache TURBO_SCM_BASE=61048c43eb845a6d244fb90ec9b10ee0b0a7d1f4 pnpm run gate --env-mode=loose
-TURBO_TELEMETRY_DISABLED=1 NEXT_TELEMETRY_DISABLED=1 ASTRO_TELEMETRY_DISABLED=1 GIT_ALLOW_PROTOCOL=file npm_config_cache=/tmp/sst-ito-npm-cache pnpm run gate:full --env-mode=loose
-```
-
-| Gate | Result |
+| Check | Result |
 | --- | --- |
-| Affected repository gate | FAIL, exit 1: Turbo reported 198 successful / 250 tasks; 2m9.466s. |
-| Full repository gate | FAIL, exit 1: Turbo reported 180 successful / 208 tasks, 96 cached; 28.832s. |
+| Dependency-first build | PASS: eight dependency build tasks. |
+| Package gate: `pnpm --filter @jeswr/personal-agent run gate --maxWorkers=1` | PASS: lint, build, typecheck and **519 tests in 56 files**. Test duration 84.04s. |
+| Separate package test run with `--maxWorkers=1` | PASS: **519 tests in 56 files**, 128.94s. |
+| `pnpm --filter @jeswr/personal-agent run test:coverage --maxWorkers=1` | PASS: **519 tests in 56 files**, 89.01s. |
+| `pnpm run lint:root` | PASS, including lockfile, workspace and raw-fetch guards. |
+| Root tests, through the repository gates | PASS: **28 tests in two files**; replayed from cache in the full gate. |
+| `pnpm run gate --env-mode=loose` | FAIL: unchanged `@jeswr/federation-trust#test`; 138 successful / 201 scheduled tasks, 56.337s. |
+| `pnpm run gate:full --env-mode=loose` | FAIL: same unchanged test; 184 successful / 236 scheduled tasks, 1m6.255s. |
 
-Both stop at `@jeswr/federation-trust#test`, specifically
-`test/characterization.test.ts:196`, "delegation credential structure is stable".
-The embedded Ed25519 delegateKey JSON string has a different property order:
-the snapshot expects `crv,x,kty`; this host produces `kty,crv,x`.
-That package reports **53 passing / one failing test**. Neither federation-trust nor
-solid-vc has any source changes relative to the supplied integration base.
-The mismatch is outside this fix brief and was left unchanged.
+Coverage includes all non-test TypeScript under `packages/personal-agent/src/`:
 
-The full gate also logged a Pod Manager worker exit around the fail-fast shutdown.
-An isolated Pod Manager rerun passed **1,146 tests, one skipped, in 104 files**.
-Pod Manager's build succeeded, including its Google Fonts fetch, so the earlier font
-blocker is resolved on this host. Both repository gates stopped before completing all tasks.
+| Statements | Branches | Functions | Lines |
+| --- | --- | --- | --- |
+| 87.02% | 74.91% | 90.48% | 89.56% |
 
-## Verification setup, review, and scope
+The new write handler and Actor options each have 100% coverage across all four metrics.
+The provenance module has 96.61% statements, 91.04% branches, 100% functions and 96.07% lines.
+No coverage thresholds, package security-critical flags, timeouts or enforcement budgets changed.
 
-The first dependency build invoked existing fetch-rdf remote-clone bootstrap scripts
-before Git was constrained to local transport. Their npm step failed because the default
-cache is read-only. This was a deviation from the lane's no-remote-fetch intent.
-Subsequent builds used `GIT_ALLOW_PROTOCOL=file`. The exact lockfile-pinned fetch-rdf
-source already present in the temporary bootstrap directory (`a8359a3764cb6b3c763e09ea211542a5dc7edc33`)
-was compiled with the installed TypeScript into ignored dependency output. No dependency
-manifest, source in another checkout, or tracked build artifact was changed.
+Initial concurrent package-test/coverage attempts hit existing transmission, A2A and
+persistence test timeouts and were cancelled. Completed runs were sequential with one
+worker and the original timeouts. Those completed runs passed in full.
 
-Manual review checked the four authorization/retention boundaries and the final diff.
-Automated roborev review remains unavailable: the CLI is not installed on this host.
-No review was claimed. All four fix commits include model provenance trailers.
+Both repository gates stopped at `packages/federation-trust/test/characterization.test.ts:196`,
+“delegation credential structure is stable”: the embedded Ed25519 `delegateKey` JSON expects
+property order `crv,x,kty`, while this host produces `kty,crv,x`. That package reports 53
+passing / one failing test. Its source and `solid-vc` are unchanged from the supplied base;
+the same blocker was recorded by the preceding lane. Both repository gates ran before
+this final report commit, and neither completed every scheduled task.
 
-The lane stayed on `lane/sst-ito`. No push, PR, publish, branch switch, tracker mutation,
-or fetch/merge into the lane checkout was performed. Gate-generated untracked app
-client-ID/callback files were removed. The working tree is clean after this report commit.
+## Scope, review and remaining acceptance work
 
-Implementation work from this brief is complete. Remaining acceptance work is the
-repository-wide snapshot failure and unavailable automated review. There are no open
-design questions.
+All builds/gates used `GIT_ALLOW_PROTOCOL=file`. An existing dependency bootstrap's remote
+clone was blocked by that setting. The already-present source at the exact lockfile pin
+`a8359a3764cb6b3c763e09ea211542a5dc7edc33` was compiled with installed TypeScript in temporary
+scratch space and copied into ignored dependency output. No remote Git fetch/merge occurred.
+
+No dependencies, manifests, lockfile or tracked dist changed. No push, PR, publish, branch
+switch, tracker mutation, provisioning, real credential-store access or live channel/model
+run occurred. Gate-generated app callback/client-ID files were removed. Work stayed in this
+checkout, with temporary build/test scratch under `/tmp`.
+
+The diff and authorization paths were manually reviewed. Automated roborev review remains
+unavailable because its CLI is not installed; no automated verdict is claimed.
+
+Remaining acceptance work: the two listed authorization-audit residuals, the unrelated
+repository snapshot blocker, and automated review. There are no open design questions
+for this lane. STATUS.md is the last changed file and its report is the final lane commit.
