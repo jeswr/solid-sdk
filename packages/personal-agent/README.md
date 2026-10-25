@@ -160,6 +160,130 @@ npm install github:jeswr/personal-agent#<sha>
 5. **An always-on host** for the Actor + outbox (the deploy-box rules apply if it is `solid-test`).
 6. **A `w3id.org/jeswr/agentic` redirect** for the one minted namespace (shared with the bridge).
 
+## Agentic Web pilot profile 0.1 (`@jeswr/personal-agent/pilot`, experimental)
+
+A second, self-contained runtime in `src/pilot/` instantiates one coherent configuration of
+every layer of the Agentic Web specification family: a transport-neutral interaction model
+and deterministic state machine; implementation descriptions that separate supported and
+accepted configurations; JWS (Ed25519 / P-256) with pinned keys, party-signed representation
+statements, an owner-signed ODRL-subset mandate evaluated through `@jeswr/solid-odrl`, and
+owner approvals bound to exact actions; persistent replay/idempotency with reconciliation of
+uncertain effects; direct and email (MIME / Gmail payload) bindings; and executable
+scheduling, mortgage, public-energy, synthetic-FHIR and industrial workflows; a remembered
+conventional scheduling link (UC-02) booked through a deterministic adapter against a local
+**synthetic** reference service (not Calendly); bounded retention; an optional RDF
+(PROV/ODRL/PROF/DPV) evidence export with competency queries; and resource-governance
+metadata (no CDMC claim). Provider sends pass a transmission gate that re-authorises the
+recorded action and keeps durable attempting/sent/uncertain records. An uncertain send is
+resolved only by a verified provider copy (or a provider-declared final absence) — never
+resent because a search came back empty; this is not an exactly-once guarantee. No LLM is
+used. Synthetic test use only — nothing is sent, and no provider credential is handled.
+
+Policy module: **SPARQ** (`sparq-policy` via its `sparq-policy-decide` binary) is the default.
+`awp-pilot init` probes and pins the binary given by `--sparq-bin` or `AWP_SPARQ_POLICY_BIN`
+(path + SHA-256) and fails without one. `--policy-engine=solid-odrl` selects the alternative
+explicitly. A missing or changed binary makes every decision `indeterminate` — never a fallback.
+
+```sh
+npm run gate                     # includes the pilot tests
+npm run pilot:demo               # → reports/pilot-demo-report.json (harness default module)
+npm run pilot:demo:sparq         # same scenarios decided by SPARQ (AWP_SPARQ_POLICY_BIN)
+npm run pilot:integration        # separate OS processes, SPARQ by default (AWP_SPARQ_POLICY_BIN)
+npm run pilot:rdf -- --sparq-cli=PATH  # RDF export + competency SPARQL on SPARQ's CLI
+npm run pilot:sparq-cases        # policy vectors vs the SPARQ binary
+npm run pilot:mcp-integration    # MCP servers in separate processes, real SPARQ (AWP_SPARQ_POLICY_BIN)
+npm run pilot:a2a-integration    # MCP operator + loopback A2A, durable mortgage roles, restarts (AWP_SPARQ_POLICY_BIN)
+npm run pilot:regional-integration  # durable energy (AU, anonymous public carriage), health (US) and industrial (EU) roles (AWP_SPARQ_POLICY_BIN)
+npm run pilot:smoke              # operator smoke script (POSIX sh; also runs under zsh)
+node dist/pilot/cli.js           # awp-pilot: init / pin / propose-meeting / process / serve / mcp / …
+```
+
+**Local MCP interface.** `awp-pilot mcp --name N --dir D` runs one agent as an MCP server on
+stdio (official `@modelcontextprotocol/sdk`; no network listener). A coding agent can inspect
+the profile, status and evidence, propose a synthetic meeting to a pinned peer, and read or
+acknowledge reviewed signed envelopes. The same server carries peer messages (`mcp-tool/0.1`,
+tool `deliver_inbound`), which the runtime verifies exactly as on any other binding. See
+[`docs/mcp/coding-agent.mcp.json`](docs/mcp/coding-agent.mcp.json).
+
+**Agent roles and the optional A2A binding.** An agent directory hosts a role (`init --role`):
+`personal` (default), or the SYNTHETIC `mortgage-consumer`, `mortgage-lender` and
+`mortgage-underwriter` — independently initialised, durable actors composed from the existing
+mortgage handlers, with narrow declared MCP operations and owner approvals signed out of process
+(`awp-pilot sign-approval`). `awp-pilot mcp --a2a` additionally runs a loopback-only A2A 1.0
+listener (official `@a2a-js/sdk` 1.2.1) that carries signed envelopes to explicitly pinned
+peers; an A2A response is a transport acknowledgement, never an agreement or permission.
+Every A2A send passes the same send-time transmission boundary as provider sends (current
+mandate, revocations, approvals, policy module; durable intent/outcome; identical re-authorised
+resends only). `init --owner-dir DIR` keeps the owner key out of the service directory (the
+service never loads it; a same-user directory, not hardware custody). The lender's
+purpose-bound store repairs interrupted commits on open and has an explicit, bounded
+`purge_expired` retention operation that erases that store's copy only. Profile §5, §7,
+§19–§20; runbook §1a, §7a–§7c.
+
+**Durable regional roles (phase 8, SYNTHETIC).** These roles compose the existing domain
+handlers with fixtures shared with the in-process scenarios:
+
+- `energy-retailer` and `energy-comparator` — anonymous public requests over the loopback
+  `public-http/0.1` carriage; usage and location stay with the comparator;
+- `health-patient`, `health-authorization` and `health-resource` — a SMART-like pattern; the
+  patient signs authorisations and revocations out of process with `owner-sign`; token issuance
+  uses a separate issuing key;
+- `industrial-planner`, `-authority`, `-provider`, `-contracting` and `-diagnostic` — internal
+  delegation, exact agreement, transfer, recommendation and a simulated work order, kept as
+  distinct events.
+
+`awp-pilot roles` lists them. `init --owner-name ORG` shares one organisation owner key across
+that organisation's agents; each keeps its own actor key. No CDS/CDR, SMART/OAuth, HIPAA,
+Catena-X/DSP or legal-eligibility claim is made. See profile §21–§23 and runbook §7d.
+
+**Phase 9 (profile 0.1.2).**
+
+- Health grants are issued only when three things agree: a clinic enrollment register binding
+  the authenticated patient to their compartment, a consent addressed to that service for that
+  purpose, and a currently valid consent window.
+- Revocations must carry the revoking patient's own issuer-signed grant.
+- Protected deliveries (health searchsets, NordWerk dataset releases) keep their authorisation
+  basis as a disclosure condition, re-checked at every transmission. A queued reply is not sent
+  after its grant was revoked or expired.
+- Received public replies are retained durably and recovered after a crash.
+- Start with [LOCAL-HANDOFF.md](LOCAL-HANDOFF.md) and profile §24.
+
+Pin peer keys with the `--flag=value` form (a thumbprint may start with `-`):
+`awp-pilot pin --name alice --card bob.card.json --party-kid=<kid> --actor-kid=<kid>`.
+Profile 0.1.1 mints URN identifiers; directories created by 0.1.0 must be re-initialised.
+Operating steps (incl. the setup-required Gmail hand-off): [`docs/OPERATOR-RUNBOOK.md`](docs/OPERATOR-RUNBOOK.md).
+
+The owner dashboard (`npm run dashboard`) is a loopback-only settings UI. It covers:
+
+- account inventory and status provenance;
+- calendar authority, which the agent applies at its next start;
+- per-account restrictions and the three-layer permissions view;
+- optional, off-by-default TypeSafe message triage.
+
+See [`docs/DASHBOARD.md`](docs/DASHBOARD.md).
+
+Deterministic actions (no model) cover:
+
+- availability across Google, Microsoft and synthetic calendars;
+- meeting proposals and slot checks;
+- contact lookup, reply preparation and an action queue.
+
+They are available from the CLI (`awp-dashboard actions`), MCP and the dashboard: see
+[`docs/ACTIONS.md`](docs/ACTIONS.md) and the provider token contract in
+[`docs/PROVIDER-ACTIONS.md`](docs/PROVIDER-ACTIONS.md). The separate credential helper
+`awp-credentials` handles Google and Microsoft sign-in (loopback, PKCE, verified account),
+private token storage and refresh; see [`docs/PROVIDER-SETUP.md`](docs/PROVIDER-SETUP.md). It has
+been tested against a local fake provider only.
+
+The pilot still extracts email content only through the bridge's `parseEmail`; in addition,
+its strict human-parity check uses a small bounded reader (`src/pilot/bindings/mime.ts`) that
+accepts only the pilot's own MIME layout and rejects everything else.
+
+Profile, wire semantics, security assumptions, supervisor interface and boundaries:
+[`docs/PILOT-PROFILE.md`](docs/PILOT-PROFILE.md); evidence matrix:
+[`docs/PILOT-MATRIX.md`](docs/PILOT-MATRIX.md); RDF vocabulary:
+[`docs/rdf/awp-pilot.ttl`](docs/rdf/awp-pilot.ttl).
+
 ## Security posture (§7)
 
 - **No single context both reads hostile input and holds act-credentials** (the Reader/Actor/outbox
