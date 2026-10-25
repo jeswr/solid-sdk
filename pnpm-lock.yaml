@@ -695,6 +695,9 @@ importers:
       '@jeswr/fetch-rdf':
         specifier: ^0.1.0
         version: 0.1.0
+      '@jeswr/suite-vocab':
+        specifier: workspace:*
+        version: link:../../packages/suite-vocab
       '@rdfjs/wrapper':
         specifier: ^0.34.0
         version: 0.34.0
@@ -768,6 +771,9 @@ importers:
       '@jeswr/solid-session-restore':
         specifier: workspace:*
         version: link:../../../packages/solid-session-restore
+      '@jeswr/suite-vocab':
+        specifier: workspace:*
+        version: link:../../../packages/suite-vocab
       '@lit/react':
         specifier: ^1.0.8
         version: 1.0.8(@types/react@19.2.17)
@@ -868,6 +874,9 @@ importers:
       '@jeswr/fetch-rdf':
         specifier: ^0.1.0
         version: 0.1.0
+      '@jeswr/suite-vocab':
+        specifier: workspace:*
+        version: link:../../packages/suite-vocab
       '@rdfjs/wrapper':
         specifier: ^0.34.0
         version: 0.34.0
@@ -938,6 +947,9 @@ importers:
       '@jeswr/solid-session-restore':
         specifier: workspace:*
         version: link:../../../packages/solid-session-restore
+      '@jeswr/suite-vocab':
+        specifier: workspace:*
+        version: link:../../../packages/suite-vocab
       '@lit/react':
         specifier: ^1.0.8
         version: 1.0.8(@types/react@19.2.17)
@@ -1038,6 +1050,9 @@ importers:
       '@jeswr/fetch-rdf':
         specifier: 0.1.0
         version: 0.1.0
+      '@jeswr/suite-vocab':
+        specifier: workspace:*
+        version: link:../../packages/suite-vocab
       '@rdfjs/wrapper':
         specifier: 0.34.0
         version: 0.34.0
@@ -1108,6 +1123,9 @@ importers:
       '@jeswr/solid-session-restore':
         specifier: workspace:*
         version: link:../../../packages/solid-session-restore
+      '@jeswr/suite-vocab':
+        specifier: workspace:*
+        version: link:../../../packages/suite-vocab
       '@lit/react':
         specifier: ^1.0.8
         version: 1.0.8(@types/react@19.2.17)
@@ -4018,6 +4036,8 @@ importers:
       vitest:
         specifier: ^4.1.9
         version: 4.1.10(@types/node@25.9.5)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1)(vite@8.1.4(@types/node@25.9.5)(esbuild@0.28.1)(jiti@2.7.0))
+
+  packages/suite-vocab: {}
 
   packages/synthetic-rdf:
     dependencies:

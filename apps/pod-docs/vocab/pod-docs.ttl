@@ -1,0 +1,51 @@
+# AUTHORED-BY Codex GPT-6.1-Sol
+@prefix pd: <https://jeswr.org/ns/pod-docs#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix ldp: <http://www.w3.org/ns/ldp#> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix vann: <http://purl.org/vocab/vann/> .
+
+<https://jeswr.org/ns/pod-docs> a owl:Ontology ;
+    rdfs:label "Pod Docs vocabulary" ;
+    vann:preferredNamespacePrefix "pd" ;
+    vann:preferredNamespaceUri "https://jeswr.org/ns/pod-docs#" .
+
+pd:Document a owl:Class ;
+    rdfs:label "Document" ;
+    rdfs:comment "A rich-text document with a body, format and provenance revision history." .
+
+pd:body a owl:DatatypeProperty ;
+    rdfs:label "body" ;
+    rdfs:comment "The rich-text body of a document or its revision, interpreted using its format." ;
+    rdfs:range xsd:string .
+
+pd:format a owl:DatatypeProperty ;
+    rdfs:label "format" ;
+    rdfs:comment "The media type describing the encoding of a document or revision body." ;
+    rdfs:range xsd:string .
+
+pd:currentRevision a owl:ObjectProperty ;
+    rdfs:label "current revision" ;
+    rdfs:comment "The provenance entity holding the current revision of this document." ;
+    rdfs:domain pd:Document ;
+    rdfs:range prov:Entity .
+
+pd:updateLog a owl:ObjectProperty ;
+    rdfs:label "update log" ;
+    rdfs:comment "The container holding the append-only Yjs update log and snapshots of this document (ADR-006 §D1 encoding)." ;
+    rdfs:domain pd:Document ;
+    rdfs:range ldp:Container .
+
+pd:assets a owl:ObjectProperty ;
+    rdfs:label "assets" ;
+    rdfs:comment "The container holding binary assets embedded in the body." ;
+    rdfs:domain pd:Document ;
+    rdfs:range ldp:Container .
+
+pd:comments a owl:ObjectProperty ;
+    rdfs:label "comments" ;
+    rdfs:comment "The container holding oa:Annotation resources targeting this document; the Commenter role grants Append on it." ;
+    rdfs:domain pd:Document ;
+    rdfs:range ldp:Container .
