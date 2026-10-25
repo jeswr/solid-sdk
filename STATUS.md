@@ -134,3 +134,67 @@ Only the reported fallback, its regression tests and this status report changed.
 The final documentation commit records this follow-up and is queued for asynchronous
 review after creation. The supplied review finding is resolved; the unrelated
 full-workspace timeout remains outside this follow-up's scope.
+
+## Fix round 2 — review of 6b7afffd
+
+Resumed the existing lane without redoing committed work. This round adds:
+
+| Commit | Change |
+| --- | --- |
+| `12799ac5` | Finalize unread adapted HTTP request bodies after the response finishes: cancel the Web stream, destroy a pending Node request, and advertise Connection: close before headers are sent. Cover ordinary, empty, failed and reader-locked responses, plus an unread POST with a second request pipelined on the same loopback connection. |
+| `905faacb` | Lowercase and remove parameters from injected PodPort media types at readResource's boundary. Verify parameterized uppercase JSON-LD returns Turtle through both tool names and the MCP resource path, while retaining the ETag. |
+| `20211da0` | Handle a client disconnect while finishing the fallback 500 response, preserving request cleanup without rejecting the adapter promise; add a regression test. |
+
+The final documentation commit updates this status last. The requested conservative
+connection policy closes the connection after the first response when a request
+body remains unread; it does not drain an unbounded upload or attempt to serve the
+queued second request on that connection.
+
+Confirmed the earlier missing-Content-Type fix remains present at **both** parsing
+sites: `parseRdf` receives `contentType || null`. All four existing headerless RDF
+resource/profile regression cases pass, covering legacy configuration and injected
+fetch-backed PodPorts. No further implementation change was needed for that finding.
+
+Exact validation commands:
+
+```sh
+pnpm --filter @jeswr/app-mcp-server run lint && pnpm --filter @jeswr/app-mcp-server run build && pnpm --filter @jeswr/app-mcp-server run typecheck && pnpm --filter @jeswr/app-mcp-server run test
+pnpm --filter @jeswr/solid-mcp run lint && pnpm --filter @jeswr/solid-mcp run build && pnpm --filter @jeswr/solid-mcp run typecheck && pnpm --filter @jeswr/solid-mcp run test
+pnpm run lint:root
+TURBO_SCM_BASE=917d3be9c7967622829adc43c1aaabb0964ec993 pnpm run gate
+pnpm run gate:full
+git diff --check 6b7afffd HEAD
+```
+
+- App gate: PASS; **18 tests**. The final affected gate also checks the last
+  disconnect fix. Before the request cleanup change, the five initial HTTP
+  regression cases failed (including the pipelined connection timeout).
+- Solid MCP gate: PASS; **181 tests**, including injected media-type normalization
+  and all four headerless RDF/profile cases.
+- Root lint: PASS, both separately and within the final affected gate.
+- Final affected gate: PASS; **24/24 tasks**, 16 cached, 2.558 seconds. The first
+  affected run also passed 24/24 tasks before the final disconnect edge-case fix.
+- Full gate: FAIL in unchanged
+  `packages/federation-trust/test/characterization.test.ts:196`. The delegation
+  credential snapshot expects serialized JWK keys in `crv,x,kty` order; the runtime
+  returns `kty,crv,x`. The first full run completed 170/229 tasks (22 cached,
+  1m1.064s); the final run after the disconnect fix completed 191/249 tasks
+  (68 cached, 1m11.994s), failing at the same snapshot. No files in that package
+  were changed. This failure remains outside the authorized fix scope.
+- Whitespace check: PASS. Removed the 16 generated callback/client-ID files from
+  the eight pod web apps after the full gates. No dist or generated assets are
+  committed; the round's implementation diff is limited to four files in the two
+  reviewed projects, plus this status update.
+
+Initial test probes could not resolve ignored dependency build output. Built the
+exact manifest-pinned fetch-rdf source tarball locally in ignored node_modules,
+then ran `pnpm --filter '@jeswr/solid-mcp^...' run build` for the two workspace
+dependencies. No git clone/fetch/merge, lifecycle scripts, dependency additions or
+manifest changes were needed. `check:packages` is not applicable to this round.
+
+Roborev is not installed and no post-commit review hook is present in this sandbox;
+new automatic per-commit review verdicts could not be obtained. The supplied review
+findings are addressed and regression-tested. No implementation work remains and
+there are no new open questions. Full-workspace validation and automated review
+remain limited as described above. No push, PR, branch switch, publication or
+changes to another checkout were performed.
