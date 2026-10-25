@@ -56,16 +56,19 @@ package plan or explicit maintainer direction.
    and address findings.
 
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 `pnpm run check:sdk-layers` (also part of `lint:root`) runs `scripts/check-sdk-layers.mjs`
-against the `dependencies` of workspace package, app (including `apps/*/web`), and tool
-manifests, enforcing ADR-001 D1 and its 2026-10-25 amendment. Apps cannot depend directly
+against the `dependencies`, `peerDependencies`, and `optionalDependencies` of workspace
+package, app (including `apps/*/web`), and tool manifests, enforcing ADR-001 D1 and its
+2026-10-25 amendment. Apps cannot depend directly
 on `@sparq-org/sparq` or the `@jeswr/storage-client/solid` and `/lws` backends;
 `@jeswr/storage-client` may depend only on `@jeswr/storage-capabilities`, `@jeswr/fetch-rdf`,
 `@jeswr/rdf-serialize`, `@jeswr/guarded-fetch`, `@solid/object`, `@rdfjs/wrapper`, and `n3`;
-`@jeswr/pod-auth` cannot depend on `@jeswr/storage-client`. The guard checks npm alias
-targets too and reports violating manifest paths and dependency names. Development, peer,
-and optional dependency fields and source import restrictions are outside this manifest
-check's scope. Fixture tests run through `pnpm run test:root`; `--root <directory>` selects
+`@jeswr/pod-auth` cannot depend on `@jeswr/storage-client`. The guard checks resolved npm
+and workspace alias targets and rejects unresolvable dependency aliases without printing
+their specs. It reports violating manifest paths, fields, and dependency names. Development
+dependencies and source import restrictions are outside this manifest check's scope.
+Fixture tests run through `pnpm run test:root`; `--root <directory>` selects
 an isolated workspace for testing the script.
 
 <!-- AUTHORED-BY Codex GPT-5 -->

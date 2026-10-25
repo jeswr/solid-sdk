@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 
 import { globSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -25,6 +26,17 @@ const appForbiddenDependencies = [
 
 const isPackageOrSubpath = (name, target) => name === target || name.startsWith(`${target}/`);
 
+function dependencyTarget(name, spec) {
+  if (typeof spec !== "string") return null;
+  if (/^workspace:[*^~]$/.test(spec)) return name;
+  const alias =
+    /^(?:npm|workspace):((?:@[a-z0-9._-]+\/)?[a-z0-9_-][a-z0-9._-]*)(?:@[^@:]+)?$/i.exec(spec);
+  if (alias) return alias[1];
+  // Versions, ranges and tags address the dependency key. Other protocols,
+  // paths and repository shorthands cannot establish the package identity.
+  return /^[a-z0-9_*^~<>=][a-z0-9._*+^~<>=| -]*$/i.test(spec) ? name : null;
+}
+
 function checkLayers(root) {
   const failures = [];
   const manifests = globSync(
@@ -40,15 +52,14 @@ function checkLayers(root) {
   for (const path of manifests) {
     const manifest = JSON.parse(readFileSync(join(root, path), "utf8"));
     const isApp = path.startsWith("apps/");
-    for (const [name, range] of Object.entries(manifest.dependencies ?? {})) {
-      // Check both the declared name and npm alias target so an allowed name
-      // cannot disguise a forbidden dependency (e.g. n3: npm:pod-auth@...).
-      const names = [name];
-      const alias = typeof range === "string" && /^npm:((?:@[^/]+\/)?[^@]+)(?:@|$)/.exec(range);
-      if (alias) names.push(alias[1]);
-
-      for (const target of new Set(names)) {
-        const location = `${path} dependencies.${name}${target === name ? "" : ` (alias of ${target})`}`;
+    for (const field of ["dependencies", "peerDependencies", "optionalDependencies"]) {
+      for (const [name, spec] of Object.entries(manifest[field] ?? {})) {
+        const target = dependencyTarget(name, spec);
+        const location = `${path} ${field}.${name}${target && target !== name ? ` (alias of ${target})` : ""}`;
+        if (target === null) {
+          failures.push(`${location}: unresolvable dependency alias`);
+          continue;
+        }
         if (isApp && appForbiddenDependencies.some((dep) => isPackageOrSubpath(target, dep))) {
           failures.push(`${location}: apps must use the protocol-neutral SDK surface`);
         }

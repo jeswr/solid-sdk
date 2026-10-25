@@ -1,75 +1,68 @@
-<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
-# Lane status — sst-8xm.29 (T-003)
+# Lane status — sst-8xm.29 (T-003), fix round 1
 
 Updated: 2026-10-25. Branch: `lane/sst-8xm.29`;
 base: `219cdd5a1579a95a6408f272fe6344e72e2e8664`.
 
-## Outcome
+## Outcome and commits
 
-Implemented `scripts/check-sdk-layers.mjs`, wired `check:sdk-layers` into
-`lint:root`, added 11 CLI fixture tests, and documented the guard in one paragraph
-in `AGENTS.md`. The current tree passes; seeded violations exit 1 with manifest
-paths, dependency names, and the violated rule. Checks cover app roots and nested
-web manifests, the storage-client allowlist, the pod-auth reverse-edge prohibition,
-and npm aliases that could otherwise disguise forbidden targets.
+The original implementation remains in `9b2a5fb9` (`feat: enforce SDK dependency
+layers`), with its earlier completion report in `ff525448`.
 
-The earlier question is resolved by ADR-001's 2026-10-25 amendment, which explicitly
-excludes pod-auth and rdf-engine from storage-client's dependencies. The supplied
-macOS planning paths do not exist here; the specified ADRs and planning STATUS.md
-were read at `/home/runner/work/solid-suite-planning/specs/sdk-core/` instead.
-`QUESTIONS.md` records the resolution.
+This revision, `fix: resolve workspace aliases in the layer guard`, addresses
+the medium finding from review @ff525448:
 
-## Commits
+- Resolve npm aliases, ranged workspace aliases, and bare workspace aliases before
+  applying rules. Only the target determines whether an edge is allowed.
+- Plain `workspace:*`, `workspace:^`, and `workspace:~` specs retain the dependency
+  key as their target, as do ordinary versions, ranges, and tags.
+- Fail closed with `unresolvable dependency alias` for other protocols, paths,
+  repository shorthands, and malformed specs; dependency specs are never printed.
+- Check `dependencies`, `peerDependencies`, and `optionalDependencies`; development
+  dependencies remain outside scope. Update the AGENTS.md guard documentation.
+- Expand fixtures from 11 to 41 layer-guard tests, covering allowed aliases,
+  disguised forbidden targets, every checked field, and unresolved aliases.
+  The real-tree test checks working-directory independence for both passing and
+  failing scans; the root lint command enforces the real-tree policy verdict.
 
-- `b0f5ac89` — `docs: record layer policy clarification` (inherited from the earlier run).
-- `6f64ad51` — `docs: record blocked layer lint lane` (inherited; this report supersedes it).
-- `9b2a5fb9` — `feat: enforce SDK dependency layers`: checker, fixture tests,
-  root lint wiring, AGENTS.md paragraph, and resolved question.
-- `docs: record completed layer lint lane` — this final report commit.
+## Validation
 
-New commits use the requested author identity, signing disabled, and the
-GPT-6.1-Sol co-author trailer.
+- `pnpm run test:root` — **PASS**, 3 files and 67 tests, including all 41
+  layer-guard tests. The test configuration does not measure script coverage.
+- `pnpm run lint:root` — **FAIL**, exit 1 at `check:sdk-layers`. Biome, lockfile
+  transport, and app-workspace checks pass. The stricter guard rejects five
+  existing declarations listed below.
+- `pnpm run check:fetch` — **PASS**, run separately because lint stops before it.
+- `git diff --check` — **PASS**.
+- The gate scope is `lint:root` plus root script tests, as requested by the fix
+  brief. No package sources changed; broader workspace gates were not run.
 
-## Gate results
+## Existing declarations blocking lint
 
-- `pnpm run lint:root` — **PASS** (exit 0). Biome checked 13 files;
-  lockfile transport, app workspace, and SDK layer guards passed. The SDK guard
-  scanned 76 manifests. `check:fetch` scanned 11 source files and passed.
-  Repeated successfully after writing this report and before the last commit.
-- `pnpm run test:root` — **PASS** (exit 0): 3 files, 37 tests, including all
-  11 new layer guard tests. Fixtures exercise allowed dependencies, both app
-  manifest locations, every forbidden edge, npm aliases, and the explicit
-  dependency-field scope. The real-tree test invokes the guard from outside
-  the checkout to verify its default root is independent of the working directory.
-- `git diff --check` — **PASS**, including before the last commit.
-- Package lint/build/typecheck/test and dependent-package checks — not applicable:
-  no `packages/*`, `apps/*`, or `tools/*` projects changed. Root validation is
-  `lint:root` plus `test:root`.
-- Whole-workspace gates (`gate` and `gate:full`) — not run, as required by the lane brief.
+The fail-closed rule applies conservatively to every manifest the guard scans,
+including tools and packages without additional layer-specific restrictions.
+It exposes these existing declarations:
 
-## Dependency checks
+| Manifest | Dependency | Protocol |
+| --- | --- | --- |
+| `apps/pod-manager/package.json` | `@solid/reactive-authentication` | `file:` |
+| `packages/agent-authz-verifier/package.json` | `@jeswr/solid-odrl` | `github:` |
+| `packages/agent-authz-verifier/package.json` | `@jeswr/solid-vc` | `github:` |
+| `packages/federation-trust/package.json` | `@jeswr/federation-registry` | `github:` |
+| `packages/federation-trust/package.json` | `@jeswr/solid-vc` | `github:` |
 
-- `pnpm install --offline --frozen-lockfile --ignore-scripts` — **PASS** (exit 0),
-  already up to date; no lockfile change or dependency lifecycle scripts.
-- `pnpm run check:packages <name>` — not applicable; no dependencies were added or changed.
+These manifests are unchanged: dependency migration is outside this fix brief.
+They need dispatcher follow-up before the stricter real-tree gate can pass.
 
-## Review and limitations
+## Review, unfinished work, and open questions
 
-`roborev status` — unavailable (exit 127, command not found). No automated
-review verdict could be obtained in this environment; the dispatcher must run
-the charter's per-commit review.
+`roborev status` is unavailable (exit 127, command not found). The dispatcher
+must obtain the charter's per-commit automated review.
 
-Conservative scope: the script reads only manifest `dependencies`, as specified
-by T-003. Development, peer, and optional dependency fields are not constrained.
-Backend names refer to ADR-003's `@jeswr/storage-client/solid` and `/lws` subpaths.
-Source import lint is outside this task; a manifest-only check cannot distinguish
-root-package imports from backend subpath imports in application source files.
-
-## Unfinished and open questions
-
-No implementation work or open design questions remain for T-003. Automated
-roborev review remains unavailable locally; the wider gate belongs to the dispatcher.
-No pushes, fetches, PRs, branch switches, deployments, new dependencies, or edits
-to other checkouts were performed. The bead is left for dispatcher integration
-and closure.
+The requested guard fix and regression fixtures are complete. Remaining blockers
+are the five existing declarations and unavailable automated review. There are
+no open design questions. STATUS.md was updated after implementation and tests.
+No dependencies were added, and no pushes, PRs, fetches, branch switches, or
+changes to other checkouts were performed. Bead integration and closure remain
+with the dispatcher.

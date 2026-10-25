@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 
 import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -26,10 +27,16 @@ function scan(manifests) {
 }
 
 describe("SDK layer guard", () => {
-  it("passes on the current tree even when invoked outside the checkout", () => {
+  it("scans the same current tree when invoked outside the checkout", () => {
+    const baseline = spawnSync(process.execPath, [guard], {
+      cwd: dirname(dirname(guard)),
+      encoding: "utf8",
+    });
     const result = spawnSync(process.execPath, [guard], { cwd: tmpdir(), encoding: "utf8" });
-    expect(result.status).toBe(0);
-    expect(result.stdout).toMatch(/SDK layer guard passed \([1-9]\d* manifests scanned\)/);
+    expect(result.status).toBe(baseline.status);
+    expect(result.stdout).toBe(baseline.stdout);
+    expect(result.stderr).toBe(baseline.stderr);
+    expect(result.stdout + result.stderr).toMatch(/SDK layer guard (passed|failed)/);
   });
 
   it("allows the seven storage-client dependencies, public app surfaces and plumbing", () => {
@@ -149,12 +156,130 @@ describe("SDK layer guard", () => {
     expect(result.stderr).not.toContain("npm:");
   });
 
-  it("checks only dependencies, leaving development, peer and optional fields outside T-003", () => {
+  it.each([
+    "dependencies",
+    "peerDependencies",
+    "optionalDependencies",
+  ])("rejects workspace aliases in %s using the resolved target", (field) => {
+    const result = scan({
+      "packages/pod-auth/package.json": {
+        name: "@jeswr/pod-auth",
+        [field]: { storage: "workspace:@jeswr/storage-client@*" },
+      },
+      "packages/storage-client/package.json": {
+        name: "@jeswr/storage-client",
+        [field]: { n3: "workspace:@jeswr/pod-auth" },
+      },
+      "apps/example/web/package.json": {
+        [field]: { engine: "workspace:@sparq-org/sparq" },
+      },
+    });
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(`${field}.storage (alias of @jeswr/storage-client)`);
+    expect(result.stderr).toContain("pod-auth must not depend on storage-client");
+    expect(result.stderr).toContain(`${field}.n3 (alias of @jeswr/pod-auth)`);
+    expect(result.stderr).toContain("storage-client may depend only on");
+    expect(result.stderr).toContain(`${field}.engine (alias of @sparq-org/sparq)`);
+    expect(result.stderr).toContain("apps must use the protocol-neutral SDK surface");
+  });
+
+  it.each([
+    "npm:n3@^1.0.0",
+    "workspace:n3@*",
+    "workspace:n3",
+    "npm:@jeswr/fetch-rdf@^1.0.0",
+    "workspace:@jeswr/fetch-rdf@^1.0.0",
+    "workspace:@jeswr/fetch-rdf",
+  ])("allows %s even under a forbidden dependency key", (spec) => {
+    const result = scan({
+      "packages/storage-client/package.json": {
+        name: "@jeswr/storage-client",
+        dependencies: { "@jeswr/pod-auth": spec },
+      },
+      "packages/pod-auth/package.json": {
+        name: "@jeswr/pod-auth",
+        peerDependencies: { "@jeswr/storage-client": spec },
+      },
+      "apps/example/package.json": {
+        optionalDependencies: { "@sparq-org/sparq": spec },
+      },
+    });
+    expect(result.status).toBe(0);
+  });
+
+  it.each([
+    "workspace:*",
+    "workspace:^",
+    "workspace:~",
+    "^1.0.0",
+    ">=1.0.0 <2.0.0",
+    "1.0.0 - 2.0.0",
+    "latest",
+    "next_build",
+  ])("uses the dependency key for %s", (spec) => {
+    const result = scan({
+      "packages/storage-client/package.json": {
+        name: "@jeswr/storage-client",
+        dependencies: { n3: spec },
+      },
+      "packages/pod-auth/package.json": {
+        name: "@jeswr/pod-auth",
+        dependencies: { "@jeswr/storage-client": spec },
+      },
+    });
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("pod-auth must not depend on storage-client");
+    expect(result.stderr).not.toContain("storage-client may depend only on");
+    expect(result.stderr).not.toContain("unresolvable dependency alias");
+  });
+
+  it.each([
+    "link:../storage-client",
+    "file:../storage-client",
+    "github:jeswr/storage-client#private-ref",
+    "git+https://example.invalid/storage-client.git#private-ref",
+    "https://example.invalid/storage-client.tgz?private-token",
+    "git@github.com:jeswr/storage-client.git",
+    "jeswr/storage-client",
+    "../storage-client",
+    "workspace:../storage-client",
+    "npm:",
+    "workspace:",
+    "",
+    null,
+  ])("fails closed on unresolvable spec %s without printing it", (spec) => {
+    const result = scan({
+      "packages/storage-client/package.json": {
+        name: "@jeswr/storage-client",
+        dependencies: { n3: spec },
+      },
+      "packages/pod-auth/package.json": {
+        name: "@jeswr/pod-auth",
+        peerDependencies: { storage: spec },
+      },
+      "apps/example/package.json": {
+        optionalDependencies: { storage: spec },
+      },
+      "tools/example/package.json": {
+        dependencies: { storage: spec },
+      },
+    });
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      "packages/storage-client/package.json dependencies.n3: unresolvable dependency alias",
+    );
+    expect(result.stderr).toContain("peerDependencies.storage: unresolvable dependency alias");
+    expect(result.stderr).toContain("optionalDependencies.storage: unresolvable dependency alias");
+    expect(result.stderr).toContain(
+      "tools/example/package.json dependencies.storage: unresolvable dependency alias",
+    );
+    if (spec) expect(result.stderr).not.toContain(spec);
+  });
+
+  it("leaves development dependencies outside the guard", () => {
     const result = scan({
       "apps/example/package.json": {
         devDependencies: { "@sparq-org/sparq": "0.1.5" },
-        peerDependencies: { "@jeswr/storage-client/solid": "*" },
-        optionalDependencies: { "@jeswr/storage-client/lws": "*" },
       },
       "packages/pod-auth/package.json": { name: "@jeswr/pod-auth" },
     });
