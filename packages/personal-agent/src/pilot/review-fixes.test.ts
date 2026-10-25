@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 /**
  * Regression tests for the Phase 1 supervisor review findings 2–6 and the retention policy.
  * Crashes are simulated the way a killed process looks from outside: a snapshot write that
@@ -33,6 +34,7 @@ import {
 } from "./scenarios/personal.js";
 import { FileLedger, verifyLedger } from "./store/ledger.js";
 import {
+  domainOwner,
   FileStateStore,
   MemoryStateStore,
   type RuntimeState,
@@ -495,10 +497,14 @@ describe("finding 6 — authority rule dates fail closed", () => {
 
 describe("retention — bounded history without forgetting unresolved work or live replay entries", () => {
   it("keeps conversations while replay entries are live, compacts afterwards, and refuses when protected state exceeds budget", async () => {
-    const t = await toProposal(fixedClock());
+    const store = new MemoryStateStore();
+    const t = await toProposal(fixedClock(), store);
     const r = await t.b.runtime.receive(t.proposeWire);
     await finish(t.a, t.b, r.outbound);
     expect(t.b.runtime.conversation(t.conversation)?.phase).toBe("completed");
+    const records = Object.values(store.load().domain);
+    expect(records.length).toBeGreaterThan(0);
+    expect(records.some((record) => domainOwner(record) === t.conversation)).toBe(true);
     const early = await t.b.runtime.compact();
     expect(early.removedConversations).toBe(0); // replay entries still live
     expect((await t.b.runtime.receive(t.proposeWire)).disposition).toBe("duplicate");
@@ -510,6 +516,9 @@ describe("retention — bounded history without forgetting unresolved work or li
     t.clock.advance(31 * 86_400_000);
     for (const rt of [t.b.runtime, t2.b.runtime]) await rt.compact();
     expect(t.b.runtime.conversation(t.conversation)).toBeUndefined();
+    expect(
+      Object.values(store.load().domain).some((record) => domainOwner(record) === t.conversation),
+    ).toBe(false);
     expect(t2.b.runtime.conversation(t2.conversation)?.phase).toBe("uncertain");
     expect(t2.b.runtime.effectStates().map((e) => e.status)).toEqual(["attempting"]);
     // The expired message is still not re-processed.

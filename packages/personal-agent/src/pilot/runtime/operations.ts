@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 /**
  * Domain adapters plug into the runtime as OPERATION HANDLERS.
  *
@@ -129,7 +130,8 @@ export interface HandlerContext {
   readonly trust: TrustStore;
   /** Handler-owned persistent state for this operation (JSON only). */
   getState<T extends Json>(key: string): T | undefined;
-  setState(key: string, value: Json): void;
+  /** Defaults to this conversation's ownership; null explicitly retains shared operation state. */
+  setState(key: string, value: Json, owner?: Iri | null): void;
   /** Append a handler-produced record (source authority, appraisal, access decision). */
   record<T extends { readonly type: string }>(record: T): void;
   /** Verify a protected statement against pinned keys of `role` (records the result). */

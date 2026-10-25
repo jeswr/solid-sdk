@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 /**
  * Persistent runtime state with crash-safe snapshots and a conservative process lock.
  *
@@ -146,13 +147,27 @@ export interface RuntimeState {
     { id: Iri; decision: "approve" | "deny"; validUntil: string; jws: string }
   >;
   agreements: Record<Iri, Agreement>;
-  /** Handler-owned state, namespaced by operation id. */
+  /** Operation-scoped state; owned entries wrap their JSON as { owner, value }. Legacy/shared entries stay unowned. */
   domain: Record<string, Json>;
   /** Owner revocations of mandates (by id + version, and digest). Never dropped. */
   revokedMandates: MandateRevocation[];
   tasks: Record<Iri, TaskState>;
   /** Provider transmissions of outbound messages, keyed by message id (see transmission.ts). */
   transmissions: Record<Iri, TransmissionRecord>;
+}
+
+/** Explicit conversation/task ownership. Legacy JSON without this envelope has no owner. */
+export function domainOwner(record: Json | undefined): Iri | undefined {
+  if (record === null || typeof record !== "object" || Array.isArray(record)) return undefined;
+  return typeof record.owner === "string" && Object.hasOwn(record, "value")
+    ? record.owner
+    : undefined;
+}
+
+/** Keep callers' JSON view compatible with snapshots written before ownership was recorded. */
+export function domainValue(record: Json | undefined): Json | undefined {
+  if (domainOwner(record) === undefined) return record;
+  return (record as { value: Json }).value;
 }
 
 export function emptyState(): RuntimeState {

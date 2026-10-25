@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 /**
  * Retention and capacity policy for retained runtime state.
  *
@@ -22,7 +23,7 @@
  */
 import { isTerminal } from "../core/conversation.js";
 import type { Iri } from "../core/types.js";
-import type { RuntimeState } from "../store/state.js";
+import { domainOwner, type RuntimeState } from "../store/state.js";
 
 export interface RetentionPolicy {
   readonly closedRetentionMs: number;
@@ -125,11 +126,8 @@ export function compactState(
   let removedEffects = 0;
   let removedAgreements = 0;
   let removedDomainKeys = 0;
-  const tokens = new Set<string>();
+  const removedOwners = new Set<Iri>(remove);
   for (const id of remove) {
-    const conv = state.conversations[id];
-    tokens.add(id);
-    for (const h of conv?.history ?? []) tokens.add(h.id);
     delete state.conversations[id];
   }
   for (const [id, o] of Object.entries(state.outbox)) {
@@ -143,14 +141,12 @@ export function compactState(
   }
   for (const [id, a] of Object.entries(state.agreements)) {
     if (remove.has(a.conversation)) {
-      tokens.add(id);
       delete state.agreements[id];
       removedAgreements++;
     }
   }
   for (const [key, e] of Object.entries(state.effects)) {
     if (remove.has(e.conversation) && settled(e)) {
-      tokens.add(key);
       delete state.effects[key];
       removedEffects++;
     }
@@ -174,21 +170,18 @@ export function compactState(
         delete state.effects[t.effectKey];
         removedEffects++;
       }
-      tokens.add(t.id);
-      tokens.add(t.effectKey);
+      removedOwners.add(t.id);
       removedTasks++;
       if (taskExcess > 0) taskExcess--;
     }
   }
 
-  if (tokens.size > 0) {
-    for (const key of Object.keys(state.domain)) {
-      for (const t of tokens) {
-        if (key.includes(t)) {
-          delete state.domain[key];
-          removedDomainKeys++;
-          break;
-        }
+  if (removedOwners.size > 0) {
+    for (const [key, record] of Object.entries(state.domain)) {
+      const owner = domainOwner(record);
+      if (owner !== undefined && removedOwners.has(owner)) {
+        delete state.domain[key];
+        removedDomainKeys++;
       }
     }
   }

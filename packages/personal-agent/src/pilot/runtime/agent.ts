@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 /**
  * The pilot agent runtime: one deterministic engine shared by every scenario.
  *
@@ -75,6 +76,7 @@ import type {
   TaskState,
   WireMessage,
 } from "../store/state.js";
+import { domainValue } from "../store/state.js";
 import {
   type AgreementPlan,
   type DisclosureCheck,
@@ -459,7 +461,7 @@ export class AgentRuntime {
   }
 
   domainState(key: string): Json | undefined {
-    return this.state.domain[key];
+    return this.getDomain(key);
   }
 
   /**
@@ -718,7 +720,7 @@ export class AgentRuntime {
       at,
     });
     this.state.conversations[id] = conv;
-    this.setDomain(`_start:${id}`, input.plan as unknown as Json);
+    this.setDomain(`_start:${id}`, input.plan as unknown as Json, id);
     if (input.discover !== false || !input.configuration) {
       const discoveryConfig = input.configuration ?? this.options.accepted[0];
       if (!discoveryConfig) throw new Error("no accepted configuration");
@@ -1290,7 +1292,7 @@ export class AgentRuntime {
       this.record({ type: "description-unusable", conversation: conv.id, at: this.now() });
       return { disposition: "accepted" as const, outbound: [] };
     }
-    this.setDomain(`_peerDescription:${conv.id}`, msg.body.description);
+    this.setDomain(`_peerDescription:${conv.id}`, msg.body.description, conv.id);
     const selection = selectConfiguration({
       localAccepted: this.options.accepted,
       peer,
@@ -1407,7 +1409,7 @@ export class AgentRuntime {
         "termsDigest does not match terms",
       );
     }
-    this.setDomain(`_offer:${msg.id}`, msg.body.terms as Json);
+    this.setDomain(`_offer:${msg.id}`, msg.body.terms as Json, conv.id);
     if (handler.termsSchema) {
       const parsed = handler.termsSchema.safeParse(msg.body.terms);
       if (!parsed.success) {
@@ -1878,7 +1880,7 @@ export class AgentRuntime {
       startedAt: this.now(),
     };
     this.state.effects[plan.key] = planned;
-    this.setDomain(`_effectIntent:${plan.key}`, plan.intent as unknown as Json);
+    this.setDomain(`_effectIntent:${plan.key}`, plan.intent as unknown as Json, ownerId);
     return planned;
   }
 
@@ -2674,7 +2676,7 @@ export class AgentRuntime {
       createdAt: this.now(),
     };
     if (continuation.type === "effect")
-      this.setDomain(`_effectIntent:${continuation.plan.key}`, intent as unknown as Json);
+      this.setDomain(`_effectIntent:${continuation.plan.key}`, intent as unknown as Json, ownerId);
     const conv = this.state.conversations[ownerId];
     if (changePhase && conv) this.apply(conv, { type: "approval-pending", at: this.now() });
     this.record({
@@ -3024,7 +3026,7 @@ export class AgentRuntime {
       wire = { format: "awp-jws-compact/0.1", jws: await signCompact(key, TYP.message, message) };
     }
     if (kind === "propose")
-      this.setDomain(`_offer:${message.id}`, (body as JsonObject).terms as Json);
+      this.setDomain(`_offer:${message.id}`, (body as JsonObject).terms as Json, conversationId);
     const entry: OutboxEntry = {
       id: message.id,
       conversation: conversationId,
@@ -3146,7 +3148,8 @@ export class AgentRuntime {
       trust: this.trust,
       assessRepresentation: (jws, expect) => this.assessRepresentationJws(jws, expect),
       getState: <T extends Json>(key: string) => this.getDomain(`${opKey}:${key}`) as T | undefined,
-      setState: (key: string, value: Json) => this.setDomain(`${opKey}:${key}`, value),
+      setState: (key: string, value: Json, owner?: Iri | null) =>
+        this.setDomain(`${opKey}:${key}`, value, owner === null ? undefined : (owner ?? conv.id)),
       record: (r) => this.record(r),
       verify: async (jws, o) => {
         const check = await verifyStatement(jws, {
@@ -3237,11 +3240,11 @@ export class AgentRuntime {
   }
 
   private getDomain(key: string): Json | undefined {
-    return this.state.domain[key];
+    return domainValue(this.state.domain[key]);
   }
 
-  private setDomain(key: string, value: Json): void {
-    this.state.domain[key] = value;
+  private setDomain(key: string, value: Json, owner?: Iri): void {
+    this.state.domain[key] = owner === undefined ? value : { owner, value };
   }
 
   private record<T extends LedgerRecord>(record: T): void {

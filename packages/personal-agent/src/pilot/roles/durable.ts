@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 /**
  * Durable handler state for roles. Several existing domain handlers keep working state in
  * memory (the comparator's collected plans, the patient agent's grant and validated resources,
@@ -62,7 +63,8 @@ export function durableHandler<H extends OperationHandler, S extends Json>(
       return async (ctx: HandlerContext, ...rest: unknown[]) => {
         hydrate(ctx);
         const reply = await (value as (...a: unknown[]) => unknown).call(target, ctx, ...rest);
-        ctx.setState(state.key, state.snapshot(target));
+        // This snapshot combines state across conversations, so no single conversation owns it.
+        ctx.setState(state.key, state.snapshot(target), null);
         return reply;
       };
     },
