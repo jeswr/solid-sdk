@@ -125,7 +125,7 @@ class Cursor {
   }
 
   get done() {
-    return this.position >= this.text.length;
+    return this.position >= this.length;
   }
 
   peek(char: string) {
