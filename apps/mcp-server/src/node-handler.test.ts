@@ -129,4 +129,54 @@ describe("Node/Web scaffold adapter", () => {
     expect(response.status).toBe(500);
     expect(Buffer.concat(response.chunks).toString()).toBe("Internal server error\n");
   });
+  it.each(["request", "response"])("aborts the handler when the %s disconnects", async (source) => {
+    const started = Promise.withResolvers<void>();
+    let signal: AbortSignal | undefined;
+    vi.mocked(handler).mockImplementationOnce(async (request) => {
+      signal = request.signal;
+      started.resolve();
+      await new Promise<void>((resolve) =>
+        request.signal.addEventListener("abort", () => resolve(), { once: true }),
+      );
+      return new Response(null, { status: 204 });
+    });
+    const request = requestFixture();
+    const response = new ResponseFixture();
+    const pending = invoke(request, response);
+    await started.promise;
+    if (source === "request") request.emit("aborted");
+    else response.destroy();
+    await pending;
+    expect(signal?.aborted).toBe(true);
+    expect(request.listenerCount("aborted")).toBe(0);
+    expect(response.listenerCount("close")).toBe(0);
+    expect(response.status).toBe(source === "request" ? 204 : 0);
+  });
+
+  it("removes disconnect listeners after a successful response", async () => {
+    let signal: AbortSignal | undefined;
+    vi.mocked(handler).mockImplementationOnce(async (request) => {
+      signal = request.signal;
+      return new Response(null, { status: 204 });
+    });
+    const request = requestFixture();
+    const response = await invoke(request);
+    expect(request.listenerCount("aborted")).toBe(0);
+    expect(response.listenerCount("close")).toBe(0);
+    request.emit("aborted");
+    expect(signal?.aborted).toBe(false);
+  });
+
+  it("cancels the returned body if the response was already disconnected", async () => {
+    const cancel = vi.fn();
+    vi.mocked(handler).mockImplementationOnce(async (request) => {
+      expect(request.signal.aborted).toBe(true);
+      return new Response(new ReadableStream({ cancel }));
+    });
+    const response = new ResponseFixture();
+    response.destroy();
+    await invoke(requestFixture(), response);
+    expect(response.status).toBe(0);
+    expect(cancel).toHaveBeenCalledOnce();
+  });
 });

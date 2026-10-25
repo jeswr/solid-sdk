@@ -9,6 +9,14 @@ export async function nodeHandler(
   request: IncomingMessage,
   response: ServerResponse,
 ): Promise<void> {
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  const close = () => {
+    if (!response.writableFinished) abort();
+  };
+  request.once("aborted", abort);
+  response.once("close", close);
+  if (request.aborted || response.destroyed) abort();
   try {
     const headers = new Headers();
     for (let index = 0; index < request.rawHeaders.length; index += 2) {
@@ -17,13 +25,17 @@ export async function nodeHandler(
       if (name !== undefined && value !== undefined) headers.append(name, value);
     }
     const method = request.method ?? "GET";
-    const init: RequestInit & { duplex?: "half" } = { method, headers };
+    const init: RequestInit & { duplex?: "half" } = { method, headers, signal: controller.signal };
     if (method !== "GET" && method !== "HEAD") {
       init.body = Readable.toWeb(request) as ReadableStream<Uint8Array>;
       init.duplex = "half";
     }
     const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
     const result = await handler(new Request(url, init));
+    if (response.destroyed) {
+      await result.body?.cancel();
+      return;
+    }
     for (const [name, value] of result.headers) {
       if (name !== "set-cookie") response.setHeader(name, value);
     }
@@ -37,11 +49,15 @@ export async function nodeHandler(
       await pipeline(Readable.fromWeb(result.body), response);
     }
   } catch {
+    if (response.destroyed) return;
     if (response.headersSent) {
       response.destroy();
     } else {
       response.writeHead(500, { "content-type": "text/plain" });
       response.end("Internal server error\n");
     }
+  } finally {
+    request.off("aborted", abort);
+    response.off("close", close);
   }
 }
