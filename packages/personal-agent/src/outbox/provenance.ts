@@ -1,5 +1,5 @@
 // AUTHORED-BY Codex GPT-6
-import { isWithinBase, vocab } from "@jeswr/agentic-legacy-bridge";
+import { classifyReliability, isWithinBase, vocab } from "@jeswr/agentic-legacy-bridge";
 import { parseRdf } from "@jeswr/fetch-rdf";
 import type { DatasetCore } from "@rdfjs/types";
 import { DataFactory } from "n3";
@@ -32,6 +32,12 @@ function verifiableRecords(store: DatasetCore, anchor: string): boolean {
     ]) {
       if (objectsOf(store, node, predicate).length !== 1) return false;
     }
+    if (
+      objectsOf(store, node, vocab.AGENTIC_ASSERTS_OBJECT).length +
+        objectsOf(store, node, vocab.AGENTIC_ASSERTS_OBJECT_IRI).length !==
+      1
+    )
+      return false;
     return objectsOf(store, node, vocab.AGENTIC_SECURITY_BEARING).length <= 1;
   });
 }
@@ -100,6 +106,27 @@ export async function provenanceRequiresConfirmation(
       });
       const expected = derived[0];
       if (!expected || expected.confirmationRequired) continue;
+      // A second assessment of the same offered datum may impose a stricter gate.
+      // Never let first-record selection or deduplication hide that assessment.
+      const times = new Set(expected.offeredTimes?.map((time) => time.startTime));
+      if (
+        readInterpretations(store).some(
+          (record) =>
+            record.assertsPredicate === vocab.SCHEMA_START_TIME &&
+            times.has(record.assertsObjectLiteral ?? "") &&
+            classifyReliability({
+              confidence: record.confidence,
+              securityBearing: record.securityBearing,
+              calibration:
+                record.calibration === vocab.AGENTIC_CALIBRATED
+                  ? "Calibrated"
+                  : record.calibration === vocab.AGENTIC_VERIFIED
+                    ? "Verified"
+                    : "SelfReported",
+            }) !== "auto",
+        )
+      )
+        continue;
       // Normalize through the persistence format (notably UTC timestamps) before
       // comparing all send-affecting fields. An unrelated calibrated record cannot
       // bless Actor-invented content, purpose, spend, recipient, or reply linkage.

@@ -33,6 +33,9 @@ describe("proposalContentDigest", () => {
     expect(proposalContentDigest(proposal({ odrlAction: "read" }))).not.toBe(base);
     expect(proposalContentDigest(proposal({ confirmationRequired: true }))).not.toBe(base);
     expect(proposalContentDigest(proposal({ spend: 1 }))).not.toBe(base);
+    expect(proposalContentDigest(proposal({ derivedFrom: "urn:agentic:raw:other" }))).not.toBe(
+      base,
+    );
     expect(
       proposalContentDigest(proposal({ offeredTimes: [{ startTime: "2026-07-07T14:00:00Z" }] })),
     ).not.toBe(base);

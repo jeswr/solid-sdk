@@ -30,6 +30,7 @@ function canonicalContent(proposal: ActionProposal): string {
     spend: proposal.spend ?? 0,
     subject: proposal.subject ?? null,
     inReplyTo: proposal.inReplyTo ?? null,
+    derivedFrom: proposal.derivedFrom ?? null,
     body: proposal.bodyText,
     times,
   });

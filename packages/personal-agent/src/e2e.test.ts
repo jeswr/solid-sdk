@@ -262,6 +262,9 @@ describe("personal-agent end-to-end (Reader → Actor → ODRL-enforced outbox)"
     "missing-link",
     "ambiguous-calibration",
     "missing-records",
+    "duplicate-security-bearing",
+    "duplicate-low-confidence",
+    "ambiguous-object",
   ])("rechecks %s Reader provenance changed after Actor derivation", async (change) => {
     const { pod } = await seededPod();
     await rewriteReader(pod, (store) => {
@@ -270,6 +273,36 @@ describe("personal-agent end-to-end (Reader → Actor → ODRL-enforced outbox)"
       ].map((q) => q.subject);
       for (const subject of records) {
         const node = namedNode(subject.value);
+        if (change === "duplicate-security-bearing" || change === "duplicate-low-confidence") {
+          const duplicate = namedNode(`${node.value}-second-assessment`);
+          for (const q of store.match(node, null, null))
+            store.addQuad(duplicate, q.predicate, q.object);
+          if (change === "duplicate-security-bearing")
+            store.addQuad(
+              duplicate,
+              namedNode(vocab.AGENTIC_SECURITY_BEARING),
+              DataFactory.literal("true", namedNode(`${vocab.XSD}boolean`)),
+            );
+          else {
+            store.removeQuads([
+              ...store.match(duplicate, namedNode(vocab.AGENTIC_CONFIDENCE), null),
+            ]);
+            store.addQuad(
+              duplicate,
+              namedNode(vocab.AGENTIC_CONFIDENCE),
+              DataFactory.literal("0.1"),
+            );
+          }
+          continue;
+        }
+        if (change === "ambiguous-object") {
+          store.addQuad(
+            node,
+            namedNode(vocab.AGENTIC_ASSERTS_OBJECT_IRI),
+            namedNode("urn:ambiguous"),
+          );
+          continue;
+        }
         if (change === "security-bearing")
           store.addQuad(
             node,
@@ -601,6 +634,29 @@ describe("personal-agent end-to-end (Reader → Actor → ODRL-enforced outbox)"
     );
     expect(result.sent).toBe(0);
     expect(recorder.sent.every((m) => m.to !== "attacker@example.com")).toBe(true);
+  });
+
+  it("cannot reuse confirmation after the Actor swaps the provenance/mandate target", async () => {
+    const { pod } = await seededPod();
+    const loaded = (await listProposals(pod.fetch, PROPOSALS))[0];
+    if (!loaded) throw new Error("missing proposal");
+    const proposal = { ...loaded.proposal, inReplyTo: undefined };
+    await writeConfirmation(
+      pod.fetch,
+      CONFIRMATIONS,
+      OWNER,
+      confirmProposal(proposal, {
+        typedAcknowledgement: proposal.recipient,
+        confirmedAt: FIXED.toISOString(),
+      }),
+    );
+    await replaceProposal(pod, { ...proposal, derivedFrom: "urn:agentic:raw:substituted" });
+    const recorder = new RecordingSender(() => FIXED);
+    const result = await runOutboxOnce(
+      outboxConfig(pod, scriptedVerifier(defaultPolicy), recorder),
+    );
+    expect(result.queuedForConfirmation).toBe(1);
+    expect(recorder.sent).toHaveLength(0);
   });
 
   it("PROHIBITED: an explicit ODRL prohibition is never sent (marked rejected)", async () => {
