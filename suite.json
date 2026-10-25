@@ -69,7 +69,10 @@
     "@jeswr/pod-access",
     "@jeswr/rdf-engine",
     "@jeswr/storage-conformance",
-    "@jeswr/suite-ui"
+    "@jeswr/suite-ui",
+    "@jeswr/pkg-memory",
+    "@jeswr/mcp-oauth",
+    "@jeswr/agent-session-capture"
   ],
   "applications": [
     {
@@ -140,6 +143,11 @@
     {
       "slug": "suite",
       "name": "@jeswr/app-suite",
+      "kind": "application"
+    },
+    {
+      "slug": "mcp-server",
+      "name": "@jeswr/app-mcp-server",
       "kind": "application"
     }
   ],
