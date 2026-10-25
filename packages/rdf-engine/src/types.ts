@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import type { Dataset, DatasetCore, Quad } from "@rdfjs/types";
+// AUTHORED-BY Codex GPT-6
+import type { DatasetCore, Quad } from "@rdfjs/types";
 
 /** Supported single-document RDF syntaxes. Remote JSON-LD contexts are not supported. */
 export type RdfMediaType =
@@ -30,7 +31,12 @@ export interface RdfEngine {
   readonly loaded: boolean;
   /** Optional Sparq build features, detected at initialization; null before loading. */
   readonly features: { serialize: boolean; parseShaclCompact: boolean } | null;
-  parse(input: string | Uint8Array, mediaType: RdfMediaType, opts?: ParseOptions): Promise<Dataset>;
+  /** Materialize an RDF/JS DatasetCore with fresh, document-scoped blank-node identities. */
+  parse(
+    input: string | Uint8Array,
+    mediaType: RdfMediaType,
+    opts?: ParseOptions,
+  ): Promise<DatasetCore>;
   serialize(data: QuadSource, format: RdfMediaType, opts?: SerializeOptions): Promise<string>;
   validate(data: QuadSource, shapes: QuadSource | string): Promise<ValidationReport>;
   canonicalize(data: QuadSource): Promise<string>;

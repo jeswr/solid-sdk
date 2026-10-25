@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # @jeswr/rdf-engine
 
@@ -21,14 +22,18 @@ try {
 }
 ```
 
-`ready()` is idempotent and shares concurrent initialization. Every operation
-calls it automatically; a failed load can retry. `loaded` indicates successful
+`ready()` is idempotent and shares initialization across engine instances and the
+configured-URL and default initialization paths. The first initialization selects
+the loader and WASM URL; later engines reuse it. Every operation calls `ready()`
+automatically; a failed initialization can retry. `loaded` indicates successful
 initialization. Disposal is terminal and idempotent, including during loading.
 WASM modules remain cached by the JavaScript runtime; disposal does not unload
 the shared module.
 
-`parse` accepts strings or UTF-8 bytes and returns an ordinary RDF/JS `Dataset`
+`parse` accepts strings or UTF-8 bytes and returns an RDF/JS `DatasetCore`
 backed by n3. It retains no WASM store, and remains usable after engine disposal.
+Each call assigns fresh blank-node identities while preserving links within the
+document, so datasets from separate parses can be combined without label collisions.
 Every temporary store is freed in `finally`, including when an operation throws.
 Turtle, TriG, N-Triples, N-Quads and JSON-LD are supported. TriG, N-Quads and
 JSON-LD preserve named graphs. Turtle and N-Triples serialization export the
