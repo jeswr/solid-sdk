@@ -24,6 +24,7 @@
   "devDependencies": {
     "@rdfjs/wrapper": "^0.34.0",
     "jsonld": "^9.0.0",
-    "n3": "^1.17.4"
+    "n3": "^1.17.4",
+    "rdf-validate-shacl": "0.6.5"
   }
 }
