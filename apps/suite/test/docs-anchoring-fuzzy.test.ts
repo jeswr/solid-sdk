@@ -62,3 +62,44 @@ it("does not treat lone surrogates as exact matches inside an astral code point"
   expect(reanchor("x𐀀x𐀀", low)).toEqual({ status: "orphan", confidence: 0 });
   expect(reanchor("x𐀀", high)).toEqual({ status: "orphan", confidence: 0 });
 });
+
+it("agrees with the oracle for edits crossing 32-bit word boundaries", () => {
+  for (const length of [31, 32, 33, 64, 65]) {
+    const original = Array.from({ length }, (_, i) => String.fromCodePoint(0x400 + i));
+    for (const changed of [
+      original.filter((_, i) => i < 30 || i > 33),
+      [...original.slice(0, 31), "🌱", "🪴", ...original.slice(31)],
+      original.map((point, i) => (i >= 30 && i <= 33 ? "☀" : point)),
+    ]) {
+      const text = [...Array.from("xxx"), ...changed, ...Array.from("zzz")];
+      const oracle = [];
+      for (let start = 1; start <= 5; start++) {
+        for (let end = start + 1; end <= text.length; end++) {
+          const edits = distance(original, text.slice(start, end));
+          if (edits <= 4) oracle.push({ start, end, edits });
+        }
+      }
+      const best = Math.min(...oracle.map(({ edits }) => edits));
+      const sort = (a: { start: number; end: number }, b: { start: number; end: number }) =>
+        a.start - b.start || a.end - b.end;
+      expect(findFuzzyRanges(text, original, 3, 2, 4).sort(sort)).toEqual(
+        oracle.filter(({ edits }) => edits === best).sort(sort),
+      );
+    }
+  }
+});
+
+it("re-anchors a long, diverse quote without dropping its interior", () => {
+  const original = Array.from({ length: 1024 }, (_, i) => String.fromCodePoint(0x400 + i));
+  const changed = [...original];
+  changed.splice(511, 1, "🌱", "🪴");
+  const result = reanchor(
+    `Note: ${changed.join("")} done.`,
+    createSelectors(`Note: ${original.join("")} done.`, { start: 6, end: 1030 }),
+  );
+  expect(result.status).toBe("anchored");
+  if (result.status !== "anchored") throw new Error("Expected long quote to match");
+  expect(result.range).toEqual({ start: 6, end: 1031 });
+  expect(result.confidence).toBe(1 - 2 / 1024);
+  expect(result.selectors.quote.exact).toBe(changed.join(""));
+});

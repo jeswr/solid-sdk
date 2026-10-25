@@ -19,18 +19,23 @@ function recoverStarts(
 ): FuzzyRange[] {
   const width = Math.min(end - low, pattern.length + edits);
   let previous = new Float64Array(width + 1).fill(Infinity);
+  let current = new Float64Array(width + 1).fill(Infinity);
   for (let j = 0; j <= Math.min(width, edits); j++) previous[j] = j;
   for (let i = 1; i <= pattern.length; i++) {
-    const current = new Float64Array(width + 1).fill(Infinity);
-    if (i <= edits) current[0] = i;
-    for (let j = Math.max(1, i - edits); j <= Math.min(width, i + edits); j++) {
+    current[0] = i <= edits ? i : Infinity;
+    const first = Math.max(1, i - edits);
+    const last = Math.min(width, i + edits);
+    // Reset only the band edges, avoiding a full-width fill on every pattern row.
+    if (first > 1) current[first - 1] = Infinity;
+    if (last < width) current[last + 1] = Infinity;
+    for (let j = first; j <= last; j++) {
       current[j] = Math.min(
         at(previous, j) + 1,
         at(current, j - 1) + 1,
         at(previous, j - 1) + Number(pattern[pattern.length - i] !== text[end - j]),
       );
     }
-    previous = current;
+    [previous, current] = [current, previous];
   }
   const ranges: FuzzyRange[] = [];
   for (let length = Math.max(1, pattern.length - edits); length <= width; length++) {
@@ -59,17 +64,18 @@ export function findFuzzyRanges(
   const limit = Math.min(text.length, high + pattern.length + maxEdits);
   const errors = Math.min(maxEdits, pattern.length - 1);
   const words = Math.ceil(pattern.length / 32);
-  const masks = new Map<string, Uint32Array>();
+  // Sparse word masks use O(quote length) space even for many distinct code points.
+  const masks = new Map<string, Map<number, number>>();
   for (const [index, point] of pattern.entries()) {
     let mask = masks.get(point);
     if (!mask) {
-      mask = new Uint32Array(words);
+      mask = new Map<number, number>();
       masks.set(point, mask);
     }
     const word = Math.floor(index / 32);
-    mask[word] = at(mask, word) | (1 << (index % 32));
+    mask.set(word, (mask.get(word) ?? 0) | (1 << (index % 32)));
   }
-  const emptyMask = new Uint32Array(words);
+  const emptyMask = new Map<number, number>();
   let state: Uint32Array[] = Array.from({ length: errors + 1 }, (_, error) => {
     const row = new Uint32Array(words);
     // Empty text matches prefixes through deletions; 32 needs a full word,
@@ -91,7 +97,7 @@ export function findFuzzyRanges(
       let deletionCarry = 1;
       for (let word = 0; word < words; word++) {
         const oldWord = at(old, word);
-        let value = ((oldWord << 1) | matchCarry) & at(mask, word);
+        let value = ((oldWord << 1) | matchCarry) & (mask.get(word) ?? 0);
         matchCarry = oldWord >>> 31;
         if (error > 0) {
           const fewer = at(state[error - 1] as Uint32Array, word);
