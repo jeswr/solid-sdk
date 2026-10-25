@@ -63,7 +63,9 @@
     "@jeswr/unstorage-solid",
     "@jeswr/y-solid",
     "@jeswr/storage-capabilities",
-    "@jeswr/storage-client"
+    "@jeswr/storage-client",
+    "@jeswr/pod-auth",
+    "@jeswr/pod-notifications"
   ],
   "applications": [
     {
