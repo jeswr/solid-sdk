@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { IntegrationAuthError } from "./errors.js";
 import {
   buildAuthorizationUrl,
@@ -136,7 +136,7 @@ describe("exchangeCodeForToken", () => {
 
   it("throws not-configured without a proxy URL in proxy mode", async () => {
     await expect(
-      exchangeCodeForToken("github", { ...CFG, tokenExchange: "proxy" }, params),
+      exchangeCodeForToken("github", { ...CFG, tokenExchange: "proxy" }, params, vi.fn()),
     ).rejects.toSatisfy(
       (e: unknown) => e instanceof IntegrationAuthError && e.reason === "not-configured",
     );

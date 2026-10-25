@@ -35,7 +35,7 @@ export interface ConnectState {
 }
 
 export function useConnect(adapter: IntegrationAdapter | undefined) {
-  const { webId, profile, activeStorage } = useSession();
+  const { webId, profile, activeStorage, podFetch, sourceFetch } = useSession();
   const [state, setState] = useState<ConnectState>({ phase: "idle" });
   const cursorRef = useRef<string | undefined>(undefined);
   // Tier-B is approval-gated by contract (registry.statusOf never returns "live"
@@ -56,16 +56,16 @@ export function useConnect(adapter: IntegrationAdapter | undefined) {
       let token = getToken(adapter.metadata.id);
       if (live && !token && adapter.oauth) {
         setState({ phase: "authorizing" });
-        token = await authorize(adapter.metadata.id, adapter.oauth);
+        token = await authorize(adapter.metadata.id, adapter.oauth, sourceFetch);
         setToken(adapter.metadata.id, token);
       }
 
       setState({ phase: "importing" });
       const report = await runImport({
         adapter,
-        podWriter: createFetchPodWriter({ adapterId: adapter.metadata.id, webId, podRoot, fetch: (input, init) => globalThis.fetch(input, init) }),
+        podWriter: createFetchPodWriter({ adapterId: adapter.metadata.id, webId, podRoot, fetch: podFetch }),
         mode: live ? "live" : "demo",
-        sourceAuth: live ? createSourceAuth(adapter.metadata.id, adapter, token, (input, init) => globalThis.fetch(input, init)) : undefined,
+        sourceAuth: live ? createSourceAuth(adapter.metadata.id, adapter, token, sourceFetch) : undefined,
         cursor: cursorRef.current,
         onProgress: (progress) =>
           setState((s) => ({ ...s, phase: "importing", progress })),
@@ -78,7 +78,7 @@ export function useConnect(adapter: IntegrationAdapter | undefined) {
         error: e instanceof Error ? e : new Error(String(e)),
       });
     }
-  }, [adapter, webId, profile, activeStorage, live]);
+  }, [adapter, webId, profile, activeStorage, live, podFetch, sourceFetch]);
 
   const reset = useCallback(() => setState({ phase: "idle" }), []);
 

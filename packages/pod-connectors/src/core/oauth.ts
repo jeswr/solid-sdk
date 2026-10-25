@@ -114,13 +114,13 @@ interface TokenEndpointAnswer {
  * `tokenExchange: "proxy"` posts the same form to the maintainer's proxy
  * (which adds the client secret server-side and forwards the answer).
  *
- * @param fetchImpl - test-only override; **omit in production**.
+ * @param fetchImpl - pristine source transport, captured before Pod auth patching.
  */
 export async function exchangeCodeForToken(
   adapterId: string,
   cfg: OAuthAppConfig,
   params: { code: string; verifier: string; redirectUri: string },
-  fetchImpl?: typeof fetch,
+  fetchImpl: typeof fetch,
 ): Promise<TokenSet> {
   const endpoint = cfg.tokenExchange === "proxy" ? cfg.tokenProxyUrl : cfg.tokenEndpoint;
   if (!endpoint || !cfg.clientId) {
@@ -141,7 +141,7 @@ export async function exchangeCodeForToken(
     headers.authorization = `Basic ${btoa(`${cfg.clientId}:`)}`;
   }
   const init: RequestInit = { method: "POST", headers, body: body.toString() };
-  const res = fetchImpl ? await fetchImpl(endpoint, init) : await fetch(endpoint, init);
+  const res = await fetchImpl(endpoint, init);
   if (!res.ok) {
     throw new IntegrationAuthError(
       adapterId,
@@ -165,7 +165,11 @@ export async function exchangeCodeForToken(
  * Run the full popup flow in the browser and return the token set.
  * Browser-only (uses `window`); the UI calls this for live-mode connects.
  */
-export async function authorize(adapterId: string, cfg: OAuthAppConfig): Promise<TokenSet> {
+export async function authorize(
+  adapterId: string,
+  cfg: OAuthAppConfig,
+  sourceFetch: typeof fetch,
+): Promise<TokenSet> {
   if (!cfg.clientId) throw new IntegrationAuthError(adapterId, "not-configured");
   const redirectUri = new URL(OAUTH_CALLBACK_PATH, window.location.href).toString();
   const { verifier, challenge } = await generatePkcePair();
@@ -177,7 +181,7 @@ export async function authorize(adapterId: string, cfg: OAuthAppConfig): Promise
 
   const callbackUrl = await waitForCallback(adapterId, popup);
   const { code } = parseCallbackUrl(adapterId, callbackUrl, state);
-  return exchangeCodeForToken(adapterId, cfg, { code, verifier, redirectUri });
+  return exchangeCodeForToken(adapterId, cfg, { code, verifier, redirectUri }, sourceFetch);
 }
 
 /** Resolve with the callback URL posted by the popup; reject if it closes first. */

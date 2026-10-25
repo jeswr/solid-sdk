@@ -33,7 +33,7 @@ export interface FileImportState {
 }
 
 export function useFileImport(adapter: FileImportAdapter | undefined) {
-  const { webId, profile, activeStorage } = useSession();
+  const { webId, profile, activeStorage, podFetch } = useSession();
   const [state, setState] = useState<FileImportState>({ phase: "idle" });
 
   const importFile = useCallback(
@@ -49,7 +49,7 @@ export function useFileImport(adapter: FileImportAdapter | undefined) {
         const report = await runFileImport({
           adapter,
           file,
-          podWriter: createFetchPodWriter({ adapterId: adapter.metadata.id, webId, podRoot, fetch: (input, init) => globalThis.fetch(input, init) }),
+          podWriter: createFetchPodWriter({ adapterId: adapter.metadata.id, webId, podRoot, fetch: podFetch }),
           onProgress: (progress) =>
             setState((s) => ({ ...s, phase: "importing", progress })),
         });
@@ -62,7 +62,7 @@ export function useFileImport(adapter: FileImportAdapter | undefined) {
         });
       }
     },
-    [adapter, webId, profile, activeStorage],
+    [adapter, webId, profile, activeStorage, podFetch],
   );
 
   const reset = useCallback(() => setState({ phase: "idle" }), []);

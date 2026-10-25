@@ -28,10 +28,17 @@ Live imports take `sourceAuth: { fetch: authenticatedSourceFetch }`. The optiona
 `createSourceAuth(id, adapter, token, sourceFetch)` helper adds bearer and adapter headers.
 The helper binds credentials to an HTTPS-only origin allowlist (default: static fixture route origins)
 and refuses redirects; pass a fifth argument to supply additional API origins explicitly.
-Keep Pod and source transports separate. Tokens stay in memory. A `PodWriter` binds a
+Hosts must capture a pristine `sourceFetch` before initializing Solid authentication and
+pass it to `authorize(id, config, sourceFetch)` as well as `createSourceAuth`. Pass the
+auth manager's separate `podFetch` to `createFetchPodWriter`; never use the patched global
+fetch for source API requests or token exchange. Tokens stay in memory. A `PodWriter` binds a
 connector container, resolves and reads slugs, writes RDF with `{ ifMatch }` or
 `{ ifNoneMatch: '*' }`, and registers Type Index entries. The fetch-backed implementation
-keeps the existing deterministic document paths and Type Index bootstrap behavior. The runner
+confines document reads, writes and every redirect hop to the connector container. Type
+Index operations separately validate the profile-selected index against the active Pod,
+allow only that document (or the bootstrap target), and refuse redirects. The profile
+read/update also refuses redirects. Deterministic document paths and Type Index bootstrap
+behavior are preserved. The runner
 retains read preconditions for subsequent writes; explicit write conditions override them.
 
 Entry points:
