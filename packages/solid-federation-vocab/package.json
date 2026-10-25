@@ -3,7 +3,7 @@
   "version": "0.0.1",
   "private": true,
   "type": "module",
-  "description": "Federation app-registration (fedapp:) + shared task/issue vocabulary under https://w3id.org/jeswr — experimental, AI-agent-generated.",
+  "description": "Federation app-registration (fedapp:) + shared task/issue vocabulary under https://jeswr.org/ns — experimental, AI-agent-generated.",
   "license": "MIT",
   "author": "Claude Opus 4.8 (@jeswr PSS agent)",
   "repository": {
@@ -15,11 +15,11 @@
   },
   "scripts": {
     "lint": "node scripts/lint.mjs",
-    "typecheck": "node --check scripts/validate.mjs && node --check scripts/lint.mjs && node --check scripts/build.mjs && node --check scripts/example.mjs && node --check scripts/ontology-gate.mjs && node --check scripts/import-sectors.mjs",
-    "test": "node scripts/validate.mjs",
+    "typecheck": "node --check scripts/validate.mjs && node --check scripts/lint.mjs && node --check scripts/build.mjs && node --check scripts/example.mjs && node --check scripts/ontology-gate.mjs && node --check scripts/import-sectors.mjs && node --check scripts/legacy-w3id-alignments.mjs && node --check scripts/test-rebase.mjs && node --check scripts/verify-persistent-ids.mjs",
+    "test": "node scripts/validate.mjs && node scripts/test-rebase.mjs",
     "ontology": "node scripts/ontology-gate.mjs",
     "build": "node scripts/build.mjs && node scripts/example.mjs",
-    "gate": "npm run lint && npm run typecheck && npm test && npm run ontology && npm run build"
+    "gate": "npm run lint && npm run build && npm run typecheck && npm test && npm run ontology"
   },
   "devDependencies": {
     "@rdfjs/wrapper": "^0.34.0",

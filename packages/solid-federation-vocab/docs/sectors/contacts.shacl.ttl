@@ -1,8 +1,8 @@
 # AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 #
-@prefix ctsh:    <https://w3id.org/jeswr/sectors/contacts/shapes#> .
-@prefix contact: <https://w3id.org/jeswr/sectors/contacts#> .
-@prefix core:    <https://w3id.org/jeswr/core#> .
+@prefix ctsh:    <https://jeswr.org/ns/sectors/contacts/shapes#> .
+@prefix contact: <https://jeswr.org/ns/sectors/contacts#> .
+@prefix core:    <https://jeswr.org/ns/core#> .
 @prefix sh:      <http://www.w3.org/ns/shacl#> .
 @prefix owl:     <http://www.w3.org/2002/07/owl#> .
 @prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
@@ -24,18 +24,18 @@
 # v1.0.0 tracks the gUFO re-base of contacts.ttl.
 # =============================================================================
 
-<https://w3id.org/jeswr/sectors/contacts/profile/1.0.0>
+<https://jeswr.org/ns/sectors/contacts/profile/1.0.0>
     a prof:Profile ;
     dcterms:title "Solid Contacts data-model profile (gUFO re-base)"@en ;
-    dcterms:isVersionOf <https://w3id.org/jeswr/sectors/contacts/profile> ;
+    dcterms:isVersionOf <https://jeswr.org/ns/sectors/contacts/profile> ;
     owl:versionInfo "1.0.0" ;
-    owl:versionIRI <https://w3id.org/jeswr/sectors/contacts/profile/1.0.0> ;
-    prof:isProfileOf <https://w3id.org/jeswr/sectors/contacts> ,
+    owl:versionIRI <https://jeswr.org/ns/sectors/contacts/profile/1.0.0> ;
+    prof:isProfileOf <https://jeswr.org/ns/sectors/contacts> ,
                      <http://www.w3.org/2006/vcard/ns> ;
     prof:hasToken "contacts-1.0.0" ;
     prof:hasResource [
         prof:hasRole <http://www.w3.org/ns/dx/prof/role/constraints> ;
-        prof:hasArtifact <https://w3id.org/jeswr/sectors/contacts/profile/1.0.0/shapes>
+        prof:hasArtifact <https://jeswr.org/ns/sectors/contacts/profile/1.0.0/shapes>
     ] ;
     rdfs:comment "Open-by-default SHACL profile for address-book data, re-based onto the gUFO Core. "@en .
 

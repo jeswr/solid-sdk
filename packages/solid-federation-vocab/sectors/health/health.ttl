@@ -1,7 +1,7 @@
 # AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 #
-@prefix health:  <https://w3id.org/jeswr/sectors/health#> .
-@prefix core:    <https://w3id.org/jeswr/core#> .
+@prefix health:  <https://jeswr.org/ns/sectors/health#> .
+@prefix core:    <https://jeswr.org/ns/core#> .
 @prefix owl:     <http://www.w3.org/2002/07/owl#> .
 @prefix rdf:     <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
 @prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
@@ -59,15 +59,15 @@
 #
 # =============================================================================
 
-<https://w3id.org/jeswr/sectors/health> a owl:Ontology ;
+<https://jeswr.org/ns/sectors/health> a owl:Ontology ;
     dcterms:title "Solid Health Sector Ontology (gUFO re-base)"@en ;
     rdfs:label "Solid Health Sector Ontology"@en ;
     vann:preferredNamespacePrefix "health" ;
-    vann:preferredNamespaceUri "https://w3id.org/jeswr/sectors/health#" ;
-    owl:imports <https://w3id.org/jeswr/core> ,
-                <https://w3id.org/jeswr/sectors/health/imports/qudt-health-slim> ;
-    owl:versionInfo "1.0.0" ;
-    owl:versionIRI <https://w3id.org/jeswr/sectors/health/1.0.0> ;
+    vann:preferredNamespaceUri "https://jeswr.org/ns/sectors/health#" ;
+    owl:imports <https://jeswr.org/ns/core> ,
+                <https://jeswr.org/ns/sectors/health/imports/qudt-health-slim> ;
+    owl:versionInfo "2.0.0" ;
+    owl:versionIRI <https://jeswr.org/ns/sectors/health/2.0.0> ;
     dcterms:description """Personal health records for the apple-health-import app
         and the EDMA patient-records use case, re-based onto the gUFO Solid Core.
         Patient=RoleMixin of core:Person; observations/conditions/medication-
@@ -76,8 +76,8 @@
         the Apple Health types) carry a value + a QUDT/UCUM unit. Aligns to FHIR
         R4/R5 (Mode A, no fhir.ttl import) and SNOMED CT / LOINC concept IRIs in
         the companion health-alignments.ttl; reuses QUDT for units via a slim
-        Mode-B module. v1.0.0 is a BREAKING re-base of v0."""@en ;
-    dcterms:modified "2026-06-13"^^xsd:date ;
+        Mode-B module. v1.0.0 is a BREAKING re-base of v0. Version 2.0.0 rebases this ontology from its legacy w3id namespace to https://jeswr.org/ns/ (DECISIONS V1)."""@en ;
+    dcterms:modified "2026-10-25"^^xsd:date ;
     rdfs:comment "Re-based per R11 §4.2 (HEALTH row)."@en .
 
 # -----------------------------------------------------------------------------
@@ -326,13 +326,13 @@ health:resultsIn a owl:ObjectProperty ;
 
 # =============================================================================
 # SECTOR MARKER — the IRI an app's fedapp:sector points at to declare it operates
-# in this sector (https://w3id.org/jeswr/fed#sector). A skos:Concept in the
+# in this sector (https://jeswr.org/ns/fed#sector). A skos:Concept in the
 # federation sector register; dereferences to this ontology.
 # =============================================================================
 
-<https://w3id.org/jeswr/sectors/health#sector>
+<https://jeswr.org/ns/sectors/health#sector>
     a <http://www.w3.org/2004/02/skos/core#Concept> ;
     rdfs:label "Health sector"@en ;
     rdfs:comment "The Health data sector. The value an app's fedapp:sector names in its Client Identifier Document to declare it operates over health data. Backed by this sector ontology."@en ;
-    rdfs:isDefinedBy <https://w3id.org/jeswr/sectors/health> ;
+    rdfs:isDefinedBy <https://jeswr.org/ns/sectors/health> ;
     skos:prefLabel "Health"@en .
