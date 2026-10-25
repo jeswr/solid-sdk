@@ -1,0 +1,21 @@
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+
+# Calendar model (CAL-00)
+
+Import from `./index`. This layer has no React, shell or SDK façade dependency.
+
+`CalendarDate` is either a valid `YYYY-MM-DD` civil date (all-day, RDF `xsd:date`) or a `Date` instant (`xsd:dateTime`). Event ends are exclusive. Writers dual-type events as `schema:Event` and `sched:CalendarEvent`, use canonical `@jeswr/suite-vocab` namespaces, and write both schema and scheduling start/end predicates. Readers accept the Pod Manager schema-only form, HTTP schema.org, and legacy scheduling namespaces. Calendar documents use `#it`, `dct:title`, and optional `schema:color`.
+
+`buildEvent` / `parseEvent` and `buildCalendar` / `parseCalendar` operate on RDF/JS datasets. `serializeDataset` / `deserializeDataset` round-trip Turtle through the suite's sanctioned serializer/parser. `EventDoc`, `CalendarDoc`, `ModelNode`, and the recurrence/reminder read/write functions expose typed accessors. Foreign types or absent event starts return `undefined`; malformed supported records throw validation errors.
+
+Rules use the shared frequency/interval/count/until/byDay/byMonthDay/byMonth/exceptDate object. Weekday keys are `MO`…`SU`; RDF uses `schema:Monday`…`Sunday` IRIs. `count` and `until` are mutually exclusive. Negative month day `-1` means the month's last day. Reminders have exactly one trigger: an absolute instant or a fixed-length ISO duration offset from the event start. `computeFireTimes` is pure and does not schedule notifications.
+
+`expandEvent(event, from, to, timeZone = "UTC")` uses rrule in wall-clock space, returns occurrences overlapping the half-open range, preserves durations, and applies inclusive until and exception dates. Supply the account/calendar timezone explicitly for timed series; all-day series use civil dates. Nonexistent local times during a DST gap are skipped. Events are never mutated. No per-event timezone RDF convention is introduced in this lane.
+
+`importICal` / `exportICal` cover the modeled VEVENT and DISPLAY VALARM fields, date-only values, named IANA TZIDs via Intl, recurrence, exceptions, UTF-8 folding, TEXT escaping, and stable UIDs. Imports return timezone contexts aligned with their events, warnings, and a skipped-component count. Preserve that context and pass it when exporting/expanding a named-zone series. Export separately per timezone. Custom VTIMEZONE definitions warn; unsupported recurrence/override/alarm features skip the affected event rather than silently altering its meaning. Tasks/VTODO are outside this calendar model.
+
+`calendarIO(fetch, podRoot)` injects fetch and applies the shared pod-scope guard to every request/redirect. Loads retain ETags. Saves require `{ create: true }` (If-None-Match) or `{ etag }` (If-Match); deletion requires a strong ETag. HTTP errors expose status and returned ETag. `eventsInRange` lists all resources so old recurring series and overlapping events remain discoverable. Errors propagate to the caller rather than masquerading as empty lists.
+
+`registerCalendar(indexUrl, calendarDocumentUrl, eventContainerUrl)` conditionally updates an existing caller-selected Type Index, preserving unrelated data and recognizing legacy class aliases. It registers `sched:Calendar` as an instance and `sched:CalendarEvent` as an instance container. Profile discovery and missing-index bootstrap belong to CAL-01's SDK wiring.
+
+The Pod Manager agenda/grid helpers retain local-time display keys. `monthsInRange` supplies UTC month keys; `selectMonthListings` selects caller-supplied listing URLs without inventing a new storage layout. See root `QUESTIONS.md` for the spec ambiguities resolved conservatively here.
