@@ -379,3 +379,74 @@ profile/index document; advertised-storage validation remains unchanged.
 No open implementation questions. Full-workspace green verification remains
 blocked by the unrelated remote-cloning helper. All commits remain on
 `lane/sst-k9mk` in this checkout; nothing was pushed, published, or merged.
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+## Fix round 5 — 2026-10-25
+
+Resumed at `4e9143cc` and read the supplied review in full. Addressed its one
+medium finding: productivity stores omitted the resolved profile document URL
+when registering their containers, so redirected WebIDs could not create items.
+
+### Commits
+
+- `437d81d7` — `fix: pass resolved profiles to productivity stores`: pass the
+  session's resolved `profileDocumentUrl` through `useStore`, all eight store
+  factories, `createStore`, and `ProductivityStore.ensureRegistered`. Wait for
+  the session profile before constructing a store and include the resolved URL
+  in memoization dependencies. Preserve authenticated redirect refusal and the
+  existing WebID RDF subject. Add 14 regression cases covering creation and
+  index reuse for every factory, profile/index read and write redirects, and
+  waiting for the session profile.
+- The final `docs: record productivity store fix validation` commit updates
+  only this report, last.
+
+### Validation
+
+Runtime: Node `24.22.1`, pnpm `10.4.1`. No dependencies, manifests, or lockfiles
+changed; `check:packages` was not applicable. Lifecycle scripts remain ignored.
+
+```sh
+pnpm exec turbo run build --filter=@jeswr/pod-connectors...
+pnpm --filter @jeswr/app-pod-manager exec vitest run src/lib/use-productivity.test.ts
+pnpm --filter @jeswr/app-pod-manager run typecheck
+pnpm --filter @jeswr/app-pod-manager run lint
+GIT_ALLOW_PROTOCOL=file pnpm --filter @jeswr/app-pod-manager run lint && GIT_ALLOW_PROTOCOL=file pnpm --filter @jeswr/app-pod-manager run build && pnpm --filter @jeswr/app-pod-manager run typecheck && pnpm --filter @jeswr/app-pod-manager run test
+pnpm run lint:root
+GIT_ALLOW_PROTOCOL=file TURBO_SCM_BASE=917d3be9c7967622829adc43c1aaabb0964ec993 pnpm run gate --env-mode=loose
+GIT_ALLOW_PROTOCOL=file pnpm run gate:full --env-mode=loose
+git diff --check
+```
+
+- Dependency-first build: **PASS**.
+- New regression file: **PASS, 14 tests**. Before the fix, creation through each
+  factory failed with a refused 302 from the WebID document. The fixed path
+  performs conditional profile updates at the resolved URL, registers the
+  container under the original WebID subject, and reuses the index without
+  another index write. Authenticated profile/index redirects abort before item
+  saving and never reach their redirect target.
+- Pod Manager lint/production static build/typecheck/tests: **PASS, 930 passed,
+  1 existing IndexedDB-dependent skip, 68 files**.
+- Root lint: **PASS**.
+- Affected gate: **PASS, 11/11 tasks (0 cached)**, including Pod Manager's four
+  checks, Pod Connectors' four checks (**269 tests, 41 files**), and 26 root tests.
+- Full-workspace gate: **BLOCKED/FAIL**, 2 successful tasks (2 cached), 23
+  scheduled. The unchanged `@jeswr/unstorage-solid#build` helper attempted to
+  clone fetch-rdf over HTTPS; `GIT_ALLOW_PROTOCOL=file` prevented it with
+  `fatal: transport 'https' not allowed`, honoring the lane's remote-fetch ban.
+  No remote source was fetched and no unrelated build helper was modified.
+- `git diff --check`: **PASS**. Existing guarded-fetch webpack warnings remain
+  non-fatal. No generated tracked files changed.
+
+### Scope, review, and open questions
+
+The supplied finding is fixed; no requested implementation remains unfinished.
+Conservative compatibility choice: direct store callers may omit the profile
+URL and retain the existing WebID-document fallback; the session hook always
+passes its resolved profile URL. No open questions or design changes.
+
+`roborev` and its post-commit hook remain unavailable in the sandbox, so no new
+automated per-commit verdict was produced. The supplied review was checked
+against the implementation and regressions directly. Full-workspace green
+verification remains blocked by the unrelated remote-cloning helper above.
+All commits stay on `lane/sst-k9mk` in this checkout; nothing was pushed,
+published, merged, or changed in another checkout.
