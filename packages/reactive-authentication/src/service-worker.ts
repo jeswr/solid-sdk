@@ -3,5 +3,6 @@
  *
  * @module
  */
-export * from "./worker/serviceWorker.js"
-export * from "./worker/messages.js"
+
+export * from "./worker/messages.js";
+export * from "./worker/serviceWorker.js";

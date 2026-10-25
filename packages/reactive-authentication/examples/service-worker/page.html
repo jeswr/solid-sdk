@@ -5,8 +5,8 @@
 <authorization-code-flow></authorization-code-flow>
 <idp-picker></idp-picker>
 <script type="module">
-import "@solid/reactive-authentication/registerElements"
-import { ReactiveFetchWorkerManager } from "@solid/reactive-authentication"
+import "@jeswr/reactive-authentication/registerElements"
+import { ReactiveFetchWorkerManager } from "@jeswr/reactive-authentication"
 
 // The page only provides UI; the worker holds credentials and decides what to authenticate.
 await new ReactiveFetchWorkerManager({

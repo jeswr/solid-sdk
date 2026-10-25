@@ -43,18 +43,10 @@
           "revocation": false,
           "offlineAccess": true,
           "refreshGrant": true,
-          "dpopAlgs": [
-            "ES256",
-            "RS256",
-            "EdDSA"
-          ],
-          "pkce": [
-            "S256"
-          ],
+          "dpopAlgs": ["ES256", "RS256", "EdDSA"],
+          "pkce": ["S256"],
           "registration": true,
-          "tokenAuth": [
-            "none"
-          ],
+          "tokenAuth": ["none"],
           "notes": "issuer https://brolly.id (no trailing slash); solid_oidc_supported advertised; issuer host brolly.id, not www.brolly.id (www answers 404 for discovery)"
         }
       },
@@ -75,9 +67,7 @@
           "dpopAlgs": null,
           "pkce": null,
           "registration": true,
-          "tokenAuth": [
-            "client_secret_basic"
-          ],
+          "tokenAuth": ["client_secret_basic"],
           "notes": "no code_challenge_methods_supported or dpop_signing_alg_values_supported advertised; the library's NSS nonce quirk list includes this origin"
         }
       },
@@ -95,19 +85,10 @@
           "revocation": true,
           "offlineAccess": true,
           "refreshGrant": true,
-          "dpopAlgs": [
-            "RS256",
-            "ES256"
-          ],
-          "pkce": [
-            "plain",
-            "S256"
-          ],
+          "dpopAlgs": ["RS256", "ES256"],
+          "pkce": ["plain", "S256"],
           "registration": true,
-          "tokenAuth": [
-            "client_secret_basic",
-            "client_secret_post"
-          ],
+          "tokenAuth": ["client_secret_basic", "client_secret_post"],
           "notes": "issuer https://login.inrupt.com (no trailing slash); storage is served from https://storage.inrupt.com/"
         }
       },
@@ -138,9 +119,7 @@
             "ES512",
             "EdDSA"
           ],
-          "pkce": [
-            "S256"
-          ],
+          "pkce": ["S256"],
           "registration": true,
           "tokenAuth": [
             "client_secret_basic",
@@ -179,9 +158,7 @@
             "ES512",
             "EdDSA"
           ],
-          "pkce": [
-            "S256"
-          ],
+          "pkce": ["S256"],
           "registration": true,
           "tokenAuth": [
             "client_secret_basic",
@@ -210,9 +187,7 @@
           "dpopAlgs": null,
           "pkce": null,
           "registration": true,
-          "tokenAuth": [
-            "client_secret_basic"
-          ],
+          "tokenAuth": ["client_secret_basic"],
           "notes": "served on port 8445; https://solid.openlinksw.com (port 443) reset the TLS connection; scopes_supported not advertised; NSS-like, but not in the library's NSS nonce quirk list (nonce behaviour unobserved)"
         }
       },
@@ -243,9 +218,7 @@
             "ES512",
             "EdDSA"
           ],
-          "pkce": [
-            "S256"
-          ],
+          "pkce": ["S256"],
           "registration": true,
           "tokenAuth": [
             "client_secret_basic",
@@ -284,9 +257,7 @@
             "ES512",
             "EdDSA"
           ],
-          "pkce": [
-            "S256"
-          ],
+          "pkce": ["S256"],
           "registration": true,
           "tokenAuth": [
             "client_secret_basic",
@@ -325,9 +296,7 @@
             "ES512",
             "EdDSA"
           ],
-          "pkce": [
-            "S256"
-          ],
+          "pkce": ["S256"],
           "registration": true,
           "tokenAuth": [
             "client_secret_basic",
@@ -356,9 +325,7 @@
           "dpopAlgs": null,
           "pkce": null,
           "registration": true,
-          "tokenAuth": [
-            "client_secret_basic"
-          ],
+          "tokenAuth": ["client_secret_basic"],
           "notes": "no code_challenge_methods_supported or dpop_signing_alg_values_supported advertised; the library's NSS nonce quirk list includes this origin (local NSS 6.0.0 omits the nonce claim)"
         }
       },
@@ -389,9 +356,7 @@
             "ES512",
             "EdDSA"
           ],
-          "pkce": [
-            "S256"
-          ],
+          "pkce": ["S256"],
           "registration": true,
           "tokenAuth": [
             "client_secret_basic",
@@ -417,18 +382,10 @@
           "revocation": false,
           "offlineAccess": false,
           "refreshGrant": true,
-          "dpopAlgs": [
-            "ES256",
-            "RS256"
-          ],
-          "pkce": [
-            "plain",
-            "S256"
-          ],
+          "dpopAlgs": ["ES256", "RS256"],
+          "pkce": ["plain", "S256"],
           "registration": true,
-          "tokenAuth": [
-            "client_secret_basic"
-          ],
+          "tokenAuth": ["client_secret_basic"],
           "notes": "discovery answered once; later GETs of https://trinpod.eu/ reset the TLS connection from this network (ECONNRESET); offline_access is not in scopes_supported although refresh_token is a supported grant; the listing's link text says https://trinpod.eu/ but its href is https://trinapp.com/"
         }
       },
@@ -446,18 +403,10 @@
           "revocation": false,
           "offlineAccess": false,
           "refreshGrant": true,
-          "dpopAlgs": [
-            "ES256",
-            "RS256"
-          ],
-          "pkce": [
-            "plain",
-            "S256"
-          ],
+          "dpopAlgs": ["ES256", "RS256"],
+          "pkce": ["plain", "S256"],
           "registration": true,
-          "tokenAuth": [
-            "client_secret_basic"
-          ],
+          "tokenAuth": ["client_secret_basic"],
           "notes": "offline_access is not in scopes_supported although refresh_token is a supported grant; the listing's link text says https://trinpod.us/ but its href is https://trinapp.com/"
         }
       },
@@ -489,19 +438,10 @@
           "revocation": true,
           "offlineAccess": true,
           "refreshGrant": true,
-          "dpopAlgs": [
-            "ES256",
-            "RS256"
-          ],
-          "pkce": [
-            "S256"
-          ],
+          "dpopAlgs": ["ES256", "RS256"],
+          "pkce": ["S256"],
           "registration": true,
-          "tokenAuth": [
-            "none",
-            "client_secret_basic",
-            "client_secret_post"
-          ],
+          "tokenAuth": ["none", "client_secret_basic", "client_secret_post"],
           "notes": "solid_oidc_supported advertised; listed as experimental"
         }
       }

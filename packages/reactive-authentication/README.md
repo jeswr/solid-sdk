@@ -1,4 +1,10 @@
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+
 # Reactive authentication
+
+> **Experimental — AI-agent-generated workspace integration.** Imported with history from
+> `jeswr/reactive-authentication-ai` main at `1b0a7ec`, as `@jeswr/reactive-authentication`.
+> This security-critical protocol engine retains its upstream API. Suite policy belongs in `@jeswr/pod-auth`.
 
 > **Independent implementation, not released.** This repository,
 > [jeswr/reactive-authentication-ai](https://github.com/jeswr/reactive-authentication-ai), is a separate
@@ -36,17 +42,17 @@ Then, in your application, install the tarball (or the checkout directory) by it
 npm install /path/to/reactive-authentication-ai/solid-reactive-authentication-<version>.tgz
 ```
 
-The package name is still `@solid/reactive-authentication`, so imports below work once the tarball built from this repository is
+The package name is still `@jeswr/reactive-authentication`, so imports below work once the tarball built from this repository is
 installed; do not expect them to work against the npm release.
 
 ## Quick start (Solid-OIDC in a page)
 
 ```js
-import "@solid/reactive-authentication/registerElements"
+import "@jeswr/reactive-authentication/registerElements"
 import {
     CachingAuthorizationServerProvider, CachingClientProvider, CredentialBoundary, DPoPTokenProvider,
     DynamicRegistrationClientProvider, ReactiveFetchManager, XASProvider,
-} from "@solid/reactive-authentication"
+} from "@jeswr/reactive-authentication"
 
 const provider = new DPoPTokenProvider(
     "https://app.example/callback.html",                    // posts its URL to the opener (see callback.html)
@@ -103,7 +109,7 @@ configured; when an eligible URL answers `401`, the boundary tries to establish 
 any login or credential use, and only then lets providers authenticate:
 
 ```js
-import { AutomaticCredentialBoundary, DPoPTokenProvider, ReactiveFetchManager } from "@solid/reactive-authentication"
+import { AutomaticCredentialBoundary, DPoPTokenProvider, ReactiveFetchManager } from "@jeswr/reactive-authentication"
 
 const boundary = new AutomaticCredentialBoundary({
     eligible: url => url.hostname.endsWith(".solidcommunity.net"), // optional: which URLs may be discovered
@@ -184,7 +190,7 @@ otherwise the fallback (e.g. `<idp-picker>`) is asked.
 ## LWS
 
 ```js
-import { CredentialBoundary, DidKeySource, LwsTokenProvider, ReactiveFetchManager } from "@solid/reactive-authentication"
+import { CredentialBoundary, DidKeySource, LwsTokenProvider, ReactiveFetchManager } from "@jeswr/reactive-authentication"
 
 const manager = new ReactiveFetchManager({
     // Active suites: OidcIdTokenSource, SamlAssertionSource, SelfIssuedJwtSource (controlled identifiers).
@@ -227,7 +233,7 @@ await manager.logout() // aborts in-flight upgrades and fences writes in every t
 
 ## Service workers
 
-`installReactiveAuthentication(self, {boundary, providers})` (from `@solid/reactive-authentication/service-worker`)
+`installReactiveAuthentication(self, {boundary, providers})` (from `@jeswr/reactive-authentication/service-worker`)
 authenticates fetches of controlled pages inside the boundary. `providers` may be a per-tab factory so that
 popups open in the tab whose request needs them (`bridge.forClient(clientId)`); the page runs
 `ReactiveFetchWorkerManager` to answer validated interaction requests. See [`examples/service-worker/sw.js`](examples/service-worker/sw.js) and [`page.html`](examples/service-worker/page.html).
@@ -242,7 +248,7 @@ a warning: `{allowInsecureRequests: true}` for components making OAuth/discovery
 
 - `new ReactiveFetchManager(providers)` → `new ReactiveFetchManager({providers, boundary})`.
   `CredentialBoundary.unrestricted()` reproduces the old "upgrade any 401" behaviour and is deprecated.
-- Custom element classes moved to `@solid/reactive-authentication/elements`; `registerElements` is unchanged.
+- Custom element classes moved to `@jeswr/reactive-authentication/elements`; `registerElements` is unchanged.
 - `BearerTokenProvider` and `dist/reactive-fetch-worker.js` were removed (hard-coded issuers, insecure HTTP,
   non-functional worker); use `DPoPTokenProvider` and `installReactiveAuthentication`.
 - `ClientCredentialsTokenProvider(asProvider, clientId, clientSecret, options)`.

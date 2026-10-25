@@ -85,7 +85,8 @@
     "@jeswr/agent-credentials",
     "@jeswr/agent-memory",
     "@jeswr/agent-registry",
-    "@jeswr/fetch-rdf"
+    "@jeswr/fetch-rdf",
+    "@jeswr/reactive-authentication"
   ],
   "applications": [
     {

@@ -5,14 +5,14 @@
  * race and an abort happen before the continuation runs.
  */
 export async function abortable<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
-    promise.catch(() => undefined)
-    signal.throwIfAborted()
-    const {promise: aborted, reject} = Promise.withResolvers<never>()
-    const onAbort = () => reject(signal.reason)
-    signal.addEventListener("abort", onAbort, {once: true})
-    try {
-        return await Promise.race([promise, aborted])
-    } finally {
-        signal.removeEventListener("abort", onAbort)
-    }
+  promise.catch(() => undefined);
+  signal.throwIfAborted();
+  const { promise: aborted, reject } = Promise.withResolvers<never>();
+  const onAbort = () => reject(signal.reason);
+  signal.addEventListener("abort", onAbort, { once: true });
+  try {
+    return await Promise.race([promise, aborted]);
+  } finally {
+    signal.removeEventListener("abort", onAbort);
+  }
 }

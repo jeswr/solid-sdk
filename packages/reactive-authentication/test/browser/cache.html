@@ -14,9 +14,9 @@
 }}
 </script>
 <script type="module">
+import { withCodec } from "@key-value-kit/core"
 import { createIndexedDbStore } from "@key-value-kit/storage/indexeddb"
 import { createWebStorageStore } from "@key-value-kit/storage/web-storage"
-import { withCodec } from "@key-value-kit/core"
 import { createBrowserCaches } from "/dist/createBrowserCaches.js"
 
 const result = document.querySelector("#result")

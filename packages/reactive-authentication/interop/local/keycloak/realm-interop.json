@@ -26,10 +26,7 @@
           "temporary": false
         }
       ],
-      "realmRoles": [
-        "default-roles-interop",
-        "offline_access"
-      ]
+      "realmRoles": ["default-roles-interop", "offline_access"]
     }
   ],
   "clients": [
@@ -41,25 +38,14 @@
       "standardFlowEnabled": true,
       "directAccessGrantsEnabled": false,
       "implicitFlowEnabled": false,
-      "redirectUris": [
-        "http://127.0.0.1:39398/callback"
-      ],
-      "webOrigins": [
-        "+"
-      ],
+      "redirectUris": ["http://127.0.0.1:39398/callback"],
+      "webOrigins": ["+"],
       "attributes": {
         "pkce.code.challenge.method": "S256",
         "post.logout.redirect.uris": "+"
       },
-      "defaultClientScopes": [
-        "basic",
-        "profile",
-        "email",
-        "roles"
-      ],
-      "optionalClientScopes": [
-        "offline_access"
-      ],
+      "defaultClientScopes": ["basic", "profile", "email", "roles"],
+      "optionalClientScopes": ["offline_access"],
       "protocolMappers": [
         {
           "name": "interop-api audience",
@@ -85,21 +71,12 @@
       "standardFlowEnabled": true,
       "directAccessGrantsEnabled": false,
       "implicitFlowEnabled": false,
-      "redirectUris": [
-        "http://127.0.0.1:39398/callback"
-      ],
+      "redirectUris": ["http://127.0.0.1:39398/callback"],
       "attributes": {
         "pkce.code.challenge.method": "S256"
       },
-      "defaultClientScopes": [
-        "basic",
-        "profile",
-        "email",
-        "roles"
-      ],
-      "optionalClientScopes": [
-        "offline_access"
-      ],
+      "defaultClientScopes": ["basic", "profile", "email", "roles"],
+      "optionalClientScopes": ["offline_access"],
       "protocolMappers": [
         {
           "name": "interop-api audience",
@@ -123,22 +100,13 @@
       "standardFlowEnabled": true,
       "directAccessGrantsEnabled": false,
       "implicitFlowEnabled": false,
-      "redirectUris": [
-        "http://127.0.0.1:39398/callback"
-      ],
+      "redirectUris": ["http://127.0.0.1:39398/callback"],
       "attributes": {
         "pkce.code.challenge.method": "S256",
         "access.token.lifespan": "5"
       },
-      "defaultClientScopes": [
-        "basic",
-        "profile",
-        "email",
-        "roles"
-      ],
-      "optionalClientScopes": [
-        "offline_access"
-      ],
+      "defaultClientScopes": ["basic", "profile", "email", "roles"],
+      "optionalClientScopes": ["offline_access"],
       "protocolMappers": [
         {
           "name": "interop-api audience",
@@ -162,18 +130,11 @@
       "standardFlowEnabled": true,
       "directAccessGrantsEnabled": false,
       "implicitFlowEnabled": false,
-      "redirectUris": [
-        "http://127.0.0.1:39398/callback"
-      ],
+      "redirectUris": ["http://127.0.0.1:39398/callback"],
       "attributes": {
         "pkce.code.challenge.method": "S256"
       },
-      "defaultClientScopes": [
-        "basic",
-        "profile",
-        "email",
-        "roles"
-      ]
+      "defaultClientScopes": ["basic", "profile", "email", "roles"]
     },
     {
       "clientId": "interop-api",

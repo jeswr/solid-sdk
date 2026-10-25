@@ -1,7 +1,7 @@
-import { WebIdRequestCancelledError } from "./WebIdRequestCancelledError.js"
+import { WebIdRequestCancelledError } from "./WebIdRequestCancelledError.js";
 
-const onlyOnce = {once: true}
-const searchString = "YOUR_USERNAME"
+const onlyOnce = { once: true };
+const searchString = "YOUR_USERNAME";
 const html = `
 <dialog>
     <fieldset>
@@ -36,66 +36,68 @@ const html = `
         </form>
     </fieldset>
 </dialog>
-`
+`;
 
 export class WebIdPicker extends HTMLElement {
-    #dialog!: HTMLDialogElement
-    #input!: HTMLInputElement
-    #code!: HTMLElement
+  #dialog!: HTMLDialogElement;
+  #input!: HTMLInputElement;
+  #code!: HTMLElement;
 
-    /** @ignore */
-    connectedCallback() {
-        const template = this.ownerDocument.createElement("template")
-        template.innerHTML = html
+  /** @ignore */
+  connectedCallback() {
+    const template = this.ownerDocument.createElement("template");
+    template.innerHTML = html;
 
-        const shadow = this.attachShadow({mode: "closed"})
-        shadow.appendChild(this.ownerDocument.importNode(template.content, true))
+    const shadow = this.attachShadow({ mode: "closed" });
+    shadow.appendChild(this.ownerDocument.importNode(template.content, true));
 
-        this.#dialog = shadow.querySelector("dialog")!
-        this.#input = shadow.querySelector("input")!
-        this.#code = shadow.querySelector("code")!
+    this.#dialog = shadow.querySelector("dialog")!;
+    this.#input = shadow.querySelector("input")!;
+    this.#code = shadow.querySelector("code")!;
 
-        shadow.querySelector("form")!.addEventListener("submit", () => this.#dialog.returnValue = this.#input.value)
-        shadow.querySelector("#cancel")!.addEventListener("click", () => this.#dialog.close())
-        this.#input.addEventListener("change", () => {
-            if (this.#input.value.includes(searchString)) {
-                const start = this.#input.value.indexOf(searchString)
-                this.#input.setSelectionRange(start, start + searchString.length, "forward")
-            }
-        })
+    shadow
+      .querySelector("form")!
+      .addEventListener("submit", () => (this.#dialog.returnValue = this.#input.value));
+    shadow.querySelector("#cancel")!.addEventListener("click", () => this.#dialog.close());
+    this.#input.addEventListener("change", () => {
+      if (this.#input.value.includes(searchString)) {
+        const start = this.#input.value.indexOf(searchString);
+        this.#input.setSelectionRange(start, start + searchString.length, "forward");
+      }
+    });
 
-        for (const option of this.querySelectorAll(":scope > option")) {
-            shadow.querySelector("datalist")!.appendChild(option.cloneNode())
+    for (const option of this.querySelectorAll(":scope > option")) {
+      shadow.querySelector("datalist")!.appendChild(option.cloneNode());
+    }
+  }
+
+  async getWebId(request: Request): Promise<URL> {
+    return await navigator.locks.request("WebIdPicker.getWebId", async (_) => {
+      this.#input.value = "";
+      this.#code.innerText = request.url;
+      this.#dialog.returnValue = "";
+      this.#dialog.showModal();
+
+      const { promise, reject, resolve } = Promise.withResolvers<URL>();
+
+      const onClose = () => {
+        request.signal.removeEventListener("abort", onAbort);
+        if (this.#dialog.returnValue !== "") {
+          resolve(new URL(this.#dialog.returnValue));
+        } else {
+          reject(new WebIdRequestCancelledError(request));
         }
-    }
+      };
+      const onAbort = () => {
+        this.#dialog.removeEventListener("close", onClose);
+        this.#dialog.close();
+        reject(request.signal.reason);
+      };
 
-    async getWebId(request: Request): Promise<URL> {
-        return await navigator.locks.request("WebIdPicker.getWebId", async _ => {
-            this.#input.value = ""
-            this.#code.innerText = request.url
-            this.#dialog.returnValue = ""
-            this.#dialog.showModal()
+      request.signal.addEventListener("abort", onAbort, onlyOnce);
+      this.#dialog.addEventListener("close", onClose, onlyOnce);
 
-            const {promise, reject, resolve} = Promise.withResolvers<URL>()
-
-            const onClose = () => {
-                request.signal.removeEventListener("abort", onAbort)
-                if (this.#dialog.returnValue !== "") {
-                    resolve(new URL(this.#dialog.returnValue))
-                } else {
-                    reject(new WebIdRequestCancelledError(request))
-                }
-            }
-            const onAbort = () => {
-                this.#dialog.removeEventListener("close", onClose)
-                this.#dialog.close()
-                reject(request.signal.reason)
-            }
-
-            request.signal.addEventListener("abort", onAbort, onlyOnce)
-            this.#dialog.addEventListener("close", onClose, onlyOnce)
-
-            return await promise
-        })
-    }
+      return await promise;
+    });
+  }
 }

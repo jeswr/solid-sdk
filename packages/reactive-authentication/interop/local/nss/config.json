@@ -8,7 +8,11 @@
   "dbPath": "./.db",
   "multiuser": true,
   "corsProxy": "/proxy",
-  "server": {"name": "reactive-authentication interop (disposable)", "description": "", "logo": ""},
+  "server": {
+    "name": "reactive-authentication interop (disposable)",
+    "description": "",
+    "logo": ""
+  },
   "enforceToc": false,
   "disablePasswordChecks": true,
   "supportEmail": "nobody@interop.test"

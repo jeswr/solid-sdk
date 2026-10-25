@@ -57,17 +57,12 @@
           "issuer": "https://github.com/login/oauth",
           "authorization_endpoint": "https://github.com/login/oauth/authorize",
           "token_endpoint": "https://github.com/login/oauth/access_token",
-          "code_challenge_methods_supported": [
-            "S256"
-          ]
+          "code_challenge_methods_supported": ["S256"]
         },
         "clientId": "${RA_INTEROP_GITHUB_CLIENT_ID}",
         "clientSecret": "${RA_INTEROP_GITHUB_CLIENT_SECRET}",
         "tokenEndpointAuthMethod": "client_secret_post",
-        "scopes": [
-          "read:user",
-          "offline_access"
-        ],
+        "scopes": ["read:user", "offline_access"],
         "api": {
           "url": "https://api.github.com/user",
           "headers": {
@@ -159,10 +154,7 @@
         "issuer": "${RA_INTEROP_GITLAB_ISSUER:-https://gitlab.com}",
         "clientId": "${RA_INTEROP_GITLAB_CLIENT_ID}",
         "clientSecret": "${RA_INTEROP_GITLAB_CLIENT_SECRET}",
-        "scopes": [
-          "openid",
-          "read_user"
-        ],
+        "scopes": ["openid", "read_user"],
         "api": {
           "url": "${RA_INTEROP_GITLAB_ISSUER:-https://gitlab.com}/api/v4/user",
           "identity": {
@@ -254,11 +246,7 @@
         "clientId": "${RA_INTEROP_AUTH0_CLIENT_ID}",
         "clientSecret": "${RA_INTEROP_AUTH0_CLIENT_SECRET}",
         "audience": "${RA_INTEROP_AUTH0_AUDIENCE}",
-        "scopes": [
-          "openid",
-          "profile",
-          "offline_access"
-        ],
+        "scopes": ["openid", "profile", "offline_access"],
         "api": {
           "url": "${RA_INTEROP_AUTH0_ISSUER}userinfo",
           "identity": {
@@ -343,11 +331,7 @@
         "issuer": "${RA_INTEROP_OKTA_ISSUER}",
         "clientId": "${RA_INTEROP_OKTA_CLIENT_ID}",
         "clientSecret": "${RA_INTEROP_OKTA_CLIENT_SECRET}",
-        "scopes": [
-          "openid",
-          "profile",
-          "offline_access"
-        ],
+        "scopes": ["openid", "profile", "offline_access"],
         "api": {
           "url": "${RA_INTEROP_OKTA_ISSUER}/v1/userinfo",
           "identity": {
@@ -430,9 +414,7 @@
         "issuer": "https://accounts.google.com",
         "clientId": "${RA_INTEROP_GOOGLE_WEB_CLIENT_ID}",
         "clientSecret": "${RA_INTEROP_GOOGLE_WEB_CLIENT_SECRET}",
-        "scopes": [
-          "openid"
-        ],
+        "scopes": ["openid"],
         "parameters": {
           "access_type": "offline"
         },
@@ -525,12 +507,7 @@
         "issuer": "https://login.microsoftonline.com/${RA_INTEROP_ENTRA_TENANT_ID}/v2.0",
         "clientId": "${RA_INTEROP_ENTRA_CLIENT_ID}",
         "clientSecret": "${RA_INTEROP_ENTRA_CLIENT_SECRET}",
-        "scopes": [
-          "openid",
-          "profile",
-          "offline_access",
-          "https://graph.microsoft.com/User.Read"
-        ],
+        "scopes": ["openid", "profile", "offline_access", "https://graph.microsoft.com/User.Read"],
         "api": {
           "url": "https://graph.microsoft.com/v1.0/me",
           "identity": {
@@ -638,10 +615,7 @@
         "audience": "${RA_INTEROP_OIDC_AUDIENCE}",
         "resource": "${RA_INTEROP_OIDC_RESOURCE}",
         "prompt": "${RA_INTEROP_OIDC_PROMPT}",
-        "scopes": [
-          "openid",
-          "profile"
-        ],
+        "scopes": ["openid", "profile"],
         "api": {
           "url": "${RA_INTEROP_OIDC_API_URL}",
           "identity": {

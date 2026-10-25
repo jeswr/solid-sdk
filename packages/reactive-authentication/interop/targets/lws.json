@@ -89,9 +89,7 @@
         "scratchContainer": "${RA_INTEROP_LWS_OPENID_SCRATCH}",
         "privateResource": "${RA_INTEROP_LWS_OPENID_PRIVATE_RESOURCE}",
         "otherProtected": "${RA_INTEROP_LWS_OPENID_OTHER_PROTECTED}",
-        "authorizationServers": [
-          "${RA_INTEROP_LWS_OPENID_AUTHORIZATION_SERVER}"
-        ],
+        "authorizationServers": ["${RA_INTEROP_LWS_OPENID_AUTHORIZATION_SERVER}"],
         "expectedSubject": "${RA_INTEROP_LWS_OPENID_SUBJECT}",
         "openid": {
           "issuer": "${RA_INTEROP_LWS_OPENID_ISSUER}",
@@ -188,9 +186,7 @@
         "scratchContainer": "${RA_INTEROP_LWS_SAML_SCRATCH}",
         "privateResource": "${RA_INTEROP_LWS_SAML_PRIVATE_RESOURCE}",
         "otherProtected": "${RA_INTEROP_LWS_SAML_OTHER_PROTECTED}",
-        "authorizationServers": [
-          "${RA_INTEROP_LWS_SAML_AUTHORIZATION_SERVER}"
-        ],
+        "authorizationServers": ["${RA_INTEROP_LWS_SAML_AUTHORIZATION_SERVER}"],
         "expectedSubject": "${RA_INTEROP_LWS_SAML_SUBJECT}",
         "saml": {
           "loginUrl": "${RA_INTEROP_LWS_SAML_LOGIN_URL}",
@@ -286,9 +282,7 @@
         "scratchContainer": "${RA_INTEROP_LWS_CID_SCRATCH}",
         "privateResource": "${RA_INTEROP_LWS_CID_PRIVATE_RESOURCE}",
         "otherProtected": "${RA_INTEROP_LWS_CID_OTHER_PROTECTED}",
-        "authorizationServers": [
-          "${RA_INTEROP_LWS_CID_AUTHORIZATION_SERVER}"
-        ],
+        "authorizationServers": ["${RA_INTEROP_LWS_CID_AUTHORIZATION_SERVER}"],
         "expectedSubject": "${RA_INTEROP_LWS_CID_SUBJECT}",
         "selfIssued": {
           "subject": "${RA_INTEROP_LWS_CID_ID}",
@@ -370,9 +364,7 @@
         "scratchContainer": "${RA_INTEROP_LWS_DID_KEY_SCRATCH}",
         "privateResource": "${RA_INTEROP_LWS_DID_KEY_PRIVATE_RESOURCE}",
         "otherProtected": "${RA_INTEROP_LWS_DID_KEY_OTHER_PROTECTED}",
-        "authorizationServers": [
-          "${RA_INTEROP_LWS_DID_KEY_AUTHORIZATION_SERVER}"
-        ],
+        "authorizationServers": ["${RA_INTEROP_LWS_DID_KEY_AUTHORIZATION_SERVER}"],
         "expectedSubject": "${RA_INTEROP_LWS_DID_KEY_SUBJECT}",
         "selfIssued": {
           "keyFile": "${RA_INTEROP_LWS_DID_KEY_KEY_FILE}"

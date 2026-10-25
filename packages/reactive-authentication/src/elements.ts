@@ -4,6 +4,6 @@
  *
  * @module
  */
-export * from "./AuthorizationCodeFlow.js"
-export * from "./IdpPicker.js"
-export * from "./WebIdPicker.js"
+export * from "./AuthorizationCodeFlow.js";
+export * from "./IdpPicker.js";
+export * from "./WebIdPicker.js";

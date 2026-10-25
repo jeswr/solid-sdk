@@ -86,9 +86,7 @@
         "webId": "${RA_INTEROP_INRUPT_PODSPACES_UMA_WEBID}",
         "storage": "${RA_INTEROP_INRUPT_PODSPACES_UMA_STORAGE}",
         "issuer": "${RA_INTEROP_INRUPT_PODSPACES_UMA_ISSUER:-https://login.inrupt.com}",
-        "umaServers": [
-          "${RA_INTEROP_INRUPT_PODSPACES_UMA_UMA_SERVER:-https://uma.inrupt.com}"
-        ],
+        "umaServers": ["${RA_INTEROP_INRUPT_PODSPACES_UMA_UMA_SERVER:-https://uma.inrupt.com}"],
         "scratchContainer": "${RA_INTEROP_INRUPT_PODSPACES_UMA_SCRATCH}",
         "privateResource": "${RA_INTEROP_INRUPT_PODSPACES_UMA_PRIVATE_RESOURCE}",
         "otherProtected": "${RA_INTEROP_INRUPT_PODSPACES_UMA_OTHER_PROTECTED}",
@@ -186,9 +184,7 @@
         "webId": "${RA_INTEROP_SOLID_UMA_WEBID}",
         "storage": "${RA_INTEROP_SOLID_UMA_STORAGE}",
         "issuer": "${RA_INTEROP_SOLID_UMA_ISSUER}",
-        "umaServers": [
-          "${RA_INTEROP_SOLID_UMA_UMA_SERVER}"
-        ],
+        "umaServers": ["${RA_INTEROP_SOLID_UMA_UMA_SERVER}"],
         "scratchContainer": "${RA_INTEROP_SOLID_UMA_SCRATCH}",
         "privateResource": "${RA_INTEROP_SOLID_UMA_PRIVATE_RESOURCE}",
         "otherProtected": "${RA_INTEROP_SOLID_UMA_OTHER_PROTECTED}",

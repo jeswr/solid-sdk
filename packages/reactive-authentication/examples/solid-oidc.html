@@ -8,15 +8,15 @@
     <option value="https://solidcommunity.net"></option>
     <option value="https://login.inrupt.com"></option>
 </idp-picker>
-<button id="logout">Log out</button>
+<button type="button" id="logout">Log out</button>
 <pre id="output"></pre>
 <script type="module">
-import "@solid/reactive-authentication/registerElements"
+import "@jeswr/reactive-authentication/registerElements"
 import {
     CachingAuthorizationServerProvider, CachingClientProvider, CachingIssuerProvider, CredentialBoundary,
-    DPoPTokenProvider, DynamicRegistrationClientProvider, HintIssuerProvider, ReactiveFetchManager, XASProvider,
-    createBrowserCaches, readIssuerHint, storageContextKey,
-} from "@solid/reactive-authentication"
+    createBrowserCaches,
+    DPoPTokenProvider, DynamicRegistrationClientProvider, HintIssuerProvider, ReactiveFetchManager, readIssuerHint, storageContextKey,XASProvider,
+} from "@jeswr/reactive-authentication"
 
 // One namespace per application, client configuration and account.
 const namespace = "example-app/v1/default-account"
