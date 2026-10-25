@@ -8,7 +8,13 @@
  * All RDF goes through the typed wrappers in `type-index.ts` — never inline
  * quads (house rule).
  */
-import { assertWithinPodScope, refuseRedirects } from "@jeswr/guarded-fetch";
+import {
+  assertWithinPodScope,
+  isWithinPodScope,
+  PodScopeError,
+  refuseRedirects,
+} from "@jeswr/guarded-fetch";
+import { Agent } from "@solid/object";
 import { DataFactory, Store } from "n3";
 import { freshRdf } from "./rdf-read.js";
 import { ResourceWriteError, writeResource } from "./resource.js";
@@ -46,7 +52,7 @@ const PREFIXES = { solid: "http://www.w3.org/ns/solid/terms#" };
  * under the pod root — and links it from the profile — when neither exists.
  *
  * Connector hosts supply the Pod transport explicitly. Only the profile document and
- * its selected, Pod-scoped index are accessible; redirects are refused.
+ * its selected index within an advertised storage are accessible; redirects are refused.
  */
 export async function ensureTypeRegistrations(opts: {
   webId: string;
@@ -63,23 +69,26 @@ export async function ensureTypeRegistrations(opts: {
   const links = typeIndexLinks(webId, profileDs);
   let indexUrl = links.privateIndex ?? links.publicIndex;
   let bootstrapped = false;
+  const indexTarget = indexUrl ?? new URL("settings/privateTypeIndex.ttl", podRoot).href;
+  // The profile's trusted storage roots are independent of the import destination.
+  const storageRoots = new Agent(webId, profileDs, DataFactory).pimStorage;
+  const indexStorage = [...storageRoots].find((root) =>
+    isWithinPodScope(root, indexTarget, { allowRoot: false }),
+  );
+  if (!indexStorage) {
+    throw new PodScopeError("Type Index is outside every advertised storage root.");
+  }
   // Bind index access to the one profile-linked document (or bootstrap target).
   // A valid Pod URL alone does not grant access to unrelated Pod documents.
   const selectedIndex = documentUrl(
-    assertWithinPodScope(
-      podRoot,
-      indexUrl ?? new URL("settings/privateTypeIndex.ttl", podRoot).href,
-      {
-        allowRoot: false,
-      },
-    ),
+    assertWithinPodScope(indexStorage, indexTarget, { allowRoot: false }),
   );
   const fetchImpl: typeof fetch = (input, init) => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
     if (documentUrl(url) !== selectedIndex) {
       throw new Error("Type Index request is outside the selected document.");
     }
-    assertWithinPodScope(podRoot, url, { allowRoot: false });
+    assertWithinPodScope(indexStorage, url, { allowRoot: false });
     return profileFetch(input, init);
   };
 

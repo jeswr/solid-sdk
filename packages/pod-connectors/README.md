@@ -35,7 +35,8 @@ fetch for source API requests or token exchange. Tokens stay in memory. A `PodWr
 connector container, resolves and reads slugs, writes RDF with `{ ifMatch }` or
 `{ ifNoneMatch: '*' }`, and registers Type Index entries. The fetch-backed implementation
 confines document reads, writes and every redirect hop to the connector container. Type
-Index operations separately validate the profile-selected index against the active Pod,
+Index operations separately validate the profile-selected index against the WebID's advertised
+`pim:storage` roots, independently of the import destination,
 allow only that document (or the bootstrap target), and refuse redirects. The profile
 read/update also refuses redirects. Deterministic document paths and Type Index bootstrap
 behavior are preserved. The runner

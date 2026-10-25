@@ -13,7 +13,8 @@ process environment or install host-specific global configuration here.
 
 Runners receive PodWriter and SourceAuth explicitly. Every adapter uses ctx.api for source
 I/O and ctx.write for Pod I/O. Keep credentials on their own transport. Fetch-backed writes
-are confined to the adapter container; Type Index links remain in the active Pod. Preserve
+are confined to the adapter container; Type Index documents must be within a `pim:storage`
+root advertised by the user's WebID, independently of the import destination. Preserve
 ETags and conditional PUT semantics. Use typed RDF wrappers and N3 Writer, never inline quads.
 
 All tests use recorded fixtures and memory Pods. Use ./testing for consumers. Run lint,

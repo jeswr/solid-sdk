@@ -6,7 +6,7 @@ import { Store } from "n3";
 import { describe, expect, it, vi } from "vitest";
 import { ResourceWriteError } from "../pod/resource.js";
 import { createFetchPodWriter } from "./pod-writer.js";
-import { createMemoryPod, TEST_POD_ROOT, TEST_WEBID } from "./testing.js";
+import { createMemoryPod, TEST_POD_ROOT, TEST_PROFILE_DOC, TEST_WEBID } from "./testing.js";
 import type { NormalisedDoc } from "./types.js";
 
 const doc: NormalisedDoc = {
@@ -173,6 +173,67 @@ describe("fetch-backed PodWriter", () => {
     ]);
     expect(result).toMatchObject({ indexUrl: first.indexUrl, added: 1, bootstrapped: false });
     expect(pod.get(result.indexUrl)).toContain(doc.forClass);
+  });
+
+  it.each([
+    "https://second.test/alice/",
+    "https://pod.test/second/",
+  ])("registers an import into %s in an index in the first advertised storage", async (secondRoot) => {
+    const pod = createMemoryPod();
+    const { indexUrl } = await writer(pod.fetch).registerType([]);
+    await pod.fetch(TEST_PROFILE_DOC, {
+      method: "PUT",
+      body: `${pod.get(TEST_PROFILE_DOC)}
+<${TEST_WEBID}> <http://www.w3.org/ns/pim/space#storage> <${secondRoot}> .`,
+    });
+    const fetch = vi.fn(pod.fetch);
+    const port = createFetchPodWriter({
+      adapterId: "toy",
+      webId: TEST_WEBID,
+      podRoot: secondRoot,
+      fetch,
+    });
+    const written = await port.write(doc);
+    const container = port.resolve("media/");
+    const result = await port.registerType([{ forClass: doc.forClass, container }]);
+    expect(written.url).toBe(`${secondRoot}integrations/toy/${doc.slug}`);
+    expect(pod.get(written.url)).toBeDefined();
+    expect(result).toEqual({ indexUrl, added: 1, bootstrapped: false });
+    expect(pod.get(indexUrl)).toContain(container);
+    const indexCalls = fetch.mock.calls.filter(([input]) => String(input) === indexUrl);
+    expect(indexCalls.map(([, init]) => init?.method ?? "GET")).toEqual(["GET", "PUT"]);
+    expect(indexCalls.every(([, init]) => init?.redirect === "manual")).toBe(true);
+    expect(new Headers(indexCalls[1][1]?.headers).get("if-match")).toBe('"v1"');
+  });
+
+  it.each([
+    "https://outside.test/index.ttl",
+    "https://pod.test/alice-sibling/index.ttl",
+    "https://second.test/alice-sibling/index.ttl",
+  ])("rejects an index outside both advertised storages: %s", async (indexUrl) => {
+    const pod = createMemoryPod();
+    const secondRoot = "https://second.test/alice/";
+    await pod.fetch(TEST_PROFILE_DOC, {
+      method: "PUT",
+      body: `${pod.get(TEST_PROFILE_DOC)}
+<${TEST_WEBID}> <http://www.w3.org/ns/pim/space#storage> <${secondRoot}> ;
+  <http://www.w3.org/ns/solid/terms#privateTypeIndex> <${indexUrl}> .`,
+    });
+    const fetch = vi.fn(pod.fetch);
+    const port = createFetchPodWriter({
+      adapterId: "toy",
+      webId: TEST_WEBID,
+      podRoot: secondRoot,
+      fetch,
+    });
+    const putsBefore = pod.putCount;
+    await expect(
+      port.registerType([{ forClass: doc.forClass, container: port.resolve("media/") }]),
+    ).rejects.toBeInstanceOf(PodScopeError);
+    expect(fetch.mock.calls.map(([input]) => String(input).split("#")[0])).toEqual([
+      TEST_PROFILE_DOC,
+    ]);
+    expect(pod.putCount).toBe(putsBefore);
   });
 
   it("refuses a profile-linked foreign Type Index before sending Pod credentials", async () => {
