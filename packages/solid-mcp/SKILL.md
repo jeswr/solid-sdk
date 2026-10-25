@@ -19,7 +19,8 @@ pod_list/pod_read/pod_write/search names. No new tools belong to MCP-01.
 The server and fetch adapter default to read-only independently. Scope-check tool
 and resource URLs even with injected PodPorts. The fetch adapter permits only the
 operator-configured WebID outside the pod, for best-effort Type Index discovery;
-never let client-selected tool URLs use this exception. Drop discovered off-pod URLs.
+never let client-selected tool URLs use this exception. Refuse off-pod profile redirects
+and drop discovered off-pod URLs.
 Guard read redirects; refuse mutation redirects, root mutations and root aliases.
 Preserve ETags and conditional mutation headers.
 

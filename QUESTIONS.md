@@ -10,3 +10,7 @@
 2. DESIGN §2 describes a complete app, while MCP-01 asks for scaffolding and MCP-11
    owns composition. Options: (a) runnable Node/Web handler scaffold returning 501;
    (b) implement health, consent and transport now. Conservative choice: (a).
+3. DESIGN §3's byte-read result omits the final URL after redirects. Options:
+   (a) resolve relative RDF IRIs against the requested URL; (b) preserve an optional
+   final representation `url` on `PodReadResult`. Conservative choice: (b), retaining
+   the existing fetch-rdf base-IRI behavior. Backends that do not redirect can omit it.

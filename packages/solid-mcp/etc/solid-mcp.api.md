@@ -61,6 +61,7 @@ export interface PodReadResult {
     body: Uint8Array;
     contentType: string;
     etag?: string;
+    url?: string;
 }
 
 // @public

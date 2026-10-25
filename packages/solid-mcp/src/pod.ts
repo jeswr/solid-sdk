@@ -154,8 +154,10 @@ export async function readResource(source: PodSource, url: string): Promise<Read
 export async function readRdf(source: PodSource, url: string): Promise<ReadRdfResult> {
   const pod = asPodPort(source);
   const target = requirePodScopedUrl({ podRoot: pod.root }, url);
-  const { body, contentType } = await pod.read(target);
-  const dataset = await parseRdf(new TextDecoder().decode(body), contentType, { baseIRI: target });
+  const { body, contentType, url: finalUrl } = await pod.read(target);
+  const dataset = await parseRdf(new TextDecoder().decode(body), contentType, {
+    baseIRI: finalUrl ?? target,
+  });
   const turtle = await serializeTurtle(dataset);
   return { turtle, dataset };
 }
@@ -426,8 +428,10 @@ async function typeIndexContainers(source: PodSource): Promise<string[]> {
   if (!webId) return [];
   const solidNs = "http://www.w3.org/ns/solid/terms#";
   const out = new Set<string>();
-  const { body, contentType } = await pod.read(webId);
-  const profile = await parseRdf(new TextDecoder().decode(body), contentType, { baseIRI: webId });
+  const { body, contentType, url: finalUrl } = await pod.read(webId);
+  const profile = await parseRdf(new TextDecoder().decode(body), contentType, {
+    baseIRI: finalUrl ?? webId,
+  });
   const indexes = new Set<string>();
   for (const p of [`${solidNs}publicTypeIndex`, `${solidNs}privateTypeIndex`]) {
     for (const quad of profile.getQuads(null, DataFactory.namedNode(p), null, null)) {

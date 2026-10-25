@@ -29,6 +29,8 @@ export interface PodReadResult {
   contentType: string;
   /** Resource version, when supplied by the server. */
   etag?: string;
+  /** Final representation URL after validated redirects, when available. */
+  url?: string;
 }
 
 /** Minimal portable container entry; fetch-backed listings retain legacy metadata. */
@@ -78,7 +80,14 @@ export function createFetchPodPort(input: SolidMcpConfig): PodPort {
       const target = profile ? url : requirePodScopedUrl(config, url);
       const fetcher =
         profile && podScopedUrlOrUndefined(config, url) === undefined ? config.fetch : guardedFetch;
-      const response = await fetcher(target, { method: "GET" });
+      const response = await fetcher(target, {
+        method: "GET",
+        // The off-pod identity exception must never follow an unchecked redirect.
+        // In-pod reads still use guardedFetch's validated redirect loop.
+        redirect: "manual",
+        // Keep RDF negotiation for profile/RDF reads while accepting arbitrary file types.
+        headers: { accept: "text/turtle, application/ld+json;q=0.9, */*;q=0.1" },
+      });
       if (response.status === 401 || response.status === 403) {
         throw new Error(
           `unauthenticated/forbidden (${response.status}) reading ${target} — supply an authenticated fetch (the Solid-MCP server holds no credentials of its own).`,
@@ -93,6 +102,7 @@ export function createFetchPodPort(input: SolidMcpConfig): PodPort {
           .trim()
           .toLowerCase(),
         etag: response.headers.get("etag") ?? undefined,
+        ...(response.url ? { url: response.url } : {}),
       };
     },
     async list(url): Promise<PodChild[]> {

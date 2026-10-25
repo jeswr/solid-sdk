@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { describe, expect, it, vi } from "vitest";
+import { readRdf } from "../src/pod.js";
 import { createFetchPodPort } from "../src/pod-port.js";
 import { containerTurtle, makeFakePod } from "./fake-pod.js";
 
@@ -24,6 +25,9 @@ describe("fetch PodPort", () => {
     expect(pod.webId).toBe("");
     expect(await pod.read(FILE)).toEqual({ body: bytes, contentType: "image/png", etag: '"v1"' });
     expect(fetch.mock.calls[0]?.[1]?.redirect).toBe("manual");
+    expect(new Headers(fetch.mock.calls[0]?.[1]?.headers).get("accept")).toBe(
+      "text/turtle, application/ld+json;q=0.9, */*;q=0.1",
+    );
   });
 
   it("supports a missing content type and ETag", async () => {
@@ -64,6 +68,16 @@ describe("fetch PodPort", () => {
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 
+  it("never follows an off-pod WebID redirect to an internal service", async () => {
+    const webId = "https://identity.example/card#me";
+    const fetch = responding(302, { location: "http://169.254.169.254/internal" });
+    const pod = createFetchPodPort({ fetch, podRoot: ROOT, webId });
+    await expect(pod.read(webId)).rejects.toThrow(/HTTP 302/);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(fetch.mock.calls[0]?.[0]).toBe(webId);
+    expect(fetch.mock.calls[0]?.[1]?.redirect).toBe("manual");
+  });
+
   it("snapshots the configured capability", async () => {
     const config = { fetch: responding(), podRoot: ROOT, readOnly: true };
     const pod = createFetchPodPort(config);
@@ -84,6 +98,26 @@ describe("fetch PodPort", () => {
     const pod = createFetchPodPort({ fetch, podRoot: ROOT });
     await expect(pod.read(FILE)).rejects.toThrow(/pod-scope/);
     expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("resolves relative RDF IRIs against the final in-pod redirect URL", async () => {
+    const finalUrl = `${ROOT}nested/data.ttl`;
+    const fetch = vi.fn<typeof globalThis.fetch>(async (input) => {
+      if (String(input) === FILE)
+        return new Response(null, { status: 302, headers: { location: finalUrl } });
+      const response = new Response('<#subject> <http://schema.org/name> "fixture" .', {
+        headers: { "content-type": "text/turtle" },
+      });
+      Object.defineProperty(response, "url", { value: finalUrl });
+      return response;
+    });
+    const pod = createFetchPodPort({ fetch, podRoot: ROOT });
+    const { dataset } = await readRdf(pod, FILE);
+    expect(dataset.getSubjects(null, null, null).map((subject) => subject.value)).toContain(
+      `${finalUrl}#subject`,
+    );
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(fetch.mock.calls.map(([url]) => url)).toEqual([FILE, finalUrl]);
   });
 
   it("forwards byte writes and conditional headers, returning the ETag", async () => {

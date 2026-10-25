@@ -67,7 +67,7 @@ const server = createSolidMcpServer({ pod });
 and refusal of all mutation redirects. Mutations reject the root and its slashless
 alias. Both adapter and server default to read-only; opt into writes at both layers.
 The configured WebID remains readable for Type Index discovery even when off-pod;
-client tools and resources are always confined to the pod root. A custom PodPort
+off-pod profile redirects are refused. Client tools and resources are always confined to the pod root. A custom PodPort
 must enforce its data boundary and mutation policy too.
 
 The existing fetch-based server configuration and exported pod operations remain
