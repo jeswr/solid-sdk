@@ -13,7 +13,7 @@ import {
   OidcSession,
   type OidcSessionOptions,
 } from "./OidcSession.js";
-import { SessionFence } from "./SessionFence.js";
+import type { SessionFence } from "./SessionFence.js";
 import { storageContextKey } from "./StorageContext.js";
 import type { TokenProvider } from "./TokenProvider.js";
 
@@ -45,6 +45,8 @@ export class DPoPTokenProvider implements TokenProvider {
   readonly #fence: SessionFence;
   readonly #context: ContextKey;
   readonly #issued = new Map<string, { issuer: string; context: string }>();
+  // Outstanding requests must outlive the bounded token history used for request copies.
+  #requests = new WeakMap<Request, { issuer: string; context: string }>();
 
   constructor(
     callbackUri: string,
@@ -55,19 +57,19 @@ export class DPoPTokenProvider implements TokenProvider {
     options: DPoPTokenProviderOptions = {},
   ) {
     this.#asProvider = asProvider;
-    this.#fence =
-      options.fence ?? new SessionFence(`local-${crypto.randomUUID()}`, { broadcast: false });
     this.#context =
       options.context ??
       storageContextKey({
         mappings: createMemoryStore(),
         ...(options.http === undefined ? {} : { http: options.http }),
       });
-    this.#session = new OidcSession(callbackUri, codeProvider, clientProvider, {
-      ...options,
-      fence: this.#fence,
-      ...(cache === undefined ? {} : { cache }),
-    });
+    this.#session = new OidcSession(
+      callbackUri,
+      codeProvider,
+      clientProvider,
+      cache === undefined ? options : { ...options, cache },
+    );
+    this.#fence = this.#session.fence;
   }
 
   /**
@@ -112,18 +114,22 @@ export class DPoPTokenProvider implements TokenProvider {
     const headers = new Headers(request.headers);
     headers.set("DPoP", proof);
     headers.set("Authorization", `DPoP ${accessToken}`);
-    return new Request(request, { headers });
+    const upgraded = new Request(request, { headers });
+    this.#requests.set(upgraded, { issuer: as.issuer, context });
+    return upgraded;
   }
 
   async invalidate(upgraded: Request): Promise<void> {
     const token = upgraded.headers.get("Authorization")?.replace(/^DPoP /, "");
-    const issued = token === undefined ? undefined : this.#issued.get(token);
+    const issued =
+      this.#requests.get(upgraded) ?? (token === undefined ? undefined : this.#issued.get(token));
     if (token !== undefined && issued !== undefined)
       await this.#session.invalidate(issued.issuer, issued.context, token);
   }
 
   async forget(): Promise<void> {
     this.#issued.clear();
+    this.#requests = new WeakMap();
     await this.#session.forget();
   }
 

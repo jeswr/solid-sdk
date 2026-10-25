@@ -97,6 +97,8 @@ export class LwsTokenProvider implements TokenProvider {
   readonly #tokens: FencedCache<LwsAccessToken>;
   readonly #metadata: KeyValueStore<oauth.AuthorizationServer>;
   readonly #issued = new Map<string, string>();
+  // Outstanding requests must outlive the bounded token history used for request copies.
+  #requests = new WeakMap<Request, string>();
 
   constructor(source: CredentialSource, options: LwsTokenProviderOptions = {}) {
     if (options.metadataStore !== undefined && !options.namespace)
@@ -131,18 +133,23 @@ export class LwsTokenProvider implements TokenProvider {
     this.#remember(token.accessToken, key);
     const headers = new Headers(request.headers);
     headers.set("Authorization", `Bearer ${token.accessToken}`);
-    return new Request(request, { headers });
+    const upgraded = new Request(request, { headers });
+    this.#requests.set(upgraded, key);
+    return upgraded;
   }
 
   async invalidate(upgraded: Request): Promise<void> {
     const rejected = upgraded.headers.get("Authorization")?.replace(/^Bearer /, "");
-    const key = rejected === undefined ? undefined : this.#issued.get(rejected);
+    const key =
+      this.#requests.get(upgraded) ??
+      (rejected === undefined ? undefined : this.#issued.get(rejected));
     if (key !== undefined)
       await this.#tokens.removeIf(key, (token) => token.accessToken === rejected);
   }
 
   async forget(): Promise<void> {
     this.#issued.clear();
+    this.#requests = new WeakMap();
     await this.#tokens.forget();
     await this.#source.forget?.();
   }

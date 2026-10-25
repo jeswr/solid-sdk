@@ -180,6 +180,11 @@ export class OidcSession {
       options.fence ?? new SessionFence(`local-${crypto.randomUUID()}`, { broadcast: false });
   }
 
+  /** The session's fence, for operations that begin before issuer or context discovery. */
+  get fence(): SessionFence {
+    return this.#fence;
+  }
+
   /**
    * Returns a usable session for the authorization server and credential context: cached, refreshed,
    * or (when `interactive`) newly authorized. Returns `undefined` only when not interactive and no
