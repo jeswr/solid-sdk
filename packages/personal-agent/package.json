@@ -48,7 +48,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "build": "tsc -p tsconfig.build.json",
+    "build": "tsc -p tsconfig.build.json && node scripts/copy-dashboard-assets.mjs dist",
     "check:dist": "node scripts/check-dist.mjs",
     "check:lockfile-transport": "node scripts/check-lockfile-transport.mjs",
     "fix:lockfile-transport": "node scripts/normalize-lockfile.mjs",

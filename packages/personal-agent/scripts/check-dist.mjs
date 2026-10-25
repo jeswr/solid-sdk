@@ -10,8 +10,10 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const root = new URL("..", import.meta.url).pathname;
+// fileURLToPath (not URL.pathname) so a checkout path containing spaces is not %-encoded.
+const root = fileURLToPath(new URL("..", import.meta.url));
 const committedDist = join(root, "dist");
 
 function listFiles(dir) {
@@ -27,12 +29,22 @@ function listFiles(dir) {
 // Compare only the meaningful build outputs: .js and .d.ts. Sourcemaps (.map)
 // and the trailing `//# sourceMappingURL=` footer embed paths and are not
 // load-bearing for the install-without-build guarantee, so they are excluded.
-const isMeaningful = (f) => (f.endsWith(".js") || f.endsWith(".d.ts")) && !f.endsWith(".d.ts.map");
+// The dashboard's static assets (copied by the build) are compared too.
+const isMeaningful = (f) =>
+  ((f.endsWith(".js") || f.endsWith(".d.ts")) && !f.endsWith(".d.ts.map")) ||
+  /^dashboard\/public\/[^/]+\.(html|css|svg)$/.test(f.split("\\").join("/"));
 const stripFooter = (s) => s.replace(/\n\/\/# sourceMappingURL=.*\n?$/, "\n");
 
 const tmp = mkdtempSync(join(tmpdir(), "pa-dist-"));
 try {
-  execFileSync("npx", ["tsc", "-p", "tsconfig.build.json", "--outDir", tmp], {
+  // Run the locally installed compiler with the current Node binary (no `npx` lookup, which
+  // is not available in every sandboxed environment).
+  const tsc = join(root, "node_modules", "typescript", "bin", "tsc");
+  execFileSync(process.execPath, [tsc, "-p", "tsconfig.build.json", "--outDir", tmp], {
+    cwd: root,
+    stdio: "inherit",
+  });
+  execFileSync(process.execPath, [join(root, "scripts", "copy-dashboard-assets.mjs"), tmp], {
     cwd: root,
     stdio: "inherit",
   });
