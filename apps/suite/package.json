@@ -10,7 +10,8 @@
     "lint": "biome check src test e2e *.ts *.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:e2e": "pnpm --filter @jeswr/suite-ui run build && playwright test"
+    "test:e2e": "pnpm --filter @jeswr/suite-ui run build && playwright test",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@jeswr/suite-ui": "workspace:*",

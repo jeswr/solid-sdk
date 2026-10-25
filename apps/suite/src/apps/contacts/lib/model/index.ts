@@ -43,5 +43,5 @@ export {
   TypeIndexDataset,
   TypeRegistration,
 } from "./discovery";
-export { importVcards, parseVcards } from "./import";
+export { importVcards, parseVcards, VcardImportError } from "./import";
 export { ContactsWriteError, PartialWriteError, type Snapshot } from "./transport";

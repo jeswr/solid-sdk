@@ -174,3 +174,25 @@ describe("Type Index and vCard model adapters", () => {
     expect(pod.files.get(ALICE)?.body).toBe(fixture("alice"));
   });
 });
+
+test("interrupted multi-card imports expose completed ids without silently duplicating them", async () => {
+  const { model, pod, book } = await setup();
+  let creates = 0;
+  pod.fail = (_url, method) => {
+    if (method === "PUT" && ++creates === 3) return new Response(null, { status: 403 });
+    return undefined;
+  };
+  try {
+    await importVcards(model, book, `${vcf}\n${vcf}`);
+    expect.fail("Expected the second card to fail");
+  } catch (error) {
+    expect(error).toMatchObject({
+      name: "VcardImportError",
+      imported: [expect.stringContaining("#this")],
+      cause: { status: 403 },
+    });
+    expect(
+      (await model.loadPeople(book)).data.filter((entry) => entry.name === "Vera Card"),
+    ).toHaveLength(1);
+  }
+});
