@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # @jeswr/storage-capabilities
 
@@ -30,8 +31,12 @@ Internal helpers for the later discovery implementation:
   pairs (or a `Headers` instance) into the architect's `ProbeResult`. Raw pairs preserve response order;
   `Headers` iteration may sort and combine fields. Recognised fields remain as evidence, including
   malformed WAC-Allow values. WAC-Allow keeps known user/public permissions alongside unknown
-  groups and modes, merges repeated groups, and rejects malformed syntax. Links with a different
-  anchor context are ignored for access control.
+  groups and modes, lower-cases modes before recognition and deduplication, skips empty list
+  members, merges repeated groups, and rejects malformed syntax. Accept-Patch and Accept-Post use
+  a single-pass tokenizer for quoted parameters; an unterminated quote discards that member and
+  the remainder of the combined field. Combined Accept-Patch, Accept-Post, and Allow fields over
+  8 KiB (UTF-8, including joining commas) are treated as absent while retaining raw evidence.
+  Links with a different anchor context are ignored for access control.
 
 Discovery, network probing, feature derivation, caches, and testing fixtures arrive in later tasks.
 The `@jeswr/storage-capabilities/cache` and `@jeswr/storage-capabilities/testing` entry points remain reserved.
