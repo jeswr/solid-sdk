@@ -28,10 +28,19 @@ export function createFetchDocumentLoader(
           redirect: "error",
         });
         if (!response.ok) {
-          throw new RdfFetchError(`HTTP ${response.status} loading JSON-LD context ${url}.`, {
-            status: response.status,
-            url,
-          });
+          const error = new RdfFetchError(
+            `HTTP ${response.status} loading JSON-LD context ${url}.`,
+            {
+              status: response.status,
+              url,
+            },
+          );
+          try {
+            await response.body?.cancel();
+          } catch {
+            // Cleanup is best-effort: preserve the original HTTP error.
+          }
+          throw error;
         }
         return await response.json();
       } catch (cause) {

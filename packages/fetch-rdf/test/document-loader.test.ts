@@ -85,6 +85,102 @@ describe("JSON-LD context policy", () => {
     });
   });
 
+  it.each([404, 503])("cancels an unread HTTP %s context response", async (status) => {
+    const cancel = vi.fn();
+    const responseBody = new ReadableStream<Uint8Array>({ cancel });
+    const response = new Response(responseBody, { status });
+    const loader = createFetchDocumentLoader(
+      vi.fn(async () => response),
+      { allow: () => true },
+    );
+
+    await expect(loader.load(contextUrl)).rejects.toMatchObject({
+      name: "RdfFetchError",
+      status,
+      url: contextUrl,
+      message: `HTTP ${status} loading JSON-LD context ${contextUrl}.`,
+    });
+    expect(cancel).toHaveBeenCalledTimes(1);
+    expect(responseBody.locked).toBe(false);
+  });
+
+  it("awaits context response cancellation before exposing the HTTP error", async () => {
+    let finishCancellation = () => {};
+    const pending = new Promise<void>((resolve) => {
+      finishCancellation = resolve;
+    });
+    const cancel = vi.fn(() => pending);
+    const response = new Response(new ReadableStream({ cancel }), { status: 403 });
+    const loader = createFetchDocumentLoader(
+      vi.fn(async () => response),
+      { allow: () => true },
+    );
+    const rejected = vi.fn();
+    const result = loader.load(contextUrl).catch(rejected);
+
+    await vi.waitFor(() => expect(cancel).toHaveBeenCalledTimes(1));
+    expect(rejected).not.toHaveBeenCalled();
+    finishCancellation();
+    await result;
+    expect(rejected).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ name: "RdfFetchError", status: 403, url: contextUrl }),
+    );
+  });
+
+  it("preserves the context HTTP error when cancellation rejects", async () => {
+    const cancel = vi.fn(async () => {
+      throw new Error("cleanup failed");
+    });
+    const response = new Response(new ReadableStream({ cancel }), { status: 500 });
+    const loader = createFetchDocumentLoader(
+      vi.fn(async () => response),
+      { allow: () => true },
+    );
+
+    await expect(loader.load(contextUrl)).rejects.toMatchObject({
+      name: "RdfFetchError",
+      status: 500,
+      url: contextUrl,
+      message: `HTTP 500 loading JSON-LD context ${contextUrl}.`,
+    });
+    expect(cancel).toHaveBeenCalledTimes(1);
+  });
+
+  it("preserves the context HTTP error for an already-locked body", async () => {
+    const responseBody = new ReadableStream<Uint8Array>();
+    const response = new Response(responseBody, { status: 500 });
+    const reader = responseBody.getReader();
+    const loader = createFetchDocumentLoader(
+      vi.fn(async () => response),
+      { allow: () => true },
+    );
+
+    try {
+      await expect(loader.load(contextUrl)).rejects.toMatchObject({
+        name: "RdfFetchError",
+        status: 500,
+        url: contextUrl,
+      });
+    } finally {
+      await reader.cancel();
+      reader.releaseLock();
+    }
+  });
+
+  it("preserves the context HTTP error when the response has no body", async () => {
+    const response = new Response(null, { status: 500 });
+    const loader = createFetchDocumentLoader(
+      vi.fn(async () => response),
+      { allow: () => true },
+    );
+
+    await expect(loader.load(contextUrl)).rejects.toMatchObject({
+      name: "RdfFetchError",
+      status: 500,
+      url: contextUrl,
+    });
+  });
+
   it("fetchRdf refuses contexts by default and forwards an explicit loader", async () => {
     const transport = vi.fn<typeof fetch>(
       async () => new Response(body, { headers: { "content-type": "application/ld+json" } }),
