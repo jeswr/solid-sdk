@@ -176,3 +176,61 @@ there are no open questions. No push, PR, branch switch or edits to another chec
 
 `roborev` remains unavailable on PATH, so per-commit roborev verdicts could not be obtained locally.
 Dispatcher/security review remains outstanding; this security-critical package has not been merged.
+
+## Fix round 2 — review `dfd6acf0bd32`
+
+Completed all three findings in `solid-sdk-lane-sst-8xm.28-dfd6acf0bd32.md`.
+Only `packages/reactive-authentication` and this report changed. No dependencies were added.
+
+| Commit | Change |
+| --- | --- |
+| `fe0b8eb5` | Reject automatic redirects in `secureFetch`, preserving manual redirect inspection for storage discovery. Add four regressions covering LWS metadata, WebID profiles, client documents, explicit follow mode, and manual mode. |
+| `ae7f299b` | Pass the OAuth operation's original generation to `OidcSession.get`. Add two peer-logout regressions during delayed generation validation and token invalidation, with broadcasts disabled; check that neither memory nor durable credentials are committed under the newer generation. |
+| `3782b12e` | Recheck the provider's resources after token acquisition and fence verification, before attaching credentials. Add three regressions for revocation during initial acquisition, renewal and fence verification while the manager's independent boundary still allows the API. |
+| Final documentation commit (this commit) | Record fix-round verification and the remaining review-tool limitation. |
+
+Conservative redirect choice: reject every automatic redirect, including HTTPS destinations, rather than
+introduce manual redirect following. Explicit manual callers still receive the response for inspection.
+The redirect regressions map only the initial HTTPS URL to a loopback fixture through the injected transport;
+native fetch handles the redirect, proving that its insecure target is never contacted.
+
+### Round-2 verification
+
+PASS required package gate and root checks, run before the final documentation commit:
+
+```sh
+pnpm --filter @jeswr/reactive-authentication run lint && pnpm --filter @jeswr/reactive-authentication run build && pnpm --filter @jeswr/reactive-authentication run typecheck && pnpm --filter @jeswr/reactive-authentication run test
+pnpm run lint:root
+git diff --check
+```
+
+- Package lint: zero errors; the existing **62 warnings** and **21 informational diagnostics** remain.
+- Build and typecheck: pass, including the SDK type-contract checks.
+- Tests: **270/270** pass in **28/28** files, with no skips.
+- Enforced coverage: statements **2038/2038**, branches **1501/1501**, functions **464/464**,
+  lines **1837/1837** — **100% in every metric**. Coverage configuration and thresholds are unchanged.
+- Root lint: Biome, lockfile transport, app workspace and raw-fetch guards pass.
+- Whitespace validation: pass.
+
+Regression sensitivity was checked before each implementation fix:
+
+```sh
+pnpm --filter @jeswr/reactive-authentication exec vitest run test/transport.test.js --coverage.enabled=false
+pnpm --filter @jeswr/reactive-authentication exec vitest run test/oauth-source-coverage.test.js --coverage.enabled=false '--testNamePattern=captured generation'
+pnpm --filter @jeswr/reactive-authentication exec vitest run test/oauth-sdk-coverage.test.js --coverage.enabled=false '--testNamePattern=resource revocation'
+```
+
+Expected baseline results: **4/4**, **2/2**, and **3/3** selected regressions failed, respectively.
+All nine now pass in the final coverage-enforced package gate. Focused storage-discovery and existing
+OAuth suites also passed after the corresponding fixes.
+
+No `check:packages` run was needed because no dependency was added. The authentication package still
+has no workspace dependants, so no dependant gate applies. Per the lane brief, no whole-workspace
+gate or `gate:full` ran. No push, PR, branch switch, network Git operation or edits to another checkout
+were performed.
+
+### Round-2 remaining work and questions
+
+No implementation work is unfinished or blocked. There are no open questions.
+`roborev` remains unavailable on PATH, so automated per-commit verdicts could not be obtained locally.
+Dispatcher/security review remains outstanding; this security-critical package has not been merged.
