@@ -1,60 +1,54 @@
 <!-- AUTHORED-BY Codex GPT-6 -->
 
-# Lane status — sst-8xm.29 (T-003), fix round 5
+# Lane status — sst-8xm.29 (T-003), fix round 6
 
 Updated: 2026-10-25. Branch: `lane/sst-8xm.29`;
 base: `219cdd5a1579a95a6408f272fe6344e72e2e8664`.
-This round resumed at `07e65b66`; earlier implementations remain in branch history.
+This round resumed at `aa21d9fb`; earlier implementations remain in branch history.
 
 ## Outcome and commits
 
 Read the original brief, every earlier fix brief, and the prescribed review
-`solid-sdk-lane-sst-8xm.29-07e65b66d004.md` in full. Addressed its single medium
-finding: `import.meta.main` silently bypassed the guard on Node 24.0 and 24.1.
+`solid-sdk-lane-sst-8xm.29-aa21d9fbec55.md` in full. Addressed its sole low
+finding: malformed wildcard ranges such as `1.x.3` and `x.1` passed spec validation.
 
-- `eba0e13a` (`fix: run layer guard on all supported Node versions`) replaces
-  `import.meta.main` with an entry-point check using `process.argv[1]`,
-  `realpathSync`, and `fileURLToPath`, APIs available in Node 24.0. Direct and
-  symlinked CLI invocations scan manifests; importing the spec validator does
-  not run the CLI. If `node:fs.globSync` is unavailable, the guard exits with
-  status 1 and an explicit API/runtime error instead of skipping validation.
-- Add five regression tests: valid and forbidden manifests with
-  `import.meta.main` deleted, missing `globSync`, symlinked CLI invocation,
-  and importing without running the CLI. Tests copy the actual guard source
-  and prepend setup to emulate the missing property/API in a subprocess.
-- Final documentation commit: `docs: record supported Node guard verification`.
+- `d1819586` (`fix: enforce wildcard ordering in layer specs`) rejects numeric
+  components after the first wildcard (`x`, `X`, or `*`), preserving linear
+  validation. Adds 32 malformed plain/workspace specs and 14 valid wildcard
+  specs to the fixture matrices. Coverage includes all checked dependency
+  fields, restricted manifests/keys, comparators, unions, and hyphen ranges.
+- Final documentation commit: `docs: record wildcard ordering verification`.
   This report was updated last, after implementation and validation.
 
-Conservative interpretation: preserve the Node `>=24` engine and existing
-layer/spec policies; change only CLI execution compatibility and explicit
-failure for the required filesystem API. No dependencies were added.
+Conservative interpretation: enforce only wildcard ordering; preserve all other
+spec and layer policies. No dependencies or package/app files changed.
 
 ## Validation
 
-Runtime: Node `v24.22.1`, pnpm `10.4.1`. Node 24.0/24.1's absent
-`import.meta.main` is simulated by deleting the property in copied CLI scripts;
-those exact older Node versions were not executed.
+Runtime: Node `v24.22.1`, pnpm `10.4.1`.
 
-- `pnpm exec vitest run test/check-sdk-layers.test.mjs` — **PASS**, 208 tests,
-  including the five new regressions and existing pathological-input checks.
+- Before the fix, `pnpm exec vitest run test/check-sdk-layers.test.mjs` —
+  **EXPECTED FAIL**, 33 failures: all 32 new malformed spec fixtures plus the
+  existing validator test that checks the unsupported-spec matrix before
+  timing pathological inputs. The remaining 267 tests passed.
 - `pnpm exec turbo run lint:root test:root --filter=// --force` — **PASS**,
   2/2 root tasks executed without cache hits. This is the touched root project's
-  gate; no package/app source files or manifests changed, so package-specific
-  build, typecheck and dependent-package gates do not apply.
+  gate; package-specific build/typecheck/dependent gates do not apply.
 - The gate's `pnpm run lint:root` — **PASS**, including Biome, lockfile transport,
   app-workspace, SDK-layer and raw-fetch checks. The layer guard passes on all
   76 real manifests.
-- The gate's `pnpm run test:root` — **PASS**, all 234 tests in 3 files.
+- The gate's `pnpm run test:root` — **PASS**, all 326 tests in 3 files,
+  including 300 layer-guard tests and existing pathological-input timing checks.
 - `git diff --check` — **PASS**.
 - `check:packages` — not applicable; no dependencies were added.
 
-The original lane brief explicitly assigns the whole-workspace gate to the
-dispatcher and prohibits running it in this lane. Neither `pnpm run gate`
-nor `pnpm run gate:full` was run; the scoped root gate above covers this change.
+The original lane brief assigns the whole-workspace gate to the dispatcher and
+prohibits running it in this lane. Neither `pnpm run gate` nor `pnpm run gate:full`
+was run; the scoped root gate above covers this change.
 
 ## Review, unfinished work, and open questions
 
-Read and addressed the sole finding in the prescribed review of `07e65b66`.
+Read and addressed the sole finding in the prescribed review of `aa21d9fb`.
 `roborev status` is unavailable (exit 127, command not found), so the dispatcher
 must obtain the charter's per-commit automated review; no new local verdict
 was available to read.
@@ -66,4 +60,4 @@ with the dispatcher.
 
 No pushes, PRs, branch switches, remote fetches, or merges were performed.
 Work stayed inside this checkout apart from read-only access to the prescribed
-tracker briefs/review and temporary regression-test files.
+tracker briefs/review and temporary regression-test files/logs.
