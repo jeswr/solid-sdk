@@ -22,6 +22,7 @@ import {
   type SolidMcpConfig,
   writesEnabled,
 } from "./auth.js";
+import { registerChatTools } from "./chat-tools.js";
 import {
   listContainer,
   RDF_MEDIA_TYPES,
@@ -237,5 +238,6 @@ export function createSolidMcpServer(config: SolidMcpConfig): McpServer {
     },
   );
 
+  registerChatTools(server, cfg);
   return server;
 }

@@ -3326,6 +3326,9 @@ importers:
       '@jeswr/rdf-serialize':
         specifier: workspace:*
         version: link:../rdf-serialize
+      '@jeswr/solid-chat-interop':
+        specifier: workspace:*
+        version: link:../solid-chat-interop
       '@modelcontextprotocol/sdk':
         specifier: ^1.29.0
         version: 1.29.0(zod@4.4.3)
