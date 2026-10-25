@@ -72,32 +72,37 @@ export class WebIdPicker extends HTMLElement {
   }
 
   async getWebId(request: Request): Promise<URL> {
-    return await navigator.locks.request("WebIdPicker.getWebId", async (_) => {
-      this.#input.value = "";
-      this.#code.innerText = request.url;
-      this.#dialog.returnValue = "";
-      this.#dialog.showModal();
+    return await navigator.locks.request(
+      "WebIdPicker.getWebId",
+      { signal: request.signal },
+      async (_) => {
+        request.signal.throwIfAborted();
+        this.#input.value = "";
+        this.#code.innerText = request.url;
+        this.#dialog.returnValue = "";
+        this.#dialog.showModal();
 
-      const { promise, reject, resolve } = Promise.withResolvers<URL>();
+        const { promise, reject, resolve } = Promise.withResolvers<URL>();
 
-      const onClose = () => {
-        request.signal.removeEventListener("abort", onAbort);
-        if (this.#dialog.returnValue !== "") {
-          resolve(new URL(this.#dialog.returnValue));
-        } else {
-          reject(new WebIdRequestCancelledError(request));
-        }
-      };
-      const onAbort = () => {
-        this.#dialog.removeEventListener("close", onClose);
-        this.#dialog.close();
-        reject(request.signal.reason);
-      };
+        const onClose = () => {
+          request.signal.removeEventListener("abort", onAbort);
+          if (this.#dialog.returnValue !== "") {
+            resolve(new URL(this.#dialog.returnValue));
+          } else {
+            reject(new WebIdRequestCancelledError(request));
+          }
+        };
+        const onAbort = () => {
+          this.#dialog.removeEventListener("close", onClose);
+          this.#dialog.close();
+          reject(request.signal.reason);
+        };
 
-      request.signal.addEventListener("abort", onAbort, onlyOnce);
-      this.#dialog.addEventListener("close", onClose, onlyOnce);
+        request.signal.addEventListener("abort", onAbort, onlyOnce);
+        this.#dialog.addEventListener("close", onClose, onlyOnce);
 
-      return await promise;
-    });
+        return await promise;
+      },
+    );
   }
 }
