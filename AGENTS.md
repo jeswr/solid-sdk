@@ -64,12 +64,13 @@ package, app (including `apps/*/web`), and tool manifests, enforcing ADR-001 D1 
 on `@sparq-org/sparq` or the `@jeswr/storage-client/solid` and `/lws` backends;
 `@jeswr/storage-client` may depend only on `@jeswr/storage-capabilities`, `@jeswr/fetch-rdf`,
 `@jeswr/rdf-serialize`, `@jeswr/guarded-fetch`, `@solid/object`, `@rdfjs/wrapper`, and `n3`;
-`@jeswr/pod-auth` cannot depend on `@jeswr/storage-client`. The guard checks resolved npm
-and explicit `workspace:<name>@<range>` alias targets; all other workspace selectors,
-including bare words, versions, and ranges, target the dependency key.
-It rejects unresolvable dependency aliases in storage-client and pod-auth manifests,
-and for restricted package keys in any scanned manifest, without printing their specs.
-Unrelated file, link, and repository specs in unrestricted manifests are ignored.
+`@jeswr/pod-auth` cannot depend on `@jeswr/storage-client`. In storage-client and pod-auth
+manifests, and for restricted package keys (including subpaths) in any scanned manifest,
+the guard accepts only `workspace:*`, `workspace:^`, `workspace:~`,
+`workspace:<semver range>`, and plain semver ranges. Aliases, paths, other protocols,
+and tags fail with "unsupported dependency spec for a layered package" without printing
+their specs. Layer rules apply to the dependency key. Unrestricted manifests' unrelated
+dependencies are ignored.
 It reports violating manifest paths, fields, and dependency names. Development
 dependencies and source import restrictions are outside this manifest check's scope.
 Fixture tests run through `pnpm run test:root`; `--root <directory>` selects

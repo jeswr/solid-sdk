@@ -28,19 +28,22 @@ const isPackageOrSubpath = (name, target) => name === target || name.startsWith(
 const layeredPackages = new Set(["@jeswr/storage-client", "@jeswr/pod-auth"]);
 const restrictedDependencies = [...layeredPackages, ...appForbiddenDependencies];
 
-function dependencyTarget(name, spec) {
-  if (typeof spec !== "string") return null;
-  if (spec.startsWith("workspace:")) {
-    // Only explicit <name>@<range> forms alias another package. All other
-    // workspace selectors, including bare words and ranges, target the key.
-    const alias = /^workspace:((?:@[a-z0-9._-]+\/)?[a-z0-9_-][a-z0-9._-]*)@[^@:]+$/i.exec(spec);
-    return alias ? alias[1] : name;
-  }
-  const alias = /^npm:((?:@[a-z0-9._-]+\/)?[a-z0-9_-][a-z0-9._-]*)(?:@[^@:]+)?$/i.exec(spec);
-  if (alias) return alias[1];
-  // Versions, ranges and tags address the dependency key. Other protocols,
-  // paths and repository shorthands cannot establish the package identity.
-  return /^[a-z0-9_*^~<>=][a-z0-9._*+^~<>=| -]*$/i.test(spec) ? name : null;
+// Allow semver range syntax only: versions/partials, wildcards, comparators,
+// conjunctions, hyphen ranges and unions. No dependency resolution is needed.
+const number = "(?:0|[1-9][0-9]*)";
+const prerelease = "(?:0|[1-9][0-9]*|[0-9]*[a-zA-Z-][0-9a-zA-Z-]*)";
+const qualifier = `(?:-${prerelease}(?:\\.${prerelease})*)?(?:\\+[0-9a-zA-Z-]+(?:\\.[0-9a-zA-Z-]+)*)?`;
+const component = `(?:${number}|[xX*])`;
+const partial = `${component}(?:\\.${component}(?:\\.${component}${qualifier})?)?`;
+const comparator = `(?:[<>]=?|[=^]|~>?)?\\s*v?${partial}`;
+const rangePart = `(?:v?${partial}\\s+-\\s+v?${partial}|${comparator}(?:\\s+${comparator})*)`;
+const semverRange = new RegExp(`^${rangePart}(?:\\s*\\|\\|\\s*${rangePart})*$`);
+
+function isSupportedSpec(spec) {
+  if (typeof spec !== "string") return false;
+  if (spec === "workspace:^" || spec === "workspace:~") return true;
+  const range = spec.startsWith("workspace:") ? spec.slice("workspace:".length) : spec;
+  return semverRange.test(range.trim());
 }
 
 function checkLayers(root) {
@@ -60,28 +63,25 @@ function checkLayers(root) {
     const isApp = path.startsWith("apps/");
     for (const field of ["dependencies", "peerDependencies", "optionalDependencies"]) {
       for (const [name, spec] of Object.entries(manifest[field] ?? {})) {
-        const target = dependencyTarget(name, spec);
-        const location = `${path} ${field}.${name}${target && target !== name ? ` (alias of ${target})` : ""}`;
-        if (target === null) {
-          if (
-            layeredPackages.has(manifest.name) ||
-            restrictedDependencies.some((dep) => isPackageOrSubpath(name, dep))
-          ) {
-            failures.push(`${location}: unresolvable dependency alias`);
-          }
-          continue;
+        const location = `${path} ${field}.${name}`;
+        const isRestricted =
+          layeredPackages.has(manifest.name) ||
+          restrictedDependencies.some((dep) => isPackageOrSubpath(name, dep));
+        if (!isRestricted) continue;
+        if (!isSupportedSpec(spec)) {
+          failures.push(`${location}: unsupported dependency spec for a layered package`);
         }
-        if (isApp && appForbiddenDependencies.some((dep) => isPackageOrSubpath(target, dep))) {
+        if (isApp && appForbiddenDependencies.some((dep) => isPackageOrSubpath(name, dep))) {
           failures.push(`${location}: apps must use the protocol-neutral SDK surface`);
         }
-        if (manifest.name === "@jeswr/storage-client" && !storageClientDependencies.has(target)) {
+        if (manifest.name === "@jeswr/storage-client" && !storageClientDependencies.has(name)) {
           failures.push(
             `${location}: storage-client may depend only on ${[...storageClientDependencies].join(", ")}`,
           );
         }
         if (
           manifest.name === "@jeswr/pod-auth" &&
-          isPackageOrSubpath(target, "@jeswr/storage-client")
+          isPackageOrSubpath(name, "@jeswr/storage-client")
         ) {
           failures.push(`${location}: pod-auth must not depend on storage-client`);
         }
