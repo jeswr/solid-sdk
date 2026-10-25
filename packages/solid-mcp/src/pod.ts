@@ -15,6 +15,8 @@ import { DataFactory } from "n3";
 import { podScopedUrlOrUndefined, requirePodScopedUrl, requirePodScopedWriteUrl } from "./auth.js";
 import { asPodPort, type PodSource } from "./pod-port.js";
 
+const RDF_ACCEPT = "text/turtle, application/ld+json;q=0.9";
+
 /** A typed child of an LDP container, mapped to absolute URLs. */
 export interface PodChild {
   /** Absolute URL of the child resource. */
@@ -154,7 +156,7 @@ export async function readResource(source: PodSource, url: string): Promise<Read
 export async function readRdf(source: PodSource, url: string): Promise<ReadRdfResult> {
   const pod = asPodPort(source);
   const target = requirePodScopedUrl({ podRoot: pod.root }, url);
-  const { body, contentType, url: finalUrl } = await pod.read(target);
+  const { body, contentType, url: finalUrl } = await pod.read(target, { accept: RDF_ACCEPT });
   const dataset = await parseRdf(new TextDecoder().decode(body), contentType, {
     baseIRI: finalUrl ?? target,
   });
@@ -428,7 +430,7 @@ async function typeIndexContainers(source: PodSource): Promise<string[]> {
   if (!webId) return [];
   const solidNs = "http://www.w3.org/ns/solid/terms#";
   const out = new Set<string>();
-  const { body, contentType, url: finalUrl } = await pod.read(webId);
+  const { body, contentType, url: finalUrl } = await pod.read(webId, { accept: RDF_ACCEPT });
   const profile = await parseRdf(new TextDecoder().decode(body), contentType, {
     baseIRI: finalUrl ?? webId,
   });

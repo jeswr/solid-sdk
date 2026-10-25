@@ -37,6 +37,7 @@ export {
   type PodConditions,
   type PodEntry,
   type PodPort,
+  type PodReadOptions,
   type PodReadResult,
   type PodSource,
 } from "./pod-port.js";

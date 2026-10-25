@@ -21,6 +21,12 @@ export interface PodConditions {
   ifNoneMatch?: "*";
 }
 
+/** Optional representation preference for a resource read. */
+export interface PodReadOptions {
+  /** Accepted media types; omitted for the backend's default representation. */
+  accept?: string;
+}
+
 /** Raw resource bytes, media type and optional ETag. */
 export interface PodReadResult {
   /** Unmodified response bytes. */
@@ -44,7 +50,7 @@ export interface PodPort {
   /** Owner identity used for best-effort Type Index discovery; empty when unknown. */
   readonly webId: string;
   /** Read raw bytes. The configured WebID may be read for discovery, even when off-pod. */
-  read(url: string): Promise<PodReadResult>;
+  read(url: string, options?: PodReadOptions): Promise<PodReadResult>;
   /** List a container's immediate children. */
   list(container: string): Promise<PodEntry[]>;
   /** Write bytes with optional preconditions; reject redirects and disabled writes. */
@@ -73,7 +79,7 @@ export function createFetchPodPort(input: SolidMcpConfig): PodPort {
   return {
     root: config.podRoot,
     webId: config.webId ?? "",
-    async read(url) {
+    async read(url, options: PodReadOptions = {}) {
       // Only the operator-configured identity retains the legacy off-pod exception.
       // Tool/resource callers scope-check first, so clients cannot use it as an escape.
       const profile = url === config.webId;
@@ -85,8 +91,8 @@ export function createFetchPodPort(input: SolidMcpConfig): PodPort {
         // The off-pod identity exception must never follow an unchecked redirect.
         // In-pod reads still use guardedFetch's validated redirect loop.
         redirect: "manual",
-        // Keep RDF negotiation for profile/RDF reads while accepting arbitrary file types.
-        headers: { accept: "text/turtle, application/ld+json;q=0.9, */*;q=0.1" },
+        // Generic reads preserve the server's default representation.
+        headers: options.accept === undefined ? undefined : { accept: options.accept },
       });
       if (response.status === 401 || response.status === 403) {
         throw new Error(

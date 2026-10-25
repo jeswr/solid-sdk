@@ -48,12 +48,17 @@ export type PodEntry = Pick<PodChild, "url" | "isContainer"> & Partial<Omit<PodC
 export interface PodPort {
     delete(url: string, cond?: PodConditions): Promise<void>;
     list(container: string): Promise<PodEntry[]>;
-    read(url: string): Promise<PodReadResult>;
+    read(url: string, options?: PodReadOptions): Promise<PodReadResult>;
     readonly root: string;
     readonly webId: string;
     write(url: string, body: Uint8Array, contentType: string, cond: PodConditions): Promise<{
         etag?: string;
     }>;
+}
+
+// @public
+export interface PodReadOptions {
+    accept?: string;
 }
 
 // @public

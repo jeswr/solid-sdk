@@ -63,7 +63,8 @@ const server = createSolidMcpServer({ pod });
 ```
 
 `PodPort` exposes raw-byte `read`, `list`, conditional `write` and `delete`, `root` and
-`webId`. The fetch adapter retains listing metadata, ETags, guarded read redirects,
+`webId`. Optional `PodReadOptions.accept` selects a representation; generic reads keep
+the backend default, while RDF/profile reads request RDF explicitly. The fetch adapter retains listing metadata, ETags, guarded read redirects,
 and refusal of all mutation redirects. Mutations reject the root and its slashless
 alias. Both adapter and server default to read-only; opt into writes at both layers.
 The configured WebID remains readable for Type Index discovery even when off-pod;

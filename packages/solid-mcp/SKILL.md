@@ -22,7 +22,8 @@ operator-configured WebID outside the pod, for best-effort Type Index discovery;
 never let client-selected tool URLs use this exception. Refuse off-pod profile redirects
 and drop discovered off-pod URLs.
 Guard read redirects; refuse mutation redirects, root mutations and root aliases.
-Preserve ETags and conditional mutation headers.
+Preserve ETags and conditional mutation headers. Use PodReadOptions.accept for RDF/profile
+reads; generic byte reads must retain the backend default representation.
 
 Use fetch-rdf and typed wrappers for RDF reads, rdf-serialize for serialization.
 Tests use fake fetch and portable pods only. Run lint, build, typecheck and test;

@@ -14,3 +14,7 @@
    (a) resolve relative RDF IRIs against the requested URL; (b) preserve an optional
    final representation `url` on `PodReadResult`. Conservative choice: (b), retaining
    the existing fetch-rdf base-IRI behavior. Backends that do not redirect can omit it.
+4. DESIGN §3 omits representation negotiation, while existing readRdf/profile reads
+   request RDF and generic reads use the server default. Options: (a) prefer RDF on
+   all reads; (b) add an optional `PodReadOptions.accept`. Conservative choice: (b),
+   preserving both existing behaviors without changing one-argument PodPort backends.

@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { describe, expect, it, vi } from "vitest";
-import { readRdf } from "../src/pod.js";
+import { readRdf, readResource, search } from "../src/pod.js";
 import { createFetchPodPort } from "../src/pod-port.js";
 import { containerTurtle, makeFakePod } from "./fake-pod.js";
 
@@ -25,8 +25,50 @@ describe("fetch PodPort", () => {
     expect(pod.webId).toBe("");
     expect(await pod.read(FILE)).toEqual({ body: bytes, contentType: "image/png", etag: '"v1"' });
     expect(fetch.mock.calls[0]?.[1]?.redirect).toBe("manual");
-    expect(new Headers(fetch.mock.calls[0]?.[1]?.headers).get("accept")).toBe(
-      "text/turtle, application/ld+json;q=0.9, */*;q=0.1",
+    expect(new Headers(fetch.mock.calls[0]?.[1]?.headers).get("accept")).toBeNull();
+  });
+
+  it("negotiates RDF only for RDF reads, preserving generic resource representations", async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>(async (_input, init) => {
+      const rdf =
+        new Headers(init?.headers).get("accept") === "text/turtle, application/ld+json;q=0.9";
+      return new Response(
+        rdf ? '<#subject> <http://schema.org/name> "RDF view" .' : "default view",
+        {
+          headers: { "content-type": rdf ? "text/turtle" : "text/plain" },
+        },
+      );
+    });
+    const pod = createFetchPodPort({ fetch, podRoot: ROOT });
+    expect((await readResource(pod, FILE)).text).toBe("default view");
+    expect((await readRdf(pod, FILE)).turtle).toContain("RDF view");
+  });
+
+  it("requests RDF for configured off-pod profile discovery", async () => {
+    const webId = "https://identity.example/card#me";
+    const index = `${ROOT}index.ttl`;
+    const solid = "http://www.w3.org/ns/solid/terms#";
+    const fixture = makeFakePod({
+      [ROOT]: { body: containerTurtle(ROOT, []), contentType: "text/turtle" },
+      [index]: {
+        body: `<#registration> <${solid}instance> <${ROOT}favorite.txt> .`,
+        contentType: "text/turtle",
+      },
+    });
+    const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
+      if (String(input) !== webId) return fixture.fetch(input, init);
+      const rdf =
+        new Headers(init?.headers).get("accept") === "text/turtle, application/ld+json;q=0.9";
+      return new Response(
+        rdf ? `<${webId}> <${solid}publicTypeIndex> <${index}> .` : "<html>profile</html>",
+        {
+          headers: { "content-type": rdf ? "text/turtle" : "text/html" },
+        },
+      );
+    });
+    const pod = createFetchPodPort({ fetch, podRoot: ROOT, webId });
+    expect((await search(pod, "favorite")).map((match) => match.url)).toContain(
+      `${ROOT}favorite.txt`,
     );
   });
 
