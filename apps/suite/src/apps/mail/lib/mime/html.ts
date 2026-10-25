@@ -1,6 +1,16 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import sanitizeHtml from "sanitize-html";
 
+function contentIdFromUrl(value: string): string | undefined {
+  if (!/^cid:/i.test(value)) return undefined;
+  try {
+    // RFC 2392 URLs percent-encode addr-spec characters. Decode exactly once.
+    return decodeURIComponent(value.slice(4)) || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * Keep reading markup and user-activated links only. No CSS, script, forms, embedded
  * documents, SVG, or load-bearing resource attributes survive. CID image references
@@ -70,7 +80,7 @@ export function sanitizeMessageHtml(html: string): string {
     ],
     transformTags: {
       img: (_tag, attributes) => {
-        const cid = /^cid:(.+)$/i.exec(attributes.src ?? "")?.[1];
+        const cid = contentIdFromUrl(attributes.src ?? "");
         return {
           tagName: "img",
           attribs: {

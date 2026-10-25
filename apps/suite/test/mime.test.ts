@@ -169,6 +169,19 @@ describe("RFC 5322 and MIME parsing", () => {
 });
 
 describe("safe reading HTML", () => {
+  it("decodes CID URL escapes once, preserves ID case and ignores malformed escapes", () => {
+    expect(
+      sanitizeMessageHtml(
+        '<img src="cid:Logo%2Fone%40example.org"><img src="cid:literal%2540example.org"><img src="cid:%invalid">',
+      ),
+    ).toBe(
+      '<img alt="" data-inline-cid="Logo/one@example.org" /><img alt="" data-inline-cid="literal%40example.org" /><img alt="" />',
+    );
+    expect(sanitizeMessageHtml('<img src="cid:%22%3E%3Cscript%3E">')).toBe(
+      '<img alt="" data-inline-cid="&quot;&gt;&lt;script&gt;" />',
+    );
+  });
+
   it("keeps basic reading structure, table semantics and safe user-activated links", () => {
     const html =
       '<h2>Title</h2><blockquote><em>Quoted</em></blockquote><ul><li>One</li></ul><pre><code>x &lt; y</code></pre><table><caption>Data</caption><tbody><tr><th scope="row">Row</th><td colspan="2">Value</td></tr></tbody></table><a href="mailto:fictional@example.org" title="Email">Write</a><a href="#part">Jump</a>';
