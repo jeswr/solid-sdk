@@ -10,11 +10,12 @@
 // The document is produced from the vocabulary constants (never hand-typed
 // IRIs) and is round-trip-validated as RDF in the test suite.
 
+import { NS } from "@jeswr/suite-vocab";
 import { FinClass } from "./vocab.js";
 
 const ACL = "http://www.w3.org/ns/auth/acl#" as const;
-const FEDAPP = "https://w3id.org/jeswr/fed#" as const;
-const SECTOR_FINANCE = "https://w3id.org/jeswr/sectors/finance#sector" as const;
+const FEDAPP = NS.FED;
+const SECTOR_FINANCE = `${NS.FINANCE}sector` as const;
 
 /** Inputs that vary per deployment (the served origin). */
 export interface ClientIdOptions {
@@ -44,7 +45,7 @@ export function buildClientIdDocument(options: ClientIdOptions): Record<string, 
       {
         fedapp: FEDAPP,
         acl: ACL,
-        sectors: "https://w3id.org/jeswr/sectors/",
+        sectors: NS.FINANCE.slice(0, -"finance#".length),
         "fedapp:sector": { "@type": "@id" },
         "fedapp:access": { "@type": "@id" },
         "fedapp:consumes": { "@type": "@id" },
