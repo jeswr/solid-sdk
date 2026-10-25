@@ -2912,6 +2912,9 @@ importers:
       '@rdfjs/wrapper':
         specifier: ^0.34.0
         version: 0.34.0
+      '@solid/object':
+        specifier: ^0.6.0
+        version: 0.6.0
       n3:
         specifier: ^2.0.3
         version: 2.1.1

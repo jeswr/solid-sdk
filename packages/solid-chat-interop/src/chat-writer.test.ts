@@ -1,0 +1,307 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+import { parseRdf } from "@jeswr/fetch-rdf";
+import { AclResource } from "@solid/object";
+import { DataFactory } from "n3";
+import { describe, expect, it } from "vitest";
+import { type ChatConversation, type ChatPodPort, ChatWriter } from "./chat-writer.js";
+import { parseAs2 } from "./reconcile.js";
+
+const ROOT = "https://alice.example/pod/";
+const OWNER = `${ROOT}profile/card#me`;
+const DAY1 = "2026-10-24T12:00:00.000Z";
+const DAY2 = "2026-10-25T12:00:00.000Z";
+const decoder = new TextDecoder();
+function httpError(status: number) {
+  return Object.assign(new Error(`HTTP ${status}`), { status });
+}
+
+class MemoryPod implements ChatPodPort {
+  root = ROOT;
+  webId = OWNER;
+  resources = new Map<string, { body: Uint8Array; contentType: string }>();
+  writes: { url: string; body: Uint8Array; cond: { ifMatch?: string; ifNoneMatch?: "*" } }[] = [];
+  reads: string[] = [];
+  failUrl?: string;
+  failStatus = 403;
+  poison: { url: string; isContainer: boolean }[] = [];
+  async read(url: string) {
+    this.reads.push(url);
+    const resource = this.resources.get(url);
+    if (!resource) throw httpError(404);
+    return resource;
+  }
+  async list(container: string) {
+    return [...this.resources.keys()]
+      .filter(
+        (url) =>
+          url.startsWith(container) &&
+          url !== container &&
+          !url.slice(container.length).replace(/\/$/, "").includes("/"),
+      )
+      .map((url) => ({ url, isContainer: url.endsWith("/") }))
+      .concat(this.poison);
+  }
+  async write(
+    url: string,
+    body: Uint8Array,
+    contentType: string,
+    cond: { ifMatch?: string; ifNoneMatch?: "*" },
+  ) {
+    this.writes.push({ url, body, cond });
+    if (url === this.failUrl) throw httpError(this.failStatus);
+    if (cond.ifNoneMatch === "*" && this.resources.has(url)) throw httpError(412);
+    this.resources.set(url, { body, contentType });
+    return {};
+  }
+}
+function conversation(overrides: Partial<ChatConversation> = {}): ChatConversation {
+  return {
+    provider: "claude",
+    conversationId: "thread-1",
+    title: "A chat",
+    messages: [
+      { id: "msg-1", role: "user", text: 'Hello "world" <x>', createdAt: DAY1 },
+      { id: "msg-2", role: "assistant", text: "Hello back", createdAt: DAY2 },
+    ],
+    ...overrides,
+  };
+}
+
+describe("ChatWriter", () => {
+  it("writes canonical AS2 and preserves immutable message IDs on re-save", async () => {
+    const pod = new MemoryPod();
+    const writer = new ChatWriter(pod);
+    const input = conversation();
+    const first = await writer.save(input);
+    expect(first).toEqual({ url: `${ROOT}private/chats/claude/thread-1/`, saved: 2, skipped: 0 });
+    const messageUrl = `${first.url}m-msg-1.ttl`;
+    const before = decoder.decode((await pod.read(messageUrl)).body);
+    const parsed = await parseAs2(messageUrl, before);
+    expect(parsed).toMatchObject({
+      content: input.messages[0]?.text,
+      author: OWNER,
+      published: DAY1,
+      room: first.url,
+      mediaType: "text/plain",
+    });
+    expect(
+      await writer.save({
+        ...input,
+        title: "Replacement title",
+        messages: input.messages.map((m) => ({ ...m, text: "Changed" })),
+      }),
+    ).toEqual({ ...first, saved: 0, skipped: 2 });
+    expect(decoder.decode((await pod.read(messageUrl)).body)).toBe(before);
+    const got = await writer.get("claude", "thread-1");
+    expect(got).toEqual({ ...input, url: first.url });
+    const writes = pod.writes.filter((w) => /m-msg-/.test(w.url));
+    expect(writes.every((w) => w.cond.ifNoneMatch === "*")).toBe(true);
+    const assistant = await parseAs2(
+      `${first.url}m-msg-2.ttl`,
+      decoder.decode((await pod.read(`${first.url}m-msg-2.ttl`)).body),
+    );
+    expect(assistant?.author).toBeUndefined();
+  });
+
+  it("derives deterministic IDs for ID-less input and tolerates concurrent replays", async () => {
+    const pod = new MemoryPod();
+    const writer = new ChatWriter(pod);
+    const input = conversation({
+      provider: "codex",
+      messages: [{ role: "tool", text: "Read", createdAt: "2026-10-24T13:00:00+01:00" }],
+    });
+    const results = await Promise.all([writer.save(input), writer.save(input)]);
+    expect(results.reduce((sum, r) => sum + r.saved, 0)).toBe(1);
+    const saved = await writer.get("codex", "thread-1");
+    expect(saved.messages[0]?.id).toMatch(/^[a-f0-9]{64}$/);
+    expect(saved.messages[0]).toMatchObject({ role: "tool", createdAt: DAY1 });
+    expect(
+      (
+        await writer.save({
+          ...input,
+          messages: [
+            { ...(input.messages[0] as ChatConversation["messages"][number]), createdAt: DAY1 },
+          ],
+        })
+      ).saved,
+    ).toBe(0);
+  });
+
+  it("writes only owner ACLs before containers and content", async () => {
+    const pod = new MemoryPod();
+    await new ChatWriter(pod).save(conversation());
+    expect(pod.writes[0]?.url).toBe(`${ROOT}private/chats/.acl`);
+    for (const write of pod.writes.filter((w) => w.url.endsWith(".acl"))) {
+      const dataset = await parseRdf(decoder.decode(write.body), "text/turtle", {
+        baseIRI: write.url,
+      });
+      const authorizations = [...new AclResource(dataset, DataFactory).authorizations];
+      expect(authorizations).toHaveLength(1);
+      const auth = authorizations[0];
+      if (!auth) throw new Error("Missing owner authorization");
+      expect([...auth.agent]).toEqual([OWNER]);
+      expect([...auth.agentClass]).toEqual([]);
+      expect([...auth.mode].sort()).toEqual(
+        ["Control", "Read", "Write"].map((m) => `http://www.w3.org/ns/auth/acl#${m}`).sort(),
+      );
+      expect(auth.accessTo).toBe(write.url.slice(0, -4));
+      expect(auth.default).toBe(auth.accessTo);
+      expect(pod.writes.findIndex((w) => w.url === auth.accessTo)).toBeGreaterThan(
+        pod.writes.indexOf(write),
+      );
+    }
+    expect(pod.writes.some((w) => w.url === `${ROOT}private/.acl`)).toBe(false);
+  });
+
+  it.each([403, 412, 500])("aborts before content if ACL write fails (%s)", async (status) => {
+    const pod = new MemoryPod();
+    pod.failUrl = `${ROOT}private/chats/claude/thread-1/.acl`;
+    pod.failStatus = status;
+    await expect(new ChatWriter(pod).save(conversation())).rejects.toMatchObject({ status });
+    expect([...pod.resources.keys()].some((url) => url.endsWith(".ttl"))).toBe(false);
+  });
+
+  it("recovers a partial save by retrying only missing message IDs", async () => {
+    const pod = new MemoryPod();
+    pod.failUrl = `${ROOT}private/chats/claude/thread-1/m-msg-2.ttl`;
+    pod.failStatus = 500;
+    const writer = new ChatWriter(pod);
+    await expect(writer.save(conversation())).rejects.toMatchObject({ status: 500 });
+    pod.failUrl = undefined;
+    expect(await writer.save(conversation())).toMatchObject({ saved: 1, skipped: 1 });
+    expect((await writer.get("claude", "thread-1")).messages).toHaveLength(2);
+  });
+
+  it("pages in stable URL order and applies since before the page limit", async () => {
+    const pod = new MemoryPod();
+    const writer = new ChatWriter(pod);
+    for (const id of ["b", "Z", "a", "A"]) await writer.save(conversation({ conversationId: id }));
+    await writer.save(
+      conversation({
+        provider: "chatgpt",
+        conversationId: "new",
+        messages: [
+          { id: "fresh", role: "system", text: "System", createdAt: "2026-10-26T12:00:00Z" },
+        ],
+      }),
+    );
+    const first = await writer.list({ provider: "claude", limit: 2 });
+    expect(first.conversations.map((c) => c.conversationId)).toEqual(["A", "Z"]);
+    const second = await writer.list({ provider: "claude", limit: 2, cursor: first.nextCursor });
+    expect(second.conversations.map((c) => c.conversationId)).toEqual(["a", "b"]);
+    expect(second.nextCursor).toBeUndefined();
+    const since = await writer.list({ since: DAY2, limit: 1 });
+    expect(since.conversations.map((c) => c.provider)).toEqual(["chatgpt"]);
+    expect(since.nextCursor).toBeUndefined();
+    expect((await writer.list({ since: "2026-10-27T00:00:00Z" })).conversations).toEqual([]);
+  });
+
+  it("returns an empty page for missing providers but propagates permission errors", async () => {
+    const pod = new MemoryPod();
+    pod.list = async () => {
+      throw httpError(404);
+    };
+    const writer = new ChatWriter(pod);
+    expect(await writer.list()).toEqual({ conversations: [] });
+    pod.list = async () => {
+      throw httpError(403);
+    };
+    await expect(writer.list()).rejects.toMatchObject({ status: 403 });
+    await expect(writer.get("claude", "missing")).rejects.toMatchObject({ status: 404 });
+  });
+
+  it("ignores poisoned listings and sorts messages by time", async () => {
+    const pod = new MemoryPod();
+    const writer = new ChatWriter(pod);
+    await writer.save(conversation({ messages: [...conversation().messages].reverse() }));
+    pod.poison = [
+      { url: "https://evil.example/m-stolen.ttl", isContainer: false },
+      { url: `${ROOT}private/chats/claude/../outside/`, isContainer: true },
+      { url: `${ROOT}private/chats/claude/thread-1/nested/m-stolen.ttl`, isContainer: false },
+      { url: `${ROOT}private/chats/claude/thread-1/m-%2e%2e.ttl`, isContainer: false },
+    ];
+    expect((await writer.list()).conversations).toHaveLength(1);
+    const got = await writer.get("claude", "thread-1");
+    expect(got.messages.map((m) => m.id)).toEqual(["msg-1", "msg-2"]);
+    expect(pod.reads.every((url) => url.startsWith(`${ROOT}private/chats/claude/thread-1/`))).toBe(
+      true,
+    );
+  });
+
+  it.each([
+    "..",
+    "a/b",
+    "%2e%2e",
+    "a?x",
+    "",
+    "a#b",
+    "a\\b",
+    "a".repeat(201),
+  ])("rejects unsafe IDs before writes: %s", async (id) => {
+    const pod = new MemoryPod();
+    const writer = new ChatWriter(pod);
+    await expect(writer.save(conversation({ conversationId: id }))).rejects.toThrow(/Chat IDs/);
+    await expect(
+      writer.save(conversation({ messages: [{ id, role: "user", text: "x", createdAt: DAY1 }] })),
+    ).rejects.toThrow(/Chat IDs/);
+    expect(pod.writes).toEqual([]);
+  });
+
+  it("validates roots, owners, providers, roles, timestamps and page limits", async () => {
+    const pod = new MemoryPod();
+    for (const root of [
+      "not-a-url",
+      "file:///tmp/",
+      `${ROOT}?query`,
+      `${ROOT}#hash`,
+      ROOT.slice(0, -1),
+      "https://u:p@alice.example/",
+    ]) {
+      expect(() => new ChatWriter({ ...pod, root } as unknown as ChatPodPort)).toThrow();
+    }
+    expect(() => new ChatWriter({ ...pod, webId: "" } as unknown as ChatPodPort)).toThrow(/WebID/);
+    const writer = new ChatWriter(pod);
+    await expect(writer.save(conversation({ provider: "other" as "claude" }))).rejects.toThrow(
+      /provider/,
+    );
+    for (const message of [
+      { role: "bad", text: "x", createdAt: DAY1 },
+      { role: "user", text: "x", createdAt: "bad" },
+      { role: "user", text: "x", createdAt: "2026-10-24T12:00:00" },
+    ])
+      await expect(
+        writer.save(conversation({ messages: [message as ChatConversation["messages"][number]] })),
+      ).rejects.toThrow();
+    for (const limit of [0, 101, 1.5, Number.NaN])
+      await expect(writer.list({ limit })).rejects.toThrow(/limit/);
+    await expect(writer.list({ since: "yesterday" })).rejects.toThrow(/timestamp/);
+    expect(pod.writes).toEqual([]);
+  });
+
+  it("rejects remote-context formats and malformed stored resources", async () => {
+    const pod = new MemoryPod();
+    const writer = new ChatWriter(pod);
+    const { url } = await writer.save(conversation());
+    const resource = pod.resources.get(`${url}_conversation.ttl`);
+    if (!resource) throw new Error("Missing metadata");
+    resource.contentType = "application/ld+json";
+    resource.body = new TextEncoder().encode('{"@context":"https://evil.example/context"}');
+    await expect(writer.get("claude", "thread-1")).rejects.toThrow(/content type/);
+    resource.contentType = "text/turtle";
+    resource.body = new TextEncoder().encode("");
+    await expect(writer.get("claude", "thread-1")).rejects.toThrow(/metadata/);
+    pod.resources.delete(`${url}_conversation.ttl`);
+    await writer.save(conversation());
+    const message = pod.resources.get(`${url}m-msg-1.ttl`);
+    if (!message) throw new Error("Missing message");
+    message.body = new TextEncoder().encode("");
+    await expect(writer.get("claude", "thread-1")).rejects.toThrow(/stored chat/);
+  });
+
+  it("handles empty conversations and excludes them from a since query", async () => {
+    const writer = new ChatWriter(new MemoryPod());
+    await writer.save(conversation({ messages: [] }));
+    expect((await writer.list()).conversations[0]?.updatedAt).toBeUndefined();
+    expect((await writer.list({ since: DAY1 })).conversations).toEqual([]);
+  });
+});
