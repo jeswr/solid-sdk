@@ -30,7 +30,11 @@ const etag = headers.get("etag");
 - Before writing to a user-configured pod base, use `@jeswr/guarded-fetch`'s pod-scope guard instead of another path-prefix implementation.
 - Before constructing RDF terms from untrusted IRIs, use `@jeswr/rdf-serialize` to escape forbidden IRIREF characters and enforce scheme policy.
 
-Do not parse untrusted ActivityStreams JSON-LD with a loader that can fetch arbitrary remote contexts. Use a bundled allowlisted context and a refusing `documentLoader` on server request paths.
+Remote JSON-LD contexts are refused by default. For a trusted remote context, pass
+`documentLoader: createFetchDocumentLoader(authenticatedFetch, { allow: url => allowedUrls.has(url) })`
+to `fetchRdf` or `parseRdf`. The helper refuses redirects and checks nested contexts too.
+For offline ActivityStreams contexts, supply an explicit `{ load }` loader returning
+only bundled allowlisted contexts; this package does not bundle contexts itself.
 
 ## Agent persona
 

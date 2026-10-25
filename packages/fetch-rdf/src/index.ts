@@ -11,9 +11,10 @@
  * @packageDocumentation
  */
 
+export { createFetchDocumentLoader } from "./document-loader.js";
 export type { RdfFetchErrorOptions } from "./errors.js";
 export { RdfFetchError } from "./errors.js";
 export { fetchRdf } from "./fetch.js";
 export type { RdfBody } from "./parse.js";
 export { extractMediaType, parseRdf, SUPPORTED_RDF_MEDIA_TYPES } from "./parse.js";
-export type { FetchedRdf, FetchRdfOptions, ParseRdfOptions } from "./types.js";
+export type { DocumentLoader, FetchedRdf, FetchRdfOptions, ParseRdfOptions } from "./types.js";

@@ -54,6 +54,30 @@ const ds = await parseRdf(turtleBody, 'text/turtle', {
 `dataset` is an [`N3.Store`](https://github.com/rdfjs/N3.js#storing),
 which implements `RDF.DatasetCore`/`RDF.Dataset`/`RDF.Store`.
 
+The result also retains the legacy `etag`, `url`, `contentType`, and `response`
+fields: `etag` is the unmodified validator or `null`; `url` is the final response
+URL (falling back to the requested URL); `contentType` is the lowercase media
+type without parameters, or `null`; `response` is the original consumed response.
+
+### JSON-LD remote contexts
+
+Inline contexts work offline. Remote contexts are refused by default with
+`RdfFetchError`. This package ships no bundled remote contexts. Pass an explicit
+`documentLoader` to `parseRdf` or `fetchRdf` to opt in:
+
+```ts
+import { createFetchDocumentLoader, fetchRdf } from '@jeswr/fetch-rdf';
+
+const documentLoader = createFetchDocumentLoader(authFetch, {
+  allow: url => url === 'https://example.org/contexts/profile.jsonld',
+});
+const result = await fetchRdf(resourceUrl, { fetch: authFetch, documentLoader });
+```
+
+The helper checks every context URL before fetching, uses only the supplied
+transport, and refuses redirects. Nested remote contexts must also be allowlisted.
+An offline loader can instead implement `{ async load(url) { /* return context */ } }`.
+
 ### `Accept`
 
 `fetchRdf` always sends:

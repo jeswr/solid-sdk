@@ -1,10 +1,42 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { fetchRdf, RdfFetchError } from "../src/index.js";
 import { JSON_LD_SAMPLE, makeResponse, TURTLE_SAMPLE } from "./helpers.js";
 
 const DEFAULT_ACCEPT = "text/turtle, application/ld+json;q=0.9";
 
+afterEach(() => vi.unstubAllGlobals());
+
 describe("fetchRdf", () => {
+  it("uses global fetch by default and forwards the abort signal", async () => {
+    const transport = vi.fn<typeof fetch>(async () => new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", transport);
+    const signal = new AbortController().signal;
+    const result = await fetchRdf("https://example.org/empty", { signal });
+    expect(result.dataset.size).toBe(0);
+    expect(transport.mock.calls[0]?.[1]?.signal).toBe(signal);
+  });
+
+  it("wraps non-Error network failures", async () => {
+    await expect(
+      fetchRdf("https://example.org/failed", {
+        fetch: vi.fn<typeof fetch>(async () => {
+          throw "network failure";
+        }),
+      }),
+    ).rejects.toMatchObject({ name: "RdfFetchError", cause: "network failure" });
+  });
+
+  it("retains status and requested URL when an HTTP failure has no metadata", async () => {
+    const response = new Response(null, { status: 503 });
+    await expect(
+      fetchRdf("https://example.org/failed", { fetch: vi.fn<typeof fetch>(async () => response) }),
+    ).rejects.toMatchObject({
+      name: "RdfFetchError",
+      status: 503,
+      url: "https://example.org/failed",
+    });
+  });
+
   it("GETs the URL with the canonical Accept header and parses Turtle", async () => {
     const fetchMock = vi.fn<typeof fetch>(async () =>
       makeResponse(TURTLE_SAMPLE, {
@@ -23,6 +55,9 @@ describe("fetchRdf", () => {
     expect(new Headers(init?.headers).get("accept")).toBe(DEFAULT_ACCEPT);
 
     expect(result.dataset.size).toBe(5);
+    expect(result.etag).toBe(result.headers.get("etag"));
+    expect(result.response.headers).toBe(result.headers);
+    expect(result.url).toBe("http://example.org/resource");
     expect(result.headers.get("etag")).toBe('"abc123"');
     expect(result.headers.get("content-type")).toBe("text/turtle");
   });
@@ -42,6 +77,7 @@ describe("fetchRdf", () => {
     expect(result.dataset.size).toBe(3);
     expect(result.headers.get("content-type")).toBe("application/ld+json");
     expect(result.headers.get("etag")).toBeNull();
+    expect(result.etag).toBeNull();
   });
 
   it("exposes the raw Content-Type on headers (parameters preserved)", async () => {
@@ -57,7 +93,29 @@ describe("fetchRdf", () => {
     });
 
     expect(result.headers.get("content-type")).toBe("text/turtle; charset=utf-8");
+    expect(result.contentType).toBe("text/turtle");
     expect(result.dataset.size).toBe(5);
+  });
+
+  it("retains the final redirected URL and resolves relative IRIs against it", async () => {
+    const response = makeResponse('<#s> <https://example.org/p> "value" .', {
+      url: "https://example.org/final",
+    });
+    const result = await fetchRdf("https://example.org/start", {
+      fetch: vi.fn<typeof fetch>(async () => response),
+    });
+    expect(result.url).toBe("https://example.org/final");
+    expect(result.response).toBe(response);
+    expect([...result.dataset][0]?.subject.value).toBe("https://example.org/final#s");
+  });
+
+  it("falls back to the requested URL and preserves absent metadata as null", async () => {
+    const result = await fetchRdf("https://example.org/requested", {
+      fetch: vi.fn<typeof fetch>(async () => makeResponse("", { omitContentType: true })),
+    });
+    expect(result.url).toBe("https://example.org/requested");
+    expect(result.etag).toBeNull();
+    expect(result.contentType).toBeNull();
   });
 
   it("overrides any caller-supplied accept in `headers`", async () => {

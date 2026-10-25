@@ -10,7 +10,7 @@
  */
 
 import { RdfFetchError } from "./errors.js";
-import { parseRdf } from "./parse.js";
+import { extractMediaType, parseRdf } from "./parse.js";
 import type { FetchedRdf, FetchRdfOptions } from "./types.js";
 
 /**
@@ -30,9 +30,7 @@ const ACCEPT = "text/turtle, application/ld+json;q=0.9";
  * @param url - The resource URL.
  * @param options - Optional. See {@link FetchRdfOptions}.
  * @returns A {@link FetchedRdf} containing the parsed dataset and the
- *   response headers. ETag, Content-Type, Link, etc. all live on
- *   `headers` rather than as separate fields, so the surface stays
- *   tight.
+ *   response headers and backwards-compatible response metadata.
  * @throws {@link RdfFetchError} on transport failure, a non-2xx
  *   response, or parse failure. The error's `status`, `url`, and
  *   `contentType` fields are populated where known so callers can
@@ -74,8 +72,16 @@ export async function fetchRdf(url: string, options: FetchRdfOptions = {}): Prom
   // to an empty string so parseRdf still returns an (empty) dataset.
   const dataset = await parseRdf(response.body ?? "", response.headers.get("content-type"), {
     baseIRI: response.url || url,
+    ...(options.documentLoader !== undefined && { documentLoader: options.documentLoader }),
   });
-  return { dataset, headers: response.headers };
+  return {
+    dataset,
+    headers: response.headers,
+    etag: response.headers.get("etag"),
+    url: response.url || url,
+    contentType: extractMediaType(response.headers.get("content-type")),
+    response,
+  };
 }
 
 function errorMessage(cause: unknown): string {

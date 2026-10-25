@@ -22,6 +22,7 @@ import type { Quad } from "@rdfjs/types";
 import contentType from "content-type";
 import { JsonLdParser } from "jsonld-streaming-parser";
 import { Store, StreamParser } from "n3";
+import { refusingDocumentLoader } from "./document-loader.js";
 import { RdfFetchError } from "./errors.js";
 import type { ParseRdfOptions } from "./types.js";
 
@@ -117,6 +118,7 @@ export async function parseRdf(
   } else if (JSON_LD_FAMILY.has(mediaType)) {
     parser = new JsonLdParser({
       ...(baseIRI !== undefined && { baseIRI }),
+      documentLoader: options.documentLoader ?? refusingDocumentLoader,
     }) as unknown as QuadTransform;
   } else {
     throw new RdfFetchError(
@@ -126,9 +128,17 @@ export async function parseRdf(
   }
 
   const storePromise = collectIntoStore(parser);
+  const pumpPromise = pumpBody(parser, body).catch((cause: unknown) => {
+    // Includes synchronous failures such as acquiring an already-locked body.
+    parser.destroy(cause instanceof Error ? cause : new Error(String(cause)));
+    throw cause;
+  });
+  // Observe both immediately: either side can fail while the other is pending.
+  const [storeResult, pumpResult] = await Promise.allSettled([storePromise, pumpPromise]);
   try {
-    await pumpBody(parser, body);
-    return await storePromise;
+    if (pumpResult.status === "rejected") throw pumpResult.reason;
+    if (storeResult.status === "rejected") throw storeResult.reason;
+    return storeResult.value;
   } catch (cause) {
     if (cause instanceof RdfFetchError) throw cause;
     throw new RdfFetchError(
@@ -191,13 +201,15 @@ async function pumpBody(parser: QuadTransform, body: RdfBody): Promise<void> {
     return;
   }
 
+  const reader = body.getReader();
   let parserError: Error | null = null;
   const onParserError = (err: Error) => {
     parserError = err;
+    // Wake a pending read even when the source never sends another chunk.
+    void reader.cancel(err).catch(() => {});
   };
   parser.on("error", onParserError);
 
-  const reader = body.getReader();
   try {
     const decoder = new TextDecoder();
     for (;;) {
