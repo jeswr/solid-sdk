@@ -125,6 +125,7 @@ describe("client metadata fetching and bounded cache", () => {
     ["max-age=10", "5", 5],
     ["max-age=600", null, 300],
     ["max-age=10", "invalid", 0],
+    ["max-age=10", "-10", 0],
     ["max-age=10", "20", 0],
     ['public, max-age="10"', null, 10],
   ])("respects cache directives %s Age=%s", async (control, age, lifetime) => {

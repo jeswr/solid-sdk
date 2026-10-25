@@ -96,7 +96,7 @@ export class Clients {
       const age = Number(response.headers.get("age") ?? 0);
       const ttl = Math.max(
         0,
-        Math.min(300, Number(maxAge ?? 300)) - (Number.isFinite(age) ? age : 300),
+        Math.min(300, Number(maxAge ?? 300)) - (Number.isFinite(age) && age >= 0 ? age : 300),
       );
       if (!/(?:^|,)\s*(?:no-store|no-cache)\b/iu.test(control) && ttl > 0) {
         if (this.cache.size >= 256) this.cache.delete(this.cache.keys().next().value as string);
