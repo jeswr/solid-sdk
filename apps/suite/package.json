@@ -17,7 +17,8 @@
     "next": "16.2.7",
     "next-themes": "^0.4.6",
     "react": "19.2.7",
-    "react-dom": "19.2.7"
+    "react-dom": "19.2.7",
+    "music-metadata": "12.3.2"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
@@ -29,6 +30,7 @@
     "@types/react-dom": "19.2.3",
     "typescript": "^6.0.3",
     "vitest": "^4.1.9",
-    "@biomejs/biome": "^2.5.1"
+    "@biomejs/biome": "^2.5.1",
+    "@vitest/coverage-v8": "4.1.10"
   }
 }
