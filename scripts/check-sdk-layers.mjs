@@ -80,11 +80,15 @@ function isVersion(value) {
   if (components.length > 3 || (components.length < 3 && (build !== -1 || prerelease !== -1))) {
     return false;
   }
-  return components.every(
-    (part) =>
-      ["x", "X", "*"].includes(part) ||
-      (isNumeric(part) && (part.length === 1 || !part.startsWith("0"))),
-  );
+  let wildcard = false;
+  for (const part of components) {
+    if (["x", "X", "*"].includes(part)) {
+      wildcard = true;
+    } else if (wildcard || !isNumeric(part) || (part.length > 1 && part.startsWith("0"))) {
+      return false;
+    }
+  }
+  return true;
 }
 
 // Parse unions, hyphen ranges and comparator sets in separate passes. Each
