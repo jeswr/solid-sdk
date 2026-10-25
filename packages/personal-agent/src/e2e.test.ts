@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
+// AUTHORED-BY Codex GPT-6
 /**
  * The GOLDEN-MASTER end-to-end flow over doubled I/O (an in-memory pod + a mock Gmail):
  * untrusted email → Reader → owner-private pod → deterministic Actor proposal → ODRL-mandate-
@@ -193,6 +194,40 @@ const loosePolicy = withAutonomousScheduling(
 const defaultPolicy = defaultAutonomyPolicy({ ownerWebId: OWNER, agentWebId: AGENT });
 
 describe("personal-agent end-to-end (Reader → Actor → ODRL-enforced outbox)", () => {
+  it("rejects and audits a mislabelled send even after owner confirmation", async () => {
+    const { pod } = await seededPod();
+    const loaded = (await listProposals(pod.fetch, PROPOSALS))[0];
+    expect(loaded).toBeDefined();
+    if (!loaded) throw new Error("missing seeded proposal");
+    const mislabelled = { ...loaded.proposal, odrlAction: "read" as const };
+    await putResource(
+      pod.fetch,
+      loaded.url,
+      await serializeProposal(mislabelled, {
+        resourceUrl: loaded.url,
+      }),
+      { contentType: "text/turtle", base: PROPOSALS },
+    );
+    await writeConfirmation(
+      pod.fetch,
+      CONFIRMATIONS,
+      OWNER,
+      confirmProposal(mislabelled, { confirm: true, confirmedAt: FIXED.toISOString() }),
+    );
+    const recorder = new RecordingSender(() => FIXED);
+    const readOnly: OdrlPolicy = {
+      ...defaultPolicy,
+      permissions: [{ type: "permission", action: "read", assigner: OWNER, assignee: AGENT }],
+    };
+    const result = await runOutboxOnce(outboxConfig(pod, scriptedVerifier(readOnly), recorder));
+    expect(result.prohibited).toBe(1);
+    expect(result.sent).toBe(0);
+    expect(recorder.sent).toHaveLength(0);
+    expect(receiptBody(pod)).toContain('"rejected"');
+    expect(receiptBody(pod)).toContain("action mismatch");
+    expect(receiptBody(pod)).toContain("requires distribute");
+  });
+
   it("Reader lands the email owner-private and the deterministic Actor proposes a scheduling reply", async () => {
     const { pod, written, interpretations, proposalsCreated } = await seededPod();
     expect(written).toBe(1);

@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
+// AUTHORED-BY Codex GPT-6
 /**
  * The ODRL evaluation the outbox executor runs against the owner's signed mandate for
  * EVERY outbound intent (the enforcement point, §5/§7). All policy logic is delegated to
@@ -36,7 +37,9 @@ export function buildRequestContext(proposal: ActionProposal, agentWebId?: strin
   const target = proposal.inReplyTo ?? proposal.derivedFrom;
   return {
     ...(agentWebId ? { agent: agentWebId } : {}),
-    action: proposal.odrlAction,
+    // This executor only transmits messages, including scheduling replies. The concrete
+    // operation is always ODRL distribute; an Actor-supplied label cannot change it.
+    action: "distribute",
     ...(target ? { target } : {}),
     attributes,
   };
@@ -55,6 +58,13 @@ export function evaluateAutonomy(
   options: EvaluateAutonomyOptions = {},
 ): AutonomyEvaluation {
   const context = buildRequestContext(proposal, options.agentWebId);
+  if (proposal.odrlAction !== context.action) {
+    return {
+      decision: "prohibited",
+      reason: `proposal action mismatch: labelled ${proposal.odrlAction}; executor requires ${context.action} (send)`,
+      outstandingDuties: [],
+    };
+  }
   const result = evaluate(policy, context, {
     requireDuties: false,
     ...(options.now ? { now: options.now } : {}),

@@ -1,10 +1,11 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
+// AUTHORED-BY Codex GPT-6
 import type { OdrlPolicy } from "@jeswr/solid-odrl";
 import { describe, expect, it } from "vitest";
 import type { ActionProposal } from "../pod/proposals.js";
 import { AGENTIC_PURPOSE_GENERAL, AGENTIC_PURPOSE_SCHEDULING } from "../vocab.js";
 import { defaultAutonomyPolicy, withAutonomousScheduling } from "./default-mandate.js";
-import { evaluateAutonomy } from "./evaluate.js";
+import { buildRequestContext, evaluateAutonomy } from "./evaluate.js";
 
 const owner = "https://jeswr.org/#me";
 const agent = "https://jeswr.org/agent#it";
@@ -30,6 +31,28 @@ const base = defaultAutonomyPolicy({ ownerWebId: owner, agentWebId: agent });
 const loose = withAutonomousScheduling(base);
 
 describe("evaluateAutonomy — the ODRL enforcement decision", () => {
+  const readOnly: OdrlPolicy = {
+    ...base,
+    permissions: [{ type: "permission", action: "read", assigner: owner, assignee: agent }],
+  };
+
+  it("a non-send permission cannot authorize the executor's send operation", () => {
+    expect(evaluateAutonomy(readOnly, proposal(), { agentWebId: agent }).decision).toBe(
+      "confirm-required",
+    );
+    expect(buildRequestContext(proposal({ odrlAction: "read" })).action).toBe("distribute");
+  });
+
+  it("rejects a label mismatch even when the labelled action has a permit", () => {
+    const verdict = evaluateAutonomy(readOnly, proposal({ odrlAction: "read" }), {
+      agentWebId: agent,
+    });
+    expect(verdict.decision).toBe("prohibited");
+    expect(verdict.reason).toContain("action mismatch");
+    expect(verdict.reason).toContain("read");
+    expect(verdict.reason).toContain("distribute");
+  });
+
   it("PERMIT: an autonomous scheduling reply under the loosened mandate", () => {
     const verdict = evaluateAutonomy(loose, proposal(), { agentWebId: agent });
     expect(verdict.decision).toBe("permit");
