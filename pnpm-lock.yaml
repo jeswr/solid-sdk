@@ -2009,6 +2009,9 @@ importers:
       '@jeswr/suite-ui':
         specifier: workspace:*
         version: link:../../packages/suite-ui
+      chrono-node:
+        specifier: ^2.10.3
+        version: 2.10.3
       next:
         specifier: 16.2.7
         version: 16.2.7(@babel/core@7.29.7)(@playwright/test@1.61.1)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
@@ -2022,6 +2025,9 @@ importers:
         specifier: 19.2.7
         version: 19.2.7(react@19.2.7)
     devDependencies:
+      '@vitest/coverage-v8':
+        specifier: ^4.1.9
+        version: 4.1.10(vitest@4.1.10)
       '@axe-core/playwright':
         specifier: ^4.11.1
         version: 4.14.0(playwright-core@1.61.1)
@@ -9574,6 +9580,10 @@ packages:
   chokidar@5.0.0:
     resolution: {integrity: sha512-TQMmc3w+5AxjpL8iIiwebF73dRDF4fBIieAqGn9RGCWaEVwQ6Fb2cGe31Yns0RRIzii5goJ1Y7xbMwo1TxMplw==}
     engines: {node: '>= 20.19.0'}
+
+  chrono-node@2.10.3:
+    resolution: {integrity: sha512-MOfrzXgSMZTH4SZ5gyRKQCVwiCrCKY+uYkSJiWoRLXS88DA6WGJm8UjgS+VVEuUQeew/UUXaxrO+SeDn/WCisg==}
+    engines: {node: ^12.20.0 || ^14.13.1 || >=16.0.0}
 
   cjs-module-lexer@1.4.3:
     resolution: {integrity: sha512-9z8TZaGM1pfswYeXrUpzPrkx8UnWYdhJclsiYMm6x/w5+nN+8Tf/LnAgfLGQCm59qAOxU8WwHEq2vNwF6i4j+Q==}
@@ -22199,6 +22209,8 @@ snapshots:
   chokidar@5.0.0:
     dependencies:
       readdirp: 5.0.0
+
+  chrono-node@2.10.3: {}
 
   cjs-module-lexer@1.4.3: {}
 
