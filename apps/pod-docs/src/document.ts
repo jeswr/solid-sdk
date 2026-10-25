@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+// AUTHORED-BY Codex GPT-6 — shared alias-aware property replacement
 /**
  * The typed RDF model for a Pod-Docs rich-text document with provenance history.
  *
@@ -23,6 +24,7 @@
 import { canonicalize, LEGACY_NAMESPACES } from "@jeswr/suite-vocab";
 import type { DatasetCore } from "@rdfjs/types";
 import {
+  type ITermFromValueMapping,
   LiteralAs,
   LiteralFrom,
   NamedNodeAs,
@@ -37,20 +39,39 @@ import {
 import { DataFactory, Store } from "n3";
 import { DCT, DEFAULT_FORMAT, DOCUMENT_CLASS, PD, PROV, RDF_TYPE } from "./vocab.js";
 
+/** The canonical predicate and every recognised legacy spelling, canonical first. */
+function documentPredicateAliases(predicate: string): Set<string> {
+  const aliases = new Set([predicate]);
+  for (const [legacy, base] of Object.entries(LEGACY_NAMESPACES)) {
+    if (predicate.startsWith(base)) aliases.add(legacy + predicate.slice(base.length));
+  }
+  return aliases;
+}
+
 /** Read canonical predicates first, accepting the legacy namespace on old documents. */
 function readDocumentValue<T>(
   anchor: TermWrapper,
   predicate: string,
   as: (term: TermWrapper) => T,
 ): T | undefined {
-  const canonical = OptionalFrom.subjectPredicate(anchor, predicate, as);
-  if (canonical !== undefined) return canonical;
-  for (const [legacy, base] of Object.entries(LEGACY_NAMESPACES)) {
-    if (!predicate.startsWith(base)) continue;
-    const value = OptionalFrom.subjectPredicate(anchor, legacy + predicate.slice(base.length), as);
+  for (const alias of documentPredicateAliases(predicate)) {
+    const value = OptionalFrom.subjectPredicate(anchor, alias, as);
     if (value !== undefined) return value;
   }
   return undefined;
+}
+
+/** Replace all recognised spellings so clearing cannot reveal an older legacy value. */
+function writeDocumentValue<T>(
+  anchor: TermWrapper,
+  predicate: string,
+  value: T | undefined,
+  from: ITermFromValueMapping<T>,
+): void {
+  for (const alias of documentPredicateAliases(predicate)) {
+    SetFrom.subjectPredicate(anchor, alias, TermAs.term, TermFrom.itself).clear();
+  }
+  OptionalAs.object(anchor, predicate, value, from);
 }
 
 /** A single saved revision as the UI consumes it (plain, serialisable). */
@@ -104,13 +125,13 @@ export class RevisionDoc extends TermWrapper {
     return readDocumentValue(this, PD.body, LiteralAs.string);
   }
   set body(v: string | undefined) {
-    OptionalAs.object(this, PD.body, v, LiteralFrom.string);
+    writeDocumentValue(this, PD.body, v, LiteralFrom.string);
   }
   get format(): string | undefined {
     return readDocumentValue(this, PD.format, LiteralAs.string);
   }
   set format(v: string | undefined) {
-    OptionalAs.object(this, PD.format, v, LiteralFrom.string);
+    writeDocumentValue(this, PD.format, v, LiteralFrom.string);
   }
   get generatedAt(): Date | undefined {
     return OptionalFrom.subjectPredicate(this, PROV.generatedAtTime, LiteralAs.date);
@@ -151,13 +172,13 @@ export class DocumentDoc extends TermWrapper {
     return readDocumentValue(this, PD.body, LiteralAs.string);
   }
   set body(v: string | undefined) {
-    OptionalAs.object(this, PD.body, v, LiteralFrom.string);
+    writeDocumentValue(this, PD.body, v, LiteralFrom.string);
   }
   get format(): string | undefined {
     return readDocumentValue(this, PD.format, LiteralAs.string);
   }
   set format(v: string | undefined) {
-    OptionalAs.object(this, PD.format, v, LiteralFrom.string);
+    writeDocumentValue(this, PD.format, v, LiteralFrom.string);
   }
   get creator(): string | undefined {
     return OptionalFrom.subjectPredicate(this, DCT.creator, NamedNodeAs.string);
@@ -182,7 +203,7 @@ export class DocumentDoc extends TermWrapper {
     return readDocumentValue(this, PD.currentRevision, NamedNodeAs.string);
   }
   set currentRevision(v: string | undefined) {
-    OptionalAs.object(this, PD.currentRevision, v, NamedNodeFrom.string);
+    writeDocumentValue(this, PD.currentRevision, v, NamedNodeFrom.string);
   }
 }
 

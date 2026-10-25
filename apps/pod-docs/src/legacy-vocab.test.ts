@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6 — alias setter regression coverage
 import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { LEGACY_NAMESPACES, NS as SUITE_NS } from "@jeswr/suite-vocab";
@@ -14,6 +15,99 @@ const legacy = Object.keys(LEGACY_NAMESPACES).find(
 );
 assert(legacy);
 const URL = "https://pod.example/docs/one.ttl";
+
+type AliasedValues = { body?: string; format?: string; currentRevision?: string };
+const aliasSetters: {
+  name: string;
+  View: new (subject: string, dataset: Store, factory: typeof DataFactory) => AliasedValues;
+  subject: string;
+  property: keyof AliasedValues;
+}[] = [
+  { name: "document body", View: DocumentDoc, subject: `${URL}#it`, property: "body" },
+  { name: "document format", View: DocumentDoc, subject: `${URL}#it`, property: "format" },
+  {
+    name: "document current revision",
+    View: DocumentDoc,
+    subject: `${URL}#it`,
+    property: "currentRevision",
+  },
+  { name: "revision body", View: RevisionDoc, subject: `${URL}#rev-0`, property: "body" },
+  { name: "revision format", View: RevisionDoc, subject: `${URL}#rev-0`, property: "format" },
+];
+
+describe.each(aliasSetters)("$name alias-aware setter", ({ View, subject, property }) => {
+  const predicate = PD[property];
+  const legacyPredicate = legacy + property;
+  const oldObject = property === "currentRevision" ? `<${URL}#rev-old>` : '"old"';
+  const newValue = property === "currentRevision" ? `${URL}#rev-new` : "new";
+
+  function legacyDataset(): Store {
+    return new Store(new Parser().parse(`<${subject}> <${legacyPredicate}> ${oldObject} .`));
+  }
+
+  it.each([false, true])("clears all values (mixed input: %s)", async (mixed) => {
+    const dataset = legacyDataset();
+    if (mixed) {
+      dataset.addQuads(new Parser().parse(`<${subject}> <${predicate}> ${oldObject} .`));
+    }
+    const view = new View(subject, dataset, DataFactory);
+    expect(view[property]).toBe(property === "currentRevision" ? `${URL}#rev-old` : "old");
+    view[property] = undefined;
+    expect(view[property]).toBeUndefined();
+    expect(dataset.size).toBe(0);
+    expect(await serializeTurtle(dataset)).not.toContain(legacyPredicate);
+  });
+
+  it("sets then clears a legacy value without resurrecting it", async () => {
+    const dataset = legacyDataset();
+    const view = new View(subject, dataset, DataFactory);
+    view[property] = newValue;
+    expect(view[property]).toBe(newValue);
+    view[property] = undefined;
+    expect(view[property]).toBeUndefined();
+    expect(dataset.size).toBe(0);
+    expect(await serializeTurtle(dataset)).not.toContain(legacyPredicate);
+  });
+
+  it.each([false, true])("writes only canonical predicates (mixed input: %s)", async (mixed) => {
+    const dataset = legacyDataset();
+    if (mixed) {
+      dataset.addQuads(
+        new Parser().parse(`
+        <${subject}> <${predicate}> ${oldObject}, "another canonical value" ;
+          <${legacyPredicate}> "another old value" .
+      `),
+      );
+    }
+    const view = new View(subject, dataset, DataFactory);
+    view[property] = newValue;
+    expect(view[property]).toBe(newValue);
+    expect(dataset.size).toBe(1);
+    const [quad] = [...dataset];
+    expect(quad?.subject.value).toBe(subject);
+    expect(quad?.predicate.value).toBe(predicate);
+    expect(quad?.object.value).toBe(newValue);
+    const output = await serializeTurtle(dataset);
+    expect(output).toContain(predicate);
+    expect(output).not.toContain(legacyPredicate);
+  });
+
+  it("preserves other subjects and properties when clearing aliases", () => {
+    const dataset = legacyDataset();
+    const otherPredicate = property === "body" ? PD.format : PD.body;
+    dataset.addQuads(
+      new Parser().parse(`
+        <${URL}#other> <${legacyPredicate}> ${oldObject} .
+        <${subject}> <${otherPredicate}> "keep" .
+      `),
+    );
+    const preserved = [...dataset].filter(
+      (quad) => quad.subject.value !== subject || quad.predicate.value !== legacyPredicate,
+    );
+    new View(subject, dataset, DataFactory)[property] = undefined;
+    expect([...dataset]).toEqual(preserved);
+  });
+});
 
 describe("legacy document vocabulary", () => {
   it.each([SUITE_NS.POD_DOCS, legacy])("reads body and revision history from %s", async (base) => {
