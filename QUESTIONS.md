@@ -20,6 +20,8 @@
      lint responsible for enforcing type-only/lazy usage. This changes the task's
      explicit allowlist and requires an architect decision.
 
-Implementation is paused under the lane brief's Working rules, which require a
-committed question and lane stop for an ambiguous ADR or a contradiction with the task.
-No checker, lint wiring, or package changes have been made.
+Resolved on 2026-10-25 by ADR-001's amendment, "storage-client dependencies":
+**Option A** is normative. The amendment explicitly excludes pod-auth and rdf-engine,
+keeps AuthFetch local, and defers sparq integration to a later adapter package.
+Implementation follows the exact seven-package allowlist in `dependencies`.
+No open questions remain for T-003.
