@@ -1,9 +1,12 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
-import { existsSync, readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+
 import * as entry0 from "@jeswr/app-agent-daemon";
 import * as entry1 from "@jeswr/app-agent-daemon/testing";
+// biome-ignore lint/style/useNodejsImportProtocol: agent imports allow only bare package names or relative paths
+import { existsSync, readFileSync } from "fs";
+// biome-ignore lint/style/useNodejsImportProtocol: agent imports allow only bare package names or relative paths
+import { fileURLToPath } from "url";
 import { expect, it } from "vitest";
 
 const manifest = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));

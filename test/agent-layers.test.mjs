@@ -224,10 +224,7 @@ describe("agent layer boundaries (DESIGN §2.2)", () => {
       ),
     ).toEqual([]);
     expect(
-      scan(
-        "apps/suite/src/apps/agent/index.ts",
-        source.replace("TARGET", "@jeswr/agent-mandate"),
-      ),
+      scan("apps/suite/src/apps/agent/index.ts", source.replace("TARGET", "@jeswr/agent-mandate")),
     ).toEqual([]);
   });
 
@@ -319,10 +316,73 @@ describe("agent module load allowlist", () => {
     'export type { Value } from "./local.js";',
     'type Value = import("./local.js").Value;',
     'await import("./local.js");',
-    'await import("node:fs");',
+    'await import("fs");',
+    'import "fs/promises";',
+    'import "@scope/package/subpath";',
+    'import "../local.js";',
+    'import "../../local.js";',
     'await import("./local.js", { with: { type: "json" } });',
   ])("allows literal ESM forms: %s", (source) => {
     expect(scan("packages/agent-model/src/index.ts", source)).toEqual([]);
+  });
+
+  it.each([
+    "file:///tmp/module.js",
+    "data:text/javascript,export default 1",
+    "http://example.test/module.js",
+    "https://example.test/module.js",
+    "HTTPS://example.test/module.js",
+    "ftp://example.test/module.js",
+    "node:fs",
+    "./local.js?raw",
+    "../local.js#fragment",
+    "@scope/package?query",
+    "@scope/package/subpath#fragment",
+    "package?query",
+    "package#fragment",
+    "#internal",
+    "/tmp/module.js",
+    "//example.test/module.js",
+    "C:/tmp/module.js",
+    "C:\\tmp\\module.js",
+    "",
+  ])("rejects specifiers outside bare packages and relative paths: %s", (specifier) => {
+    const literal = JSON.stringify(specifier);
+    for (const source of [
+      `import ${literal};`,
+      `import * as value from ${literal};`,
+      `export * from ${literal};`,
+      `export { value } from ${literal};`,
+      `await import(${literal});`,
+      `import type { Value } from ${literal};`,
+      `export type { Value } from ${literal};`,
+      `type Value = import(${literal}).Value;`,
+    ])
+      expect(scan("packages/agent-model/src/index.ts", source).join("\n")).toContain(
+        "agent module specifier must be a bare package name or relative path",
+      );
+  });
+
+  it.each([
+    'import "f\\u0069le:///tmp/module.js";',
+    'await import("./local.js\\u003fraw");',
+    'export * from "./local.js\\u0023fragment";',
+    'import "../../agent-model/src/index.js?raw";',
+  ])("checks decoded specifiers before path normalization: %s", (source) => {
+    expect(scan("packages/agent-model/src/index.ts", source).join("\n")).toContain(
+      "agent module specifier must be a bare package name or relative path",
+    );
+  });
+
+  it.each([
+    "packages/agent-channels/test/transport.test.ts",
+    "packages/agent-channels/vitest.config.ts",
+    "apps/agent-daemon/src/index.ts",
+    "apps/suite/src/apps/agent/index.ts",
+  ])("enforces the specifier allowlist throughout agent code: %s", (path) => {
+    expect(scan(path, 'import "file:///tmp/module.js";').join("\n")).toContain(
+      "agent module specifier must be a bare package name or relative path",
+    );
   });
 });
 

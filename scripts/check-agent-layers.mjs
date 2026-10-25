@@ -51,6 +51,16 @@ function packageName(specifier) {
   return specifier.startsWith("@") ? parts.slice(0, 2).join("/") : parts[0];
 }
 
+function allowedModuleSpecifier(specifier) {
+  // Check the decoded literal before path normalization can hide a URL/query/fragment.
+  // Schemes (including node:) and absolute paths are outside the agent allowlist.
+  return (
+    !/[:?#\\]/.test(specifier) &&
+    (/^\.{1,2}\//.test(specifier) ||
+      /^(?:@[a-z0-9_~-][a-z0-9._~-]*\/)?[a-z0-9_~-][a-z0-9._~-]*(?:\/[^/]+)*$/i.test(specifier))
+  );
+}
+
 function context(root, file) {
   const path = relative(root, file).replaceAll("\\", "/");
   const parts = path.split("/");
@@ -175,6 +185,8 @@ function sourceFailures(root, file) {
       if (agentSource) report(node, "unverifiable dynamic import; use a string literal");
       return;
     }
+    if (agentSource && !allowedModuleSpecifier(value))
+      report(node, `agent module specifier must be a bare package name or relative path: ${value}`);
     for (const failure of importFailures(ctx, importTarget(root, file, value), typeOnly))
       report(node, `${failure}: ${value}`);
   }
