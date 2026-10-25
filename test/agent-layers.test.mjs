@@ -270,6 +270,8 @@ describe("binding origin enforcement", () => {
     "export const request = globalThis.fetch;",
     "const transport = { fetch };",
     "const transport = { request: fetch };",
+    "class Transport extends (fetch as any) {}",
+    "const request = fetch<any>;",
   ])("rejects raw fetch escaping even with valid declared origins: %s", (source) => {
     expect(
       scan("packages/agent-channels/src/gmail/index.ts", `${origins} ${source}`).join("\n"),
@@ -293,7 +295,7 @@ describe("binding origin enforcement", () => {
     expect(
       scan(
         "packages/agent-channels/src/gmail/index.ts",
-        "type Fetch = typeof globalThis.fetch; type Bare = typeof fetch; export type { fetch }; const transport = { fetch: fake }; const { fetch: f, ...rest } = transport;",
+        "type Fetch = typeof globalThis.fetch; type Bare = typeof fetch; export type { fetch }; interface Transport extends globalThis.fetch {} class Fake implements fetch {} const transport = { fetch: fake }; const { fetch: f, ...rest } = transport;",
       ),
     ).toEqual([]);
   });

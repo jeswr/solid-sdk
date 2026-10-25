@@ -324,7 +324,12 @@ function sourceFailures(root, file) {
       report(node, `${failure}: ${value}`);
   }
   function visit(node, inType = false) {
-    inType ||= ts.isTypeNode(node);
+    // TypeScript also labels runtime class bases and generic instantiations as type nodes.
+    inType ||= ts.isExpressionWithTypeArguments(node)
+      ? ts.isHeritageClause(node.parent) &&
+        (ts.isInterfaceDeclaration(node.parent.parent) ||
+          node.parent.token === ts.SyntaxKind.ImplementsKeyword)
+      : ts.isTypeNode(node);
     if (ts.isImportDeclaration(node)) {
       const clause = node.importClause;
       const bindings = clause?.namedBindings;
