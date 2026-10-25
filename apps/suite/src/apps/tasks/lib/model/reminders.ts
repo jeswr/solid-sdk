@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { TermFrom } from "@rdfjs/wrapper";
-import { aliases, type Node, NS, requireDate, SCHED } from "./rdf";
+import { aliases, Node, NS, requireDate, requireHttp, SCHED } from "./rdf";
 
 export type Reminder =
   | { id?: string | undefined; offset: string; time?: never }
@@ -31,16 +31,23 @@ export function validateReminders(reminders: readonly Reminder[], due: Date | un
     else requireDate(reminder.time as Date);
   }
 }
+/** Blank-node labels and RDF statement order change on round-trip; identify the trigger itself. */
+function reminderId(taskId: string, reminder: Reminder): string {
+  return `${taskId}/reminder-${encodeURIComponent(reminder.offset ?? (reminder.time as Date).toISOString())}`;
+}
 export function readReminders(task: Node): Reminder[] {
   return aliases(`${SCHED}hasReminder`)
     .flatMap((p) => [...task.nodes(p)])
-    .map((value, index) => {
-      const id = value.termType === "NamedNode" ? value.value : `${task.value}/reminder-${index}`;
+    .map((value) => {
       const offset = value.text(`${SCHED}triggerOffset`);
       const time = value.date(`${SCHED}triggerTime`);
       if ((offset !== undefined) === (time !== undefined))
         throw new TypeError("A reminder requires exactly one trigger.");
-      return offset === undefined ? { id, time: time as Date } : { id, offset };
+      const reminder = offset === undefined ? { time: time as Date } : { offset };
+      return {
+        ...reminder,
+        id: value.termType === "NamedNode" ? value.value : reminderId(task.value, reminder),
+      };
     });
 }
 export function writeReminders(
@@ -56,7 +63,9 @@ export function writeReminders(
     }
   task.clear(`${SCHED}hasReminder`);
   for (const reminder of reminders) {
-    const value = task.child();
+    const value = reminder.id
+      ? new Node(requireHttp(reminder.id), task.dataset, task.factory)
+      : task.child();
     value.types.add(`${SCHED}Reminder`);
     value.setTyped(`${SCHED}triggerOffset`, reminder.offset, `${NS.XSD}duration`);
     value.setDate(`${SCHED}triggerTime`, reminder.time);
@@ -75,8 +84,8 @@ export function computeFireTimes(
   reminders: readonly Reminder[],
 ): FireTime[] {
   validateReminders(reminders, due);
-  return reminders.map((reminder, index) => {
-    const id = reminder.id ?? `${taskId}/reminder-${index}`;
+  return reminders.map((reminder) => {
+    const id = reminder.id ?? reminderId(taskId, reminder);
     const at =
       reminder.time ??
       new Date((due as Date).getTime() + offsetMilliseconds(reminder.offset as string));

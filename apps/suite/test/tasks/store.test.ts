@@ -112,6 +112,15 @@ describe("project discovery and first use", () => {
     const invalid = new Pod();
     invalid.seed(`${projects}inbox.ttl`, `<#this> a <${NS.WF}Tracker>.`);
     await expect(store(invalid).bootstrapInbox()).rejects.toThrow("stateStore");
+    const conflicting = new Pod();
+    conflicting.intercept = (request) =>
+      request.method === "PUT" && request.url === `${projects}inbox.ttl`
+        ? new Response(null, { status: 412 })
+        : undefined;
+    await expect(store(conflicting).bootstrapInbox()).rejects.toMatchObject({ status: 412 });
+    expect(
+      conflicting.mutations().filter((request) => request.url.endsWith("inbox.ttl")),
+    ).toHaveLength(3);
     const denied = new Pod();
     denied.intercept = (request) =>
       request.method === "PUT" && request.url.endsWith(".ttl")

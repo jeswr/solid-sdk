@@ -13,6 +13,8 @@ import {
   writeRecurrence,
 } from "../../src/apps/tasks/lib/model/recurrence";
 
+import rruleFixtures from "./rrule-fixtures.json";
+
 const due = new Date(2026, 9, 26, 9);
 const isoDates = (dates: Date[]) =>
   dates.map(
@@ -21,50 +23,16 @@ const isoDates = (dates: Date[]) =>
   );
 
 describe("recurrence expansion", () => {
-  // Calendar fixtures follow RFC 5545 DTSTART-anchored interval/count/until semantics.
+  // Independent expected dates generated with rrule.js 2.8.1 (temporary tool, no app dependency).
   it.each(
-    Array.from({ length: 10 }, (_, i) => i + 1),
-  )("expands 10 daily occurrences at interval %i", (interval) => {
-    const values = expandRecurrence({ frequency: "DAILY", interval }, due, 10);
-    expect(values).toHaveLength(10);
-    for (let i = 0; i < 10; i++) {
-      const expected = new Date(due);
-      expected.setDate(expected.getDate() + interval * i);
-      expect(values[i]).toEqual(expected);
-    }
-  });
-  it.each(
-    Array.from({ length: 10 }, (_, i) => i + 1),
-  )("expands 10 weekly occurrences at interval %i", (interval) => {
-    const values = expandRecurrence({ frequency: "WEEKLY", interval }, due, 10);
-    expect(values).toHaveLength(10);
-    for (let i = 0; i < 10; i++) {
-      const expected = new Date(due);
-      expected.setDate(expected.getDate() + interval * i * 7);
-      expect(values[i]).toEqual(expected);
-    }
-  });
-  it.each(
-    Array.from({ length: 10 }, (_, i) => i + 1),
-  )("expands 10 monthly occurrences at interval %i", (interval) => {
-    const values = expandRecurrence({ frequency: "MONTHLY", interval }, due, 10);
-    expect(values).toHaveLength(10);
-    for (let i = 0; i < 10; i++) {
-      const expected = new Date(due);
-      expected.setMonth(expected.getMonth() + interval * i);
-      expect(values[i]).toEqual(expected);
-    }
-  });
-  it.each(
-    Array.from({ length: 10 }, (_, i) => i + 1),
-  )("expands 10 yearly occurrences at interval %i", (interval) => {
-    const values = expandRecurrence({ frequency: "YEARLY", interval }, due, 10);
-    expect(values).toHaveLength(10);
-    for (let i = 0; i < 10; i++) {
-      const expected = new Date(due);
-      expected.setFullYear(expected.getFullYear() + interval * i);
-      expect(values[i]).toEqual(expected);
-    }
+    rruleFixtures,
+  )("matches ten rrule.js occurrences: $rule.frequency $rule.interval $due", (fixture) => {
+    const dates = expandRecurrence(fixture.rule as RecurrenceRule, new Date(fixture.due), 10);
+    const localDates = dates.map(
+      (date) =>
+        `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}T${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}:${String(date.getSeconds()).padStart(2, "0")}`,
+    );
+    expect(localDates).toEqual(fixture.expected);
   });
   it("uses Monday-based interval weeks, deduplicates and orders byDay", () => {
     expect(

@@ -181,6 +181,7 @@ describe("RDF model interoperability", () => {
     });
     const task = new TaskItem(`${taskUrl}#it`, dataset, DataFactory);
     expect(task.allDay).toBe("2026-11-01");
+    expect(task.dueDate).toEqual(new Date(2026, 10, 1));
     expect(task.reminders).toEqual([]);
     task.state = "closed";
     task.endedAt = now;
@@ -288,7 +289,7 @@ describe("reminder library", () => {
     ).toEqual([]);
     expect(pendingReminders(times, now, new Set())).toEqual([times[1]]);
     expect(computeFireTimes(task.id, now, [{ offset: "PT0S" }])[0]?.id).toBe(
-      `${task.id}/reminder-0`,
+      `${task.id}/reminder-PT0S`,
     );
     const again = await parse(taskUrl, await serialize(dataset));
     expect(
@@ -371,4 +372,42 @@ describe("completion roll-forward", () => {
         .copy,
     ).toBeDefined();
   });
+});
+
+it("keeps fired reminder identities stable after RDF reordering and removal", () => {
+  const taskId = `${taskUrl}#it`;
+  const reminders = [{ offset: "-PT1H" }, { offset: "PT0S" }, { time: now }];
+  const times = computeFireTimes(taskId, now, reminders);
+  const fired = new Set(times.map((time) => time.key));
+  const reordered = computeFireTimes(taskId, now, [
+    reminders[2] as { time: Date },
+    reminders[0] as { offset: string },
+  ]);
+  expect(pendingReminders(reordered, now, fired)).toEqual([]);
+  const item = new TaskItem(
+    taskId,
+    createTask(taskUrl, { title: "Reminder", state: "open", dueDate: now, reminders }),
+    DataFactory,
+  );
+  item.reminders = [item.reminders[2] as { time: Date }, item.reminders[0] as { offset: string }];
+  expect(new Set(computeFireTimes(taskId, now, item.reminders).map((time) => time.key))).toEqual(
+    new Set([times[2]?.key, times[0]?.key]),
+  );
+});
+
+it("round-trips recurrence through TaskItem and validates remaining reminders on due removal", () => {
+  const dataset = createTask(taskUrl, {
+    ...details,
+    recurrence: { frequency: "DAILY", interval: 2 },
+    reminders: [{ offset: "PT0S" }],
+  });
+  const task = new TaskItem(`${taskUrl}#it`, dataset, DataFactory);
+  expect(task.recurrence).toMatchObject({ frequency: "DAILY", interval: 2 });
+  task.recurrence = undefined;
+  expect(task.recurrence).toBeUndefined();
+  expect(() =>
+    validateTask({ title: "No due", state: "open", reminders: [{ offset: "PT0S" }] }),
+  ).toThrow("due date");
+  expect(() => (task.allDay = "invalid")).toThrow("all-day");
+  expect(() => (task.reminders = [{ id: "urn:reminder", offset: "PT0S" }])).toThrow("HTTP");
 });

@@ -8,6 +8,7 @@ import {
 } from "@jeswr/solid-task-model/task";
 import type { DatasetCore } from "@rdfjs/types";
 import {
+  aliases,
   DataFactory,
   NS,
   node,
@@ -18,8 +19,20 @@ import {
   SCHEMA,
   type Store,
 } from "./rdf";
-import { nextOccurrence, type RecurrenceRule, readRecurrence, writeRecurrence } from "./recurrence";
-import { type Reminder, readReminders, shiftReminders, writeReminders } from "./reminders";
+import {
+  nextOccurrence,
+  type RecurrenceRule,
+  readRecurrence,
+  validateRule,
+  writeRecurrence,
+} from "./recurrence";
+import {
+  type Reminder,
+  readReminders,
+  shiftReminders,
+  validateReminders,
+  writeReminders,
+} from "./reminders";
 
 export interface TaskDetails extends Omit<TaskData, "rank" | "priority"> {
   rank?: number | undefined;
@@ -34,10 +47,15 @@ export class TaskItem extends Task {
     return node(this.id, this.dataset);
   }
   get allDay(): string | undefined {
-    const text = this.extra.text(`${SCHED}dueTime`);
-    return text && /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : undefined;
+    for (const predicate of aliases(`${SCHED}dueTime`))
+      for (const value of this.extra.nodes(predicate)) {
+        if (value.termType === "Literal" && value.datatype.value === `${NS.XSD}date`)
+          return value.value;
+      }
+    return undefined;
   }
   set allDay(value: string | undefined) {
+    if (value !== undefined) this.dueDate = allDayDate(value);
     this.extra.setTyped(`${SCHED}dueTime`, value, `${NS.XSD}date`);
   }
   override get rank() {
@@ -66,6 +84,16 @@ export class TaskItem extends Task {
     writeReminders(this.extra, value, this.dueDate);
   }
 }
+/** Local midnight paired with the date-only scheduling marker (§5.3). */
+function allDayDate(value: string): Date {
+  if (
+    !/^\d{4}-\d{2}-\d{2}$/.test(value) ||
+    new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) !== value
+  )
+    throw new TypeError("Invalid all-day due date.");
+  const [year, month, day] = value.split("-").map(Number) as [number, number, number];
+  return new Date(year, month - 1, day);
+}
 export function validateTask(data: TaskDetails): void {
   requireTitle(data.title);
   for (const field of [data.created, data.modified, data.endedAt, data.dueDate])
@@ -86,13 +114,12 @@ export function validateTask(data: TaskDetails): void {
     throw new TypeError("Invalid position.");
   if (data.priority !== undefined && !["high", "medium", "low"].includes(data.priority))
     throw new TypeError("Invalid priority.");
-  if (
-    data.allDay !== undefined &&
-    (!data.dueDate ||
-      !/^\d{4}-\d{2}-\d{2}$/.test(data.allDay) ||
-      new Date(`${data.allDay}T00:00:00Z`).toISOString().slice(0, 10) !== data.allDay)
-  )
-    throw new TypeError("Invalid all-day due date.");
+  if (data.allDay !== undefined) {
+    if (!data.dueDate) throw new TypeError("An all-day task requires a due date.");
+    allDayDate(data.allDay);
+  }
+  if (data.recurrence) validateRule(data.recurrence);
+  validateReminders(data.reminders ?? [], data.dueDate);
 }
 export function createTask(url: string, data: TaskDetails): Store {
   validateTask(data);

@@ -67,20 +67,21 @@ export class TaskStore {
   }
   async bootstrapInbox(): Promise<StoredProject> {
     const url = `${this.projects}inbox.ttl`;
-    const existing = await this.io.optional(url);
-    if (existing) {
-      const project = await this.readProject(url);
-      if (!project.tracker.stateStore) throw new TypeError("Inbox has no stateStore.");
-      await this.io.container(project.tracker.stateStore);
-      await this.register(project.tracker.stateStore);
-      return project;
-    }
-    try {
-      return await this.createProject("Inbox", true);
-    } catch (error) {
-      if (!(error instanceof ModelError && error.status === 412)) throw error;
-      // A concurrent first-use client won the Inbox reservation. Reuse/repair it.
-      return this.bootstrapInbox();
+    for (let attempt = 0; ; attempt++) {
+      const existing = await this.io.optional(url);
+      if (existing) {
+        const project = await this.readProject(url);
+        if (!project.tracker.stateStore) throw new TypeError("Inbox has no stateStore.");
+        await this.io.container(project.tracker.stateStore);
+        await this.register(project.tracker.stateStore);
+        return project;
+      }
+      try {
+        return await this.createProject("Inbox", true);
+      } catch (error) {
+        // A concurrent first-use client won the reservation. Re-read and repair it.
+        if (!(error instanceof ModelError && error.status === 412 && attempt < 2)) throw error;
+      }
     }
   }
   async createProject(title: string, inbox = false): Promise<StoredProject> {
