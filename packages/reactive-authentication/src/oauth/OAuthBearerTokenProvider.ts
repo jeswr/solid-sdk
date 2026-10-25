@@ -60,6 +60,10 @@ export class OAuthBearerTokenProvider implements TokenProvider {
     const token = await this.#token(signal);
     signal.throwIfAborted();
     await this.#fence.assertCurrent(generation);
+    if (!this.#resources.allows(request.url))
+      throw new ReactiveAuthenticationError(
+        `${request.url} is not a resource of ${this.#source.id}`,
+      );
 
     const headers = new Headers(request.headers);
     headers.delete("DPoP"); // a stale proof bound to another token must not accompany a Bearer token
