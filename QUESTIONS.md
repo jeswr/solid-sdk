@@ -2,28 +2,28 @@
 
 # T-004 / sst-8xm.30 — API compatibility decision
 
-1. **Which `fetchRdf` result contract must the import preserve?** ADR-001 §D2 says
-   “API unchanged”; T-004 says to keep the API, and the dispatcher explicitly selects
-   upstream `main` at `a8359a3764cb6b3c763e09ea211542a5dc7edc33`. That commit exports
-   `FetchedRdf = { dataset: Store; headers: Headers }`, deliberately removing parallel
-   metadata fields. Existing workspace consumers instead read `etag`, `url`,
-   `contentType`, and/or `response`, and some injected readers return only that older
-   shape. Switching their manifests to `workspace:*` produces TypeScript and runtime
-   test failures. In particular, callers retaining the final URL after redirects cannot
-   recover it from the imported `headers` result alone.
+The fix-round-1 brief resolves the API question raised at `474c1be6`: restore
+backwards-compatible result metadata alongside the imported `headers` field.
 
-   Options:
+Implemented in `37a63a7c`:
 
-   - Preserve the selected upstream contract and authorize migration of consumer code,
-     tests, and injected-reader contracts. Specify how callers should retain final
-     response URLs where required.
-   - Preserve compatibility with existing callers by restoring the legacy result fields
-     alongside `headers` in the imported package, with regression tests. This extends the
-     selected upstream API and needs an explicit compatibility decision.
-   - Keep the history import and dependency changes as staged lane work, and resolve
-     compatibility in another task before this lane is merged.
+- `etag`: the unmodified response header, or `null`.
+- `url`: the final response URL after redirects, falling back to the requested URL.
+- `contentType`: the lowercase media type without parameters, or `null` when absent.
+- `response`: the original response, whose body has been consumed by parsing.
 
-   This lane conservatively retains the selected upstream API. It has stopped without
-   choosing either migration or an API extension, as required by the brief's ambiguity
-   rule. The dependant gate is not green; see `STATUS.md` for validation and additional
-   integration failures.
+These semantics match the imported package's earlier result contract. No consumer
+migration or redirect-handling redesign was made.
+
+The explicit consumer checks found one remaining compatibility limit: Pod Money's
+injected test readers return the older shape without `headers` and with a
+`DatasetCore`-typed dataset. The imported result requires `headers` and an N3
+`Store`. This round conservatively preserves those imported type requirements;
+restoring metadata fixes production reads but does not make these test doubles
+assignable to `typeof fetchRdf`.
+
+Dispatcher question: should subsequent work adapt the consumer's injected-reader
+contract/test doubles, or authorize relaxing the additional public result types?
+The latter changes more than the named metadata fields. This lane chose neither
+additional migration nor type redesign. Validation and other remaining failures
+are in [STATUS.md](STATUS.md).
