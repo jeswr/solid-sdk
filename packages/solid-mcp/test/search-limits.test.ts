@@ -1,0 +1,225 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { search } from "../src/pod.js";
+import { containerTurtle, makeFakePod, poisonedContainerTurtle } from "./fake-pod.js";
+
+const POD = "https://alice.example/pod/";
+const WEBID = `${POD}profile/card#me`;
+const INDEX = `${POD}settings/index.ttl`;
+const SOLID = "http://www.w3.org/ns/solid/terms#";
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+});
+
+describe("one bounded search across discovery and scanning", () => {
+  it("finds memory notes and RDF chat titles through Type Index instances", async () => {
+    const note = `${POD}private/memory/note.ttl`;
+    const chat = `${POD}private/chats/title.ttl`;
+    const pod = makeFakePod({
+      [WEBID]: {
+        contentType: "text/turtle",
+        body: `<${WEBID}> <${SOLID}privateTypeIndex> <${INDEX}> .`,
+      },
+      [INDEX]: {
+        contentType: "text/turtle",
+        body: `<#r> <${SOLID}instance> <${note}>, <${chat}> .`,
+      },
+      [note]: {
+        contentType: "text/turtle",
+        body: '<> <https://schema.org/text> "I prefer avocados" .',
+      },
+      [chat]: {
+        contentType: "text/turtle",
+        body: '<> <https://www.w3.org/ns/activitystreams#name> "Avocado recipes" .',
+      },
+      [POD]: { contentType: "text/turtle", body: containerTurtle(POD, []) },
+    });
+    const hits = await search({ fetch: pod.fetch, podRoot: POD, webId: WEBID }, "avocado");
+    expect(hits.map((hit) => hit.url).sort()).toEqual([chat, note].sort());
+  });
+
+  it("caps direct index instances together with discovery", async () => {
+    const urls = Array.from({ length: 20 }, (_, index) => `${POD}match-${index}.ttl`);
+    const pod = makeFakePod({
+      [WEBID]: {
+        contentType: "text/turtle",
+        body: `<${WEBID}> <${SOLID}publicTypeIndex> <${INDEX}> .`,
+      },
+      [INDEX]: {
+        contentType: "text/turtle",
+        body: `<#r> <${SOLID}instance> ${urls.map((url) => `<${url}>`).join(",")} .`,
+      },
+    });
+    const fetch = vi.fn(pod.fetch);
+    const hits = await search({ fetch, podRoot: POD, webId: WEBID }, "match", { maxResources: 4 });
+    expect(hits).toHaveLength(2);
+    expect(fetch).toHaveBeenCalledTimes(4);
+    expect(fetch.mock.calls.map(([url]) => url)).toEqual([WEBID, INDEX, urls[0], urls[1]]);
+  });
+
+  it("caps index document discovery and hinted container requests", async () => {
+    const indexes = Array.from({ length: 20 }, (_, i) => `${POD}index-${i}.ttl`);
+    const pod = makeFakePod({
+      [WEBID]: {
+        contentType: "text/turtle",
+        body: `<${WEBID}> <${SOLID}publicTypeIndex> ${indexes.map((url) => `<${url}>`).join(",")} .`,
+      },
+    });
+    const fetch = vi.fn(pod.fetch);
+    await search({ fetch, podRoot: POD, webId: WEBID }, "x", { maxResources: 3 });
+    expect(fetch).toHaveBeenCalledTimes(3);
+  });
+
+  it("counts the root and each child once and respects depth zero", async () => {
+    const pod = makeFakePod({
+      [POD]: {
+        contentType: "text/turtle",
+        body: containerTurtle(POD, [
+          { name: "sub/", container: true },
+          { name: "match.ttl" },
+          { name: "match-too.ttl" },
+        ]),
+      },
+      [`${POD}sub/`]: {
+        contentType: "text/turtle",
+        body: containerTurtle(`${POD}sub/`, [{ name: "deep-match.ttl" }]),
+      },
+    });
+    const fetch = vi.fn(pod.fetch);
+    const hits = await search({ fetch, podRoot: POD }, "match", { maxResources: 3, maxDepth: 0 });
+    expect(hits.map((hit) => hit.url)).toEqual([`${POD}match.ttl`]);
+    expect(fetch.mock.calls.map(([url]) => url)).toEqual([POD, `${POD}match.ttl`]);
+  });
+
+  it("never follows poisoned listing or index URLs", async () => {
+    const evil = "http://169.254.169.254/latest/meta-data/";
+    const pod = makeFakePod({
+      [POD]: {
+        contentType: "text/turtle",
+        body: poisonedContainerTurtle(POD, [evil, `${POD}match.ttl`]),
+      },
+      [WEBID]: {
+        contentType: "text/turtle",
+        body: `<${WEBID}> <${SOLID}publicTypeIndex> <${INDEX}>, <${evil}> .`,
+      },
+      [INDEX]: { contentType: "text/turtle", body: `<#r> <${SOLID}instanceContainer> <${evil}> .` },
+    });
+    const fetch = vi.fn(pod.fetch);
+    const hits = await search({ fetch, podRoot: POD, webId: WEBID }, "match");
+    expect(hits.map((hit) => hit.url)).toEqual([`${POD}match.ttl`]);
+    expect(fetch.mock.calls.every(([url]) => String(url).startsWith(POD))).toBe(true);
+  });
+
+  it("bounds redirect hops in the same resource budget", async () => {
+    const pod = makeFakePod({
+      [POD]: { contentType: "text/plain", body: "", redirectTo: `${POD}next/` },
+    });
+    const fetch = vi.fn(pod.fetch);
+    expect(await search({ fetch, podRoot: POD }, "match", { maxResources: 1 })).toEqual([]);
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    "discovery",
+    "container",
+    "literal",
+    "body",
+  ])("stops a stalled %s read at the deadline", async (stage) => {
+    vi.useFakeTimers();
+    const fixture = makeFakePod({
+      [POD]: { contentType: "text/turtle", body: containerTurtle(POD, [{ name: "match.ttl" }]) },
+    });
+    let signal: AbortSignal | null | undefined;
+    let resolveLate: (value: Response) => void = () => {};
+    const cancel = vi.fn();
+    const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (stage === "literal" && url === POD) return fixture.fetch(input, init);
+      signal = init?.signal;
+      if (stage === "body")
+        return new Response(new ReadableStream({ cancel }), {
+          headers: { "content-type": "text/turtle" },
+        });
+      return new Promise<Response>((resolve) => {
+        resolveLate = resolve;
+      });
+    });
+    const result = search(
+      { fetch, podRoot: POD, ...(stage === "discovery" ? { webId: WEBID } : {}) },
+      "match",
+      { maxTimeMs: 25 },
+    );
+    await vi.advanceTimersByTimeAsync(25);
+    const hits = await result;
+    expect(hits.map((hit) => hit.url)).toEqual(stage === "literal" ? [`${POD}match.ttl`] : []);
+    expect(signal?.aborted).toBe(true);
+    if (stage === "body") expect(cancel).toHaveBeenCalledOnce();
+    const calls = fetch.mock.calls.length;
+    resolveLate(new Response(containerTurtle(POD, [{ name: "late-match.ttl" }])));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fetch).toHaveBeenCalledTimes(calls);
+    expect(hits.map((hit) => hit.url)).not.toContain(`${POD}late-match.ttl`);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it.each([
+    { maxResources: 0 },
+    { maxTimeMs: 0 },
+  ])("does no I/O with zero budget %j", async (options) => {
+    const fetch = vi.fn(makeFakePod({}).fetch);
+    expect(await search({ fetch, podRoot: POD, webId: WEBID }, "x", options)).toEqual([]);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it.each([NaN, Infinity, -1, 0.5, 2_147_483_648])("rejects invalid budget %s", async (limit) => {
+    for (const key of ["maxDepth", "maxResources", "maxTimeMs"]) {
+      await expect(
+        search({ fetch: makeFakePod({}).fetch, podRoot: POD }, "x", { [key]: limit }),
+      ).rejects.toThrow(/non-negative integer/);
+    }
+  });
+
+  it("uses configured server caps and cleans up timers after success", async () => {
+    vi.useFakeTimers();
+    const fetch = vi.fn(
+      makeFakePod({
+        [POD]: { contentType: "text/turtle", body: containerTurtle(POD, [{ name: "match.ttl" }]) },
+      }).fetch,
+    );
+    expect(
+      await search({ fetch, podRoot: POD, searchLimits: { maxResources: 1 } }, "match"),
+    ).toEqual([]);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("skips oversized scan responses", async () => {
+    const fetch = vi.fn(
+      async () =>
+        new Response("#".repeat(1024 * 1024 + 1), { headers: { "content-type": "text/turtle" } }),
+    );
+    expect(await search({ fetch, podRoot: POD }, "x")).toEqual([]);
+    expect(fetch).toHaveBeenCalledOnce();
+  });
+
+  it("refuses remote contexts in discovery without any parser network requests", async () => {
+    const network = vi.fn(() => {
+      throw new Error("Unexpected network");
+    });
+    vi.stubGlobal("fetch", network);
+    const pod = makeFakePod({
+      [WEBID]: {
+        contentType: "application/ld+json",
+        body: '{"@context":"http://127.0.0.1/context"}',
+      },
+      [POD]: { contentType: "text/turtle", body: containerTurtle(POD, [{ name: "match.txt" }]) },
+    });
+    expect(
+      (await search({ fetch: pod.fetch, podRoot: POD, webId: WEBID }, "match")).map(
+        (hit) => hit.url,
+      ),
+    ).toEqual([`${POD}match.txt`]);
+    expect(network).not.toHaveBeenCalled();
+  });
+});

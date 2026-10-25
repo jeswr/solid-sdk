@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 /**
  * `@jeswr/solid-mcp` — a Model Context Protocol (MCP) server that exposes a Solid
@@ -19,6 +20,7 @@ export {
   type SolidMcpConfig,
   writesEnabled,
 } from "./auth.js";
+export { type FetchResult, fetchDocument } from "./fetch.js";
 export {
   listContainer,
   type PodChild,

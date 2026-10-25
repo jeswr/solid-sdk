@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Sonnet 5
 /**
  * The AUTH SEAM + the pod-scope (SSRF) guard.
@@ -65,6 +66,8 @@ export interface SolidMcpConfig {
    * `false` to enable the `solid_write` tool / `writeResource`.
    */
   readOnly?: boolean;
+  /** Server-side search caps, covering Type Index discovery and container scans. */
+  searchLimits?: { maxDepth?: number; maxResources?: number; maxTimeMs?: number };
 }
 
 /**

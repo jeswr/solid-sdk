@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
@@ -66,10 +67,17 @@ describe("createSolidMcpServer — tool registration + listing", () => {
     await client.close();
   });
 
-  it("registers the four tools", async () => {
+  it("registers search/fetch alongside the legacy tools", async () => {
     const { tools } = await client.listTools();
     const names = tools.map((t) => t.name).sort();
-    expect(names).toEqual(["solid_list", "solid_read", "solid_search", "solid_write"]);
+    expect(names).toEqual([
+      "fetch",
+      "search",
+      "solid_list",
+      "solid_read",
+      "solid_search",
+      "solid_write",
+    ]);
   });
 
   it("marks read tools readOnlyHint:true and write readOnlyHint:false + destructive", async () => {

@@ -17,3 +17,8 @@
    resources, applied across discovery and scanning, with a 5-second deadline.
    No extra keys are added to the exact `{results}` response. Memory notes and
    RDF chat titles are found through the same scan, without new store seams.
+4. DESIGN §4 requires Turtle for RDF, including named-graph formats (TriG and
+   N-Quads); Turtle cannot carry graph names. Options: fail these reads, emit
+   TriG despite the contract, or render the union of the dataset graphs as
+   Turtle. Selected a read-only union view via `@rdfjs/wrapper` graph projection;
+   the source media type stays in metadata and the stored document is unchanged.

@@ -11,6 +11,22 @@ import { Store } from 'n3';
 export function createSolidMcpServer(config: SolidMcpConfig): McpServer;
 
 // @public
+export function fetchDocument(config: SolidMcpConfig, id: string): Promise<FetchResult>;
+
+// @public
+export interface FetchResult {
+    id: string;
+    metadata: {
+        contentType: string;
+        truncated: boolean;
+        etag?: string;
+    };
+    text: string;
+    title: string;
+    url: string;
+}
+
+// @public
 export function listContainer(config: SolidMcpConfig, url: string): Promise<PodChild[]>;
 
 // @public
@@ -76,6 +92,7 @@ export interface SearchMatch {
 export interface SearchOptions {
     maxDepth?: number;
     maxResources?: number;
+    maxTimeMs?: number;
     scope?: string;
 }
 
@@ -84,6 +101,11 @@ export interface SolidMcpConfig {
     fetch: typeof fetch;
     podRoot: string;
     readOnly?: boolean;
+    searchLimits?: {
+        maxDepth?: number;
+        maxResources?: number;
+        maxTimeMs?: number;
+    };
     webId?: string;
 }
 

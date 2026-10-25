@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 /**
  * createSolidMcpServer — build an MCP server that exposes a Solid pod.
@@ -22,6 +23,7 @@ import {
   type SolidMcpConfig,
   writesEnabled,
 } from "./auth.js";
+import { fetchDocument } from "./fetch.js";
 import {
   listContainer,
   RDF_MEDIA_TYPES,
@@ -133,6 +135,47 @@ export function createSolidMcpServer(config: SolidMcpConfig): McpServer {
   );
 
   // ---- Tools ----
+  server.registerTool(
+    "search",
+    {
+      title: "Search the Solid pod",
+      description:
+        "Search by resource name, URL, or RDF literals, including memory notes and chat titles. Returns {results:[{id,title,url}]} within bounded depth, resources, and time.",
+      inputSchema: { query: z.string().describe("Case-insensitive search term.") },
+      annotations: { readOnlyHint: true, openWorldHint: true },
+    },
+    async ({ query }) => {
+      try {
+        const matches = await search(cfg, query);
+        return toolText(
+          JSON.stringify({
+            results: matches.map(({ url, name }) => ({ id: url, title: name, url })),
+          }),
+        );
+      } catch (e) {
+        return toolError(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    "fetch",
+    {
+      title: "Fetch a Solid resource",
+      description:
+        "Fetch a pod URL from search. Returns {id,title,text,url,metadata}: RDF as Turtle, text/* as text, binary metadata only; metadata.truncated flags the 1 MiB cap.",
+      inputSchema: { id: z.string().describe("Absolute resource URL within the pod.") },
+      annotations: { readOnlyHint: true, openWorldHint: true },
+    },
+    async ({ id }) => {
+      try {
+        return toolText(JSON.stringify(await fetchDocument(cfg, id)));
+      } catch (e) {
+        return toolError(e);
+      }
+    },
+  );
+
   server.registerTool(
     "solid_list",
     {

@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-5
 /**
  * Pod operations over the injected authenticated `fetch`, all pod-scope-guarded.
@@ -20,6 +21,8 @@ import {
   scopedFetch,
   writesEnabled,
 } from "./auth.js";
+import { resourceTitle } from "./content.js";
+import { SearchBudget, searchLimit } from "./search-budget.js";
 
 /** A typed child of an LDP container, mapped to absolute URLs. */
 export interface PodChild {
@@ -75,8 +78,10 @@ export interface SearchOptions {
   scope?: string;
   /** Max recursion depth for the container scan (default 4). */
   maxDepth?: number;
-  /** Max total resources visited in the scan (default 500). */
+  /** Max distinct resources across discovery and scanning (default 500). */
   maxResources?: number;
+  /** Wall-clock budget including discovery and stalled reads (default 5000 ms). */
+  maxTimeMs?: number;
 }
 
 /**
@@ -267,6 +272,7 @@ async function seedContainers(
   q: string,
   scope: string,
   matches: RankedMatches,
+  budget: SearchBudget,
 ): Promise<Set<string>> {
   const seeds = new Set<string>([scope]);
   if (!config.webId) return seeds;
@@ -277,23 +283,28 @@ async function seedContainers(
     return seeds; // No type index / unreadable profile — plain scan from scope.
   }
   for (const hint of hints) {
-    // Best-effort per hint: a hint outside the pod scope OR one whose direct
-    // instance segment is undecodable (malformed percent-encoding in an untrusted
-    // profile) is SKIPPED, never allowed to abort the whole search. The entire
-    // per-hint body is guarded, matching the original error boundary.
+    if (!budget.claim(hint)) continue;
+    // Best-effort per hint: untrusted profile data never aborts the whole search.
     try {
       const scoped = requirePodScopedUrl(config, hint); // only honour in-pod hints
       if (isContainerUrl(scoped)) {
         seeds.add(scoped);
       } else {
         // A direct instance file: match its url/name immediately.
-        const name = decodeURIComponent(scoped.replace(/\/$/, "").split("/").pop() ?? scoped);
+        const name = resourceTitle(scoped);
         if (scoped.toLowerCase().includes(q) || name.toLowerCase().includes(q)) {
           matches.add({ url: scoped, name, snippet: "type-index instance" }, 0);
         }
+        await matchChildLiteral(
+          config,
+          { url: scoped, name, isContainer: false, type: [] },
+          q,
+          matches,
+          budget,
+        );
       }
     } catch {
-      // out-of-pod or undecodable hint — ignore (best-effort seeding).
+      // Unreadable or out-of-pod hint — ignore (best-effort seeding).
     }
   }
   return seeds;
@@ -305,12 +316,13 @@ async function matchChildLiteral(
   child: PodChild,
   q: string,
   matches: RankedMatches,
+  budget: SearchBudget,
 ): Promise<void> {
   // A container listing often does NOT advertise a child's mimeType, so we also
   // try resources whose URL carries a known RDF file extension. Best-effort.
   if (!(isRdfLike(child.mimeType) || hasRdfExtension(child.url))) return;
   const literalHit = await literalMatch(config, child.url, q);
-  if (literalHit) {
+  if (literalHit && budget.active) {
     matches.add({ url: child.url, name: child.name, snippet: `literal: ${literalHit}` }, 2);
   }
 }
@@ -326,17 +338,16 @@ async function scanContainers(
   q: string,
   seeds: Set<string>,
   maxDepth: number,
-  maxResources: number,
   matches: RankedMatches,
+  budget: SearchBudget,
 ): Promise<void> {
-  let visited = 0;
   const seen = new Set<string>();
   const queue: Array<{ url: string; depth: number }> = [...seeds].map((url) => ({ url, depth: 0 }));
-  while (queue.length > 0 && visited < maxResources) {
+  while (queue.length > 0 && budget.active) {
     const next = queue.shift();
     if (!next) break;
     const { url, depth } = next;
-    if (seen.has(url)) continue;
+    if (seen.has(url) || !budget.claim(url)) continue;
     seen.add(url);
 
     let children: PodChild[];
@@ -347,15 +358,15 @@ async function scanContainers(
     }
 
     for (const child of children) {
-      if (visited >= maxResources) break;
-      visited++;
+      if (!budget.active) break;
+      if (!budget.claim(child.url)) continue;
       if (child.name.toLowerCase().includes(q) || child.url.toLowerCase().includes(q)) {
         matches.add({ url: child.url, name: child.name, snippet: "name/url match" }, 1);
       }
       if (child.isContainer) {
         if (depth + 1 <= maxDepth) queue.push({ url: child.url, depth: depth + 1 });
       } else {
-        await matchChildLiteral(config, child, q, matches);
+        await matchChildLiteral(config, child, q, matches, budget);
       }
     }
   }
@@ -384,14 +395,39 @@ export async function search(
   if (q.length === 0) {
     return [];
   }
-  const maxDepth = options.maxDepth ?? 4;
-  const maxResources = options.maxResources ?? 500;
+  const maxDepth = searchLimit(options.maxDepth ?? config.searchLimits?.maxDepth ?? 4, "maxDepth");
+  const maxResources = searchLimit(
+    options.maxResources ?? config.searchLimits?.maxResources ?? 500,
+    "maxResources",
+  );
+  const maxTimeMs = searchLimit(
+    options.maxTimeMs ?? config.searchLimits?.maxTimeMs ?? 5000,
+    "maxTimeMs",
+  );
   const scope = requirePodScopedUrl(config, options.scope ?? config.podRoot);
 
   const matches = new RankedMatches();
-  const seeds = await seedContainers(config, q, scope, matches); // (1) seed
-  await scanContainers(config, q, seeds, maxDepth, maxResources, matches); // (2) scan
-  return matches.ranked(); // (3) rank
+  if (maxResources === 0 || maxTimeMs === 0) return [];
+  const budget = new SearchBudget(maxResources, maxTimeMs);
+  const bounded = { ...config, fetch: budget.wrap(config.fetch) };
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<void>((resolve) => {
+    timer = setTimeout(() => {
+      budget.stop();
+      resolve();
+    }, maxTimeMs);
+  });
+  const crawl = async () => {
+    const seeds = await seedContainers(bounded, q, scope, matches, budget);
+    await scanContainers(bounded, q, seeds, maxDepth, matches, budget);
+  };
+  try {
+    await Promise.race([crawl(), deadline]);
+    return matches.ranked();
+  } finally {
+    clearTimeout(timer);
+    budget.stop();
+  }
 }
 
 /** Is the MIME type one we will attempt to RDF-parse for literal search? */

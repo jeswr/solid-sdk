@@ -1,3 +1,4 @@
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- AUTHORED-BY Codex GPT-5 -->
 
 # @jeswr/solid-mcp
@@ -43,6 +44,36 @@ The bundled `solid-mcp` CLI reads `SOLID_MCP_POD_ROOT`, optional `SOLID_MCP_WEBI
 - Operations: `listContainer`, `readResource`, `readRdf`, `search`, `writeResource`.
 - Scope: `normalizePodRoot`, `requirePodScopedUrl`, `podScopedUrlOrUndefined`.
 - MCP tools: `solid_list`, `solid_read`, `solid_search`, and opt-in `solid_write`.
+
+## ChatGPT search and fetch
+
+`search` accepts `{query}` and returns one MCP text block containing JSON:
+`{results:[{id,title,url}]}`. IDs are pod resource URLs. It searches Type Index
+registrations and container listings, matching names, URLs, and RDF literals
+(including memory notes and chat titles). Results are deduplicated and ranked.
+The legacy `solid_search` tool retains its original array response.
+
+The shared discovery/scan limits default to depth 4, 500 distinct resources, and
+5000 ms. Set `searchLimits: {maxDepth, maxResources, maxTimeMs}` in the server
+configuration to override them. Discovery, redirect hops, and hinted resources
+consume the same resource budget. A deadline returns the matches found so far;
+the exact search response has no additional completeness fields. Each scanned
+response is also limited to 1 MiB.
+
+`fetch` accepts `{id}` (an absolute pod URL) and returns one MCP text block
+containing `{id,title,text,url,metadata}`. Titles use the decoded filename.
+Metadata contains `contentType`, `truncated`, and an optional `etag`. RDF is
+parsed using `@jeswr/fetch-rdf` and serialized as Turtle; `text/*` is returned as
+text. Named-graph RDF is rendered as a union graph (Turtle has no graph labels).
+Other media types, including non-RDF `application/json`, return empty text
+and metadata without downloading the body.
+
+Both the input and UTF-8 output are capped at 1 MiB. Text returns a complete
+UTF-8 prefix and `metadata.truncated: true` when capped. Oversized RDF returns
+empty text with that flag, since a partial document may be invalid RDF. Missing
+Content-Type is treated as binary. JSON-LD inline contexts are supported; remote
+contexts and `@import` are refused to prevent parser-initiated network requests.
+All fetch URLs and redirect hops are validated against the configured pod scope.
 
 ## Links
 
