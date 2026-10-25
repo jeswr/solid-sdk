@@ -368,14 +368,17 @@ describe("makeCopy", () => {
     const source = await document();
     const asset = `${docContainerUrls(DOC).assets}chart.png`;
     s.resources.set(asset, { body: "png bytes", contentType: "image/png", etag: '"a"' });
-    const persistFullState = vi.fn(async (updates: string, fetchImpl: typeof fetch) => {
-      expect(fetchImpl).toBe(s.fetchImpl);
-      await fetchImpl(`${updates}state`, {
-        method: "PUT",
-        body: "current CRDT state",
-        headers: { "if-none-match": "*", "content-type": "application/octet-stream" },
-      });
-    });
+    const persistFullState = vi.fn(
+      async (updates: string, fetchImpl: typeof fetch, mapping: ReadonlyMap<string, string>) => {
+        expect(fetchImpl).toBe(s.fetchImpl);
+        expect(mapping.get(asset)).toBe(`${POD}docs/plan-copy/assets/chart.png`);
+        await fetchImpl(`${updates}state`, {
+          method: "PUT",
+          body: `current CRDT state ${mapping.get(asset)}`,
+          headers: { "if-none-match": "*", "content-type": "application/octet-stream" },
+        });
+      },
+    );
     const copy = await s.store.makeCopy(source, {
       assets: [asset, asset],
       persistFullState,
@@ -396,7 +399,7 @@ describe("makeCopy", () => {
       "png bytes",
     );
     expect(s.resources.get(`${docContainerUrls(copy.url).updateLog}state`)?.body).toBe(
-      "current CRDT state",
+      `current CRDT state ${POD}docs/plan-copy/assets/chart.png`,
     );
     const fresh = await s.store.read(copy.url);
     expect(fresh).toEqual(copy);

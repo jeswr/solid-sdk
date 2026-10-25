@@ -50,7 +50,12 @@ export interface CopyState {
   /** Only referenced assets, not every file left in the source container. */
   assets: readonly string[];
   snapshot: (assetUrls: ReadonlyMap<string, string>) => Snapshot | Promise<Snapshot>;
-  persistFullState: (updates: string, fetchImpl: typeof fetch) => Promise<void>;
+  /** Persist a clone of the captured state with the same remapped asset references. */
+  persistFullState: (
+    updates: string,
+    fetchImpl: typeof fetch,
+    assetUrls: ReadonlyMap<string, string>,
+  ) => Promise<void>;
 }
 
 /** All I/O uses the supplied account fetch; no auth globals or editor imports. */
@@ -269,7 +274,7 @@ export class DocsStore {
       if (!written.ok) throw new ResourceWriteError(destination, written.status);
       mapping.set(asset, destination);
     }
-    await state.persistFullState(target.updateLog, this.fetchImpl);
+    await state.persistFullState(target.updateLog, this.fetchImpl, mapping);
     const snapshot = await state.snapshot(mapping);
     // Fresh copy history captures the copied content, never the reservation's empty body.
     const dataset = buildDocument(copy.url, { ...copy.data, ...snapshot, priorRevisions: [] });
