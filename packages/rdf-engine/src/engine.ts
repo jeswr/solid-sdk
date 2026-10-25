@@ -20,6 +20,16 @@ type JsonTerm =
     }
   | { type: "triple"; value: unknown };
 
+/** Conservative syntax check, including scoped contexts and context arrays. */
+function hasNullContext(value: unknown): boolean {
+  if (value === null || typeof value !== "object") return false;
+  return Object.entries(value).some(
+    ([key, entry]) =>
+      (key === "@context" && (entry === null || (Array.isArray(entry) && entry.includes(null)))) ||
+      hasNullContext(entry),
+  );
+}
+
 /** Materialize both graph scopes; no WASM handle escapes a document operation. */
 function dataset(store: Wasm.Store): Store {
   // Labels identify nodes only within this document, including across its graph scopes.
@@ -118,11 +128,24 @@ export function createEngine(load: () => Promise<Runtime>): RdfEngine {
       return use(({ Store: WasmStore }) => {
         const format = formatName(mediaType);
         let text = decode(input);
-        // 0.1.5 has no dataset-preserving base loader. Set JSON-LD's base context instead.
         if (opts?.baseIri && format === "jsonld") {
+          const document: unknown = JSON.parse(text);
+          // Graph keywords may appear as keys, aliases or @container values. Without
+          // them, the native graph loader safely sets the actual document base.
+          if (!JSON.stringify(document).includes('"@graph"')) {
+            return withStore(WasmStore.loadWithBase(text, format, opts.baseIri), dataset);
+          }
+          // 0.1.5 has no dataset/base loader. Keep the graph-preserving wrapper only
+          // where a context reset cannot discard its inherited base. Scan syntax
+          // conservatively rather than reimplement JSON-LD context/value expansion.
+          if (hasNullContext(document)) {
+            throw new TypeError(
+              "Sparq 0.1.5 cannot combine a JSON-LD base, graph syntax and null contexts",
+            );
+          }
           text = JSON.stringify({
             "@context": { "@base": opts.baseIri },
-            "@graph": JSON.parse(text),
+            "@graph": document,
           });
         }
         // 0.1.5 has no dataset-preserving base loader. Resolve TriG with n3 first.

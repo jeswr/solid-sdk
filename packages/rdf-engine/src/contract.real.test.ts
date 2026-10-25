@@ -24,6 +24,90 @@ test("JSON-LD resolves relative identifiers against the supplied base", async ()
   );
 });
 
+test.each([
+  { context: null },
+  { context: [{ "@base": "https://other.example/" }, null] },
+  { context: [{ "@base": null }, null] },
+])("JSON-LD context reset $context retains the original document base", async ({ context }) => {
+  const data = await engine.parse(
+    JSON.stringify({
+      "@context": context,
+      "@id": "#me",
+      "https://example/p": "value",
+    }),
+    "application/ld+json",
+    { baseIri: "https://example/profile" },
+  );
+  expect(await engine.canonicalize(data)).toBe(
+    '<https://example/profile#me> <https://example/p> "value" .\n',
+  );
+});
+
+test("nested JSON-LD context resets restore the document base after a local override", async () => {
+  const data = await engine.parse(
+    JSON.stringify({
+      "@context": { "@base": "https://other.example/" },
+      "@id": "#parent",
+      "https://example/p": {
+        "@context": null,
+        "@id": "#me",
+        "https://example/p": "value",
+      },
+    }),
+    "application/ld+json",
+    { baseIri: "https://example/profile" },
+  );
+  expect(await engine.canonicalize(data)).toBe(
+    '<https://example/profile#me> <https://example/p> "value" .\n' +
+      "<https://other.example/#parent> <https://example/p> <https://example/profile#me> .\n",
+  );
+});
+
+test.each([
+  {
+    "@context": null,
+    "@id": "#graph",
+    "@graph": [{ "@id": "#me", "https://example/p": "value" }],
+  },
+  {
+    "@context": [{ graph: "@graph" }, null],
+    "@id": "#graph",
+    "@graph": [{ "@id": "#me", "https://example/p": "value" }],
+  },
+  {
+    "@context": { graph: "@graph" },
+    "@id": "#graph",
+    graph: [{ "@context": null, "@id": "#me", "https://example/p": "value" }],
+  },
+  {
+    "@context": {
+      graphs: { "@id": "https://example/graphs", "@container": ["@graph", "@id"] },
+    },
+    "@id": "#parent",
+    graphs: { "#graph": [{ "@context": [null], "@id": "#me", "https://example/p": "value" }] },
+  },
+])("JSON-LD rejects graph syntax combined with a base and null contexts: %j", async (input) => {
+  await expect(
+    engine.parse(JSON.stringify(input), "application/ld+json", {
+      baseIri: "https://example/profile",
+    }),
+  ).rejects.toThrow("Sparq 0.1.5 cannot combine a JSON-LD base, graph syntax and null contexts");
+});
+
+test("JSON-LD graph syntax with null contexts remains supported without a supplied base", async () => {
+  const data = await engine.parse(
+    JSON.stringify({
+      "@context": null,
+      "@id": "https://example/g",
+      "@graph": [{ "@id": "https://example/s", "https://example/p": "value" }],
+    }),
+    "application/ld+json",
+  );
+  expect(await engine.canonicalize(data)).toBe(
+    '<https://example/s> <https://example/p> "value" <https://example/g> .\n',
+  );
+});
+
 test("JSON-LD base resolution preserves default and named graphs", async () => {
   const input = JSON.stringify([
     { "@id": "#me", "https://example/name": "Alice" },

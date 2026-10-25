@@ -41,6 +41,12 @@ Turtle, TriG, N-Triples, N-Quads and JSON-LD are supported. TriG, N-Quads and
 JSON-LD preserve named graphs. Turtle and N-Triples serialization export the
 default graph. `baseIri` resolves relative Turtle and TriG IRIs; TriG uses n3 for
 base resolution because 0.1.5 has no dataset-preserving base loader.
+For JSON-LD without graph syntax, `baseIri` sets the native document base, which
+survives null context resets. Documents using graph syntax retain a surrounding
+base context to preserve graph names. Combining `baseIri`, graph syntax and null
+contexts throws `TypeError`: the pinned binding cannot preserve both the base
+and graph names for that combination. The syntax check is conservative and also
+examines JSON literal contents and context aliases.
 
 `serialize` accepts a dataset or any quad iterable, plus optional `prefixes` and
 `pretty`. Turtle, TriG and JSON-LD use Sparq's serializer; line formats use n3's

@@ -68,6 +68,13 @@ test("all document stores return owned heapBytes to baseline on success and fail
       expect(live.size).toBe(0);
       expect(heapBytes()).toBe(before);
     }
+    await engine.parse(
+      '{"@context":null,"@id":"#me","https://example/p":"value"}',
+      "application/ld+json",
+      { baseIri: "https://example/profile" },
+    );
+    expect(live.size).toBe(0);
+    expect(heapBytes()).toBe(before);
     const serialize = vi.spyOn(Store.prototype, "serialize").mockImplementation(() => {
       throw new Error("writer failed");
     });
