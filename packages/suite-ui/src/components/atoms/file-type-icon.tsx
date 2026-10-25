@@ -112,14 +112,15 @@ const EXTENSIONS: Record<string, FileType> = {
 export function getFileType(contentType?: string, name?: string): FileType {
   const mime = contentType?.split(";", 1)[0]?.trim().toLowerCase();
   if (mime && mime !== "application/octet-stream") {
-    if (MIME_TYPES[mime]) return MIME_TYPES[mime];
+    if (Object.hasOwn(MIME_TYPES, mime)) return MIME_TYPES[mime] ?? "unknown";
     if (mime.startsWith("image/")) return "image";
     if (mime.startsWith("audio/")) return "audio";
     if (mime.startsWith("video/")) return "video";
     if (mime.startsWith("text/")) return "text";
     return "unknown";
   }
-  return EXTENSIONS[name?.split(".").pop()?.toLowerCase() ?? ""] ?? "unknown";
+  const extension = name?.split(".").pop()?.toLowerCase() ?? "";
+  return Object.hasOwn(EXTENSIONS, extension) ? (EXTENSIONS[extension] ?? "unknown") : "unknown";
 }
 export type FileTypeIconProps = {
   contentType?: string;

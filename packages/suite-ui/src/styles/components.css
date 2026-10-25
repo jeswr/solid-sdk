@@ -351,3 +351,31 @@
   font: 600 var(--text-xs) / var(--lh-xs) var(--font-ui);
   font-variant-numeric: tabular-nums;
 }
+[data-slot="badge"] {
+  border-radius: var(--radius-sm);
+}
+[data-slot="context-menu-checkbox-item"],
+[data-slot="context-menu-radio-item"],
+[data-slot="context-menu-sub-trigger"],
+[data-slot="dropdown-menu-sub-trigger"] {
+  min-height: var(--control-h-sm);
+  border-radius: var(--radius-md);
+}
+[data-slot="scroll-area-scrollbar"][data-orientation="vertical"] {
+  width: 24px;
+  padding: 8px;
+}
+[data-slot="scroll-area-scrollbar"][data-orientation="horizontal"] {
+  height: 24px;
+  padding: 8px;
+}
+@media (pointer: coarse) {
+  [data-slot="scroll-area-scrollbar"][data-orientation="vertical"] {
+    width: 44px;
+    padding: 20px;
+  }
+  [data-slot="scroll-area-scrollbar"][data-orientation="horizontal"] {
+    height: 44px;
+    padding: 20px;
+  }
+}

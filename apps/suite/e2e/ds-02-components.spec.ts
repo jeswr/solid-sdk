@@ -295,3 +295,12 @@ test("coarse pointers enforce comfortable controls and reduced motion", async ({
   await reflow(page);
   await context.close();
 });
+test("scroll-area: keyboard scrolling", async ({ page }, info) => {
+  await page.goto("/dev/components/scroll-area");
+  const viewport = page.locator('[data-density="comfortable"] [data-slot="scroll-area-viewport"]');
+  await viewport.focus();
+  await page.keyboard.press("End");
+  await expect.poll(() => viewport.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
+  await capture(page, info, "scroll-area-keyboard-scrolled");
+  await reflow(page);
+});

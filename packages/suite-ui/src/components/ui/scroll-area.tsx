@@ -19,6 +19,7 @@ function ScrollArea({
     >
       <ScrollAreaPrimitive.Viewport
         data-slot="scroll-area-viewport"
+        tabIndex={0}
         className="size-full rounded-[inherit] transition-[color,box-shadow]    "
       >
         {children}

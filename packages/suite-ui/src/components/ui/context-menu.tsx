@@ -12,9 +12,33 @@ function ContextMenu({ ...props }: React.ComponentProps<typeof ContextMenuPrimit
 }
 
 function ContextMenuTrigger({
+  onKeyDown,
+  disabled,
   ...props
 }: React.ComponentProps<typeof ContextMenuPrimitive.Trigger>) {
-  return <ContextMenuPrimitive.Trigger data-slot="context-menu-trigger" {...props} />;
+  return (
+    <ContextMenuPrimitive.Trigger
+      data-slot="context-menu-trigger"
+      {...(disabled === undefined ? {} : { disabled })}
+      {...props}
+      onKeyDown={(event) => {
+        onKeyDown?.(event);
+        if (event.defaultPrevented || disabled) return;
+        if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) {
+          event.preventDefault();
+          const rect = event.currentTarget.getBoundingClientRect();
+          event.currentTarget.dispatchEvent(
+            new MouseEvent("contextmenu", {
+              bubbles: true,
+              cancelable: true,
+              clientX: rect.left,
+              clientY: rect.bottom,
+            }),
+          );
+        }
+      }}
+    />
+  );
 }
 
 function ContextMenuGroup({ ...props }: React.ComponentProps<typeof ContextMenuPrimitive.Group>) {

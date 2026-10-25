@@ -7,7 +7,7 @@ import type * as React from "react";
 import { cn } from "../../lib/utils.js";
 
 const buttonVariants = cva(
-  "inline-flex shrink-0 items-center justify-center gap-2 rounded-md text-base font-medium whitespace-nowrap transition-[background-color,border-color,box-shadow]     disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive   [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  "inline-flex shrink-0 items-center justify-center gap-2 rounded-md text-base font-medium whitespace-nowrap transition-[background-color,border-color,box-shadow]     disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive   [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-5",
   {
     variants: {
       variant: {
@@ -51,12 +51,12 @@ function Button({
 
   return (
     <Comp
+      {...props}
       type={asChild ? undefined : type}
       data-slot="button"
       data-variant={variant}
       data-size={size}
       className={cn(buttonVariants({ variant, size, className }))}
-      {...props}
     />
   );
 }

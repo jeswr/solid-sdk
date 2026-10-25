@@ -318,7 +318,7 @@ function Primitives({ name }: { name: string }) {
       return (
         <Ui.ScrollArea
           className="h-40 rounded-lg border"
-          tabIndex={0}
+          role="region"
           aria-label="Recent documents"
         >
           <div className="p-3">
@@ -371,7 +371,10 @@ function Primitives({ name }: { name: string }) {
           <Ui.Button
             variant="outline"
             onClick={() =>
-              Ui.toast.error("Can't reach your storage", { duration: Number.POSITIVE_INFINITY })
+              Ui.toast.error("Can't reach your storage", {
+                duration: Number.POSITIVE_INFINITY,
+                cancel: { label: "Dismiss", onClick: () => {} },
+              })
             }
           >
             Show error toast
