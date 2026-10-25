@@ -69,6 +69,45 @@ describe("Markdown-lite inline AST", () => {
     ]);
     expect(parseInline("literal", {}, 16)).toEqual([text("literal")]);
   });
+
+  it("matches adjacent nested delimiters and preserves unmatched runs", () => {
+    for (const source of ["***both***", "___both___"]) {
+      expect(parseInline(source)).toEqual([
+        { type: "bold", children: [{ type: "italic", children: [text("both")] }] },
+      ]);
+    }
+    expect(parseInline("*italic **bold***")).toEqual([
+      { type: "italic", children: [text("italic "), { type: "bold", children: [text("bold")] }] },
+    ]);
+    expect(parseInline("**bold *italic***")).toEqual([
+      { type: "bold", children: [text("bold "), { type: "italic", children: [text("italic")] }] },
+    ]);
+    expect(parseInline("**code `**` and \\*literal\\***")).toEqual([
+      {
+        type: "bold",
+        children: [text("code "), { type: "code", value: "**" }, text(" and *literal*")],
+      },
+    ]);
+    for (const value of [
+      "**unclosed*",
+      "__unclosed_",
+      "**unclosed _word",
+      "**unclosed * word",
+      "**unclosed _",
+      "**unclosed `",
+    ]) {
+      expect(parseInline(value)).toEqual([text(value)]);
+    }
+    expect(parseInline("**a _b_ c**")).toEqual([
+      {
+        type: "bold",
+        children: [text("a "), { type: "italic", children: [text("b")] }, text(" c")],
+      },
+    ]);
+    expect(parseInline("**a *b* c**", {}, 15)).toEqual([
+      { type: "bold", children: [text("a *b* c")] },
+    ]);
+  });
 });
 
 describe("HTTP(S) and WebID autolinking", () => {

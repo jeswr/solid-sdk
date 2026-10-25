@@ -3,6 +3,36 @@ import { EMOJI_SHORTCODES } from "./emoji";
 import { parseAutolink, trimLinkEnd } from "./links";
 import type { InlineNode, TextOptions } from "./types";
 
+/** Find a matching delimiter without closing inside code, escapes, or nested emphasis. */
+function emphasisEnd(source: string, start: number, delimiter: string, depth: number): number {
+  if (depth >= 16) return -1;
+  for (let offset = start; offset < source.length; offset += 1) {
+    if (source.charAt(offset) === "\\") {
+      offset += 1;
+      continue;
+    }
+    const code = /^`[^`\n]+`/.exec(source.slice(offset));
+    if (code) {
+      offset += code[0].length - 1;
+      continue;
+    }
+    const marker = /^(\*\*|__|\*|_)/.exec(source.slice(offset))?.[0];
+    if (!marker) continue;
+    if (marker === delimiter) return offset;
+    if (!/\s/.test(source.charAt(offset + marker.length))) {
+      const end = emphasisEnd(source, offset + marker.length, marker, depth + 1);
+      if (end > offset + marker.length) {
+        offset = end + marker.length - 1;
+        continue;
+      }
+    }
+    // A triple closing run can close the inner single and then the outer double.
+    if (source.startsWith(delimiter, offset)) return offset;
+    offset += marker.length - 1;
+  }
+  return -1;
+}
+
 /** Parse a bounded Markdown-lite subset; HTML and unsupported syntax stay literal. */
 export function parseInline(source: string, options: TextOptions = {}, depth = 0): InlineNode[] {
   const nodes: InlineNode[] = [];
@@ -71,7 +101,7 @@ export function parseInline(source: string, options: TextOptions = {}, depth = 0
     }
     const delimiter = /^(\*\*|__|\*|_)/.exec(rest)?.[0];
     if (delimiter && boundary) {
-      const end = rest.indexOf(delimiter, delimiter.length);
+      const end = emphasisEnd(rest, delimiter.length, delimiter, depth);
       const body = rest.slice(delimiter.length, end);
       if (end > delimiter.length && !/^\s|\s$/.test(body)) {
         nodes.push({
@@ -81,6 +111,9 @@ export function parseInline(source: string, options: TextOptions = {}, depth = 0
         offset += end + delimiter.length;
         continue;
       }
+      appendText(delimiter);
+      offset += delimiter.length;
+      continue;
     }
     appendText(source.charAt(offset));
     offset += 1;
