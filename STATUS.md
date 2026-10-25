@@ -5,6 +5,68 @@
 
 Updated: 2026-10-25. Branch: `lane/sst-8xm.58`.
 
+## Fix round 4 after review of 60f37e105984
+
+Read the complete supplied review and all earlier lane briefs. Changes are
+limited to its two findings, their regression tests and package documentation.
+
+Commits:
+
+- `41f8a9db` — `fix: reject unsupported parsed RDF terms`: explicitly reject
+  SPARQL JSON triple terms and directional literals with `TypeError` before
+  materialization can change their values. Real-WASM regressions cover triple
+  objects in default and named graphs, `en--ltr` and `ar--rtl`. The original
+  decoder returned altered datasets for these inputs. The heap/store lifetime
+  test verifies that both new rejection paths free their temporary stores.
+- `3cadc50b` — `fix: retain JSON-LD bases across null contexts`: use native
+  `loadWithBase` for JSON-LD without graph syntax. Regressions cover the review's
+  exact null-context example, context arrays resetting an overridden or cleared
+  base, and nested resets after a local override. Existing JSON literal,
+  named-graph, explicit base override/clearing and byte-input tests still pass.
+  The new native path is also covered by the heap/store lifetime test.
+- `docs: record round four fix verification` — final STATUS.md-only commit.
+
+Conservative compatibility choice: retain the existing dataset/base-context
+wrapper for documents containing graph syntax, including aliases and graph
+containers. Sparq 0.1.5 has no dataset-preserving base loader; its native base
+loader demonstrably folds named graphs into the default graph. Documents
+combining a supplied base, graph syntax and null contexts now throw `TypeError`
+instead of returning an empty or folded dataset. Regressions cover direct,
+array, nested, aliased and graph-container forms of that rejection. Graphs with
+null contexts and absolute identifiers still parse without a supplied base.
+
+The compatibility guard deliberately checks syntax conservatively, including
+JSON literal contents. It can reject a document whose graph/reset tokens appear
+only in literals. Full support for the base + graph + reset combination remains
+blocked by the pinned binding; it requires an upstream dataset/base API or a
+broader parser implementation. Neither a dependency change nor a new JSON-LD
+processor was introduced under this fix-only brief. This is the remaining
+limitation for the dispatcher; no further scope choice is requested in this lane.
+
+Final checks passed on Node v24.22.1 / pnpm 10.4.1 before the final commit:
+
+| Command | Result |
+| --- | --- |
+| `pnpm --filter @jeswr/rdf-engine run lint` | PASS; 20 files checked |
+| `pnpm --filter @jeswr/rdf-engine run build` | PASS |
+| `pnpm --filter @jeswr/rdf-engine run typecheck` | PASS |
+| `pnpm --filter @jeswr/rdf-engine run test` | PASS; 72 tests across 6 files, including real Node WASM |
+| `pnpm run lint:root` | PASS; Biome and all root guards |
+| `git diff --check` | PASS |
+
+Coverage: statements 99.54%, branches 98.01%, functions 100%, lines 99.49%; all
+90% thresholds pass. No workspace manifest depends on rdf-engine, so there is
+no dependent gate. Per the original lane brief, no whole-workspace gate or
+`gate:full` was run. The first lint attempt found a formatting issue, which was
+fixed before the successful final gate.
+
+No dependencies were added, so no new `check:packages` invocation was needed;
+the earlier dependency-policy results below remain applicable. `roborev` is
+unavailable, so no additional automated review verdict was produced. Tracker
+operations remain with the dispatcher because this is a dedicated worktree.
+No lockfile, tracker state or other checkout changed. No push, PR, branch switch,
+fetch or merge occurred. STATUS.md was edited last.
+
 ## JSON-LD base fix after review of cadf5e3e
 
 Status: the supplied relative-identifier regression and named-graph preservation
