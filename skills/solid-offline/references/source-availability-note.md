@@ -14,4 +14,3 @@ the [`jeswr/solid-offline`](../../../packages/solid-offline/README.md) package. 
 wired into an app, hold the snapshot cache yourself as below. (Do **not** write code against a
 `solid-offline` API here — it is not yet published; this skill documents the *pattern*, not a
 package surface.)
-
