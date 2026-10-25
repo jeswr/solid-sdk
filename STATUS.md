@@ -108,3 +108,86 @@ by the unrelated timeout above; the requested affected gate and lane acceptance 
 `QUESTIONS.md`; none blocks this lane. The Node CLI and fixture recorder remain assigned to
 CON-03 and CON-02 respectively. Nothing was pushed, published, or merged; no other checkout
 or unrelated source was modified.
+
+## Fix round 1 — 2026-10-25
+
+Resumed the existing history-preserving move at `9772b3d9` on `lane/sst-k9mk`.
+This round addresses both high findings in the Codex review of that commit; it
+adds no packages, dependencies, or strategy changes.
+
+### Fix commits
+
+- `745a6730` — `fix: confine connector redirects to document scope`: bind document
+  reads/writes and every redirect hop to the connector container, including
+  rejecting the container document itself. Keep Type Index access separate: check
+  the selected profile-linked index (or the existing bootstrap target) against
+  the active Pod, restrict access to that document, and refuse redirects from
+  both the profile and index. Preserve conditional writes and index bootstrap.
+- `907fdca9` — `fix: isolate connector source and Pod transports`: capture a
+  pristine source fetch before SessionProvider initializes authentication; expose
+  the auth manager's fetch directly through the session for connector Pod I/O.
+  Inject source fetch into SourceAuth and the OAuth popup/token-exchange path;
+  inject Pod fetch into both import hooks' PodWriter. Document the transport
+  contract and add a regression using the real reactive auth manager.
+- The final `docs: record connector fix-round validation` commit updates only
+  this report, after all implementation and verification work.
+
+### Validation for this round
+
+Runtime: Node `24.22.1`, pnpm `10.4.1`. Dependency lifecycle scripts remained
+ignored. No manifest or lockfile changed, so no dependency-policy additions were
+needed (`check:packages`: not applicable).
+
+```sh
+pnpm install --frozen-lockfile
+pnpm exec turbo run build --filter=@jeswr/pod-connectors...
+pnpm --filter @jeswr/pod-connectors run lint && pnpm --filter @jeswr/pod-connectors run build && pnpm --filter @jeswr/pod-connectors run typecheck && pnpm --filter @jeswr/pod-connectors run test
+pnpm --filter @jeswr/app-pod-manager run lint
+pnpm --filter @jeswr/app-pod-manager run build && pnpm --filter @jeswr/app-pod-manager run typecheck
+pnpm --filter @jeswr/app-pod-manager run test
+pnpm run lint:root
+TURBO_SCM_BASE=917d3be9c7967622829adc43c1aaabb0964ec993 pnpm run gate
+pnpm run gate:full
+```
+
+- Frozen install and dependency-first build: **PASS**.
+- Pod connectors lint/build/typecheck/tests: **PASS**, **257 tests in 41 files**.
+- Pod Manager lint/production static build/typecheck/tests: **PASS**, **915 tests
+  passed, 1 existing IndexedDB-dependent skip, 67 files**.
+- Root lint: **PASS**.
+- Affected gate against the dispatcher-specified base: **PASS, 11/11 tasks**
+  (1 cached), including 26 root tests, both projects' tests, and their builds.
+- Full-workspace gate: **FAIL** after 2 successful tasks (23 scheduled), in the
+  unchanged `@jeswr/unstorage-solid#build` helper. Its dependency bootstrap invokes
+  `npm install --no-audit --no-fund --ignore-scripts --prefer-offline` and fails
+  with `EROFS` opening `/home/runner/.npm/_cacache/tmp/…`. The helper also clones
+  upstream source; it was not retried because this lane forbids remote fetches.
+  No unrelated build script or cache policy was changed.
+
+Initial direct checks required building the workspace guarded-fetch dependency
+first. Two new regression-test setup/assertion issues were corrected before the
+passing checks above: RDF reads wrap the scope exception in `RdfFetchError`, and
+the auth package's browser exports require an `HTMLElement` stub under Node.
+Existing non-fatal Biome warnings and guarded-fetch webpack dynamic-dependency
+warnings remain.
+
+The new tests verify that source API and OAuth token requests carry no Pod
+Authorization/DPoP headers even after global auth patching; the same auth manager
+successfully upgrades a separate Pod challenge. They also verify rejection of a
+second-hop document redirect elsewhere in the same Pod for reads and PUT writes,
+continued support for redirects inside the connector container, refusal of
+profile/index redirects to unrelated Pod documents, and successful index updates.
+
+### Scope, review, and open questions
+
+Both requested findings are implemented and the history-preserving move was not
+repeated. Conservative redirect policy: Type Index/profile requests refuse all
+redirects, keeping access limited to the exact selected documents. There are no
+open implementation questions or unfinished requested changes.
+
+Full-workspace green verification remains blocked by the unrelated build helper
+above. `roborev` and its post-commit hook are unavailable in this sandbox, so no
+new automated per-commit verdict was produced; the two supplied findings were
+checked against the changes and regressions directly. No review tooling was
+installed. All commits remain local to `lane/sst-k9mk`; nothing was pushed,
+published, merged, or changed in another checkout.
