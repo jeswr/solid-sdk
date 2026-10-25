@@ -39,6 +39,18 @@ test("all document stores return owned heapBytes to baseline on success and fail
       await engine.validate(data, "");
       await engine.canonicalize(data);
       await expect(engine.validate(data, "invalid shapes")).rejects.toThrow();
+      const index = await engine.createIndex();
+      await index.put("https://example/resource", data);
+      expect(live.size).toBe(1);
+      const owned = [...live][0];
+      expect(
+        owned?.ask(
+          'ASK { GRAPH <https://example/resource> { <https://example/s> <https://example/p> "value" } }',
+        ),
+      ).toBe(true);
+      await index.remove("https://example/resource");
+      expect(owned?.ask("ASK { GRAPH <https://example/resource> { ?s ?p ?o } }")).toBe(false);
+      index.dispose();
       expect(heapBytes()).toBe(before);
     }
     // Failure after allocation during parse/materialization and serialization must free too.
@@ -54,7 +66,7 @@ test("all document stores return owned heapBytes to baseline on success and fail
     serialize.mockRestore();
     await expect(engine.parse("invalid RDF", "text/turtle")).rejects.toThrow();
     expect(peak).toBeGreaterThan(0);
-    expect(created).toBeGreaterThanOrEqual(500);
+    expect(created).toBeGreaterThanOrEqual(600);
     expect(freed).toBe(created);
     expect(live.size).toBe(0);
     expect(heapBytes()).toBe(before);

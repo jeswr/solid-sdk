@@ -2,10 +2,17 @@
 import { expect, test, vi } from "vitest";
 import { createFakeRdfEngine, FakeEngineUnsupportedError } from "./testing.js";
 
+vi.mock("@sparq-org/sparq", () => {
+  throw new Error("WASM must not load");
+});
+vi.mock("@sparq-org/sparq/wasm-node", () => {
+  throw new Error("Node WASM must not load");
+});
+vi.mock("@sparq-org/sparq/wasm/sparq_wasm.js", () => {
+  throw new Error("Web WASM must not load");
+});
+
 test("fake imports no Sparq module and rejects unsupported operations with a typed error", async () => {
-  vi.doMock("@sparq-org/sparq", () => {
-    throw new Error("WASM must not load");
-  });
   const fake = createFakeRdfEngine();
   await expect(fake.parse("{}", "application/ld+json")).rejects.toBeInstanceOf(
     FakeEngineUnsupportedError,
@@ -25,7 +32,6 @@ test("fake imports no Sparq module and rejects unsupported operations with a typ
     });
   }
   fake.dispose();
-  vi.doUnmock("@sparq-org/sparq");
 });
 
 test("fake validation defaults to conforming and accepts a result or async validator", async () => {

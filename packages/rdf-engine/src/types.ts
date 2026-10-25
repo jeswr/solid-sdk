@@ -34,6 +34,19 @@ export interface RdfEngine {
   serialize(data: QuadSource, format: RdfMediaType, opts?: SerializeOptions): Promise<string>;
   validate(data: QuadSource, shapes: QuadSource | string): Promise<ValidationReport>;
   canonicalize(data: QuadSource): Promise<string>;
+  /** Create the named-graph lifecycle foundation; query/persistence arrive in T-071. */
+  createIndex(): Promise<LocalIndex>;
+  dispose(): void;
+}
+
+/** LocalIndex graph lifecycle. T-071 adds SPARQL, snapshots, persistence and LRU. */
+export interface LocalIndex {
+  /** Replace all quads in a graph, assigning the resource IRI as their graph name. */
+  put(graphIri: string, data: QuadSource): Promise<void>;
+  remove(graphIri: string): Promise<void>;
+  has(graphIri: string): boolean;
+  /** Number of deduplicated quads across indexed graphs. */
+  size(): number;
   dispose(): void;
 }
 

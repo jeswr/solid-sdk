@@ -115,6 +115,50 @@ for (const [name, factory] of [
       await expect(engine.serialize([], "text/turtle")).rejects.toThrow("disposed");
       await expect(engine.validate([], "")).rejects.toThrow("disposed");
       await expect(engine.canonicalize([])).rejects.toThrow("disposed");
+      await expect(engine.createIndex()).rejects.toThrow("disposed");
+    });
+
+    test("LocalIndex replaces/removes resource graphs, deduplicates and owns its data", async () => {
+      const index = await engine.createIndex();
+      const data = await engine.parse(triple + named, "application/n-quads");
+      expect(index.size()).toBe(0);
+      expect(index.has("https://example/resource")).toBe(false);
+      await index.put("https://example/resource", [...data, ...data]);
+      expect(index.has("https://example/resource")).toBe(true);
+      expect(index.size()).toBe(2);
+      for (const quad of data) {
+        data.delete(quad);
+        break;
+      }
+      expect(index.size()).toBe(2);
+      await index.put("https://example/resource", data);
+      expect(index.size()).toBe(1);
+      await index.put("https://example/second", data);
+      expect(index.size()).toBe(2);
+      await expect(index.put("relative-graph", data)).rejects.toThrow();
+      expect(index.size()).toBe(2);
+      await index.remove("https://example/resource");
+      await index.remove("https://example/resource");
+      expect(index.has("https://example/resource")).toBe(false);
+      expect(index.has("https://example/second")).toBe(true);
+      expect(index.size()).toBe(1);
+      await index.put("https://example/second", []);
+      expect(index.has("https://example/second")).toBe(true);
+      expect(index.size()).toBe(0);
+      index.dispose();
+      index.dispose();
+      expect(() => index.size()).toThrow("disposed");
+      expect(() => index.has("https://example/second")).toThrow("disposed");
+      await expect(index.put("https://example/second", [])).rejects.toThrow("disposed");
+      await expect(index.remove("https://example/second")).rejects.toThrow("disposed");
+    });
+
+    test("engine disposal also disposes all owned indexes", async () => {
+      const first = await engine.createIndex();
+      const second = await engine.createIndex();
+      engine.dispose();
+      expect(() => first.size()).toThrow("disposed");
+      expect(() => second.size()).toThrow("disposed");
     });
 
     test("disposal cancels an operation queued after initialization", async () => {

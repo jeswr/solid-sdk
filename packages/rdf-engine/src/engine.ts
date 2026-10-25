@@ -2,8 +2,9 @@
 import type { Quad, Term } from "@rdfjs/types";
 import type * as Wasm from "@sparq-org/sparq/wasm-node";
 import { DataFactory, Store } from "n3";
+import { createLocalIndex } from "./local-index.js";
 import { decode, formatName, graphDocument, parseN3, writeN3 } from "./rdf.js";
-import type { RdfEngine, ValidationReport } from "./types.js";
+import type { LocalIndex, RdfEngine, ValidationReport } from "./types.js";
 
 /** Internal common surface of the shipped browser and Node WASM modules. */
 export type Runtime = Pick<typeof Wasm, "Store" | "canonicalizeNQuads">;
@@ -52,6 +53,7 @@ export function createEngine(load: () => Promise<Runtime>): RdfEngine {
   let runtime: Runtime | undefined;
   let disposed = false;
   let features: RdfEngine["features"] = null;
+  const indexes = new Set<LocalIndex>();
   function check() {
     if (disposed) throw new Error("RDF engine is disposed");
   }
@@ -144,8 +146,27 @@ export function createEngine(load: () => Promise<Runtime>): RdfEngine {
     canonicalize(data) {
       return use((module) => module.canonicalizeNQuads(writeN3(data, "application/n-quads")));
     },
+    createIndex() {
+      return use(({ Store: WasmStore }) => {
+        const store = WasmStore.loadDataset("", "nquads");
+        const index = createLocalIndex(
+          (inserts, deletes) =>
+            store.applyDelta(
+              writeN3(inserts, "application/n-quads"),
+              writeN3(deletes, "application/n-quads"),
+            ),
+          () => {
+            store.free();
+            indexes.delete(index);
+          },
+        );
+        indexes.add(index);
+        return index;
+      });
+    },
     dispose() {
       disposed = true;
+      for (const index of indexes) index.dispose();
       runtime = undefined;
       features = null;
     },

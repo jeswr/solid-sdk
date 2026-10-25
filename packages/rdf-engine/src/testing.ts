@@ -1,6 +1,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+
+import { createLocalIndex } from "./local-index.js";
 import { decode, formatName, groundCanonical, hasBlankNode, parseN3, writeN3 } from "./rdf.js";
-import type { QuadSource, RdfEngine, ValidationReport } from "./types.js";
+import type { LocalIndex, QuadSource, RdfEngine, ValidationReport } from "./types.js";
 
 export type * from "./types.js";
 
@@ -26,6 +28,7 @@ export interface FakeRdfEngineOptions {
 export function createFakeRdfEngine(opts: FakeRdfEngineOptions = {}): RdfEngine {
   let loaded = false;
   let disposed = false;
+  const indexes = new Set<LocalIndex>();
   function check() {
     if (disposed) throw new Error("RDF engine is disposed");
   }
@@ -70,8 +73,21 @@ export function createFakeRdfEngine(opts: FakeRdfEngineOptions = {}): RdfEngine 
       }
       return groundCanonical(quads);
     },
+    async createIndex() {
+      await ready();
+      check();
+      const index = createLocalIndex(
+        () => {},
+        () => {
+          indexes.delete(index);
+        },
+      );
+      indexes.add(index);
+      return index;
+    },
     dispose() {
       disposed = true;
+      for (const index of indexes) index.dispose();
       loaded = false;
     },
   };

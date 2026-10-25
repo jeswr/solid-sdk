@@ -20,6 +20,10 @@ JavaScript memory. The shared contract runs on both engines; JSON-LD, SHACL and 
 canonicalization have a separate real-engine contract. Preserve the 90% coverage gate, the
 installed-WASM size test and bench/bundle.json measurement (gzip level 9).
 
+The shared contract also covers LocalIndex graph lifecycle (put/remove/has/size/dispose).
+Real indexes own one WASM store; engine disposal releases every owned index. T-071 owns
+the later query/stream, snapshot/restore, persistence and LRU surfaces.
+
 Before implementation, read SDK core ADR-001 D4 and `ADR-007-sparq-wasm.md` in
 `solid-suite-planning/specs/sdk-core/`, alongside this repository's `AGENTS.md`.
 
