@@ -2,7 +2,14 @@
 import { mkdir } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import AxeBuilder from "@axe-core/playwright";
-import { expect, test } from "@playwright/test";
+import { expect, type Page, test } from "@playwright/test";
+
+async function expectAccessible(page: Page) {
+  const results = await new AxeBuilder({ page }).analyze();
+  expect(
+    results.violations.filter((v) => v.impact === "serious" || v.impact === "critical"),
+  ).toEqual([]);
+}
 
 for (const route of ["components", "components/tokens"]) {
   test(`${route}: accessible fixture and full-page screenshot`, async ({ page }, testInfo) => {
@@ -12,10 +19,7 @@ for (const route of ["components", "components/tokens"]) {
     await expect(page.locator("html")).toHaveClass(theme === "dark" ? /dark/ : /light/);
     await page.evaluate(() => document.fonts.ready);
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
-    const results = await new AxeBuilder({ page }).analyze();
-    expect(
-      results.violations.filter((v) => v.impact === "serious" || v.impact === "critical"),
-    ).toEqual([]);
+    await expectAccessible(page);
     const directory = fileURLToPath(new URL("../../../artifacts/screens/DS-01/", import.meta.url));
     await mkdir(directory, { recursive: true });
     await page.screenshot({
@@ -26,6 +30,7 @@ for (const route of ["components", "components/tokens"]) {
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
       320,
     );
+    await expectAccessible(page);
   });
 }
 test("keyboard navigation, real density heights and reduced motion", async ({ page }) => {
@@ -55,12 +60,17 @@ test("keyboard navigation, real density heights and reduced motion", async ({ pa
       .locator("html")
       .evaluate((el) => getComputedStyle(el).getPropertyValue("--duration-base").trim()),
   ).toBe("0ms");
+  await expectAccessible(page);
 });
 
-test("touch pointers force comfortable density and 44px controls", async ({ browser }) => {
+test("touch pointers force comfortable density and 44px controls", async ({
+  browser,
+}, testInfo) => {
   const context = await browser.newContext({
     hasTouch: true,
-    viewport: { width: 375, height: 900 },
+    viewport: testInfo.project.use.viewport ?? { width: 375, height: 900 },
+    colorScheme: testInfo.project.use.colorScheme ?? "light",
+    reducedMotion: "reduce",
   });
   const page = await context.newPage();
   await page.goto("http://127.0.0.1:3210/dev/components/tokens");
@@ -78,5 +88,6 @@ test("touch pointers force comfortable density and 44px controls", async ({ brow
   expect(
     await compact.locator("button").evaluate((el) => el.getBoundingClientRect().height),
   ).toBeGreaterThanOrEqual(44);
+  await expectAccessible(page);
   await context.close();
 });
