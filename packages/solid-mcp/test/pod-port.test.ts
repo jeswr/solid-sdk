@@ -81,6 +81,50 @@ describe("fetch PodPort", () => {
     });
   });
 
+  it.each(["legacy", "PodPort"])("defaults headerless RDF reads to Turtle via %s", async (mode) => {
+    const fetch = vi.fn<typeof globalThis.fetch>(
+      async () =>
+        new Response(
+          new TextEncoder().encode('<#subject> <http://schema.org/name> "Headerless RDF" .'),
+        ),
+    );
+    const config = { fetch, podRoot: ROOT };
+    const source = mode === "legacy" ? config : createFetchPodPort(config);
+    const { dataset, turtle } = await readRdf(source, FILE);
+    expect(dataset.getSubjects(null, null, null).map((subject) => subject.value)).toEqual([
+      `${FILE}#subject`,
+    ]);
+    expect(turtle).toContain('"Headerless RDF"');
+  });
+
+  it.each([
+    "legacy",
+    "PodPort",
+  ])("discovers Type Index hints from a headerless profile via %s", async (mode) => {
+    const webId = "https://identity.example/card#me";
+    const index = `${ROOT}index.ttl`;
+    const instance = `${ROOT}favorite.txt`;
+    const solid = "http://www.w3.org/ns/solid/terms#";
+    const fixture = makeFakePod({
+      [ROOT]: { body: containerTurtle(ROOT, []), contentType: "text/turtle" },
+      [index]: {
+        body: `<#registration> <${solid}instance> <${instance}> .`,
+        contentType: "text/turtle",
+      },
+    });
+    const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
+      if (String(input) !== webId) return fixture.fetch(input, init);
+      return new Response(
+        new TextEncoder().encode(`<${webId}> <${solid}publicTypeIndex> <${index}> .`),
+      );
+    });
+    const config = { fetch, podRoot: ROOT, webId };
+    const source = mode === "legacy" ? config : createFetchPodPort(config);
+    expect(await search(source, "favorite")).toEqual([
+      { url: instance, name: "favorite.txt", snippet: "type-index instance" },
+    ]);
+  });
+
   it("preserves portable listing fields and legacy metadata", async () => {
     const fixture = makeFakePod({
       [ROOT]: {

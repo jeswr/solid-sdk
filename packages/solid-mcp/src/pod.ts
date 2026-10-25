@@ -157,7 +157,7 @@ export async function readRdf(source: PodSource, url: string): Promise<ReadRdfRe
   const pod = asPodPort(source);
   const target = requirePodScopedUrl({ podRoot: pod.root }, url);
   const { body, contentType, url: finalUrl } = await pod.read(target, { accept: RDF_ACCEPT });
-  const dataset = await parseRdf(new TextDecoder().decode(body), contentType, {
+  const dataset = await parseRdf(new TextDecoder().decode(body), contentType || null, {
     baseIRI: finalUrl ?? target,
   });
   const turtle = await serializeTurtle(dataset);
@@ -431,7 +431,7 @@ async function typeIndexContainers(source: PodSource): Promise<string[]> {
   const solidNs = "http://www.w3.org/ns/solid/terms#";
   const out = new Set<string>();
   const { body, contentType, url: finalUrl } = await pod.read(webId, { accept: RDF_ACCEPT });
-  const profile = await parseRdf(new TextDecoder().decode(body), contentType, {
+  const profile = await parseRdf(new TextDecoder().decode(body), contentType || null, {
     baseIRI: finalUrl ?? webId,
   });
   const indexes = new Set<string>();
