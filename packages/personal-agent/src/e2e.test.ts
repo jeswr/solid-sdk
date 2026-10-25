@@ -13,6 +13,7 @@
  *  - at-most-once send (a re-run never double-sends).
  */
 import { vocab } from "@jeswr/agentic-legacy-bridge";
+import { parseRdf } from "@jeswr/fetch-rdf";
 import type { OdrlPolicy } from "@jeswr/solid-odrl";
 import { DataFactory, Writer } from "n3";
 import { describe, expect, it } from "vitest";
@@ -131,7 +132,7 @@ function scriptedVerifier(policy: OdrlPolicy, issuer: string = OWNER): MandateVe
 
 const REFUSING_VERIFIER: MandateVerifier = { load: async () => undefined };
 
-async function seededPod(): Promise<{
+async function seededPod(calibration?: string): Promise<{
   pod: MemoryPod;
   written: number;
   interpretations: number;
@@ -150,6 +151,24 @@ async function seededPod(): Promise<{
     interpretingAgentWebId: AGENT,
     now: FIXED,
   });
+  if (calibration) {
+    for (const [url, resource] of pod.store) {
+      if (url.startsWith(INBOX) && url.endsWith(".ttl")) {
+        const dataset = await parseRdf(resource.body, "text/turtle", { baseIRI: url });
+        const writer = new Writer({ format: "text/turtle" });
+        writer.addQuads(
+          [...dataset].map((q) =>
+            q.object.value === vocab.AGENTIC_CALIBRATED
+              ? quad(q.subject, q.predicate, namedNode(calibration), q.graph)
+              : q,
+          ),
+        );
+        resource.body = await new Promise<string>((resolve, reject) => {
+          writer.end((error, body) => (error ? reject(error) : resolve(body)));
+        });
+      }
+    }
+  }
   const actor = await runActorOnce({
     readFetch: pod.fetch,
     writeFetch: pod.fetch,
@@ -194,6 +213,30 @@ const loosePolicy = withAutonomousScheduling(
 const defaultPolicy = defaultAutonomyPolicy({ ownerWebId: OWNER, agentWebId: AGENT });
 
 describe("personal-agent end-to-end (Reader → Actor → ODRL-enforced outbox)", () => {
+  it("preserves self-reported calibration through storage and refuses autonomous execution", async () => {
+    const { pod, proposalsCreated } = await seededPod(vocab.AGENTIC_SELF_REPORTED);
+    expect(proposalsCreated).toBe(1);
+    const loaded = (await listProposals(pod.fetch, PROPOSALS))[0];
+    expect(loaded?.proposal.confirmationRequired).toBe(true);
+    if (!loaded) throw new Error("missing proposal");
+    const recorder = new RecordingSender(() => FIXED);
+    const config = outboxConfig(pod, scriptedVerifier(loosePolicy), recorder);
+    const first = await runOutboxOnce(config);
+    expect(first.sent).toBe(0);
+    expect(first.queuedForConfirmation).toBe(1);
+    expect(recorder.sent).toHaveLength(0);
+    await writeConfirmation(
+      pod.fetch,
+      CONFIRMATIONS,
+      OWNER,
+      confirmProposal(loaded.proposal, { confirm: true, confirmedAt: FIXED.toISOString() }),
+    );
+    const second = await runOutboxOnce(config);
+    expect(second.sent).toBe(1);
+    expect(receiptBody(pod)).toContain("authorizedByConfirmation");
+    expect(receiptBody(pod)).not.toContain("authorizedByPermit");
+  });
+
   it("rejects and audits a mislabelled send even after owner confirmation", async () => {
     const { pod } = await seededPod();
     const loaded = (await listProposals(pod.fetch, PROPOSALS))[0];

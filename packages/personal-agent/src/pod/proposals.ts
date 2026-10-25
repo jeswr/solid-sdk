@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
+// AUTHORED-BY Codex GPT-6
 /**
  * The ACTION-PROPOSAL record — the ONLY thing the Actor writes, and the ONLY thing
  * the outbox executor sends. The Actor PROPOSES (writes a `pending` record); a human
@@ -18,6 +19,7 @@ import {
   AGENTIC_ACTION_PROPOSAL,
   AGENTIC_CHANNEL,
   AGENTIC_CONFIRM_FRICTION,
+  AGENTIC_CONFIRMATION_REQUIRED,
   AGENTIC_CONFIRMED_AT,
   AGENTIC_EXECUTED_AT,
   AGENTIC_HIGH_FRICTION,
@@ -42,6 +44,7 @@ import {
   SCHEMA_RECIPIENT,
   SCHEMA_START_TIME,
   SCHEMA_TEXT,
+  XSD_BOOLEAN,
   XSD_DATE_TIME,
   XSD_INTEGER,
 } from "../vocab.js";
@@ -98,6 +101,8 @@ export interface ActionProposal {
   readonly status: ProposalStatus;
   /** The confirmation friction (drives how strong the human confirm must be). */
   readonly friction: ConfirmFriction;
+  /** The derivation's reliability gate requires owner confirmation before sending. */
+  readonly confirmationRequired?: boolean;
   /** The human prose body to send. */
   readonly bodyText: string;
   /** Optional subject line. */
@@ -209,6 +214,15 @@ export function serializeProposal(
   writer.addQuad(quad(subject, namedNode(SCHEMA_RECIPIENT), literal(recipient)));
   writer.addQuad(quad(subject, namedNode(SCHEMA_TEXT), literal(body)));
   writer.addQuad(quad(subject, namedNode(AGENTIC_ODRL_ACTION), literal(proposal.odrlAction)));
+  if (proposal.confirmationRequired) {
+    writer.addQuad(
+      quad(
+        subject,
+        namedNode(AGENTIC_CONFIRMATION_REQUIRED),
+        literal("true", namedNode(XSD_BOOLEAN)),
+      ),
+    );
+  }
   writer.addQuad(
     quad(subject, namedNode(AGENTIC_SPEND), literal(String(spend), namedNode(XSD_INTEGER))),
   );
@@ -335,6 +349,9 @@ export function parseProposal(store: DatasetCore): ActionProposal | undefined {
   const confirmedAt = utcIso(firstLiteralOf(store, subject, AGENTIC_CONFIRMED_AT));
   const executedAt = utcIso(firstLiteralOf(store, subject, AGENTIC_EXECUTED_AT));
   const note = firstLiteralOf(store, subject, AGENTIC_NOTE);
+  const confirmationRequired = objectsOf(store, subject, AGENTIC_CONFIRMATION_REQUIRED).some(
+    (term) => term.termType !== "Literal" || (term.value !== "false" && term.value !== "0"),
+  );
 
   const offeredTimes: OfferedTime[] = [];
   for (const eventTerm of objectsOf(store, subject, SCHEMA_ABOUT)) {
@@ -360,6 +377,7 @@ export function parseProposal(store: DatasetCore): ActionProposal | undefined {
     spend,
     status,
     friction,
+    ...(confirmationRequired ? { confirmationRequired: true } : {}),
     bodyText: sanitizeText(bodyText).slice(0, MAX_TEXT),
     ...(subjectLine ? { subject: sanitizeText(subjectLine).slice(0, MAX_SUBJECT) } : {}),
     ...(inReplyTo ? { inReplyTo } : {}),

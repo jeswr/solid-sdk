@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
+// AUTHORED-BY Codex GPT-6
 /**
  * The OUTBOX EXECUTOR — the deterministic, NO-LLM enforcement point (§2/§5/§7 + the ODRL
  * mandate directive). It is the security boundary: it holds the per-channel send tokens, it
@@ -280,7 +281,7 @@ export async function runOutboxOnce(config: ExecutorConfig): Promise<ExecutorRes
       continue;
     }
 
-    const autonomous = verdict.decision === "permit";
+    const autonomous = verdict.decision === "permit" && !proposal.confirmationRequired;
     if (!autonomous) {
       // A confirm-required intent is authorized ONLY by an owner confirmation whose CONTENT
       // DIGEST matches the CURRENT proposal — forgery- and swap-proof.

@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
+// AUTHORED-BY Codex GPT-6
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { describe, expect, it } from "vitest";
 import { AGENTIC_PURPOSE_SCHEDULING } from "../vocab.js";
@@ -33,6 +34,13 @@ async function roundTrip(p: ActionProposal): Promise<ActionProposal | undefined>
 }
 
 describe("ActionProposal serialize/parse", () => {
+  it("preserves the confirmation-required reliability flag", async () => {
+    expect((await roundTrip(proposal({ confirmationRequired: true })))?.confirmationRequired).toBe(
+      true,
+    );
+    expect((await roundTrip(proposal()))?.confirmationRequired).toBeUndefined();
+  });
+
   it("round-trips a full proposal", async () => {
     const back = await roundTrip(proposal());
     expect(back?.id).toBe("p1");

@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
+// AUTHORED-BY Codex GPT-6
 /**
  * The content digest that CONTENT-LOCKS an owner confirmation to a specific proposal body.
  * The human-confirm gate approves the fully-rendered outbound content (§7); the confirmation
@@ -24,6 +25,7 @@ function canonicalContent(proposal: ActionProposal): string {
     channel: proposal.channel,
     recipient: proposal.recipient,
     odrlAction: proposal.odrlAction,
+    ...(proposal.confirmationRequired ? { confirmationRequired: true } : {}),
     purpose: proposal.purpose ?? null,
     spend: proposal.spend ?? 0,
     subject: proposal.subject ?? null,

@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
+// AUTHORED-BY Codex GPT-6
 import { describe, expect, it } from "vitest";
 import { proposalContentDigest } from "./digest.js";
 import type { ActionProposal } from "./proposals.js";
@@ -30,6 +31,7 @@ describe("proposalContentDigest", () => {
     expect(proposalContentDigest(proposal({ recipient: "bob@example.com" }))).not.toBe(base);
     expect(proposalContentDigest(proposal({ bodyText: "different" }))).not.toBe(base);
     expect(proposalContentDigest(proposal({ odrlAction: "read" }))).not.toBe(base);
+    expect(proposalContentDigest(proposal({ confirmationRequired: true }))).not.toBe(base);
     expect(proposalContentDigest(proposal({ spend: 1 }))).not.toBe(base);
     expect(
       proposalContentDigest(proposal({ offeredTimes: [{ startTime: "2026-07-07T14:00:00Z" }] })),

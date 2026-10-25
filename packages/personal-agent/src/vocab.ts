@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
+// AUTHORED-BY Codex GPT-6
 /**
  * Vocabulary — the IRI constants this package writes for its ONE new concept: the
  * outbound ACTION PROPOSAL record (the Reader/Actor/outbox split's only new data
@@ -44,6 +45,8 @@ export const DCT_SUBJECT = "http://purl.org/dc/terms/subject";
 
 /** The minted proposal-record type. */
 export const AGENTIC_ACTION_PROPOSAL = `${AGENTIC}ActionProposal`;
+/** Reliability gate requires owner confirmation even under an autonomous-send mandate. */
+export const AGENTIC_CONFIRMATION_REQUIRED = `${AGENTIC}confirmationRequired`;
 /** The proposal's lifecycle status (predicate). */
 export const AGENTIC_PROPOSAL_STATUS = `${AGENTIC}proposalStatus`;
 /** Status individuals — a proposal is NEVER sent until it reaches `Confirmed`. */

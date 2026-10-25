@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
+// AUTHORED-BY Codex GPT-6
 /**
  * Read the DETERMINISTIC structured metadata the Reader already landed (§5.1) — the Actor's
  * zero-LLM-tokens hot path. This walks the bridge's reified `agentic:Interpretation` graph
@@ -9,7 +10,7 @@
 import { normalizeEmailAddress, vocab } from "@jeswr/agentic-legacy-bridge";
 import type { DatasetCore } from "@rdfjs/types";
 import { DataFactory } from "n3";
-import { firstIriOf, firstLiteralOf, subjectsOf } from "../pod/rdf-query.js";
+import { firstIriOf, firstLiteralOf, objectsOf, subjectsOf } from "../pod/rdf-query.js";
 
 const { namedNode } = DataFactory;
 
@@ -31,6 +32,8 @@ export interface ReadInterpretation {
   readonly method?: string;
   /** The calibration IRI. */
   readonly calibration?: string;
+  /** Security-bearing data can never drive an autonomous proposal. */
+  readonly securityBearing?: boolean;
 }
 
 /** Context about the inbound message the interpretations derive from. */
@@ -57,6 +60,9 @@ export function readInterpretations(store: DatasetCore): ReadInterpretation[] {
     const record: ReadInterpretation = {
       node,
       confidence: Number.isFinite(confidence) ? confidence : 0,
+      securityBearing: objectsOf(store, node, vocab.AGENTIC_SECURITY_BEARING).some(
+        (term) => term.termType !== "Literal" || (term.value !== "false" && term.value !== "0"),
+      ),
       ...optional("assertsSubject", firstIriOf(store, node, vocab.AGENTIC_ASSERTS_SUBJECT)),
       ...optional("assertsPredicate", firstIriOf(store, node, vocab.AGENTIC_ASSERTS_PREDICATE)),
       ...optional("assertsObjectIri", firstIriOf(store, node, vocab.AGENTIC_ASSERTS_OBJECT_IRI)),
