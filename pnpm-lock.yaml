@@ -2522,10 +2522,23 @@ importers:
         version: 4.1.10(@types/node@25.9.5)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1)(vite@8.1.4(@types/node@25.9.5)(esbuild@0.28.1)(jiti@2.7.0))
 
   packages/rdf-engine:
+    dependencies:
+      '@rdfjs/types':
+        specifier: 2.0.1
+        version: 2.0.1
+      '@sparq-org/sparq':
+        specifier: 0.1.5
+        version: 0.1.5
+      n3:
+        specifier: 2.0.3
+        version: 2.0.3
     devDependencies:
       '@biomejs/biome':
         specifier: ^2.5.1
         version: 2.5.3
+      '@types/n3':
+        specifier: 1.26.1
+        version: 1.26.1
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
@@ -4065,6 +4078,13 @@ importers:
         version: 4.1.10(@types/node@25.9.5)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1)(vite@8.1.4(@types/node@25.9.5)(esbuild@0.28.1)(jiti@2.7.0))
 
 packages:
+
+  fzstd@0.1.1:
+    resolution: {integrity: sha512-dkuVSOKKwh3eas5VkJy1AW1vFpet8TA/fGmVA5krThl8YcOVE/8ZIoEA1+U1vEn5ckxxhLirSdY837azmbaNHA==}
+
+  '@sparq-org/sparq@0.1.5':
+    resolution: {integrity: sha512-YJ3awKa3OuNHJ7p5SpKoDch9uVyKP64YHEP8Bq6mt712rpjV2Xq6SlK2smOyzw9HA+bVOOl/InxYy48x6JWu5w==}
+    engines: {node: '>=18'}
 
   '@adobe/css-tools@4.5.0':
     resolution: {integrity: sha512-6OzddxPio9UiWTCemp4N8cYLV2ZN1ncRnV1cVGtve7dhPOtRkleRyx32GQCYSwDYgaHU3USMm84tNsvKzRCa1Q==}
@@ -13714,6 +13734,12 @@ packages:
       '@types/emscripten': '>=1.39.6'
 
 snapshots:
+
+  fzstd@0.1.1: {}
+
+  '@sparq-org/sparq@0.1.5':
+    dependencies:
+      fzstd: 0.1.1
 
   '@adobe/css-tools@4.5.0': {}
 
