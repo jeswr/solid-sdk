@@ -61,7 +61,14 @@
     "@jeswr/solid-vc",
     "@jeswr/solid-webauthn-reauth",
     "@jeswr/unstorage-solid",
-    "@jeswr/y-solid"
+    "@jeswr/y-solid",
+    "@jeswr/storage-capabilities",
+    "@jeswr/storage-client",
+    "@jeswr/pod-auth",
+    "@jeswr/pod-notifications",
+    "@jeswr/pod-access",
+    "@jeswr/rdf-engine",
+    "@jeswr/storage-conformance"
   ],
   "applications": [
     {
