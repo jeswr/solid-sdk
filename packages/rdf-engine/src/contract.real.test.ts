@@ -106,6 +106,31 @@ test("JSON-LD blank nodes are scoped to each parsed document", async () => {
   expect([...union].every((quad) => quad.subject.equals(quad.object))).toBe(true);
 });
 
+test.each([
+  [
+    "triple-term object",
+    "<https://example/s> <https://example/p> <<( <https://example/a> <https://example/b> <https://example/c> )>> .",
+    "Unsupported RDF term type: triple",
+  ],
+  [
+    "triple-term object in a named graph",
+    "<https://example/g> { <https://example/s> <https://example/p> <<( <https://example/a> <https://example/b> <https://example/c> )>> . }",
+    "Unsupported RDF term type: triple",
+  ],
+  [
+    "left-to-right literal",
+    '<https://example/s> <https://example/p> "v"@en--ltr .',
+    "Unsupported RDF literal direction: ltr",
+  ],
+  [
+    "right-to-left literal in a named graph",
+    '<https://example/g> { <https://example/s> <https://example/p> "v"@ar--rtl . }',
+    "Unsupported RDF literal direction: rtl",
+  ],
+])("rejects an unsupported %s without returning altered RDF", async (_name, input, message) => {
+  await expect(engine.parse(input, "application/trig")).rejects.toThrow(message);
+});
+
 const shapes = `@prefix sh: <http://www.w3.org/ns/shacl#> .
   <https://example/Shape> a sh:NodeShape; sh:targetNode <https://example/s>;
   sh:property [ sh:path <https://example/name>; sh:minCount 1 ] .`;

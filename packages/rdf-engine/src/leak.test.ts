@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { expect, test, vi } from "vitest";
 import { createEngine } from "./engine.js";
 
@@ -59,6 +60,14 @@ test("all document stores return owned heapBytes to baseline on success and fail
     });
     await expect(engine.parse("", "text/turtle")).rejects.toThrow("query failed");
     query.mockRestore();
+    for (const input of [
+      "<https://example/s> <https://example/p> <<( <https://example/a> <https://example/b> <https://example/c> )>> .",
+      '<https://example/s> <https://example/p> "v"@en--ltr .',
+    ]) {
+      await expect(engine.parse(input, "text/turtle")).rejects.toThrow("Unsupported RDF");
+      expect(live.size).toBe(0);
+      expect(heapBytes()).toBe(before);
+    }
     const serialize = vi.spyOn(Store.prototype, "serialize").mockImplementation(() => {
       throw new Error("writer failed");
     });

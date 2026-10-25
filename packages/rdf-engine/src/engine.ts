@@ -10,12 +10,15 @@ import type { LocalIndex, RdfEngine, ValidationReport } from "./types.js";
 /** Internal common surface of the shipped browser and Node WASM modules. */
 export type Runtime = Pick<typeof Wasm, "Store" | "canonicalizeNQuads">;
 
-type JsonTerm = {
-  type: "uri" | "bnode" | "literal";
-  value: string;
-  datatype?: string;
-  "xml:lang"?: string;
-};
+type JsonTerm =
+  | {
+      type: "uri" | "bnode" | "literal";
+      value: string;
+      datatype?: string;
+      "xml:lang"?: string;
+      "its:dir"?: string;
+    }
+  | { type: "triple"; value: unknown };
 
 /** Materialize both graph scopes; no WASM handle escapes a document operation. */
 function dataset(store: Wasm.Store): Store {
@@ -30,6 +33,12 @@ function dataset(store: Wasm.Store): Store {
         blankNodes.set(value.value, node);
       }
       return node;
+    }
+    if (value.type !== "literal") {
+      throw new TypeError(`Unsupported RDF term type: ${value.type}`);
+    }
+    if (value["its:dir"] !== undefined) {
+      throw new TypeError(`Unsupported RDF literal direction: ${value["its:dir"]}`);
     }
     return DataFactory.literal(
       value.value,

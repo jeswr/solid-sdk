@@ -34,6 +34,8 @@ the shared module.
 backed by n3. It retains no WASM store, and remains usable after engine disposal.
 Each call assigns fresh blank-node identities while preserving links within the
 document, so datasets from separate parses can be combined without label collisions.
+The real engine rejects RDF triple terms and directional language literals with a
+`TypeError` because its materialized RDF/JS representation does not support them.
 Every temporary store is freed in `finally`, including when an operation throws.
 Turtle, TriG, N-Triples, N-Quads and JSON-LD are supported. TriG, N-Quads and
 JSON-LD preserve named graphs. Turtle and N-Triples serialization export the
