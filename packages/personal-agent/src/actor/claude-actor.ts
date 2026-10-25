@@ -17,6 +17,7 @@
 import { createSolidMcpServer } from "@jeswr/solid-mcp";
 import type { PodFetch } from "../config.js";
 import { buildActorOptions } from "./options.js";
+import { createProposalsServer } from "./proposals-server.js";
 
 /** Options for {@link createClaudeActor}. */
 export interface CreateClaudeActorOptions {
@@ -50,11 +51,7 @@ export function createClaudeActor(options: CreateClaudeActorOptions): ClaudeActo
     readOnly: true,
     ...(options.webId ? { webId: options.webId } : {}),
   });
-  const proposalsServer = createSolidMcpServer({
-    fetch: options.writeFetch,
-    podRoot: options.proposalsContainer,
-    readOnly: false,
-  });
+  const proposalsServer = createProposalsServer(options);
   // `{ type: "sdk", name, instance }` is the Agent SDK's in-process MCP server config.
   const mcpServers: Record<string, unknown> = {
     pod: { type: "sdk", name: "pod", instance: podServer },

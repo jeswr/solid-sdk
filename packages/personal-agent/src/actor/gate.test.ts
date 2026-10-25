@@ -1,10 +1,13 @@
 // AUTHORED-BY Codex GPT-6
 import { parseRdf } from "@jeswr/fetch-rdf";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { describe, expect, it, vi } from "vitest";
 import type { PodFetch } from "../config.js";
 import { parseProposal, serializeProposal } from "../pod/proposals.js";
 import { createGate, POD_READ_TOOLS, PROPOSAL_WRITE_TOOL } from "./gate.js";
 import { buildActorOptions } from "./options.js";
+import { createProposalsServer } from "./proposals-server.js";
 
 const proposals = "https://pod.example/agent/proposals/";
 const target = `${proposals}p1.ttl`;
@@ -246,5 +249,66 @@ describe("createGate — validated proposals without control rights", () => {
     expect((await options.canUseTool(PROPOSAL_WRITE_TOOL, await writeInput())).behavior).toBe(
       "allow",
     );
+  });
+
+  it("validates before SDK pre-approval and again inside the real MCP write handler", async () => {
+    const writeFetch = vi.fn<PodFetch>(async () => new Response(null, { status: 201 }));
+    const readFetch = discovery();
+    const options = buildActorOptions({
+      proposalsContainer: proposals,
+      mcpServers: {},
+      discoveryFetch: readFetch,
+    });
+    expect(options.allowedTools).not.toContain(PROPOSAL_WRITE_TOOL);
+    const permission = vi.spyOn(options, "canUseTool");
+    const server = createProposalsServer({ proposalsContainer: proposals, readFetch, writeFetch });
+    const client = new Client({ name: "actor-test", version: "0.0.1" });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    await server.connect(serverTransport);
+    await client.connect(clientTransport);
+    // SDK order: PreToolUse → pre-approval → canUseTool → dispatch. Simulate an
+    // extra pre-approval so canUseTool is skipped, as in the original vulnerability.
+    const dispatch = async (input: Record<string, unknown>, runHook = true) => {
+      if (runHook) {
+        const hook = options.hooks.PreToolUse[0]?.hooks[0];
+        if (!hook) throw new Error("mandatory PreToolUse hook missing");
+        const { hookSpecificOutput: verdict } = await hook({
+          tool_name: PROPOSAL_WRITE_TOOL,
+          tool_input: input,
+        });
+        if (verdict.permissionDecision === "deny") return { isError: true };
+        input = verdict.updatedInput ?? input;
+      }
+      const preapproved = [...options.allowedTools, PROPOSAL_WRITE_TOOL];
+      if (!preapproved.includes(PROPOSAL_WRITE_TOOL))
+        await options.canUseTool(PROPOSAL_WRITE_TOOL, input);
+      return client.callTool({ name: "solid_write", arguments: input });
+    };
+    try {
+      const valid = await writeInput();
+      for (const input of [
+        { ...valid, url: `${target}.acl` },
+        { ...valid, url: "https://evil.example/p1.ttl" },
+        { ...valid, content: "invalid" },
+        { ...valid, content: `${valid.content}\n<> a <${LDP}Container> .` },
+      ]) {
+        expect((await dispatch(input)).isError).toBe(true);
+        // Even a client bypassing all SDK permissions must hit the implementation gate.
+        expect((await dispatch(input, false)).isError).toBe(true);
+      }
+      expect(writeFetch).not.toHaveBeenCalled();
+      expect(
+        (await dispatch({ ...valid, content: `${valid.content}\n<urn:extra> <urn:p> "discard" .` }))
+          .isError,
+      ).not.toBe(true);
+      expect(writeFetch).toHaveBeenCalledTimes(1);
+      expect(writeFetch.mock.calls[0]?.[1]?.body).not.toContain("urn:extra");
+      expect(permission).not.toHaveBeenCalled();
+      expect((await dispatch(valid, false)).isError).not.toBe(true);
+      expect(writeFetch).toHaveBeenCalledTimes(2);
+    } finally {
+      await client.close();
+      await server.close();
+    }
   });
 });
