@@ -7,7 +7,7 @@ export default defineConfig({
     coverage: {
       enabled: true,
       provider: "v8",
-      include: ["src/apps/photos/lib/library/**/*.ts"],
+      include: ["src/apps/photos/lib/library/**/*.ts", "src/apps/docs/lib/diff/**/*.ts"],
       reporter: ["text", "json-summary"],
       thresholds: {
         perFile: true,
