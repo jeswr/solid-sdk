@@ -1,7 +1,12 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import assert from "node:assert/strict";
 import { afterEach, test, vi } from "vitest";
-import { CredentialBoundary, ReactiveAuthenticationClient } from "../src/mod.js";
+import {
+  AutomaticCredentialBoundary,
+  CredentialBoundary,
+  ReactiveAuthenticationClient,
+} from "../src/mod.js";
+import { withMockedDate } from "./helpers/clock.js";
 
 afterEach(() => vi.unstubAllGlobals());
 const boundary = new CredentialBoundary(["https://pod.example/"]);
@@ -10,6 +15,108 @@ const provider = {
   upgrade: async (request) =>
     new Request(request, { headers: { authorization: "Bearer credential" } }),
 };
+
+for (const retry of ["initial", "nonce", "renewal"]) {
+  test(`boundary removal during the ${retry} upgrade prevents the credentialed send`, async () => {
+    const boundary = new CredentialBoundary(["https://pod.example/"]);
+    const started = Promise.withResolvers();
+    const gate = Promise.withResolvers();
+    const pauseAt = retry === "initial" ? 1 : 2;
+    let upgrades = 0;
+    let invalidations = 0;
+    const sent = [];
+    const client = new ReactiveAuthenticationClient({
+      boundary,
+      providers: [
+        {
+          ...provider,
+          upgrade: async (request) => {
+            if (++upgrades === pauseAt) {
+              started.resolve();
+              await gate.promise;
+            }
+            return await provider.upgrade(request);
+          },
+          invalidate: async () => {
+            invalidations++;
+          },
+        },
+      ],
+      fetch: async (request) => {
+        sent.push(request);
+        return new Response(null, {
+          status: 401,
+          headers:
+            retry === "nonce"
+              ? { "www-authenticate": 'DPoP error="use_dpop_nonce"', "dpop-nonce": "nonce" }
+              : { "www-authenticate": "Bearer" },
+        });
+      },
+    });
+    const pending = client.fetch("https://pod.example/private", { method: "PUT", body: "write" });
+    const rejected = assert.rejects(pending, /Credential boundary no longer allows/);
+    await started.promise;
+    boundary.delete("https://pod.example/");
+    gate.resolve();
+    await rejected;
+    assert.equal(sent.length, pauseAt, "only attempts before removal reached the transport");
+    assert.equal(sent[0].headers.has("authorization"), false);
+    assert.equal(invalidations, retry === "renewal" ? 1 : 0);
+  });
+}
+
+test("automatic boundary expiry during provider work prevents disclosure", async () => {
+  await withMockedDate(async (advance) => {
+    const url = "https://pod.example/";
+    const boundary = new AutomaticCredentialBoundary({ lifetimeMs: 1000 });
+    const response = new Response(null, {
+      status: 401,
+      headers: { link: '<http://www.w3.org/ns/pim/space#Storage>; rel="type"' },
+    });
+    const started = Promise.withResolvers();
+    const gate = Promise.withResolvers();
+    const fetch = vi.fn(async () => response);
+    const client = new ReactiveAuthenticationClient({
+      boundary,
+      fetch,
+      providers: [
+        {
+          ...provider,
+          upgrade: async (request) => {
+            started.resolve();
+            await gate.promise;
+            return await provider.upgrade(request);
+          },
+        },
+      ],
+    });
+    const pending = client.fetch(url);
+    const rejected = assert.rejects(pending, /Credential boundary no longer allows/);
+    await started.promise;
+    assert.equal(boundary.allows(url), true);
+    advance(1000);
+    gate.resolve();
+    await rejected;
+    assert.equal(fetch.mock.calls.length, 1);
+    assert.equal(fetch.mock.calls[0][0].headers.has("authorization"), false);
+  });
+});
+
+test("boundary removal while discarding a challenge is enforced at the send", async () => {
+  const boundary = new CredentialBoundary(["https://pod.example/"]);
+  const fetch = vi.fn(
+    async () =>
+      new Response(
+        new ReadableStream({
+          cancel: () => boundary.delete("https://pod.example/"),
+        }),
+        { status: 401 },
+      ),
+  );
+  const client = new ReactiveAuthenticationClient({ boundary, providers: [provider], fetch });
+  await assert.rejects(client.fetch("https://pod.example/private"), /Credential boundary/);
+  assert.equal(fetch.mock.calls.length, 1);
+});
 
 test("the client exposes its boundary and defaults to the current pristine transport", async () => {
   vi.stubGlobal("fetch", async () => new Response("default"));
