@@ -1,0 +1,121 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+import type { TextRange } from "./types";
+
+export interface FuzzyRange extends TextRange {
+  edits: number;
+}
+
+// All typed-array indices below are bounded by the allocated row/chunk length.
+const at = (row: Uint32Array | Float64Array, index: number): number => row[index] as number;
+
+/** Recover all equally good starts for an endpoint with a banded reverse edit-distance pass. */
+function recoverStarts(
+  text: readonly string[],
+  pattern: readonly string[],
+  end: number,
+  edits: number,
+  low: number,
+  high: number,
+): FuzzyRange[] {
+  const width = Math.min(end - low, pattern.length + edits);
+  let previous = new Float64Array(width + 1).fill(Infinity);
+  for (let j = 0; j <= Math.min(width, edits); j++) previous[j] = j;
+  for (let i = 1; i <= pattern.length; i++) {
+    const current = new Float64Array(width + 1).fill(Infinity);
+    if (i <= edits) current[0] = i;
+    for (let j = Math.max(1, i - edits); j <= Math.min(width, i + edits); j++) {
+      current[j] = Math.min(
+        at(previous, j) + 1,
+        at(current, j - 1) + 1,
+        at(previous, j - 1) + Number(pattern[pattern.length - i] !== text[end - j]),
+      );
+    }
+    previous = current;
+  }
+  const ranges: FuzzyRange[] = [];
+  for (let length = Math.max(1, pattern.length - edits); length <= width; length++) {
+    const start = end - length;
+    if (start <= high && at(previous, length) === edits) ranges.push({ start, end, edits });
+  }
+  return ranges;
+}
+
+/**
+ * Shift-And Bitap with Levenshtein error levels and 32-code-point pattern words.
+ * Carries cross every word boundary, including deletion state, so long quotes
+ * are matched as one contiguous pattern rather than independent chunk hits.
+ * Search cost O(window length × ceil(quote length / 32) × (maxEdits + 1));
+ * only competitive endpoints need bounded edit-distance range recovery.
+ */
+export function findFuzzyRanges(
+  text: readonly string[],
+  pattern: readonly string[],
+  expected: number,
+  radius: number,
+  maxEdits: number,
+): FuzzyRange[] {
+  const low = Math.max(0, expected - radius);
+  const high = Math.min(text.length, expected + radius);
+  const limit = Math.min(text.length, high + pattern.length + maxEdits);
+  const errors = Math.min(maxEdits, pattern.length - 1);
+  const words = Math.ceil(pattern.length / 32);
+  const masks = new Map<string, Uint32Array>();
+  for (const [index, point] of pattern.entries()) {
+    let mask = masks.get(point);
+    if (!mask) {
+      mask = new Uint32Array(words);
+      masks.set(point, mask);
+    }
+    const word = Math.floor(index / 32);
+    mask[word] = at(mask, word) | (1 << (index % 32));
+  }
+  const emptyMask = new Uint32Array(words);
+  let state: Uint32Array[] = Array.from({ length: errors + 1 }, (_, error) => {
+    const row = new Uint32Array(words);
+    // Empty text matches prefixes through deletions; 32 needs a full word,
+    // since JavaScript shifts reduce their count modulo 32.
+    row[0] = error === 32 ? 0xffffffff : (1 << error) - 1;
+    return row;
+  });
+  const finalBit = 1 << ((pattern.length - 1) % 32);
+  let bestEdits = errors;
+  let ranges: FuzzyRange[] = [];
+  for (let index = low; index < limit; index++) {
+    const mask = masks.get(text[index] as string) ?? emptyMask;
+    const next: Uint32Array[] = [];
+    for (let error = 0; error <= errors; error++) {
+      const old = state[error] as Uint32Array;
+      const row = new Uint32Array(words);
+      let matchCarry = 1;
+      let substitutionCarry = 1;
+      let deletionCarry = 1;
+      for (let word = 0; word < words; word++) {
+        const oldWord = at(old, word);
+        let value = ((oldWord << 1) | matchCarry) & at(mask, word);
+        matchCarry = oldWord >>> 31;
+        if (error > 0) {
+          const fewer = at(state[error - 1] as Uint32Array, word);
+          const updatedFewer = at(next[error - 1] as Uint32Array, word);
+          value |= (fewer << 1) | substitutionCarry | fewer | (updatedFewer << 1) | deletionCarry;
+          substitutionCarry = fewer >>> 31;
+          deletionCarry = updatedFewer >>> 31;
+        }
+        row[word] = value;
+      }
+      next.push(row);
+    }
+    state = next;
+    for (let error = 0; error <= bestEdits; error++) {
+      if ((at(state[error] as Uint32Array, words - 1) & finalBit) !== 0) {
+        const recovered = recoverStarts(text, pattern, index + 1, error, low, high);
+        if (recovered.length > 0) {
+          if (error < bestEdits) ranges = [];
+          bestEdits = error;
+          ranges.push(...recovered);
+          break;
+        }
+      }
+    }
+  }
+  return ranges;
+}
