@@ -29,7 +29,9 @@ Internal helpers for the later discovery implementation:
 - `parseProbeHeaders(url, headers, observedAt)` in `src/probe-headers.ts` parses ordered raw header
   pairs (or a `Headers` instance) into the architect's `ProbeResult`. Raw pairs preserve response order;
   `Headers` iteration may sort and combine fields. Recognised fields remain as evidence, including
-  malformed WAC-Allow values. Links with a different anchor context are ignored for access control.
+  malformed WAC-Allow values. WAC-Allow keeps known user/public permissions alongside unknown
+  groups and modes, merges repeated groups, and rejects malformed syntax. Links with a different
+  anchor context are ignored for access control.
 
 Discovery, network probing, feature derivation, caches, and testing fixtures arrive in later tasks.
 The `@jeswr/storage-capabilities/cache` and `@jeswr/storage-capabilities/testing` entry points remain reserved.

@@ -74,17 +74,18 @@ test.each([
   "",
   " ",
   "user=read",
-  'user="Read"',
-  'user="delete"',
-  'user="readwrite"',
-  'user="read", user="write"',
-  'public="read", public=""',
-  'group="read"',
   'user="read" garbage',
   'user="read", garbage',
   'user="read",',
   'user="read", public="write',
   'user="read\nwrite"',
+  'user="read\rwrite"',
+  'user="read,write"',
+  'user="read\u0000write"',
+  'group-id="read", user="read"',
+  'user="read", group=write',
+  'user="read", group="write\n"',
+  'user="read", group="write,read"',
 ])("leaves malformed WAC-Allow unknown: %j", (value) => {
   const result = parseProbeHeaders(url, [["WAC-Allow", value]], 0);
   expect(result).not.toHaveProperty("wacAllow");
@@ -109,4 +110,23 @@ test("ignores foreign anchor contexts and keeps the first access-control link", 
 
 test("rejects an invalid probe URL", () => {
   expect(() => parseProbeHeaders("not absolute", [], 0)).toThrow(TypeError);
+});
+
+test.each([
+  ['user="read", group="write", public="read"', { user: ["read"], public: ["read"] }],
+  ['group="write", user="read"', { user: ["read"], public: [] }],
+  ['user="read", group="write"', { user: ["read"], public: [] }],
+  ['user="read delete write", public="future read"', { user: ["read", "write"], public: ["read"] }],
+  ['user="Read read readwrite", public="delete"', { user: ["read"], public: [] }],
+  ['group="read delete", user="append future"', { user: ["append"], public: [] }],
+  ['group="read"', { user: [], public: [] }],
+  ['user="delete"', { user: [], public: [] }],
+  [
+    'user="read read", user="write", public="read", public=""',
+    { user: ["read", "write"], public: ["read"] },
+  ],
+])("preserves known WAC permissions alongside extensions: %s", (value, expected) => {
+  const result = parseProbeHeaders(url, [["WAC-Allow", value as string]], 0);
+  expect(result.wacAllow).toEqual(expected);
+  expect(result.evidence).toEqual([{ header: "WAC-Allow", value }]);
 });

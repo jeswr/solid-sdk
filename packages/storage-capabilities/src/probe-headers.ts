@@ -3,22 +3,21 @@ import { parseLinkHeaders } from "./link.js";
 import type { ProbeResult, WacMode } from "./types.js";
 import { ACP } from "./vocab.js";
 
-/** Parse a WAC-Allow field without mistaking malformed evidence for known permissions. */
+/** Parse WAC §6.1 groups, ignoring extensions while rejecting malformed syntax. */
 function parseWacAllow(value: string): ProbeResult["wacAllow"] {
   const permissions: { user: WacMode[]; public: WacMode[] } = { user: [], public: [] };
-  const seen = new Set<string>();
-  const scope = /[ \t]*(user|public)[ \t]*=[ \t]*"([^"\r\n]*)"[ \t]*(,|$)/y;
+  const scope = /[ \t]*([A-Za-z]+)[ \t]*=[ \t]*"([^"\r\n]*)"[ \t]*(,|$)/y;
   for (let match = scope.exec(value); match !== null; match = scope.exec(value)) {
-    const name = match[1] as "user" | "public";
+    const name = match[1] as string;
     const modes = (match[2] as string).split(/[ \t]+/).filter(Boolean);
-    if (
-      seen.has(name) ||
-      modes.some((mode) => !["read", "write", "append", "control"].includes(mode))
-    ) {
-      return undefined;
+    // Unknown modes are tokens too; broken quoting, separators and control bytes are syntax errors.
+    if (modes.some((mode) => !/^[!#$%&'*+\-.^_`|~\da-z]+$/i.test(mode))) return undefined;
+    if (name === "user" || name === "public") {
+      const known = modes.filter((mode): mode is WacMode =>
+        ["read", "write", "append", "control"].includes(mode),
+      );
+      permissions[name] = [...new Set([...permissions[name], ...known])];
     }
-    seen.add(name);
-    permissions[name] = modes as WacMode[];
     if (match[3] === "") return permissions;
   }
   return undefined;
