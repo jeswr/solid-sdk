@@ -29,7 +29,7 @@ No metadata is published for a photo whose thumbnail upload failed.
 `trashPhoto` copies the supported metadata and a PROV record into `.trash/` before conditionally
 deleting the original description. Original subject identity is retained. Restore is create-only;
 a collision preserves the trash copy. Purge removes matching app-owned original/thumbnail binaries,
-then the metadata copy; imported binary paths are refused. Failed moves may leave both metadata
+then the metadata copy; imported binary paths and existing original descriptions are refused. Failed moves may leave both metadata
 copies, so callers can reconcile without losing the recovery copy. Existing album memberships and
 favourite values are not rewritten by trash; they reference the stable original subject.
 
