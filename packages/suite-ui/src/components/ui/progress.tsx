@@ -1,0 +1,30 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+// Adapted from shadcn/ui (MIT), new-york-v4 registry. See THIRD_PARTY_NOTICES.md.
+"use client";
+
+import { Progress as ProgressPrimitive } from "radix-ui";
+import type * as React from "react";
+import { cn } from "../../lib/utils.js";
+
+function Progress({
+  className,
+  value,
+  ...props
+}: React.ComponentProps<typeof ProgressPrimitive.Root>) {
+  return (
+    <ProgressPrimitive.Root
+      value={value ?? null}
+      data-slot="progress"
+      className={cn("relative h-2 w-full overflow-hidden rounded-full bg-surface-3", className)}
+      {...props}
+    >
+      <ProgressPrimitive.Indicator
+        data-slot="progress-indicator"
+        className="h-full w-full flex-1 bg-primary"
+        style={{ transform: `translateX(-${100 - (value || 0)}%)` }}
+      />
+    </ProgressPrimitive.Root>
+  );
+}
+
+export { Progress };
