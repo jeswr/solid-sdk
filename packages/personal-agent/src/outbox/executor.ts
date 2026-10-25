@@ -37,6 +37,7 @@ import { proposalContentDigest } from "../pod/digest.js";
 import { listProposals } from "../pod/proposal-store.js";
 import type { ActionProposal } from "../pod/proposals.js";
 import { putResource, refuseRedirect, throwIfNotWritten } from "../pod/write.js";
+import { provenanceRequiresConfirmation } from "./provenance.js";
 import { type ReceiptOutcome, type SendReceiptInput, serializeSendReceipt } from "./receipt.js";
 import type { ChannelSender, OutboundMessage } from "./sender.js";
 
@@ -48,6 +49,8 @@ export interface ExecutorConfig {
   readonly writeFetch: PodFetch;
   /** The proposals container (Actor-writable — its content is UNTRUSTED for authorization). */
   readonly proposals: string;
+  /** Trusted Reader inbox, outside Actor write authority. Omitted/unverifiable ⇒ confirm. */
+  readonly inbox?: string;
   /** The owner-only confirmations container (Actor-UNwritable — the confirm gate's sink). */
   readonly confirmations: string;
   /** The owner-only outbox container (Actor-UNwritable — receipts = the idempotency marker). */
@@ -281,7 +284,8 @@ export async function runOutboxOnce(config: ExecutorConfig): Promise<ExecutorRes
       continue;
     }
 
-    const autonomous = verdict.decision === "permit" && !proposal.confirmationRequired;
+    const autonomous =
+      verdict.decision === "permit" && !(await provenanceRequiresConfirmation(proposal, config));
     if (!autonomous) {
       // A confirm-required intent is authorized ONLY by an owner confirmation whose CONTENT
       // DIGEST matches the CURRENT proposal — forgery- and swap-proof.

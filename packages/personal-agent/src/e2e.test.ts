@@ -15,8 +15,8 @@
 import { vocab } from "@jeswr/agentic-legacy-bridge";
 import { parseRdf } from "@jeswr/fetch-rdf";
 import type { OdrlPolicy } from "@jeswr/solid-odrl";
-import { DataFactory, Writer } from "n3";
-import { describe, expect, it } from "vitest";
+import { DataFactory, Store, Writer } from "n3";
+import { describe, expect, it, vi } from "vitest";
 import { runActorOnce } from "./actor/run.js";
 import { defaultAutonomyPolicy, withAutonomousScheduling } from "./mandate/default-mandate.js";
 import type { LoadedMandate, MandateVerifier } from "./mandate/types.js";
@@ -191,6 +191,7 @@ function outboxConfig(pod: MemoryPod, verifier: MandateVerifier, recorder: Recor
     writeFetch: pod.fetch,
     proposals: PROPOSALS,
     confirmations: CONFIRMATIONS,
+    inbox: INBOX,
     outbox: OUTBOX,
     ownerWebId: OWNER,
     verifier,
@@ -207,12 +208,200 @@ function receiptBody(pod: MemoryPod): string | undefined {
   return key ? pod.store.get(key)?.body : undefined;
 }
 
+async function rewriteReader(pod: MemoryPod, change: (store: Store) => void) {
+  for (const [url, resource] of pod.store) {
+    if (!url.startsWith(INBOX) || !url.endsWith(".ttl") || url.endsWith(".chat.ttl")) continue;
+    const store = new Store([...(await parseRdf(resource.body, "text/turtle", { baseIRI: url }))]);
+    change(store);
+    const writer = new Writer({ format: "text/turtle" });
+    writer.addQuads([...store]);
+    resource.body = await new Promise<string>((resolve, reject) => {
+      writer.end((error, body) => (error ? reject(error) : resolve(body)));
+    });
+  }
+}
+
+async function replaceProposal(pod: MemoryPod, proposal: ActionProposal) {
+  const url = proposalUrl(PROPOSALS, proposal.id) as string;
+  await putResource(pod.fetch, url, await serializeProposal(proposal, { resourceUrl: url }), {
+    contentType: "text/turtle",
+    base: PROPOSALS,
+  });
+}
+
 const loosePolicy = withAutonomousScheduling(
   defaultAutonomyPolicy({ ownerWebId: OWNER, agentWebId: AGENT }),
 );
 const defaultPolicy = defaultAutonomyPolicy({ ownerWebId: OWNER, agentWebId: AGENT });
 
 describe("personal-agent end-to-end (Reader → Actor → ODRL-enforced outbox)", () => {
+  it.each([
+    false,
+    undefined,
+  ])("cannot erase Reader confirmation requirements with Actor flag %s", async (confirmationRequired) => {
+    const { pod } = await seededPod(vocab.AGENTIC_SELF_REPORTED);
+    const loaded = (await listProposals(pod.fetch, PROPOSALS))[0];
+    if (!loaded) throw new Error("missing proposal");
+    await replaceProposal(pod, {
+      ...loaded.proposal,
+      confirmationRequired,
+      status: "confirmed",
+      friction: "low",
+    });
+    const recorder = new RecordingSender(() => FIXED);
+    const result = await runOutboxOnce(outboxConfig(pod, scriptedVerifier(loosePolicy), recorder));
+    expect(result.queuedForConfirmation).toBe(1);
+    expect(recorder.sent).toHaveLength(0);
+  });
+
+  it.each([
+    "self-reported",
+    "security-bearing",
+    "missing-calibration",
+    "missing-confidence",
+    "missing-link",
+    "ambiguous-calibration",
+    "missing-records",
+  ])("rechecks %s Reader provenance changed after Actor derivation", async (change) => {
+    const { pod } = await seededPod();
+    await rewriteReader(pod, (store) => {
+      const records = [
+        ...store.match(null, namedNode(vocab.RDF_TYPE), namedNode(vocab.AGENTIC_INTERPRETATION)),
+      ].map((q) => q.subject);
+      for (const subject of records) {
+        const node = namedNode(subject.value);
+        if (change === "security-bearing")
+          store.addQuad(
+            node,
+            namedNode(vocab.AGENTIC_SECURITY_BEARING),
+            DataFactory.literal("true", namedNode(`${vocab.XSD}boolean`)),
+          );
+        else if (change === "missing-records")
+          store.removeQuads([...store.match(node, null, null)]);
+        else {
+          const predicate =
+            change === "missing-confidence"
+              ? vocab.AGENTIC_CONFIDENCE
+              : change === "missing-link"
+                ? vocab.PROV_WAS_DERIVED_FROM
+                : vocab.AGENTIC_CALIBRATION;
+          if (change !== "ambiguous-calibration")
+            store.removeQuads([...store.match(node, namedNode(predicate), null)]);
+          if (change === "self-reported" || change === "ambiguous-calibration")
+            store.addQuad(
+              node,
+              namedNode(vocab.AGENTIC_CALIBRATION),
+              namedNode(vocab.AGENTIC_SELF_REPORTED),
+            );
+        }
+      }
+    });
+    const recorder = new RecordingSender(() => FIXED);
+    const config = outboxConfig(pod, scriptedVerifier(loosePolicy), recorder);
+    expect((await runOutboxOnce(config)).queuedForConfirmation).toBe(1);
+    expect(recorder.sent).toHaveLength(0);
+    const loaded = (await listProposals(pod.fetch, PROPOSALS))[0];
+    if (!loaded) throw new Error("missing proposal");
+    await writeConfirmation(
+      pod.fetch,
+      CONFIRMATIONS,
+      OWNER,
+      confirmProposal(loaded.proposal, { confirm: true, confirmedAt: FIXED.toISOString() }),
+    );
+    expect((await runOutboxOnce(config)).sent).toBe(1);
+  });
+
+  it.each([
+    "absent-inbox",
+    "overlapping-inbox",
+    "missing-graph",
+    "redirect",
+    "unavailable",
+    "wrong-format",
+    "duplicate-anchor",
+  ])("requires confirmation for %s provenance", async (failure) => {
+    const { pod } = await seededPod();
+    const recorder = new RecordingSender(() => FIXED);
+    const config = outboxConfig(pod, scriptedVerifier(loosePolicy), recorder);
+    if (failure === "missing-graph")
+      for (const url of pod.store.keys()) {
+        if (url.startsWith(INBOX)) pod.store.delete(url);
+      }
+    if (failure === "duplicate-anchor") {
+      const graph = [...pod.store].find(
+        ([url]) => url.startsWith(INBOX) && url.endsWith(".ttl") && !url.endsWith(".chat.ttl"),
+      );
+      if (!graph) throw new Error("missing graph");
+      pod.store.set(`${INBOX}duplicate.ttl`, { ...graph[1] });
+    }
+    const readFetch = vi.fn<typeof fetch>(async (input, init) => {
+      if (String(input).startsWith(INBOX)) {
+        if (failure === "redirect")
+          return new Response(null, { status: 302, headers: { location: `${PROPOSALS}fake.ttl` } });
+        if (failure === "unavailable") throw new Error("offline");
+        if (failure === "wrong-format")
+          return new Response("{}", { headers: { "content-type": "application/ld+json" } });
+      }
+      return pod.fetch(input, init);
+    });
+    const result = await runOutboxOnce({
+      ...config,
+      readFetch,
+      inbox:
+        failure === "absent-inbox"
+          ? undefined
+          : failure === "overlapping-inbox"
+            ? PROPOSALS
+            : INBOX,
+    });
+    expect(result.queuedForConfirmation).toBe(1);
+    expect(recorder.sent).toHaveLength(0);
+    expect(readFetch.mock.calls.every(([, init]) => init?.redirect !== "follow")).toBe(true);
+  });
+
+  it.each([
+    { recipient: "mallory@example.com" },
+    { bodyText: "invented content" },
+    { offeredTimes: [{ startTime: "2026-07-09T14:00:00Z" }] },
+    { inReplyTo: "urn:agentic:raw:forged" },
+    { derivedFrom: `${PROPOSALS}fake.ttl` },
+    { derivedFrom: "https://evil.example/fake.ttl", inReplyTo: "https://evil.example/fake.ttl" },
+    { derivedFrom: undefined },
+    { purpose: AGENTIC_PURPOSE_GENERAL },
+    { spend: 1 },
+  ])("cannot bless Actor-controlled send fields with unrelated calibrated provenance: %j", async (change) => {
+    const { pod } = await seededPod();
+    const loaded = (await listProposals(pod.fetch, PROPOSALS))[0];
+    if (!loaded) throw new Error("missing proposal");
+    await replaceProposal(pod, { ...loaded.proposal, ...change });
+    const recorder = new RecordingSender(() => FIXED);
+    // Broad permission proves provenance validation, rather than a mandate constraint, blocks this.
+    const broad: OdrlPolicy = {
+      ...defaultPolicy,
+      permissions: [{ type: "permission", action: "distribute", assignee: AGENT }],
+    };
+    const readFetch = vi.fn(pod.fetch);
+    expect(
+      (await runOutboxOnce({ ...outboxConfig(pod, scriptedVerifier(broad), recorder), readFetch }))
+        .queuedForConfirmation,
+    ).toBe(1);
+    expect(recorder.sent).toHaveLength(0);
+    expect(readFetch.mock.calls.every(([url]) => String(url).startsWith(POD))).toBe(true);
+  });
+
+  it("allows the Actor flag only to add confirmation to calibrated Reader provenance", async () => {
+    const { pod } = await seededPod();
+    const loaded = (await listProposals(pod.fetch, PROPOSALS))[0];
+    if (!loaded) throw new Error("missing proposal");
+    await replaceProposal(pod, { ...loaded.proposal, confirmationRequired: true });
+    const recorder = new RecordingSender(() => FIXED);
+    expect(
+      (await runOutboxOnce(outboxConfig(pod, scriptedVerifier(loosePolicy), recorder)))
+        .queuedForConfirmation,
+    ).toBe(1);
+    expect(recorder.sent).toHaveLength(0);
+  });
+
   it("preserves self-reported calibration through storage and refuses autonomous execution", async () => {
     const { pod, proposalsCreated } = await seededPod(vocab.AGENTIC_SELF_REPORTED);
     expect(proposalsCreated).toBe(1);
