@@ -18,6 +18,7 @@ export class Pod {
     | undefined;
   constructor() {
     this.seed(storage, `<${storage}> a <${NS.LDP}BasicContainer>.`);
+    this.seed(`${storage}profile/`, `<${storage}profile/> a <${NS.LDP}BasicContainer>.`);
     this.seed(`${storage}profile/card`, `<${webId}> <${NS.DCT}title> "Alice".`);
   }
   seed(url: string, body: string) {
