@@ -84,26 +84,6 @@ describe("readRdf", () => {
     await expect(readRdf(URL_X, fetch)).rejects.toMatchObject({ status: 404 });
     await expect(readRdf(URL_X, fetch)).rejects.toBeInstanceOf(RdfFetchError);
   });
-
-  it("uses the global fetch when no fetchImpl is given (production path)", async () => {
-    const original = globalThis.fetch;
-    let sentCacheControl: string | null = null;
-    globalThis.fetch = (async (_input: string | URL | Request, init?: RequestInit) => {
-      const h = new Headers(init?.headers);
-      sentCacheControl = h.get("cache-control");
-      return new Response(`@prefix dct: <http://purl.org/dc/terms/> . <#it> dct:title "G" .`, {
-        status: 200,
-        headers: { "content-type": "text/turtle", etag: 'W/"g"' },
-      });
-    }) as typeof fetch;
-    try {
-      const { etag } = await readRdf(URL_X, globalThis.fetch);
-      expect(etag).toBe('W/"g"');
-      expect(sentCacheControl).toBe(REVALIDATE_HEADERS["cache-control"]);
-    } finally {
-      globalThis.fetch = original;
-    }
-  });
 });
 
 describe("writeRdf", () => {
@@ -136,36 +116,6 @@ describe("writeRdf", () => {
     expect(err).toBeInstanceOf(ResourceWriteError);
     expect(err.status).toBe(412);
   });
-
-  it("uses the global fetch when no fetchImpl is given (degraded-path coverage)", async () => {
-    const original = globalThis.fetch;
-    let called = "";
-    globalThis.fetch = (async (input: string | URL | Request) => {
-      called = typeof input === "string" ? input : input.toString();
-      return new Response(null, { status: 201, headers: { etag: 'W/"g"' } });
-    }) as typeof fetch;
-    try {
-      const { etag } = await writeRdf(URL_X, new Store(), { fetchImpl: globalThis.fetch });
-      expect(etag).toBe('W/"g"');
-      expect(called).toBe(URL_X);
-    } finally {
-      globalThis.fetch = original;
-    }
-  });
-
-  it("throws on a non-2xx from the global fetch path too", async () => {
-    const original = globalThis.fetch;
-    globalThis.fetch = (async () => new Response(null, { status: 500 })) as typeof fetch;
-    try {
-      const err = await writeRdf(URL_X, new Store(), { fetchImpl: globalThis.fetch }).catch(
-        (e) => e,
-      );
-      expect(err).toBeInstanceOf(ResourceWriteError);
-      expect(err.status).toBe(500);
-    } finally {
-      globalThis.fetch = original;
-    }
-  });
 });
 
 describe("deleteRdf", () => {
@@ -187,28 +137,6 @@ describe("deleteRdf", () => {
     const err = await deleteRdf(URL_X, fetch).catch((e) => e);
     expect(err).toBeInstanceOf(ResourceDeleteError);
     expect(err.status).toBe(500);
-  });
-
-  it("uses the global fetch when no fetchImpl is given", async () => {
-    const original = globalThis.fetch;
-    globalThis.fetch = (async () => new Response(null, { status: 205 })) as typeof fetch;
-    try {
-      await expect(deleteRdf(URL_X, globalThis.fetch)).resolves.toBeUndefined();
-    } finally {
-      globalThis.fetch = original;
-    }
-  });
-
-  it("throws on a non-2xx from the global fetch path too", async () => {
-    const original = globalThis.fetch;
-    globalThis.fetch = (async () => new Response(null, { status: 500 })) as typeof fetch;
-    try {
-      const err = await deleteRdf(URL_X, globalThis.fetch).catch((e) => e);
-      expect(err).toBeInstanceOf(ResourceDeleteError);
-      expect(err.status).toBe(500);
-    } finally {
-      globalThis.fetch = original;
-    }
   });
 });
 

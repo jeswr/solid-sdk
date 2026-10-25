@@ -268,7 +268,7 @@ export function documentSubject(resourceUrl: string): string {
 }
 
 /** The revision-entity IRI for a resource at index `n` (`<resource>#rev-<n>`). */
-export function revisionSubject(resourceUrl: string, index: number): string {
+export function revisionSubject(resourceUrl: string, index: number | bigint): string {
   return `${resourceUrl}#rev-${index}`;
 }
 
@@ -424,13 +424,15 @@ export function buildDocument(resourceUrl: string, input: BuildDocumentInput): S
  * another resource) are ignored for indexing. Returns -1 when none match, so a
  * brand-new document's first revision is `rev-0`.
  */
-function highestRevisionIndex(resourceUrl: string, revisions: readonly Revision[]): number {
+function highestRevisionIndex(resourceUrl: string, revisions: readonly Revision[]): bigint {
   const prefix = `${resourceUrl}#rev-`;
-  let max = -1;
+  let max = BigInt(-1);
   for (const rev of revisions) {
     if (!rev.id.startsWith(prefix)) continue;
-    const n = Number(rev.id.slice(prefix.length));
-    if (Number.isInteger(n) && n > max) max = n;
+    const suffix = rev.id.slice(prefix.length);
+    if (!/^\d+$/.test(suffix)) continue;
+    const n = BigInt(suffix);
+    if (n > max) max = n;
   }
   return max;
 }
@@ -457,7 +459,7 @@ export function applyRevisionPolicy(
       snapshot.body !== last.body)
   ) {
     revisions.unshift({
-      id: revisionSubject(resourceUrl, highestRevisionIndex(resourceUrl, prior) + 1),
+      id: revisionSubject(resourceUrl, highestRevisionIndex(resourceUrl, prior) + BigInt(1)),
       body: snapshot.body,
       format: snapshot.format,
       generatedAt: snapshot.now.toISOString(),

@@ -118,6 +118,14 @@ describe("revision retention", () => {
     expect(result.at(-1)?.wasRevisionOf).toBeUndefined();
     expect(prior.at(-1)?.wasRevisionOf).toBeUndefined();
   });
+  it("allocates unique revision IDs beyond the JavaScript safe integer limit", () => {
+    const huge = revision(0, 10, "Keep me");
+    huge.id = `${URL_DOC}#rev-9007199254740992`;
+    const revisions = applyRevisionPolicy(URL_DOC, [huge], snapshot);
+    expect(revisions[0]?.id).toBe(`${URL_DOC}#rev-9007199254740993`);
+    expect(revisions[0]?.wasRevisionOf).toBe(huge.id);
+    expect(revisions[1]?.label).toBe("Keep me");
+  });
   it("normalizes duplicate IDs and hostile links without mutating input", () => {
     const r = revision(0, 1);
     r.wasRevisionOf = r.id;

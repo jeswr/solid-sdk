@@ -45,6 +45,7 @@ export interface SaveOptions {
   /** Injectable clock/backoff seam; default uses real timers. */
   wait?: ((milliseconds: number) => Promise<void>) | undefined;
 }
+/** Callbacks must use one captured editor state so its log and HTML agree. */
 export interface CopyState {
   /** Only referenced assets, not every file left in the source container. */
   assets: readonly string[];

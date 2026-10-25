@@ -341,6 +341,18 @@ describe("snapshot conflicts", () => {
       vi.useRealTimers();
     }
   });
+  it("attributes revisions to the editor while retaining the original creator", async () => {
+    const s = await server();
+    const stored = await document();
+    stored.data.creator = "https://bob.example/#me";
+    const saved = await s.store.save(
+      stored,
+      { body: "new", now: new Date(NOW.getTime() + 600_000) },
+      { regenerate: () => ({ body: "unused" }) },
+    );
+    expect(saved.data.creator).toBe("https://bob.example/#me");
+    expect(saved.data.revisions[0]?.attributedTo).toBe(WEBID);
+  });
   it("preserves defaults and sends explicit If-Match on servers with no ETag", async () => {
     const s = await server();
     const stored = { ...(await document()), etag: null };
@@ -411,6 +423,20 @@ describe("makeCopy", () => {
     expect(s.resources.get(`${docContainerUrls(copy.url).assets}image`)?.contentType).toBe(
       "application/octet-stream",
     );
+  });
+  it("keeps long renamed documents copyable within the title limit", async () => {
+    const s = await server();
+    const source = await document("x".repeat(200));
+    source.url = `${POD}docs/${"a".repeat(48)}.ttl`;
+    delete source.data.assets;
+    const copy = await s.store.makeCopy(source, {
+      assets: [],
+      snapshot: () => ({ body: "live" }),
+      persistFullState: async () => {},
+    });
+    expect(copy.url).toBe(`${POD}docs/${"a".repeat(48)}-copy.ttl`);
+    expect(copy.data.title.length).toBe(200);
+    expect(copy.data.title.startsWith("Copy of ")).toBe(true);
   });
   it("rejects foreign asset links before any I/O", async () => {
     const s = await server();
