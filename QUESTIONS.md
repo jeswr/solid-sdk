@@ -15,15 +15,15 @@ Implemented in `37a63a7c`:
 These semantics match the imported package's earlier result contract. No consumer
 migration or redirect-handling redesign was made.
 
-The explicit consumer checks found one remaining compatibility limit: Pod Money's
-injected test readers return the older shape without `headers` and with a
-`DatasetCore`-typed dataset. The imported result requires `headers` and an N3
-`Store`. This round conservatively preserves those imported type requirements;
-restoring metadata fixes production reads but does not make these test doubles
-assignable to `typeof fetchRdf`.
+The fix-round-2 brief resolves the remaining consumer-contract question: Pod Money
+now declares a minimal injected-reader function returning only `DatasetCore`, `etag`,
+and `url`, the fields its store consumes. The public fetch-rdf result contract stays
+as imported. All 48 consumers converted to `workspace:*` pass typecheck.
 
-Dispatcher question: should subsequent work adapt the consumer's injected-reader
-contract/test doubles, or authorize relaxing the additional public result types?
-The latter changes more than the named metadata fields. This lane chose neither
-additional migration nor type redesign. Validation and other remaining failures
-are in [STATUS.md](STATUS.md).
+The same brief resolves known-context handling: solid-vc and solid-chat-interop own
+bundled context JSON and explicit offline loaders. Unknown contexts are refused,
+including nested ones. The generic fetch-rdf parser still refuses remote contexts by
+default. Existing round-trip tests pass again.
+
+No open API or design questions remain for this fix brief. Wider validation results
+and limitations are recorded in [STATUS.md](STATUS.md).

@@ -1,103 +1,98 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 
-# Lane sst-8xm.30 — T-004 fetch-rdf import, fix round 1
+# Lane sst-8xm.30 — T-004, fix round 2
 
-Date: 2026-10-25. Branch: `lane/sst-8xm.30`. Resumed from `474c1be6`.
+Date: 2026-10-25. Branch: `lane/sst-8xm.30`. Resumed from `4e2214b1`.
 
-**The four requested fixes are implemented. Touched-package gates pass. The dependent
-workspace gate remains red; this lane is not ready to merge.** The explicit consumer
-checks pass for 47 of 48 consumers. Pod Money's legacy injected test readers remain
-incompatible with the imported result's required `headers`/N3 `Store` types; the
-conservative scope choice and dispatcher question are recorded in [QUESTIONS.md](QUESTIONS.md).
+Both review findings are fixed. The touched-package gate and root lint pass; all
+48 consumers converted to `workspace:*` pass typecheck. The broader affected repo
+gate remains red on the previously recorded federation-trust characterization
+snapshot mismatch. This report does not claim a green broader gate.
 
-## Commits
+## Commits this round
 
-Existing import/integration commits retained unchanged:
+- `ed1855dd fix: parse supported JSON-LD contexts offline` — bundle full W3C
+  credentials v1/v2, Data Integrity v2, and ActivityStreams JSON context documents
+  in their owning packages. `parseCredentialRdf`, the credential digest parser,
+  and the shared AS2/LongChat parser explicitly use offline loaders. Exact URL
+  allowlists refuse unknown and nested contexts without network fallback.
+- `ea63924f fix: narrow pod money RDF reader contract` — require only the consumed
+  `DatasetCore`, `etag`, and `url` result fields from injected readers. Existing
+  fixtures remain unchanged and typecheck against this minimal contract.
+- Final report commit: `docs: report second fetch-rdf fix validation` — resolve
+  the previous API question in QUESTIONS.md and update this STATUS.md last.
 
-- `c95e3bfb feat: import fetch-rdf history`.
-- `99061d3a chore: integrate fetch-rdf workspace package`.
-- `474c1be6 docs: record fetch-rdf lane blocker`.
+The original import and fix-round-1 commits remain intact. No dependencies,
+public fetch-rdf types, default context policy, or workspace manifests changed.
+The generic parser still refuses remote JSON-LD contexts by default.
 
-Fix-round commits:
+## Context support and tests
 
-- `37a63a7c fix: contain RDF loading and restore response metadata` — refuse remote
-  JSON-LD contexts by default; expose an explicit `documentLoader` seam and
-  `createFetchDocumentLoader(fetch, { allow })`; restore `etag`, `url`, `contentType`,
-  and `response` alongside `headers`; observe store/pump failures immediately and
-  cancel pending source reads on parser errors; add regression tests and API guidance.
-- `1454e94c fix: sanitize bundled workspace dependency paths` — label sibling package
-  dist files as `<name>/dist/...` and their source-map sources as `<name>/src/...` in
-  solid-a2a, federation-registry and solid-odrl. Existing absolute-path guards remain.
-- `5b17ce6b fix: reject ancestor paths in bundle sanitizers` — require a package slug,
-  preventing `..` from being classified as a sibling dependency; cover ancestor escapes.
-- Final report commit: `docs: report fetch-rdf fix validation` — update QUESTIONS.md
-  with the resolved metadata decision and remaining type-contract question, and update
-  this STATUS.md last.
+The supported URLs are exactly:
 
-The default context policy makes no network requests. The helper checks every context
-URL before fetching through the supplied transport and refuses redirects. Nested
-contexts must also be allowlisted. No contexts were already bundled in this package.
-Metadata semantics match the earlier imported contract: verbatim nullable ETag; final
-response URL with requested-URL fallback; nullable parameter-free lowercase media type;
-original consumed Response. The imported Store/required-headers typing is preserved.
+- solid-vc: `https://www.w3.org/2018/credentials/v1`,
+  `https://www.w3.org/ns/credentials/v2`, and the package's already-emitted
+  `https://w3id.org/security/data-integrity/v2`.
+- solid-chat-interop: `https://www.w3.org/ns/activitystreams`.
 
-## Touched-package gates
+The owning `src/contexts/README.md` files record the source URLs and retrieval
+date. Contexts are imported into the builds, never fetched at runtime. The chat
+TypeScript build copies its imported JSON into dist; solid-vc bundles its JSON.
+Loaders return isolated copies and have no transport or URL fallback.
 
-For each row, all commands below ran with `<name>` replaced by the package name:
+Original JSON-LD round-trip tests are retained and passing. New tests cover v1/v2
+credential expansion, the generated credential graph's digest round-trip, Data
+Integrity expansion, AS2 JSON-LD → canonical model → Turtle → canonical model,
+and refusal of unknown, nested, and URL-variant contexts. These tests replace
+global fetch with a failing spy and assert that it is never called.
+
+## Required package and root checks
+
+PASS (exit 0):
 
 ```sh
-pnpm --filter <name> run lint
-pnpm --filter <name> run build
-pnpm --filter <name> run typecheck
-pnpm --filter <name> run test
-pnpm --filter <name> run test:coverage
+pnpm exec turbo run lint build typecheck test \
+  --filter=@jeswr/fetch-rdf --filter=@jeswr/solid-vc \
+  --filter=@jeswr/solid-chat-interop --filter=@jeswr/app-pod-money \
+  --concurrency=4 --continue=always
+pnpm run lint:root
+pnpm run test:root
+pnpm --filter @jeswr/solid-vc run test:coverage
+git diff --check
 ```
 
-| Package | lint | build | typecheck | test | coverage command |
-| --- | --- | --- | --- | --- | --- |
-| `@jeswr/fetch-rdf` | PASS (0) | PASS (0) | PASS (0) | PASS (0), 47 tests | PASS (0) |
-| `@jeswr/solid-a2a` | PASS (0) | PASS (0) | PASS (0) | PASS (0), 256 tests | PASS (0) |
-| `@jeswr/federation-registry` | PASS (0) | PASS (0) | PASS (0) | PASS (0), 101 tests | PASS (0) |
-| `@jeswr/solid-odrl` | PASS (0) | PASS (0) | PASS (0) | PASS (0), 257 tests | PASS (0) |
+Scoped Turbo gate: **20/20 tasks successful**.
 
-Fetch-rdf retains all 26 upstream tests. New tests cover default remote-context refusal,
-explicit offline loading, allowlist rejection, injected-fetch use, nested contexts,
-context failures, metadata/redirect semantics, source errors without unhandledRejection,
-parser-error cancellation of stalled sources, locked streams, non-Error failures, and
-large-chunk backpressure. Sanitizer tests cover JS/map labels across checkout paths,
-spaces and node_modules ancestors, plus unrelated and ancestor-path rejection.
-
-Coverage percentages (statements / branches / functions / lines):
-
-| Package | Statements | Branches | Functions | Lines |
+| Package | lint | build | typecheck | tests |
 | --- | --- | --- | --- | --- |
-| fetch-rdf | 94.35 | 94.11 | 90.47 | 98.13 |
-| solid-a2a | 98.18 | 96.12 | 100 | 98.18 |
-| federation-registry | 99.03 | 94.70 | 98.43 | 99.03 |
-| solid-odrl | 96.88 | 92.95 | 95.65 | 96.88 |
+| `@jeswr/fetch-rdf` (unchanged regression check) | PASS | PASS | PASS | 47 PASS |
+| `@jeswr/solid-vc` | PASS | PASS | PASS | 340 PASS |
+| `@jeswr/solid-chat-interop` | PASS | PASS | PASS | 91 PASS |
+| `@jeswr/app-pod-money` | PASS | PASS | PASS | 141 PASS |
 
-These commands pass their existing configured thresholds. The pre-existing solid-odrl
-coverage configuration does not enforce the charter's 100% security-critical target;
-no coverage policy or unrelated application logic was changed in this scoped fix.
+Root tests: 2 files / 26 tests pass. Solid-vc coverage command passes; the new
+context loader has 100% statements, branches, functions, and lines. Overall
+solid-vc coverage remains 94.28% statements/lines, 88.38% branches, 94.3% functions;
+no unrelated coverage policy or source changes were made.
 
-Early local runs needed `pnpm --filter @jeswr/rdf-serialize run build` (PASS, 0) because
-its dist was absent. Initial sanitizer runs also exposed esbuild following upstream
-source maps into sibling `src/` files; handling those paths was necessary for the
-requested builds to pass. The table above records final runs after those corrections.
+Built-package smoke checks import both dist entry points and parse their bundled
+contexts with global fetch disabled: PASS. This verifies JSON artifact packaging
+as well as source-level tests. Initial typechecks before dependency builds failed
+because workspace dist was absent; all final checks run after dependency builds.
 
-## Workspace consumer typechecks
+## Workspace consumers
 
-Every one of the 48 manifests switched to `workspace:*` in `99061d3a` was checked
-explicitly, after dependency-first builds, using this command for each name below:
+Consumer membership was derived from package manifests changed by `99061d3a`
+whose fetch-rdf dependency is now `workspace:*`: **48 consumers**.
+
+Dependency-first builds for those 48 consumers via Turbo: **54/54 tasks PASS**.
+Then each consumer was checked explicitly with:
 
 ```sh
-pnpm -r --filter <name> run typecheck
+pnpm --filter <consumer-name> run typecheck
 ```
 
-**47 PASS, 1 FAIL.** Pod Money's errors are in `test/store.test.ts`: its injected readers
-return the older object shape without `headers`. They also declare DatasetCore rather
-than Store. Production metadata property reads no longer report missing `etag`/`url`.
-No consumer source or test fixture was changed.
+**48/48 PASS (exit 0), including both Pod Money packages.**
 
 | Consumer | Typecheck |
 | --- | --- |
@@ -116,7 +111,7 @@ No consumer source or test fixture was changed.
 | `@jeswr/app-pod-mail` | PASS (0) |
 | `@jeswr/pod-mail-web` | PASS (0) |
 | `@jeswr/app-pod-manager` | PASS (0) |
-| `@jeswr/app-pod-money` | FAIL (2) |
+| `@jeswr/app-pod-money` | PASS (0) |
 | `@jeswr/pod-money-web` | PASS (0) |
 | `@jeswr/app-pod-music` | PASS (0) |
 | `@jeswr/pod-music-web` | PASS (0) |
@@ -150,53 +145,33 @@ No consumer source or test fixture was changed.
 | `@jeswr/unstorage-solid` | PASS (0) |
 | `@jeswr/y-solid` | PASS (0) |
 
-## Root and dependent checks
+## Broader repo gate and remaining limitations
 
-- `pnpm run lint:root`: PASS (0), including final rerun after code changes.
-- `pnpm run test:root`: PASS (0), 2 files / 26 tests.
-- `git diff --check`: PASS (0).
-- Dependency policy: no dependencies added; `check:packages` was not needed in this
-  round. No manifests or lockfiles changed. The original workspace conversions remain.
-- `pnpm exec turbo run build typecheck test --filter=...@jeswr/fetch-rdf --concurrency=4 --continue=always`:
-  FAIL (2), 156 successful / 162 tasks. Repeated on the final code with
-  `npm_config_cache=/tmp/sst-8xm.30-npm-cache`: same six failing tasks, 91 cached tasks.
-  Turbo's strict environment filtering did not pass that cache setting through.
-- `npm_config_cache=/tmp/sst-8xm.30-npm-cache pnpm --filter create-solid-demo run test`:
-  PASS (0), 32 tests passed / 1 skipped, confirming the packed-bin failure below is
-  avoided with a writable npm cache.
-- `gate:full` / whole-workspace gate: not run, as explicitly prohibited by the lane
-  brief; the dispatcher owns wider validation.
-- roborev: unavailable on PATH. No automated review verdict could be obtained.
-  Manual review caught and fixed the sanitizer ancestor escape in `5b17ce6b`.
+The default `pnpm run gate` could not infer a base branch in this dedicated
+checkout and fell back to every package. That fallback run was interrupted (130).
+The gate was then run against the lane's supplied base, without fetching refs:
 
-Dependent-gate failures on final code:
+```sh
+TURBO_SCM_BASE=219cdd5a1579a95a6408f272fe6344e72e2e8664 pnpm run gate
+```
 
-| Task | Finding |
-| --- | --- |
-| `@jeswr/app-pod-money#typecheck` | Legacy injected test readers lack required headers and use DatasetCore; metadata field restoration alone does not adapt that contract. |
-| `@jeswr/solid-vc#test` | JSON-LD round-trip tests load the remote credentials/v2 context; the requested default policy now refuses it. |
-| `@jeswr/solid-chat-interop#test` | JSON-LD reconciliation loads a remote ActivityStreams context; the requested default policy now refuses it. |
-| `@jeswr/federation-trust#test` | Characterization snapshot differs in delegateKey JWK property order; also reported at the previous lane head. |
-| `@jeswr/solid-components#test` | 39 component tests fail, primarily while displaying Loading; related failures were reported at the previous lane head. No unrelated component changes attempted. |
-| `create-solid-demo#test` | npm pack fails with EROFS against /home/runner/.npm; standalone rerun with a writable cache passes. |
+FAIL (exit 1): 172 successful / 218 scheduled tasks, 115 cached. It stops on
+`@jeswr/federation-trust#test`: 53 tests pass, one characterization snapshot fails
+at `test/characterization.test.ts:196`. The serialized `delegateKey` JWK property
+order is `kty, crv, x`; the snapshot expects `crv, x, kty`. This exact failure was
+already recorded at the prior lane head. No snapshot or federation-trust source
+was changed. Unfinished tasks in this fail-fast gate are not claimed to pass.
+Previous wider-gate issues outside this fix brief were not repaired or reclassified.
 
-## Remaining work and open question
+The requested scoped fixes have no remaining implementation work or open design
+questions. The conservative context scope is the exact supported URLs above;
+unknown contexts remain refused. The referenced `briefs/sst-8xm.30.md` and
+`.fix1.md` were absent from this checkout; the supplied brief and prior lane report
+provided the working context.
 
-The import's wider acceptance remains incomplete. The dispatcher retains follow-up
-tracking and bead closure; no tracker state was changed from this dedicated checkout.
-
-- Resolve the Pod Money injected-reader compatibility choice in QUESTIONS.md: adapt
-  its contracts/test doubles or explicitly relax the additional public result types.
-  This round conservatively restores the requested fields and preserves the imported
-  Store/headers type requirements.
-- VC and chat parsing callers need an explicit safe context policy/offline loader to
-  support their existing remote-context documents under the new default. Expanding
-  those packages or bundling new contexts was outside this fix brief.
-- Diagnose the snapshot/component failures and run the dispatcher-owned wider gate.
-  The known failures above prevent calling the lane merge-ready.
-- Obtain the required roborev review when its executable/service is available.
-
-All work and commits stayed on lane/sst-8xm.30. No push, PR, branch switch, network Git
-fetch/merge, dependency addition, or mirror publication. Generated apps/*/web/public
-build outputs were removed. Dist remains untracked/ignored. The report is committed
-last and the tracked/untracked working tree is clean at handoff.
+Roborev remains unavailable on PATH, so no automated per-commit verdict was
+obtained. Manual review checked exact URL matching, nested-context rejection,
+absence of network fallback, immutable bundled documents, build artifacts, and
+Pod Money's consumed result fields. No push, PR, branch switch, dependency addition,
+remote fetch/merge, or changes outside this checkout were made. Generated untracked
+web build outputs were removed. STATUS.md was the last file edited this round.
