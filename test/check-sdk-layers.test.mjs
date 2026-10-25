@@ -169,10 +169,10 @@ describe("SDK layer guard", () => {
       },
       "packages/storage-client/package.json": {
         name: "@jeswr/storage-client",
-        [field]: { n3: "workspace:@jeswr/pod-auth" },
+        [field]: { n3: "workspace:@jeswr/pod-auth@*" },
       },
       "apps/example/web/package.json": {
-        [field]: { engine: "workspace:@sparq-org/sparq" },
+        [field]: { engine: "workspace:@sparq-org/sparq@*" },
       },
     });
     expect(result.status).toBe(1);
@@ -187,10 +187,8 @@ describe("SDK layer guard", () => {
   it.each([
     "npm:n3@^1.0.0",
     "workspace:n3@*",
-    "workspace:n3",
     "npm:@jeswr/fetch-rdf@^1.0.0",
     "workspace:@jeswr/fetch-rdf@^1.0.0",
-    "workspace:@jeswr/fetch-rdf",
   ])("allows %s even under a forbidden dependency key", (spec) => {
     const result = scan({
       "packages/storage-client/package.json": {
@@ -219,6 +217,10 @@ describe("SDK layer guard", () => {
     "workspace:1.0.0 - 2.0.0",
     "workspace:1.x || >=2.0.0 <3",
     "workspace:1.2.3-beta.1+build.5",
+    "workspace:n3",
+    "workspace:@jeswr/fetch-rdf",
+    "workspace:../storage-client",
+    "workspace:",
     "^1.0.0",
     ">=1.0.0 <2.0.0",
     "1.0.0 - 2.0.0",
@@ -242,6 +244,24 @@ describe("SDK layer guard", () => {
   });
 
   it.each([
+    "dependencies",
+    "peerDependencies",
+    "optionalDependencies",
+  ])("rejects storage-client's pod-auth key with workspace:n3 in %s", (field) => {
+    const result = scan({
+      "packages/storage-client/package.json": {
+        name: "@jeswr/storage-client",
+        [field]: { "@jeswr/pod-auth": "workspace:n3" },
+      },
+    });
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      `packages/storage-client/package.json ${field}.@jeswr/pod-auth: storage-client may depend only on`,
+    );
+    expect(result.stderr).not.toContain("alias of");
+  });
+
+  it.each([
     "link:../storage-client",
     "file:../storage-client",
     "github:jeswr/storage-client#private-ref",
@@ -250,9 +270,7 @@ describe("SDK layer guard", () => {
     "git@github.com:jeswr/storage-client.git",
     "jeswr/storage-client",
     "../storage-client",
-    "workspace:../storage-client",
     "npm:",
-    "workspace:",
     "",
     null,
   ])("fails closed on unresolvable spec %s without printing it", (spec) => {

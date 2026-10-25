@@ -28,25 +28,15 @@ const isPackageOrSubpath = (name, target) => name === target || name.startsWith(
 const layeredPackages = new Set(["@jeswr/storage-client", "@jeswr/pod-auth"]);
 const restrictedDependencies = [...layeredPackages, ...appForbiddenDependencies];
 
-// Recognize workspace versions/ranges before package aliases: e.g. 0.1.0 is
-// also syntactically a package name, but workspace:0.1.0 targets the key.
-const number = "(?:0|[1-9][0-9]*)";
-const prerelease = "(?:0|[1-9][0-9]*|[0-9]*[a-zA-Z-][0-9a-zA-Z-]*)";
-const version = `${number}\\.${number}\\.${number}(?:-${prerelease}(?:\\.${prerelease})*)?(?:\\+[0-9a-zA-Z-]+(?:\\.[0-9a-zA-Z-]+)*)?`;
-const partial = `(?:${version}|(?:${number}|[xX*])(?:\\.(?:${number}|[xX*])){0,2})`;
-const comparator = `(?:[<>]=?|[=~^])?\\s*v?${partial}`;
-const range = new RegExp(
-  `^(?:v?${partial}\\s+-\\s+v?${partial}|${comparator}(?:\\s+${comparator})*)(?:\\s*\\|\\|\\s*(?:v?${partial}\\s+-\\s+v?${partial}|${comparator}(?:\\s+${comparator})*))*$`,
-);
-
 function dependencyTarget(name, spec) {
   if (typeof spec !== "string") return null;
   if (spec.startsWith("workspace:")) {
-    const value = spec.slice("workspace:".length).trim();
-    if (value === "^" || value === "~" || range.test(value)) return name;
+    // Only explicit <name>@<range> forms alias another package. All other
+    // workspace selectors, including bare words and ranges, target the key.
+    const alias = /^workspace:((?:@[a-z0-9._-]+\/)?[a-z0-9_-][a-z0-9._-]*)@[^@:]+$/i.exec(spec);
+    return alias ? alias[1] : name;
   }
-  const alias =
-    /^(?:npm|workspace):((?:@[a-z0-9._-]+\/)?[a-z0-9_-][a-z0-9._-]*)(?:@[^@:]+)?$/i.exec(spec);
+  const alias = /^npm:((?:@[a-z0-9._-]+\/)?[a-z0-9_-][a-z0-9._-]*)(?:@[^@:]+)?$/i.exec(spec);
   if (alias) return alias[1];
   // Versions, ranges and tags address the dependency key. Other protocols,
   // paths and repository shorthands cannot establish the package identity.

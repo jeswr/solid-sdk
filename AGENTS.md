@@ -65,7 +65,8 @@ on `@sparq-org/sparq` or the `@jeswr/storage-client/solid` and `/lws` backends;
 `@jeswr/storage-client` may depend only on `@jeswr/storage-capabilities`, `@jeswr/fetch-rdf`,
 `@jeswr/rdf-serialize`, `@jeswr/guarded-fetch`, `@solid/object`, `@rdfjs/wrapper`, and `n3`;
 `@jeswr/pod-auth` cannot depend on `@jeswr/storage-client`. The guard checks resolved npm
-and workspace alias targets; workspace versions and ranges target the dependency key.
+and explicit `workspace:<name>@<range>` alias targets; all other workspace selectors,
+including bare words, versions, and ranges, target the dependency key.
 It rejects unresolvable dependency aliases in storage-client and pod-auth manifests,
 and for restricted package keys in any scanned manifest, without printing their specs.
 Unrelated file, link, and repository specs in unrestricted manifests are ignored.
