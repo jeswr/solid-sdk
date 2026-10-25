@@ -41,6 +41,15 @@ await build({
   logLevel: "warning",
 });
 await build({
+  entryPoints: { cache: "test/browser/cache-entry.js" },
+  bundle: true,
+  format: "esm",
+  outdir: "test/browser/.bundle",
+  platform: "browser",
+  absWorkingDir: root,
+  logLevel: "warning",
+});
+await build({
   entryPoints: { sw: "test/browser/sw-entry.js" },
   bundle: true,
   format: "esm",
