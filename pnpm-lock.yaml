@@ -3240,6 +3240,9 @@ importers:
       n3:
         specifier: ^1.17.4
         version: 1.26.0
+      rdf-validate-shacl:
+        specifier: 0.6.5
+        version: 0.6.5
 
   packages/solid-granary:
     dependencies:

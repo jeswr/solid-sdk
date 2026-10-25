@@ -1,7 +1,9 @@
+# AUTHORED-BY Codex GPT-6.1-Sol
 # AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 #
 @prefix schsh:   <https://w3id.org/jeswr/sectors/scheduling/shapes#> .
 @prefix sched:   <https://w3id.org/jeswr/sectors/scheduling#> .
+@prefix schema:  <https://schema.org/> .
 @prefix core:    <https://w3id.org/jeswr/core#> .
 @prefix sh:      <http://www.w3.org/ns/shacl#> .
 @prefix owl:     <http://www.w3.org/2002/07/owl#> .
@@ -19,22 +21,23 @@
 #    conformance => parent-conformance, the §3.4 ⊆ rule).
 #  - sh:severity carries the RFC 2119 grade: Violation=MUST, Warning=SHOULD,
 #    Info=MAY. A conformance RESULT is read against severity, not pass/fail.
-#  - IMMUTABLE version IRI (.../scheduling/profile/1.0.0); additive-only.
+#  - IMMUTABLE version IRI (.../scheduling/profile/1.1.0); additive-only.
 #
-# v1.0.0 tracks the gUFO re-base of scheduling.ttl.
+# v1.1.0 adds all-day dates and schema.org recurrence selectors.
 # =============================================================================
 
-<https://w3id.org/jeswr/sectors/scheduling/profile/1.0.0>
+<https://w3id.org/jeswr/sectors/scheduling/profile/1.1.0>
     a prof:Profile ;
     dcterms:title "Solid Scheduling data-model profile (gUFO re-base)"@en ;
     dcterms:isVersionOf <https://w3id.org/jeswr/sectors/scheduling/profile> ;
-    owl:versionInfo "1.0.0" ;
-    owl:versionIRI <https://w3id.org/jeswr/sectors/scheduling/profile/1.0.0> ;
+    owl:versionInfo "1.1.0" ;
+    dcterms:modified "2026-10-25"^^xsd:date ;
+    owl:versionIRI <https://w3id.org/jeswr/sectors/scheduling/profile/1.1.0> ;
     prof:isProfileOf <https://w3id.org/jeswr/sectors/scheduling> ;
-    prof:hasToken "scheduling-1.0.0" ;
+    prof:hasToken "scheduling-1.1.0" ;
     prof:hasResource [
         prof:hasRole <http://www.w3.org/ns/dx/prof/role/constraints> ;
-        prof:hasArtifact <https://w3id.org/jeswr/sectors/scheduling/profile/1.0.0/shapes>
+        prof:hasArtifact <https://w3id.org/jeswr/sectors/scheduling/profile/1.1.0/shapes>
     ] ;
     rdfs:comment "Open-by-default SHACL profile for calendar/scheduling data, re-based onto the gUFO Core. Validates CalendarEvent, Task, Calendar, Attendance, RecurrenceRule and Reminder. "@en .
 
@@ -59,7 +62,7 @@ schsh:CalendarEventShape
     # MUST: a start time
     sh:property [
         sh:path sched:startTime ;
-        sh:datatype xsd:dateTime ;
+        sh:or ( [ sh:datatype xsd:date ] [ sh:datatype xsd:dateTime ] ) ;
         sh:minCount 1 ;
         sh:maxCount 1 ;
         sh:severity sh:Violation ;
@@ -69,7 +72,7 @@ schsh:CalendarEventShape
     # SHOULD: an end time (open-ended / all-day events may omit)
     sh:property [
         sh:path sched:endTime ;
-        sh:datatype xsd:dateTime ;
+        sh:or ( [ sh:datatype xsd:date ] [ sh:datatype xsd:dateTime ] ) ;
         sh:minCount 1 ;
         sh:maxCount 1 ;
         sh:severity sh:Warning ;
@@ -129,7 +132,7 @@ schsh:TaskShape
 
     sh:property [
         sh:path sched:dueTime ;
-        sh:datatype xsd:dateTime ;
+        sh:or ( [ sh:datatype xsd:date ] [ sh:datatype xsd:dateTime ] ) ;
         sh:maxCount 1 ;
         sh:severity sh:Warning ;
         sh:message "A Task SHOULD have a due time."@en ;
@@ -219,6 +222,40 @@ schsh:RecurrenceRuleShape
         sh:maxCount 1 ;
         sh:severity sh:Info ;
         sh:message "Interval, when present, must be a positive integer."@en ;
+    ] ;
+
+    sh:property [
+        sh:path sched:until ;
+        sh:or ( [ sh:datatype xsd:date ] [ sh:datatype xsd:dateTime ] ) ;
+        sh:maxCount 1 ;
+        sh:message "Until, when present, must be a date (all-day) or dateTime."@en ;
+    ] ;
+
+    sh:property [
+        sh:path schema:byDay ;
+        sh:or ( [ sh:nodeKind sh:IRI ] [ sh:datatype xsd:string ] ) ;
+        sh:message "By-day values must be IRIs or strings."@en ;
+    ] ;
+
+    sh:property [
+        sh:path schema:byMonthDay ;
+        sh:datatype xsd:integer ;
+        sh:or ( [ sh:minInclusive 1 ; sh:maxInclusive 31 ] [ sh:in ( -1 ) ] ) ;
+        sh:message "By-month-day values must be integers from 1 to 31, or -1 (last day)."@en ;
+    ] ;
+
+    sh:property [
+        sh:path schema:byMonth ;
+        sh:datatype xsd:integer ;
+        sh:minInclusive 1 ;
+        sh:maxInclusive 12 ;
+        sh:message "By-month values must be integers from 1 to 12."@en ;
+    ] ;
+
+    sh:property [
+        sh:path schema:exceptDate ;
+        sh:or ( [ sh:datatype xsd:date ] [ sh:datatype xsd:dateTime ] ) ;
+        sh:message "Exception dates must be dates (all-day) or dateTimes."@en ;
     ] .
 
 # -----------------------------------------------------------------------------
