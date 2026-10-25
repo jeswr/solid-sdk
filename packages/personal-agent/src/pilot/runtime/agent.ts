@@ -1588,7 +1588,9 @@ export class AgentRuntime {
   }
 
   private async onDeliver(conv: ConversationState, msg: Message<"deliver">) {
-    const handler = this.handlers.get(operationKey(msg.body.operation));
+    const request = conv.requests?.[msg.body.ref];
+    if (!request) this.reject("protocol-violation", "delivery request is not recorded");
+    const handler = this.handlers.get(operationKey(request.operation));
     if (!handler?.onDeliver) return { disposition: "accepted" as const, outbound: [] };
     const reply = await handler.onDeliver(this.context(conv, msg), msg.body, msg.evidence ?? []);
     return this.applyReply(this.mustConversation(conv.id), msg, reply, handler);

@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 /**
  * The deterministic conversation state machine (one instance per conversation per side).
  *
@@ -14,6 +15,7 @@
 import type { PilotLimits } from "./limits.js";
 import type {
   AnyMessage,
+  Basis,
   Iri,
   MessageKind,
   OperationRef,
@@ -60,6 +62,18 @@ export interface ConversationState {
   };
   readonly agreement?: Iri;
   readonly invocation?: Iri;
+  /** Recorded requests, including operations invoked under a different negotiated operation. */
+  readonly requests?: Readonly<
+    Record<
+      Iri,
+      {
+        readonly operation: OperationRef;
+        readonly basis: Basis;
+        readonly by: Side;
+        readonly delivered?: boolean;
+      }
+    >
+  >;
   readonly requiredOutcomes: readonly Side[];
   readonly outcomes: { readonly self?: OutcomeConclusion; readonly peer?: OutcomeConclusion };
   readonly openedAt: string;
@@ -241,7 +255,23 @@ export function transition(
         return fail("terms-digest-mismatch", "accepted terms digest differs from the offer");
       }
       const { openProposal: _closed, ...rest } = base;
-      next = { ...rest, phase: "agreed", agreement: message.body.agreement };
+      next = {
+        ...rest,
+        phase: "agreed",
+        agreement: message.body.agreement,
+        ...(state.operation
+          ? {
+              requests: {
+                ...state.requests,
+                [message.body.agreement]: {
+                  operation: state.operation,
+                  basis: { kind: "agreement", agreement: message.body.agreement },
+                  by: open.by,
+                },
+              },
+            }
+          : {}),
+      };
       break;
     }
     case "refuse": {
@@ -277,9 +307,39 @@ export function transition(
           operation: message.body.operation,
         };
       }
+      next = {
+        ...next,
+        requests: {
+          ...state.requests,
+          [message.id]: {
+            operation: message.body.operation,
+            basis,
+            by,
+          },
+        },
+      };
       break;
     }
     case "deliver": {
+      const request = state.requests?.[message.body.ref];
+      if (!request || request.by === by || request.delivered) {
+        return fail("protocol-violation", "delivery does not answer an outstanding peer request");
+      }
+      if (
+        request.operation.id !== message.body.operation.id ||
+        request.operation.version !== message.body.operation.version
+      ) {
+        return fail("protocol-violation", "delivery operation differs from the recorded request");
+      }
+      const basis = message.body.basis;
+      const basisMatches =
+        request.basis.kind === "agreement"
+          ? basis.kind === "agreement" &&
+            basis.agreement === request.basis.agreement &&
+            basis.agreement === state.agreement
+          : basis.kind === "invocation" && basis.invocation === message.body.ref;
+      if (!basisMatches)
+        return fail("protocol-violation", "delivery basis differs from the recorded request");
       if (phase === "invoked") {
         if (message.body.ref !== state.invocation) {
           return fail("protocol-violation", "delivery does not answer the invocation");
@@ -290,6 +350,10 @@ export function transition(
       } else {
         return fail("protocol-violation", `cannot deliver in ${phase}`);
       }
+      next = {
+        ...next,
+        requests: { ...state.requests, [message.body.ref]: { ...request, delivered: true } },
+      };
       break;
     }
     case "receipt": {
