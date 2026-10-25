@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 /**
  * `@jeswr/solid-mcp` — a Model Context Protocol (MCP) server that exposes a Solid
@@ -31,4 +32,13 @@ export {
   search,
   writeResource,
 } from "./pod.js";
-export { createSolidMcpServer } from "./server.js";
+export {
+  createFetchPodPort,
+  type PodConditions,
+  type PodEntry,
+  type PodPort,
+  type PodReadResult,
+  type PodSource,
+} from "./pod-port.js";
+export { createSolidMcpServer, type SolidMcpServerConfig } from "./server.js";
+export { createPodToolRegistry, type PodTool, registerPodTools } from "./tools.js";

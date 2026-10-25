@@ -4,14 +4,22 @@
 
 ```ts
 
+import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { Store } from 'n3';
+import { z } from 'zod';
 
 // @public
-export function createSolidMcpServer(config: SolidMcpConfig): McpServer;
+export function createFetchPodPort(input: SolidMcpConfig): PodPort;
 
 // @public
-export function listContainer(config: SolidMcpConfig, url: string): Promise<PodChild[]>;
+export function createPodToolRegistry(pod: PodPort, readOnly?: boolean): readonly PodTool[];
+
+// @public
+export function createSolidMcpServer(config: SolidMcpServerConfig): McpServer;
+
+// @public
+export function listContainer(source: PodSource, url: string): Promise<PodChild[]>;
 
 // @public
 export function normalizePodRoot(podRoot: string): string;
@@ -28,12 +36,54 @@ export interface PodChild {
 }
 
 // @public
+export interface PodConditions {
+    ifMatch?: string;
+    ifNoneMatch?: "*";
+}
+
+// @public
+export type PodEntry = Pick<PodChild, "url" | "isContainer"> & Partial<Omit<PodChild, "url" | "isContainer">>;
+
+// @public
+export interface PodPort {
+    delete(url: string, cond?: PodConditions): Promise<void>;
+    list(container: string): Promise<PodEntry[]>;
+    read(url: string): Promise<PodReadResult>;
+    readonly root: string;
+    readonly webId: string;
+    write(url: string, body: Uint8Array, contentType: string, cond: PodConditions): Promise<{
+        etag?: string;
+    }>;
+}
+
+// @public
+export interface PodReadResult {
+    body: Uint8Array;
+    contentType: string;
+    etag?: string;
+}
+
+// @public
 export function podScopedUrlOrUndefined(config: {
     podRoot: string;
 }, url: string): string | undefined;
 
 // @public
-export function readRdf(config: SolidMcpConfig, url: string): Promise<ReadRdfResult>;
+export type PodSource = SolidMcpConfig | PodPort;
+
+// @public
+export interface PodTool {
+    aliases: readonly string[];
+    description: string;
+    handler(input: unknown): Promise<CallToolResult>;
+    inputSchema: z.ZodObject;
+    name: string;
+    readOnly: boolean;
+    title: string;
+}
+
+// @public
+export function readRdf(source: PodSource, url: string): Promise<ReadRdfResult>;
 
 // @public
 export interface ReadRdfResult {
@@ -42,7 +92,7 @@ export interface ReadRdfResult {
 }
 
 // @public
-export function readResource(config: SolidMcpConfig, url: string): Promise<ReadResult>;
+export function readResource(source: PodSource, url: string): Promise<ReadResult>;
 
 // @public
 export interface ReadResult {
@@ -51,6 +101,9 @@ export interface ReadResult {
     etag?: string;
     text?: string;
 }
+
+// @public
+export function registerPodTools(server: McpServer, tools: readonly PodTool[]): void;
 
 // @public
 export function requirePodScopedUrl(config: {
@@ -63,7 +116,7 @@ export function requirePodScopedWriteUrl(config: {
 }, url: string): string;
 
 // @public
-export function search(config: SolidMcpConfig, query: string, options?: SearchOptions): Promise<SearchMatch[]>;
+export function search(source: PodSource, query: string, options?: SearchOptions): Promise<SearchMatch[]>;
 
 // @public
 export interface SearchMatch {
@@ -88,7 +141,13 @@ export interface SolidMcpConfig {
 }
 
 // @public
-export function writeResource(config: SolidMcpConfig, url: string, content: string, contentType: string): Promise<{
+export type SolidMcpServerConfig = SolidMcpConfig | {
+    pod: PodPort;
+    readOnly?: boolean;
+};
+
+// @public
+export function writeResource(source: PodSource, url: string, content: string, contentType: string): Promise<{
     url: string;
     etag?: string;
 }>;
