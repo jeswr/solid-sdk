@@ -1,3 +1,4 @@
+import { NS } from "@jeswr/suite-vocab";
 // AUTHORED-BY Codex GPT-6.1-Sol — ported from apps/pod-health/test/model.test.ts
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 
@@ -413,7 +414,7 @@ describe("HealthDocument.observations — subtype-only RDF (no RDFS inference)",
   it("lists subjects typed ONLY as a subtype (no base health:Observation)", () => {
     // Mimic another app that asserts only the subtype class.
     const ttl = `
-      @prefix health: <https://TBD.example/solid/health#> .
+      @prefix health: <${NS.HEALTH}> .
       @prefix ex: <https://carol.example/health/> .
       ex:HR a health:HeartRateObservation .
       ex:Step a health:StepCountObservation .
@@ -433,7 +434,7 @@ describe("HealthDocument.observations — subtype-only RDF (no RDFS inference)",
 
   it("de-duplicates a subject carrying both the base and a subtype type", () => {
     const ttl = `
-      @prefix health: <https://TBD.example/solid/health#> .
+      @prefix health: <${NS.HEALTH}> .
       @prefix ex: <https://carol.example/health/> .
       ex:HR a health:Observation, health:HeartRateObservation .
     `;

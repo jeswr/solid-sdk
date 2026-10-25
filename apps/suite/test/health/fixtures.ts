@@ -1,3 +1,4 @@
+import { NS } from "@jeswr/suite-vocab";
 // AUTHORED-BY Codex GPT-6.1-Sol — ported from apps/pod-health/test/fixtures.ts
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
@@ -9,8 +10,8 @@
  * vital and a condition).
  */
 export const CONFORMANT_HEALTH_TTL = `
-@prefix health: <https://TBD.example/solid/health#> .
-@prefix core:   <https://TBD.example/solid/core#> .
+@prefix health: <${NS.HEALTH}> .
+@prefix core:   <${NS.CORE}> .
 @prefix unit:   <http://qudt.org/vocab/unit/> .
 @prefix time:   <http://www.w3.org/2006/time#> .
 @prefix xsd:    <http://www.w3.org/2001/XMLSchema#> .
@@ -49,7 +50,7 @@ ex:SctHypertension a health:CodeableConcept ;
 /** A type-index document already carrying a HealthRecord registration. */
 export const TYPE_INDEX_TTL = `
 @prefix solid: <http://www.w3.org/ns/solid/terms#> .
-@prefix health: <https://TBD.example/solid/health#> .
+@prefix health: <${NS.HEALTH}> .
 
 <https://carol.example/settings/publicTypeIndex.ttl>
     a solid:TypeIndex, solid:ListedDocument .
