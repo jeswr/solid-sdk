@@ -1,0 +1,29 @@
+/* AUTHORED-BY Codex GPT-6.1-Sol */
+:root,
+[data-density="comfortable"] {
+  --row-h: 44px;
+  --row-h-grid-card: 200px;
+  --control-h: 36px;
+  --control-h-sm: 28px;
+  --cell-px: 12px;
+  --text-row: var(--text-base);
+}
+[data-density="compact"] {
+  --row-h: 32px;
+  --row-h-grid-card: 160px;
+  --control-h: 32px;
+  --control-h-sm: 24px;
+  --cell-px: 8px;
+  --text-row: var(--text-sm);
+}
+@media (pointer: coarse) {
+  :root,
+  [data-density] {
+    --row-h: 44px;
+    --row-h-grid-card: 200px;
+    --control-h: 44px;
+    --control-h-sm: 44px;
+    --cell-px: 12px;
+    --text-row: var(--text-base);
+  }
+}
