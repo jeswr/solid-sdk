@@ -194,7 +194,14 @@ export class OAuthCodeSource implements AccessTokenSource {
 
     if (rejectedToken !== undefined)
       await this.#session.invalidate(as.issuer, this.#context, rejectedToken);
-    const entry = (await this.#session.get(as, this.#context, bound, accessTokenUsable))!;
+    const entry = (await this.#session.get(
+      as,
+      this.#context,
+      bound,
+      accessTokenUsable,
+      true,
+      generation,
+    ))!;
     await this.#session.assertCurrent(entry, bound);
     if (entry.tokenResult.token_type !== "bearer") {
       throw new ReactiveAuthenticationError(
