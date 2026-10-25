@@ -204,6 +204,100 @@ describe("agent layer boundaries (DESIGN §2.2)", () => {
 });
 
 describe("binding origin enforcement", () => {
+  const wrappers = [
+    "(FETCH)",
+    "FETCH as typeof fetch",
+    "FETCH satisfies typeof fetch",
+    "<typeof fetch>FETCH",
+    "FETCH!",
+    "(((FETCH as typeof fetch) satisfies typeof fetch)!)",
+  ];
+  const rawFetchForms = [
+    "fetch",
+    "globalThis.fetch",
+    "window.fetch",
+    "self.fetch",
+    'globalThis["fetch"]',
+  ];
+  const origins = 'const ORIGINS = new Set(["https://mail.example"]);';
+
+  it.each(wrappers)("rejects storing a raw fetch wrapped as %s", (wrapper) => {
+    for (const raw of rawFetchForms) {
+      const expression = wrapper.replace("FETCH", raw);
+      const failures = scan(
+        "packages/agent-channels/src/gmail/index.ts",
+        `${origins} const request = ${expression}; request("https://mail.example/messages");`,
+      );
+      expect(failures.join("\n")).toContain("raw fetch reference");
+    }
+  });
+
+  it.each(wrappers)("validates a direct fetch wrapped as %s", (wrapper) => {
+    for (const raw of rawFetchForms) {
+      const expression = wrapper.replace("FETCH", raw);
+      expect(
+        scan(
+          "packages/agent-channels/src/gmail/index.ts",
+          `${origins} (${expression})("https://mail.example/messages");`,
+        ),
+      ).toEqual([]);
+      expect(
+        scan(
+          "packages/agent-channels/src/gmail/index.ts",
+          `${origins} (${expression})("https://other.example/messages");`,
+        ).join("\n"),
+      ).toContain("static ORIGINS");
+    }
+  });
+
+  it.each([
+    'let request; request = fetch; request("https://other.example/messages");',
+    'let request; request = (globalThis.fetch as typeof fetch)!; request("https://other.example/messages");',
+    "configure(fetch);",
+    "configure((window.fetch satisfies typeof fetch));",
+    "const { fetch: f } = globalThis;",
+    "const { fetch } = window;",
+    'const { ["fetch"]: f } = (self as Window);',
+    'const { "fetch": f } = globalThis;',
+    "let request; ({ fetch: request } = globalThis);",
+    "function configure({ fetch: request } = globalThis) {}",
+    "const request = fetch.bind(globalThis);",
+    "const request = globalThis.fetch.call;",
+    "export { fetch };",
+    "export { fetch as request };",
+    "export default fetch;",
+    "export default (self.fetch!);",
+    "export const request = globalThis.fetch;",
+    "const transport = { fetch };",
+    "const transport = { request: fetch };",
+  ])("rejects raw fetch escaping even with valid declared origins: %s", (source) => {
+    expect(
+      scan("packages/agent-channels/src/gmail/index.ts", `${origins} ${source}`).join("\n"),
+    ).toContain("raw fetch");
+  });
+
+  it.each([
+    "packages/agent-executor/src/index.ts",
+    "packages/agent-model-gateway/src/index.ts",
+    "packages/agent-memory/src/index.ts",
+    "apps/agent-daemon/src/index.ts",
+    "apps/suite/src/apps/agent/index.ts",
+  ])("enforces raw fetch references throughout agent source: %s", (path) => {
+    expect(scan(path, `${origins} configure(globalThis.fetch);`).join("\n")).toContain("raw fetch");
+    expect(scan(path, `${origins} fetch("https://mail.example/messages");`)).toEqual([]);
+    expect(scan(path, `${origins} fetch(input);`).join("\n")).toContain("static ORIGINS");
+  });
+
+  it("preserves test and type-only references without treating property names as raw fetch", () => {
+    expect(scan("packages/agent-channels/test/transport.test.ts", "configure(fetch);")).toEqual([]);
+    expect(
+      scan(
+        "packages/agent-channels/src/gmail/index.ts",
+        "type Fetch = typeof globalThis.fetch; type Bare = typeof fetch; export type { fetch }; const transport = { fetch: fake }; const { fetch: f, ...rest } = transport;",
+      ),
+    ).toEqual([]);
+  });
+
   it("reuses a binding's imported static origins in its send half", () => {
     expect(
       checkAgentLayers(
