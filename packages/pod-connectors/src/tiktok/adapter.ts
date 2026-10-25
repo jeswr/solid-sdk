@@ -12,12 +12,13 @@ import { DataFactory, Store } from "n3";
 import { postJson } from "../core/fixture-fetch.js";
 import type { ImportContext, ImportOutcome, IntegrationAdapter } from "../core/types.js";
 import { CLASSES, MediaItem, SocialMediaPosting } from "../core/vocab.js";
-import { type TikTokVideoListAnswer, TIKTOK_FIXTURES } from "./fixtures.js";
+import { TIKTOK_FIXTURES, type TikTokVideoListAnswer } from "./fixtures.js";
 
 const ID = "tiktok";
 const API = "https://open.tiktokapis.com/v2";
 const SCOPES = ["user.info.basic", "video.list"] as const;
-const VIDEO_FIELDS = "id,title,video_description,share_url,cover_image_url,duration,create_time,view_count";
+const VIDEO_FIELDS =
+  "id,title,video_description,share_url,cover_image_url,duration,create_time,view_count";
 
 export const tiktokAdapter: IntegrationAdapter = {
   metadata: {
@@ -35,12 +36,12 @@ export const tiktokAdapter: IntegrationAdapter = {
     ],
   },
   oauth: {
-    clientId: process.env.NEXT_PUBLIC_TIKTOK_CLIENT_ID,
+    clientId: undefined,
     authorizationEndpoint: "https://www.tiktok.com/v2/auth/authorize/",
     tokenEndpoint: "https://open.tiktokapis.com/v2/oauth/token/",
     scopes: SCOPES,
     tokenExchange: "proxy",
-    tokenProxyUrl: process.env.NEXT_PUBLIC_TIKTOK_TOKEN_PROXY,
+    tokenProxyUrl: undefined,
   },
   fixtures: () => TIKTOK_FIXTURES,
 

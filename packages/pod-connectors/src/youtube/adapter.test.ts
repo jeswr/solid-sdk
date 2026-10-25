@@ -26,7 +26,11 @@ describe("youtube adapter contract", () => {
   it("writes playlists as schema:MusicPlaylist with item counts", async () => {
     const { pod } = await demoImport(youtubeAdapter);
     const ds = pod.dataset(LISTS_DOC);
-    const watch = new MusicPlaylist(`${LISTS_DOC}#playlist-PLrAXtmRdnEQy6nuLMHjMZOz59O`, ds, DataFactory);
+    const watch = new MusicPlaylist(
+      `${LISTS_DOC}#playlist-PLrAXtmRdnEQy6nuLMHjMZOz59O`,
+      ds,
+      DataFactory,
+    );
     expect(watch.types.has(CLASSES.MusicPlaylist)).toBe(true);
     expect(watch.name).toBe("Watch later");
     expect(watch.numTracks).toBe(42);

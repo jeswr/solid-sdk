@@ -34,12 +34,12 @@ export const instagramAdapter: IntegrationAdapter = {
     ],
   },
   oauth: {
-    clientId: process.env.NEXT_PUBLIC_INSTAGRAM_CLIENT_ID,
+    clientId: undefined,
     authorizationEndpoint: "https://api.instagram.com/oauth/authorize",
     tokenEndpoint: "https://api.instagram.com/oauth/access_token",
     scopes: SCOPES,
     tokenExchange: "proxy",
-    tokenProxyUrl: process.env.NEXT_PUBLIC_INSTAGRAM_TOKEN_PROXY,
+    tokenProxyUrl: undefined,
   },
   fixtures: () => INSTAGRAM_FIXTURES,
 

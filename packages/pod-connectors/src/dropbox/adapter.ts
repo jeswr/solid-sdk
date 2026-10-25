@@ -35,7 +35,7 @@ export const dropboxAdapter: IntegrationAdapter = {
     ],
   },
   oauth: {
-    clientId: process.env.NEXT_PUBLIC_DROPBOX_CLIENT_ID,
+    clientId: undefined,
     authorizationEndpoint: "https://www.dropbox.com/oauth2/authorize",
     tokenEndpoint: "https://api.dropboxapi.com/oauth2/token",
     scopes: SCOPES,

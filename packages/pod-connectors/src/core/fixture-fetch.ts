@@ -7,13 +7,13 @@ import { IntegrationSyncError, RateLimitedError } from "./errors.js";
 import type { FixtureRoute } from "./types.js";
 
 /** Build a `fetch`-shaped function answering from fixture routes. */
-export function fixtureFetch(
-  adapterId: string,
-  routes: readonly FixtureRoute[],
-): typeof fetch {
+export function fixtureFetch(adapterId: string, routes: readonly FixtureRoute[]): typeof fetch {
   const impl = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
-    const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
-    const method = (init?.method ?? (input instanceof Request ? input.method : "GET")).toUpperCase();
+    const url =
+      typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+    const method = (
+      init?.method ?? (input instanceof Request ? input.method : "GET")
+    ).toUpperCase();
 
     const route = routes.find(
       (r) => (r.method ?? "GET").toUpperCase() === method && url.startsWith(r.url),

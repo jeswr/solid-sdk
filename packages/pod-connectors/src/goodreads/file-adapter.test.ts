@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
 import { DataFactory } from "n3";
+import { describe, expect, it } from "vitest";
 import { fileImport, memoryFile, TEST_POD_ROOT } from "../core/testing.js";
 import { Book, CLASSES } from "../core/vocab.js";
 import { cleanIsbn, goodreadsFileAdapter, parseDateOnly } from "./file-adapter.js";
@@ -49,7 +49,9 @@ describe("goodreads file adapter", () => {
     );
     const ds = pod.dataset(DOC);
     const nameQuad = [...ds].find(
-      (q) => q.predicate.value === "https://schema.org/name" && q.object.value === "The Pragmatic Programmer",
+      (q) =>
+        q.predicate.value === "https://schema.org/name" &&
+        q.object.value === "The Pragmatic Programmer",
     );
     const book = new Book(nameQuad!.subject.value, ds, DataFactory);
     expect(book.ratingValue).toBeUndefined();

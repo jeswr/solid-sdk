@@ -12,7 +12,7 @@ import { DataFactory, Store } from "n3";
 import { getJson } from "../core/fixture-fetch.js";
 import type { ImportContext, ImportOutcome, IntegrationAdapter } from "../core/types.js";
 import { CLASSES, MediaItem } from "../core/vocab.js";
-import { type GPhotosMediaItemsList, GOOGLE_PHOTOS_FIXTURES } from "./fixtures.js";
+import { GOOGLE_PHOTOS_FIXTURES, type GPhotosMediaItemsList } from "./fixtures.js";
 
 const ID = "google-photos";
 const API = "https://photoslibrary.googleapis.com/v1";
@@ -35,19 +35,23 @@ export const googlePhotosAdapter: IntegrationAdapter = {
     ],
   },
   oauth: {
-    clientId: process.env.NEXT_PUBLIC_GOOGLE_PHOTOS_CLIENT_ID,
+    clientId: undefined,
     authorizationEndpoint: "https://accounts.google.com/o/oauth2/v2/auth",
     tokenEndpoint: "https://oauth2.googleapis.com/token",
     scopes: SCOPES,
     tokenExchange: "proxy",
-    tokenProxyUrl: process.env.NEXT_PUBLIC_GOOGLE_PHOTOS_TOKEN_PROXY,
+    tokenProxyUrl: undefined,
     extraAuthParams: { access_type: "offline", prompt: "consent" },
   },
   fixtures: () => GOOGLE_PHOTOS_FIXTURES,
 
   async import(ctx: ImportContext): Promise<ImportOutcome> {
     ctx.progress({ label: "Indexing your photo library…", done: 0, total: 1 });
-    const list = await getJson<GPhotosMediaItemsList>(ID, ctx.api, `${API}/mediaItems?pageSize=100`);
+    const list = await getJson<GPhotosMediaItemsList>(
+      ID,
+      ctx.api,
+      `${API}/mediaItems?pageSize=100`,
+    );
 
     const doc = ctx.resolve("media/photos.ttl");
     const items = new Store();

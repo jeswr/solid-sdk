@@ -194,9 +194,7 @@ function waitForCallback(adapterId: string, popup: Window): Promise<string> {
     const closedPoll = window.setInterval(() => {
       if (popup.closed) {
         cleanup();
-        reject(
-          new IntegrationAuthError(adapterId, "cancelled", "The sign-in window was closed."),
-        );
+        reject(new IntegrationAuthError(adapterId, "cancelled", "The sign-in window was closed."));
       }
     }, 500);
     const cleanup = () => {

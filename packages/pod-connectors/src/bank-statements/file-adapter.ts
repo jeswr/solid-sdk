@@ -79,7 +79,15 @@ export const bankStatementsFileAdapter: FileImportAdapter = {
 };
 
 const DATE_HEADERS = ["date", "transaction date", "posting date", "posted date", "value date"];
-const DESC_HEADERS = ["description", "name", "payee", "memo", "details", "narrative", "transaction"];
+const DESC_HEADERS = [
+  "description",
+  "name",
+  "payee",
+  "memo",
+  "details",
+  "narrative",
+  "transaction",
+];
 const AMOUNT_HEADERS = ["amount", "value"];
 const DEBIT_HEADERS = ["debit", "withdrawal", "paid out", "money out"];
 const CREDIT_HEADERS = ["credit", "deposit", "paid in", "money in"];
@@ -140,7 +148,7 @@ export function normaliseAmount(raw: string): string | undefined {
 
 function cleanNumber(raw: string | undefined): number | undefined {
   if (!raw) return undefined;
-  const n = Number(raw.replace(/[^0-9.\-]/g, ""));
+  const n = Number(raw.replace(/[^0-9.-]/g, ""));
   return Number.isFinite(n) ? n : undefined;
 }
 
@@ -167,7 +175,7 @@ export function parseOfx(text: string, limit = Number.POSITIVE_INFINITY): Transa
 /** Read an OFX tag value (`<TAG>value` up to the next `<` or newline). */
 function tag(block: string, name: string): string | undefined {
   const m = block.match(new RegExp(`<${name}>([^<\\r\\n]*)`, "i"));
-  return m ? m[1].trim() || undefined : undefined;
+  return m ? (m[1] ?? "").trim() || undefined : undefined;
 }
 
 /** OFX dates are `YYYYMMDD` (optionally followed by HHMMSS / tz). */

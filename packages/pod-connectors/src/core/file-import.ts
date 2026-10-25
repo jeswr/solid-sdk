@@ -21,22 +21,15 @@
  * container under the user's pod root (the slug-escape guard below).
  */
 import { IntegrationSyncError } from "./errors.js";
-import {
-  adapterContainerUrl,
-  type ImportReport,
-} from "./import-runner.js";
-import { writeResource } from "../../pod-data.js";
-import {
-  type DesiredRegistration,
-  ensureTypeRegistrations,
-} from "../../type-index-write.js";
+import type { ImportReport } from "./import-runner.js";
+import { registrationsFor } from "./pod-writer.js";
 import type {
   ImportProgress,
   IntegrationMetadata,
   NormalisedDoc,
+  PodWriter,
   WrittenDoc,
 } from "./types.js";
-import { VOCAB_PREFIXES } from "./vocab.js";
 
 /**
  * Hard caps for untrusted uploads. A real export is a few MB at most; these
@@ -99,12 +92,8 @@ export interface FileImportAdapter {
 export interface RunFileImportOptions {
   adapter: FileImportAdapter;
   file: ImportFile;
-  webId: string;
-  /** The active storage root (ends with `/`). */
-  podRoot: string;
+  podWriter: PodWriter;
   onProgress?: (p: ImportProgress) => void;
-  /** Test-only pod fetch override; **omit in production**. */
-  podFetch?: typeof fetch;
 }
 
 /**
@@ -112,9 +101,7 @@ export interface RunFileImportOptions {
  * write, then ensure type-index registrations. Returns the same
  * {@link ImportReport} shape the OAuth runner does, so the UI is shared.
  */
-export async function runFileImport(
-  opts: RunFileImportOptions,
-): Promise<ImportReport> {
+export async function runFileImport(opts: RunFileImportOptions): Promise<ImportReport> {
   const { adapter, file } = opts;
   const id = adapter.metadata.id;
 
@@ -125,28 +112,14 @@ export async function runFileImport(
     );
   }
 
-  const root = adapterContainerUrl(opts.podRoot, id);
   const written: WrittenDoc[] = [];
 
   await adapter.importFile(file, {
     maxRows: MAX_ROWS,
-    resolve: (slug) => new URL(slug, root).toString(),
+    resolve: (slug) => opts.podWriter.resolve(slug),
     progress: (p) => opts.onProgress?.(p),
     write: async (doc) => {
-      const url = new URL(doc.slug, root).toString();
-      if (!url.startsWith(root)) {
-        throw new IntegrationSyncError(id, `Slug escapes the adapter container: ${doc.slug}`);
-      }
-      await writeResource(url, doc.dataset, {
-        fetchImpl: opts.podFetch,
-        prefixes: { ...VOCAB_PREFIXES },
-      });
-      const w: WrittenDoc = {
-        url,
-        category: doc.category,
-        forClass: doc.forClass,
-        skipRegistration: doc.skipRegistration,
-      };
+      const w = await opts.podWriter.write(doc);
       written.push(w);
       return w;
     },
@@ -159,12 +132,7 @@ export async function runFileImport(
     );
   }
 
-  const { indexUrl } = await ensureTypeRegistrations({
-    webId: opts.webId,
-    podRoot: opts.podRoot,
-    registrations: registrationsFor(written),
-    fetchImpl: opts.podFetch,
-  });
+  const { indexUrl } = await opts.podWriter.registerType(registrationsFor(written));
 
   return {
     adapterId: id,
@@ -173,17 +141,6 @@ export async function runFileImport(
     categories: [...new Set(written.map((w) => w.category))],
     indexUrl,
   };
-}
-
-/** Distinct (forClass, containing-container) pairs from the written docs. */
-function registrationsFor(written: WrittenDoc[]): DesiredRegistration[] {
-  const out = new Map<string, DesiredRegistration>();
-  for (const w of written) {
-    if (w.skipRegistration) continue;
-    const container = w.url.slice(0, w.url.lastIndexOf("/") + 1);
-    out.set(`${w.forClass}|${container}`, { forClass: w.forClass, container });
-  }
-  return [...out.values()];
 }
 
 function formatBytes(bytes: number): string {

@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
 import { DataFactory } from "n3";
+import { describe, expect, it } from "vitest";
 import { demoImport, TEST_POD_ROOT } from "../core/testing.js";
 import { CLASSES, DigitalDocument } from "../core/vocab.js";
 import { dropboxAdapter } from "./adapter.js";

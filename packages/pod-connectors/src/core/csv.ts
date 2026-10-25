@@ -100,14 +100,14 @@ export function parseCsvRows(text: string, delimiter = ","): string[][] {
  */
 export function parseCsv(text: string, delimiter = ","): ParsedCsv {
   const matrix = parseCsvRows(text, delimiter);
-  if (matrix.length === 0) return { headers: [], rows: [] };
-  const headers = matrix[0].map((h) => h.trim());
+  const [headerRow, ...dataRows] = matrix;
+  if (!headerRow) return { headers: [], rows: [] };
+  const headers = headerRow.map((h) => h.trim());
   const rows: Record<string, string>[] = [];
-  for (let r = 1; r < matrix.length; r++) {
-    const cells = matrix[r];
+  for (const cells of dataRows) {
     const obj: Record<string, string> = {};
-    for (let c = 0; c < headers.length; c++) {
-      obj[headers[c]] = (cells[c] ?? "").trim();
+    for (const [c, header] of headers.entries()) {
+      obj[header] = (cells[c] ?? "").trim();
     }
     rows.push(obj);
   }

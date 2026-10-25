@@ -7,10 +7,10 @@
  * - Tier B → **approval-needed** (platform review gates any user connect)
  * - Tier C → **export-file** (no user-grade API; imports the user's official export file)
  *
- * The gate is env-only: an adapter goes live iff `NEXT_PUBLIC_<APP>_CLIENT_ID`
- * is present at build time (each adapter references its env var literally so
- * Next.js can inline it).
+ * Hosts inject public OAuth configuration through createRegistry().
  */
+
+import type { IntegrationAdapter, IntegrationMetadata } from "./core/types.js";
 import { discordAdapter } from "./discord/adapter.js";
 import { dropboxAdapter } from "./dropbox/adapter.js";
 import { facebookAdapter } from "./facebook/adapter.js";
@@ -31,7 +31,6 @@ import { tiktokAdapter } from "./tiktok/adapter.js";
 import { twitchAdapter } from "./twitch/adapter.js";
 import { xTwitterAdapter } from "./x-twitter/adapter.js";
 import { youtubeAdapter } from "./youtube/adapter.js";
-import type { IntegrationAdapter, IntegrationMetadata } from "./core/types.js";
 
 /** A renderable catalog row — metadata plus tier-specific honesty fields. */
 export interface CatalogEntry extends IntegrationMetadata {
@@ -137,18 +136,117 @@ export const TIER_B: readonly CatalogEntry[] = TIER_B_ADAPTERS.map((a) => ({
 /** Tier C — no user-grade API; the platform's official export file instead. */
 export const TIER_C: readonly CatalogEntry[] = [
   C("netflix", "Netflix", ["media"], "Your viewing history into Media.", "Viewing-activity CSV"),
-  C("amazon-orders", "Amazon orders", ["finance"], "Your order history into Finance.", "Order-history export"),
-  C("uber", "Uber", ["mobility", "finance"], "Your trips and receipts into Mobility and Finance.", "Data download (ZIP/CSV)"),
-  C("apple-health", "Apple Health", ["health"], "Workouts and vitals into Health.", "Health export.zip (XML)"),
-  C("whatsapp", "WhatsApp", ["social"], "Chat history into Social & interests.", "Chat export (TXT)"),
-  C("goodreads", "Goodreads", ["documents"], "Your library and reviews into Documents.", "Library export CSV"),
-  C("steam", "Steam", ["media", "social"], "Your games and playtime into Media and Social.", "Account-data export"),
-  C("chatgpt", "ChatGPT", ["documents"], "Your conversations into Documents.", "Conversations export (JSON)"),
-  C("bank-statements", "Bank statements", ["finance"], "Transactions into Finance.", "CSV / OFX statements"),
-  C("google-takeout", "Google Takeout", ["documents", "media", "calendar"], "Everything Google holds, filed by category.", "Takeout archive"),
+  C(
+    "amazon-orders",
+    "Amazon orders",
+    ["finance"],
+    "Your order history into Finance.",
+    "Order-history export",
+  ),
+  C(
+    "uber",
+    "Uber",
+    ["mobility", "finance"],
+    "Your trips and receipts into Mobility and Finance.",
+    "Data download (ZIP/CSV)",
+  ),
+  C(
+    "apple-health",
+    "Apple Health",
+    ["health"],
+    "Workouts and vitals into Health.",
+    "Health export.zip (XML)",
+  ),
+  C(
+    "whatsapp",
+    "WhatsApp",
+    ["social"],
+    "Chat history into Social & interests.",
+    "Chat export (TXT)",
+  ),
+  C(
+    "goodreads",
+    "Goodreads",
+    ["documents"],
+    "Your library and reviews into Documents.",
+    "Library export CSV",
+  ),
+  C(
+    "steam",
+    "Steam",
+    ["media", "social"],
+    "Your games and playtime into Media and Social.",
+    "Account-data export",
+  ),
+  C(
+    "chatgpt",
+    "ChatGPT",
+    ["documents"],
+    "Your conversations into Documents.",
+    "Conversations export (JSON)",
+  ),
+  C(
+    "bank-statements",
+    "Bank statements",
+    ["finance"],
+    "Transactions into Finance.",
+    "CSV / OFX statements",
+  ),
+  C(
+    "google-takeout",
+    "Google Takeout",
+    ["documents", "media", "calendar"],
+    "Everything Google holds, filed by category.",
+    "Takeout archive",
+  ),
 ];
 
 /** All 30 catalog entries, A → B → C, in display order. */
 export function allCatalogEntries(): CatalogEntry[] {
   return [...ADAPTERS.map((a) => ({ ...a.metadata })), ...TIER_B, ...TIER_C];
+}
+
+/** Public per-source configuration supplied by the host. Tokens stay in SourceAuth. */
+export interface ConnectorConfig {
+  readonly clientId?: string;
+  readonly tokenProxyUrl?: string;
+}
+
+/** Public OAuth configuration keyed by catalog id. */
+export type ConnectorConfigs = Readonly<Record<string, ConnectorConfig>>;
+
+/** Create an isolated catalog with host-provided OAuth configuration. */
+export function createRegistry(config: ConnectorConfigs = {}) {
+  const configured = ALL_ADAPTERS.map((adapter): IntegrationAdapter => {
+    const settings = config[adapter.metadata.id];
+    if (!settings || !adapter.oauth) return adapter;
+    return {
+      ...adapter,
+      oauth: { ...adapter.oauth, ...settings },
+      apiHeaders:
+        adapter.metadata.id === "twitch"
+          ? { ...adapter.apiHeaders, "client-id": settings.clientId ?? "" }
+          : adapter.apiHeaders,
+    };
+  });
+  const byId = new Map(configured.map((adapter) => [adapter.metadata.id, adapter]));
+  const tierA = configured.filter((adapter) => adapter.metadata.tier === "A");
+  const tierB = configured.filter((adapter) => adapter.metadata.tier === "B");
+  return {
+    ADAPTERS: tierA,
+    TIER_B_ADAPTERS: tierB,
+    ALL_ADAPTERS: configured,
+    adapterById: (id: string) => byId.get(id),
+    allCatalogEntries: (): CatalogEntry[] => [
+      ...tierA.map((a) => ({ ...a.metadata })),
+      ...TIER_B,
+      ...TIER_C,
+    ],
+    statusOf: (entry: CatalogEntry): IntegrationStatus => {
+      if (entry.tier === "B") return "approval-needed";
+      if (entry.tier === "C") return "export-file";
+      const adapter = byId.get(entry.id);
+      return adapter && isLive(adapter) ? "live" : "demo";
+    },
+  };
 }

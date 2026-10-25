@@ -1,0 +1,316 @@
+{
+  "name": "@jeswr/pod-connectors",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Source connectors and injected Pod import runners extracted from Pod Manager.",
+  "license": "MIT",
+  "sideEffects": false,
+  "securityCritical": true,
+  "engines": {
+    "node": ">=24"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./oauth": {
+      "types": "./dist/core/oauth.d.ts",
+      "default": "./dist/core/oauth.js"
+    },
+    "./node": {
+      "types": "./dist/node.d.ts",
+      "default": "./dist/node.js"
+    },
+    "./testing": {
+      "types": "./dist/core/testing.d.ts",
+      "default": "./dist/core/testing.js"
+    },
+    "./registry": {
+      "types": "./dist/registry.d.ts",
+      "default": "./dist/registry.js"
+    },
+    "./types": {
+      "types": "./dist/core/types.d.ts",
+      "default": "./dist/core/types.js"
+    },
+    "./file-adapters": {
+      "types": "./dist/file-adapters.d.ts",
+      "default": "./dist/file-adapters.js"
+    },
+    "./core/*": {
+      "types": "./dist/core/*.d.ts",
+      "default": "./dist/core/*.js"
+    },
+    "./pod/*": {
+      "types": "./dist/pod/*.d.ts",
+      "default": "./dist/pod/*.js"
+    },
+    "./adapters/amazon-orders": {
+      "types": "./dist/amazon-orders/file-adapter.d.ts",
+      "default": "./dist/amazon-orders/file-adapter.js"
+    },
+    "./amazon-orders/*": {
+      "types": "./dist/amazon-orders/*.d.ts",
+      "default": "./dist/amazon-orders/*.js"
+    },
+    "./adapters/apple-health": {
+      "types": "./dist/apple-health/file-adapter.d.ts",
+      "default": "./dist/apple-health/file-adapter.js"
+    },
+    "./apple-health/*": {
+      "types": "./dist/apple-health/*.d.ts",
+      "default": "./dist/apple-health/*.js"
+    },
+    "./adapters/bank-statements": {
+      "types": "./dist/bank-statements/file-adapter.d.ts",
+      "default": "./dist/bank-statements/file-adapter.js"
+    },
+    "./bank-statements/*": {
+      "types": "./dist/bank-statements/*.d.ts",
+      "default": "./dist/bank-statements/*.js"
+    },
+    "./adapters/chatgpt": {
+      "types": "./dist/chatgpt/file-adapter.d.ts",
+      "default": "./dist/chatgpt/file-adapter.js"
+    },
+    "./chatgpt/*": {
+      "types": "./dist/chatgpt/*.d.ts",
+      "default": "./dist/chatgpt/*.js"
+    },
+    "./adapters/discord": {
+      "types": "./dist/discord/adapter.d.ts",
+      "default": "./dist/discord/adapter.js"
+    },
+    "./discord/*": {
+      "types": "./dist/discord/*.d.ts",
+      "default": "./dist/discord/*.js"
+    },
+    "./adapters/dropbox": {
+      "types": "./dist/dropbox/adapter.d.ts",
+      "default": "./dist/dropbox/adapter.js"
+    },
+    "./dropbox/*": {
+      "types": "./dist/dropbox/*.d.ts",
+      "default": "./dist/dropbox/*.js"
+    },
+    "./adapters/facebook": {
+      "types": "./dist/facebook/adapter.d.ts",
+      "default": "./dist/facebook/adapter.js"
+    },
+    "./facebook/*": {
+      "types": "./dist/facebook/*.d.ts",
+      "default": "./dist/facebook/*.js"
+    },
+    "./adapters/fitbit": {
+      "types": "./dist/fitbit/adapter.d.ts",
+      "default": "./dist/fitbit/adapter.js"
+    },
+    "./fitbit/*": {
+      "types": "./dist/fitbit/*.d.ts",
+      "default": "./dist/fitbit/*.js"
+    },
+    "./adapters/garmin": {
+      "types": "./dist/adapters-garmin.d.ts",
+      "default": "./dist/adapters-garmin.js"
+    },
+    "./garmin/*": {
+      "types": "./dist/garmin/*.d.ts",
+      "default": "./dist/garmin/*.js"
+    },
+    "./adapters/github": {
+      "types": "./dist/github/adapter.d.ts",
+      "default": "./dist/github/adapter.js"
+    },
+    "./github/*": {
+      "types": "./dist/github/*.d.ts",
+      "default": "./dist/github/*.js"
+    },
+    "./adapters/goodreads": {
+      "types": "./dist/goodreads/file-adapter.d.ts",
+      "default": "./dist/goodreads/file-adapter.js"
+    },
+    "./goodreads/*": {
+      "types": "./dist/goodreads/*.d.ts",
+      "default": "./dist/goodreads/*.js"
+    },
+    "./adapters/google-calendar": {
+      "types": "./dist/google-calendar/adapter.d.ts",
+      "default": "./dist/google-calendar/adapter.js"
+    },
+    "./google-calendar/*": {
+      "types": "./dist/google-calendar/*.d.ts",
+      "default": "./dist/google-calendar/*.js"
+    },
+    "./adapters/google-photos": {
+      "types": "./dist/google-photos/adapter.d.ts",
+      "default": "./dist/google-photos/adapter.js"
+    },
+    "./google-photos/*": {
+      "types": "./dist/google-photos/*.d.ts",
+      "default": "./dist/google-photos/*.js"
+    },
+    "./adapters/google-takeout": {
+      "types": "./dist/google-takeout/file-adapter.d.ts",
+      "default": "./dist/google-takeout/file-adapter.js"
+    },
+    "./google-takeout/*": {
+      "types": "./dist/google-takeout/*.d.ts",
+      "default": "./dist/google-takeout/*.js"
+    },
+    "./adapters/instagram": {
+      "types": "./dist/instagram/adapter.d.ts",
+      "default": "./dist/instagram/adapter.js"
+    },
+    "./instagram/*": {
+      "types": "./dist/instagram/*.d.ts",
+      "default": "./dist/instagram/*.js"
+    },
+    "./adapters/linkedin": {
+      "types": "./dist/linkedin/adapter.d.ts",
+      "default": "./dist/linkedin/adapter.js"
+    },
+    "./linkedin/*": {
+      "types": "./dist/linkedin/*.d.ts",
+      "default": "./dist/linkedin/*.js"
+    },
+    "./adapters/netflix": {
+      "types": "./dist/netflix/file-adapter.d.ts",
+      "default": "./dist/netflix/file-adapter.js"
+    },
+    "./netflix/*": {
+      "types": "./dist/netflix/*.d.ts",
+      "default": "./dist/netflix/*.js"
+    },
+    "./adapters/notion": {
+      "types": "./dist/notion/adapter.d.ts",
+      "default": "./dist/notion/adapter.js"
+    },
+    "./notion/*": {
+      "types": "./dist/notion/*.d.ts",
+      "default": "./dist/notion/*.js"
+    },
+    "./adapters/pinterest": {
+      "types": "./dist/pinterest/adapter.d.ts",
+      "default": "./dist/pinterest/adapter.js"
+    },
+    "./pinterest/*": {
+      "types": "./dist/pinterest/*.d.ts",
+      "default": "./dist/pinterest/*.js"
+    },
+    "./adapters/reddit": {
+      "types": "./dist/reddit/adapter.d.ts",
+      "default": "./dist/reddit/adapter.js"
+    },
+    "./reddit/*": {
+      "types": "./dist/reddit/*.d.ts",
+      "default": "./dist/reddit/*.js"
+    },
+    "./adapters/slack": {
+      "types": "./dist/slack/adapter.d.ts",
+      "default": "./dist/slack/adapter.js"
+    },
+    "./slack/*": {
+      "types": "./dist/slack/*.d.ts",
+      "default": "./dist/slack/*.js"
+    },
+    "./adapters/spotify": {
+      "types": "./dist/spotify/adapter.d.ts",
+      "default": "./dist/spotify/adapter.js"
+    },
+    "./spotify/*": {
+      "types": "./dist/spotify/*.d.ts",
+      "default": "./dist/spotify/*.js"
+    },
+    "./adapters/steam": {
+      "types": "./dist/steam/file-adapter.d.ts",
+      "default": "./dist/steam/file-adapter.js"
+    },
+    "./steam/*": {
+      "types": "./dist/steam/*.d.ts",
+      "default": "./dist/steam/*.js"
+    },
+    "./adapters/strava": {
+      "types": "./dist/strava/adapter.d.ts",
+      "default": "./dist/strava/adapter.js"
+    },
+    "./strava/*": {
+      "types": "./dist/strava/*.d.ts",
+      "default": "./dist/strava/*.js"
+    },
+    "./adapters/tiktok": {
+      "types": "./dist/tiktok/adapter.d.ts",
+      "default": "./dist/tiktok/adapter.js"
+    },
+    "./tiktok/*": {
+      "types": "./dist/tiktok/*.d.ts",
+      "default": "./dist/tiktok/*.js"
+    },
+    "./adapters/twitch": {
+      "types": "./dist/twitch/adapter.d.ts",
+      "default": "./dist/twitch/adapter.js"
+    },
+    "./twitch/*": {
+      "types": "./dist/twitch/*.d.ts",
+      "default": "./dist/twitch/*.js"
+    },
+    "./adapters/uber": {
+      "types": "./dist/uber/file-adapter.d.ts",
+      "default": "./dist/uber/file-adapter.js"
+    },
+    "./uber/*": {
+      "types": "./dist/uber/*.d.ts",
+      "default": "./dist/uber/*.js"
+    },
+    "./adapters/whatsapp": {
+      "types": "./dist/whatsapp/file-adapter.d.ts",
+      "default": "./dist/whatsapp/file-adapter.js"
+    },
+    "./whatsapp/*": {
+      "types": "./dist/whatsapp/*.d.ts",
+      "default": "./dist/whatsapp/*.js"
+    },
+    "./adapters/x-twitter": {
+      "types": "./dist/x-twitter/adapter.d.ts",
+      "default": "./dist/x-twitter/adapter.js"
+    },
+    "./x-twitter/*": {
+      "types": "./dist/x-twitter/*.d.ts",
+      "default": "./dist/x-twitter/*.js"
+    },
+    "./adapters/youtube": {
+      "types": "./dist/youtube/adapter.d.ts",
+      "default": "./dist/youtube/adapter.js"
+    },
+    "./youtube/*": {
+      "types": "./dist/youtube/*.d.ts",
+      "default": "./dist/youtube/*.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "SKILL.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "biome check .",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@jeswr/fetch-rdf": "^0.1.0",
+    "@jeswr/guarded-fetch": "workspace:*",
+    "@rdfjs/wrapper": "^0.34.0",
+    "@solid/object": "^0.6.0",
+    "n3": "^2.0.3"
+  },
+  "devDependencies": {
+    "@rdfjs/types": "^2.0.1",
+    "@types/n3": "^1.26.1",
+    "@biomejs/biome": "^2.5.1",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.9"
+  }
+}

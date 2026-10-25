@@ -12,7 +12,7 @@ import { DataFactory, Store } from "n3";
 import { getJson } from "../core/fixture-fetch.js";
 import type { ImportContext, ImportOutcome, IntegrationAdapter } from "../core/types.js";
 import { CLASSES, Organisation } from "../core/vocab.js";
-import { type SlackAuthTest, type SlackConversationsList, SLACK_FIXTURES } from "./fixtures.js";
+import { SLACK_FIXTURES, type SlackAuthTest, type SlackConversationsList } from "./fixtures.js";
 
 const ID = "slack";
 const API = "https://slack.com/api";
@@ -34,12 +34,12 @@ export const slackAdapter: IntegrationAdapter = {
     ],
   },
   oauth: {
-    clientId: process.env.NEXT_PUBLIC_SLACK_CLIENT_ID,
+    clientId: undefined,
     authorizationEndpoint: "https://slack.com/oauth/v2/authorize",
     tokenEndpoint: "https://slack.com/api/oauth.v2.access",
     scopes: SCOPES,
     tokenExchange: "proxy",
-    tokenProxyUrl: process.env.NEXT_PUBLIC_SLACK_TOKEN_PROXY,
+    tokenProxyUrl: undefined,
     // Slack puts user scopes under `user_scope` rather than `scope`.
     extraAuthParams: { user_scope: SCOPES.join(",") },
   },

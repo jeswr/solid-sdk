@@ -73,9 +73,11 @@ export const whatsappFileAdapter: FileImportAdapter = {
 };
 
 // `[14/02/2023, 09:30:15] Alice: Hi`  — iOS bracketed form.
-const IOS = /^\[(\d{1,2})[/.](\d{1,2})[/.](\d{2,4}),?\s+(\d{1,2}):(\d{2})(?::(\d{2}))?(?:\s*([AaPp][Mm]))?\]\s*([^:]+):\s?([\s\S]*)$/;
+const IOS =
+  /^\[(\d{1,2})[/.](\d{1,2})[/.](\d{2,4}),?\s+(\d{1,2}):(\d{2})(?::(\d{2}))?(?:\s*([AaPp][Mm]))?\]\s*([^:]+):\s?([\s\S]*)$/;
 // `2/14/23, 9:30 AM - Alice: Hi`  — Android dash form.
-const ANDROID = /^(\d{1,2})[/.](\d{1,2})[/.](\d{2,4}),?\s+(\d{1,2}):(\d{2})(?::(\d{2}))?(?:\s*([AaPp][Mm]))?\s+-\s+([^:]+):\s?([\s\S]*)$/;
+const ANDROID =
+  /^(\d{1,2})[/.](\d{1,2})[/.](\d{2,4}),?\s+(\d{1,2}):(\d{2})(?::(\d{2}))?(?:\s*([AaPp][Mm]))?\s+-\s+([^:]+):\s?([\s\S]*)$/;
 
 /** Parse a WhatsApp transcript into messages, joining continuation lines. */
 export function parseWhatsappChat(text: string, limit = Number.POSITIVE_INFINITY): ChatMessage[] {
@@ -97,7 +99,7 @@ export function parseWhatsappChat(text: string, limit = Number.POSITIVE_INFINITY
     if (m) {
       flush();
       if (out.length >= limit) break;
-      const [, a, b, y, h, mi, s, ampm, sender, body] = m;
+      const [, a = "", b = "", y = "", h = "", mi = "", s, ampm, sender = "", body = ""] = m;
       current = { when: buildDate(a, b, y, h, mi, s, ampm), sender: sender.trim(), parts: [body] };
     } else if (current) {
       current.parts.push(clean);

@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
 import { DataFactory } from "n3";
+import { describe, expect, it } from "vitest";
 import { fileImport, memoryFile, TEST_POD_ROOT } from "../core/testing.js";
 import { CLASSES, ExerciseAction } from "../core/vocab.js";
 import { appleHealthFileAdapter, humanWorkoutType, parseAppleDate } from "./file-adapter.js";
@@ -37,7 +37,8 @@ describe("apple-health file adapter", () => {
     );
     const ds = pod.dataset(DOC);
     const run = [...ds].find(
-      (q) => q.predicate.value === "https://schema.org/exerciseType" && q.object.value === "Running",
+      (q) =>
+        q.predicate.value === "https://schema.org/exerciseType" && q.object.value === "Running",
     );
     expect(run).toBeDefined();
     const ex = new ExerciseAction(run!.subject.value, ds, DataFactory);

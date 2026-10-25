@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
 import { DataFactory } from "n3";
+import { describe, expect, it } from "vitest";
 import { demoImport, TEST_POD_ROOT } from "../core/testing.js";
 import { CLASSES, Group, SocialMediaPosting } from "../core/vocab.js";
 import { redditAdapter } from "./adapter.js";

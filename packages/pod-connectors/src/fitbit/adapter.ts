@@ -12,7 +12,7 @@ import { DataFactory, Store } from "n3";
 import { getJson } from "../core/fixture-fetch.js";
 import type { ImportContext, ImportOutcome, IntegrationAdapter } from "../core/types.js";
 import { CLASSES, ExerciseAction } from "../core/vocab.js";
-import { type FitbitActivitiesAnswer, FITBIT_FIXTURES } from "./fixtures.js";
+import { FITBIT_FIXTURES, type FitbitActivitiesAnswer } from "./fixtures.js";
 
 const ID = "fitbit";
 const API = "https://api.fitbit.com";
@@ -34,12 +34,12 @@ export const fitbitAdapter: IntegrationAdapter = {
     ],
   },
   oauth: {
-    clientId: process.env.NEXT_PUBLIC_FITBIT_CLIENT_ID,
+    clientId: undefined,
     authorizationEndpoint: "https://www.fitbit.com/oauth2/authorize",
     tokenEndpoint: "https://api.fitbit.com/oauth2/token",
     scopes: SCOPES,
     tokenExchange: "proxy",
-    tokenProxyUrl: process.env.NEXT_PUBLIC_FITBIT_TOKEN_PROXY,
+    tokenProxyUrl: undefined,
   },
   fixtures: () => FITBIT_FIXTURES,
 

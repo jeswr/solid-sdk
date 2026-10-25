@@ -1,3 +1,5 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+
 /**
  * Test doubles for the integrations framework (imported by vitest only).
  *
@@ -7,13 +9,10 @@
  * type-index bootstrap, idempotent re-import) without any network.
  */
 import { Parser, Store } from "n3";
-import {
-  type FileImportAdapter,
-  type ImportFile,
-  runFileImport,
-} from "./file-import.js";
+import { type FileImportAdapter, type ImportFile, runFileImport } from "./file-import.js";
 import { fixtureFetch } from "./fixture-fetch.js";
-import { type ImportReport, runImport } from "./import-runner.js";
+import { createSourceAuth, type ImportReport, runImport } from "./import-runner.js";
+import { createFetchPodWriter } from "./pod-writer.js";
 import type { FixtureRoute, IntegrationAdapter } from "./types.js";
 
 export const TEST_POD_ROOT = "https://pod.test/alice/";
@@ -168,11 +167,14 @@ export async function demoImport(
   const pod = opts?.pod ?? createMemoryPod();
   const report = await runImport({
     adapter,
-    webId: TEST_WEBID,
-    podRoot: TEST_POD_ROOT,
+    podWriter: createFetchPodWriter({
+      adapterId: adapter.metadata.id,
+      webId: TEST_WEBID,
+      podRoot: TEST_POD_ROOT,
+      fetch: pod.fetch,
+    }),
     mode: "demo",
     cursor: opts?.cursor,
-    podFetch: pod.fetch,
   });
   return { pod, report };
 }
@@ -195,13 +197,20 @@ export async function sparseImport(
   const pod = opts?.pod ?? createMemoryPod();
   const report = await runImport({
     adapter,
-    webId: TEST_WEBID,
-    podRoot: TEST_POD_ROOT,
+    podWriter: createFetchPodWriter({
+      adapterId: adapter.metadata.id,
+      webId: TEST_WEBID,
+      podRoot: TEST_POD_ROOT,
+      fetch: pod.fetch,
+    }),
     mode: "live",
-    token: { accessToken: "test-token", tokenType: "Bearer" },
+    sourceAuth: createSourceAuth(
+      adapter.metadata.id,
+      adapter,
+      { accessToken: "test-token", tokenType: "Bearer" },
+      fixtureFetch(adapter.metadata.id, routes),
+    ),
     cursor: opts?.cursor,
-    podFetch: pod.fetch,
-    apiFetch: fixtureFetch(adapter.metadata.id, routes),
   });
   return { pod, report };
 }
@@ -222,11 +231,7 @@ export function expectCleanTurtle(pod: MemoryPod, url: string): Store {
 }
 
 /** An in-memory {@link ImportFile} from a string (the parser only reads text). */
-export function memoryFile(
-  name: string,
-  content: string,
-  type = "text/plain",
-): ImportFile {
+export function memoryFile(name: string, content: string, type = "text/plain"): ImportFile {
   const bytes = new TextEncoder().encode(content);
   return {
     name,
@@ -249,9 +254,15 @@ export async function fileImport(
   const report = await runFileImport({
     adapter,
     file,
-    webId: TEST_WEBID,
-    podRoot: TEST_POD_ROOT,
-    podFetch: pod.fetch,
+    podWriter: createFetchPodWriter({
+      adapterId: adapter.metadata.id,
+      webId: TEST_WEBID,
+      podRoot: TEST_POD_ROOT,
+      fetch: pod.fetch,
+    }),
   });
   return { pod, report };
 }
+
+/** Recorded source fetch for fixture-only tests. */
+export { fixtureFetch, getJson } from "./fixture-fetch.js";

@@ -9,9 +9,9 @@
  * cursors).
  */
 import { DataFactory, Store } from "n3";
+import { IntegrationSyncError } from "../core/errors.js";
 import { getJson } from "../core/fixture-fetch.js";
 import { arr, optionalDate, optionalText, SkipCounter } from "../core/safe.js";
-import { IntegrationSyncError } from "../core/errors.js";
 import type { ImportContext, ImportOutcome, IntegrationAdapter } from "../core/types.js";
 import { CLASSES, WatchAction } from "../core/vocab.js";
 import { TWITCH_FIXTURES, type TwitchFollowsAnswer, type TwitchUsersAnswer } from "./fixtures.js";
@@ -37,15 +37,15 @@ export const twitchAdapter: IntegrationAdapter = {
     ],
   },
   oauth: {
-    clientId: process.env.NEXT_PUBLIC_TWITCH_CLIENT_ID,
+    clientId: undefined,
     authorizationEndpoint: "https://id.twitch.tv/oauth2/authorize",
     tokenEndpoint: "https://id.twitch.tv/oauth2/token",
     scopes: SCOPES,
     tokenExchange: "proxy",
-    tokenProxyUrl: process.env.NEXT_PUBLIC_TWITCH_TOKEN_PROXY,
+    tokenProxyUrl: undefined,
   },
   // Helix rejects calls without the app's Client-Id header.
-  apiHeaders: { "client-id": process.env.NEXT_PUBLIC_TWITCH_CLIENT_ID ?? "" },
+  apiHeaders: { "client-id": "" },
   fixtures: () => TWITCH_FIXTURES,
 
   async import(ctx: ImportContext): Promise<ImportOutcome> {
@@ -58,7 +58,10 @@ export const twitchAdapter: IntegrationAdapter = {
     const me = arr(users?.data)[0];
     const myId = optionalText(me?.id);
     if (myId === undefined) {
-      throw new IntegrationSyncError(ID, "Twitch did not return your user id — cannot list follows.");
+      throw new IntegrationSyncError(
+        ID,
+        "Twitch did not return your user id — cannot list follows.",
+      );
     }
 
     ctx.progress({ label: "Fetching the channels you follow…", done: 1, total: 2 });
@@ -77,11 +80,7 @@ export const twitchAdapter: IntegrationAdapter = {
         skipped.skip();
         continue;
       }
-      const watch = new WatchAction(
-        `${doc}#follow-${broadcasterId}`,
-        dataset,
-        DataFactory,
-      ).mark();
+      const watch = new WatchAction(`${doc}#follow-${broadcasterId}`, dataset, DataFactory).mark();
       watch.name = optionalText(f.broadcaster_name);
       watch.identifier = broadcasterId;
       const login = optionalText(f.broadcaster_login);

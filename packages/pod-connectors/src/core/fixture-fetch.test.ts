@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import { IntegrationSyncError, RateLimitedError } from "./errors.js";
 import { fixtureFetch, getJson, postJson } from "./fixture-fetch.js";
 import type { FixtureRoute } from "./types.js";
@@ -22,13 +22,9 @@ describe("fixtureFetch", () => {
   });
 
   it("throws (never hits the network) for an unrecorded call", async () => {
-    await expect(api("https://api.test/v1/unknown")).rejects.toBeInstanceOf(
-      IntegrationSyncError,
-    );
+    await expect(api("https://api.test/v1/unknown")).rejects.toBeInstanceOf(IntegrationSyncError);
     // Method counts: GET /v1/search is not the recorded POST route.
-    await expect(api("https://api.test/v1/search")).rejects.toBeInstanceOf(
-      IntegrationSyncError,
-    );
+    await expect(api("https://api.test/v1/search")).rejects.toBeInstanceOf(IntegrationSyncError);
   });
 });
 
@@ -39,15 +35,15 @@ describe("getJson / postJson error mapping", () => {
     await expect(getJson("demo", api, "https://api.test/v1/me")).resolves.toEqual({
       id: "u1",
     });
-    await expect(
-      postJson("demo", api, "https://api.test/v1/search", { q: "x" }),
-    ).resolves.toEqual({ results: [] });
+    await expect(postJson("demo", api, "https://api.test/v1/search", { q: "x" })).resolves.toEqual({
+      results: [],
+    });
   });
 
   it("maps 429 to RateLimitedError", async () => {
-    await expect(
-      getJson("demo", api, "https://api.test/v1/limited"),
-    ).rejects.toBeInstanceOf(RateLimitedError);
+    await expect(getJson("demo", api, "https://api.test/v1/limited")).rejects.toBeInstanceOf(
+      RateLimitedError,
+    );
   });
 
   it("maps other failures to IntegrationSyncError with the status", async () => {

@@ -79,7 +79,10 @@ function asString(v: unknown): string | undefined {
 }
 
 /** Parse `conversations.json` into flattened conversations (bounded by `limit`). */
-export function parseChatgptExport(text: string, limit = Number.POSITIVE_INFINITY): FlatConversation[] {
+export function parseChatgptExport(
+  text: string,
+  limit = Number.POSITIVE_INFINITY,
+): FlatConversation[] {
   let data: unknown;
   try {
     data = JSON.parse(text);
@@ -137,7 +140,9 @@ function extractParts(content: unknown): string {
   const parts = content.parts;
   if (!Array.isArray(parts)) return "";
   return parts
-    .map((p) => (typeof p === "string" ? p : isObject(p) && asString(p.text) ? asString(p.text) : ""))
+    .map((p) =>
+      typeof p === "string" ? p : isObject(p) && asString(p.text) ? asString(p.text) : "",
+    )
     .filter(Boolean)
     .join("\n")
     .trim();

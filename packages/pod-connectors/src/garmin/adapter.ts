@@ -18,7 +18,7 @@ import { DataFactory, Store } from "n3";
 import { getJson } from "../core/fixture-fetch.js";
 import type { ImportContext, ImportOutcome, IntegrationAdapter } from "../core/types.js";
 import { CLASSES, ExerciseAction, TravelAction } from "../core/vocab.js";
-import { type GarminActivitiesAnswer, GARMIN_FIXTURES } from "./fixtures.js";
+import { GARMIN_FIXTURES, type GarminActivitiesAnswer } from "./fixtures.js";
 
 const ID = "garmin";
 const API = "https://apis.garmin.com";
@@ -44,12 +44,12 @@ export const garminAdapter: IntegrationAdapter = {
     ],
   },
   oauth: {
-    clientId: process.env.NEXT_PUBLIC_GARMIN_CLIENT_ID,
+    clientId: undefined,
     authorizationEndpoint: "https://connect.garmin.com/oauth2Confirm",
     tokenEndpoint: "https://diauth.garmin.com/di-oauth2-service/oauth/token",
     scopes: SCOPES,
     tokenExchange: "proxy",
-    tokenProxyUrl: process.env.NEXT_PUBLIC_GARMIN_TOKEN_PROXY,
+    tokenProxyUrl: undefined,
   },
   fixtures: () => GARMIN_FIXTURES,
 
@@ -68,9 +68,14 @@ export const garminAdapter: IntegrationAdapter = {
 
     for (const a of list) {
       const start = new Date(`${a.startTimeGMT.replace(" ", "T")}Z`);
-      const distance = a.distanceInMeters !== undefined ? metresToKm(a.distanceInMeters) : undefined;
+      const distance =
+        a.distanceInMeters !== undefined ? metresToKm(a.distanceInMeters) : undefined;
       if (TRAVEL_TYPES.has(a.activityType.typeKey)) {
-        const tr = new TravelAction(`${travelDoc}#journey-${a.activityId}`, journeys, DataFactory).mark();
+        const tr = new TravelAction(
+          `${travelDoc}#journey-${a.activityId}`,
+          journeys,
+          DataFactory,
+        ).mark();
         tr.name = a.activityName;
         tr.identifier = String(a.activityId);
         tr.startTime = start;
@@ -78,7 +83,11 @@ export const garminAdapter: IntegrationAdapter = {
         if (distance) tr.distance = distance;
         tr.sourceUrl = `https://connect.garmin.com/modern/activity/${a.activityId}`;
       } else {
-        const ex = new ExerciseAction(`${exDoc}#activity-${a.activityId}`, exercises, DataFactory).mark();
+        const ex = new ExerciseAction(
+          `${exDoc}#activity-${a.activityId}`,
+          exercises,
+          DataFactory,
+        ).mark();
         ex.name = a.activityName;
         ex.identifier = String(a.activityId);
         ex.exerciseType = a.activityType.typeKey;

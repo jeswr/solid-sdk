@@ -13,7 +13,7 @@ import { postJson } from "../core/fixture-fetch.js";
 import { arr, optionalDate, optionalText, SkipCounter } from "../core/safe.js";
 import type { ImportContext, ImportOutcome, IntegrationAdapter } from "../core/types.js";
 import { CLASSES, DataCollection, DigitalDocument } from "../core/vocab.js";
-import { type NotionPage, type NotionSearchAnswer, NOTION_FIXTURES } from "./fixtures.js";
+import { NOTION_FIXTURES, type NotionPage, type NotionSearchAnswer } from "./fixtures.js";
 
 const ID = "notion";
 const API = "https://api.notion.com/v1";
@@ -35,12 +35,12 @@ export const notionAdapter: IntegrationAdapter = {
     ],
   },
   oauth: {
-    clientId: process.env.NEXT_PUBLIC_NOTION_CLIENT_ID,
+    clientId: undefined,
     authorizationEndpoint: "https://api.notion.com/v1/oauth/authorize",
     tokenEndpoint: "https://api.notion.com/v1/oauth/token",
     scopes: [],
     tokenExchange: "proxy",
-    tokenProxyUrl: process.env.NEXT_PUBLIC_NOTION_TOKEN_PROXY,
+    tokenProxyUrl: undefined,
     extraAuthParams: { owner: "user" },
   },
   apiHeaders: { "notion-version": "2022-06-28" },

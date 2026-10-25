@@ -36,9 +36,7 @@ export interface IntegrationMetadata {
 /** OAuth2 endpoints + per-app parameters for the shared PKCE engine. */
 export interface OAuthAppConfig {
   /**
-   * Public client id from `NEXT_PUBLIC_<APP>_CLIENT_ID`. Adapters must
-   * reference their env var **literally** (Next.js inlines at build time).
-   * Absent ⇒ the adapter is demo-only.
+   * Public client id injected by the host. Absent means demo-only.
    */
   readonly clientId?: string;
   readonly authorizationEndpoint: string;
@@ -49,7 +47,7 @@ export interface OAuthAppConfig {
    * `"public"`: the platform exchanges code→token for secretless PKCE clients.
    * `"proxy"`: the platform insists on a client secret, so the exchange goes
    * through the maintainer-deployed proxy at `tokenProxyUrl`
-   * (`NEXT_PUBLIC_<APP>_TOKEN_PROXY`). Without it the adapter stays demo.
+   *. Without it the adapter stays demo.
    */
   readonly tokenExchange: "public" | "proxy";
   readonly tokenProxyUrl?: string;
@@ -168,4 +166,32 @@ export interface IntegrationAdapter {
   fixtures(): readonly FixtureRoute[];
   /** Pull → normalise → `ctx.write(...)`. Pure with respect to `ctx`. */
   import(ctx: ImportContext): Promise<ImportOutcome>;
+}
+
+/** Conditional HTTP write semantics shared by PodWriter implementations. */
+export type WriteConditions =
+  | { readonly ifMatch?: string; readonly ifNoneMatch?: never }
+  | { readonly ifMatch?: never; readonly ifNoneMatch: "*" };
+
+/** One class-to-container Type Index registration. */
+export interface TypeRegistrationRequest {
+  readonly forClass: string;
+  readonly container: string;
+}
+
+/** Host-owned storage port, bound to one connector's document container. */
+export interface PodWriter {
+  /** Resolve an adapter-relative slug within its container. */
+  resolve(slug: string): string;
+  /** Read existing RDF and its ETag; undefined only for a missing document. */
+  read(slug: string): Promise<{ dataset: DatasetCore; etag: string | null } | undefined>;
+  /** Write RDF, preserving the caller's conditional-write precondition. */
+  write(doc: NormalisedDoc, conditions?: WriteConditions): Promise<WrittenDoc>;
+  /** Ensure the distinct class/container registrations and report the index used. */
+  registerType(registrations: readonly TypeRegistrationRequest[]): Promise<{ indexUrl: string }>;
+}
+
+/** Host-owned source API transport, already authenticated for this source. */
+export interface SourceAuth {
+  readonly fetch: typeof fetch;
 }

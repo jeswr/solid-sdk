@@ -1,7 +1,10 @@
-import { describe, it, expect } from "vitest";
+// AUTHORED-BY Codex GPT-6.1-Sol
+
 import { DataFactory, Store } from "n3";
+import { describe, expect, it } from "vitest";
 import { IntegrationSyncError } from "./errors.js";
-import { runImport } from "./import-runner.js";
+import { createSourceAuth, runImport } from "./import-runner.js";
+import { createFetchPodWriter } from "./pod-writer.js";
 import { createMemoryPod, TEST_POD_ROOT, TEST_WEBID } from "./testing.js";
 import type { ImportContext, IntegrationAdapter } from "./types.js";
 import { CLASSES, MusicRecording } from "./vocab.js";
@@ -50,10 +53,14 @@ describe("runImport (demo mode, memory pod)", () => {
 
     const report = await runImport({
       adapter: toyAdapter,
-      webId: TEST_WEBID,
-      podRoot: TEST_POD_ROOT,
+      podWriter: createFetchPodWriter({
+        adapterId: "toy",
+        webId: TEST_WEBID,
+        podRoot: TEST_POD_ROOT,
+        fetch: pod.fetch,
+      }),
       mode: "demo",
-      podFetch: pod.fetch,
+
       onProgress: (p) => progress.push(p.label),
     });
 
@@ -78,10 +85,13 @@ describe("runImport (demo mode, memory pod)", () => {
     const pod = createMemoryPod();
     const opts = {
       adapter: toyAdapter,
-      webId: TEST_WEBID,
-      podRoot: TEST_POD_ROOT,
+      podWriter: createFetchPodWriter({
+        adapterId: "toy",
+        webId: TEST_WEBID,
+        podRoot: TEST_POD_ROOT,
+        fetch: pod.fetch,
+      }),
       mode: "demo" as const,
-      podFetch: pod.fetch,
     };
     const first = await runImport(opts);
     const urlsAfterFirst = pod.urls();
@@ -99,10 +109,13 @@ describe("runImport (demo mode, memory pod)", () => {
     await expect(
       runImport({
         adapter: toyAdapter,
-        webId: TEST_WEBID,
-        podRoot: TEST_POD_ROOT,
+        podWriter: createFetchPodWriter({
+          adapterId: "toy",
+          webId: TEST_WEBID,
+          podRoot: TEST_POD_ROOT,
+          fetch: pod.fetch,
+        }),
         mode: "live",
-        podFetch: pod.fetch,
       }),
     ).rejects.toBeInstanceOf(IntegrationSyncError);
   });
@@ -118,14 +131,80 @@ describe("runImport (demo mode, memory pod)", () => {
 
     await runImport({
       adapter: toyAdapter,
-      webId: TEST_WEBID,
-      podRoot: TEST_POD_ROOT,
+      podWriter: createFetchPodWriter({
+        adapterId: "toy",
+        webId: TEST_WEBID,
+        podRoot: TEST_POD_ROOT,
+        fetch: pod.fetch,
+      }),
       mode: "live",
-      token: { accessToken: "tok-1", tokenType: "Bearer" },
-      podFetch: pod.fetch,
-      apiFetch,
+      sourceAuth: createSourceAuth(
+        "toy",
+        toyAdapter,
+        { accessToken: "tok-1", tokenType: "Bearer" },
+        apiFetch,
+      ),
     });
 
     expect(seen[0]).toEqual({ authorization: "Bearer tok-1", "x-toy": "1" });
   });
+});
+
+// AUTHORED-BY Codex GPT-6.1-Sol
+it("runs over explicit storage and source ports without using global fetch", async () => {
+  const { vi } = await import("vitest");
+  const globalFetch = vi
+    .spyOn(globalThis, "fetch")
+    .mockRejectedValue(new Error("unexpected global I/O"));
+  const resolved: string[] = [];
+  const written: import("./types.js").WrittenDoc[] = [];
+  const sourceAuth = {
+    fetch: vi.fn<typeof fetch>().mockResolvedValue(Response.json({ songs: [] })),
+  };
+  const registerType = vi.fn().mockResolvedValue({ indexUrl: "https://memory.test/index" });
+  const podWriter: import("./types.js").PodWriter = {
+    resolve: (slug) => {
+      resolved.push(slug);
+      return `https://memory.test/${slug}`;
+    },
+    read: async () => undefined,
+    write: async (doc) => {
+      const result = {
+        url: `https://memory.test/${doc.slug}`,
+        category: doc.category,
+        forClass: doc.forClass,
+      };
+      written.push(result);
+      return result;
+    },
+    registerType,
+  };
+  try {
+    const adapter: IntegrationAdapter = {
+      ...toyAdapter,
+      async import(ctx) {
+        expect(await ctx.read("old.ttl")).toBeUndefined();
+        ctx.resolve("music/songs.ttl");
+        await ctx.api("https://source.test/songs");
+        await ctx.write({
+          slug: "music/songs.ttl",
+          category: "media",
+          forClass: CLASSES.MusicRecording,
+          dataset: new Store(),
+        });
+        return {};
+      },
+    };
+    const report = await runImport({ adapter, mode: "live", podWriter, sourceAuth });
+    expect(report.written).toEqual(written);
+    expect(report.indexUrl).toBe("https://memory.test/index");
+    expect(resolved).toEqual(["music/songs.ttl"]);
+    expect(sourceAuth.fetch).toHaveBeenCalledOnce();
+    expect(registerType).toHaveBeenCalledWith([
+      { forClass: CLASSES.MusicRecording, container: "https://memory.test/music/" },
+    ]);
+    expect(globalFetch).not.toHaveBeenCalled();
+  } finally {
+    globalFetch.mockRestore();
+  }
 });

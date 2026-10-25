@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
 import { DataFactory } from "n3";
+import { describe, expect, it } from "vitest";
 import { fileImport, memoryFile, TEST_POD_ROOT } from "../core/testing.js";
 import { CLASSES, Invoice, TravelAction } from "../core/vocab.js";
 import { uberFileAdapter } from "./file-adapter.js";
@@ -35,10 +35,7 @@ describe("uber file adapter", () => {
   });
 
   it("captures distance, start time and fare details", async () => {
-    const { pod } = await fileImport(
-      uberFileAdapter,
-      memoryFile("t.csv", SAMPLE, "text/csv"),
-    );
+    const { pod } = await fileImport(uberFileAdapter, memoryFile("t.csv", SAMPLE, "text/csv"));
     const trips = pod.dataset(TRIPS);
     const startQuad = [...trips].find((q) => q.predicate.value === "https://schema.org/startTime");
     const trip = new TravelAction(startQuad!.subject.value, trips, DataFactory);
@@ -47,7 +44,9 @@ describe("uber file adapter", () => {
     expect(trip.startTime?.toISOString()).toBe("2023-02-14T09:30:00.000Z");
 
     const fares = pod.dataset(FARES);
-    const fareQuad = [...fares].find((q) => q.predicate.value === "https://schema.org/totalPaymentDue");
+    const fareQuad = [...fares].find(
+      (q) => q.predicate.value === "https://schema.org/totalPaymentDue",
+    );
     const inv = new Invoice(fareQuad!.subject.value, fares, DataFactory);
     expect(inv.totalPaymentDue).toBe("14.50");
     expect(inv.priceCurrency).toBe("GBP");

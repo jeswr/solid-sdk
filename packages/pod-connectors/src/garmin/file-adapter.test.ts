@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
 import { DataFactory, type Store } from "n3";
+import { describe, expect, it } from "vitest";
 import { fileImport, memoryFile, TEST_POD_ROOT } from "../core/testing.js";
 import { CLASSES, ExerciseAction, TravelAction } from "../core/vocab.js";
 import {
@@ -125,7 +125,9 @@ describe("garmin file adapter — Activities.csv", () => {
     expect(ride.calories).toBe("1234 kcal");
     expect(ride.duration).toBe("PT1H");
     // The Commuting row has no Title → named after its activity type.
-    const names = [...ds].filter((q) => q.predicate.value === `${SCHEMA}name`).map((q) => q.object.value);
+    const names = [...ds]
+      .filter((q) => q.predicate.value === `${SCHEMA}name`)
+      .map((q) => q.object.value);
     expect(names).toContain("Commuting");
   });
 
@@ -136,7 +138,8 @@ describe("garmin file adapter — Activities.csv", () => {
     );
     const ds = pod.dataset(EX_DOC);
     const hostile = [...ds].find(
-      (q) => q.predicate.value === `${SCHEMA}name` && q.object.value === "<script>alert(1)</script>",
+      (q) =>
+        q.predicate.value === `${SCHEMA}name` && q.object.value === "<script>alert(1)</script>",
     );
     expect(hostile).toBeDefined();
     expect(hostile!.object.termType).toBe("Literal"); // inert, never an IRI
@@ -147,7 +150,9 @@ describe("garmin file adapter — Activities.csv", () => {
     expect(row.distance).toBeUndefined();
     expect(row.calories).toBeUndefined();
     // The injection attempt never appears as a subject/object IRI.
-    expect([...ds].some((q) => q.object.termType === "NamedNode" && q.object.value.includes("<"))).toBe(false);
+    expect(
+      [...ds].some((q) => q.object.termType === "NamedNode" && q.object.value.includes("<")),
+    ).toBe(false);
   });
 
   it("uses deterministic fragment IRIs — re-import is idempotent", async () => {
@@ -159,7 +164,9 @@ describe("garmin file adapter — Activities.csv", () => {
       size: pod.dataset(EX_DOC).size + pod.dataset(TRAVEL_DOC).size,
     };
     for (const s of [...before.ex, ...before.travel]) {
-      expect(s).toMatch(new RegExp(`^${ROOT}(health/activities\\.ttl#activity-|mobility/journeys\\.ttl#journey-)`));
+      expect(s).toMatch(
+        new RegExp(`^${ROOT}(health/activities\\.ttl#activity-|mobility/journeys\\.ttl#journey-)`),
+      );
     }
     await fileImport(garminFileAdapter, file, { pod });
     expect(subjectsOf(pod.dataset(EX_DOC), CLASSES.ExerciseAction)).toEqual(before.ex);
@@ -256,16 +263,35 @@ describe("garmin helpers", () => {
   });
 
   it("isTravelActivity: rides/commutes travel; indoor/virtual riding stays exercise", () => {
-    for (const t of ["Cycling", "Road Cycling", "Mountain Biking", "Gravel Ride", "Commuting", "driving", "Motorcycling"]) {
+    for (const t of [
+      "Cycling",
+      "Road Cycling",
+      "Mountain Biking",
+      "Gravel Ride",
+      "Commuting",
+      "driving",
+      "Motorcycling",
+    ]) {
       expect(isTravelActivity(t), t).toBe(true);
     }
-    for (const t of ["Running", "Trail Running", "Pool Swim", "Strength Training", "Indoor Cycling", "Virtual Ride", "Walking", ""]) {
+    for (const t of [
+      "Running",
+      "Trail Running",
+      "Pool Swim",
+      "Strength Training",
+      "Indoor Cycling",
+      "Virtual Ride",
+      "Walking",
+      "",
+    ]) {
       expect(isTravelActivity(t), t).toBe(false);
     }
   });
 
   it("parseGarminCsvDate: Garmin's local timestamp (treated as UTC) or undefined", () => {
-    expect(parseGarminCsvDate("2026-06-01 06:30:00")?.toISOString()).toBe("2026-06-01T06:30:00.000Z");
+    expect(parseGarminCsvDate("2026-06-01 06:30:00")?.toISOString()).toBe(
+      "2026-06-01T06:30:00.000Z",
+    );
     expect(parseGarminCsvDate("not-a-date")).toBeUndefined();
     expect(parseGarminCsvDate("2026-13-45 99:99:99")).toBeUndefined();
   });

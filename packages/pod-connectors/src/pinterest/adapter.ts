@@ -35,12 +35,12 @@ export const pinterestAdapter: IntegrationAdapter = {
     ],
   },
   oauth: {
-    clientId: process.env.NEXT_PUBLIC_PINTEREST_CLIENT_ID,
+    clientId: undefined,
     authorizationEndpoint: "https://www.pinterest.com/oauth/",
     tokenEndpoint: "https://api.pinterest.com/v5/oauth/token",
     scopes: SCOPES,
     tokenExchange: "proxy",
-    tokenProxyUrl: process.env.NEXT_PUBLIC_PINTEREST_TOKEN_PROXY,
+    tokenProxyUrl: undefined,
   },
   fixtures: () => PINTEREST_FIXTURES,
 

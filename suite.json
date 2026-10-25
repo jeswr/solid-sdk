@@ -61,7 +61,8 @@
     "@jeswr/solid-vc",
     "@jeswr/solid-webauthn-reauth",
     "@jeswr/unstorage-solid",
-    "@jeswr/y-solid"
+    "@jeswr/y-solid",
+    "@jeswr/pod-connectors"
   ],
   "applications": [
     {

@@ -30,7 +30,7 @@ export const discordAdapter: IntegrationAdapter = {
     ],
   },
   oauth: {
-    clientId: process.env.NEXT_PUBLIC_DISCORD_CLIENT_ID,
+    clientId: undefined,
     authorizationEndpoint: "https://discord.com/oauth2/authorize",
     tokenEndpoint: "https://discord.com/api/oauth2/token",
     scopes: SCOPES,

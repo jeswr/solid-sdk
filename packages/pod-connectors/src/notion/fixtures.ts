@@ -15,7 +15,10 @@ export interface NotionPage {
   created_time?: string | null;
   last_edited_time?: string | null;
   url?: string | null;
-  properties?: Record<string, { type?: string | null; title?: NotionRichText[] | null } | null> | null;
+  properties?: Record<
+    string,
+    { type?: string | null; title?: NotionRichText[] | null } | null
+  > | null;
 }
 
 export interface NotionDatabase {

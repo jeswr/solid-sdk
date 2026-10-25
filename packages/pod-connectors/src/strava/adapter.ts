@@ -41,12 +41,12 @@ export const stravaAdapter: IntegrationAdapter = {
     ],
   },
   oauth: {
-    clientId: process.env.NEXT_PUBLIC_STRAVA_CLIENT_ID,
+    clientId: undefined,
     authorizationEndpoint: "https://www.strava.com/oauth/authorize",
     tokenEndpoint: "https://www.strava.com/oauth/token",
     scopes: SCOPES,
     tokenExchange: "proxy",
-    tokenProxyUrl: process.env.NEXT_PUBLIC_STRAVA_TOKEN_PROXY,
+    tokenProxyUrl: undefined,
     extraAuthParams: { approval_prompt: "auto" },
   },
   fixtures: () => STRAVA_FIXTURES,
@@ -115,14 +115,11 @@ function fill(action: ExerciseAction | TravelAction, a: StravaActivity): void {
   action.startTime = optionalDate(a.start_date);
   const movingTime = optionalNumber(a.moving_time);
   action.duration =
-    movingTime !== undefined
-      ? `PT${Math.floor(movingTime / 60)}M${movingTime % 60}S`
-      : undefined;
+    movingTime !== undefined ? `PT${Math.floor(movingTime / 60)}M${movingTime % 60}S` : undefined;
   const distance = optionalNumber(a.distance);
   action.distance = distance !== undefined ? `${(distance / 1000).toFixed(1)} km` : undefined;
   action.sourceUrl = `https://www.strava.com/activities/${a.id}`;
 }
-
 
 /** Newest start time (epoch seconds) across old cursor + new activities. */
 function nextCursor(

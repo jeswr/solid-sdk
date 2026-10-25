@@ -14,11 +14,11 @@ import { getJson } from "../core/fixture-fetch.js";
 import type { ImportContext, ImportOutcome, IntegrationAdapter } from "../core/types.js";
 import { CLASSES, Group, SocialMediaPosting } from "../core/vocab.js";
 import {
+  REDDIT_FIXTURES,
   type RedditListing,
   type RedditMe,
   type RedditSavedPost,
   type RedditSubreddit,
-  REDDIT_FIXTURES,
 } from "./fixtures.js";
 
 const ID = "reddit";
@@ -41,7 +41,7 @@ export const redditAdapter: IntegrationAdapter = {
     ],
   },
   oauth: {
-    clientId: process.env.NEXT_PUBLIC_REDDIT_CLIENT_ID,
+    clientId: undefined,
     authorizationEndpoint: "https://www.reddit.com/api/v1/authorize",
     tokenEndpoint: "https://www.reddit.com/api/v1/access_token",
     scopes: SCOPES,
@@ -110,4 +110,3 @@ export const redditAdapter: IntegrationAdapter = {
     return { cursor: newest ?? ctx.cursor };
   },
 };
-

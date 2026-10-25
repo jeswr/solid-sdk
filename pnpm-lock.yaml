@@ -1363,6 +1363,9 @@ importers:
       '@jeswr/fetch-rdf':
         specifier: ^0.1.0
         version: 0.1.0
+      '@jeswr/pod-connectors':
+        specifier: workspace:*
+        version: link:../../packages/pod-connectors
       '@rdfjs/wrapper':
         specifier: ^0.34.0
         version: 0.34.0
@@ -2484,6 +2487,40 @@ importers:
       vitest:
         specifier: ^4.1.8
         version: 4.1.10(@types/node@20.19.43)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1)(vite@8.1.4(@types/node@20.19.43)(esbuild@0.28.1)(jiti@2.7.0))
+
+  packages/pod-connectors:
+    dependencies:
+      '@jeswr/fetch-rdf':
+        specifier: ^0.1.0
+        version: 0.1.0
+      '@jeswr/guarded-fetch':
+        specifier: workspace:*
+        version: link:../guarded-fetch
+      '@rdfjs/wrapper':
+        specifier: ^0.34.0
+        version: 0.34.0
+      '@solid/object':
+        specifier: ^0.6.0
+        version: 0.6.0
+      n3:
+        specifier: ^2.0.3
+        version: 2.1.1
+    devDependencies:
+      '@rdfjs/types':
+        specifier: ^2.0.1
+        version: 2.0.1
+      '@types/n3':
+        specifier: ^1.26.1
+        version: 1.26.1
+      '@biomejs/biome':
+        specifier: ^2.5.1
+        version: 2.5.3
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: ^4.1.9
+        version: 4.1.10(@types/node@25.9.5)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1)(vite@8.1.4(@types/node@25.9.5)(esbuild@0.28.1)(jiti@2.7.0))
 
   packages/rdf-serialize:
     dependencies:

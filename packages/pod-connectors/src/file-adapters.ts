@@ -12,6 +12,7 @@ import { amazonOrdersFileAdapter } from "./amazon-orders/file-adapter.js";
 import { appleHealthFileAdapter } from "./apple-health/file-adapter.js";
 import { bankStatementsFileAdapter } from "./bank-statements/file-adapter.js";
 import { chatgptFileAdapter } from "./chatgpt/file-adapter.js";
+import type { FileImportAdapter } from "./core/file-import.js";
 import { garminFileAdapter } from "./garmin/file-adapter.js";
 import { goodreadsFileAdapter } from "./goodreads/file-adapter.js";
 import { googleTakeoutFileAdapter } from "./google-takeout/file-adapter.js";
@@ -19,7 +20,6 @@ import { netflixFileAdapter } from "./netflix/file-adapter.js";
 import { steamFileAdapter } from "./steam/file-adapter.js";
 import { uberFileAdapter } from "./uber/file-adapter.js";
 import { whatsappFileAdapter } from "./whatsapp/file-adapter.js";
-import type { FileImportAdapter } from "./core/file-import.js";
 
 /** The 10 Tier-C file-import adapters plus the Tier-B hybrids (Garmin). */
 export const FILE_ADAPTERS: readonly FileImportAdapter[] = [

@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import { IntegrationAuthError } from "./errors.js";
 import {
   buildAuthorizationUrl,
@@ -115,12 +115,7 @@ describe("exchangeCodeForToken", () => {
       auth = new Headers(init?.headers).get("authorization");
       return Response.json({ access_token: "tok", token_type: "bearer" });
     };
-    await exchangeCodeForToken(
-      "reddit",
-      { ...CFG, basicAuthForToken: true },
-      params,
-      fetchImpl,
-    );
+    await exchangeCodeForToken("reddit", { ...CFG, basicAuthForToken: true }, params, fetchImpl);
     expect(auth).toBe(`Basic ${btoa("client-123:")}`);
   });
 
@@ -149,9 +144,7 @@ describe("exchangeCodeForToken", () => {
 
   it("maps a token-endpoint refusal to exchange-failed", async () => {
     const fetchImpl: typeof fetch = async () => new Response("nope", { status: 400 });
-    await expect(
-      exchangeCodeForToken("spotify", CFG, params, fetchImpl),
-    ).rejects.toSatisfy(
+    await expect(exchangeCodeForToken("spotify", CFG, params, fetchImpl)).rejects.toSatisfy(
       (e: unknown) => e instanceof IntegrationAuthError && e.reason === "exchange-failed",
     );
   });

@@ -34,12 +34,12 @@ export const googleCalendarAdapter: IntegrationAdapter = {
     ],
   },
   oauth: {
-    clientId: process.env.NEXT_PUBLIC_GOOGLE_CALENDAR_CLIENT_ID,
+    clientId: undefined,
     authorizationEndpoint: "https://accounts.google.com/o/oauth2/v2/auth",
     tokenEndpoint: "https://oauth2.googleapis.com/token",
     scopes: SCOPES,
     tokenExchange: "proxy",
-    tokenProxyUrl: process.env.NEXT_PUBLIC_GOOGLE_CALENDAR_TOKEN_PROXY,
+    tokenProxyUrl: undefined,
     // Google needs these to return a refresh token on first consent.
     extraAuthParams: { access_type: "offline", prompt: "consent" },
   },

@@ -9,40 +9,30 @@
  * Documents land at `<podRoot>integrations/<adapterId>/<slug>` — deterministic
  * URLs, so a re-import overwrites in place (idempotent).
  */
-import { RdfFetchError } from "@jeswr/fetch-rdf";
-import { writeResource } from "../../pod-data.js";
-import { freshRdf } from "../../rdf-read.js";
-import {
-  type DesiredRegistration,
-  ensureTypeRegistrations,
-} from "../../type-index-write.js";
 import { IntegrationSyncError } from "./errors.js";
 import { fixtureFetch } from "./fixture-fetch.js";
+import { registrationsFor } from "./pod-writer.js";
 import type {
   ImportProgress,
   IntegrationAdapter,
+  PodWriter,
+  SourceAuth,
   TokenSet,
   WrittenDoc,
 } from "./types.js";
-import { VOCAB_PREFIXES } from "./vocab.js";
 
 export type ImportMode = "live" | "demo";
 
 export interface RunImportOptions {
   adapter: IntegrationAdapter;
-  webId: string;
-  /** The active storage root (ends with `/`). */
-  podRoot: string;
+  /** Explicit, host-owned storage port for this adapter. */
+  podWriter: PodWriter;
   mode: ImportMode;
-  /** Required for live mode. */
-  token?: TokenSet;
+  /** Required for live mode; already authenticated by the host. */
+  sourceAuth?: SourceAuth;
   /** Cursor from the previous import (incremental, where supported). */
   cursor?: string;
   onProgress?: (p: ImportProgress) => void;
-  /** Test-only pod fetch override; **omit in production**. */
-  podFetch?: typeof fetch;
-  /** Test-only source-API fetch override for live mode. */
-  apiFetch?: typeof fetch;
 }
 
 export interface ImportReport {
@@ -68,55 +58,26 @@ export async function runImport(opts: RunImportOptions): Promise<ImportReport> {
   const { adapter, mode } = opts;
   const id = adapter.metadata.id;
 
-  const api =
-    mode === "demo"
-      ? fixtureFetch(id, adapter.fixtures())
-      : tokenFetch(id, adapter, opts.token, opts.apiFetch);
+  const api = mode === "demo" ? fixtureFetch(id, adapter.fixtures()) : opts.sourceAuth?.fetch;
+  if (!api)
+    throw new IntegrationSyncError(id, "Live import requires SourceAuth — authorize first.");
 
-  const root = adapterContainerUrl(opts.podRoot, id);
   const written: WrittenDoc[] = [];
 
   const outcome = await adapter.import({
     api,
     cursor: opts.cursor,
-    resolve: (slug) => new URL(slug, root).toString(),
-    read: async (slug) => {
-      const url = new URL(slug, root).toString();
-      try {
-        const { dataset } = await freshRdf(url, opts.podFetch);
-        return dataset;
-      } catch (e) {
-        if (e instanceof RdfFetchError && e.status === 404) return undefined;
-        throw e;
-      }
-    },
+    resolve: (slug) => opts.podWriter.resolve(slug),
+    read: async (slug) => (await opts.podWriter.read(slug))?.dataset,
     progress: (p) => opts.onProgress?.(p),
     write: async (doc) => {
-      const url = new URL(doc.slug, root).toString();
-      if (!url.startsWith(root)) {
-        throw new IntegrationSyncError(id, `Slug escapes the adapter container: ${doc.slug}`);
-      }
-      await writeResource(url, doc.dataset, {
-        fetchImpl: opts.podFetch,
-        prefixes: { ...VOCAB_PREFIXES },
-      });
-      const w: WrittenDoc = {
-        url,
-        category: doc.category,
-        forClass: doc.forClass,
-        skipRegistration: doc.skipRegistration,
-      };
+      const w = await opts.podWriter.write(doc);
       written.push(w);
       return w;
     },
   });
 
-  const { indexUrl } = await ensureTypeRegistrations({
-    webId: opts.webId,
-    podRoot: opts.podRoot,
-    registrations: registrationsFor(written),
-    fetchImpl: opts.podFetch,
-  });
+  const { indexUrl } = await opts.podWriter.registerType(registrationsFor(written));
 
   return {
     adapterId: id,
@@ -129,27 +90,16 @@ export async function runImport(opts: RunImportOptions): Promise<ImportReport> {
   };
 }
 
-/** Distinct (forClass, containing-container) pairs from the written docs. */
-function registrationsFor(written: WrittenDoc[]): DesiredRegistration[] {
-  const out = new Map<string, DesiredRegistration>();
-  for (const w of written) {
-    if (w.skipRegistration) continue;
-    const container = w.url.slice(0, w.url.lastIndexOf("/") + 1);
-    out.set(`${w.forClass}|${container}`, { forClass: w.forClass, container });
-  }
-  return [...out.values()];
-}
-
 /**
  * Live-mode source fetch: injects the bearer token + the adapter's static API
  * headers. The token goes to the platform's API host and nowhere else.
  */
-function tokenFetch(
+export function createSourceAuth(
   adapterId: string,
   adapter: IntegrationAdapter,
   token: TokenSet | undefined,
-  fetchImpl?: typeof fetch,
-): typeof fetch {
+  fetchImpl: typeof fetch,
+): SourceAuth {
   if (!token) {
     throw new IntegrationSyncError(adapterId, "Live import requires a token — authorize first.");
   }
@@ -158,7 +108,7 @@ function tokenFetch(
     headers.set("authorization", `Bearer ${token.accessToken}`);
     for (const [k, v] of Object.entries(adapter.apiHeaders ?? {})) headers.set(k, v);
     const next: RequestInit = { ...init, headers };
-    return fetchImpl ? fetchImpl(input as RequestInfo, next) : fetch(input as RequestInfo, next);
+    return fetchImpl(input as RequestInfo, next);
   };
-  return impl as typeof fetch;
+  return { fetch: impl as typeof fetch };
 }

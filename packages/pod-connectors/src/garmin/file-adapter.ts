@@ -47,8 +47,7 @@ const metadata: IntegrationMetadata = {
   authKind: "export-file",
   scopes: [],
   categories: ["health", "mobility"],
-  whatYouGet:
-    "Your Garmin activities — workouts into Health, rides and commutes into Mobility.",
+  whatYouGet: "Your Garmin activities — workouts into Health, rides and commutes into Mobility.",
   requirements: [],
 };
 
@@ -206,9 +205,7 @@ export function parseClockDuration(raw: string): string | undefined {
   if (!m) return undefined;
   const [, a, b, c] = m;
   const seconds =
-    c !== undefined
-      ? Number(a) * 3600 + Number(b) * 60 + Number(c)
-      : Number(a) * 60 + Number(b);
+    c !== undefined ? Number(a) * 3600 + Number(b) * 60 + Number(c) : Number(a) * 60 + Number(b);
   return isoDurationFromSeconds(seconds);
 }
 
@@ -249,7 +246,12 @@ function parseGpx(xml: string, maxPoints: number, sink: ActivitySink): void {
       }
       const lat = Number.parseFloat(pt.attrs.lat ?? "");
       const lon = Number.parseFloat(pt.attrs.lon ?? "");
-      if (Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180) {
+      if (
+        Number.isFinite(lat) &&
+        Number.isFinite(lon) &&
+        Math.abs(lat) <= 90 &&
+        Math.abs(lon) <= 180
+      ) {
         if (prev) metres += haversineMetres(prev.lat, prev.lon, lat, lon);
         prev = { lat, lon };
       }
@@ -263,7 +265,8 @@ function parseGpx(xml: string, maxPoints: number, sink: ActivitySink): void {
         name,
         type,
         start,
-        duration: seconds !== undefined && seconds > 0 ? isoDurationFromSeconds(seconds) : undefined,
+        duration:
+          seconds !== undefined && seconds > 0 ? isoDurationFromSeconds(seconds) : undefined,
         distance: metres > 0 ? `${(metres / 1000).toFixed(2)} km` : undefined,
         // GPX has no calories — never invent them.
       },
@@ -286,14 +289,15 @@ function parseTcx(xml: string, maxRows: number, sink: ActivitySink): void {
     for (const lap of extractBlocks(activity.inner, "Lap", maxRows)) {
       // Lap summary fields precede <Track>; cut it off so trackpoint
       // DistanceMeters/Calories can never shadow the lap totals.
-      const summary = lap.inner.split(/<Track[\s>]/)[0];
+      const summary = lap.inner.split(/<Track[\s>]/)[0] ?? "";
       seconds += positiveFloat(firstTagText(summary, "TotalTimeSeconds")) ?? 0;
       metres += positiveFloat(firstTagText(summary, "DistanceMeters")) ?? 0;
       kcal += positiveFloat(firstTagText(summary, "Calories")) ?? 0;
     }
     addActivity(
       {
-        name: firstTagText(activity.inner, "Name") ?? (sport ? `Garmin ${sport}` : "Garmin activity"),
+        name:
+          firstTagText(activity.inner, "Name") ?? (sport ? `Garmin ${sport}` : "Garmin activity"),
         type: sport,
         start: parseIsoDate(id),
         duration: seconds > 0 ? isoDurationFromSeconds(seconds) : undefined,

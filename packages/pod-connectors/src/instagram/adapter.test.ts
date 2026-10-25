@@ -25,7 +25,11 @@ describe("instagram adapter contract", () => {
     expect(reel.types.has(CLASSES.VideoObject)).toBe(true);
 
     const social = pod.dataset(SOCIAL_DOC);
-    const post = new SocialMediaPosting(`${SOCIAL_DOC}#post-17895695668004550`, social, DataFactory);
+    const post = new SocialMediaPosting(
+      `${SOCIAL_DOC}#post-17895695668004550`,
+      social,
+      DataFactory,
+    );
     expect(post.types.has(CLASSES.SocialMediaPosting)).toBe(true);
     expect(post.isPartOf).toBe("Instagram");
   });

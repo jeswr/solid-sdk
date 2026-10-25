@@ -79,7 +79,10 @@ export const goodreadsFileAdapter: FileImportAdapter = {
 /** Goodreads wraps ISBNs as `="0123456789"`; unwrap and validate digits. */
 export function cleanIsbn(raw: string | undefined): string | undefined {
   if (!raw) return undefined;
-  const inner = raw.trim().replace(/^="?|"?$/g, "").trim();
+  const inner = raw
+    .trim()
+    .replace(/^="?|"?$/g, "")
+    .trim();
   return /^[0-9Xx]{10,13}$/.test(inner) ? inner : undefined;
 }
 

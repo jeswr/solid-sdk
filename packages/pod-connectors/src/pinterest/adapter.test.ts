@@ -23,7 +23,11 @@ describe("pinterest adapter contract", () => {
     expect(pin.width).toBe(600);
 
     const social = pod.dataset(SOCIAL_DOC);
-    const post = new SocialMediaPosting(`${SOCIAL_DOC}#pin-813034246246243478`, social, DataFactory);
+    const post = new SocialMediaPosting(
+      `${SOCIAL_DOC}#pin-813034246246243478`,
+      social,
+      DataFactory,
+    );
     expect(post.types.has(CLASSES.SocialMediaPosting)).toBe(true);
     expect(post.isPartOf).toBe("Pinterest · Home office");
   });

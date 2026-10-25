@@ -12,7 +12,7 @@ import { DataFactory, Store } from "n3";
 import { getJson } from "../core/fixture-fetch.js";
 import type { ImportContext, ImportOutcome, IntegrationAdapter } from "../core/types.js";
 import { CLASSES, WorkPosition } from "../core/vocab.js";
-import { type LiPositionsAnswer, type LiYearMonth, LINKEDIN_FIXTURES } from "./fixtures.js";
+import { LINKEDIN_FIXTURES, type LiPositionsAnswer, type LiYearMonth } from "./fixtures.js";
 
 const ID = "linkedin";
 const API = "https://api.linkedin.com/v2";
@@ -34,12 +34,12 @@ export const linkedinAdapter: IntegrationAdapter = {
     ],
   },
   oauth: {
-    clientId: process.env.NEXT_PUBLIC_LINKEDIN_CLIENT_ID,
+    clientId: undefined,
     authorizationEndpoint: "https://www.linkedin.com/oauth/v2/authorization",
     tokenEndpoint: "https://www.linkedin.com/oauth/v2/accessToken",
     scopes: SCOPES,
     tokenExchange: "proxy",
-    tokenProxyUrl: process.env.NEXT_PUBLIC_LINKEDIN_TOKEN_PROXY,
+    tokenProxyUrl: undefined,
   },
   fixtures: () => LINKEDIN_FIXTURES,
 

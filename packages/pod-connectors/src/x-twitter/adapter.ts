@@ -12,7 +12,7 @@ import { DataFactory, Store } from "n3";
 import { getJson } from "../core/fixture-fetch.js";
 import type { ImportContext, ImportOutcome, IntegrationAdapter } from "../core/types.js";
 import { CLASSES, SocialMediaPosting } from "../core/vocab.js";
-import { type XTweetsAnswer, X_TWITTER_FIXTURES } from "./fixtures.js";
+import { X_TWITTER_FIXTURES, type XTweetsAnswer } from "./fixtures.js";
 
 const ID = "x-twitter";
 const API = "https://api.twitter.com/2";
@@ -34,7 +34,7 @@ export const xTwitterAdapter: IntegrationAdapter = {
     ],
   },
   oauth: {
-    clientId: process.env.NEXT_PUBLIC_X_TWITTER_CLIENT_ID,
+    clientId: undefined,
     authorizationEndpoint: "https://twitter.com/i/oauth2/authorize",
     tokenEndpoint: "https://api.twitter.com/2/oauth2/token",
     scopes: SCOPES,

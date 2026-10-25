@@ -16,8 +16,8 @@
  * coerced to inert RDF literals.
  */
 import { DataFactory, Store } from "n3";
-import type { FileImportAdapter, FileImportContext, ImportFile } from "../core/file-import.js";
 import { isoDurationFromMinutes } from "../core/duration.js";
+import type { FileImportAdapter, FileImportContext, ImportFile } from "../core/file-import.js";
 import { recordFragment } from "../core/slug.js";
 import type { IntegrationMetadata } from "../core/types.js";
 import { CLASSES, OnlineAccount, VideoGame } from "../core/vocab.js";

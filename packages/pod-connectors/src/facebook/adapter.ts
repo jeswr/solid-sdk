@@ -13,7 +13,7 @@ import { DataFactory, Store } from "n3";
 import { getJson } from "../core/fixture-fetch.js";
 import type { ImportContext, ImportOutcome, IntegrationAdapter } from "../core/types.js";
 import { CLASSES, Group, SocialMediaPosting } from "../core/vocab.js";
-import { type FbGroupsAnswer, type FbPostsAnswer, FACEBOOK_FIXTURES } from "./fixtures.js";
+import { FACEBOOK_FIXTURES, type FbGroupsAnswer, type FbPostsAnswer } from "./fixtures.js";
 
 const ID = "facebook";
 const API = "https://graph.facebook.com/v20.0";
@@ -35,12 +35,12 @@ export const facebookAdapter: IntegrationAdapter = {
     ],
   },
   oauth: {
-    clientId: process.env.NEXT_PUBLIC_FACEBOOK_CLIENT_ID,
+    clientId: undefined,
     authorizationEndpoint: "https://www.facebook.com/v20.0/dialog/oauth",
     tokenEndpoint: "https://graph.facebook.com/v20.0/oauth/access_token",
     scopes: SCOPES,
     tokenExchange: "proxy",
-    tokenProxyUrl: process.env.NEXT_PUBLIC_FACEBOOK_TOKEN_PROXY,
+    tokenProxyUrl: undefined,
   },
   fixtures: () => FACEBOOK_FIXTURES,
 
@@ -56,7 +56,11 @@ export const facebookAdapter: IntegrationAdapter = {
     const postStore = new Store();
     for (const p of posts.data) {
       const text = p.message ?? p.story;
-      const post = new SocialMediaPosting(`${postsDoc}#post-${fragment(p.id)}`, postStore, DataFactory).mark();
+      const post = new SocialMediaPosting(
+        `${postsDoc}#post-${fragment(p.id)}`,
+        postStore,
+        DataFactory,
+      ).mark();
       post.identifier = p.id;
       post.headline = text || undefined;
       post.description = text || undefined;

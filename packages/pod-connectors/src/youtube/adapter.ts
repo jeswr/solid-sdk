@@ -17,7 +17,7 @@ import { DataFactory, Store } from "n3";
 import { getJson } from "../core/fixture-fetch.js";
 import type { ImportContext, ImportOutcome, IntegrationAdapter } from "../core/types.js";
 import { CLASSES, MediaItem, MusicPlaylist } from "../core/vocab.js";
-import { type YTPlaylistsList, type YTVideosList, YOUTUBE_FIXTURES } from "./fixtures.js";
+import { YOUTUBE_FIXTURES, type YTPlaylistsList, type YTVideosList } from "./fixtures.js";
 
 const ID = "youtube";
 const API = "https://www.googleapis.com/youtube/v3";
@@ -39,12 +39,12 @@ export const youtubeAdapter: IntegrationAdapter = {
     ],
   },
   oauth: {
-    clientId: process.env.NEXT_PUBLIC_YOUTUBE_CLIENT_ID,
+    clientId: undefined,
     authorizationEndpoint: "https://accounts.google.com/o/oauth2/v2/auth",
     tokenEndpoint: "https://oauth2.googleapis.com/token",
     scopes: SCOPES,
     tokenExchange: "proxy",
-    tokenProxyUrl: process.env.NEXT_PUBLIC_YOUTUBE_TOKEN_PROXY,
+    tokenProxyUrl: undefined,
     extraAuthParams: { access_type: "offline", prompt: "consent" },
   },
   fixtures: () => YOUTUBE_FIXTURES,

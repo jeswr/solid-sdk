@@ -51,7 +51,8 @@ export function* extractElements(
   const re = new RegExp(`<${escapeTag(tag)}((?:\\s[^>]*)?)/?>`, "g");
   let m: RegExpExecArray | null;
   let count = 0;
-  // Standard regex `exec` loop (the assignment is intentional).
+  // Bounded regex exec loop; assignments deliberately advance the parser.
+  // biome-ignore lint/suspicious/noAssignInExpressions: standard regex exec iteration
   while (count < limit && (m = re.exec(xml)) !== null) {
     yield parseAttrs(m[1] ?? "");
     count++;
@@ -82,7 +83,8 @@ export function* extractBlocks(
   const close = `</${tag}>`;
   let count = 0;
   let m: RegExpExecArray | null;
-  // Standard regex `exec` loop (the assignment is intentional).
+  // Bounded regex exec loop; assignments deliberately advance the parser.
+  // biome-ignore lint/suspicious/noAssignInExpressions: standard regex exec iteration
   while (count < limit && (m = open.exec(xml)) !== null) {
     const attrs = parseAttrs(m[1] ?? "");
     if (m[0].endsWith("/>")) {
@@ -122,7 +124,8 @@ const ATTR_RE = /([A-Za-z_:][\w:.-]*)\s*=\s*"([^"]*)"|([A-Za-z_:][\w:.-]*)\s*=\s
 function parseAttrs(chunk: string): XmlAttrs {
   const out: Record<string, string> = {};
   let m: RegExpExecArray | null;
-  // Standard regex `exec` loop (the assignment is intentional).
+  // Bounded regex exec loop; assignments deliberately advance the parser.
+  // biome-ignore lint/suspicious/noAssignInExpressions: standard regex exec iteration
   while ((m = ATTR_RE.exec(chunk)) !== null) {
     const name = m[1] ?? m[3];
     const value = m[2] ?? m[4] ?? "";

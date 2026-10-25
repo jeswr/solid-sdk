@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
 import { DataFactory } from "n3";
+import { describe, expect, it } from "vitest";
 import { fileImport, memoryFile, TEST_POD_ROOT } from "../core/testing.js";
 import { CLASSES, TextDocument } from "../core/vocab.js";
 import { chatgptFileAdapter, parseChatgptExport } from "./file-adapter.js";
@@ -68,7 +68,9 @@ describe("chatgpt file adapter", () => {
     );
     const ds = pod.dataset(DOC);
     const nameQuad = [...ds].find(
-      (q) => q.predicate.value === "https://schema.org/name" && q.object.value === "Solid pods explained",
+      (q) =>
+        q.predicate.value === "https://schema.org/name" &&
+        q.object.value === "Solid pods explained",
     );
     const td = new TextDocument(nameQuad!.subject.value, ds, DataFactory);
     expect(td.text).toBe("You: What is a Solid pod?\n\nChatGPT: A personal online datastore.");

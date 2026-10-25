@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
 import { DataFactory } from "n3";
+import { describe, expect, it } from "vitest";
 import { fileImport, memoryFile, TEST_POD_ROOT } from "../core/testing.js";
 import { CLASSES, Message } from "../core/vocab.js";
 import { parseWhatsappChat, whatsappFileAdapter } from "./file-adapter.js";
@@ -36,7 +36,9 @@ describe("whatsapp file adapter", () => {
     );
     const ds = pod.dataset(DOC);
     const textQuad = [...ds].find(
-      (q) => q.predicate.value === "https://schema.org/text" && q.object.value.startsWith("Hi! How are you?"),
+      (q) =>
+        q.predicate.value === "https://schema.org/text" &&
+        q.object.value.startsWith("Hi! How are you?"),
     );
     expect(textQuad).toBeDefined();
     const m = new Message(textQuad!.subject.value, ds, DataFactory);

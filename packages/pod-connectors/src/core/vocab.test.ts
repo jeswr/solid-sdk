@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
 import { DataFactory, Store, Writer } from "n3";
-import { safeIri, PodThing } from "./vocab.js";
+import { describe, expect, it } from "vitest";
+import { PodThing, safeIri } from "./vocab.js";
 
 describe("safeIri (RDF/IRI injection guard — security review F-1)", () => {
   it("passes legitimate http(s) URLs unchanged", () => {
@@ -26,7 +26,11 @@ describe("safeIri (RDF/IRI injection guard — security review F-1)", () => {
 
   it("neutralises the injection end-to-end (no extra triples serialised)", async () => {
     const store = new Store();
-    const thing = new PodThing("https://pod.example/me/integrations/steam/games#g1", store, DataFactory);
+    const thing = new PodThing(
+      "https://pod.example/me/integrations/steam/games#g1",
+      store,
+      DataFactory,
+    );
     thing.sourceUrl = "123> . <https://victim/p#me> <http://e/p> <http://evil/o";
 
     const ttl = await new Promise<string>((resolve, reject) => {

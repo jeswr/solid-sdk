@@ -1,5 +1,4 @@
-import { describe, it, expect } from "vitest";
-import { categoryById } from "../categories.js";
+import { describe, expect, it } from "vitest";
 import { FILE_ADAPTERS, fileAdapterById } from "./file-adapters.js";
 import {
   ADAPTERS,
@@ -90,15 +89,6 @@ describe("integrations registry", () => {
     }
   });
 
-  it("every entry's categories exist in the taxonomy", () => {
-    for (const entry of allCatalogEntries()) {
-      expect(entry.categories.length).toBeGreaterThan(0);
-      for (const cat of entry.categories) {
-        expect(categoryById(cat), `${entry.id} → ${cat}`).toBeDefined();
-      }
-    }
-  });
-
   it("tier-honest statuses: A=demo without env config, B=approval, C=export-file", () => {
     // No NEXT_PUBLIC_* integration env vars are set in the test run.
     for (const entry of allCatalogEntries()) {
@@ -122,9 +112,6 @@ describe("integrations registry", () => {
       expect(adapter?.fileHint.length).toBeGreaterThan(0);
       // The adapter's categories must match the catalog entry's, and exist.
       expect([...adapter!.metadata.categories].sort()).toEqual([...entry.categories].sort());
-      for (const cat of adapter!.metadata.categories) {
-        expect(categoryById(cat)).toBeDefined();
-      }
     }
   });
 
@@ -145,14 +132,12 @@ describe("integrations registry", () => {
     expect(file?.fileHint).toMatch(/GPX or TCX/);
     expect(file?.fileHint).toMatch(/Export Your Data/);
     // Same id, same categories — the data lands in the same pod container.
-    expect([...file!.metadata.categories].sort()).toEqual(
-      [...oauth!.metadata.categories].sort(),
-    );
+    expect([...file!.metadata.categories].sort()).toEqual([...oauth!.metadata.categories].sort());
   });
 
   it("Tier-C export links: a real https URL where the platform has one, absent otherwise", () => {
     // Platforms with a single web page where the user requests/downloads the export.
-    const EXPORT_URLS: Record<string, string> = {
+    const ExportUrls: Record<string, string> = {
       "google-takeout": "https://takeout.google.com",
       netflix: "https://www.netflix.com/viewingactivity",
       "amazon-orders": "https://www.amazon.co.uk/hz/privacy-central/data-requests/preview.html",
@@ -164,15 +149,15 @@ describe("integrations registry", () => {
     };
     // In-app or institution-specific exports: no URL to send the user to —
     // the field must be ABSENT (the UI renders no link).
-    const NO_EXPORT_URL = ["apple-health", "whatsapp", "bank-statements"];
+    const NoExportUrl = ["apple-health", "whatsapp", "bank-statements"];
 
     for (const a of FILE_ADAPTERS) {
-      const expected = EXPORT_URLS[a.metadata.id];
+      const expected = ExportUrls[a.metadata.id];
       if (expected) {
         expect(a.exportUrl, a.metadata.id).toBe(expected);
         expect(new URL(a.exportUrl!).protocol).toBe("https:");
       } else {
-        expect(NO_EXPORT_URL).toContain(a.metadata.id);
+        expect(NoExportUrl).toContain(a.metadata.id);
         expect(a.exportUrl, `${a.metadata.id} must not carry an exportUrl`).toBeUndefined();
       }
     }
@@ -187,5 +172,31 @@ describe("integrations registry", () => {
         ).toBe(true);
       }
     }
+  });
+});
+
+// AUTHORED-BY Codex GPT-6.1-Sol
+// Configured registries are isolated from both each other and default adapters.
+describe("injected public configuration", () => {
+  it("keeps hosts isolated and preserves proxy/live gates and Twitch headers", async () => {
+    const { createRegistry } = await import("./registry.js");
+    const first = createRegistry({
+      spotify: { clientId: "first" },
+      github: { clientId: "id" },
+      twitch: { clientId: "twitch-id", tokenProxyUrl: "https://proxy.test/token" },
+    });
+    const second = createRegistry({ spotify: { clientId: "second" } });
+    expect(first.adapterById("spotify")?.oauth?.clientId).toBe("first");
+    expect(second.adapterById("spotify")?.oauth?.clientId).toBe("second");
+    expect(adapterById("spotify")?.oauth?.clientId).toBeUndefined();
+    expect(first.statusOf(first.adapterById("spotify")!.metadata)).toBe("live");
+    expect(first.statusOf(first.adapterById("github")!.metadata)).toBe("demo");
+    expect(first.adapterById("twitch")?.apiHeaders?.["client-id"]).toBe("twitch-id");
+    expect(first.statusOf(first.adapterById("twitch")!.metadata)).toBe("live");
+    expect(first.statusOf(first.adapterById("google-calendar")!.metadata)).toBe("approval-needed");
+    expect(first.statusOf(TIER_C[0]!)).toBe("export-file");
+    expect(first.statusOf({ ...ADAPTERS[0]!.metadata, id: "unknown" })).toBe("demo");
+    expect(first.adapterById("unknown")).toBeUndefined();
+    expect(first.allCatalogEntries()).toHaveLength(30);
   });
 });

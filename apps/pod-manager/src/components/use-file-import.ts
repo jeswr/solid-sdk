@@ -11,6 +11,8 @@
  * Only the parser layer ever reads the file bytes — this hook just hands the
  * `File` through.
  */
+// AUTHORED-BY Codex GPT-6.1-Sol
+import { createFetchPodWriter } from "@jeswr/pod-connectors";
 import { useCallback, useState } from "react";
 import { NoStorageError } from "@/lib/errors";
 import type { FileImportAdapter } from "@/lib/integrations/core/file-import";
@@ -47,8 +49,7 @@ export function useFileImport(adapter: FileImportAdapter | undefined) {
         const report = await runFileImport({
           adapter,
           file,
-          webId,
-          podRoot,
+          podWriter: createFetchPodWriter({ adapterId: adapter.metadata.id, webId, podRoot, fetch: (input, init) => globalThis.fetch(input, init) }),
           onProgress: (progress) =>
             setState((s) => ({ ...s, phase: "importing", progress })),
         });

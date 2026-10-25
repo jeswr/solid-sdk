@@ -11,6 +11,8 @@
  * The incremental cursor lives for the page's lifetime — a second click on
  * "Import again" syncs incrementally where the platform supports it.
  */
+// AUTHORED-BY Codex GPT-6.1-Sol
+import { createFetchPodWriter, createSourceAuth } from "@jeswr/pod-connectors";
 import { useCallback, useRef, useState } from "react";
 import { NoStorageError } from "@/lib/errors";
 import { authorize } from "@/lib/integrations/core/oauth";
@@ -61,10 +63,9 @@ export function useConnect(adapter: IntegrationAdapter | undefined) {
       setState({ phase: "importing" });
       const report = await runImport({
         adapter,
-        webId,
-        podRoot,
+        podWriter: createFetchPodWriter({ adapterId: adapter.metadata.id, webId, podRoot, fetch: (input, init) => globalThis.fetch(input, init) }),
         mode: live ? "live" : "demo",
-        token: live ? token : undefined,
+        sourceAuth: live ? createSourceAuth(adapter.metadata.id, adapter, token, (input, init) => globalThis.fetch(input, init)) : undefined,
         cursor: cursorRef.current,
         onProgress: (progress) =>
           setState((s) => ({ ...s, phase: "importing", progress })),

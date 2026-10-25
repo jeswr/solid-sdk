@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
 import { DataFactory } from "n3";
+import { describe, expect, it } from "vitest";
 import { fileImport, memoryFile, TEST_POD_ROOT } from "../core/testing.js";
 import { CLASSES, Invoice } from "../core/vocab.js";
 import { amazonOrdersFileAdapter, parseDate } from "./file-adapter.js";
@@ -34,7 +34,8 @@ describe("amazon-orders file adapter", () => {
     );
     const ds = pod.dataset(DOC);
     const nameQuad = [...ds].find(
-      (q) => q.predicate.value === "https://schema.org/name" && q.object.value === "Mechanical Keyboard",
+      (q) =>
+        q.predicate.value === "https://schema.org/name" && q.object.value === "Mechanical Keyboard",
     );
     expect(nameQuad).toBeDefined();
     const inv = new Invoice(nameQuad!.subject.value, ds, DataFactory);

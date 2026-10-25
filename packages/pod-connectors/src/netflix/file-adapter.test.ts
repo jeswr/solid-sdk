@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
 import { DataFactory } from "n3";
+import { describe, expect, it } from "vitest";
 import { fileImport, memoryFile, TEST_POD_ROOT } from "../core/testing.js";
 import { CLASSES, WatchAction } from "../core/vocab.js";
 import { netflixFileAdapter, parseNetflixDate } from "./file-adapter.js";
@@ -34,10 +34,7 @@ describe("netflix file adapter", () => {
   });
 
   it("stamps the WatchAction type and parses the date", async () => {
-    const { pod } = await fileImport(
-      netflixFileAdapter,
-      memoryFile("nf.csv", SAMPLE, "text/csv"),
-    );
+    const { pod } = await fileImport(netflixFileAdapter, memoryFile("nf.csv", SAMPLE, "text/csv"));
     const ds = pod.dataset(DOC);
     // Find the Glass Onion subject by its name triple.
     const nameQuad = [...ds].find(

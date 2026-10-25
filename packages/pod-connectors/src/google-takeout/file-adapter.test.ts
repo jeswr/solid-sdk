@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
 import { DataFactory } from "n3";
+import { describe, expect, it } from "vitest";
 import { fileImport, memoryFile, TEST_POD_ROOT } from "../core/testing.js";
 import { CalendarEvent, CLASSES, WatchAction } from "../core/vocab.js";
 import { googleTakeoutFileAdapter, parseMyActivity } from "./file-adapter.js";
@@ -64,7 +64,8 @@ describe("google-takeout file adapter", () => {
     );
     const docs = pod.dataset(DOCS);
     const hostile = [...docs].find(
-      (q) => q.predicate.value === "https://schema.org/name" && q.object.value === "javascript:alert(1)",
+      (q) =>
+        q.predicate.value === "https://schema.org/name" && q.object.value === "javascript:alert(1)",
     );
     expect(hostile).toBeDefined(); // present, but as an inert string literal
     expect(hostile!.object.termType).toBe("Literal");

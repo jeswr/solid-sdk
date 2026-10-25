@@ -1,11 +1,6 @@
-import { describe, it, expect } from "vitest";
 import { DataFactory } from "n3";
-import {
-  demoImport,
-  expectCleanTurtle,
-  sparseImport,
-  TEST_POD_ROOT,
-} from "../core/testing.js";
+import { describe, expect, it } from "vitest";
+import { demoImport, expectCleanTurtle, sparseImport, TEST_POD_ROOT } from "../core/testing.js";
 import { CLASSES, WatchAction } from "../core/vocab.js";
 import { twitchAdapter } from "./adapter.js";
 

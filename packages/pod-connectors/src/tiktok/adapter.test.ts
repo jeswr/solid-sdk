@@ -23,7 +23,11 @@ describe("tiktok adapter contract", () => {
     expect(clip.sourceUrl).toBe("https://www.tiktok.com/@user/video/7341234567890123456");
 
     const social = pod.dataset(SOCIAL_DOC);
-    const post = new SocialMediaPosting(`${SOCIAL_DOC}#post-7341234567890123456`, social, DataFactory);
+    const post = new SocialMediaPosting(
+      `${SOCIAL_DOC}#post-7341234567890123456`,
+      social,
+      DataFactory,
+    );
     expect(post.types.has(CLASSES.SocialMediaPosting)).toBe(true);
     expect(post.isPartOf).toBe("TikTok");
   });

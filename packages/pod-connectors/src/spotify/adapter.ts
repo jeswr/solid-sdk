@@ -9,11 +9,7 @@ import { getJson } from "../core/fixture-fetch.js";
 import { arr, optionalNumber, optionalText, SkipCounter } from "../core/safe.js";
 import type { ImportContext, ImportOutcome, IntegrationAdapter } from "../core/types.js";
 import { CLASSES, MusicPlaylist, MusicRecording } from "../core/vocab.js";
-import {
-  type SpotifyPlaylists,
-  SPOTIFY_FIXTURES,
-  type SpotifyTopTracks,
-} from "./fixtures.js";
+import { SPOTIFY_FIXTURES, type SpotifyPlaylists, type SpotifyTopTracks } from "./fixtures.js";
 
 const ID = "spotify";
 const API = "https://api.spotify.com/v1";
@@ -35,7 +31,7 @@ export const spotifyAdapter: IntegrationAdapter = {
     ],
   },
   oauth: {
-    clientId: process.env.NEXT_PUBLIC_SPOTIFY_CLIENT_ID,
+    clientId: undefined,
     authorizationEndpoint: "https://accounts.spotify.com/authorize",
     tokenEndpoint: "https://accounts.spotify.com/api/token",
     scopes: SCOPES,

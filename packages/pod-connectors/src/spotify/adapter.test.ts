@@ -1,11 +1,6 @@
-import { describe, it, expect } from "vitest";
 import { DataFactory } from "n3";
-import {
-  demoImport,
-  expectCleanTurtle,
-  sparseImport,
-  TEST_POD_ROOT,
-} from "../core/testing.js";
+import { describe, expect, it } from "vitest";
+import { demoImport, expectCleanTurtle, sparseImport, TEST_POD_ROOT } from "../core/testing.js";
 import { CLASSES, MusicPlaylist, MusicRecording } from "../core/vocab.js";
 import { spotifyAdapter } from "./adapter.js";
 
@@ -33,7 +28,11 @@ describe("spotify adapter contract", () => {
   it("writes playlists as schema:MusicPlaylist with track counts", async () => {
     const { pod } = await demoImport(spotifyAdapter);
     const ds = pod.dataset(LISTS_DOC);
-    const focus = new MusicPlaylist(`${LISTS_DOC}#playlist-37i9dQZF1DXcBWIGoYBM5M`, ds, DataFactory);
+    const focus = new MusicPlaylist(
+      `${LISTS_DOC}#playlist-37i9dQZF1DXcBWIGoYBM5M`,
+      ds,
+      DataFactory,
+    );
     expect(focus.types.has(CLASSES.MusicPlaylist)).toBe(true);
     expect(focus.name).toBe("Focus Flow");
     expect(focus.numTracks).toBe(74);
