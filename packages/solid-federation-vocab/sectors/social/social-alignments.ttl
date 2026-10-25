@@ -1,7 +1,7 @@
 # AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 #
-@prefix social:  <https://w3id.org/jeswr/sectors/social#> .
-@prefix core:    <https://w3id.org/jeswr/core#> .
+@prefix social:  <https://jeswr.org/ns/sectors/social#> .
+@prefix core:    <https://jeswr.org/ns/core#> .
 @prefix owl:     <http://www.w3.org/2002/07/owl#> .
 @prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
 @prefix skos:    <http://www.w3.org/2004/02/skos/core#> .
@@ -30,9 +30,12 @@
 # same social:Note shape chat-interop reconciles.
 # =============================================================================
 
-<https://w3id.org/jeswr/sectors/social/alignments> a owl:Ontology ;
+<https://jeswr.org/ns/sectors/social/alignments> a owl:Ontology ;
+    dcterms:description "Version 2.0.0 rebases this ontology from its legacy w3id namespace to https://jeswr.org/ns/ (DECISIONS V1)."@en ;
+    owl:versionIRI <https://jeswr.org/ns/sectors/social/alignments/2.0.0> ;
+    owl:versionInfo "2.0.0" ;
     dcterms:title "Solid Social Sector Ontology — AS2 + SIOC + schema.org Mode-A alignments"@en ;
-    owl:imports <https://w3id.org/jeswr/sectors/social> ;
+    owl:imports <https://jeswr.org/ns/sectors/social> ;
     rdfs:comment "Annotation-only (skos:*Match) bridges to ActivityStreams 2.0, SIOC and schema.org — the @jeswr/solid-chat-interop CanonicalMessage content model. No entailment. "@en .
 
 # --- Note <-> as:Note / sioc:Note (the canonical message/feed-item shape) ---

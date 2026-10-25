@@ -1,7 +1,7 @@
 # AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 #
-@prefix media:   <https://w3id.org/jeswr/sectors/media#> .
-@prefix core:    <https://w3id.org/jeswr/core#> .
+@prefix media:   <https://jeswr.org/ns/sectors/media#> .
+@prefix core:    <https://jeswr.org/ns/core#> .
 @prefix owl:     <http://www.w3.org/2002/07/owl#> .
 @prefix rdf:     <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
 @prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
@@ -11,7 +11,7 @@
 @prefix vann:    <http://purl.org/vocab/vann/> .
 @prefix gufo:    <http://purl.org/nemo/gufo#> .
 @prefix foaf:    <http://xmlns.com/foaf/0.1/> .
-@prefix fedgen:  <https://w3id.org/jeswr/fedgen#> .
+@prefix fedgen:  <https://jeswr.org/ns/fedgen#> .
 
 # =============================================================================
 # Solid Media & Activity sector ontology — RE-BASED onto gUFO (KEY=media).
@@ -53,14 +53,14 @@
 # endurant-domain media:recordingOf is rooted in core:about.
 # =============================================================================
 
-<https://w3id.org/jeswr/sectors/media> a owl:Ontology ;
+<https://jeswr.org/ns/sectors/media> a owl:Ontology ;
     dcterms:title "Solid Media & Activity Ontology (gUFO re-base)"@en ;
     rdfs:label "Solid Media & Activity Ontology"@en ;
     vann:preferredNamespacePrefix "media" ;
-    vann:preferredNamespaceUri "https://w3id.org/jeswr/sectors/media#" ;
-    owl:imports <https://w3id.org/jeswr/core> ;
-    owl:versionInfo "1.0.0" ;
-    owl:versionIRI <https://w3id.org/jeswr/sectors/media/1.0.0> ;
+    vann:preferredNamespaceUri "https://jeswr.org/ns/sectors/media#" ;
+    owl:imports <https://jeswr.org/ns/core> ;
+    owl:versionInfo "2.0.0" ;
+    owl:versionIRI <https://jeswr.org/ns/sectors/media/2.0.0> ;
     dcterms:description """Media consumption & creative works — the Spotify
         end-to-end example and the media importers — re-based onto the gUFO Core.
         Roots in core:InformationResource/core:Asset (creative works),
@@ -70,8 +70,8 @@
         (the usage licence). v1.0.0 is a BREAKING re-base of v0 (the meta-types
         change meaning), so a new MAJOR version. Aligns to schema.org
         CreativeWork/MusicRecording/MusicGroup/Event and ODRL in the companion
-        alignments file."""@en ;
-    dcterms:modified "2026-06-13"^^xsd:date ;
+        alignments file. Version 2.0.0 rebases this ontology from its legacy w3id namespace to https://jeswr.org/ns/ (DECISIONS V1)."""@en ;
+    dcterms:modified "2026-10-25"^^xsd:date ;
     rdfs:comment "Re-based per R11 §4.2."@en .
 
 # -----------------------------------------------------------------------------
@@ -342,13 +342,13 @@ media:loved a owl:DatatypeProperty ;
 
 # =============================================================================
 # SECTOR MARKER — the IRI an app's fedapp:sector points at to declare it operates
-# in this sector (https://w3id.org/jeswr/fed#sector). A skos:Concept in the
+# in this sector (https://jeswr.org/ns/fed#sector). A skos:Concept in the
 # federation sector register; dereferences to this ontology.
 # =============================================================================
 
-<https://w3id.org/jeswr/sectors/media#sector>
+<https://jeswr.org/ns/sectors/media#sector>
     a <http://www.w3.org/2004/02/skos/core#Concept> ;
     rdfs:label "Media & Activity sector"@en ;
     rdfs:comment "The Media & Activity data sector. The value an app's fedapp:sector names in its Client Identifier Document to declare it operates over media & activity data. Backed by this sector ontology."@en ;
-    rdfs:isDefinedBy <https://w3id.org/jeswr/sectors/media> ;
+    rdfs:isDefinedBy <https://jeswr.org/ns/sectors/media> ;
     skos:prefLabel "Media & Activity"@en .

@@ -4,10 +4,10 @@
 // (identity, finance, health, media, scheduling, contacts) from the
 // full-solid-ecosystem federation working tree INTO this repo, RE-NAMESPACED from
 // the placeholder `https://TBD.example/solid/<x>` IRIs to the persistent
-// `https://w3id.org/jeswr/` home decided in prod-solid-server ADR-0013:
+// `https://jeswr.org/ns/` home decided in DECISIONS V1 (VOC-02):
 //
-//   https://TBD.example/solid/core      -> https://w3id.org/jeswr/core
-//   https://TBD.example/solid/<sector>  -> https://w3id.org/jeswr/sectors/<sector>
+//   https://TBD.example/solid/core      -> https://jeswr.org/ns/core
+//   https://TBD.example/solid/<sector>  -> https://jeswr.org/ns/sectors/<sector>
 //
 // This is a TEXT transform over Turtle source (the .ttl files are authored as
 // Turtle directly — the suite house rule); every output is then re-parsed with
@@ -35,8 +35,8 @@ if (!existsSync(SRC)) {
 }
 
 const OLD_BASE = "https://TBD.example/solid";
-const NEW_CORE = "https://w3id.org/jeswr/core";
-const NEW_SECTORS = "https://w3id.org/jeswr/sectors";
+const NEW_CORE = "https://jeswr.org/ns/core";
+const NEW_SECTORS = "https://jeswr.org/ns/sectors";
 
 const MARKER = "# AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate\n";
 
@@ -116,7 +116,7 @@ const SECTOR_LABEL = {
 
 /**
  * Append the `<ns>sector` marker term that `fedapp:sector` dereferences to
- * (`https://w3id.org/jeswr/sectors/<x>#sector`). It is a skos:Concept whose
+ * (`https://jeswr.org/ns/sectors/<x>#sector`). It is a skos:Concept whose
  * scheme is the federation sector register; an app's Client-ID document names it
  * as the sector it operates in. Declared here so the IRI resolves and carries a
  * definition (validate.mjs requires rdfs:label/comment on each named term). Kept
@@ -124,20 +124,20 @@ const SECTOR_LABEL = {
  * no dependency on the fedapp vocabulary.
  */
 function addSectorMarker(text, sector) {
-  if (text.includes(`<https://w3id.org/jeswr/sectors/${sector}#sector>`)) return text;
+  if (text.includes(`<https://jeswr.org/ns/sectors/${sector}#sector>`)) return text;
   const label = SECTOR_LABEL[sector] ?? sector;
   const block = `
 # =============================================================================
 # SECTOR MARKER — the IRI an app's fedapp:sector points at to declare it operates
-# in this sector (https://w3id.org/jeswr/fed#sector). A skos:Concept in the
+# in this sector (https://jeswr.org/ns/fed#sector). A skos:Concept in the
 # federation sector register; dereferences to this ontology.
 # =============================================================================
 
-<https://w3id.org/jeswr/sectors/${sector}#sector>
+<https://jeswr.org/ns/sectors/${sector}#sector>
     a <http://www.w3.org/2004/02/skos/core#Concept> ;
     rdfs:label "${label} sector"@en ;
     rdfs:comment "The ${label} data sector. The value an app's fedapp:sector names in its Client Identifier Document to declare it operates over ${label.toLowerCase()} data. Backed by this sector ontology."@en ;
-    rdfs:isDefinedBy <https://w3id.org/jeswr/sectors/${sector}> ;
+    rdfs:isDefinedBy <https://jeswr.org/ns/sectors/${sector}> ;
     skos:prefLabel "${label}"@en .
 `;
   // ensure a trailing newline then append
