@@ -16,6 +16,7 @@ type JsonTerm = {
   datatype?: string;
   "xml:lang"?: string;
 };
+
 /** Materialize both graph scopes; no WASM handle escapes a document operation. */
 function dataset(store: Wasm.Store): Store {
   // Labels identify nodes only within this document, including across its graph scopes.
@@ -108,6 +109,13 @@ export function createEngine(load: () => Promise<Runtime>): RdfEngine {
       return use(({ Store: WasmStore }) => {
         const format = formatName(mediaType);
         let text = decode(input);
+        // 0.1.5 has no dataset-preserving base loader. Set JSON-LD's base context instead.
+        if (opts?.baseIri && format === "jsonld") {
+          text = JSON.stringify({
+            "@context": { "@base": opts.baseIri },
+            "@graph": JSON.parse(text),
+          });
+        }
         // 0.1.5 has no dataset-preserving base loader. Resolve TriG with n3 first.
         if (opts?.baseIri && format === "trig") {
           text = writeN3(parseN3(text, mediaType, opts), "application/n-quads");

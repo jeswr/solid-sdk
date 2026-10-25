@@ -13,6 +13,66 @@ afterEach(() => {
   engine.dispose();
 });
 
+test("JSON-LD resolves relative identifiers against the supplied base", async () => {
+  const data = await engine.parse(
+    '{"@id":"#me","https://example/name":"Alice"}',
+    "application/ld+json",
+    { baseIri: "https://example/profile" },
+  );
+  expect(await engine.canonicalize(data)).toBe(
+    '<https://example/profile#me> <https://example/name> "Alice" .\n',
+  );
+});
+
+test("JSON-LD base resolution preserves default and named graphs", async () => {
+  const input = JSON.stringify([
+    { "@id": "#me", "https://example/name": "Alice" },
+    {
+      "@id": "#graph",
+      "@graph": [{ "@id": "#me", "https://example/knows": { "@id": "friend" } }],
+    },
+  ]);
+  const data = await engine.parse(new TextEncoder().encode(input), "application/ld+json", {
+    baseIri: "https://example/profile",
+  });
+  expect(await engine.canonicalize(data)).toBe(
+    "<https://example/profile#me> <https://example/knows> <https://example/friend> <https://example/profile#graph> .\n" +
+      '<https://example/profile#me> <https://example/name> "Alice" .\n',
+  );
+});
+
+test("JSON-LD explicit base directives override or clear the supplied base", async () => {
+  for (const base of ["https://other.example/", null]) {
+    const data = await engine.parse(
+      JSON.stringify({
+        "@context": { "@base": base },
+        "@id": "#me",
+        "https://example/name": "Alice",
+      }),
+      "application/ld+json",
+      { baseIri: "https://example/profile" },
+    );
+    expect(await engine.canonicalize(data)).toBe(
+      base ? '<https://other.example/#me> <https://example/name> "Alice" .\n' : "",
+    );
+  }
+});
+
+test("JSON-LD base resolution leaves JSON literal values intact", async () => {
+  const value = { "@context": null, nested: [null, { "@id": "#literal" }] };
+  const data = await engine.parse(
+    JSON.stringify({
+      "@context": { value: "@value", type: "@type" },
+      "@id": "#me",
+      "https://example/value": { value, type: "@json" },
+    }),
+    "application/ld+json",
+    { baseIri: "https://example/profile" },
+  );
+  expect(data.size).toBe(1);
+  expect(JSON.parse([...data][0]?.object.value ?? "")).toEqual(value);
+});
+
 test("JSON-LD parse and serialize preserve literal types, language and named graphs", async () => {
   const input = JSON.stringify({
     "@id": "https://example/g",
