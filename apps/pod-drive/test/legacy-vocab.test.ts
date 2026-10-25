@@ -26,7 +26,9 @@ describe("canonical and legacy drive vocabulary", () => {
     `);
     expect(findDriveRoots(index)).toEqual([root]);
     expect(findDriveRoots(index, `${legacy}DriveRoot`)).toEqual([root]);
-    const container = turtle(`<${root}> a <${NS.LDP}Container>, <${base}DriveRoot> .`);
+    const container = turtle(
+      `<${root}> a "not a class", <${NS.LDP}Container>, <${base}DriveRoot> .`,
+    );
     expect(new DriveResource(root, container, DataFactory).isDriveRoot).toBe(true);
   });
 

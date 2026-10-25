@@ -30,6 +30,8 @@ import {
   OptionalAs,
   OptionalFrom,
   SetFrom,
+  TermAs,
+  TermFrom,
   TermWrapper,
 } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
@@ -227,7 +229,13 @@ function readRevisions(doc: DocumentDoc, dataset: DatasetCore): Revision[] {
  */
 export function parseDocument(resourceUrl: string, dataset: DatasetCore): PodDocument | undefined {
   const doc = new DocumentDoc(documentSubject(resourceUrl), dataset, DataFactory);
-  if (![...doc.types].some((type) => canonicalize(type) === DOCUMENT_CLASS)) return undefined;
+  const types = SetFrom.subjectPredicate(doc, RDF_TYPE, TermAs.term, TermFrom.itself);
+  if (
+    ![...types].some(
+      (type) => type.termType === "NamedNode" && canonicalize(type.value) === DOCUMENT_CLASS,
+    )
+  )
+    return undefined;
   return {
     title: doc.title ?? "",
     body: doc.body ?? "",

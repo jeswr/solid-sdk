@@ -22,7 +22,7 @@ describe("legacy document vocabulary", () => {
       @prefix pd: <${base}> .
       @prefix prov: <${SUITE_NS.PROV}> .
       @prefix xsd: <${SUITE_NS.XSD}> .
-      <${URL}#it> a pd:Document ; pd:body "hello" ; pd:format "text/markdown" ;
+      <${URL}#it> a "not a class" , pd:Document ; pd:body "hello" ; pd:format "text/markdown" ;
         pd:currentRevision <${URL}#rev-0> .
       <${URL}#rev-0> a prov:Entity ; pd:body "hello" ; pd:format "text/markdown" ;
         prov:generatedAtTime "2026-10-25T00:00:00Z"^^xsd:dateTime .
