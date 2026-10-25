@@ -157,7 +157,7 @@ test("client credentials without an advertised expiry remain cached and can be i
   await provider.forget();
 });
 
-test("DPoP providers ignore foreign resource nonces and bound remembered rejections", async () => {
+test("DPoP providers retain outstanding invalidation contexts and ignore foreign nonces", async () => {
   const provider = new DPoPTokenProvider(
     callback,
     automaticCodeProvider(),
@@ -171,9 +171,25 @@ test("DPoP providers ignore foreign resource nonces and bound remembered rejecti
     upgraded.push(await provider.upgrade(new Request(`${rs.url}/alice/eviction-${i}`)));
   assert.equal(new Set(upgraded.map((request) => request.headers.get("authorization"))).size, 101);
   const before = op.stats.token.length;
+  const first = new Request(`${rs.url}/alice/eviction-0`);
   await provider.invalidate(upgraded[0]);
-  await provider.upgrade(new Request(`${rs.url}/alice/eviction-0`));
-  assert.equal(op.stats.token.length, before);
+  const renewed = await provider.upgrade(first.clone());
+  assert.notEqual(renewed.headers.get("authorization"), upgraded[0].headers.get("authorization"));
+  assert.equal(op.stats.token.length, before + 1);
+  await provider.invalidate(upgraded[0]);
+  assert.equal(
+    (await provider.upgrade(first.clone())).headers.get("authorization"),
+    renewed.headers.get("authorization"),
+    "a late rejection leaves the replacement cached",
+  );
+  await provider.invalidate(new Request(first));
+  await provider.invalidate(new Request(first, { headers: { authorization: "DPoP unrelated" } }));
+  await provider.invalidate(renewed.clone());
+  assert.notEqual(
+    (await provider.upgrade(first)).headers.get("authorization"),
+    renewed.headers.get("authorization"),
+    "recent cloned requests retain the existing invalidation behavior",
+  );
   const response = Object.defineProperty(
     new Response(null, { status: 401, headers: { "dpop-nonce": "foreign" } }),
     "url",
@@ -187,7 +203,7 @@ test("DPoP providers ignore foreign resource nonces and bound remembered rejecti
   await provider.forget();
 });
 
-test("LWS exchanges verify signed subjects, cache tokens without expiry, and bound invalidation history", async () => {
+test("LWS exchanges retain outstanding invalidation contexts after history eviction", async () => {
   const keys = await crypto.subtle.generateKey({ name: "Ed25519" }, false, ["sign", "verify"]);
   const source = new SelfIssuedJwtSource({
     subject: "https://agent.example/id",
@@ -226,11 +242,20 @@ test("LWS exchanges verify signed subjects, cache tokens without expiry, and bou
   for (let i = 0; i < 101; i++) upgraded.push(await provider.upgrade(request(i), challenges(i)));
   assert.equal(issued, 101);
   await provider.invalidate(upgraded[0]);
-  await provider.upgrade(request(0), challenges(0));
-  assert.equal(issued, 101);
-  await provider.invalidate(upgraded[100]);
-  await provider.upgrade(request(100), challenges(100));
+  const renewed = await provider.upgrade(request(0), challenges(0));
+  assert.notEqual(renewed.headers.get("authorization"), upgraded[0].headers.get("authorization"));
   assert.equal(issued, 102);
+  await provider.invalidate(upgraded[0]);
+  assert.equal(
+    (await provider.upgrade(request(0), challenges(0))).headers.get("authorization"),
+    renewed.headers.get("authorization"),
+    "late rejections preserve the replacement",
+  );
+  assert.equal(issued, 102);
+  await provider.invalidate(request(0));
+  await provider.invalidate(upgraded[100].clone());
+  await provider.upgrade(request(100), challenges(100));
+  assert.equal(issued, 103);
   await provider.forget();
 });
 
