@@ -525,6 +525,9 @@ importers:
       '@jeswr/fetch-rdf':
         specifier: ^0.1.0
         version: 0.1.0
+      '@jeswr/suite-vocab':
+        specifier: workspace:*
+        version: link:../../packages/suite-vocab
       '@rdfjs/wrapper':
         specifier: ^0.34.0
         version: 0.34.0
@@ -1499,6 +1502,9 @@ importers:
       '@jeswr/fetch-rdf':
         specifier: 0.1.0
         version: 0.1.0
+      '@jeswr/suite-vocab':
+        specifier: workspace:*
+        version: link:../../packages/suite-vocab
       '@rdfjs/wrapper':
         specifier: 0.34.0
         version: 0.34.0
@@ -3036,6 +3042,9 @@ importers:
       '@jeswr/solid-task-model':
         specifier: workspace:*
         version: link:../solid-task-model
+      '@jeswr/suite-vocab':
+        specifier: workspace:*
+        version: link:../suite-vocab
       '@rdfjs/wrapper':
         specifier: ^0.34.0
         version: 0.34.0
