@@ -16,3 +16,10 @@
      the UUIDv5 namespace, or the exact UUID name construction. Inventing those details
      would violate the port/parity requirement. No placeholder implementation or fabricated
      parity fixtures have been added.
+
+   Answer (round 2): read-only KG sources are mounted at
+   `/home/runner/work/solid-sdk-lanes/_sources/knowledge-graph/`. The dispatcher
+   explicitly replaces private pilot data with five fictional `example.org` fact
+   inputs and Python-generated outputs. No private pilot fixture is copied.
+   This resolves question 1. The package takes the owner WebID explicitly and
+   accepts supplied source hashes rather than reading arbitrary source files.
