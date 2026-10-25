@@ -1,7 +1,7 @@
 # AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 #
-@prefix col:     <https://w3id.org/jeswr/sectors/collectibles#> .
-@prefix core:    <https://w3id.org/jeswr/core#> .
+@prefix col:     <https://jeswr.org/ns/sectors/collectibles#> .
+@prefix core:    <https://jeswr.org/ns/core#> .
 @prefix owl:     <http://www.w3.org/2002/07/owl#> .
 @prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
 @prefix rdf:     <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
@@ -32,10 +32,12 @@
 # only ANNOTATES the closest CRM/linked.art analogues here.
 # =============================================================================
 
-<https://w3id.org/jeswr/sectors/collectibles/alignments> a owl:Ontology ;
+<https://jeswr.org/ns/sectors/collectibles/alignments> a owl:Ontology ;
+    dcterms:description "Version 2.0.0 rebases this ontology from its legacy w3id namespace to https://jeswr.org/ns/ (DECISIONS V1)."@en ;
+    owl:versionIRI <https://jeswr.org/ns/sectors/collectibles/alignments/2.0.0> ;
     dcterms:title "Solid Collectibles sector — external alignments"@en ;
-    owl:imports <https://w3id.org/jeswr/sectors/collectibles> ;
-    owl:versionInfo "0.1.0" ;
+    owl:imports <https://jeswr.org/ns/sectors/collectibles> ;
+    owl:versionInfo "2.0.0" ;
     rdfs:comment "Optional Mode-A bridge: schema.org amount/creative-work terms, PROV-O activity/attribution framing, and linked.art (CIDOC-CRM) art-market analogues as reference only. External IRIs are real and governed by their bodies. Nothing is owl:imported into the reasoned closure."@en .
 
 dcterms:title a owl:AnnotationProperty .

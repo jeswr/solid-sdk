@@ -51,24 +51,24 @@ const note = (m) => console.log(`  · ${m}`);
 // carry label + definition. SHACL/alignments/imports files are parsed for
 // well-formedness but their shapes/bridges aren't held to the F1 term rule.
 const ONTOLOGIES = [
-  { dir: "core", file: "core.ttl", ns: "https://w3id.org/jeswr/core#" },
-  { dir: "identity", file: "identity.ttl", ns: "https://w3id.org/jeswr/sectors/identity#" },
-  { dir: "finance", file: "finance.ttl", ns: "https://w3id.org/jeswr/sectors/finance#" },
-  { dir: "health", file: "health.ttl", ns: "https://w3id.org/jeswr/sectors/health#" },
-  { dir: "health/diet", file: "diet.ttl", ns: "https://w3id.org/jeswr/sectors/health/diet#" },
-  { dir: "media", file: "media.ttl", ns: "https://w3id.org/jeswr/sectors/media#" },
-  { dir: "scheduling", file: "scheduling.ttl", ns: "https://w3id.org/jeswr/sectors/scheduling#" },
-  { dir: "contacts", file: "contacts.ttl", ns: "https://w3id.org/jeswr/sectors/contacts#" },
-  { dir: "drawing", file: "drawing.ttl", ns: "https://w3id.org/jeswr/sectors/drawing#" },
-  { dir: "social", file: "social.ttl", ns: "https://w3id.org/jeswr/sectors/social#" },
-  { dir: "bookmarks", file: "bookmarks.ttl", ns: "https://w3id.org/jeswr/sectors/bookmarks#" },
-  { dir: "futures", file: "futures.ttl", ns: "https://w3id.org/jeswr/sectors/futures#" },
+  { dir: "core", file: "core.ttl", ns: "https://jeswr.org/ns/core#" },
+  { dir: "identity", file: "identity.ttl", ns: "https://jeswr.org/ns/sectors/identity#" },
+  { dir: "finance", file: "finance.ttl", ns: "https://jeswr.org/ns/sectors/finance#" },
+  { dir: "health", file: "health.ttl", ns: "https://jeswr.org/ns/sectors/health#" },
+  { dir: "health/diet", file: "diet.ttl", ns: "https://jeswr.org/ns/sectors/health/diet#" },
+  { dir: "media", file: "media.ttl", ns: "https://jeswr.org/ns/sectors/media#" },
+  { dir: "scheduling", file: "scheduling.ttl", ns: "https://jeswr.org/ns/sectors/scheduling#" },
+  { dir: "contacts", file: "contacts.ttl", ns: "https://jeswr.org/ns/sectors/contacts#" },
+  { dir: "drawing", file: "drawing.ttl", ns: "https://jeswr.org/ns/sectors/drawing#" },
+  { dir: "social", file: "social.ttl", ns: "https://jeswr.org/ns/sectors/social#" },
+  { dir: "bookmarks", file: "bookmarks.ttl", ns: "https://jeswr.org/ns/sectors/bookmarks#" },
+  { dir: "futures", file: "futures.ttl", ns: "https://jeswr.org/ns/sectors/futures#" },
   {
     dir: "collectibles",
     file: "collectibles.ttl",
-    ns: "https://w3id.org/jeswr/sectors/collectibles#",
+    ns: "https://jeswr.org/ns/sectors/collectibles#",
   },
-  { dir: "equine", file: "equine.ttl", ns: "https://w3id.org/jeswr/sectors/equine#" },
+  { dir: "equine", file: "equine.ttl", ns: "https://jeswr.org/ns/sectors/equine#" },
 ];
 
 // =============================================================================
@@ -92,7 +92,7 @@ let totalQuads = 0;
 for (const p of ttlFiles.sort()) {
   const rel = relative(ROOT, p);
   try {
-    const quads = new Parser({ baseIRI: `https://w3id.org/jeswr/${rel}` }).parse(
+    const quads = new Parser({ baseIRI: `https://jeswr.org/ns/${rel}` }).parse(
       readFileSync(p, "utf8"),
     );
     parsedQuads.set(p, quads);
@@ -165,14 +165,14 @@ for (const { dir, file, ns } of ONTOLOGIES) {
 // vocabularies, not gUFO-rooted domain ontologies. (validate.mjs additionally
 // requires rdfs:isDefinedBy on these; this layer mirrors the sector term-hygiene
 // bar so the same rule is visible in the ontology gate.) Note fedcon: mints under
-// https://jeswr.org/fedcon# — the one root vocab NOT under w3id.org/jeswr.
+// https://jeswr.org/fedcon# — the one root vocab NOT under jeswr.org/ns.
 // =============================================================================
 console.log("\nLayer 2b — root governance-vocab term hygiene (fedapp / fedreg / fedcon / task):");
 const ROOT_VOCABS = [
-  { file: "fedapp.ttl", ns: "https://w3id.org/jeswr/fed#" },
-  { file: "fedreg.ttl", ns: "https://w3id.org/jeswr/fedreg#" },
+  { file: "fedapp.ttl", ns: "https://jeswr.org/ns/fed#" },
+  { file: "fedreg.ttl", ns: "https://jeswr.org/ns/fedreg#" },
   { file: "fedcon.ttl", ns: "https://jeswr.org/fedcon#" },
-  { file: "task.ttl", ns: "https://w3id.org/jeswr/task#" },
+  { file: "task.ttl", ns: "https://jeswr.org/ns/task#" },
 ];
 for (const { file, ns } of ROOT_VOCABS) {
   const p = join(ROOT, file);
@@ -182,7 +182,7 @@ for (const { file, ns } of ROOT_VOCABS) {
   }
   let quads;
   try {
-    quads = new Parser({ baseIRI: `https://w3id.org/jeswr/${file}` }).parse(
+    quads = new Parser({ baseIRI: `https://jeswr.org/ns/${file}` }).parse(
       readFileSync(p, "utf8"),
     );
   } catch (err) {
