@@ -1,8 +1,65 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # Lane report — sst-8xm.58 / T-070
 
 Updated: 2026-10-25. Branch: `lane/sst-8xm.58`.
+
+## Fix round after review of 1658b267
+
+Status: all three supplied review findings are addressed. No implementation blocker
+or open question remains for this fix round. The referenced `briefs/sst-8xm.58.md`
+and `.fix1.md` are absent from this checkout; the three findings supplied directly
+in the lane instruction define the conservative scope. No additional API or task
+scope was introduced. Earlier implementation notes below describe the retained
+T-070/T-071 split.
+
+Commits:
+
+- `2bde3f14` — `fix: share RDF engine initialization across instances`: one
+  module-level initialization promise covers both configured-URL and default
+  Node initialization of the web binding. It is retained after success and engine
+  disposal, and cleared only when initialization fails. Regression tests cover
+  concurrent engines, mixed initialization paths, retry after failure and reuse
+  after disposal. The concurrency test creates an index on the first engine,
+  completes a competing initialization, then checks and mutates the actual owned
+  WASM store to prove it survives. The synchronous `./node` binding continues to
+  initialize once through the JavaScript module cache.
+- `389c1378` — `fix: scope parsed blank nodes to each document`: real-engine
+  materialization maps document labels to fresh RDF/JS blank nodes, preserving
+  links across subject, object and graph positions. The fake uses n3's default
+  per-document scoping, removing `blankNodePrefix: ""`. Union regressions cover
+  all shared syntaxes, graph links, TriG base resolution and real JSON-LD. The new
+  regressions reproduced collisions before the fix and pass afterward.
+- `0e1d7b24` — `fix: expose parsed RDF as DatasetCore`: narrow `parse` to
+  `Promise<DatasetCore>` and correct its API and README documentation. Document
+  shared initialization selection and per-parse blank-node identities.
+- `docs: record RDF engine fix verification` — this STATUS.md-only final commit.
+
+Final checks passed on Node v24.22.1 / pnpm 10.4.1 before the final commit:
+
+| Command | Result |
+| --- | --- |
+| `pnpm --filter @jeswr/rdf-engine run lint` | PASS; 20 files checked |
+| `pnpm --filter @jeswr/rdf-engine run build` | PASS |
+| `pnpm --filter @jeswr/rdf-engine run typecheck` | PASS |
+| `pnpm --filter @jeswr/rdf-engine run test` | PASS; 55 tests across 6 files |
+| `pnpm run lint:root` | PASS; Biome and all root guards |
+| `git diff --check` | PASS |
+
+Coverage: statements 99.5%, branches 97.5%, functions 100%, lines 99.45%; all
+existing 90% thresholds pass. Tests include real Node and hosted-URL WASM,
+store-lifetime accounting and the installed-artifact bundle budget. The emitted
+declarations use DatasetCore. No workspace manifest depends on rdf-engine, so
+there is no dependent package gate. The requested touched-package gates and root
+lint were run; no whole-workspace gate was run.
+
+`roborev` is unavailable, so no automated review verdict was produced. Beads
+tracker operations were left to the dispatcher because this is a dedicated
+worktree. No dependencies, lockfile, tracker state or other checkout changed.
+No push, PR, branch switch, fetch or merge occurred. STATUS.md was edited last.
+
+## Earlier implementation report at 1658b267
 
 Status: single-document implementation complete and package gates passing.
 QUESTIONS.md item 1 is resolved using the exact architect answer supplied in the
