@@ -104,10 +104,16 @@ describe("JSON-LD context policy", () => {
     expect(responseBody.locked).toBe(false);
   });
 
-  it("awaits context response cancellation before exposing the HTTP error", async () => {
-    let finishCancellation = () => {};
-    const pending = new Promise<void>((resolve) => {
-      finishCancellation = resolve;
+  it.each([
+    "never settles",
+    "rejects after timeout",
+  ])("immediately exposes the context HTTP error when cancellation %s", async (outcome) => {
+    vi.useFakeTimers();
+    const unhandled = vi.fn();
+    process.on("unhandledRejection", unhandled);
+    let failCancellation = (_reason: Error) => {};
+    const pending = new Promise<void>((_resolve, reject) => {
+      failCancellation = reject;
     });
     const cancel = vi.fn(() => pending);
     const response = new Response(new ReadableStream({ cancel }), { status: 403 });
@@ -118,13 +124,31 @@ describe("JSON-LD context policy", () => {
     const rejected = vi.fn();
     const result = loader.load(contextUrl).catch(rejected);
 
-    await vi.waitFor(() => expect(cancel).toHaveBeenCalledTimes(1));
-    expect(rejected).not.toHaveBeenCalled();
-    finishCancellation();
-    await result;
-    expect(rejected).toHaveBeenCalledExactlyOnceWith(
-      expect.objectContaining({ name: "RdfFetchError", status: 403, url: contextUrl }),
-    );
+    try {
+      await vi.advanceTimersByTimeAsync(0);
+      expect(cancel).toHaveBeenCalledTimes(1);
+      expect(rejected).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({
+          name: "RdfFetchError",
+          status: 403,
+          url: contextUrl,
+          message: `HTTP 403 loading JSON-LD context ${contextUrl}.`,
+        }),
+      );
+      await result;
+      expect(vi.getTimerCount()).toBe(1);
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(vi.getTimerCount()).toBe(0);
+      if (outcome === "rejects after timeout") {
+        failCancellation(new Error("late cleanup failure"));
+        await vi.advanceTimersByTimeAsync(0);
+      }
+      expect(unhandled).not.toHaveBeenCalled();
+      expect(rejected).toHaveBeenCalledTimes(1);
+    } finally {
+      process.off("unhandledRejection", unhandled);
+      vi.useRealTimers();
+    }
   });
 
   it("preserves the context HTTP error when cancellation rejects", async () => {

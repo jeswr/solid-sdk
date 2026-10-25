@@ -10,6 +10,7 @@
  * @packageDocumentation
  */
 
+import { cancelResponseBody } from "./cancel-body.js";
 import { RdfFetchError } from "./errors.js";
 import { extractMediaType, parseRdf } from "./parse.js";
 import type { FetchedRdf, FetchRdfOptions } from "./types.js";
@@ -88,11 +89,7 @@ export async function fetchRdf(url: string, options: FetchRdfOptions = {}): Prom
     // Header/status checks can reject before the parser owns the stream.
     // Parsing also tears down its reader; cancellation here is best-effort
     // so an absent, locked, or errored body cannot hide the original failure.
-    try {
-      await response.body?.cancel();
-    } catch {
-      // Preserve the response/parse error if cleanup fails.
-    }
+    void cancelResponseBody(response);
     throw cause;
   }
 }

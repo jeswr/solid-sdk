@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+import { cancelResponseBody } from "./cancel-body.js";
 import { RdfFetchError } from "./errors.js";
 import type { DocumentLoader } from "./types.js";
 
@@ -35,11 +36,7 @@ export function createFetchDocumentLoader(
               url,
             },
           );
-          try {
-            await response.body?.cancel();
-          } catch {
-            // Cleanup is best-effort: preserve the original HTTP error.
-          }
+          void cancelResponseBody(response);
           throw error;
         }
         return await response.json();

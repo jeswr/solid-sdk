@@ -25,21 +25,47 @@ describe("rejected response cleanup", () => {
     expect(body.locked).toBe(false);
   });
 
-  it("awaits cancellation before exposing the HTTP error", async () => {
-    let finishCancellation = () => {};
-    const pending = new Promise<void>((resolve) => {
-      finishCancellation = resolve;
-    });
-    const cancel = vi.fn(() => pending);
-    const response = new Response(new ReadableStream({ cancel }), { status: 403 });
-    const rejected = vi.fn();
-    const result = fetchRdf(url, { fetch: vi.fn(async () => response) }).catch(rejected);
+  describe.each(["never settles", "rejects after timeout"])("when cancellation %s", (outcome) => {
+    it.each([
+      { status: 403, contentType: "text/plain", message: "HTTP 403" },
+      { status: 200, contentType: "text/html", message: "Unsupported RDF media type" },
+      { status: 200, contentType: "invalid", message: "Invalid Content-Type header" },
+    ])("immediately exposes the $status / $contentType error", async (testCase) => {
+      vi.useFakeTimers();
+      const unhandled = vi.fn();
+      process.on("unhandledRejection", unhandled);
+      let failCancellation = (_reason: Error) => {};
+      const pending = new Promise<void>((_resolve, reject) => {
+        failCancellation = reject;
+      });
+      const cancel = vi.fn(() => pending);
+      const response = new Response(new ReadableStream({ cancel }), {
+        status: testCase.status,
+        headers: { "content-type": testCase.contentType },
+      });
+      const rejected = vi.fn();
+      const result = fetchRdf(url, { fetch: vi.fn(async () => response) }).catch(rejected);
 
-    await vi.waitFor(() => expect(cancel).toHaveBeenCalledTimes(1));
-    expect(rejected).not.toHaveBeenCalled();
-    finishCancellation();
-    await result;
-    expect(rejected).toHaveBeenCalledWith(expect.objectContaining({ status: 403 }));
+      try {
+        await vi.advanceTimersByTimeAsync(0);
+        expect(cancel).toHaveBeenCalledTimes(1);
+        expect(rejected).toHaveBeenCalledExactlyOnceWith(expect.any(RdfFetchError));
+        expect(rejected.mock.calls[0]?.[0].message).toContain(testCase.message);
+        await result;
+        expect(vi.getTimerCount()).toBe(1);
+        await vi.advanceTimersByTimeAsync(1_000);
+        expect(vi.getTimerCount()).toBe(0);
+        if (outcome === "rejects after timeout") {
+          failCancellation(new Error("late cleanup failure"));
+          await vi.advanceTimersByTimeAsync(0);
+        }
+        expect(unhandled).not.toHaveBeenCalled();
+        expect(rejected).toHaveBeenCalledTimes(1);
+      } finally {
+        process.off("unhandledRejection", unhandled);
+        vi.useRealTimers();
+      }
+    });
   });
 
   it("preserves the HTTP error when body cancellation rejects", async () => {
