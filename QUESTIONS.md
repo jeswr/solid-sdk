@@ -18,3 +18,9 @@
    request RDF and generic reads use the server default. Options: (a) prefer RDF on
    all reads; (b) add an optional `PodReadOptions.accept`. Conservative choice: (b),
    preserving both existing behaviors without changing one-argument PodPort backends.
+5. A review proposed broadening RDF negotiation to every parser-supported format.
+   DESIGN §3 / MCP-01 asks for a fetch-backed seam and preservation of existing
+   operations. Options: (a) retain the pre-lane fetch-rdf canonical Accept value
+   (`text/turtle, application/ld+json;q=0.9`); (b) broaden the negotiated formats.
+   Conservative choice: (a). Parser support is unchanged; callers can select other
+   representations through PodReadOptions. Broader negotiation is outside this lane.
