@@ -61,7 +61,8 @@
     "@jeswr/solid-vc",
     "@jeswr/solid-webauthn-reauth",
     "@jeswr/unstorage-solid",
-    "@jeswr/y-solid"
+    "@jeswr/y-solid",
+    "@jeswr/suite-ui"
   ],
   "applications": [
     {
@@ -127,6 +128,11 @@
     {
       "slug": "pod-photos",
       "name": "@jeswr/app-pod-photos",
+      "kind": "application"
+    },
+    {
+      "slug": "suite",
+      "name": "@jeswr/app-suite",
       "kind": "application"
     }
   ],
