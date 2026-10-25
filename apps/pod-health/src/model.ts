@@ -8,6 +8,7 @@
 // @rdfjs/wrapper mapping helpers. No `dataset.add(factory.quad(...))` and no
 // string-concatenated Turtle anywhere in this file.
 
+import type { DataFactory, DatasetCore } from "@rdfjs/types";
 import {
   DatasetWrapper,
   LiteralAs,
@@ -17,8 +18,8 @@ import {
   OptionalAs,
   OptionalFrom,
   SetFrom,
-  TermWrapper,
 } from "@rdfjs/wrapper";
+import { canonicalizeHealthDataset, HealthTerm } from "./canonical-vocab.js";
 import {
   CoreProp,
   GeoProp,
@@ -47,7 +48,7 @@ const OBS_CLASS: Record<Exclude<ObservationKind, "Observation">, string> = {
  * `health:CodeableConcept` — a coded clinical concept (SNOMED CT / LOINC / an
  * Apple-Health type). A `core:Identifier` carrying the code value + its scheme.
  */
-export class CodeableConcept extends TermWrapper {
+export class CodeableConcept extends HealthTerm {
   /** Live set of `rdf:type` IRIs. */
   get types(): Set<string> {
     return SetFrom.subjectPredicate(this, RDF_TYPE, NamedNodeAs.string, NamedNodeFrom.string);
@@ -86,7 +87,7 @@ export class CodeableConcept extends TermWrapper {
  * case. Interval effective times (sleep, daily step totals) keep the link and
  * are read via the raw `effectiveTime` IRI.
  */
-export class Observation extends TermWrapper {
+export class Observation extends HealthTerm {
   /** Live set of `rdf:type` IRIs. */
   get types(): Set<string> {
     return SetFrom.subjectPredicate(this, RDF_TYPE, NamedNodeAs.string, NamedNodeFrom.string);
@@ -181,7 +182,7 @@ export class Observation extends TermWrapper {
  * A `time:Instant` — a point in time carrying an `xsd:dateTime` stamp. Used as
  * the effective time of a spot observation and the start/end of a workout.
  */
-export class Instant extends TermWrapper {
+export class Instant extends HealthTerm {
   /** Live set of `rdf:type` IRIs. */
   get types(): Set<string> {
     return SetFrom.subjectPredicate(this, RDF_TYPE, NamedNodeAs.string, NamedNodeFrom.string);
@@ -205,7 +206,7 @@ export class Instant extends TermWrapper {
  * `health:Condition` — a coded clinical problem / diagnosis recorded for a
  * patient. A record `health:patient`-about a core:Person carrying `health:hasCode`.
  */
-export class Condition extends TermWrapper {
+export class Condition extends HealthTerm {
   /** Live set of `rdf:type` IRIs. */
   get types(): Set<string> {
     return SetFrom.subjectPredicate(this, RDF_TYPE, NamedNodeAs.string, NamedNodeFrom.string);
@@ -236,7 +237,7 @@ export class Condition extends TermWrapper {
 /**
  * `health:MedicinalProduct` — an identifiable drug or vaccine (a core:Asset).
  */
-export class MedicinalProduct extends TermWrapper {
+export class MedicinalProduct extends HealthTerm {
   /** Live set of `rdf:type` IRIs. */
   get types(): Set<string> {
     return SetFrom.subjectPredicate(this, RDF_TYPE, NamedNodeAs.string, NamedNodeFrom.string);
@@ -252,7 +253,7 @@ export class MedicinalProduct extends TermWrapper {
  * `health:MedicationStatement` — a record that a patient is / was taking a
  * medicinal product. References the product via `health:medication`.
  */
-export class MedicationStatement extends TermWrapper {
+export class MedicationStatement extends HealthTerm {
   /** Live set of `rdf:type` IRIs. */
   get types(): Set<string> {
     return SetFrom.subjectPredicate(this, RDF_TYPE, NamedNodeAs.string, NamedNodeFrom.string);
@@ -284,7 +285,7 @@ export class MedicationStatement extends TermWrapper {
  * `health:Immunization` — a record that a vaccine was administered to a patient.
  * References the vaccine via `health:medication`.
  */
-export class Immunization extends TermWrapper {
+export class Immunization extends HealthTerm {
   /** Live set of `rdf:type` IRIs. */
   get types(): Set<string> {
     return SetFrom.subjectPredicate(this, RDF_TYPE, NamedNodeAs.string, NamedNodeFrom.string);
@@ -317,7 +318,7 @@ export class Immunization extends TermWrapper {
  * is the patient (a core:Person). Aggregates clinical entries via `health:hasEntry`.
  * The load-bearing record-vs-subject split (the record is NOT the patient).
  */
-export class HealthRecord extends TermWrapper {
+export class HealthRecord extends HealthTerm {
   /** Live set of `rdf:type` IRIs. */
   get types(): Set<string> {
     return SetFrom.subjectPredicate(this, RDF_TYPE, NamedNodeAs.string, NamedNodeFrom.string);
@@ -369,7 +370,7 @@ export type ActivityType = "Run" | "Ride" | "Walk" | "Hike" | "Other";
  * (a GPX `<trkpt>`). Latitude / longitude / elevation reuse the W3C WGS84 geo
  * vocabulary; `ph:sequence` preserves the GPX track order.
  */
-export class RoutePoint extends TermWrapper {
+export class RoutePoint extends HealthTerm {
   /** Live set of `rdf:type` IRIs. */
   get types(): Set<string> {
     return SetFrom.subjectPredicate(this, RDF_TYPE, NamedNodeAs.string, NamedNodeFrom.string);
@@ -427,7 +428,7 @@ export class RoutePoint extends TermWrapper {
  * health sector ontology has no activity/route model yet — see the tracked
  * sector-vocab ADR follow-up to migrate this upstream).
  */
-export class Workout extends TermWrapper {
+export class Workout extends HealthTerm {
   /** Live set of `rdf:type` IRIs. */
   get types(): Set<string> {
     return SetFrom.subjectPredicate(this, RDF_TYPE, NamedNodeAs.string, NamedNodeFrom.string);
@@ -498,6 +499,10 @@ export class Workout extends TermWrapper {
  * this must be a DatasetWrapper (not reachable from one root term).
  */
 export class HealthDocument extends DatasetWrapper {
+  constructor(dataset: DatasetCore, factory: DataFactory) {
+    super(canonicalizeHealthDataset(dataset, factory), factory);
+  }
+
   /** Every `health:HealthRecord` subject in the document. */
   get records(): Iterable<HealthRecord> {
     return this.instancesOf(HealthClass.HealthRecord, HealthRecord);
