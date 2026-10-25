@@ -16,7 +16,8 @@
   },
   "scripts": {
     "lint": "pnpm run lint:root && turbo run lint --affected --concurrency=4",
-    "lint:root": "biome check scripts test guardrails skills package.json turbo.json vitest.config.ts && pnpm run check:lockfile-transport && pnpm run check:app-workspace && pnpm run check:fetch",
+    "lint:root": "biome check scripts test guardrails skills package.json turbo.json vitest.config.ts && pnpm run check:lockfile-transport && pnpm run check:app-workspace && pnpm run check:fetch && pnpm run check:agent-layers",
+    "check:agent-layers": "node scripts/check-agent-layers.mjs",
     "lint:fix": "biome check --write .",
     "check:lockfile-transport": "node scripts/check-lockfile-transport.mjs",
     "check:app-workspace": "node scripts/check-app-workspace.mjs",
