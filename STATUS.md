@@ -7,20 +7,33 @@ Date: 2026-10-25. Branch: `lane/sst-8xm.31`. Base: `219cdd5a`.
 ## Outcome
 
 Blocked before implementation by the brief's mandatory ambiguity stop rule.
-ADR-002 references `ProbeResult` in the required public interfaces but never
-defines it. See `QUESTIONS.md` for the design-record gap and resolution options.
+ADR-002 references `ProbeResult` in the required public interfaces. Its new
+2026-10-25 amendment points to a normative declaration in the tracker's
+`lanes/brief-extras.json`, but that file contains only T-001, T-002, and T-004
+entries, with no T-010 entry or `ProbeResult` declaration. The generated T-010
+brief also has no declaration. See `QUESTIONS.md` for the evidence and options.
 Only lane documentation changed; package sources and manifests are unchanged.
+
+Read the ADRs and architecture status from the relocated
+`/home/runner/work/solid-suite-planning/specs/sdk-core/` directory; the original
+`/Users/jesght/...` paths do not exist here. Checked the amendment's referenced
+file at `/home/runner/work/solid-suite-tracker/lanes/brief-extras.json` without
+changing the planning or tracker checkouts.
 
 ## Commits
 
 - `1798b64` — `docs: record missing probe result contract`: record the missing
   public type and the options requiring an architect decision.
-- Final report commit — `docs: record blocked storage capabilities lane`:
-  add this report and the verification results.
+- `a7cb79de` — `docs: record blocked storage capabilities lane`: original
+  report and verification results, already present at this turn's start.
+- `4856ba90` — `docs: clarify missing normative probe declaration`: record
+  the ADR amendment and absent T-010 extras after rechecking the design sources.
+- Final report commit — `docs: refresh blocked lane verification`: record
+  the repeated checks and current review-tool limitation.
 
 ## Gate results
 
-Commands ran in this checkout before the final commit; all exited 0:
+Commands reran in this checkout on 2026-10-25 before the final commit; all exited 0:
 
 | Command | Result |
 | --- | --- |
@@ -40,16 +53,18 @@ not required and was not run.
 
 ## Review
 
-The checkout has no post-commit roborev hook. `roborev review HEAD` explicitly
-queued review job 5806 for `1798b64`; its verdict was pending when this report
-was prepared. The final report commit will also be explicitly queued for review.
+The original report recorded roborev job 5806 queued for `1798b64`.
+On this turn, `roborev show 1798b64` exited 127 (`roborev: command not found`).
+Reviews cannot be read or queued with the currently available toolchain; no
+review tooling was installed. The dispatcher must arrange review of the new
+documentation commits.
 
 ## Unfinished and open questions
 
 All T-010 implementation remains unfinished: vocabulary constants, public types,
 Link parser, and the 12 table cases with executable-code coverage.
 
-Open question: supply the exact `ProbeResult` declaration (preferred), authorize
-designing it from the probe algorithm, or amend T-010 to defer the affected
-interfaces. No placeholder public contract was invented. No tracker state was
-changed from this isolated checkout.
+Open question: supply the exact `ProbeResult` declaration in the normative T-010
+extras or ADR-002 (preferred), authorize designing it from the probe algorithm,
+or amend T-010 to defer the affected interfaces. No placeholder public contract
+was invented. No tracker state was changed from this isolated checkout.
