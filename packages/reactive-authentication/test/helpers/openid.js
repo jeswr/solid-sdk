@@ -163,7 +163,7 @@ export async function startOpenIdProvider(options = {}) {
               jkt,
               code.nonce,
               code.scope.includes("offline_access"),
-              true,
+              code.scope.includes("openid"),
             ),
           );
         }
@@ -212,14 +212,14 @@ export async function startOpenIdProvider(options = {}) {
     if (withIdToken) {
       result.id_token = await new SignJWT({
         webid: webId,
-        azp: clientId,
+        ...(options.omitAzp ? {} : { azp: clientId }),
         ...(nonce === undefined ? {} : { nonce }),
         cnf: { jkt },
       })
         .setProtectedHeader({ alg: "ES256", kid: "op-key" })
         .setIssuer(`${base}/`)
         .setSubject(subject)
-        .setAudience([clientId, "solid"])
+        .setAudience(options.omitAzp ? [clientId] : [clientId, "solid"])
         .setIssuedAt(now)
         .setExpirationTime(now + expiresIn)
         .sign(keys.privateKey);
