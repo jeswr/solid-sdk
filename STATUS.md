@@ -1,173 +1,152 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
-# sst-ito — A-002 agent history imports
+# sst-ito — A-002 fix round 1
 
-Updated: 2026-10-25. Branch: `lane/sst-ito`; base: `agent/integration` at `61048c43`.
-Implementation is committed. **A-002 acceptance is not complete:** personal-agent verification
-remains timeout-blocked, and both repository gates fail on an existing Google Fonts build fetch.
-This report is committed last, after the gate attempts.
+Updated: 2026-10-25. Branch: `lane/sst-ito`; integration base: `61048c43`.
+Resumed from `44067f16`; the imports were not repeated.
+
+All four requested fixes are implemented. Both imported packages pass their full tests,
+coverage, lint, build, typecheck, and focused Turbo gate. Root lint and root tests pass.
+**Repository-wide validation remains blocked:** both affected and full gates stop at an
+unchanged federation-trust snapshot mismatch. This report is updated and committed last,
+after the validation attempts.
 
 ## Commits
 
-| Commit | Change |
+The existing import commits remain: `783a6730` (personal-agent history), `9a99b8a4`
+(legacy-bridge history), `bccc018e` (drop standalone artifacts), `5fccd959`
+(workspace integration), and `44067f16` (previous validation report).
+
+| Fix-round commit | Change |
 | --- | --- |
-| `783a6730` | Import personal-agent history from pilot head `d409005`; filtered parent `0edb2e6b679827939a9ea1183e35c935d991e7ff`. |
-| `9a99b8a4` | Import legacy-bridge history from main head `82bea82`; filtered parent `aabd11fb06058b16cd50100cd3b426a73a987688`. |
-| `bccc018e` | Delete imported dist, npm locks, standalone tool configuration, and check-dist scripts. |
-| `5fccd959` | Integrate workspace dependencies, tooling, package skills, coverage, mirror configuration, and mechanical lint/declaration fixes. |
-| This commit (`docs: record sst-ito validation blockers`) | Record validation results and remaining work. |
+| `ae60152e` | Derive send authorization from the executor's operation; reject and audit mismatched proposal labels. |
+| `8cc8b95d` | Validate Actor proposal writes and exclude ACL/ACP resources, containers, and non-RDF content; document credentials without control rights. |
+| `2367aa2d` | Apply the bridge calibration/reliability gate and preserve confirmation requirements through proposal storage and execution. |
+| `3a170d71` | Record explicit domain ownership and compact only exact conversation/task owner matches. |
+| This commit | Replace the previous validation report with fix-round results. |
 
-Both sources were cloned with `--no-local` into temporary directories, rewritten with
-`git filter-repo --force --to-subdirectory-filter packages/<name>`, and merged separately
-with `--allow-unrelated-histories`. Source checkouts were not edited. Only local temporary
-repositories were fetched for the imports; no push, PR, or mirror-publish command ran.
+## Behavior and conservative choices
 
-## Scope and conservative choices
+- The outbox currently performs message sends, including scheduling replies. Its required
+  ODRL action is therefore `distribute`, independent of the proposal's action label.
+  Mismatches are prohibited even after owner confirmation and recorded in rejected outbox
+  receipts. A `read` permission cannot authorize a send.
+- The live Actor gate accepts only a parsed proposal at its expected proposal URL and
+  serializes the validated record before allowing the write. It denies `.acl`/`.acr`
+  paths, discovered `Link rel="acl"` and ACP `accessControl` targets (headers or RDF),
+  container URLs/types, arbitrary or malformed RDF, non-RDF writes, and failed discovery.
+  Access-control resource comparisons discard fragments. The live Actor injects its read
+  fetch for discovery; direct gate/options callers must provide `discoveryFetch`.
+- Actor writes remain Turtle-only, matching the existing proposal serializer. This also
+  avoids loading remote JSON-LD contexts at the untrusted input boundary. The README
+  requires the live Actor's injected authenticated fetch credentials to lack `acl:Control`
+  and equivalent ACP control rights.
+- Existing deterministic candidate filtering is retained. The bridge reliability gate
+  marks selected self-reported, missing/unknown-calibration, intermediate-confidence, or
+  security-bearing signals as confirmation-required; audit-only signals are excluded.
+  A proposal containing any selected confirmation-required signal carries the flag.
+  RDF storage and the content digest preserve it, and the executor requires a matching
+  owner confirmation even under an autonomous-send mandate.
+- New conversation/task-owned domain entries store `{ owner, value }`. Cleanup compares
+  the owner ID exactly; keys and message/effect ID substrings no longer establish ownership.
+  Legacy entries without ownership remain readable and are retained. Shared operation
+  snapshots explicitly remain unowned because they combine several conversations' state.
+- No dependencies, lockfile entries, package names/exports, or securityCritical flags were
+  changed in this round. No timeout or enforcement-budget changes were made.
 
-- Both packages retain their existing scoped names, exports, CLI entry points, source, docs,
-  scripts other than check-dist, README, LICENSE, and existing handoff material.
-- Internal git dependency specifications become `workspace:*`, including legacy-bridge's
-  solid-chat-interop dependency. fetch-rdf remains `^0.1.0` because it is absent from this base.
-- Both packages use Node `>=24`, root Biome/TypeScript settings, and Vitest 4.1.10 (root lock).
-  personal-agent declares its already-used `@rdfjs/types` development dependency for pnpm.
-- Mechanical source changes remove an unused import, make existing optional-chain assertions
-  lintable, and annotate `evidenceGraph` with public N3 types to avoid a private declaration path.
-- `src/triage/typesafe.ts` stays until A-011, following the dispatcher's later explicit instruction.
-  Vocabulary migration and feature extraction belong to subsequent tasks.
-- suite.json lists both packages. Each manifest declares `mirrorPublish.inlined: []` because
-  tsc preserves dependency imports. Root tests verify target identity and refusal without
-  every required dependency mirror SHA. Publishing remains unexecuted.
-- Workspace guarded-fetch resolved undici **8.5.0**, so the pilot override is preserved as
-  root `pnpm.overrides["@jeswr/guarded-fetch>undici"] = "8.9.0"`. Both workspace and existing
-  guarded-fetch snapshot edges resolve the patched release in the lockfile.
+## Package validation
 
-## Dependency policy
+Host: Node `v24.22.1`, pnpm `10.4.1`, Vitest `4.1.10`.
+Tests use synthetic fixtures, injected I/O, in-memory stores, and loopback services.
+No live provider/model, credential store, provisioning, or send script was invoked.
 
-All checks used the repository guard in strict full registry mode and passed:
+For both packages, `run lint`, `run build`, and `run typecheck` passed.
+The dependency-first build passed all eight dependency tasks.
+
+| Package | Tests | Coverage run |
+| --- | --- | --- |
+| personal-agent | PASS: 482 tests, 55 files | PASS: 482 tests, 55 files |
+| agentic-legacy-bridge | PASS: 650 tests, 37 files | PASS: 650 tests, 37 files |
+
+Coverage includes every non-test TypeScript file under each package's `src/`:
+
+| Package | Statements | Branches | Functions | Lines |
+| --- | --- | --- | --- | --- |
+| personal-agent | 86.88% | 74.56% | 90.39% | 89.46% |
+| agentic-legacy-bridge | 93.95% | 86.75% | 97.32% | 96.30% |
+
+These are complete passing-suite baselines, replacing the previous partial personal-agent
+coverage. Both securityCritical flags remain unset because coverage is below 100%.
+**Test-only timeout increases: none.** All tests and coverage ran with existing defaults.
+
+Regression coverage includes non-send permissions, confirmed action-label mismatches and
+their receipts; ACL/ACP targets advertised on both containers and resources; permitted
+proposal writes and every requested write rejection; calibrated versus uncalibrated
+derivation and confirmation-only execution; and conversation/task prefix collisions
+(`urn:case:1` versus `urn:case:10`) with unowned-state retention.
+
+Commands, with `GIT_ALLOW_PROTOCOL=file`:
 
 ```sh
-pnpm run check:packages @a2a-js/sdk @modelcontextprotocol/sdk canonicalize express jose jsonld-streaming-parser @types/express @anthropic-ai/claude-agent-sdk @jeswr/fetch-rdf @solid/object n3 zod @biomejs/biome @types/n3 @types/node typescript vitest @rdfjs/types rdf-canonize @vitest/coverage-v8 undici --strict
-pnpm run check:packages @anthropic-ai/sdk --strict
+pnpm --filter @jeswr/personal-agent run test
+pnpm --filter @jeswr/personal-agent run test:coverage
+pnpm --filter @jeswr/agentic-legacy-bridge run test
+pnpm --filter @jeswr/agentic-legacy-bridge run test:coverage
+pnpm run lint:root
+pnpm run test:root
+pnpm exec turbo run lint build typecheck test --filter=@jeswr/personal-agent --filter=@jeswr/agentic-legacy-bridge --concurrency=4 --env-mode=loose
 ```
 
-The seven specifically requested pilot dependency checks all passed. No policy exceptions or
-new production APIs were introduced. The Anthropic SDK peer stays at the pilot lock's
-`0.110.0`; a newer automatically selected peer archive stalled during temporary installation.
+The focused package gate passed **16/16 tasks** (nine cached), in 1m8.652s.
+Root lint passed all workspace, lockfile-transport, and raw-fetch guards.
+Root tests passed **28 tests in two files**.
 
-## Verification environment and dependency setup
+## Repository gates and remaining blocker
 
-Host: Node `v25.1.0`, pnpm `10.4.1`, TypeScript `6.0.3`, Vitest `4.1.10`.
-Tests use existing injected transports, in-memory stores, fixtures, and loopback servers.
-Verification uses a temporary `NODE_OPTIONS` preload blocking external TCP/DNS and remote git;
-`GIT_ALLOW_PROTOCOL=file` also blocks remote git. No real credential store, provider API,
-model API, Solid pod, provisioning command, or send script was used.
-
-A pre-existing dependency build started a GitHub clone to reconstruct fetch-rdf before the
-child-process block was added. It was interrupted. The existing lockfile-pinned fetch-rdf
-source (`a8359a3`) was then compiled locally into ignored dependency output. No tracked
-dependency package source was changed for that bootstrap; reconstructed output is ignored.
-
-Normal workspace re-resolution was blocked by pre-existing `#main` git dependencies requesting
-GitHub (notably federation-client/fetch-rdf). Registry dependencies were installed with
-lifecycle scripts disabled in `/tmp/sst-ito-verification`, preserving pilot direct versions
-and root tooling versions. Optional native components were omitted locally; provider SDKs
-were not invoked. Dependencies were linked into ignored node_modules for verification.
-The registry resolution was merged with unchanged existing lockfile entries and workspace
-links. This consistency check passed:
+Both gates were run after the final implementation commit and before this report commit:
 
 ```sh
-CI=true GIT_ALLOW_PROTOCOL=file NODE_OPTIONS=--require=/tmp/sst-ito-offline.cjs pnpm install --ignore-scripts --frozen-lockfile --offline --lockfile-only
+TURBO_TELEMETRY_DISABLED=1 NEXT_TELEMETRY_DISABLED=1 ASTRO_TELEMETRY_DISABLED=1 GIT_ALLOW_PROTOCOL=file npm_config_cache=/tmp/sst-ito-npm-cache TURBO_SCM_BASE=61048c43eb845a6d244fb90ec9b10ee0b0a7d1f4 pnpm run gate --env-mode=loose
+TURBO_TELEMETRY_DISABLED=1 NEXT_TELEMETRY_DISABLED=1 ASTRO_TELEMETRY_DISABLED=1 GIT_ALLOW_PROTOCOL=file npm_config_cache=/tmp/sst-ito-npm-cache pnpm run gate:full --env-mode=loose
 ```
 
-## Package checks and coverage
-
-All commands below use `GIT_ALLOW_PROTOCOL=file NODE_OPTIONS=--require=/tmp/sst-ito-offline.cjs`.
-For each package, `pnpm --filter <name> run lint`, `run build`, and `run typecheck` passed.
-Dependency-first Turbo build passed for all seven required existing workspace dependencies.
-No test or enforcement timeout was raised in configuration.
-
-| Package/check | Result |
+| Gate | Result |
 | --- | --- |
-| legacy-bridge `run test --testTimeout=60000 --hookTimeout=60000` | PASS: 650 tests, 37 files. |
-| legacy-bridge `run test:coverage --testTimeout=60000 --hookTimeout=60000` | PASS: 650 tests, 37 files. |
-| personal-agent `run test --testTimeout=120000 --hookTimeout=120000` | Interrupted (exit 130) after at least 12 observed failures in helper startup, A2A, industrial, and health cases; no complete pass count. |
-| personal-agent focused rerun | Two failures: fake SPARQ child probe ETIMEDOUT; a helper containing only `process.exit(0)` exceeded the unchanged 10-second helper deadline. |
-| personal-agent sequential coverage run | FAIL: 82 passed, one failed; stopped by `--bail=1` at the A2A scheduling test's existing 20,000 ms limit. Three files passed, one failed, 53 files discovered. Remaining files were not verified. |
-| personal-agent undici compatibility regression | PASS: four tests; verifies actual undici 8.9.0 loading, loopback transport, default refusal, and redirect revalidation. |
+| Affected repository gate | FAIL, exit 1: Turbo reported 198 successful / 250 tasks; 2m9.466s. |
+| Full repository gate | FAIL, exit 1: Turbo reported 180 successful / 208 tasks, 96 cached; 28.832s. |
 
-Focused command:
+Both stop at `@jeswr/federation-trust#test`, specifically
+`test/characterization.test.ts:196`, "delegation credential structure is stable".
+The embedded Ed25519 delegateKey JSON string has a different property order:
+the snapshot expects `crv,x,kty`; this host produces `kty,crv,x`.
+That package reports **53 passing / one failing test**. Neither federation-trust nor
+solid-vc has any source changes relative to the supplied integration base.
+The mismatch is outside this fix brief and was left unchanged.
 
-```sh
-pnpm --filter @jeswr/personal-agent run test src/pilot/a2a.test.ts src/actions/providers.test.ts --testNamePattern='pinned policy binary was replaced|settles once with a typed error' --testTimeout=120000 --hookTimeout=120000 --maxWorkers=1 --reporter=verbose
-```
+The full gate also logged a Pod Manager worker exit around the fail-fast shutdown.
+An isolated Pod Manager rerun passed **1,146 tests, one skipped, in 104 files**.
+Pod Manager's build succeeded, including its Google Fonts fetch, so the earlier font
+blocker is resolved on this host. Both repository gates stopped before completing all tasks.
 
-Undici compatibility command:
+## Verification setup, review, and scope
 
-```sh
-pnpm --filter @jeswr/personal-agent run test src/guarded-fetch-undici.test.ts --testTimeout=60000 --hookTimeout=60000 --maxWorkers=1 --reporter=verbose
-```
+The first dependency build invoked existing fetch-rdf remote-clone bootstrap scripts
+before Git was constrained to local transport. Their npm step failed because the default
+cache is read-only. This was a deviation from the lane's no-remote-fetch intent.
+Subsequent builds used `GIT_ALLOW_PROTOCOL=file`. The exact lockfile-pinned fetch-rdf
+source already present in the temporary bootstrap directory (`a8359a3764cb6b3c763e09ea211542a5dc7edc33`)
+was compiled with the installed TypeScript into ignored dependency output. No dependency
+manifest, source in another checkout, or tracked build artifact was changed.
 
-Final sequential coverage command:
+Manual review checked the four authorization/retention boundaries and the final diff.
+Automated roborev review remains unavailable: the CLI is not installed on this host.
+No review was claimed. All four fix commits include model provenance trailers.
 
-```sh
-pnpm --filter @jeswr/personal-agent run test:coverage --coverage.reportOnFailure --testTimeout=120000 --hookTimeout=120000 --maxWorkers=1 --bail=1 --reporter=verbose
-```
+The lane stayed on `lane/sst-ito`. No push, PR, publish, branch switch, tracker mutation,
+or fetch/merge into the lane checkout was performed. Gate-generated untracked app
+client-ID/callback files were removed. The working tree is clean after this report commit.
 
-Coverage includes all non-test TypeScript under each package's src directory:
-
-| Package | Statements | Branches | Functions | Lines | SEC decision |
-| --- | --- | --- | --- | --- | --- |
-| agentic-legacy-bridge | 93.95% | 86.75% | 97.32% | 96.30% | Leave unset: below 100%. |
-| personal-agent (partial, fail-fast run) | 30.64% | 23.89% | 30.59% | 31.65% | Leave unset: 100% not established. |
-
-The personal-agent figures are **partial execution coverage, not a full-suite baseline**.
-The first A2A scheduling test at `src/pilot/a2a.test.ts:267` hit its explicit 20-second timeout,
-which the command-line default timeout does not override. The fake SPARQ child deadline
-remains five seconds, and the credential helper deadline remains ten seconds. No enforcement
-budget or embedded test timeout was changed. A separate trivial Node launch measured 2,824 ms
-cold and 466 ms with the verification preload on a subsequent launch; startup latency varied.
-
-## Root checks and repository gates
-
-- `pnpm run lint:root`: PASS, including check:app-workspace, lockfile transport, and raw-fetch guards.
-- `pnpm run test:root --testTimeout=60000 --hookTimeout=60000 --maxWorkers=2`: PASS, 28 tests.
-  An earlier run hit two 10-second cleanup-hook timeouts; the retry passed without source changes.
-- Affected gate: **FAIL**, exit 1, 27 successful / 139 scheduled tasks; 1m56.666s.
-- Full gate: **FAIL**, exit 1, 53 successful / 183 scheduled tasks (26 cached); 2m0.839s.
-- Both stop at `@jeswr/app-pod-manager#build`: `next/font` in
-  `apps/pod-manager/src/app/layout.tsx` tries to fetch Inter from Google Fonts. The offline
-  guard blocks the connection. That application source is unchanged by this lane.
-- `agent/integration` is not present as a local ref in this dedicated checkout. The affected
-  gate uses the exact base SHA supplied in the brief instead; no branch/ref was created.
-
-Exact gate commands:
-
-```sh
-TURBO_TELEMETRY_DISABLED=1 NEXT_TELEMETRY_DISABLED=1 ASTRO_TELEMETRY_DISABLED=1 GIT_ALLOW_PROTOCOL=file NODE_OPTIONS=--require=/tmp/sst-ito-offline.cjs TURBO_SCM_BASE=61048c43eb845a6d244fb90ec9b10ee0b0a7d1f4 pnpm run gate --env-mode=loose
-TURBO_TELEMETRY_DISABLED=1 NEXT_TELEMETRY_DISABLED=1 ASTRO_TELEMETRY_DISABLED=1 GIT_ALLOW_PROTOCOL=file NODE_OPTIONS=--require=/tmp/sst-ito-offline.cjs pnpm run gate:full --env-mode=loose
-```
-
-Turbo's `--env-mode=loose` propagates the verification guard to task subprocesses. Gate tasks
-are unchanged. Telemetry is disabled. Denied Google Fonts attempts did not result in a live
-provider request. The gates terminate before all scheduled checks complete.
-
-## Review, unfinished work, and open questions
-
-Manual review checked history preservation, dependency mapping, public declarations, unchanged
-exports/runtime logic, and fail-closed mirror pin requirements. Roborev was not invoked because
-its model-provider calls conflict with this lane's explicit network restriction; commit hooks
-were disabled for the integration and report commits for the same reason.
-
-Remaining acceptance work:
-
-- Obtain a complete passing personal-agent run and full-suite coverage baseline. Existing
-  helper/SPARQ startup deadlines and the A2A test's 20-second bound fail on this host, including
-  the focused single-worker rerun. These are unresolved validation failures, not asserted fixes.
-- Obtain green affected/full gates with an offline font fixture or equivalent
-  existing-app build support. The current Pod Manager build requires a forbidden external fetch.
-- Automated roborev review remains unrun under this lane's provider-network restriction.
-
-Both package flags remain unset. There are no open design questions. Conservative choices are
-recorded above: preserve imported runtime behavior, TypeSafe until A-011, and existing security
-limits. No PR, push, publish, new feature, tracker mutation, or source change in another checkout
-is part of this lane's output. The bead must not be reported as fully verified.
+Implementation work from this brief is complete. Remaining acceptance work is the
+repository-wide snapshot failure and unavailable automated review. There are no open
+design questions.
