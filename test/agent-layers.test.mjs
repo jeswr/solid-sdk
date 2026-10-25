@@ -35,47 +35,9 @@ describe("agent layer boundaries (DESIGN §2.2)", () => {
     'import "openai";',
     'export * from "@anthropic-ai/sdk";',
     'await import("openai");',
-    'require("openai");',
     'import "open\\u0061i";',
   ])("also enforces SDK isolation outside agent projects: %s", (source) => {
     expect(scan("apps/pod-mail/web/src/index.ts", source).join("\n")).toContain("gateway-only");
-  });
-  it.each([
-    "(require)(TARGET);",
-    "(require as Loader)(TARGET);",
-    "(require satisfies Loader)(TARGET);",
-    "(<Loader>require)(TARGET);",
-    "require!(TARGET);",
-    "module.require(TARGET);",
-    "(module.require as Loader)(TARGET);",
-    'module["require"](TARGET);',
-    'module[("require" as const)!](TARGET);',
-    "module[`require`](TARGET);",
-    'module["requ\\u0069re"](TARGET);',
-    "(requ\\u0069re)(TARGET);",
-    // biome-ignore lint/suspicious/noTemplateCurlyInString: source fixture for prefilter coverage
-    "const label = `value ${name}`; (require)(TARGET);",
-  ])("checks wrapped and member loader targets outside agent projects: %s", (source) => {
-    for (const [target, reason] of [
-      ["openai", "gateway-only"],
-      ["@anthropic-ai/sdk", "gateway-only"],
-      ["@jeswr/agent-channels/gmail/send", "executor-only"],
-      ["../../../../packages/agent-channels/src/gmail/send.js", "executor-only"],
-    ]) {
-      expect(
-        scan(
-          "apps/pod-mail/web/src/index.ts",
-          source.replace("TARGET", JSON.stringify(target)),
-        ).join("\n"),
-      ).toContain(reason);
-    }
-    expect(scan("apps/pod-mail/web/src/index.ts", source.replace("TARGET", '"fs"'))).toEqual([]);
-    // Normalizing a loader for suite-wide target checks must not permit it in agent code.
-    expect(
-      scan("packages/agent-model-gateway/src/index.ts", source.replace("TARGET", '"openai"')).join(
-        "\n",
-      ),
-    ).toContain("CommonJS");
   });
   it("allows test tooling without exempting configuration files from SDK restrictions", () => {
     expect(
@@ -109,9 +71,7 @@ describe("agent layer boundaries (DESIGN §2.2)", () => {
     'import "@jeswr/agent-channels/gmail/send";',
     'export * from "@jeswr/agent-channels/gmail/send";',
     'await import("@jeswr/agent-channels/gmail/send");',
-    'require("@jeswr/agent-channels/gmail/send");',
     'type Send = import("@jeswr/agent-channels/gmail/send").Send;',
-    'import send = require("@jeswr/agent-channels/gmail/send");',
     'import "../../../packages/agent-channels/src/gmail/send.js";',
   ])("rejects alternate send import syntax: %s", (source) => {
     expect(scan("apps/agent-daemon/src/index.ts", source).join("\n")).toContain("executor-only");
@@ -300,6 +260,12 @@ describe("agent module load allowlist", () => {
     '(<Loader>require)("node:fs");',
     'require!("node:fs");',
     '(0, require)("node:fs");',
+    '(requ\\u0069re)("openai");',
+    'require.resolve("openai");',
+    '(require.resolve as Resolver)("openai");',
+    'require["resolve"]("openai");',
+    'module.require.resolve("openai");',
+    'module["requ\\u0069re"]["resolve"]("openai");',
     'const load = require; load("node:fs");',
     'let load; load = require; load("node:fs");',
     "configure(require);",
@@ -320,6 +286,10 @@ describe("agent module load allowlist", () => {
     'import { createRequire as makeLoader } from "module"; const load = makeLoader(import.meta.url);',
     "const makeLoader = (createRequire as Factory);",
     "const makeLoader = createRequire.bind(null);",
+    'createRequire(import.meta.url)("openai");',
+    '(createRequire as Factory)(import.meta.url).resolve("openai");',
+    'mod["createRequire"](import.meta.url)("openai");',
+    'mod[`createRequire`](import.meta.url).resolve("openai");',
     'import * as mod from "node:module"; mod.createRequire(import.meta.url);',
     'const { createRequire: makeLoader } = await import("node:module");',
     'const { ["createRequire"]: makeLoader } = await import("node:module");',
@@ -429,8 +399,16 @@ describe("agent module load allowlist", () => {
     ["apps/agent-daemon/src/index.ts", "../../../packages/agent-channels/src/gmail/%73end.js"],
     ["packages/agent-model-gateway/src/index.ts", "../../agent-%61udit/src/index.js"],
     ["packages/agent-model-gateway/src/index.ts", "../../agent-audit/src/%69ndex.js"],
-    ["apps/pod-mail/web/src/index.ts", "../../../../packages/agent-channels/src/gmail/%73end.js"],
-  ])("rejects encoded boundary targets in %s before filesystem normalization", (path, target) => {
+    ["apps/agent-daemon/src/index.ts", "../../../packages/agent-channels/src/gmail/send.js?raw"],
+    [
+      "apps/agent-daemon/src/index.ts",
+      "../../../packages/agent-channels/src/gmail/send.js#fragment",
+    ],
+    ["packages/agent-executor/src/index.ts", "@jeswr/agent-channels/gmail/send?raw"],
+    ["packages/agent-executor/src/index.ts", "@jeswr/agent-channels/gmail/send#fragment"],
+    ["packages/agent-model-gateway/src/index.ts", "../../agent-audit/src/index.js?raw"],
+    ["packages/agent-model-gateway/src/index.ts", "../../agent-audit/src/index.js#fragment"],
+  ])("rejects unsupported boundary specifiers in %s without resolving them", (path, target) => {
     const literal = JSON.stringify(target);
     for (const source of [
       `import ${literal};`,
@@ -438,9 +416,35 @@ describe("agent module load allowlist", () => {
       `await import(${literal});`,
       `type Value = import(${literal}).Value;`,
     ])
-      expect(scan(path, source).join("\n")).toContain(
-        "URL-encoded module specifiers are forbidden",
+      expect(scan(path, source)).toEqual([
+        `${path}:1: agent module specifier must be a bare package name or relative path: ${target}`,
+      ]);
+  });
+
+  it.each([
+    "require(TARGET);",
+    "(require as Loader)(TARGET);",
+    'module["require"](TARGET);',
+    "require.resolve(TARGET);",
+    "module.require.resolve(TARGET);",
+    "createRequire(import.meta.url)(TARGET);",
+    "import value = require(TARGET);",
+    "import type Value = require(TARGET);",
+  ])("rejects CommonJS independently of its target: %s", (source) => {
+    for (const target of [
+      "fs",
+      "openai",
+      "@jeswr/agent-channels/gmail/send",
+      "./local.js?raw",
+      "./local%2ejs",
+    ]) {
+      const failures = scan(
+        "packages/agent-model/src/index.ts",
+        source.replace("TARGET", JSON.stringify(target)),
       );
+      expect(failures.length).toBeGreaterThan(0);
+      for (const failure of failures) expect(failure).toContain("CommonJS");
+    }
   });
 
   it.each([

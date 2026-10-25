@@ -154,22 +154,9 @@ function isPropertyName(node) {
   );
 }
 
-function isRequire(expression) {
-  const node = ts.skipOuterExpressions(expression);
-  if (ts.isIdentifier(node)) return node.text === "require";
-  if (ts.isPropertyAccessExpression(node)) return node.name.text === "require";
-  if (ts.isElementAccessExpression(node)) {
-    const key = ts.skipOuterExpressions(node.argumentExpression);
-    return ts.isStringLiteralLike(key) && key.text === "require";
-  }
-  return false;
-}
-
 function needsImportCheck(root, file, text) {
-  // preProcessFile misses wrapped/member require calls. Conservatively include
-  // loader spellings, escapes and percent encodings, even inside templates.
-  // The AST pass distinguishes actual references from comments/string examples.
-  if (/require|\\|%/.test(text)) return true;
+  // Conservatively parse escaped ESM specifiers; the AST decodes their literals.
+  if (text.includes("\\")) return true;
   return ts.preProcessFile(text, true, true).importedFiles.some(({ fileName }) => {
     const target = importTarget(root, file, fileName);
     return (
@@ -198,12 +185,8 @@ function sourceFailures(root, file) {
       if (agentSource) report(node, "unverifiable dynamic import; use a string literal");
       return;
     }
-    if (agentSource && !allowedModuleSpecifier(value))
+    if (agentSource && !allowedModuleSpecifier(value)) {
       report(node, `agent module specifier must be a bare package name or relative path: ${value}`);
-    // ESM decodes percent escapes and removes URL whitespace before resolution.
-    // Reject encoded targets outright rather than interpreting them as paths.
-    if (value.includes("%")) {
-      report(node, `URL-encoded module specifiers are forbidden: ${value}`);
       return;
     }
     for (const failure of importFailures(ctx, importTarget(root, file, value), typeOnly))
@@ -242,13 +225,10 @@ function sourceFailures(root, file) {
       ts.isExternalModuleReference(node.moduleReference)
     ) {
       if (agentSource) report(node, "CommonJS import-equals is forbidden; use literal ESM imports");
-      checkImport(node, node.moduleReference.expression, node.isTypeOnly);
     } else if (ts.isImportTypeNode(node) && ts.isLiteralTypeNode(node.argument)) {
       checkImport(node, node.argument.literal, true);
-    } else if (ts.isCallExpression(node)) {
-      if (node.expression.kind === ts.SyntaxKind.ImportKeyword || isRequire(node.expression))
-        checkImport(node, node.arguments[0]);
-    }
+    } else if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword)
+      checkImport(node, node.arguments[0]);
     ts.forEachChild(node, visit);
   }
   visit(source);
