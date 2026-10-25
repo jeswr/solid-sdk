@@ -12,6 +12,8 @@ const sourceExtensions = new Set([".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", 
 const ignoredDirectories = new Set([
   "node_modules",
   "dist",
+  ".next",
+  "out",
   "coverage",
   ".git",
   ".turbo",

@@ -194,7 +194,7 @@ describe("agent layer boundaries (DESIGN §2.2)", () => {
 
   it("ignores generated, dependency and seeded-fixture directories", () => {
     const files = Object.fromEntries(
-      ["dist", "node_modules", "coverage", "__fixtures__"].map((directory) => [
+      ["dist", ".next", "out", "node_modules", "coverage", "__fixtures__"].map((directory) => [
         `packages/agent-channels/${directory}/index.ts`,
         'import "openai";',
       ]),
