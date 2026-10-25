@@ -51,8 +51,8 @@ for (const file of ttlFiles) {
   // carry only rdfs:label, exactly like the sector .shacl.ttl sidecars, which this
   // gate never term-checks. Skip the label/comment/isDefinedBy + ontology-node
   // loop for them (mirrors the sectors/ convention).
-  if (file.endsWith(".shacl.ttl")) {
-    ok("SHACL profile — not term-hygiene-checked (mirrors the sectors/ convention)");
+  if (file.endsWith(".shacl.ttl") || file === "legacy-w3id-alignments.ttl") {
+    ok("Profile or Mode-A sidecar — parsed without ontology term-hygiene checks");
     continue;
   }
 

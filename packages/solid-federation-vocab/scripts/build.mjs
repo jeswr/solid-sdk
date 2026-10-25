@@ -34,7 +34,11 @@ mkdirSync(DOCS, { recursive: true });
 // fedcon.shacl.ttl): like the sector .shacl.ttl profiles they are copied VERBATIM
 // as sidecars (below), never merged into the reasoned vocab.nt dump nor given their
 // own HTML/context — mirroring the sectors/ convention.
-const ttlFiles = readdirSync(ROOT).filter((f) => f.endsWith(".ttl") && !f.endsWith(".shacl.ttl"));
+const ttlFiles = readdirSync(ROOT).filter(
+  (f) => f.endsWith(".ttl") && !f.endsWith(".shacl.ttl") && f !== "legacy-w3id-alignments.ttl",
+);
+// Mode-A compatibility is served for opt-in readers, never added to vocab.nt.
+copyFileSync(join(ROOT, "legacy-w3id-alignments.ttl"), join(DOCS, "legacy-w3id-alignments.ttl"));
 const jsonldFiles = readdirSync(ROOT).filter((f) => f.endsWith(".jsonld"));
 
 // 1 + 2 — parse all Turtle, re-serialise via n3.Writer.
