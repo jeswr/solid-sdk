@@ -7,47 +7,114 @@
     "finished": "2026-10-25T11:00:00Z"
   },
   "sources": [
-    { "id": "chat", "kind": "codex-thread", "thread_id": "12345678-1234-4234-8234-123456789abc", "title": "Fictional profile", "created": "2026-10-24T10:00:00Z" },
-    { "id": "doc", "kind": "document", "url": "https://example.org/documents/fictional-record", "title": "Synthetic record", "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "author": "https://example.org/people/morgan#me", "date": "2026-10-24" }
+    {
+      "id": "chat",
+      "kind": "codex-thread",
+      "thread_id": "12345678-1234-4234-8234-123456789abc",
+      "title": "Fictional profile",
+      "created": "2026-10-24T10:00:00Z"
+    },
+    {
+      "id": "doc",
+      "kind": "document",
+      "url": "https://example.org/documents/fictional-record",
+      "title": "Synthetic record",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "author": "https://example.org/people/morgan#me",
+      "date": "2026-10-24"
+    }
   ],
   "entities": [
-    { "id": "https://example.org/people/avery#me", "types": ["schema:Person"], "label": "Avery Example" },
-    { "id": "https://example.org/people/morgan#me", "types": ["schema:Person"], "label": "Morgan Example" }
+    {
+      "id": "https://example.org/people/avery#me",
+      "types": ["schema:Person"],
+      "label": "Avery Example"
+    },
+    {
+      "id": "https://example.org/people/morgan#me",
+      "types": ["schema:Person"],
+      "label": "Morgan Example"
+    }
   ],
   "claims": [
     {
       "id": "address",
       "assertion": "<https://example.org/people/avery#me> vcard:hasAddress <https://example.org/entities/residence> . <https://example.org/entities/residence> a vcard:Address, vcard:Home ; vcard:street-address \"12 Fiction Lane\" ; vcard:locality \"Storyville\" ; vcard:postal-code \"EX1 2AB\" ; vcard:country-name \"Exampleland\" ; schema:validFrom \"2025-02\"^^xsd:gYearMonth ; schema:validThrough \"2026\"^^xsd:gYear .",
-      "epistemic": "SelfReportedExplicit", "validity": "Superseded", "categories": ["pd:PhysicalAddress", "pd:HomeLocation"],
+      "epistemic": "SelfReportedExplicit",
+      "validity": "Superseded",
+      "categories": ["pd:PhysicalAddress", "pd:HomeLocation"],
       "attributed_to": "https://example.org/people/avery#me",
-      "evidence": [{ "source": "chat", "message_id": "msg_23456789-1234-4234-8234-123456789abc", "timestamp": "2026-10-24T10:01:00Z", "speaker": "https://example.org/people/avery#me", "quote": "My fictional address is 12 Fiction Lane." }]
+      "evidence": [
+        {
+          "source": "chat",
+          "message_id": "msg_23456789-1234-4234-8234-123456789abc",
+          "timestamp": "2026-10-24T10:01:00Z",
+          "speaker": "https://example.org/people/avery#me",
+          "quote": "My fictional address is 12 Fiction Lane."
+        }
+      ]
     },
     {
       "id": "preference",
       "assertion": "<https://example.org/people/avery#me> schema:additionalProperty [ a schema:PropertyValue ; schema:propertyID \"beverage\" ; schema:value \"Mint tea\" ] .",
-      "epistemic": "SelfReportedHedged", "hedge": "I think", "categories": ["pd:Preference"],
+      "epistemic": "SelfReportedHedged",
+      "hedge": "I think",
+      "categories": ["pd:Preference"],
       "attributed_to": "https://example.org/people/avery#me",
-      "evidence": [{ "source": "chat", "message_id": "fictional-message-two", "timestamp": "2026-10-24T10:02:00Z", "speaker": "https://example.org/people/avery#me", "quote": "I think I prefer mint tea." }]
+      "evidence": [
+        {
+          "source": "chat",
+          "message_id": "fictional-message-two",
+          "timestamp": "2026-10-24T10:02:00Z",
+          "speaker": "https://example.org/people/avery#me",
+          "quote": "I think I prefer mint tea."
+        }
+      ]
     },
     {
       "id": "medication",
       "assertion": "<https://example.org/entities/statement> a health:MedicationStatement ; health:patient <https://example.org/people/avery#me> ; health:medication <https://example.org/entities/product> ; schema:doseSchedule [ a schema:DoseSchedule ; schema:doseValue \"2.00\"^^xsd:decimal ; schema:doseUnit \"mg\" ; schema:frequency \"daily\" ] . <https://example.org/entities/product> a health:MedicinalProduct, schema:Drug ; schema:name \"Fictionalium\" ; schema:code [ a schema:MedicalCode ; schema:codeValue \"EX00\" ; schema:codingSystem \"ATC\" ] .",
-      "epistemic": "Documented", "categories": ["pd:MedicalHealth"], "attributed_to": "https://example.org/people/morgan#me",
-      "evidence": [{ "source": "doc", "locator": "page=1", "quote": "Synthetic prescription: Fictionalium 2 mg daily.", "timestamp": "2026-10-24T09:00:00Z" }]
+      "epistemic": "Documented",
+      "categories": ["pd:MedicalHealth"],
+      "attributed_to": "https://example.org/people/morgan#me",
+      "evidence": [
+        {
+          "source": "doc",
+          "locator": "page=1",
+          "quote": "Synthetic prescription: Fictionalium 2 mg daily.",
+          "timestamp": "2026-10-24T09:00:00Z"
+        }
+      ]
     },
     {
       "id": "condition",
       "assertion": "<https://example.org/entities/condition> a health:Condition, schema:MedicalCondition ; health:patient <https://example.org/people/avery#me> ; schema:name \"Fictional condition\" ; health:hasCode <https://example.org/entities/code> . <https://example.org/entities/code> a health:CodeableConcept ; core:value \"EX-C\" ; skos:exactMatch <https://example.org/concepts/fictional-condition> .",
-      "epistemic": "ThirdPartyReported", "validity": "Contradicted", "categories": ["pd:MedicalHealth"], "attributed_to": "https://example.org/people/morgan#me", "contradicts": ["medication"],
-      "evidence": [{ "source": "doc", "quote": "A fictional condition is reported." }], "note": "Deliberately synthetic conflict link for parity."
+      "epistemic": "ThirdPartyReported",
+      "validity": "Contradicted",
+      "categories": ["pd:MedicalHealth"],
+      "attributed_to": "https://example.org/people/morgan#me",
+      "contradicts": ["medication"],
+      "evidence": [{ "source": "doc", "quote": "A fictional condition is reported." }],
+      "note": "Deliberately synthetic conflict link for parity."
     },
     {
       "id": "relationship",
       "assertion": "<https://example.org/people/avery#me> schema:knows <https://example.org/entities/role> . <https://example.org/entities/role> a schema:Role ; schema:roleName \"friend\" ; schema:knows <https://example.org/people/morgan#me> ; schema:startDate \"2024-01-01\"^^xsd:date .",
-      "epistemic": "Inferred", "categories": ["pd:SocialNetwork"], "attributed_to": "https://example.org/agents/extractor", "supersedes": ["address"],
+      "epistemic": "Inferred",
+      "categories": ["pd:SocialNetwork"],
+      "attributed_to": "https://example.org/agents/extractor",
+      "supersedes": ["address"],
       "inference": { "rule": "pkg-rule:synthetic-test", "inputs": ["preference", "condition"] },
-      "evidence": [{ "source": "doc", "timestamp": "2026-10-24T12:00:00Z", "quote": "Fictional friendship inference." }]
+      "evidence": [
+        {
+          "source": "doc",
+          "timestamp": "2026-10-24T12:00:00Z",
+          "quote": "Fictional friendship inference."
+        }
+      ]
     }
   ],
-  "skipped_sensitive": [{ "category": "pd:Identifying", "source": "doc", "note": "Synthetic identifier value omitted." }]
+  "skipped_sensitive": [
+    { "category": "pd:Identifying", "source": "doc", "note": "Synthetic identifier value omitted." }
+  ]
 }
