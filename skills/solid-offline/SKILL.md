@@ -10,6 +10,8 @@ Put the authenticated WebID in both cache key and envelope; clear on logout and 
 Use explicit per-key codecs for durable snapshots; unregistered keys stay memory-only.
 Use the [package skill](../../packages/solid-offline/SKILL.md) for `createOfflineClient`, worker wiring, status hooks, and logout purge. Its API and security rules take precedence over this pattern guide.
 
+<!-- AUTHORED-BY Codex GPT-6 -->
+
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 
 <!-- AUTHORED-BY Claude Opus 4.8 -->
@@ -96,15 +98,18 @@ interface CacheEnvelope {
 // WebID mismatch, resource mismatch, too old, or unparseable.
 function read(webId: string | null, resourceUrl: string, now = Date.now()): unknown | null {
   if (!webId || !resourceUrl) return null;           // no identity ⇒ never hydrate
-  const raw = storage.getItem(keyFor(webId, resourceUrl));
-  if (!raw) return null;
   try {
+    // The getter itself can throw (e.g. SecurityError); acquire storage here too.
+    const storage = globalThis.localStorage;
+    if (!storage) return null;
+    const raw = storage.getItem(keyFor(webId, resourceUrl));
+    if (!raw) return null;
     const env = JSON.parse(raw) as CacheEnvelope;
     if (env.v !== VERSION || env.webId !== webId || env.resource !== resourceUrl) return null;
     if (now - env.at > MAX_AGE_MS) return null;       // bound first-paint staleness; still revalidates
     return env.data;
   } catch {
-    return null;                                       // corrupt entry is never a blocker
+    return null;                                       // unavailable storage or corrupt data never blocks rendering
   }
 }
 ```

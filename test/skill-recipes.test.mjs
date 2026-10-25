@@ -1,5 +1,7 @@
 // AUTHORED-BY Codex GPT-6
 // Execute the documented examples so API and credential-boundary regressions fail the gate.
+import * as nodeCrypto from "node:crypto";
+import { EventEmitter } from "node:events";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import ts from "typescript";
@@ -12,10 +14,14 @@ const packageRequire = createRequire(
 );
 const oauth = await import(packageRequire.resolve("oauth4webapi"));
 const { Parser, Store } = packageRequire("n3");
+const fixtureRequire = createRequire(
+  new URL("../packages/solid-dpop/package.json", import.meta.url),
+);
+const jose = await import(fixtureRequire.resolve("jose"));
 const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor;
 
-function blocks(skill, language, section = "") {
-  const markdown = readFileSync(new URL(`../skills/${skill}/SKILL.md`, import.meta.url), "utf8");
+function blocks(skill, language, section = "", file = "SKILL.md") {
+  const markdown = readFileSync(new URL(`../skills/${skill}/${file}`, import.meta.url), "utf8");
   const start = section ? markdown.indexOf(section) : 0;
   if (start < 0) throw new Error(`Missing section: ${section}`);
   return [
@@ -207,5 +213,305 @@ describe("Solid skill recipes", () => {
       ).rejects.toThrow(guardedFetch.PodScopeError);
       expect(authenticatedFetch).not.toHaveBeenCalled();
     }
+  });
+});
+
+// AUTHORED-BY Codex GPT-6
+// Regressions from the second review: execute the recipes with adversarial ordering and failures.
+describe("reviewed recipe failure boundaries", () => {
+  it("requires a matching access-token hash on protected-resource DPoP proofs", async () => {
+    const code = blocks("solid-auth", "ts")[0];
+    const issuer = "https://issuer.example/";
+    const audience = "https://resource.example/";
+    const issuerKeys = await jose.generateKeyPair("ES256");
+    const issuerJwk = {
+      ...(await jose.exportJWK(issuerKeys.publicKey)),
+      kid: "issuer",
+      alg: "ES256",
+    };
+    const proofKeys = await jose.generateKeyPair("ES256");
+    const proofJwk = await jose.exportJWK(proofKeys.publicKey);
+    const claims = {
+      iss: issuer,
+      aud: audience,
+      sub: "alice",
+      client_id: "app",
+      cnf: { jkt: await jose.calculateJwkThumbprint(proofJwk) },
+    };
+    const accessToken = await new jose.SignJWT(claims)
+      .setProtectedHeader({ alg: "ES256", typ: "at+jwt", kid: issuerJwk.kid })
+      .setIssuedAt()
+      .setExpirationTime("5m")
+      .setJti(nodeCrypto.randomUUID())
+      .sign(issuerKeys.privateKey);
+    const ath = nodeCrypto.createHash("sha256").update(accessToken).digest("base64url");
+    const bindings = {
+      trustedIssuers: new Set([issuer]),
+      unverifiedIss: issuer,
+      audience,
+      as: { issuer, jwks_uri: `${issuer}jwks` },
+      dpop: true,
+      SIGNING_ALGS: ["ES256"],
+      challenge: (_error, message) => new Error(message),
+      oauth: {
+        ...oauth,
+        validateJwtAccessToken: (as, request, expectedAudience, options) =>
+          oauth.validateJwtAccessToken(as, request, expectedAudience, {
+            ...options,
+            [oauth.customFetch]: async () => Response.json({ keys: [issuerJwk] }),
+          }),
+      },
+    };
+    async function verify(hash) {
+      const proof = await new jose.SignJWT({
+        htu: audience,
+        htm: "GET",
+        ...(hash === undefined ? {} : { ath: hash }),
+      })
+        .setProtectedHeader({ alg: "ES256", typ: "dpop+jwt", jwk: proofJwk })
+        .setIssuedAt()
+        .setJti(nodeCrypto.randomUUID())
+        .sign(proofKeys.privateKey);
+      const request = new Request(audience, {
+        headers: { authorization: `DPoP ${accessToken}`, dpop: proof },
+      });
+      return execute(code, { ...bindings, request }, {}, "claims");
+    }
+    expect(await verify(ath)).toMatchObject(claims);
+    await expect(verify(undefined)).rejects.toThrow();
+    await expect(
+      verify(nodeCrypto.createHash("sha256").update("another-token").digest("base64url")),
+    ).rejects.toThrow();
+  });
+
+  it("keeps newer field generations even when priority returns to the same value", async () => {
+    const code = blocks("solid-app-shell", "ts", "### Trap 2")[0];
+    const { claimMutation, revertIfCurrent, fieldOwners } = await execute(
+      code,
+      {},
+      {},
+      "({ claimMutation, revertIfCurrent, fieldOwners })",
+    );
+    const original = { id: "one", priority: 0, status: "todo", state: "open", title: "Original" };
+    const first = claimMutation("one", { kind: "priority" });
+    claimMutation("one", { kind: "priority" }); // 1 -> 2 succeeds
+    claimMutation("one", { kind: "priority" }); // 2 -> 1 succeeds
+    const current = [{ ...original, priority: 1, title: "Newer title" }];
+    expect(revertIfCurrent(current, original, first)).toBe(current);
+
+    const status = claimMutation("one", { kind: "status" });
+    claimMutation("one", { kind: "priority" }); // unrelated field must not block rollback
+    const moved = [{ ...current[0], status: "done", state: "closed", priority: 3 }];
+    expect(revertIfCurrent(moved, original, status)).toEqual([{ ...current[0], priority: 3 }]);
+    // React may replay a state updater; rollback must not consume ownership.
+    expect(revertIfCurrent(moved, original, status)).toEqual([{ ...current[0], priority: 3 }]);
+    const other = claimMutation("two", { kind: "priority" });
+    expect(revertIfCurrent(current, { ...original, id: "two" }, other)).toBe(current);
+    // Removing/replacing a record invalidates its ownership before the ID is reused.
+    fieldOwners.delete("one");
+    expect(revertIfCurrent(moved, original, status)).toBe(moved);
+  });
+
+  it("treats storage acquisition and read errors as misses without weakening identity checks", async () => {
+    const code = blocks("solid-offline", "ts").find((block) => block.includes("function read("));
+    const webId = "https://pod.example/alice/card#me";
+    const resource = "https://pod.example/alice/items";
+    const keyFor = (identity, url) => `${identity}\u0000${url}`;
+    const envelope = { v: 2, at: 100, webId, resource, data: [{ title: "Cached" }] };
+    async function readWith(storageGlobal) {
+      return execute(
+        code,
+        { globalThis: storageGlobal, keyFor, VERSION: 2, MAX_AGE_MS: 1000 },
+        {},
+        "read",
+      );
+    }
+    for (const storageGlobal of [
+      {},
+      {
+        get localStorage() {
+          throw new DOMException("Denied", "SecurityError");
+        },
+      },
+      {
+        localStorage: {
+          getItem() {
+            throw new DOMException("Denied", "SecurityError");
+          },
+        },
+      },
+    ]) {
+      const read = await readWith(storageGlobal);
+      expect(read(webId, resource, 100)).toBeNull();
+    }
+    const getItem = vi.fn(() => JSON.stringify(envelope));
+    const read = await readWith({ localStorage: { getItem } });
+    expect(read(webId, resource, 100)).toEqual(envelope.data);
+    expect(getItem).toHaveBeenCalledWith(keyFor(webId, resource));
+    expect(read(null, resource, 100)).toBeNull();
+    expect(read("https://pod.example/bob/card#me", resource, 100)).toBeNull();
+    expect(read(webId, `${resource}/other`, 100)).toBeNull();
+    expect(read(webId, resource, 2000)).toBeNull();
+    getItem.mockReturnValue(JSON.stringify({ ...envelope, v: 1 }));
+    expect(read(webId, resource, 100)).toBeNull();
+    getItem.mockReturnValue("broken JSON");
+    expect(read(webId, resource, 100)).toBeNull();
+  });
+
+  it("seeds distinct accounts on successive setups against the same reused CSS", async () => {
+    const code = blocks("solid-test-infrastructure", "ts", "", "references/global-setup.ts.md")[0];
+    const base = "http://localhost:3000";
+    const emails = new Set(["alice@example.com"]);
+    const pods = new Set(["alice"]);
+    const profiles = new Map();
+    const env = {};
+    const fetch = vi.fn(async (url, init = {}) => {
+      const json = init.body?.startsWith("{") ? JSON.parse(init.body) : {};
+      if (url === `${base}/.account/`) {
+        return Response.json({
+          controls: {
+            password: { create: `${base}/password` },
+            account: { pod: `${base}/pod`, clientCredentials: `${base}/credentials` },
+          },
+        });
+      }
+      if (url === `${base}/.account/account/`) {
+        return Response.json({}, { headers: { "set-cookie": "session=test; Path=/" } });
+      }
+      if (url === `${base}/password`) {
+        if (emails.has(json.email)) return Response.json({}, { status: 409 });
+        emails.add(json.email);
+        return Response.json({});
+      }
+      if (url === `${base}/pod`) {
+        if (pods.has(json.name)) return Response.json({}, { status: 409 });
+        pods.add(json.name);
+        return Response.json({});
+      }
+      if (url === `${base}/credentials`)
+        return Response.json({ id: "fixture", secret: "test-only" });
+      if (url === `${base}/.oidc/token`) {
+        expect(jose.decodeJwt(init.headers.dpop).ath).toBeUndefined();
+        return Response.json({ access_token: "fixture-access-token" });
+      }
+      if (init.method === "PUT") {
+        const proof = init.headers.dpop;
+        const { jwk } = jose.decodeProtectedHeader(proof);
+        const { payload } = await jose.jwtVerify(proof, await jose.importJWK(jwk));
+        expect(payload.ath).toBe(
+          nodeCrypto.createHash("sha256").update("fixture-access-token").digest("base64url"),
+        );
+        expect(payload.htu).toBe(url);
+        profiles.set(url, new Store(new Parser({ baseIRI: url }).parse(init.body)));
+        return new Response(null, { status: 204 });
+      }
+      throw new Error(`Unexpected fixture request: ${url}`);
+    });
+    const setup = await execute(
+      code,
+      { fetch, process: { env }, console: { log: vi.fn() } },
+      { jose, "node:crypto": nodeCrypto },
+      "globalSetup",
+    );
+    await setup();
+    const first = JSON.parse(env.SOLID_E2E_ACCOUNT);
+    await setup();
+    const second = JSON.parse(env.SOLID_E2E_ACCOUNT);
+    expect(first.webId).not.toBe(second.webId);
+    expect(first.email).not.toBe(second.email);
+    for (const account of [first, second]) {
+      expect(emails.has(account.email)).toBe(true);
+      expect(account.password).toBeTruthy();
+      const profileUrl = account.webId.split("#")[0];
+      expect(
+        profiles
+          .get(profileUrl)
+          .getObjects(account.webId, "http://www.w3.org/ns/pim/space#storage", null)[0].value,
+      ).toBe(account.podRoot);
+    }
+  });
+
+  it.each([
+    "fresh",
+    "consent-only",
+    "incomplete",
+  ])("completes popup login from feature beforeEach (%s)", async (flow) => {
+    const code = blocks(
+      "solid-test-infrastructure",
+      "ts",
+      "",
+      "references/feature.spec.example.ts.md",
+    )[0];
+    const context = new EventEmitter();
+    let phase = flow === "consent-only" ? "consent" : "email";
+    const account = {
+      webId: "http://localhost:3000/e2e-test/profile/card#me",
+      email: "fixture@example.com",
+      password: "test-only",
+    };
+    const fills = new Map();
+    const popup = {
+      isClosed: () => phase === "done",
+      locator: (selector) => ({
+        isVisible: async () => phase === "email" && selector === "#email",
+        fill: async (value) => {
+          fills.set(selector, value);
+        },
+      }),
+      getByRole: (_role, { name }) => ({
+        isVisible: async () => phase === "consent" && name.test("Authorize"),
+        click: async () => {
+          if (name.test("Log in")) {
+            expect(fills.get("#email")).toBe(account.email);
+            expect(fills.get("#password")).toBe(account.password);
+            phase = "consent";
+          } else if (name.test("Authorize") && phase === "consent") {
+            if (flow !== "incomplete") phase = "done";
+          } else throw new Error("Unexpected popup action");
+        },
+      }),
+    };
+    const page = {
+      goto: vi.fn(),
+      context: () => context,
+      fill: vi.fn(async (_selector, value) => {
+        expect(value).toBe(account.webId);
+      }),
+      click: async () => {
+        expect(context.listenerCount("page")).toBe(1);
+        context.emit("page", { isClosed: () => true }); // transient prompt=none
+        context.emit("page", popup);
+      },
+      getByRole: () => ({ isVisible: async () => phase === "done" }),
+    };
+    const beforeEach = [];
+    const test = Object.assign(() => {}, {
+      describe: (_name, body) => body(),
+      beforeEach: (callback) => beforeEach.push(callback),
+    });
+    // Drive Playwright's polling contract deterministically over popup state transitions.
+    const playwrightExpect = {
+      poll: (callback) => ({
+        toBe: async (expected) => {
+          for (let attempt = 0; attempt < 4; attempt++) {
+            if ((await callback()) === expected) return;
+          }
+          throw new Error("Login did not complete");
+        },
+      }),
+    };
+    await execute(
+      code,
+      { process: { env: { SOLID_E2E_ACCOUNT: JSON.stringify(account) } } },
+      { "@playwright/test": { test, expect: playwrightExpect } },
+    );
+    expect(beforeEach).toHaveLength(1);
+    if (flow === "incomplete") {
+      await expect(beforeEach[0]({ page })).rejects.toThrow("Login did not complete");
+    } else {
+      await beforeEach[0]({ page });
+      expect(phase).toBe("done");
+    }
+    expect(context.listenerCount("page")).toBe(0);
   });
 });

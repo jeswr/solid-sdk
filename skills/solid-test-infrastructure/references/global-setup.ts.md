@@ -1,3 +1,5 @@
+<!-- AUTHORED-BY Codex GPT-6 -->
+
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 
 # `global-setup.ts` — source example
@@ -18,11 +20,7 @@ import { randomUUID, createHash } from "node:crypto";
 const BASE = "http://localhost:3000";
 const ISSUER = `${BASE}/`;
 const TOKEN_ENDPOINT = `${BASE}/.oidc/token`;
-const POD = "alice";
-const WEBID = `${BASE}/${POD}/profile/card#me`;
 const NAME = "Alice Verify";
-const EMAIL = "alice@example.com";
-const PASSWORD = "test-password-123";
 
 interface Jar {
   cookie?: string;
@@ -44,7 +42,7 @@ async function controls(jar: Jar) {
   return (await res.json()).controls;
 }
 
-async function seedProfile(ccId: string, ccSecret: string) {
+async function seedProfile(ccId: string, ccSecret: string, POD: string, WEBID: string) {
   const { publicKey, privateKey } = await generateKeyPair("ES256");
   const jwk = await exportJWK(publicKey);
   jwk.alg = "ES256";
@@ -108,6 +106,11 @@ export default async function globalSetup() {
         `Check 'lsof -i :3000' — a stray 'next dev' (default port 3000) is the usual culprit.`,
     );
   }
+  // Unique on every invocation, including when Playwright reuses a running dev CSS.
+  const POD = `e2e-${randomUUID()}`;
+  const WEBID = `${BASE}/${POD}/profile/card#me`;
+  const EMAIL = `${POD}@example.com`;
+  const PASSWORD = randomUUID();
   const jar: Jar = {};
   await jsonPost(`${BASE}/.account/account/`, {}, jar);
   const c = await controls(jar);
@@ -115,7 +118,12 @@ export default async function globalSetup() {
   const pod = await jsonPost(c.account.pod, { name: POD }, jar);
   if (pod.status >= 400) throw new Error(`pod create failed: ${JSON.stringify(pod.json)}`);
   const cc = await jsonPost(c.account.clientCredentials, { name: "seed", webId: WEBID }, jar);
-  await seedProfile(cc.json.id, cc.json.secret);
+  await seedProfile(cc.json.id, cc.json.secret, POD, WEBID);
+  // Playwright passes globalSetup environment variables to test workers.
+  // Keep test-only credentials in memory; do not log or commit them.
+  process.env.SOLID_E2E_ACCOUNT = JSON.stringify({
+    webId: WEBID, email: EMAIL, password: PASSWORD, podRoot: `${BASE}/${POD}/`,
+  });
   // eslint-disable-next-line no-console
   console.log(`[global-setup] seeded pod for ${WEBID}`);
 }

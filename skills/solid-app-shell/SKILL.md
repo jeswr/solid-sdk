@@ -6,9 +6,11 @@ description: Use when making Solid app mutations optimistic, fixing stale rollba
 ## Quick reference
 
 Update local UI state immediately, persist asynchronously, and reconcile in the background.
-Revert only the failed mutation's fields, and only while its optimistic state or mutation ID still owns them.
+Revert only the failed mutation's fields, and only while its mutation generation still owns each field.
 Flush pending debounced writes on page teardown, respecting the keepalive body cap and retaining failed writes for retry.
 For shared React chrome APIs, read [the package skill](../../packages/app-shell/SKILL.md); this skill keeps application patterns.
+
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 
@@ -42,13 +44,14 @@ answers. Instead, make mutations **optimistic**:
 ```ts
 // optimistic write — local first, persist in the background, revert on failure
 // optimisticMove returns three things: the new item LIST, the pre-move record,
-// and the optimistically-moved record (the "expected current state" the revert
-// compares against so a stale failure can't clobber a newer move — see Trap 2).
-const { items: next, original, optimistic } = optimisticMove(items, id, move /* … */);
+// and the optimistically-moved record. Ownership uses generations, not value equality
+// (see Trap 2); keep the generation registry stable across renders.
+const { items: next, original } = optimisticMove(items, id, move /* … */);
 if (!original) return;          // no-op (already in that state) — don't show "Saving…"
+const mutation = claimMutation(id, move); // claim each changed field before publishing
 setItemsLocal(() => next);      // UI updates instantly
 persist((repo) => repo.applyWrite(id, move)).catch(() => {
-  setItemsLocal((cur) => revertIfCurrent(cur, original, optimistic, move));
+  setItemsLocal((cur) => revertIfCurrent(cur, original, mutation));
 });
 ```
 
@@ -80,32 +83,47 @@ write's later failure must **not** roll the card back to where the *first* move 
 move now owns the card's state. A blind revert resurrects stale state and undoes the user's newer
 action.
 
-**Fix: track the expected optimistic state and only revert if the current local state still
-corresponds to the failed mutation.** Capture the record the failed write optimistically produced
-(`optimistic`); on failure, compare the card's *current* state against it on the move's own
-dimension. If they no longer match, a newer move already changed the card — **drop the stale failure
-and leave the list unchanged**:
+**Fix: claim a monotonically increasing generation per item and changed field.**
+Value equality cannot establish ownership: with priority `0 → 1 → 2 → 1`, a late failure
+of the first write sees `1` again but must not undo the newer successful edits.
+Capture each write's generation before publishing the optimistic state; roll back only
+fields whose current generation still belongs to that write:
 
 ```ts
-function revertIfCurrent(items, original, optimistic, move) {
+// Keep this registry for the store's lifetime, not inside a render or mutation callback.
+let nextGeneration = 0;
+const fieldOwners = new Map(); // item ID -> Map(field, generation)
+
+function claimMutation(id, move) {
+  const fields = move.kind === "status" ? ["status", "state"] : ["priority"];
+  const generation = ++nextGeneration;
+  const owners = fieldOwners.get(id) ?? new Map();
+  for (const field of fields) owners.set(field, generation);
+  fieldOwners.set(id, owners);
+  return { generation, fields };
+}
+
+function revertIfCurrent(items, original, mutation) {
   const current = items.find((i) => i.id === original.id);
-  if (!current) return items;                 // item gone (deleted/archived) — nothing to revert
-  const stillThisMove =
-    move.kind === "status"
-      ? current.status === optimistic.status && current.state === optimistic.state
-      : current.priority === optimistic.priority;
-  if (!stillThisMove) return items;           // a newer move owns it — drop the stale failure
-  const reverted = move.kind === "status"
-    ? { ...current, status: original.status, state: original.state }   // Trap 1: field-scoped
-    : { ...current, priority: original.priority };
+  if (!current) return items;                 // deleted/archived — nothing to revert
+  const owners = fieldOwners.get(original.id);
+  const ownedFields = mutation.fields.filter(
+    (field) => owners?.get(field) === mutation.generation,
+  );
+  if (!ownedFields.length) return items;      // a newer write owns these fields
+  const reverted = { ...current };           // preserve unrelated edits (Trap 1)
+  for (const field of ownedFields) {
+    reverted[field] = original[field];
+  }
   return items.map((i) => (i.id === original.id ? reverted : i));
 }
 ```
 
-Compare on the **move's dimension** (status vs priority), not by object reference — a later
-unrelated re-render produces a fresh object reference and must not look like "a newer move".
-Equivalently, a per-item mutation id works: stamp each optimistic write with an id, and only revert
-when the item's current pending-mutation id still equals the failed write's.
+Keep ownership per **field**, not just per item: editing priority must not prevent rollback
+of a failed status write. Every local writer must claim its changed fields. Keep the latest
+generations after success so older failures stay fenced out; invalidate ownership on deletion,
+record replacement, or account switch. Never restore an older generation during rollback. Keep the rollback updater pure: React
+may evaluate it more than once, so it must not mutate the ownership registry.
 
 ## Flush a debounced write on tab teardown — don't lose the last edit
 
@@ -190,7 +208,7 @@ Building a list/browser view over a pod container surfaced three patterns worth 
 | View fetches an attacker's URL | Don't fetch every `ldp:contains` IRI — require http(s) + same-origin (parsed `origin`) + a real descendant `pathname` before fetching a child |
 | A producer app's data shows under "Other" | A consumer must map EVERY producer's Type-Index `solid:forClass` IRI into its own category/view map (both `https`/`http` schema.org forms) — an unmapped class is still discovered but mis-bucketed into the fallback (cited: pod-docs' `pd:Document`); add the mapping + a regression test when you add a producer app |
 | Concurrent edits lost on revert | Trap 1 — revert only the failed write's field(s) onto the **current** record, never replace the whole record with `original` |
-| Newer move undone by an older failure | Trap 2 — capture the optimistic state / a mutation id and revert only if the current state still corresponds to the failed write |
+| Newer move undone by an older failure | Trap 2 — require the failed mutation's generation to own each field; repeated values do not prove ownership |
 | Spurious "Saving…" on a no-op drop | A move to the current column changes nothing — detect it (no `original`) and skip the write |
 | Indicator clutters the UI | Hide when idle; auto-clear "Saved" back to idle after ~1.5 s; fixed-corner pill, `aria-live="polite"`, not a modal |
 | Coupled server change missing after persist | Background-reconcile on success — the server may have changed a field your write didn't set |

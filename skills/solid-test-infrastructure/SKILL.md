@@ -5,6 +5,8 @@ description: Use when creating Solid package or app tests, running Vitest agains
 
 ## Quick reference
 
+<!-- AUTHORED-BY Codex GPT-6 -->
+
 <!-- AUTHORED-BY Codex GPT-5 -->
 
 **Test Solid code against real protocol behavior**
@@ -70,19 +72,22 @@ they powered full popup-login e2e runs (3/3 stable) and authenticated write-path
    as is `dev.mjs` via `APP_CMD`). One CSS instance per suite — startup is ~13s, so never
    per-test. `reuseExistingServer` keeps local iteration fast.
 2. **[`global-setup.ts`](references/global-setup.ts.md)** — runs once after the servers are up:
-   - creates an account via the CSS account API (`POST /.account/account/` with `{}` — with a
+   - creates a unique account and pod per run via the CSS account API (`POST /.account/account/` with `{}` — with a
      JSON content-type an empty body 500s), registers a password, creates the pod;
    - mints **client-credentials**, then exchanges them for a **DPoP-bound token** (jose-built
      proofs — note the `ath` claim on resource requests);
    - **seeds the profile** — a fresh CSS pod profile has no `foaf:name` and no `pim:storage`
-     (so no display name and no write path); the setup PUTs them plus a photo.
+     (so no display name and no write path); the setup PUTs them plus a photo;
+   - passes `{ webId, email, password, podRoot }` to test workers through
+     `process.env.SOLID_E2E_ACCOUNT`, without logging credentials.
 
 3. **[`css-account.ts`](references/css-account.ts.md)** — the per-test account fixture:
    `createCssAccount({ pod })` returns `{ webId, email, password, podRoot, token, proof }` with
    the bare profile seeded — fresh-account-per-write-test isolation without restarting CSS
    (compile-verified; same recipe as global-setup, packaged per call).
 
-Copy what you need, adjust the constants (`POD`, `EMAIL`, `PASSWORD`), done. `jose` is the only
+Copy what you need; keep the unique per-run account names and consume the setup credentials
+in tests rather than hardcoding Alice. `jose` is the only
 extra dev-dependency. Alternative to run-time profile seeding: start CSS with the **custom pod
 templates** from this repo's `config/pod-templates/` (+ `config/css-memory-wac-templates.json`)
 and every pod is born with `pim:storage` — see `docs/local-ops.md` for the verified mechanics
@@ -136,7 +141,7 @@ snapshot-test UI, don't test shadcn primitives, don't `sleep()` — auto-waits o
 [`feature.spec.example.ts`](references/feature.spec.example.ts.md) is the per-feature e2e template —
 distilled from a real Bob-built TODO app developed against this guide: login error-states
 first (they're the executable form of the `solid-reactive-authentication` UX spec), a
-`beforeEach` login, role/placeholder locators, empty-state → create → persist-across-reload.
+shared popup-login helper in `beforeEach` (email/password and consent), role/placeholder locators, empty-state → create → persist-across-reload.
 
 ## PGlite-backed services — boot once per worker, reset between tests
 

@@ -1,3 +1,5 @@
+<!-- AUTHORED-BY Codex GPT-6 -->
+
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 
 # `feature.spec.example.ts` — source example
@@ -21,9 +23,43 @@ as part of this documentation consolidation.
  *  - role/placeholder locators (no brittle CSS selectors), auto-waits, no sleep;
  *  - unique test data per run; empty state → create → mutate progression.
  */
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
 
-const WEBID = "http://localhost:3000/alice/profile/card#me"; // seeded by global-setup.ts
+// Shared by beforeEach and reload recovery. Adapt app locators to your feature.
+async function login(page: Page) {
+  const account = JSON.parse(process.env.SOLID_E2E_ACCOUNT ?? "null");
+  if (!account) throw new Error("Missing test account; run global-setup.ts first");
+  const popups: Page[] = [];
+  const collect = (popup: Page) => popups.push(popup);
+  const context = page.context();
+  context.on("page", collect); // subscribe BEFORE submitting the WebID
+  try {
+    await page.fill('input[type="url"]', account.webId);
+    await page.click('button[type="submit"]');
+    // A prompt=none popup may close before the interactive popup opens. Drive
+    // every live popup, including consent-only pages when CSS already has a session.
+    await expect.poll(async () => {
+      for (const popup of popups) {
+        if (popup.isClosed()) continue;
+        try {
+          const email = popup.locator("#email");
+          if (await email.isVisible()) {
+            await email.fill(account.email);
+            await popup.locator("#password").fill(account.password);
+            await popup.getByRole("button", { name: /^log in$/i }).click();
+          }
+          const consent = popup.getByRole("button", { name: /^authorize$/i });
+          if (await consent.isVisible()) await consent.click();
+        } catch (error) {
+          if (!popup.isClosed()) throw error;
+        }
+      }
+      return page.getByRole("heading", { name: /items/i }).isVisible();
+    }, { timeout: 30_000 }).toBe(true); // incomplete login fails the test
+  } finally {
+    context.off("page", collect);
+  }
+}
 
 test.describe("Login surface", () => {
   test("shows WebID-first entry with a get-a-pod affordance", async ({ page }) => {
@@ -51,9 +87,7 @@ test.describe("Login surface", () => {
 test.describe("Feature: items", () => {
   test.beforeEach(async ({ page }) => {
     await page.goto("/");
-    await page.fill('input[type="url"]', WEBID);
-    await page.click('button[type="submit"]');
-    await expect(page.getByRole("heading", { name: /items/i })).toBeVisible({ timeout: 15_000 });
+    await login(page);
   });
 
   test("shows the empty state before any item exists", async ({ page }) => {
@@ -75,9 +109,13 @@ test.describe("Feature: items", () => {
     await expect(page.getByText(text)).toBeVisible({ timeout: 10_000 });
 
     await page.reload();
-    // Re-auth may run silently (prompt=none) or need re-entry — assert the data, generously.
-    await page.fill('input[type="url"]', WEBID).catch(() => {});
-    await page.click('button[type="submit"]').catch(() => {});
+    // Wait for either session restore or the login form; complete login if needed.
+    const entry = page.locator('input[type="url"]');
+    await expect.poll(async () =>
+      (await page.getByRole("heading", { name: /items/i }).isVisible()) ||
+      (await entry.isVisible()),
+    ).toBe(true);
+    if (await entry.isVisible()) await login(page);
     await expect(page.getByText(text)).toBeVisible({ timeout: 20_000 });
   });
 });
