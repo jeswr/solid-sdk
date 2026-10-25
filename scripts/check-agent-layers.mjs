@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 
 // Agent DESIGN §2.2. Fold this into check-sdk-layers.mjs when sdk-core T-003 lands.
 import { existsSync, readdirSync, readFileSync } from "node:fs";
@@ -122,150 +123,25 @@ function importFailures(ctx, target, typeOnly = false, manifest = false) {
   return failures;
 }
 
-function unwrapExpression(node) {
-  while (
-    node &&
-    (ts.isAsExpression(node) ||
-      ts.isParenthesizedExpression(node) ||
-      ts.isSatisfiesExpression(node) ||
-      ts.isTypeAssertionExpression(node) ||
-      ts.isNonNullExpression(node))
-  )
-    node = node.expression;
-  return node;
-}
+const forbiddenGlobals = new Set(["fetch", "globalThis", "global", "window", "self"]);
+const commonJsLoaders = new Set(["require", "createRequire"]);
 
-function staticString(node) {
-  node = unwrapExpression(node);
-  if (!node) return undefined;
-  if (ts.isStringLiteralLike(node)) return node.text;
-  if (
-    ts.isNewExpression(node) &&
-    ts.isIdentifier(node.expression) &&
-    node.expression.text === "URL"
-  )
-    return staticString(node.arguments?.[0]);
-  return undefined;
-}
-
-function isGlobalObject(node) {
-  node = unwrapExpression(node);
-  return ts.isIdentifier(node) && ["globalThis", "window", "self"].includes(node.text);
-}
-
-function propertyName(node) {
-  if (!node) return undefined;
-  if (ts.isComputedPropertyName(node)) return staticString(node.expression);
-  return ts.isIdentifier(node) ? node.text : staticString(node);
-}
-
-function isFetch(node) {
-  node = unwrapExpression(node);
-  return (
-    (ts.isIdentifier(node) && node.text === "fetch") ||
-    (ts.isPropertyAccessExpression(node) && node.name.text === "fetch") ||
-    (ts.isElementAccessExpression(node) && staticString(node.argumentExpression) === "fetch")
-  );
-}
-
-function isRawFetchReference(node) {
-  if (ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node))
-    return isGlobalObject(node.expression) && isFetch(node);
-  if (!ts.isIdentifier(node) || node.text !== "fetch") return false;
+function isPropertyName(node) {
   const parent = node.parent;
-  // Property names, binding declarations and type queries do not read the global value.
-  if (ts.isPropertyAccessExpression(parent) && parent.name === node) return false;
-  if (ts.isTypeQueryNode(parent)) return false;
-  if (ts.isShorthandPropertyAssignment(parent)) return true;
-  if (ts.isExportAssignment(parent)) return parent.expression === node;
-  if (ts.isExportSpecifier(parent))
-    return (
-      !parent.isTypeOnly &&
-      !parent.parent.parent.isTypeOnly &&
-      !parent.parent.parent.moduleSpecifier &&
-      (parent.propertyName ?? parent.name) === node
-    );
-  return ts.isExpressionNode(node);
-}
-
-function directCall(reference) {
-  // Walk out through wrappers so `(fetch as typeof fetch)(url)` is still a direct call.
-  while (
-    reference.parent.expression === reference &&
-    unwrapExpression(reference.parent) !== reference.parent
-  )
-    reference = reference.parent;
-  return ts.isCallExpression(reference.parent) && reference.parent.expression === reference
-    ? reference.parent
-    : undefined;
-}
-
-function declaredOrigins(source) {
-  for (const statement of source.statements) {
-    if (
-      !ts.isVariableStatement(statement) ||
-      !(statement.declarationList.flags & ts.NodeFlags.Const)
-    )
-      continue;
-    for (const declaration of statement.declarationList.declarations) {
-      const value = declaration.initializer;
-      if (
-        !ts.isIdentifier(declaration.name) ||
-        declaration.name.text !== "ORIGINS" ||
-        !value ||
-        !ts.isNewExpression(value) ||
-        value.expression.getText(source) !== "Set"
-      )
-        continue;
-      const values = value.arguments?.[0];
-      if (values && ts.isArrayLiteralExpression(values))
-        return new Set(values.elements.map((element) => staticString(element)));
-    }
-  }
-  return undefined;
-}
-
-function bindingOrigins(root, file, source) {
-  const local = declaredOrigins(source);
-  if (local) return local;
-  // Send halves can reuse the binding's exported allowlist without duplicating it.
-  for (const statement of source.statements) {
-    if (
-      !ts.isImportDeclaration(statement) ||
-      !ts.isStringLiteral(statement.moduleSpecifier) ||
-      !statement.moduleSpecifier.text.startsWith(".")
-    )
-      continue;
-    const bindings = statement.importClause?.namedBindings;
-    if (
-      statement.importClause?.isTypeOnly ||
-      !bindings ||
-      !ts.isNamedImports(bindings) ||
-      !bindings.elements.some(
-        (element) =>
-          !element.isTypeOnly &&
-          element.name.text === "ORIGINS" &&
-          (element.propertyName?.text ?? element.name.text) === "ORIGINS",
-      )
-    )
-      continue;
-    const target = resolve(dirname(file), statement.moduleSpecifier.text);
-    const path = relative(join(root, "packages/agent-channels/src"), target);
-    if (path.startsWith("..")) continue;
-    const candidate = [target, target.replace(/\.[cm]?js$/, ".ts")].find((entry) =>
-      existsSync(entry),
-    );
-    if (candidate)
-      return declaredOrigins(
-        ts.createSourceFile(
-          candidate,
-          readFileSync(candidate, "utf8"),
-          ts.ScriptTarget.Latest,
-          true,
-        ),
-      );
-  }
-  return undefined;
+  // Computed keys and shorthand properties read an identifier; ordinary keys do not.
+  return (
+    (ts.isPropertyAccessExpression(parent) && parent.name === node) ||
+    (ts.isQualifiedName(parent) && parent.right === node) ||
+    (ts.isBindingElement(parent) && parent.propertyName === node) ||
+    ((ts.isPropertyAssignment(parent) ||
+      ts.isPropertyDeclaration(parent) ||
+      ts.isPropertySignature(parent) ||
+      ts.isMethodDeclaration(parent) ||
+      ts.isMethodSignature(parent) ||
+      ts.isGetAccessorDeclaration(parent) ||
+      ts.isSetAccessorDeclaration(parent)) &&
+      parent.name === node)
+  );
 }
 
 function sourceFailures(root, file) {
@@ -274,7 +150,7 @@ function sourceFailures(root, file) {
   const agentSource =
     ctx.project?.startsWith("agent-") || ctx.ui || ctx.path.startsWith("apps/agent-daemon/");
   // Existing apps include large generated modules. Preprocess their import tokens
-  // before building an AST; only agent code needs the detailed direction/origin checks.
+  // before building an AST; only agent code needs the detailed capability checks.
   // TypeScript's scanner also decodes escaped specifiers, unlike a text search.
   if (
     !agentSource &&
@@ -293,43 +169,38 @@ function sourceFailures(root, file) {
     failures.push(
       `${ctx.path}:${source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1}: ${message}`,
     );
-  const origins =
-    ctx.project === "agent-channels" ? bindingOrigins(root, file, source) : declaredOrigins(source);
-  const checkFetch = agentSource && !ctx.test;
-  function checkOrigin(call) {
-    const url = staticString(call.arguments[0]);
-    let origin;
-    try {
-      origin = new URL(url).origin;
-    } catch {
-      /* Unverifiable input fails closed below. */
-    }
-    if (!origin || !origins?.has(origin))
-      report(
-        call,
-        "fetch target is not in this module's static ORIGINS; use the guarded transport seam for dynamic URLs",
-      );
-  }
   function checkImport(node, specifier, typeOnly = false) {
-    const value = staticString(specifier);
+    const value = specifier && ts.isStringLiteral(specifier) ? specifier.text : undefined;
     if (value === undefined) {
-      if (
-        !ctx.test &&
-        (ctx.project?.startsWith("agent-") || ctx.ui || ctx.path.startsWith("apps/agent-daemon/"))
-      )
-        report(node, "unverifiable dynamic import");
+      if (agentSource) report(node, "unverifiable dynamic import; use a string literal");
       return;
     }
     for (const failure of importFailures(ctx, importTarget(root, file, value), typeOnly))
       report(node, `${failure}: ${value}`);
   }
-  function visit(node, inType = false) {
-    // TypeScript also labels runtime class bases and generic instantiations as type nodes.
-    inType ||= ts.isExpressionWithTypeArguments(node)
-      ? ts.isHeritageClause(node.parent) &&
-        (ts.isInterfaceDeclaration(node.parent.parent) ||
-          node.parent.token === ts.SyntaxKind.ImplementsKeyword)
-      : ts.isTypeNode(node);
+  function visit(node) {
+    // Reject capabilities at their reference, so wrappers and aliases cannot hide them.
+    if (agentSource) {
+      if (ts.isIdentifier(node)) {
+        if (commonJsLoaders.has(node.text))
+          report(node, "CommonJS loaders are forbidden; use literal ESM imports");
+        if (forbiddenGlobals.has(node.text) && !isPropertyName(node))
+          report(node, `forbidden agent identifier: ${node.text}; use the guarded-fetch adapter`);
+      } else if (ts.isStringLiteralLike(node) && commonJsLoaders.has(node.text)) {
+        let reference = node;
+        while (reference.parent && ts.isOuterExpression(reference.parent))
+          reference = reference.parent;
+        const parent = reference.parent;
+        if (
+          (ts.isElementAccessExpression(parent) && parent.argumentExpression === reference) ||
+          ts.isComputedPropertyName(parent) ||
+          (ts.isBindingElement(parent) && parent.propertyName === reference) ||
+          ts.isImportSpecifier(parent) ||
+          ts.isExportSpecifier(parent)
+        )
+          report(node, "CommonJS loaders are forbidden; use literal ESM imports");
+      }
+    }
     if (ts.isImportDeclaration(node)) {
       const clause = node.importClause;
       const bindings = clause?.namedBindings;
@@ -353,6 +224,7 @@ function sourceFailures(root, file) {
       ts.isImportEqualsDeclaration(node) &&
       ts.isExternalModuleReference(node.moduleReference)
     ) {
+      if (agentSource) report(node, "CommonJS import-equals is forbidden; use literal ESM imports");
       checkImport(node, node.moduleReference.expression, node.isTypeOnly);
     } else if (ts.isImportTypeNode(node) && ts.isLiteralTypeNode(node.argument)) {
       checkImport(node, node.argument.literal, true);
@@ -362,35 +234,8 @@ function sourceFailures(root, file) {
         (ts.isIdentifier(node.expression) && node.expression.text === "require")
       )
         checkImport(node, node.arguments[0]);
-      // Retain the existing binding checks for injected transports such as io.fetch.
-      if (ctx.project === "agent-channels" && checkFetch && isFetch(node.expression))
-        checkOrigin(node);
     }
-    if (checkFetch && !inType) {
-      if (isRawFetchReference(node)) {
-        const call = directCall(node);
-        if (!call) report(node, "raw fetch reference must be a direct call with static ORIGINS");
-        else if (ctx.project !== "agent-channels") checkOrigin(call);
-      }
-      // Destructuring reads a property without a fetch member expression in the AST.
-      const bindings =
-        (ts.isVariableDeclaration(node) || ts.isParameter(node)) &&
-        ts.isObjectBindingPattern(node.name) &&
-        node.initializer &&
-        isGlobalObject(node.initializer)
-          ? node.name.elements
-          : ts.isBinaryExpression(node) &&
-              node.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
-              ts.isObjectLiteralExpression(unwrapExpression(node.left)) &&
-              isGlobalObject(node.right)
-            ? unwrapExpression(node.left).properties
-            : [];
-      for (const binding of bindings) {
-        if (propertyName(binding.propertyName ?? binding.name) === "fetch")
-          report(binding, "raw fetch destructuring cannot be validated with static ORIGINS");
-      }
-    }
-    ts.forEachChild(node, (child) => visit(child, inType));
+    ts.forEachChild(node, visit);
   }
   visit(source);
   return failures;

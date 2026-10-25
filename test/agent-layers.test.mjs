@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -203,140 +204,182 @@ describe("agent layer boundaries (DESIGN §2.2)", () => {
   });
 });
 
-describe("binding origin enforcement", () => {
-  const wrappers = [
-    "(FETCH)",
-    "FETCH as typeof fetch",
-    "FETCH satisfies typeof fetch",
-    "<typeof fetch>FETCH",
-    "FETCH!",
-    "(((FETCH as typeof fetch) satisfies typeof fetch)!)",
-  ];
-  const rawFetchForms = [
-    "fetch",
-    "globalThis.fetch",
-    "window.fetch",
-    "self.fetch",
-    'globalThis["fetch"]',
-  ];
-  const origins = 'const ORIGINS = new Set(["https://mail.example"]);';
-
-  it.each(wrappers)("rejects storing a raw fetch wrapped as %s", (wrapper) => {
-    for (const raw of rawFetchForms) {
-      const expression = wrapper.replace("FETCH", raw);
-      const failures = scan(
-        "packages/agent-channels/src/gmail/index.ts",
-        `${origins} const request = ${expression}; request("https://mail.example/messages");`,
-      );
-      expect(failures.join("\n")).toContain("raw fetch reference");
-    }
+describe("agent module load allowlist", () => {
+  it.each([
+    'require("node:fs");',
+    '(require)("node:fs");',
+    '(require as Loader)("node:fs");',
+    '(require satisfies Loader)("node:fs");',
+    '(<Loader>require)("node:fs");',
+    'require!("node:fs");',
+    '(0, require)("node:fs");',
+    'const load = require; load("node:fs");',
+    'let load; load = require; load("node:fs");',
+    "configure(require);",
+    'module.require("node:fs");',
+    '(module.require as Loader)("node:fs");',
+    'module["require"]("node:fs");',
+    'module[("require" as string)!]("node:fs");',
+    'module[`require`]("node:fs");',
+    "const load = module.require.bind(module);",
+    "const { require: load } = module;",
+    'const { "require": load } = module;',
+    'const { ["require"]: load } = module;',
+    'import load = require("node:fs");',
+    'import type Fs = require("node:fs");',
+    'import { createRequire } from "node:module";',
+    'import { createRequire as makeLoader } from "node:module";',
+    'import { "createRequire" as makeLoader } from "node:module";',
+    'import { createRequire as makeLoader } from "module"; const load = makeLoader(import.meta.url);',
+    "const makeLoader = (createRequire as Factory);",
+    "const makeLoader = createRequire.bind(null);",
+    'import * as mod from "node:module"; mod.createRequire(import.meta.url);',
+    'const { createRequire: makeLoader } = await import("node:module");',
+    'const { ["createRequire"]: makeLoader } = await import("node:module");',
+    'const { [("createRequire" as const)]: makeLoader } = await import("node:module");',
+    'import * as mod from "node:module"; const makeLoader = mod["createRequire"];',
+    'export { createRequire as makeLoader } from "node:module";',
+  ])("rejects CommonJS loader capabilities: %s", (source) => {
+    expect(scan("packages/agent-model-gateway/src/index.ts", source).join("\n")).toContain(
+      "CommonJS",
+    );
   });
 
-  it.each(wrappers)("validates a direct fetch wrapped as %s", (wrapper) => {
-    for (const raw of rawFetchForms) {
-      const expression = wrapper.replace("FETCH", raw);
+  it.each([
+    "await import(specifier);",
+    'await import("node:" + "fs");',
+    "await import(`node:fs`);",
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: source fixture for a dynamic import
+    "await import(`node:${name}`);",
+    'await import(("node:fs"));',
+    'await import("node:fs" as string);',
+    'await import(new URL("node:fs"));',
+    "await import();",
+  ])("rejects non-literal module loads: %s", (source) => {
+    expect(scan("packages/agent-model/src/index.ts", source).join("\n")).toContain(
+      "unverifiable dynamic import",
+    );
+  });
+
+  it.each([
+    'import "./local.js";',
+    'import * as local from "./local.js";',
+    'import { value as local } from "./local.js";',
+    'export * from "./local.js";',
+    'export { value as local } from "./local.js";',
+    'export * as local from "./local.js";',
+    'import type { Value } from "./local.js";',
+    'export type { Value } from "./local.js";',
+    'type Value = import("./local.js").Value;',
+    'await import("./local.js");',
+    'await import("node:fs");',
+    'await import("./local.js", { with: { type: "json" } });',
+  ])("allows literal ESM forms: %s", (source) => {
+    expect(scan("packages/agent-model/src/index.ts", source)).toEqual([]);
+  });
+});
+
+describe("agent capability references", () => {
+  const globals = ["fetch", "globalThis", "global", "window", "self"];
+  const wrappers = [
+    "VALUE",
+    "(VALUE)",
+    "VALUE as any",
+    "VALUE satisfies unknown",
+    "<any>VALUE",
+    "VALUE!",
+    "(((VALUE as any) satisfies unknown)!)",
+  ];
+
+  it.each(globals)("rejects every wrapped reference to %s", (name) => {
+    for (const wrapper of wrappers) {
+      const expression = wrapper.replace("VALUE", name);
       expect(
-        scan(
-          "packages/agent-channels/src/gmail/index.ts",
-          `${origins} (${expression})("https://mail.example/messages");`,
-        ),
-      ).toEqual([]);
-      expect(
-        scan(
-          "packages/agent-channels/src/gmail/index.ts",
-          `${origins} (${expression})("https://other.example/messages");`,
-        ).join("\n"),
-      ).toContain("static ORIGINS");
+        scan("packages/agent-channels/src/gmail/index.ts", `configure(${expression});`).join("\n"),
+      ).toContain(`forbidden agent identifier: ${name}`);
     }
   });
 
   it.each([
-    'let request; request = fetch; request("https://other.example/messages");',
-    'let request; request = (globalThis.fetch as typeof fetch)!; request("https://other.example/messages");',
-    "configure(fetch);",
-    "configure((window.fetch satisfies typeof fetch));",
-    "const { fetch: f } = globalThis;",
-    "const { fetch } = window;",
-    'const { ["fetch"]: f } = (self as Window);',
-    'const { "fetch": f } = globalThis;',
-    "let request; ({ fetch: request } = globalThis);",
-    "function configure({ fetch: request } = globalThis) {}",
+    'const ORIGINS = new Set(["https://mail.example"]); fetch("https://mail.example/messages");',
+    'global.fetch("https://mail.example/messages");',
+    'globalThis["fetch"](input);',
+    "const root = global; const request = root.fetch;",
+    "const { fetch: request } = globalThis;",
+    "let request; ({ fetch: request } = window);",
+    "function configure({ fetch: request } = self) {}",
     "const request = fetch.bind(globalThis);",
-    "const request = globalThis.fetch.call;",
-    "export { fetch };",
-    "export { fetch as request };",
-    "export default fetch;",
-    "export default (self.fetch!);",
-    "export const request = globalThis.fetch;",
     "const transport = { fetch };",
     "const transport = { request: fetch };",
+    "let request; request = fetch;",
+    "export { fetch };",
+    "export { global as root };",
+    "export default self;",
     "class Transport extends (fetch as any) {}",
     "const request = fetch<any>;",
-  ])("rejects raw fetch escaping even with valid declared origins: %s", (source) => {
-    expect(
-      scan("packages/agent-channels/src/gmail/index.ts", `${origins} ${source}`).join("\n"),
-    ).toContain("raw fetch");
+    "type Fetch = typeof fetch;",
+    "type Fetch = typeof globalThis.fetch;",
+    "interface Transport extends globalThis.fetch {}",
+    "class Fake implements fetch {}",
+    "export type { fetch };",
+    "const value = transport[fetch];",
+    "const value = { [global]: fake };",
+    "const { [self]: value } = transport;",
+    "const { fetch } = transport;",
+    'import { fetch as request } from "./transport.js";',
+    "const request = f\\u0065tch;",
+  ])("rejects direct calls, escapes and type references: %s", (source) => {
+    expect(scan("packages/agent-channels/src/gmail/index.ts", source).join("\n")).toContain(
+      "forbidden agent identifier",
+    );
   });
 
   it.each([
     "packages/agent-executor/src/index.ts",
     "packages/agent-model-gateway/src/index.ts",
     "packages/agent-memory/src/index.ts",
+    "packages/agent-channels/src/gmail/index.ts",
+    "packages/agent-channels/test/transport.test.ts",
+    "packages/agent-channels/src/gmail/transport.spec.ts",
+    "packages/agent-channels/vitest.config.ts",
     "apps/agent-daemon/src/index.ts",
+    "apps/agent-daemon/test/transport.test.ts",
     "apps/suite/src/apps/agent/index.ts",
-  ])("enforces raw fetch references throughout agent source: %s", (path) => {
-    expect(scan(path, `${origins} configure(globalThis.fetch);`).join("\n")).toContain("raw fetch");
-    expect(scan(path, `${origins} fetch("https://mail.example/messages");`)).toEqual([]);
-    expect(scan(path, `${origins} fetch(input);`).join("\n")).toContain("static ORIGINS");
-  });
-
-  it("preserves test and type-only references without treating property names as raw fetch", () => {
-    expect(scan("packages/agent-channels/test/transport.test.ts", "configure(fetch);")).toEqual([]);
-    expect(
-      scan(
-        "packages/agent-channels/src/gmail/index.ts",
-        "type Fetch = typeof globalThis.fetch; type Bare = typeof fetch; export type { fetch }; interface Transport extends globalThis.fetch {} class Fake implements fetch {} const transport = { fetch: fake }; const { fetch: f, ...rest } = transport;",
-      ),
-    ).toEqual([]);
-  });
-
-  it("reuses a binding's imported static origins in its send half", () => {
-    expect(
-      checkAgentLayers(
-        workspace({
-          "packages/agent-channels/src/gmail.ts":
-            'export const ORIGINS = new Set(["https://mail.example"]);',
-          "packages/agent-channels/src/gmail/send.ts":
-            'import { ORIGINS } from "../gmail.js"; fetch("https://mail.example/messages");',
-        }),
-      ),
-    ).toEqual([]);
-  });
-  it("allows a literal URL only when its exact origin is statically declared", () => {
-    expect(
-      scan(
-        "packages/agent-channels/src/gmail/index.ts",
-        'export const ORIGINS: ReadonlySet<string> = new Set(["https://mail.example"]); fetch("https://mail.example/messages");',
-      ),
-    ).toEqual([]);
-  });
-
-  it.each([
-    'fetch("https://mail.example/messages");',
-    'const ORIGINS = new Set(["https://mail.example"]); fetch("https://mail.example.evil.example/messages");',
-    'const ORIGINS = new Set(["https://mail.example"]); globalThis.fetch("https://other.example/messages");',
-    'const ORIGINS = new Set(["https://mail.example"]); fetch(input);',
-    'const ORIGINS = new Set(["https://mail.example"]); io.fetch(new URL("https://other.example/messages"));',
-    'const request = globalThis.fetch; request("https://other.example/messages");',
-    'globalThis["fetch"]("https://other.example/messages");',
-    'const { fetch: request } = globalThis; request("https://other.example/messages");',
-    'const request = fetch.bind(globalThis); request("https://other.example/messages");',
-    'const ORIGINS = new Set(["https://mail.example"]); let url = "https://mail.example"; url = input; fetch(url);',
-    'let ORIGINS = new Set(["https://mail.example"]); fetch("https://mail.example/messages");',
-    'function configure() { const ORIGINS = new Set(["https://mail.example"]); } fetch("https://mail.example/messages");',
-  ])("refuses missing, hostile or unverifiable fetch origins: %s", (source) => {
-    expect(scan("packages/agent-channels/src/gmail/index.ts", source).join("\n")).toContain(
-      "static ORIGINS",
+  ])("enforces capability restrictions throughout agent code: %s", (path) => {
+    for (const name of globals)
+      expect(scan(path, `configure(${name});`).join("\n")).toContain(
+        `forbidden agent identifier: ${name}`,
+      );
+    expect(scan(path, 'const load = require; load("node:fs");').join("\n")).toContain("CommonJS");
+    expect(scan(path, "await import(specifier);").join("\n")).toContain(
+      "unverifiable dynamic import",
     );
+  });
+
+  it.each(globals)("allows %s as an ordinary property or member name", (name) => {
+    expect(
+      scan(
+        "packages/agent-channels/src/gmail/index.ts",
+        `const transport = { ${name}: fake }; transport.${name}(input);
+         transport["${name}"](input); const { ${name}: request } = transport;
+         interface Transport { ${name}: TransportTypes.${name}; }
+         class Fake { ${name}() {} }`,
+      ),
+    ).toEqual([]);
+  });
+
+  it("allows guarded transport calls and inert examples", () => {
+    expect(
+      scan(
+        "packages/agent-channels/src/gmail/index.ts",
+        'import { guardedFetch } from "@jeswr/guarded-fetch"; guardedFetch(input); io.fetch(input); // require(global.fetch)\nconst example = "createRequire, fetch, globalThis, global, window, self";',
+      ),
+    ).toEqual([]);
+  });
+
+  it("keeps other packages outside the agent capability policy", () => {
+    expect(
+      scan("packages/guarded-fetch/src/index.ts", "const request = globalThis.fetch;"),
+    ).toEqual([]);
   });
 });
