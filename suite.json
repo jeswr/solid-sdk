@@ -68,7 +68,8 @@
     "@jeswr/pod-notifications",
     "@jeswr/pod-access",
     "@jeswr/rdf-engine",
-    "@jeswr/storage-conformance"
+    "@jeswr/storage-conformance",
+    "@jeswr/pkg-memory"
   ],
   "applications": [
     {
