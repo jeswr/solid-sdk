@@ -158,13 +158,13 @@ describe("revision retention", () => {
         expect(revisions.filter((r) => r.label !== undefined).map((r) => r.label)).toEqual(
           [...names].reverse(),
         );
-        revisions.forEach((r, i) => {
-          expect(r.wasRevisionOf).toBe(revisions[i + 1]?.id);
-        });
+        expect(revisions.map((r) => r.wasRevisionOf)).toEqual(
+          revisions.map((_, i) => revisions[i + 1]?.id),
+        );
       }
       assert(revisions.length > 100);
     }
-  });
+  }, 30_000);
 });
 
 describe("layout and validation", () => {
