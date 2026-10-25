@@ -1,8 +1,9 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { onest, sourceCode, sourceSerif } from "@jeswr/suite-ui/fonts";
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Providers } from "./providers";
 import "./globals.css";
+export const viewport: Viewport = { colorScheme: "light dark" };
 export const metadata: Metadata = { title: "Solid Suite · Component fixtures" };
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
