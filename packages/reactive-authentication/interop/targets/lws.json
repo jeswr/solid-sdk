@@ -1,0 +1,390 @@
+{
+  "schemaVersion": 1,
+  "description": "External Linked Web Storage deployments per authentication suite (live, configured by environment). No public LWS deployment is known; mock fixtures are not listed here.",
+  "targets": [
+    {
+      "id": "lws-openid",
+      "name": "LWS deployment, OpenID Connect suite (ID token from a browser login, RFC 8693 exchange)",
+      "category": "live",
+      "adapter": "lws",
+      "software": {
+        "name": "unspecified LWS 1.0 (editor's draft) deployment",
+        "source": "service",
+        "url": "https://github.com/w3c/lws-protocol/tree/268fd25be04dd609f8b3a9b324e99c0073c67f0f"
+      },
+      "links": {
+        "suites": "https://github.com/w3c/lws-protocol/tree/268fd25be04dd609f8b3a9b324e99c0073c67f0f",
+        "protocols": "docs/protocols.md"
+      },
+      "notes": [
+        "no public LWS deployment is known (2026-09-27); configure a deployment you are allowed to test. The repository's LWS fixtures in test/helpers/lws.js are mocks and are not interoperability evidence",
+        "LWS 1.0 Operations define no HTTP binding yet at 268fd25: writes use PUT with If-None-Match: * / If-Match",
+        "unattended (session mode): unverified — depends on the OpenID provider's consent and MFA policy; fails closed if interaction is needed"
+      ],
+      "env": [
+        {
+          "name": "RA_INTEROP_LWS_OPENID_STORAGE",
+          "description": "storage (or the part the test identity may use, ends with /) of the openid deployment; for lws.boundary-automatic it must be the StorageRoot endpoint advertised by the storage description",
+          "pii": true
+        },
+        {
+          "name": "RA_INTEROP_LWS_OPENID_SCRATCH",
+          "description": "container dedicated to test writes inside the storage (ends with /); omit for read-only runs",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_LWS_OPENID_PRIVATE_RESOURCE",
+          "description": "an existing private resource the test identity may read (read-only runs)",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_LWS_OPENID_OTHER_PROTECTED",
+          "description": "a protected resource outside the storage (read-only boundary probe)",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_LWS_OPENID_AUTHORIZATION_SERVER",
+          "description": "the storage's authorization server (as_uri) when it is not on the storage's origin; trusted explicitly",
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_LWS_OPENID_SUBJECT",
+          "description": "the agent identifier the storage should see (ID token sub URI); required so strict results are tied to the test identity",
+          "pii": true
+        },
+        {
+          "name": "RA_INTEROP_LWS_OPENID_ISSUER",
+          "description": "the OpenID provider trusted by the deployment (issues URI sub and azp)"
+        },
+        {
+          "name": "RA_INTEROP_LWS_OPENID_CLIENT_ID",
+          "description": "registered client ID at that provider (omit to use dynamic registration)",
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_LWS_OPENID_CLIENT_SECRET",
+          "description": "client secret of a confidential registered client",
+          "secret": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_LWS_OPENID_REDIRECT_URI",
+          "description": "loopback redirect URI registered for that client (default http://127.0.0.1:39398/callback)",
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_LWS_OPENID_STORAGE_STATE",
+          "description": "Playwright storageState file of a dedicated test account's signed-in identity-provider session (contains cookies; never commit). With --headed it seeds the browser; without --headed it enables the fail-closed non-interactive session mode (a configured file that does not exist is a configuration error)",
+          "pii": true,
+          "optional": true
+        }
+      ],
+      "config": {
+        "label": "the openid LWS deployment",
+        "suite": "openid",
+        "storage": "${RA_INTEROP_LWS_OPENID_STORAGE}",
+        "scratchContainer": "${RA_INTEROP_LWS_OPENID_SCRATCH}",
+        "privateResource": "${RA_INTEROP_LWS_OPENID_PRIVATE_RESOURCE}",
+        "otherProtected": "${RA_INTEROP_LWS_OPENID_OTHER_PROTECTED}",
+        "authorizationServers": [
+          "${RA_INTEROP_LWS_OPENID_AUTHORIZATION_SERVER}"
+        ],
+        "expectedSubject": "${RA_INTEROP_LWS_OPENID_SUBJECT}",
+        "openid": {
+          "issuer": "${RA_INTEROP_LWS_OPENID_ISSUER}",
+          "clientId": "${RA_INTEROP_LWS_OPENID_CLIENT_ID}",
+          "clientSecret": "${RA_INTEROP_LWS_OPENID_CLIENT_SECRET}"
+        },
+        "redirectUri": "${RA_INTEROP_LWS_OPENID_REDIRECT_URI:-http://127.0.0.1:39398/callback}",
+        "storageState": "${RA_INTEROP_LWS_OPENID_STORAGE_STATE}",
+        "login": {
+          "recipe": "manual"
+        }
+      },
+      "capabilities": {
+        "writes": true,
+        "storageDiscovery": "unverified"
+      },
+      "capabilityNotes": {
+        "storageDiscovery": "lws.boundary-automatic needs the first 401 to carry Link rel=\"https://www.w3.org/ns/lws#storage\" to a same-origin storage description whose StorageRoot equals the configured storage and whose root HEAD links back; no LWS deployment has been observed yet (run with --exercise-unverified to observe it)"
+      }
+    },
+    {
+      "id": "lws-saml",
+      "name": "LWS deployment, SAML 2.0 suite (assertion from the deployment's SAML service provider after a browser login)",
+      "category": "live",
+      "adapter": "lws",
+      "software": {
+        "name": "unspecified LWS 1.0 (editor's draft) deployment",
+        "source": "service",
+        "url": "https://github.com/w3c/lws-protocol/tree/268fd25be04dd609f8b3a9b324e99c0073c67f0f"
+      },
+      "links": {
+        "suites": "https://github.com/w3c/lws-protocol/tree/268fd25be04dd609f8b3a9b324e99c0073c67f0f",
+        "protocols": "docs/protocols.md"
+      },
+      "notes": [
+        "no public LWS deployment is known (2026-09-27); configure a deployment you are allowed to test. The repository's LWS fixtures in test/helpers/lws.js are mocks and are not interoperability evidence",
+        "LWS 1.0 Operations define no HTTP binding yet at 268fd25: writes use PUT with If-None-Match: * / If-Match",
+        "unattended (session mode): works only if the stored SP session still yields an assertion from the assertion endpoint; otherwise the adapter fails closed without opening a sign-in page"
+      ],
+      "env": [
+        {
+          "name": "RA_INTEROP_LWS_SAML_STORAGE",
+          "description": "storage (or the part the test identity may use, ends with /) of the saml deployment; for lws.boundary-automatic it must be the StorageRoot endpoint advertised by the storage description",
+          "pii": true
+        },
+        {
+          "name": "RA_INTEROP_LWS_SAML_SCRATCH",
+          "description": "container dedicated to test writes inside the storage (ends with /); omit for read-only runs",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_LWS_SAML_PRIVATE_RESOURCE",
+          "description": "an existing private resource the test identity may read (read-only runs)",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_LWS_SAML_OTHER_PROTECTED",
+          "description": "a protected resource outside the storage (read-only boundary probe)",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_LWS_SAML_AUTHORIZATION_SERVER",
+          "description": "the storage's authorization server (as_uri) when it is not on the storage's origin; trusted explicitly",
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_LWS_SAML_SUBJECT",
+          "description": "leave unset: the SAML NameID stays inside the assertion, which the client does not parse, so the subject cannot be compared (setting it makes lws.login-read FAIL)",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_LWS_SAML_LOGIN_URL",
+          "description": "https URL that starts the SAML sign-in at the service provider"
+        },
+        {
+          "name": "RA_INTEROP_LWS_SAML_ASSERTION_ENDPOINT",
+          "description": "https endpoint of the service provider returning {xml, recipient, notOnOrAfter} for ?audience=<as_uri> to the signed-in browser session"
+        },
+        {
+          "name": "RA_INTEROP_LWS_SAML_STORAGE_STATE",
+          "description": "Playwright storageState file of a dedicated test account's signed-in identity-provider session (contains cookies; never commit). With --headed it seeds the browser; without --headed it enables the fail-closed non-interactive session mode (a configured file that does not exist is a configuration error); here the SAML service provider's session",
+          "pii": true,
+          "optional": true
+        }
+      ],
+      "config": {
+        "label": "the saml LWS deployment",
+        "suite": "saml",
+        "storage": "${RA_INTEROP_LWS_SAML_STORAGE}",
+        "scratchContainer": "${RA_INTEROP_LWS_SAML_SCRATCH}",
+        "privateResource": "${RA_INTEROP_LWS_SAML_PRIVATE_RESOURCE}",
+        "otherProtected": "${RA_INTEROP_LWS_SAML_OTHER_PROTECTED}",
+        "authorizationServers": [
+          "${RA_INTEROP_LWS_SAML_AUTHORIZATION_SERVER}"
+        ],
+        "expectedSubject": "${RA_INTEROP_LWS_SAML_SUBJECT}",
+        "saml": {
+          "loginUrl": "${RA_INTEROP_LWS_SAML_LOGIN_URL}",
+          "assertionEndpoint": "${RA_INTEROP_LWS_SAML_ASSERTION_ENDPOINT}"
+        },
+        "login": {
+          "recipe": "manual"
+        },
+        "storageState": "${RA_INTEROP_LWS_SAML_STORAGE_STATE}"
+      },
+      "capabilities": {
+        "writes": true,
+        "storageDiscovery": "unverified"
+      },
+      "capabilityNotes": {
+        "storageDiscovery": "lws.boundary-automatic needs the first 401 to carry Link rel=\"https://www.w3.org/ns/lws#storage\" to a same-origin storage description whose StorageRoot equals the configured storage and whose root HEAD links back; no LWS deployment has been observed yet (run with --exercise-unverified to observe it)"
+      }
+    },
+    {
+      "id": "lws-cid",
+      "name": "LWS deployment, self-signed identity with a controlled identifier document",
+      "category": "live",
+      "adapter": "lws",
+      "software": {
+        "name": "unspecified LWS 1.0 (editor's draft) deployment",
+        "source": "service",
+        "url": "https://github.com/w3c/lws-protocol/tree/268fd25be04dd609f8b3a9b324e99c0073c67f0f"
+      },
+      "links": {
+        "suites": "https://github.com/w3c/lws-protocol/tree/268fd25be04dd609f8b3a9b324e99c0073c67f0f",
+        "protocols": "docs/protocols.md"
+      },
+      "notes": [
+        "no public LWS deployment is known (2026-09-27); configure a deployment you are allowed to test. The repository's LWS fixtures in test/helpers/lws.js are mocks and are not interoperability evidence",
+        "LWS 1.0 Operations define no HTTP binding yet at 268fd25: writes use PUT with If-None-Match: * / If-Match",
+        "unattended: no browser; needs only the key file (materialized from a secret)"
+      ],
+      "env": [
+        {
+          "name": "RA_INTEROP_LWS_CID_STORAGE",
+          "description": "storage (or the part the test identity may use, ends with /) of the controlled-identifier deployment; for lws.boundary-automatic it must be the StorageRoot endpoint advertised by the storage description",
+          "pii": true
+        },
+        {
+          "name": "RA_INTEROP_LWS_CID_SCRATCH",
+          "description": "container dedicated to test writes inside the storage (ends with /); omit for read-only runs",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_LWS_CID_PRIVATE_RESOURCE",
+          "description": "an existing private resource the test identity may read (read-only runs)",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_LWS_CID_OTHER_PROTECTED",
+          "description": "a protected resource outside the storage (read-only boundary probe)",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_LWS_CID_AUTHORIZATION_SERVER",
+          "description": "the storage's authorization server (as_uri) when it is not on the storage's origin; trusted explicitly",
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_LWS_CID_SUBJECT",
+          "description": "optional: the controlled identifier is already fixed by RA_INTEROP_LWS_CID_ID",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_LWS_CID_ID",
+          "description": "https URL of the agent's controlled identifier document (sub = iss = client_id)",
+          "pii": true
+        },
+        {
+          "name": "RA_INTEROP_LWS_CID_KEY_ID",
+          "description": "verification method URL listed under authentication in that document (kid)",
+          "pii": true
+        },
+        {
+          "name": "RA_INTEROP_LWS_CID_KEY_FILE",
+          "description": "path to the private Ed25519 or P-256 JWK whose public key the document publishes (never commit)",
+          "secret": true
+        }
+      ],
+      "config": {
+        "label": "the controlled-identifier LWS deployment",
+        "suite": "controlled-identifier",
+        "storage": "${RA_INTEROP_LWS_CID_STORAGE}",
+        "scratchContainer": "${RA_INTEROP_LWS_CID_SCRATCH}",
+        "privateResource": "${RA_INTEROP_LWS_CID_PRIVATE_RESOURCE}",
+        "otherProtected": "${RA_INTEROP_LWS_CID_OTHER_PROTECTED}",
+        "authorizationServers": [
+          "${RA_INTEROP_LWS_CID_AUTHORIZATION_SERVER}"
+        ],
+        "expectedSubject": "${RA_INTEROP_LWS_CID_SUBJECT}",
+        "selfIssued": {
+          "subject": "${RA_INTEROP_LWS_CID_ID}",
+          "keyId": "${RA_INTEROP_LWS_CID_KEY_ID}",
+          "keyFile": "${RA_INTEROP_LWS_CID_KEY_FILE}"
+        }
+      },
+      "capabilities": {
+        "writes": true,
+        "storageDiscovery": "unverified"
+      },
+      "capabilityNotes": {
+        "storageDiscovery": "lws.boundary-automatic needs the first 401 to carry Link rel=\"https://www.w3.org/ns/lws#storage\" to a same-origin storage description whose StorageRoot equals the configured storage and whose root HEAD links back; no LWS deployment has been observed yet (run with --exercise-unverified to observe it)"
+      }
+    },
+    {
+      "id": "lws-did-key",
+      "name": "LWS deployment, self-signed identity with did:key",
+      "category": "live",
+      "adapter": "lws",
+      "software": {
+        "name": "unspecified LWS 1.0 (editor's draft) deployment",
+        "source": "service",
+        "url": "https://github.com/w3c/lws-protocol/tree/268fd25be04dd609f8b3a9b324e99c0073c67f0f"
+      },
+      "links": {
+        "suites": "https://github.com/w3c/lws-protocol/tree/268fd25be04dd609f8b3a9b324e99c0073c67f0f",
+        "protocols": "docs/protocols.md"
+      },
+      "notes": [
+        "no public LWS deployment is known (2026-09-27); configure a deployment you are allowed to test. The repository's LWS fixtures in test/helpers/lws.js are mocks and are not interoperability evidence",
+        "LWS 1.0 Operations define no HTTP binding yet at 268fd25: writes use PUT with If-None-Match: * / If-Match",
+        "unattended: no browser; needs only the key file (materialized from a secret)"
+      ],
+      "env": [
+        {
+          "name": "RA_INTEROP_LWS_DID_KEY_STORAGE",
+          "description": "storage (or the part the test identity may use, ends with /) of the did-key deployment; for lws.boundary-automatic it must be the StorageRoot endpoint advertised by the storage description",
+          "pii": true
+        },
+        {
+          "name": "RA_INTEROP_LWS_DID_KEY_SCRATCH",
+          "description": "container dedicated to test writes inside the storage (ends with /); omit for read-only runs",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_LWS_DID_KEY_PRIVATE_RESOURCE",
+          "description": "an existing private resource the test identity may read (read-only runs)",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_LWS_DID_KEY_OTHER_PROTECTED",
+          "description": "a protected resource outside the storage (read-only boundary probe)",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_LWS_DID_KEY_AUTHORIZATION_SERVER",
+          "description": "the storage's authorization server (as_uri) when it is not on the storage's origin; trusted explicitly",
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_LWS_DID_KEY_SUBJECT",
+          "description": "the agent identifier the storage should see (the did:key of the configured key); required so strict results are tied to the test identity",
+          "pii": true
+        },
+        {
+          "name": "RA_INTEROP_LWS_DID_KEY_KEY_FILE",
+          "description": "path to the private Ed25519 or P-256 JWK whose did:key the deployment grants access (never commit)",
+          "secret": true
+        }
+      ],
+      "config": {
+        "label": "the did-key LWS deployment",
+        "suite": "did-key",
+        "storage": "${RA_INTEROP_LWS_DID_KEY_STORAGE}",
+        "scratchContainer": "${RA_INTEROP_LWS_DID_KEY_SCRATCH}",
+        "privateResource": "${RA_INTEROP_LWS_DID_KEY_PRIVATE_RESOURCE}",
+        "otherProtected": "${RA_INTEROP_LWS_DID_KEY_OTHER_PROTECTED}",
+        "authorizationServers": [
+          "${RA_INTEROP_LWS_DID_KEY_AUTHORIZATION_SERVER}"
+        ],
+        "expectedSubject": "${RA_INTEROP_LWS_DID_KEY_SUBJECT}",
+        "selfIssued": {
+          "keyFile": "${RA_INTEROP_LWS_DID_KEY_KEY_FILE}"
+        }
+      },
+      "capabilities": {
+        "writes": true,
+        "storageDiscovery": "unverified"
+      },
+      "capabilityNotes": {
+        "storageDiscovery": "lws.boundary-automatic needs the first 401 to carry Link rel=\"https://www.w3.org/ns/lws#storage\" to a same-origin storage description whose StorageRoot equals the configured storage and whose root HEAD links back; no LWS deployment has been observed yet (run with --exercise-unverified to observe it)"
+      }
+    }
+  ]
+}

@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Microsoft Graph with MSAL.js</title>
+<!-- Register an Entra ID app with a "Single-page application" redirect URI (enables CORS for the SPA). -->
+<button id="sign-in">Sign in with Microsoft</button>
+<pre id="output"></pre>
+<script type="module">
+import { PublicClientApplication } from "@azure/msal-browser" // your application's dependency, not this library's
+import {
+    CredentialBoundary, InteractionRequiredError, MsalTokenSource, OAuthBearerTokenProvider, ReactiveFetchManager,
+} from "@solid/reactive-authentication"
+
+// redirectUri: the dedicated MSAL v5 redirect page (microsoft-redirect.html), registered as an SPA redirect URI.
+const msal = new PublicClientApplication({auth: {
+    clientId: "00000000-0000-0000-0000-000000000000",
+    authority: "https://login.microsoftonline.com/common", // MSAL validates the tenant issuer; nothing is disabled here
+    redirectUri: new URL("microsoft-redirect.html", location.href).href,
+}})
+await msal.initialize()
+const button = document.querySelector("#sign-in")
+
+// One source per resource: Graph here; another API gets its own source, scopes and boundary.
+const graph = new MsalTokenSource(msal, {
+    scopes: ["User.Read"],
+    account: () => msal.getActiveAccount(), // the account the user chose, never an arbitrary cached one
+    onInteractionRequired: () => { button.hidden = false },
+})
+const resources = new CredentialBoundary(["https://graph.microsoft.com/v1.0/"])
+const manager = new ReactiveFetchManager({providers: [new OAuthBearerTokenProvider(graph, {resources})], boundary: resources})
+
+async function showProfile() {
+    try {
+        const response = await manager.fetch("https://graph.microsoft.com/v1.0/me")
+        document.querySelector("#output").textContent = JSON.stringify(await response.json(), null, 2)
+    } catch (e) {
+        if (!(e instanceof InteractionRequiredError)) throw e
+    }
+}
+
+// Sign-in runs from the click (MSAL opens its popup immediately); the chosen account becomes active.
+button.addEventListener("click", async () => {
+    const result = await msal.loginPopup({scopes: ["User.Read"], prompt: "select_account"})
+    msal.setActiveAccount(result.account)
+    button.hidden = true
+    await showProfile()
+})
+// Later consent for more scopes of the same resource: `await graph.authorize()` from a click.
+await showProfile()
+</script>
+</html>

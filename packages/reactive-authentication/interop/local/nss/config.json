@@ -1,0 +1,15 @@
+{
+  "root": "./data",
+  "port": "39343",
+  "serverUri": "http://localhost:39343",
+  "webid": true,
+  "mount": "/",
+  "configPath": "./config",
+  "dbPath": "./.db",
+  "multiuser": true,
+  "corsProxy": "/proxy",
+  "server": {"name": "reactive-authentication interop (disposable)", "description": "", "logo": ""},
+  "enforceToc": false,
+  "disablePasswordChecks": true,
+  "supportEmail": "nobody@interop.test"
+}
