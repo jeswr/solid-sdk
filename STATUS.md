@@ -60,3 +60,19 @@ unresolved implementation decisions.
 STATUS.md was updated last, after implementation and validation. No dependencies
 were added; no pushes, PRs, branch switches, or merges were performed. Bead
 integration and closure remain with the dispatcher.
+
+## Resume verification
+
+This invocation started at `2e0dbcd6`, with the round 3 implementation already
+committed in `72c178c9`. Verified that its explicit alias handling and the exact
+`"@jeswr/pod-auth": "workspace:n3"` regression match the brief; no further code
+changes were needed.
+
+- `pnpm exec turbo run lint:root test:root --filter=// --force` — **PASS**,
+  2/2 tasks executed without cache hits. `lint:root` passes on the real tree
+  (76 manifests); all 83 root tests pass, including 57 layer-guard tests.
+- `git diff --check` — **PASS**.
+- `roborev status` — still unavailable (exit 127, command not found).
+- Final resume commit: `docs: record resumed lane verification`; only this
+  status report changed, last, after validation. No implementation work or
+  open questions remain; the review and wider-gate limitations above still apply.
