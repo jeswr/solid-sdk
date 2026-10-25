@@ -110,8 +110,8 @@ export class TypeIndexDataset extends DatasetWrapper {
     const reg = new TypeRegistration(indexUrl + fragment, this, this.factory);
     reg.markRegistration();
     reg.forClass = classIri;
-    if (location.instance !== undefined) reg.instance = location.instance;
-    if (location.container !== undefined) reg.instanceContainer = location.container;
+    reg.instance = location.instance;
+    reg.instanceContainer = location.container;
     return reg;
   }
 

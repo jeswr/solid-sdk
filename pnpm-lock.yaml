@@ -1973,15 +1973,33 @@ importers:
 
   apps/suite:
     dependencies:
+      '@jeswr/fetch-rdf':
+        specifier: ^0.1.0
+        version: 0.1.0
+      '@jeswr/guarded-fetch':
+        specifier: workspace:*
+        version: link:../../packages/guarded-fetch
       '@jeswr/suite-ui':
         specifier: workspace:*
         version: link:../../packages/suite-ui
+      '@rdfjs/wrapper':
+        specifier: ^0.34.0
+        version: 0.34.0
+      '@solid/object':
+        specifier: ^0.6.0
+        version: 0.6.0
+      n3:
+        specifier: ^2.0.3
+        version: 2.1.1
       next:
         specifier: 16.2.7
         version: 16.2.7(@babel/core@7.29.7)(@playwright/test@1.61.1)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       next-themes:
         specifier: ^0.4.6
         version: 0.4.6(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      postal-mime:
+        specifier: ^2.7.3
+        version: 2.7.6
       react:
         specifier: 19.2.7
         version: 19.2.7
@@ -1998,9 +2016,15 @@ importers:
       '@playwright/test':
         specifier: 1.61.1
         version: 1.61.1
+      '@rdfjs/types':
+        specifier: ^2.0.1
+        version: 2.0.1
       '@tailwindcss/postcss':
         specifier: ^4
         version: 4.3.2
+      '@types/n3':
+        specifier: ^1.21.1
+        version: 1.26.1
       '@types/node':
         specifier: ^25.9.2
         version: 25.9.5
@@ -2010,6 +2034,9 @@ importers:
       '@types/react-dom':
         specifier: 19.2.3
         version: 19.2.3(@types/react@19.2.17)
+      '@vitest/coverage-v8':
+        specifier: ^4.1.9
+        version: 4.1.10(vitest@4.1.10)
       tailwindcss:
         specifier: ^4
         version: 4.3.1
@@ -12047,6 +12074,9 @@ packages:
   possible-typed-array-names@1.1.0:
     resolution: {integrity: sha512-/+5VFTchJDoVj3bhoqi6UeymcD00DAwb1nJwamzPvHEszJ4FpF6SNNbUbOS8yI56qHzdV8eK0qEfOSiodkTdxg==}
     engines: {node: '>= 0.4'}
+
+  postal-mime@2.7.6:
+    resolution: {integrity: sha512-UUlyE2KlxmvwMGq060onF/VWU3zD6dVW31FwokQ5v26jWd35fbs2MoTFzh+jXnPwAyV2MULMKXcBInGOl5TO6Q==}
 
   postcss-load-config@6.0.1:
     resolution: {integrity: sha512-oPtTM4oerL+UXmx+93ytZVN82RrlY/wPUV8IeDxFrzIjXOLF1pN+EmKPLbubvKHT2HC20xXsCAH2Z+CKV6Oz/g==}
@@ -25052,6 +25082,8 @@ snapshots:
       fsevents: 2.3.2
 
   possible-typed-array-names@1.1.0: {}
+
+  postal-mime@2.7.6: {}
 
   postcss-load-config@6.0.1(jiti@2.7.0)(postcss@8.5.17):
     dependencies:

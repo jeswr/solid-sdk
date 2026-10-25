@@ -145,3 +145,13 @@ describe("TypeIndexDataset", () => {
     expect(idx.locate(Classes.EmailMessage)).toEqual([{ container: MAIL_CONTAINER }]);
   });
 });
+
+it("replaces registration location without keeping the previous alternative", () => {
+  const index = emptyIndex();
+  index.register(INDEX, "#replace", Classes.EmailMessage, { instance: `${MAIL_CONTAINER}one.ttl` });
+  const registration = index.register(INDEX, "#replace", Classes.EmailMessage, {
+    container: MAIL_CONTAINER,
+  });
+  expect(registration.instance).toBeUndefined();
+  expect(registration.instanceContainer).toBe(MAIL_CONTAINER);
+});
