@@ -136,3 +136,93 @@ Review and remaining constraints:
   font build under this lane's network rule. No unrelated workaround was added.
 - Open questions: none. No pushes, fetches, PRs, branch switches or other checkout
   mutations were performed.
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+## Fix round 1 — wrapped and escaped fetch references
+
+Resumed from `ea7efaf91a4c00c135a477560cc419169c83012b` on `lane/sst-z1d`.
+Addressed the supplied medium-severity review finding without redoing the scaffold.
+
+Commits:
+
+- `6303ea2b` — `fix: reject escaped raw fetch references`: normalize parentheses,
+  `as`, `satisfies`, angle-bracket type assertions and non-null expressions;
+  replace alias tracking with rejection of raw fetch references outside direct,
+  statically origin-checked calls. Reject storage, later reassignment, argument
+  passing, binding/assignment/parameter destructuring, bound functions and exports.
+  Apply this rule throughout agent source while preserving existing test exemptions
+  and binding checks for injected transport calls.
+- `2acf3b36` — `fix: check fetch references in runtime type expressions`: keep
+  checks active in class bases and generic instantiations, which TypeScript also
+  labels as type nodes. Preserve genuine type-only references.
+- The final `docs: record sst-z1d fix validation` commit updates this report last.
+
+The final root suite has 123 passing cases, including 95 layer-guard cases.
+Regression coverage includes every requested wrapper form on bare/globalThis/window/self
+fetch and static bracket access, nested wrappers, direct calls with allowed and hostile
+origins, escapes despite valid declared origins, later assignments, callbacks,
+destructuring, exports and runtime type expressions. Existing valid fixtures still pass.
+The checker rejects the raw reference itself; it performs no alias data-flow tracking.
+
+Conservative interpretation: this checkout has no sanctioned guarded-fetch adapter
+file exception in `check-agent-layers.mjs`. No new exception or adapter path was invented;
+the existing test exemptions remain. Static local origins are accepted for direct raw
+calls in other agent source; channel send halves retain their existing imported-origin
+support. No package or app source/manifests were changed, and no dependencies were added.
+Package-specific gates and `check:packages` are therefore not applicable to this fix.
+
+Validation (all commands executed inside this checkout):
+
+- `pnpm exec biome check scripts/check-agent-layers.mjs test/agent-layers.test.mjs`
+  — PASS on the final implementation.
+- `pnpm run lint:root` — PASS. The final implementation also passes this exact
+  root-lint command as the first step of the affected gate below.
+- `pnpm run test:root --testTimeout=60000 --hookTimeout=60000` — PASS:
+  123 tests across four files. No timeout configuration was changed.
+- `TURBO_SCM_BASE=ea7efaf91a4c00c135a477560cc419169c83012b pnpm run gate --cache=local:rw`
+  — PASS on the final implementation: root lint and 1/1 Turbo task, uncached;
+  all 123 tests pass with default timeouts. Only the root project is affected by
+  this fix relative to the reviewed lane head.
+- `TURBO_SCM_BASE=agent/integration pnpm run gate --cache=local:rw` — BLOCKED:
+  root lint passes, then Turbo cannot resolve the absent local branch ref.
+- `TURBO_SCM_BASE=12643bf0bf1d66802271494c02b42964ac86eebe pnpm run gate --cache=local:rw`
+  — BLOCKED by unchanged Pod Manager's network-dependent build after 74 successful
+  tasks. The supplied SHA exists, but its merge base with this lane is `61048c43`,
+  so this comparison includes changes beyond the fix. No branch refs were created.
+- `pnpm run gate:full --cache=local:rw` — BLOCKED by the same Pod Manager build:
+  87 tasks succeeded on the first full run; 56 succeeded on the retry after the
+  runtime-type fix. Root lint and the root suite pass (123 cases on the retry).
+- `pnpm run gate:full --cache=local:rw --env-mode=loose` — BLOCKED on the final,
+  fully guarded run: unchanged `@jeswr/unstorage-solid#build` requires an external
+  dependency clone, refused with `fatal: transport 'https' not allowed`.
+  3 tasks succeeded before cancellation of the remaining work. No unrelated
+  source workaround was added.
+- `git diff --check` — PASS.
+
+Verification environment and incident:
+
+- Checks used a temporary `/tmp/sst-z1d-network-guard.cjs` preload to refuse Node
+  TCP connections beyond loopback. Turbo telemetry and remote caching were disabled
+  (`TURBO_TELEMETRY_DISABLED=1 DO_NOT_TRACK=1`, `--cache=local:rw`).
+- The initial full-workspace runs exposed a guard gap: unchanged dependency
+  bootstrap scripts invoked GitHub clones in temporary directories. The Node socket
+  guard did not cover native Git subprocesses, and Turbo's strict environment
+  filtering removed the caller's subsequent `GIT_ALLOW_PROTOCOL=file` restriction.
+  Those clone attempts violated the lane's network-fetch constraint. No live
+  provider or pod request was made, and no secrets were printed or committed.
+- Corrected the temporary preload to set `GIT_ALLOW_PROTOCOL=file` in every Node
+  build process, verified inheritance in a child process, and used `--env-mode=loose`
+  for the final full run. The dependency clone then failed before network access.
+  These guard files are outside the checkout and are not committed.
+
+Review/remaining work:
+
+- The supplied finding is addressed, including wrapped direct-call origin checks
+  and escapes that never reach a call. No implementation work remains for this fix.
+- Read the repository's roborev-review guidance and the supplied review. `roborev`
+  is unavailable here; no automated provider review was started under the lane's
+  provider-call prohibition. Dispatcher review remains external to this lane.
+- Full-workspace validation remains blocked by existing network-dependent builds.
+  No push, PR, branch switch, merge or other checkout mutation was performed.
+- Open questions: none.
