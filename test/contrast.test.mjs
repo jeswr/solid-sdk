@@ -46,6 +46,10 @@ test("only an exact documented theme/pair/measurement exempts a failure", () => 
   const known = contrastIssues("<!-- contrast-issue: light|--ring|--background|1.000 -->");
   const rows = evaluateContrast({ light: values, dark: values }, known);
   expect(rows.filter((r) => r.status === "KNOWN SPEC ISSUE")).toHaveLength(1);
+  const near = contrastIssues("<!-- contrast-issue: light|--ring|--background|1.004 -->");
+  expect(
+    evaluateContrast({ light: values }, near).some((r) => r.status === "KNOWN SPEC ISSUE"),
+  ).toBe(false);
   expect(rows.filter((r) => r.status === "FAIL").length).toBeGreaterThan(0);
   values["--ring"] = "oklch(0.8 0 0)";
   expect(

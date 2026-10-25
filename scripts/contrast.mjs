@@ -79,7 +79,7 @@ export function evaluateContrast(themes, known = new Map()) {
         status:
           ratio >= pair.minimum
             ? "PASS"
-            : recorded !== undefined && Math.abs(recorded - ratio) < 0.005
+            : recorded !== undefined && recorded === Number(ratio.toFixed(3))
               ? "KNOWN SPEC ISSUE"
               : "FAIL",
       };

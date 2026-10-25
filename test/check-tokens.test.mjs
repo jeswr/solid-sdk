@@ -23,3 +23,12 @@ test("scanner ignores comments, retains literals inside quoted CSS/JS and URLs",
     scanDirectory(fileURLToPath(new URL("./fixtures/token-scanner", import.meta.url))),
   ).toHaveLength(4);
 });
+
+test("CSS URLs cannot hide subsequent literals behind false line comments", () => {
+  expect(
+    scanColours("a { background: url(https://example.test/image); color: #fff; }", ".css"),
+  ).toEqual([{ literal: "#fff", line: 1 }]);
+  expect(scanColours('<!-- #abc -->\n<svg fill="#fff"/>', ".svg")).toEqual([
+    { literal: "#fff", line: 2 },
+  ]);
+});

@@ -5,7 +5,8 @@ import { extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 /** Blank comments while retaining offsets/lines and colour literals inside strings. */
-export function withoutComments(source) {
+export function withoutComments(source, extension = ".ts") {
+  const lineComments = /^\.[cm]?[jt]sx?$/.test(extension);
   let result = "";
   let quote = "";
   for (let i = 0; i < source.length; ) {
@@ -24,7 +25,7 @@ export function withoutComments(source) {
         ? "*/"
         : source.startsWith("<!--", i)
           ? "-->"
-          : source.startsWith("//", i)
+          : lineComments && source.startsWith("//", i)
             ? "\n"
             : null;
       if (!end) {
@@ -40,8 +41,8 @@ export function withoutComments(source) {
   }
   return result;
 }
-export function scanColours(source) {
-  const stripped = withoutComments(source);
+export function scanColours(source, extension = ".ts") {
+  const stripped = withoutComments(source, extension);
   return [
     ...stripped.matchAll(
       /#[\da-f]{8}\b|#[\da-f]{6}\b|#[\da-f]{4}\b|#[\da-f]{3}\b|\b(?:oklch|rgba?|hsla?)\s*\(/gi,
@@ -62,7 +63,10 @@ export function scanDirectory(directory) {
       /\.(?:[cm]?[jt]sx?|css|scss|html|svg|json|mdx)$/.test(extname(path))
     ) {
       failures.push(
-        ...scanColours(readFileSync(path, "utf8")).map((issue) => ({ path, ...issue })),
+        ...scanColours(readFileSync(path, "utf8"), extname(path)).map((issue) => ({
+          path,
+          ...issue,
+        })),
       );
     }
   }
