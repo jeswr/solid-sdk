@@ -198,7 +198,7 @@ it("runs over explicit storage and source ports without using global fetch", asy
     const report = await runImport({ adapter, mode: "live", podWriter, sourceAuth });
     expect(report.written).toEqual(written);
     expect(report.indexUrl).toBe("https://memory.test/index");
-    expect(resolved).toEqual(["music/songs.ttl"]);
+    expect(resolved).toContain("music/songs.ttl");
     expect(sourceAuth.fetch).toHaveBeenCalledOnce();
     expect(registerType).toHaveBeenCalledWith([
       { forClass: CLASSES.MusicRecording, container: "https://memory.test/music/" },
@@ -207,4 +207,126 @@ it("runs over explicit storage and source ports without using global fetch", asy
   } finally {
     globalFetch.mockRestore();
   }
+});
+
+// AUTHORED-BY Codex GPT-6.1-Sol
+it("retains read preconditions and surfaces a concurrent 412 without clobbering data", async () => {
+  const pod = createMemoryPod();
+  const port = createFetchPodWriter({
+    adapterId: "toy",
+    webId: TEST_WEBID,
+    podRoot: TEST_POD_ROOT,
+    fetch: pod.fetch,
+  });
+  const doc = {
+    slug: "music/songs.ttl",
+    category: "media",
+    forClass: CLASSES.MusicRecording,
+    dataset: new Store(),
+  };
+  await port.write(doc);
+  const adapter: IntegrationAdapter = {
+    ...toyAdapter,
+    async import(ctx) {
+      await ctx.read(doc.slug);
+      await port.write(doc); // concurrent writer changes the ETag after our read
+      await ctx.write(doc);
+      return {};
+    },
+  };
+  await expect(runImport({ adapter, mode: "demo", podWriter: port })).rejects.toMatchObject({
+    status: 412,
+  });
+  expect((await port.read(doc.slug))?.etag).toBe('"v2"');
+});
+
+it("uses create-only semantics after an absent read and passes explicit conditions", async () => {
+  const pod = createMemoryPod();
+  const port = createFetchPodWriter({
+    adapterId: "toy",
+    webId: TEST_WEBID,
+    podRoot: TEST_POD_ROOT,
+    fetch: pod.fetch,
+  });
+  const doc = {
+    slug: "music/songs.ttl",
+    category: "media",
+    forClass: CLASSES.MusicRecording,
+    dataset: new Store(),
+  };
+  const adapter: IntegrationAdapter = {
+    ...toyAdapter,
+    async import(ctx) {
+      expect(await ctx.read(doc.slug)).toBeUndefined();
+      await port.write(doc);
+      await expect(ctx.write(doc)).rejects.toMatchObject({ status: 412 });
+      await ctx.write(doc, { ifMatch: '"v1"' });
+      return {};
+    },
+  };
+  await runImport({ adapter, mode: "demo", podWriter: port });
+  expect((await port.read(doc.slug))?.etag).toBe('"v2"');
+});
+
+it("restricts bearer credentials to allowed origins and refuses source redirects", async () => {
+  const { vi } = await import("vitest");
+  const transport = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ ok: true }));
+  const auth = createSourceAuth(
+    "toy",
+    toyAdapter,
+    { accessToken: "fixture-token", tokenType: "Bearer" },
+    transport,
+    ["https://source.test"],
+  );
+  await auth.fetch(
+    new Request("https://source.test/items", { headers: { "x-source": "preserved" } }),
+  );
+  const init = transport.mock.calls[0]![1];
+  expect(new Headers(init?.headers).get("authorization")).toBe("Bearer fixture-token");
+  expect(new Headers(init?.headers).get("x-source")).toBe("preserved");
+  expect(init?.redirect).toBe("manual");
+  await expect(auth.fetch("https://foreign.test/items")).rejects.toBeInstanceOf(
+    IntegrationSyncError,
+  );
+  await expect(auth.fetch("https://user:password@source.test/items")).rejects.toBeInstanceOf(
+    IntegrationSyncError,
+  );
+  expect(transport).toHaveBeenCalledOnce();
+  transport.mockResolvedValueOnce(
+    new Response(null, { status: 302, headers: { location: "https://foreign.test/leak" } }),
+  );
+  await expect(auth.fetch("https://source.test/items", { redirect: "follow" })).rejects.toThrow();
+  expect(transport).toHaveBeenCalledTimes(2);
+  expect(() => createSourceAuth("toy", toyAdapter, undefined, transport)).toThrow();
+});
+
+it("forwards explicit file-import write conditions to the Pod port", async () => {
+  const { runFileImport } = await import("./file-import.js");
+  const { memoryFile } = await import("./testing.js");
+  const pod = createMemoryPod();
+  const port = createFetchPodWriter({
+    adapterId: "toy",
+    webId: TEST_WEBID,
+    podRoot: TEST_POD_ROOT,
+    fetch: pod.fetch,
+  });
+  const adapter: import("./file-import.js").FileImportAdapter = {
+    metadata: { ...toyAdapter.metadata, tier: "C", authKind: "export-file" },
+    accept: ".txt",
+    fileHint: "Synthetic fixture",
+    async importFile(_file, ctx) {
+      await ctx.write(
+        {
+          slug: "items.ttl",
+          category: "media",
+          forClass: CLASSES.MusicRecording,
+          dataset: new Store(),
+        },
+        { ifNoneMatch: "*" },
+      );
+    },
+  };
+  const options = { adapter, file: memoryFile("fixture.txt", "fixture"), podWriter: port };
+  await runFileImport(options);
+  await expect(runFileImport(options)).rejects.toMatchObject({ status: 412 });
 });

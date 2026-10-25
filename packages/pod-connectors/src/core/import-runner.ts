@@ -9,6 +9,7 @@
  * Documents land at `<podRoot>integrations/<adapterId>/<slug>` — deterministic
  * URLs, so a re-import overwrites in place (idempotent).
  */
+import { refuseRedirects } from "@jeswr/guarded-fetch";
 import { IntegrationSyncError } from "./errors.js";
 import { fixtureFetch } from "./fixture-fetch.js";
 import { registrationsFor } from "./pod-writer.js";
@@ -18,6 +19,7 @@ import type {
   PodWriter,
   SourceAuth,
   TokenSet,
+  WriteConditions,
   WrittenDoc,
 } from "./types.js";
 
@@ -63,15 +65,25 @@ export async function runImport(opts: RunImportOptions): Promise<ImportReport> {
     throw new IntegrationSyncError(id, "Live import requires SourceAuth — authorize first.");
 
   const written: WrittenDoc[] = [];
+  const readConditions = new Map<string, WriteConditions>();
 
   const outcome = await adapter.import({
     api,
     cursor: opts.cursor,
     resolve: (slug) => opts.podWriter.resolve(slug),
-    read: async (slug) => (await opts.podWriter.read(slug))?.dataset,
+    read: async (slug) => {
+      const existing = await opts.podWriter.read(slug);
+      const url = opts.podWriter.resolve(slug);
+      if (!existing) readConditions.set(url, { ifNoneMatch: "*" });
+      else if (existing.etag) readConditions.set(url, { ifMatch: existing.etag });
+      else readConditions.delete(url);
+      return existing?.dataset;
+    },
     progress: (p) => opts.onProgress?.(p),
-    write: async (doc) => {
-      const w = await opts.podWriter.write(doc);
+    write: async (doc, conditions) => {
+      const url = opts.podWriter.resolve(doc.slug);
+      const w = await opts.podWriter.write(doc, conditions ?? readConditions.get(url));
+      readConditions.delete(url);
       written.push(w);
       return w;
     },
@@ -92,23 +104,39 @@ export async function runImport(opts: RunImportOptions): Promise<ImportReport> {
 
 /**
  * Live-mode source fetch: injects the bearer token + the adapter's static API
- * headers. The token goes to the platform's API host and nowhere else.
+ * headers. Only allowlisted API origins receive credentials; redirects are refused.
+ * Defaults to the adapter's static recorded fixture origins. Hosts can provide an
+ * explicit origin list for APIs not represented by those routes.
  */
 export function createSourceAuth(
   adapterId: string,
   adapter: IntegrationAdapter,
   token: TokenSet | undefined,
   fetchImpl: typeof fetch,
+  allowedOrigins: readonly string[] = adapter.fixtures().map((route) => new URL(route.url).origin),
 ): SourceAuth {
   if (!token) {
     throw new IntegrationSyncError(adapterId, "Live import requires a token — authorize first.");
   }
+  const origins = new Set(allowedOrigins.map((origin) => new URL(origin).origin));
+  const sourceFetch = refuseRedirects(fetchImpl);
   const impl = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
-    const headers = new Headers(init?.headers);
+    const url = new URL(
+      typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+    );
+    if (!origins.has(url.origin) || url.username || url.password) {
+      throw new IntegrationSyncError(
+        adapterId,
+        "Source request is outside the allowed API origins.",
+      );
+    }
+    const headers = new Headers(
+      init?.headers ?? (input instanceof Request ? input.headers : undefined),
+    );
     headers.set("authorization", `Bearer ${token.accessToken}`);
     for (const [k, v] of Object.entries(adapter.apiHeaders ?? {})) headers.set(k, v);
     const next: RequestInit = { ...init, headers };
-    return fetchImpl(input as RequestInfo, next);
+    return sourceFetch(input as RequestInfo, next);
   };
   return { fetch: impl as typeof fetch };
 }

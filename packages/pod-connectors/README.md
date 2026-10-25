@@ -26,10 +26,13 @@ const report = await runImport({
 
 Live imports take `sourceAuth: { fetch: authenticatedSourceFetch }`. The optional
 `createSourceAuth(id, adapter, token, sourceFetch)` helper adds bearer and adapter headers.
+The helper binds credentials to an origin allowlist (default: static fixture route origins)
+and refuses redirects; pass a fifth argument to supply additional API origins explicitly.
 Keep Pod and source transports separate. Tokens stay in memory. A `PodWriter` binds a
 connector container, resolves and reads slugs, writes RDF with `{ ifMatch }` or
 `{ ifNoneMatch: '*' }`, and registers Type Index entries. The fetch-backed implementation
-keeps the existing deterministic document paths and Type Index bootstrap behavior.
+keeps the existing deterministic document paths and Type Index bootstrap behavior. The runner
+retains read preconditions for subsequent writes; explicit write conditions override them.
 
 Entry points:
 

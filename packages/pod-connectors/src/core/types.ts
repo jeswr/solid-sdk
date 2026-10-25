@@ -122,8 +122,8 @@ export interface ImportContext {
    * merge new items into an existing collection). `undefined` when absent.
    */
   read(slug: string): Promise<DatasetCore | undefined>;
-  /** Serialise + PUT a normalised document into the pod. */
-  write(doc: NormalisedDoc): Promise<WrittenDoc>;
+  /** Write RDF; defaults to the precondition retained by a preceding read of this URL. */
+  write(doc: NormalisedDoc, conditions?: WriteConditions): Promise<WrittenDoc>;
   /** Report progress to the UI. */
   progress(p: ImportProgress): void;
   /** Incremental cursor from the previous import of this adapter, if any. */

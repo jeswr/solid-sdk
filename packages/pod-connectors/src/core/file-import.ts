@@ -28,6 +28,7 @@ import type {
   IntegrationMetadata,
   NormalisedDoc,
   PodWriter,
+  WriteConditions,
   WrittenDoc,
 } from "./types.js";
 
@@ -53,7 +54,7 @@ export interface FileImportContext {
   /** Resolve a slug to the absolute pod URL it will be written at (for fragment IRIs). */
   resolve(slug: string): string;
   /** Serialise + PUT a normalised document into the pod. */
-  write(doc: NormalisedDoc): Promise<WrittenDoc>;
+  write(doc: NormalisedDoc, conditions?: WriteConditions): Promise<WrittenDoc>;
   /** Report progress to the UI. */
   progress(p: ImportProgress): void;
   /** Shared row cap so adapters bound their own loops consistently. */
@@ -118,8 +119,8 @@ export async function runFileImport(opts: RunFileImportOptions): Promise<ImportR
     maxRows: MAX_ROWS,
     resolve: (slug) => opts.podWriter.resolve(slug),
     progress: (p) => opts.onProgress?.(p),
-    write: async (doc) => {
-      const w = await opts.podWriter.write(doc);
+    write: async (doc, conditions) => {
+      const w = await opts.podWriter.write(doc, conditions);
       written.push(w);
       return w;
     },
