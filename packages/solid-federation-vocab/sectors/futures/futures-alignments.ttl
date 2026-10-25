@@ -1,7 +1,7 @@
 # AUTHORED-BY Claude Fable 5 (PSS agent)
 #
-@prefix fut:     <https://w3id.org/jeswr/sectors/futures#> .
-@prefix core:    <https://w3id.org/jeswr/core#> .
+@prefix fut:     <https://jeswr.org/ns/sectors/futures#> .
+@prefix core:    <https://jeswr.org/ns/core#> .
 @prefix owl:     <http://www.w3.org/2002/07/owl#> .
 @prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
 @prefix rdf:     <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
@@ -50,10 +50,12 @@
 #     Recommendation-track, referenced by their published term IRIs.
 # =============================================================================
 
-<https://w3id.org/jeswr/sectors/futures/alignments> a owl:Ontology ;
+<https://jeswr.org/ns/sectors/futures/alignments> a owl:Ontology ;
+    dcterms:description "Version 2.0.0 rebases this ontology from its legacy w3id namespace to https://jeswr.org/ns/ (DECISIONS V1)."@en ;
+    owl:versionIRI <https://jeswr.org/ns/sectors/futures/alignments/2.0.0> ;
     dcterms:title "Solid Futures sector — external alignments"@en ;
-    owl:imports <https://w3id.org/jeswr/sectors/futures> ;
-    owl:versionInfo "0.2.0" ;
+    owl:imports <https://jeswr.org/ns/sectors/futures> ;
+    owl:versionInfo "2.0.0" ;
     rdfs:comment "Optional Mode-A bridge: ActivityStreams 2.0 reaction/event terms, PROV-O activity framing, ODRL 2.2 profiled actions, VC 2.0 credential class, the shared task model's wf: terms, and scheme-level literature anchors for the Max-Neef and Schwartz seeds. External IRIs are real and governed by their bodies. Nothing is owl:imported into the reasoned closure. v0.2.0 adds the fedreg: anchors for the adoption machinery."@en .
 
 dcterms:title a owl:AnnotationProperty .
@@ -117,8 +119,8 @@ fut:implementationTracker rdfs:seeAlso wf:Tracker .
 # storage-description resource the claim is re-checked against. Annotation
 # only (rdfs:seeAlso) — fedreg: is not owl:imported into the reasoned closure.
 # -----------------------------------------------------------------------------
-fut:AdoptionObservation  rdfs:seeAlso <https://w3id.org/jeswr/fedreg#acceptsSpec> .
-fut:observationSource    rdfs:seeAlso <https://w3id.org/jeswr/fedreg#Registry> .
+fut:AdoptionObservation  rdfs:seeAlso <https://jeswr.org/ns/fedreg#acceptsSpec> .
+fut:observationSource    rdfs:seeAlso <https://jeswr.org/ns/fedreg#Registry> .
 
 # -----------------------------------------------------------------------------
 # LITERATURE ANCHORS — scheme level only (see header note).

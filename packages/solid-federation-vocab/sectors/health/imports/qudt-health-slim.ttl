@@ -36,12 +36,13 @@
 # class references beyond the qudt: schema terms (resolved via the catalog).
 # =============================================================================
 
-<https://w3id.org/jeswr/sectors/health/imports/qudt-health-slim> a owl:Ontology ;
+<https://jeswr.org/ns/sectors/health/imports/qudt-health-slim> a owl:Ontology ;
+    dcterms:description "Version 2.0.0 rebases this ontology from its legacy w3id namespace to https://jeswr.org/ns/ (DECISIONS V1)."@en ;
     dcterms:title "QUDT health slim module for the Solid health sector"@en ;
-    owl:versionInfo "qudt-2.1-2026-06-13-health-slim" ;
-    owl:versionIRI <https://w3id.org/jeswr/sectors/health/imports/qudt-health-slim/2026-06-13> ;
+    owl:versionInfo "2.0.0" ;
+    owl:versionIRI <https://jeswr.org/ns/sectors/health/imports/qudt-health-slim/2.0.0> ;
     dcterms:source <http://qudt.org/2.1/vocab/unit> ;
-    dcterms:modified "2026-06-13"^^xsd:date ;
+    dcterms:modified "2026-10-25"^^xsd:date ;
     rdfs:comment "Slim Mode-B curated extract of QUDT 2.1 (HeartRate + Beat-per-Minute), version-pinned 2026-06-13. Self-contained; the core QUDT-units slim supplies Length/Mass/Time. The QUDT schema is NOT owl:imported (its transitive vaem/dtype/coordinateSystems closure is not DL-reasonable); the qudt: meta-classes used are declared as punned owl:Class locally — the F5 fix the Core applies for time:TemporalEntity."@en .
 
 # --- annotation-property declarations (F5 DL hygiene) ---

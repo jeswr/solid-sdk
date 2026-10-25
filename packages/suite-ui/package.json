@@ -1,0 +1,46 @@
+{
+  "name": "@jeswr/suite-ui",
+  "version": "0.1.0",
+  "description": "Solid Suite normative design tokens, theme mapping, density and Next.js fonts",
+  "type": "module",
+  "license": "MIT",
+  "securityCritical": false,
+  "sideEffects": [
+    "**/*.css"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./fonts": {
+      "types": "./dist/fonts.d.ts",
+      "import": "./dist/fonts.js"
+    },
+    "./styles/tokens.css": "./dist/styles/tokens.css",
+    "./styles/theme.css": "./dist/styles/theme.css",
+    "./styles/density.css": "./dist/styles/density.css"
+  },
+  "files": [
+    "dist",
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json && node scripts/copy-css.mjs",
+    "lint": "biome check src test scripts vitest.config.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "peerDependencies": {
+    "next": "^16.2.7"
+  },
+  "devDependencies": {
+    "next": "16.2.7",
+    "@types/node": "^25.9.2",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.9",
+    "@biomejs/biome": "^2.5.1"
+  }
+}

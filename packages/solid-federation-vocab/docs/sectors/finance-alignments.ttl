@@ -1,7 +1,7 @@
 # AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 #
-@prefix fin:     <https://w3id.org/jeswr/sectors/finance#> .
-@prefix core:    <https://w3id.org/jeswr/core#> .
+@prefix fin:     <https://jeswr.org/ns/sectors/finance#> .
+@prefix core:    <https://jeswr.org/ns/core#> .
 @prefix owl:     <http://www.w3.org/2002/07/owl#> .
 @prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
 @prefix skos:    <http://www.w3.org/2004/02/skos/core#> .
@@ -42,9 +42,12 @@
 # Every line is a reviewable claim; nothing is silently inherited.
 # =============================================================================
 
-<https://w3id.org/jeswr/sectors/finance/alignments> a owl:Ontology ;
+<https://jeswr.org/ns/sectors/finance/alignments> a owl:Ontology ;
+    dcterms:description "Version 2.0.0 rebases this ontology from its legacy w3id namespace to https://jeswr.org/ns/ (DECISIONS V1)."@en ;
+    owl:versionIRI <https://jeswr.org/ns/sectors/finance/alignments/2.0.0> ;
+    owl:versionInfo "2.0.0" ;
     dcterms:title "Solid Finance Sector Ontology — FIBO + ISO 20022 Mode-A alignments"@en ;
-    owl:imports <https://w3id.org/jeswr/sectors/finance> ;
+    owl:imports <https://jeswr.org/ns/sectors/finance> ;
     rdfs:comment "Annotation-only (skos:closeMatch) bridges to FIBO terms outside the slim module and to ISO 20022. Mode-B FIBO reuse (subClassOf the slim module) is in finance.ttl. "@en .
 
 # --- Accounts: subtype-level FIBO matches not carried by the slim module ---

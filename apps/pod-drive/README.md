@@ -16,6 +16,11 @@ breadcrumb, and renders empty / loading / error / access-denied states. The full
 coverage ratchet against every well-known server remain deliberate, tracked follow-ups (see
 [Roadmap](#roadmap)).
 
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+Suite vocabulary writes use `https://jeswr.org/ns/` only, via `@jeswr/suite-vocab`.
+Readers accept legacy namespace aliases; Type Index discovery matches both canonical and
+legacy class IRIs. Standard vocabularies keep their published namespaces.
+
 ## What the data layer does
 
 `@jeswr/pod-drive` (the package in `src/`) is a pure, auth-agnostic data layer:
@@ -75,7 +80,7 @@ coverage ratchet against every well-known server remain deliberate, tracked foll
 ## Federation registry readiness
 
 `public/clientid.jsonld` is a Solid-OIDC Client Identifier Document that also publishes the
-[`fedapp:`](https://w3id.org/jeswr/fed) block (from `jeswr/solid-federation-vocab`): the app is a
+[`fedapp:`](https://jeswr.org/ns/fed) block (from `jeswr/solid-federation-vocab`): the app is a
 `fedapp:App` operating in the `documents` sector, requesting `acl:Read`/`Write`/`Append`, and
 declaring it `fedapp:declaresShape poddrive:DriveRoot` and consumes/produces LDP `Container` /
 `Resource`. This makes the app discoverable to a federation registry once that lands — membership

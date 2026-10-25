@@ -8,6 +8,7 @@
 // write itself, with `If-Match: <etag>`, is the UI layer's job — kept out of
 // this pure data module so it stays trivially testable and auth-agnostic).
 
+import { NS } from "@jeswr/suite-vocab";
 import type { Quad } from "@rdfjs/types";
 import { DataFactory, Writer } from "n3";
 
@@ -23,12 +24,12 @@ const { namedNode } = DataFactory;
 export function quadsToTurtle(quads: Iterable<Quad>): Promise<string> {
   const writer = new Writer({
     prefixes: {
-      rdf: "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
-      ldp: "http://www.w3.org/ns/ldp#",
-      posix: "http://www.w3.org/ns/posix/stat#",
-      dcterms: "http://purl.org/dc/terms/",
-      solid: "http://www.w3.org/ns/solid/terms#",
-      poddrive: "https://w3id.org/jeswr/pod-drive#",
+      rdf: NS.RDF,
+      ldp: NS.LDP,
+      posix: NS.POSIX,
+      dcterms: NS.DCT,
+      solid: NS.SOLID,
+      poddrive: NS.POD_DRIVE,
     },
   });
   for (const q of quads) {

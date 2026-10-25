@@ -5,9 +5,9 @@
 # (data = this file + diet.ttl for the coded-value class typing; shapes =
 # diet.shacl.ttl). Parsed for well-formedness by the ontology gate (Layer 1).
 #
-@prefix diet:   <https://w3id.org/jeswr/sectors/health/diet#> .
-@prefix health: <https://w3id.org/jeswr/sectors/health#> .
-@prefix core:   <https://w3id.org/jeswr/core#> .
+@prefix diet:   <https://jeswr.org/ns/sectors/health/diet#> .
+@prefix health: <https://jeswr.org/ns/sectors/health#> .
+@prefix core:   <https://jeswr.org/ns/core#> .
 @prefix schema: <http://schema.org/> .
 @prefix ex:     <https://example.org/alice/health/diary/> .
 @prefix xsd:    <http://www.w3.org/2001/XMLSchema#> .
