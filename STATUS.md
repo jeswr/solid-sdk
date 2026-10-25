@@ -13,7 +13,7 @@ Completed on `lane/sst-8xm.28`, based on `219cdd5a1579a95a6408f272fe6344e72e2e86
 | `daa9d6c9` | Bundle the browser cache fixture so its transitive `idb-keyval` dependency resolves with pnpm's strict layout. |
 | `9db0d7d9` | Add element and worker tests for popup validation, cancellation, WebID/issuer selection, trusted worker messages and tab isolation. |
 | `e723d8e9` | Add protocol, storage, credential, SDK, cache and session adversarial tests, reaching 100% coverage. The challenge cursor reuses its existing length getter without changing parsing behavior. Extend only test fixtures for absent `azp` and non-OpenID grants. |
-| Final documentation commit | Update package README for workspace usage and record this lane report. |
+| `716d285b` | Update package README for workspace usage and record the original import lane report. |
 
 Conservative import choices: preserve upstream version `0.1.5` and the existing `.`, `./elements`,
 `./registerElements`, `./service-worker` API. Keep the package private pending suite conformance.
@@ -101,3 +101,78 @@ The required external roborev review could not run because `roborev` is not inst
 Dispatcher/security review remains outstanding; this security-critical package has not been auto-merged.
 The wider workspace gate and configured live/Docker interoperability runs remain with the dispatcher;
 they were outside this lane's requested gate scope.
+
+## Fix round 1 — review `716d285bc60c`
+
+Completed the four findings in
+`solid-sdk-lane-sst-8xm.28-716d285bc60c.md` on `lane/sst-8xm.28`.
+Only the authentication package and this report changed; no dependencies were added.
+
+| Commit | Change |
+| --- | --- |
+| `5250bf55` | Capture the DPoP operation's fence signal and generation before issuer/context discovery in both `upgrade()` and `restore()`, and carry that generation into session acquisition. Add six logout-race regressions, including shared-store supersession without broadcasts. |
+| `4978e7fc` | Recheck the current boundary immediately before every provider-credentialed send, after provider work, challenge-body disposal and session checks. Add five regressions for removal during initial/nonce/renewal upgrades, automatic-root expiry, and removal during body disposal. |
+| `3b67575c` | Pass cancellation signals into both picker lock requests and check them before opening dialogs. Add four regressions using real queued Web Locks and an abort at lock grant. |
+| `a975729c` | Preserve DPoP/LWS invalidation context in weak maps keyed by returned requests. Strengthen both history-eviction regressions to require renewal after 101 credentials and preserve replacements on late rejection. Retain recent cloned-request compatibility. Reuse the session-owned fence so the existing shared-store validation remains enforced. |
+| Final documentation commit (this commit) | Record fix-round changes, verification and remaining review-tool limitation. |
+
+Conservative behavior: if the boundary is removed or expires during authentication, reject with
+`ReactiveAuthenticationError` before sending credentials. Keep the existing bounded token-history
+fallback for recent request copies; outstanding returned requests retain context independently.
+
+### Fix-round verification
+
+PASS final required package gate and root checks:
+
+```sh
+pnpm --filter @jeswr/reactive-authentication run lint && pnpm --filter @jeswr/reactive-authentication run build && pnpm --filter @jeswr/reactive-authentication run typecheck && pnpm --filter @jeswr/reactive-authentication run test
+pnpm run lint:root
+```
+
+- Lint: zero errors; the existing 62 warnings and 21 informational diagnostics remain.
+- Build and typecheck: pass, including the SDK type-contract checks.
+- Tests: **261/261** pass in **27/27** files, with no skips.
+- Enforced coverage: statements **2036/2036**, branches **1497/1497**, functions **464/464**,
+  lines **1835/1835** — **100% in every metric**; thresholds and included sources were unchanged.
+- Root checks: Biome, lockfile transport, app workspace and raw-fetch guards all pass.
+- `git diff --check`: pass.
+
+The first full run caught two existing constructor-validation regressions in the initial fence patch.
+Reusing `OidcSession`'s fence corrected them; the final full run above passes both existing tests.
+
+Regression sensitivity check: temporarily substituted the original six implementation sources from
+`716d285b` while retaining the new tests, then restored every source in a `finally` block:
+
+```sh
+pnpm --filter @jeswr/reactive-authentication exec vitest run test/session-coverage.test.js test/fetch-coverage.test.js test/browser-elements.test.js --coverage.enabled=false --testTimeout=2000 '--testNamePattern=remains fenced|boundary removal during|automatic boundary expiry|picker rechecks cancellation|outstanding invalidation contexts'
+```
+
+Expected baseline failure: **12/12 selected regressions failed**, covering all four review findings.
+All those regressions pass with the fixes, in the final coverage-enforced run.
+
+PASS existing Chromium suites against the freshly built output, using the already cached browser:
+
+```sh
+PLAYWRIGHT_BROWSERS_PATH=/tmp/sst-8xm28-browsers pnpm --filter @jeswr/reactive-authentication exec node test/browser/run.js
+PLAYWRIGHT_BROWSERS_PATH=/tmp/sst-8xm28-browsers pnpm --filter @jeswr/reactive-authentication exec node --test test/browser/sdk-regressions.test.js
+```
+
+Chromium `156.0.8078.4`: all browser scenarios pass; both SDK/browser regressions pass.
+No browser download or network Git operation was needed.
+
+Dependencies were restored from the existing local store without changing manifests or the lockfile:
+
+```sh
+CI=true pnpm --filter @jeswr/reactive-authentication --filter @jeswr/solid-sdk-workspace install --frozen-lockfile --ignore-scripts --offline --store-dir /tmp/sst-8xm28-pnpm-store
+```
+
+No `check:packages` run was needed because no dependency was added. The authentication package still
+has no workspace dependants. Per the lane brief, no whole-workspace gate or `gate:full` ran.
+
+### Fix-round remaining work and questions
+
+All four requested findings are fixed and tested. No implementation work is unfinished or blocked;
+there are no open questions. No push, PR, branch switch or edits to another checkout were performed.
+
+`roborev` remains unavailable on PATH, so per-commit roborev verdicts could not be obtained locally.
+Dispatcher/security review remains outstanding; this security-critical package has not been merged.
