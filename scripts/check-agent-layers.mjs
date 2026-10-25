@@ -202,24 +202,10 @@ function sourceFailures(root, file) {
       }
     }
     if (ts.isImportDeclaration(node)) {
-      const clause = node.importClause;
-      const bindings = clause?.namedBindings;
-      const typeOnly =
-        clause?.isTypeOnly ||
-        (!clause?.name &&
-          bindings &&
-          ts.isNamedImports(bindings) &&
-          bindings.elements.length > 0 &&
-          bindings.elements.every((element) => element.isTypeOnly));
-      checkImport(node, node.moduleSpecifier, typeOnly);
+      // Inline type specifiers still emit a module load under verbatimModuleSyntax.
+      checkImport(node, node.moduleSpecifier, node.importClause?.isTypeOnly);
     } else if (ts.isExportDeclaration(node) && node.moduleSpecifier) {
-      const typeOnly =
-        node.isTypeOnly ||
-        (node.exportClause &&
-          ts.isNamedExports(node.exportClause) &&
-          node.exportClause.elements.length > 0 &&
-          node.exportClause.elements.every((element) => element.isTypeOnly));
-      checkImport(node, node.moduleSpecifier, typeOnly);
+      checkImport(node, node.moduleSpecifier, node.isTypeOnly);
     } else if (
       ts.isImportEqualsDeclaration(node) &&
       ts.isExternalModuleReference(node.moduleReference)

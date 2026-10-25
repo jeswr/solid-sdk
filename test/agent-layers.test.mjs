@@ -94,7 +94,7 @@ describe("agent layer boundaries (DESIGN §2.2)", () => {
     ],
     [
       "packages/agent-model-gateway/src/index.ts",
-      'import { type Ingest } from "@jeswr/agent-channels";',
+      'export type { Ingest } from "@jeswr/agent-channels";',
     ],
     [
       "packages/agent-executor/src/index.ts",
@@ -182,6 +182,53 @@ describe("agent layer boundaries (DESIGN §2.2)", () => {
     expect(failures).toHaveLength(3);
     expect(failures.join("\n")).toContain("gateway-only");
     expect(failures.join("\n")).toContain("agent-audit");
+  });
+
+  it.each([
+    'import { type Ingest } from "TARGET";',
+    'import { type Ingest, type Other } from "TARGET";',
+    'export { type Ingest } from "TARGET";',
+    'export { type Ingest, type Other } from "TARGET";',
+    'import { type Ingest, value } from "TARGET";',
+    'export { type Ingest, value } from "TARGET";',
+    'import Default, { type Ingest } from "TARGET";',
+    'import {} from "TARGET";',
+    'export {} from "TARGET";',
+  ])("keeps inline type specifiers subject to runtime layer rules: %s", (source) => {
+    expect(
+      scan(
+        "packages/agent-model-gateway/src/index.ts",
+        source.replace("TARGET", "@jeswr/agent-channels"),
+      ).join("\n"),
+    ).toContain("ingest types only");
+    expect(
+      scan(
+        "apps/suite/src/apps/agent/index.ts",
+        source.replace("TARGET", "@jeswr/agent-mandate"),
+      ).join("\n"),
+    ).toContain("issue/verify");
+  });
+
+  it.each([
+    'import type { Ingest } from "TARGET";',
+    'import type Ingest from "TARGET";',
+    'import type * as Ingest from "TARGET";',
+    'export type { Ingest } from "TARGET";',
+    'export type * from "TARGET";',
+    'export type * as Ingest from "TARGET";',
+  ])("exempts whole type-only declarations from runtime layer rules: %s", (source) => {
+    expect(
+      scan(
+        "packages/agent-model-gateway/src/index.ts",
+        source.replace("TARGET", "@jeswr/agent-channels"),
+      ),
+    ).toEqual([]);
+    expect(
+      scan(
+        "apps/suite/src/apps/agent/index.ts",
+        source.replace("TARGET", "@jeswr/agent-mandate"),
+      ),
+    ).toEqual([]);
   });
 
   it("ignores comments and string examples without importing them", () => {
