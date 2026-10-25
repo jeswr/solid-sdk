@@ -303,3 +303,67 @@ Review / remaining constraints:
 - No pushes, PRs, branch switches, merges, other checkout changes or tracker changes
   were performed. Open question: the exact sanctioned adapter path, if an exception
   is required in this checkout.
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+## Addendum fix round — whole-statement types and module specifiers
+
+Resumed on `lane/sst-z1d` at `7d97690b7ef977b3cc00e772c56d7b77c0572094`.
+The earlier loader/identifier allowlist remains in place; this round addresses
+both findings in the supplied review addendum.
+
+Commits:
+
+- `6a1f7172` — `fix: restrict type-only exemptions to whole statements`: only
+  `import type` and `export type ... from` declarations receive the runtime-layer
+  exemption. Inline `type` specifiers, including lists containing only types,
+  remain runtime edges under `verbatimModuleSyntax`. Regression cases cover both
+  gateway channel imports/exports and agent UI mandate imports/exports, including
+  mixed, empty, default and namespace forms.
+- `fdce42dc` — `fix: restrict agent module specifiers to packages and paths`:
+  validate decoded literal specifiers before path normalization; reject schemes,
+  queries, fragments, absolute paths and backslashes. Cover static imports,
+  re-exports, dynamic imports and type imports, including escaped literals and
+  test/configuration files. Convert Node builtin imports in the ten scaffold
+  export tests and the existing authorization verifier build script to bare
+  names, with local Biome suppressions explaining the agent policy.
+- The final `docs: record sst-z1d addendum validation` commit updates this report last.
+
+Conservative interpretation:
+
+- The addendum permits only bare package names (including package subpaths) and
+  relative paths. Therefore all schemes, including `node:`, are rejected in agent
+  code; bare builtin names such as `fs` and `url` remain permitted where layer
+  rules allow them. No new exception was added.
+- The referenced `briefs/sst-z1d.md` and earlier briefs remain absent. Used the
+  supplied brief/addendum and existing implementation. The earlier interpretation
+  of the absent sanctioned adapter path remains unchanged; `guarded-fetch` itself
+  is outside the agent policy. No package API, manifests or dependencies changed.
+
+Validation of the final implementation:
+
+- `pnpm exec vitest run test/agent-layers.test.mjs` — PASS: **190 layer tests**.
+- Biome checks of all changed scripts and tests — PASS, no remaining warnings.
+- `pnpm run lint:root` — PASS as the first stage of the successful affected gate
+  and again as its Turbo root task. An earlier attempt identified the verifier's
+  remaining `node:` imports; converted those before the successful run.
+- `TURBO_SCM_BASE=7d97690b7ef977b3cc00e772c56d7b77c0572094 pnpm run gate --cache=local:rw --env-mode=loose`
+  — PASS: **46 successful / 46 total**, none cached, 21.696 seconds. Includes
+  lint/build/typecheck/test for all eleven touched projects, root lint, all
+  **218 root tests** and **109 package/app tests** (62 scaffold + 47 verifier).
+- `pnpm run gate:full --cache=local:rw --env-mode=loose` — BLOCKED by the unchanged
+  `@jeswr/unstorage-solid#build`, whose dependency clone failed with
+  `fatal: transport 'https' not allowed`. **26 tasks succeeded**, 19 cached,
+  before cancellation. Root tests pass through cached results in this run.
+- `git diff --check` — PASS.
+
+Validation retained `/tmp/sst-z1d-network-guard.cjs`, `GIT_ALLOW_PROTOCOL=file`,
+`TURBO_TELEMETRY_DISABLED=1` and `DO_NOT_TRACK=1`. Remote caching was disabled.
+No remote fetch/clone completed; no live provider or pod request was made.
+Logs: `/tmp/sst-z1d-addendum-gate.log` and `/tmp/sst-z1d-addendum-full.log`.
+
+Implementation is complete. Full-workspace validation remains blocked by the
+existing remote-dependent build. Read the local review/test guidance and addressed
+the supplied review; `roborev` remains unavailable, so dispatcher automated review
+is external. No push, PR, branch switch, merge, other checkout mutation or tracker
+change was performed. No new open questions; the prior adapter-path caveat remains.
