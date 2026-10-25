@@ -191,3 +191,62 @@ new automated per-commit verdict was produced; the two supplied findings were
 checked against the changes and regressions directly. No review tooling was
 installed. All commits remain local to `lane/sst-k9mk`; nothing was pushed,
 published, merged, or changed in another checkout.
+
+## Fix round 2 — 2026-10-25
+
+Resumed at `07491f0c` and addressed the medium Type Index multi-storage finding.
+
+### Commits
+
+- `9cab68f2` — `fix: validate Type Index against advertised storages`: validate
+  the selected index against the user's WebID-subject `pim:storage` roots, using
+  the existing scope guard, independently of the import destination. Retain
+  exact-document access, redirect refusal, bootstrap location, and ETag writes.
+  Update the package README and skill to describe this boundary.
+- The final report-only commit updates this file last.
+
+### Validation
+
+Runtime: Node `24.22.1`, pnpm `10.4.1`. No dependencies, manifests, or lockfiles
+changed; `check:packages` was not applicable. Lifecycle scripts remained ignored.
+
+```sh
+pnpm exec turbo run build --filter=@jeswr/pod-connectors...
+pnpm --filter @jeswr/pod-connectors exec vitest run src/core/pod-writer.test.ts
+pnpm --filter @jeswr/pod-connectors run lint && pnpm --filter @jeswr/pod-connectors run build && pnpm --filter @jeswr/pod-connectors run typecheck && pnpm --filter @jeswr/pod-connectors run test
+pnpm run lint:root
+TURBO_SCM_BASE=917d3be9c7967622829adc43c1aaabb0964ec993 pnpm run gate
+GIT_ALLOW_PROTOCOL=file pnpm run gate:full --env-mode=loose
+```
+
+- Dependency-first build: **PASS**. The first test attempt lacked the built
+  guarded-fetch workspace dependency; building it resolved the import failures.
+- Focused PodWriter regressions: **PASS, 23 tests**. The new cases import into
+  the second advertised storage while registering in the first, for both shared
+  and separate origins. They verify conditional index writes and manual redirect
+  handling, plus rejection before index I/O for targets outside both roots,
+  including sibling paths. Existing redirect-refusal regressions also pass.
+- Pod connectors lint/build/typecheck/tests: **PASS, 262 tests in 41 files**.
+- Root lint: **PASS**.
+- Affected gate: **PASS, 11/11 tasks (2 cached)**, including Pod Manager's lint,
+  production build, typecheck and tests (**915 passed, 1 existing skip, 67 files**).
+- Full-workspace gate: **BLOCKED/FAIL**, 4 successful tasks, then the unchanged
+  `@jeswr/unstorage-solid#build` dependency helper attempted an HTTPS clone of
+  fetch-rdf. `GIT_ALLOW_PROTOCOL=file` deliberately blocked it with
+  `fatal: transport 'https' not allowed`, honoring the lane's remote-fetch ban.
+  `--env-mode=loose` passes that restriction to task subprocesses. No remote source
+  was fetched and no unrelated build helper was changed.
+
+Existing non-fatal Biome and guarded-fetch webpack warnings remain. `git diff
+--check` passed. `roborev` and its post-commit hook remain unavailable; the supplied
+finding was checked directly against the implementation and regressions.
+
+### Scope and open questions
+
+The requested fix is complete. Conservative interpretation: only advertised
+`pim:storage` roots grant index scope; there is no fallback to an unadvertised
+import destination when the profile advertises none. Bootstrap still targets
+the import Pod's existing settings path and must pass the same storage check.
+No open implementation questions. Full-workspace green verification remains
+blocked by the unrelated remote-cloning helper. All changes and commits stay in
+this checkout on `lane/sst-k9mk`; nothing was pushed, published, or merged.
