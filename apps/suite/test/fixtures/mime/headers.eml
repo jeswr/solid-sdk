@@ -1,0 +1,22 @@
+X-Fixture-Author: AUTHORED-BY Codex GPT-6.1-Sol
+From: =?UTF-8?Q?Zo=C3=AB_Example?= <zoe@example.org>
+Sender: Fictional Relay <relay@example.org>
+To: Friends: "River, Alex" <alex@example.org>, robin@example.org;
+To: Morgan Example <morgan@example.org>
+Cc: =?UTF-8?B?U2FtIEV4YW1wbGU=?= <sam@example.org>
+Bcc: hidden@example.org
+Reply-To: reply@example.org
+Subject: =?UTF-8?Q?A_synthetic_=E2=9C=93?=
+ =?UTF-8?B?IG1lc3NhZ2U=?=
+Date: Sun, 25 Oct 2026 12:34:56 +0200
+Message-ID: <sample-1@example.org>
+In-Reply-To: <sample-0@example.org>
+References: <sample-root@example.org> <sample-0@example.org>
+X-Label: =?ISO-8859-1?Q?caf=E9?=
+X-Label: second
+MIME-Version: 1.0
+Content-Type: text/plain; charset=us-ascii
+Content-Transfer-Encoding: 7bit
+
+Hello, fictional friends.
+This is synthetic mail.

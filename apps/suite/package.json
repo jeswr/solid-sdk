@@ -10,14 +10,17 @@
     "lint": "biome check src test e2e *.ts *.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:e2e": "pnpm --filter @jeswr/suite-ui run build && playwright test"
+    "test:e2e": "pnpm --filter @jeswr/suite-ui run build && playwright test",
+    "test:mime": "vitest run test/mime.test.ts --coverage"
   },
   "dependencies": {
     "@jeswr/suite-ui": "workspace:*",
     "next": "16.2.7",
     "next-themes": "^0.4.6",
     "react": "19.2.7",
-    "react-dom": "19.2.7"
+    "react-dom": "19.2.7",
+    "postal-mime": "4.1.4",
+    "sanitize-html": "2.18.1"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
@@ -29,6 +32,8 @@
     "@types/react-dom": "19.2.3",
     "typescript": "^6.0.3",
     "vitest": "^4.1.9",
-    "@biomejs/biome": "^2.5.1"
+    "@biomejs/biome": "^2.5.1",
+    "@types/sanitize-html": "2.16.2",
+    "@vitest/coverage-v8": "4.1.10"
   }
 }

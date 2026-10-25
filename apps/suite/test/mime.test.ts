@@ -1,0 +1,214 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+import { readFile } from "node:fs/promises";
+import { describe, expect, it } from "vitest";
+import { parseMimeMessage, sanitizeMessageHtml } from "../src/apps/mail/lib/mime";
+
+const fixture = (name: string) => readFile(new URL(`./fixtures/mime/${name}.eml`, import.meta.url));
+
+describe("RFC 5322 and MIME parsing", () => {
+  it("unfolds and decodes headers, preserving duplicate fields and structured raw values", async () => {
+    const message = await parseMimeMessage(await fixture("headers"));
+    expect(message.subject).toBe("A synthetic ✓ message");
+    expect(message.from).toEqual({ name: "Zoë Example", address: "zoe@example.org" });
+    expect(message.sender).toEqual({ name: "Fictional Relay", address: "relay@example.org" });
+    expect(message.to).toEqual([
+      {
+        name: "Friends",
+        group: [
+          { name: "River, Alex", address: "alex@example.org" },
+          { name: "", address: "robin@example.org" },
+        ],
+      },
+      { name: "Morgan Example", address: "morgan@example.org" },
+    ]);
+    expect(message.cc).toEqual([{ name: "Sam Example", address: "sam@example.org" }]);
+    expect(message.bcc).toEqual([{ name: "", address: "hidden@example.org" }]);
+    expect(message.replyTo).toEqual([{ name: "", address: "reply@example.org" }]);
+    expect(message.date).toBe("2026-10-25T10:34:56.000Z");
+    expect(message.messageId).toBe("<sample-1@example.org>");
+    expect(message.inReplyTo).toBe("<sample-0@example.org>");
+    expect(message.references).toBe("<sample-root@example.org> <sample-0@example.org>");
+    expect(message.headers.filter((header) => header.name === "x-label")).toEqual([
+      { name: "x-label", rawValue: "=?ISO-8859-1?Q?caf=E9?=", value: "café" },
+      { name: "x-label", rawValue: "second", value: "second" },
+    ]);
+    expect(message.headers.find((header) => header.name === "subject")?.rawValue).not.toMatch(
+      /[\r\n]/,
+    );
+    expect(message.text).toBe("Hello, fictional friends.\nThis is synthetic mail.\n");
+    expect(message.html).toBeNull();
+    expect(message.attachments).toEqual([]);
+  });
+
+  it("extracts mixed/alternative/related bodies, attachment bytes and CID metadata", async () => {
+    const message = await parseMimeMessage(await fixture("multipart"));
+    expect(message.text).toBe("Hello café ✓.\nA softbreak.");
+    expect(message.html).toContain("<p>Hello <strong>café ✓</strong>.</p>");
+    expect(message.html).toContain('data-inline-cid="logo@example.org"');
+    expect(message.html).not.toContain("src=");
+    expect(message.attachments).toHaveLength(5);
+    expect(message.attachments[0]).toEqual({
+      filename: "logo.png",
+      contentType: "image/png",
+      disposition: null,
+      description: null,
+      contentId: "logo@example.org",
+      inline: true,
+      size: 8,
+      content: new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]),
+    });
+    expect(message.attachments[1]).toEqual({
+      filename: "fictional café.pdf",
+      contentType: "application/pdf",
+      disposition: "attachment",
+      description: "Fictional résumé",
+      contentId: null,
+      inline: false,
+      size: 15,
+      content: new TextEncoder().encode("%PDF-synthetic\n"),
+    });
+    expect(message.attachments[2]?.filename).toBe("notes ✓.txt");
+    expect(new TextDecoder().decode(message.attachments[2]?.content)).toBe("Attachment ✓");
+    expect(message.attachments[3]).toMatchObject({
+      filename: null,
+      contentType: "application/octet-stream",
+      size: 4,
+      inline: false,
+      content: new Uint8Array([0, 1, 2, 255]),
+    });
+    expect(message.attachments[4]).toMatchObject({
+      filename: "inline.gif",
+      contentId: "extra@example.org",
+      disposition: "inline",
+      inline: true,
+    });
+    expect(message.text).not.toMatch(/preamble|epilogue|Attachment/);
+  });
+
+  it("extracts HTML-only mail without active HTML or an invented plain-text body", async () => {
+    const message = await parseMimeMessage(await fixture("html-only"));
+    expect(message.text).toBe("");
+    expect(message.html).toContain("<p>Hello <strong>Dana</strong> &amp; Kit.</p>");
+    expect(message.html).toContain('<a href="https://example.org/read">Read more</a>');
+    expect(message.html).not.toMatch(
+      /<script|<style|<iframe|<object|<svg|<form|<input|<base|<link|<meta|src=|srcset=|onload=|onerror=|style=|ping=|javascript:|Sentinel/,
+    );
+  });
+
+  it("returns predictable empty values for an empty message", async () => {
+    expect(await parseMimeMessage("")).toEqual({
+      headers: [],
+      from: null,
+      sender: null,
+      to: [],
+      cc: [],
+      bcc: [],
+      replyTo: [],
+      subject: "",
+      date: null,
+      messageId: null,
+      inReplyTo: null,
+      references: null,
+      text: "",
+      html: null,
+      attachments: [],
+    });
+  });
+
+  it.each([
+    "7bit",
+    "8bit",
+    "binary",
+    "x-unknown",
+  ])("decodes %s body octets from a sliced byte input", async (encoding) => {
+    const header = new TextEncoder().encode(
+      `Content-Type: text/plain; charset=windows-1252\r\nContent-Transfer-Encoding: ${encoding}\r\n\r\n`,
+    );
+    const framed = new Uint8Array([42, ...header, 99, 97, 102, 233, 32, 128, 42]);
+    const message = await parseMimeMessage(framed.subarray(1, -1));
+    expect(message.text).toBe("café €\n");
+  });
+
+  it.each([
+    ["utf-8", "base64", "44GT44KT44Gr44Gh44Gv", "こんにちは"],
+    ["iso-8859-1", "quoted-printable", "caf=E9=20=3D=20yes=\r\n!", "café = yes!"],
+    ["shift_jis", "base64", "grGC8YLJgr+CzQ==", "こんにちは"],
+    ["x-fictional-charset", "8bit", "Hello", "Hello"],
+  ])("decodes %s with %s", async (charset, transfer, body, expected) => {
+    const input = new TextEncoder().encode(
+      `Content-Type: text/plain; charset=${charset}\r\nContent-Transfer-Encoding: ${transfer}\r\n\r\n${body}`,
+    );
+    expect((await parseMimeMessage(input.buffer)).text.trim()).toBe(expected);
+  });
+
+  it("keeps encapsulated mail as an attachment, excluding its body from the outer message", async () => {
+    const message = await parseMimeMessage(
+      "Content-Type: multipart/mixed; boundary=x\n\n--x\nContent-Type: text/plain\n\nOuter message\n--x\nContent-Type: message/rfc822\n\nFrom: Fictional <inner@example.org>\nSubject: Inner\n\nInner body\n--x--",
+    );
+    expect(message.text.trim()).toBe("Outer message");
+    expect(message.attachments[0]?.contentType).toBe("message/rfc822");
+    expect(new TextDecoder().decode(message.attachments[0]?.content)).toContain("Inner body");
+  });
+
+  it("tolerates LF headers, invalid dates, missing closing boundaries and malformed encoded words", async () => {
+    const message = await parseMimeMessage(
+      'Date: fictional date\nSubject: =?broken?=\nContent-Type: multipart/mixed; boundary="x"\n\n--x\nContent-Type: text/plain\n\nRecovered body',
+    );
+    expect(message.date).toBe("fictional date");
+    expect(message.subject).toBe("=?broken?=");
+    expect(message.text.trim()).toBe("Recovered body");
+  });
+
+  it("propagates the parser's nesting limit rejection", async () => {
+    let input = "Content-Type: text/plain\r\n\r\nEnd";
+    for (let depth = 0; depth < 257; depth++) {
+      input = `Content-Type: multipart/mixed; boundary=b${depth}\r\n\r\n--b${depth}\r\n${input}\r\n--b${depth}--`;
+    }
+    await expect(parseMimeMessage(input)).rejects.toMatchObject({ code: "EMAXNESTINGDEPTH" });
+  });
+});
+
+describe("safe reading HTML", () => {
+  it("keeps basic reading structure, table semantics and safe user-activated links", () => {
+    const html =
+      '<h2>Title</h2><blockquote><em>Quoted</em></blockquote><ul><li>One</li></ul><pre><code>x &lt; y</code></pre><table><caption>Data</caption><tbody><tr><th scope="row">Row</th><td colspan="2">Value</td></tr></tbody></table><a href="mailto:fictional@example.org" title="Email">Write</a><a href="#part">Jump</a>';
+    expect(sanitizeMessageHtml(html)).toBe(html);
+  });
+
+  it("converts only CID sources to inert metadata and discards forged CID attributes", () => {
+    expect(
+      sanitizeMessageHtml(
+        '<img src="CID:logo@example.org" alt="Logo" title="Local"><img data-inline-cid="forged" src="https://example.org/pixel"><img src="cid:"><img>',
+      ),
+    ).toBe(
+      '<img alt="Logo" title="Local" data-inline-cid="logo@example.org" /><img alt="" /><img alt="" /><img alt="" />',
+    );
+  });
+
+  it.each([
+    '<a href="jav&#x61;script:alert(1)">Link</a>',
+    '<a href="java&#10;script:alert(1)">Link</a>',
+    '<a href="data:text/html,evil">Link</a>',
+    '<a href="vbscript:evil">Link</a>',
+    '<a href="//example.org/path">Link</a>',
+  ])("removes unsafe or protocol-relative link targets: %s", (html) => {
+    expect(sanitizeMessageHtml(html)).toBe("<a>Link</a>");
+  });
+
+  it.each([
+    '<img src="https://example.org/pixel" srcset="https://example.org/2x 2x" onerror="evil()">',
+    '<img src="data:image/svg+xml,evil" style="background:url(https://example.org/pixel)">',
+    '<img src="/local" background="https://example.org/pixel">',
+    '<img src="blob:https://example.org/id">',
+    '<img src="//example.org/pixel">',
+  ])("removes every automatic image source: %s", (html) => {
+    expect(sanitizeMessageHtml(html)).toBe('<img alt="" />');
+  });
+
+  it("removes scripts, styles, embedded documents, foreign content and active attributes", () => {
+    const html =
+      '<script>bad()</script><style>bad()</style><iframe srcdoc="bad">bad</iframe><object>bad</object><svg><script>bad()</script></svg><math><mi>bad</mi></math><template>bad</template><video poster="https://example.org/pixel"><source src="https://example.org/video"></video><p onclick="bad()" id="location" class="bad" style="color:red">Safe</p>';
+    expect(sanitizeMessageHtml(html)).toBe("<p>Safe</p>");
+    expect(sanitizeMessageHtml(sanitizeMessageHtml(html))).toBe("<p>Safe</p>");
+  });
+});
