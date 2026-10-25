@@ -1,0 +1,29 @@
+node_modules/
+*.log
+.DS_Store
+coverage/
+# Pilot runtime state: synthetic private keys, agent state, ledgers, spools. Never commit.
+.awp-runtime/
+# Owner private keys of the prepared synthetic demo (kept OUTSIDE each agent directory).
+.awp-owners/
+awp-spool/
+# Owner dashboard state: private account inventory, settings, demo agents and their owner keys.
+.awp-dashboard/
+# Separate dashboard states (e.g. the actions fixture demo).
+.awp-dashboard-*/
+*.private.jwk.json
+# Provider credential helper store and provider configuration (keep them OUTSIDE the repository;
+# these patterns only guard against accidents).
+.awp-credentials/
+.awp-credentials-*/
+providers.json
+client_secret*.json
+# NB: dist/ is intentionally COMMITTED (GitHub-installable under ignore-scripts) for the M1 modules
+# only. The pilot's build outputs below are NOT committed (they are dropped on the solid-sdk import).
+/dist/actions/
+/dist/credentials/
+/dist/dashboard/
+/dist/pilot/
+/dist/triage/
+# Pilot run evidence (reports, *.stream.jsonl, *.stderr.log) is kept outside the repository.
+/reports/

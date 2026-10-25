@@ -1,0 +1,1 @@
+{"version":3,"file":"index.js","sourceRoot":"","sources":["../../src/outbox/index.ts"],"names":[],"mappings":"AAAA,iFAAiF;AACjF,qFAAqF;AACrF,OAAO,EAAqB,gBAAgB,EAAE,eAAe,EAAE,MAAM,cAAc,CAAC;AACpF,OAAO,EAA4C,aAAa,EAAE,MAAM,eAAe,CAAC;AACxF,OAAO,EAA8C,oBAAoB,EAAE,MAAM,cAAc,CAAC;AAChG,OAAO,EAIL,eAAe,GAEhB,MAAM,aAAa,CAAC"}
