@@ -56,7 +56,10 @@ describe("pc: read aliases", () => {
   });
 
   it("canonicalizes raw serializer input without first wrapping the room", async () => {
-    const output = await serializeTurtle(turtleToStore(fixture(LEGACY), URL), PREFIXES);
+    const output = await serializeTurtle(turtleToStore(fixture(LEGACY), URL), {
+      ...PREFIXES,
+      pc: LEGACY,
+    });
     expect(output).not.toContain("w3id.org/jeswr");
     expect(output).toContain("pc:ChatRoom");
     expect(parseRoom(URL, turtleToStore(output, URL))?.participants[0]?.webId).toBe(BOB);

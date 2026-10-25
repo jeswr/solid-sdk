@@ -2,7 +2,7 @@
 //
 // Client Identifier Document — the static clientid.jsonld an app serves at its
 // client_id URL. Carries the Solid-OIDC client metadata AND the fedapp: block
-// from https://w3id.org/jeswr/fed so the federation registry can read which
+// from https://jeswr.org/ns/fed so the federation registry can read which
 // sector Pod Money operates in and which classes it consumes / produces —
 // WITHOUT trusting any self-asserted membership (membership is the registry's
 // job after a signed challenge).

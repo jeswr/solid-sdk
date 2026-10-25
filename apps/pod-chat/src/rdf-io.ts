@@ -7,6 +7,7 @@
  * `@jeswr/fetch-rdf` + `n3.Writer`, never a bespoke parser).
  */
 import { type FetchedRdf, fetchRdf } from "@jeswr/fetch-rdf";
+import { canonicalize } from "@jeswr/suite-vocab";
 import type { DatasetCore } from "@rdfjs/types";
 import { DataFactory, Writer } from "n3";
 import { canonicalizeChatDataset } from "./canonical-vocab.js";
@@ -43,7 +44,12 @@ export function serializeTurtle(
   prefixes?: Record<string, string>,
 ): Promise<string> {
   return new Promise((resolve, reject) => {
-    const writer = new Writer({ format: "text/turtle", prefixes });
+    const canonicalPrefixes =
+      prefixes &&
+      Object.fromEntries(
+        Object.entries(prefixes).map(([prefix, base]) => [prefix, canonicalize(base)]),
+      );
+    const writer = new Writer({ format: "text/turtle", prefixes: canonicalPrefixes });
     for (const quad of canonicalizeChatDataset(dataset, DataFactory)) writer.addQuad(quad);
     writer.end((err, result) => (err ? reject(err) : resolve(result)));
   });
