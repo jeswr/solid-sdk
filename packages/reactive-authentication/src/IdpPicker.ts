@@ -100,34 +100,39 @@ export class IdpPicker extends HTMLElement implements IssuerProvider {
   }
 
   async getIssuer(request: Request): Promise<URL> {
-    return await navigator.locks.request("IdpPicker.getIssuer", async (_) => {
-      this.#request = request;
-      this.#input.value = this.#suggestion;
-      this.#code.innerText = request.url;
-      this.#dialog.returnValue = "";
-      this.#dialog.showModal();
+    return await navigator.locks.request(
+      "IdpPicker.getIssuer",
+      { signal: request.signal },
+      async (_) => {
+        request.signal.throwIfAborted();
+        this.#request = request;
+        this.#input.value = this.#suggestion;
+        this.#code.innerText = request.url;
+        this.#dialog.returnValue = "";
+        this.#dialog.showModal();
 
-      const { promise, reject, resolve } = Promise.withResolvers<URL>();
+        const { promise, reject, resolve } = Promise.withResolvers<URL>();
 
-      const onClose = () => {
-        request.signal.removeEventListener("abort", onAbort);
-        if (this.#dialog.returnValue !== "") {
-          resolve(new URL(this.#dialog.returnValue));
-        } else {
-          reject(new IssuerRequestCancelledError(request));
-        }
-      };
-      const onAbort = () => {
-        this.#dialog.removeEventListener("close", onClose);
-        this.#dialog.close();
-        reject(request.signal.reason);
-      };
+        const onClose = () => {
+          request.signal.removeEventListener("abort", onAbort);
+          if (this.#dialog.returnValue !== "") {
+            resolve(new URL(this.#dialog.returnValue));
+          } else {
+            reject(new IssuerRequestCancelledError(request));
+          }
+        };
+        const onAbort = () => {
+          this.#dialog.removeEventListener("close", onClose);
+          this.#dialog.close();
+          reject(request.signal.reason);
+        };
 
-      request.signal.addEventListener("abort", onAbort, onlyOnce);
-      this.#dialog.addEventListener("close", onClose, onlyOnce);
+        request.signal.addEventListener("abort", onAbort, onlyOnce);
+        this.#dialog.addEventListener("close", onClose, onlyOnce);
 
-      return await promise;
-    });
+        return await promise;
+      },
+    );
   }
 
   async #useWebId() {

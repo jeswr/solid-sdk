@@ -72,6 +72,7 @@ class Element extends Node {
   }
 }
 
+const browserLocks = navigator.locks;
 let AuthorizationCodeFlow, IdpPicker, WebIdPicker;
 beforeAll(async () => {
   vi.stubGlobal("HTMLElement", Element);
@@ -93,6 +94,74 @@ afterEach(() => {
 afterAll(() => {
   vi.unstubAllGlobals();
 });
+
+for (const kind of ["issuer", "webid"]) {
+  test(`${kind} picker aborts queued requests without opening or blocking the next dialog`, async () => {
+    vi.stubGlobal("navigator", { locks: browserLocks });
+    const picker = kind === "issuer" ? new IdpPicker() : new WebIdPicker();
+    const method = kind === "issuer" ? "getIssuer" : "getWebId";
+    picker.connectedCallback();
+    const opened = Promise.withResolvers();
+    const nextOpened = Promise.withResolvers();
+    const dialog = picker.node("dialog");
+    let shown = 0;
+    vi.spyOn(dialog, "showModal").mockImplementation(() => {
+      dialog.open = true;
+      if (++shown === 1) opened.resolve();
+      else nextOpened.resolve();
+    });
+    const first = picker[method](new Request("https://pod.example/first"));
+    await opened.promise;
+    const controller = new AbortController();
+    const reason = new Error("queued request cancelled");
+    const second = picker[method](
+      new Request("https://pod.example/second", { signal: controller.signal }),
+    );
+    const rejected = assert.rejects(second, (error) => error === reason);
+    const third = picker[method](new Request("https://pod.example/third"));
+    controller.abort(reason);
+    await rejected;
+    assert.equal(shown, 1);
+    assert.equal(dialog.open, true, "cancelling a waiter leaves the active dialog open");
+    picker.node("input").value = "https://identity.example/";
+    await picker.node("form").emit("submit");
+    dialog.close();
+    assert.equal((await first).href, "https://identity.example/");
+    await nextOpened.promise;
+    assert.equal(shown, 2, "the cancelled request never opened a dialog");
+    assert.equal(picker.node("code").innerText, "https://pod.example/third");
+    picker.node("input").value = "https://next.example/";
+    await picker.node("form").emit("submit");
+    dialog.close();
+    assert.equal((await third).href, "https://next.example/");
+    await assert.rejects(
+      picker[method](new Request("https://pod.example/aborted", { signal: controller.signal })),
+      (error) => error === reason,
+    );
+    assert.equal(shown, 2);
+  });
+
+  test(`${kind} picker rechecks cancellation when its lock is granted`, async () => {
+    const picker = kind === "issuer" ? new IdpPicker() : new WebIdPicker();
+    const method = kind === "issuer" ? "getIssuer" : "getWebId";
+    picker.connectedCallback();
+    const controller = new AbortController();
+    const reason = new Error("cancelled at lock grant");
+    const request = new Request("https://pod.example/private", { signal: controller.signal });
+    vi.stubGlobal("navigator", {
+      locks: {
+        request: async (_name, options, callback) => {
+          assert.equal(options.signal, request.signal);
+          controller.abort(reason);
+          return await callback();
+        },
+      },
+    });
+    const show = vi.spyOn(picker.node("dialog"), "showModal");
+    await assert.rejects(picker[method](request), (error) => error === reason);
+    assert.equal(show.mock.calls.length, 0);
+  });
+}
 
 test("WebID picker selects username templates, confirms, cancels and aborts", async () => {
   const picker = new WebIdPicker();
