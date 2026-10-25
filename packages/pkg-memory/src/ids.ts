@@ -120,7 +120,7 @@ function labels(store: DatasetCore, maxWork: number): Map<string, string> {
   let budget = maxWork;
   function distinguish(colors: Color[]): Color[] {
     if (discrete(colors)) return colors;
-    let best: Color[] | undefined;
+    let best: Color[][] = [];
     for (let i = 0; i < colors.length; i++) {
       const c = colors[i] as Color;
       if (c.nodes.length === 1) continue;
@@ -134,10 +134,15 @@ function labels(store: DatasetCore, maxWork: number): Map<string, string> {
           color: [...(c.color as string[][]), [String(c.nodes.length)]],
         };
         const candidate = refine([...copy, singleton], [singleton]);
-        if (!best || score(candidate, best) > 0) best = candidate;
+        const comparison = best.length === 0 ? 1 : score(candidate, best[0] as Color[]);
+        if (comparison > 0) best = [candidate];
+        else if (comparison === 0) best.push(candidate);
       }
     }
-    return distinguish(best as Color[]);
+    // RDFlib prefers any discrete tied candidate before descending into the
+    // first unresolved candidate. Keep all ties; its automorphism pruning is
+    // an optimization and is unnecessary for these bounded assertion graphs.
+    return best.find(discrete) ?? distinguish(best[0] as Color[]);
   }
   function score(a: Color[], b: Color[]): number {
     for (let i = 0; i < Math.min(a.length, b.length); i++) {

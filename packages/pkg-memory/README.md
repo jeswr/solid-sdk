@@ -58,3 +58,9 @@ are MCP-05. No owner identity or data access is implicit.
 Offline fixtures contain only fictional identities. See
 [test/fixtures/README.md](test/fixtures/README.md) for the independent Python oracle.
 `@jeswr/pkg-memory/testing` exposes fixed fictional build options for consumer tests.
+
+The parity contract is checked against the five synthetic Python facts and the
+committed canonicalization edge cases. RDFlib 7.1.4 itself can choose different
+canonical IDs across runs on some highly symmetric regular blank-node graphs;
+byte parity on those graphs is not a stable reference contract. Templates use
+plain-string literals (RDF/JS merges plain strings and explicit `xsd:string`).
