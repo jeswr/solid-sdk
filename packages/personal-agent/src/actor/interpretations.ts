@@ -9,7 +9,7 @@
 import { normalizeEmailAddress, vocab } from "@jeswr/agentic-legacy-bridge";
 import type { DatasetCore } from "@rdfjs/types";
 import { DataFactory } from "n3";
-import { firstIriOf, firstLiteralOf, objectsOf, subjectsOf } from "../pod/rdf-query.js";
+import { firstIriOf, firstLiteralOf, subjectsOf } from "../pod/rdf-query.js";
 
 const { namedNode } = DataFactory;
 

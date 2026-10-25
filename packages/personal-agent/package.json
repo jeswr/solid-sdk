@@ -43,16 +43,15 @@
     "LICENSE"
   ],
   "scripts": {
-    "lint": "biome check src scripts && npm run check:lockfile-transport",
+    "lint": "biome check src scripts",
     "lint:fix": "biome check --write src scripts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
     "build": "tsc -p tsconfig.build.json && node scripts/copy-dashboard-assets.mjs dist",
-    "check:dist": "node scripts/check-dist.mjs",
     "check:lockfile-transport": "node scripts/check-lockfile-transport.mjs",
     "fix:lockfile-transport": "node scripts/normalize-lockfile.mjs",
-    "gate": "npm run lint && npm run typecheck && npm run test && npm run build",
+    "gate": "pnpm run lint && pnpm run build && pnpm run typecheck && pnpm run test",
     "pilot": "node dist/pilot/cli.js",
     "pilot:demo": "node dist/pilot/cli.js demo --out reports/pilot-demo-report.json",
     "pilot:demo:sparq": "node dist/pilot/cli.js demo --policy-engine=sparq --out reports/pilot-demo-report-sparq.json",
@@ -72,7 +71,8 @@
     "actions:integration": "node scripts/actions-integration.mjs",
     "credentials": "node dist/credentials/cli.js",
     "credentials:integration": "node scripts/credentials-integration.mjs",
-    "triage:eval": "node scripts/triage-eval.mjs"
+    "triage:eval": "node scripts/triage-eval.mjs",
+    "test:coverage": "vitest run --coverage"
   },
   "keywords": [
     "solid",
@@ -94,21 +94,16 @@
     "url": "git+https://github.com/jeswr/personal-agent.git"
   },
   "engines": {
-    "node": ">=22.19.0"
-  },
-  "overrides": {
-    "@jeswr/guarded-fetch": {
-      "undici": "8.9.0"
-    }
+    "node": ">=24"
   },
   "dependencies": {
     "@a2a-js/sdk": "^1.2.1",
-    "@jeswr/agentic-legacy-bridge": "git+https://github.com/jeswr/agentic-legacy-bridge.git#e3179c29f1cb85c325e0d843fe84e941649ad1d4",
+    "@jeswr/agentic-legacy-bridge": "workspace:*",
     "@jeswr/fetch-rdf": "^0.1.0",
-    "@jeswr/guarded-fetch": "git+https://github.com/jeswr/guarded-fetch.git#184f060d95cc29ef7a01e8bc28fb04bb24b5af76",
-    "@jeswr/solid-mcp": "git+https://github.com/jeswr/solid-mcp.git#00bb2aa6cd4c5126202f19538309e4a2fbc6386f",
-    "@jeswr/solid-odrl": "git+https://github.com/jeswr/solid-odrl.git#b8fabc729c56245f4b63846261f1f06b6503f1c8",
-    "@jeswr/solid-vc": "git+https://github.com/jeswr/solid-vc.git#69b89c194344a032ce3d11943a33a98e6b9313aa",
+    "@jeswr/guarded-fetch": "workspace:*",
+    "@jeswr/solid-mcp": "workspace:*",
+    "@jeswr/solid-odrl": "workspace:*",
+    "@jeswr/solid-vc": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@solid/object": "^0.6.0",
     "canonicalize": "^1.0.8",
@@ -127,12 +122,17 @@
   },
   "devDependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.3.201",
-    "@biomejs/biome": "^2.5.0",
+    "@biomejs/biome": "^2.5.1",
     "@types/express": "^5.0.6",
     "@types/n3": "^1.26.1",
-    "@types/node": "^22.10.0",
+    "@types/node": "^25.9.2",
     "jsonld-streaming-parser": "^5.0.1",
-    "typescript": "^5.9.0",
-    "vitest": "^3.2.0"
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.9",
+    "@vitest/coverage-v8": "^4.1.9",
+    "@rdfjs/types": "^2.0.1"
+  },
+  "mirrorPublish": {
+    "inlined": []
   }
 }

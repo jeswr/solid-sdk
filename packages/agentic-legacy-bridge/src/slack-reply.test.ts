@@ -34,7 +34,7 @@ describe("createSlackReplySender — chat.postMessage carrier", () => {
     expect(calls).toHaveLength(1);
     expect(calls[0]?.url).toBe(SLACK_CHAT_POST_MESSAGE_ENDPOINT);
     expect(calls[0]?.init?.redirect).toBe("manual");
-    expect((calls[0]?.init?.headers as Record<string, string>).authorization).toBe(
+    expect((calls[0]?.init?.headers as Record<string, string>)?.authorization).toBe(
       `Bearer ${TOKEN}`,
     );
     const body = JSON.parse(String(calls[0]?.init?.body)) as Record<string, unknown>;

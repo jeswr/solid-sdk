@@ -10,6 +10,7 @@
  * commit (uncertain) and is later reconciled, and the industrial scenario (source-authority
  * assessments). Both sides run this code base — this is not interoperability evidence.
  */
+import type { Quad } from "n3";
 import { DirectBus } from "../bindings/direct.js";
 import { digestOf } from "../core/canonical.js";
 import { buildMeetingTerms, MEETING_MODEL, SCHEDULE_OP } from "../domains/scheduling.js";
@@ -221,7 +222,10 @@ export async function collectRuntimeEvidence(): Promise<RuntimeEvidence> {
 }
 
 /** Convert collected evidence into one graph (plus the per-ledger conversion reports). */
-export function evidenceGraph(ev: RuntimeEvidence) {
+export function evidenceGraph(ev: RuntimeEvidence): {
+  quads: Quad[];
+  reports: Record<string, ReturnType<typeof ledgerToRdf>["report"]>;
+} {
   const reports: Record<string, ReturnType<typeof ledgerToRdf>["report"]> = {};
   const quads = [];
   for (const [id, entries] of Object.entries(ev.ledgers)) {

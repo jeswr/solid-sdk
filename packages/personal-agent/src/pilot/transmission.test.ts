@@ -249,11 +249,11 @@ describe("review item 1 — authorisation and expiry are re-decided at transmiss
     const { alice, bob, clock } = await world();
     const { propose } = await alicePropose(alice, bob, clock.now());
     const i = await item(alice, propose, clock.now());
-    const raw = (i.email?.raw as string).replace(
+    const email = i.email as NonNullable<ProcessedOutbound["email"]>;
+    const raw = email.raw.replace(
       /^Message-ID: .+\r$/m,
       "Message-ID: <forged@awp-pilot.invalid>\r",
     );
-    const email = i.email as NonNullable<ProcessedOutbound["email"]>;
     const forged: ProcessedOutbound = {
       ...i,
       email: {

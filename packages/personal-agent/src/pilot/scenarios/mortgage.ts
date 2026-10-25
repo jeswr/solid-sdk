@@ -243,11 +243,12 @@ export async function runMortgage(clock: { now: () => Date; advance: (ms: number
     brokerOnward: broker.decision,
     underwriterOnward: onward.decision,
   };
-  const annual = (assessment.items?.find((i) => i.id === derivedId)?.data as { value: number })
-    .value;
-  const depositValue = (
-    assessment.items?.find((i) => i.id === depositId)?.data as { balance: number }
-  ).balance;
+  const annualData = assessment.items?.find((i) => i.id === derivedId)?.data as { value: number };
+  const depositData = assessment.items?.find((i) => i.id === depositId)?.data as {
+    balance: number;
+  };
+  const annual = annualData.value;
+  const depositValue = depositData.balance;
   const indicative =
     380000 / annual <= 4.5 && depositValue >= 450000 - 380000
       ? "indicatively-eligible"

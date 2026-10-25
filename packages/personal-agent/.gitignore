@@ -18,12 +18,7 @@ awp-spool/
 .awp-credentials-*/
 providers.json
 client_secret*.json
-# NB: dist/ is intentionally COMMITTED (GitHub-installable under ignore-scripts) for the M1 modules
-# only. The pilot's build outputs below are NOT committed (they are dropped on the solid-sdk import).
-/dist/actions/
-/dist/credentials/
-/dist/dashboard/
-/dist/pilot/
-/dist/triage/
+# Built output is rebuilt locally; published mirrors carry dist/.
+/dist/
 # Pilot run evidence (reports, *.stream.jsonl, *.stderr.log) is kept outside the repository.
 /reports/

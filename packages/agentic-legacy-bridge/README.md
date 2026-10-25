@@ -1,3 +1,7 @@
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+
+> **Experimental — AI-agent-generated.** Canonical source: `solid-sdk/packages/agentic-legacy-bridge`; the standalone repository becomes a read-only mirror when publishing is enabled.
+
 # `@jeswr/agentic-legacy-bridge`
 
 The path **FROM** today's channels (email first) **TO** the accountable web of agents.

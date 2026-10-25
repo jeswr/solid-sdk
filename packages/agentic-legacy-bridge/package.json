@@ -31,15 +31,15 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
-    "lint": "biome check src scripts && npm run check:lockfile-transport",
+    "lint": "biome check src scripts",
     "lint:fix": "biome check --write src scripts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "check:dist": "node scripts/check-dist.mjs",
     "check:lockfile-transport": "node scripts/check-lockfile-transport.mjs",
     "fix:lockfile-transport": "node scripts/normalize-lockfile.mjs",
-    "gate": "npm run lint && npm run typecheck && npm run test && npm run build && npm run check:dist"
+    "gate": "pnpm run lint && pnpm run build && pnpm run typecheck && pnpm run test",
+    "test:coverage": "vitest run --coverage"
   },
   "keywords": [
     "solid",
@@ -61,21 +61,25 @@
     "url": "git+https://github.com/jeswr/agentic-legacy-bridge.git"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=24"
   },
   "dependencies": {
     "@jeswr/fetch-rdf": "^0.1.0",
-    "@jeswr/guarded-fetch": "git+https://github.com/jeswr/guarded-fetch.git#bd4490927fd36d62f6b78a0021e8d40bbb572c3b",
-    "@jeswr/solid-chat-interop": "git+https://github.com/jeswr/solid-chat-interop.git#f48de5a17f06dd1be5514d6a9d62b26107304c93",
+    "@jeswr/guarded-fetch": "workspace:*",
+    "@jeswr/solid-chat-interop": "workspace:*",
     "n3": "^2.0.3",
     "rdf-canonize": "5.0.0"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.0.0",
+    "@biomejs/biome": "^2.5.1",
     "@rdfjs/types": "^2.0.1",
     "@types/n3": "^1.26.1",
-    "@types/node": "^20",
-    "typescript": "^5",
-    "vitest": "^4.1.8"
+    "@types/node": "^25.9.2",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.9",
+    "@vitest/coverage-v8": "^4.1.9"
+  },
+  "mirrorPublish": {
+    "inlined": []
   }
 }

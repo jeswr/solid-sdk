@@ -41,6 +41,7 @@
     "overrides": {
       "ajv@8": "^8.18.0",
       "esbuild@>=0.27.0 <0.28.1": "^0.28.1",
+      "@jeswr/guarded-fetch>undici": "8.9.0",
       "nodemailer": "^9.0.1",
       "postcss": "^8.5.10",
       "ws": "^8.21.0"

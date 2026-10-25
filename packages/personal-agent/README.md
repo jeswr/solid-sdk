@@ -1,3 +1,7 @@
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+
+> **Experimental — AI-agent-generated.** Canonical source: `solid-sdk/packages/personal-agent`; the standalone repository becomes a read-only mirror when publishing is enabled.
+
 # @jeswr/personal-agent
 
 **The maintainer's personal agent — the "works today" counterpart of

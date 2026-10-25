@@ -145,7 +145,7 @@ describe("buildAgenticGraph — M2.5a status widening + attempts counter", () =>
     expect(q?.object.value).toBe("3");
     expect(q?.object.termType).toBe("Literal");
     // biome-ignore lint/suspicious/noExplicitAny: reading the literal datatype in a test.
-    expect((q?.object as any).datatype?.value).toBe("http://www.w3.org/2001/XMLSchema#integer");
+    expect((q?.object as any)?.datatype?.value).toBe("http://www.w3.org/2001/XMLSchema#integer");
   });
 
   it("omits the attempts quad by default and for a malformed counter (back-compat: absent ⇒ 0)", async () => {

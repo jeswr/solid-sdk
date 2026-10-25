@@ -4,3 +4,6 @@ coverage/
 .DS_Store
 .vitest/
 # dist/ is COMMITTED (GitHub-installable under ignore-scripts=true — do NOT ignore it).
+
+# Built output is rebuilt locally; published mirrors carry dist/.
+/dist/
