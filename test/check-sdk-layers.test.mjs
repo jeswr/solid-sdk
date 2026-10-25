@@ -7,6 +7,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
+import { isSupportedSpec } from "../scripts/check-sdk-layers.mjs";
 
 const guard = fileURLToPath(new URL("../scripts/check-sdk-layers.mjs", import.meta.url));
 const dirs = [];
@@ -158,6 +159,9 @@ describe("SDK layer guard", () => {
       "=1.2.3",
       "v1.2.3",
       ">= 1.2.3 < 2.0.0",
+      "~> 1.2.3",
+      "= 1.2.3",
+      "\t>=1.2.3\n<2.0.0 || v3 - 4.x ",
     ].flatMap((range) => [range, `workspace:${range}`]),
   ];
   const unsupportedSpecs = [
@@ -192,6 +196,21 @@ describe("SDK layer guard", () => {
     "01.2.3",
     "1.2.3-01",
     "1.2.3+",
+    "1.2.3-alpha..1",
+    "1.2.3+build..1",
+    "1.2.3+build+other",
+    "1.2-beta",
+    "1.2+build",
+    "1.2.3 ||",
+    "|| 1.2.3",
+    "1.2.3 | 2.0.0",
+    "1.2.3 -",
+    "- 2.0.0",
+    "1.2.3 - >=2.0.0",
+    "1.2.3 - 2.0.0 <3",
+    "^ >=1.2.3",
+    "==1.2.3",
+    "vv1.2.3",
     ">=",
     "",
     " ",
@@ -199,6 +218,28 @@ describe("SDK layer guard", () => {
     1,
   ];
   const fields = ["dependencies", "peerDependencies", "optionalDependencies"];
+
+  it("validates pathological specs in under 50 ms each", () => {
+    const cases = [
+      [`1.2.3${" ".repeat(100_000)}!`, false],
+      [`workspace:${"1 ".repeat(10_000)}!`, false],
+      [`1.2.3-${"1".repeat(100_000)}!`, false],
+      [`1.2.3-${"a.".repeat(10_000)}!`, false],
+      [`1.2.3+${"a".repeat(100_000)}!`, false],
+      [`workspace:${"1||".repeat(10_000)}latest`, false],
+      [`1.2.3-${"a".repeat(100_000)}`, true],
+    ];
+    // Warm the parser before timing; exclude process startup and fixture I/O.
+    for (const spec of acceptedSpecs) expect(isSupportedSpec(spec)).toBe(true);
+    for (const spec of unsupportedSpecs) expect(isSupportedSpec(spec)).toBe(false);
+    for (const [spec, supported] of cases) {
+      const start = performance.now();
+      const result = isSupportedSpec(spec);
+      const elapsed = performance.now() - start;
+      expect(result).toBe(supported);
+      expect(elapsed).toBeLessThan(50);
+    }
+  });
 
   it.each(acceptedSpecs)("accepts %s in layered manifests and under restricted keys", (spec) => {
     const result = scan({
