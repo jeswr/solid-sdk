@@ -1,0 +1,7 @@
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+# PHO-00 interpretations
+
+1. **Month shards versus item URLs** — 07-parity-backlog, Photos data mapping and PHO-01: month shards could mean moving metadata into month containers or grouping the fixed `photos/items/<uuid>.ttl` resources. Conservatively preserve the explicit item URLs; expose UTC month/day grouping helpers for later hooks without introducing a second persistent index.
+2. **Strip location** — 07-parity-backlog, Photos open points and PHO-01: the acceptance names geo triples; the toggle could also mean stripping GPS from the original binary. Conservatively remove location from RDF and require the injected image encoder to remove location metadata from the uploaded original. Real encoding stays in PHO-01 per 08-model-first.
+3. **Trash layout** — Photos specifies app-managed trash without a record layout. Use a per-photo metadata copy under `photos/.trash/<id>.ttl`, with the original photograph subject retained and a PROV entity recording original URL, actor, and invalidation time. Keep binaries until explicit purge; restore recreates the original metadata with create-only semantics. Purge only deletes binaries at the app-managed paths matching the photo identifier; imported/shared external binary paths are refused. No automatic expiry is inferred.
+4. **Vocabulary dependency** — the base has no `@jeswr/suite-vocab` package. Use only existing standard schema.org, EXIF, Geo, DCT, RDF, and PROV IRIs; mint no suite terms or legacy aliases. PHO-01 can import shared constants once that package lands.
