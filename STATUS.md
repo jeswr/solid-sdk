@@ -193,3 +193,59 @@ questions. Conservatively, ACL-before-content support and an unchanged WAC ACL
 association are required for every content resource, including existing ones;
 unsupported servers fail closed. The earlier shared PodPort/registry
 coordination question is unchanged.
+
+## Fix round 3 — review at ea53c6f322d1
+
+- `9ce98897` — `fix: reject shared chat ACL documents`: resolves the medium
+  finding about removing unrelated authorizations. Before replacing a discovered
+  ACL, the writer checks every authorization's complete `acl:accessTo` and
+  `acl:default` sets. If any scope names another resource, saving fails before
+  writing that ACL or its target. The conservative option explicitly allowed by
+  the review is to reject shared documents, preserving them unchanged.
+  The README documents this restriction. Twenty-four regression cases cover
+  containers, metadata and messages, new and existing resources, separate
+  authorizations and multiple scope values in one authorization. They assert
+  the shared ACL and target remain unchanged and subsequent messages are not
+  written. All 24 failed against the previous implementation before the fix.
+- Final documentation commit — `docs: record shared ACL fix validation`.
+
+Final validation commands (the new tests use only the in-memory pod):
+
+```sh
+PATH=/tmp/sst-fv0j-no-remote-git:$PATH pnpm exec turbo run build --filter='@jeswr/solid-chat-interop^...'
+# PASS: dependency-first build.
+
+PATH=/tmp/sst-fv0j-no-remote-git:$PATH bash -c 'pnpm --filter @jeswr/solid-chat-interop run lint && pnpm --filter @jeswr/solid-chat-interop run build && pnpm --filter @jeswr/solid-chat-interop run typecheck && pnpm --filter @jeswr/solid-chat-interop run test'
+# PASS: lint/build/typecheck; 152 tests in 7 files (66 writer tests).
+
+PATH=/tmp/sst-fv0j-no-remote-git:$PATH pnpm run lint:root
+# PASS: Biome, lockfile transport, app workspace and fetch guards.
+
+PATH=/tmp/sst-fv0j-no-remote-git:$PATH TURBO_SCM_BASE=08e8edf3e9eefafe1bbd38312d74b787e88ca184 pnpm run gate
+# PASS: 26/26 Turbo tasks, including dependent packages and 115 MCP tests.
+
+PATH=/tmp/sst-fv0j-no-remote-git:$PATH pnpm run gate:full
+# FAIL: unchanged @jeswr/federation-trust#test; 227/273 tasks completed.
+```
+
+The full gate again stops at the existing “delegation credential structure is
+stable” snapshot mismatch in
+`packages/federation-trust/test/characterization.test.ts:196`: delegateKey JSON
+expects key order `crv,x,kty`, but receives `kty,crv,x`. That package is unchanged;
+the remaining full-workspace tasks did not complete. Generated untracked
+callback/client-ID assets were removed after the run.
+
+The first affected-gate attempt was blocked when the existing MCP build script
+tried a remote Git clone for missing fetch-rdf output. The PATH guard refused
+the clone. Restoring the already available exact-pinned fetch-rdf artifact
+described above into this checkout's MCP node_modules allowed the gate to pass;
+the source archive identifies commit
+`a8359a3764cb6b3c763e09ea211542a5dc7edc33`. No remote Git operation, dependency
+addition, lockfile change or lifecycle script was needed. check:packages is not
+applicable. An initial package lint attempt reported test formatting; formatting
+was corrected before the successful final package gate.
+
+Roborev remains unavailable, so no automated review verdict could be obtained.
+Logs: `/tmp/sst-fv0j-fix3-{deps,regression-red,interop-gate,root-lint,gate,gate-full}.log`.
+No requested implementation remains unfinished and there are no new open
+questions. The earlier shared PodPort/registry coordination question is unchanged.
