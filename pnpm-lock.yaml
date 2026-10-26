@@ -2027,6 +2027,9 @@ importers:
       '@univerjs/sheets':
         specifier: 1.2.0
         version: 1.2.0(react@19.2.7)(rxjs@7.8.2)
+      marked:
+        specifier: 17.0.6
+        version: 17.0.6
       n3:
         specifier: 2.0.3
         version: 2.0.3
