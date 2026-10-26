@@ -47,7 +47,7 @@ export class AuthorizationServer {
       throw new Error("Issuer and resource must not contain queries");
     this.issuer = options.issuer;
     this.resource = options.resource;
-    this.base = options.issuer.replace(/\/$/u, "");
+    this.base = issuer.href.replace(/\/$/u, "");
     this.stores = options.stores ?? createMemoryStores();
     this.now = options.now ?? (() => Math.floor(Date.now() / 1000));
     this.scopes = [...(options.scopes ?? [])];

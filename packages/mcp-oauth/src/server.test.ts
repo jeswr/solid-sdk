@@ -6,6 +6,52 @@ import { createAuthorizationServer } from "./index.js";
 import { CODE_TTL, digest, GRANT_TTL, LOGIN_TTL, OAuthError } from "./protocol.js";
 
 describe("metadata and complete OAuth flow", () => {
+  it.each([
+    "https://mcp.example:443/auth",
+    "https://MCP.EXAMPLE/auth",
+    "https://MCP.EXAMPLE:443/auth/",
+  ])("routes normalized endpoint URLs while retaining issuer %s", async (issuer) => {
+    const f = fixture({ issuer });
+    const metadataResponse = await f.server.handle(
+      new Request("https://mcp.example/.well-known/oauth-authorization-server/auth"),
+    );
+    expect(metadataResponse.status).toBe(200);
+    const metadata = await metadataResponse.json();
+    expect(metadata).toMatchObject({
+      issuer,
+      authorization_endpoint: `${ISSUER}/authorize`,
+      token_endpoint: `${ISSUER}/token`,
+      registration_endpoint: `${ISSUER}/register`,
+      revocation_endpoint: `${ISSUER}/revoke`,
+      jwks_uri: `${ISSUER}/jwks`,
+    });
+    expect((await f.server.handle(new Request(metadata.jwks_uri))).status).toBe(200);
+    expect(f.server.protectedResourceMetadata().authorization_servers).toEqual([issuer]);
+    const id = await f.register();
+    expect((await f.server.handle(f.authRequest(id))).status).toBe(302);
+    expect(f.provider.begin).toHaveBeenCalledWith(SESSION.webId, `${ISSUER}/callback`);
+    const callback = await f.server.handle(new Request(`${ISSUER}/callback?state=upstream-state`));
+    expect(callback.status).toBe(302);
+    const params = new URL(callback.headers.get("location") as string).searchParams;
+    expect(params.get("iss")).toBe(issuer);
+    const exchange = await f.exchange(id, params.get("code") as string);
+    expect(exchange.status).toBe(200);
+    const tokens = await exchange.json();
+    const claims = JSON.parse(
+      Buffer.from(tokens.access_token.split(".")[1], "base64url").toString(),
+    );
+    expect(claims.iss).toBe(issuer);
+    await expect(f.server.verifyAccessToken(tokens.access_token, RESOURCE)).resolves.toBeDefined();
+    const refreshed = await f.refresh(id, tokens.refresh_token);
+    expect(refreshed.status).toBe(200);
+    const rotated = await refreshed.json();
+    const revoke = await f.form("revoke", { client_id: id, token: rotated.refresh_token });
+    expect(revoke.status).toBe(200);
+    await expect(f.server.verifyAccessToken(rotated.access_token, RESOURCE)).rejects.toMatchObject({
+      error: "invalid_token",
+    });
+  });
+
   it("serves RFC metadata with inserted well-known paths and only advertised capabilities", async () => {
     const f = fixture();
     const as = await f.server.handle(
