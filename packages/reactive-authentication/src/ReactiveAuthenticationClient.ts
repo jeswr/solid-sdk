@@ -178,7 +178,7 @@ export class ReactiveAuthenticationClient {
       }
       if (result.status !== 401) return result;
 
-      challenge = challengeContext(result);
+      challenge = { ...challengeContext(result), request: upgraded };
       if (isNonceChallenge(challenge) && nonceRetries++ < 1) continue;
       if (provider.invalidate !== undefined && renewals++ < 1) {
         await provider.invalidate(upgraded, challenge);

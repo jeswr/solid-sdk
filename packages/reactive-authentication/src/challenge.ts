@@ -13,6 +13,8 @@ export interface AuthenticationChallenge {
 export interface ChallengeContext {
   readonly response: Response;
   readonly challenges: readonly AuthenticationChallenge[];
+  /** The provider-issued request answered by this challenge, when retrying credentials. */
+  readonly request?: Request;
 }
 
 export function challengeContext(response: Response): ChallengeContext {

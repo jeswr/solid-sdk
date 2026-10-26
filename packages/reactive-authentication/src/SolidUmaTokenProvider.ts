@@ -161,14 +161,16 @@ export class SolidUmaTokenProvider implements TokenProvider {
       nonce !== undefined &&
       findChallenge(challenge, [], "dpop")?.params["error"] === "use_dpop_nonce"
     ) {
-      const response = challenge!.response;
+      const context = challenge!;
+      const response = context.response;
       if (response.url !== "" && new URL(response.url).origin !== new URL(request.url).origin)
         throw new ReactiveAuthenticationError("DPoP nonce came from a different resource origin");
       const ticket = await this.#rpts.ticket(request.signal);
-      // A nonce challenge has no UMA ticket or AS binding. Reuse only the context already verified
-      // for this exact resource, and never acquire new credentials from this challenge alone. Use actual
+      // A nonce challenge has no UMA ticket or AS binding. Reuse only the challenged request's
+      // verified context, and never acquire new credentials from this challenge alone. Use actual
       // expiry here: the cache's renewal margin must not prevent replaying a short-lived, valid RPT.
-      const key = this.#contexts.get(request.url);
+      const issued = context.request ?? request;
+      const key = issued.url === request.url ? this.#requests.get(issued) : undefined;
       const rpt = key === undefined ? undefined : await this.#rpts.read(key, ticket);
       if (
         rpt === undefined ||
