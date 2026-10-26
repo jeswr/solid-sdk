@@ -281,9 +281,24 @@ class Sync {
     const path = root(id);
     const slug = `${path}meta.ttl`;
     await mutate(this.ctx.resolve(slug), async () => {
-      await this.ctx.read(slug);
-      // Keep the source id discoverable for replay/full reconciliation if cleanup fails.
+      const dataset = await this.ctx.read(slug);
+      if (dataset) {
+        const item = new DriveMetadata(`${this.ctx.resolve(slug)}#it`, dataset, DataFactory);
+        // Publish the incomplete state before deleting any linked representations.
+        // Retain source id and provenance for replay/full reconciliation.
+        item.encodings.clear();
+        item.contentSkipped = "pending-deletion";
+        await this.ctx.write({
+          slug,
+          category: "documents",
+          forClass: CLASSES.DigitalDocument,
+          dataset,
+          skipRegistration: true,
+        });
+      }
       await this.clean(path, new Set());
+      // The pending-deletion write changed the ETag and cleared the retained read.
+      await this.ctx.read(slug);
       await this.ctx.remove(slug);
     });
   }
@@ -395,6 +410,7 @@ class Sync {
     const unchanged =
       sameVersion &&
       old.encodingFormat === mimeType &&
+      // Pending deletion and missing expected links must restore content on return.
       !old.contentSkipped &&
       names().every((name) => old.encodings.has(this.ctx.resolve(`${path}${name}`)));
     const content: BinaryDoc[] = [];

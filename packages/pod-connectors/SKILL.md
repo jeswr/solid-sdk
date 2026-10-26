@@ -61,8 +61,12 @@ failure, best-effort roll back staging without deleting currently linked represe
 Serialize each file's Pod mutations and cleanup within the runtime. After every store,
 reconcile canonical representation children through an @solid/object Container listing,
 including legacy paths and orphaned exports regardless of previous encoding links.
-For deletions, remove representations before metadata so failed cleanup leaves a discoverable
-tombstone for replay or full reconciliation.
+For deletions, conditionally rewrite existing metadata first: clear all encoding links, set
+`contentSkipped` to `"pending-deletion"`, and retain the source id and provenance. Remove
+representations next, then re-read metadata to conditionally delete it under the updated ETag.
+Failed cleanup leaves a discoverable tombstone for replay or full reconciliation. Pending
+deletion or missing expected encoding links must force a returning file to download again,
+even when its source version is unchanged.
 A policy omission writes explanatory metadata without incrementing `skipped`.
 Drive tests wrap JSON `fixtureFetch` with synthetic media/export responses; do not broaden
 fixtureFetch or call live Google APIs. True streaming bodies await a future PodWriter port.

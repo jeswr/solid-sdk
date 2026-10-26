@@ -194,8 +194,11 @@ fail before reconciliation or checkpoint advancement. One shared `RunBudget` cap
 requests (including downloads), listed items, and cumulative JSON response bytes across pagination
 and any full-resync fallback (512 MiB JSON data budget by default).
 Failed imports preserve the host's previous checkpoint.
-Removed/trashed files lose all content representations before their metadata through `ctx.remove`.
-If cleanup fails, metadata stays as a deletion tombstone so a replay or full resync retries cleanup.
+Removed/trashed files first conditionally rewrite metadata with no encoding links and
+`contentSkipped: "pending-deletion"`, retaining the source id and provenance. They then
+remove all representations through `ctx.remove` and conditionally delete metadata using its
+updated ETag. If cleanup fails, this tombstone remains discoverable for replay or full resync;
+a returning file downloads its content again even when its source version is unchanged.
 
 Files have stable paths inside the connector container:
 `drive/files/<pathId(fileId)>/meta.ttl`, with `content-<v>` beside binary metadata, or
@@ -219,7 +222,8 @@ limit). Representations use create-only writes; the conditional metadata write p
 encoding links only after every download and content write succeeds. Previous versions are
 removed after the metadata commit. A failed commit attempts to remove staged representations
 while preserving anything linked by the current metadata. Matching checksum/modified-time
-metadata and encoding links avoid another download. Downloads may overlap; each file's Pod
+metadata and every expected encoding link avoid another download only when no `contentSkipped`
+reason is present. Downloads may overlap; each file's Pod
 mutations and cleanup are serialized within the runtime. Every successful store lists that
 file's container and removes unlinked canonical representations, including abandoned exports
 and legacy `content`, `content.pdf`, and `content.txt` paths. This also runs for metadata-only

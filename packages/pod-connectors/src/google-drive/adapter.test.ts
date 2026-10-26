@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_RUN_LIMITS, RunBudget } from "../core/budget.js";
 import { runImport } from "../core/import-runner.js";
 import { createFetchPodWriter } from "../core/pod-writer.js";
+import { Provenance } from "../core/provenance.js";
 import {
   createMemoryPod,
   demoImport,
@@ -473,10 +474,18 @@ describe("Drive incremental sync", () => {
     "replay",
     "expired cursor",
   ])("finishes an interrupted deletion after %s", async (recovery) => {
-    const { run, pod, podWriter, state } = await imported();
+    const { run, pod, podWriter, state, metadata } = await imported();
+    const source = new Provenance(
+      `${metaUrl(DOC.id)}#it`,
+      pod.dataset(metaUrl(DOC.id)),
+      DataFactory,
+    );
+    const derivedFrom = [...source.derivedFrom];
     const remove = podWriter.remove;
     if (!remove) throw new Error("Expected memory Pod delete port");
     const failedCleanup = vi.spyOn(podWriter, "remove").mockImplementation(async (slug, opts) => {
+      expect(metadata(DOC.id).contentSkipped).toBe("pending-deletion");
+      expect([...metadata(DOC.id).encodings]).toEqual([]);
       if (slug.endsWith(".txt")) throw new Error("Interrupted deletion");
       await remove(slug, opts);
     });
@@ -488,6 +497,11 @@ describe("Drive incremental sync", () => {
     expect(pod.bytes(contentUrl(DOC, ".pdf"))).toBeUndefined();
     expect(pod.bytes(contentUrl(DOC, ".txt"))).toBeDefined();
     expect(pod.get(metaUrl(DOC.id))).toBeDefined();
+    expect(metadata(DOC.id).identifier).toBe(DOC.id);
+    expect([
+      ...new Provenance(`${metaUrl(DOC.id)}#it`, pod.dataset(metaUrl(DOC.id)), DataFactory)
+        .derivedFrom,
+    ]).toEqual(derivedFrom);
     expect(failedCleanup.mock.calls.map(([slug]) => slug)).not.toContain(`${path(DOC.id)}meta.ttl`);
     expect(onState).toHaveBeenCalledWith(
       expect.objectContaining({ cursor: state.cursor, counts: state.counts, lastOutcome: "error" }),
@@ -506,6 +520,131 @@ describe("Drive incremental sync", () => {
     expect(pod.get(metaUrl(DOC.id))).toBeUndefined();
     expect(pod.bytes(contentUrl(DOC, ".txt"))).toBeUndefined();
     expect(pod.bytes(contentUrl(BINARY))).toBeDefined();
+  });
+
+  it("preserves content and the checkpoint when the pending-deletion write conflicts", async () => {
+    const { run, pod, podWriter, state, metadata } = await imported();
+    const write = podWriter.write;
+    const newer = pod.dataset(metaUrl(DOC.id));
+    new DriveMetadata(`${metaUrl(DOC.id)}#it`, newer, DataFactory).name = "Concurrent metadata";
+    const conflict = vi.spyOn(podWriter, "write").mockImplementation(async (doc, conditions) => {
+      if (doc.slug === `${path(DOC.id)}meta.ttl`) {
+        expect(conditions).toEqual({ ifMatch: expect.any(String) });
+        await write({ ...doc, dataset: newer });
+      }
+      return write(doc, conditions);
+    });
+    const remove = vi.spyOn(podWriter, "remove");
+    const onState = vi.fn();
+    await expect(
+      run([changes({ changes: [{ fileId: DOC.id, removed: true }], newStartPageToken: "2000" })], {
+        state,
+        onState,
+      }).result,
+    ).rejects.toMatchObject({ status: 412 });
+    expect(conflict).toHaveBeenCalled();
+    expect(remove).not.toHaveBeenCalled();
+    expect(metadata(DOC.id).name).toBe("Concurrent metadata");
+    expect(metadata(DOC.id).contentSkipped).toBeUndefined();
+    for (const url of metadata(DOC.id).encodings) expect(pod.bytes(url)).toBeDefined();
+    expect(onState).toHaveBeenCalledWith(
+      expect.objectContaining({ cursor: state.cursor, counts: state.counts, lastOutcome: "error" }),
+    );
+  });
+
+  it("uses the pending-deletion ETag for the final metadata removal", async () => {
+    const { run, podWriter, state } = await imported();
+    const before = await podWriter.read(`${path(DOC.id)}meta.ttl`);
+    let pendingEtag: string | null | undefined;
+    const write = podWriter.write;
+    vi.spyOn(podWriter, "write").mockImplementation(async (doc, conditions) => {
+      const result = await write(doc, conditions);
+      if (doc.slug === `${path(DOC.id)}meta.ttl`)
+        pendingEtag = (await podWriter.read(doc.slug))?.etag;
+      return result;
+    });
+    const remove = vi.spyOn(podWriter, "remove");
+    await run(
+      [changes({ changes: [{ fileId: DOC.id, removed: true }], newStartPageToken: "2000" })],
+      { state },
+    ).result;
+    expect(pendingEtag).toEqual(expect.any(String));
+    expect(pendingEtag).not.toBe(before?.etag);
+    expect(remove).toHaveBeenLastCalledWith(`${path(DOC.id)}meta.ttl`, { ifMatch: pendingEtag });
+  });
+
+  it("restores every export when a same-version file returns after interrupted deletion", async () => {
+    const { run, pod, podWriter, state, metadata } = await imported();
+    const remove = podWriter.remove;
+    if (!remove) throw new Error("Expected memory Pod delete port");
+    const failedCleanup = vi.spyOn(podWriter, "remove").mockImplementation(async (slug, opts) => {
+      if (slug.endsWith(".txt")) throw new Error("Interrupted deletion");
+      await remove(slug, opts);
+    });
+    const onState = vi.fn();
+    await expect(
+      run([changes({ changes: [{ fileId: DOC.id, removed: true }], newStartPageToken: "2000" })], {
+        state,
+        onState,
+      }).result,
+    ).rejects.toThrow("Interrupted deletion");
+    expect(pod.bytes(contentUrl(DOC, ".pdf"))).toBeUndefined();
+    expect(pod.bytes(contentUrl(DOC, ".txt"))).toBeDefined();
+    expect(onState).toHaveBeenCalledWith(
+      expect.objectContaining({ cursor: state.cursor, counts: state.counts, lastOutcome: "error" }),
+    );
+    failedCleanup.mockRestore();
+
+    // Replay coalesces the removal and return into a same-version store.
+    const routes = [
+      changes({ changes: [{ fileId: DOC.id, removed: true }], nextPageToken: "return" }),
+      changes({ changes: [{ fileId: DOC.id, file: DOC }], newStartPageToken: "3000" }),
+    ];
+    const retry = run(routes, { state, media: CONTENT });
+    const report = await retry.result;
+    expect(report.cursor).toBe("3000");
+    expect(retry.api.mock.calls.map(([url]) => String(url)).slice(2)).toEqual([
+      exportUrl(DOC.id, "application/pdf"),
+      exportUrl(DOC.id, "text/plain"),
+    ]);
+    expect(metadata(DOC.id).contentSkipped).toBeUndefined();
+    expect([...metadata(DOC.id).encodings]).toEqual([
+      contentUrl(DOC, ".pdf"),
+      contentUrl(DOC, ".txt"),
+    ]);
+    expect(new TextDecoder().decode(pod.bytes(contentUrl(DOC, ".pdf")))).toBe("%PDF-synthetic");
+    expect(new TextDecoder().decode(pod.bytes(contentUrl(DOC, ".txt")))).toBe("Synthetic document");
+    const unchanged = run(routes, { state: report.state });
+    await unchanged.result;
+    expect(unchanged.api).toHaveBeenCalledTimes(2);
+    for (const url of metadata(DOC.id).encodings) expect(pod.bytes(url)).toBeDefined();
+  });
+
+  it.each([
+    "pending-deletion",
+    "missing-encodings",
+  ])("downloads expected content again for %s metadata", async (copyState) => {
+    const { run, pod, podWriter, metadata } = await imported();
+    const slug = `${path(DOC.id)}meta.ttl`;
+    const dataset = pod.dataset(metaUrl(DOC.id));
+    const item = new DriveMetadata(`${metaUrl(DOC.id)}#it`, dataset, DataFactory);
+    if (copyState === "pending-deletion") item.contentSkipped = "pending-deletion";
+    else item.encodings.clear();
+    await podWriter.write({
+      slug,
+      category: "documents",
+      forClass: "https://schema.org/DigitalDocument",
+      dataset,
+    });
+    const retry = run(full([DOC]), { media: CONTENT });
+    await retry.result;
+    expect(retry.api).toHaveBeenCalledTimes(4);
+    expect(metadata(DOC.id).contentSkipped).toBeUndefined();
+    expect([...metadata(DOC.id).encodings]).toEqual([
+      contentUrl(DOC, ".pdf"),
+      contentUrl(DOC, ".txt"),
+    ]);
+    for (const url of metadata(DOC.id).encodings) expect(pod.bytes(url)).toBeDefined();
   });
 
   it("counts malformed changes and allows empty incremental pages", async () => {
