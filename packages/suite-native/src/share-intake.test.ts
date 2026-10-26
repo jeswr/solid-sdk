@@ -177,6 +177,24 @@ describe("createShareInbox", () => {
     expect(remove).toHaveBeenCalledOnce();
   });
 
+  test("hands each batch out once until it is acknowledged", async () => {
+    const { plugin, emit } = fakePlugin();
+    const shared = batch([{ kind: "text", text: "hi" }]);
+    plugin.getPending.mockResolvedValue({ batches: [shared] });
+    const inbox = createShareInbox(plugin);
+    const handler = vi.fn();
+    await inbox.onReceived(handler);
+    const [pending] = await inbox.takePending();
+    emit(shared);
+    await flush();
+    expect(handler).not.toHaveBeenCalled();
+    await inbox.acknowledge(pending as ShareBatch);
+    emit(shared);
+    emit(shared);
+    await flush();
+    expect(handler).toHaveBeenCalledOnce();
+  });
+
   test("acknowledges a batch", async () => {
     const { plugin } = fakePlugin();
     await createShareInbox(plugin).acknowledge(validateShareBatch(batch([file()])));

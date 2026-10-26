@@ -168,7 +168,10 @@ export interface ShareInboxOptions {
 export interface ShareInbox {
   /** Validated batches that arrived before anyone was listening. They stay until acknowledged. */
   takePending(): Promise<ShareBatch[]>;
-  /** Subscribes to new batches; returns an unsubscribe function. */
+  /**
+   * Subscribes to new batches; returns an unsubscribe function. A batch already handed out by this
+   * inbox (here or by `takePending`) is not delivered again until it is acknowledged.
+   */
   onReceived(handler: (batch: ShareBatch) => void): Promise<() => Promise<void>>;
   /** Reads file item `index` of `batch` into a Blob, enforcing the declared size. */
   readFile(batch: ShareBatch, index: number): Promise<Blob>;
@@ -182,6 +185,8 @@ export function createShareInbox(
   options: ShareInboxOptions = {},
 ): ShareInbox {
   const limits = options.limits ?? DEFAULT_SHARE_LIMITS;
+  // iOS announces pending batches on every resume, so a live event can repeat a pending batch.
+  const handedOut = new Set<string>();
   const accept = async (raw: unknown): Promise<ShareBatch | undefined> => {
     try {
       return validateShareBatch(raw, limits);
@@ -200,12 +205,18 @@ export function createShareInbox(
       const { batches } = await plugin.getPending();
       if (!Array.isArray(batches)) return [];
       const accepted = await Promise.all(batches.map(accept));
-      return accepted.filter((batch): batch is ShareBatch => batch !== undefined);
+      const valid = accepted.filter((batch): batch is ShareBatch => batch !== undefined);
+      for (const batch of valid) handedOut.add(batch.id);
+      return valid;
     },
 
     async onReceived(handler) {
       const listener = await plugin.addListener("shareReceived", (raw) => {
-        void accept(raw).then((batch) => batch && handler(batch));
+        void accept(raw).then((batch) => {
+          if (batch === undefined || handedOut.has(batch.id)) return;
+          handedOut.add(batch.id);
+          handler(batch);
+        });
       });
       return () => listener.remove();
     },
@@ -231,8 +242,9 @@ export function createShareInbox(
       return new Blob(parts, { type: entry.mimeType });
     },
 
-    acknowledge(batch) {
-      return plugin.acknowledge({ batchId: batch.id });
+    async acknowledge(batch) {
+      await plugin.acknowledge({ batchId: batch.id });
+      handedOut.delete(batch.id);
     },
   };
 }
