@@ -195,3 +195,37 @@ switches, remote fetches, or merges occurred.
 Both supplied findings are addressed. No implementation work remains; open questions: none.
 Full-workspace validation and automated roborev review have the limitations above. No screenshots
 or browser checks apply to these pure model fixes.
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+## Fix round 4 — review of `e627122f089a`
+
+Implemented the single supplied tombstone-subject finding on `lane/sst-sf1j`.
+
+- `d3cf5ed5` — `fix(photos): sanitize tombstone subjects`: construct the receipt subject from
+  `documentUrl(originalUrl)` before appending `#it`, matching photo and trash-record identity.
+  Four regression cases use filenames containing spaces, angle brackets, quotes, and an embedded
+  newline. They parse the serialized tombstone, verify its escaped subject and matching receipt,
+  and restore the original photo using a fresh storage adapter.
+- Final documentation commit — `docs(photos): record fourth review fix and validation`:
+  this report, updated last.
+
+### Fix-round-4 validation
+
+| Exact command | Result |
+| --- | --- |
+| `pnpm --filter '@jeswr/app-suite^...' run build` | PASS: all three workspace prerequisites. |
+| `pnpm --filter @jeswr/app-suite exec vitest run test/photos/trash.test.ts -t 'sanitizes the tombstone subject'` | Before the fix: all four final regression cases failed to parse the tombstone Turtle, reproducing the finding. |
+| `pnpm --filter @jeswr/app-suite exec vitest run test/photos/trash.test.ts` | After the fix: PASS, all 26 tests. |
+| `pnpm --filter @jeswr/app-suite run lint && pnpm --filter @jeswr/app-suite run build && pnpm --filter @jeswr/app-suite run typecheck && pnpm --filter @jeswr/app-suite run test` | PASS: lint, production build, strict tsc, 9 files / 136 tests. |
+| `pnpm --filter @jeswr/app-suite run test:coverage` | PASS: every model file meets 100% statements, branches, functions, and lines; totals 572 statements, 372 branches, 163 functions, 488 lines. |
+| `pnpm run lint:root` | PASS: all guards and 74 contrast pairs. |
+| `TURBO_SCM_BASE=25a9001cfeb4bcf53501005292d1860b25dacfaf pnpm run gate` | PASS: 9 / 9 tasks, including root tests, before the final report commit. |
+| `GIT_ALLOW_PROTOCOL=file pnpm run gate:full --env-mode=loose` | BLOCKED in untouched `@jeswr/unstorage-solid#build`: its dependency bootstrap attempted a remote clone, and Git rejected HTTPS transport before any network fetch. 10 / 122 scheduled tasks completed. |
+| `git diff --check` | PASS. |
+| `command -v roborev` | Unavailable; no automated per-commit verdict could be collected. |
+
+The supplied finding is addressed. No implementation work remains; open questions: none.
+Full-workspace validation and automated roborev review have the limitations above. No dependencies,
+UI, tracker files, or unrelated source changes were added. No screenshots apply to this model fix.
+Commits use GPT-6 provenance, the requested identity, and disabled signing. No pushes, PRs, branch
+switches, remote fetches, or merges occurred.
