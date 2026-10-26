@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # SHT-L1: headless Univer feasibility
 
@@ -84,17 +85,20 @@ a pnpm store allocation, or compressed download size.
 
 - `parseCsv` / `serializeCsv` support BOM input, LF/CRLF/CR records, escaped
   quotes, commas, multiline fields, Unicode, trailing empty fields and empty
-  input. Malformed quoting throws `SyntaxError`. Output is canonical CRLF.
+  input. Malformed quoting throws `SyntaxError`. Output is canonical CRLF;
+  a leading U+FEFF in the first field is quoted to distinguish it from a BOM.
 - `csvToWorkbook` creates ordered sheets and imports every field as an explicit
   Univer string cell. Leading zeroes, ISO dates and `=...` stay lexical text;
   import does not run formulas. Ragged rows are padded on export. At least one
-  sheet with nonempty unique IDs is required, including safe prototype-like IDs.
+  sheet with nonempty unique IDs is required. Prototype-like IDs are supported
+  except `__proto__`, which CSV import and engine loading reject before loading
+  because Univer 1.2.0 silently drops that sheet.
 - `workbookToCsv` projects the occupied sparse rectangle, padding holes and
   omitting unused grid capacity. It writes scalar values (including zero/false),
-  cached formula results, and plain rich text with the final document CRLF
-  removed. A formula with no cached value exports an empty field. Unknown sheets
-  and invalid coordinates throw. CSV loses types, styles, merges, formulas and
-  rich-text runs; the snapshot retains them.
+  boolean-typed numeric 0/1 as `false`/`true`, cached formula results, and plain
+  rich text with the final document CRLF removed. A formula with no cached value
+  exports an empty field. Unknown sheets and invalid coordinates throw. CSV loses
+  types, styles, merges, formulas and rich-text runs; the snapshot retains them.
 - `inferColumns` treats the first row as headers and infers finite decimal
   numbers, valid ISO calendar dates, lowercase booleans or strings. It ignores
   blank values; empty/mixed columns and leading-zero identifiers stay strings.
@@ -103,10 +107,12 @@ a pnpm store allocation, or compressed download size.
   `sheets/<n>.csv` and `sheets/<n>.jsonld` paths (zero-based position), IDs, names,
   CSV and column projections. The full snapshot is authoritative.
   `storageToWorkbook` parses that snapshot and checks its derived sheet records
-  against the supplied records, throwing on any divergence rather than silently
-  overwriting formulas or styles. The projection is an in-memory hand-off, not
-  a new persistent format. Inputs are typed workbook snapshots, not an untrusted
-  JSON validation boundary; no arbitrary-size/resource-limit guarantee is made.
+  against the supplied records by field value, ignoring object property order
+  while preserving sheet and column array order, throwing on divergence rather
+  than silently overwriting formulas or styles. The projection is an in-memory
+  hand-off, not a new persistent format. Inputs are typed workbook snapshots,
+  not an untrusted JSON validation boundary; no arbitrary-size/resource-limit
+  guarantee is made.
 
 SHT-00's implementation is absent at base
 `606c87b7edf73e83f118f95295b0eeda7abb6d92`; SHT-L1 depends only on DS-01.

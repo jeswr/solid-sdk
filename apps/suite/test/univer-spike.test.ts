@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 // biome-ignore-all lint/style/noNonNullAssertion: Synthetic fixtures define these sheets and cells explicitly.
 import { CellValueType, type IWorkbookData } from "@univerjs/core";
 import { describe, expect, it } from "vitest";
@@ -72,6 +73,22 @@ describe("CSV fields", () => {
     expect(serializeCsv([])).toBe("");
     expect(parseCsv(serializeCsv([[""]]))).toEqual([[""]]);
   });
+
+  it.each([
+    "\uFEFF",
+    "\uFEFFAvery",
+    "\uFEFF\uFEFFName",
+  ])("preserves a quoted leading U+FEFF field: %j", (value) => {
+    const input = `"${value}",\uFEFFOther\r\n\uFEFFRow,value\r\n`;
+    const grid = parseCsv(input);
+    expect(grid[0]![0]).toBe(value);
+    expect(serializeCsv(grid)).toBe(input);
+    expect(parseCsv(serializeCsv(grid))).toEqual(grid);
+    const snapshot = loadWorkbook(
+      csvToWorkbook("bom", "Unicode", [{ id: "s", name: "Sheet", csv: input }]),
+    );
+    expect(workbookToCsv(snapshot, "s")).toBe(input);
+  });
 });
 
 describe("workbook conversions", () => {
@@ -108,8 +125,10 @@ describe("workbook conversions", () => {
     expect(() => csvToWorkbook("x", "x", [{ id: "", name: "", csv: "" }])).toThrow("unique");
     const s = { id: "same", name: "s", csv: "" };
     expect(() => csvToWorkbook("x", "x", [s, s])).toThrow("unique");
-    const snapshot = csvToWorkbook("x", "x", [{ id: "__proto__", name: "Proto", csv: "a" }]);
-    expect(workbookToCsv(snapshot, "__proto__")).toBe("a\r\n");
+    expect(() => csvToWorkbook("x", "x", [{ id: "__proto__", name: "Proto", csv: "a" }])).toThrow(
+      "__proto__",
+    );
+    const snapshot = fixture();
     expect(() => workbookToCsv(snapshot, "toString")).toThrow("Unknown sheet");
     Object.defineProperty(snapshot.sheets, "missing", { value: undefined });
     expect(() => workbookToCsv(snapshot, "missing")).toThrow("Missing sheet");
@@ -181,6 +200,60 @@ describe("descriptor inputs", () => {
 });
 
 describe("real headless engine and SHT-00 hand-off", () => {
+  it.each([
+    "constructor",
+    "toString",
+    "hasOwnProperty",
+  ])("preserves supported prototype-like sheet ID %s through engine and storage", (id) => {
+    const snapshot = csvToWorkbook("x", "x", [{ id, name: "Sheet", csv: "a\nb" }]);
+    const loaded = loadWorkbook(snapshot);
+    expect(loaded.sheetOrder).toEqual([id]);
+    expect(Object.hasOwn(loaded.sheets, id)).toBe(true);
+    expect(workbookToCsv(loaded, id)).toBe("a\r\nb\r\n");
+    expect(storageToWorkbook(workbookToStorage(loaded))).toEqual(loaded);
+  });
+
+  it("rejects __proto__ in either the sheet order or map before engine loading", () => {
+    const snapshot = fixture();
+    const before = structuredClone(snapshot);
+    const sheets = JSON.parse('{"__proto__":{"id":"__proto__","name":"Proto"}}');
+    expect(() => loadWorkbook({ ...snapshot, sheetOrder: ["__proto__"] })).toThrow("__proto__");
+    expect(() => loadWorkbook({ ...snapshot, sheets })).toThrow("__proto__");
+    expect(() => loadWorkbook({ sheets })).toThrow("__proto__");
+    expect(() => loadWorkbook({ sheetOrder: ["__proto__"] })).toThrow("__proto__");
+    expect(snapshot).toEqual(before);
+  });
+
+  it("still loads partial snapshots with engine defaults", () => {
+    const loaded = loadWorkbook({});
+    expect(loaded.sheetOrder).toHaveLength(1);
+    expect(Object.keys(loaded.sheets)).toEqual(loaded.sheetOrder);
+  });
+
+  it("exports engine boolean 0/1 cells as booleans while preserving numeric cells", () => {
+    const snapshot = csvToWorkbook("bool", "Boolean cells", [
+      { id: "s", name: "Sheet", csv: "Active,Count\nfalse,0\ntrue,1" },
+    ]);
+    snapshot.sheets.s!.cellData![1] = {
+      0: { v: 0, t: CellValueType.BOOLEAN },
+      1: { v: 0, t: CellValueType.NUMBER },
+    };
+    snapshot.sheets.s!.cellData![2] = {
+      0: { v: 1, t: CellValueType.BOOLEAN },
+      1: { v: 1, t: CellValueType.NUMBER },
+    };
+    const loaded = loadWorkbook(snapshot);
+    expect(loaded.sheets.s!.cellData![1]![0]).toEqual({ v: 0, t: CellValueType.BOOLEAN });
+    expect(loaded.sheets.s!.cellData![2]![0]).toEqual({ v: 1, t: CellValueType.BOOLEAN });
+    expect(workbookToCsv(loaded, "s")).toBe("Active,Count\r\nfalse,0\r\ntrue,1\r\n");
+    const storage = workbookToStorage(loaded);
+    expect(storage.sheets[0]!.columns).toEqual([
+      { name: "Active", type: "boolean" },
+      { name: "Count", type: "number" },
+    ]);
+    expect(storageToWorkbook(storage)).toEqual(loaded);
+  });
+
   it("loads in Node with no DOM, preserves formulas/styles and disposes cleanly", () => {
     expect(typeof window).toBe("undefined");
     const original = fixture();
@@ -219,5 +292,56 @@ describe("real headless engine and SHT-00 hand-off", () => {
     expect(() => storageToWorkbook({ ...storage, workbookJson: "{" })).toThrow(SyntaxError);
     storage.sheets[0]!.csv = "different";
     expect(() => storageToWorkbook(storage)).toThrow("do not match");
+  });
+
+  it("accepts equivalent records regardless of sheet and column property order", () => {
+    const snapshot = loadWorkbook(fixture());
+    const storage = workbookToStorage(snapshot);
+    storage.sheets = storage.sheets.map((sheet) => ({
+      columns: sheet.columns.map(({ name, type }) => ({ type, name })),
+      csv: sheet.csv,
+      descriptorPath: sheet.descriptorPath,
+      csvPath: sheet.csvPath,
+      name: sheet.name,
+      id: sheet.id,
+    }));
+    expect(storageToWorkbook(JSON.parse(JSON.stringify(storage)))).toEqual(snapshot);
+  });
+
+  it.each([
+    "id",
+    "name",
+    "csvPath",
+    "descriptorPath",
+    "csv",
+  ] as const)("rejects a changed sheet %s", (field) => {
+    const storage = workbookToStorage(fixture());
+    storage.sheets[0]![field] = "different";
+    expect(() => storageToWorkbook(storage)).toThrow("do not match");
+  });
+
+  it.each(["name", "type"] as const)("rejects a changed column %s", (field) => {
+    const storage = workbookToStorage(fixture());
+    if (field === "name") storage.sheets[0]!.columns[0]!.name = "Different";
+    else storage.sheets[0]!.columns[0]!.type = "number";
+    expect(() => storageToWorkbook(storage)).toThrow("do not match");
+  });
+
+  it.each(["sheets", "columns"] as const)("preserves meaningful %s array order", (field) => {
+    const storage = workbookToStorage(fixture());
+    if (field === "sheets") storage.sheets.reverse();
+    else storage.sheets[0]!.columns.reverse();
+    expect(() => storageToWorkbook(storage)).toThrow("do not match");
+  });
+
+  it.each(["sheets", "columns"] as const)("rejects missing or extra %s", (field) => {
+    for (const change of ["missing", "extra", "hole"]) {
+      const storage = workbookToStorage(fixture());
+      const records = field === "sheets" ? storage.sheets : storage.sheets[0]!.columns;
+      if (change === "missing") records.pop();
+      else if (change === "extra") records.length += 1;
+      else delete records[0];
+      expect(() => storageToWorkbook(storage)).toThrow("do not match");
+    }
   });
 });

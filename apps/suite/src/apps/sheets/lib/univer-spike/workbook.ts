@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { CellValueType, type ICellData, type IWorkbookData, LocaleType } from "@univerjs/core";
 import { parseCsv, serializeCsv } from "./csv";
 
@@ -31,8 +32,8 @@ export function csvToWorkbook(
     sheets: {},
   };
   for (const sheet of sheets) {
-    if (!sheet.id || Object.hasOwn(data.sheets, sheet.id)) {
-      throw new TypeError("Sheet IDs must be nonempty and unique");
+    if (!sheet.id || sheet.id === "__proto__" || Object.hasOwn(data.sheets, sheet.id)) {
+      throw new TypeError("Sheet IDs must be nonempty, unique and not __proto__");
     }
     const grid = parseCsv(sheet.csv);
     const cellData: Record<number, Record<number, ICellData>> = {};
@@ -44,7 +45,7 @@ export function csvToWorkbook(
       cellData[r] = cells;
     });
     data.sheetOrder.push(sheet.id);
-    // Define a data property even for IDs such as __proto__.
+    // Store supported IDs as own data properties.
     Object.defineProperty(data.sheets, sheet.id, {
       enumerable: true,
       configurable: true,
@@ -84,7 +85,10 @@ export function workbookToCsv(snapshot: IWorkbookData, sheetId: string): string 
     Array.from({ length: height }, (_, r) =>
       Array.from({ length: width }, (_, c) => {
         const cell = cells[r]?.[c];
-        if (cell?.v != null) return String(cell.v);
+        if (cell?.v != null) {
+          if (cell.t === CellValueType.BOOLEAN) return cell.v ? "true" : "false";
+          return String(cell.v);
+        }
         return cell?.p?.body?.dataStream.replace(/\r\n$/, "") ?? "";
       }),
     ),
