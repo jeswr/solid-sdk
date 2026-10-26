@@ -424,3 +424,73 @@ The requested finding is fixed and tested. No implementation work is unfinished 
 there are no open questions. `roborev` remains unavailable on PATH, so fresh automated per-commit
 verdicts could not be obtained locally. Dispatcher/security review remains outstanding; this
 security-critical package has not been merged.
+
+## Fix round 6 — review `190ed420ef59`
+
+Completed the sole finding in `solid-sdk-lane-sst-8xm.28-190ed420ef59.md`.
+Only `packages/reactive-authentication` and this report changed. No dependencies were added.
+
+| Commit | Change |
+| --- | --- |
+| `49285007` | Require an explicit `SessionFence` when constructing `OidcIdTokenSource`, expose that fence, and reject an LWS provider whose fence is missing or differs from the source's. Wire one fence through OIDC callers, the OpenID example and the interoperability adapter. Add runtime constructor checks, a compile-time required-fence contract, and a real HTTP regression covering two logout/login cycles with the manager, LWS provider and source sharing the same fence. |
+| Final documentation commit (this commit) | Record round-6 verification and the review-tool limitation. |
+
+The required shared fence follows the brief's design call. Even separate fences with the same namespace
+are rejected on the LWS OIDC path; their generation numbers must never be compared as if they belonged
+to one fence. Non-session credential sources retain their existing optional-fence behavior.
+
+### Round-6 verification
+
+PASS required package gate and root checks, run before the final documentation commit:
+
+```sh
+pnpm --filter @jeswr/reactive-authentication run lint && pnpm --filter @jeswr/reactive-authentication run build && pnpm --filter @jeswr/reactive-authentication run typecheck && pnpm --filter @jeswr/reactive-authentication run test
+pnpm run lint:root
+git diff --check
+```
+
+- Package lint: zero errors; **65 warnings** and **22 informational diagnostics**, unchanged from round 5.
+- Build and typecheck: pass, including the SDK contracts and the new required-fence type checks.
+- Tests: **287/287** pass in **29/29** files, with no skips.
+- Enforced coverage: statements **2064/2064**, branches **1525/1525**, functions **468/468**,
+  lines **1862/1862** — **100% in every metric**. Coverage configuration and thresholds are unchanged.
+- Root lint: Biome, lockfile transport, app workspace and raw-fetch guards pass.
+- Whitespace validation: pass.
+
+Regression sensitivity was checked before the implementation fix:
+
+```sh
+pnpm --filter @jeswr/reactive-authentication exec vitest run test/lws.test.js --coverage.enabled=false '--testNamePattern=one explicit fence|sharing one fence'
+```
+
+Expected baseline result: **1/2** selected tests failed because construction accepted a missing fence;
+the explicitly shared-fence logout/login test already passed. After the fix, missing and null source
+fences, absent provider fences, and distinct provider/source fence instances are rejected. The HTTP
+regression confirms the resource is private, authenticates three sessions across two logout/login
+cycles, checks fresh OIDC grants and LWS exchanges, verifies cache reuse within each session, and
+checks identity removal and signal cancellation at every logout. The previous peer-logout acquisition
+regression remains covered by the passing full suite.
+
+Focused verification also passed all **42/42** tests in the three touched test files:
+
+```sh
+pnpm --filter @jeswr/reactive-authentication exec vitest run test/lws.test.js test/session-coverage.test.js test/defensive-coverage.test.js --coverage.enabled=false
+```
+
+Validation used Node `24.22.1` and pnpm `10.4.1`. No `check:packages` run was needed because no dependency
+was added. The dependant dry run selected only this package, so no dependant gate applies:
+
+```sh
+pnpm exec turbo run build typecheck test --filter=...@jeswr/reactive-authentication --dry=json
+```
+
+Per the lane brief, no whole-workspace gate or `gate:full` ran. No push, PR, branch switch, network Git
+operation or edits to another checkout were performed. The working tree is clean after this final
+report commit.
+
+### Round-6 remaining work and questions
+
+The requested finding is fixed and tested. No implementation work is unfinished or blocked;
+there are no open questions. `roborev status` failed with exit 127 (`roborev: command not found`), so
+fresh automated per-commit verdicts could not be obtained locally. Dispatcher/security review remains
+outstanding; this security-critical package has not been merged.
