@@ -1,9 +1,10 @@
+# AUTHORED-BY Codex GPT-6.1-Sol
 # AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 #
-@prefix diet:    <https://w3id.org/jeswr/sectors/health/diet#> .
-@prefix dsh:     <https://w3id.org/jeswr/sectors/health/diet/shapes#> .
-@prefix health:  <https://w3id.org/jeswr/sectors/health#> .
-@prefix core:    <https://w3id.org/jeswr/core#> .
+@prefix diet:    <https://jeswr.org/ns/sectors/health/diet#> .
+@prefix dsh:     <https://jeswr.org/ns/sectors/health/diet/shapes#> .
+@prefix health:  <https://jeswr.org/ns/sectors/health#> .
+@prefix core:    <https://jeswr.org/ns/core#> .
 @prefix sh:      <http://www.w3.org/ns/shacl#> .
 @prefix owl:     <http://www.w3.org/2002/07/owl#> .
 @prefix rdf:     <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
@@ -42,26 +43,26 @@
 # cannot assert the ABSENCE of an undefined property, so it is a design note here.
 # =============================================================================
 
-<https://w3id.org/jeswr/sectors/health/diet/profile>
+<https://jeswr.org/ns/sectors/health/diet/profile>
     a prof:Profile ;
     dcterms:title "Solid Health Diet data-model profile (version-independent)"@en ;
     dcterms:description "Resolves to the current Diet sub-sector profile version."@en .
 
-<https://w3id.org/jeswr/sectors/health/diet/profile/1.0.0>
+<https://jeswr.org/ns/sectors/health/diet/profile/1.0.0>
     a prof:Profile ;
     dcterms:title "Solid Health Diet data-model profile"@en ;
-    dcterms:isVersionOf <https://w3id.org/jeswr/sectors/health/diet/profile> ;
+    dcterms:isVersionOf <https://jeswr.org/ns/sectors/health/diet/profile> ;
     owl:versionInfo "1.0.0" ;
-    owl:versionIRI <https://w3id.org/jeswr/sectors/health/diet/profile/1.0.0> ;
-    prof:isProfileOf <https://w3id.org/jeswr/sectors/health/diet> ;
+    owl:versionIRI <https://jeswr.org/ns/sectors/health/diet/profile/1.0.0> ;
+    prof:isProfileOf <https://jeswr.org/ns/sectors/health/diet> ;
     prof:hasToken "solid-health-diet-1.0.0" ;
     prof:hasResource [
         prof:hasRole <http://www.w3.org/ns/dx/prof/role/constraints> ;
-        prof:hasArtifact <https://w3id.org/jeswr/sectors/health/diet/profile/1.0.0/diet.shacl.ttl>
+        prof:hasArtifact <https://jeswr.org/ns/sectors/health/diet/profile/1.0.0/diet.shacl.ttl>
     ] ;
     prof:hasResource [
         prof:hasRole <http://www.w3.org/ns/dx/prof/role/vocabulary> ;
-        prof:hasArtifact <https://w3id.org/jeswr/sectors/health/diet>
+        prof:hasArtifact <https://jeswr.org/ns/sectors/health/diet>
     ] ;
     rdfs:comment "Open-by-default SHACL profile for the diet sub-sector; MUSTs follow the 'what + when' frictionless-logging rule."@en .
 

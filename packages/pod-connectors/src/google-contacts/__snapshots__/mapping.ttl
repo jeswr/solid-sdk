@@ -1,0 +1,45 @@
+# AUTHORED-BY Codex GPT-6.1-Sol
+<https://pod.test/alice/integrations/google-contacts/contacts/index.ttl#this> <http://purl.org/dc/terms/title> "Google Contacts";
+    a <http://www.w3.org/2006/vcard/ns#AddressBook>;
+    <http://www.w3.org/2006/vcard/ns#nameEmailIndex> <https://pod.test/alice/integrations/google-contacts/contacts/people.ttl>.
+<https://pod.test/alice/integrations/google-contacts/contacts/Person/c101/index.ttl#addr-0> a <http://www.w3.org/2006/vcard/ns#Home>;
+    <http://www.w3.org/2006/vcard/ns#country-name> "Exampleland";
+    <http://www.w3.org/2006/vcard/ns#locality> "Exampleton";
+    <http://www.w3.org/2006/vcard/ns#postal-code> "EX1 2AB";
+    <http://www.w3.org/2006/vcard/ns#region> "Example County";
+    <http://www.w3.org/2006/vcard/ns#street-address> "10 Synthetic Street\nUnit 2".
+<https://pod.test/alice/integrations/google-contacts/contacts/Person/c101/index.ttl#email-0> a <http://www.w3.org/2006/vcard/ns#Home>;
+    <http://www.w3.org/2006/vcard/ns#value> <mailto:alex@example.test>.
+<https://pod.test/alice/integrations/google-contacts/contacts/Person/c101/index.ttl#email-1> a <http://www.w3.org/2006/vcard/ns#Work>;
+    <http://www.w3.org/2006/vcard/ns#value> <mailto:alex@work.example.test>.
+<https://pod.test/alice/integrations/google-contacts/contacts/Person/c101/index.ttl#email-2> a <http://www.w3.org/2006/vcard/ns#Other>;
+    <http://www.w3.org/2006/vcard/ns#value> <mailto:alex@club.example.test>.
+<https://pod.test/alice/integrations/google-contacts/contacts/Person/c101/index.ttl#name> <http://www.w3.org/2006/vcard/ns#additional-name> "Morgan";
+    <http://www.w3.org/2006/vcard/ns#family-name> "Example";
+    <http://www.w3.org/2006/vcard/ns#given-name> "Alex";
+    <http://www.w3.org/2006/vcard/ns#honorific-prefix> "Dr";
+    <http://www.w3.org/2006/vcard/ns#honorific-suffix> "Jr".
+<https://pod.test/alice/integrations/google-contacts/contacts/Person/c101/index.ttl#tel-0> a <http://www.w3.org/2006/vcard/ns#Home>;
+    <http://www.w3.org/2006/vcard/ns#value> <tel:+12025550101>.
+<https://pod.test/alice/integrations/google-contacts/contacts/Person/c101/index.ttl#tel-1> a <http://www.w3.org/2006/vcard/ns#Work>;
+    <http://www.w3.org/2006/vcard/ns#value> <tel:+12025550102>.
+<https://pod.test/alice/integrations/google-contacts/contacts/Person/c101/index.ttl#tel-2> a <http://www.w3.org/2006/vcard/ns#Other>;
+    <http://www.w3.org/2006/vcard/ns#value> "ask reception, extension 42".
+<https://pod.test/alice/integrations/google-contacts/contacts/Person/c101/index.ttl#this> a <http://www.w3.org/2006/vcard/ns#Individual>;
+    <http://www.w3.org/2006/vcard/ns#bday> "1990-06-11"^^<http://www.w3.org/2001/XMLSchema#date>;
+    <http://www.w3.org/2006/vcard/ns#fn> "Dr Alex Morgan Example Jr";
+    <http://www.w3.org/2006/vcard/ns#hasAddress> <https://pod.test/alice/integrations/google-contacts/contacts/Person/c101/index.ttl#addr-0>;
+    <http://www.w3.org/2006/vcard/ns#hasEmail> <https://pod.test/alice/integrations/google-contacts/contacts/Person/c101/index.ttl#email-0>, <https://pod.test/alice/integrations/google-contacts/contacts/Person/c101/index.ttl#email-1>, <https://pod.test/alice/integrations/google-contacts/contacts/Person/c101/index.ttl#email-2>;
+    <http://www.w3.org/2006/vcard/ns#hasName> <https://pod.test/alice/integrations/google-contacts/contacts/Person/c101/index.ttl#name>;
+    <http://www.w3.org/2006/vcard/ns#hasTelephone> <https://pod.test/alice/integrations/google-contacts/contacts/Person/c101/index.ttl#tel-0>, <https://pod.test/alice/integrations/google-contacts/contacts/Person/c101/index.ttl#tel-1>, <https://pod.test/alice/integrations/google-contacts/contacts/Person/c101/index.ttl#tel-2>;
+    <http://www.w3.org/2006/vcard/ns#inAddressBook> <https://pod.test/alice/integrations/google-contacts/contacts/index.ttl#this>;
+    <http://www.w3.org/2006/vcard/ns#organization-name> "Example Workshop";
+    <http://www.w3.org/2006/vcard/ns#role> "Volunteer coordinator";
+    <http://www.w3.org/2006/vcard/ns#title> "Engineer".
+<https://pod.test/alice/integrations/google-contacts/contacts/Person/c102/index.ttl#name> <http://www.w3.org/2006/vcard/ns#family-name> "Example";
+    <http://www.w3.org/2006/vcard/ns#given-name> "Sam".
+<https://pod.test/alice/integrations/google-contacts/contacts/Person/c102/index.ttl#this> a <http://www.w3.org/2006/vcard/ns#Individual>;
+    <http://www.w3.org/2006/vcard/ns#bday> "--02-29"^^<http://www.w3.org/2001/XMLSchema#gMonthDay>;
+    <http://www.w3.org/2006/vcard/ns#fn> "Sam Example";
+    <http://www.w3.org/2006/vcard/ns#hasName> <https://pod.test/alice/integrations/google-contacts/contacts/Person/c102/index.ttl#name>;
+    <http://www.w3.org/2006/vcard/ns#inAddressBook> <https://pod.test/alice/integrations/google-contacts/contacts/index.ttl#this>.

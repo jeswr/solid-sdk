@@ -54,21 +54,26 @@ describe("construction and features", () => {
       protocol: "solid",
       move: { state: "available", detail: { native: false } },
       patch: { state: "available" },
-      pagination: { state: "unavailable" },
+      // An authoritative description that omits ssd:Pagination leaves it unknown.
+      pagination: { state: "unknown" },
     });
     expect(storage.isWithinStorage(`${ROOT}x`)).toBe(true);
     expect(storage.isWithinStorage("https://other.example/x")).toBe(false);
   });
 
   test("LWS features follow the moveResource toggle", () => {
-    expect(lws().features.move.state).toBe("unavailable");
+    // Without lws:MoveResource the description is silent, so move is unknown, not unavailable.
+    expect(lws().features.move.state).toBe("unknown");
     expect(lws({ moveResource: true }).features.move).toMatchObject({
       state: "available",
       detail: { native: true, containers: true, preservesIdentifier: false },
     });
     expect(lws().features).toMatchObject({
       pagination: { state: "available" },
-      recursiveDelete: { state: "available" },
+      // Recursive delete is advertised only by an ssd:RecursiveDeleteService endpoint
+      // (POST {container}); the in-memory backend has none, so the row is unknown even
+      // though delete({ recursive: true }) works here.
+      recursiveDelete: { state: "unknown" },
     });
   });
 
