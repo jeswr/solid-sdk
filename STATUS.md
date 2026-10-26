@@ -131,3 +131,45 @@ output in this checkout; the dependency build and complete rerun above passed.
 Full gate logs: `/tmp/sst-ne8m-round2-gate.log` and
 `/tmp/sst-ne8m-round2-gate-full.log`. No dependencies or UI changed. Both review
 findings are resolved; no implementation work or open questions remain.
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+## Fix round 3 — ID3 unsynchronisation and linked artwork
+
+- `2862de61` — `fix: normalize ID3 tags and skip linked artwork`: de-unsynchronise
+  ID3v2.3 tag bodies before calling the pinned parser, clear the unsynchronisation
+  flag and rewrite the tag size. Preserve frame sizes, following audio/legacy
+  tags and caller-owned bytes. Handle consecutive leading tags. Select the first
+  embedded picture, skipping APIC URL entries (`-->`); return null for linked-only
+  artwork without fetching it.
+- Final documentation commit — `docs: record ID3 review fix validation` (this file,
+  committed last).
+
+Regression tests reproduced both review findings against the original wrapper
+(9 failures in the first regression run). The final suite passes 44 tests across
+two files with **100% metadata statements, branches, functions and lines**.
+Synthetic fixtures cover UTF-16 metadata, conflicting legacy values, escaped
+frame sizes, binary zero/FF sequences, tag/audio boundaries, consecutive tags,
+repeated reads without mutation, typed failures and linked/embedded artwork
+ordering in ID3v2.3 and ID3v2.4.
+
+Conservative input policy, as permitted by the final-round brief: unsynchronised
+ID3v2.3 extended headers reject with the pinned library's
+`UnexpectedFileContentError`; the pinned parser does not reliably account for
+their size. Invalid/truncated unsynchronised tag sizes reject with the same typed
+error. No parser upgrade, new dependency, UI or unrelated source change.
+
+| Command | Result |
+| --- | --- |
+| `pnpm --filter @jeswr/suite-ui run build` | PASS; generate existing dependency output |
+| `pnpm --filter @jeswr/app-suite run lint && pnpm --filter @jeswr/app-suite run build && pnpm --filter @jeswr/app-suite run typecheck && pnpm --filter @jeswr/app-suite run test` | PASS; production build and all 44 tests, 100% metadata coverage |
+| `pnpm run lint:root` | PASS, including all 74 contrast pairs |
+| `TURBO_SCM_BASE=fb563b151d1a4f20412812343b5046fa2827ac3e pnpm run gate` | PASS; 7/7 tasks |
+| `pnpm run gate:full` | FAIL; unrelated `@jeswr/unstorage-solid#build` npm bootstrap hits `EROFS` under `/home/runner/.npm/_cacache/tmp/`; 31 tasks succeeded before cancellation |
+| `roborev status` | Unavailable; command not found (exit 127) |
+
+Logs: `/tmp/sst-ne8m-round3-regressions.log`,
+`/tmp/sst-ne8m-round3-app-test.log`, `/tmp/sst-ne8m-round3-lint-root.log`,
+`/tmp/sst-ne8m-round3-gate.log`, `/tmp/sst-ne8m-round3-gate-full.log`.
+Both findings are resolved. No implementation work or open questions remain;
+full-workspace verification and automated review retain the environment blockers
+above. No push, PR, branch switch or remote fetch/merge was performed.
