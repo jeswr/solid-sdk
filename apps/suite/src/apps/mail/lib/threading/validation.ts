@@ -33,8 +33,9 @@ function messageId(value: string): void {
 }
 
 export function validateSubject(value: string): void {
+  // Only complete encoded words indicate raw headers; literal "=?" is valid decoded text.
   // biome-ignore lint/suspicious/noControlCharactersInRegex: Reject NUL in decoded headers.
-  if (typeof value !== "string" || /[\r\n\u0000]|=\?/u.test(value)) {
+  if (typeof value !== "string" || /[\r\n\u0000]|=\?[^?\s]+\?[bq]\?[^?\s]+\?=/iu.test(value)) {
     throw new ThreadingError("unsupported-subject");
   }
 }

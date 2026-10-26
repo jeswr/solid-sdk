@@ -47,8 +47,33 @@ describe("subject normalization", () => {
     ["[unfinished topic", "[unfinished topic"],
     ["Project [club]", "project [club]"],
     ["Preview: meeting", "preview: meeting"],
+    ["What does =? mean?", "what does =? mean?"],
+    ["=?", "=?"],
+    ["=?unfinished", "=?unfinished"],
+    ["What does =?UTF-8?Q? mean?", "what does =?utf-8?q? mean?"],
   ])("normalizes %j as %j", (input, expected) => {
     expect(normalizeSubject(input)).toBe(expected);
+  });
+
+  it("threads literal encoded-word markers without rejecting the mailbox", () => {
+    const original = { ...valid, subject: "What does =? mean?" };
+    const reply = {
+      ...valid,
+      id: "https://example.org/mail/message-2",
+      messageId: "<two@example.org>",
+      subject: "Re: What does =? mean?",
+      timestamp: 1,
+    };
+    const unrelated = {
+      ...valid,
+      id: "https://example.org/mail/message-3",
+      messageId: "<three@example.org>",
+    };
+    const threads = buildThreads([unrelated, reply, original]);
+    expect(threads).toHaveLength(2);
+    expect(threads[0]!.subject).toBe("what does =? mean?");
+    expect(threads[0]!.messages).toEqual([original, reply]);
+    expect(threads[1]!.messages).toEqual([unrelated]);
   });
 
   it.each([
@@ -57,6 +82,8 @@ describe("subject normalization", () => {
     "bad\r\nsubject",
     "bad\u0000subject",
     "=?UTF-8?B?UGxhbnM=?=",
+    "=?UTF-8?Q?Reading_plans?=",
+    "Re: =?utf-8?q?Reading_plans?= for Friday",
   ])("rejects undecoded/unsupported subjects %j", (subject) => {
     expect(() => normalizeSubject(subject as string)).toThrow(ThreadingError);
     rejects([{ ...valid, subject }], "unsupported-subject");
