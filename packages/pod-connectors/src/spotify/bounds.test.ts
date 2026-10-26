@@ -142,9 +142,68 @@ describe("Spotify source bounds", () => {
     }
   });
 
+  it.each([
+    false,
+    true,
+  ])("bounds cumulative streamed UTF-8 bytes before replacing collections (paginated: %s)", async (paginated) => {
+    const maxBytes = 512;
+    const track = { id: "replacement-track", name: "é".repeat(150) };
+    const first = JSON.stringify({
+      items: [{ track }],
+      ...(paginated ? { next: `${API}/me/tracks?limit=50&offset=1` } : {}),
+    });
+    const second = JSON.stringify({ items: paginated ? [{ track }] : [track] });
+    const encoder = new TextEncoder();
+    const bytes = encoder.encode(second);
+    // Each response fits; the combined UTF-8 data exceeds the run's capacity.
+    expect(encoder.encode(first).byteLength).toBeLessThan(maxBytes);
+    expect(bytes.byteLength).toBeLessThan(maxBytes);
+    expect(first.length + second.length).toBeLessThan(maxBytes);
+    expect(encoder.encode(first).byteLength + bytes.byteLength).toBeGreaterThan(maxBytes);
+    const cancel = vi.fn();
+    let offset = 0;
+    const streamed = new Response(
+      new ReadableStream(
+        {
+          pull(controller) {
+            if (offset >= bytes.byteLength) return controller.close();
+            controller.enqueue(bytes.subarray(offset, offset + 64));
+            offset += 64;
+          },
+          cancel,
+        },
+        { highWaterMark: 0 },
+      ),
+    );
+    const api = source("replacement", (url) => {
+      if (url.pathname === "/v1/me/tracks" && !url.searchParams.has("offset"))
+        return new Response(first);
+      if (url.pathname === (paginated ? "/v1/me/tracks" : "/v1/me/top/tracks")) return streamed;
+      return undefined;
+    });
+    await expectPreserved(api, { maxRequests: 100, maxItems: 100, maxBytes }, "data budget");
+    expect(api).toHaveBeenCalledTimes(2);
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(offset).toBeLessThan(bytes.byteLength);
+  });
+
   it("allows exact limits and creates a fresh budget for each run", async () => {
     const { podWriter } = await seeded();
-    const adapter = createSpotifyAdapter({ maxRequests: 12, maxItems: 11 });
+    const fixture = source("replacement");
+    let maxBytes = 0;
+    const measured: typeof fetch = async (...args) => {
+      const response = await fixture(...args);
+      maxBytes += (await response.clone().arrayBuffer()).byteLength;
+      return response;
+    };
+    await runImport({
+      adapter: spotifyAdapter,
+      mode: "live",
+      podWriter,
+      sourceAuth: { fetch: measured },
+    });
+    const limits = { maxRequests: 12, maxItems: 11, maxBytes };
+    const adapter = createSpotifyAdapter(limits);
     for (let run = 0; run < 2; run++) {
       const api = source("replacement");
       const report = await runImport({
@@ -157,6 +216,11 @@ describe("Spotify source bounds", () => {
       expect(report.state?.lastOutcome).toBe("success");
       expect(api).toHaveBeenCalledTimes(12);
     }
+    // Every response counts, including the profile, playlist contents and history.
+    const api = source("replacement");
+    await expectPreserved(api, { ...limits, maxBytes: maxBytes - 1 }, "data budget");
+    expect(api).toHaveBeenCalledTimes(12);
+    expect(String(api.mock.lastCall?.[0])).toContain("/me/player/recently-played?");
   });
 
   it.each([

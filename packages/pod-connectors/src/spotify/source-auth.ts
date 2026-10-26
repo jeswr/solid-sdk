@@ -1,9 +1,13 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { refuseRedirects } from "@jeswr/guarded-fetch";
+import { readJson } from "../core/budget.js";
 import { IntegrationAuthError } from "../core/errors.js";
 import { createSourceAuth } from "../core/import-runner.js";
 import type { SourceAuth, TokenSet } from "../core/types.js";
 import { spotifyAdapter } from "./adapter.js";
+
+const TOKEN_ENDPOINT = "https://accounts.spotify.com/api/token";
+const MAX_TOKEN_BYTES = 64 * 1024;
 
 /** Host-owned, memory-only Spotify PKCE session; retry one GET after a 401 refresh. */
 export function createSpotifySourceAuth(options: {
@@ -24,7 +28,7 @@ export function createSpotifySourceAuth(options: {
         "not-configured",
         "Spotify requires reauthorization.",
       );
-    const response = await transport("https://accounts.spotify.com/api/token", {
+    const response = await transport(TOKEN_ENDPOINT, {
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
@@ -35,7 +39,16 @@ export function createSpotifySourceAuth(options: {
     });
     if (!response.ok)
       throw new IntegrationAuthError("spotify", "exchange-failed", "Spotify token refresh failed.");
-    const json = (await response.json()) as {
+    const json = (await readJson(response, "spotify", TOKEN_ENDPOINT, MAX_TOKEN_BYTES).catch(
+      (cause: unknown) => {
+        throw new IntegrationAuthError(
+          "spotify",
+          "exchange-failed",
+          "Invalid Spotify token response.",
+          { cause },
+        );
+      },
+    )) as {
       access_token?: unknown;
       refresh_token?: unknown;
       expires_in?: unknown;

@@ -39,7 +39,7 @@ export async function spotifyJson<T>(
         url,
         status: res.status,
       });
-    return (await readJson(res, "spotify", url)) as T;
+    return (await readJson(res, "spotify", url, undefined, budget)) as T;
   }
 }
 

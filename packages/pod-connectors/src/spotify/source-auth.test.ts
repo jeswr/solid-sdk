@@ -83,12 +83,16 @@ describe("Spotify PKCE SourceAuth", () => {
     "missing",
     "empty",
     "null",
+    "invalid-json",
+    "empty-body",
   ])("fails closed on refresh failure %s", async (failure) => {
     const onToken = vi.fn();
     const transport = vi.fn<typeof fetch>(async (input) => {
       if (String(input) !== TOKEN) return response(401);
       if (typeof failure === "number")
         return response(failure, { error_description: "fixture-sensitive" });
+      if (failure === "invalid-json") return new Response("{");
+      if (failure === "empty-body") return new Response(null);
       return response(
         200,
         failure === "missing" ? {} : failure === "null" ? null : { access_token: " " },
@@ -100,8 +104,71 @@ describe("Spotify PKCE SourceAuth", () => {
       fetch: transport,
       onToken,
     });
-    await expect(auth.fetch(API)).rejects.toThrow();
+    await expect(auth.fetch(API)).rejects.toMatchObject({
+      name: "IntegrationAuthError",
+      adapterId: "spotify",
+      reason: "exchange-failed",
+    });
     expect(onToken).not.toHaveBeenCalled();
+  });
+
+  it.each([true, false])("caps refresh responses at 64 KiB (declared: %s)", async (declared) => {
+    const cap = 64 * 1024;
+    const bytes = new TextEncoder().encode(
+      JSON.stringify({ access_token: "fixture-new" }).padEnd(cap + 1, " "),
+    );
+    const cancel = vi.fn();
+    let offset = 0;
+    const pull = vi.fn((controller: ReadableStreamDefaultController<Uint8Array>) => {
+      if (offset >= bytes.byteLength) return controller.close();
+      controller.enqueue(bytes.subarray(offset, offset + 1024));
+      offset += 1024;
+    });
+    const oversized = new Response(new ReadableStream({ pull, cancel }, { highWaterMark: 0 }), {
+      headers: declared ? { "content-length": String(bytes.byteLength) } : undefined,
+    });
+    const onToken = vi.fn();
+    const transport = vi.fn<typeof fetch>(async (input) =>
+      String(input) === TOKEN ? oversized : response(401),
+    );
+    const auth = createSpotifySourceAuth({
+      clientId: "fixture-client",
+      token,
+      fetch: transport,
+      onToken,
+    });
+    await expect(auth.fetch(API)).rejects.toMatchObject({
+      name: "IntegrationAuthError",
+      adapterId: "spotify",
+      reason: "exchange-failed",
+      cause: { name: "IntegrationSyncError", message: expect.stringContaining("too large") },
+    });
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(pull).toHaveBeenCalledTimes(declared ? 0 : cap / 1024 + 1);
+    expect(transport).toHaveBeenCalledTimes(2);
+    expect(onToken).not.toHaveBeenCalled();
+    expect(token.accessToken).toBe("fixture-old");
+  });
+
+  it("accepts a refresh response at exactly 64 KiB", async () => {
+    const onToken = vi.fn();
+    const transport = vi.fn<typeof fetch>(async (input, init) => {
+      if (String(input) === TOKEN)
+        return new Response(JSON.stringify({ access_token: "fixture-new" }).padEnd(64 * 1024, " "));
+      return response(
+        new Headers(init?.headers).get("authorization") === "Bearer fixture-old" ? 401 : 200,
+      );
+    });
+    const auth = createSpotifySourceAuth({
+      clientId: "fixture-client",
+      token,
+      fetch: transport,
+      onToken,
+    });
+    expect((await auth.fetch(API)).status).toBe(200);
+    expect(onToken).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ accessToken: "fixture-new" }),
+    );
   });
 
   it("requires a refresh token and never retries mutating calls", async () => {

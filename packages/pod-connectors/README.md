@@ -131,7 +131,8 @@ and played-at timestamp in `music/recently-played.ttl`.
 
 Spotify validates every page before importing its items and uses the shared 32 MiB JSON
 response cap and per-run budget (20,000 source requests, including rate-limit retries, and
-2,000,000 page items, including skipped entries). `createSpotifyAdapter(limits)` from
+2,000,000 page items, including skipped entries, plus 512 MiB of cumulative response bytes
+counted as they stream). `createSpotifyAdapter(limits)` from
 `./adapters/spotify` accepts custom `RunLimits`. Collections are written only after all
 source fetching succeeds; malformed responses and exceeded limits retain existing snapshots
 and the previous checkpoint. Larger imports fail for the host to handle; this adapter does
@@ -154,7 +155,9 @@ const sourceAuth = createSpotifySourceAuth({
 
 Only `api.spotify.com` receives bearer credentials. Refresh goes to Spotify's fixed token
 endpoint without a client secret or API bearer header; redirects are refused. Concurrent
-401s share one refresh. GET retries are limited to one refresh per request. API 429s wait
+401s share one refresh. Refresh responses are capped at 64 KiB; oversized or invalid responses
+fail with an authentication error without updating the in-memory token. GET retries are
+limited to one refresh per request. API 429s wait
 for `Retry-After` (seconds or HTTP date), with at most three retries. Playlist item 403/404
 responses retain the playlist metadata and count its inaccessible contents once in `skipped`;
 other failures reach the host without advancing its checkpoint. Unusable or oversized delays
