@@ -510,6 +510,21 @@ describe("health FHIR R4 collection export", () => {
     expectCode(() => build(records(), { ...options(), clock: () => now }), "INVALID_OPTIONS");
   });
 
+  it("uses the clock's Date value and wraps invalid Date receivers", () => {
+    const now = new Date("2026-10-26T12:00:00Z");
+    now.toISOString = () => {
+      throw new Error("Must not use overridden formatting");
+    };
+    expect(buildFhirBundle(records(), { ...options(), clock: () => now }).timestamp).toBe(
+      "2026-10-26T12:00:00.000Z",
+    );
+    const proxy = new Proxy(new Date(), {});
+    expectCode(
+      () => buildFhirBundle(records(), { ...options(), clock: () => proxy }),
+      "INVALID_OPTIONS",
+    );
+  });
+
   it.each([
     undefined,
     "not-a-uuid",

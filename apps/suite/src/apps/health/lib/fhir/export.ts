@@ -164,18 +164,15 @@ export function buildFhirBundle(input: HealthRecords, options: FhirExportOptions
       Date.parse(effective(a)) - Date.parse(effective(b)) ||
       compare(a.id, b.id),
   );
-  let now: unknown;
+  let timestamp: string;
   try {
-    now = options.clock();
+    const now: unknown = options.clock();
+    requireValid(now instanceof Date, "INVALID_OPTIONS", "Clock must return a Date");
+    // Format the Date value itself, without invoking callback-supplied methods.
+    timestamp = Date.prototype.toISOString.call(now);
   } catch {
-    throw new FhirExportError("INVALID_OPTIONS", "Clock failed");
+    throw new FhirExportError("INVALID_OPTIONS", "Clock must return a valid Date");
   }
-  requireValid(
-    now instanceof Date && Number.isFinite(now.getTime()),
-    "INVALID_OPTIONS",
-    "Clock must return a valid Date",
-  );
-  const timestamp = now.toISOString();
   requireValid(date(timestamp, false), "INVALID_OPTIONS", "Clock is outside the FHIR date range");
   const urls = new Set<string>();
   const entry = resources.map((resource) => {
