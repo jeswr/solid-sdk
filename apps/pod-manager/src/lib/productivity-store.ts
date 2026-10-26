@@ -93,6 +93,7 @@ export class ProductivityStore<T> {
     private readonly podRoot: string,
     private readonly webId: string,
     private readonly fetchImpl?: typeof fetch,
+    private readonly profileDocumentUrl?: string,
   ) {
     this.containerUrl = new URL(cfg.containerSlug, podRoot).toString();
   }
@@ -259,6 +260,7 @@ export class ProductivityStore<T> {
   async ensureRegistered(): Promise<void> {
     await ensureTypeRegistrations({
       webId: this.webId,
+      profileDocumentUrl: this.profileDocumentUrl,
       podRoot: this.podRoot,
       registrations: [{ forClass: this.cfg.forClass, container: this.containerUrl }],
       fetchImpl: this.fetchImpl,
@@ -269,9 +271,9 @@ export class ProductivityStore<T> {
 /** Build a typed store for an app, bound to the active pod + WebID. */
 export function createStore<T>(
   cfg: StoreConfig<T>,
-  opts: { podRoot: string; webId: string; fetchImpl?: typeof fetch },
+  opts: { podRoot: string; webId: string; profileDocumentUrl?: string; fetchImpl?: typeof fetch },
 ): ProductivityStore<T> {
-  return new ProductivityStore(cfg, opts.podRoot, opts.webId, opts.fetchImpl);
+  return new ProductivityStore(cfg, opts.podRoot, opts.webId, opts.fetchImpl, opts.profileDocumentUrl);
 }
 
 /**
