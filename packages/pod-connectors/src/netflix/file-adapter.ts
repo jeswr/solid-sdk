@@ -1,3 +1,5 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /**
  * Netflix → Media (Tier-C file import).
  *
@@ -17,6 +19,7 @@ import type { FileImportAdapter, FileImportContext, ImportFile } from "../core/f
 import { recordFragment } from "../core/slug.js";
 import type { IntegrationMetadata } from "../core/types.js";
 import { CLASSES, WatchAction } from "../core/vocab.js";
+import { vocabMap } from "./vocab-map.js";
 
 const ID = "netflix";
 
@@ -32,6 +35,7 @@ const metadata: IntegrationMetadata = {
 };
 
 export const netflixFileAdapter: FileImportAdapter = {
+  vocabMap,
   metadata,
   accept: ".csv,text/csv",
   fileHint:

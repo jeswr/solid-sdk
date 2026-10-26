@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /** biome-ignore-all lint/style/noNonNullAssertion: fixtures guarantee the referenced entries. */
 import { readFile } from "node:fs/promises";
 import { parseRdf } from "@jeswr/fetch-rdf";
@@ -13,6 +14,7 @@ import {
   parseNanopublications,
   serializeNanopublications,
   type TemporalValue,
+  UnsupportedLiteralCharacterError,
 } from "../src/index.js";
 import { graph, NS } from "../src/rdf.js";
 import { exampleBuildOptions } from "../src/testing.js";
@@ -53,6 +55,50 @@ const fixtures: {
     graph: string;
   }[];
 } = JSON.parse(await readFile(new URL("./fixtures/temporal.json", import.meta.url), "utf8"));
+
+const review: {
+  sourceDates: {
+    kind: "document" | "email";
+    value: string;
+    normalized: string;
+    datatype: string;
+  }[];
+} = JSON.parse(await readFile(new URL("./fixtures/review-parity.json", import.meta.url), "utf8"));
+
+it.each(
+  review.sourceDates,
+)("matches the reference builder's $kind source date: $value", async (fixture) => {
+  const input = batch(assertion("2026-01-01T12:00:00Z"));
+  const source = "https://example.org/source";
+  input.sources = [{ id: "source", kind: fixture.kind, url: source, date: fixture.value }];
+  // Check both nanopub batches and audit-only empty batches.
+  for (const claims of [input.claims, []]) {
+    const built = await buildNanopublications({ ...input, claims }, options);
+    const parsed = await parseRdf(await serializeNanopublications(built), "application/trig");
+    for (const dataset of [built.dataset, parsed]) {
+      const dates = [
+        ...dataset.match(df.namedNode(source), df.namedNode(`${NS.schema}dateCreated`)),
+      ];
+      expect(dates).toHaveLength(1);
+      expect(dates[0]!.object).toEqual(
+        df.literal(fixture.normalized, df.namedNode(fixture.datatype)),
+      );
+    }
+  }
+});
+
+it.each([
+  "document",
+  "email",
+] as const)("rejects excluded literal characters in %s source dates with a typed error", async (kind) => {
+  const input = batch(assertion("2026-01-01T12:00:00Z"));
+  input.sources = [
+    { id: "source", kind, url: "https://example.org/source", date: "2026-01-01\u2028" },
+  ];
+  await expect(buildNanopublications(input, options)).rejects.toThrow(
+    UnsupportedLiteralCharacterError,
+  );
+});
 
 it.each(fixtures.cases)("matches the RDFlib 7.1.4 temporal oracle: $name", async (fixture) => {
   const expected = [...(await parseRdf(fixture.graph, "application/n-triples"))];
