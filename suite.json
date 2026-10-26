@@ -73,6 +73,7 @@
     "@jeswr/mcp-oauth",
     "@jeswr/agent-session-capture",
     "@jeswr/suite-vocab",
+    "@jeswr/pod-connectors",
     "@jeswr/fetch-rdf"
   ],
   "applications": [

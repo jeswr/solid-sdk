@@ -2,6 +2,11 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 
 ## Integrations (Connect sources)
 
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+The adapters now live in `@jeswr/pod-connectors`. Thin shims under
+`src/lib/integrations` preserve app import paths; its registry injects the literal
+Next.js environment values and the hooks create Pod/source ports at import time.
+
 The `/connect` catalog ships 30 apps (see `docs/integrations-catalog.md`); the 8 Tier-A
 adapters (Spotify, GitHub, Strava, Reddit, Discord, Twitch, Notion, Dropbox) run in
 **demo mode** (fixture data, honestly labelled) until configured. To take one live, set
