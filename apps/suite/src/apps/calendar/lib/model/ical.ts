@@ -2,9 +2,9 @@
 // AUTHORED-BY Codex GPT-6
 // Calendar-only port of Pod Manager ical.ts: TEXT escaping, unfolding, stable UID and UTF-8 folding.
 import { RRule } from "rrule";
-import { fromWallClock, wallClock } from "./recurrence";
+import { fromWallClock } from "./recurrence";
 import type { CalendarDate, CalendarEvent, RecurrenceRule, Reminder, Weekday } from "./types";
-import { asDate, validateEvent, validateRule } from "./validation";
+import { asDate, durationMilliseconds, validateEvent, validateRule } from "./validation";
 
 function escapeText(value: string): string {
   return value
@@ -122,8 +122,13 @@ export function exportICal(opts: {
   const prop = (name: string, value: string) => lines.push(`${name}:${escapeText(value)}`);
   const dateProp = (name: string, value: CalendarDate) => {
     if (typeof value === "string") lines.push(`${name};VALUE=DATE:${formatICalDate(value)}`);
-    else if (zone === "UTC") lines.push(`${name}:${formatICalDate(value)}`);
-    else lines.push(`${name};TZID=${zone}:${formatICalDate(wallClock(value, zone)).slice(0, -1)}`);
+    else {
+      // We cannot supply VTIMEZONE definitions or encode later overlap instants
+      // in local ICS time. Reject instead of changing a named-zone schedule.
+      if (zone !== "UTC")
+        throw new TypeError("Named-zone ICS export requires unsupported VTIMEZONE definitions");
+      lines.push(`${name}:${formatICalDate(value)}`);
+    }
   };
   for (const item of opts.events) {
     const { data: event, url } = "data" in item ? item : { data: item, url: undefined };
@@ -143,13 +148,24 @@ export function exportICal(opts: {
       )
         throw new TypeError("ICS DTSTART and UNTIL must use the same date kind");
       lines.push(`RRULE:${ruleToICal(event.recurrence)}`);
-      for (const date of event.recurrence.exceptDate ?? []) dateProp("EXDATE", date);
+      for (const date of event.recurrence.exceptDate ?? []) {
+        if (typeof date !== typeof event.start)
+          throw new TypeError("ICS DTSTART and EXDATE must use the same date kind");
+        dateProp("EXDATE", date);
+      }
     }
     for (const reminder of event.reminders ?? []) {
       lines.push("BEGIN:VALARM", "ACTION:DISPLAY");
       prop("DESCRIPTION", event.name);
-      if (reminder.triggerOffset !== undefined) lines.push(`TRIGGER:${reminder.triggerOffset}`);
-      else lines.push(`TRIGGER;VALUE=DATE-TIME:${formatICalDate(reminder.triggerTime as Date)}`);
+      if (reminder.triggerOffset !== undefined) {
+        const offset = reminder.triggerOffset;
+        const milliseconds = durationMilliseconds(offset);
+        // Model days/weeks are fixed lengths; ICS days/weeks are nominal.
+        const duration = /[DW]/.test(offset)
+          ? `${milliseconds < 0 ? "-" : ""}PT${Math.abs(milliseconds) / 1000}S`
+          : offset;
+        lines.push(`TRIGGER:${duration}`);
+      } else lines.push(`TRIGGER;VALUE=DATE-TIME:${formatICalDate(reminder.triggerTime as Date)}`);
       lines.push("END:VALARM");
     }
     lines.push("END:VEVENT");
@@ -282,6 +298,8 @@ function parseEventProperties(
       if (typeof value === "string") throw new TypeError("Absolute alarm needs an instant");
       return { triggerTime: value };
     }
+    if (/[DW]/.test(trigger.value))
+      throw new TypeError("Unsupported nominal day/week ICS alarm duration");
     return { triggerOffset: trigger.value };
   });
   const end = get("DTEND");

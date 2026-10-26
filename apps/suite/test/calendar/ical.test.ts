@@ -4,6 +4,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   type CalendarEvent,
+  computeFireTimes,
   expandEvent,
   exportICal,
   foldContentLine,
@@ -95,7 +96,7 @@ describe("ICS compatibility and validation", () => {
     expect(imported.skipped).toBe(1);
     expect(imported.warnings).toEqual(["Unsupported ICS event property"]);
   });
-  it.each(["UTC", "Europe/London"])("rejects mixed DTSTART/UNTIL date kinds in %s", (timeZone) => {
+  it.each(["UTC"])("rejects mixed DTSTART/UNTIL date kinds in %s", (timeZone) => {
     for (const [start, until] of [
       [new Date("2026-03-01T09:00Z"), "2026-03-03"],
       ["2026-03-01", new Date("2026-03-03T09:00Z")],
@@ -108,10 +109,7 @@ describe("ICS compatibility and validation", () => {
       ).toThrow("ICS DTSTART and UNTIL must use the same date kind");
     }
   });
-  it.each([
-    "UTC",
-    "Europe/London",
-  ])("round-trips matching DTSTART/UNTIL kinds in %s", (timeZone) => {
+  it.each(["UTC"])("round-trips matching DTSTART/UNTIL kinds in %s", (timeZone) => {
     for (const [start, until] of [
       [new Date("2026-07-01T08:00Z"), new Date("2026-07-03T07:30Z")],
       ["2026-07-01", "2026-07-03"],
@@ -137,8 +135,8 @@ describe("ICS compatibility and validation", () => {
     const imported = importICal(source);
     expect(imported.events[0]?.start).toEqual(new Date("2026-07-01T08:00Z"));
     expect(imported.timeZones).toEqual(["Europe/London"]);
-    expect(importICal(exportICal({ events: imported.events, timeZone: "Europe/London" }))).toEqual(
-      imported,
+    expect(() => exportICal({ events: imported.events, timeZone: "Europe/London" })).toThrow(
+      "VTIMEZONE",
     );
     expect(parseICalDate("20260701T090000", "Europe/London")).toEqual(
       new Date("2026-07-01T08:00Z"),
@@ -146,6 +144,86 @@ describe("ICS compatibility and validation", () => {
     expect(
       importICal(source.replace(/;TZID="?Europe\/London"?/g, ""), "Europe/London").events[0]?.start,
     ).toEqual(new Date("2026-07-01T08:00Z"));
+  });
+  it.each([
+    undefined,
+    { frequency: "DAILY", count: 2 } as const,
+  ])("rejects named-zone export without losing a later overlap start (%j)", (recurrence) => {
+    const event: CalendarEvent = {
+      name: "Repeated hour",
+      start: new Date("2026-10-25T01:30Z"),
+      end: new Date("2026-10-25T02:30Z"),
+      recurrence,
+    };
+    expect(() => exportICal({ events: [event], timeZone: "Europe/London" })).toThrow("VTIMEZONE");
+    const exported = exportICal({ events: [event], timeZone: "UTC" });
+    expect(exported).toContain("DTSTART:20261025T013000Z");
+    expect(exported).not.toContain("TZID");
+    expect(importICal(exported).events[0]).toMatchObject({
+      start: event.start,
+      end: event.end,
+      recurrence,
+    });
+  });
+  it("rejects mismatched exception kinds rather than weakening civil exclusions", () => {
+    for (const [start, exceptDate] of [
+      [new Date("2026-03-01T09:00Z"), "2026-03-02"],
+      ["2026-03-01", new Date("2026-03-02T09:00Z")],
+    ] as const) {
+      expect(() =>
+        exportICal({
+          events: [
+            {
+              name: "Mixed exception",
+              start,
+              recurrence: { frequency: "DAILY", exceptDate: [exceptDate] },
+            },
+          ],
+        }),
+      ).toThrow("ICS DTSTART and EXDATE must use the same date kind");
+    }
+    const event: CalendarEvent = {
+      name: "Timed exception",
+      start: new Date("2026-03-01T09:00Z"),
+      recurrence: { frequency: "DAILY", count: 3, exceptDate: [new Date("2026-03-02T09:00Z")] },
+    };
+    const roundtrip = importICal(exportICal({ events: [event] })).events[0] as CalendarEvent;
+    expect(
+      expandEvent(roundtrip, new Date("2026-03-01Z"), new Date("2026-03-05Z")).map((e) => e.start),
+    ).toEqual([event.start, new Date("2026-03-03T09:00Z")]);
+  });
+  it.each([
+    "-P1D",
+    "-P1W",
+    "P1DT1H",
+    "P0D",
+  ])("reports unsupported nominal alarm %s across DST", (offset) => {
+    const source = ics(`BEGIN:VALARM\nACTION:DISPLAY\nTRIGGER:${offset}\nEND:VALARM`).replace(
+      "DTSTART:20260301T090000Z",
+      "DTSTART;TZID=America/New_York:20260308T090000",
+    );
+    const imported = importICal(source);
+    expect(imported.events).toEqual([]);
+    expect(imported.skipped).toBe(1);
+    expect(imported.warnings).toEqual(["Unsupported nominal day/week ICS alarm duration"]);
+  });
+  it.each([
+    "-P1D",
+    "-P1W",
+    "P1DT1H1M1S",
+    "P0D",
+    "-PT24H",
+  ])("exports fixed offset %s in exact time units", (triggerOffset) => {
+    const event: CalendarEvent = {
+      name: "Fixed alarm",
+      start: new Date("2026-03-08T13:00Z"),
+      reminders: [{ triggerOffset }],
+    };
+    const exported = exportICal({ events: [event] });
+    expect(exported).toMatch(/TRIGGER:-?PT[0-9HMS]+\r\n/);
+    const imported = importICal(exported);
+    expect(imported.warnings).toEqual([]);
+    expect(computeFireTimes(imported.events[0] as CalendarEvent)).toEqual(computeFireTimes(event));
   });
   it("exports stable source-based UIDs, escapes TEXT, and folds by UTF-8 octets", () => {
     const e: CalendarEvent = {
