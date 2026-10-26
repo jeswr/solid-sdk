@@ -11,6 +11,7 @@ export default defineConfig({
         "src/apps/sheets/lib/model/**/*.ts",
         "src/apps/photos/lib/library/**/*.ts",
         "src/apps/docs/lib/diff/**/*.ts",
+        "src/apps/docs/lib/find/**/*.ts",
         "src/apps/tasks/lib/quickadd/**/*.ts",
         "src/apps/music/lib/metadata/**/*.ts",
         "src/apps/contacts/lib/vcard/**/*.ts",
