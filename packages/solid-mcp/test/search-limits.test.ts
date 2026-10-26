@@ -43,6 +43,123 @@ describe("search fetch cancellation", () => {
 });
 
 describe("one bounded search across discovery and scanning", () => {
+  it.each([
+    "profile",
+    "index",
+    "container",
+    "literal",
+  ])("skips excessive inline context expansion in the search %s read", async (stage) => {
+    const note = `${POD}note.ttl`;
+    const context = {
+      p: `https://example.org/${"long".repeat(4096)}/`,
+      ...Object.fromEntries(Array.from({ length: 100 }, (_, i) => [`p${i}`, "p:x"])),
+    };
+    const documents = {
+      profile: { "@id": WEBID, [`${SOLID}publicTypeIndex`]: { "@id": INDEX } },
+      index: { "@id": `${INDEX}#r`, [`${SOLID}instance`]: { "@id": note } },
+      container: { "@id": POD, "http://www.w3.org/ns/ldp#contains": { "@id": note } },
+      literal: { "@id": note, "https://schema.org/text": "avocado" },
+    };
+    const resource = (name: keyof typeof documents) => ({
+      contentType: "application/ld+json",
+      body: JSON.stringify({
+        ...(stage === name ? { "@context": context } : {}),
+        ...documents[name],
+      }),
+    });
+    const pod = makeFakePod({
+      [WEBID]: resource("profile"),
+      [INDEX]: resource("index"),
+      [POD]:
+        stage === "container"
+          ? resource("container")
+          : { contentType: "text/turtle", body: containerTurtle(POD, []) },
+      [note]: resource("literal"),
+    });
+    const fetch = vi.fn(pod.fetch);
+    expect(
+      await search(
+        { fetch, podRoot: POD, ...(stage === "container" ? {} : { webId: WEBID }) },
+        "avocado",
+      ),
+    ).toEqual([]);
+    expect(fetch.mock.calls.map(([url]) => url)).toEqual(
+      stage === "profile"
+        ? [WEBID, POD]
+        : stage === "index"
+          ? [WEBID, INDEX, POD]
+          : stage === "container"
+            ? [POD]
+            : [WEBID, INDEX, note, POD],
+    );
+  });
+
+  it.each([
+    "container",
+    "index",
+    "literal",
+  ])("follows JSON-LD redirects before reading any body during %s search", async (stage) => {
+    const note = `${POD}note.ttl`;
+    const target = stage === "container" ? POD : stage === "index" ? INDEX : note;
+    const finalUrl = `${POD}actual/${stage}`;
+    for (const [status, body] of [
+      [301, ""],
+      [302, "invalid JSON"],
+      [303, "x".repeat(1024 * 1024 + 1)],
+      [307, '{"@context":"https://evil.example/context"}'],
+      [308, null],
+    ] as const) {
+      const cancel = vi.fn();
+      const redirect = new Response(
+        body === null ? new ReadableStream({ cancel }, { highWaterMark: 0 }) : body,
+        {
+          status,
+          headers: { location: finalUrl, "content-type": "application/ld+json" },
+        },
+      );
+      if (!redirect.body) throw new Error("Expected redirect fixture body");
+      const read = vi.spyOn(redirect.body, "getReader");
+      const pod = makeFakePod({
+        [WEBID]: {
+          contentType: "text/turtle",
+          body: `<${WEBID}> <${SOLID}publicTypeIndex> <${INDEX}>.`,
+        },
+        [INDEX]: { contentType: "text/turtle", body: `<#r> <${SOLID}instance> <${note}>.` },
+        [POD]: { contentType: "text/turtle", body: containerTurtle(POD, []) },
+        [note]: { contentType: "text/turtle", body: '<> <https://schema.org/text> "avocado".' },
+        [finalUrl]: {
+          contentType: "application/ld+json",
+          body: JSON.stringify(
+            stage === "container"
+              ? { "@id": POD, "http://www.w3.org/ns/ldp#contains": { "@id": note } }
+              : stage === "index"
+                ? { "@id": `${finalUrl}#r`, [`${SOLID}instance`]: { "@id": note } }
+                : { "@id": note, "https://schema.org/text": "avocado" },
+          ),
+        },
+      });
+      const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) =>
+        String(input) === target ? redirect : pod.fetch(input, init),
+      );
+      const hits = await search(
+        { fetch, podRoot: POD, ...(stage === "container" ? {} : { webId: WEBID }) },
+        "avocado",
+        { maxTimeMs: 500 },
+      );
+      expect(hits.map((hit) => hit.url)).toEqual([note]);
+      expect(read).not.toHaveBeenCalled();
+      expect(redirect.body?.locked).toBe(false);
+      if (body === null) expect(cancel).toHaveBeenCalledOnce();
+      expect(fetch.mock.calls.map(([url]) => url)).toEqual(
+        stage === "container"
+          ? [POD, finalUrl, note]
+          : stage === "index"
+            ? [WEBID, INDEX, finalUrl, note, POD]
+            : [WEBID, INDEX, note, finalUrl, POD],
+      );
+    }
+  });
+
   it("finds memory notes and RDF chat titles through Type Index instances", async () => {
     const note = `${POD}private/memory/note.ttl`;
     const chat = `${POD}private/chats/title.ttl`;

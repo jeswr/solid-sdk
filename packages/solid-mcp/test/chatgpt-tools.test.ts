@@ -397,6 +397,20 @@ describe("fetch representations and byte cap", () => {
     expect(result.metadata.truncated).toBe(true);
   });
 
+  it("marks unused inline context expansion as truncated", async () => {
+    const id = `${POD}data`;
+    const context = {
+      p: `https://example.org/${"long".repeat(4096)}/`,
+      ...Object.fromEntries(Array.from({ length: 100 }, (_, i) => [`p${i}`, "p:x"])),
+    };
+    const body = JSON.stringify({ "@context": context });
+    expect(Buffer.byteLength(body)).toBeLessThan(CAP);
+    const pod = makeFakePod({ [id]: { contentType: "application/ld+json", body } });
+    const result = await fetchDocument({ fetch: pod.fetch, podRoot: POD }, id);
+    expect(result.text).toBe("");
+    expect(result.metadata.truncated).toBe(true);
+  });
+
   it.each([401, 403, 404, 500])("fails closed on HTTP %s", async (status) => {
     const pod = makeFakePod({
       [`${POD}data`]: { contentType: "text/plain", body: "private", status },

@@ -5,6 +5,7 @@ import { RdfFetchError, SUPPORTED_RDF_MEDIA_TYPES } from "@jeswr/fetch-rdf";
 import type { DataFactory as RdfFactory, Term } from "@rdfjs/types";
 import { NamedGraphDataset } from "@rdfjs/wrapper";
 import { JsonLdParser } from "jsonld-streaming-parser";
+import type { ParsingContext } from "jsonld-streaming-parser/lib/ParsingContext.js";
 import { DataFactory, Store, StreamParser, Writer } from "n3";
 import {
   decodePrefix,
@@ -40,28 +41,23 @@ function termBytes(term: Term, depth = 0): number {
 }
 
 /** Check expanded terms before constructing each quad, including duplicates. */
-function budgetedFactory(): RdfFactory {
+function budgetedFactory(charge: (bytes: number) => void): RdfFactory {
   let quads = 0;
   let bytes = 0;
-  let createdBytes = 0;
-  function charge(value: string): void {
-    createdBytes += Buffer.byteLength(value);
-    if (createdBytes > MAX_CONTENT_BYTES) throw new RdfLimitError();
-  }
   return {
     ...DataFactory,
     // Also bound expanded declarations and terms that never reach a quad.
     namedNode<Iri extends string = string>(value: Iri) {
-      charge(value);
+      charge(Buffer.byteLength(value));
       return DataFactory.namedNode(value);
     },
     blankNode(value) {
-      if (value) charge(value);
+      if (value) charge(Buffer.byteLength(value));
       return DataFactory.blankNode(value);
     },
     // JSON-LD's factory calls use null for an absent datatype/language.
     literal(value, languageOrDatatype) {
-      charge(value);
+      charge(Buffer.byteLength(value));
       // N3 2 supports directional languages; @types/n3 still omits that overload.
       return (DataFactory.literal as RdfFactory["literal"])(value, languageOrDatatype ?? undefined);
     },
@@ -70,6 +66,81 @@ function budgetedFactory(): RdfFactory {
       if (++quads > MAX_RDF_QUADS || bytes > MAX_CONTENT_BYTES) throw new RdfLimitError();
       return DataFactory.quad(subject, predicate, object, graph);
     },
+  };
+}
+
+/** Context normalization never calls the RDF factory. Account for it separately. */
+function budgetJsonLdContexts(parser: JsonLdParser, charge: (bytes: number) => void): void {
+  // Version 5 has no context-parser injection option. Keep this instance-local
+  // adapter at the parser boundary; never patch shared library prototypes.
+  const contextParser = (parser as unknown as { parsingContext: ParsingContext }).parsingContext
+    .contextParser;
+  const stringBytes = (value: unknown) =>
+    typeof value === "string" ? Buffer.byteLength(value) : 0;
+  function chargeContext(value: unknown, depth = 0): void {
+    if (depth > 64) {
+      charge(MAX_CONTENT_BYTES + 1);
+      return;
+    }
+    if (typeof value === "string") charge(stringBytes(value));
+    else if (value && typeof value === "object") {
+      for (const [key, child] of Object.entries(value)) {
+        charge(stringBytes(key));
+        chargeContext(child, depth + 1);
+      }
+    }
+  }
+  type Context = Parameters<typeof contextParser.expandPrefixedTerms>[0];
+  function expansionSize(context: ReturnType<Context["getContextRaw"]>): number {
+    let maximum = 0;
+    for (const value of Object.values(context)) {
+      maximum = Math.max(maximum, stringBytes(value), stringBytes(value?.["@id"]));
+    }
+    // Covers prefix concatenation and relative @vocab resolution through @base.
+    return maximum + stringBytes(context["@base"]) + stringBytes(context["@vocab"]);
+  }
+  const parse = contextParser.parse.bind(contextParser);
+  contextParser.parse = (...args) => {
+    // Charge copies/inheritance before the normalizer clones or retains them.
+    chargeContext(args[0]);
+    chargeContext(args[1]?.parentContext);
+    return parse(...args);
+  };
+  const applyBase = contextParser.applyBaseEntry.bind(contextParser);
+  contextParser.applyBaseEntry = (context, options, inherit) => {
+    charge(
+      stringBytes(context?.["@base"]) +
+        stringBytes(options.parentContext?.["@base"]) +
+        stringBytes(options.baseIRI),
+    );
+    return applyBase(context, options, inherit);
+  };
+  const inner = contextParser.parseInnerContexts.bind(contextParser);
+  contextParser.parseInnerContexts = (context, ...args) => {
+    // @vocab can expand before expandPrefixedTerms is called, including arrays
+    // that concatenate a new relative vocab with the inherited vocabulary.
+    if (typeof context["@vocab"] === "string") {
+      charge(expansionSize(context) + stringBytes(context["@vocab"]));
+    }
+    return inner(context, ...args);
+  };
+  const expand = contextParser.expandPrefixedTerms.bind(contextParser);
+  contextParser.expandPrefixedTerms = (context, ...args) => {
+    let maximum = expansionSize(context.getContextRaw());
+    const expandTerm = context.expandTerm.bind(context);
+    context.expandTerm = (term, ...options) => {
+      // Reserve a conservative UTF-8 upper bound BEFORE concatenating. Update
+      // it on every step so chained prefixes cannot grow unchecked.
+      charge(maximum + stringBytes(term));
+      const result = expandTerm(term, ...options);
+      maximum = Math.max(maximum, stringBytes(result));
+      return result;
+    };
+    try {
+      expand(context, ...args);
+    } finally {
+      context.expandTerm = expandTerm;
+    }
   };
 }
 
@@ -86,11 +157,25 @@ export async function parseBoundedRdf(source: string, contentType: string, baseI
   const input = Buffer.from(
     format === "application/ld+json" ? normalizeLocalJsonLd(source) : source,
   );
-  const factory = budgetedFactory();
+  let allocatedBytes = 0;
+  const charge = (bytes: number) => {
+    allocatedBytes += bytes;
+    if (allocatedBytes > MAX_CONTENT_BYTES) throw new RdfLimitError();
+  };
+  const factory = budgetedFactory(charge);
   const parser =
     format === "application/ld+json"
-      ? new JsonLdParser({ baseIRI, dataFactory: factory })
+      ? new JsonLdParser({
+          baseIRI,
+          dataFactory: factory,
+          documentLoader: {
+            async load() {
+              throw new Error("Remote JSON-LD contexts are disabled (SSRF guard).");
+            },
+          },
+        })
       : new StreamParser({ format, baseIRI, factory });
+  if (parser instanceof JsonLdParser) budgetJsonLdContexts(parser, charge);
   const dataset = new Store();
   // Small chunks keep parser queues bounded as well as the retained dataset.
   function* chunks() {
@@ -98,17 +183,23 @@ export async function parseBoundedRdf(source: string, contentType: string, baseI
       yield input.subarray(offset, offset + 4096);
     }
   }
-  await pipeline(
-    Readable.from(chunks()),
-    parser,
-    new Writable({
-      objectMode: true,
-      write(quad, _encoding, done) {
-        dataset.addQuad(quad);
-        done();
-      },
-    }),
-  );
+  try {
+    await pipeline(
+      Readable.from(chunks()),
+      parser,
+      new Writable({
+        objectMode: true,
+        write(quad, _encoding, done) {
+          dataset.addQuad(quad);
+          done();
+        },
+      }),
+    );
+  } catch (error) {
+    // Scoped-context validation wraps thrown errors, discarding their class.
+    if (allocatedBytes > MAX_CONTENT_BYTES) throw new RdfLimitError();
+    throw error;
+  }
   return dataset;
 }
 

@@ -1,5 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { limitedBody, mediaType, normalizeLocalJsonLd } from "./content.js";
+import { limitedBody } from "./content.js";
 
 /** One resource/deadline budget shared by discovery, hints, and the crawl. */
 export class SearchBudget {
@@ -50,14 +50,13 @@ export class SearchBudget {
         void response.body?.cancel().catch(() => {});
         throw new Error("Search deadline reached.");
       }
+      // The scope guard must validate/follow redirects before any body read.
+      // RDF normalization belongs to the final-response parser, not this hop.
+      if ([301, 302, 303, 307, 308].includes(response.status)) return response;
       const { bytes, truncated } = await limitedBody(response, signal);
       signal.throwIfAborted();
       if (!this.active || truncated) throw new Error("Search response limit reached.");
-      const body =
-        mediaType(response.headers.get("content-type")) === "application/ld+json"
-          ? normalizeLocalJsonLd(new TextDecoder().decode(bytes))
-          : new Uint8Array(bytes);
-      const bounded = new Response(response.body === null ? null : body, {
+      const bounded = new Response(response.body === null ? null : new Uint8Array(bytes), {
         status: response.status,
         statusText: response.statusText,
         headers: response.headers,
