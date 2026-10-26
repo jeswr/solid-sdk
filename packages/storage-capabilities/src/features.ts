@@ -39,15 +39,33 @@ function localName(iri: unknown): string {
   return iri.slice(Math.max(iri.lastIndexOf("#"), iri.lastIndexOf("/"), iri.lastIndexOf(":")) + 1);
 }
 
-/** Values of an extra member, under its raw JSON key or any expanded IRI with that local name. */
+const LWS_NS = "https://www.w3.org/ns/lws#";
+const NOTIFY_NS = "http://www.w3.org/ns/solid/notifications#";
+
+/**
+ * Values of an extra member under its documented keys only: the raw JSON key, the `ssd:`
+ * compact key, and the expanded ssd:/lws: IRIs (plus notify:channelType for channelType).
+ * Unrelated predicates that merely share a local name are ignored.
+ */
 function values(extra: Readonly<Record<string, unknown>>, name: string): unknown[] {
+  const keys = new Set([name, `ssd:${name}`, `${SSD_NS}${name}`, `${LWS_NS}${name}`]);
+  if (name === "channelType") keys.add(`${NOTIFY_NS}channelType`);
   const found: unknown[] = [];
   for (const [key, value] of Object.entries(extra)) {
-    if (key === name || (key.includes(":") && localName(key) === name)) {
-      found.push(...(Array.isArray(value) ? value : [value]));
-    }
+    if (!keys.has(key)) continue;
+    // Iterative append: a spread of a huge parser-accepted array would overflow the stack.
+    if (Array.isArray(value)) for (const item of value) found.push(item);
+    else found.push(value);
   }
   return found;
+}
+
+function origin(url: unknown): string | undefined {
+  try {
+    return new URL(url as string).origin;
+  } catch {
+    return undefined;
+  }
 }
 
 function strings(extra: Readonly<Record<string, unknown>>, name: string): string[] {
@@ -80,11 +98,18 @@ export function deriveFeatures(d: StorageDescription, probe?: ProbeResult): Feat
   const authoritative = described && !(d.evidence ?? []).includes("cross-origin-description");
   const typed = (entry: { type?: readonly string[] }, ...iris: string[]) =>
     Array.isArray(entry.type) && entry.type.some((type) => iris.includes(type));
-  const service = (...iris: string[]) => services.find((entry) => typed(entry, ...iris));
-  const capability = (name: string) =>
-    capabilities.find(
+  // ADR-008 §8: endpoints must share the storage's origin. Only Solid notification
+  // subscription services (e.g. ESS) are a documented cross-origin exception.
+  const rootOrigin = origin(d.root);
+  const local = (entry: ServiceEntry) =>
+    rootOrigin !== undefined && origin(entry.endpoint) === rootOrigin;
+  const service = (...iris: string[]) =>
+    services.find((entry) => typed(entry, ...iris) && local(entry));
+  const capabilitiesNamed = (name: string) =>
+    capabilities.filter(
       (entry) => Array.isArray(entry.type) && entry.type.some((type) => localName(type) === name),
     );
+  const capability = (name: string) => capabilitiesNamed(name)[0];
   const cite = (type: string, endpoint?: string) =>
     `${source}:${localName(type)}${endpoint === undefined ? "" : `:${endpoint}`}`;
   const absent = (type: string) => `${source}:absent:${localName(type)}`;
@@ -120,7 +145,7 @@ export function deriveFeatures(d: StorageDescription, probe?: ProbeResult): Feat
       if (kinds.includes(SSD.StreamingHttpChannel)) offer("sse", entry, SSD.StreamingHttpChannel);
     }
     // Evaluated independently: a service may carry both notification types.
-    if (authoritative && typed(entry, LWS.NotificationService)) {
+    if (authoritative && typed(entry, LWS.NotificationService) && local(entry)) {
       notificationServices++;
       const kinds = strings(entry.extra ?? {}, "subscriptionType");
       if (kinds.includes(SSD.WebSocketSubscription)) {
@@ -151,6 +176,7 @@ export function deriveFeatures(d: StorageDescription, probe?: ProbeResult): Feat
     ? services.find(
         (entry) =>
           typed(entry, SSD.CrdtSyncService) &&
+          local(entry) &&
           Array.isArray(entry.conformsTo) &&
           entry.conformsTo.includes(Y_PROTOCOL_V1),
       )
@@ -215,11 +241,14 @@ export function deriveFeatures(d: StorageDescription, probe?: ProbeResult): Feat
         ? feature("available", accessGrants.evidence, { model: "odrl-grants" })
         : feature(accessGrants.state, accessGrants.evidence, { model: "none" });
   } else {
+    // Union over every AccessControl capability, so an unrecognised one cannot hide another.
     const declared = authoritative
-      ? capabilities.find((entry) => typed(entry, SSD.AccessControl))
-      : undefined;
+      ? capabilities.filter((entry) => typed(entry, SSD.AccessControl))
+      : [];
     const models = new Set(
-      declared ? strings(declared.extra ?? {}, "model").map((iri) => ACCESS_MODELS[iri]) : [],
+      declared.flatMap((entry) =>
+        strings(entry.extra ?? {}, "model").map((iri) => ACCESS_MODELS[iri]),
+      ),
     );
     const model = models.has("acp")
       ? "acp"
@@ -286,23 +315,29 @@ export function deriveFeatures(d: StorageDescription, probe?: ProbeResult): Feat
   }
 
   // patch
-  const declaredPatch = authoritative ? capability("PatchSupport") : undefined;
-  const declaredFormats = patchFormats(declaredPatch?.extra ?? {});
+  // Union over every PatchSupport capability.
+  const patchCapabilities = authoritative ? capabilitiesNamed("PatchSupport") : [];
+  const declaredPatch = patchCapabilities[0];
+  const nodes =
+    patchCapabilities.length > 0 ? indexNodes([...services, ...capabilities]) : new Map();
+  const declaredFormats = merge(
+    ...patchCapabilities.map((entry) => patchFormats(entry.extra ?? {}, nodes)),
+  ).formats;
   let patch: Features["patch"];
   if (lws) {
     patch = feature(
       "available",
       declaredPatch ? cite(SSD.PatchSupport) : `${source}:baseline`,
       merge(
-        declaredFormats,
+        new Map(Object.entries(declaredFormats)),
         new Map([
           ["application/linkset+json", [JSON_PATCH]],
           ["application/json", [JSON_PATCH]],
         ]),
       ),
     );
-  } else if (declaredFormats.size > 0) {
-    patch = feature("available", cite(SSD.PatchSupport), merge(declaredFormats));
+  } else if (Object.keys(declaredFormats).length > 0) {
+    patch = feature("available", cite(SSD.PatchSupport), { formats: declaredFormats });
   } else if (probe?.acceptPatch?.length) {
     patch = feature("available", "header:Accept-Patch", {
       formats: { "text/turtle": [...new Set(probe.acceptPatch)] },
@@ -371,43 +406,87 @@ export function deriveFeatures(d: StorageDescription, probe?: ProbeResult): Feat
 }
 
 /**
- * Read a PatchSupport `format` member: either a JSON map `{ "<source type>": "<patch type>" | [...] }`
- * (LWS example) or RDF-derived `{ source, patchType }` nodes (ADR-008), single or repeated.
+ * Index the expanded blank-node objects of a description by `@id`. The Solid mapper expands a
+ * shared node once and emits `{ "@id" }` references elsewhere, so a reader must resolve them.
  */
-function patchFormats(extra: Readonly<Record<string, unknown>>): Map<string, string[]> {
-  const formats = new Map<string, string[]>();
-  const add = (sourceType: unknown, patchTypes: unknown[]) => {
-    if (typeof sourceType !== "string" || !MEDIA_TYPE.test(sourceType)) return;
-    const types = patchTypes
-      .filter((type): type is string => typeof type === "string" && MEDIA_TYPE.test(type))
-      .map((type) => type.toLowerCase());
-    if (types.length === 0) return;
-    const key = sourceType.toLowerCase();
-    formats.set(key, [...new Set([...(formats.get(key) ?? []), ...types])]);
+function indexNodes(
+  entries: readonly { extra?: unknown }[],
+): Map<string, Readonly<Record<string, unknown>>> {
+  const index = new Map<string, Readonly<Record<string, unknown>>>();
+  const seen = new Set<object>();
+  // Entries of a malformed description may be non-objects; optional chaining tolerates them.
+  const pending: unknown[] = entries.map((entry) => (entry as { extra?: unknown } | null)?.extra);
+  // Breadth-first in document order, so the first expansion of an id wins deterministically.
+  for (let next = 0; next < pending.length; next++) {
+    const value = pending[next];
+    if (typeof value !== "object" || value === null || seen.has(value)) continue;
+    seen.add(value);
+    if (Array.isArray(value)) {
+      for (const item of value) pending.push(item);
+      continue;
+    }
+    const node = value as Readonly<Record<string, unknown>>;
+    const id = node["@id"];
+    if (typeof id === "string" && Object.keys(node).length > 1 && !index.has(id)) {
+      index.set(id, node);
+    }
+    for (const key of Object.keys(node)) pending.push(node[key]);
+  }
+  return index;
+}
+
+/**
+ * Read a PatchSupport `format` member: either a JSON map `{ "<source type>": "<patch type>" | [...] }`
+ * (LWS example) or RDF-derived `{ source, patchType }` nodes (ADR-008), single or repeated, possibly
+ * as `{ "@id" }` references into `nodes`. Linear in the input: each node's types are normalised once.
+ */
+function patchFormats(
+  extra: Readonly<Record<string, unknown>>,
+  nodes: ReadonlyMap<string, Readonly<Record<string, unknown>>> = new Map(),
+): Map<string, Set<string>> {
+  const formats = new Map<string, Set<string>>();
+  const normalise = (patchTypes: unknown[]) => {
+    const types = new Set<string>();
+    for (const type of patchTypes) {
+      if (typeof type === "string" && MEDIA_TYPE.test(type)) types.add(type.toLowerCase());
+    }
+    return types;
   };
-  for (const format of values(extra, "format")) {
-    if (!record(format)) continue;
+  const add = (sourceType: unknown, types: ReadonlySet<string>) => {
+    if (types.size === 0 || typeof sourceType !== "string" || !MEDIA_TYPE.test(sourceType)) return;
+    const key = sourceType.toLowerCase();
+    const known = formats.get(key) ?? new Set<string>();
+    for (const type of types) known.add(type);
+    formats.set(key, known);
+  };
+  for (const value of values(extra, "format")) {
+    if (!record(value)) continue;
+    const id = value["@id"];
+    const format = (typeof id === "string" && nodes.get(id)) || value;
     const sourceTypes = values(format, "source");
     if (sourceTypes.length > 0) {
-      for (const sourceType of sourceTypes) add(sourceType, values(format, "patchType"));
+      const types = normalise(values(format, "patchType"));
+      for (const sourceType of new Set(sourceTypes)) add(sourceType, types);
       continue;
     }
     for (const [sourceType, patchTypes] of Object.entries(format)) {
-      add(sourceType, Array.isArray(patchTypes) ? patchTypes : [patchTypes]);
+      add(sourceType, normalise(Array.isArray(patchTypes) ? patchTypes : [patchTypes]));
     }
   }
   return formats;
 }
 
 /** Union format maps into a fresh plain object (keys are validated media types). */
-function merge(...maps: ReadonlyMap<string, readonly string[]>[]): {
+function merge(...maps: ReadonlyMap<string, Iterable<string>>[]): {
   formats: Record<string, string[]>;
 } {
-  const merged = new Map<string, string[]>();
+  const merged = new Map<string, Set<string>>();
   for (const map of maps) {
     for (const [key, types] of map) {
-      merged.set(key, [...new Set([...(merged.get(key) ?? []), ...types])]);
+      const known = merged.get(key) ?? new Set<string>();
+      for (const type of types) known.add(type);
+      merged.set(key, known);
     }
   }
-  return { formats: Object.fromEntries(merged) };
+  return { formats: Object.fromEntries([...merged].map(([key, types]) => [key, [...types]])) };
 }

@@ -11,7 +11,7 @@ import {
   sparqLwsStorage,
   storageFixtures,
 } from "./testing.js";
-import type { ResolveOptions } from "./types.js";
+import type { DescriptionCache, ResolveOptions } from "./types.js";
 
 function options(fetch: typeof globalThis.fetch): ResolveOptions {
   return { fetch, cache: createMemoryCache(), now: () => 1000 };
@@ -214,6 +214,27 @@ describe("capabilities() probing policy", () => {
     release();
     await pending;
     expect(await cache.get(cssStorage.root)).toEqual(replaced);
+  });
+
+  test("custom caches without attachProbe never persist the probe (no non-atomic write)", async () => {
+    const inner = createMemoryCache();
+    const set = vi.fn(inner.set);
+    const cache: DescriptionCache = {
+      get: (id) => inner.get(id),
+      set,
+      delete: (id) => inner.delete(id),
+      lookupPrefix: (url) => inner.lookupPrefix(url),
+      rememberPrefix: (root, id) => inner.rememberPrefix(root, id),
+    };
+    const fetch = fixtureFetch(cssStorage);
+    const features = await capabilities(cssStorage.resource, { fetch, cache, now: () => 1000 });
+    expect(features.accessControl.detail.model).toBe("wac");
+    expect((await cache.get(cssStorage.root))?.probe).toBeUndefined();
+    // Only the resolver's description write happened.
+    expect(set).toHaveBeenCalledTimes(1);
+    fetch.calls.length = 0;
+    await capabilities(cssStorage.resource, { fetch, cache, now: () => 1000 });
+    expect(fetch.calls.filter((call) => call.startsWith("OPTIONS"))).toHaveLength(1);
   });
 
   test("uses the shared default cache when none is given", async () => {

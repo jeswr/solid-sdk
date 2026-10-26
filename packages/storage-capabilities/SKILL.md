@@ -109,4 +109,14 @@ only from the resolver's own `Updates-Via` mapping. An unrecognised `notify:chan
 becomes a service type. Unknown types are ignored, and `deriveFeatures` never throws (fast-check
 property test). Without a description document (NSS), rows that depend on the description are
 `unknown`, not `unavailable`.
+Feature-bearing keys are matched exactly (`name`, `ssd:name`, or the full `ssd:`/`lws:` IRI); an
+unrelated predicate with the same local name is ignored. `AccessControl` models and `PatchSupport`
+formats are unioned across all matching capabilities. Every described service endpoint except
+Solid notification services must share the storage root's origin (ADR-008 §8).
+
+`capabilities()` attaches its probe through the optional `DescriptionCache.attachProbe`, which
+writes only when the record still holds the same description and no probe (both shipped caches
+implement it atomically). Custom caches without it never store the probe, so it is repeated on
+the next call rather than written non-atomically. PatchSupport parsing is linear in its input and
+resolves the mapper's `{ "@id" }` references to a format node expanded elsewhere.
 
