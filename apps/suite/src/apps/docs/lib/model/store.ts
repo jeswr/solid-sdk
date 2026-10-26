@@ -231,7 +231,7 @@ export class DocsStore {
       });
       try {
         const { etag } = await writeRdf(stored.url, dataset, {
-          etag: current.etag ?? "*",
+          etag: current.etag,
           fetchImpl: this.fetchImpl,
           prefixes: PREFIXES,
         });
@@ -291,7 +291,7 @@ export class DocsStore {
     // Fresh copy history captures the copied content, never the reservation's empty body.
     const dataset = buildDocument(copy.url, { ...copy.data, ...snapshot, priorRevisions: [] });
     const { etag } = await writeRdf(copy.url, dataset, {
-      etag: copy.etag ?? "*",
+      etag: copy.etag,
       fetchImpl: this.fetchImpl,
       prefixes: PREFIXES,
     });
