@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 "use client";
 
 import { Grid2X2, MoreHorizontal, Plus, X } from "lucide-react";
@@ -63,6 +64,7 @@ export function AppLauncher({
       <Popover.Trigger asChild>
         <button
           type="button"
+          data-slot="app-launcher-trigger"
           className={
             trigger === "brand"
               ? "suite-rail-button suite-brand"
@@ -115,6 +117,7 @@ export function AppLauncher({
             <Popover.Close asChild>
               <button
                 type="button"
+                data-slot="navigation-icon-button"
                 className="suite-icon-button"
                 aria-label="Close apps"
                 title="Close apps"
@@ -129,6 +132,7 @@ export function AppLauncher({
           <input
             ref={input}
             id={id}
+            data-slot="app-launcher-filter"
             className="suite-filter-input"
             type="search"
             value={filter}
@@ -159,7 +163,12 @@ export function AppLauncher({
               {available.length === 0 && backlog.length === 0 ? (
                 <div className="suite-navigation-state">
                   <p>No apps available</p>
-                  <button type="button" className="suite-action" onClick={preferences.retry}>
+                  <button
+                    type="button"
+                    data-slot="navigation-action"
+                    className="suite-action"
+                    onClick={preferences.retry}
+                  >
                     Retry
                   </button>
                 </div>
@@ -170,6 +179,7 @@ export function AppLauncher({
                       <p>No apps pinned yet</p>
                       <button
                         type="button"
+                        data-slot="navigation-action"
                         className="suite-action"
                         onClick={() => setCustomise(true)}
                       >
@@ -194,6 +204,7 @@ export function AppLauncher({
                       <p>No results for &apos;{filter}&apos;</p>
                       <button
                         type="button"
+                        data-slot="navigation-action"
                         className="suite-action"
                         onClick={() => {
                           setFilter("");
@@ -232,6 +243,7 @@ export function AppLauncher({
                   <button
                     type="button"
                     key={action.id}
+                    data-slot="navigation-action"
                     className="suite-action"
                     onClick={() => {
                       action.onSelect();
@@ -248,6 +260,7 @@ export function AppLauncher({
           <footer className="suite-launcher-footer">
             <button
               type="button"
+              data-slot="navigation-text-button"
               className="suite-text-button"
               aria-expanded={customise}
               aria-controls={`${id}-customise`}

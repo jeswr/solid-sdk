@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 "use client";
 
 import type { NavigationError } from "./preferences.js";
@@ -26,7 +27,7 @@ export function NavigationErrorState({
   return (
     <div className="suite-navigation-state" role="alert">
       <p>{navigationErrorCopy[error]}</p>
-      <button type="button" className="suite-action" onClick={retry}>
+      <button type="button" data-slot="navigation-action" className="suite-action" onClick={retry}>
         Retry
       </button>
     </div>

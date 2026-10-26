@@ -72,6 +72,7 @@ export function CustomiseRail({ apps }: { apps: readonly NavigationApp[] }) {
               >
                 <button
                   type="button"
+                  data-slot="customise-rail-drag"
                   className="suite-drag"
                   draggable={writable}
                   onDragStart={(event) => {
@@ -88,6 +89,7 @@ export function CustomiseRail({ apps }: { apps: readonly NavigationApp[] }) {
                 <label>
                   <input
                     type="checkbox"
+                    data-slot="customise-rail-checkbox"
                     checked={index >= 0}
                     disabled={index < 0 && saved.length >= 6}
                     onChange={(event) => pin(app.slug, event.target.checked)}
@@ -98,6 +100,7 @@ export function CustomiseRail({ apps }: { apps: readonly NavigationApp[] }) {
                   <span className="suite-reorder">
                     <button
                       type="button"
+                      data-slot="navigation-icon-button"
                       className="suite-icon-button"
                       title={`Move ${app.name} up`}
                       aria-label={`Move ${app.name} up`}
@@ -108,6 +111,7 @@ export function CustomiseRail({ apps }: { apps: readonly NavigationApp[] }) {
                     </button>
                     <button
                       type="button"
+                      data-slot="navigation-icon-button"
                       className="suite-icon-button"
                       title={`Move ${app.name} down`}
                       aria-label={`Move ${app.name} down`}
