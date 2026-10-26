@@ -1,5 +1,4 @@
-// AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
+// AUTHORED-BY GPT-6.1-Sol
 import { readFileSync } from "node:fs";
 import { IDBFactory } from "fake-indexeddb";
 import { afterEach, describe, expect, test, vi } from "vitest";

@@ -1,4 +1,4 @@
-// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY GPT-6.1-Sol
 import { longestPrefix, type Prefix, prefixUrl, sameDescription } from "./prefix.js";
 import type { DescriptionCache } from "./types.js";
 

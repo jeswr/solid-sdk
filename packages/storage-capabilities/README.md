@@ -1,4 +1,4 @@
-<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY GPT-6.1-Sol -->
 <!-- AUTHORED-BY Codex GPT-6 -->
 <!-- AUTHORED-BY Claude Opus 5.5 -->
 

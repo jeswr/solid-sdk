@@ -1,4 +1,4 @@
-// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY GPT-6.1-Sol
 
 /** LWS vocabulary IRIs recognised by ADR-002. */
 export const LWS = {

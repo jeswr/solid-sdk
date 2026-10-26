@@ -1,5 +1,4 @@
-// AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
+// AUTHORED-BY GPT-6.1-Sol
 export type Protocol = "solid" | "lws";
 
 export interface ServiceEntry {

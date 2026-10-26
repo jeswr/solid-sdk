@@ -1,6 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
-// AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
+// AUTHORED-BY GPT-6.1-Sol
 import fc from "fast-check";
 import { describe, expect, test } from "vitest";
 import { deriveFeatures } from "./features.js";

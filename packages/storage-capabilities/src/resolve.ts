@@ -1,5 +1,4 @@
-// AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
+// AUTHORED-BY GPT-6.1-Sol
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { createMemoryCache } from "./cache.js";
 import { CapabilitiesError } from "./errors.js";

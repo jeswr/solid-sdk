@@ -1,4 +1,4 @@
-// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY GPT-6.1-Sol
 // Trusted draft context snapshot for https://www.w3.org/ns/lws/v1.
 // Source: jeswr/solid-specs@e1e1210 tools/spec-check/contexts/lws-v1.stand-in.jsonld
 // The draft spec-check stand-in supplies the LWS terms used by its examples.

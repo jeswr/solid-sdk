@@ -1,5 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
-// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY GPT-6.1-Sol
 import { describe, expect, test, vi } from "vitest";
 import { createMemoryCache } from "./cache.js";
 import { capabilities } from "./capabilities.js";

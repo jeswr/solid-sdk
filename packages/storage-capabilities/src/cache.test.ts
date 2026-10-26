@@ -1,4 +1,4 @@
-// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY GPT-6.1-Sol
 import { IDBFactory, IDBObjectStore } from "fake-indexeddb";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { createIndexedDbCache, createMemoryCache } from "./cache.js";
