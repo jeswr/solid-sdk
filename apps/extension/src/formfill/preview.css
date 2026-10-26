@@ -1,0 +1,19 @@
+/* AUTHORED-BY Codex GPT-6.1-Sol */
+:root { color-scheme: light dark; font: 15px/1.5 system-ui, sans-serif; }
+body { margin: 0; background: light-dark(#f8f7fc, #19171f); color: light-dark(#25212f, #f3effa); }
+main { padding: 24px; max-width: 560px; margin: auto; }
+h1 { font-size: 1.4rem; margin-top: 0; }
+#origin, dd { overflow-wrap: anywhere; white-space: pre-wrap; }
+select { display: block; width: 100%; padding: 8px; margin: 5px 0 20px; font: inherit; }
+fieldset { border: 1px solid #8887; border-radius: 8px; margin: 16px 0; padding: 12px; }
+legend { font-weight: 600; }
+input { accent-color: #7560d6; }
+dt { font-size: .85rem; opacity: .8; }
+dd { margin: 0 0 12px; }
+.hint { font-size: .85rem; opacity: .8; }
+.actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 24px; }
+button { font: inherit; padding: 8px 20px; cursor: pointer; border: 1px solid #888; border-radius: 6px; }
+#fill { background: #6554c0; color: white; }
+button:disabled { opacity: .5; cursor: default; }
+:focus-visible { outline: 3px solid #1785d1; outline-offset: 3px; }
+#error { color: light-dark(#a32626, #ffaaaa); }

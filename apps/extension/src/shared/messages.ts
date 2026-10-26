@@ -10,6 +10,9 @@
  * result. The credential boundary is enforced entirely in the service worker.
  */
 
+import type { FieldCategory } from '../content/formfill/detect';
+import type { FormFillField, FormFillValue } from './formfill';
+
 /** A namespacing tag on every page↔content postMessage so we ignore unrelated messages. */
 export const CHANNEL = 'solid-browser-ext' as const;
 
@@ -219,7 +222,51 @@ export type OriginGrantRequest =
       readonly expiresAt: number;
     };
 
+/** Worker-to-ISOLATED message; never exposed to the MAIN world. */
+export interface FormFillTrigger {
+  readonly type: 'SOLID_FORMFILL_TRIGGER';
+}
+
+/** ISOLATED-only request: no page origin, DOM, or values are accepted. */
+export interface FormFillRequest {
+  readonly type: 'SOLID_FORMFILL_REQUEST';
+  readonly fields: readonly FormFillField[];
+}
+export type FormFillPreviewRequest =
+  | {
+      readonly type: 'SOLID_FORMFILL_PREVIEW';
+      readonly requestId: string;
+      readonly profileId?: string;
+    }
+  | {
+      readonly type: 'SOLID_FORMFILL_DECISION';
+      readonly requestId: string;
+      readonly profileId?: string;
+      readonly categories: readonly FieldCategory[];
+      readonly remember: boolean;
+    };
+export interface FormFillPreview {
+  readonly requestId: string;
+  readonly origin: string;
+  readonly profileId: string;
+  readonly profiles: readonly { id: string; label: string }[];
+  readonly values: readonly FormFillValue[];
+  readonly selected: readonly FieldCategory[];
+}
+export interface FormFillResponse {
+  readonly origin?: string;
+  readonly values: readonly FormFillValue[];
+}
+export interface FormFillReport {
+  readonly type: 'SOLID_FORMFILL_REPORT';
+  readonly filled: number;
+  readonly skipped: number;
+}
+
 export type WorkerRequest =
+  | FormFillRequest
+  | FormFillPreviewRequest
+  | FormFillReport
   | OriginGrantRequest
   | ProfileRequest
   | FetchRequest

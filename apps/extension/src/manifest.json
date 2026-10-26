@@ -34,7 +34,8 @@
       "matches": ["<all_urls>"],
       "js": ["content/content-script.js"],
       "run_at": "document_start",
-      "world": "ISOLATED"
+      "world": "ISOLATED",
+      "all_frames": true
     },
     {
       "matches": ["<all_urls>"],

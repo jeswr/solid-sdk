@@ -78,6 +78,8 @@ import { type MessageSender, resolveRequestingOrigin } from './core/requesting-o
 import { filterResponseHeaders } from './core/response-headers';
 import { SingleFlight } from './core/single-flight';
 import { parseWebIdProfile } from './core/webid';
+import { FormFillWorker, registerFormFillMenu } from './formfill';
+import { loadFormFillData } from './formfill-data-loader';
 import { syncOriginFetchInjection } from './global-fetch-register';
 import { profileAuthority } from './profile-authority';
 import {
@@ -192,6 +194,7 @@ async function reconcileOriginGrants(): Promise<void> {
   const store = await getProfiles();
   const { profiles } = await store.list();
   const active = new Set(profiles.filter((p) => p.sessionState === 'active').map((p) => p.id));
+  await formFill.reconcile(profiles);
   const gone: OriginGrant[] = [];
   await originGrants.update((grants) =>
     grants.filter((g) => {
@@ -330,6 +333,7 @@ function refreshOnce(id: string): Promise<StoredSession | null> {
           cancelProfileOperations(id);
           try {
             try {
+              await formFill.revokeProfile(id);
               await store.signOut(id);
             } finally {
               await syncOriginGrants();
@@ -407,6 +411,7 @@ async function teardownSession(sender?: MessageSender, stamp?: string): Promise<
     if (record)
       await withProfileLifecycle(record.profile.id, async () => {
         try {
+          await formFill.revokeProfile(record.profile.id);
           await store.signOut(record.profile.id);
         } finally {
           await syncOriginGrants();
@@ -951,6 +956,7 @@ async function handleProfiles(
         await revokeThenPublish(() =>
           withProfileLifecycle(message.profileId, async () => {
             try {
+              await formFill.revokeProfile(message.profileId);
               await store.remove(message.profileId);
             } finally {
               await syncOriginGrants();
@@ -1633,6 +1639,17 @@ chrome.runtime.onMessage.addListener(
       );
     };
     switch (message.type) {
+      case 'SOLID_FORMFILL_REQUEST':
+        respond(formFill.request(message, sender));
+        return true;
+      case 'SOLID_FORMFILL_PREVIEW':
+      case 'SOLID_FORMFILL_DECISION':
+        respond(formFill.preview(message, sender));
+        return true;
+      case 'SOLID_FORMFILL_REPORT':
+        // Counts only; deliberately no persistent page/form telemetry.
+        sendResponse({ ok: true });
+        return false;
       case 'SOLID_ORIGIN_GRANTS_LIST':
       case 'SOLID_ORIGIN_GRANT_REVOKE':
       case 'SOLID_ORIGIN_GRANT_PROFILE':
@@ -1690,6 +1707,31 @@ chrome.runtime.onMessage.addListener(
   },
 );
 
+const formFill = new FormFillWorker({
+  profiles: async () => (await getProfiles()).list(),
+  load: async (profileId) => {
+    const result = await withProfileOperation(profileId, async (signal) => {
+      const ctx = await ensureSession(profileId);
+      if (!ctx) throw new Error('Please sign in to this profile.');
+      const current = () => checkProfileSession(ctx, signal);
+      const pods = await podOriginsFor(ctx.session, profileId);
+      const fetchSession = await buildFetchSession(ctx.session, ctx.keyPair, profileId);
+      const read = makeResolveFetch(
+        { ...fetchSession, allowedOrigins: pods },
+        ctx.session.webId,
+        signal,
+        current,
+      );
+      const data = await loadFormFillData(ctx.session.webId, pods, read);
+      await current();
+      return { data, current };
+    });
+    if (!result) throw new Error('Profile is no longer available.');
+    return result;
+  },
+  commit: withProfileTask,
+});
+
 /** First-run onboarding: prompt the user to PIN the toolbar action (extensions can't self-pin). */
 chrome.runtime.onInstalled.addListener((details) => {
   if (details.reason === 'install') {
@@ -1702,6 +1744,9 @@ chrome.runtime.onInstalled.addListener((details) => {
 // Wire the persistent side panel: a right-click "Open Solid side panel" action-menu entry
 // + its open handler. The toolbar action keeps its existing popup unchanged.
 registerSidePanel();
+registerFormFillMenu();
+// Local settings/grants are worker-owned; content scripts only receive explicit responses.
+void chrome.storage.local.setAccessLevel?.({ accessLevel: 'TRUSTED_CONTEXTS' }).catch(() => {});
 
 // Re-hydrate the session + icon on every SW wake.
 void updateDefaultIconAndBroadcast().catch(() => {});

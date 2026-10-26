@@ -7,6 +7,9 @@ const CopyPlugin = require('copy-webpack-plugin');
 module.exports = {
   mode: 'production',
   devtool: 'source-map',
+  // Extension bundles load from disk, not the network; the web-oriented 244 KiB hint does not
+  // apply. Keep a ceiling so an accidental heavy dependency still warns.
+  performance: { maxAssetSize: 512 * 1024, maxEntrypointSize: 512 * 1024 },
   entry: {
     'background/service-worker': './src/background/service-worker.ts',
     'popup/popup': './src/popup/popup.ts',
@@ -15,6 +18,7 @@ module.exports = {
     'inject/fetch-patch': './src/inject/fetch-patch.ts',
     'inject/inject': './src/inject/inject.ts',
     'consent/consent': './src/consent/consent.ts',
+    'formfill/preview': './src/formfill/preview.ts',
   },
   output: {
     path: path.resolve(__dirname, 'dist'),
@@ -52,6 +56,8 @@ module.exports = {
         { from: 'src/sidepanel/grants.css', to: 'sidepanel/grants.css' },
         { from: 'src/consent/consent.html', to: 'consent/consent.html' },
         { from: 'src/consent/consent.css', to: 'consent/consent.css' },
+        { from: 'src/formfill/preview.html', to: 'formfill/preview.html' },
+        { from: 'src/formfill/preview.css', to: 'formfill/preview.css' },
         { from: 'src/icons', to: 'icons' },
         // Generated from client-id-template.ts and the manifest's pinned public key.
         { from: 'public/clientid.jsonld', to: 'clientid.jsonld' },

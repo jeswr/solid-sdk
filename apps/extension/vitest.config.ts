@@ -20,6 +20,7 @@ export default defineConfig({
         'src/background/core/profile-store.ts',
         'src/background/core/origin-grant.ts',
         'src/background/core/formfill-data.ts',
+        'src/background/core/formfill-grant.ts',
         'src/content/formfill/*.ts',
         'src/shared/formfill-values.ts',
       ],
