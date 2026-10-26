@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate; see docs/MODEL-PROVENANCE.md
+// AUTHORED-BY Codex GPT-6.1-Sol
 "use client";
 
 /**
@@ -86,6 +87,8 @@ function IssueEditor() {
         state,
         created: item?.data.created, // preserve original open date on edit
         assignee: assignee.trim() || undefined,
+        creator: item?.data.creator,
+        priority: item?.data.priority,
       };
       if (isNew) {
         const { url: created } = await store.create(issue, title);
