@@ -8,6 +8,9 @@ import { DIRECT } from "../profiles.js";
 import type { RenderableProposal, TokenProvider, Wire } from "../types.js";
 import { accountId, assertGrant, assertWire, type DirectMailbox, envelope } from "./shared.js";
 
+/** All senders sharing a mailbox must observe its in-flight attempts before claiming absence. */
+const pendingByMailbox = new WeakMap<DirectMailbox, Set<{ readonly bytes: string }>>();
+
 /** Inject a pure local signature verifier, including its key/audience policy. No keys are loaded here. */
 export interface DirectOptions {
   readonly tokens: TokenProvider;
@@ -20,7 +23,8 @@ export function createDirectSend(
   options: DirectOptions,
 ): NonNullable<ChannelBinding["send"]> {
   const now = options.now ?? Date.now;
-  const pending = new Set<{ readonly bytes: string }>();
+  const pending = pendingByMailbox.get(mailbox) ?? new Set<{ readonly bytes: string }>();
+  pendingByMailbox.set(mailbox, pending);
   async function verified(compactJws: string) {
     const result = validateMessage(await options.verify(compactJws));
     if (!result.ok) throw new ChannelParseError("unverifiable direct message");

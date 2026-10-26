@@ -2,6 +2,7 @@
 // AUTHORED-BY Codex GPT-6
 import { canonicalJson, digestBytes } from "@jeswr/agent-model";
 import { describe, expect, it, vi } from "vitest";
+import { createDirectSend } from "../src/direct/send.js";
 import { type DirectMailbox, envelope } from "../src/direct/shared.js";
 import { createDirectReader } from "../src/direct.js";
 import {
@@ -293,9 +294,74 @@ describe("direct loopback", () => {
     }
   });
 
-  it("tracks overlapping attempts separately and keeps accepted bytes as positive evidence", async () => {
+  it.each([
+    "verification",
+    "credentials",
+  ] as const)("shares pending %s with another sender on the same mailbox", async (stage) => {
+    for (const accepted of [true, false]) {
+      const config = options();
+      const mailbox: DirectMailbox = { inboxes: new Map(), accepted: new Map() };
+      const verify = vi.fn(verifyMessage);
+      const send = vi.fn(config.tokens.send.bind(config.tokens));
+      const tokens = { read: config.tokens.read.bind(config.tokens), send };
+      const sender = createDirectSend(mailbox, { ...config, verify });
+      const wire = await sender.render(signed(), DIRECT);
+      const started = deferred<void>();
+      const resume = deferred<void>();
+      if (stage === "verification")
+        verify.mockImplementationOnce(async (jws) => {
+          started.resolve();
+          await resume.promise;
+          return verifyMessage(jws);
+        });
+      else
+        send.mockImplementationOnce(async (ref) => {
+          started.resolve();
+          await resume.promise;
+          return config.tokens.send(ref);
+        });
+
+      const pending = sender.transmit(wire, { account, tokens, dryRun: false });
+      await started.promise;
+      const observer = createDirectSend(mailbox, config);
+      expect(observer.finalAbsence).toBe(true);
+      expect(await observer.lookup?.(wire)).toMatchObject({ outcome: "unknown" });
+      const isolated = createInMemoryDirectBinding(config);
+      expect(await isolated.send.lookup?.(wire)).toEqual({ outcome: "absent" });
+      if (accepted) {
+        resume.resolve();
+        expect(await pending).toEqual({
+          outcome: "accepted",
+          providerRef: `direct:${wire.digest}`,
+        });
+        expect(await observer.lookup?.(wire)).toEqual({
+          outcome: "found",
+          providerRef: `direct:${wire.digest}`,
+        });
+      } else {
+        const rejected = expect(pending).rejects.toThrow("test refusal");
+        resume.reject(new Error("test refusal"));
+        await rejected;
+        expect(await observer.lookup?.(wire)).toEqual({ outcome: "absent" });
+      }
+      expect(
+        (await createDirectReader(mailbox, config.tokens).ingest.list(account, undefined, limits))
+          .items,
+      ).toHaveLength(accepted ? 1 : 0);
+    }
+  });
+
+  it.each([
+    false,
+    true,
+  ])("tracks overlapping attempts across shared senders (%s) and keeps positive evidence", async (shared) => {
     const config = options();
-    const binding = createInMemoryDirectBinding(config);
+    const mailbox: DirectMailbox = { inboxes: new Map(), accepted: new Map() };
+    const binding = {
+      ...createDirectReader(mailbox, config.tokens),
+      send: createDirectSend(mailbox, config),
+    };
+    const secondSender = shared ? createDirectSend(mailbox, config) : binding.send;
     const wire = await binding.send.render(signed(), DIRECT);
     const firstGrant = deferred<SendGrant>();
     const secondGrant = deferred<SendGrant>();
@@ -317,17 +383,22 @@ describe("direct loopback", () => {
     const io = { account, tokens, dryRun: false };
     const first = binding.send.transmit(wire, io);
     await firstStarted.promise;
-    const second = binding.send.transmit(wire, io);
+    const second = secondSender.transmit(wire, io);
     await secondStarted.promise;
     expect(await binding.send.lookup?.(wire)).toMatchObject({ outcome: "unknown" });
     const rejected = expect(first).rejects.toThrow("test refusal");
     firstGrant.reject(new Error("test refusal"));
     await rejected;
     expect(await binding.send.lookup?.(wire)).toMatchObject({ outcome: "unknown" });
+    expect(await secondSender.lookup?.(wire)).toMatchObject({ outcome: "unknown" });
     secondGrant.resolve(await config.tokens.send(account));
     const result = await second;
     expect(result).toEqual({ outcome: "accepted", providerRef: `direct:${wire.digest}` });
     expect(await binding.send.lookup?.(wire)).toEqual({
+      outcome: "found",
+      providerRef: `direct:${wire.digest}`,
+    });
+    expect(await secondSender.lookup?.(wire)).toEqual({
       outcome: "found",
       providerRef: `direct:${wire.digest}`,
     });
