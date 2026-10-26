@@ -75,9 +75,10 @@ describe("metadata and complete OAuth flow", () => {
       client_id_metadata_document_supported: true,
       authorization_response_iss_parameter_supported: true,
     });
-    const rs = await f.server.handle(
-      new Request("https://mcp.example/.well-known/oauth-protected-resource/mcp"),
+    expect(f.server.protectedResourceMetadataUrl()).toBe(
+      "https://mcp.example/.well-known/oauth-protected-resource/mcp",
     );
+    const rs = await f.server.handle(new Request(f.server.protectedResourceMetadataUrl()));
     expect(rs.status).toBe(200);
     expect(await rs.json()).toEqual({
       resource: RESOURCE,
