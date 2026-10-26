@@ -507,6 +507,23 @@ describe("reply, reply-all and forward drafts", () => {
         .references,
     ).toEqual(["<parent@example.org>"]);
   });
+  it("preserves known ancestry when a source has no Message-ID", () => {
+    const { messageId: _id, ...source } = original;
+    for (const metadata of [
+      { references: ["<ancestor@example.org>"] },
+      { inReplyTo: "<ancestor@example.org>" },
+    ]) {
+      const draft = reply({ ...source, ...metadata }, [bob.email]);
+      expect(draft.references).toEqual(["<ancestor@example.org>"]);
+      expect(draft).not.toHaveProperty("inReplyTo");
+    }
+  });
+  it("rejects a generated identifier outside the documented identifier subset", () => {
+    const messageIdDomain = ["a".repeat(63), "b".repeat(63), "c".repeat(63), "d".repeat(50)].join(
+      ".",
+    );
+    rejects(() => build({}, { messageIdDomain }), "unsupported-address");
+  });
   it("does not repeat Re:/Fwd: prefixes, preserving their existing spelling", () => {
     expect(reply({ ...original, subject: "rE: A note" }, [bob.email]).subject).toBe("rE: A note");
     expect(forward({ ...original, subject: "fWD: A note" }).subject).toBe("fWD: A note");

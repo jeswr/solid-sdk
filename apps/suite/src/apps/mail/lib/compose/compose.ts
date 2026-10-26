@@ -16,6 +16,7 @@ import {
   date,
   domain,
   key,
+  messageId,
   record,
   requireInput,
   text,
@@ -65,6 +66,7 @@ export function composeMessage(input: ComposeInput, sources: ComposeSources): Co
   requireInput(random instanceof Uint8Array && random.length === 16, "randomBytes");
   const token = Array.from(random, (byte) => byte.toString(16).padStart(2, "0")).join("");
   const id = `<${now.getTime().toString(36)}.${token}@${sources.messageIdDomain}>`;
+  messageId(id);
   const fields = [
     header("Date", now.toUTCString().replace("GMT", "+0000")),
     header("Message-ID", id),

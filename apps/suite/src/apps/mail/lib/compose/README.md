@@ -44,7 +44,7 @@ To becomes the fallback target. Reply-all additionally includes original To/Cc, 
 precedence. Both quote each original line after a UTC date/author attribution and add Re: unless
 already present (case-insensitive). References preserves the supplied chain (or a single
 In-Reply-To fallback), deduplicates it, then appends the parent's Message-ID. A source lacking a
-Message-ID remains unthreaded. `forward(original)` starts an unthreaded, recipient-free Fwd:
+Message-ID retains known ancestry in References and omits In-Reply-To. `forward(original)` starts an unthreaded, recipient-free Fwd:
 draft with attribution; callers explicitly choose recipients and attachments. Decoded Unicode
 names remain readable in forward text. Returned recipients are copies.
 
@@ -57,7 +57,9 @@ Unsupported inputs throw `ComposeError` with `code` and a safe `field`, without 
   Local parts are limited to 64 characters, total mailboxes to 254, domain labels to 63.
 - `invalid-source`: injected clock/random function missing or throwing.
 
-Message-ID inputs are single angle-bracketed identifiers using the same dot-atom/DNS subset.
+Message-ID inputs and generated IDs use the same dot-atom/DNS subset (≤254 characters inside
+angle brackets); excessively long generation domains are rejected rather than emitting an ID
+that the reply helpers could not accept.
 Empty supplied Reply-To is rejected. Attachment media types must be bare leaf `type/subtype`
 (no parameters, multipart or message types). Filenames must be nonempty, ≤180 UTF-8 bytes, and
 contain neither control characters nor path separators. Dates and byte-source results outside

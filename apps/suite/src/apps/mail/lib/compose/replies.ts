@@ -74,15 +74,14 @@ function replyDraft(
     subject: prefixed(original.subject, "Re"),
     text: `\r\n\r\n${quote(original)}`,
   };
+  const parents =
+    original.references ?? (original.inReplyTo === undefined ? [] : [original.inReplyTo]);
+  const references = [...new Set(parents.filter((id) => id !== original.messageId))];
   if (original.messageId !== undefined) {
     draft.inReplyTo = original.messageId;
-    const parents =
-      original.references ?? (original.inReplyTo === undefined ? [] : [original.inReplyTo]);
-    draft.references = [
-      ...new Set(parents.filter((id) => id !== original.messageId)),
-      original.messageId,
-    ];
+    references.push(original.messageId);
   }
+  if (references.length > 0) draft.references = references;
   return draft;
 }
 export function reply(original: OriginalMessage, identities: readonly string[]): MessageDraft {
