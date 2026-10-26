@@ -220,6 +220,22 @@ describe("fail-closed boundaries", () => {
       expect(ports.storage.events).toEqual([]);
     }
   });
+  it.each([
+    "op://test-vault/gmail-main%40example.com/credential",
+    "op://gmail-main%40example.com/item/credential",
+    "op://test-vault/item/gmail-main%40example.com",
+    "op://test-vault/odi-mail%40example.com/credential",
+    "op://test-vault/alternate-main%40example.org/credential",
+    "op://test-vault/item%GG/credential",
+    "op://test-vault/item/credential%0A",
+  ])("rejects identifying or invalid encoded references before storage", async (ref) => {
+    const ports = harness(fixture.replace("op://test-vault/account-01/credential", ref));
+    await expect(importRegistry(config, ports)).rejects.toThrow(
+      /Invalid registry|private identifier/,
+    );
+    expect(ports.storage.events).toEqual([]);
+    expect(ports.storage.resources.size).toBe(0);
+  });
   it("rejects malformed account fields, unsafe ids, excessive lists and timestamps", () => {
     const baseline = {
       version: 1,

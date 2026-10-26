@@ -153,6 +153,48 @@ describe("privacy and settings model", () => {
     first.refs = ["op://test-vault/cafe\u0301@example.com/credential"];
     expect(() => inventorySettings(snap, salt)).toThrow("private identifier");
   });
+  it.each([
+    ["gmail-main@example.com", "gmail-main%40example.com"],
+    [
+      "gmail-main@example.com",
+      "%67%6D%61%69%6C%2D%6D%61%69%6E%40%65%78%61%6D%70%6C%65%2E%63%6F%6D",
+    ],
+    ["café@example.com", "cafe%CC%81%40example.com"],
+    ["123456789", "%31%32%33%34%35%36%37%38%39"],
+    ["@fixture:Example.org", "%40fixture%3AExample.org"],
+  ])("rejects encoded private handle %s in every reference component", (handle, encoded) => {
+    for (const ref of [
+      `op://${encoded}/item/credential`,
+      `op://test-vault/${encoded}/credential`,
+      `op://test-vault/item/${encoded}`,
+    ]) {
+      const snap = parseRegistryYaml(fixture);
+      const first = snap.accounts[0];
+      if (!first) throw new Error("Fixture account absent");
+      first.handles = [handle];
+      first.refs = [ref];
+      expect(() => inventorySettings(snap, salt)).toThrow("private identifier");
+    }
+  });
+  it.each([
+    "op://test-vault/item%/credential",
+    "op://test-vault/item%GG/credential",
+    "op://test-vault/item%C3%28/credential",
+    "op://test-vault/item/credential%00",
+  ])("rejects malformed or control-bearing decoded references", (ref) => {
+    const snap = parseRegistryYaml(fixture);
+    const first = snap.accounts[0];
+    if (!first) throw new Error("Fixture account absent");
+    first.refs = [ref];
+    expect(() => inventorySettings(snap, salt)).toThrow("Invalid registry schema");
+  });
+  it("preserves valid encoded references verbatim", () => {
+    const snap = parseRegistryYaml(fixture);
+    const first = snap.accounts[0];
+    if (!first) throw new Error("Fixture account absent");
+    first.refs = ["op://test%20vault/account%2D01/credential", "profile:fixture"];
+    expect(inventorySettings(snap, salt).connections[0]?.credentialRefs).toEqual(first.refs);
+  });
 });
 
 describe("pilot assessments without a provider grant", () => {

@@ -76,7 +76,15 @@ function credentialReference(value: unknown): string {
     !/^profile:[a-z0-9][a-z0-9_-]{0,63}$/.test(ref)
   )
     invalid();
-  return ref;
+  try {
+    // Inspect decoded components without resolving or rewriting the emitted reference.
+    return ref
+      .split("/")
+      .map((component) => string(decodeURIComponent(component), 500))
+      .join("/");
+  } catch {
+    return invalid();
+  }
 }
 function account(value: unknown): RegistryAccount {
   const a = object(value);
@@ -289,8 +297,8 @@ export function inventorySettings(snapshot: RegistrySnapshot, salt: Uint8Array):
           });
       }
       for (const ref of a.refs) {
-        credentialReference(ref);
-        if (rawHandles.some((h) => normaliseHandle(ref).includes(h)))
+        const decoded = credentialReference(ref);
+        if (rawHandles.some((h) => normaliseHandle(decoded).includes(h)))
           throw new Error("Credential reference contains a private identifier");
       }
       return {
