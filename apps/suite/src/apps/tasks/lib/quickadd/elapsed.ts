@@ -42,7 +42,9 @@ export const durationPattern = `${durationUnit}(?:\\s*,?\\s*(?:and\\s*)?${durati
 export function elapsedInstant(text: string, now: Date): Date {
   const negative = /^(?:last|past|-)|\b(?:ago|before|earlier)\b/i.test(text);
   const values = units.map(([unit]) => {
-    const match = new RegExp(`\\b(${amount})\\s*(${unit})\\b`, "i").exec(text.toLowerCase());
+    const match = [...text.toLowerCase().matchAll(new RegExp(`(${amount})\\s*(${unit})\\b`, "g"))]
+      .filter((fragment) => !/^[a-z]+$/.test(fragment[0]))
+      .at(-1);
     if (!match) return 0;
     const word = String(match[1]).trim();
     const value = /half/.test(word)

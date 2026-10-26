@@ -355,6 +355,8 @@ describe("metadata and spans", () => {
 describe("time zones, DST and determinism", () => {
   it.each([
     ["in 2 hours", "2026-03-08T04:30:00.000Z"],
+    ["in2hours", "2026-03-08T04:30:00.000Z"],
+    ["in 1 hour and 2 hours", "2026-03-08T04:30:00.000Z"],
     ["now", "2026-03-08T02:30:00.000Z"],
     ["in 30 minutes", "2026-03-08T03:00:00.000Z"],
     ["in 45 seconds", "2026-03-08T02:30:45.000Z"],
