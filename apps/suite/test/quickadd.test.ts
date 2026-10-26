@@ -506,7 +506,7 @@ describe("time zones, DST and determinism", () => {
   });
 });
 
-describe("round-three deadline regressions", () => {
+describe("calendar, offset and reminder regressions", () => {
   it.each([
     ["2026-11-01T00:30:00Z", "UTC", "this month", date("2026-11-01")],
     ["2026-11-01T00:30:00Z", "UTC", "this week", date("2026-11-01")],
@@ -564,6 +564,9 @@ describe("round-three deadline regressions", () => {
 
   it.each([
     ["in 1h30m", "2026-10-23T12:30:00.000Z"],
+    ["-2 hours", "2026-10-23T09:00:00.000Z"],
+    ["+2 hours", "2026-10-23T13:00:00.000Z"],
+    ["2 hours from now", "2026-10-23T13:00:00.000Z"],
     ["in 1h30m45s", "2026-10-23T12:30:45.000Z"],
     ["in 1d2h30m", "2026-10-24T13:30:00.000Z"],
     ["1h30m ago", "2026-10-23T09:30:00.000Z"],

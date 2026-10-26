@@ -92,16 +92,24 @@ export function parseQuickAdd(text: string, ctx: QuickAddContext): QuickAddResul
   if (recurrence) result.recurrence = recurrence;
   // Chrono merges anchored offsets into relative results, discarding their anchor.
   // Until exact anchor resolution is supported, preserve all deadline text in that input.
-  const unresolvedAnchor = new RegExp(
-    `${durationPattern}\\s*(?:before|after|since|from(?!\\s+now\\b))\\b|[+-]\\s*${durationPattern}`,
-    "i",
-  ).test(working);
+  const parsed = parser.parse(working, { instant: today, timezone: 0 }, { forwardDate: true });
+  const signedAnchor = new RegExp(`^.+\\s[+-]\\s*${durationPattern}`, "i");
+  const unresolvedAnchor =
+    new RegExp(`${durationPattern}\\s*(?:before|after|since|from(?!\\s+now\\b))\\b`, "i").test(
+      working,
+    ) ||
+    parsed.some(
+      (candidate) =>
+        signedAnchor.test(candidate.text) ||
+        (/^[+-]/.test(candidate.text) &&
+          parser
+            .parse(working.slice(0, candidate.index), { instant: today, timezone: 0 })
+            .some((anchor) =>
+              /^\s*$/.test(working.slice(anchor.index + anchor.text.length, candidate.index)),
+            )),
+    );
   // A UTC surrogate supplies the injected zone's wall clock to chrono, independent of host TZ.
-  const matches = (
-    unresolvedAnchor
-      ? []
-      : parser.parse(working, { instant: today, timezone: 0 }, { forwardDate: true })
-  ).flatMap((candidate) => {
+  const matches = (unresolvedAnchor ? [] : parsed).flatMap((candidate) => {
     const tags = candidate.start.tags();
     const elapsed = tags.has("result/relativeDateAndTime") || tags.has("casualReference/now");
     if (elapsed || !candidate.start.isCertain("timezoneOffset")) return [candidate];
