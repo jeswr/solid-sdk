@@ -19,7 +19,12 @@ function encodeConstraint(c: Constraint): JsonValue {
   };
 }
 function encodeDuty(d: OdrlDuty): JsonValue {
-  return { [`${ODRL}action`]: uri(d.action) };
+  return {
+    [`${ODRL}action`]: uri(d.action),
+    ...opt(`${ODRL}uid`, d.id),
+    ...opt(`${ODRL}target`, d.target),
+    [`${ODRL}constraint`]: (d.constraints ?? []).map(encodeConstraint),
+  };
 }
 function encodeRule(r: Rule): JsonValue {
   return {
@@ -39,7 +44,7 @@ export function encodePolicy(p: Policy): JsonValue {
     [`${ODRL}uid`]: p.id,
     ...opt(`${ODRL}assigner`, p.assigner),
     ...opt(`${ODRL}assignee`, p.assignee),
-    ...opt(`${ODRL}conflict`, p.conflict),
+    ...opt(`${ODRL}conflict`, p.conflict === undefined ? undefined : uri(p.conflict)),
     ...opt(`${ODRL}profile`, p.profile as JsonValue | undefined),
     [`${ODRL}permission`]: (p.permissions ?? []).map(encodeRule),
     [`${ODRL}prohibition`]: (p.prohibitions ?? []).map(encodeRule),
@@ -55,8 +60,8 @@ export function encodeLimit(c: Limit): JsonValue {
     [`${AGENT}enforcement`]: c.enforcement,
   };
 }
-function optional(n: Node, predicate: string, iri = true): string | undefined {
-  return n.values(predicate).length === 0 ? undefined : iri ? n.iri(predicate) : n.text(predicate);
+function optional(n: Node, predicate: string): string | undefined {
+  return n.values(predicate).length === 0 ? undefined : n.iri(predicate);
 }
 function decodeConstraint(n: Node): Constraint {
   const rights = n.values(`${ODRL}rightOperand`).map((v) => {
@@ -76,7 +81,12 @@ function decodeConstraint(n: Node): Constraint {
   };
 }
 function decodeDuty(n: Node): OdrlDuty {
-  return { action: local(n.iri(`${ODRL}action`)) as OdrlDuty["action"] };
+  return {
+    action: local(n.iri(`${ODRL}action`)) as OdrlDuty["action"],
+    id: optional(n, `${ODRL}uid`),
+    target: optional(n, `${ODRL}target`),
+    constraints: n.values(`${ODRL}constraint`).map(decodeConstraint) as OdrlDuty["constraints"],
+  };
 }
 function decodeRule(n: Node, type: Rule["type"]): Rule {
   return {
@@ -93,13 +103,14 @@ function decodeRule(n: Node, type: Rule["type"]): Rule {
 /** Read an embedded ODRL policy through typed RDF accessors. */
 export function decodePolicy(n: Node): Policy {
   const type = local(n.iri(RDF_TYPE));
+  const conflict = optional(n, `${ODRL}conflict`);
   if (!["Set", "Agreement", "Offer"].includes(type)) throw new Error("Invalid policy type");
   return {
     id: n.iri(`${ODRL}uid`),
     type: type as Policy["type"],
     assigner: optional(n, `${ODRL}assigner`),
     assignee: optional(n, `${ODRL}assignee`),
-    conflict: optional(n, `${ODRL}conflict`, false) as Policy["conflict"],
+    conflict: conflict === undefined ? undefined : (local(conflict) as Policy["conflict"]),
     profile: optional(n, `${ODRL}profile`),
     permissions: n.values(`${ODRL}permission`).map((r) => decodeRule(r, "permission")),
     prohibitions: n.values(`${ODRL}prohibition`).map((r) => decodeRule(r, "prohibition")),

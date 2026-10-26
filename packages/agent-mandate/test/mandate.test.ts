@@ -1,6 +1,14 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 
-import { issue, type KeyPair, type VerifiableCredential } from "@jeswr/solid-vc";
+import {
+  buildBitstringStatusListCredential,
+  createBitstringStatusResolver,
+  createStatusBitstring,
+  issue,
+  type KeyPair,
+  setStatusBit,
+  type VerifiableCredential,
+} from "@jeswr/solid-vc";
 import { beforeAll, expect, it } from "vitest";
 import {
   createVcMandateVerifier,
@@ -170,4 +178,71 @@ it("rejects signed graphs with a mismatching agreement binding", async () => {
       await createVcMandateVerifier({ ...options, read: async () => signed }).load(),
     ).toBeUndefined();
   }
+});
+it("rejects a signed limit outside the accounting vocabulary", async () => {
+  const m = {
+    ...mandate(),
+    limits: [
+      {
+        leftOperand: "urn:unsupported",
+        operator: "lteq" as const,
+        rightOperand: 1,
+        enforcement: "hard" as const,
+      },
+    ],
+  };
+  const vc = await issueMandate(m, key, { statusListCredential: STATUS, statusListIndex: "1" });
+  expect(
+    await createVcMandateVerifier({ ...options, read: async () => vc }).load(),
+  ).toBeUndefined();
+});
+it("rejects an absent status result and invalid verification clock", async () => {
+  expect(
+    await createVcMandateVerifier({
+      ...options,
+      resolveStatus: async () => ({ status: "absent" }),
+    }).load(),
+  ).toBeUndefined();
+  expect(
+    await createVcMandateVerifier({ ...options, now: () => new Date("invalid") }).load(),
+  ).toBeUndefined();
+  expect(
+    await createVcMandateVerifier({
+      ...options,
+      now: () => new Date(credential.validUntil as string),
+    }).load(),
+  ).toBeUndefined();
+});
+it("verifies actual signed bitstring status lists and refuses revoked or unreadable lists", async () => {
+  for (const revoked of [false, true]) {
+    const bits = createStatusBitstring();
+    setStatusBit(bits, 1, revoked);
+    const list = await issue({
+      credential: await buildBitstringStatusListCredential({
+        id: STATUS,
+        issuer: OWNER,
+        statusPurpose: "revocation",
+        bits,
+        validFrom: NOW.toISOString(),
+        validUntil: "2026-11-01T00:00:00Z",
+      }),
+      key,
+      options: { created: NOW },
+    });
+    const resolveStatus = createBitstringStatusResolver({
+      ...options.webIdKeyResolver,
+      now: NOW,
+      fetch: async () =>
+        new Response(JSON.stringify(list), { headers: { "content-type": "application/ld+json" } }),
+    });
+    const result = await createVcMandateVerifier({ ...options, resolveStatus }).load();
+    if (revoked) expect(result).toBeUndefined();
+    else expect(result?.id).toBe(ID);
+  }
+  const resolveStatus = createBitstringStatusResolver({
+    ...options.webIdKeyResolver,
+    now: NOW,
+    fetch: async () => new Response("unreadable", { status: 503 }),
+  });
+  expect(await createVcMandateVerifier({ ...options, resolveStatus }).load()).toBeUndefined();
 });

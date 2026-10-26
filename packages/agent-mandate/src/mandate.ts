@@ -2,6 +2,7 @@
 import { readBoundAuthorization, verifyAgentAuthority } from "@jeswr/agent-authz-verifier";
 import {
   buildAgentAuthorizationCredential,
+  type Credential,
   credentialToRdf,
   issue,
   type KeyPair,
@@ -94,12 +95,11 @@ export function defaultMandate(options: {
     limits: [],
   };
 }
-/** Sign an AgentAuthorizationCredential with the entire Agreement embedded in its claim graph. */
-export async function issueMandate(
+/** Build the package's canonical embedded Agreement claim graph (internal transport helper). */
+export function mandateCredential(
   m: Mandate,
-  key: KeyPair,
-  status: { statusListCredential: string; statusListIndex: string },
-): Promise<VerifiableCredential> {
+  status: { statusListCredential: string; statusListIndex: string; id?: string },
+): Credential {
   // The signed status is mandatory; the verifier checks the reserved status-list location.
   const credential = buildAgentAuthorizationCredential({
     id: m.id,
@@ -124,8 +124,16 @@ export async function issueMandate(
       [`${ODRL}constraint`]: m.limits.map(encodeLimit),
     },
   };
+  return { ...credential, credentialSubject: subject };
+}
+/** Sign an AgentAuthorizationCredential with the entire Agreement embedded in its claim graph. */
+export async function issueMandate(
+  m: Mandate,
+  key: KeyPair,
+  status: { statusListCredential: string; statusListIndex: string; id?: string },
+): Promise<VerifiableCredential> {
   return issue({
-    credential: { ...credential, credentialSubject: subject },
+    credential: mandateCredential(m, status),
     key,
     options: { created: new Date(m.validFrom) },
   });
@@ -146,7 +154,13 @@ export function createVcMandateVerifier(options: VcMandateOptions): MandateVerif
     async load() {
       try {
         const vc = await options.read();
-        if (!vc || !vc.id || vc.issuer !== options.ownerWebId || !vc.validFrom || !vc.validUntil)
+        if (!vc?.id || vc.issuer !== options.ownerWebId || !vc.validFrom || !vc.validUntil)
+          return undefined;
+        const now = options.now();
+        if (
+          !(Date.parse(vc.validFrom) <= now.getTime()) ||
+          !(Date.parse(vc.validUntil) > now.getTime())
+        )
           return undefined;
         const proofs = Array.isArray(vc.proof) ? vc.proof : [vc.proof];
         if (proofs.length !== 1 || proofs[0]?.cryptosuite !== "eddsa-rdfc-2022") return undefined;
@@ -173,9 +187,14 @@ export function createVcMandateVerifier(options: VcMandateOptions): MandateVerif
           {
             request: { action: "use", agent: subject },
             rootPrincipal: issuer,
-            now: options.now(),
+            now,
             ...options.webIdKeyResolver,
-            resolveStatus: options.resolveStatus,
+            resolveStatus: async (credential) => {
+              const result = await options.resolveStatus(credential);
+              return result.status === "valid"
+                ? result
+                : { status: "revoked", reason: "Mandate status could not be confirmed clear" };
+            },
             requireLeafAssignee: subject,
           },
         );

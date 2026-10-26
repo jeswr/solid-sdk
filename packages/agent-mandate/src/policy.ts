@@ -3,6 +3,7 @@ import {
   evaluate,
   LEFT_OPERANDS,
   ODRL_ACTIONS,
+  type OdrlDuty,
   type OdrlPolicy,
   type OdrlRule,
   OPERATORS,
@@ -28,14 +29,25 @@ const operands = new Set<string>([
   ...["recipientSet", "binding", "costExceeds"].map((x) => `${AGENT}${x}`),
 ]);
 
+function supportedDuty(d: OdrlDuty): boolean {
+  return (
+    (ODRL_ACTIONS as readonly string[]).includes(d.action) &&
+    (d.constraints ?? []).every(
+      (c) => operands.has(c.leftOperand) && (OPERATORS as readonly string[]).includes(c.operator),
+    )
+  );
+}
+
 /** Validate the profile before asking an engine; unsupported terms never grant authority. */
 export function supportedPolicy(p: Policy): boolean {
   return (
     (p.conflict === undefined || p.conflict === "prohibit") &&
     p.profile === undefined &&
+    (p.obligations ?? []).every(supportedDuty) &&
     [...(p.permissions ?? []), ...(p.prohibitions ?? [])].every(
       (r) =>
         actions.has(r.action) &&
+        (r.duties ?? []).every(supportedDuty) &&
         (r.constraints ?? []).every(
           (c) =>
             operands.has(c.leftOperand) && (OPERATORS as readonly string[]).includes(c.operator),

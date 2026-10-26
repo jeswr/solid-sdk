@@ -9,20 +9,39 @@ export interface LegacyPinnedKey {
   readonly subject: string;
   readonly alg: "EdDSA" | "ES256";
 }
+function iri(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    value.length <= 512 &&
+    /^[A-Za-z][A-Za-z0-9+.-]*:[^\s<>"{}|\\^`]+$/.test(value) &&
+    value.split("#").length <= 2
+  );
+}
+function instant(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    value.length <= 64 &&
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(value) &&
+    Number.isFinite(Date.parse(value))
+  );
+}
 function validPolicy(p: Policy): boolean {
   return (
-    typeof p.id === "string" &&
+    iri(p.id) &&
     supportedPolicy(p) &&
     (p.obligations ?? []).length === 0 &&
     [...(p.permissions ?? []), ...(p.prohibitions ?? [])].every(
       (r) =>
         ["use", "read", "distribute", "compensate", "transfer"].includes(r.action) &&
+        (r.id === undefined || iri(r.id)) &&
+        (r.target === undefined || iri(r.target)) &&
         (r.type === "permission" || r.type === "prohibition") &&
         (r.type !== "permission" || typeof r.target === "string") &&
         (r.duties ?? []).length === 0 &&
         (r.constraints ?? []).every(
           (c) =>
             ["dateTime", "purpose", "recipient"].includes(c.leftOperand) &&
+            ["eq", "neq", "isAnyOf", "isNoneOf", "lt", "lteq", "gt", "gteq"].includes(c.operator) &&
             (typeof c.rightOperand === "string" ||
               typeof c.rightOperand === "number" ||
               (Array.isArray(c.rightOperand) &&
@@ -58,15 +77,18 @@ export function createLegacyMandateVerifier(options: {
           return undefined;
         const verified = await compactVerify(jws, pinned.publicKey, { algorithms: [pinned.alg] });
         const m = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(verified.payload));
+        const now = options.now().getTime();
         if (
           m.type !== "OwnerMandate" ||
           !Number.isInteger(m.version) ||
           m.version < 1 ||
-          typeof m.id !== "string" ||
+          !iri(m.id) ||
+          !instant(m.validFrom) ||
+          !instant(m.validUntil) ||
           m.issuer !== options.ownerWebId ||
           m.subject !== options.agentWebId ||
-          !(Date.parse(m.validFrom) <= options.now().getTime()) ||
-          !(Date.parse(m.validUntil) > options.now().getTime()) ||
+          !(Date.parse(m.validFrom) <= now) ||
+          !(Date.parse(m.validUntil) > now) ||
           !validPolicy(m.autonomous) ||
           !validPolicy(m.withApproval) ||
           (await options.isRevoked(m.id))

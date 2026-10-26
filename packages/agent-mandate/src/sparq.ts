@@ -7,7 +7,7 @@ import { Store } from "n3";
 import { encodePolicy } from "./codec.js";
 import { supportedPolicy } from "./policy.js";
 import { turtle } from "./rdf.js";
-import { AGENT, type Effect, ODRL, type PolicyEngine } from "./types.js";
+import { AGENT, type Effect, ODRL, type PolicyEngine, type Rule } from "./types.js";
 
 /** The pilot's local binary protocol, selected explicitly without fallback. */
 export const SPARQ_DECIDE_API = "sparq-policy-decide/1";
@@ -40,6 +40,10 @@ export function sparqPolicyEngine(
       try {
         if (
           !options.binary ||
+          (options.timeoutMs !== undefined &&
+            (!Number.isFinite(options.timeoutMs) ||
+              options.timeoutMs <= 0 ||
+              options.timeoutMs > 30000)) ||
           !supportedPolicy(policy) ||
           (policy.obligations ?? []).length > 0 ||
           [...(policy.permissions ?? []), ...(policy.prohibitions ?? [])].some(
@@ -47,20 +51,24 @@ export function sparqPolicyEngine(
           )
         )
           return { effect: "indeterminate" };
-        const filter = (rules = policy.permissions) =>
-          (rules ?? []).filter(
+        const filter = (rules: readonly Rule[] = []) =>
+          rules.filter(
             (r) =>
               (r.assignee ?? policy.assignee) === undefined ||
               (r.assignee ?? policy.assignee) === request.agent,
           );
+        const withoutParties = (rules: readonly Rule[] = []) =>
+          filter(rules).map(({ assignee: _assignee, assigner: _assigner, ...rule }) => rule);
         const graph = credentialToRdf({
           id: "urn:example:sparq-envelope",
           issuer: "https://owner.example/#me",
           credentialSubject: {
             [`${AGENT}policy`]: encodePolicy({
               ...policy,
-              permissions: filter(policy.permissions),
-              prohibitions: filter(policy.prohibitions),
+              assigner: undefined,
+              assignee: undefined,
+              permissions: withoutParties(policy.permissions),
+              prohibitions: withoutParties(policy.prohibitions),
             }),
           },
         });
@@ -103,7 +111,11 @@ export function sparqPolicyEngine(
           env: {},
           shell: false,
         });
-        if (result.error || result.status !== 0 || result.stdout.length > 64 * 1024)
+        if (
+          result.error ||
+          result.status !== 0 ||
+          new TextEncoder().encode(result.stdout).length > 64 * 1024
+        )
           return { effect: "indeterminate" };
         const doc = JSON.parse(result.stdout);
         if (
@@ -115,6 +127,8 @@ export function sparqPolicyEngine(
           !Array.isArray(doc.matchedRules) ||
           !doc.matchedRules.every((r: unknown) => typeof r === "string")
         )
+          return { effect: "indeterminate" };
+        if (doc.effect === "permit" && Array.isArray(doc.unresolved) && doc.unresolved.length > 0)
           return { effect: "indeterminate" };
         const effect: Effect =
           doc.effect === "permit"

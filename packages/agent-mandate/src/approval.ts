@@ -108,8 +108,7 @@ export async function verifyApproval(
     if (!(await resolver.isControlledBy(method, options.ownerWebId))) return fail("key");
     const key = await resolver.resolveKey(method);
     if (
-      !key ||
-      key.algorithm.name !== "ECDSA" ||
+      key?.algorithm.name !== "ECDSA" ||
       (key.algorithm as { name: string; namedCurve: string }).namedCurve !== "P-256"
     )
       return fail("key");

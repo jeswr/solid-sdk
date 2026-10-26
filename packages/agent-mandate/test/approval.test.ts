@@ -1,8 +1,10 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 
+import { parseRdf } from "@jeswr/fetch-rdf";
 import type { KeyPair, WebIdKeyResolver } from "@jeswr/solid-vc";
 import { beforeAll, expect, it } from "vitest";
 import { type Approval, issueApproval, verifyApproval } from "../src/approval.js";
+import { node, SEC, turtle } from "../src/rdf.js";
 import { approvalKey, clock, edKey, NOW, OWNER, profileResolver } from "./helpers.js";
 
 let key: KeyPair;
@@ -93,17 +95,16 @@ it("rejects unlisted, missing and wrong keys and never uses embedded keys", asyn
       }),
     ).toEqual({ valid: false, reason });
   }
+  const store = await parseRdf(doc, "text/turtle");
+  node(store, a.id).setText(`${SEC}publicKeyJwk`, "test-token-0123456789");
   expect(
-    await verifyApproval(
-      `${doc}\n<${a.id}> <https://w3id.org/security#publicKeyJwk> "test-token-0123456789" .`,
-      {
-        ...options(),
-        webIdKeyResolver: {
-          isControlledBy: async () => false,
-          resolveKey: async () => key.publicKey,
-        },
+    await verifyApproval(await turtle(store), {
+      ...options(),
+      webIdKeyResolver: {
+        isControlledBy: async () => false,
+        resolveKey: async () => key.publicKey,
       },
-    ),
+    }),
   ).toEqual({ valid: false, reason: "key" });
 });
 it("rejects changed signed terms before comparing expected terms", async () => {

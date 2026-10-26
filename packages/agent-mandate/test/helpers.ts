@@ -4,6 +4,7 @@ import {
   generateKeyPairForSuite,
   type KeyPair,
   publishVerificationMethod,
+  type ResolveWebIdKeyOptions,
 } from "@jeswr/solid-vc";
 import { defaultMandate } from "../src/mandate.js";
 import { AGENT, type Intent, type Mandate } from "../src/types.js";
@@ -44,7 +45,7 @@ export async function profileResolver(key: KeyPair) {
     verificationMethod: key.verificationMethod,
     key,
   });
-  const fetchFixture: typeof fetch = async () =>
+  const fetchFixture: NonNullable<ResolveWebIdKeyOptions["fetch"]> = async () =>
     new Response(profile.turtle, { headers: { "content-type": "text/turtle" } });
   return createWebIdKeyResolver({ fetch: fetchFixture });
 }

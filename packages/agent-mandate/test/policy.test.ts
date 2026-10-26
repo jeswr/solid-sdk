@@ -205,3 +205,46 @@ it("turns unsupported vocabulary into confirmation and preserves prohibition pre
     effect: "prohibited",
   });
 });
+it("requires confirmation for unsupported duties even if context claims fulfillment", async () => {
+  for (const p of [
+    policy({ obligations: [{ action: "unknown" as "inform" }] }),
+    policy({ permissions: [{ ...permit, duties: [{ action: "unknown" as "inform" }] }] }),
+    policy({
+      obligations: [
+        {
+          action: "inform",
+          constraints: [{ leftOperand: "unknown" as "purpose", operator: "eq", rightOperand: "x" }],
+        },
+      ],
+    }),
+    policy({
+      obligations: [
+        {
+          action: "inform",
+          constraints: [{ leftOperand: "purpose", operator: "unknown" as "eq", rightOperand: "x" }],
+        },
+      ],
+    }),
+    policy({
+      obligations: [
+        {
+          action: "inform",
+          constraints: [{ leftOperand: "purpose", operator: "eq", rightOperand: "x" }],
+        },
+      ],
+    }),
+  ]) {
+    expect(
+      await solidOdrlEngine.evaluate(
+        p,
+        intent({ action: "read", attributes: { "fulfilled:unknown": true, purpose: "y" } }),
+      ),
+    ).toEqual({ effect: "indeterminate" });
+  }
+  expect(
+    await solidOdrlEngine.evaluate(
+      policy({ conflict: "perm", prohibitions: [{ type: "prohibition", action: "read" }] }),
+      intent({ action: "read" }),
+    ),
+  ).toEqual({ effect: "prohibited" });
+});
