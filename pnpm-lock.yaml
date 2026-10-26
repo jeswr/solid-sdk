@@ -37,8 +37,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/app-shell
       '@jeswr/fetch-rdf':
-        specifier: 0.1.0
-        version: 0.1.0
+        specifier: workspace:*
+        version: link:../../packages/fetch-rdf
       '@jeswr/solid-elements':
         specifier: workspace:*
         version: link:../../packages/solid-elements
@@ -125,6 +125,8 @@ importers:
         specifier: 4.1.10
         version: 4.1.10(@types/node@22.19.3)(@vitest/coverage-v8@4.1.10)(jsdom@26.1.0)(vite@7.3.5(@types/node@22.19.3)(jiti@2.7.0)(lightningcss@1.32.0))
 
+  apps/agent-daemon: {}
+
   apps/app-store: {}
 
   apps/app-store/web:
@@ -133,8 +135,8 @@ importers:
         specifier: workspace:*
         version: link:../../../packages/app-shell
       '@jeswr/fetch-rdf':
-        specifier: ^0.1.0
-        version: 0.1.0
+        specifier: workspace:*
+        version: link:../../../packages/fetch-rdf
       '@jeswr/solid-elements':
         specifier: workspace:*
         version: link:../../../packages/solid-elements
@@ -245,8 +247,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/app-shell
       '@jeswr/fetch-rdf':
-        specifier: ^0.1.0
-        version: 0.1.0
+        specifier: workspace:*
+        version: link:../../packages/fetch-rdf
       '@jeswr/guarded-fetch':
         specifier: workspace:*
         version: link:../../packages/guarded-fetch
@@ -372,8 +374,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/app-shell
       '@jeswr/fetch-rdf':
-        specifier: ^0.1.0
-        version: 0.1.0
+        specifier: workspace:*
+        version: link:../../packages/fetch-rdf
       '@jeswr/guarded-fetch':
         specifier: workspace:*
         version: link:../../packages/guarded-fetch
@@ -523,8 +525,8 @@ importers:
   apps/pod-chat:
     dependencies:
       '@jeswr/fetch-rdf':
-        specifier: ^0.1.0
-        version: 0.1.0
+        specifier: workspace:*
+        version: link:../../packages/fetch-rdf
       '@rdfjs/wrapper':
         specifier: ^0.34.0
         version: 0.34.0
@@ -590,8 +592,8 @@ importers:
         specifier: workspace:*
         version: link:../../../packages/app-shell
       '@jeswr/fetch-rdf':
-        specifier: ^0.1.0
-        version: 0.1.0
+        specifier: workspace:*
+        version: link:../../../packages/fetch-rdf
       '@jeswr/solid-elements':
         specifier: workspace:*
         version: link:../../../packages/solid-elements
@@ -693,8 +695,8 @@ importers:
   apps/pod-docs:
     dependencies:
       '@jeswr/fetch-rdf':
-        specifier: ^0.1.0
-        version: 0.1.0
+        specifier: workspace:*
+        version: link:../../packages/fetch-rdf
       '@jeswr/suite-vocab':
         specifier: workspace:*
         version: link:../../packages/suite-vocab
@@ -763,8 +765,8 @@ importers:
         specifier: workspace:*
         version: link:../../../packages/app-shell
       '@jeswr/fetch-rdf':
-        specifier: ^0.1.0
-        version: 0.1.0
+        specifier: workspace:*
+        version: link:../../../packages/fetch-rdf
       '@jeswr/solid-elements':
         specifier: workspace:*
         version: link:../../../packages/solid-elements
@@ -872,8 +874,8 @@ importers:
   apps/pod-drive:
     dependencies:
       '@jeswr/fetch-rdf':
-        specifier: ^0.1.0
-        version: 0.1.0
+        specifier: workspace:*
+        version: link:../../packages/fetch-rdf
       '@jeswr/suite-vocab':
         specifier: workspace:*
         version: link:../../packages/suite-vocab
@@ -939,8 +941,8 @@ importers:
         specifier: workspace:*
         version: link:../../../packages/app-shell
       '@jeswr/fetch-rdf':
-        specifier: ^0.1.0
-        version: 0.1.0
+        specifier: workspace:*
+        version: link:../../../packages/fetch-rdf
       '@jeswr/solid-elements':
         specifier: workspace:*
         version: link:../../../packages/solid-elements
@@ -1048,8 +1050,8 @@ importers:
   apps/pod-health:
     dependencies:
       '@jeswr/fetch-rdf':
-        specifier: 0.1.0
-        version: 0.1.0
+        specifier: workspace:*
+        version: link:../../packages/fetch-rdf
       '@jeswr/suite-vocab':
         specifier: workspace:*
         version: link:../../packages/suite-vocab
@@ -1115,8 +1117,8 @@ importers:
         specifier: workspace:*
         version: link:../../../packages/app-shell
       '@jeswr/fetch-rdf':
-        specifier: ^0.1.0
-        version: 0.1.0
+        specifier: workspace:*
+        version: link:../../../packages/fetch-rdf
       '@jeswr/solid-elements':
         specifier: workspace:*
         version: link:../../../packages/solid-elements
@@ -1224,8 +1226,8 @@ importers:
   apps/pod-mail:
     dependencies:
       '@jeswr/fetch-rdf':
-        specifier: ^0.1.0
-        version: 0.1.0
+        specifier: workspace:*
+        version: link:../../packages/fetch-rdf
       '@rdfjs/wrapper':
         specifier: ^0.34.0
         version: 0.34.0
@@ -1288,8 +1290,8 @@ importers:
         specifier: workspace:*
         version: link:../../../packages/app-shell
       '@jeswr/fetch-rdf':
-        specifier: ^0.1.0
-        version: 0.1.0
+        specifier: workspace:*
+        version: link:../../../packages/fetch-rdf
       '@jeswr/solid-elements':
         specifier: workspace:*
         version: link:../../../packages/solid-elements
@@ -1394,8 +1396,8 @@ importers:
   apps/pod-manager:
     dependencies:
       '@jeswr/fetch-rdf':
-        specifier: ^0.1.0
-        version: 0.1.0
+        specifier: workspace:*
+        version: link:../../packages/fetch-rdf
       '@jeswr/pod-connectors':
         specifier: workspace:*
         version: link:../../packages/pod-connectors
@@ -1500,8 +1502,8 @@ importers:
   apps/pod-money:
     dependencies:
       '@jeswr/fetch-rdf':
-        specifier: 0.1.0
-        version: 0.1.0
+        specifier: workspace:*
+        version: link:../../packages/fetch-rdf
       '@rdfjs/wrapper':
         specifier: 0.34.0
         version: 0.34.0
@@ -1564,8 +1566,8 @@ importers:
         specifier: workspace:*
         version: link:../../../packages/app-shell
       '@jeswr/fetch-rdf':
-        specifier: ^0.1.0
-        version: 0.1.0
+        specifier: workspace:*
+        version: link:../../../packages/fetch-rdf
       '@jeswr/solid-elements':
         specifier: workspace:*
         version: link:../../../packages/solid-elements
@@ -1670,8 +1672,8 @@ importers:
   apps/pod-music:
     dependencies:
       '@jeswr/fetch-rdf':
-        specifier: ^0.1.0
-        version: 0.1.0
+        specifier: workspace:*
+        version: link:../../packages/fetch-rdf
       '@rdfjs/wrapper':
         specifier: ^0.34.0
         version: 0.34.0
@@ -1734,8 +1736,8 @@ importers:
         specifier: workspace:*
         version: link:../../../packages/app-shell
       '@jeswr/fetch-rdf':
-        specifier: ^0.1.0
-        version: 0.1.0
+        specifier: workspace:*
+        version: link:../../../packages/fetch-rdf
       '@jeswr/solid-elements':
         specifier: workspace:*
         version: link:../../../packages/solid-elements
@@ -1837,8 +1839,8 @@ importers:
   apps/pod-photos:
     dependencies:
       '@jeswr/fetch-rdf':
-        specifier: ^0.1.0
-        version: 0.1.0
+        specifier: workspace:*
+        version: link:../../packages/fetch-rdf
       '@rdfjs/wrapper':
         specifier: ^0.34.0
         version: 0.34.0
@@ -1904,8 +1906,8 @@ importers:
         specifier: workspace:*
         version: link:../../../packages/app-shell
       '@jeswr/fetch-rdf':
-        specifier: ^0.1.0
-        version: 0.1.0
+        specifier: workspace:*
+        version: link:../../../packages/fetch-rdf
       '@jeswr/solid-elements':
         specifier: workspace:*
         version: link:../../../packages/solid-elements
@@ -2074,6 +2076,12 @@ importers:
         specifier: ^4.1.9
         version: 4.1.10(@types/node@25.9.5)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1)(vite@8.1.4(@types/node@25.9.5)(esbuild@0.28.1)(jiti@2.7.0))
 
+  packages/agent-audit:
+    devDependencies:
+      '@vitest/coverage-v8':
+        specifier: ^4.1.10
+        version: 4.1.10(vitest@4.1.10)
+
   packages/agent-authz-verifier:
     dependencies:
       '@jeswr/solid-odrl':
@@ -2119,6 +2127,42 @@ importers:
       vitest:
         specifier: ^3.2.6
         version: 3.2.7(@types/node@22.20.1)(jiti@2.7.0)(jsdom@29.1.1)(lightningcss@1.32.0)
+
+  packages/agent-channels:
+    devDependencies:
+      '@vitest/coverage-v8':
+        specifier: ^4.1.10
+        version: 4.1.10(vitest@4.1.10)
+
+  packages/agent-credentials:
+    devDependencies:
+      '@vitest/coverage-v8':
+        specifier: ^4.1.10
+        version: 4.1.10(vitest@4.1.10)
+
+  packages/agent-executor:
+    devDependencies:
+      '@vitest/coverage-v8':
+        specifier: ^4.1.10
+        version: 4.1.10(vitest@4.1.10)
+
+  packages/agent-mandate:
+    devDependencies:
+      '@vitest/coverage-v8':
+        specifier: ^4.1.10
+        version: 4.1.10(vitest@4.1.10)
+
+  packages/agent-memory: {}
+
+  packages/agent-model: {}
+
+  packages/agent-model-gateway:
+    devDependencies:
+      '@vitest/coverage-v8':
+        specifier: ^4.1.10
+        version: 4.1.10(vitest@4.1.10)
+
+  packages/agent-registry: {}
 
   packages/agent-session-capture:
     devDependencies:
@@ -2315,8 +2359,8 @@ importers:
         specifier: ^2.0.0
         version: 2.5.3
       '@jeswr/fetch-rdf':
-        specifier: github:jeswr/fetch-rdf#main
-        version: https://codeload.github.com/jeswr/fetch-rdf/tar.gz/a8359a3764cb6b3c763e09ea211542a5dc7edc33
+        specifier: workspace:*
+        version: link:../fetch-rdf
       '@jeswr/guarded-fetch':
         specifier: workspace:*
         version: link:../guarded-fetch
@@ -2370,8 +2414,8 @@ importers:
         specifier: ^2.0.0
         version: 2.5.3
       '@jeswr/fetch-rdf':
-        specifier: github:jeswr/fetch-rdf#main
-        version: https://codeload.github.com/jeswr/fetch-rdf/tar.gz/a8359a3764cb6b3c763e09ea211542a5dc7edc33
+        specifier: workspace:*
+        version: link:../fetch-rdf
       '@microsoft/api-extractor':
         specifier: ^7.58.9
         version: 7.58.9(@types/node@22.20.1)
@@ -2431,8 +2475,8 @@ importers:
         specifier: ^2.0.0
         version: 2.5.3
       '@jeswr/fetch-rdf':
-        specifier: github:jeswr/fetch-rdf#main
-        version: https://codeload.github.com/jeswr/fetch-rdf/tar.gz/a8359a3764cb6b3c763e09ea211542a5dc7edc33
+        specifier: workspace:*
+        version: link:../fetch-rdf
       '@microsoft/api-extractor':
         specifier: ^7.58.9
         version: 7.58.9(@types/node@22.20.1)
@@ -2454,6 +2498,43 @@ importers:
       vitest:
         specifier: ^3.2.6
         version: 3.2.7(@types/node@22.20.1)(jiti@2.7.0)(jsdom@29.1.1)(lightningcss@1.32.0)
+
+  packages/fetch-rdf:
+    dependencies:
+      '@rdfjs/types':
+        specifier: ^2.0.1
+        version: 2.0.1
+      '@types/n3':
+        specifier: ^1.16.0
+        version: 1.26.1
+      content-type:
+        specifier: ^1.0.5
+        version: 1.0.5
+      jsonld-streaming-parser:
+        specifier: ^5.0.0
+        version: 5.0.1
+      n3:
+        specifier: ^2.0.3
+        version: 2.1.1
+    devDependencies:
+      '@biomejs/biome':
+        specifier: ^2.5.1
+        version: 2.5.3
+      '@types/content-type':
+        specifier: ^1.1.8
+        version: 1.1.9
+      '@types/node':
+        specifier: ^25.9.2
+        version: 25.9.5
+      '@vitest/coverage-v8':
+        specifier: ^4.1.9
+        version: 4.1.10(vitest@4.1.10)
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: ^4.1.9
+        version: 4.1.10(@types/node@25.9.5)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1)(vite@8.1.4(@types/node@25.9.5)(esbuild@0.28.1)(jiti@2.7.0))
 
   packages/guarded-fetch:
     dependencies:
@@ -2495,8 +2576,8 @@ importers:
   packages/matrix-chat-to-pod:
     dependencies:
       '@jeswr/fetch-rdf':
-        specifier: ^0.1.0
-        version: 0.1.0
+        specifier: workspace:*
+        version: link:../fetch-rdf
       '@jeswr/guarded-fetch':
         specifier: workspace:*
         version: link:../guarded-fetch
@@ -2563,8 +2644,8 @@ importers:
         specifier: ^2.0.0
         version: 2.5.3
       '@jeswr/fetch-rdf':
-        specifier: ^0.1.0
-        version: 0.1.0
+        specifier: workspace:*
+        version: link:../fetch-rdf
       '@rdfjs/types':
         specifier: ^2.0.1
         version: 2.0.1
@@ -2660,8 +2741,8 @@ importers:
   packages/pod-connectors:
     dependencies:
       '@jeswr/fetch-rdf':
-        specifier: ^0.1.0
-        version: 0.1.0
+        specifier: workspace:*
+        version: link:../fetch-rdf
       '@jeswr/guarded-fetch':
         specifier: workspace:*
         version: link:../guarded-fetch
@@ -2771,8 +2852,8 @@ importers:
   packages/rxdb-solid:
     dependencies:
       '@jeswr/fetch-rdf':
-        specifier: ^0.1.0
-        version: 0.1.0
+        specifier: workspace:*
+        version: link:../fetch-rdf
       '@jeswr/guarded-fetch':
         specifier: workspace:*
         version: link:../guarded-fetch
@@ -2836,8 +2917,8 @@ importers:
         specifier: ^2.0.0
         version: 2.5.3
       '@jeswr/fetch-rdf':
-        specifier: github:jeswr/fetch-rdf#main
-        version: https://codeload.github.com/jeswr/fetch-rdf/tar.gz/a8359a3764cb6b3c763e09ea211542a5dc7edc33
+        specifier: workspace:*
+        version: link:../fetch-rdf
       '@rdfjs/types':
         specifier: ^2.0.1
         version: 2.0.1
@@ -2882,8 +2963,8 @@ importers:
         specifier: ^2.0.0
         version: 2.5.3
       '@jeswr/fetch-rdf':
-        specifier: github:jeswr/fetch-rdf#main
-        version: https://codeload.github.com/jeswr/fetch-rdf/tar.gz/a8359a3764cb6b3c763e09ea211542a5dc7edc33
+        specifier: workspace:*
+        version: link:../fetch-rdf
       '@microsoft/api-extractor':
         specifier: ^7.58.9
         version: 7.58.9(@types/node@22.20.1)
@@ -2912,8 +2993,8 @@ importers:
   packages/solid-agent-notify:
     dependencies:
       '@jeswr/fetch-rdf':
-        specifier: ^0.1.0
-        version: 0.1.0
+        specifier: workspace:*
+        version: link:../fetch-rdf
       '@jeswr/guarded-fetch':
         specifier: workspace:*
         version: link:../guarded-fetch
@@ -2955,8 +3036,8 @@ importers:
   packages/solid-api-auth:
     dependencies:
       '@jeswr/fetch-rdf':
-        specifier: ^0.1.0
-        version: 0.1.0
+        specifier: workspace:*
+        version: link:../fetch-rdf
       jose:
         specifier: ^6.2.3
         version: 6.2.3
@@ -3004,8 +3085,8 @@ importers:
   packages/solid-auth-core:
     dependencies:
       '@jeswr/fetch-rdf':
-        specifier: ^0.1.0
-        version: 0.1.0
+        specifier: workspace:*
+        version: link:../fetch-rdf
       '@solid/object':
         specifier: ^0.6.0
         version: 0.6.0
@@ -3059,8 +3140,8 @@ importers:
   packages/solid-bookmark:
     dependencies:
       '@jeswr/fetch-rdf':
-        specifier: ^0.1.0
-        version: 0.1.0
+        specifier: workspace:*
+        version: link:../fetch-rdf
       '@jeswr/rdf-serialize':
         specifier: workspace:*
         version: link:../rdf-serialize
@@ -3099,8 +3180,8 @@ importers:
   packages/solid-chat-interop:
     dependencies:
       '@jeswr/fetch-rdf':
-        specifier: ^0.1.0
-        version: 0.1.0
+        specifier: workspace:*
+        version: link:../fetch-rdf
       '@jeswr/rdf-serialize':
         specifier: workspace:*
         version: link:../rdf-serialize
@@ -3186,8 +3267,8 @@ importers:
         specifier: ^0.11.0
         version: 0.11.0
       '@jeswr/fetch-rdf':
-        specifier: ^0.1.0
-        version: 0.1.0
+        specifier: workspace:*
+        version: link:../fetch-rdf
       '@jeswr/guarded-fetch':
         specifier: workspace:*
         version: link:../guarded-fetch
@@ -3255,8 +3336,8 @@ importers:
   packages/solid-dav-bridge:
     dependencies:
       '@jeswr/fetch-rdf':
-        specifier: ^0.1.0
-        version: 0.1.0
+        specifier: workspace:*
+        version: link:../fetch-rdf
       '@jeswr/guarded-fetch':
         specifier: workspace:*
         version: link:../guarded-fetch
@@ -3317,8 +3398,8 @@ importers:
   packages/solid-drawing:
     dependencies:
       '@jeswr/fetch-rdf':
-        specifier: ^0.1.0
-        version: 0.1.0
+        specifier: workspace:*
+        version: link:../fetch-rdf
       '@jeswr/rdf-serialize':
         specifier: workspace:*
         version: link:../rdf-serialize
@@ -3370,8 +3451,8 @@ importers:
         specifier: ^0.11.0
         version: 0.11.0
       '@jeswr/fetch-rdf':
-        specifier: ^0.1.0
-        version: 0.1.0
+        specifier: workspace:*
+        version: link:../fetch-rdf
       '@jeswr/solid-session-restore':
         specifier: workspace:*
         version: link:../solid-session-restore
@@ -3445,8 +3526,8 @@ importers:
   packages/solid-granary:
     dependencies:
       '@jeswr/fetch-rdf':
-        specifier: ^0.1.0
-        version: 0.1.0
+        specifier: workspace:*
+        version: link:../fetch-rdf
       '@jeswr/guarded-fetch':
         specifier: workspace:*
         version: link:../guarded-fetch
@@ -3476,8 +3557,8 @@ importers:
   packages/solid-health-diary:
     dependencies:
       '@jeswr/fetch-rdf':
-        specifier: ^0.1.0
-        version: 0.1.0
+        specifier: workspace:*
+        version: link:../fetch-rdf
       '@jeswr/rdf-serialize':
         specifier: workspace:*
         version: link:../rdf-serialize
@@ -3553,8 +3634,8 @@ importers:
         specifier: ^2.5.3
         version: 2.5.3
       '@jeswr/fetch-rdf':
-        specifier: github:jeswr/fetch-rdf#a8359a3764cb6b3c763e09ea211542a5dc7edc33
-        version: https://codeload.github.com/jeswr/fetch-rdf/tar.gz/a8359a3764cb6b3c763e09ea211542a5dc7edc33
+        specifier: workspace:*
+        version: link:../fetch-rdf
       '@microsoft/api-extractor':
         specifier: 7.58.9
         version: 7.58.9(@types/node@26.1.1)
@@ -3580,8 +3661,8 @@ importers:
   packages/solid-memory:
     dependencies:
       '@jeswr/fetch-rdf':
-        specifier: ^0.1.0
-        version: 0.1.0
+        specifier: workspace:*
+        version: link:../fetch-rdf
       '@jeswr/rdf-serialize':
         specifier: workspace:*
         version: link:../rdf-serialize
@@ -3639,8 +3720,8 @@ importers:
         specifier: ^2.0.0
         version: 2.5.3
       '@jeswr/fetch-rdf':
-        specifier: github:jeswr/fetch-rdf#main
-        version: https://codeload.github.com/jeswr/fetch-rdf/tar.gz/a8359a3764cb6b3c763e09ea211542a5dc7edc33
+        specifier: workspace:*
+        version: link:../fetch-rdf
       '@microsoft/api-extractor':
         specifier: ^7.58.9
         version: 7.58.9(@types/node@22.20.1)
@@ -3743,8 +3824,8 @@ importers:
   packages/solid-pod-guard:
     dependencies:
       '@jeswr/fetch-rdf':
-        specifier: ^0.1.0
-        version: 0.1.0
+        specifier: workspace:*
+        version: link:../fetch-rdf
       '@jeswr/guarded-fetch':
         specifier: workspace:*
         version: link:../guarded-fetch
@@ -3940,8 +4021,8 @@ importers:
   packages/solid-task-model:
     dependencies:
       '@jeswr/fetch-rdf':
-        specifier: ^0.1.0
-        version: 0.1.0
+        specifier: workspace:*
+        version: link:../fetch-rdf
       '@jeswr/rdf-serialize':
         specifier: workspace:*
         version: link:../rdf-serialize
@@ -4017,8 +4098,8 @@ importers:
         specifier: ^2.0.0
         version: 2.5.3
       '@jeswr/fetch-rdf':
-        specifier: github:jeswr/fetch-rdf#main
-        version: https://codeload.github.com/jeswr/fetch-rdf/tar.gz/a8359a3764cb6b3c763e09ea211542a5dc7edc33
+        specifier: workspace:*
+        version: link:../fetch-rdf
       '@microsoft/api-extractor':
         specifier: ^7.58.9
         version: 7.58.9(@types/node@22.20.1)
@@ -4169,8 +4250,8 @@ importers:
         specifier: ^2.0.0
         version: 2.5.3
       '@jeswr/fetch-rdf':
-        specifier: github:jeswr/fetch-rdf#main
-        version: https://codeload.github.com/jeswr/fetch-rdf/tar.gz/a8359a3764cb6b3c763e09ea211542a5dc7edc33
+        specifier: workspace:*
+        version: link:../fetch-rdf
       '@microsoft/api-extractor':
         specifier: ^7.47.0
         version: 7.58.9(@types/node@22.20.1)
@@ -4205,8 +4286,8 @@ importers:
   packages/y-solid:
     dependencies:
       '@jeswr/fetch-rdf':
-        specifier: ^0.1.0
-        version: 0.1.0
+        specifier: workspace:*
+        version: link:../fetch-rdf
       '@jeswr/guarded-fetch':
         specifier: workspace:*
         version: link:../guarded-fetch
@@ -6537,15 +6618,6 @@ packages:
     resolution: {tarball: https://codeload.github.com/jeswr/federation-registry/tar.gz/601e8a4b4981b2876adb760b3d92179e9326de54}
     version: 0.1.0
     engines: {node: '>=24'}
-
-  '@jeswr/fetch-rdf@0.1.0':
-    resolution: {integrity: sha512-bdugw+QynGEUTUYERuVDY0sMfEiCehx54ahvXVUY/KThq1r6w+uHH0kbhg8s36gvdW3xNDaqAbbnGbRDR9qgkw==}
-    engines: {node: '>=20'}
-
-  '@jeswr/fetch-rdf@https://codeload.github.com/jeswr/fetch-rdf/tar.gz/a8359a3764cb6b3c763e09ea211542a5dc7edc33':
-    resolution: {tarball: https://codeload.github.com/jeswr/fetch-rdf/tar.gz/a8359a3764cb6b3c763e09ea211542a5dc7edc33}
-    version: 0.1.0
-    engines: {node: '>=20'}
 
   '@jeswr/guarded-fetch@https://codeload.github.com/jeswr/guarded-fetch/tar.gz/bd4490927fd36d62f6b78a0021e8d40bbb572c3b':
     resolution: {tarball: https://codeload.github.com/jeswr/guarded-fetch/tar.gz/bd4490927fd36d62f6b78a0021e8d40bbb572c3b}
@@ -18722,19 +18794,6 @@ snapshots:
     dependencies:
       '@rdfjs/types': 2.0.1
       '@rdfjs/wrapper': 0.34.0
-      content-type: 1.0.5
-      jsonld-streaming-parser: 5.0.1
-      n3: 2.1.1
-
-  '@jeswr/fetch-rdf@0.1.0':
-    dependencies:
-      '@rdfjs/dataset': 2.0.3
-      content-type: 1.0.5
-      jsonld-streaming-parser: 5.0.1
-      n3: 2.1.1
-
-  '@jeswr/fetch-rdf@https://codeload.github.com/jeswr/fetch-rdf/tar.gz/a8359a3764cb6b3c763e09ea211542a5dc7edc33':
-    dependencies:
       content-type: 1.0.5
       jsonld-streaming-parser: 5.0.1
       n3: 2.1.1
