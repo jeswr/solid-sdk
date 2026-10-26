@@ -21,6 +21,7 @@ import {
   DropdownMenuTrigger,
   IconButton,
   Progress,
+  Slider,
   TooltipProvider,
 } from "../src/index.js";
 
@@ -59,6 +60,46 @@ it("IconButton pairs its name with a keyboard tooltip and prevents disabled acti
 });
 it("requires a nonempty IconButton label", () =>
   expect(() => render(<IconButton label=" ">+</IconButton>)).toThrow("non-empty label"));
+
+it.each([
+  { props: {}, expected: ["0"] },
+  { props: { min: 10, max: 50 }, expected: ["10"] },
+  { props: { defaultValue: [25] }, expected: ["25"] },
+  { props: { defaultValue: [20, 80] }, expected: ["20", "80"] },
+  { props: { value: [30] }, expected: ["30"] },
+  { props: { value: [30, 70], defaultValue: [10] }, expected: ["30", "70"] },
+])("submits one Slider form value per thumb: $expected", ({ props, expected }) => {
+  const { container } = render(
+    <form>
+      <Slider name="volume" {...props} />
+    </form>,
+  );
+  const form = container.querySelector("form");
+  expect(form).not.toBeNull();
+  expect(screen.getAllByRole("slider").map((thumb) => thumb.getAttribute("aria-valuenow"))).toEqual(
+    expected,
+  );
+  // Radix uses array field names for ranges and the literal name for a single thumb.
+  expect(Array.from(new FormData(form ?? undefined).entries())).toEqual(
+    expected.map((value) => [expected.length > 1 ? "volume[]" : "volume", value]),
+  );
+});
+
+it("updates a default Slider's single submitted value from the keyboard", () => {
+  const { container } = render(
+    <form>
+      <Slider name="volume" />
+    </form>,
+  );
+  const thumb = screen.getByRole("slider", { name: "Value" });
+  thumb.focus();
+  fireEvent.keyDown(thumb, { key: "ArrowRight" });
+  expect(document.activeElement).toBe(thumb);
+  expect(thumb.getAttribute("aria-valuenow")).toBe("1");
+  expect(new FormData(container.querySelector("form") ?? undefined).getAll("volume")).toEqual([
+    "1",
+  ]);
+});
 
 it.each([true, false])("guards IconButton activation handlers when disabled=%s", (disabled) => {
   const activate = vi.fn();
