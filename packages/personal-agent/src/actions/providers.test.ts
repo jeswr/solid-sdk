@@ -1,8 +1,9 @@
+// AUTHORED-BY Codex GPT-6
 import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { type ProviderEnvironment, zonedToUtc } from "./providers/common.js";
+import { type ProviderEnvironment, zonedToUtc, zonedToUtcChecked } from "./providers/common.js";
 import {
   type AccessTokenProvider,
   CredentialError,
@@ -660,6 +661,57 @@ describe("review counterexamples (independently reproduced) and related boundari
       ok: true,
       busy: [{ start: "2026-11-01T05:30:00.000Z", end: "2026-11-01T06:45:00.000Z" }],
     });
+  });
+
+  it("widens Microsoft busy time across Lord Howe's thirty-minute fall-back", async () => {
+    const f = vi.fn(async () =>
+      json({
+        value: [
+          {
+            showAs: "busy",
+            start: { dateTime: "2026-04-05T01:45:00", timeZone: "Australia/Lord_Howe" },
+            end: { dateTime: "2026-04-05T01:50:00", timeZone: "Australia/Lord_Howe" },
+          },
+        ],
+      }),
+    );
+    const result = await microsoftCalendarView(
+      env(f),
+      {
+        connectionId: "m",
+        calendarId: "primary",
+        ownerTimeZone: "UTC",
+        window: { start: "2026-04-04T00:00:00Z", end: "2026-04-06T00:00:00Z" },
+      },
+      at,
+    );
+    expect(result).toMatchObject({
+      ok: true,
+      busy: [{ start: "2026-04-04T14:45:00.000Z", end: "2026-04-04T15:20:00.000Z" }],
+    });
+  });
+
+  it.each([
+    ["earliest", "2026-04-04T14:45:00.000Z"],
+    ["latest", "2026-04-04T15:15:00.000Z"],
+  ] as const)("finds the %s instant using the real thirty-minute offset change", (prefer, iso) => {
+    expect(zonedToUtcChecked("2026-04-05", 105, "Australia/Lord_Howe", prefer)).toBe(
+      Date.parse(iso),
+    );
+  });
+
+  it.each([
+    "earliest",
+    "latest",
+  ] as const)("rejects non-hour gaps and keeps normal times with %s preference", (prefer) => {
+    expect(zonedToUtcChecked("2026-10-04", 135, "Australia/Lord_Howe", prefer)).toBeUndefined();
+    expect(zonedToUtcChecked("2011-12-30", 720, "Pacific/Apia", prefer)).toBeUndefined();
+    expect(zonedToUtcChecked("2026-04-05", 180, "Australia/Lord_Howe", prefer)).toBe(
+      Date.parse("2026-04-04T16:30:00Z"),
+    );
+    expect(zonedToUtcChecked("2026-04-05", 540, "Asia/Kathmandu", prefer)).toBe(
+      Date.parse("2026-04-05T03:15:00Z"),
+    );
   });
 
   it("the adapter boundary refuses malformed or expired token expiry from any credential provider", async () => {

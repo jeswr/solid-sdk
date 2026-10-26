@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 /**
  * Shared provider-adapter plumbing: bounded HTTP, token acquisition with minimum-scope checks,
  * and time conversion. Every failure becomes a `SourceFailure` (fail closed), never data.
@@ -233,9 +234,17 @@ export function zonedToUtcChecked(
     const p = localParts(new Date(t), timeZone);
     return p.date === date && p.minutes === minutes;
   };
-  const guess = zonedToUtc(date, minutes, timeZone);
-  if (!matches(guess)) return undefined;
-  const candidates = [guess - 3_600_000, guess, guess + 3_600_000].filter(matches);
+  const wanted = Date.parse(`${date}T00:00:00Z`) + minutes * 60_000;
+  // Sample both sides of any nearby transition, including non-hour shifts and skipped days.
+  // Each actual zone offset gives a candidate; round-trip it to reject nonexistent wall times.
+  const offsets = new Set<number>();
+  for (const days of [-2, -1, 0, 1, 2]) {
+    const sample = wanted + days * 86_400_000;
+    const p = localParts(new Date(sample), timeZone);
+    offsets.add(Date.parse(`${p.date}T00:00:00Z`) + p.minutes * 60_000 - sample);
+  }
+  const candidates = [...offsets].map((offset) => wanted - offset).filter(matches);
+  if (candidates.length === 0) return undefined;
   return prefer === "earliest" ? Math.min(...candidates) : Math.max(...candidates);
 }
 
