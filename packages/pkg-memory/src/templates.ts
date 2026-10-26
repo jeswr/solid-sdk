@@ -171,8 +171,6 @@ export function createFactAssertion(about: string, fact: Fact): Store {
           .link(type, `${NS.schema}DoseSchedule`)
           .text(`${NS.schema}doseValue`, v.dose.value, `${NS.xsd}decimal`)
           .text(`${NS.schema}doseUnit`, v.dose.unit);
-        if (!/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(v.dose.value))
-          throw new Error("Invalid dose decimal");
         if (v.dose.frequency !== undefined)
           schedule.text(`${NS.schema}frequency`, v.dose.frequency);
       }

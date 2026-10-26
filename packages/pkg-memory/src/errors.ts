@@ -14,3 +14,11 @@ export class UnsupportedLiteralCharacterError extends TypeError {
     this.name = "UnsupportedLiteralCharacterError";
   }
 }
+
+/** A supported scalar datatype has a noncanonical or invalid lexical form. */
+export class UnsupportedLiteralLexicalFormError extends TypeError {
+  constructor(readonly datatype: string) {
+    super("Unsupported literal lexical form");
+    this.name = "UnsupportedLiteralLexicalFormError";
+  }
+}

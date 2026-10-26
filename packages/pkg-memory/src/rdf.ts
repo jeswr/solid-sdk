@@ -4,7 +4,11 @@ import { safeIri } from "@jeswr/rdf-serialize";
 import type { DatasetCore, Literal, NamedNode, Quad, Term } from "@rdfjs/types";
 import { LiteralAs, NamedNodeAs, SetFrom, TermAs, TermFrom, TermWrapper } from "@rdfjs/wrapper";
 import { DataFactory as df, Literal as N3Literal, Parser, Store } from "n3";
-import { UnsupportedLiteralCharacterError, UnsupportedLiteralDatatypeError } from "./errors.js";
+import {
+  UnsupportedLiteralCharacterError,
+  UnsupportedLiteralDatatypeError,
+  UnsupportedLiteralLexicalFormError,
+} from "./errors.js";
 
 export const NS = {
   pkg: "https://jeswr.org/ns/pkg#",
@@ -85,6 +89,14 @@ const supportedLiteralDatatypes = new Set([
   `${NS.xsd}gYearMonth`,
 ]);
 
+// RDFlib's stable scalar spellings: Decimal retains scale and signed zero.
+// The end assertion rejects trailing newlines as well as other extra characters.
+const scalarLexicalForms = new Map([
+  [`${NS.xsd}integer`, /^(?:0|-?[1-9]\d*)(?![\s\S])/],
+  [`${NS.xsd}decimal`, /^-?(?:0|[1-9]\d*)(?:\.\d+)?(?![\s\S])/],
+  [`${NS.xsd}boolean`, /^(?:true|false)(?![\s\S])/],
+]);
+
 function validateLiteral(term: Literal): void {
   if (!supportedLiteralDatatypes.has(term.datatype.value))
     throw new UnsupportedLiteralDatatypeError(term.datatype.value);
@@ -92,6 +104,9 @@ function validateLiteral(term: Literal): void {
   // biome-ignore lint/suspicious/noControlCharactersInRegex: explicitly reject the control characters in the parity policy.
   const separator = /[\u2028\u2029\u0085\u000b\u000c\u001c-\u001e]/u.exec(term.value);
   if (separator) throw new UnsupportedLiteralCharacterError(separator[0].codePointAt(0) as number);
+  const lexicalForm = scalarLexicalForms.get(term.datatype.value);
+  if (lexicalForm && !lexicalForm.test(term.value))
+    throw new UnsupportedLiteralLexicalFormError(term.datatype.value);
 }
 
 /** Validate the literal parity boundary without changing serialized graph values. */
@@ -243,7 +258,7 @@ function calendarLiteral(value: string, datatype: "date" | "gYear" | "gYearMonth
 }
 
 export function normalizeLiteral(term: Literal): Literal {
-  // Validate before trimming numeric whitespace or normalizing dateTime values.
+  // Scalar forms must already be canonical; only temporal values are normalized.
   validateLiteral(term);
   if (term.datatype.value === `${NS.xsd}dateTime`)
     return df.literal(dateTime(term.value, false), term.datatype);
@@ -253,22 +268,5 @@ export function normalizeLiteral(term: Literal): Literal {
     (datatype === "date" || datatype === "gYear" || datatype === "gYearMonth")
   )
     return df.literal(calendarLiteral(term.value, datatype), term.datatype);
-  const value = term.value.trim();
-  if (term.datatype.value === `${NS.xsd}integer` && /^[+-]?\d+$/.test(value)) {
-    return df.literal(BigInt(value).toString(), term.datatype);
-  }
-  if (term.datatype.value === `${NS.xsd}decimal` && /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(value)) {
-    // Decimal's fixed-point spelling retains scale and signed zero, without
-    // passing through a JS number (which would round arbitrary-precision values).
-    const [integer, fraction] = value.replace(/^\+/, "").split(".");
-    const whole = (integer as string).replace(/^(-?)0+(?=\d)/, "$1").replace(/^-?$/, "$&0");
-    return df.literal(whole + (fraction ? `.${fraction}` : ""), term.datatype);
-  }
-  if (
-    term.datatype.value === `${NS.xsd}boolean` &&
-    ["true", "false", "1", "0"].includes(term.value)
-  ) {
-    return df.literal(["true", "1"].includes(term.value) ? "true" : "false", term.datatype);
-  }
   return term;
 }

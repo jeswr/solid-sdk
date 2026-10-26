@@ -50,8 +50,19 @@ audit-only dataset.
 
 Literal datatypes are limited to `xsd:string` (including plain strings),
 `rdf:langString`, `xsd:integer`, `xsd:decimal`, `xsd:boolean`, `xsd:dateTime`,
-`xsd:date`, `xsd:gYear` and `xsd:gYearMonth`. Only these datatypes have supported
-RDFlib 7.1.4 normalization. All other literal datatypes, including derived integer
+`xsd:date`, `xsd:gYear` and `xsd:gYearMonth`. The four temporal types retain their
+RDFlib 7.1.4 normalization. Other allowed types require canonical lexical forms
+and are never coerced. Strings retain their contents; language strings retain
+their contents and tag spelling. Integers use `0` or an optional minus sign with
+unpadded nonzero digits. Decimals use unpadded fixed-point notation, retaining
+fractional scale and signed zero (`2.00`, `-0`, `-0.00` are supported). Booleans
+use exactly `true` or `false`. Whitespace, plus signs, integer negative zero,
+exponents, shorthand fractions, `1`/`0` booleans and invalid scalar values throw
+the exported `UnsupportedLiteralLexicalFormError` (a `TypeError` with a `datatype`
+IRI property). These are RDFlib's stable scalar spellings, including its decimal
+scale, rather than coercions of additional lexical forms.
+
+All other literal datatypes, including derived integer
 types, floating-point types, `xsd:time`, `xsd:duration`, `xsd:token`, binary types
 and custom datatypes, throw the exported `UnsupportedLiteralDatatypeError`
 (a `TypeError` with a `datatype` IRI property).
@@ -62,7 +73,9 @@ numeric `codePoint` property). These characters are rejected before normalizatio
 or hashing because Python's line splitting changes the reference hash input.
 Ordinary newlines, carriage returns and tabs remain supported. Literal validation
 applies to raw RDF/JS assertions, Turtle parsing, templates, batch metadata, TriG
-parsing and serialization, including caller-modified datasets.
+parsing and serialization, including caller-modified datasets. Serialization also
+checks every subject, predicate, object, graph name and literal datatype against
+the builder's IRI and language-tag guards before invoking the Writer.
 
 Nanopub, activity, message-fallback and annotation IDs use the reference UUIDv5
 namespace and name construction. Assertion IDs hash RDFlib 7's canonical N-Triples;

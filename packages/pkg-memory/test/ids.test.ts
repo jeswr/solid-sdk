@@ -11,6 +11,7 @@ import {
   parseAssertion,
   pkgId,
   UnsupportedLiteralDatatypeError,
+  UnsupportedLiteralLexicalFormError,
 } from "../src/index.js";
 import { exampleBuildOptions } from "../src/testing.js";
 
@@ -18,7 +19,13 @@ it("matches supported RDFlib canonicalization oracles and rejects unsupported hi
   const fixtures: { cases: { name: string; assertion: string; id: string; graph: string }[] } =
     JSON.parse(await readFile(new URL("./fixtures/canonical.json", import.meta.url), "utf8"));
   for (const fixture of fixtures.cases) {
-    if (["derived-integers", "floating-point", "invalid-numerics"].includes(fixture.name)) {
+    if (["typed", "decimal", "derived-integers", "invalid-numerics"].includes(fixture.name)) {
+      await expect(parseAssertion(fixture.assertion, exampleBuildOptions().owner)).rejects.toThrow(
+        UnsupportedLiteralLexicalFormError,
+      );
+      continue;
+    }
+    if (fixture.name === "floating-point") {
       await expect(parseAssertion(fixture.assertion, exampleBuildOptions().owner)).rejects.toThrow(
         UnsupportedLiteralDatatypeError,
       );
