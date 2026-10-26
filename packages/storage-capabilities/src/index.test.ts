@@ -4,9 +4,9 @@ import * as cache from "./cache.js";
 import * as api from "./index.js";
 import * as testing from "./testing.js";
 
-test("public parser, errors, fixture and reserved cache entry points load", () => {
+test("public parser, errors, fixture and cache entry points load", () => {
   expect(Object.keys(api).sort()).toEqual(["CapabilitiesError", "parseLwsDescription"]);
-  expect(Object.keys(cache)).toEqual([]);
+  expect(Object.keys(cache).sort()).toEqual(["createIndexedDbCache", "createMemoryCache"]);
   expect(Object.keys(testing)).toEqual(["sparqLwsCid"]);
   expect(testing.sparqLwsCid.type).toEqual(["Storage"]);
 });
