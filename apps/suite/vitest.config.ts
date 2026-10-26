@@ -13,6 +13,7 @@ export default defineConfig({
         "src/apps/photos/lib/exif/**/*.ts",
         "src/apps/photos/lib/library/**/*.ts",
         "src/apps/notes/lib/**/*.ts",
+        "src/apps/notes/lib/convert/**/*.ts",
         "src/lib/order/**/*.ts",
         "src/apps/docs/lib/anchoring/**/*.ts",
         "src/apps/sheets/lib/refs/**/*.ts",
