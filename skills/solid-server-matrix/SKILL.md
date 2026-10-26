@@ -240,6 +240,30 @@ hides the WAC↔ACP and DPoP-strictness divergences above.
 
 ---
 
+## Pitfalls
+
+### Split broker and resource server
+
+The NOTES broker/RS deployment uses a WebID whose `solid:oidcIssuer` points to a separate
+broker, which federates to Keycloak. Do not assume the issuer is the storage host or that a
+CSS-only host map describes this deployment. See the
+[client issuer pitfalls](../solid-reactive-authentication/SKILL.md#broker-issuers-and-loopback-http).
+Its RS strictly checks resource-request DPoP `ath`; use the suite proof helpers and verify
+the access-token hash. Token-endpoint proofs omit `ath` (compatibility footnote 10 above).
+
+### Loopback address versus public URL
+
+If `https://localhost:3000` fails with ECONNREFUSED (or a tool reports status `000`) while
+`127.0.0.1` connects, check whether localhost resolves to `::1` but the RS binds IPv4 only.
+Route the connection to IPv4 while retaining `localhost` in the request URL and TLS SAN/SNI;
+raw Node TLS connections to `127.0.0.1` may need `servername: "localhost"`.
+In the source deployment the certificate and `PSS_TOKEN_AUDIENCE` use
+`https://localhost:3000`; changing the request URL to the IP breaks that deployment's checks.
+DPoP `htu` binds the actual target URI (without query/fragment), not the socket address or
+the access-token audience alone. Do not turn this local hostname lesson into a general
+byte-for-byte audience/URL equality rule. See the
+[testing callout](../solid-test-infrastructure/SKILL.md#minimal-live-round-trip-proof).
+
 ## Common misdiagnoses
 
 - **"CORS error."** Most browser-reported CORS failures on Solid are really a

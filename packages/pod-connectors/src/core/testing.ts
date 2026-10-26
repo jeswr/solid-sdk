@@ -270,3 +270,6 @@ export async function fileImport(
 
 /** Recorded source fetch for fixture-only tests. */
 export { fixtureFetch, getJson } from "./fixture-fetch.js";
+
+/** Fail-closed fixture recorder; hosts explicitly allowlist non-personal fields. */
+export { createFixtureRecorder, redactFixture } from "./fixture-recorder.js";
