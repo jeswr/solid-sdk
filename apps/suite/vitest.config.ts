@@ -13,6 +13,7 @@ export default defineConfig({
         "src/apps/notes/lib/**/*.ts",
         "src/lib/order/**/*.ts",
         "src/apps/docs/lib/anchoring/**/*.ts",
+        "src/apps/docs/lib/outline/**/*.ts",
         "src/apps/sheets/lib/refs/**/*.ts",
         "src/apps/calendar/lib/layout/**/*.ts",
         "src/apps/chat/lib/timeline/**/*.ts",
