@@ -608,9 +608,16 @@ async function searchRdf(
 ): Promise<import("n3").Store> {
   const transport = fetchConfig(source);
   if (transport) {
-    return (
-      await fetchBoundedRdf(url, { fetch: profile ? transport.fetch : scopedFetch(transport) })
-    ).dataset;
+    // Match the adapter's discovery policy: only the configured off-pod WebID
+    // bypasses the pod scope, and its redirects are never followed. In-pod
+    // profiles use the guarded loop over the budget-wrapped transport so every
+    // permitted hop is validated and charged before issuing its request.
+    const offPodProfile =
+      profile && url === transport.webId && podScopedUrlOrUndefined(transport, url) === undefined;
+    const fetcher: typeof fetch = offPodProfile
+      ? (input, init) => transport.fetch(input, { ...init, redirect: "manual" })
+      : scopedFetch(transport);
+    return (await fetchBoundedRdf(url, { fetch: fetcher })).dataset;
   }
   const pod = asPodPort(source);
   const { body, contentType, url: finalUrl } = await pod.read(url, { accept: RDF_ACCEPT });

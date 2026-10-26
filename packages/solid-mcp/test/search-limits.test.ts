@@ -1,6 +1,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { search } from "../src/pod.js";
+import { createFetchPodPort } from "../src/pod-port.js";
 import { SearchBudget } from "../src/search-budget.js";
 import { containerTurtle, makeFakePod, poisonedContainerTurtle } from "./fake-pod.js";
 
@@ -11,6 +13,154 @@ const SOLID = "http://www.w3.org/ns/solid/terms#";
 afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
+});
+
+describe.each([false, true])("search profile redirect policy (fetch PodPort: %s)", (portable) => {
+  const source = (fetch: typeof globalThis.fetch, webId: string) => {
+    const config = { fetch, podRoot: POD, webId };
+    return portable ? createFetchPodPort(config) : config;
+  };
+
+  it.each([
+    301, 302, 303, 307, 308,
+  ])("refuses off-pod profile HTTP %s redirects", async (status) => {
+    const webId = "https://identity.example/card#me";
+    for (const location of [
+      "http://169.254.169.254/latest/meta-data/",
+      "https://evil.example/card",
+      "https://identity.example/other",
+      `${POD}card`,
+    ]) {
+      const cancel = vi.fn();
+      const response = new Response(new ReadableStream({ cancel }, { highWaterMark: 0 }), {
+        status,
+        headers: { location, "content-type": "application/ld+json" },
+      });
+      if (!response.body) throw new Error("Expected redirect fixture body");
+      const read = vi.spyOn(response.body, "getReader");
+      const fixture = makeFakePod({
+        [POD]: { contentType: "text/turtle", body: containerTurtle(POD, []) },
+      });
+      const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
+        if (String(input) !== webId) return fixture.fetch(input, init);
+        // Model fetch's default automatic following without any real network I/O.
+        if (init?.redirect !== "manual") return fetch(location, init);
+        return response;
+      });
+      expect(await search(source(fetch, webId), "match")).toEqual([]);
+      expect(fetch.mock.calls.map(([url]) => String(url))).toEqual([webId, POD]);
+      expect(fetch.mock.calls.every(([, init]) => init?.redirect === "manual")).toBe(true);
+      expect(read).not.toHaveBeenCalled();
+      expect(cancel).toHaveBeenCalledOnce();
+    }
+  });
+
+  it.each([301, 302, 303, 307, 308])("guards in-pod profile HTTP %s redirects", async (status) => {
+    for (const location of [
+      "http://169.254.169.254/latest/meta-data/",
+      "https://evil.example/card",
+      "https://alice.example/other/card",
+    ]) {
+      const fixture = makeFakePod({
+        [WEBID]: {
+          contentType: "text/plain",
+          body: "",
+          redirectTo: location,
+          redirectStatus: status,
+        },
+        [POD]: { contentType: "text/turtle", body: containerTurtle(POD, []) },
+      });
+      const fetch = vi.fn(fixture.fetch);
+      expect(await search(source(fetch, WEBID), "match")).toEqual([]);
+      expect(fetch.mock.calls.map(([url]) => String(url))).toEqual([WEBID, POD]);
+      expect(fetch.mock.calls.every(([, init]) => init?.redirect === "manual")).toBe(true);
+    }
+  });
+
+  it.each([
+    301, 302, 303, 307, 308,
+  ])("follows validated in-pod profile HTTP %s redirects", async (status) => {
+    const finalProfile = `${POD}actual/card`;
+    const index = `${POD}actual/index.ttl`;
+    const note = `${POD}actual/note.ttl`;
+    const cancel = vi.fn();
+    const response = new Response(new ReadableStream({ cancel }, { highWaterMark: 0 }), {
+      status,
+      headers: { location: "../actual/card", "content-type": "application/ld+json" },
+    });
+    if (!response.body) throw new Error("Expected redirect fixture body");
+    const read = vi.spyOn(response.body, "getReader");
+    const fixture = makeFakePod({
+      [finalProfile]: {
+        contentType: "text/turtle",
+        body: `<#me> <${SOLID}publicTypeIndex> <index.ttl>.`,
+      },
+      [index]: { contentType: "text/turtle", body: `<#r> <${SOLID}instance> <note.ttl>.` },
+      [note]: { contentType: "text/turtle", body: '<> <https://schema.org/text> "avocado".' },
+      [POD]: { contentType: "text/turtle", body: containerTurtle(POD, []) },
+    });
+    const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
+      if (String(input) === WEBID) return response;
+      const result = await fixture.fetch(input, init);
+      Object.defineProperty(result, "url", { value: String(input) });
+      return result;
+    });
+    expect((await search(source(fetch, WEBID), "avocado")).map((hit) => hit.url)).toEqual([note]);
+    expect(fetch.mock.calls.map(([url]) => String(url))).toEqual([
+      WEBID,
+      finalProfile,
+      index,
+      note,
+      POD,
+    ]);
+    expect(fetch.mock.calls.every(([, init]) => init?.redirect === "manual")).toBe(true);
+    expect(read).not.toHaveBeenCalled();
+    expect(cancel).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    1, 2, 3, 4, 5, 6,
+  ])("charges profile redirect hops to the shared resource cap %s", async (maxResources) => {
+    const first = `${POD}first/card`;
+    const last = `${POD}last/card`;
+    const note = `${POD}note.ttl`;
+    const fixture = makeFakePod({
+      [WEBID]: { contentType: "text/plain", body: "", redirectTo: first },
+      [first]: { contentType: "text/plain", body: "", redirectTo: last },
+      [last]: { contentType: "text/turtle", body: `<#me> <${SOLID}publicTypeIndex> <${INDEX}>.` },
+      [INDEX]: { contentType: "text/turtle", body: `<#r> <${SOLID}instance> <${note}>.` },
+      [note]: { contentType: "text/turtle", body: '<> <https://schema.org/text> "avocado".' },
+      [POD]: { contentType: "text/turtle", body: containerTurtle(POD, []) },
+    });
+    const fetch = vi.fn(fixture.fetch);
+    const hits = await search(source(fetch, WEBID), "avocado", { maxResources });
+    expect(hits.map((hit) => hit.url)).toEqual(maxResources >= 5 ? [note] : []);
+    expect(fetch.mock.calls.map(([url]) => String(url))).toEqual(
+      [WEBID, first, last, INDEX, note, POD].slice(0, maxResources),
+    );
+  });
+
+  it("cancels a stalled redirected profile at the shared deadline", async () => {
+    vi.useFakeTimers();
+    const finalProfile = `${POD}actual/card`;
+    const cancel = vi.fn();
+    let signal: AbortSignal | null | undefined;
+    const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
+      if (String(input) === WEBID) {
+        return new Response(null, { status: 302, headers: { location: finalProfile } });
+      }
+      signal = init?.signal;
+      return new Response(new ReadableStream({ cancel }, { highWaterMark: 0 }), {
+        headers: { "content-type": "text/turtle" },
+      });
+    });
+    const result = search(source(fetch, WEBID), "avocado", { maxTimeMs: 25 });
+    await vi.advanceTimersByTimeAsync(25);
+    expect(await result).toEqual([]);
+    expect(fetch.mock.calls.map(([url]) => String(url))).toEqual([WEBID, finalProfile]);
+    expect(signal?.aborted).toBe(true);
+    expect(cancel).toHaveBeenCalledOnce();
+  });
 });
 
 describe("search fetch cancellation", () => {
