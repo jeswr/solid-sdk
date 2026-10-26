@@ -156,6 +156,41 @@ describe("playback model", () => {
     ).toEqual([]);
   });
 
+  it.each([
+    "",
+    'core:atTime "2026-10-25T12:00:00Z";',
+    'core:atTime [ time:inXSDDateTime "2026-10-25T12:00:00Z" ];',
+  ])("checks every candidate when minting an instant without a named link (%s)", async (link) => {
+    const dataset = await parseMusic(
+      `
+      @prefix core: <${NS.CORE}>. @prefix time: <${NS.TIME}>. @prefix s: <${S}>.
+      <#play> ${link} a s:ListenAction.
+      <#play-instant> time:inXSDDateTime "2000-01-01T00:00:00Z";
+        s:description "Unrelated timestamp".
+      <#play-instant-1> s:description "Unrelated metadata".
+      <#other> s:about <#play-instant-2>.
+    `,
+      base,
+    );
+    const preserved = [...dataset];
+    const event = new PlaybackEvent(`${base}#play`, dataset);
+    event.startTime = now;
+    expect(event.iris(`${NS.CORE}atTime`)).toEqual([`${base}#play-instant-3`]);
+    for (const quad of preserved.filter((quad) => quad.subject.value !== event.value)) {
+      expect(dataset.has(quad)).toBe(true);
+    }
+    expect(
+      new MusicNode(`${base}#play-instant`, dataset).strings(`${NS.TIME}inXSDDateTime`),
+    ).toEqual(["2000-01-01T00:00:00Z"]);
+    const size = dataset.size;
+    const next = new Date("2026-10-25T13:00:00Z");
+    event.startTime = next;
+    expect(event.iris(`${NS.CORE}atTime`)).toEqual([`${base}#play-instant-3`]);
+    expect(dataset.size).toBe(size);
+    const roundTrip = await parseMusic(await serializeMusic(dataset), base);
+    expect(new PlaybackEvent(event.value, roundTrip).startTime).toEqual(next);
+  });
+
   it("writes integer milliseconds and rejects invalid edits before mutation", async () => {
     const dataset = new Store();
     const event = new PlaybackEvent(`${base}#play`, dataset).stampType();

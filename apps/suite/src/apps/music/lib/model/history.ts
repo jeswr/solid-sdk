@@ -48,8 +48,10 @@ export class PlaybackEvent extends MusicNode {
     this.assertWritableSubject();
     // Reuse private imported instants, but never change another resource's time.
     const dataset = this.dataset as Store;
-    let instantIri = this.iris(`${NS.CORE}atTime`)[0] ?? `${this.value}-instant`;
+    const linkedInstantIri = this.iris(`${NS.CORE}atTime`)[0];
+    let instantIri = linkedInstantIri ?? `${this.value}-instant`;
     if (
+      !linkedInstantIri ||
       dataset
         .getQuads(null, null, DataFactory.namedNode(instantIri), null)
         .some((quad) => !this.equals(quad.subject))
