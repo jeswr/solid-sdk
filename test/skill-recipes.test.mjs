@@ -21,7 +21,8 @@ const jose = await import(fixtureRequire.resolve("jose"));
 const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor;
 
 function blocks(skill, language, section = "", file = "SKILL.md") {
-  const markdown = readFileSync(new URL(`../skills/${skill}/${file}`, import.meta.url), "utf8");
+  const directory = skill === "solid-fetch-rdf" ? "packages/fetch-rdf" : `skills/${skill}`;
+  const markdown = readFileSync(new URL(`../${directory}/${file}`, import.meta.url), "utf8");
   const start = section ? markdown.indexOf(section) : 0;
   if (start < 0) throw new Error(`Missing section: ${section}`);
   return [

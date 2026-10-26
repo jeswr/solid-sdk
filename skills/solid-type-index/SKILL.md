@@ -363,7 +363,7 @@ testability discipline as the cross-pod provenance predicate in `solid-fetch-rdf
 - `AGENTS.md` §Writing data — read-modify-write, ETags, explicit Content-Type,
   trailing-slash rule (containers end in `/`). This skill **closes** that
   section's type-index deferral.
-- `solid-fetch-rdf` skill — `isUnderStorage` own-storage containment check, the
+- [Package-local `solid-fetch-rdf` skill](../../packages/fetch-rdf/SKILL.md) — `isUnderStorage` own-storage containment check, the
   cross-pod-claim provenance tiers, and the external-index SSRF/scheme rules the
   pod-search section above reuses.
 - `solid-rdf` skill — Turtle/JSON-LD parse + serialise, the "never hand-build
