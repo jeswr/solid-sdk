@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { PreviewError } from "./errors";
 import { decodeValue, readMetadataTags } from "./html";
 
@@ -46,8 +47,8 @@ function resolveUrl(value: string, base?: string): string {
   return url.href;
 }
 
-function text(value: string): string {
-  return decodeValue(value).replace(/\s+/g, " ").trim();
+function text(value: string, inAttribute = true): string {
+  return decodeValue(value, inAttribute).replace(/\s+/g, " ").trim();
 }
 
 /** Extract metadata without network or DOM access. See README for the accepted HTML subset. */
@@ -56,7 +57,7 @@ export function extractPreviewMetadata(html: string, pageUrl: string): PreviewMe
   const page = resolveUrl(pageUrl);
   const values = new Map<string, string>();
   const store = (key: string, raw: string, url = false) => {
-    const value = url ? decodeValue(raw).trim() : text(raw);
+    const value = url ? decodeValue(raw, true).trim() : text(raw, key !== "title");
     if (!value) return;
     const normalized = url ? resolveUrl(value, page) : value;
     if (!values.has(key)) values.set(key, normalized);
@@ -90,7 +91,9 @@ export function extractPreviewMetadata(html: string, pageUrl: string): PreviewMe
         store(key.replace(/:(url|src)$/, key === "og:url" ? ":url" : ""), content, true);
       }
     } else {
-      const relations = text(attr("rel")).toLowerCase().split(" ");
+      const relations = decodeValue(attr("rel"), true)
+        .toLowerCase()
+        .split(/[\t\n\f\r ]+/);
       if (relations.includes("canonical")) store("canonical", attr("href"), true);
       if (relations.includes("icon") || relations.includes("apple-touch-icon"))
         store("icon", attr("href"), true);

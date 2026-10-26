@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { describe, expect, it, vi } from "vitest";
 import {
   createLinkPreview,
@@ -136,6 +137,94 @@ describe("chat link preview metadata", () => {
       ).title,
     ).toBe('"A\'s" <b> AB😀 &lt; <b>');
     expect(createLinkPreview("<title>A & B</title>", PAGE).title).toBe("A & B");
+  });
+
+  it.each([
+    "AT&T",
+    "A&width=800",
+    "A&fictional",
+    "A&123",
+    "A&AmP",
+    "A&",
+  ])("preserves literal ampersands in title and attribute text: %s", (value) => {
+    expect(
+      createLinkPreview(`<title>${value}</title>${meta("description", value)}`, PAGE),
+    ).toMatchObject({ title: value, description: value });
+  });
+
+  it.each([
+    "width=800",
+    "amp=1",
+    "copy=1",
+    "notebook=1",
+    "AMPx=1",
+  ])("preserves literal query separators in URL attributes: %s", (query) => {
+    const value = `/cover?a=1&${query}`;
+    expect(
+      createLinkPreview(
+        `${meta("og:image", value)}<link rel=canonical href="${value}"><link rel=icon href="${value}">`,
+        PAGE,
+      ),
+    ).toMatchObject({
+      image: `https://example.org${value}`,
+      url: `https://example.org${value}`,
+      iconUrl: `https://example.org${value}`,
+    });
+  });
+
+  it.each([
+    "&copy",
+    "&notebook",
+    "&amplitude",
+    "&AMPx",
+    "&nbsp!",
+  ])("rejects unsupported semicolonless references in title text: %s", (value) =>
+    rejects(`<title>${value}</title>`));
+
+  it.each([
+    "&copy",
+    "&amp",
+    "&nbsp!",
+    "&copy;",
+    "&fictional;",
+    "&#65",
+  ])("retains entity rejection in extracted attributes: %s", (value) =>
+    rejects(meta("description", value)));
+
+  it.each([
+    " ",
+    "\t",
+    "\n",
+    "\f",
+    "\r",
+    "&#9;",
+    "&#10;",
+    "&#12;",
+    "&#13;",
+    "&#32;",
+  ])("splits decoded link relations on HTML ASCII whitespace: %s", (space) => {
+    expect(
+      createLinkPreview(
+        `<link rel="${space}CANONICAL${space}alternate${space}" href="/canonical"><link rel="shortcut${space}ICON" href="/icon">`,
+        PAGE,
+      ),
+    ).toMatchObject({ url: "https://example.org/canonical", iconUrl: "https://example.org/icon" });
+  });
+
+  it.each([
+    "&nbsp;",
+    "\u00a0",
+    "\u2003",
+    "\u202f",
+    "\ufeff",
+    "&#x2003;",
+  ])("does not manufacture link relations from Unicode whitespace: %s", (space) => {
+    expect(
+      createLinkPreview(
+        `<link rel="canonical${space}alternate" href="/other"><link rel="${space}canonical${space}" href="/other"><link rel="shortcut${space}icon" href="/icon"><link rel="${space}apple-touch-icon" href="/apple">`,
+        PAGE,
+      ),
+    ).toMatchObject({ url: PAGE, iconUrl: null });
   });
 
   it("ignores comment, raw text and body metadata lookalikes", () => {

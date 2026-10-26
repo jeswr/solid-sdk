@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { PreviewError } from "./errors";
 
 export const MAX_PREVIEW_HTML_BYTES = 512 * 1024;
@@ -20,30 +21,58 @@ const ENTITIES: Readonly<Record<string, string>> = {
   gt: ">",
   nbsp: "\u00a0",
 };
+// HTML names that can consume a prefix without a semicolon. Detect them only to reject
+// unsupported references; they remain literal in attributes before ASCII alphanumerics or '='.
+// https://html.spec.whatwg.org/entities.json (the 106 names without a trailing semicolon).
+const LEGACY_REFERENCE_PREFIX = new RegExp(
+  `^(?:${[
+    "AElig|AMP|Aacute|Acirc|Agrave|Aring|Atilde|Auml|COPY|Ccedil|ETH|Eacute|Ecirc|Egrave|Euml|GT",
+    "Iacute|Icirc|Igrave|Iuml|LT|Ntilde|Oacute|Ocirc|Ograve|Oslash|Otilde|Ouml|QUOT|REG|THORN",
+    "Uacute|Ucirc|Ugrave|Uuml|Yacute|aacute|acirc|acute|aelig|agrave|amp|aring|atilde|auml",
+    "brvbar|ccedil|cedil|cent|copy|curren|deg|divide|eacute|ecirc|egrave|eth|euml|frac12|frac14|frac34",
+    "gt|iacute|icirc|iexcl|igrave|iquest|iuml|laquo|lt|macr|micro|middot|nbsp|not|ntilde|oacute",
+    "ocirc|ograve|ordf|ordm|oslash|otilde|ouml|para|plusmn|pound|quot|raquo|reg|sect|shy|sup1|sup2",
+    "sup3|szlig|thorn|times|uacute|ucirc|ugrave|uml|uuml|yacute|yen|yuml",
+  ].join("|")})`,
+);
 
 /** A deliberately explicit entity subset, decoded once, never recursively. */
-export function decodeValue(value: string): string {
-  return value.replace(/&(#[^;\s<&]*;?|[a-z][a-z0-9]*;?)/gi, (reference: string) => {
-    if (!reference.endsWith(";")) throw new PreviewError("invalid-html");
-    const key = reference.slice(1, -1);
-    if (!key.startsWith("#")) {
-      if (!Object.hasOwn(ENTITIES, key)) throw new PreviewError("invalid-html");
-      return ENTITIES[key] as string;
-    }
-    if (!/^#(?:x[0-9a-f]+|[0-9]+)$/i.test(key)) throw new PreviewError("invalid-html");
-    const hex = key.charAt(1).toLowerCase() === "x";
-    const point = Number.parseInt(key.slice(hex ? 2 : 1), hex ? 16 : 10);
-    if (
-      point === 0 ||
-      point > 0x10ffff ||
-      (point >= 0xd800 && point <= 0xdfff) ||
-      (point < 32 && ![9, 10, 12, 13].includes(point)) ||
-      (point >= 127 && point <= 159)
-    ) {
-      throw new PreviewError("invalid-html");
-    }
-    return String.fromCodePoint(point);
-  });
+export function decodeValue(value: string, inAttribute: boolean): string {
+  return value.replace(
+    /&(?:#[^;\s<&]*;?|[a-z][a-z0-9]*;?)/gi,
+    (reference: string, offset: number) => {
+      const terminated = reference.endsWith(";");
+      const key = reference.slice(1, terminated ? -1 : undefined);
+      if (!key.startsWith("#")) {
+        if (!terminated) {
+          const legacy = LEGACY_REFERENCE_PREFIX.exec(key);
+          if (
+            !legacy ||
+            (inAttribute && /[=a-z0-9]/i.test(value.charAt(offset + 1 + legacy[0].length)))
+          ) {
+            return reference;
+          }
+          throw new PreviewError("invalid-html");
+        }
+        if (!Object.hasOwn(ENTITIES, key)) throw new PreviewError("invalid-html");
+        return ENTITIES[key] as string;
+      }
+      if (!terminated) throw new PreviewError("invalid-html");
+      if (!/^#(?:x[0-9a-f]+|[0-9]+)$/i.test(key)) throw new PreviewError("invalid-html");
+      const hex = key.charAt(1).toLowerCase() === "x";
+      const point = Number.parseInt(key.slice(hex ? 2 : 1), hex ? 16 : 10);
+      if (
+        point === 0 ||
+        point > 0x10ffff ||
+        (point >= 0xd800 && point <= 0xdfff) ||
+        (point < 32 && ![9, 10, 12, 13].includes(point)) ||
+        (point >= 127 && point <= 159)
+      ) {
+        throw new PreviewError("invalid-html");
+      }
+      return String.fromCodePoint(point);
+    },
+  );
 }
 
 interface Tag {
