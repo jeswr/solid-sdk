@@ -119,7 +119,7 @@ describe("domain discovery", () => {
     expect(fetch.mock.calls.some(([input]) => String(input).includes("unrelated"))).toBe(false);
   });
 
-  it("uses only the primary subject even when a connector collection contains several typed nodes", async () => {
+  it("uses only the primary subject for connector collections independently of the WebID", async () => {
     const fetch = fixtureFetch({
       [`${STORAGE}collection.ttl`]:
         '<#a> a schema:MusicRecording ; schema:name "A" . <#b> a schema:MusicRecording . <#c> a schema:MusicRecording .',
@@ -127,9 +127,41 @@ describe("domain discovery", () => {
     const result = await discoverDomainItems("media", {
       storage: STORAGE,
       fetch,
+      webId: WEB_ID,
       typeIndex: [{ forClass: `${NS.SCHEMA}MusicRecording`, instance: `${STORAGE}collection.ttl` }],
     });
     expect(result.items.map((item) => item.title)).toEqual(["A"]);
+  });
+
+  it.each([
+    true,
+    false,
+  ])("merges listing dates into directly registered items (instance first: %s)", async (instanceFirst) => {
+    const container = `${STORAGE}registered/`;
+    const url = `${container}one.ttl`;
+    const fetch = fixtureFetch({
+      [container]: `<> ldp:contains <one.ttl#it>, <two.ttl> .
+          <one.ttl#it> dct:modified "2026-02-01" .
+          <two.ttl> dct:modified "2026-03-01" .`,
+      [url]: '<#it> a schema:Book ; schema:name "Z" .',
+      [`${container}two.ttl`]:
+        '<#it> a schema:Book ; schema:name "A" ; dct:modified "2026-01-01" .',
+    });
+    const registrations = [
+      { forClass: `${NS.SCHEMA}Book`, instance: `${url}#it` },
+      { forClass: `${NS.SCHEMA}Book`, container },
+    ];
+    const result = await discoverDomainItems("media", {
+      storage: STORAGE,
+      fetch,
+      typeIndex: instanceFirst ? registrations : registrations.reverse(),
+    });
+    expect(result.failures).toEqual([]);
+    expect(result.items.map((item) => [item.title, item.modified])).toEqual([
+      ["Z", "2026-02-01"],
+      ["A", "2026-01-01"],
+    ]);
+    expect(fetch.mock.calls.filter(([input]) => String(input) === url)).toHaveLength(1);
   });
 
   it("discovers Other by actual types, including conditionally classified registered classes", async () => {
@@ -188,6 +220,22 @@ describe("domain discovery", () => {
     expect(result.items.map((item) => item.title)).toEqual(["one.bin"]);
   });
 
+  it("selects the six most recent Drive files using POSIX dates and epoch seconds", async () => {
+    const fetch = fixtureFetch({
+      [`${STORAGE}drive/`]: `<> ldp:contains <a>, <b>, <c>, <d>, <e>, <f>, <g> .
+        <a> <${NS.POSIX}mtime> "2026-01-01T00:00:00Z" .
+        <g> <${NS.POSIX}mtime> 1767312000 .`,
+    });
+    const result = await discoverDomainItems("documents", { storage: STORAGE, fetch });
+    expect(result.failures).toEqual([]);
+    expect(result.items.map((item) => item.title)).toEqual(["g", "a", "b", "c", "d", "e"]);
+    expect(result.items.slice(0, 2).map((item) => item.modified)).toEqual([
+      "2026-01-02T00:00:00.000Z",
+      "2026-01-01T00:00:00.000Z",
+    ]);
+    expect(fetch.mock.calls.some(([input]) => /drive\/[a-g]$/.test(String(input)))).toBe(false);
+  });
+
   it("adds profile Identity and one aggregate contact-details card, from supplied or fetched RDF", async () => {
     const body =
       '<#me> a vcard:Individual ; vcard:fn "Alice Example" ; vcard:hasEmail [ vcard:hasValue <mailto:alice@example.com> ] ; vcard:hasTelephone <tel:+123> .';
@@ -213,6 +261,34 @@ describe("domain discovery", () => {
         })
       ).items,
     ).toHaveLength(2);
+  });
+
+  it.each([
+    true,
+    false,
+  ])("uses the exact WebID for profile cards despite larger or preferred unrelated subjects (supplied: %s)", async (supplied) => {
+    for (const linked of ["_:email", "<#it>"]) {
+      const body = `<#me> a vcard:Individual ; vcard:fn "Alice" ; vcard:hasEmail ${linked} .
+          ${linked} a vcard:Email ; vcard:hasValue <mailto:alice@example.com> ;
+            schema:name "Email" ; schema:description "More statements than the WebID" .`;
+      const fetch = fixtureFetch({ [`${STORAGE}profile/card`]: body });
+      const result = await discoverDomainItems("personal", {
+        storage: STORAGE,
+        fetch,
+        webId: WEB_ID,
+        ...(supplied ? { profile: await rdf(body, WEB_ID) } : {}),
+      });
+      expect(result.failures).toEqual([]);
+      expect(
+        result.items.map((item) => [item.dataType?.id, item.title, item.subject.value]),
+      ).toEqual([
+        ["identity", "Alice", WEB_ID],
+        ["contact-details", "Contact details", WEB_ID],
+      ]);
+      expect(
+        fetch.mock.calls.filter(([input]) => String(input) === `${STORAGE}profile/card`),
+      ).toHaveLength(supplied ? 0 : 1);
+    }
   });
 
   it("reports partial failures, ignores nonexistent known containers, and rejects unsafe locations", async () => {

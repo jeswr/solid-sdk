@@ -65,7 +65,6 @@ interface Visit {
   container: boolean;
   files: boolean;
   parent: string;
-  modified?: string;
 }
 
 /**
@@ -94,19 +93,17 @@ export async function discoverDomainItems(
   result.etags = etags;
   const queue: Visit[] = [];
   const seen = new Set<string>();
+  const listedModified = new Map<string, string>();
   let requests = 0;
 
-  const addDataset = (
-    dataset: DatasetCore,
-    url: string,
-    parent: string,
-    etag: string | null,
-    modified?: string,
-  ) => {
-    const node = primarySubject(dataset, url);
+  const addDataset = (dataset: DatasetCore, url: string, parent: string, etag: string | null) => {
+    const node =
+      webId && url === webId.split("#")[0]
+        ? subjectOf(dataset, webId)
+        : primarySubject(dataset, url);
     if (!node) return;
     const classified = classifySubject(node, webId);
-    const modifiedAt = node.modified ?? modified;
+    const modifiedAt = node.modified;
     const item: DomainItem = {
       ...classified,
       url,
@@ -230,16 +227,18 @@ export async function discoverDomainItems(
                 url: childUrl,
                 error: new TypeError("File is outside the selected storage"),
               });
-          } else
+          } else {
+            if (child.modified)
+              listedModified.set(childUrl.split("#")[0] as string, child.modified);
             queue.push({
               url: childUrl,
               container: false,
               files: false,
               parent: url,
-              ...(child.modified ? { modified: child.modified } : {}),
             });
+          }
         }
-      } else addDataset(dataset, url, visit.parent, etag, visit.modified);
+      } else addDataset(dataset, url, visit.parent, etag);
     } catch (error) {
       options.signal?.throwIfAborted();
       if (!(error instanceof RdfFetchError && error.status === 404))
@@ -248,6 +247,9 @@ export async function discoverDomainItems(
   }
   const unique = new Map<string, DomainItem>();
   for (const item of result.items) {
+    // A direct registration may have been read before its container listing.
+    const modified = item.modified ?? listedModified.get(item.url);
+    if (modified) item.modified = modified;
     if (item.domain.id === category.id) unique.set(`${item.url}|${item.dataType?.id}`, item);
   }
   let fileCount = 0;

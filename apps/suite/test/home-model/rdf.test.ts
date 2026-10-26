@@ -112,6 +112,27 @@ describe("typed RDF read model", () => {
   });
 
   it.each([
+    ['"2026-01-02T03:04:05Z"', "2026-01-02T03:04:05.000Z"],
+    ["1767312000", "2026-01-02T00:00:00.000Z"],
+    ["0", "1970-01-01T00:00:00.000Z"],
+    ["-1", "1969-12-31T23:59:59.000Z"],
+    ["1.5", "1970-01-01T00:00:01.500Z"],
+    ['" 1767312000 "', "2026-01-02T00:00:00.000Z"],
+    ['"", " ", "bad", <https://wrong.example/>, "1e100", "1767312000"', "2026-01-02T00:00:00.000Z"],
+    ['"bad", "Infinity", "1e100", <https://wrong.example/>', undefined],
+  ])("falls back to forgiving POSIX mtime values: %s", async (values, expected) => {
+    const dataset = await rdf(`<> dct:modified "invalid" ; <${NS.POSIX}mtime> ${values} .`);
+    expect(subjectOf(dataset, `${STORAGE}item.ttl`).modified).toBe(expected);
+  });
+
+  it("prefers a valid Dublin Core modification date over POSIX mtime", async () => {
+    const dataset = await rdf(
+      `<> dct:modified "bad", "2026-01-01" ; <${NS.POSIX}mtime> 1767312000 .`,
+    );
+    expect(subjectOf(dataset, `${STORAGE}item.ttl`).modified).toBe("2026-01-01");
+  });
+
+  it.each([
     ["https://pod.example/alice/a.ttl", true],
     ["https://pod.example/alice", false],
     ["https://pod.example/alice2/a.ttl", false],

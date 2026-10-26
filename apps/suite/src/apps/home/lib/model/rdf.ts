@@ -47,7 +47,18 @@ export class HomeSubject extends TermWrapper {
     return this.iris(`${NS.SCHEMA}url`);
   }
   get modified(): string | undefined {
-    return this.texts(`${NS.DCT}modified`).find((date) => Number.isFinite(Date.parse(date)));
+    const modified = this.texts(`${NS.DCT}modified`).find((date) =>
+      Number.isFinite(Date.parse(date)),
+    );
+    if (modified) return modified;
+    for (const lexical of this.texts(`${NS.POSIX}mtime`)) {
+      const value = lexical.trim();
+      if (!value) continue;
+      const seconds = Number(value);
+      const date = new Date(Number.isFinite(seconds) ? seconds * 1000 : value);
+      if (Number.isFinite(date.getTime())) return date.toISOString();
+    }
+    return undefined;
   }
   get contains(): string[] {
     return this.iris(`${NS.LDP}contains`);
