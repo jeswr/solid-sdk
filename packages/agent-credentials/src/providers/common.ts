@@ -195,7 +195,7 @@ export function parseRfc3339(v: string): number | undefined {
   if (!m) return undefined;
   const n = m.slice(1).map((x) => (x === undefined ? 0 : Number.parseInt(x, 10)));
   const [y, mo, d, h, mi, s] = n as [number, number, number, number, number, number];
-  const [oh, om] = [n[7] ?? 0, n[8] ?? 0];
+  const [oh, om] = [n[7] as number, n[8] as number];
   if (!validDate(y, mo, d) || h > 23 || mi > 59 || s > 59 || oh > 23 || om > 59) return undefined;
   const t = Date.parse(v);
   return Number.isNaN(t) ? undefined : t;
@@ -248,9 +248,9 @@ export function nextDate(date: string): string {
 }
 
 /** Clip to a window and drop empty intervals. */
-export function clip(busy: readonly Slot[], window: Slot): Slot[] {
-  const a = Date.parse(window.start);
-  const b = Date.parse(window.end);
+export function clip(busy: readonly Slot[], timeWindow: Slot): Slot[] {
+  const a = Date.parse(timeWindow.start);
+  const b = Date.parse(timeWindow.end);
   const out: Slot[] = [];
   for (const s of busy) {
     const x = Math.max(a, Date.parse(s.start));

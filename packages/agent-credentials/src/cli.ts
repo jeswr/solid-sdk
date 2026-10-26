@@ -6,6 +6,7 @@
  * Human-facing commands (safe output: never a token or client secret):
  *   client google --client-file FILE | client microsoft --client-id ID
  *   profile add --name N --provider google|microsoft --connection ID --account ADDRESS
+              [--purpose read|send] [--resource mail|calendar|teams]
  *               [--calendar-inventory] [--account-type personal|work-or-school] [--tenant T]
  *   profile remove --name N
  *   login --profile N [--open] [--timeout-seconds S]      (the ONLY command that signs in)
@@ -21,10 +22,12 @@ import { spawn } from "child_process";
 import {
   closeSync,
   constants,
+  existsSync,
   fsyncSync,
   lstatSync,
   openSync,
   readFileSync,
+  realpathSync,
   renameSync,
   unlinkSync,
 } from "fs";
@@ -239,6 +242,7 @@ Every command needs --dir DIR (absolute; or AWP_CREDENTIALS_DIR). None prints a 
   client microsoft --client-id GUID       register the Microsoft public client
      (replacing a client that existing grants were issued to needs --force)
   profile add --name N --provider google|microsoft --connection ID --account ADDRESS
+              [--purpose read|send] [--resource mail|calendar|teams]
               [--calendar-inventory] [--account-type personal|work-or-school] [--tenant T]
   profile remove --name N
   login --profile N [--open] [--timeout-seconds S]   the only command that signs in
@@ -259,6 +263,8 @@ function parse(argv: readonly string[]) {
       "client-id": { type: "string" },
       name: { type: "string" },
       provider: { type: "string" },
+      purpose: { type: "string" },
+      resource: { type: "string" },
       connection: { type: "string" },
       account: { type: "string" },
       "calendar-inventory": { type: "boolean" },
@@ -403,10 +409,13 @@ async function run(
           provider,
           connectionId,
           account,
+          purpose: (values.purpose as Profile["purpose"]) ?? "read",
+          resource: (values.resource as Profile["resource"]) ?? "calendar",
           inventory: provider === "google" && values["calendar-inventory"] === true,
           ...(microsoft ? { microsoft } : {}),
           createdAt: deps.now().toISOString(),
         };
+        describeScopes(p); // Refuse unsupported purpose/resource combinations before persisting.
         store.putProfile(p);
         print(
           `Created profile ${name} (${provider}, dashboard account ${connectionId}, chosen account ${account}).\nScopes that login will request:\n${describeScopes(p)}`,
@@ -503,20 +512,23 @@ async function run(
         const out = values.out;
         if (!out) throw new HelperError("invalid", "--out FILE is required");
         const cli = fileURLToPath(import.meta.url);
-        const accounts = store.profiles().map((name) => {
-          const p = store.profile(name) as Profile;
-          const args = [cli, "--dir", store.dir, "token", "--profile", name];
-          if (args.some((a) => a.length > 200))
-            throw new HelperError(
-              "invalid",
-              "a path is longer than the provider configuration allows",
-            );
-          return {
-            connectionId: p.connectionId,
-            provider: p.provider,
-            credential: { type: "helper", command: process.execPath, args },
-          };
-        });
+        const accounts = store
+          .profiles()
+          .filter((name) => store.profile(name)?.purpose === "read")
+          .map((name) => {
+            const p = store.profile(name) as Profile;
+            const args = [cli, "--dir", store.dir, "token", "--profile", name];
+            if (args.some((a) => a.length > 200))
+              throw new HelperError(
+                "invalid",
+                "a path is longer than the provider configuration allows",
+              );
+            return {
+              connectionId: p.connectionId,
+              provider: p.provider,
+              credential: { type: "helper", command: process.execPath, args },
+            };
+          });
         writePrivateFile(
           out,
           `${JSON.stringify({ version: 1, accounts }, null, 2)}\n`,
@@ -542,4 +554,23 @@ async function run(
         );
     }
   }
+}
+
+const isMain =
+  process.argv[1] !== undefined &&
+  existsSync(process.argv[1]) &&
+  realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url));
+if (isMain) {
+  main(process.argv.slice(2), {
+    stdout: (s) => process.stdout.write(s),
+    stderr: (s) => process.stderr.write(s),
+    stdoutIsTTY: process.stdout.isTTY === true,
+  }).then(
+    (code) => {
+      process.exitCode = code;
+    },
+    () => {
+      process.exitCode = 1;
+    },
+  );
 }

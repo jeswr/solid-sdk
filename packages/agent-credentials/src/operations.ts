@@ -253,6 +253,8 @@ export async function login(
         version: 1,
         profile: name,
         provider: p.provider,
+        purpose: p.purpose,
+        resource: p.resource,
         clientId: client.clientId,
         account,
         grantedScopes: granted,
@@ -321,6 +323,8 @@ export function grantBindingProblem(
   clientId: string | undefined,
 ): string | undefined {
   if (g.profile !== p.name) return "the grant record belongs to another profile";
+  if (g.purpose !== p.purpose || g.resource !== p.resource)
+    return "the grant record is for another purpose or resource";
   if (g.provider !== p.provider) return "the grant record is for another provider";
   if (g.account.username !== p.account.toLowerCase())
     return "the grant record is for another account than this profile's chosen account";
@@ -337,6 +341,8 @@ export function grantBindingProblem(
 }
 
 function checkBinding(g: Grant, p: Profile, client: ClientInfo): void {
+  if (missing(g.grantedScopes, requiredScopes(p)).length)
+    throw new HelperError("scope", "required scopes missing from grant");
   const problem = grantBindingProblem(g, p, client.clientId);
   if (!problem) return;
   throw new HelperError(
@@ -413,13 +419,18 @@ export async function accessToken(deps: Deps, name: string): Promise<IssuedToken
       updatedAt: now.toISOString(),
     };
     deps.store.putGrant(next);
-    return { token: answer.access_token, expiresAt: next.access?.expiresAt ?? "", scopes: granted };
+    return {
+      token: answer.access_token,
+      expiresAt: (next.access as { expiresAt: string }).expiresAt,
+      scopes: granted,
+    };
   });
 }
 
 // ------------------------------------------------------------------ helper protocol
 
 const helperRequest = z.strictObject({
+  purpose: z.enum(["read", "send"]).default("read"),
   provider: z.enum(["google", "microsoft"]),
   connectionId: z.string().max(64),
   scopes: z.array(z.string().max(300)).max(10),
@@ -445,7 +456,11 @@ export async function helperExchange(
   }
   try {
     const p = loadProfile(deps.store, name);
-    if (p.provider !== req.provider || p.connectionId !== req.connectionId)
+    if (
+      p.purpose !== req.purpose ||
+      p.provider !== req.provider ||
+      p.connectionId !== req.connectionId
+    )
       return { exit: EXIT.refused, problem: "the request is not for this profile's account" };
     const t = await accessToken(deps, name);
     const lacking = missing(t.scopes, req.scopes);
@@ -476,20 +491,14 @@ export async function helperExchange(
 
 export async function calendars(deps: Deps, name: string) {
   const p = loadProfile(deps.store, name);
+  if (p.purpose !== "read" || p.resource !== "calendar")
+    throw new HelperError("scope", "calendar inventory requires a calendar read profile");
   if (p.provider === "google" && !p.inventory)
     throw new HelperError(
       "scope",
       "this Google profile does not request the calendar-list scope (create a profile with --calendar-inventory and log in)",
     );
   const t = await accessToken(deps, name);
-  if (
-    p.provider === "google" &&
-    !t.scopes.includes("https://www.googleapis.com/auth/calendar.calendarlist.readonly")
-  )
-    throw new HelperError(
-      "scope",
-      "the grant does not include the calendar-list scope (log in again)",
-    );
   return listCalendars(deps.transport, p, t.token);
 }
 

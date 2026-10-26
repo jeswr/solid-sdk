@@ -19,6 +19,22 @@
     "./testing": {
       "types": "./dist/testing.d.ts",
       "default": "./dist/testing.js"
+    },
+    "./cli": {
+      "types": "./dist/cli.d.ts",
+      "default": "./dist/cli.js"
+    },
+    "./providers/google": {
+      "types": "./dist/providers/google.d.ts",
+      "default": "./dist/providers/google.js"
+    },
+    "./providers/microsoft": {
+      "types": "./dist/providers/microsoft.d.ts",
+      "default": "./dist/providers/microsoft.js"
+    },
+    "./providers/setup": {
+      "types": "./dist/providers/setup.d.ts",
+      "default": "./dist/providers/setup.js"
     }
   },
   "files": [

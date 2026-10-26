@@ -43,7 +43,9 @@ export async function call(
 ): Promise<{ status: number; body: unknown }> {
   let origin: string;
   try {
-    origin = new URL(url).origin;
+    const parsed = new URL(url);
+    if (parsed.username || parsed.password || parsed.hash) throw new Error("invalid provider URL");
+    origin = parsed.origin;
   } catch {
     throw new HelperError("invalid", `${what}: not a URL`);
   }
@@ -107,6 +109,9 @@ export const GOOGLE = {
   issuers: ["https://accounts.google.com", "accounts.google.com"],
   calendarList: "https://www.googleapis.com/calendar/v3/users/me/calendarList",
   /** Availability only: free/busy of calendars (no event details). */
+  MAIL_READ: "https://www.googleapis.com/auth/gmail.readonly",
+  MAIL_SEND: "https://www.googleapis.com/auth/gmail.send",
+  CALENDAR_READ: "https://www.googleapis.com/auth/calendar.readonly",
   FREEBUSY: "https://www.googleapis.com/auth/calendar.freebusy",
   /** Optional, explicit inventory only: the list of the account's calendars. */
   CALENDARLIST: "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
@@ -131,14 +136,32 @@ export const MICROSOFT = {
  */
 export function requestedScopes(p: Profile): string[] {
   return p.provider === "google"
-    ? ["openid", "email", GOOGLE.FREEBUSY, ...(p.inventory ? [GOOGLE.CALENDARLIST] : [])]
-    : ["openid", "profile", "offline_access", MICROSOFT.CALENDARS];
+    ? ["openid", "email", ...requiredScopes(p)]
+    : [
+        "openid",
+        "profile",
+        "offline_access",
+        ...requiredScopes(p).map((s) => `${MICROSOFT.graph}/${s}`),
+      ];
 }
-/** The calendar scopes that must be granted (identity scopes are proven by the ID token). */
+/** Minimum scopes for exactly one purpose and resource. */
 export function requiredScopes(p: Profile): string[] {
-  return p.provider === "google"
-    ? [GOOGLE.FREEBUSY, ...(p.inventory ? [GOOGLE.CALENDARLIST] : [])]
-    : ["Calendars.ReadBasic"];
+  if (p.provider === "google") {
+    if (p.resource === "teams")
+      throw new HelperError("invalid", "Google does not supply Teams grants");
+    if (p.resource === "mail") return [p.purpose === "read" ? GOOGLE.MAIL_READ : GOOGLE.MAIL_SEND];
+    if (p.purpose !== "read")
+      throw new HelperError("refused", "calendar send grants are not supported");
+    return [GOOGLE.CALENDAR_READ, ...(p.inventory ? [GOOGLE.CALENDARLIST] : [])];
+  }
+  if (p.resource === "calendar") {
+    if (p.purpose !== "read")
+      throw new HelperError("refused", "calendar send grants are not supported");
+    return ["Calendars.ReadBasic"];
+  }
+  if (p.resource === "teams")
+    return p.purpose === "read" ? ["Chat.Read", "ChannelMessage.Read.All"] : ["ChatMessage.Send"];
+  return [p.purpose === "read" ? "Mail.Read" : "Mail.Send"];
 }
 /** Scopes as the actions name them (Graph scopes without the resource prefix). */
 export function normaliseScopes(provider: Profile["provider"], scope: string): string[] {
@@ -410,7 +433,7 @@ export async function verifyIdentity(
       );
     account = { subject: claims.sub, username: email };
   } else {
-    const tid = String(claims.tid ?? "");
+    const tid = claims.tid as string; // Already required and validated before signature verification.
     const oid = String(claims.oid ?? "");
     const username = String(claims.preferred_username ?? "").toLowerCase();
     if (!tenantMatches(tenantOf(p), tid))

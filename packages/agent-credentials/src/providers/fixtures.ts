@@ -18,7 +18,7 @@ export const FIXTURE_CALENDARS = [
   { provider: "google", providerCalendarId: "primary", label: "Google calendar (fixture)" },
   {
     provider: "google",
-    providerCalendarId: "family-fixture@group.calendar.google.com",
+    providerCalendarId: "family-fixture@example.org",
     label: "Google shared family calendar (fixture)",
   },
   { provider: "microsoft", providerCalendarId: "primary", label: "Outlook calendar (fixture)" },
@@ -35,9 +35,7 @@ const GOOGLE_BUSY: Record<string, Slot[]> = {
     { start: "2026-10-22T09:00:00Z", end: "2026-10-22T10:30:00Z" },
     { start: "2026-10-27T10:00:00Z", end: "2026-10-27T11:00:00Z" },
   ],
-  "family-fixture@group.calendar.google.com": [
-    { start: "2026-10-21T15:00:00Z", end: "2026-10-21T17:00:00Z" },
-  ],
+  "family-fixture@example.org": [{ start: "2026-10-21T15:00:00Z", end: "2026-10-21T17:00:00Z" }],
 };
 
 interface FixtureEvent {

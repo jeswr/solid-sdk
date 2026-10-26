@@ -99,7 +99,7 @@ function allDayBusy(e: z.infer<typeof eventSchema>, ownerTimeZone: string): Slot
 function continuesSameRequest(
   next: string,
   path: string,
-  window: Slot,
+  timeWindow: Slot,
   seen: Set<string>,
 ): boolean {
   let u: URL;
@@ -121,8 +121,8 @@ function continuesSameRequest(
     u.password === "" &&
     u.hash === "" &&
     decoded(u.pathname) === decoded(path) &&
-    u.searchParams.get("startDateTime") === window.start &&
-    u.searchParams.get("endDateTime") === window.end &&
+    u.searchParams.get("startDateTime") === timeWindow.start &&
+    u.searchParams.get("endDateTime") === timeWindow.end &&
     !seen.has(u.toString())
   );
 }

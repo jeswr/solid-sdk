@@ -21,6 +21,7 @@ export type ProviderFamily = "google" | "microsoft";
 
 export interface TokenRequest {
   provider: ProviderFamily;
+  purpose?: "read" | "send";
   /** The dashboard connection (account record) id the token is for. */
   connectionId: string;
   /** Minimum scopes the adapter needs (the helper may return broader ones). */
@@ -121,6 +122,7 @@ export class HelperTokenProvider implements AccessTokenProvider {
       provider: request.provider,
       connectionId: request.connectionId,
       scopes: request.scopes,
+      purpose: request.purpose ?? "read",
     });
     let parsed: z.infer<typeof helperOutput>;
     try {

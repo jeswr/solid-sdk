@@ -26,10 +26,10 @@ import {
   readdirSync,
   readFileSync,
   renameSync,
-  statSync,
   unlinkSync,
   writeSync,
 } from "fs";
+import { homedir } from "os";
 import { isAbsolute, join } from "path";
 import { setTimeout as sleep } from "timers/promises";
 import { z } from "zod";
@@ -60,7 +60,11 @@ export class HelperError extends Error {
 
 const MAX_FILE = 64 * 1024;
 export const NAME = /^[a-z0-9][a-z0-9-]{0,39}$/;
-const uid = () => (typeof process.getuid === "function" ? process.getuid() : undefined);
+const uid = () => {
+  if (typeof process.getuid !== "function")
+    throw new HelperError("refused", "file ownership cannot be verified on this platform");
+  return process.getuid();
+};
 
 // ------------------------------------------------------------------ record schemas
 
@@ -99,6 +103,8 @@ export const profileSchema = z.strictObject({
   version: z.literal(1),
   name: z.string().regex(NAME),
   provider: z.enum(["google", "microsoft"]),
+  purpose: z.enum(["read", "send"]),
+  resource: z.enum(["mail", "calendar", "teams"]),
   /** The dashboard account record (connection id) this profile supplies tokens for. */
   connectionId: z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/),
   /** The exact account the operator chose (address / UPN, lower case). */
@@ -120,6 +126,8 @@ export const grantSchema = z.strictObject({
   version: z.literal(1),
   profile: z.string().regex(NAME),
   provider: z.enum(["google", "microsoft"]),
+  purpose: z.enum(["read", "send"]),
+  resource: z.enum(["mail", "calendar", "teams"]),
   /** The OAuth client the grant was issued to; a grant never migrates to another client. */
   clientId: z.string().min(1).max(200),
   /** The VERIFIED account (from the signed ID token), pinned at first consent. */
@@ -165,7 +173,7 @@ function checkOwnerOnly(path: string, kind: "directory" | "file"): void {
   if (st.isSymbolicLink()) throw new HelperError("refused", `${path} is a symbolic link (refused)`);
   if (kind === "directory" ? !st.isDirectory() : !st.isFile())
     throw new HelperError("refused", `${path} is not a ${kind}`);
-  if (uid() !== undefined && st.uid !== uid())
+  if (st.uid !== uid())
     throw new HelperError("refused", `${path} is owned by another user (refused)`);
   if (st.mode & 0o077)
     throw new HelperError(
@@ -192,23 +200,68 @@ function ensureDir(path: string): void {
   checkOwnerOnly(path, "directory");
 }
 
+/** Construct the platform default without opening or creating any directory. */
+export function defaultStoreDir(
+  options: { platform?: string; home?: string; xdgDataHome?: string } = {},
+): string {
+  const home = options.home ?? homedir();
+  if ((options.platform ?? process.platform) === "darwin")
+    return join(home, "Library", "Application Support", "jeswr-agent");
+  const xdg = options.xdgDataHome ?? process.env.XDG_DATA_HOME;
+  return join(xdg && isAbsolute(xdg) ? xdg : join(home, ".local", "share"), "jeswr-agent");
+}
+
+export const tokenFileProviders = [
+  "anthropic",
+  "openai",
+  "slack",
+  "matrix",
+  "discord",
+  "telegram",
+  "bluesky",
+  "mastodon",
+] as const;
+export type TokenFileProvider = (typeof tokenFileProviders)[number];
+export const tokenFileSchema = z.strictObject({
+  version: z.literal(1),
+  name: z.string().regex(NAME),
+  provider: z.enum(tokenFileProviders),
+  account: z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/),
+  purpose: z.enum(["read", "send"]),
+  token: secret,
+  expiresAt: iso.optional(),
+  credentialRef: z
+    .string()
+    .max(1000)
+    .regex(/^op:\/\/[^\s/]+\/[^\s/]+\/[^\s]+$/),
+});
+export type TokenFile = z.infer<typeof tokenFileSchema>;
+
 export class CredentialStore {
   readonly dir: string;
 
   /** Opens (creating it 0700 if absent; its parent must exist) the dedicated store directory. */
-  constructor(dir: string) {
+  constructor(options: string | { dir?: string } = {}) {
+    const dir = typeof options === "string" ? options : (options.dir ?? defaultStoreDir());
     if (!isAbsolute(dir)) throw new HelperError("invalid", "--dir must be an absolute path");
     this.dir = dir;
     ensureDir(dir);
-    for (const sub of ["clients", "profiles", "grants", "locks"]) ensureDir(join(dir, sub));
+    for (const sub of ["clients", "profiles", "grants", "providers", "locks", "ledger"])
+      ensureDir(join(dir, sub));
   }
 
-  private path(sub: "clients" | "profiles" | "grants", name: string): string {
+  private path(sub: "clients" | "profiles" | "grants" | "providers", name: string): string {
     if (!NAME.test(name)) throw new HelperError("invalid", `invalid name “${name}”`);
     return join(this.dir, sub, `${name}.json`);
   }
 
+  private guard(path: string): void {
+    checkOwnerOnly(this.dir, "directory");
+    checkOwnerOnly(join(path, ".."), "directory");
+  }
+
   private read<T>(path: string, schema: z.ZodType<T>): T | undefined {
+    this.guard(path);
     let fd: number;
     try {
       fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW);
@@ -222,7 +275,7 @@ export class CredentialStore {
     try {
       const st = fstatSync(fd);
       if (!st.isFile()) throw new HelperError("refused", `${path} is not a file`);
-      if (uid() !== undefined && st.uid !== uid())
+      if (st.uid !== uid())
         throw new HelperError("refused", `${path} is owned by another user (refused)`);
       if (st.mode & 0o077)
         throw new HelperError(
@@ -248,6 +301,12 @@ export class CredentialStore {
 
   /** Atomic, private replacement of one record. */
   private write(path: string, value: unknown): void {
+    this.guard(path);
+    try {
+      checkOwnerOnly(path, "file");
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
     const tmp = `${path}.${process.pid}.${randomBytes(6).toString("hex")}.tmp`;
     const fd = openSync(
       tmp,
@@ -300,6 +359,7 @@ export class CredentialStore {
     return this.read(this.path("profiles", name), profileSchema);
   }
   profiles(): string[] {
+    this.guard(join(this.dir, "profiles", "probe"));
     return readdirSync(join(this.dir, "profiles"))
       .filter((f) => f.endsWith(".json"))
       .map((f) => f.slice(0, -5))
@@ -318,8 +378,26 @@ export class CredentialStore {
     validFor(grantSchema, g);
     this.write(this.path("grants", g.profile), g);
   }
+  /** A privately provisioned token, with a purpose independent of its scopes. */
+  tokenFile(name: string): TokenFile | undefined {
+    return this.read(this.path("providers", name), tokenFileSchema);
+  }
+  putTokenFile(record: TokenFile): void {
+    validFor(tokenFileSchema, record);
+    this.write(this.path("providers", record.name), record);
+  }
+  tokenFiles(): string[] {
+    this.guard(join(this.dir, "providers", "probe"));
+    return readdirSync(join(this.dir, "providers"))
+      .filter((f) => f.endsWith(".json"))
+      .map((f) => f.slice(0, -5))
+      .filter((n) => NAME.test(n))
+      .sort();
+  }
+
   removeGrant(name: string): boolean {
     const p = this.path("grants", name);
+    this.guard(p);
     try {
       checkOwnerOnly(p, "file");
     } catch (error) {
@@ -341,6 +419,7 @@ export class CredentialStore {
   ): Promise<T> {
     if (!NAME.test(name)) throw new HelperError("invalid", `invalid name “${name}”`);
     const path = join(this.dir, "locks", `${name}.lock`);
+    this.guard(path);
     const deadline = Date.now() + (opts.waitMs ?? 20_000);
     const staleMs = opts.staleMs ?? 60_000;
     for (;;) {
@@ -362,9 +441,10 @@ export class CredentialStore {
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
         try {
-          if (Date.now() - statSync(path).mtimeMs > staleMs) unlinkSync(path);
-        } catch {
-          // released meanwhile
+          checkOwnerOnly(path, "file");
+          if (Date.now() - lstatSync(path).mtimeMs > staleMs) unlinkSync(path);
+        } catch (lockError) {
+          if ((lockError as NodeJS.ErrnoException).code !== "ENOENT") throw lockError;
         }
         if (Date.now() > deadline)
           throw new HelperError("unavailable", "another helper process holds this profile's lock");
