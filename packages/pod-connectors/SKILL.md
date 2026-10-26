@@ -78,3 +78,20 @@ before accessing JSON. Keep ETags and create-only writes; a failed import retain
 successful cursor/counts/time, and failed state persistence must produce a nonzero exit.
 CLI tests use fixture source transports and a memory Pod; only callback tests open loopback
 sockets. Never include arbitrary server/exception text in CLI diagnostics.
+vocabulary (`http://schema.org/`, matching apps/suite's mail model) stay identical. Keep Message-ID
+document ids, write `.eml` create-only, and flush thread/folder membership once per run.
+
+Google Contacts (CON-05) writes the SolidOS vCard address book under `contacts/`, with
+`index.ttl#this`, `people.ttl`, and `Person/<pathId>/index.ttl#this`. Use its typed wrappers;
+keep vCard as the write model (V10). Register only the address-book class for `contacts/`.
+Encode email addresses for RFC 6068 with `encodeURIComponent` on either side of the final `@`.
+Buffer every People API page and require the final sync token before applying writes or
+deletions. Use one shared `RunBudget` across all pages and retries, counting every request
+and buffered person. Read 400 error details through the shared byte-capped `readJson` too.
+An expired token (410, or 400 with the documented `EXPIRED_SYNC_TOKEN` error
+detail) discards partial increments and retries a full snapshot once. Retain unchanged
+members on increments, remove source deletions with `ctx.remove`, and rewrite `people.ttl`
+once. Full snapshots reconcile actual canonical person documents via `Container` listings,
+including unindexed writes left by failed runs. Validate `metadata.previousResourceNames`
+with `personId` and conditionally remove former documents and memberships. Keep malformed-person
+skip counting and the synthetic sorted Turtle mapping snapshot covered by fixture tests.
