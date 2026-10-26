@@ -55,13 +55,15 @@ export function createImportSession(
     const subjects = new Set(
       [...incoming].filter((q) => q.subject.termType === "NamedNode").map((q) => q.subject.value),
     );
+    // Only adapter-supplied subjects replace existing descriptions; provenance adds the URL.
+    const dataset = doc.writeMode === "merge" ? mergeItems(previous?.dataset, incoming) : incoming;
     const fallback = safeIri(input.sourceUrl) ?? source;
-    const document = new Provenance(url, incoming, DataFactory);
+    const document = new Provenance(url, dataset, DataFactory);
     document.derivedFrom.add(fallback);
     document.generatedBy.clear();
     document.generatedBy.add(activityUrl);
     for (const subject of subjects) {
-      const item = new Provenance(subject, incoming, DataFactory);
+      const item = new Provenance(subject, dataset, DataFactory);
       const origin = item.sourceUrl ?? fallback;
       item.derivedFrom.add(origin);
       document.derivedFrom.add(origin);
@@ -70,7 +72,6 @@ export function createImportSession(
       used.add(origin);
       if (subject !== url) itemKeys.add(JSON.stringify([url, subject]));
     }
-    const dataset = doc.writeMode === "merge" ? mergeItems(previous?.dataset, incoming) : incoming;
     const result = await writer.write({ ...doc, dataset }, conditions ?? conditionFor(previous));
     for (const request of registrationsFor([result])) {
       registrations.set(JSON.stringify([request.forClass, request.container]), request);

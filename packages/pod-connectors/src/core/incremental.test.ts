@@ -19,7 +19,7 @@ import {
   TEST_WEBID,
 } from "./testing.js";
 import type { ConnectorState, ImportContext, IntegrationAdapter, PodWriter } from "./types.js";
-import { CLASSES, MusicPlaylist, MusicRecording } from "./vocab.js";
+import { CLASSES, DataCollection, MusicPlaylist, MusicRecording } from "./vocab.js";
 
 const RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
 function song(dataset: Store, subject: string, id: string, name: string) {
@@ -160,6 +160,97 @@ describe("CON-02 incremental writes", () => {
       [...ds].filter((q) => q.predicate.value === "https://schema.org/identifier"),
     ).toHaveLength(3);
   });
+
+  for (const kind of ["api", "file"] as const) {
+    for (const page of ["item-only", "empty", "collection"] as const) {
+      it(`preserves absent collection metadata and replaces explicit metadata on ${kind} ${page} merges`, async () => {
+        const pod = createMemoryPod();
+        const port = writer(pod);
+        const url = port.resolve("items.ttl");
+        const existing = new Store();
+        const collection = new DataCollection(url, existing, DataFactory).mark();
+        collection.name = "Existing collection";
+        song(existing, `${url}#old`, "old", "Existing item");
+        const previousActivity = "urn:synthetic:previous-run";
+        for (const subject of [url, `${url}#old`]) {
+          const provenance = new Provenance(subject, existing, DataFactory);
+          provenance.generatedBy.add(previousActivity);
+          provenance.derivedFrom.add("https://source.test/previous");
+        }
+        await port.write({
+          slug: "items.ttl",
+          category: "media",
+          forClass: CLASSES.MusicRecording,
+          dataset: existing,
+        });
+        const incoming = new Store();
+        if (page !== "empty") song(incoming, `${url}#new`, "new", "New item");
+        if (page === "collection") {
+          const replacement = new MusicPlaylist(url, incoming, DataFactory).mark();
+          replacement.name = "Updated collection";
+        }
+        const original = copyDataset(incoming);
+        const importPage = async (ctx: Pick<ImportContext, "write">) => {
+          await ctx.write({
+            slug: "items.ttl",
+            category: "media",
+            forClass: CLASSES.MusicRecording,
+            dataset: incoming,
+            writeMode: "merge",
+            sourceUrl: "https://source.test/current",
+          });
+          return {};
+        };
+        const source = adapter(importPage);
+        const report =
+          kind === "api"
+            ? await runImport({ adapter: source, podWriter: port, mode: "demo" })
+            : await runFileImport({
+                adapter: {
+                  metadata: source.metadata,
+                  accept: ".txt",
+                  fileHint: "Synthetic file",
+                  async importFile(_file, ctx) {
+                    await importPage(ctx);
+                  },
+                },
+                podWriter: port,
+                file: memoryFile("synthetic.txt", "fixture"),
+              });
+        const result = pod.dataset(url);
+        const document = new Provenance(url, result, DataFactory);
+        expect(document.name).toBe(
+          page === "collection" ? "Updated collection" : "Existing collection",
+        );
+        expect(document.types.has(CLASSES.Dataset)).toBe(page !== "collection");
+        expect(document.types.has(CLASSES.MusicPlaylist)).toBe(page === "collection");
+        expect(document.derivedFrom.has("https://source.test/current")).toBe(true);
+        expect(document.generatedBy.size).toBe(1);
+        expect(document.generatedBy.has(previousActivity)).toBe(false);
+        const activityUrl = [...document.generatedBy][0] ?? "";
+        expect(
+          new Provenance(
+            activityUrl,
+            pod.dataset(port.resolve("_provenance.ttl")),
+            DataFactory,
+          ).types.has(`${PROV}Activity`),
+        ).toBe(true);
+        const oldItem = new Provenance(`${url}#old`, result, DataFactory);
+        expect(oldItem.name).toBe("Existing item");
+        expect([...oldItem.generatedBy]).toEqual([previousActivity]);
+        if (page !== "empty") {
+          const newItem = new Provenance(`${url}#new`, result, DataFactory);
+          expect(newItem.name).toBe("New item");
+          expect([...newItem.generatedBy]).toEqual([activityUrl]);
+          expect(newItem.derivedFrom.has("https://source.test/songs/new")).toBe(true);
+          expect(document.derivedFrom.has("https://source.test/songs/new")).toBe(true);
+        }
+        expect(report.state?.counts.items).toBe(page === "empty" ? 0 : 1);
+        expect(incoming.size).toBe(original.size);
+        for (const quad of original) expect(incoming.has(quad)).toBe(true);
+      });
+    }
+  }
 
   for (const snapshot of [
     {
