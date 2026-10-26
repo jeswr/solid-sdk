@@ -668,6 +668,71 @@ describe("skill validation", () => {
     expect(existsSync(join(root, "skills/INDEX.md"))).toBe(false);
   });
 
+  it.each(
+    [
+      ...secrets.map(([category, value]) => [value, `possible ${category} (value omitted)`]),
+      ...localPaths.map((value) => [value, "absolute user path is forbidden (value omitted)"]),
+    ].flatMap(([value, rule]) => [
+      ["mapping value", value, rule],
+      ["mapping key", value, rule],
+      ["sequence value", value, rule],
+    ]),
+  )("scans every decoded frontmatter scalar: %s (%s)", (kind, value, rule) => {
+    const root = fixture();
+    const escaped = [...value]
+      .map((character) => `\\u${character.codePointAt(0).toString(16).padStart(4, "0")}`)
+      .join("");
+    const entry =
+      kind === "mapping key"
+        ? `    "${escaped}": true`
+        : kind === "sequence value"
+          ? `    - "${escaped}"`
+          : `    note: "${escaped}"`;
+    put(root, "skills/alpha/SKILL.md", skill({ extra: `metadata:\n  nested:\n${entry}\n` }));
+    expect(checkSkills(root, { write: true }).errors).toEqual([
+      `skills/alpha/SKILL.md: decoded metadata: ${rule}`,
+    ]);
+    expect(existsSync(join(root, "skills/INDEX.md"))).toBe(false);
+  });
+
+  it("walks shared and cyclic YAML aliases without skipping scalar checks", () => {
+    const root = fixture();
+    put(
+      root,
+      "skills/alpha/SKILL.md",
+      skill({
+        extra:
+          'metadata: &metadata\n  self: *metadata\n  nested: &nested\n    note: "API_TOKEN=fixture-credential-value"\n  alias: *nested\n',
+      }),
+    );
+    expect(checkSkills(root, { write: true }).errors).toEqual([
+      "skills/alpha/SKILL.md: decoded metadata: possible environment secret (value omitted)",
+    ]);
+  });
+
+  it.each(["\n", "\r\n"])("preserves body finding lines with newline %j", (newline) => {
+    const root = fixture();
+    const text = skill({
+      description: ">-\n  Use when checking\n  body line numbers.",
+      extra: 'metadata:\n  example: "API_TOKEN=\\"<token>\\""\n',
+      body: "\nPASSWORD=fixture-credential-value\n/home/someone/private\n",
+    });
+    put(root, "skills/alpha/SKILL.md", `\uFEFF${text.replaceAll("\n", newline)}`);
+    expect(checkSkills(root, { write: true }).errors).toEqual([
+      "skills/alpha/SKILL.md: line 11: absolute user path is forbidden",
+      "skills/alpha/SKILL.md: line 10: possible environment secret (value omitted)",
+    ]);
+  });
+
+  it("scans companion frontmatter as raw text", () => {
+    const root = fixture();
+    const path = "skills/alpha/references/guide.md";
+    put(root, path, '---\nexample: API_TOKEN="fixture-credential-value"\n---\n');
+    expect(checkSkills(root, { write: true }).errors).toEqual([
+      `${path}: line 2: possible environment secret (value omitted)`,
+    ]);
+  });
+
   it("scans decoded names without exposing their values", () => {
     const root = fixture();
     const value = `sk-${"a".repeat(24)}`;
@@ -757,6 +822,84 @@ describe("skill validation", () => {
     );
     expect(result.stdout).toBe("");
     expect(existsSync(join(root, "skills/INDEX.md"))).toBe(false);
+  });
+
+  const assignmentBoundaries = [
+    ["semicolon", "API_TOKEN=$API_TOKEN;PASSWORD=fixture-credential-value", 1],
+    ["empty single-quoted prefix", "PASSWORD=''fixture-credential-value", 1],
+    ["empty double-quoted prefix", 'PASSWORD=""fixture-credential-value', 1],
+    ["adjacent quoted segments", "PASSWORD=''\"fixture-credential-value\"", 1],
+    ["ampersands", 'export A_TOKEN="x" && B_SECRET=real-looking-value cmd', 2],
+    ["pipe", "API_TOKEN=$API_TOKEN|PASSWORD=fixture-credential-value", 1],
+    ["closing parenthesis", "API_TOKEN=$API_TOKEN)PASSWORD=fixture-credential-value", 1],
+    ["quoted variable", 'PASSWORD="$PASSWORD"', 0],
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: literal documentation template
+    ["braced variable suffix", 'PASSWORD="${SECRET}suffix"', 1],
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: literal documentation template
+    ["braced variable punctuation suffix", 'PASSWORD="${SECRET}."', 1],
+    ["variable suffix", 'PASSWORD="$PASSWORD/suffix"', 1],
+    ["angle bracket suffix", 'PASSWORD="<token>suffix"', 1],
+    ["backslash is literal before an angle bracket", String.raw`PASSWORD="\<token>"`, 1],
+    ["escaped double quote", String.raw`PASSWORD="fixture\"credential-value"`, 1],
+    ["single quotes preserve backslashes", String.raw`PASSWORD='\$PASSWORD'`, 1],
+    ["unterminated double quote", 'PASSWORD="fixture-credential-value', 1],
+    ["unterminated single quote", "PASSWORD='fixture-credential-value", 1],
+    [
+      "unterminated quote stops at the newline",
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: literal documentation template
+      'API_TOKEN="${API_TOKEN}\nPASSWORD=fixture-credential-value',
+      1,
+    ],
+    ["hash inside unquoted value", "PASSWORD=fixture#credential-value", 1],
+    ["comment at value start", "PASSWORD=# comment", 0],
+    ["empty before separator", "API_TOKEN=;PASSWORD=fixture-credential-value", 1],
+  ];
+  it.each(
+    ["description", "body", "companion"].flatMap((surface) =>
+      assignmentBoundaries.map(([label, text, count]) => [surface, label, text, count]),
+    ),
+  )("scans complete assignments in %s: %s", (surface, _label, text, count) => {
+    const root = fixture();
+    const path =
+      surface === "companion" ? "skills/alpha/references/guide.md" : "skills/alpha/SKILL.md";
+    put(
+      root,
+      path,
+      surface === "description"
+        ? skill({ description: JSON.stringify(`Use when setting ${text}`) })
+        : surface === "body"
+          ? skill({ body: text })
+          : text,
+    );
+    const { errors } = checkSkills(root, { write: true });
+    expect(errors).toHaveLength(count);
+    for (const error of errors) {
+      expect(error).toMatch(
+        new RegExp(
+          `^${path.replaceAll(".", "\\.")}: (?:decoded metadata|line \\d+): possible environment secret \\(value omitted\\)$`,
+        ),
+      );
+    }
+    expect(existsSync(join(root, "skills/INDEX.md"))).toBe(count === 0);
+  });
+
+  it.each([
+    "description",
+    "body",
+    "companion",
+  ])("accepts quoted placeholders in %s without treating YAML escapes as shell text", (surface) => {
+    const root = fixture();
+    const text = 'Use when setting API_TOKEN="<token>".';
+    put(
+      root,
+      "skills/alpha/SKILL.md",
+      skill({
+        description: JSON.stringify(surface === "description" ? text : "Use when testing."),
+        body: surface === "body" ? text : "",
+      }),
+    );
+    if (surface === "companion") put(root, "skills/alpha/references/guide.md", text);
+    expect(checkSkills(root, { write: true }).errors).toEqual([]);
   });
 
   it.each([

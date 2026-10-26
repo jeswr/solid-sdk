@@ -29,20 +29,63 @@ const secretPatterns = [
     "Authorization header",
     /\bAuthorization["']?\s*:\s*["'`]?(?:(?:Bearer|DPoP|Basic)\s+)?([^\s"'`]+)/gi,
   ],
-  [
-    "environment secret",
-    // Capture complete quoted values; only double quotes honour backslash escapes.
-    /\b(?=[A-Z0-9_]*(?:TOKEN|SECRET|PASSWORD|KEY))[A-Z_][A-Z0-9_]*[\t ]*=[\t ]*(?:"((?:\\[\s\S]|[^"\\])*)"|'([^']*)'|([^\s"'`#]+))/g,
-  ],
 ];
 
 function isPlaceholder(value) {
   // Existing recipes use a public localStorage identifier and a generated test password.
   // Exempt these exact examples rather than all storage keys or arbitrary expressions.
   if (value === "solid:recent-accounts" || /^randomUUID\(\);?$/.test(value)) return true;
-  return /^(?:\$|<|\{|\[|\.\.\.|…|(?:your|example|placeholder|redacted|dummy|test)(?:[-_]|$)|(?:changeme|xxx)$)/i.test(
+  // Delimited templates may end a prose sentence. Prefix-style examples retain
+  // their descriptive suffixes, but variable references must occupy the whole value.
+  return /^(?:\$[A-Z_][A-Z0-9_]*|\$\{[^{}\r\n]+\}|(?:<[^<>]*>|\{[^{}]*\}|\[[^[\]]*\])[.,]?|\.\.\.|…|(?:your|example|placeholder|redacted|dummy|test)(?:[-_][\s\S]*)?|changeme|xxx)$/i.test(
     value,
   );
+}
+
+function assignmentValue(text, start) {
+  let value = "";
+  let cursor = start;
+  const terminator = /[\s;&|`)]/;
+  while (cursor < text.length && !terminator.test(text[cursor]) && text[cursor] !== "#") {
+    const quote = text[cursor];
+    if (quote === '"' || quote === "'") {
+      cursor++;
+      while (cursor < text.length && !/[\r\n]/.test(text[cursor])) {
+        if (text[cursor] === quote) {
+          cursor++;
+          break;
+        }
+        if (
+          quote === '"' &&
+          text[cursor] === "\\" &&
+          cursor + 1 < text.length &&
+          /[$`"\\]/.test(text[cursor + 1])
+        ) {
+          cursor++;
+        }
+        value += text[cursor++];
+      }
+    } else {
+      while (
+        cursor < text.length &&
+        !terminator.test(text[cursor]) &&
+        text[cursor] !== '"' &&
+        text[cursor] !== "'"
+      ) {
+        value += text[cursor++];
+      }
+      // Preserve the existing exact generated-password recipe, including its
+      // closing parenthesis, without exempting randomUUID() followed by a suffix.
+      if (
+        value === "randomUUID(" &&
+        text[cursor] === ")" &&
+        (cursor + 1 === text.length || terminator.test(text[cursor + 1]))
+      ) {
+        value += text[cursor++];
+      }
+    }
+  }
+  return { value: value.trim(), end: cursor };
 }
 
 function lineNumber(text, offset) {
@@ -58,6 +101,27 @@ function scanSecrets(text, report) {
         ?.trim();
       if (value !== undefined && (value === "" || isPlaceholder(value))) continue;
       report(category, match.index);
+    }
+  }
+  const assignments = /\b(?=[A-Z0-9_]*(?:TOKEN|SECRET|PASSWORD|KEY))[A-Z_][A-Z0-9_]*[\t ]*=[\t ]*/g;
+  while (assignments.lastIndex < text.length) {
+    const match = assignments.exec(text);
+    if (!match) break;
+    const { value, end } = assignmentValue(text, assignments.lastIndex);
+    if (value !== "" && !isPlaceholder(value)) report("environment secret", match.index);
+    assignments.lastIndex = end;
+  }
+}
+
+function* metadataScalars(value, seen = new Set()) {
+  if (typeof value === "string") yield value;
+  else if (value && typeof value === "object" && !seen.has(value)) {
+    // YAML aliases may share nodes or form cycles. Scan mapping keys as well as
+    // values, including strings nested inside sequences and arbitrary metadata.
+    seen.add(value);
+    for (const [key, child] of Object.entries(value)) {
+      if (!Array.isArray(value)) yield key;
+      yield* metadataScalars(child, seen);
     }
   }
 }
@@ -224,6 +288,7 @@ export function checkSkills(root, { write = false } = {}) {
   const skills = [];
   const names = new Map();
   const files = new Set();
+  const bodies = new Map();
   const report = (path, rule) => errors.push(`${path}: ${rule}`);
   const paths = [];
 
@@ -275,6 +340,7 @@ export function checkSkills(root, { write = false } = {}) {
       continue;
     }
     const body = text.slice(frontmatter[0].length);
+    bodies.set(path, { text: body, lineOffset: lineNumber(text, frontmatter[0].length) - 1 });
     const lines = body === "" ? 0 : body.replace(/\n$/, "").split("\n").length;
     if (lines > 500) report(path, `body exceeds 500 lines (${lines})`);
 
@@ -291,9 +357,8 @@ export function checkSkills(root, { write = false } = {}) {
       continue;
     }
     const { name, description } = data;
-    // These decoded fields are emitted into the index; YAML escapes/folding can hide private data.
-    for (const value of [name, description]) {
-      if (typeof value !== "string") continue;
+    // Scan only decoded frontmatter: YAML quoting/escapes are not shell syntax.
+    for (const value of metadataScalars(data)) {
       scanSecrets(value, (category) => {
         report(path, `decoded metadata: possible ${category} (value omitted)`);
       });
@@ -320,16 +385,27 @@ export function checkSkills(root, { write = false } = {}) {
   }
 
   for (const path of [...files].sort()) {
-    const text = readFileSync(join(root, path), "utf8");
+    const { text, lineOffset } = bodies.get(path) ?? {
+      text: readFileSync(join(root, path), "utf8"),
+      lineOffset: 0,
+    };
     scanLocalPaths(text, (offset) => {
-      report(path, `line ${lineNumber(text, offset)}: absolute user path is forbidden`);
+      report(
+        path,
+        `line ${lineOffset + lineNumber(text, offset)}: absolute user path is forbidden`,
+      );
     });
     scanSecrets(text, (category, offset) => {
-      report(path, `line ${lineNumber(text, offset)}: possible ${category} (value omitted)`);
+      report(
+        path,
+        `line ${lineOffset + lineNumber(text, offset)}: possible ${category} (value omitted)`,
+      );
     });
     if (!path.endsWith(".md")) continue;
     // Frontmatter is metadata, not Markdown; fenced/inline code is ignored by the lexer.
-    const markdown = text.replace(/^(?:\uFEFF)?---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/, "");
+    const markdown = bodies.has(path)
+      ? text
+      : text.replace(/^(?:\uFEFF)?---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/, "");
     for (const href of linksIn(markdown)) {
       if (/^(?:[a-z][a-z\d+.-]*:|\/|#|\?)/i.test(href) || href === "") continue;
       try {
