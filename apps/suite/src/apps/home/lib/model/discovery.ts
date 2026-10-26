@@ -6,8 +6,9 @@ import { NS } from "@jeswr/suite-vocab";
 import type { DatasetCore, Term } from "@rdfjs/types";
 import { TermAs } from "@rdfjs/wrapper";
 import { classificationForType, classifySubject, hasProfileContactDetails } from "./classify";
+import { DiscoveryBudget, type DiscoveryBudgetOptions } from "./discovery-budget";
 import { type Classification, type DataCategory, DOMAINS, UNCATEGORISED } from "./domains";
-import { inStorage, primarySubject, readResource, subjectOf } from "./rdf";
+import { inStorage, primarySubject, subjectOf } from "./rdf";
 import type { DiscoveryFailure, RegisteredLocation } from "./type-index";
 
 export interface DomainItem extends Classification {
@@ -21,7 +22,7 @@ export interface DomainItem extends Classification {
   etag: string | null;
 }
 
-export interface DiscoveryOptions {
+export interface DiscoveryOptions extends DiscoveryBudgetOptions {
   fetch: typeof globalThis.fetch;
   storage: string;
   /** Materialised public + private registrations, e.g. from readTypeIndexes. */
@@ -29,14 +30,12 @@ export interface DiscoveryOptions {
   webId?: string;
   /** Allows a profile hosted outside storage without forwarding credentials there. */
   profile?: DatasetCore;
-  maxRequests?: number;
-  signal?: AbortSignal;
 }
 
 export interface DomainItems {
   items: DomainItem[];
   failures: DiscoveryFailure[];
-  /** True when traversal stopped at its request budget. Failures also imply partial data. */
+  /** True when discovery stopped at its request budget or deadline. Failures also imply partial data. */
   truncated: boolean;
   etags: ReadonlyMap<string, string | null>;
 }
@@ -85,16 +84,13 @@ export async function discoverDomainItems(
   const { storage, fetch, webId } = options;
   if (!inStorage(storage, storage) || new URL(storage).hash)
     throw new TypeError("Expected a storage root ending in /");
-  const maxRequests = options.maxRequests ?? 256;
-  if (!Number.isSafeInteger(maxRequests) || maxRequests < 1)
-    throw new TypeError("Expected a positive request budget");
+  const budget = options.budget ?? new DiscoveryBudget(options);
   const result: DomainItems = { items: [], failures: [], truncated: false, etags: new Map() };
   const etags = new Map<string, string | null>();
   result.etags = etags;
   const queue: Visit[] = [];
   const seen = new Set<string>();
   const listedModified = new Map<string, string>();
-  let requests = 0;
 
   const addDataset = (dataset: DatasetCore, url: string, parent: string, etag: string | null) => {
     const node =
@@ -166,7 +162,7 @@ export async function discoverDomainItems(
   }
 
   for (let index = 0; index < queue.length; index++) {
-    options.signal?.throwIfAborted();
+    if (budget.truncated) break;
     const visit = queue[index] as Visit;
     const url = visit.url.split("#")[0] as string;
     if (seen.has(url)) continue;
@@ -178,13 +174,10 @@ export async function discoverDomainItems(
       });
       continue;
     }
-    if (requests >= maxRequests) {
-      result.truncated = true;
-      break;
-    }
-    requests++;
     try {
-      const { dataset, etag } = await readResource(fetch, url, options.signal);
+      const resource = await budget.read(fetch, url);
+      if (!resource) break;
+      const { dataset, etag } = resource;
       etags.set(url, etag);
       const node = subjectOf(dataset, url);
       const files =
@@ -240,11 +233,12 @@ export async function discoverDomainItems(
         }
       } else addDataset(dataset, url, visit.parent, etag);
     } catch (error) {
-      options.signal?.throwIfAborted();
+      budget.throwIfCancelled();
       if (!(error instanceof RdfFetchError && error.status === 404))
         result.failures.push({ url, error });
     }
   }
+  result.truncated = budget.truncated;
   const unique = new Map<string, DomainItem>();
   for (const item of result.items) {
     // A direct registration may have been read before its container listing.

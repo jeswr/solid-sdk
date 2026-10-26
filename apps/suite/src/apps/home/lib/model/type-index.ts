@@ -1,8 +1,10 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 // Read-only port of PM type-index.ts. Index bootstrap/registration belongs to the later SDK.
 import { canonicalize, NS } from "@jeswr/suite-vocab";
 import type { DatasetCore } from "@rdfjs/types";
-import { inStorage, readResource, subjectOf } from "./rdf";
+import { DiscoveryBudget, type DiscoveryBudgetOptions } from "./discovery-budget";
+import { inStorage, subjectOf } from "./rdf";
 
 export interface RegisteredLocation {
   forClass: string;
@@ -40,7 +42,9 @@ export async function readTypeIndexes(
   webId: string,
   profile: DatasetCore,
   storage: string,
-): Promise<{ locations: RegisteredLocation[]; failures: DiscoveryFailure[] }> {
+  options: DiscoveryBudgetOptions = {},
+): Promise<{ locations: RegisteredLocation[]; failures: DiscoveryFailure[]; truncated: boolean }> {
+  const budget = options.budget ?? new DiscoveryBudget(options);
   const node = subjectOf(profile, webId);
   const links = new Set(
     ["publicTypeIndex", "privateTypeIndex"].flatMap((name) => node.iris(NS.SOLID + name)),
@@ -51,11 +55,14 @@ export async function readTypeIndexes(
     try {
       if (!inStorage(url, storage))
         throw new TypeError("Type Index is outside the selected storage");
-      const { dataset } = await readResource(fetch, url);
+      const resource = await budget.read(fetch, url);
+      if (!resource) break;
+      const { dataset } = resource;
       locations.push(...registrationsFrom(dataset));
     } catch (error) {
+      budget.throwIfCancelled();
       failures.push({ url, error });
     }
   }
-  return { locations, failures };
+  return { locations, failures, truncated: budget.truncated };
 }
