@@ -586,6 +586,9 @@ describe("review round 1 regressions", () => {
     const storage = createSolidBackend({ root: CSS_ROOT, fetch });
     await rejects(storage.list(`${CSS_ROOT}?x=1`), "bad-request");
     await rejects(storage.list(`${CSS_ROOT}#top`), "bad-request");
+    await rejects(storage.list(`${CSS_ROOT}?`), "bad-request");
+    await rejects(storage.list(`${CSS_ROOT}#`), "bad-request");
+    await rejects(storage.list(`${CSS_ROOT}notes/?`), "bad-request");
     await rejects(storage.list("https://css.example/alice?x=1"), "bad-request");
     expect(fetch).not.toHaveBeenCalled();
     expect((await storage.head(`${CSS_ROOT}file.ttl?source=/`)).kind).toBe("resource");

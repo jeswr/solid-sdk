@@ -240,8 +240,9 @@ export function createSolidBackend(options: SolidBackendOptions): StorageClient 
 
     async list(url, opts = {}) {
       const container = scoped(root, "GET", url);
-      // A query or fragment would name a different RDF subject than the container itself.
-      if (new URL(container).search || new URL(container).hash) {
+      // A query or fragment (even an empty `?` or `#`, which URL.search/hash report as "") would
+      // name a different RDF subject than the container. In a canonical href both are delimiters.
+      if (/[?#]/.test(container)) {
         throw new StorageError("bad-request", {
           method: "GET",
           url: container,
