@@ -306,6 +306,9 @@ button:not([data-slot]) {
   border: 2px solid var(--presence-drive);
   font-size: var(--text-xs);
 }
+.fixture-avatar::before {
+  content: attr(data-initials);
+}
 .fixture-unread {
   position: absolute;
   top: 0;

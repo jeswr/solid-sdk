@@ -121,6 +121,7 @@ export function NavigationFixture({
             notifications={
               <button
                 type="button"
+                data-slot="fixture-rail-button"
                 className="suite-rail-button"
                 aria-label="Notifications, 2 unread"
                 title="Notifications, 2 unread"
@@ -136,6 +137,7 @@ export function NavigationFixture({
               state === "cached" || state === "offline" ? (
                 <button
                   type="button"
+                  data-slot="fixture-rail-button"
                   className="suite-rail-button"
                   aria-label="Offline — showing saved copies"
                   title="Offline — showing saved copies"
@@ -148,14 +150,14 @@ export function NavigationFixture({
             account={
               <button
                 type="button"
+                data-slot="fixture-rail-button"
                 className="suite-rail-button"
                 aria-label="Account menu, Alice Wilder"
                 title="Account menu, Alice Wilder"
                 onClick={() => setMessage("Account menu selected")}
               >
-                <span className="fixture-avatar" aria-hidden="true">
-                  AW
-                </span>
+                {/* Initials are drawn by CSS so the accessible name stays the label alone. */}
+                <span className="fixture-avatar" data-initials="AW" aria-hidden="true" />
               </button>
             }
           />
