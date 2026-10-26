@@ -11,7 +11,7 @@ import { fileURLToPath } from "node:url";
 import { NamedNodeAs, NamedNodeFrom, SetFrom, TermWrapper } from "@rdfjs/wrapper";
 import { DataFactory, Store, Writer } from "n3";
 
-const FEDAPP = "https://w3id.org/jeswr/fed#";
+const FEDAPP = "https://jeswr.org/ns/fed#";
 const ACL = "http://www.w3.org/ns/auth/acl#";
 // The shared task CLASS is the re-used wf:Task (NOT a minted tm:Task) — see
 // task.ttl + the @contexts, which map "Task" → wf:Task. Apps consume/produce
@@ -62,7 +62,7 @@ const store = new Store();
 const doc = new FedAppDoc("https://app.example/clientid.jsonld", store, DataFactory);
 
 doc.types.add(`${FEDAPP}App`);
-doc.sector.add("https://w3id.org/jeswr/sectors/scheduling#sector");
+doc.sector.add("https://jeswr.org/ns/sectors/scheduling#sector");
 doc.access.add(`${ACL}Read`);
 doc.access.add(`${ACL}Write`);
 doc.access.add(`${ACL}Append`);
@@ -70,7 +70,7 @@ doc.produces.add(`${WF}Task`);
 doc.consumes.add(`${WF}Task`);
 
 const writer = new Writer({
-  prefixes: { fedapp: FEDAPP, acl: ACL, wf: WF, sectors: "https://w3id.org/jeswr/sectors/" },
+  prefixes: { fedapp: FEDAPP, acl: ACL, wf: WF, sectors: "https://jeswr.org/ns/sectors/" },
 });
 writer.addQuads(store.getQuads(null, null, null, null));
 

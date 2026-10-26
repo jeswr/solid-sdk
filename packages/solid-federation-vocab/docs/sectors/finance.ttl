@@ -1,7 +1,7 @@
 # AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 #
-@prefix fin:     <https://w3id.org/jeswr/sectors/finance#> .
-@prefix core:    <https://w3id.org/jeswr/core#> .
+@prefix fin:     <https://jeswr.org/ns/sectors/finance#> .
+@prefix core:    <https://jeswr.org/ns/core#> .
 @prefix gufo:    <http://purl.org/nemo/gufo#> .
 @prefix owl:     <http://www.w3.org/2002/07/owl#> .
 @prefix rdf:     <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
@@ -51,15 +51,15 @@
 #
 # =============================================================================
 
-<https://w3id.org/jeswr/sectors/finance> a owl:Ontology ;
+<https://jeswr.org/ns/sectors/finance> a owl:Ontology ;
     dcterms:title "Solid Finance Sector Ontology (gUFO re-base)"@en ;
     rdfs:label "Solid Finance Sector Ontology"@en ;
     vann:preferredNamespacePrefix "fin" ;
-    vann:preferredNamespaceUri "https://w3id.org/jeswr/sectors/finance#" ;
-    owl:imports <https://w3id.org/jeswr/core> ,
-                <https://w3id.org/jeswr/sectors/finance/imports/fibo-slim> ;
-    owl:versionInfo "1.2.0" ;
-    owl:versionIRI <https://w3id.org/jeswr/sectors/finance/1.2.0> ;
+    vann:preferredNamespaceUri "https://jeswr.org/ns/sectors/finance#" ;
+    owl:imports <https://jeswr.org/ns/core> ,
+                <https://jeswr.org/ns/sectors/finance/imports/fibo-slim> ;
+    owl:versionInfo "2.0.0" ;
+    owl:versionIRI <https://jeswr.org/ns/sectors/finance/2.0.0> ;
     dcterms:description """Personal-finance terms (accounts, transactions,
         holdings, payments) for the EDMA lending/banking use cases, re-based onto
         the gUFO Solid Core. Account=Relator(+Phase status); transactions/payments
@@ -79,8 +79,8 @@
         CapNote's capital calls & distributions, and fin:sharePct (the honest
         percentage datatype replacing Keystone's range-violating bare-literal
         qudt:quantityValue) + fin:jurisdiction. Generic double-entry + PE terms,
-        aligned to FIBO Mode-A (finance-alignments.ttl); no existing term changed."""@en ;
-    dcterms:modified "2026-07-03"^^xsd:date ;
+        aligned to FIBO Mode-A (finance-alignments.ttl); no existing term changed. Version 2.0.0 rebases this ontology from its legacy w3id namespace to https://jeswr.org/ns/ (DECISIONS V1)."""@en ;
+    dcterms:modified "2026-10-25"^^xsd:date ;
     rdfs:comment "Re-based per R11 §4.2. v1.2.0 ADDITIVE: double-entry ledger (Keystone) + private-equity capital-calls/distributions (CapNote) + fin:sharePct/jurisdiction. See the revenue-products ontology review §4–§5."@en .
 
 # -----------------------------------------------------------------------------
@@ -688,13 +688,13 @@ fin:jurisdiction a owl:DatatypeProperty ;
 
 # =============================================================================
 # SECTOR MARKER — the IRI an app's fedapp:sector points at to declare it operates
-# in this sector (https://w3id.org/jeswr/fed#sector). A skos:Concept in the
+# in this sector (https://jeswr.org/ns/fed#sector). A skos:Concept in the
 # federation sector register; dereferences to this ontology.
 # =============================================================================
 
-<https://w3id.org/jeswr/sectors/finance#sector>
+<https://jeswr.org/ns/sectors/finance#sector>
     a <http://www.w3.org/2004/02/skos/core#Concept> ;
     rdfs:label "Finance sector"@en ;
     rdfs:comment "The Finance data sector. The value an app's fedapp:sector names in its Client Identifier Document to declare it operates over finance data. Backed by this sector ontology."@en ;
-    rdfs:isDefinedBy <https://w3id.org/jeswr/sectors/finance> ;
+    rdfs:isDefinedBy <https://jeswr.org/ns/sectors/finance> ;
     skos:prefLabel "Finance"@en .

@@ -3,7 +3,7 @@
   "version": "0.0.1",
   "private": true,
   "type": "module",
-  "description": "Static SPA host shell for Pod Docs — standalone Solid login + the @jeswr/pod-docs DocumentBrowser, served as a static dist/ by any file server.",
+  "description": "Static SPA host shell for Pod Docs \u2014 standalone Solid login + the @jeswr/pod-docs DocumentBrowser, served as a static dist/ by any file server.",
   "author": "Claude Opus 4.8 (@jeswr PSS agent)",
   "license": "MIT",
   "engines": {
@@ -37,7 +37,8 @@
     "n3": "^2.0.3",
     "oauth4webapi": "^3.8.6",
     "react": "^19.2.0",
-    "react-dom": "^19.2.0"
+    "react-dom": "^19.2.0",
+    "@jeswr/suite-vocab": "workspace:*"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.1",

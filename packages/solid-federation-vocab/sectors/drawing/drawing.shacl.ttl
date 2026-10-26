@@ -1,8 +1,8 @@
 # AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 #
-@prefix drawing: <https://w3id.org/jeswr/sectors/drawing#> .
-@prefix drsh:    <https://w3id.org/jeswr/sectors/drawing/shapes#> .
-@prefix core:    <https://w3id.org/jeswr/core#> .
+@prefix drawing: <https://jeswr.org/ns/sectors/drawing#> .
+@prefix drsh:    <https://jeswr.org/ns/sectors/drawing/shapes#> .
+@prefix core:    <https://jeswr.org/ns/core#> .
 @prefix sh:      <http://www.w3.org/ns/shacl#> .
 @prefix owl:     <http://www.w3.org/2002/07/owl#> .
 @prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
@@ -18,16 +18,16 @@
 # grade (Violation=MUST, Warning=SHOULD, Info=MAY); IMMUTABLE version IRI; additive.
 # =============================================================================
 
-<https://w3id.org/jeswr/sectors/drawing/profile> a prof:Profile ;
+<https://jeswr.org/ns/sectors/drawing/profile> a prof:Profile ;
     dcterms:title "Solid Drawing data-model profile (version-independent)"@en ;
-    dcterms:hasVersion <https://w3id.org/jeswr/sectors/drawing/profile/1.0.0> ;
+    dcterms:hasVersion <https://jeswr.org/ns/sectors/drawing/profile/1.0.0> ;
     rdfs:comment "Version-independent IRI resolving to the current Drawing profile. "@en .
 
-<https://w3id.org/jeswr/sectors/drawing/profile/1.0.0> a prof:Profile ;
+<https://jeswr.org/ns/sectors/drawing/profile/1.0.0> a prof:Profile ;
     dcterms:title "Solid Drawing data-model profile 1.0.0"@en ;
-    dcterms:isVersionOf <https://w3id.org/jeswr/sectors/drawing/profile> ;
+    dcterms:isVersionOf <https://jeswr.org/ns/sectors/drawing/profile> ;
     owl:versionInfo "1.0.0" ;
-    prof:isProfileOf <https://w3id.org/jeswr/sectors/drawing> ;
+    prof:isProfileOf <https://jeswr.org/ns/sectors/drawing> ;
     prof:hasToken "drawing-1.0.0" ;
     rdfs:comment "IMMUTABLE version IRI. Open shapes; sh:Violation=MUST, sh:Warning=SHOULD. "@en .
 

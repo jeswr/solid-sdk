@@ -1,8 +1,8 @@
 # AUTHORED-BY Claude Fable 5 (PSS agent)
 #
-@prefix fut:     <https://w3id.org/jeswr/sectors/futures#> .
-@prefix fsh:     <https://w3id.org/jeswr/sectors/futures/shapes#> .
-@prefix core:    <https://w3id.org/jeswr/core#> .
+@prefix fut:     <https://jeswr.org/ns/sectors/futures#> .
+@prefix fsh:     <https://jeswr.org/ns/sectors/futures/shapes#> .
+@prefix core:    <https://jeswr.org/ns/core#> .
 @prefix sh:      <http://www.w3.org/ns/shacl#> .
 @prefix owl:     <http://www.w3.org/2002/07/owl#> .
 @prefix rdf:     <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
@@ -76,46 +76,46 @@
 #    compose prompt).
 # =============================================================================
 
-<https://w3id.org/jeswr/sectors/futures/profile>
+<https://jeswr.org/ns/sectors/futures/profile>
     a prof:Profile ;
     dcterms:title "Solid Futures data-model profile (version-independent)"@en ;
-    dcterms:hasVersion <https://w3id.org/jeswr/sectors/futures/profile/0.1.0> ,
-                       <https://w3id.org/jeswr/sectors/futures/profile/0.2.0> ;
+    dcterms:hasVersion <https://jeswr.org/ns/sectors/futures/profile/0.1.0> ,
+                       <https://jeswr.org/ns/sectors/futures/profile/0.2.0> ;
     dcterms:description "Resolves to the current Futures sector profile version (latest: 0.2.0)."@en .
 
-<https://w3id.org/jeswr/sectors/futures/profile/0.1.0>
+<https://jeswr.org/ns/sectors/futures/profile/0.1.0>
     a prof:Profile ;
     dcterms:title "Solid Futures data-model profile"@en ;
-    dcterms:isVersionOf <https://w3id.org/jeswr/sectors/futures/profile> ;
+    dcterms:isVersionOf <https://jeswr.org/ns/sectors/futures/profile> ;
     owl:versionInfo "0.1.0" ;
-    owl:versionIRI <https://w3id.org/jeswr/sectors/futures/profile/0.1.0> ;
-    prof:isProfileOf <https://w3id.org/jeswr/sectors/futures> ;
+    owl:versionIRI <https://jeswr.org/ns/sectors/futures/profile/0.1.0> ;
+    prof:isProfileOf <https://jeswr.org/ns/sectors/futures> ;
     prof:hasToken "solid-futures-0.1.0" ;
     prof:hasResource [
         prof:hasRole <http://www.w3.org/ns/dx/prof/role/constraints> ;
-        prof:hasArtifact <https://w3id.org/jeswr/sectors/futures/futures.shacl.ttl>
+        prof:hasArtifact <https://jeswr.org/ns/sectors/futures/futures.shacl.ttl>
     ] ;
     prof:hasResource [
         prof:hasRole <http://www.w3.org/ns/dx/prof/role/vocabulary> ;
-        prof:hasArtifact <https://w3id.org/jeswr/sectors/futures>
+        prof:hasArtifact <https://jeswr.org/ns/sectors/futures>
     ] ;
     rdfs:comment "Open-by-default SHACL profile for the futures sector; the version implementations pin via fedreg:acceptsSpec."@en .
 
-<https://w3id.org/jeswr/sectors/futures/profile/0.2.0>
+<https://jeswr.org/ns/sectors/futures/profile/0.2.0>
     a prof:Profile ;
     dcterms:title "Solid Futures data-model profile 0.2.0"@en ;
-    dcterms:isVersionOf <https://w3id.org/jeswr/sectors/futures/profile> ;
+    dcterms:isVersionOf <https://jeswr.org/ns/sectors/futures/profile> ;
     owl:versionInfo "0.2.0" ;
-    owl:versionIRI <https://w3id.org/jeswr/sectors/futures/profile/0.2.0> ;
-    prof:isProfileOf <https://w3id.org/jeswr/sectors/futures> ;
+    owl:versionIRI <https://jeswr.org/ns/sectors/futures/profile/0.2.0> ;
+    prof:isProfileOf <https://jeswr.org/ns/sectors/futures> ;
     prof:hasToken "solid-futures-0.2.0" ;
     prof:hasResource [
         prof:hasRole <http://www.w3.org/ns/dx/prof/role/constraints> ;
-        prof:hasArtifact <https://w3id.org/jeswr/sectors/futures/futures.shacl.ttl>
+        prof:hasArtifact <https://jeswr.org/ns/sectors/futures/futures.shacl.ttl>
     ] ;
     prof:hasResource [
         prof:hasRole <http://www.w3.org/ns/dx/prof/role/vocabulary> ;
-        prof:hasArtifact <https://w3id.org/jeswr/sectors/futures>
+        prof:hasArtifact <https://jeswr.org/ns/sectors/futures>
     ] ;
     rdfs:comment "IMMUTABLE version IRI. ADDITIVE over 0.1.0 (the unite S1 futures-0.2.0 draft, formalised): the scope-B InfraProposal + AdoptionDecision/AdoptionObservation shapes, the Convergence-Room Critique shape, and the methodProvenance / indirectStakeholders constraints. Open shapes; sh:Violation=MUST, sh:Warning=SHOULD."@en .
 

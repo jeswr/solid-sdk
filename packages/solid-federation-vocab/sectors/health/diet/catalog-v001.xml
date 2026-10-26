@@ -25,17 +25,17 @@
   <uri name="http://qudt.org/2.1/schema/qudt" uri="../../core/imports/qudt-schema.ttl"/>
   <uri name="http://qudt.org/2.1/vocab/qudt-slim" uri="../../core/imports/qudt-units-slim.ttl"/>
   <!-- The Solid Core (a direct import + the sector's mandatory root) -->
-  <uri name="https://w3id.org/jeswr/core" uri="../../core/core.ttl"/>
-  <uri name="https://w3id.org/jeswr/core#" uri="../../core/core.ttl"/>
-  <uri name="https://w3id.org/jeswr/core/1.0.1" uri="../../core/core.ttl"/>
+  <uri name="https://jeswr.org/ns/core" uri="../../core/core.ttl"/>
+  <uri name="https://jeswr.org/ns/core#" uri="../../core/core.ttl"/>
+  <uri name="https://jeswr.org/ns/core/2.0.0" uri="../../core/core.ttl"/>
   <!-- The parent health sector (a direct import) -->
-  <uri name="https://w3id.org/jeswr/sectors/health" uri="../health.ttl"/>
-  <uri name="https://w3id.org/jeswr/sectors/health#" uri="../health.ttl"/>
-  <uri name="https://w3id.org/jeswr/sectors/health/1.0.0" uri="../health.ttl"/>
+  <uri name="https://jeswr.org/ns/sectors/health" uri="../health.ttl"/>
+  <uri name="https://jeswr.org/ns/sectors/health#" uri="../health.ttl"/>
+  <uri name="https://jeswr.org/ns/sectors/health/2.0.0" uri="../health.ttl"/>
   <!-- QUDT health slim module (imported by the health sector) -->
-  <uri name="https://w3id.org/jeswr/sectors/health/imports/qudt-health-slim" uri="../imports/qudt-health-slim.ttl"/>
+  <uri name="https://jeswr.org/ns/sectors/health/imports/qudt-health-slim" uri="../imports/qudt-health-slim.ttl"/>
   <!-- This sub-sector (self, for the alignments file's import) -->
-  <uri name="https://w3id.org/jeswr/sectors/health/diet" uri="diet.ttl"/>
-  <uri name="https://w3id.org/jeswr/sectors/health/diet#" uri="diet.ttl"/>
-  <uri name="https://w3id.org/jeswr/sectors/health/diet/1.0.0" uri="diet.ttl"/>
+  <uri name="https://jeswr.org/ns/sectors/health/diet" uri="diet.ttl"/>
+  <uri name="https://jeswr.org/ns/sectors/health/diet#" uri="diet.ttl"/>
+  <uri name="https://jeswr.org/ns/sectors/health/diet/2.0.0" uri="diet.ttl"/>
 </catalog>

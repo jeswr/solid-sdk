@@ -1,0 +1,15 @@
+# AUTHORED-BY Codex GPT-6.1-Sol
+@prefix ex: <https://example.org/scheduling/> .
+@prefix sched: <https://jeswr.org/ns/sectors/scheduling#> .
+@prefix core: <https://jeswr.org/ns/core#> .
+@prefix schema: <https://schema.org/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+ex:event a sched:CalendarEvent ;
+    sched:summary "All-day event" ;
+    sched:startTime "2026-11-01"^^xsd:date ;
+    sched:endTime "2026-11-02"^^xsd:date ;
+    sched:organizer ex:organizer .
+ex:organizer a core:Agent .
+ex:period core:validFrom "2026-11-01"^^xsd:date ;
+    core:validUntil "2026-11-02"^^xsd:date .

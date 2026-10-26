@@ -1,7 +1,7 @@
 # AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 #
-@prefix social:  <https://w3id.org/jeswr/sectors/social#> .
-@prefix core:    <https://w3id.org/jeswr/core#> .
+@prefix social:  <https://jeswr.org/ns/sectors/social#> .
+@prefix core:    <https://jeswr.org/ns/core#> .
 @prefix owl:     <http://www.w3.org/2002/07/owl#> .
 @prefix rdf:     <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
 @prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
@@ -21,7 +21,7 @@
 #
 # THIS SECTOR ALSO REPAIRS A DANGLING REFERENCE: @jeswr/pod-chat's
 # clientid.jsonld already names fedapp:sector
-# <https://w3id.org/jeswr/sectors/social#sector>, which until now did not resolve
+# <https://jeswr.org/ns/sectors/social#sector>, which until now did not resolve
 # (the sector was flagged "not yet authored" in the README). Authoring it here
 # fixes that reference.
 #
@@ -40,14 +40,14 @@
 # the closed-world MUST/SHOULD.
 # =============================================================================
 
-<https://w3id.org/jeswr/sectors/social> a owl:Ontology ;
+<https://jeswr.org/ns/sectors/social> a owl:Ontology ;
     dcterms:title "Solid Social, Fediverse & Feed Sector Ontology"@en ;
     rdfs:label "Solid Social, Fediverse & Feed Sector Ontology"@en ;
     vann:preferredNamespacePrefix "social" ;
-    vann:preferredNamespaceUri "https://w3id.org/jeswr/sectors/social#" ;
-    owl:imports <https://w3id.org/jeswr/core> ;
-    owl:versionInfo "1.0.0" ;
-    owl:versionIRI <https://w3id.org/jeswr/sectors/social/1.0.0> ;
+    vann:preferredNamespaceUri "https://jeswr.org/ns/sectors/social#" ;
+    owl:imports <https://jeswr.org/ns/core> ;
+    owl:versionInfo "2.0.0" ;
+    owl:versionIRI <https://jeswr.org/ns/sectors/social/2.0.0> ;
     dcterms:description """The social / fediverse / feed data sector — the domain a
         federated Elk (Mastodon/ActivityPub) client, a Miniflux (RSS/Atom) reader,
         and @jeswr/pod-chat operate in. Authors the sector marker and gUFO-rooted
@@ -56,8 +56,8 @@
         spine. Built on ActivityStreams 2.0 (as:Note/as:Collection) + SIOC and
         aligned to @jeswr/solid-chat-interop's CanonicalMessage (whose content model
         is AS2) in the companion alignments file. Authoring this sector also repairs
-        the dangling fedapp:sector reference in @jeswr/pod-chat's clientid."""@en ;
-    dcterms:modified "2026-06-21"^^xsd:date ;
+        the dangling fedapp:sector reference in @jeswr/pod-chat's clientid. Version 2.0.0 rebases this ontology from its legacy w3id namespace to https://jeswr.org/ns/ (DECISIONS V1)."""@en ;
+    dcterms:modified "2026-10-25"^^xsd:date ;
     rdfs:comment "Foundation sector for the 5-OSS-fork initiative (Elk + Miniflux); repairs the pod-chat dangling reference."@en .
 
 # -----------------------------------------------------------------------------
@@ -146,14 +146,14 @@ social:published a owl:DatatypeProperty ;
 
 # =============================================================================
 # SECTOR MARKER — the IRI an app's fedapp:sector points at to declare it operates
-# in this sector (https://w3id.org/jeswr/fed#sector). A skos:Concept in the
+# in this sector (https://jeswr.org/ns/fed#sector). A skos:Concept in the
 # federation sector register; dereferences to this ontology. THIS is the IRI
 # @jeswr/pod-chat's clientid.jsonld already references.
 # =============================================================================
 
-<https://w3id.org/jeswr/sectors/social#sector>
+<https://jeswr.org/ns/sectors/social#sector>
     a <http://www.w3.org/2004/02/skos/core#Concept> ;
     rdfs:label "Social, Fediverse & Feed sector"@en ;
     rdfs:comment "The Social, Fediverse & Feed data sector. The value an app's fedapp:sector names in its Client Identifier Document to declare it operates over social / fediverse / feed data (toots, posts, chat messages, RSS entries). Backed by this sector ontology. Already referenced by @jeswr/pod-chat's clientid."@en ;
-    rdfs:isDefinedBy <https://w3id.org/jeswr/sectors/social> ;
+    rdfs:isDefinedBy <https://jeswr.org/ns/sectors/social> ;
     skos:prefLabel "Social, Fediverse & Feed"@en .
