@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { describe, expect, it } from "vitest";
 import {
   DEFAULT_GROUP_GAP_MS,
@@ -140,13 +141,51 @@ describe("Markdown-lite inline AST", () => {
 
   it("falls back to intact literal input when scans exceed the shared work budget", () => {
     for (const suffix of [
-      "@[".repeat(10_000),
-      `${"@[".repeat(10_000)}](https://example.org/`,
       "*a ".repeat(10_000),
-      `${"**open ".repeat(16)}${"@[".repeat(10_000)}`,
+      `${"**open ".repeat(16)}${"*a ".repeat(10_000)}`,
+      "`unclosed\n".repeat(10_000) + "*a ".repeat(10_000),
+      `${"**open ".repeat(16)}@[Mira](https://example.org/${"a".repeat(10_000)}`,
     ]) {
       const source = `**formatted** ${suffix}`;
       expect(parseInline(source)).toEqual([text(source)]);
+    }
+  });
+
+  it.each([
+    ": ",
+    "@ ",
+    "`\n",
+    "@[] ",
+    "@[Mira]\n",
+    ":oops! ",
+  ])("charges actual lookahead for failed tokens %j", (punctuation) => {
+    const prefix = punctuation.repeat(200);
+    const suffix = punctuation.repeat(200);
+    const content = [
+      { type: "bold", children: [text("bold")] },
+      text(" "),
+      { type: "link", href: mira, label: mira },
+      text(" "),
+      { type: "mention", label: "mira", webId: mira },
+      text(" "),
+      { type: "emoji", shortcode: "smile", value: EMOJI_SHORTCODES.smile },
+    ];
+    expect(parseInline(`${prefix}**bold** ${mira} @mira :smile: ${suffix}`, options)).toEqual([
+      text(prefix),
+      ...content,
+      text(` ${suffix}`),
+    ]);
+    expect(parseInline(`**${prefix}bold**`, options)).toEqual([
+      { type: "bold", children: [text(`${prefix}bold`)] },
+    ]);
+  });
+
+  it("preserves malformed mentions in a single opaque scan", () => {
+    for (const suffix of ["@[".repeat(10_000), `${"@[".repeat(10_000)}](https://example.org/`]) {
+      expect(parseInline(`**formatted** ${suffix}`)).toEqual([
+        { type: "bold", children: [text("formatted")] },
+        text(` ${suffix}`),
+      ]);
     }
   });
 
@@ -270,6 +309,63 @@ describe("HTTP(S) and WebID autolinking", () => {
     ]);
   });
 
+  it.each(["_", "__", "*", "**"])("keeps URL markers opaque inside %s", (marker) => {
+    const href = "https://example.org/_file*part__two**#me";
+    const link = { type: "link", href, label: href };
+    const type = marker.length === 2 ? "bold" : "italic";
+    expect(parseInline(`${marker}Visit ${href} now${marker}`)).toEqual([
+      { type, children: [text("Visit "), link, text(" now")] },
+    ]);
+    expect(parseInline(`${marker}https://example.org/_file${marker}`)).toEqual([
+      {
+        type,
+        children: [
+          { type: "link", href: "https://example.org/_file", label: "https://example.org/_file" },
+        ],
+      },
+    ]);
+    expect(parseInline(`${marker}Visit https://example.org/_file., now${marker}`)).toEqual([
+      {
+        type,
+        children: [
+          text("Visit "),
+          { type: "link", href: "https://example.org/_file", label: "https://example.org/_file" },
+          text("., now"),
+        ],
+      },
+    ]);
+  });
+
+  it.each(["*", "_"])("closes nested %s formatting after URL tokens", (marker) => {
+    const href = "https://example.org/_file";
+    expect(parseInline(`${marker.repeat(3)}${href}${marker.repeat(3)}`)).toEqual([
+      {
+        type: "bold",
+        children: [{ type: "italic", children: [{ type: "link", href, label: href }] }],
+      },
+    ]);
+  });
+
+  it.each([
+    ["**", "_"],
+    ["_", "**"],
+    ["__", "*"],
+    ["*", "__"],
+  ])("closes mixed %s/%s formatting after URL tokens", (outer, inner) => {
+    const href = "https://example.org/_file";
+    expect(parseInline(`${outer}${inner}${href}${inner}${outer}`)).toEqual([
+      {
+        type: outer.length === 2 ? "bold" : "italic",
+        children: [
+          {
+            type: inner.length === 2 ? "bold" : "italic",
+            children: [{ type: "link", href, label: href }],
+          },
+        ],
+      },
+    ]);
+  });
+
   it("trims long unmatched bracket suffixes while retaining balanced brackets", () => {
     const suffix = ")].!};".repeat(10_000);
     expect(parseInline(`https://example.org/a_(b)${suffix}`)).toEqual([
@@ -284,6 +380,7 @@ describe("HTTP(S) and WebID autolinking", () => {
   it("preserves invalid URL candidates and avoids linking inside words or email", () => {
     for (const value of [
       "https://[",
+      "https://",
       "https://user@example.org/",
       "xhttps://example.org/",
       "mira@https://example.org/",
@@ -348,6 +445,33 @@ describe("mentions and emoji", () => {
       "@[](https://example.org/)",
     ]) {
       expect(parseInline(value)).toEqual([text(value)]);
+    }
+  });
+
+  it("keeps balanced WebID destination parentheses intact", () => {
+    for (const webId of [
+      "https://example.org/a_(b)#me",
+      "https://example.org/a_(b_(c))#me",
+      "https://example.org/?person=(mira)#me",
+    ]) {
+      const mention = { type: "mention", label: "Mira", webId };
+      expect(parseInline(`@[Mira](${webId})`)).toEqual([mention]);
+      expect(parseInline(`_@[Mira](${webId})_`)).toEqual([{ type: "italic", children: [mention] }]);
+    }
+  });
+
+  it("preserves whole unsupported mention destinations literally", () => {
+    for (const source of [
+      "@[Mira](https://example.org/a_(b)#me",
+      "@[Mira](https://example.org/a_(b#me)",
+      "@[Mira](https://example.org/a_(b)#me extra)",
+      "@[Mira](https://example.org/a_(b) **extra**)",
+      "@[Mira](javascript:alert(1))",
+      "@[Mira](https://example.org/a_(b)\n#me)",
+      "@[Mira](https://example.org/a_(b)\n**literal** https://example.org/other)",
+      "@[Mira\n**Sage**](https://example.org/a_(b)#me)",
+    ]) {
+      expect(parseInline(source)).toEqual([text(source)]);
     }
   });
 
