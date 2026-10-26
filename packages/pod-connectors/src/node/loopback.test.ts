@@ -325,11 +325,13 @@ describe("source loopback login", () => {
     expect(oauth.tokenExchange).toBe("proxy");
   });
   it.each([
-    undefined,
-    "https://proxy.test/token",
-  ])("exchanges Fitbit directly with Basic authentication and a form (proxy: %s)", async (tokenProxyUrl) => {
+    ["fitbit", undefined],
+    ["fitbit", "https://proxy.test/token"],
+    ["pinterest", undefined],
+    ["pinterest", "https://proxy.test/token"],
+  ])("exchanges %s directly with Basic authentication and a form (proxy: %s)", async (id, tokenProxyUrl) => {
     const completeCallback = mockLoopbackCallback();
-    const oauth = createRegistry().adapterById("fitbit")?.oauth;
+    const oauth = createRegistry().adapterById(id)?.oauth;
     if (!oauth) throw new Error("Missing fixture OAuth configuration");
     let authorization: URL;
     const transport = vi.fn(async (url, init) => {
@@ -360,7 +362,7 @@ describe("source loopback login", () => {
     });
     await expect(
       authorizeLoopback(
-        "fitbit",
+        id,
         { ...oauth, clientId: "synthetic-client", clientSecret: "synthetic-secret", tokenProxyUrl },
         transport,
         {
@@ -377,6 +379,7 @@ describe("source loopback login", () => {
   it.each([
     "notion",
     "fitbit",
+    "pinterest",
   ])("keeps %s's form proxy contract without a local secret", async (id) => {
     const completeCallback = mockLoopbackCallback();
     const oauth = createRegistry().adapterById(id)?.oauth;
