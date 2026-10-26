@@ -115,7 +115,11 @@ export function serializeQuads(
   for (const [name, namespace] of Object.entries(prefixes)) {
     if (!PREFIX.test(name)) throw new TypeError(`Invalid prefix name: ${JSON.stringify(name)}`);
     if (name.includes(".") || [...iris].some((iri) => iri.startsWith(`${name}:`))) continue;
-    safePrefixes[name] = escapeIri(namespace);
+    const iri = escapeIri(namespace);
+    // n3.Writer escapes only `]/()*+?.\$` when it builds its namespace regex; any other regex
+    // metacharacter surviving escapeIri (`[`, as in IPv6 hosts) would corrupt unrelated IRIs.
+    if (/[[{}|^]/.test(iri)) continue;
+    safePrefixes[name] = iri;
   }
   return serialize(safe, {
     format,
