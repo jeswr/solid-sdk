@@ -115,7 +115,8 @@ final class ShareOutStore {
         for dir in try directories() {
             let id = dir.lastPathComponent
             let abandoned = uploads[id] == nil && fm.fileExists(atPath: dir.appendingPathComponent(Self.uploadingMarker).path)
-            if abandoned || now.timeIntervalSince(try modified(dir)) > Self.maxAge { try abort(id) }
+            let age = now.timeIntervalSince(try modified(dir))
+            if abandoned || age > Self.maxAge { try abort(id) }
         }
         let dirs = try directories().sorted { (try modified($0)) < (try modified($1)) }
         var total: Int64 = 0

@@ -38,4 +38,21 @@ final class BridgeOriginGuardTests: XCTestCase {
         XCTAssertNil(SuiteSharePlugin.items(text: String(repeating: "x", count: 10_001), url: nil, files: nil, committed: committed))
         XCTAssertNil(SuiteSharePlugin.items(text: nil, url: nil, files: nil, committed: committed))
     }
+
+    func testOnlyRegisteredPluginNamesReachCapacitor() {
+        let registered: (String) -> Bool = { $0 == "SuiteAuthSession" }
+        let call: [String: Any] = ["type": "message", "pluginId": "SuiteAuthSession", "methodName": "cancel"]
+        XCTAssertTrue(BridgeOriginGuard.admits(body: call, isRegistered: registered))
+        let refused: [[String: Any]] = [
+            ["type": "message", "pluginId": "SuiteAuthSessionPlugin", "methodName": "cancel"],
+            ["type": "message", "pluginId": "SharePlugin", "methodName": "share"],
+            ["type": "message", "methodName": "cancel"],
+            ["type": "cordova", "service": "SuiteAuthSession", "action": "cancel"]
+        ]
+        for body in refused {
+            XCTAssertFalse(BridgeOriginGuard.admits(body: body, isRegistered: registered))
+        }
+        let jsError: [String: Any] = ["type": "js.error", "error": [String: Any]()]
+        XCTAssertTrue(BridgeOriginGuard.admits(body: jsError, isRegistered: registered))
+    }
 }

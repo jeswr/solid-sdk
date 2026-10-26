@@ -173,6 +173,9 @@ describe("iOS project", () => {
     const controller = read("ios/App/App/MainViewController.swift");
     expect(controller).toContain('removeScriptMessageHandler(forName: "bridge")');
     expect(controller).toContain("BridgeOriginGuard(");
+    // Unregistered plugin ids would make Capacitor replace a live plugin with a fresh instance.
+    expect(controller).toContain("bridge?.plugin(withName: name) != nil");
+    expect(read("ios/App/App/BridgeOriginGuard.swift")).toContain("Self.admits(body: message.body");
     expect(controller).toContain("registerPluginInstance(SuiteShareIntakePlugin())");
     expect(read("ios/App/App/BridgeOriginGuard.swift")).toContain("message.frameInfo.isMainFrame");
     expect(controller).toContain("UIDelegateOriginGuard(");
