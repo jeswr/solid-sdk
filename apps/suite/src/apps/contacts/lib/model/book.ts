@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { safeHttpIri } from "@jeswr/rdf-serialize";
 import {
   type AddressBookData,
   buildAddressBook,
@@ -18,10 +17,12 @@ import { DataFactory, Store } from "n3";
 import {
   applyContact,
   ContactsDataset,
+  contactIdentifier,
   documentUrl,
   flatContacts,
   readGroupsIndex,
   readPeopleIndex,
+  requireLosslessMigration,
   requireName,
   validateContact,
 } from "./data";
@@ -159,11 +160,7 @@ export class ContactsModel {
   }
 
   private applyMembers(group: ContactGroup, members: readonly string[]): void {
-    const safe = members.map((member) => {
-      const iri = safeHttpIri(member);
-      if (!iri) throw new TypeError("Group members must be HTTP(S) contact identifiers.");
-      return iri;
-    });
+    const safe = members.map(contactIdentifier);
     group.setMembers(safe);
   }
 
@@ -247,6 +244,7 @@ export class ContactsModel {
     if (documentUrl(this.transport.url(destination)) === source.url) {
       throw new TypeError("Migration requires a distinct destination document.");
     }
+    requireLosslessMigration(source.dataset, candidate.id, candidate.data);
     // Require a source ETag BEFORE creating anything; preserve the original on every failure.
     const deletion = replacement(source);
     const plan = await this.planContact(book, candidate.data, destination);

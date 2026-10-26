@@ -6,7 +6,7 @@ import {
   type ContactData,
   ContactGroup,
 } from "@jeswr/solid-task-model/contacts";
-import type { DatasetCore } from "@rdfjs/types";
+import type { DatasetCore, Term } from "@rdfjs/types";
 import { DatasetWrapper } from "@rdfjs/wrapper";
 import { DataFactory } from "n3";
 
@@ -54,9 +54,16 @@ export function readGroupsIndex(book: string, dataset: DatasetCore): IndexEntry[
 
 /** PM flat contacts are read-only candidates until the caller explicitly migrates them. */
 export function flatContacts(dataset: DatasetCore): { id: string; data: ContactData }[] {
-  return [...new ContactsDataset(dataset, DataFactory).contacts]
-    .filter((contact) => !contact.inAddressBook)
-    .map((contact) => ({ id: contact.id, data: contactData(contact) }));
+  return [...iterateFlatContacts(dataset)].map((contact) => ({
+    id: contact.id,
+    data: contactData(contact),
+  }));
+}
+
+export function* iterateFlatContacts(dataset: DatasetCore) {
+  for (const contact of new ContactsDataset(dataset, DataFactory).contacts) {
+    if (!contact.inAddressBook) yield contact;
+  }
 }
 
 /** Keep all migration fields, including multiple direct or structured contact points and ORG. */
@@ -97,6 +104,15 @@ export function sortedSections(entries: readonly IndexEntry[], locale = "en") {
   return [...sections].map(([letter, contacts]) => ({ letter, contacts }));
 }
 
+/** Match the shared setters' canonical URL requirement without silently dropping identifiers. */
+export function contactIdentifier(value: string): string {
+  const safe = safeHttpIri(value);
+  if (!safe || new URL(safe).href !== value) {
+    throw new TypeError("Contact identifiers must be canonical absolute HTTP(S) URLs.");
+  }
+  return value;
+}
+
 export function requireName(name: string): void {
   if (!name.trim()) throw new TypeError("A name is required.");
 }
@@ -112,9 +128,7 @@ export function validateContact(data: ContactData): void {
   for (const phone of data.phones ?? []) {
     if (!/^(?:tel:)?\+?\d[\d(). -]*$/.test(phone)) throw new TypeError("Invalid phone.");
   }
-  if (data.webId !== undefined && !safeHttpIri(data.webId)) {
-    throw new TypeError("Account ID must be an absolute HTTP(S) URL.");
-  }
+  if (data.webId !== undefined) contactIdentifier(data.webId);
   if (data.created !== undefined && !Number.isFinite(data.created.getTime())) {
     throw new TypeError("Invalid creation date.");
   }
@@ -128,4 +142,49 @@ export function applyContact(contact: Contact, data: ContactData): void {
   contact.note = data.note;
   contact.organization = data.organization;
   contact.setWebId(safeHttpIri(data.webId));
+}
+
+/** Refuse deletion of source RDF outside the flat fields that the migration can reproduce. */
+export function requireLosslessMigration(
+  dataset: DatasetCore,
+  id: string,
+  data: ContactData,
+): void {
+  const { namedNode, literal } = DataFactory;
+  const fields = new Map<string, Term[]>([
+    ["http://www.w3.org/1999/02/22-rdf-syntax-ns#type", [namedNode(CONTACT_CLASS)]],
+    [`${VCARD}fn`, [literal(data.name)]],
+    [`${VCARD}hasEmail`, (data.emails ?? []).map(namedNode)],
+    [
+      `${VCARD}hasTelephone`,
+      (data.phones ?? []).map((phone) => namedNode(phone.replace(/[(). -]/g, ""))),
+    ],
+    [`${VCARD}url`, data.webId === undefined ? [] : [namedNode(data.webId)]],
+    [`${VCARD}note`, data.note === undefined ? [] : [literal(data.note)]],
+    [
+      `${VCARD}organization-name`,
+      data.organization === undefined ? [] : [literal(data.organization)],
+    ],
+    [
+      "http://purl.org/dc/terms/created",
+      data.created === undefined
+        ? []
+        : [
+            literal(
+              data.created.toISOString(),
+              namedNode("http://www.w3.org/2001/XMLSchema#dateTime"),
+            ),
+          ],
+    ],
+  ]);
+  for (const quad of dataset) {
+    if (
+      quad.subject.termType !== "NamedNode" ||
+      quad.subject.value !== id ||
+      quad.graph.termType !== "DefaultGraph" ||
+      !fields.get(quad.predicate.value)?.some((term) => term.equals(quad.object))
+    ) {
+      throw new TypeError("Migration would discard source RDF; keep the source document.");
+    }
+  }
 }

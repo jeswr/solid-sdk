@@ -275,3 +275,80 @@ describe("address book CRUD with protocol preconditions", () => {
     expect(pod.files.has(ALICE)).toBe(false);
   });
 });
+
+test.each([
+  '<#it> vcard:hasUID "urn:uuid:original" .',
+  "<#it> vcard:hasPhoto <https://example.org/photo.jpg> .",
+  '<#other> <https://example.org/note> "Unrelated RDF" .',
+  '<#it> vcard:fn "Another name" .',
+  '<#it> vcard:note "Original note"@en .',
+  "<#it> vcard:hasEmail [ vcard:value <mailto:extra@example.org> ] .",
+  "<#it> vcard:url <https://noncanonical.example> .",
+])("refuses lossy migration before any writes: %s", async (extra) => {
+  const { model, pod, book } = await setup();
+  const body = `${fixture("pm")} ${extra}`;
+  pod.seed(PM, body);
+  await expect(model.migrateToBook(book, PM, newPerson)).rejects.toThrow("discard source RDF");
+  expect(pod.writes).toHaveLength(0);
+  expect(pod.files.get(PM)?.body).toBe(body);
+  expect(pod.files.has(newPerson)).toBe(false);
+});
+
+test.each([
+  "https://alice.example",
+  "https://ALICE.example/#me",
+  "https://alice.example:443/#me",
+  "https://alice.example/a/../b#me",
+])("rejects identifiers unsupported by the shared setters before writes: %s", async (identifier) => {
+  const { model, pod, book } = await setup();
+  await expect(model.createContact(book, { name: "Alice", webId: identifier })).rejects.toThrow(
+    "canonical",
+  );
+  const person = await model.loadContact(ALICE);
+  await expect(
+    model.updateContact(book, person, { name: "Alice", webId: identifier }),
+  ).rejects.toThrow("canonical");
+  await expect(model.createGroup(book, { name: "Group", members: [identifier] })).rejects.toThrow(
+    "canonical",
+  );
+  const group = await model.loadGroup(FRIENDS);
+  await expect(
+    model.updateGroup(book, group, { name: "Group", members: [identifier] }),
+  ).rejects.toThrow("canonical");
+  await expect(model.setGroupMembers(group, [identifier])).rejects.toThrow("canonical");
+  expect(pod.writes).toHaveLength(0);
+});
+
+test("accepted canonical WebIDs and group identifiers survive create and update", async () => {
+  const { model, book } = await setup();
+  const webId = "https://alice.example/";
+  const id = await model.createContact(book, { name: "Alice", webId }, newPerson);
+  expect((await model.loadContact(id)).data.webId).toBe(webId);
+  await model.updateContact(book, await model.loadContact(id), {
+    name: "Alice",
+    webId: `${webId}#me`,
+  });
+  expect((await model.loadContact(id)).data.webId).toBe(`${webId}#me`);
+  const groupId = await model.createGroup(book, { name: "Group", members: [webId] }, newGroup);
+  expect((await model.loadGroup(groupId)).data.members).toEqual([webId]);
+  await model.updateGroup(book, await model.loadGroup(groupId), {
+    name: "Group",
+    members: [`${webId}#me`],
+  });
+  expect((await model.loadGroup(groupId)).data.members).toEqual([`${webId}#me`]);
+  await model.setGroupMembers(await model.loadGroup(groupId), [webId]);
+  expect((await model.loadGroup(groupId)).data.members).toEqual([webId]);
+});
+
+test("migrates a minimal flat contact and a canonical creation time without discarding fields", async () => {
+  const { model, pod, book } = await setup();
+  pod.seed(
+    PM,
+    `${VCARD_PREFIX} <#it> a vcard:Individual; vcard:fn "Minimal"; <http://purl.org/dc/terms/created> "2026-01-01T00:00:00.000Z"^^<http://www.w3.org/2001/XMLSchema#dateTime> .`,
+  );
+  const id = await model.migrateToBook(book, PM, newPerson);
+  expect((await model.loadContact(id)).data).toMatchObject({
+    name: "Minimal",
+    created: new Date("2026-01-01T00:00:00Z"),
+  });
+});
