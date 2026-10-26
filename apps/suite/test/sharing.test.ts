@@ -231,6 +231,48 @@ for (const model of ["wac", "acp"] as const) {
       grant(comment, ALICE, ["Append"]);
       expect(diffSharing(value, select(ALICE, "editor"))).toHaveLength(1);
     });
+    it.each([
+      "editor",
+      "owner",
+    ] as const)("promotes a viewer to %s without a comments destination", (role) => {
+      const doc = document(model);
+      grant(doc, ALICE, ["Read"]);
+      const value = { ...input(doc), comments: { resource: COMMENTS, documents: [] } };
+      const delta = {
+        model,
+        source: doc.source,
+        resource: FILE,
+        principal: { kind: "webid", webId: ALICE },
+        add: role === "owner" && model === "wac" ? ["Write", "Control"] : ["Write"],
+        remove: [],
+        inherited: false,
+      };
+      expect(diffSharing(value, select(ALICE, role))).toEqual([
+        delta,
+        ...(role === "owner" && model === "acp"
+          ? [{ ...delta, resource: doc.source, add: ["Read", "Write"] }]
+          : []),
+      ]);
+      expect(() => diffSharing(value, select(ALICE, "commenter"))).toThrow("explicit destination");
+    });
+    it.each(
+      [[], ["Read"], ["Append"], ["Read", "Write"], ["Read", "Write", "Append"]].map((modes) => ({
+        modes,
+      })),
+    )("preserves comments permissions $modes on editor and owner promotion", ({ modes }) => {
+      const doc = document(model);
+      const comment = document(model, false, COMMENTS);
+      grant(doc, ALICE, ["Read"]);
+      grant(comment, ALICE, modes);
+      const snapshot = [...comment.dataset];
+      const value = { ...input(doc), comments: context(comment) };
+      for (const role of ["editor", "owner"] as const) {
+        expect(diffSharing(value, select(ALICE, role))).toEqual(
+          diffSharing(input(doc), select(ALICE, role)),
+        );
+      }
+      expect([...comment.dataset]).toEqual(snapshot);
+    });
     it("requires explicit destinations and comments context", () => {
       expect(() => diffSharing(input(document(model)), select(ALICE, "commenter"))).toThrow(
         "comments container",

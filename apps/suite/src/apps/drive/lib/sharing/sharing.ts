@@ -144,9 +144,9 @@ export function diffSharing(input: SharingInput, desired: SharingSelection): Aut
         changes,
       );
     }
-    if (input.comments) {
+    if (input.comments && role !== "editor" && role !== "owner") {
       const beforeComments = allowed(forPrincipal(comments, webId, input.comments.resource));
-      const wantsComments = role !== undefined && role !== "viewer";
+      const wantsComments = role === "commenter";
       if (!wantsComments && beforeComments.has("Write")) {
         throw new SharingError(
           "Comment access also comes from Write; changing it requires a richer model",
