@@ -73,3 +73,54 @@ Screenshots/Playwright/axe: not applicable; this model-first lane renders no UI 
 No browser was launched. Hooks, Type Index wiring, offline behavior and UI remain assigned to
 HLT-01 and later tasks by the model-first split; the model API is documented beside the code.
 The only incomplete verification is the unrelated full gate and unavailable roborev review.
+
+## Fix round 3 — review `c1e768b43ab0`
+
+Addressed exactly the three findings in
+`/home/runner/work/solid-suite-tracker/lanes/reviews/solid-sdk-lane-sst-bk4r-c1e768b43ab0.md`.
+Resumed from `c1e768b43ab0736905338ad1dcd9e86a666fcf44` on `lane/sst-bk4r`.
+
+### Commits
+
+- `26a32d61 fix: reject external health JSON-LD contexts`: route resource, initialization ACL,
+  and target ACL reads through one JSON-LD validation boundary before `fetchRdf` parses them.
+  Refuse remote contexts/imports, including relative and same-pod URLs; retain inline contexts.
+  Normalize validated JSON before parsing so duplicate keys cannot bypass validation.
+  Regression tests cover nested/scoped/array contexts, imports, both ACL paths, no global fetch,
+  inline context/ACL compatibility, ETag/relative identity preservation, and duplicate keys.
+- `884a11f8 fix: preserve blank metric links as RDF terms`: observation code/time getters retain
+  RDF terms; setters accept terms or IRI strings. Concept/instant resolvers accept terms.
+  Regression tests cover all four named/blank code/time combinations, Turtle round trips,
+  term assignment, direct LOINC links, and unchanged measurement values.
+- `40ba25b7 fix: load established connector workout files`: merge native workout indexes with
+  `health/workouts.ttl` (Apple Health) and `health/activities.ttl` (Garmin/Fitbit), or caller-supplied
+  in-scope connector paths. Deduplicate document reads and workout identities; tolerate absent
+  connector files while preserving permission/parse failures. Tests use the established root
+  documents, missing native containers, custom locations, duplicate sources, and foreign paths.
+- Final commit, `docs: record health fix round three validation`: this report, committed last.
+
+### Validation
+
+Commands ran in this checkout. The initial targeted I/O test could not resolve unbuilt
+`suite-vocab` output; building the four existing workspace prerequisites resolved it.
+The blank-node change's initial typecheck exposed wrapper/optional-term typing mismatches;
+these were corrected in its final commit before the successful checks below.
+
+| Exact command | Result |
+| --- | --- |
+| `PATH="$PWD/node_modules/.bin:$PATH" pnpm exec turbo run build --filter="@jeswr/app-suite^..." --concurrency=4` | PASS: guarded-fetch, rdf-serialize, suite-vocab, suite-ui. Generated output is ignored. |
+| `pnpm --filter @jeswr/app-suite exec vitest run test/health/io.test.ts` | PASS after the context fix: 62 tests. |
+| `pnpm --filter @jeswr/app-suite run typecheck && pnpm --filter @jeswr/app-suite exec vitest run test/health/metrics.test.ts test/health/model.test.ts` | PASS after the blank-node fix: strict tsc and 54 tests. |
+| `pnpm --filter @jeswr/app-suite run lint && pnpm --filter @jeswr/app-suite run build && pnpm --filter @jeswr/app-suite run typecheck && pnpm --filter @jeswr/app-suite run test` | PASS: Biome, production Next build, strict tsc, 185 tests in 10 files. Model coverage remains 100% statements (682/682), branches (343/343), functions (203/203), lines (608/608). |
+| `pnpm run lint:root` | PASS: Biome, lockfile/app/fetch guards, tokens, 74 contrast pairs. |
+| `PATH="$PWD/node_modules/.bin:$PATH" TURBO_SCM_BASE=e2f34bbc4af68bbde69a3e23401b4a1ce12d5ced pnpm run gate` | PASS: 9/9 Turbo tasks; root lint also passed. |
+| `PATH="/tmp/sst-bk4r-fix3-bin:$PWD/node_modules/.bin:$PATH" pnpm run gate:full` | BLOCKED outside this lane: existing unstorage-solid dependency bootstrap tries `git clone https://github.com/jeswr/fetch-rdf.git`. A temporary Git shim refused network operations to honor the lane restrictions. Exit 1; 10 tasks succeeded before interruption. Shim removed afterwards. |
+| `roborev status` | UNAVAILABLE: command not found (exit 127); no automated verdict available. The supplied review was read in full and addressed. |
+| `git diff --check` | PASS. |
+
+No dependencies, manifests, lockfiles, UI, vocabulary, other checkouts, or remote branches changed.
+No package-policy checks or screenshots were needed. Conservative interpretation: reject every
+remote JSON-LD context/import, including same-pod URLs, because the pinned parser has no injectable
+loader. Caller-supplied connector paths replace the default connector locations while native
+indexes are always retained. No implementation work remains unfinished and no open questions
+remain; full-workspace validation and roborev availability are the verification limitations.
