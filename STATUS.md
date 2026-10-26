@@ -45,3 +45,33 @@ Early development runs identified two incorrect test expectations (an ambiguous 
 Implementation and app acceptance checks are complete. Full-workspace validation remains blocked by the unrelated `unstorage-solid` build/cache restriction, and roborev review is unavailable in this environment.
 
 The nonblocking specification questions and implemented conservative choices are in `QUESTIONS.md`: explicit selection for ambiguous dates, account/currency-scoped duplicate candidates, first matching rule with existing categories preserved, exact decimal strings and no invented currency default. There are no unanswered questions blocking this lane.
+
+## Fix round 1 — review of f0f1d7cdfd46
+
+Scope: exactly the four OFX/QFX review findings, regression tests, importer documentation and this required validation report. No dependencies or manifests changed.
+
+Commits:
+
+- `cfd42bd7` — `fix: validate OFX amounts and unsupported records`: validate OFX numeric syntax before canonicalising decimal commas/points; reject grouping and accounting notation; reject transaction `CURRENCY` overrides and either correction marker atomically; keep `ORIGCURRENCY` amounts in statement currency; accept dotted QFX extension tags in opening/closing patterns. Adds 24 regression cases and synthetic QFX institution metadata fixtures.
+- Final `docs: record OFX review fix validation` commit — this fix-round report.
+
+Conservative choices explicitly allowed by the review: transaction currency overrides and correction records reject the entire import until supported. Empty markers also reject. No transaction schema or duplicate-handling policy changes.
+
+Validation commands below ran before the final report commit; command output is redirected to the listed temporary logs.
+
+| Command | Result |
+| --- | --- |
+| `pnpm --filter @jeswr/app-suite exec biome check --write src/apps/money/lib/import/ofx.ts test/money-import.test.ts test/fixtures/money-statements.ts` | PASS; formatted one test file. |
+| `pnpm --filter @jeswr/app-suite run test` | PASS; 161 tests. Log: `/tmp/sst-esit-fix-test.log`. |
+| `pnpm --filter @jeswr/suite-ui run build` | PASS; existing workspace dependency. Log: `/tmp/sst-esit-fix-dependency-build.log`. |
+| `pnpm --filter @jeswr/app-suite run lint && pnpm --filter @jeswr/app-suite run build && pnpm --filter @jeswr/app-suite run typecheck && pnpm --filter @jeswr/app-suite run test` | PASS; production build, lint, strict types and 161 tests. Log: `/tmp/sst-esit-fix-package-gate.log`. |
+| `pnpm run lint:root` | PASS, including 74 contrast pairs. Log: `/tmp/sst-esit-fix-root-lint.log`. |
+| `TURBO_SCM_BASE=f0f1d7cdfd46e65a5d28138520ee0ce498f342d2 pnpm run gate` | PASS; 6/6 tasks. Log: `/tmp/sst-esit-fix-affected-gate.log`. |
+| `GIT_ALLOW_PROTOCOL=file pnpm run gate:full` | FAIL; 25 successful tasks; unchanged `@jeswr/unstorage-solid#build` failed with npm `EROFS` at `/home/runner/.npm/_cacache/tmp/...`. Turbo's strict environment filtered the protocol guard, so the dependency script performed its temporary remote clone before failing; its `finally` cleanup removed that temporary checkout. Log: `/tmp/sst-esit-fix-full-gate.log`. |
+| `GIT_ALLOW_PROTOCOL=file pnpm run gate:full --env-mode=loose` | BLOCKED as intended by the lane's no-remote restriction: the unchanged `unstorage-solid` dependency script attempts `git clone` over HTTPS, rejected with `fatal: transport 'https' not allowed`. No network clone in this retry. Log: `/tmp/sst-esit-fix-full-gate-guarded.log`. |
+| `git diff --check` | PASS. |
+| `command -v roborev` | Unavailable; automated per-commit review cannot run. |
+
+Coverage remains **100% statements (311/311), branches (315/315), functions (40/40) and lines (264/264)** across the import directory, enforced per executable source file by the ordinary app test command. Regression cases cover both SGML and XML decimal commas, exact precision, grouping rejection, atomic currency/correction rejection after valid records, incomplete correction metadata, `ORIGCURRENCY`, and QFX `INTU.BID` with implicit/explicit closing tags.
+
+All four requested findings are addressed. No UI, screenshots, dependency checks or new specification questions apply. Package and affected gates pass. Full-workspace validation remains blocked by an unrelated dependency build that requires a remote clone and an unwritable npm cache; roborev remains unavailable. No unrelated source changes were made to work around those limitations.
