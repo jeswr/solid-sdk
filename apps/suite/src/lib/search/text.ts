@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 
 export type SearchIndexErrorCode =
   | "invalid-input"
@@ -19,7 +20,7 @@ export class SearchIndexError extends Error {
 
 export interface SearchToken {
   term: string;
-  /** Half-open UTF-16 offsets into the original text, before normalization. */
+  /** Original half-open UTF-16 grapheme bounds; expansions can share source ranges. */
   start: number;
   end: number;
 }
@@ -55,28 +56,30 @@ function fold(value: string): string {
 
 /**
  * Words only; punctuation and emoji are separators. No stemming or query syntax.
- * Reject compatibility characters whose normalization changes word boundaries:
- * preserving original word offsets would otherwise silently change query meaning.
+ * Segment after folding so equivalent normalized text has identical word boundaries.
+ * Each folded UTF-16 unit maps to its entire source grapheme, including removed marks
+ * and expansions into multiple words, so source offsets remain safe for highlighting.
  */
 export function tokenize(text: string): SearchToken[] {
   validateText(text);
   const tokens: SearchToken[] = [];
-  const words = segmenter("word");
-  for (const part of words.segment(text)) {
-    const term = fold(part.segment);
-    const foldedWords = [...words.segment(term)].filter((piece) => piece.isWordLike);
-    if (
-      part.isWordLike
-        ? foldedWords.length !== 1 || foldedWords[0]?.segment !== term
-        : foldedWords.length !== 0
-    ) {
-      throw new SearchIndexError("invalid-input", "Normalization changes word boundaries");
+  let normalized = "";
+  const starts: number[] = [];
+  const ends: number[] = [];
+  for (const part of segmenter("grapheme").segment(text)) {
+    const folded = fold(part.segment);
+    normalized += folded;
+    for (let offset = 0; offset < folded.length; offset++) {
+      starts.push(part.index);
+      ends.push(part.index + part.segment.length);
     }
+  }
+  for (const part of segmenter("word").segment(normalized)) {
     if (part.isWordLike) {
       tokens.push({
-        term,
-        start: part.index,
-        end: part.index + part.segment.length,
+        term: part.segment,
+        start: starts[part.index] as number,
+        end: ends[part.index + part.segment.length - 1] as number,
       });
     }
   }

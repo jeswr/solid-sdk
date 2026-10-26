@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # SH-L2 questions and conservative defaults
 
@@ -21,6 +22,6 @@
    removal. Ill-formed UTF-16, invalid schemas, invalid lengths, unknown snapshot
    versions, duplicate adds and missing updates throw SearchIndexError. Punctuation
    is a word separator, not query syntax; empty/punctuation-only queries return [].
-   Compatibility characters whose folding changes word boundaries (e.g. the Arabic
-   phrase ligature U+FDFA or square kilogram U+338F) are rejected with invalid-input
-   rather than indexed as unqueryable terms or assigned misleading source offsets.
+   Word boundaries are determined after folding. Each normalized UTF-16 unit maps
+   to its original grapheme for highlighting, including compatibility expansions
+   into multiple words; such words can share or overlap original source ranges.

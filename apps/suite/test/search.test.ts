@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import fc from "fast-check";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -7,6 +8,7 @@ import {
   SearchIndex,
   SearchIndexError,
   type SearchIndexErrorCode,
+  type SearchToken,
   tokenize,
 } from "../src/lib/search";
 
@@ -47,15 +49,49 @@ describe("Unicode tokenizer", () => {
     expect(tokenize(text).map(({ term }) => term)).toEqual(expected);
   });
 
-  it.each([
-    "ﷺ",
-    "㎏",
-    "½",
-    "a℀b",
-    "\u0345",
-    "\u037a",
-  ])("rejects normalization that cannot preserve original word boundaries %#", (text) =>
-    rejects(() => tokenize(text)));
+  it.each<[string, SearchToken[]]>([
+    [
+      "ﷺ",
+      [
+        { term: "صلى", start: 0, end: 1 },
+        { term: "الله", start: 0, end: 1 },
+        { term: "عليه", start: 0, end: 1 },
+        { term: "وسلم", start: 0, end: 1 },
+      ],
+    ],
+    ["㎏", [{ term: "kg", start: 0, end: 1 }]],
+    ["½", [{ term: "1⁄2", start: 0, end: 1 }]],
+    [
+      "a℀b",
+      [
+        { term: "aa", start: 0, end: 2 },
+        { term: "cb", start: 1, end: 3 },
+      ],
+    ],
+    ["\u0345", [{ term: "ι", start: 0, end: 1 }]],
+    ["\u037a", [{ term: "ι", start: 0, end: 1 }]],
+    ["\u0301", []],
+    [
+      "สำหรับ",
+      [
+        { term: "สา", start: 0, end: 2 },
+        { term: "ห", start: 2, end: 3 },
+        { term: "รบ", start: 3, end: 6 },
+      ],
+    ],
+    ["がっこう", [{ term: "かっこう", start: 0, end: 4 }]],
+    ["か\u3099っこう", [{ term: "かっこう", start: 0, end: 5 }]],
+    [
+      "\u0301😀½ a\u0301\u0327 𐐀",
+      [
+        { term: "1⁄2", start: 3, end: 4 },
+        { term: "a", start: 5, end: 8 },
+        { term: "𐐨", start: 9, end: 11 },
+      ],
+    ],
+  ])("segments normalized %s and maps expansions to source graphemes", (text, expected) => {
+    expect(tokenize(text)).toEqual(expected);
+  });
 
   it("segments scripts without spaces, Cyrillic and supplementary letters", () => {
     expect(tokenize("你好世界").map(({ term }) => term)).toEqual(["你好", "世界"]);
@@ -88,6 +124,25 @@ describe("Unicode tokenizer", () => {
 });
 
 describe("index lifecycle and query matching", () => {
+  it.each([
+    ["Use ½ cup milk", "Use 1⁄2 cup milk"],
+    ["สำหรับ", "สาหรบ"],
+    ["がっこう", "かっこう"],
+    ["ﷺ", "صلى الله عليه وسلم"],
+    ["㎏", "kg"],
+    ["a℀b", "aa/cb"],
+  ])("indexes and queries equivalent normalized text: %s", (original, normalized) => {
+    const index = new SearchIndex();
+    index.add(doc("original", "", original));
+    index.add(doc("normalized", "", normalized));
+    expect(ids(index, original)).toEqual(["normalized", "original"]);
+    expect(index.search(normalized)).toEqual(index.search(original));
+    const restored = SearchIndex.restore(index.serialize());
+    expect(restored.search(normalized)).toEqual(index.search(original));
+    index.update(doc("original", original));
+    expect(ids(index, normalized)).toEqual(["original", "normalized"]);
+  });
+
   it("handles empty indexes, empty fields and queries with no words", () => {
     const index = new SearchIndex();
     expect(index.size).toBe(0);
@@ -347,6 +402,31 @@ describe("JSON snapshots", () => {
 });
 
 describe("snippets", () => {
+  it.each([
+    ["😀 Use ½ cup milk", "1⁄2", [{ start: 7, end: 8 }], ["½"]],
+    [
+      "😀 สำหรับ",
+      "สาหรบ",
+      [
+        { start: 3, end: 5 },
+        { start: 5, end: 6 },
+        { start: 6, end: 9 },
+      ],
+      ["สำ", "ห", "รับ"],
+    ],
+    ["😀 がっこう", "かっこう", [{ start: 3, end: 7 }], ["がっこう"]],
+    ["😀 か\u3099っこう", "かっこう", [{ start: 3, end: 8 }], ["か\u3099っこう"]],
+    ["😀 ﷺ", "الله", [{ start: 3, end: 4 }], ["ﷺ"]],
+    ["😀 ㎏", "kg", [{ start: 3, end: 4 }], ["㎏"]],
+    ["😀 a℀b", "cb", [{ start: 4, end: 6 }], ["℀b"]],
+  ] as const)("highlights original graphemes after normalization: %s", (text, query, ranges, slices) => {
+    const snippet = createSnippet(text, query);
+    expect(snippet).toEqual({ text, start: 0, end: text.length, highlights: ranges });
+    expect(snippet.highlights.map(({ start, end }) => snippet.text.slice(start, end))).toEqual(
+      slices,
+    );
+  });
+
   it("returns raw original text and folded whole-word highlight ranges", () => {
     const text = "😀 CAFÉ cafe\u0301 Straße <script>";
     const snippet = createSnippet(text, "cafe str");
