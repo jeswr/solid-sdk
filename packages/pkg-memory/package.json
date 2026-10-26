@@ -33,7 +33,7 @@
   },
   "license": "MIT",
   "dependencies": {
-    "@jeswr/fetch-rdf": "^0.1.0",
+    "@jeswr/fetch-rdf": "workspace:*",
     "@jeswr/rdf-serialize": "workspace:*",
     "@rdfjs/types": "^2.0.1",
     "@rdfjs/wrapper": "^0.34.0",
@@ -41,7 +41,7 @@
   },
   "devDependencies": {
     "@types/n3": "^1.26.1",
-    "@vitest/coverage-v8": "^4.1.9",
+    "@vitest/coverage-v8": "^4.1.10",
     "rdf-isomorphic": "^2.0.1",
     "@biomejs/biome": "^2.5.1",
     "typescript": "^6.0.3",

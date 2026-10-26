@@ -24,7 +24,7 @@
   <uri name="http://qudt.org/2.1/schema/qudt" uri="imports/qudt-schema.ttl"/>
   <uri name="http://qudt.org/2.1/vocab/qudt-slim" uri="imports/qudt-units-slim.ttl"/>
   <!-- The Solid Core (this ontology) -->
-  <uri name="https://w3id.org/jeswr/core" uri="core.ttl"/>
-  <uri name="https://w3id.org/jeswr/core#" uri="core.ttl"/>
-  <uri name="https://w3id.org/jeswr/core/1.0.1" uri="core.ttl"/>
+  <uri name="https://jeswr.org/ns/core" uri="core.ttl"/>
+  <uri name="https://jeswr.org/ns/core#" uri="core.ttl"/>
+  <uri name="https://jeswr.org/ns/core/2.0.0" uri="core.ttl"/>
 </catalog>

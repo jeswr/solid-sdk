@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
 // The Credential ↔ RDF lowering + round-trip, and the agent-authorization
@@ -9,6 +10,7 @@
 import { randomUUID } from "node:crypto";
 import { parseRdf } from "@jeswr/fetch-rdf";
 import type { DatasetCore, Quad } from "@rdfjs/types";
+import { credentialDocumentLoader } from "./context-loader.js";
 import { digestRdfContent } from "./digest.js";
 import { isAbsoluteIri, requireObjectIri, safeObjectIri } from "./iri.js";
 import { serialize } from "./serialize.js";
@@ -512,7 +514,9 @@ export async function parseCredentialRdf(
   body: string,
   contentType = "text/turtle",
 ): Promise<DatasetCore> {
-  return (await parseRdf(body, contentType)) as unknown as DatasetCore;
+  return (await parseRdf(body, contentType, {
+    documentLoader: credentialDocumentLoader,
+  })) as unknown as DatasetCore;
 }
 
 /** Find the first credential node in a parsed dataset, or `undefined`. */

@@ -44,6 +44,7 @@ import {
   type SessionStore,
 } from "@/lib/session-persistence";
 import { fetchProfile, type PodProfile } from "@/lib/profile";
+import { sourceFetch } from "@/lib/source-fetch";
 import { readCache } from "@/lib/swr-cache";
 
 type Status = "loading" | "logged-out" | "authenticating" | "logged-in";
@@ -59,6 +60,9 @@ export class NoWebIdFromProviderError extends Error {
 }
 
 export interface Session {
+  /** Separate source and Pod transports for connector imports. */
+  sourceFetch: typeof fetch;
+  podFetch: typeof fetch;
   status: Status;
   webId?: string;
   profile?: PodProfile;
@@ -107,6 +111,7 @@ interface BlockedPopup {
 
 export function SessionProvider({ children }: { children: React.ReactNode }) {
   const registeredRef = useRef(false);
+  const podTransportRef = useRef<typeof fetch | null>(null);
   // The WebID the provider's 401-upgrade path should resolve the issuer from
   // when no issuer is pinned yet (the silent-restore path after a reload).
   const pendingWebIdRef = useRef<string>(undefined);
@@ -121,6 +126,11 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   const controllerRef = useRef<PopupLoginController>(null);
   // Resolves to the token provider once the auth module is wired up.
   const providerReadyRef = useRef<Promise<WebIdDPoPTokenProvider>>(null);
+  const podFetch = useCallback<typeof fetch>(async (input, init) => {
+    await providerReadyRef.current;
+    if (!podTransportRef.current) throw new Error("Pod transport is not initialized");
+    return podTransportRef.current(input, init);
+  }, []);
   // The SAME provider, synchronously reachable once ready — the click handlers
   // consult its canRenewWithoutInteraction probe BEFORE deciding to open a
   // popup, and a click handler cannot await (the user activation would be
@@ -212,6 +222,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       );
 
       const manager = new ReactiveFetchManager([provider]);
+      podTransportRef.current = manager.fetch;
       manager.registerGlobally();
       providerSyncRef.current = provider;
       return provider;
@@ -437,6 +448,8 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
 
   const session = useMemo<Session>(
     () => ({
+      sourceFetch,
+      podFetch,
       status,
       webId,
       profile,
@@ -449,6 +462,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       setActiveStorage,
     }),
     [
+      podFetch,
       status,
       webId,
       profile,

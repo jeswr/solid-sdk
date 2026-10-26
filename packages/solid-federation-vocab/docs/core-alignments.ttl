@@ -1,6 +1,6 @@
 # AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 #
-@prefix core:    <https://w3id.org/jeswr/core#> .
+@prefix core:    <https://jeswr.org/ns/core#> .
 @prefix owl:     <http://www.w3.org/2002/07/owl#> .
 @prefix rdf:     <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
 @prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
@@ -38,10 +38,12 @@
 # This is the auditable seam: every equivalence here is a reviewable claim.
 # =============================================================================
 
-<https://w3id.org/jeswr/core/alignments> a owl:Ontology ;
+<https://jeswr.org/ns/core/alignments> a owl:Ontology ;
+    dcterms:description "Version 2.0.0 rebases this ontology from its legacy w3id namespace to https://jeswr.org/ns/ (DECISIONS V1)."@en ;
+    owl:versionIRI <https://jeswr.org/ns/core/alignments/2.0.0> ;
     dcterms:title "Solid Core Ontology — alignments (gist + W3C bridges)"@en ;
-    owl:versionInfo "1.0.0" ;
-    owl:imports <https://w3id.org/jeswr/core> ;
+    owl:versionInfo "2.0.0" ;
+    owl:imports <https://jeswr.org/ns/core> ;
     rdfs:comment "Optional Mode-A bridge to gist (discovery) + foaf/schema/prov/org/vcard/adms/dcat. "@en .
 
 # Declare the annotation properties used here so this file is self-describing.

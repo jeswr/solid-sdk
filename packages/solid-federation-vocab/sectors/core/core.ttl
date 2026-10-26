@@ -1,6 +1,7 @@
+# AUTHORED-BY Codex GPT-6.1-Sol
 # AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 #
-@prefix core:    <https://w3id.org/jeswr/core#> .
+@prefix core:    <https://jeswr.org/ns/core#> .
 @prefix owl:     <http://www.w3.org/2002/07/owl#> .
 @prefix rdf:     <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
 @prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
@@ -45,13 +46,13 @@
 # SKOS/schema.org) live in the SEPARATE optional solid-core-alignments.ttl.
 # =============================================================================
 
-<https://w3id.org/jeswr/core> a owl:Ontology ;
+<https://jeswr.org/ns/core> a owl:Ontology ;
     dcterms:title "Solid Core Ontology (gUFO re-base)"@en ;
     rdfs:label "Solid Core Ontology"@en ;
     vann:preferredNamespacePrefix "core" ;
-    vann:preferredNamespaceUri "https://w3id.org/jeswr/core#" ;
-    owl:versionInfo "1.0.1" ;
-    owl:versionIRI <https://w3id.org/jeswr/core/1.0.1> ;
+    vann:preferredNamespaceUri "https://jeswr.org/ns/core#" ;
+    owl:versionInfo "2.0.0" ;
+    owl:versionIRI <https://jeswr.org/ns/core/2.0.0> ;
     owl:imports <http://purl.org/nemo/gufo#> ;
     dcterms:description """The foundational ontology of the Solid data
         federation, re-based onto gUFO (the gentle OWL-2-DL implementation of
@@ -61,9 +62,9 @@
         (e.g. core:Relationship and core:Account are now gufo:Relator, not bare
         classes), so this is a new MAJOR version. The single mandatory import is
         now gUFO + this thin profile. External vocabularies are reached via the
-        companion alignments file, never re-derived."""@en ;
-    dcterms:modified "2026-06-13"^^xsd:date ;
-    rdfs:comment "Re-based per R11 §1.3. v1.0.1 ADDITIVE: adds core:Quantity (a foundational reified quantity value) + core:numericValue/core:unit; no existing term changed."@en .
+        companion alignments file, never re-derived. Version 2.0.0 rebases this ontology from its legacy w3id namespace to https://jeswr.org/ns/ (DECISIONS V1)."""@en ;
+    dcterms:modified "2026-10-25"^^xsd:date ;
+    rdfs:comment "Re-based per R11 §1.3. v1.1.0 widens core:validFrom/core:validUntil to date or dateTime; date values mean all-day. v1.0.1 added core:Quantity + core:numericValue/core:unit."@en .
 
 # -----------------------------------------------------------------------------
 # Annotation-property declarations (F5: the v0 DL-authoring gap — ROBOT
@@ -340,13 +341,15 @@ core:timestamp a owl:DatatypeProperty ;
     skos:definition "A simple instant when literal-level precision is enough (e.g. record creation)."@en .
 
 core:validFrom a owl:DatatypeProperty ;
+    skos:scopeNote "an xsd:date value means all-day"@en ;
     rdfs:label "valid from"@en ;
-    rdfs:range xsd:dateTime ;
+    rdfs:range [ a rdfs:Datatype ; owl:unionOf ( xsd:date xsd:dateTime ) ] ;
     skos:definition "Start of an entity's validity or applicability period."@en .
 
 core:validUntil a owl:DatatypeProperty ;
+    skos:scopeNote "an xsd:date value means all-day"@en ;
     rdfs:label "valid until"@en ;
-    rdfs:range xsd:dateTime ;
+    rdfs:range [ a rdfs:Datatype ; owl:unionOf ( xsd:date xsd:dateTime ) ] ;
     skos:definition "End of an entity's validity or applicability period."@en .
 
 core:atPlace a owl:ObjectProperty ;
