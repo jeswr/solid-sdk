@@ -10,6 +10,7 @@ export default defineConfig({
       include: [
         "src/apps/photos/lib/exif/**/*.ts",
         "src/apps/photos/lib/library/**/*.ts",
+        "src/apps/photos/lib/albums/**/*.ts",
         "src/apps/notes/lib/**/*.ts",
         "src/lib/order/**/*.ts",
         "src/apps/docs/lib/anchoring/**/*.ts",
