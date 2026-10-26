@@ -66,3 +66,30 @@ Validation on the final implementation:
 - `roborev status` — unavailable, exit 127 (`roborev: command not found`). Automated per-commit review remains for the dispatcher.
 
 Conservative collision handling preserves existing resources and leaves any partial companion reservations in place; it never deletes a container that another writer might be using. Missing-index recovery shares the existing three-retry budget and does not rewrite an already-linked profile. No open implementation questions or unfinished fixes remain. Full-workspace validation and automated review remain incomplete for the reasons above. Final fix-round documentation commit: `docs: record docs review fix validation`.
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+## Fix round 2
+
+Starting head: `9e9f7ffbb1da2e4e2484e11192e7c00ecfcad165`. All four supplied findings are addressed on `lane/sst-f77f`:
+
+- `df4e9fbc fix: preserve document format when copying` — carries the source format into the reservation, final snapshot and fresh revision. HTML/Markdown tests verify persisted and reopened content. The Markdown regression failed with `text/html` before the fix.
+- `e8a33b1b fix: scope docs type index requests and redirects` — uses the shared `@jeswr/guarded-fetch` pod-scope guard for profile-derived index URLs, registration destinations, discovery, bootstrap and every index redirect hop. Discovery requires the selected storage root and filters foreign registered destinations. Profile I/O refuses redirects. Adds only the existing guard package as a `workspace:*` dependency; no third-party dependency versions changed.
+- `c57175cd fix: retry concurrent private index profile linking` — retries profile-link 412s at most three times after the initial attempt, re-reading the profile and its ETag, preserving concurrent RDF changes and reusing a newly established link. Non-conflict failures propagate. Uses `If-Match: *` when the profile has no ETag.
+- `7b6719b3 fix: verify private type index access before registration` — verifies direct or nearest inherited owner-only WAC access before linking an index and before private registration attempts. Checks all applicable authorization targets and principals, requires the owner's Read/Write/Control, and rejects public, other-agent, group or origin grants. Policy discovery and redirects stay within the selected pod. Tests also exercise simultaneous first-use document creation: one profile PUT succeeds, the other gets 412, and both documents persist.
+
+The conservative privacy choice is verification without rewriting existing grants. Unreadable, absent, malformed, ACP or hybrid policies fail closed with an error; this lane does not implement ACP evaluation or replace access-control documents. An empty bootstrap index may remain after verification fails, but no profile link or private registration is written. This follows the existing Pod Manager's WAC-only, ACP-rejection approach. `solid:UnlistedDocument` is never treated as proof of privacy.
+
+Validation on the final implementation:
+
+- `PATH="$PWD/node_modules/.bin:$PATH" pnpm --filter @jeswr/suite-vocab --filter @jeswr/suite-ui run build` and `PATH="$PWD/node_modules/.bin:$PATH" pnpm --filter @jeswr/guarded-fetch run build` — PASS; built existing workspace dependencies for app resolution.
+- `pnpm run check:packages @jeswr/guarded-fetch` — the registry-only name lookup failed because this internal package is unpublished. `pnpm run check:packages --mode policy @jeswr/guarded-fetch` — PASS. `pnpm run check:packages --scan apps/suite/package.json` — PASS, all 21 registry dependencies cleared; the scanner correctly excludes `workspace:*` edges from npm existence checks.
+- `pnpm install --offline --ignore-scripts` — PASS. Removed unrelated pnpm peer-snapshot normalization from the lockfile diff; its only committed change is the app's workspace guard edge.
+- `pnpm --filter @jeswr/app-suite run test:coverage` — PASS: 11 files / 209 tests; 100% statements (495/495), branches (275/275), functions (119/119), and lines (444/444) across `lib/model`. Added 54 tests relative to the starting head.
+- `PATH="$PWD/node_modules/.bin:$PATH" pnpm --filter @jeswr/app-suite run lint && PATH="$PWD/node_modules/.bin:$PATH" pnpm --filter @jeswr/app-suite run build && PATH="$PWD/node_modules/.bin:$PATH" pnpm --filter @jeswr/app-suite run typecheck && PATH="$PWD/node_modules/.bin:$PATH" pnpm --filter @jeswr/app-suite run test` — PASS, including the Next production build and all 209 tests.
+- `pnpm run lint:root` — PASS, including all workspace/transport/fetch/token guards and 74 contrast pairs.
+- `PATH="$PWD/node_modules/.bin:$PATH" TURBO_SCM_BASE=9e9f7ffbb1da2e4e2484e11192e7c00ecfcad165 GIT_ALLOW_PROTOCOL=file pnpm run gate --env-mode=loose` — PASS: 9/9 tasks successful; includes the 41 root tests and 209 app tests.
+- `PATH="$PWD/node_modules/.bin:$PATH" GIT_ALLOW_PROTOCOL=file pnpm run gate:full --env-mode=loose` — BLOCKED outside this lane: `@jeswr/unstorage-solid#build` invokes an existing upstream dependency bootstrap. Git rejected its HTTPS clone with `fatal: transport 'https' not allowed` before network transport. Turbo stopped with 32 successful / 169 total tasks (6 cached). The explicit loose environment mode preserves `GIT_ALLOW_PROTOCOL` in child tasks. No remote fetch or merge occurred.
+- `git diff 9e9f7ffbb1da2e4e2484e11192e7c00ecfcad165 --check` — PASS.
+- `roborev status` — unavailable (`roborev: command not found`, exit 127). The mandated automated review remains for the dispatcher; no tooling was installed.
+
+No UI changed; screenshots/Playwright/axe are not applicable. No open implementation questions remain. Full-workspace validation and automated review remain incomplete for the external reasons above. Final documentation commit: `docs: record second docs review fix validation` (this file, committed last after the gates).
