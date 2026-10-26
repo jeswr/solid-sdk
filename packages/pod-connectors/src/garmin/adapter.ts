@@ -1,3 +1,5 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /**
  * Garmin → Health + Mobility. Your Garmin Connect activities split by kind:
  * fitness activities (running, cycling…) become `schema:ExerciseAction` in
@@ -19,6 +21,7 @@ import { getJson } from "../core/fixture-fetch.js";
 import type { ImportContext, ImportOutcome, IntegrationAdapter } from "../core/types.js";
 import { CLASSES, ExerciseAction, TravelAction } from "../core/vocab.js";
 import { GARMIN_FIXTURES, type GarminActivitiesAnswer } from "./fixtures.js";
+import { vocabMap } from "./vocab-map.js";
 
 const ID = "garmin";
 const API = "https://apis.garmin.com";
@@ -28,6 +31,7 @@ const SCOPES = ["activity:read"] as const;
 const TRAVEL_TYPES = new Set(["commuting", "transition", "driving", "motorcycling"]);
 
 export const garminAdapter: IntegrationAdapter = {
+  vocabMap,
   metadata: {
     id: ID,
     name: "Garmin",
