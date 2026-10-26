@@ -14,7 +14,6 @@ const appsDirectory = new URL("../../../apps/", import.meta.url);
 const shippedApps = readdirSync(appsDirectory).filter((app) =>
   existsSync(new URL(`${app}/clientid.jsonld`, appsDirectory)),
 );
-// Keep the reader's existing vocabulary: namespace migration is a separate issue.
 const terms = {
   fedapp: "https://w3id.org/jeswr/fed#",
   acl: "http://www.w3.org/ns/auth/acl#",
@@ -72,8 +71,11 @@ describe("offline federation client contexts", () => {
     expect(fetch).toHaveBeenCalledTimes(mode === "body" ? 0 : 1);
   });
 
-  it("verifies and lists a registration using the bundled federation context", async () => {
-    const body = registration([OIDC, FEDERATION]);
+  it.each([
+    FEDERATION,
+    "https://jeswr.org/ns/fed",
+  ])("verifies and lists a registration using context %s", async (context) => {
+    const body = registration([OIDC, context]);
     const result = await verify(APP, { body, bodyContentType: "application/ld+json" });
     expect(result.valid).toBe(true);
     expect(result.registration).toMatchObject({

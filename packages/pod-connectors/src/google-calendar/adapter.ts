@@ -1,3 +1,5 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /**
  * Google Calendar → Calendar. Upcoming events from the user's primary
  * calendar (`/calendar/v3/calendars/primary/events`) as `schema:Event`.
@@ -13,12 +15,14 @@ import { getJson } from "../core/fixture-fetch.js";
 import type { ImportContext, ImportOutcome, IntegrationAdapter } from "../core/types.js";
 import { CalendarEvent, CLASSES } from "../core/vocab.js";
 import { type GCalEventsList, GOOGLE_CALENDAR_FIXTURES } from "./fixtures.js";
+import { vocabMap } from "./vocab-map.js";
 
 const ID = "google-calendar";
 const API = "https://www.googleapis.com/calendar/v3";
 const SCOPES = ["https://www.googleapis.com/auth/calendar.events.readonly"] as const;
 
 export const googleCalendarAdapter: IntegrationAdapter = {
+  vocabMap,
   metadata: {
     id: ID,
     name: "Google Calendar",

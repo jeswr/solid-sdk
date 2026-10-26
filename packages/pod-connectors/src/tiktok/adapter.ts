@@ -1,3 +1,5 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /**
  * TikTok → Media + Social. Your own videos (`POST /v2/video/list/`) saved two
  * ways: the clip as `schema:VideoObject` (Media), and the post itself as
@@ -13,6 +15,7 @@ import { postJson } from "../core/fixture-fetch.js";
 import type { ImportContext, ImportOutcome, IntegrationAdapter } from "../core/types.js";
 import { CLASSES, MediaItem, SocialMediaPosting } from "../core/vocab.js";
 import { TIKTOK_FIXTURES, type TikTokVideoListAnswer } from "./fixtures.js";
+import { vocabMap } from "./vocab-map.js";
 
 const ID = "tiktok";
 const API = "https://open.tiktokapis.com/v2";
@@ -21,6 +24,7 @@ const VIDEO_FIELDS =
   "id,title,video_description,share_url,cover_image_url,duration,create_time,view_count";
 
 export const tiktokAdapter: IntegrationAdapter = {
+  vocabMap,
   metadata: {
     id: ID,
     name: "TikTok",
