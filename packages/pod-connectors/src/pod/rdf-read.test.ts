@@ -16,6 +16,24 @@ const jsonLdResponse = (document: unknown) =>
 
 afterEach(() => vi.unstubAllGlobals());
 
+describe("connector RDF HTTP failures", () => {
+  it.each([
+    401, 403, 404, 500,
+  ])("preserves the canonical error class and HTTP %s status", async (status) => {
+    const url = `${TEST_POD_ROOT}notes/note.ttl.acl`;
+    const failure = await freshRdf(
+      url,
+      async () =>
+        new Response("missing or inaccessible", {
+          status,
+          headers: { "content-type": "text/plain" },
+        }),
+    ).catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(RdfFetchError);
+    expect(failure).toMatchObject({ status, url, contentType: "text/plain" });
+  });
+});
+
 describe("connector RDF context boundary", () => {
   it.each([
     "document",
@@ -110,6 +128,7 @@ describe("connector RDF context boundary", () => {
       response,
       url,
     });
+    expect(result.headers).toBe(response.headers);
     const headers = new Headers(scopedFetch.mock.calls[0]?.[1]?.headers);
     expect(headers.get("cache-control")).toBe("no-cache");
     expect(headers.get("accept")).toContain("application/ld+json");

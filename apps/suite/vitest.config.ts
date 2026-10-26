@@ -17,7 +17,9 @@ export default defineConfig({
         "src/apps/calendar/lib/layout/**/*.ts",
         "src/apps/chat/lib/timeline/**/*.ts",
         "src/apps/health/lib/stats/**/*.ts",
+        "src/apps/money/lib/budget/**/*.ts",
         "src/apps/sheets/lib/univer-spike/**/*.ts",
+        "src/apps/money/lib/rules/**/*.ts",
       ],
       reporter: ["text", "json-summary"],
       thresholds: {

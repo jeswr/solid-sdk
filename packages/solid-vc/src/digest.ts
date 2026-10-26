@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Fable 5
 //
 // The G1 POLICY-CONTENT DIGEST: a cryptographic content address for an RDF
@@ -34,6 +35,7 @@ import { createHash } from "node:crypto";
 import { parseRdf } from "@jeswr/fetch-rdf";
 import type { DatasetCore, Quad } from "@rdfjs/types";
 import { canonicalNQuads } from "./canonicalize.js";
+import { credentialDocumentLoader } from "./context-loader.js";
 import { base58btcEncode } from "./multibase.js";
 
 /** The multihash code + length prefix for sha2-256 (0x12, 32 bytes). */
@@ -76,7 +78,9 @@ export async function digestRdfContent(
   content: string,
   contentType = "text/turtle",
 ): Promise<string> {
-  const dataset = (await parseRdf(content, contentType)) as unknown as DatasetCore;
+  const dataset = (await parseRdf(content, contentType, {
+    documentLoader: credentialDocumentLoader,
+  })) as unknown as DatasetCore;
   const quads = [...dataset.match()] as Quad[];
   if (quads.length === 0) {
     throw new Error(
