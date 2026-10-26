@@ -107,6 +107,55 @@ describe("Drive client against a seeded demo pod", () => {
     expect(new Uint8Array(await blob.arrayBuffer())).toEqual(REPORT_PDF);
   });
 
+  it("reads RDF datasets with their ETag and returns undefined for missing RDF", async () => {
+    const { pod, client } = await setup();
+    const url = `${DRIVE}data.ttl`;
+    const result = await client.readRdf(url);
+    expect(result?.etag).toBe((await client.stat(url)).etag);
+    expect(result?.dataset.size).toBeGreaterThan(0);
+    expect([...(result?.dataset ?? [])].some((quad) => quad.subject.value === `${url}#it`)).toBe(
+      true,
+    );
+    expect(await client.readRdf(`${DRIVE}absent.ttl`)).toBeUndefined();
+    // An otherwise valid response with a missing validator is still readable.
+    const withoutEtag = stubClient(async (input, init) => {
+      const response = await pod.fetch(input, init);
+      response.headers.delete("etag");
+      return response;
+    });
+    const unvalidated = await withoutEtag.readRdf(url);
+    expect(unvalidated).not.toHaveProperty("etag");
+    expect([...(unvalidated?.dataset ?? [])]).toEqual([...(result?.dataset ?? [])]);
+  });
+
+  it.each([401, 403, 409, 410, 412, 500])("maps readRdf HTTP %i failures", async (status) => {
+    const client = stubClient(async () => new Response(null, { status }));
+    const url = `${DRIVE}data.ttl`;
+    await expect(client.readRdf(url)).rejects.toEqual(
+      await client.stat(url).catch((error: unknown) => error),
+    );
+  });
+
+  it("preserves readRdf parsing and network failures without an HTTP status", async () => {
+    const error = new Error("offline");
+    const offline = stubClient(async () => {
+      throw error;
+    });
+    await expect(offline.readRdf(`${DRIVE}data.ttl`)).rejects.toMatchObject({
+      name: "RdfFetchError",
+      cause: error,
+      status: undefined,
+    });
+    const malformed = stubClient(
+      async () =>
+        new Response("invalid Turtle", {
+          headers: { "content-type": "text/turtle" },
+        }),
+    );
+    await expect(malformed.readRdf(`${DRIVE}data.ttl`)).rejects.toBeInstanceOf(RdfFetchError);
+    await expect(malformed.readRdf(`${DRIVE}data.ttl`)).rejects.not.toBeInstanceOf(DriveError);
+  });
+
   it("writes strings and Blobs with conditional create/overwrite and creates normalized folders", async () => {
     const { pod, client } = await setup();
     const url = `${DRIVE}New/fresh.txt`;

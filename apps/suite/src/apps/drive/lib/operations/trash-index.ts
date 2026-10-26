@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex
 /**
  * App-managed trash index (04-drive §5.3): one `prov:Entity` subject per
  * trashed item in `<drive>/.trash/index.ttl`, read and written through
@@ -114,12 +115,12 @@ export function trashEntries(index: TrashIndex): TrashEntry[] {
       const by = record.trashedBy;
       const format = record.format;
       const size = record.size;
+      const path = original.replace(/\/$/, "");
       out.push({
         url: record.value,
         original,
         trashedAt,
-        name:
-          record.title ?? decodeURIComponent(original.replace(/\/$/, "").split("/").pop() ?? ""),
+        name: record.title ?? decodeURIComponent(path.slice(path.lastIndexOf("/") + 1)),
         ...(by ? { trashedBy: by } : {}),
         ...(format ? { contentType: format } : {}),
         ...(size !== undefined ? { size } : {}),

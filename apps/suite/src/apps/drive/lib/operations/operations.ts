@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex
 /**
  * Drive operations over a {@link DriveClient} (04-drive §4, §5.2–5.4): uploads
  * with conflict policies, new folder, rename, move, make a copy, the
@@ -352,7 +353,7 @@ export async function recentFiles(
   const maxDepth = options.maxDepth ?? 4;
   const maxContainers = options.maxContainers ?? 400;
   const concurrency = options.concurrency ?? 8;
-  const files: (DriveItem & { folder: string })[] = [];
+  const files: (DriveItem & { folder: string; modified: Date })[] = [];
   const seen = new Set<string>();
   let frontier = roots.map((url) => ({ url, depth: 0 }));
   let visited = 0;
@@ -375,14 +376,14 @@ export async function recentFiles(
         if (item.kind === "folder") {
           if (depth + 1 <= maxDepth) next.push({ url: item.url, depth: depth + 1 });
         } else if (item.modified) {
-          files.push({ ...item, folder: url });
+          files.push({ ...item, folder: url, modified: item.modified });
         }
       }
     }
     frontier = [...frontier, ...next];
   }
   return files
-    .sort((a, b) => (b.modified?.getTime() ?? 0) - (a.modified?.getTime() ?? 0))
+    .sort((a, b) => b.modified.getTime() - a.modified.getTime())
     .slice(0, options.limit ?? 50);
 }
 
