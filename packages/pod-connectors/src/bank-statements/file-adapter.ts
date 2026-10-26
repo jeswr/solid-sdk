@@ -19,9 +19,11 @@
 import { DataFactory, Store } from "n3";
 import { parseCsv } from "../core/csv.js";
 import type { FileImportAdapter, FileImportContext, ImportFile } from "../core/file-import.js";
+import { csvRowsFromChunks, fileText } from "../core/file-stream.js";
 import { recordFragment } from "../core/slug.js";
 import type { IntegrationMetadata } from "../core/types.js";
 import { CLASSES, Invoice } from "../core/vocab.js";
+import { ofxTransactions } from "./ofx-stream.js";
 import { vocabMap } from "./vocab-map.js";
 
 const ID = "bank-statements";
@@ -54,14 +56,12 @@ export const bankStatementsFileAdapter: FileImportAdapter = {
 
   async importFile(file: ImportFile, ctx: FileImportContext): Promise<void> {
     ctx.progress({ label: "Reading your statement…", done: 0, total: 1 });
-    const text = await file.text();
-    const isOfx = /\.(ofx|qfx)$/i.test(file.name) || /<STMTTRN>/i.test(text);
-    const txns = isOfx ? parseOfx(text, ctx.maxRows) : parseBankCsv(text, ctx.maxRows);
 
     const doc = ctx.resolve("finance/bank-transactions.ttl");
     const store = new Store();
     let i = 0;
-    for (const txn of txns) {
+    for await (const txn of streamBankTransactions(file, () => ctx.skip())) {
+      if (i >= ctx.maxRows) break;
       const key = `${i}|${txn.date?.toISOString() ?? ""}|${txn.amount}|${txn.description}`;
       const frag = recordFragment(txn.description || "transaction", key);
       const inv = new Invoice(`${doc}#txn-${frag}`, store, DataFactory).mark();
@@ -82,6 +82,42 @@ export const bankStatementsFileAdapter: FileImportAdapter = {
   },
 };
 
+/** Sniff a bounded prefix, then parse one CSV row or OFX transaction at a time. */
+async function* streamBankTransactions(
+  file: ImportFile,
+  skip: () => void,
+): AsyncGenerator<Transaction> {
+  const source = fileText(file);
+  let prefix = "";
+  try {
+    while (prefix.length < 256) {
+      const next = await source.next();
+      if (next.done) break;
+      prefix += next.value;
+    }
+    async function* chunks(): AsyncGenerator<string> {
+      yield prefix;
+      yield* source;
+    }
+    const isOfx =
+      /\.(ofx|qfx)$/i.test(file.name) || /^\s*(?:OFXHEADER|<OFX|<\?xml|<STMTTRN>)/i.test(prefix);
+    if (!isOfx) {
+      let parseRow: ReturnType<typeof bankRowParser> | undefined;
+      for await (const row of csvRowsFromChunks(chunks())) {
+        parseRow ??= bankRowParser(Object.keys(row));
+        const txn = parseRow(row);
+        if (txn) yield txn;
+      }
+      return;
+    }
+    for await (const { block, currency } of ofxTransactions(chunks(), skip)) {
+      for (const txn of parseOfx(block)) yield { ...txn, currency };
+    }
+  } finally {
+    await source.return(undefined);
+  }
+}
+
 const DATE_HEADERS = ["date", "transaction date", "posting date", "posted date", "value date"];
 const DESC_HEADERS = [
   "description",
@@ -99,6 +135,18 @@ const CREDIT_HEADERS = ["credit", "deposit", "paid in", "money in"];
 /** Parse a generic bank CSV, detecting the relevant columns by header. */
 export function parseBankCsv(text: string, limit = Number.POSITIVE_INFINITY): Transaction[] {
   const { headers, rows } = parseCsv(text);
+  const parseRow = bankRowParser(headers);
+  const out: Transaction[] = [];
+  for (const row of rows) {
+    if (out.length >= limit) break;
+    const txn = parseRow(row);
+    if (txn) out.push(txn);
+  }
+  return out;
+}
+
+/** Detect and normalise column aliases once per file, for both parsing paths. */
+function bankRowParser(headers: readonly string[]) {
   const lower = headers.map((h) => h.toLowerCase());
   const find = (cands: string[]) => {
     const i = lower.findIndex((h) => cands.includes(h));
@@ -110,18 +158,15 @@ export function parseBankCsv(text: string, limit = Number.POSITIVE_INFINITY): Tr
   const debitCol = find(DEBIT_HEADERS);
   const creditCol = find(CREDIT_HEADERS);
 
-  const out: Transaction[] = [];
-  for (const row of rows) {
-    if (out.length >= limit) break;
+  return (row: Record<string, string>): Transaction | undefined => {
     const amount = resolveAmount(row, amountCol, debitCol, creditCol);
-    if (amount === undefined) continue;
-    out.push({
+    if (amount === undefined) return undefined;
+    return {
       date: dateCol ? parseFlexibleDate(row[dateCol]) : undefined,
       description: (descCol ? row[descCol] : "") || "Transaction",
       amount,
-    });
-  }
-  return out;
+    };
+  };
 }
 
 function resolveAmount(

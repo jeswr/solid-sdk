@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * A small, dependency-free CSV parser for Tier-C export files.
  *
@@ -20,6 +21,10 @@ export interface ParsedCsv {
   /** Data rows; each maps a header to its (possibly empty) cell value. */
   readonly rows: readonly Readonly<Record<string, string>>[];
 }
+
+/** Bound header work independently of file size and the number of data rows. */
+export const MAX_CSV_HEADER_CHARS = 64 * 1024;
+export const MAX_CSV_COLUMNS = 1024;
 
 /**
  * Tokenise CSV text into a matrix of string cells. Handles quoting, embedded
@@ -102,6 +107,8 @@ export function parseCsv(text: string, delimiter = ","): ParsedCsv {
   const matrix = parseCsvRows(text, delimiter);
   const [headerRow, ...dataRows] = matrix;
   if (!headerRow) return { headers: [], rows: [] };
+  if (headerRow.length > MAX_CSV_COLUMNS || headerRow.join(",").length > MAX_CSV_HEADER_CHARS)
+    throw new Error("CSV header exceeds the import limit (1024 columns / 64 KiB characters).");
   const headers = headerRow.map((h) => h.trim());
   const rows: Record<string, string>[] = [];
   for (const cells of dataRows) {

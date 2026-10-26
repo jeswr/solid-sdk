@@ -21,7 +21,8 @@
  */
 import { DataFactory, Store } from "n3";
 import type { FileImportAdapter, FileImportContext, ImportFile } from "../core/file-import.js";
-import { extractElements } from "../core/mini-xml.js";
+import { fileText, xmlTags } from "../core/file-stream.js";
+import { parseAttrs } from "../core/mini-xml.js";
 import { recordFragment } from "../core/slug.js";
 import type { IntegrationMetadata } from "../core/types.js";
 import { CLASSES, ExerciseAction } from "../core/vocab.js";
@@ -49,12 +50,14 @@ export const appleHealthFileAdapter: FileImportAdapter = {
 
   async importFile(file: ImportFile, ctx: FileImportContext): Promise<void> {
     ctx.progress({ label: "Reading your workouts…", done: 0, total: 1 });
-    const xml = await file.text();
 
     const doc = ctx.resolve("health/workouts.ttl");
     const store = new Store();
     let count = 0;
-    for (const w of extractElements(xml, "Workout", ctx.maxRows)) {
+    for await (const token of xmlTags(fileText(file))) {
+      if (count >= ctx.maxRows) break;
+      if (!/^<Workout(?:\s|\/?>)/.test(token)) continue;
+      const w = parseAttrs(token.slice(8, -1));
       const type = humanWorkoutType(w.workoutActivityType ?? "");
       const start = parseAppleDate(w.startDate);
       const key = `${w.startDate ?? ""}|${w.workoutActivityType ?? ""}|${w.duration ?? ""}`;

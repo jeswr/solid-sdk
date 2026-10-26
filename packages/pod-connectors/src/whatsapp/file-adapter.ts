@@ -17,6 +17,7 @@
  */
 import { DataFactory, Store } from "n3";
 import type { FileImportAdapter, FileImportContext, ImportFile } from "../core/file-import.js";
+import { fileText, textLines } from "../core/file-stream.js";
 import { recordFragment } from "../core/slug.js";
 import type { IntegrationMetadata } from "../core/types.js";
 import { CLASSES, Message } from "../core/vocab.js";
@@ -50,12 +51,12 @@ export const whatsappFileAdapter: FileImportAdapter = {
 
   async importFile(file: ImportFile, ctx: FileImportContext): Promise<void> {
     ctx.progress({ label: "Reading your chat…", done: 0, total: 1 });
-    const messages = parseWhatsappChat(await file.text(), ctx.maxRows);
 
     const doc = ctx.resolve("social/whatsapp-chat.ttl");
     const store = new Store();
     let i = 0;
-    for (const msg of messages) {
+    for await (const msg of streamWhatsappChat(file)) {
+      if (i >= ctx.maxRows) break;
       const key = `${i}|${msg.sender}|${msg.when?.toISOString() ?? ""}`;
       const frag = recordFragment(msg.sender, key);
       const m = new Message(`${doc}#msg-${frag}`, store, DataFactory).mark();
@@ -112,6 +113,19 @@ export function parseWhatsappChat(text: string, limit = Number.POSITIVE_INFINITY
   }
   flush();
   return out;
+}
+
+/** Keep a single multiline message until the next timestamped record. */
+async function* streamWhatsappChat(file: ImportFile): AsyncGenerator<ChatMessage> {
+  let pending: string[] = [];
+  for await (const line of textLines(fileText(file))) {
+    const clean = line.replace(/^[‎‏‪-‮]+/, "");
+    if (IOS.test(clean) || ANDROID.test(clean)) {
+      yield* parseWhatsappChat(pending.join("\n"));
+      pending = [line];
+    } else if (pending.length) pending.push(line);
+  }
+  yield* parseWhatsappChat(pending.join("\n"));
 }
 
 function buildDate(

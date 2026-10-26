@@ -40,6 +40,7 @@ export function createImportSession(
   active.add(claim);
   const started = new Date();
   const activityUrl = `${writer.resolve(RUNS)}#run-${crypto.randomUUID()}`;
+  const connectorRoot = new URL(".", writer.resolve(RUNS)).href;
   const connector = `urn:solid:connector:${encodeURIComponent(id)}`;
   const reads = new Map<string, Awaited<ReturnType<PodWriter["read"]>>>();
   const used = new Set<string>([source]);
@@ -61,7 +62,14 @@ export function createImportSession(
       throw new Error("Reserved connector provenance slug.");
     if (!reads.has(url)) await read(input.slug);
     const previous = reads.get(url);
-    const doc = vocabMap ? vocabMap({ ...input, dataset: copyDataset(input.dataset) }) : input;
+    const sourceSubjects = new Set(
+      [...input.dataset]
+        .filter((q) => q.subject.termType === "NamedNode")
+        .map((q) => q.subject.value),
+    );
+    const doc = vocabMap
+      ? vocabMap({ ...input, dataset: copyDataset(input.dataset) }, { webId: writer.webId })
+      : input;
     const incoming = copyDataset(doc.dataset);
     const subjects = new Set(
       [...incoming].filter((q) => q.subject.termType === "NamedNode").map((q) => q.subject.value),
@@ -74,6 +82,8 @@ export function createImportSession(
     document.generatedBy.clear();
     document.generatedBy.add(activityUrl);
     for (const subject of subjects) {
+      // Linked identities keep their typing, but were not created by this import.
+      if (!subject.startsWith(connectorRoot)) continue;
       const item = new Provenance(subject, dataset, DataFactory);
       const origin = item.sourceUrl ?? fallback;
       item.derivedFrom.add(origin);
@@ -81,7 +91,10 @@ export function createImportSession(
       item.generatedBy.clear();
       item.generatedBy.add(activityUrl);
       used.add(origin);
-      if (subject !== url) itemKeys.add(JSON.stringify([url, subject]));
+      // Sector maps can add linked people/activities. Counts describe the
+      // adapter's local source items; local mapped resources also get provenance.
+      if (subject !== url && sourceSubjects.has(subject))
+        itemKeys.add(JSON.stringify([url, subject]));
     }
     const result = await writer.write({ ...doc, dataset }, conditions ?? conditionFor(previous));
     let registered = result;
