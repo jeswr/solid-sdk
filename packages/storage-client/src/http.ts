@@ -1,11 +1,12 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6.1-Sol
 // HTTP plumbing shared by the network backends: scope-checked requests, network-error mapping,
 // Link / WAC-Allow parsing and ReadResult construction (ADR-003 §2, §6, §7). Not exported.
 import { assertWithinPodScope, redactUserinfo } from "@jeswr/guarded-fetch";
 import { parseLinkHeaders, parseWacAllow } from "@jeswr/storage-capabilities";
 import { StorageError, storageErrorFrom } from "./errors.js";
 import { throwIfAborted } from "./internal.js";
-import type { AuthFetch, LinkTarget, ReadResult, ResourceKind } from "./types.js";
+import type { AuthFetch, Body, LinkTarget, ReadResult, ResourceKind } from "./types.js";
 
 /**
  * `value` with any userinfo removed. Parse first so every authority spelling (backslashes, mixed
@@ -57,6 +58,7 @@ export async function send(
   url: string,
   headers: Record<string, string>,
   signal: AbortSignal | undefined,
+  body?: Body,
 ): Promise<Response> {
   throwIfAborted(method, url, signal);
   try {
@@ -65,6 +67,10 @@ export async function send(
       headers,
       redirect: "manual",
       ...(signal ? { signal } : {}),
+      ...(body === undefined
+        ? {}
+        : { body: body as NonNullable<Parameters<AuthFetch>[1]>["body"] }),
+      ...(body instanceof ReadableStream ? { duplex: "half" } : {}),
     });
   } catch (cause) {
     throwIfAborted(method, url, signal);
@@ -72,6 +78,7 @@ export async function send(
       method,
       url,
       cause,
+      retryable: !(body instanceof ReadableStream),
       message: `${method} ${url} failed: network`,
     });
   }

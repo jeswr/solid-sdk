@@ -1,5 +1,6 @@
 // AUTHORED-BY Claude Opus 5.5
-// Solid backend, read side (ADR-003 §6, T-021). Writes arrive with T-022.
+// AUTHORED-BY Codex GPT-6.1-Sol
+// Solid backend read side (ADR-003 §6, T-021); mutations are isolated in solid-write.ts.
 import { parseRdf, SUPPORTED_RDF_MEDIA_TYPES } from "@jeswr/fetch-rdf";
 import { isWithinPodScope } from "@jeswr/guarded-fetch";
 import { deriveFeatures, type Features } from "@jeswr/storage-capabilities";
@@ -19,6 +20,7 @@ import {
   send,
 } from "./http.js";
 import { paginate, pathParent } from "./internal.js";
+import { solidWrites } from "./solid-write.js";
 import type {
   AuthFetch,
   Entry,
@@ -50,6 +52,8 @@ export interface SolidBackendOptions {
   root: string;
   /** Resolved features (capabilities()); default: an undescribed Solid storage. */
   features?: Features;
+  /** HEAD after a committed mutation without an ETag. Default true; failures yield null. */
+  etagFollowUp?: boolean;
 }
 
 /** A listed member with the optional `dct:format` literal some servers emit. */
@@ -91,17 +95,7 @@ function tolerant<T>(read: () => T): T | undefined {
   }
 }
 
-function writesPending(method: string, url: string): Promise<never> {
-  return Promise.reject(
-    new StorageError("unsupported", {
-      method,
-      url,
-      message: `${method} on the Solid backend is not available yet (T-022)`,
-    }),
-  );
-}
-
-/** Create the Solid StorageClient. Read operations only; mutations reject with `unsupported`. */
+/** Create the Solid StorageClient (ADR-003 §6). */
 export function createSolidBackend(options: SolidBackendOptions): StorageClient {
   const { fetch } = options;
   const root = scoped(options.root, "GET", options.root);
@@ -326,13 +320,7 @@ export function createSolidBackend(options: SolidBackendOptions): StorageClient 
       return { url: result.url, etag: result.etag, contentType: type, dataset };
     },
 
-    write: (url) => writesPending("PUT", url),
-    writeRdf: (url) => writesPending("PUT", url),
-    create: (url) => writesPending("POST", url),
-    patch: (url) => writesPending("PATCH", url),
-    move: (url) => writesPending("MOVE", url),
-    delete: (url) => writesPending("DELETE", url),
-    setMetadata: (url) => writesPending("PATCH", url),
+    ...solidWrites({ ...options, root }, () => client),
 
     async metadata(url): Promise<Metadata> {
       const described = await client.head(url);

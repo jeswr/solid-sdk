@@ -3,7 +3,7 @@
 
 # @jeswr/storage-client
 
-> **Experimental — AI-agent-generated.** Types, errors, helpers and the in-memory backend are implemented; the Solid and LWS HTTP backends follow.
+> **Experimental — AI-agent-generated.** Types, errors, helpers, the in-memory backend and the Solid HTTP backend are implemented; LWS follows.
 
 Protocol-neutral storage clients for Solid and LWS. Design of record: SDK core `ADR-003-storage-client.md` and ADR-001 D4 in
 `solid-suite-planning/specs/sdk-core/`.
@@ -17,7 +17,8 @@ Entry points:
 - `@jeswr/storage-client/errors`: the error model, plus `storageErrorFrom(method, url, response)`, which reads at most 64 KiB of an RFC 9457 body.
 - `@jeswr/storage-client/helpers`: `retryOnConflict(fn, read, attempts = 3)` and an RFC 6902 `applyJsonPatch`.
 - `@jeswr/storage-client/memory`: `createMemoryStorage({ protocol: 'solid' | 'lws', pageSize, moveResource, strictConditional })`, a full in-memory `StorageClient` for tests.
-- `@jeswr/storage-client/solid`, `/lws`, `/testing`: reserved for the HTTP backends and recorded fixtures.
+- `@jeswr/storage-client/solid`: `createSolidBackend({ fetch, root, features?, etagFollowUp? })` and `buildN3Patch({ inserts, deletes, where? })`. Solid moves use copy/delete emulation with rollback; ACLs and describedby metadata are not copied.
+- `@jeswr/storage-client/lws`, `/testing`: reserved for the LWS backend and recorded fixtures.
 
 ```ts
 import { createMemoryStorage } from '@jeswr/storage-client/memory';

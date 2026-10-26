@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6.1-Sol
 // RDF helpers shared by the backends: serialise through @jeswr/rdf-serialize (n3.Writer) and
 // apply insert/delete quad patches to an n3 Store. Never hand-builds RDF text.
 
@@ -36,18 +37,33 @@ const PREFIX = new RegExp(`^(?:[${PN_CHARS_BASE}](?:[${PN_CHARS}.]*[${PN_CHARS}]
  * (@jeswr/rdf-serialize `escapeIri`; legitimate IRIs are unchanged), relabel unsafe blank nodes
  * consistently, and refuse malformed language tags.
  */
-function injectionSafe(quads: readonly Quad[]): Quad[] {
+export function injectionSafe(
+  quads: readonly Quad[],
+  allowVariables = false,
+  reservedLabels: ReadonlySet<string> = new Set(),
+): Quad[] {
   const { namedNode, blankNode, literal, quad, defaultGraph } = DataFactory;
   const labels = new Map<string, string>();
+  const taken = new Set([
+    ...reservedLabels,
+    ...quads
+      .flatMap((q) => [q.subject, q.predicate, q.object, q.graph])
+      .filter((t) => t.termType === "BlankNode")
+      .map((t) => t.value),
+  ]);
   const term = (value: Term): Term => {
     switch (value.termType) {
       case "NamedNode":
         return namedNode(escapeIri(value.value));
       case "BlankNode": {
-        if (BLANK_LABEL.test(value.value)) return value;
+        if (BLANK_LABEL.test(value.value) && !reservedLabels.has(value.value)) return value;
         let label = labels.get(value.value);
         if (label === undefined) {
-          label = `x${labels.size}_${crypto.randomUUID().replaceAll("-", "")}`;
+          let index = labels.size;
+          do {
+            label = `x${index++}`;
+          } while (taken.has(label));
+          taken.add(label);
           labels.set(value.value, label);
         }
         return blankNode(label);
@@ -66,6 +82,9 @@ function injectionSafe(quads: readonly Quad[]): Quad[] {
         return literal(value.value, namedNode(escapeIri(value.datatype.value)));
       case "DefaultGraph":
         return defaultGraph();
+      case "Variable":
+        if (allowVariables) return value;
+        throw new TypeError(`${value.termType} terms cannot be serialised`);
       default:
         throw new TypeError(`${value.termType} terms cannot be serialised`);
     }

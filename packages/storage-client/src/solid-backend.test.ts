@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6.1-Sol
 import { deriveFeatures } from "@jeswr/storage-capabilities";
 import { DataFactory, Store } from "n3";
 import { describe, expect, test, vi } from "vitest";
@@ -365,7 +366,7 @@ describe("scope, transport and aborts", () => {
   });
 });
 
-describe("metadata, construction and pending writes", () => {
+describe("metadata and construction", () => {
   test("metadata reads the describedby document as rel maps", async () => {
     const { storage } = backend();
     const metadata = await storage.metadata(`${NOTES}today.ttl`);
@@ -425,22 +426,6 @@ describe("metadata, construction and pending writes", () => {
     expect(() => createSolidBackend({ fetch, root: "https://css.example/alice?x=1" })).toThrow(
       TypeError,
     );
-  });
-
-  test("writes reject with unsupported until T-022", async () => {
-    const { storage, fetch } = backend();
-    const url = `${NOTES}x`;
-    const pending = [
-      storage.write(url, "x", { contentType: "text/plain", ifMatch: "*" }),
-      storage.writeRdf(url, [], { ifMatch: "*" }),
-      storage.create(NOTES, "x", { contentType: "text/plain" }),
-      storage.patch(url, { kind: "json", ops: [] }, { ifMatch: '"1"' }),
-      storage.move(url, NOTES, { ifMatch: '"1"' }),
-      storage.delete(url, { ifMatch: '"1"' }),
-      storage.setMetadata(url, [], { ifMatch: '"1"' }),
-    ];
-    for (const promise of pending) await rejects(promise, "unsupported");
-    expect(fetch).not.toHaveBeenCalled();
   });
 });
 
