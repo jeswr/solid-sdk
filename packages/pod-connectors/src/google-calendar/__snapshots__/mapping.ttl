@@ -17,7 +17,7 @@
     <https://schema.org/url> <https://www.google.com/calendar/event?eid=7p4f2k9q1m3n8s0a>.
 <https://pod.test/alice/integrations/google-calendar/calendar/events.ttl#event-7p4f2k9q1m3n8s0a/recurrence-0> a <https://jeswr.org/ns/sectors/scheduling#RecurrenceRule>, <https://schema.org/Schedule>;
     <https://jeswr.org/ns/sectors/scheduling#frequency> "WEEKLY";
-    <https://jeswr.org/ns/sectors/scheduling#interval> 1;
+    <https://jeswr.org/ns/sectors/scheduling#interval> "1"^^<http://www.w3.org/2001/XMLSchema#positiveInteger>;
     <https://jeswr.org/ns/sectors/scheduling#until> "2026-07-01T08:00:00Z"^^<http://www.w3.org/2001/XMLSchema#dateTime>;
     <https://schema.org/byDay> <https://schema.org/Friday>, <https://schema.org/Monday>, <https://schema.org/Thursday>, <https://schema.org/Tuesday>, <https://schema.org/Wednesday>;
     <https://schema.org/exceptDate> "2026-06-12T08:00:00Z"^^<http://www.w3.org/2001/XMLSchema#dateTime>;
@@ -48,7 +48,7 @@
     <https://schema.org/startDate> "2026-06-15"^^<http://www.w3.org/2001/XMLSchema#date>;
     <https://schema.org/url> <https://www.google.com/calendar/event?eid=z9y8x7w6v5u4t3s2>.
 <https://pod.test/alice/integrations/google-calendar/calendar/events.ttl#event-z9y8x7w6v5u4t3s2/recurrence-0> a <https://jeswr.org/ns/sectors/scheduling#RecurrenceRule>, <https://schema.org/Schedule>;
-    <https://jeswr.org/ns/sectors/scheduling#count> 3;
+    <https://jeswr.org/ns/sectors/scheduling#count> "3"^^<http://www.w3.org/2001/XMLSchema#positiveInteger>;
     <https://jeswr.org/ns/sectors/scheduling#frequency> "YEARLY";
     <https://schema.org/byMonth> 6;
     <https://schema.org/byMonthDay> 15;

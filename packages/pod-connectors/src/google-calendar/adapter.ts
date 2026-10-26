@@ -14,7 +14,7 @@ import {
   GOOGLE_CALENDAR_FIXTURES,
 } from "./fixtures.js";
 import { calendarDate, parseRecurrence } from "./recurrence.js";
-import { GoogleCalendarEvent, RecurrenceRule, vocabMap } from "./vocab-map.js";
+import { GoogleCalendarEvent, InstanceExclusions, RecurrenceRule, vocabMap } from "./vocab-map.js";
 
 const ID = "google-calendar";
 const API = "https://www.googleapis.com/calendar/v3/calendars/primary/events";
@@ -58,6 +58,8 @@ export const googleCalendarAdapter: IntegrationAdapter = {
     }
     const doc = ctx.resolve(SLUG);
     const events = syncToken ? copyDataset(existing) : new Store();
+    const deletedMasters = new Set<string>();
+    const cancelledInstances: { parent: string; date: string }[] = [];
     let skipped = 0;
     for (const item of batch.items) {
       if (!item || typeof item.id !== "string" || !item.id) {
@@ -67,24 +69,13 @@ export const googleCalendarAdapter: IntegrationAdapter = {
       const iri = eventIri(doc, item.id);
       if (item.status === "cancelled") {
         removeEvent(events, iri);
-        if (item.recurringEventId && item.originalStartTime) {
-          const exception = new GoogleCalendarEvent(iri, events, DataFactory);
-          exception.types.add(CLASSES.Event);
-          exception.identifier = item.id;
-          exception.sourceUrl = item.htmlLink ?? `${API}/${encodeURIComponent(item.id)}`;
-          exception.parent = eventIri(doc, item.recurringEventId);
-          exception.originalStart = eventDate(item.originalStartTime);
-          exception.cancelled = true;
+        if (item.recurringEventId) {
+          const date = item.originalStartTime
+            ? eventDate(item.originalStartTime, batch.timeZone)
+            : undefined;
+          if (date) cancelledInstances.push({ parent: eventIri(doc, item.recurringEventId), date });
         } else {
-          // A deleted series also removes any previously imported overridden instances.
-          for (const q of [
-            ...events.match(
-              null,
-              DataFactory.namedNode(`${SCHEMA}superEvent`),
-              DataFactory.namedNode(iri),
-            ),
-          ])
-            removeEvent(events, q.subject.value);
+          deletedMasters.add(iri);
         }
         continue;
       }
@@ -92,14 +83,17 @@ export const googleCalendarAdapter: IntegrationAdapter = {
         skipped++;
         continue;
       }
-      const start = eventDate(item.start);
-      const end = eventDate(item.end);
+      const start = eventDate(item.start, batch.timeZone);
+      const end = eventDate(item.end, batch.timeZone);
       if (!start || !end) {
         skipped++;
         continue;
       }
       // Validate recurrence before touching the previous item in the working copy.
-      const rules = parseRecurrence(item.recurrence ?? [], item.start.timeZone);
+      const timeZone = item.start.timeZone ?? batch.timeZone;
+      const rules = parseRecurrence(item.recurrence ?? [], timeZone);
+      // Only instance exclusions survive a master replacement; its EXDATEs are authoritative.
+      const previousInstanceExclusions = [...instanceExclusions(events, iri).dates];
       removeEvent(events, iri);
       const event = new GoogleCalendarEvent(iri, events, DataFactory).mark();
       event.identifier = item.id;
@@ -114,7 +108,7 @@ export const googleCalendarAdapter: IntegrationAdapter = {
       if (item.recurringEventId) {
         event.parent = eventIri(doc, item.recurringEventId);
         event.originalStart = item.originalStartTime
-          ? eventDate(item.originalStartTime)
+          ? eventDate(item.originalStartTime, batch.timeZone)
           : undefined;
       }
       for (const [index, rule] of rules.entries()) {
@@ -123,9 +117,23 @@ export const googleCalendarAdapter: IntegrationAdapter = {
         event.schedules.add(ruleIri);
         const recurrence = new RecurrenceRule(ruleIri, events, DataFactory);
         recurrence.setRule(rule);
-        recurrence.timezone = item.start.timeZone;
+        recurrence.timezone = timeZone;
       }
+      for (const date of previousInstanceExclusions) addInstanceException(events, iri, date);
     }
+    // Google does not guarantee parent/child ordering, even across pages.
+    for (const iri of deletedMasters) {
+      for (const q of [
+        ...events.match(
+          null,
+          DataFactory.namedNode(`${SCHEMA}superEvent`),
+          DataFactory.namedNode(iri),
+        ),
+      ])
+        removeEvent(events, q.subject.value);
+      removeEvent(events, iri);
+    }
+    for (const { parent, date } of cancelledInstances) addInstanceException(events, parent, date);
     addInstanceExceptions(events);
     await ctx.write({
       slug: SLUG,
@@ -143,10 +151,11 @@ export const googleCalendarAdapter: IntegrationAdapter = {
 async function fetchEvents(
   ctx: ImportContext,
   syncToken?: string,
-): Promise<{ items: GCalEvent[]; cursor: string }> {
+): Promise<{ items: GCalEvent[]; cursor: string; timeZone?: string }> {
   const items: GCalEvent[] = [];
   const pages = new Set<string>();
   let pageToken: string | undefined;
+  let timeZone: string | undefined;
   do {
     const url = new URL(API);
     url.searchParams.set("singleEvents", "false");
@@ -156,6 +165,7 @@ async function fetchEvents(
     if (pageToken) url.searchParams.set("pageToken", pageToken);
     const list = await getJson<GCalEventsList>(ID, ctx.api, url.href);
     if (!list || (list.items !== undefined && !Array.isArray(list.items))) invalidPage();
+    timeZone ??= list.timeZone;
     items.push(...(list.items ?? []));
     pageToken = list.nextPageToken;
     if (
@@ -166,7 +176,7 @@ async function fetchEvents(
     if (pageToken) pages.add(pageToken);
     else {
       if (typeof list.nextSyncToken !== "string" || !list.nextSyncToken) invalidPage();
-      return { items, cursor: list.nextSyncToken };
+      return { items, cursor: list.nextSyncToken, timeZone };
     }
   } while (pageToken);
   return invalidPage();
@@ -180,9 +190,9 @@ function eventIri(doc: string, id: string): string {
   return `${doc}#event-${encodeURIComponent(id)}`;
 }
 
-function eventDate(value: GCalEventDateTime): string | undefined {
+function eventDate(value: GCalEventDateTime, calendarTimeZone?: string): string | undefined {
   const date = value.date ?? value.dateTime;
-  return date ? calendarDate(date) : undefined;
+  return date ? calendarDate(date, value.timeZone ?? calendarTimeZone) : undefined;
 }
 
 function validDate(value: string): Date | undefined {
@@ -200,7 +210,19 @@ function removeEvent(dataset: Store, iri: string): void {
   }
 }
 
-// Retain cancelled and moved instance identities so later master updates keep their exceptions.
+function instanceExclusions(dataset: DatasetCore, parentIri: string): InstanceExclusions {
+  return new InstanceExclusions(`${parentIri}/instance-exclusions`, dataset, DataFactory);
+}
+
+function addInstanceException(dataset: DatasetCore, parentIri: string, date: string): void {
+  const parent = new GoogleCalendarEvent(parentIri, dataset, DataFactory);
+  if (!parent.recurrence.size) return;
+  instanceExclusions(dataset, parentIri).dates.add(date);
+  for (const iri of parent.recurrence)
+    new RecurrenceRule(iri, dataset, DataFactory).exceptions.add(date);
+}
+
+// Moved instances still carry their original start and suppress that occurrence on the master.
 function addInstanceExceptions(dataset: DatasetCore): void {
   for (const q of dataset.match(null, DataFactory.namedNode(`${SCHEMA}superEvent`), null)) {
     if (q.subject.termType !== "NamedNode" || q.object.termType !== "NamedNode") continue;
@@ -208,8 +230,6 @@ function addInstanceExceptions(dataset: DatasetCore): void {
       ...dataset.match(q.subject, DataFactory.namedNode(`${SCHEMA}previousStartDate`), null),
     ][0]?.object;
     if (original?.termType !== "Literal") continue;
-    const parent = new GoogleCalendarEvent(q.object.value, dataset, DataFactory);
-    for (const iri of parent.recurrence)
-      new RecurrenceRule(iri, dataset, DataFactory).exceptions.add(original.value);
+    addInstanceException(dataset, q.object.value, original.value);
   }
 }

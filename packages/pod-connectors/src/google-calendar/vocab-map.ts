@@ -34,6 +34,10 @@ function temporal(value: string, factory: Factory): Term {
   );
 }
 
+function positiveInteger(value: number, factory: Factory): Term {
+  return factory.literal(String(value), factory.namedNode(`${XSD}positiveInteger`));
+}
+
 /** Typed writes for VOC-01 dates and sector fields, retaining legacy schema readers. */
 export class GoogleCalendarEvent extends CalendarEvent {
   override mark(): this {
@@ -79,13 +83,12 @@ export class GoogleCalendarEvent extends CalendarEvent {
   set originalStart(value: string | undefined) {
     OptionalAs.object(this, `${SCHEMA}previousStartDate`, value, temporal);
   }
-  set cancelled(value: boolean) {
-    OptionalAs.object(
-      this,
-      `${SCHEMA}eventStatus`,
-      value ? `${SCHEMA}EventCancelled` : undefined,
-      NamedNodeFrom.string,
-    );
+}
+
+/** Adapter state for instance exclusions, separate from source EXDATEs and event types. */
+export class InstanceExclusions extends PodThing {
+  get dates(): Set<string> {
+    return SetFrom.subjectPredicate(this, `${SCHEMA}exceptDate`, LiteralAs.string, temporal);
   }
 }
 
@@ -101,8 +104,8 @@ export class RecurrenceRule extends PodThing {
     this.types.add(`${SCHED}RecurrenceRule`);
     this.types.add(`${SCHEMA}Schedule`);
     OptionalAs.object(this, `${SCHED}frequency`, rule.frequency, LiteralFrom.string);
-    OptionalAs.object(this, `${SCHED}interval`, rule.interval, LiteralFrom.integer);
-    OptionalAs.object(this, `${SCHED}count`, rule.count, LiteralFrom.integer);
+    OptionalAs.object(this, `${SCHED}interval`, rule.interval, positiveInteger);
+    OptionalAs.object(this, `${SCHED}count`, rule.count, positiveInteger);
     OptionalAs.object(this, `${SCHED}until`, rule.until, temporal);
     for (const day of rule.byDay)
       SetFrom.subjectPredicate(
