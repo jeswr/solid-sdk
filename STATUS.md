@@ -237,3 +237,81 @@ No requested finding remains unfinished and there are no new open questions. The
 implementation limitations recorded above remain outside this fix round. `roborev` is
 still unavailable, so automated per-commit review could not run; the supplied findings were
 reproduced and verified locally. No external review service was called.
+
+## Fix round 3 — review findings at `b04290c900b0`
+
+2026-10-26. All four requested findings are fixed on `lane/sst-gpa`:
+
+- `a77d8453` — `fix(agent-mandate): preserve shared action implications`.
+  Delegate standard action matching to the shared evaluator before validating rule
+  context. Inherited `write` prohibitions cover `append`; `use` excludes ACL control,
+  delegation and ownership transfer. Custom agent actions match exactly. Tests exercise
+  permissions, prohibitions in all three policy sets, missing context and active duties.
+- `aa23c821` — `fix(agent-mandate): reject unsupported legacy semantics`.
+  Strict signed-field allowlists cover the mandate envelope, both policies, permissions,
+  prohibitions and constraints. Rule kinds must agree with their containing collection;
+  unsupported duties and obligations remain rejected. Tests sign unsupported restrictions
+  at every depth, swapped rule kinds and malformed supported metadata. The pilot fixture
+  continues to load and evaluate successfully.
+- `1c2ace63` — `fix(agent-mandate): preserve shared vocabulary identities`.
+  Use shared forward/reverse action, operand and operator mappings while retaining explicit
+  extension IRIs. ACL Append/Control and delegationDepth keep their canonical identities
+  in signed RDF and external-engine policies, requests and context. Tests cover every
+  shared action/operand, extension IRIs, independent WebCrypto verification of exported
+  signed Turtle, verified round trips and captured fake sparq input.
+- `d7806326` — `fix(agent-mandate): reject precision-losing operands`.
+  Require decimal identity to survive Number conversion and dateTime values to be exactly
+  representable in milliseconds. Insignificant zeros and Number exponent formatting are
+  normalized without dropping decimal digits. Lossy values are indeterminate throughout
+  permissions, prohibitions, active duties and obligations. Tests cover both operands,
+  equality, inequality, ordering, set membership, large decimals, underflow and sub-millisecond
+  timestamps; representable values still evaluate successfully.
+- Final report commit — `docs(agent-mandate): record third fix round validation`.
+
+Every regression group was observed failing before its corresponding fix. Commits use
+the prescribed identity, signing disabled and provenance naming Codex GPT-6.
+
+Validation used Node v24.22.1 (`PATH=/opt/node24/bin:$PATH`):
+
+```sh
+pnpm exec turbo run build --filter=@jeswr/agent-mandate... --concurrency=4
+pnpm --filter @jeswr/agent-mandate run lint && pnpm --filter @jeswr/agent-mandate run build && pnpm --filter @jeswr/agent-mandate run typecheck && pnpm --filter @jeswr/agent-mandate run test
+TURBO_SCM_BASE=b04290c900b0b2f144be1691952139a95fa62fbb pnpm run gate
+pnpm run gate:full
+```
+
+The prerequisite build passes 7/7 tasks. The package gate passes 264 tests in 8 files,
+with 100% coverage per source file: statements 406/406, branches 488/488, functions
+114/114 and lines 363/363. No thresholds, exclusions or timeouts changed. The affected
+repository gate passes 11/11 tasks, including `pnpm run lint:root`; its comparison base
+is the supplied pre-fix head. The existing non-fatal agent-authz-verifier sourcemap
+warning remains.
+
+- `pnpm run gate:full` — FAIL outside this fix round after 71 successful tasks
+  (253 total reported), in 2m38s. Root tests reported 679 passes and seven timing
+  failures in untouched files: six `test/agent-layers.test.mjs` module-load-form
+  cases exceeded the five-second timeout, and `test/check-sdk-layers.test.mjs`'s
+  pathological-spec performance assertion took 187 ms against a 50 ms limit.
+  No root source, tests or configuration were changed. The previously documented
+  federation-codegen failures were not reached in this run.
+- Isolated rerun of both root test files — PASS, 643/643 tests in 57 seconds:
+
+  ```sh
+  pnpm exec vitest run test/check-sdk-layers.test.mjs test/agent-layers.test.mjs --maxWorkers=1 --testTimeout=30000 --hookTimeout=30000
+  ```
+
+  Only the CLI timeout and worker count changed for this rerun; the 50 ms performance
+  assertion and all repository test configurations remained unchanged.
+- `git diff --check` — PASS.
+
+No dependencies were added; no new `check:packages` run was needed. Changes are confined
+to the reviewed package and this required report. Conservative choice: precision that the
+shared Number/Date comparisons cannot preserve returns indeterminate (confirmation),
+rather than introducing another comparison engine. Unsupported legacy signed fields
+refuse the entire mandate.
+
+No requested finding remains unfinished and there are no new open questions. Original
+implementation limitations above remain outside this fix round. `roborev` is still
+unavailable, so automated per-commit review could not run; the supplied findings were
+reproduced and verified locally. No external review service was called, no remote was
+fetched or merged, and nothing was pushed or published.
