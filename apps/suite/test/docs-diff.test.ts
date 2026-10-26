@@ -372,6 +372,53 @@ describe("bounded untrusted documents", () => {
       /node limit/,
     );
   });
+  it("checks collection bounds before reading entries beyond the budget", () => {
+    const values = new Array(DIFF_LIMITS.json + 1);
+    Object.defineProperty(values, 0, {
+      enumerable: true,
+      get() {
+        throw new Error("Oversized array entry must not be read");
+      },
+    });
+    const attrs = {
+      ["x".repeat(DIFF_LIMITS.json)]: null,
+      get late() {
+        throw new Error("Over-budget object entry must not be read");
+      },
+    };
+    for (const attributes of [{ values }, attrs]) {
+      expect(invalid(doc({ type: "paragraph", attrs: attributes }))).toThrow(
+        /Document JSON limit exceeded/,
+      );
+    }
+  });
+  it("rejects sparse arrays in content, marks and nested attributes", () => {
+    const sparse = new Array(3);
+    sparse[2] = null;
+    for (const value of [
+      { type: "doc", content: sparse },
+      doc({ type: "paragraph", marks: sparse }),
+      doc({ type: "paragraph", attrs: { values: sparse } }),
+    ]) {
+      expect(invalid(value)).toThrow(/Expected dense JSON array/);
+    }
+  });
+  it("validates non-enumerable array slots and ignores inherited object entries", () => {
+    const values = [null];
+    Object.defineProperty(values, 0, { enumerable: false, value: undefined });
+    expect(invalid(doc({ type: "paragraph", attrs: { values } }))).toThrow(TypeError);
+    Object.defineProperty(Object.prototype, "syntheticInheritedDiffAttribute", {
+      configurable: true,
+      enumerable: true,
+      writable: true,
+      value: undefined,
+    });
+    try {
+      expect(diffDocuments(doc(paragraph("same")), doc(paragraph("same")))).toEqual([]);
+    } finally {
+      Reflect.deleteProperty(Object.prototype, "syntheticInheritedDiffAttribute");
+    }
+  });
   it("throws for worst-case block or inline work instead of returning partial results", () => {
     const many = (letter: string) => doc(...Array.from({ length: 1_100 }, () => paragraph(letter)));
     expect(() => diffDocuments(many("a"), many("b"))).toThrow(/work limit/);

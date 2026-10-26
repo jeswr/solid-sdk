@@ -22,16 +22,26 @@ function validateJson(value: unknown, budget: { remaining: number }, depth = 0):
     if (!Number.isFinite(value)) throw new TypeError("Expected finite JSON number");
   } else if (value !== null && typeof value !== "boolean") {
     if (typeof value !== "object") throw new TypeError("Expected JSON value");
+    if (Array.isArray(value)) {
+      if (value.length > budget.remaining) throw new RangeError("Document JSON limit exceeded");
+      for (let i = 0; i < value.length; i++) {
+        if (!Object.hasOwn(value, i)) throw new TypeError("Expected dense JSON array");
+        budget.remaining -= String(i).length;
+        validateJson(value[i], budget, depth + 1);
+      }
+      return;
+    }
     if (
-      !Array.isArray(value) &&
       Object.getPrototypeOf(value) !== Object.prototype &&
       Object.getPrototypeOf(value) !== null
     ) {
       throw new TypeError("Expected plain JSON object");
     }
-    for (const [key, child] of Object.entries(value)) {
+    for (const key in value) {
+      if (!Object.hasOwn(value, key)) continue;
       budget.remaining -= key.length;
-      validateJson(child, budget, depth + 1);
+      if (budget.remaining < 0) throw new RangeError("Document JSON limit exceeded");
+      validateJson((value as Record<string, unknown>)[key], budget, depth + 1);
     }
   }
 }
