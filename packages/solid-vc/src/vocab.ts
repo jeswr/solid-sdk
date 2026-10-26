@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
 // Term IRIs + constants for the W3C Verifiable Credentials 2.0 surface (M4-VC of
@@ -44,13 +45,12 @@ export const ODRL = "http://www.w3.org/ns/odrl/2/" as const;
 export const SCHEMA = "https://schema.org/" as const;
 
 /**
- * The `@jeswr` Solid-VC extension namespace — the ONLY minted namespace here. It
- * homes the agent-authorization credential type + its properties. Per the suite
- * namespace rule it is a `@jeswr`/`w3id.org/jeswr`-rooted IRI (NEVER `@solid/`),
- * and it references (does not duplicate) `@jeswr/solid-federation-vocab`. The IRI
- * resolves under the `w3id.org/jeswr` vocab home the federation vocab owns.
+ * The Solid-VC extension namespace for newly authored authorization terms.
  */
-export const SVC = "https://w3id.org/jeswr/solid-vc#" as const;
+// Canonical source: @jeswr/suite-vocab NS.SOLID_VC
+export const SVC = "https://jeswr.org/ns/solid-vc#" as const;
+/** Historical shorthand expansion: changing it would invalidate existing proofs. */
+export const LEGACY_SVC_NS = "https://w3id.org/jeswr/solid-vc#" as const;
 
 /** `rdf:type`. */
 export const RDF_TYPE = `${RDF}type` as const;
@@ -204,4 +204,20 @@ export const SVC_SIGNED_CONTEXT: ReadonlyArray<string | Record<string, unknown>>
   VC_V2_CONTEXT,
   DI_V2_CONTEXT,
   SVC_TERMS,
+];
+
+/** Historical inline context, retained for existing signed shorthand payloads. */
+export const LEGACY_SVC_INLINE_CONTEXT: ReadonlyArray<string | Record<string, unknown>> = [
+  VC_V2_CONTEXT,
+  {
+    svc: LEGACY_SVC_NS,
+    acl: ACL,
+    odrl: ODRL,
+    schema: SCHEMA,
+    AgentAuthorizationCredential: `${LEGACY_SVC_NS}AgentAuthorizationCredential`,
+    authorizes: { "@id": `${LEGACY_SVC_NS}authorizes`, "@type": "@id" },
+    action: { "@id": `${LEGACY_SVC_NS}action`, "@type": "@id" },
+    target: { "@id": `${LEGACY_SVC_NS}target`, "@type": "@id" },
+    policy: { "@id": `${LEGACY_SVC_NS}policy`, "@type": "@id" },
+  },
 ];

@@ -1,3 +1,4 @@
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- AUTHORED-BY Codex GPT-5 -->
 
 # @jeswr/solid-vc
@@ -9,6 +10,15 @@ for other cryptosuites.
 
 > Experimental and security-critical. Verification must stay fail-closed and use trusted key
 > resolution.
+
+New authorization builders emit `https://jeswr.org/ns/solid-vc#` class and
+property IRIs. Readers accept canonical, legacy and mixed authorization graphs;
+conflicting singleton claims are rejected. Existing signed payloads are never
+rebased: explicit legacy IRIs, historical bare extension type/claim expansion
+(`https://w3id.org/jeswr/solid-vc#`), and their inline context remain available so
+old signatures still verify. For new generic credentials, use explicit canonical
+extension type and property IRIs. The W3C context URLs and cryptosuite identifiers
+remain unchanged. Canonicalizing a signed payload requires issuing a new proof.
 
 ## Install
 

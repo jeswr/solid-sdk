@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
 // Turtle / N-Triples serialisation of a VC graph — a thin adapter over the shared
@@ -10,7 +11,19 @@
 
 import { legacySerialize } from "@jeswr/rdf-serialize";
 import type { Quad } from "@rdfjs/types";
-import { ACL, DC_CREATED, ODRL, RDF, RDFS, SCHEMA, SEC, SVC, VC, XSD } from "./vocab.js";
+import {
+  ACL,
+  DC_CREATED,
+  LEGACY_SVC_NS,
+  ODRL,
+  RDF,
+  RDFS,
+  SCHEMA,
+  SEC,
+  SVC,
+  VC,
+  XSD,
+} from "./vocab.js";
 
 /** Prefixes emitted in the serialised Turtle for readability. */
 const PREFIXES = {
@@ -38,5 +51,20 @@ const PREFIXES = {
  * empty exactly as before.
  */
 export function serialize(quads: readonly Quad[], format = "text/turtle"): Promise<string> {
-  return legacySerialize(quads, format, PREFIXES);
+  // Preserve the historical projection of legacy signed graphs. Never rewrite
+  // payload terms merely to change a display prefix.
+  const hasCanonical = quads.some(
+    (q) =>
+      q.predicate.value.startsWith(SVC) ||
+      (q.object.termType === "NamedNode" && q.object.value.startsWith(SVC)),
+  );
+  const hasLegacy = quads.some(
+    (q) =>
+      q.predicate.value.startsWith(LEGACY_SVC_NS) ||
+      (q.object.termType === "NamedNode" && q.object.value.startsWith(LEGACY_SVC_NS)),
+  );
+  return legacySerialize(quads, format, {
+    ...PREFIXES,
+    svc: !hasCanonical && hasLegacy ? LEGACY_SVC_NS : SVC,
+  });
 }

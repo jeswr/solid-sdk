@@ -23,6 +23,8 @@ import type {
   RelatedResource,
 } from "./types.js";
 import {
+  LEGACY_SVC_INLINE_CONTEXT,
+  LEGACY_SVC_NS,
   RDF_TYPE,
   SCHEMA_ENCODING_FORMAT,
   SEC_DIGEST_MULTIBASE,
@@ -50,6 +52,7 @@ import {
   XSD,
 } from "./vocab.js";
 import {
+  AuthorizationSubjectNode,
   type CredentialNode,
   firstIri,
   firstLiteral,
@@ -67,7 +70,9 @@ function looksLikeIri(value: string): boolean {
 /** Resolve a (possibly relative) credential type to an absolute IRI. */
 function typeIri(type: string): string {
   if (type === "VerifiableCredential") return VC_CREDENTIAL;
-  if (type === "AgentAuthorizationCredential") return SVC_AGENT_AUTHORIZATION;
+  // Preserve the signed pre-image of historical bare type names. New builders
+  // use explicit canonical IRIs, so verification never guesses an alias.
+  if (type === "AgentAuthorizationCredential") return `${LEGACY_SVC_NS}${type}`;
   // The Bitstring Status List classes — defined by the VC 2.0 base context, so
   // the bare names the JSON-LD projection keeps expand to these SAME IRIs.
   if (type === "BitstringStatusListCredential") return STATUS_BITSTRING_CREDENTIAL;
@@ -75,7 +80,7 @@ function typeIri(type: string): string {
   if (type === "BitstringStatusListEntry") return STATUS_BITSTRING_ENTRY;
   if (looksLikeIri(type)) return type;
   // A bare extension type name: home it under the @jeswr svc extension namespace.
-  return `https://w3id.org/jeswr/solid-vc#${type}`;
+  return `${LEGACY_SVC_NS}${type}`;
 }
 
 /**
@@ -203,7 +208,8 @@ function claimPredicate(claim: string): string {
   if (looksLikeIri(claim)) return claim;
   const status = STATUS_CLAIM_TERMS[claim];
   if (status !== undefined) return status;
-  return `https://w3id.org/jeswr/solid-vc#${claim}`;
+  // Bare claims are part of the historical signing contract.
+  return `${LEGACY_SVC_NS}${claim}`;
 }
 
 /** Write one claim value (string IRI / typed literal / nested object / array). */
@@ -407,6 +413,24 @@ export function credentialToTurtle(credential: Credential, format?: string): Pro
   return serialize(credentialToRdf(credential), format);
 }
 
+/** Absolute claim keys have no context coercion: preserve IRI-valued objects. */
+function jsonLdSubject(subject: CredentialSubject): Record<string, unknown> {
+  function valueFor(claim: string, value: JsonValue | undefined): unknown {
+    if (Array.isArray(value)) return value.map((item) => valueFor(claim, item));
+    if (
+      looksLikeIri(claim) &&
+      claim !== STATUS_ENCODED_LIST &&
+      typeof value === "string" &&
+      looksLikeIri(value)
+    )
+      return { "@id": value };
+    return value;
+  }
+  return Object.fromEntries(
+    Object.entries(subject).map(([claim, value]) => [claim, valueFor(claim, value)]),
+  );
+}
+
 /**
  * Build the VC 2.0 JSON-LD document for a credential's claim graph (no proof): a
  * deterministic projection kept in lock-step with the RDF quads, with the pinned
@@ -423,7 +447,13 @@ export function credentialToJsonLd(credential: Credential): Record<string, unkno
   const id = credential.id ?? `urn:uuid:${randomUUID()}`;
   const types = ["VerifiableCredential", ...(credential.type ?? [])];
   const doc: Record<string, unknown> = {
-    "@context": SVC_INLINE_CONTEXT,
+    "@context": credentialToRdf(credential).some(
+      (q) =>
+        q.predicate.value.startsWith(LEGACY_SVC_NS) ||
+        (q.object.termType === "NamedNode" && q.object.value.startsWith(LEGACY_SVC_NS)),
+    )
+      ? LEGACY_SVC_INLINE_CONTEXT
+      : SVC_INLINE_CONTEXT,
     id,
     type: [...new Set(types)],
     issuer: credential.issuer,
@@ -476,7 +506,7 @@ export function credentialToJsonLd(credential: Credential): Record<string, unkno
   // whitespace / absent) is OMITTED so the subject is anonymous — NOT copied through
   // as an empty-string `@id` (which is a present RELATIVE reference resolving against
   // the base, the parity gap this closes). A valid absolute id is byte-unchanged.
-  const normalized = subjects.map(subjectWithNormalizedId);
+  const normalized = subjects.map((subject) => jsonLdSubject(subjectWithNormalizedId(subject)));
   doc.credentialSubject = normalized.length === 1 ? normalized[0] : normalized;
   return doc;
 }
@@ -558,7 +588,7 @@ export function buildAgentAuthorizationCredential(auth: AgentAuthorization): Cre
   const credentialSubject: CredentialSubject = { id: auth.principal, ...subject };
   const credential: Credential = {
     issuer: auth.principal,
-    type: ["AgentAuthorizationCredential"],
+    type: [SVC_AGENT_AUTHORIZATION],
     credentialSubject,
     ...(auth.id !== undefined ? { id: auth.id } : {}),
     ...(auth.validFrom !== undefined ? { validFrom: auth.validFrom } : {}),
@@ -719,13 +749,20 @@ export function agentAuthorizationFromRdf(
   node: CredentialNode,
 ): Pick<AgentAuthorization, "principal" | "agent" | "action" | "target" | "policy"> | undefined {
   const meta = credentialMetaFromNode(node);
-  if (!meta.types.includes(SVC_AGENT_AUTHORIZATION)) return undefined;
+  if (
+    !meta.types.some(
+      (type) =>
+        type === SVC_AGENT_AUTHORIZATION || type === `${LEGACY_SVC_NS}AgentAuthorizationCredential`,
+    )
+  )
+    return undefined;
   const subjectTerm = [...node.subjects].find((t) => t.termType === "NamedNode");
   if (subjectTerm === undefined) return undefined;
   const subjectIri = subjectTerm.value;
   const dataset = node.dataset as unknown as DatasetCore;
   const reads = readSubjectClaims(dataset, subjectIri);
-  if (reads.authorizes === undefined || reads.action.length === 0) return undefined;
+  if (reads === undefined || reads.authorizes === undefined || reads.action.length === 0)
+    return undefined;
   return {
     principal: subjectIri,
     agent: reads.authorizes,
@@ -735,39 +772,20 @@ export function agentAuthorizationFromRdf(
   };
 }
 
-/** Read the agent-authz claims for a subject IRI directly from the quads. */
+/** Read both aliases without changing the signed graph; reject ambiguous scalars. */
 function readSubjectClaims(
   dataset: DatasetCore,
   subjectIri: string,
-): { authorizes?: string; action: string[]; target?: string; policy?: string } {
-  let authorizes: string | undefined;
-  const action: string[] = [];
-  let target: string | undefined;
-  let policy: string | undefined;
-  for (const quad of dataset.match()) {
-    if (quad.subject.termType !== "NamedNode" || quad.subject.value !== subjectIri) continue;
-    if (quad.object.termType !== "NamedNode") continue;
-    switch (quad.predicate.value) {
-      case SVC_AUTHORIZES:
-        authorizes = quad.object.value;
-        break;
-      case SVC_ACTION:
-        action.push(quad.object.value);
-        break;
-      case SVC_TARGET:
-        target = quad.object.value;
-        break;
-      case SVC_POLICY:
-        policy = quad.object.value;
-        break;
-      default:
-        break;
-    }
-  }
+): { authorizes?: string; action: string[]; target?: string; policy?: string } | undefined {
+  const node = new AuthorizationSubjectNode(subjectIri, dataset);
+  const authorizes = node.iris("authorizes");
+  const target = node.iris("target");
+  const policy = node.iris("policy");
+  if (authorizes.size > 1 || target.size > 1 || policy.size > 1) return undefined;
   return {
-    ...(authorizes !== undefined ? { authorizes } : {}),
-    action,
-    ...(target !== undefined ? { target } : {}),
-    ...(policy !== undefined ? { policy } : {}),
+    authorizes: [...authorizes][0],
+    action: [...node.iris("action")],
+    target: [...target][0],
+    policy: [...policy][0],
   };
 }
