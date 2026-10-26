@@ -144,3 +144,31 @@ Suite-ui lint/build/typecheck/test pass: **125 tests across six files**. The new
 The full-workspace gate exits 1 at the pre-existing `@jeswr/unstorage-solid#build` dependency bootstrap: it attempts `git clone https://github.com/jeswr/fetch-rdf.git`, which the temporary PATH guard rejects before any network Git operation. **10 tasks succeeded** before the gate stopped. This is the same unrelated blocker documented in earlier rounds; bootstrap scripts were left unchanged. `git diff --check` passes.
 
 No browser was launched or screenshots taken, per the original brief. `roborev` remains unavailable on PATH, so automated per-commit verdicts could not be read. All three requested fixes are complete; no new open questions.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+## Fix round 3 — review of be60291fbf9e
+
+Only the three findings in `solid-sdk-lane-sst-93m.3-be60291fbf9e.md` were changed, each with regression coverage:
+
+- `d5048592 fix: preserve calendar navigation focus`: hoist Calendar's custom component implementations so controlled month updates retain their identities. Tests navigate twice in each direction, checking the displayed month, the original navigation button and retained focus.
+- `93676f7b fix: forward external slider labels to thumbs`: pass `aria-labelledby` to every focusable thumb and omit the direct/fallback label when an external label is supplied. Tests cover single and range sliders, multiple label IDs, precedence over `aria-label`, external labels without `aria-label`, direct labels and the existing numbered fallback labels.
+- `78e5d7e6 fix: recognize the canonical pod docs namespace`: correct the mapping to `https://w3id.org/jeswr/pod-docs#Document`, confirmed against the local Pod Docs vocabulary. The corrected mapping regression checks classification, rendered glyph, badge, hue token and axe results.
+- Final documentation commit: this validation report, committed last.
+
+Each regression reproduced its reported defect before the corresponding fix. No dependencies, fixture designs or unrelated source files changed. No network Git operation, push, PR, branch switch or other-checkout edit was performed.
+
+Validation commands:
+
+```sh
+pnpm --filter @jeswr/suite-ui run lint && pnpm --filter @jeswr/suite-ui run build && pnpm --filter @jeswr/suite-ui run typecheck && pnpm --filter @jeswr/suite-ui run test
+pnpm run lint:root
+PATH="/tmp/ds02-git-guard:$PATH" TURBO_SCM_BASE=a0bd08653bf5283b8b184ef864680213f0bcae19 pnpm run gate
+PATH="/tmp/ds02-git-guard:$PATH" pnpm run gate:full
+git diff --check
+```
+
+Suite-ui lint/build/typecheck/test pass: **134 tests across six files**. Root lint and guards pass, including all 74 contrast pairs. The affected workspace gate passes **10/10 tasks**, including the dependent suite app's lint/build/typecheck/test and all 41 root tests. The existing harmless jsdom canvas warning remains.
+
+The full-workspace gate exits 1 at the pre-existing `@jeswr/unstorage-solid#build` dependency bootstrap, which attempts `git clone https://github.com/jeswr/fetch-rdf.git`. The existing temporary PATH guard rejects it before any network Git operation. **17 tasks succeeded** before the gate stopped. This is the same unrelated blocker documented in earlier rounds; bootstrap scripts were left unchanged. Gate logs are in `/tmp/sst-93m.3-fix3-gate.log` and `/tmp/sst-93m.3-fix3-gate-full.log`. `git diff --check` passes.
+
+No browser was launched or screenshots taken, per the original brief. `roborev` remains unavailable on PATH, so automated per-commit verdicts could not be read. All three requested fixes are complete; no new open questions.
