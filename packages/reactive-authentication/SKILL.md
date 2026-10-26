@@ -16,7 +16,10 @@ The public entry points remain `.`, `./elements`, `./registerElements`, and `./s
 - Inject transport, credential boundaries, providers and stores. Preserve the pristine fetch seam.
 - Keep credentials within verified storage boundaries; reject stale operations after logout or account changes.
 - Preserve non-extractable DPoP keys, refresh rotation, session fences and cross-tab locking.
-- Do not add suite login policy, RFC 9728 support, or global registration as part of import maintenance.
+- RFC 9728 LWS discovery is supported; legacy `as_uri`/`realm` challenges are behind
+  `legacyLwsChallenge` (default true). Validate PRM origin/resource, StorageRoot and AS metadata before
+  obtaining any subject credential. Reuse this package's StorageContext discovery; add no workspace dependencies.
+- Do not add suite login policy or global registration as part of import maintenance.
 - Build before typechecking consumers: `pnpm --filter @jeswr/reactive-authentication run build`.
 - Run lint, build, typecheck and test for this package. Vitest runs the imported protocol and harness
   tests against local fixtures and enforces 100% coverage for this security-critical package.

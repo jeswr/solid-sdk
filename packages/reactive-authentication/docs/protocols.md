@@ -10,7 +10,10 @@ Sources read on 2026-09-26: [Solid-OIDC](https://solidproject.org/TR/oidc) 0.1.0
 (2026-09-25): `lws10-core/Authentication.html`, `Authorization.html`, `Discovery.html`,
 `Security-Considerations.html` (the included sections, which rendered pages can omit) and the four
 `lws10-authn-*` suites. LWS documents are editor's drafts ("unofficial proposal"); support tracks that commit
-and may need changes as they evolve. Nothing here claims conformance certification.
+and may need changes as they evolve. LWS authorization discovery additionally supports
+the [23 October 2026 Working Draft](https://www.w3.org/TR/2026/WD-lws10-core-20261023/) and
+[RFC 9728](https://www.rfc-editor.org/rfc/rfc9728.html); the earlier challenge remains available for
+compatibility. Nothing here claims conformance certification.
 
 ## Matrix
 
@@ -19,7 +22,7 @@ and may need changes as they evolve. Nothing here claims conformance certificati
 | Solid-OIDC | Authorization code + PKCE (S256), `state`, `nonce`, silent `prompt=none` then interactive (`prompt=consent` for `offline_access`) | Access token from the OP; refresh (rotating) grants | `Authorization: DPoP` + fresh proof (`htm`, `htu`, `ath`, `jti`, RS nonce) | `DPoPTokenProvider`, `OidcSession`, `authorizationCodeGrant` | `test/solid-oidc.test.js`, `test/persistence.test.js`, browser `page`, `sw`, `popup` |
 | Solid-OIDC §9 with UMA 2.0 | ID token via the Solid-OIDC session (DPoP-bound, `cnf`) | UMA grant `urn:ietf:params:oauth:grant-type:uma-ticket` with `ticket`, `claim_token` = ID token, `claim_token_format` = `http://openid.net/specs/openid-connect-core-1_0.html#IDToken`, DPoP proof with the ID token's key; metadata at `as_uri` + `/.well-known/uma2-configuration` with that profile in `uma_profiles_supported` | RPT as `DPoP` (+ proof) or `Bearer` per `token_type` | `SolidUmaTokenProvider` | `test/uma.test.js` (mock AS verifies ID token signature with jose, `webid`, `aud` `solid`, `cnf.jkt` = proof key, single-use tickets) |
 | OAuth client credentials (CSS style) | Client ID/secret | Client credentials grant, DPoP-bound | `Authorization: DPoP` | `ClientCredentialsTokenProvider` | `test/components.test.js` |
-| LWS core authorization | — | RFC 8693 token exchange at `as_uri` from `/.well-known/lws-configuration`, `resource` = `realm` | `Authorization: Bearer` (RFC 6750) | `LwsTokenProvider`, `lws/tokenExchange` | `test/lws.test.js` |
+| LWS core authorization | — | RFC 9728 PRM selects an AS; RFC 8693 exchange uses `resource` = storage Link. Legacy `as_uri`/`realm` enabled by default. AS metadata at `/.well-known/lws-configuration` | `Authorization: Bearer` (RFC 6750) | `LwsTokenProvider`, `lws/tokenExchange` | `test/lws.test.js`, `test/lws-resource-metadata.test.js` |
 | LWS OpenID Connect suite | ID token via authorization code flow (URI `sub`, `azp` required) | subject token type `urn:ietf:params:oauth:token-type:id_token` | via LWS core | `OidcIdTokenSource` | `test/lws.test.js` (mock AS verifies signature against the OP's JWKS) |
 | LWS SAML 2.0 suite | Signed assertion from the application's SAML stack (adapter) | `urn:ietf:params:oauth:token-type:saml2`, base64url assertion | via LWS core | `SamlAssertionSource` | `test/lws.test.js` (mock AS verifies the XML signature with xml-crypto; tampering and wrong audience rejected) |
 | LWS self-signed, controlled identifiers | Self-issued JWT: `sub` = `iss` = `client_id`, `aud` = [AS], `iat`, `exp`, `jti`, `kid` = verification method | `urn:ietf:params:oauth:token-type:jwt` | via LWS core | `SelfIssuedJwtSource`, `createControlledIdentifierDocument` | `test/lws.test.js` (verifier dereferences the CID, selects `kid` in `authentication`) |
@@ -39,11 +42,33 @@ from the signed reference) and multiformats/@noble/curves, independently of the 
 
 - **Challenges.** `WWW-Authenticate` is parsed per RFC 9110; challenges with duplicated parameters are dropped
   and parsing stops at malformed input. oauth4webapi has an equivalent parser but does not export it.
-- **LWS.** A `Bearer` challenge with `as_uri` and `realm` selects `LwsTokenProvider` (UMA challenges go to `SolidUmaTokenProvider`). Both values come from the same
+- **LWS RFC 9728.** A `Bearer resource_metadata="M"` challenge selects `LwsTokenProvider`.
+  M must be HTTPS (HTTP only with `http.allowInsecureRequests`) and have the request's origin.
+  PRM is retrieved with `credentials: "omit"`, `redirect: "manual"` using non-reactive secure transport;
+  non-success, non-JSON, any 3xx, followed or opaque redirects fail closed. Its `resource` is compared
+  string-for-string to the WHATWG-serialized `Request.url` after stripping its fragment; query and
+  percent-encoding are kept. The returned string is not normalized. This is the requested-resource
+  rule in LWS Discovery Validation 2 and RFC 9728 §3.3 for challenge-supplied metadata.
+  The 401 must carry `Link: <S>; rel="https://www.w3.org/ns/lws#storage"`.
+  Existing `resolveStorageContext` verifies S's description and a containing, same-origin StorageRoot
+  whose HEAD response links back to S; an exact-URL fallback is insufficient for authentication.
+  `authorization_servers` must be an array with a usable issuer. Select the first entry passing
+  `trustAuthorizationServer` (including policies from `trustAuthorizationServers` or `trustBindings`);
+  its `ChallengeBinding.realm` is S and `resource` is the requested URL. The default trusts any listed AS
+  after PRM and storage validation, including a separately hosted AS.
+  Discover its LWS metadata without redirects, requiring `issuer` equality, before calling
+  `CredentialSource.getCredential`. Exchange uses `resource=S` (not PRM's `resource`), subject token,
+  subject token type and client ID. Access tokens are fenced and cached per AS, S and credential context
+  until expiry minus 30 seconds; rejection invalidation is compare-and-remove, and `forget()` logs out.
+  Validation failures acquire no credential and make no token request.
+- **LWS legacy.** A `Bearer` challenge with `as_uri` and `realm` also selects `LwsTokenProvider`
+  unless `legacyLwsChallenge: false` (default true). Both values come from the same
   401, so trust is anchored in the requested resource: by default the AS and the realm must be on the
   resource's origin; other bindings need `trustAuthorizationServers` (same-origin realm) or `trustBindings`
   (explicit AS/realm pairs). Only then is containment checked: by path, or under a `StorageRoot` of the
-  realm's description that itself links back to that storage.
+  realm's description that itself links back to that storage. RFC 9728 takes precedence when both
+  forms occur, even in separate Bearer challenges; a failed RFC 9728 validation never falls back.
+  UMA challenges go to `SolidUmaTokenProvider`.
 - **Solid.** Issuers come from the application (picker, hint, fixed) or the WebID (`solid:oidcIssuer`, the
   RDF body is canonical). With `verifyWebId`, the reported WebID must list the issuer (exact identifier
   comparison; only origin-only issuers are treated as equal with and without a trailing slash).
@@ -76,7 +101,8 @@ from the signed reference) and multiformats/@noble/curves, independently of the 
    the OpenID suite and request example use the registered `…:id_token`. We send `id_token` and accept either
    in `subject_token_types_supported`.
 2. **Metadata location for issuers with paths.** The draft only names the path `/.well-known/lws-configuration`;
-   for issuers with a path we insert it before the path (RFC 8414 §3.1). `issuer` must equal `as_uri`.
+   for issuers with a path we insert it before the path (RFC 8414 §3.1). `issuer` must equal the selected
+   AS identifier (`as_uri` for legacy challenges).
 3. **`kid` form (CID suite).** CID 1.0 §3.3 retrieves verification methods by URL; the suite's example uses a
    bare `kid`. We emit the verification method's absolute URL.
 4. **SAML token shape.** The suite example shows a `samlp:Response`; RFC 8693's `saml2` type is an assertion.
@@ -85,7 +111,7 @@ from the signed reference) and multiformats/@noble/curves, independently of the 
    endpoint. We send `client_id` (the credential's client identifier) with no client authentication.
 6. **Access token type.** The draft presents access tokens as Bearer; responses with another `token_type` are
    rejected. No DPoP binding is defined for LWS access tokens.
-7. **"Logically contained within the realm".** Undefined beyond examples; we use path containment or a
+7. **Legacy "logically contained within the realm".** Undefined beyond examples; we use path containment or a
    confirmed `StorageRoot` of the realm's description.
 8. **Audience of ID tokens.** The OpenID suite says `aud` SHOULD include the AS; many OPs cannot. The default
    sends ID tokens to trusted AS bindings regardless; `requireAudience` refuses otherwise.

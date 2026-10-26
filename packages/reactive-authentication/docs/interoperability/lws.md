@@ -2,7 +2,9 @@
 
 Targets in `interop/targets/lws.json`, run by `interop/adapters/lws.js` with the library's LWS support
 (`LwsTokenProvider` and one `CredentialSource` per authentication suite), following the LWS editor's drafts at
-[w3c/lws-protocol@268fd25](https://github.com/w3c/lws-protocol/tree/268fd25be04dd609f8b3a9b324e99c0073c67f0f).
+[w3c/lws-protocol@268fd25](https://github.com/w3c/lws-protocol/tree/268fd25be04dd609f8b3a9b324e99c0073c67f0f),
+plus RFC 9728 discovery from the
+[23 October 2026 Working Draft](https://www.w3.org/TR/2026/WD-lws10-core-20261023/).
 
 **No public LWS deployment is known (2026-09-27).** These targets are UNTESTED until you configure a
 deployment you may test. The mock LWS authorization server in `test/helpers/lws.js` is used only to self-test
@@ -17,9 +19,23 @@ the adapter's mechanics offline (`test/interop-live-config.test.js`); that is no
 | `lws-cid` | self-signed, controlled identifier | self-issued JWT (`SelfIssuedJwtSource`) | an HTTPS CID document publishing the key under `authentication` |
 | `lws-did-key` | self-signed, did:key | self-issued JWT (`DidKeySource`) | the key's did:key granted access in the storage |
 
-The storage answers 401 with `WWW-Authenticate: Bearer as_uri="…", realm="…"`; the library checks the binding
+The storage can answer 401 with `WWW-Authenticate: Bearer resource_metadata="M"` and
+`Link: <S>; rel="https://www.w3.org/ns/lws#storage"`. Before acquiring any credential, the provider fetches
+same-origin PRM without credentials or redirects, requires `resource` to equal the serialized
+`Request.url` with fragment stripped and query kept (no normalization of the returned string), and uses
+its own `StorageContext` discovery to verify S's same-origin, containing StorageRoot and backlink.
+It chooses the first `authorization_servers` entry accepted by `trustAuthorizationServer` (default: any
+listed issuer after validation). Metadata discovery disallows redirects and requires the selected issuer,
+with RFC 8414 path insertion for issuers with paths. Exchange uses `resource=S`, then replays with Bearer.
+Tokens are cached per AS, S and credential context until expiry minus 30 seconds, fenced across logout.
+The transport-injected `test/lws-resource-metadata.test.js` exercises fail-closed validation; the mock
+supports RFC 9728, legacy and both challenge forms in `test/lws.test.js`.
+
+Legacy `WWW-Authenticate: Bearer as_uri="…", realm="…"` remains enabled by default; the library checks the binding
 against its trust policy (same origin as the storage by default, or `RA_INTEROP_<P>_AUTHORIZATION_SERVER`),
 checks realm containment, exchanges the credential (RFC 8693, `resource` = realm) and replays with `Bearer`.
+Set `legacyLwsChallenge: false` on `LwsTokenProvider` to ignore this form. When both forms occur,
+`resource_metadata` takes precedence and validation failure cannot fall back to legacy.
 
 ## Scenarios
 
@@ -67,7 +83,7 @@ Common to each target (`<P>` = `LWS_OPENID`, `LWS_SAML`, `LWS_CID`, `LWS_DID_KEY
 | `RA_INTEROP_<P>_SCRATCH` | pii, optional | container for run-owned writes inside it |
 | `RA_INTEROP_<P>_PRIVATE_RESOURCE` | pii, optional | existing readable private resource (read-only mode) |
 | `RA_INTEROP_<P>_OTHER_PROTECTED` | pii, optional | protected resource outside the storage |
-| `RA_INTEROP_<P>_AUTHORIZATION_SERVER` | optional | trusted `as_uri` when not on the storage's origin |
+| `RA_INTEROP_<P>_AUTHORIZATION_SERVER` | optional | AS allowlist entry; required for cross-origin legacy `as_uri` |
 | `RA_INTEROP_<P>_SUBJECT` | pii; **required** for `lws-openid` and `lws-did-key`, optional for `lws-cid` (fixed by `…_CID_ID`); leave unset for `lws-saml` | expected agent identifier |
 | `RA_INTEROP_<P>_STORAGE_STATE` | pii, optional (`lws-openid`, `lws-saml`) | Playwright storage state of a dedicated test account's IdP/SP session |
 
@@ -125,5 +141,6 @@ node interop/run.js --suite live --target lws-did-key --exercise-unverified   # 
   including `lws.boundary-automatic`, the 201-only ownership rule and the SAML cancellation path).
 - Automatic discovery accepts only same-origin storage descriptions (library limitation); deployments that
   describe storage on another origin need the explicit boundary (`lws.boundary`).
-- LWS drafts are unofficial and moving; the adapter follows the library's pinned commit.
+- LWS drafts are unofficial and moving; discovery supports the 2026-10-23 Working Draft alongside
+  the library's pinned legacy commit. External RFC 9728 interoperability remains unverified.
 - The SAML suite's client transports assertions only; validation belongs to the authorization server.

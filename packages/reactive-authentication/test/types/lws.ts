@@ -25,3 +25,4 @@ new OidcIdTokenSource(...args, {});
 const source = new OidcIdTokenSource(...args, { fence });
 const shared: SessionFence = source.fence;
 new LwsTokenProvider(source, { fence: shared });
+new LwsTokenProvider(source, { fence: shared, legacyLwsChallenge: false });

@@ -568,6 +568,55 @@ function recordingSource(inner, gate) {
   };
 }
 
+test("RFC 9728 and both-form LWS servers exchange, cache, renew rejected tokens and forget", async () => {
+  for (const challengeForm of ["rfc9728", "both"]) {
+    const server = await startLws({
+      challengeForm,
+      asUri: () => "https://legacy-should-not-be-used.invalid/",
+    });
+    try {
+      const inner = await DidKeySource.generate();
+      const source = recordingSource(inner);
+      const provider = new LwsTokenProvider(source, { http: insecure });
+      const manager = new ReactiveFetchManager({
+        providers: [provider],
+        boundary: new CredentialBoundary([`${server.url}/root/`], { allowInsecureHttp: true }),
+        fetch: transport,
+      });
+      const target = `${server.url}/root/prm?view=full#section`;
+      assert.equal(await (await manager.fetch(target)).text(), `hello ${inner.did}`);
+      assert.equal(server.stats.exchanges[0].resource, `${server.url}/storage_1`);
+      assert.equal(
+        server.stats.exchanges[0].grant_type,
+        "urn:ietf:params:oauth:grant-type:token-exchange",
+      );
+      assert.equal(server.stats.exchanges[0].subject_token_type, TYPES.jwt);
+      assert.equal(server.stats.exchanges[0].client_id, inner.did);
+      const authorization = server.server.requests
+        .findLast((r) => r.headers.has("authorization"))
+        .headers.get("authorization");
+      assert.match(authorization, /^Bearer /);
+      assert.equal((await manager.fetch(`${server.url}/root/another`)).status, 200);
+      assert.equal(server.stats.exchanges.length, 1, "cached across resources in the storage");
+      assert.equal(source.calls, 1);
+
+      server.rejectAccessToken(authorization.slice(7));
+      assert.equal((await manager.fetch(target)).status, 200);
+      assert.equal(server.stats.exchanges.length, 2, "rejected Bearer is exchanged again");
+      await provider.forget();
+      assert.equal((await manager.fetch(target)).status, 200);
+      assert.equal(server.stats.exchanges.length, 3, "forget clears the fenced cache");
+      assert.ok(
+        server.server.requests.some(
+          (r) => new URL(r.url).pathname === "/.well-known/oauth-protected-resource/root/prm",
+        ),
+      );
+    } finally {
+      await server.close();
+    }
+  }
+});
+
 test("review-3 #1: a foreign realm whose description claims the local StorageRoot cannot attract credentials", async () => {
   const foreign = await serve((request, { url }) =>
     new URL(request.url).pathname === "/storage"

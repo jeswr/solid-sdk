@@ -7,10 +7,10 @@ import type { CredentialSource } from "../credentials/CredentialSource.js";
 import { FencedCache, type FenceTicket, type Stamped } from "../FencedCache.js";
 import { ReactiveAuthenticationError } from "../ReactiveAuthenticationError.js";
 import type { SessionFence } from "../SessionFence.js";
-import { isInRealm } from "../StorageContext.js";
+import { describes, isInRealm, resolveStorageContext } from "../StorageContext.js";
 import type { TokenProvider } from "../TokenProvider.js";
-import { assertSecureUrl, type HttpOptions } from "../transport.js";
-import { parseHttpUrl } from "../url.js";
+import { assertSecureUrl, type HttpOptions, secureFetch } from "../transport.js";
+import { parseHttpUrl, withoutFragment } from "../url.js";
 import { discoverLwsAuthorizationServer, exchangeToken } from "./tokenExchange.js";
 
 /** What a challenge asks the client to do: send a credential to `authorizationServer` for `realm`. */
@@ -31,12 +31,15 @@ export interface LwsTokenProviderOptions {
   readonly http?: HttpOptions;
 
   /**
-   * Which challenge bindings are trusted. Both `as_uri` and `realm` come from the server's 401 and agree
-   * with each other by construction, so trust is anchored in the requested resource: by default the
-   * authorization server and the realm must be on the resource's origin. Separately hosted servers need
-   * an explicit policy ({@link trustAuthorizationServers}, {@link trustBindings}).
+   * Which challenge bindings are trusted. With RFC 9728, defaults to any server listed by validated,
+   * same-origin, resource-bound metadata; `realm` is the verified storage Link. A supplied policy narrows
+   * that list. Legacy `as_uri`/`realm` challenges default to both URLs on the resource's origin; separately
+   * hosted servers need an explicit policy ({@link trustAuthorizationServers}, {@link trustBindings}).
    */
   readonly trustAuthorizationServer?: AuthorizationServerPolicy;
+
+  /** Answer pre-2026-10-14 `as_uri`/`realm` challenges. RFC 9728 takes precedence. @defaultValue true */
+  readonly legacyLwsChallenge?: boolean;
 
   /**
    * Shared with the manager and session-backed source; required when the source supplies a fence.
@@ -87,12 +90,14 @@ export function trustBindings(
 }
 
 /**
- * LWS 1.0 authorization: answers `WWW-Authenticate` challenges carrying `as_uri` and `realm` by exchanging
+ * LWS 1.0 authorization: answers RFC 9728 `resource_metadata` challenges and, by default, legacy
+ * `as_uri`/`realm` challenges by exchanging
  * a subject credential (from any {@link CredentialSource}) for an audience-restricted access token with
  * OAuth 2.0 Token Exchange (RFC 8693), and presents it as a Bearer token (RFC 6750).
  *
- * Before anything is fetched or disclosed, the binding must pass the trust policy; then the request URL must
- * be logically contained in the realm (by path, or under the realm's StorageRoot). Access tokens are
+ * RFC 9728 validates same-origin, resource-bound PRM and a confirmed StorageRoot before selecting a
+ * trusted server. Legacy bindings pass the trust policy before any discovery, then require realm
+ * containment. Credentials are acquired only after discovery succeeds. Access tokens are
  * generation-stamped in a {@link FencedCache}, so logout (local or through a shared fence) invalidates them.
  */
 export class LwsTokenProvider implements TokenProvider {
@@ -124,17 +129,25 @@ export class LwsTokenProvider implements TokenProvider {
   }
 
   async matches(_: Request, challenge?: ChallengeContext): Promise<boolean> {
-    return findChallenge(challenge, ["as_uri", "realm"], "bearer") !== undefined;
+    return (
+      findChallenge(challenge, ["resource_metadata"], "bearer") !== undefined ||
+      (this.#options.legacyLwsChallenge !== false &&
+        findChallenge(challenge, ["as_uri", "realm"], "bearer") !== undefined)
+    );
   }
 
   async upgrade(request: Request, challenge?: ChallengeContext): Promise<Request> {
     const ticket = await this.#tokens.ticket(request.signal);
-    const { as, realm } = await this.#verifiedChallenge(request, challenge, ticket.signal);
+    const { as, realm, renewalWindow } = await this.#verifiedChallenge(
+      request,
+      challenge,
+      ticket.signal,
+    );
     const key = await this.#tokens.key([as.href, realm.href, this.#source.id]);
 
     const token = await this.#tokens.locked(key, ticket, async () => {
       const cached = await this.#tokens.read(key, ticket);
-      if (cached !== undefined && usable(cached)) return cached;
+      if (cached !== undefined && usable(cached, renewalWindow)) return cached;
       await this.#tokens.remove(key);
       return await this.#tokens.write(key, await this.#exchange(as, realm, ticket), ticket);
     });
@@ -168,9 +181,21 @@ export class LwsTokenProvider implements TokenProvider {
     request: Request,
     challenge: ChallengeContext | undefined,
     signal: AbortSignal,
-  ): Promise<{ as: URL; realm: URL }> {
+  ): Promise<{ as: URL; realm: URL; renewalWindow: number }> {
+    const metadata = findChallenge(challenge, ["resource_metadata"], "bearer");
+    if (metadata !== undefined)
+      return await this.#verifiedResourceMetadata(
+        request,
+        challenge!,
+        metadata.params["resource_metadata"]!,
+        signal,
+      );
+
     // Only the LWS Bearer challenge: e.g. a UMA challenge also carrying realm/as_uri is not LWS.
-    const params = findChallenge(challenge, ["as_uri", "realm"], "bearer")?.params;
+    const params =
+      this.#options.legacyLwsChallenge === false
+        ? undefined
+        : findChallenge(challenge, ["as_uri", "realm"], "bearer")?.params;
     const as = parseHttpUrl(params?.["as_uri"] ?? "");
     const realm = parseHttpUrl(params?.["realm"] ?? "");
     if (as === undefined || realm === undefined)
@@ -195,7 +220,75 @@ export class LwsTokenProvider implements TokenProvider {
         `${request.url} is not contained in realm ${realm.href}`,
       );
 
-    return { as, realm };
+    return { as, realm, renewalWindow: 10_000 };
+  }
+
+  async #verifiedResourceMetadata(
+    request: Request,
+    challenge: ChallengeContext,
+    metadataUrl: string,
+    signal: AbortSignal,
+  ): Promise<{ as: URL; realm: URL; renewalWindow: number }> {
+    const resource = new URL(request.url);
+    const url = parseHttpUrl(metadataUrl);
+    if (url === undefined || url.origin !== resource.origin)
+      throw new ReactiveAuthenticationError(
+        "LWS resource_metadata must be on the request's origin",
+      );
+
+    const response = await secureFetch(
+      url,
+      {
+        method: "GET",
+        credentials: "omit",
+        redirect: "manual",
+        signal,
+        headers: { accept: "application/json" },
+      },
+      this.#options.http,
+    );
+    if (!response.ok || !describes(response, url.href))
+      throw new ReactiveAuthenticationError(
+        "LWS protected resource metadata could not be retrieved without redirects",
+      );
+    const prm = (await response.json()) as {
+      resource?: unknown;
+      authorization_servers?: unknown;
+    } | null;
+    // Compare the serialized Request URL with its fragment stripped and query kept, without
+    // normalizing the returned string (LWS Discovery Validation 2 / RFC 9728 §3.3).
+    if (prm?.resource !== withoutFragment(resource))
+      throw new ReactiveAuthenticationError(
+        "LWS protected resource metadata resource does not match the request URL",
+      );
+
+    const storage = await resolveStorageContext(request.url, challenge.response, {
+      signal,
+      ...(this.#options.http === undefined ? {} : { http: this.#options.http }),
+    });
+    // The existing resolver requires a same-origin, containing StorageRoot that confirms this Link.
+    if (storage.source !== "lws")
+      throw new ReactiveAuthenticationError(
+        "LWS storage Link has no verified same-origin StorageRoot",
+      );
+    const realm = new URL(storage.storage!);
+
+    if (!Array.isArray(prm.authorization_servers))
+      throw new ReactiveAuthenticationError(
+        "LWS protected resource metadata lacks authorization_servers",
+      );
+    for (const identifier of prm.authorization_servers) {
+      const as = typeof identifier === "string" ? parseHttpUrl(identifier) : undefined;
+      if (as === undefined) continue;
+      const policy = this.#options.trustAuthorizationServer;
+      if (policy !== undefined && !(await policy({ authorizationServer: as, realm, resource })))
+        continue;
+      assertSecureUrl(as, this.#options.http);
+      return { as, realm, renewalWindow: 30_000 };
+    }
+    throw new ReactiveAuthenticationError(
+      "No trusted LWS authorization server in protected resource metadata",
+    );
   }
 
   async #exchange(as: URL, realm: URL, ticket: FenceTicket): Promise<LwsAccessToken> {
@@ -235,6 +328,6 @@ export class LwsTokenProvider implements TokenProvider {
   }
 }
 
-function usable(token: LwsAccessToken): boolean {
-  return token.expiresAt === undefined || Date.now() < token.expiresAt - 10_000;
+function usable(token: LwsAccessToken, renewalWindow: number): boolean {
+  return token.expiresAt === undefined || Date.now() < token.expiresAt - renewalWindow;
 }

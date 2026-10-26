@@ -127,10 +127,13 @@ function verifySaml(token, as, idp) {
  * @param {{entityId: string, publicKey: string}} [options.idp] trusted SAML IdP
  * @param {string[]} [options.subjectTokenTypes] advertised types
  * @param {(base: string) => string} [options.asUri] as_uri to announce (default: this server)
+ * @param {"legacy" | "rfc9728" | "both"} [options.challengeForm] defaults to legacy
+ * @param {(base: string) => string[]} [options.authorizationServers] PRM issuer list (default: this server)
  */
 export async function startLws(options = {}) {
   const asKeys = await generateKeyPair("ES256");
   const stats = { exchanges: [], rejected: [], accepted: [] };
+  const rejectedTokens = new Set();
 
   const server = await serve(async (request, { url: base }) => {
     const url = new URL(request.url);
@@ -138,6 +141,14 @@ export async function startLws(options = {}) {
     const realm = `${base}/storage_1`;
     const json = (body, status = 200) =>
       Response.json(body, { status, headers: { "cache-control": "no-store" } });
+
+    const prmPrefix = "/.well-known/oauth-protected-resource";
+    if (url.pathname.startsWith(`${prmPrefix}/`)) {
+      return json({
+        resource: `${base}${url.pathname.slice(prmPrefix.length)}${url.search}`,
+        authorization_servers: options.authorizationServers?.(base) ?? [as],
+      });
+    }
 
     if (url.pathname === "/.well-known/lws-configuration") {
       return json({
@@ -219,16 +230,26 @@ export async function startLws(options = {}) {
     }
 
     // Protected storage resources under /root/ (and a misplaced one under /other/).
-    const challenge = (error) =>
-      new Response("unauthorized", {
+    const challenge = (error) => {
+      const legacy = `as_uri="${options.asUri?.(base) ?? as}", realm="${realm}"`;
+      const metadata = `resource_metadata="${base}${prmPrefix}${url.pathname}${url.search}"`;
+      const params =
+        options.challengeForm === "rfc9728"
+          ? metadata
+          : options.challengeForm === "both"
+            ? `${legacy}, ${metadata}`
+            : legacy;
+      return new Response("unauthorized", {
         status: 401,
         headers: {
-          "www-authenticate": `Bearer as_uri="${options.asUri?.(base) ?? as}", realm="${realm}"${error ? `, error="${error}"` : ""}`,
+          "www-authenticate": `Bearer ${params}${error ? `, error="${error}"` : ""}`,
           link: `<${realm}>; rel="https://www.w3.org/ns/lws#storage"`,
         },
       });
+    };
     const authorization = request.headers.get("authorization");
     if (!authorization?.startsWith("Bearer ")) return challenge();
+    if (rejectedTokens.has(authorization.slice(7))) return challenge("invalid_token");
     try {
       const { payload } = await jwtVerify(authorization.slice(7), asKeys.publicKey, {
         issuer: as,
@@ -252,5 +273,6 @@ export async function startLws(options = {}) {
     },
     close: () => server.close(),
     exportJWK: () => exportJWK(asKeys.publicKey),
+    rejectAccessToken: (token) => rejectedTokens.add(token),
   };
 }
