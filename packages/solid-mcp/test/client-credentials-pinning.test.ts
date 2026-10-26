@@ -1,11 +1,18 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { Readable } from "node:stream";
+import { gzipSync } from "node:zlib";
+import { parseRdf } from "@jeswr/fetch-rdf";
 import { createPinningDispatcher } from "@jeswr/guarded-fetch/node";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createCliFetch } from "../src/client-credentials.js";
 import { ISSUER, mockCss, POD } from "./fixtures/css.mjs";
 
-const sockets = vi.hoisted(() => ({ connected: [] as string[] }));
+const sockets = vi.hoisted(() => ({
+  connected: [] as string[],
+  encoding: undefined as string | undefined,
+  body: undefined as Readable | undefined,
+}));
 
 // Replace socket creation; retain the actual connect-time validating lookup.
 vi.mock("@jeswr/guarded-fetch/node", async (importOriginal) => {
@@ -20,6 +27,7 @@ vi.mock("@jeswr/guarded-fetch/node", async (importOriginal) => {
         expect(request.method).toBe("GET");
         expect(request.headers).not.toHaveProperty("authorization");
         expect(request.headers).not.toHaveProperty("dpop");
+        expect(request.headers["accept-encoding"]).toBe("identity");
         const lookup = original.createValidatingLookup(
           options.resolveAll,
           options.allowLoopback,
@@ -33,10 +41,17 @@ vi.mock("@jeswr/guarded-fetch/node", async (importOriginal) => {
             resolve();
           });
         });
+        const turtle = '<https://profile.example/me> <http://xmlns.com/foaf/0.1/name> "Avery".';
+        sockets.body = Readable.from([
+          sockets.encoding === "gzip" ? gzipSync(turtle) : Buffer.from(turtle),
+        ]);
         return {
           statusCode: 200,
-          headers: { "content-type": "text/plain" },
-          body: Readable.from([Buffer.from("public profile")]),
+          headers: {
+            "content-type": "text/turtle",
+            ...(sockets.encoding === undefined ? {} : { "content-encoding": sockets.encoding }),
+          },
+          body: sockets.body,
         };
       },
     })),
@@ -46,6 +61,8 @@ vi.mock("@jeswr/guarded-fetch/node", async (importOriginal) => {
 afterEach(() => {
   vi.clearAllMocks();
   sockets.connected.length = 0;
+  sockets.encoding = undefined;
+  sockets.body = undefined;
 });
 
 describe("anonymous redirect connection pinning", () => {
@@ -83,7 +100,7 @@ describe("anonymous redirect connection pinning", () => {
     const result = transport("https://profile.example/me", {
       headers: { authorization: "DPoP fixture-token-1", dpop: "fixture" },
     });
-    if (allowed) expect(await (await result).text()).toBe("public profile");
+    if (allowed) expect((await parseRdf(await (await result).text(), "text/turtle")).size).toBe(1);
     else await expect(result).rejects.toThrow("Invalid anonymous profile redirect");
     expect(sockets.connected).toEqual(allowed ? [address] : []);
     expect(dnsLookup).toHaveBeenCalledTimes(2);
@@ -91,5 +108,40 @@ describe("anonymous redirect connection pinning", () => {
       allowLoopback: false,
       resolveAll: dnsLookup,
     });
+  });
+
+  it.each([
+    "identity",
+    "gzip",
+    "br",
+    "",
+    "identity, gzip",
+  ])("requires identity encoding on dispatcher profile responses (%s)", async (encoding) => {
+    sockets.encoding = encoding;
+    const css = mockCss();
+    const transport = await createCliFetch(
+      {
+        podRoot: POD,
+        readOnly: true,
+        clientId: "fixture-id",
+        clientSecret: "fixture-secret",
+        oidcIssuer: ISSUER,
+      },
+      async (input, init) => {
+        if (new Request(input, init).url.startsWith(ISSUER)) return css.fetch(input, init);
+        return new Response(null, { status: 302, headers: { location: "/card" } });
+      },
+      async () => [{ address: "93.184.216.34", family: 4 }],
+    );
+    const response = transport("https://profile.example/me", {
+      headers: { "accept-encoding": "gzip" },
+    });
+    if (encoding === "identity") {
+      const result = await response;
+      expect((await parseRdf(await result.text(), "text/turtle")).size).toBe(1);
+    } else {
+      await expect(response).rejects.toThrow("Invalid anonymous profile redirect.");
+      expect(sockets.body?.destroyed).toBe(true);
+    }
   });
 });

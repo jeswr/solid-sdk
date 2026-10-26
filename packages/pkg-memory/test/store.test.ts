@@ -183,6 +183,175 @@ function concurrentStores(context = setup()) {
   return { ...context, other: new NanopubStore(context.pod) };
 }
 
+async function roleCollision(targetRole: string, incomingRole = "provenance") {
+  const first = await build("role-first");
+  const second = await build("role-second", { template: "email", value: "second@example.org" });
+  const a = first.nanopubs[0]!;
+  const b = second.nanopubs[0]!;
+  const names: Record<string, string> = {
+    head: a.id,
+    provenance: a.provenanceId,
+    pubinfo: a.pubinfoId,
+    assertion: a.assertionId,
+    sources: pkgId("batch", a.batch, "sources"),
+    entities: pkgId("batch", a.batch, "entities"),
+  };
+  const target = names[targetRole]!;
+  const old = incomingRole === "provenance" ? b.provenanceId : b.pubinfoId;
+  const predicate = `${NS.np}${incomingRole === "provenance" ? "hasProvenance" : "hasPublicationInfo"}`;
+  const head = graph(second.dataset, b.id);
+  new RdfNode(b.id, head).terms(predicate).clear();
+  new RdfNode(b.id, head).link(predicate, target);
+  for (const quad of [...second.dataset])
+    if (quad.graph.value === b.id) second.dataset.delete(quad);
+  putGraph(second.dataset, b.id, head);
+  const contents = graph(second.dataset, old);
+  // The reported provenance graph contains the assertion plus extra statements.
+  if (targetRole === "assertion")
+    for (const quad of graph(first.dataset, target)) contents.add(quad);
+  for (const quad of [...second.dataset]) if (quad.graph.value === old) second.dataset.delete(quad);
+  putGraph(second.dataset, target, contents);
+  return [first, await parseNanopublications(await serializeNanopublications(second))] as const;
+}
+
+it.each([
+  "head",
+  "provenance",
+  "pubinfo",
+  "assertion",
+  "sources",
+  "entities",
+])("rejects a provenance collision with %s in both put orders before any write", async (role) => {
+  const pair = await roleCollision(role);
+  for (const values of [pair, [...pair].reverse()]) {
+    const { store, write } = setup();
+    await store.put(values[0]!);
+    write.mockClear();
+    await expect(store.put(values[1]!)).rejects.toThrow("graph role or owner");
+    expect(write).not.toHaveBeenCalled();
+    expect((await store.list()).nanopubs).toHaveLength(1);
+  }
+});
+
+it.each([
+  "head",
+  "provenance",
+  "pubinfo",
+  "assertion",
+  "sources",
+  "entities",
+])("reserves roles before concurrent provenance/%s collisions can publish both nanopubs", async (role) => {
+  for (const reverse of [false, true]) {
+    const { store, other } = concurrentStores();
+    const pair = [...(await roleCollision(role))];
+    if (reverse) pair.reverse();
+    const results = await Promise.allSettled([store.put(pair[0]!), other.put(pair[1]!)]);
+    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    const rejected = results.find(
+      (result) => result.status === "rejected",
+    ) as PromiseRejectedResult;
+    expect(rejected.reason.message).toContain("graph role or owner");
+    expect((await store.list()).nanopubs).toHaveLength(1);
+  }
+});
+
+it("rejects another nanopub's pubinfo ownership, including an incoming batch", async () => {
+  const pair = await roleCollision("pubinfo", "pubinfo");
+  const { store, write } = setup();
+  const dataset = new Store(pair.flatMap((value) => [...value.dataset]));
+  await expect(
+    store.put({ dataset, nanopubs: pair.flatMap((value) => value.nanopubs) }),
+  ).rejects.toThrow("graph role or owner");
+  expect(write).not.toHaveBeenCalled();
+  await store.put(pair[0]);
+  write.mockClear();
+  await expect(store.put(pair[1])).rejects.toThrow("graph role or owner");
+  expect(write).not.toHaveBeenCalled();
+});
+
+it.each([
+  "head",
+  "provenance",
+  "pubinfo",
+  "assertion",
+  "sources",
+  "entities",
+])("rejects legacy stored provenance/%s collisions in either listing order", async (role) => {
+  const { store, memory, pod, write } = setup();
+  for (const value of await roleCollision(role))
+    await memory.write(
+      store.url(value.nanopubs[0]!.id),
+      encode(await serializeNanopublications(value)),
+      "application/trig",
+      {},
+    );
+  const list = pod.list;
+  for (const reverse of [false, true]) {
+    if (reverse) pod.list = async (container) => (await list(container)).reverse();
+    await expect(store.list()).rejects.toThrow("graph role or owner");
+    await expect(store.put(await build("unrelated"))).rejects.toThrow("graph role or owner");
+    expect(write).not.toHaveBeenCalled();
+  }
+});
+
+it.each([
+  "type",
+  "contents",
+  "read",
+  "write",
+])("fails closed on an orphan role reservation with invalid %s", async (failure) => {
+  const { store, memory, pod, write } = setup();
+  const value = await build("orphan-role");
+  const np = value.nanopubs[0]!;
+  const name = [
+    np.id,
+    np.provenanceId,
+    np.pubinfoId,
+    np.assertionId,
+    ...["sources", "entities"].map((kind) => pkgId("batch", np.batch, kind)),
+  ].sort()[0]!;
+  const id = pkgId("store", "graph-role", name);
+  const url = `${store.container}shared-${id.slice("urn:uuid:".length)}.reservation`;
+  write.mockImplementation((target, bytes, type, cond) =>
+    target.endsWith(".trig")
+      ? Promise.reject(statusError(500))
+      : memory.write(target, bytes, type, cond),
+  );
+  await expect(store.put(value)).rejects.toMatchObject({ status: 500 });
+  const retained = await memory.read(url);
+  if (failure === "type" || failure === "contents")
+    await memory.write(
+      url,
+      failure === "contents" ? encode("invalid") : retained.body,
+      failure === "type" ? "text/plain" : "application/trig",
+      {},
+    );
+  if (failure === "read")
+    pod.read = async (target) => {
+      if (target === url) throw statusError(403);
+      return memory.read(target);
+    };
+  write.mockReset().mockImplementation((target, bytes, type, cond) => {
+    if (failure === "write" && target === url) throw statusError(500);
+    return memory.write(target, bytes, type, cond);
+  });
+  await expect(store.put(value)).rejects.toThrow();
+  expect(write.mock.calls.some(([target]) => target.endsWith(".trig"))).toBe(false);
+});
+
+it.each([403, 412])("fails closed when a shared-content reservation fails (%s)", async (status) => {
+  const { store, memory, write } = setup();
+  const value = await build("content-reservation-error");
+  const name = value.nanopubs[0]!.assertionId;
+  const url = `${store.container}shared-${name.slice("urn:uuid:".length)}.reservation`;
+  write.mockImplementation((target, bytes, type, cond) => {
+    if (target === url) throw statusError(status);
+    return memory.write(target, bytes, type, cond);
+  });
+  await expect(store.put(value)).rejects.toMatchObject({ status });
+  expect(write.mock.calls.some(([target]) => target.endsWith(".trig"))).toBe(false);
+});
+
 it.each([
   "sources",
   "entities",
@@ -458,7 +627,7 @@ it.each([
   "default",
   "named",
 ])("rejects a duplicate resource with an extra quad in a %s graph", async (kind) => {
-  const { store, memory } = setup();
+  const { store, memory, pod, write } = setup();
   const value = await build("complete-dataset-conflict");
   const url = store.url(value.nanopubs[0]!.id);
   await store.put(value);
@@ -474,6 +643,13 @@ it.each([
   }
   const bytes = encode(await serializeNanopublications(retained));
   await memory.write(url, bytes, "application/trig", {});
+  write.mockClear();
+  await expect(store.list()).rejects.toThrow("Unowned nanopublication graph");
+  await expect(store.put(retained)).rejects.toThrow("Unowned nanopublication graph");
+  await expect(store.put(value)).rejects.toThrow("Unowned nanopublication graph");
+  expect(write).not.toHaveBeenCalled();
+  // Still compare the entire resource if it was installed after the snapshot.
+  pod.list = async () => [];
   await expect(store.put(value)).rejects.toMatchObject({ status: 412 });
   expect((await memory.read(url)).body).toEqual(bytes);
 });
@@ -1356,7 +1532,8 @@ it("conditionally replaces only the store's ACL and retains existing containers"
   await store.put(await build());
   write.mockClear();
   await new NanopubStore(pod).put(await build("second"));
-  expect(write.mock.calls.filter((call) => call[0].endsWith(".acl"))).toHaveLength(9);
+  // Store + nanopub + seven content reservations + six role reservations.
+  expect(write.mock.calls.filter((call) => call[0].endsWith(".acl"))).toHaveLength(15);
   expect(write.mock.calls[0]![0]).toBe(`${store.container}.acl`);
   expect(write.mock.calls[0]![3].ifMatch).toBeDefined();
   expect(write.mock.calls[1]![3]).toEqual({ ifNoneMatch: "*" });

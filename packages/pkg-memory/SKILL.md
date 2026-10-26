@@ -42,3 +42,8 @@ reservations with owner-only ACLs, and ignore them in nanopub listings. Orphaned
 reservations remain authoritative. Identical nanopub retries are idempotent only
 after full dataset comparison; conflicting contents must reject. Keep validation
 against legacy collections that have no reservations.
+Reserve every graph's role create-only as well: head, provenance and pubinfo have
+one nanopub owner, assertions can be shared, and sources/entities belong to their
+batch. Reject role/owner collisions and unowned graphs before writes and on list;
+never union a private graph into a shared one. Orphan role reservations also remain
+authoritative.

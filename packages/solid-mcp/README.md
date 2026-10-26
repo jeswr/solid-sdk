@@ -84,8 +84,12 @@ Environment variables override individual JSON fields:
 
 Provide both credentials and either the issuer or token endpoint. Partial auth
 settings or failed login stop startup; there is no anonymous fallback after an auth
-failure. With no auth settings, public-pod access remains available. Authenticated
-pod/auth endpoints require HTTPS, with HTTP allowed for loopback development.
+failure. With no auth settings, public-pod access remains available.
+Discovery and token responses (including nonce challenges) are streamed with a
+64 KiB body cap. Each login or renewal has one 30-second deadline covering key
+creation, discovery, token exchange and nonce retries. Failed renewals release
+waiting calls with a generic error; later calls can retry.
+Authenticated pod/auth endpoints require HTTPS, with HTTP allowed for loopback development.
 Credentials are only attached within the configured pod scope; off-pod profile
 discovery is anonymous. Diagnostics go to stderr; stdout carries MCP messages only.
 
@@ -185,7 +189,11 @@ off-pod profile redirects are refused for ordinary injected fetch functions. The
 anonymous transport permits bounded, validated same-origin profile redirects.
 Anonymous profile reads share one 10-second deadline across the initial request,
 redirects and body consumption, retain caller cancellation, and reject bodies
-over the guarded-fetch resource limit of 1 MiB. Relative RDF links resolve against
+over the guarded-fetch resource limit of 1 MiB.
+Redirect hops made through the pinning dispatcher request `Accept-Encoding: identity`
+and reject any present `Content-Encoding` other than `identity`; encoded wire bytes
+are never parsed as RDF. The same body cap and deadline cover these hops.
+Relative RDF links resolve against
 the validated final profile URL and discovered locations remain pod-scoped.
 Client tools and resources are always confined to the pod root. A custom PodPort
 must enforce its data boundary and mutation policy too.

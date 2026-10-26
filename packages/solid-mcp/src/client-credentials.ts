@@ -14,6 +14,7 @@ import {
   type SolidSessionState,
 } from "@jeswr/solid-dpop";
 import { podScopedUrlOrUndefined } from "./auth.js";
+import { withAuthLimits } from "./auth-limits.js";
 import type { CliConfig } from "./cli-config.js";
 import { withProfileLimits } from "./profile-limits.js";
 import { withProfileRedirects } from "./profile-redirects.js";
@@ -36,51 +37,53 @@ export async function createCliFetch(
   let endpoint = config.tokenUrl;
 
   // Auth traffic never uses the pod fetch or follows redirects with credentials.
-  const authTransport: FetchLike = async (url, init) => {
-    try {
-      if (url === discovery && !init?.method) {
-        if (!endpoint) {
-          const response = await fetchImpl(url, { redirect: "manual", credentials: "omit" });
-          if (!response.ok) throw new Error();
-          const metadata = await response.json();
-          if (metadata.issuer !== creds.issuer || typeof metadata.token_endpoint !== "string")
-            throw new Error();
-          endpoint = metadata.token_endpoint;
+  const authTransport =
+    (boundedFetch: typeof fetch): FetchLike =>
+    async (url, init) => {
+      try {
+        if (url === discovery && !init?.method) {
+          if (!endpoint) {
+            const response = await boundedFetch(url, { redirect: "manual", credentials: "omit" });
+            if (!response.ok) throw new Error();
+            const metadata = await response.json();
+            if (metadata.issuer !== creds.issuer || typeof metadata.token_endpoint !== "string")
+              throw new Error();
+            endpoint = metadata.token_endpoint;
+          }
+          assertEndpointTransport(endpoint as string, "token_endpoint");
+          const target = new URL(endpoint as string);
+          if (target.username || target.password || target.hash) throw new Error();
+          return Response.json({ token_endpoint: endpoint });
         }
-        assertEndpointTransport(endpoint as string, "token_endpoint");
-        const target = new URL(endpoint as string);
-        if (target.username || target.password || target.hash) throw new Error();
-        return Response.json({ token_endpoint: endpoint });
+        const response = await boundedFetch(url, {
+          ...init,
+          body: init?.body as BodyInit | undefined,
+          redirect: "manual",
+          credentials: "omit",
+        });
+        // Upstream error bodies may echo secrets. Preserve only nonce challenges.
+        if (!response.ok) {
+          await response.body?.cancel();
+          return new Response(null, { status: response.status, headers: response.headers });
+        }
+        const token = await response.json();
+        if (
+          token.token_type?.toLowerCase() !== "dpop" ||
+          typeof token.access_token !== "string" ||
+          !/^[\x21-\x7e]+$/.test(token.access_token) ||
+          (token.expires_in !== undefined &&
+            (typeof token.expires_in !== "number" ||
+              !Number.isFinite(token.expires_in) ||
+              token.expires_in <= 0))
+        )
+          throw new Error();
+        return Response.json(token);
+      } catch {
+        throw new Error(
+          "CSS client-credentials login failed; check issuer, endpoint and credentials.",
+        );
       }
-      const response = await fetchImpl(url, {
-        ...init,
-        body: init?.body as BodyInit | undefined,
-        redirect: "manual",
-        credentials: "omit",
-      });
-      // Upstream error bodies may echo secrets. Preserve only nonce challenges.
-      if (!response.ok) {
-        await response.body?.cancel();
-        return new Response(null, { status: response.status, headers: response.headers });
-      }
-      const token = await response.json();
-      if (
-        token.token_type?.toLowerCase() !== "dpop" ||
-        typeof token.access_token !== "string" ||
-        !/^[\x21-\x7e]+$/.test(token.access_token) ||
-        (token.expires_in !== undefined &&
-          (typeof token.expires_in !== "number" ||
-            !Number.isFinite(token.expires_in) ||
-            token.expires_in <= 0))
-      )
-        throw new Error();
-      return Response.json(token);
-    } catch {
-      throw new Error(
-        "CSS client-credentials login failed; check issuer, endpoint and credentials.",
-      );
-    }
-  };
+    };
 
   let session: SolidSessionState;
   let pending: Promise<SolidSessionState> | undefined;
@@ -90,10 +93,14 @@ export async function createCliFetch(
       pending = (async () => {
         try {
           // In-flight requests keep their token while signing proofs and retrying nonces.
-          if (session) {
-            const token = await acquireToken(creds, session.keyPair, authTransport);
-            session = { ...session, ...token };
-          } else session = await createSession(creds, authTransport);
+          session = await withAuthLimits(async (boundedFetch) => {
+            const transport = authTransport(boundedFetch);
+            if (session) {
+              const token = await acquireToken(creds, session.keyPair, transport);
+              return { ...session, ...token };
+            }
+            return createSession(creds, transport);
+          }, fetchImpl);
           return session;
         } catch {
           throw new Error(
@@ -141,7 +148,8 @@ export async function createCliFetch(
                 origin: target.origin,
                 path: target.pathname + target.search,
                 method: anonymousRequest.method as "GET" | "HEAD",
-                headers: Object.fromEntries(headers),
+                // dispatcher.request returns wire bytes, without Fetch decoding.
+                headers: { ...Object.fromEntries(headers), "accept-encoding": "identity" },
                 signal: anonymousRequest.signal,
               });
               const responseHeaders = new Headers();
@@ -152,6 +160,11 @@ export async function createCliFetch(
                     ? []
                     : [values])
                   responseHeaders.append(name, value);
+              const encoding = responseHeaders.get("content-encoding");
+              if (encoding !== null && encoding.trim().toLowerCase() !== "identity") {
+                result.body.destroy();
+                throw new Error("Unsupported anonymous profile encoding.");
+              }
               const noBody =
                 anonymousRequest.method === "HEAD" || [204, 205, 304].includes(result.statusCode);
               if (noBody) result.body.destroy();

@@ -174,11 +174,17 @@ every shared graph identity must be an exact lowercase `urn:uuid` IRI. All ident
 and destination URLs are validated before any write, including ACLs.
 An existing reservation must agree on graph contents and joint blank-node identity.
 Concurrent conflicting puts therefore cannot publish conflicting graph copies.
+Each graph also has a create-only role reservation keyed by its full IRI. Head,
+provenance and publication-info graphs belong to exactly one nanopub; assertion
+graphs can be shared, and source/entity graphs belong to their batch. Reusing a
+graph for another role or owner rejects. Incoming batches and stored collections
+are checked before writes, and listings reject collisions in legacy data rather
+than unioning their statements. Unowned graphs (including default or blank-node
+graph names) reject as well. Role reservations remain authoritative after a crash.
 Reservations have owner-only ACLs, use the same TriG/octet-stream storage rules,
 and are ignored by `list`. A crash leaving only reservations is safe, and matching
 retries can continue. Identical nanopub retries succeed after verifying the entire
-stored RDF dataset, including default and blank-node-named graphs; different contents
-still reject. Collections created before
+stored RDF dataset; additional or different contents still reject. Collections created before
 reservations remain readable and are checked against new puts before any write.
 
 The store tries `application/trig` and reads the representation back. An HTTP 415

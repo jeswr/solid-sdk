@@ -8,6 +8,7 @@ import { compareDateTimes } from "./chronology.js";
 import { canonicalizeGraphWithLabels, pkgId } from "./ids.js";
 import {
   buildNanopublications,
+  type Nanopublication,
   type Nanopublications,
   parseNanopublications,
   serializeNanopublications,
@@ -85,6 +86,8 @@ export class NanopubStore {
   /** Persist each nanopub separately, create-only; graph metadata is parsed before any write. */
   async put(value: Nanopublications): Promise<string[]> {
     const parsed = await parseNanopublications(await serializeNanopublications(value));
+    const roles = new Map<string, GraphOwnership>();
+    validateGraphRoles(parsed, roles);
     const parts = parsed.nanopubs.map((np) => {
       const sharedGraphs = [
         np.assertionId,
@@ -130,6 +133,10 @@ export class NanopubStore {
       })),
     );
     await this.initialize();
+    // Role reservations use the graph IRI, including fragment-bearing private
+    // graphs, as their key. All must succeed before any dependent nanopub write.
+    for (const [name, ownership] of [...roles].sort(([a], [b]) => a.localeCompare(b)))
+      await this.reserveGraphRole(name, ownership);
     // Immutable graph reservations precede EVERY dependent nanopub. A crash can
     // leave a reservation alone, but cannot expose an unreserved nanopub. Each
     // reservation retains its shared-graph context so joint blank-node identity
@@ -406,6 +413,30 @@ export class NanopubStore {
       validateSharedCopies(dataset, stored, names, context);
     }
   }
+  private async reserveGraphRole(name: string, ownership: GraphOwnership): Promise<void> {
+    const url = this.resourceUrl(pkgId("store", "graph-role", name), true);
+    const manifest = new Store();
+    new RdfNode(url, manifest)
+      .link(`${NS.pkg}reservedGraph`, name)
+      .text(`${NS.pkg}graphRole`, ownership.role)
+      .text(`${NS.pkg}graphOwner`, ownership.owner);
+    const bytes = encode(await serialize([...manifest], { format: "application/trig" }));
+    try {
+      await this.writeNanopub(url, bytes, true);
+    } catch (error) {
+      if (podStatus(error) !== 412) throw error;
+      const retained = await this.readOptional(url);
+      if (!retained) throw error;
+      const type = retained.contentType.split(";")[0]?.trim().toLowerCase();
+      // Reservations are immutable and byte-preserving, like graph contents.
+      // A malformed or different manifest cannot authorize a graph's reuse.
+      if (
+        (type !== "application/trig" && type !== "application/octet-stream") ||
+        !equalBytes(retained.body, bytes)
+      )
+        throw new Error("Conflicting nanopublication graph role or owner");
+    }
+  }
   private async writeNanopub(url: string, bytes: Uint8Array, reservation = false): Promise<void> {
     // A resource ACL overrides the container default, including orphan ACLs.
     await this.protectResource(url, false, await this.readOptional(`${url}.acl`), true);
@@ -579,13 +610,47 @@ function equalBytes(a: Uint8Array, b: Uint8Array): boolean {
   return a.length === b.length && a.every((value, i) => value === b[i]);
 }
 
+interface GraphOwnership {
+  role: "head" | "provenance" | "pubinfo" | "assertion" | "sources" | "entities";
+  owner: string;
+}
+
+function registerGraphRoles(roles: Map<string, GraphOwnership>, np: Nanopublication): Set<string> {
+  const entries: [string, GraphOwnership][] = [
+    [np.id, { role: "head", owner: np.id }],
+    [np.provenanceId, { role: "provenance", owner: np.id }],
+    [np.pubinfoId, { role: "pubinfo", owner: np.id }],
+    [np.assertionId, { role: "assertion", owner: np.assertionId }],
+    [pkgId("batch", np.batch, "sources"), { role: "sources", owner: np.batch }],
+    [pkgId("batch", np.batch, "entities"), { role: "entities", owner: np.batch }],
+  ];
+  for (const [name, ownership] of entries) {
+    const previous = roles.get(name);
+    if (previous && (previous.role !== ownership.role || previous.owner !== ownership.owner))
+      throw new Error("Conflicting nanopublication graph role or owner");
+    roles.set(name, ownership);
+  }
+  return new Set(entries.map(([name]) => name));
+}
+
+function validateGraphRoles(value: Nanopublications, roles: Map<string, GraphOwnership>): void {
+  const names = new Set<string>();
+  for (const np of value.nanopubs)
+    for (const name of registerGraphRoles(roles, np)) names.add(name);
+  for (const quad of value.dataset)
+    if (quad.graph.termType !== "NamedNode" || !names.has(quad.graph.value))
+      throw new Error("Unowned nanopublication graph");
+}
+
 /** Merge document-local blank nodes through their validated shared graphs. */
 function mergeNanopublications(values: Iterable<Nanopublications>): Nanopublications {
   const dataset = new Store();
   const nanopubs: Nanopublications["nanopubs"] = [];
   const shared = new Map<string, string>();
+  const roles = new Map<string, GraphOwnership>();
   for (const result of values) {
     const np = result.nanopubs[0] as Nanopublications["nanopubs"][number];
+    validateGraphRoles(result, roles);
     const graphs = [
       np.assertionId,
       pkgId("batch", np.batch, "sources"),
