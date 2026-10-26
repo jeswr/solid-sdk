@@ -86,10 +86,6 @@ export function runs(document: DocumentNode): Run[] {
   return result;
 }
 
-function word(char: string | undefined): boolean {
-  return char !== undefined && /[\p{L}\p{M}\p{N}\p{Pc}]/u.test(char);
-}
-
 export function search(document: DocumentNode, query: string, input: FindOptions): FindMatch[] {
   const opts = options(input);
   if (typeof query !== "string" || query.length > FIND_LIMITS.query || !query.isWellFormed()) {
@@ -108,8 +104,8 @@ export function search(document: DocumentNode, query: string, input: FindOptions
     for (const char of chars) offsets.push((offsets.at(-1) as number) + char.length);
     for (let start = 0; start < chars.length; ) {
       spend(budget);
-      const end = matchAt(pattern, chars, start, budget);
-      if (end !== null && (!opts.wholeWord || (!word(chars[start - 1]) && !word(chars[end])))) {
+      const end = matchAt(pattern, chars, start, budget, opts.wholeWord);
+      if (end !== null) {
         const from = offsets[start] as number;
         const to = offsets[end] as number;
         result.push({ from: run.from + from, to: run.from + to, text: run.text.slice(from, to) });

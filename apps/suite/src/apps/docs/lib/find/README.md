@@ -27,6 +27,7 @@ Case-insensitive matching defaults on and uses ECMAScript Unicode simple case fo
 (`iu`); there is no normalization or multi-character case expansion. Whole-word
 boundaries mean absence of an adjacent Unicode letter, mark, number, or connector
 punctuation character. They do not depend on text-node boundaries.
+Whole-word checks participate in greedy regex backtracking.
 
 Set `regex: true` for the supported sequence dialect: literal code points, `.`,
 nonempty character classes/ranges (including negation), `\d\D\w\W\s\S`,

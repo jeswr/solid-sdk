@@ -188,6 +188,16 @@ describe("budgeted regular expressions", () => {
     ]);
   });
 
+  it("backtracks greedy expressions to a valid whole-word boundary", () => {
+    expect(findText(plain("cat---cat"), "cat-*", { regex: true, wholeWord: true })).toEqual([
+      { from: 1, to: 6, text: "cat--" },
+      { from: 7, to: 10, text: "cat" },
+    ]);
+    expect(
+      replaceAll(plain("cat---cat"), "cat-*", "dog", { regex: true, wholeWord: true }).document,
+    ).toEqual(doc(paragraph(text("dog"), text("-"), text("dog"))));
+  });
+
   it.each([
     "",
     "^$",
@@ -313,6 +323,13 @@ describe("replace and undo", () => {
     expect(replaceAll(plain("😀😀"), "😀", "x").document).toEqual(
       doc(paragraph(text("x"), text("x"))),
     );
+  });
+
+  it("uses each match's first marks when multiple matches span leaves", () => {
+    const input = doc(paragraph(text("a", "bold"), text("bca", "italic"), text("bc", "bold")));
+    const result = replaceAll(input, "abc", "z");
+    expect(result.document).toEqual(doc(paragraph(text("z", "bold"), text("z", "italic"))));
+    expect(result.changeSet.undo(result.document)).toEqual(input);
   });
 
   it("supports no-op change sets and detached snapshots", () => {

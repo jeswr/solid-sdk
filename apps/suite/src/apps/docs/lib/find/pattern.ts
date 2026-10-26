@@ -27,6 +27,10 @@ function unsupported(): never {
   throw new FindError("unsupported-regex", "Unsupported or invalid regular expression");
 }
 
+function word(char: string | undefined): boolean {
+  return char !== undefined && /[\p{L}\p{M}\p{N}\p{Pc}]/u.test(char);
+}
+
 /** Only compile single-character atoms with native RegExp; repetition runs in our budgeted VM. */
 export function compile(query: string, regex: boolean, caseSensitive: boolean): Pattern {
   const chars = Array.from(query);
@@ -108,6 +112,7 @@ export function matchAt(
   chars: string[],
   start: number,
   budget: Budget,
+  wholeWord: boolean,
 ): number | null {
   const frames: { position: number; next: number; minimum: number }[] = [];
   let atomIndex = 0;
@@ -115,7 +120,11 @@ export function matchAt(
   while (true) {
     spend(budget);
     if (atomIndex === pattern.atoms.length) {
-      if (!pattern.end || position === chars.length) return position;
+      if (
+        (!pattern.end || position === chars.length) &&
+        (!wholeWord || (!word(chars[start - 1]) && !word(chars[position])))
+      )
+        return position;
     } else {
       const atom = pattern.atoms[atomIndex] as Atom;
       let count = 0;
