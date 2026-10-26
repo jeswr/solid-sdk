@@ -71,6 +71,44 @@ describe("CSS client credentials", () => {
     expect((await fetch(`${POD}note`)).ok).toBe(true);
     expect([tokenAttempts, resourceAttempts]).toEqual([2, 2]);
   });
+  it("retries both concurrent resource challenges and caches the nonce for later calls", async () => {
+    const css = mockCss();
+    const urls = [`${POD}first`, `${POD}second`];
+    const nonces = new Map<string, unknown[]>();
+    const jtis = new Set<string>();
+    let releaseChallenges!: () => void;
+    const bothStarted = new Promise<void>((resolve) => {
+      releaseChallenges = resolve;
+    });
+    const fetch = await createCliFetch(config, async (input, init) => {
+      const request = new Request(input, init);
+      if (request.url.startsWith(POD)) {
+        const proof = proofOf(request, "fixture-token-1");
+        const sent = nonces.get(request.url) ?? [];
+        sent.push(proof.nonce);
+        nonces.set(request.url, sent);
+        jtis.add(proof.jti);
+        if (urls.includes(request.url) && sent.length === 1) {
+          if (nonces.size === 2) releaseChallenges();
+          await bothStarted;
+          return new Response(null, { status: 401, headers: { "DPoP-Nonce": "rs-nonce" } });
+        }
+        expect(proof.nonce).toBe("rs-nonce");
+      }
+      return css.fetch(input, init);
+    });
+
+    const responses = await Promise.all(urls.map((url) => fetch(url)));
+    expect(responses.map((response) => response.status)).toEqual([200, 200]);
+    expect(urls.map((url) => nonces.get(url))).toEqual([
+      [undefined, "rs-nonce"],
+      [undefined, "rs-nonce"],
+    ]);
+    expect((await fetch(`${POD}later`)).ok).toBe(true);
+    expect(nonces.get(`${POD}later`)).toEqual(["rs-nonce"]);
+    expect(jtis.size).toBe(5);
+    expect(css.stats).toMatchObject({ tokens: 1, discoveries: 1, reads: 3 });
+  });
   it("never sends pod credentials to an off-pod profile or follows an escaping redirect", async () => {
     const css = mockCss();
     const fetch = await createCliFetch(config, css.fetch);

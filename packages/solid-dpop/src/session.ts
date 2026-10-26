@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 /**
  * Server-side Solid-OIDC session: the consumer custodies one DPoP keypair + access token
  * per connection and uses them to make sender-constrained (RFC 9449) requests to a pod.
@@ -204,11 +205,13 @@ export async function authedFetch(
     });
   };
 
-  let res = await doRequest(session.nonce);
+  // Concurrent requests may update the cached nonce while this request is in flight.
+  const sentNonce = session.nonce;
+  let res = await doRequest(sentNonce);
   const challenge = res.headers.get("DPoP-Nonce");
-  if (res.status === 401 && challenge && challenge !== session.nonce) {
+  if (res.status === 401 && challenge && challenge !== sentNonce) {
     session.nonce = challenge;
-    res = await doRequest(session.nonce);
+    res = await doRequest(challenge);
     const next = res.headers.get("DPoP-Nonce");
     if (next) session.nonce = next;
   } else {
