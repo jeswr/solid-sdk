@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 /**
  * `@jeswr/solid-health-diary` — the SHARED multi-intolerance health-diary RDF
@@ -9,7 +10,7 @@
  * genetics SUMMARY (never raw genotype data), and a diet plan. Built on schema.org
  * + the suite `health` sector + OWL-Time/PROV-O/Dublin Core, with the new
  * nutrition/intolerance terms under `diet:`
- * (`https://w3id.org/jeswr/sectors/health/diet#`) — the vocab authored in parallel
+ * (`https://jeswr.org/ns/sectors/health/diet#`) — the vocab authored in parallel
  * in `solid-federation-vocab` (Brief 1B). Typed accessors + SHACL + OFF-tag
  * exposure derivation + an owner-only fail-closed ACL helper.
  *
@@ -196,6 +197,9 @@ export {
   HEALTH_PATIENT_PROP,
   health,
   isTriggerSlug,
+  LEGACY_CORE_NS,
+  LEGACY_DIET_NS,
+  LEGACY_HEALTH_NS,
   PREFIXES,
   PROV,
   PROV_DERIVED_FROM,
