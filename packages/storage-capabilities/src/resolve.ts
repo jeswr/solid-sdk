@@ -14,6 +14,8 @@ import { PIM, SOLID, SSD } from "./vocab.js";
 
 const DEFAULT_TTL_MS = 3_600_000;
 const LWS_STORAGE = "https://www.w3.org/ns/lws#storage";
+// Increment whenever parser changes invalidate previously derived feature evidence.
+const PARSED_CACHE_VERSION = 1;
 /** Shared module default so `capabilities()` and the resolver see the same records. */
 export const defaultCache = createMemoryCache();
 
@@ -165,6 +167,10 @@ export async function resolveStorageDescription(
   let cached = storageId === undefined ? undefined : await cache.get(storageId);
   let invalidationId = storageId;
   try {
+    if (cached && cached.version !== PARSED_CACHE_VERSION) {
+      await cache.delete(cached.description.id);
+      cached = undefined;
+    }
     if (cached) {
       if (
         httpUrl(cached.description.root).origin !== httpUrl(resource).origin ||
@@ -199,6 +205,7 @@ export async function resolveStorageDescription(
           true,
         );
         await cache.set(description.id, {
+          version: PARSED_CACHE_VERSION,
           description,
           // A 304 keeps the original entry arrays; a replacement body must be probed anew.
           ...(description.services === cached.description.services && cached.probe
@@ -270,7 +277,7 @@ export async function resolveStorageDescription(
         },
       ];
     }
-    await cache.set(description.id, { description });
+    await cache.set(description.id, { version: PARSED_CACHE_VERSION, description });
     await cache.rememberPrefix(description.root, description.id);
     return description;
   } catch (error) {

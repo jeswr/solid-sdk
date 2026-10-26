@@ -9,6 +9,17 @@ import { ACQ, DCT, DID, LWS, NOTIFY, SSD } from "./vocab.js";
 const SSD_FORMAT = "https://jeswr.org/ns/solid-sd#format";
 
 const RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
+// These extra fields supply IRI-valued feature evidence. Validate before the generic
+// extra mapper turns literal lexical values into strings indistinguishable from IRIs.
+const IRI_EVIDENCE: ReadonlySet<string> = new Set([
+  DCT.conformsTo,
+  SSD.model,
+  "https://www.w3.org/ns/lws#model",
+  "https://jeswr.org/ns/solid-sd#subscriptionType",
+  LWS.subscriptionType,
+  "https://jeswr.org/ns/solid-sd#appliesTo",
+  LWS.appliesTo,
+]);
 const CHANNEL_TYPES: ReadonlySet<string> = new Set([
   NOTIFY.WebSocketChannel2023,
   NOTIFY.StreamingHTTPChannel2023,
@@ -59,7 +70,9 @@ class DescriptionNode extends TermWrapper {
     }
     return Object.fromEntries(
       [...predicates].map((predicate) => {
-        const values = this.objects(predicate).map((term): unknown => {
+        const objects = this.objects(predicate);
+        const terms = IRI_EVIDENCE.has(predicate) ? objects.filter(isNamedNode) : objects;
+        const values = terms.map((term): unknown => {
           // ADR-008 format nodes may be named (`ssd:format <#turtle>`): expand those too, so
           // their ssd:source/ssd:patchType survive. Other named objects stay IRI strings.
           // Nodes already expanded anywhere in this mapping become references (checked first,
@@ -96,20 +109,25 @@ function isNamedNode(term: Term): boolean {
 }
 
 function notificationExtra(node: DescriptionNode, visited: Set<string>): Record<string, unknown> {
-  const normativePresent = node.objects(NOTIFY.channelType).length > 0;
-  let channels = node.iris(NOTIFY.channelType);
+  const normative = node.objects(NOTIFY.channelType);
+  const normativePresent = normative.length > 0;
   // Read-only fallback for sparq's pre-draft property (sparq-org/sparq#7234).
   // The draft's notify:channelType takes precedence whenever present.
-  if (!normativePresent) channels = node.iris("https://jeswr.org/ns/solid-sd#channelType");
+  const rawChannels = normativePresent
+    ? normative
+    : node.objects("https://jeswr.org/ns/solid-sd#channelType");
+  const channel = rawChannels[0];
+  // SSD-SVC-NOTIFY-2: exactly one raw object, and it must be an IRI. Filtering
+  // first would accept an IRI plus a literal, or enable multiple channels.
+  const channels =
+    rawChannels.length === 1 && channel?.termType === "NamedNode" ? [channel.value] : [];
   return {
     ...node.extra(
       [RDF_TYPE, DID.serviceEndpoint, DCT.conformsTo, NOTIFY.channelType, NOTIFY.feature],
       visited,
     ),
-    // An empty array records invalid normative presence and blocks later legacy fallback.
-    ...(normativePresent || channels.length > 0
-      ? { [NOTIFY.channelType]: channels.length === 1 ? channels[0] : channels }
-      : {}),
+    // Empty arrays block all downstream channel fallbacks, including service types.
+    [NOTIFY.channelType]: channels.length === 1 ? channels[0] : channels,
     [NOTIFY.feature]: node.iris(NOTIFY.feature),
   };
 }

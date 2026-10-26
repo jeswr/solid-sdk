@@ -53,7 +53,9 @@ Read-only sparq fallbacks: `ssd:channelType` (sparq-org/sparq#7234), nested `ssd
 CID `format` maps and `mediaType` entries. Normative fields win; malformed flat entries cannot
 fall back. The channel fallback applies only when `notify:channelType` is absent, not when
 its values are literals or blank nodes. Invalid normative presence is represented by an empty
-channel array, preventing downstream fallback. `ssd:RecursiveDeleteService` is a service endpoint for POST `{container}`;
+channel array, preventing downstream fallback. Validate exactly one raw channel object before
+filtering by term kind; multiple IRIs or an IRI plus a literal are malformed too. Missing channels
+also block downstream type-based fallback. `ssd:RecursiveDeleteService` is a service endpoint for POST `{container}`;
 deprecated `ssd:RecursiveDelete` capability data leaves the feature unknown.
 The resolver passes the internal third argument `notificationsOnly: true` when evidence
 includes `assumed-origin-root`, suppressing root `did:service`, `lws:capability`, and ACQ
@@ -68,6 +70,9 @@ and a cached probe; replacement bodies discard the probe. 404/410 and root misma
 records. The optional `StorageDescription.evidence` array records `assumed-origin-root` without
 changing the DescriptionSource union. Feature derivation also distrusts root entries carrying
 that evidence or the old `cross-origin-description` evidence.
+Parsed cache records carry a resolver version. A missing or different version invalidates the
+record and repeats discovery and an unconditional description GET; never reuse its ETag or probe.
+Cache implementations must preserve the version when attaching probes.
 
 All fetches use the injected transport, manual redirects and optional abort signal. Count body
 bytes while streaming and cap at 1 MiB regardless of Content-Length. The standard W3C notifications
@@ -90,7 +95,9 @@ and persistence/error tests. Keep the package's configured 100% coverage thresho
 
 Only the five recognised `notify:` channel classes become notification service types; any other
 `notify:channelType` value stays in `extra` so it cannot pose as another service class.
-Extras use expanded predicate keys. IRIs and literal lexical values are strings; singleton
+Extras use expanded predicate keys. Known IRI-valued feature evidence (capability profiles,
+models, LWS subscription types and move targets, including accepted aliases) filters out non-IRI
+terms before lexical mapping. Other IRIs and literal lexical values are strings; singleton
 values are scalars and repeated values are arrays. Notification features are always arrays.
 Nested blank nodes become property objects with an `@id` matching later references;
 callers can find a shared node's mapped properties by matching that identifier.

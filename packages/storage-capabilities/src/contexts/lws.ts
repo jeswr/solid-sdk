@@ -43,8 +43,5 @@ export default {
       "@type": "@id",
       "@container": "@set",
     },
-    format: {
-      "@id": "http://purl.org/dc/terms/format",
-    },
   },
 };

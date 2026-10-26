@@ -359,6 +359,66 @@ describe("refresh", () => {
   test.each([
     "memory",
     "IndexedDB",
+  ])("%s: ignores old parsed records whether fresh or expired", async (kind) => {
+    for (const version of [undefined, 0]) {
+      for (const maxAgeMs of [0, 3_600_000]) {
+        const { fetch, options } = setup();
+        if (kind === "IndexedDB") {
+          vi.stubGlobal("indexedDB", new IDBFactory());
+          options.cache = createIndexedDbCache();
+        }
+        const root = "https://pod.example/";
+        const description: StorageDescription = {
+          protocol: "solid",
+          id: root,
+          root,
+          descriptionUrl: DESCRIPTION,
+          services: [
+            {
+              type: [SSD.SolidNotificationService, NOTIFY.WebSocketChannel2023],
+              endpoint: `${root}root-notifications`,
+              extra: {},
+            },
+          ],
+          capabilities: [],
+          sources: ["solid-description"],
+          evidence: ["assumed-origin-root"],
+          fetchedAt: 1000,
+          maxAgeMs,
+          etag: '"old"',
+          verificationMethods: [],
+        };
+        await options.cache?.set(root, {
+          description,
+          ...(version === undefined ? {} : { version }),
+          probe: { url: root, observedAt: 0, evidence: [] },
+        });
+        await options.cache?.rememberPrefix(root, root);
+        options.maxAncestorProbes = 0;
+        fetch.mockResolvedValueOnce(head(SOLID_LINK)).mockResolvedValueOnce(
+          rdf(`
+          @prefix did: <https://www.w3.org/ns/did#> .
+          @prefix ssd: <https://jeswr.org/ns/solid-sd#> .
+          @prefix notify: <http://www.w3.org/ns/solid/notifications#> .
+          <${root}> did:service [ a ssd:SolidNotificationService ; did:serviceEndpoint <${root}root-notifications> ; notify:channelType notify:WebSocketChannel2023 ] .
+        `),
+        );
+        const result = await resolveStorageDescription(RESOURCE, options);
+        expect(result.services).toEqual([]);
+        expect(deriveFeatures(result).liveUpdates.state).toBe("unknown");
+        expect(fetch.mock.calls.map(([url, init]) => [url, init?.method])).toEqual([
+          [RESOURCE, "HEAD"],
+          [DESCRIPTION, "GET"],
+        ]);
+        expect(new Headers(fetch.mock.calls[1]?.[1]?.headers).has("if-none-match")).toBe(false);
+        expect((await options.cache?.get(root))?.probe).toBeUndefined();
+      }
+    }
+  });
+
+  test.each([
+    "memory",
+    "IndexedDB",
   ])("%s: TTL expiry makes one conditional GET, 304 refreshes metadata and retains probe", async (kind) => {
     const { fetch, options } = setup();
     if (kind === "IndexedDB") {
@@ -369,7 +429,7 @@ describe("refresh", () => {
     fetch.mockResolvedValueOnce(cid({ ETag: '"v1"', "Cache-Control": "max-age=1" }));
     const first = await resolveStorageDescription(LWS_RESOURCE, options);
     const cachedProbe = { url: first.root, observedAt: 10, evidence: [] };
-    await options.cache?.set(first.id, { description: first, probe: cachedProbe });
+    await options.cache?.set(first.id, { version: 1, description: first, probe: cachedProbe });
     fetch.mockClear();
     options.now = () => 1999;
     expect(await resolveStorageDescription(LWS_RESOURCE, options)).toEqual(first);
@@ -387,6 +447,7 @@ describe("refresh", () => {
     expect(new Headers(fetch.mock.calls[0]?.[1]?.headers).get("if-none-match")).toBe('"v1"');
     expect(refreshed).toEqual({ ...first, fetchedAt: 2000, maxAgeMs: 2000, etag: '"v2"' });
     expect(await options.cache?.get(first.id)).toEqual({
+      version: 1,
       description: refreshed,
       probe: cachedProbe,
     });
@@ -401,6 +462,7 @@ describe("refresh", () => {
     fetch.mockResolvedValueOnce(cid({ ETag: '"v1"', "Cache-Control": "max-age=1" }));
     const first = await resolveStorageDescription(LWS_RESOURCE, options);
     await options.cache?.set(first.id, {
+      version: 1,
       description: first,
       probe: { url: first.root, observedAt: 0, evidence: [] },
     });
@@ -415,7 +477,7 @@ describe("refresh", () => {
     fetch.mockResolvedValueOnce(cid());
     const next = await resolveStorageDescription(LWS_RESOURCE, options);
     expect(next).toMatchObject({ maxAgeMs: 3_600_000, etag: null, fetchedAt: 3000 });
-    expect(await options.cache?.get(next.id)).toEqual({ description: next });
+    expect(await options.cache?.get(next.id)).toEqual({ version: 1, description: next });
   });
 
   test("refreshes Solid RDF without HEAD and sends no conditional header when there is no ETag", async () => {
@@ -475,7 +537,7 @@ describe("refresh", () => {
     await expect(resolveStorageDescription(LWS_RESOURCE, options)).rejects.toMatchObject({
       code: "network",
     });
-    expect(await options.cache?.get(first.id)).toEqual({ description: first });
+    expect(await options.cache?.get(first.id)).toEqual({ version: 1, description: first });
     fetch.mockResolvedValueOnce(
       cid(
         {},
@@ -523,7 +585,7 @@ describe("refresh", () => {
       ...parseLwsDescription(movedCid(), sparqLwsCid.id, `${MOVED_ROOT}file`),
       fetchedAt: 1000,
     };
-    await options.cache?.set(description.id, { description });
+    await options.cache?.set(description.id, { version: 1, description });
     await options.cache?.rememberPrefix("https://lws.example/", description.id);
     fetch.mockResolvedValueOnce(head());
     await expect(resolveStorageDescription(LWS_RESOURCE, options)).rejects.toMatchObject({
@@ -532,7 +594,7 @@ describe("refresh", () => {
     expect(fetch.mock.calls.map(([url, init]) => [url, init?.method])).toEqual([
       [LWS_RESOURCE, "HEAD"],
     ]);
-    expect(await options.cache?.get(description.id)).toEqual({ description });
+    expect(await options.cache?.get(description.id)).toEqual({ version: 1, description });
   });
 });
 
@@ -584,7 +646,7 @@ describe("validation and failures", () => {
   test("invalidates a newly discovered storage even when no prefix matched it", async () => {
     const { fetch, options } = setup();
     const previous = parseLwsDescription(sparqLwsCid, sparqLwsCid.id, LWS_RESOURCE);
-    await options.cache?.set(previous.id, { description: previous });
+    await options.cache?.set(previous.id, { version: 1, description: previous });
     options.seedHeaders = new Headers({ Link: LWS_LINK });
     fetch.mockResolvedValueOnce(
       cid(
@@ -615,7 +677,7 @@ describe("validation and failures", () => {
       fetchedAt: 0,
       maxAgeMs,
     };
-    await options.cache?.set(description.id, { description });
+    await options.cache?.set(description.id, { version: 1, description });
     await options.cache?.rememberPrefix(description.root, description.id);
     fetch.mockResolvedValueOnce(protocol === "solid" ? rdf() : cid());
     await expect(resolveStorageDescription(LWS_RESOURCE, options)).rejects.toMatchObject({
@@ -631,7 +693,7 @@ describe("validation and failures", () => {
       ...parseLwsDescription(sparqLwsCid, sparqLwsCid.id, LWS_RESOURCE),
       root: "https://evil.example/",
     };
-    await options.cache?.set(description.id, { description });
+    await options.cache?.set(description.id, { version: 1, description });
     await options.cache?.rememberPrefix("https://lws.example/", description.id);
     await expect(resolveStorageDescription(LWS_RESOURCE, options)).rejects.toMatchObject({
       code: "root-mismatch",

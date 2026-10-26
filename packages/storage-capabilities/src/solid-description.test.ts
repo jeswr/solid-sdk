@@ -232,14 +232,10 @@ describe("parseSolidDescription", () => {
     expect(parseSolidDescription(dataset, ROOT)).toEqual({
       services: [
         {
-          type: [
-            SSD.SolidNotificationService,
-            NOTIFY.WebSocketChannel2023,
-            NOTIFY.StreamingHTTPChannel2023,
-          ],
+          type: [SSD.SolidNotificationService],
           endpoint: `${ROOT}notify`,
           extra: {
-            [NOTIFY.channelType]: [NOTIFY.WebSocketChannel2023, NOTIFY.StreamingHTTPChannel2023],
+            [NOTIFY.channelType]: [],
             [NOTIFY.feature]: [`${NOTIFY_NS}state`],
             "urn:extra:custom": "value",
           },
@@ -252,7 +248,7 @@ describe("parseSolidDescription", () => {
         {
           type: [SSD.SolidNotificationService],
           endpoint: `${ROOT}missing`,
-          extra: { [NOTIFY.feature]: [] },
+          extra: { [NOTIFY.channelType]: [], [NOTIFY.feature]: [] },
         },
       ],
       capabilities: [],
@@ -266,10 +262,10 @@ describe("parseSolidDescription", () => {
     `);
     expect(parseSolidDescription(dataset, ROOT).services).toEqual([
       {
-        type: [SSD.SolidNotificationService, NOTIFY.WebhookChannel2023],
+        type: [SSD.SolidNotificationService],
         endpoint: `${ROOT}spoof`,
         extra: {
-          [NOTIFY.channelType]: [SSD.CrdtSyncService, NOTIFY.WebhookChannel2023],
+          [NOTIFY.channelType]: [],
           [NOTIFY.feature]: [],
         },
       },

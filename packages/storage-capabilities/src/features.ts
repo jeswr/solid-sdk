@@ -497,7 +497,13 @@ function patchFormats(
     return formats;
   }
   // Compatibility only: sparq's current LWS mediaType member has no JSON-LD meaning.
-  for (const source of values(extra, "mediaType")) add(source, normalise(patches));
+  for (const source of values(extra, "mediaType")) {
+    if (record(source)) {
+      for (const [sourceType, patchTypes] of Object.entries(source)) {
+        add(sourceType, normalise(Array.isArray(patchTypes) ? patchTypes : [patchTypes]));
+      }
+    } else add(source, normalise(patches));
+  }
   for (const value of values(extra, "format")) {
     if (!record(value)) continue;
     const id = value["@id"];

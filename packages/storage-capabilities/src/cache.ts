@@ -28,7 +28,7 @@ export function createMemoryCache(): DescriptionCache {
       ) {
         return false;
       }
-      descriptions.set(storageId, structuredClone({ description: current.description, probe }));
+      descriptions.set(storageId, structuredClone({ ...current, probe }));
       return true;
     },
     async rememberPrefix(root, storageId) {
@@ -114,7 +114,7 @@ export function createIndexedDbCache({
             current.probe === undefined &&
             sameDescription(current.description, description)
           ) {
-            store.put({ description: current.description, probe }, storageId);
+            store.put({ ...current, probe }, storageId);
             attached = true;
           }
         };

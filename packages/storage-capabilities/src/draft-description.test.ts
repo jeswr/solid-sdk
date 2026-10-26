@@ -5,6 +5,7 @@ import { parseRdf } from "@jeswr/fetch-rdf";
 import { describe, expect, test, vi } from "vitest";
 import { deriveFeatures } from "./index.js";
 import { parseLwsDescription } from "./lws-description.js";
+import { notificationDocumentLoader } from "./notification-context.js";
 import { parseSolidDescription } from "./solid-description.js";
 import type { CapabilityEntry, StorageDescription } from "./types.js";
 import { ACQ, LWS, NOTIFY, SSD } from "./vocab.js";
@@ -52,6 +53,28 @@ function fixture(name: string): string {
 }
 
 describe("draft examples", () => {
+  test("parses sparq's real LWS fixture offline through RDF and compact JSON paths", async () => {
+    const body = fixture("sparq-real-lws.jsonld");
+    const fetch = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("no network"));
+    try {
+      const dataset = await parseRdf(body, "application/ld+json", {
+        baseIRI: ROOT,
+        documentLoader: notificationDocumentLoader,
+      });
+      const mapped = description(parseSolidDescription(dataset, ROOT));
+      expect(deriveFeatures(mapped).accessGrants.state).toBe("available");
+      const d = parseLwsDescription(JSON.parse(body), ROOT, `${ROOT}doc`);
+      expect(deriveFeatures(d).patch.detail.formats).toEqual({
+        "application/json": ["application/json-patch+json"],
+        "application/ld+json": ["application/json-patch+json"],
+        "application/linkset+json": ["application/json-patch+json"],
+      });
+      expect(fetch).not.toHaveBeenCalled();
+    } finally {
+      fetch.mockRestore();
+    }
+  });
+
   test("CSS lists two usable notification channels and leaves other behaviours unknown", async () => {
     const d = await solid(fixture("css.ttl"));
     expect(d.services).toEqual([
@@ -274,6 +297,8 @@ describe("entry merging and compatibility", () => {
     '"invalid"',
     '"http://www.w3.org/ns/solid/notifications#WebSocketChannel2023"',
     "[]",
+    "notify:WebSocketChannel2023, notify:StreamingHTTPChannel2023",
+    'notify:WebSocketChannel2023, "bad"',
   ])("malformed normative channel %s never activates the legacy fallback", async (channel) => {
     for (const link of ["did:service", "notify:subscription"]) {
       const d = await solid(`
@@ -288,6 +313,30 @@ describe("entry merging and compatibility", () => {
       expect(d.services[0]?.type).toEqual([SSD.SolidNotificationService]);
       expect(d.services[0]?.extra[NOTIFY.channelType]).toEqual([]);
     }
+  });
+
+  test("a missing channel cannot fall back to the service's RDF types", async () => {
+    const d = await solid(
+      `<> did:service [ a ssd:SolidNotificationService, notify:WebSocketChannel2023 ; did:serviceEndpoint <notifications> ] .`,
+    );
+    expect(deriveFeatures(d).liveUpdates).toMatchObject({
+      state: "unavailable",
+      detail: { channels: [] },
+    });
+  });
+
+  test.each([
+    '"http://www.w3.org/ns/solid/notifications#WebSocketChannel2023"',
+    "notify:WebSocketChannel2023, notify:StreamingHTTPChannel2023",
+    'notify:WebSocketChannel2023, "bad"',
+  ])("malformed legacy channel %s cannot activate notifications", async (channel) => {
+    const d = await solid(
+      `<> did:service [ a ssd:SolidNotificationService ; did:serviceEndpoint <notifications> ; ssd:channelType ${channel} ] .`,
+    );
+    expect(deriveFeatures(d).liveUpdates).toMatchObject({
+      state: "unavailable",
+      detail: { channels: [] },
+    });
   });
 
   test("root ACQ supplies its profile and merges with the listed query service", async () => {
@@ -324,6 +373,9 @@ describe("entry merging and compatibility", () => {
 
   test.each([
     { format: { "text/turtle": ["text/n3"] } },
+    { mediaType: { "text/turtle": ["text/n3"] } },
+    { mediaType: { "Text/Turtle": ["TEXT/N3", "bad"], invalid: "text/n3" } },
+    { mediaType: { "text/turtle": "text/n3", "application/json": null } },
     { mediaType: "text/turtle", patchType: ["text/n3"] },
     { format: [{ mediaType: "text/turtle", patchType: "text/n3" }] },
     { format: { mediaType: "text/turtle", patchType: "text/n3" } },
@@ -389,6 +441,78 @@ describe("entry merging and compatibility", () => {
 });
 
 describe("draft feature semantics with T-014 protocol defaults", () => {
+  test.each([
+    ["literal", '"https://tus.io/protocols/resumable-upload"', "unknown"],
+    ["blank node", "[]", "unknown"],
+    ["IRI", "<https://tus.io/protocols/resumable-upload>", "available"],
+  ])("resumable upload profile requires an IRI (%s)", async (_kind, profile, state) => {
+    const d = await solid(
+      `<> lws:capability [ a ssd:ResumableUploads ; dct:conformsTo ${profile} ] .`,
+    );
+    expect(deriveFeatures(d).resumableUploads.state).toBe(state);
+  });
+
+  test.each([
+    [SSD.SparqlQueryService, "serverSearch", ACQ.profile],
+    [SSD.CrdtSyncService, "realtimeCollab", SSD.yProtocolV1],
+    [LWS.AccessRequestService, "accessRequests", LWS.AccessProfile],
+    [LWS.AccessGrantService, "accessGrants", LWS.AccessProfile],
+  ] as const)("RDF service %s only uses IRI profiles and types", async (type, name, profile) => {
+    for (const term of [`"${profile}"`, "[]"]) {
+      const d = await solid(
+        `<> did:service [ a <${type}> ; did:serviceEndpoint <service> ; dct:conformsTo ${term} ] .`,
+      );
+      expect(deriveFeatures(d)[name].state).toBe("unknown");
+    }
+    for (const term of [`"${type}"`, "[]"]) {
+      const d = await solid(
+        `<> did:service [ a ${term} ; did:serviceEndpoint <service> ; dct:conformsTo <${profile}> ] .`,
+      );
+      expect(deriveFeatures(d)[name].state).toBe("unknown");
+    }
+    const valid = await solid(
+      `<> did:service [ a <${type}> ; did:serviceEndpoint <service> ; dct:conformsTo <${profile}> ] .`,
+    );
+    expect(deriveFeatures(valid)[name].state).toBe("available");
+  });
+
+  test("RDF access-control models and capability types require IRIs", async () => {
+    const literal = await solid(
+      `<> lws:capability [ a ssd:AccessControl ; ssd:model "${SSD.WAC}" ], [ a "${SSD.Pagination}" ] .`,
+    );
+    expect(deriveFeatures(literal).accessControl.state).toBe("unknown");
+    expect(deriveFeatures(literal).pagination.state).toBe("unknown");
+    const iri = await solid(
+      "<> lws:capability [ a ssd:AccessControl ; ssd:model ssd:WAC ], [ a ssd:Pagination ] .",
+    );
+    expect(deriveFeatures(iri).accessControl.state).toBe("available");
+    expect(deriveFeatures(iri).pagination.state).toBe("available");
+    const legacy = await solid(
+      `<> lws:capability [ a ssd:AccessControl ; lws:model "${SSD.WAC}" ] .`,
+    );
+    expect(deriveFeatures(legacy).accessControl.state).toBe("unknown");
+  });
+
+  test.each([
+    false,
+    true,
+  ])("RDF LWS subscription and move targets require IRIs (IRI: %s)", async (iri) => {
+    const subscription = iri ? "ssd:WebSocketSubscription" : `"${SSD.WebSocketSubscription}"`;
+    const target = iri ? "lws:Container" : '"https://www.w3.org/ns/lws#Container"';
+    const d = await solid(
+      `<> did:service [ a lws:NotificationService ; did:serviceEndpoint <notifications> ; lws:subscriptionType ${subscription} ] ; lws:capability [ a lws:MoveResource ; lws:appliesTo ${target} ] .`,
+    );
+    d.protocol = "lws";
+    expect(deriveFeatures(d).liveUpdates.state).toBe(iri ? "available" : "unavailable");
+    expect(deriveFeatures(d).move.detail.containers).toBe(iri);
+    const aliases = await solid(
+      `<> did:service [ a lws:NotificationService ; did:serviceEndpoint <notifications> ; ssd:subscriptionType ${subscription} ] ; lws:capability [ a lws:MoveResource ; ssd:appliesTo ${target} ] .`,
+    );
+    aliases.protocol = "lws";
+    expect(deriveFeatures(aliases).liveUpdates.state).toBe(iri ? "available" : "unavailable");
+    expect(deriveFeatures(aliases).move.detail.containers).toBe(iri);
+  });
+
   test.each([
     "solid",
     "lws",
@@ -547,11 +671,14 @@ describe("draft feature semantics with T-014 protocol defaults", () => {
     expect(d.services[0]?.extra["urn:extra"]).toMatchObject({ "urn:value": "kept" });
   });
 
-  test("multiple channel IRIs remain usable; scoped CID unknown extras are preserved", async () => {
+  test("multiple channel IRIs are rejected; scoped CID unknown extras are preserved", async () => {
     const d =
       await solid(`<> did:service [ a ssd:SolidNotificationService ; did:serviceEndpoint <notify> ;
       notify:channelType notify:WebSocketChannel2023, notify:StreamingHTTPChannel2023 ] .`);
-    expect(deriveFeatures(d).liveUpdates.detail.channels).toEqual(["websocket", "sse"]);
+    expect(deriveFeatures(d).liveUpdates).toMatchObject({
+      state: "unavailable",
+      detail: { channels: [] },
+    });
     const cid = parseLwsDescription(
       {
         id: ROOT,

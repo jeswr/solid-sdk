@@ -1,5 +1,5 @@
-# // AUTHORED-BY Codex GPT-6.1-Sol
-# Source: /home/user/solid-specs/specs/service-description/examples/sparq-solid.ttl
+# // AUTHORED-BY GPT-6.1-Sol
+# Source: jeswr/solid-specs@e1e1210 specs/service-description/examples/sparq-solid.ttl
 # AUTHORED-BY Claude Opus 5.5
 # A Solid storage that lists every service and capability type this specification defines:
 # what the sparq server's Solid mode serves once its open service asks land.

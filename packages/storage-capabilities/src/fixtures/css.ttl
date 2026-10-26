@@ -1,5 +1,5 @@
-# // AUTHORED-BY Codex GPT-6.1-Sol
-# Source: /home/user/solid-specs/specs/service-description/examples/css.ttl
+# // AUTHORED-BY GPT-6.1-Sol
+# Source: jeswr/solid-specs@e1e1210 specs/service-description/examples/css.ttl
 # AUTHORED-BY Claude Opus 5.5
 # A storage description in the shape a Community Solid Server serves today: the storage and
 # its notification subscription services only, no did:service or lws:capability. Valid: this

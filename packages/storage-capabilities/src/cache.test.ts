@@ -13,6 +13,7 @@ afterEach(() => {
 
 const description = parseLwsDescription(sparqLwsCid, sparqLwsCid.id, "https://lws.example/data");
 const record = {
+  version: 1,
   description,
   probe: { url: description.root, observedAt: 42, acceptPatch: ["text/n3"], evidence: [] },
 };
@@ -98,7 +99,7 @@ describe.each([
     expect(await cache.attachProbe?.(description.id, description, probe)).toBe(false);
     expect(await cache.get(description.id)).toBeUndefined();
     // Same generation without a probe: attached.
-    await cache.set(description.id, { description });
+    await cache.set(description.id, { version: 1, description });
     expect(await cache.attachProbe?.(description.id, description, probe)).toBe(true);
     expect(await cache.get(description.id)).toEqual(record);
     // Already probed: left alone.

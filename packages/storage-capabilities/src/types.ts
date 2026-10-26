@@ -106,13 +106,8 @@ export interface ResolveOptions {
 }
 
 export interface DescriptionCache {
-  get(
-    storageId: string,
-  ): Promise<{ description: StorageDescription; probe?: ProbeResult } | undefined>;
-  set(
-    storageId: string,
-    v: { description: StorageDescription; probe?: ProbeResult },
-  ): Promise<void>;
+  get(storageId: string): Promise<DescriptionCacheRecord | undefined>;
+  set(storageId: string, v: DescriptionCacheRecord): Promise<void>;
   delete(storageId: string): Promise<void>;
   /** Maps resource URL prefix → storageId so the next lookup for a sibling needs no network. */
   rememberPrefix(root: string, storageId: string): Promise<void>;
@@ -127,6 +122,14 @@ export interface DescriptionCache {
     description: StorageDescription,
     probe: ProbeResult,
   ): Promise<boolean>;
+}
+
+/** Parsed metadata is reusable only with the resolver's current record version. */
+export interface DescriptionCacheRecord {
+  /** Missing versions identify records written before parsed-cache versioning. */
+  version?: number;
+  description: StorageDescription;
+  probe?: ProbeResult;
 }
 
 /** Access modes reported by WAC-Allow. */

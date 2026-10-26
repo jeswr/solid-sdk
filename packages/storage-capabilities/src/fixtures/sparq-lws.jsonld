@@ -1,5 +1,5 @@
 {
-  "_comment": "// AUTHORED-BY Codex GPT-6.1-Sol; Source: /home/user/solid-specs/specs/service-description/examples/sparq-lws.jsonld",
+  "_comment": "// AUTHORED-BY GPT-6.1-Sol; Source: jeswr/solid-specs@e1e1210 specs/service-description/examples/sparq-lws.jsonld",
   "@context": [
     "https://www.w3.org/ns/cid/v1",
     "https://www.w3.org/ns/lws/v1",
