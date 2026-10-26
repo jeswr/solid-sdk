@@ -127,3 +127,45 @@ were changed. No UI or screenshots apply. No open questions remain for this fix
 round; full-workspace validation is blocked by the unrelated tests above.
 `roborev` remains unavailable in this environment, so automated review is left to
 the dispatcher/integrator. The final documentation commit records this report.
+
+## Fix round 4 — review of d7758b3c472c
+
+The checkout started at `a7f5d90c`, which already addresses finding 1 with a shared
+`DiscoveryBudget` for Type Index reads and resource traversal. Its regression
+tests pass: many index links respect the request limit, failed reads consume the
+shared budget, caller cancellation rejects, deadlines abort pending reads and
+remain shared between phases, and late responses report incomplete results.
+
+Commit `4acf780a` — `fix: normalize Home discovery resource URLs` addresses finding
+2. Normalize HTTP(S) resource URLs before queue deduplication, ETag indexing,
+listing-metadata matching and binary-file item keys. Preserve RDF subject terms
+exactly as supplied. Scope checks still inspect the original location so URL
+normalization cannot erase encoded-path ambiguity checks.
+
+Regression tests reproduce duplicate RDF cards for hostname casing, default
+HTTP/HTTPS ports and fragments, then verify one fetch and one card, retained
+listing dates and unchanged RDF subjects. Binary listing aliases also produce
+one card without fetching the file. Malformed URLs and encoded path ambiguities
+remain rejected.
+
+Validation ran before the final documentation commit. Workspace prerequisites
+were rebuilt with `PATH="$PWD/node_modules/.bin:$PATH" pnpm exec turbo run build
+--filter='@jeswr/app-suite^...' --concurrency=4` (PASS, 3/3 tasks). Root tooling
+was also added to PATH for root lint and both Turbo gates below.
+
+| Command | Result |
+| --- | --- |
+| `pnpm --filter @jeswr/app-suite exec vitest run test/home-model/discovery.test.ts --coverage.enabled=false` | Before the fix: expected FAIL, reproducing duplicate RDF and binary cards in three cases. |
+| `pnpm --filter @jeswr/app-suite run lint && pnpm --filter @jeswr/app-suite run build && pnpm --filter @jeswr/app-suite run typecheck && pnpm --filter @jeswr/app-suite run test` | PASS. Lint, production build, typecheck and 169 tests across 6 files. Model coverage: 100% statements (339/339), branches (264/264), functions (76/76), lines (291/291). |
+| `pnpm run lint:root` | PASS. Workspace guards and all 74 contrast pairs. |
+| `TURBO_SCM_BASE=c08bee62c4f52ecde59372a0f6996345e2e60d40 pnpm run gate` | PASS. 9/9 tasks. |
+| `pnpm run gate:full` | FAIL outside this lane at `@jeswr/federation-codegen#test`: the same two previously recorded failures in `tools/federation-codegen/test/generator.test.ts` (lines 81 and 126). Tests expect legacy `https://w3id.org/jeswr/` bookmark namespaces and generated ontology output; inputs use `https://jeswr.org/ns/`. Turbo completed 193 tasks successfully of 261 scheduled before stopping. |
+| `git diff --check` | PASS. |
+
+Both requested findings are addressed. No dependencies were added. No UI or
+screenshots apply. Full-workspace validation remains blocked by the unrelated
+federation-codegen failures; no open implementation questions remain. Generated
+public auth artifacts from the full gate were removed before the final commit.
+`roborev` is still unavailable (`command -v roborev` found no executable), so
+per-commit automated review remains for the dispatcher/integrator. The final
+commit, `docs: record Home fix round four validation`, updates this report last.
