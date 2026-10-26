@@ -37,6 +37,7 @@ export default defineConfig({
         "src/apps/chat/lib/timeline/**/*.ts",
         "src/apps/health/lib/stats/**/*.ts",
         "src/apps/health/lib/trends/**/*.ts",
+        "src/apps/health/lib/medication/**/*.ts",
         "src/apps/money/lib/budget/**/*.ts",
         "src/apps/sheets/lib/univer-spike/**/*.ts",
         "src/apps/contacts/lib/dedupe/**/*.ts",
