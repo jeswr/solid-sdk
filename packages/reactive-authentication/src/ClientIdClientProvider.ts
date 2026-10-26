@@ -1,13 +1,14 @@
 import type * as oauth from "oauth4webapi";
 import type { ClientProvider } from "./ClientProvider.js";
 import { ReactiveAuthenticationError } from "./ReactiveAuthenticationError.js";
-import { type HttpOptions, secureFetch } from "./transport.js";
+import { type HttpOptions, secureDocumentFetch } from "./transport.js";
 
 /**
  * Uses a Solid-OIDC Client Identifier Document: the client ID is the document's URL.
  *
- * The document is fetched and checked (its `client_id` must equal its URL and it must list the redirect
- * URI) so that configuration errors surface here rather than as an opaque authorization error.
+ * The document is fetched (following at most five scheme-checked redirects, without credentials) and
+ * checked (its `client_id` must equal the configured URL and it must list the redirect URI) so that
+ * configuration errors surface here rather than as an opaque authorization error.
  */
 export class ClientIdClientProvider implements ClientProvider {
   readonly #clientIdDocUri: URL;
@@ -23,9 +24,10 @@ export class ClientIdClientProvider implements ClientProvider {
     redirectUri: string,
     signal: AbortSignal,
   ): Promise<oauth.Client> {
-    const response = await secureFetch(
+    const { response } = await secureDocumentFetch(
       this.#clientIdDocUri,
-      { signal, headers: { accept: "application/ld+json, application/json;q=0.5" } },
+      "application/ld+json, application/json;q=0.5",
+      signal,
       this.#http,
     );
     if (!response.ok)

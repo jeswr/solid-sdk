@@ -89,3 +89,48 @@ test("secure transport rejects automatic redirects and preserves manual redirect
     await server.close();
   }
 });
+
+test("client document follows HTTPS redirects and validates the configured client identifier", async () => {
+  const requests = [];
+  const http = {
+    fetch: async (url, init) => {
+      requests.push({ url: new URL(url).href, init });
+      if (requests.length === 1)
+        return new Response(null, { status: 303, headers: { location: "/clients/app.json" } });
+      return Response.json({ client_id: clientId, redirect_uris: [redirectUri] });
+    },
+  };
+  const signal = new AbortController().signal;
+  const client = await new ClientIdClientProvider(new URL(clientId), http).getClient(
+    {},
+    redirectUri,
+    signal,
+  );
+  assert.equal(client.client_id, clientId);
+  assert.deepEqual(
+    requests.map(({ url }) => url),
+    [clientId, `${issuer}clients/app.json`],
+  );
+  for (const { init } of requests) {
+    assert.equal(init.redirect, "manual");
+    assert.equal(init.credentials, "omit");
+    assert.equal(init.signal, signal);
+  }
+
+  requests.length = 0;
+  const moved = {
+    fetch: async (url) => {
+      requests.push({ url: new URL(url).href });
+      if (requests.length === 1)
+        return new Response(null, { status: 301, headers: { location: "/clients/app.json" } });
+      return Response.json({
+        client_id: `${issuer}clients/app.json`,
+        redirect_uris: [redirectUri],
+      });
+    },
+  };
+  await assert.rejects(
+    new ClientIdClientProvider(new URL(clientId), moved).getClient({}, redirectUri, signal),
+    /client_id does not match/,
+  );
+});
