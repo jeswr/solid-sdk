@@ -2190,6 +2190,13 @@ importers:
         version: 3.2.7(@types/node@22.20.1)(jiti@2.7.0)(jsdom@29.1.1)(lightningcss@1.32.0)
 
   packages/agent-channels:
+    dependencies:
+      '@jeswr/agent-model':
+        specifier: workspace:*
+        version: link:../agent-model
+      '@jeswr/guarded-fetch':
+        specifier: workspace:*
+        version: link:../guarded-fetch
     devDependencies:
       '@vitest/coverage-v8':
         specifier: ^4.1.10
@@ -2289,6 +2296,9 @@ importers:
 
   packages/agentic-legacy-bridge:
     dependencies:
+      '@jeswr/agent-channels':
+        specifier: workspace:*
+        version: link:../agent-channels
       '@jeswr/fetch-rdf':
         specifier: ^0.1.0
         version: 0.1.0
