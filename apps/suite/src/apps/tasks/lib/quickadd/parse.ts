@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { en } from "chrono-node";
+import { elapsedInstant } from "./elapsed";
 import { parseRecurrence, recurrencePattern, recurrenceStart } from "./recurrence";
 import { localCalendar, toInstant } from "./time";
 import type { Due, QuickAddContext, QuickAddResult, QuickAddSpan, RecurrenceRule } from "./types";
@@ -64,15 +65,14 @@ export function parseQuickAdd(text: string, ctx: QuickAddContext): QuickAddResul
     .flatMap((candidate) => {
       const tags = candidate.start.tags();
       const elapsed = tags.has("result/relativeDateAndTime") || tags.has("casualReference/now");
-      if (!elapsed && !candidate.start.isCertain("timezoneOffset")) return [candidate];
-      // Durations inherit the reference offset; only other certain offsets are explicit tokens.
-      // Reparse against the real clock so elapsed time and explicit-zone date inference agree.
+      if (elapsed || !candidate.start.isCertain("timezoneOffset")) return [candidate];
+      // Infer explicit-zone dates against the real clock in that zone.
       return parser
         .parse(
           candidate.text,
           {
             instant: ctx.now,
-            timezone: elapsed ? 0 : Number(candidate.start.get("timezoneOffset")),
+            timezone: Number(candidate.start.get("timezoneOffset")),
           },
           { forwardDate: true },
         )
@@ -88,32 +88,45 @@ export function parseQuickAdd(text: string, ctx: QuickAddContext): QuickAddResul
   let due: Due | undefined;
   if (match) {
     const start = match.start;
-    const calendar = new Date(
-      Date.UTC(Number(start.get("year")), Number(start.get("month")) - 1, Number(start.get("day"))),
-    );
-    // A lone time qualifies the recurrence's initial day, rather than changing its weekday.
-    if (
-      recurrence &&
-      start.isCertain("hour") &&
-      !(["day", "weekday", "month", "year"] as const).some((part) => start.isCertain(part))
-    ) {
-      calendar.setTime(recurrenceStart(recurrence, today).getTime());
-    }
-    if (start.isCertain("hour")) {
-      calendar.setUTCHours(
-        Number(start.get("hour")),
-        Number(start.get("minute")),
-        Number(start.get("second")),
-        0,
-      );
-      const offset = start.isCertain("timezoneOffset") ? start.get("timezoneOffset") : null;
-      const instant =
-        offset === null
-          ? toInstant(calendar, ctx.tz)
-          : new Date(calendar.getTime() - offset * 60_000);
-      if (instant) due = { kind: "dateTime", dateTime: instant.toISOString(), timeZone: ctx.tz };
+    const tags = start.tags();
+    if (tags.has("result/relativeDateAndTime") || tags.has("casualReference/now")) {
+      due = {
+        kind: "dateTime",
+        dateTime: elapsedInstant(match.text, ctx.now).toISOString(),
+        timeZone: ctx.tz,
+      };
     } else {
-      due = { kind: "date", date: calendar.toISOString().slice(0, 10) };
+      const calendar = new Date(
+        Date.UTC(
+          Number(start.get("year")),
+          Number(start.get("month")) - 1,
+          Number(start.get("day")),
+        ),
+      );
+      // A lone time qualifies the recurrence's initial day, rather than changing its weekday.
+      if (
+        recurrence &&
+        start.isCertain("hour") &&
+        !(["day", "weekday", "month", "year"] as const).some((part) => start.isCertain(part))
+      ) {
+        calendar.setTime(recurrenceStart(recurrence, today).getTime());
+      }
+      if (start.isCertain("hour")) {
+        calendar.setUTCHours(
+          Number(start.get("hour")),
+          Number(start.get("minute")),
+          Number(start.get("second")),
+          0,
+        );
+        const offset = start.isCertain("timezoneOffset") ? start.get("timezoneOffset") : null;
+        const instant =
+          offset === null
+            ? toInstant(calendar, ctx.tz)
+            : new Date(calendar.getTime() - offset * 60_000);
+        if (instant) due = { kind: "dateTime", dateTime: instant.toISOString(), timeZone: ctx.tz };
+      } else {
+        due = { kind: "date", date: calendar.toISOString().slice(0, 10) };
+      }
     }
     if (due) addSpan("due", match.index, match.text.length);
   } else if (recurrence) {

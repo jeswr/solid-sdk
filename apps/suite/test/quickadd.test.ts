@@ -342,6 +342,45 @@ describe("metadata and spans", () => {
 
 describe("time zones, DST and determinism", () => {
   it.each([
+    ["in 2 hours", "2026-03-08T04:30:00.000Z"],
+    ["now", "2026-03-08T02:30:00.000Z"],
+    ["in 30 minutes", "2026-03-08T03:00:00.000Z"],
+    ["in 45 seconds", "2026-03-08T02:30:45.000Z"],
+    ["in half an hour", "2026-03-08T03:00:00.000Z"],
+    ["in a couple of hours", "2026-03-08T04:30:00.000Z"],
+    ["in a few minutes", "2026-03-08T02:33:00.000Z"],
+    ["in several seconds", "2026-03-08T02:30:07.000Z"],
+    ["in 1.5 seconds", "2026-03-08T02:30:01.500Z"],
+    ["next hour", "2026-03-08T03:30:00.000Z"],
+    ["last hour", "2026-03-08T01:30:00.000Z"],
+    ["two hours ago", "2026-03-08T00:30:00.000Z"],
+    ["in 1 year 1 hour", "2027-03-08T03:30:00.000Z"],
+    ["in 1 quarter 1 hour", "2026-06-08T03:30:00.000Z"],
+    ["in 1 month 1 hour", "2026-04-08T03:30:00.000Z"],
+    ["in 1 week 1 hour", "2026-03-15T03:30:00.000Z"],
+    ["in 1 day 1 hour", "2026-03-09T03:30:00.000Z"],
+    ["in half a year 1 hour", "2026-09-08T03:30:00.000Z"],
+    ["in half a quarter 1 hour", "2026-04-22T03:30:00.000Z"],
+    ["in half a week 1 hour", "2026-03-12T03:30:00.000Z"],
+    ["in half a day 1 hour", "2026-03-08T15:30:00.000Z"],
+  ])("resolves %s at a host DST gap using the injected instant", (phrase, expected) => {
+    const result = parseQuickAdd(`Call ${phrase}`, {
+      now: new Date("2026-03-08T02:30:00Z"),
+      tz: "UTC",
+    });
+    expect(result.due).toEqual(timed(expected, "UTC"));
+    expect(result.title).toBe("Call");
+    expect(result.spans).toEqual([{ kind: "due", start: 5, end: 5 + phrase.length, text: phrase }]);
+  });
+  it.each([
+    ["2026-03-08T01:30:00Z", "2026-03-08T03:30:00.000Z"],
+    ["2026-11-01T00:30:00Z", "2026-11-01T02:30:00.000Z"],
+  ])("crosses host DST changes from %s by elapsed hours", (now, expected) => {
+    expect(parseQuickAdd("Call in 2 hours", { now: new Date(now), tz: "UTC" }).due).toEqual(
+      timed(expected, "UTC"),
+    );
+  });
+  it.each([
     ["Europe/London", "2026-10-23T11:00:00Z", "in 2 hours", "2026-10-23T13:00:00.000Z"],
     ["America/New_York", "2026-10-23T11:00:00Z", "in 30 minutes", "2026-10-23T11:30:00.000Z"],
     ["Asia/Kolkata", "2026-10-23T11:00:00Z", "in two hours", "2026-10-23T13:00:00.000Z"],
