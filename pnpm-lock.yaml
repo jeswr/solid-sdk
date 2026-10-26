@@ -49,6 +49,9 @@ importers:
       '@jeswr/solid-session-restore':
         specifier: workspace:*
         version: link:../../packages/solid-session-restore
+      '@jeswr/suite-vocab':
+        specifier: workspace:*
+        version: link:../../packages/suite-vocab
       '@lit/react':
         specifier: ^1.0.8
         version: 1.0.8(@types/react@19.2.17)

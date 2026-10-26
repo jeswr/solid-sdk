@@ -6,6 +6,7 @@
 // ONLY write paths — every mutation goes through these wrapper setters (the
 // house RDF discipline: typed accessors + n3.Writer, never hand-built triples).
 
+import type { DataFactory, DatasetCore, Term } from "@rdfjs/types";
 import {
   LiteralAs,
   LiteralFrom,
@@ -16,6 +17,7 @@ import {
   SetFrom,
   TermWrapper,
 } from "@rdfjs/wrapper";
+import { accmTerm, canonicalizeAccmDataset } from "./canonical-vocab.js";
 import { ACCM, DCT, DPV } from "./vocab.js";
 
 /** The request lifecycle status values (proposal §3.5 state machine). */
@@ -32,7 +34,7 @@ const IRI_STATUS: Record<string, RequestStatus> = Object.fromEntries(
 );
 
 export function statusFromIri(iri: string | undefined): RequestStatus | undefined {
-  return iri === undefined ? undefined : IRI_STATUS[iri];
+  return iri === undefined ? undefined : IRI_STATUS[accmTerm(iri)];
 }
 export function statusToIri(status: RequestStatus): string {
   return STATUS_IRI[status];
@@ -44,11 +46,21 @@ export function statusToIri(status: RequestStatus): string {
  * documents — they share the vocabulary.
  */
 export class AccmRecord extends TermWrapper {
+  constructor(term: string | Term, dataset: DatasetCore, factory: DataFactory) {
+    const subject = typeof term === "string" ? factory.namedNode(term) : term;
+    super(subject, canonicalizeAccmDataset(dataset, factory), factory);
+  }
+
   get statusIri(): string | undefined {
     return OptionalFrom.subjectPredicate(this, ACCM.status, NamedNodeAs.string);
   }
   set statusIri(value: string | undefined) {
-    OptionalAs.object(this, ACCM.status, value, NamedNodeFrom.string);
+    OptionalAs.object(
+      this,
+      ACCM.status,
+      value === undefined ? undefined : accmTerm(value),
+      NamedNodeFrom.string,
+    );
   }
 
   get status(): RequestStatus | undefined {
@@ -114,7 +126,12 @@ export class AccmRecord extends TermWrapper {
     return OptionalFrom.subjectPredicate(this, ACCM.dataClass, NamedNodeAs.string);
   }
   set dataClass(value: string | undefined) {
-    OptionalAs.object(this, ACCM.dataClass, value, NamedNodeFrom.string);
+    OptionalAs.object(
+      this,
+      ACCM.dataClass,
+      value === undefined ? undefined : accmTerm(value),
+      NamedNodeFrom.string,
+    );
   }
 
   get created(): Date | undefined {
