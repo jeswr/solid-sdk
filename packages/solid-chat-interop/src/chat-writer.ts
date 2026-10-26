@@ -161,8 +161,8 @@ export class ChatWriter {
       throw error;
     }
   }
-  private async protect(container: string): Promise<void> {
-    const acl = await this.pod.discoverAcl(container);
+  private async createProtected(url: string, turtle: string): Promise<boolean> {
+    const acl = await this.pod.discoverAcl(url);
     // Existing documents must be recognizable WAC, never ACP or another model.
     try {
       const existing = await this.dataset(acl);
@@ -177,8 +177,8 @@ export class ChatWriter {
     const store = new Store();
     const auth = new Authorization(`${acl}#owner`, store, DataFactory);
     auth.type.add("http://www.w3.org/ns/auth/acl#Authorization");
-    auth.accessTo = container;
-    auth.default = container;
+    auth.accessTo = url;
+    if (url.endsWith("/")) auth.default = url;
     auth.agent.add(this.owner);
     auth.canRead = true;
     auth.canWrite = true;
@@ -186,13 +186,10 @@ export class ChatWriter {
     // No content is written until the owner-only ACL PUT succeeds. In particular,
     // never swallow ACL errors or fall back to inherited/public permissions.
     await this.pod.write(acl, encoder.encode(await storeToTurtle(store)), "text/turtle", {});
-    const containerStore = new Store();
-    new ChatDoc(container, containerStore, DataFactory).types.add(
-      "http://www.w3.org/ns/ldp#BasicContainer",
-    );
-    await this.create(container, await storeToTurtle(containerStore));
-    if ((await this.pod.discoverAcl(container)) !== acl)
-      throw new Error("Chat ACL association changed after container creation");
+    const created = await this.create(url, turtle);
+    if ((await this.pod.discoverAcl(url)) !== acl)
+      throw new Error("Chat ACL association changed after resource creation");
+    return created;
   }
   async save(
     conversation: ChatConversation,
@@ -226,12 +223,17 @@ export class ChatWriter {
     room.identifier = conversation.conversationId;
     room.title = sanitizeText(conversation.title);
     const roomTurtle = await storeToTurtle(metadata);
-    for (const container of [this.base, `${this.base}${conversation.provider}/`, url])
-      await this.protect(container);
-    await this.create(`${url}_conversation.ttl`, roomTurtle);
+    for (const container of [this.base, `${this.base}${conversation.provider}/`, url]) {
+      const containerStore = new Store();
+      new ChatDoc(container, containerStore, DataFactory).types.add(
+        "http://www.w3.org/ns/ldp#BasicContainer",
+      );
+      await this.createProtected(container, await storeToTurtle(containerStore));
+    }
+    await this.createProtected(`${url}_conversation.ttl`, roomTurtle);
     let saved = 0;
     for (const message of messages)
-      if (await this.create(message.resource, message.turtle)) saved++;
+      if (await this.createProtected(message.resource, message.turtle)) saved++;
     return { url, saved, skipped: messages.length - saved };
   }
   private async dataset(url: string) {

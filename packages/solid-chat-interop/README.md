@@ -72,12 +72,14 @@ const conversation = await chats.get("codex", "session-123");
 
 Each conversation lives under `<pod.root>private/chats/<provider>/<conversationId>/`.
 The writer discovers and installs owner-only WAC ACL documents on the chats, provider and
-conversation containers before creating their content. It leaves the enclosing
+conversation containers, conversation metadata and each message before creating or
+accepting those resources, including existing resources skipped with a 412. Resource-specific
+grants are replaced; only container ACLs include inherited defaults. It leaves the enclosing
 `private/` namespace's ACL alone. ACL failures abort; servers must support the
-ACL-before-content sequence and advertise the ACL association even before container
+ACL-before-content sequence and advertise the ACL association even before resource
 creation. The port's `discoverAcl` must obtain a unique WAC `rel="acl"` Link from
 the exact target and reject unsupported models and unsafe targets. The association
-is checked again after container creation; existing non-WAC ACL documents abort the
+is checked again after each create attempt; existing non-WAC ACL documents abort the
 save. The caller's port must enforce pod scope, refuse write redirects, and reject
 HTTP failures with a numeric `status` property. There is no permissive ACL fallback.
 

@@ -1,15 +1,16 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { parseRdf } from "@jeswr/fetch-rdf";
-import { AclResource } from "@solid/object";
-import { DataFactory } from "n3";
+import { AclResource, Authorization } from "@solid/object";
+import { DataFactory, Store } from "n3";
 import { describe, expect, it } from "vitest";
 import { type ChatConversation, type ChatPodPort, ChatWriter } from "./chat-writer.js";
-import { parseAs2 } from "./reconcile.js";
+import { parseAs2, storeToTurtle } from "./reconcile.js";
 
 const ROOT = "https://alice.example/pod/";
 const OWNER = `${ROOT}profile/card#me`;
 const DAY1 = "2026-10-24T12:00:00.000Z";
 const DAY2 = "2026-10-25T12:00:00.000Z";
+const CONTENT_FILES = ["_conversation.ttl", "m-msg-1.ttl"];
 const decoder = new TextDecoder();
 function httpError(status: number) {
   return Object.assign(new Error(`HTTP ${status}`), { status });
@@ -98,7 +99,7 @@ describe("ChatWriter", () => {
     expect(decoder.decode((await pod.read(messageUrl)).body)).toBe(before);
     const got = await writer.get("claude", "thread-1");
     expect(got).toEqual({ ...input, url: first.url });
-    const writes = pod.writes.filter((w) => /m-msg-/.test(w.url));
+    const writes = pod.writes.filter((w) => /m-msg-.*\.ttl$/.test(w.url));
     expect(writes.every((w) => w.cond.ifNoneMatch === "*")).toBe(true);
     const assistant = await parseAs2(
       `${first.url}m-msg-2.ttl`,
@@ -135,7 +136,9 @@ describe("ChatWriter", () => {
     const pod = new MemoryPod();
     await new ChatWriter(pod).save(conversation());
     expect(pod.writes[0]?.url).toBe(`${ROOT}private/chats/.acl`);
-    for (const write of pod.writes.filter((w) => w.url.endsWith(".acl"))) {
+    const aclWrites = pod.writes.filter((w) => w.url.endsWith(".acl"));
+    expect(aclWrites).toHaveLength(6);
+    for (const write of aclWrites) {
       const dataset = await parseRdf(decoder.decode(write.body), "text/turtle", {
         baseIRI: write.url,
       });
@@ -149,12 +152,127 @@ describe("ChatWriter", () => {
         ["Control", "Read", "Write"].map((m) => `http://www.w3.org/ns/auth/acl#${m}`).sort(),
       );
       expect(auth.accessTo).toBe(write.url.slice(0, -4));
-      expect(auth.default).toBe(auth.accessTo);
+      expect(auth.default).toBe(auth.accessTo?.endsWith("/") ? auth.accessTo : undefined);
       expect(pod.writes.findIndex((w) => w.url === auth.accessTo)).toBeGreaterThan(
         pod.writes.indexOf(write),
       );
     }
     expect(pod.writes.some((w) => w.url === `${ROOT}private/.acl`)).toBe(false);
+  });
+
+  describe.each([false, true])("content ACLs with existing resource = %s", (existing) => {
+    it.each(
+      CONTENT_FILES,
+    )("replaces public grants before creating or skipping %s", async (file) => {
+      const pod = new MemoryPod();
+      const writer = new ChatWriter(pod);
+      if (existing) await writer.save(conversation());
+      const resource = `${ROOT}private/chats/claude/thread-1/${file}`;
+      const original = pod.resources.get(resource);
+      const acl = `${ROOT}permissions/${file}`;
+      pod.aclLinks.set(resource, acl);
+      const store = new Store();
+      const publicAuth = new Authorization(`${acl}#public`, store, DataFactory);
+      publicAuth.type.add("http://www.w3.org/ns/auth/acl#Authorization");
+      publicAuth.accessTo = resource;
+      publicAuth.agentClass.add("http://xmlns.com/foaf/0.1/Agent");
+      publicAuth.canRead = true;
+      pod.resources.set(acl, {
+        body: new TextEncoder().encode(await storeToTurtle(store)),
+        contentType: "text/turtle",
+      });
+      pod.writes = [];
+      const write = pod.write.bind(pod);
+      // Inspect permissions at the moment the content PUT (including 412) is attempted.
+      pod.write = async (url, body, contentType, cond) => {
+        if (url === resource) {
+          const dataset = await parseRdf(decoder.decode((await pod.read(acl)).body), "text/turtle");
+          const authorizations = [...new AclResource(dataset, DataFactory).authorizations];
+          expect(authorizations).toHaveLength(1);
+          const auth = authorizations[0];
+          expect(auth?.accessTo).toBe(resource);
+          expect(auth?.default).toBeUndefined();
+          expect([...(auth?.agent ?? [])]).toEqual([OWNER]);
+          expect([...(auth?.agentClass ?? [])]).toEqual([]);
+          expect(auth?.canRead).toBe(true);
+          expect(auth?.canWrite).toBe(true);
+          expect(auth?.canReadWriteAcl).toBe(true);
+        }
+        return write(url, body, contentType, cond);
+      };
+      expect(await writer.save(conversation({ title: "Replacement title" }))).toMatchObject({
+        saved: existing ? 0 : 2,
+        skipped: existing ? 2 : 0,
+      });
+      const contentIndex = pod.writes.findIndex((w) => w.url === resource);
+      expect(contentIndex).toBeGreaterThan(0);
+      expect(pod.writes[contentIndex - 1]?.url).toBe(acl);
+      expect(pod.writes[contentIndex]?.cond).toEqual({ ifNoneMatch: "*" });
+      expect(pod.writes.some((w) => w.url === `${resource}.acl`)).toBe(false);
+      if (existing) expect(pod.resources.get(resource)).toBe(original);
+    });
+
+    it.each(CONTENT_FILES)("fails closed on ACL errors for %s", async (file) => {
+      for (const failure of ["discovery", "read", "unsupported", 403, 412, 500] as const) {
+        const pod = new MemoryPod();
+        const writer = new ChatWriter(pod);
+        if (existing) await writer.save(conversation());
+        const resource = `${ROOT}private/chats/claude/thread-1/${file}`;
+        const acl = `${resource}.acl`;
+        const error = httpError(403);
+        if (failure === "discovery") {
+          const discoverAcl = pod.discoverAcl.bind(pod);
+          pod.discoverAcl = async (url) => {
+            if (url === resource) throw error;
+            return discoverAcl(url);
+          };
+        } else if (failure === "read") {
+          const read = pod.read.bind(pod);
+          pod.read = async (url) => {
+            if (url === acl) throw error;
+            return read(url);
+          };
+        } else if (failure === "unsupported") {
+          pod.resources.set(acl, {
+            body: new TextEncoder().encode(
+              "<> a <http://www.w3.org/ns/solid/acp#AccessControlResource> .",
+            ),
+            contentType: "text/turtle",
+          });
+        } else {
+          pod.failUrl = acl;
+          pod.failStatus = failure;
+        }
+        pod.writes = [];
+        if (failure === "unsupported")
+          await expect(writer.save(conversation())).rejects.toThrow(/access-control model/);
+        else
+          await expect(writer.save(conversation())).rejects.toMatchObject({
+            status: typeof failure === "number" ? failure : 403,
+          });
+        expect(pod.writes.some((w) => w.url === resource)).toBe(false);
+        expect(pod.writes.some((w) => w.url.endsWith("m-msg-2.ttl"))).toBe(false);
+      }
+    });
+
+    it.each(
+      CONTENT_FILES,
+    )("rejects a changed ACL association after creating or skipping %s", async (file) => {
+      const pod = new MemoryPod();
+      const writer = new ChatWriter(pod);
+      if (existing) await writer.save(conversation());
+      const resource = `${ROOT}private/chats/claude/thread-1/${file}`;
+      const discoverAcl = pod.discoverAcl.bind(pod);
+      let calls = 0;
+      pod.discoverAcl = async (url) => {
+        if (url === resource && calls++ > 0) return `${resource}.other-acl`;
+        return discoverAcl(url);
+      };
+      pod.writes = [];
+      await expect(writer.save(conversation())).rejects.toThrow(/association changed/);
+      expect(calls).toBe(2);
+      expect(pod.writes.at(-1)?.url).toBe(resource);
+    });
   });
 
   it.each([403, 412, 500])("aborts before content if ACL write fails (%s)", async (status) => {
