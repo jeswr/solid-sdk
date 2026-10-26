@@ -9,7 +9,10 @@ class MainViewController: CAPBridgeViewController {
     private var uiGuard: UIDelegateOriginGuard?
 
     override open func capacitorDidLoad() {
-        guard let bridge = bridge else { return }
+        // The protocol hides the delegation handler; the concrete bridge exposes it.
+        guard let bridge = bridge as? CapacitorBridge else {
+            fatalError("Capacitor bridge is not a CapacitorBridge")
+        }
         bridge.registerPluginInstance(SuiteNavigationPlugin())
         bridge.registerPluginInstance(SuiteAuthSessionPlugin())
         guard let allowed = SuiteOrigin(url: bridge.config.serverURL) else {
