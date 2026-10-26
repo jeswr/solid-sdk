@@ -10,6 +10,7 @@ export default defineConfig({
       include: [
         "src/apps/photos/lib/library/**/*.ts",
         "src/lib/order/**/*.ts",
+        "src/apps/tasks/lib/lists/**/*.ts",
         "src/apps/docs/lib/anchoring/**/*.ts",
       ],
       reporter: ["text", "json-summary"],
