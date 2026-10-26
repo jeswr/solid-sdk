@@ -482,7 +482,7 @@ describe("global restrictions across module load forms", () => {
   });
 
   it.each(forms)("checks relative, absolute and file URL targets lexically: %s", (form) => {
-    for (const kind of ["relative", "absolute", "file"])
+    for (const kind of ["relative", "absolute", "file", "file-upper"])
       for (const [name, subpath, reason] of [
         ["@jeswr/agent-channels", "dist/gmail/send.js", "executor-only"],
         ["openai", "dist/index.js", "gateway-only"],
@@ -495,12 +495,11 @@ describe("global restrictions across module load forms", () => {
         });
         const file = join(directory, "apps/ordinary/web/src/index.ts");
         const target = join(directory, "tools/provider store", subpath);
-        const specifier =
-          kind === "file"
-            ? pathToFileURL(target).href
-            : kind === "absolute"
-              ? target
-              : relative(dirname(file), target);
+        const specifier = kind.startsWith("file")
+          ? pathToFileURL(target).href.replace(/^file:/, kind === "file-upper" ? "FILE:" : "file:")
+          : kind === "absolute"
+            ? target
+            : relative(dirname(file), target);
         writeFileSync(file, form.replace("TARGET", JSON.stringify(specifier)));
         expect(checkAgentLayers(directory).join("\n")).toContain(reason);
       }

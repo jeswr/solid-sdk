@@ -139,7 +139,7 @@ function projectTarget(project, path) {
 
 function importTargets(projects, file, specifier) {
   let target;
-  if (specifier.startsWith("file:")) {
+  if (/^file:/i.test(specifier)) {
     try {
       target = fileURLToPath(specifier);
     } catch {
