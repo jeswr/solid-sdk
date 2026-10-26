@@ -797,7 +797,7 @@ it("toggles list and grid with v from a focused row but not with a modifier", as
   // The new view's element for the same item takes focus, so `v` works again.
   drive.prefs.view = "grid";
   await view.render(tree(items));
-  await act(async () => new Promise((resolve) => requestAnimationFrame(resolve)));
+  await act(async () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
   const card = row(view.host);
   expect(card).not.toBe(focused);
   expect(document.activeElement).toBe(card);
