@@ -264,11 +264,14 @@ Each adapter exposes a `vocab-map.ts` seam, applied by the runner without mutati
 input. Existing music, calendar and social class alignments add sector types alongside legacy
 types. Detailed adapter field mappings remain with their later connector tasks. Namespace
 bases come from `@jeswr/suite-vocab` (`NS`), with adapter terms assembled in
-`core/federation-vocab.ts` and adapter vocab modules. Pod reads resolve legacy
-`https://w3id.org/jeswr/` vocabulary predicates and class IRIs through `canonicalize()`
-before typed access, including Type Index matching and incremental reconciliation.
-Rewritten documents use canonical jeswr vocabulary while resource identifiers, literal
+`core/federation-vocab.ts` and adapter vocab modules. Import-session reads and run provenance
+resolve legacy `https://w3id.org/jeswr/` vocabulary predicates and class IRIs through
+`canonicalize()` before typed access and incremental reconciliation. Rewrites of these
+connector-owned documents use canonical jeswr vocabulary while resource identifiers, literal
 contents and standard namespaces retain their spelling (mail keeps `http://schema.org/`).
+Shared WebID profiles and Type Index datasets retain their raw terms. Type Index comparisons
+accept legacy classes without changing existing registrations; only new registrations use
+canonical class IRIs.
 
 ## Streaming file imports
 

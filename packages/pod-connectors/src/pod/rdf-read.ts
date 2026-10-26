@@ -22,7 +22,6 @@
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { type FetchedRdf, fetchRdf } from "@jeswr/fetch-rdf";
-import { canonicalizeJeswrDataset } from "../core/canonical-vocab.js";
 import { RemoteContextRefusedError } from "../core/errors.js";
 
 /** Request headers that force conditional revalidation through HTTP caches. */
@@ -31,6 +30,8 @@ export const REVALIDATE_HEADERS = { "cache-control": "no-cache" } as const;
 /**
  * Fetch + parse a pod RDF document, always revalidating any cached copy.
  * JSON-LD supports inline contexts only: this package bundles no context URLs.
+ * Preserve raw vocabulary so mutations of shared profiles and Type Index documents
+ * retain other apps' terms. Import sessions normalize connector-owned documents.
  *
  * Same contract as `fetchRdf` (errors propagate as `RdfFetchError`; keep the
  * returned `etag` for conditional writes).
@@ -46,7 +47,7 @@ export async function freshRdf(
   // can distinguish context policy failures from other fetch/parse failures.
   let refusal: RemoteContextRefusedError | undefined;
   try {
-    const result = await fetchRdf(url, {
+    return await fetchRdf(url, {
       fetch: fetchImpl,
       headers: REVALIDATE_HEADERS,
       documentLoader: {
@@ -56,7 +57,6 @@ export async function freshRdf(
         },
       },
     });
-    return { ...result, dataset: canonicalizeJeswrDataset(result.dataset) };
   } catch (cause) {
     if (refusal) throw refusal;
     throw cause;

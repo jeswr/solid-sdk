@@ -29,12 +29,16 @@ build, typecheck and test, then the workspace gates before completing a change.
 
 CON-13 takes every jeswr namespace base from `@jeswr/suite-vocab` (`NS`); assemble local
 term names in the existing vocab modules. Keep standard namespace spellings exact,
-especially mail's `http://schema.org/`. Pod read boundaries use `canonicalizeJeswrDataset`
-to resolve suite aliases through `canonicalize()` before typed access and reconciliation,
-including custom PodWriter ports and provenance documents. Type Index class comparisons
-also accept legacy IRIs. Restrict canonicalization to suite vocabulary predicates and
-class values; preserve resource identifiers, literal contents and standard IRIs. Rewrites
-emit canonical jeswr terms. Keep the source-literal guard and legacy Pod regressions green.
+especially mail's `http://schema.org/`. Confine `canonicalizeJeswrDataset` to import-session
+reads (including custom PodWriter ports) and run provenance in the connector's own container.
+Build its result in one pass, adding each unchanged or transformed quad without deleting
+from a populated copy. Resolve suite aliases through `canonicalize()` before typed access
+and reconciliation; restrict changes to vocabulary predicates and class values, preserving
+resource identifiers, literal contents and standard IRIs. Rewrites of connector-owned
+documents emit canonical jeswr terms. Keep `freshRdf` datasets raw: shared WebID profiles
+and Type Index documents must preserve other apps' stored terms. Type Index comparisons
+accept legacy classes without changing existing registrations; only new registrations use
+canonical class IRIs. Keep the source-literal guard and legacy Pod regressions green.
 
 CON-02 adds the shared incremental write pipeline, host-owned ConnectorState, PROV activity
 recording and per-adapter vocab-map.ts hooks. Preserve ETags on automatic merges and never
