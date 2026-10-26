@@ -2072,6 +2072,9 @@ importers:
       sanitize-html:
         specifier: 2.18.1
         version: 2.18.1
+      saxes:
+        specifier: 6.0.0
+        version: 6.0.0
     devDependencies:
       '@axe-core/playwright':
         specifier: ^4.11.1
