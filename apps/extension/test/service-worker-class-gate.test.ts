@@ -672,7 +672,7 @@ describe('Phase-2 per-data-class gate (wired into the SW)', () => {
       evil,
     );
     expect(rev.ok).toBe(false);
-    expect((profileDb.state.records[0]?.classGrants as unknown[]).length).toBe(1);
+    expect((profileDb.state.records[0]!.classGrants as unknown[]).length).toBe(1);
   });
 
   it('CONCURRENT save + revoke do not resurrect the revoked grant (serialised store)', async () => {

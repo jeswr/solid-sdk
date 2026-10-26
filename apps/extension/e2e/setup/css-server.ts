@@ -1,6 +1,8 @@
 import { type ChildProcess, spawn } from 'node:child_process';
+import fs from 'node:fs';
 import http from 'node:http';
 import { createRequire } from 'node:module';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -9,6 +11,7 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 let serverProcess: ChildProcess | null = null;
+let moduleRoot: string | null = null;
 
 const CSS_PORT = 3000;
 const CSS_BASE_URL = `http://localhost:${CSS_PORT}`;
@@ -25,9 +28,22 @@ export async function startCSSServer(): Promise<void> {
 
   // Run the CSS entry point directly (not via npx) so SIGTERM reaches the server itself.
   const cssBin = createRequire(import.meta.url).resolve('@solid/community-server/bin/server.js');
+  moduleRoot = isolatedModuleRoot(cssBin);
   serverProcess = spawn(
     process.execPath,
-    [cssBin, '-p', String(CSS_PORT), '-c', cssConfig, '--seedConfig', seedConfig, '-l', 'warn'],
+    [
+      cssBin,
+      '-p',
+      String(CSS_PORT),
+      '-c',
+      cssConfig,
+      '--seedConfig',
+      seedConfig,
+      '-m',
+      moduleRoot,
+      '-l',
+      'warn',
+    ],
     {
       stdio: 'pipe',
       env: { ...process.env },
@@ -55,6 +71,57 @@ export async function stopCSSServer(): Promise<void> {
     serverProcess.kill('SIGTERM');
     serverProcess = null;
   }
+  if (moduleRoot) {
+    fs.rmSync(moduleRoot, { recursive: true, force: true });
+    moduleRoot = null;
+  }
+}
+
+/**
+ * Components.js scans every `node_modules` above its main module path. In the pnpm workspace
+ * that includes the hoisted `node_modules/.pnpm/node_modules`, where other packages' Comunica
+ * and CSS versions break config loading, while CSS's own transitive dependencies sit in
+ * per-package folders it never visits. Build a temporary root with a flat `node_modules` of
+ * CSS's dependency closure (first version found wins, as npm hoisting would) and point
+ * Components.js at it.
+ */
+function isolatedModuleRoot(cssBin: string): string {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ext-e2e-css-'));
+  const modules = path.join(root, 'node_modules');
+  fs.mkdirSync(modules);
+  fs.writeFileSync(path.join(root, 'package.json'), '{"name":"ext-e2e-css","private":true}\n');
+  const linked = new Map<string, string>();
+  const queue = [packageDir(fs.realpathSync(cssBin))];
+  for (let dir = queue.shift(); dir; dir = queue.shift()) {
+    const name = packageName(dir);
+    if (linked.has(name)) continue;
+    linked.set(name, dir);
+    const target = path.join(modules, name);
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.symlinkSync(dir, target, 'dir');
+    // pnpm keeps a package's dependencies beside it in the same `node_modules` folder.
+    const siblings = path.resolve(dir, name.startsWith('@') ? '../..' : '..');
+    for (const entry of fs.readdirSync(siblings)) {
+      if (entry.startsWith('.')) continue;
+      const entries = entry.startsWith('@')
+        ? fs.readdirSync(path.join(siblings, entry)).map((scoped) => path.join(entry, scoped))
+        : [entry];
+      for (const dep of entries) {
+        if (!linked.has(dep)) queue.push(fs.realpathSync(path.join(siblings, dep)));
+      }
+    }
+  }
+  return root;
+}
+
+function packageDir(file: string): string {
+  let dir = path.dirname(file);
+  while (!fs.existsSync(path.join(dir, 'package.json'))) dir = path.dirname(dir);
+  return dir;
+}
+
+function packageName(dir: string): string {
+  return JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf8')).name;
 }
 
 function isServerUp(url: string): Promise<boolean> {

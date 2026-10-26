@@ -118,7 +118,7 @@ Explicit `solid.fetch` calls retain the worker's denial response.
   `https://jeswr.github.io/solid-browser-extension/clientid.jsonld`, its redirect is
   `https://bicabcdahgfbkgmlidjpmiadmjlppikk.chromiumapp.org/`, and its auth method is `none`.
   The build rejects a missing or mismatched public key; the dispatcher-supplied key can be
-  imported with `EXT_PUBKEY=/path/to/extension-pubkey.b64 npm run generate:client-id`.
+  imported with `EXT_PUBKEY=/path/to/extension-pubkey.b64 pnpm run generate:client-id`.
   The public key belongs in `manifest.key`; the extension signing private key stays with Jesse.
   A page may still declare its own Client ID Document via `solid.setClientId(...)`.
 - **Profiles:** `ProfileStore` supports up to eight distinct WebIDs. Each profile has its own
@@ -267,26 +267,26 @@ changing an origin's profile clears its old pod/class scope before fresh consent
 ## Build & load the unpacked extension
 
 ```bash
-npm ci --ignore-scripts # install the locked dependencies; @jeswr deps are pinned git+https
-npm run build          # webpack -> dist/
+pnpm install --frozen-lockfile                 # from the solid-sdk root; @jeswr deps are workspace:*
+pnpm turbo run build --filter=@jeswr/app-extension # builds solid-elements, then webpack -> dist/
 ```
 
 Then in Chrome:
 
 1. Open `chrome://extensions`, toggle **Developer mode** (top-right).
-2. **Load unpacked** → select this repo's `dist/` folder.
+2. **Load unpacked** → select `apps/extension/dist/`.
 3. Pin it (puzzle-piece icon → pin) — the popup is the account menu.
 4. Click the icon, enter your WebID / Pod URL, sign in.
 
 ## Develop & test
 
 ```bash
-npm run gate           # lint (biome) + typecheck (tsc) + test (vitest) + build (webpack)
-npm run lint           # biome over src test e2e scripts
-npm run typecheck      # tsc --noEmit
-npm test               # vitest — mocked security-critical core, no server needed
-npm run build          # webpack bundle to dist/
-npm run test:e2e       # build + Playwright against a LOCAL Community Solid Server
+pnpm run gate          # lint (biome) + typecheck (tsc) + test (vitest) + build (webpack)
+pnpm run lint          # biome over src test e2e scripts
+pnpm run typecheck      # tsc --noEmit
+pnpm test              # vitest — mocked security-critical core, no server needed
+pnpm run build         # webpack bundle to dist/
+pnpm run test:e2e      # build + Playwright against a LOCAL Community Solid Server
 ```
 
 The unit suite stubs `fetch` / `chrome.*` and needs no server. The Playwright e2e suite

@@ -29,10 +29,10 @@ Page (MAIN world)  <--postMessage-->  Content Script (ISOLATED)  <--chrome.runti
 
 Solid-OIDC **authorization-code + PKCE + DPoP** via `chrome.identity.launchWebAuthFlow` (no
 `window` in a service worker). DPoP proofs mirror `@jeswr/solid-dpop`'s RFC 9449 discipline but
-are reimplemented on Web Crypto + jose because the service worker has no `node:crypto`. Reused
-suite packages (pinned `git+https#<sha>`): `@jeswr/solid-elements` (the popup web components),
-`@jeswr/solid-session-restore` (the audited silent-restore decision), `@jeswr/solid-dpop` (the
-proof-spec reference). **Never re-alias the components' own theme tokens; scope filled button
+are reimplemented on Web Crypto + jose because the service worker has no `node:crypto`. This app
+lives in the solid-sdk monorepo (`apps/extension`) and takes `@jeswr/solid-elements` (the popup
+web components) as a `workspace:*` dependency; `@jeswr/solid-dpop` is the proof-spec reference
+only, not a dependency. **Never re-alias the components' own theme tokens; scope filled button
 styles to `#login-form`** (the suite CSS-leak guards).
 
 ## Security invariants (do not weaken)
@@ -47,16 +47,16 @@ styles to `#login-form`** (the suite CSS-leak guards).
 
 ## Gate
 
-`npm run gate` = lint (biome) + typecheck (tsc) + test (vitest, the core) + build (webpack).
-e2e (`npm run test:e2e`) runs against a LOCAL Community Solid Server only, never the live box.
+`pnpm run gate` = lint (biome) + typecheck (tsc) + test (vitest, the core) + build (webpack).
+e2e (`pnpm run test:e2e`) runs against a LOCAL Community Solid Server only, never the live box.
 
 ## Build & Test
 
 ```bash
-npm install           # Install dependencies
-npm run build         # Build extension to dist/
-npm run build:dev     # Build in watch mode
-npm run test:e2e      # Build + run Playwright e2e tests
+pnpm install                                  # From the solid-sdk root
+pnpm --filter @jeswr/app-extension run build     # Build extension to dist/
+pnpm --filter @jeswr/app-extension run build:dev # Build in watch mode
+pnpm --filter @jeswr/app-extension run test:e2e  # Build + run Playwright e2e tests
 ```
 
 ### E2E Testing
@@ -79,7 +79,7 @@ Solid-specific skill documents are in `.skills/`:
 
 Use the Context7 MCP server for up-to-date library documentation. Prefer Context7 over training data for API specifics of:
 - `jose` (DPoP proof signing / JWK)
-- `@jeswr/solid-elements`, `@jeswr/solid-session-restore`, `@jeswr/solid-dpop`
+- `@jeswr/solid-elements`, `@jeswr/solid-dpop`
 - Playwright extension testing
 - Community Solid Server configuration
 - Chrome Extension MV3 APIs
@@ -92,8 +92,8 @@ This project uses **roborev** for continuous automated code review. Every git co
 
 - **Commit frequently** — small, focused commits. Each commit is reviewed independently by roborev, so smaller commits produce more actionable feedback.
 - **One concern per commit** — don't mix feature code, test changes, and config changes in a single commit.
-- **Build before committing** — run `npm run build` to catch TypeScript/webpack errors. The reviewer can't run the build itself.
-- **Run tests before committing** — run `npm run test:e2e` for any changes that touch the extension source, message protocol, or auth flow.
+- **Build before committing** — run `pnpm run build` to catch TypeScript/webpack errors. The reviewer can't run the build itself.
+- **Run tests before committing** — run `pnpm run test:e2e` for any changes that touch the extension source, message protocol, or auth flow.
 
 ### Reviewing and fixing
 
@@ -128,7 +128,7 @@ Workflow:
 
 Rules:
 - **Small, focused commits.** One concern per commit. Do not batch unrelated changes.
-- **Build and test before committing.** Run `npm run build` and `npm run test:e2e` for source changes.
+- **Build and test before committing.** Run `pnpm run build` and `pnpm run test:e2e` for source changes.
 - **Never skip commits.** Even config-only or docs-only changes must be committed so they are reviewed.
 - The `.roborev.toml` file configures review guidelines — read it to understand what the reviewer focuses on and what it ignores.
 

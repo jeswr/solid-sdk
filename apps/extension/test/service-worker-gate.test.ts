@@ -2238,7 +2238,7 @@ describe('ProfileStore runtime API and adversarial isolation', () => {
     });
     fetchImpl = async (url, init) => {
       if (url === a.session.tokenEndpoint) {
-        expect((init?.body as URLSearchParams).get('refresh_token')).toBe(a.session.refreshToken);
+        expect((init!.body as URLSearchParams).get('refresh_token')).toBe(a.session.refreshToken);
         return Response.json({
           access_token: 'fixture-rotated',
           refresh_token: 'fixture-rotated-refresh',
