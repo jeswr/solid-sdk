@@ -191,14 +191,18 @@ the changes feed triggers one full resync. Full snapshots reconcile missing loca
 only after a complete, valid listing. List and changes pages require object envelopes with
 `files`/`changes` arrays and nonempty string pagination tokens when present; malformed pages
 fail before reconciliation or checkpoint advancement. One shared `RunBudget` caps source
-requests (including downloads) and listed items across pagination and any full-resync fallback.
+requests (including downloads), listed items, and cumulative JSON response bytes across pagination
+and any full-resync fallback (512 MiB JSON data budget by default).
 Failed imports preserve the host's previous checkpoint.
-Removed/trashed files lose their metadata and all content representations through `ctx.remove`.
+Removed/trashed files lose all content representations before their metadata through `ctx.remove`.
+If cleanup fails, metadata stays as a deletion tombstone so a replay or full resync retries cleanup.
 
 Files have stable paths inside the connector container:
 `drive/files/<pathId(fileId)>/meta.ttl`, with `content-<v>` beside binary metadata, or
 `content-<v>.pdf` and (for Google documents) `content-<v>.txt` beside exported metadata.
-`<v>` is the first 24 SHA-256 hex characters of the checksum, else modified time, else file id.
+`<v>` is the first 24 SHA-256 hex characters of the checksum, else modified time, else the
+downloaded bytes (the first representation for exports). Files without source version fields
+are downloaded on every import so changed bytes get a new create-only path.
 Folder ids, rather than names, identify folders; `schema:isPartOf` links mirror the Drive
 tree without moving resources on rename. Metadata uses `https://schema.org/`:
 `DigitalDocument` for files, `Collection` for folders, source id/URL, name, media type,

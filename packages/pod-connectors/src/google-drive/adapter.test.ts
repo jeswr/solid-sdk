@@ -4,7 +4,7 @@ import { setImmediate } from "node:timers/promises";
 import { Container, Resource } from "@solid/object";
 import { DataFactory, Store, Writer } from "n3";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { RunBudget } from "../core/budget.js";
+import { DEFAULT_RUN_LIMITS, RunBudget } from "../core/budget.js";
 import { runImport } from "../core/import-runner.js";
 import { createFetchPodWriter } from "../core/pod-writer.js";
 import {
@@ -26,9 +26,9 @@ const ROOT = `${TEST_POD_ROOT}integrations/google-drive/`;
 const path = (id: string) =>
   `drive/files/${encodeURIComponent(id).replace(/~/g, "%7E").replace(/%/g, "~")}/`;
 const metaUrl = (id: string) => `${ROOT}${path(id)}meta.ttl`;
-const contentUrl = (file: DriveFile, extension = "") =>
+const contentUrl = (file: DriveFile, extension = "", unversionedBody = file.id) =>
   `${ROOT}${path(file.id)}content-${createHash("sha256")
-    .update(file.md5Checksum ?? file.modifiedTime ?? file.id)
+    .update(file.md5Checksum ?? file.modifiedTime ?? unversionedBody)
     .digest("hex")
     .slice(0, 24)}${extension}`;
 const mediaUrl = (id: string) => `${DRIVE_API}/files/${encodeURIComponent(id)}?alt=media`;
@@ -248,13 +248,42 @@ describe("Drive full sync", () => {
     expect(pod.contentType(contentUrl(rdf))).toBe("application/octet-stream");
   });
 
-  it("downloads again without version fields or when one version field changes", async () => {
-    const { run } = setup();
-    const bare = { ...BINARY, md5Checksum: undefined, modifiedTime: undefined };
-    await run(full([bare]), { media: CONTENT }).result;
-    const next = run(full([bare]), { media: CONTENT });
+  it.each([
+    ["binary", BINARY, [""]],
+    ["document", DOC, [".pdf", ".txt"]],
+  ] as const)("versions unversioned %s copies by downloaded bytes", async (_kind, file, extensions) => {
+    const { run, pod, metadata } = setup();
+    const bare = { ...file, md5Checksum: undefined, modifiedTime: undefined };
+    const media = (first: string, text: string): Media => ({
+      [mediaUrl(file.id)]: bytes(first),
+      [exportUrl(file.id, "application/pdf")]: bytes(first),
+      [exportUrl(file.id, "text/plain")]: bytes(text),
+    });
+    await run(full([bare]), { media: media("old!", "Old text") }).result;
+    expect([...metadata(file.id).encodings]).toEqual(
+      extensions.map((extension) => contentUrl(bare, extension, "old!")),
+    );
+    const next = run(full([bare]), { media: media("next", "Next text") });
     await next.result;
-    expect(next.api.mock.calls).toHaveLength(3);
+    expect(next.api.mock.calls).toHaveLength(2 + extensions.length);
+    expect([...metadata(file.id).encodings]).toEqual(
+      extensions.map((extension) => contentUrl(bare, extension, "next")),
+    );
+    for (const extension of extensions) {
+      expect(pod.bytes(contentUrl(bare, extension, "old!"))).toBeUndefined();
+      expect(new TextDecoder().decode(pod.bytes(contentUrl(bare, extension, "next")))).toBe(
+        extension === ".txt" ? "Next text" : "next",
+      );
+    }
+    // Identical downloads keep the same create-only paths and their linked content.
+    await run(full([bare]), { media: media("next", "Next text") }).result;
+    expect(new TextDecoder().decode(pod.bytes(contentUrl(bare, extensions[0], "next")))).toBe(
+      "next",
+    );
+  });
+
+  it("downloads again when one source version field changes", async () => {
+    const { run } = setup();
     await run(full([BINARY]), { media: CONTENT }).result;
     const changedTime = run(full([{ ...BINARY, modifiedTime: "2026-06-14T00:00:00Z" }]), {
       media: CONTENT,
@@ -440,6 +469,45 @@ describe("Drive incremental sync", () => {
     }
   });
 
+  it.each([
+    "replay",
+    "expired cursor",
+  ])("finishes an interrupted deletion after %s", async (recovery) => {
+    const { run, pod, podWriter, state } = await imported();
+    const remove = podWriter.remove;
+    if (!remove) throw new Error("Expected memory Pod delete port");
+    const failedCleanup = vi.spyOn(podWriter, "remove").mockImplementation(async (slug, opts) => {
+      if (slug.endsWith(".txt")) throw new Error("Interrupted deletion");
+      await remove(slug, opts);
+    });
+    const routes = [
+      changes({ changes: [{ fileId: DOC.id, removed: true }], newStartPageToken: "2000" }),
+    ];
+    const onState = vi.fn();
+    await expect(run(routes, { state, onState }).result).rejects.toThrow("Interrupted deletion");
+    expect(pod.bytes(contentUrl(DOC, ".pdf"))).toBeUndefined();
+    expect(pod.bytes(contentUrl(DOC, ".txt"))).toBeDefined();
+    expect(pod.get(metaUrl(DOC.id))).toBeDefined();
+    expect(failedCleanup.mock.calls.map(([slug]) => slug)).not.toContain(`${path(DOC.id)}meta.ttl`);
+    expect(onState).toHaveBeenCalledWith(
+      expect.objectContaining({ cursor: state.cursor, counts: state.counts, lastOutcome: "error" }),
+    );
+    failedCleanup.mockRestore();
+    const cleanup = vi.spyOn(podWriter, "remove");
+    const report = await run(
+      recovery === "replay" ? routes : [changes({}, 410), ...full([FILES[0], BINARY])],
+      { state },
+    ).result;
+    expect(report.cursor).toBe(recovery === "replay" ? "2000" : "1000");
+    expect(cleanup.mock.calls.map(([slug]) => slug)).toEqual([
+      contentUrl(DOC, ".txt").slice(ROOT.length),
+      `${path(DOC.id)}meta.ttl`,
+    ]);
+    expect(pod.get(metaUrl(DOC.id))).toBeUndefined();
+    expect(pod.bytes(contentUrl(DOC, ".txt"))).toBeUndefined();
+    expect(pod.bytes(contentUrl(BINARY))).toBeDefined();
+  });
+
   it("counts malformed changes and allows empty incremental pages", async () => {
     const { run } = setup();
     const report = await run(
@@ -496,6 +564,37 @@ describe("Drive incremental sync", () => {
     expect(onState).toHaveBeenCalledWith(
       expect.objectContaining({ cursor: state.cursor, lastOutcome: "error", counts: state.counts }),
     );
+  });
+
+  it.each([
+    ["15", 15],
+    ["invalid", undefined],
+    ["0", undefined],
+    [undefined, undefined],
+  ])("preserves rate-limit error mapping for Retry-After %s", async (retryAfter, seconds) => {
+    const { podWriter } = setup();
+    const api = vi.fn(
+      async () =>
+        new Response(null, {
+          status: 429,
+          headers: retryAfter === undefined ? {} : { "retry-after": retryAfter },
+        }),
+    );
+    await expect(
+      runImport({
+        adapter: googleDriveAdapter,
+        mode: "live",
+        podWriter,
+        sourceAuth: { fetch: api },
+        cursor: "old",
+      }),
+    ).rejects.toMatchObject({
+      name: "RateLimitedError",
+      adapterId: "google-drive",
+      status: 429,
+      retryAfterSeconds: seconds,
+    });
+    expect(api).toHaveBeenCalledOnce();
   });
 
   it("does not interpret a failed media request as an expired changes token", async () => {
@@ -706,6 +805,7 @@ describe("Drive malformed snapshots", () => {
   it("counts every source request and page item on one budget, including a full fallback", async () => {
     const requests = vi.spyOn(RunBudget.prototype, "request");
     const items = vi.spyOn(RunBudget.prototype, "items");
+    const bytes = vi.spyOn(RunBudget.prototype, "bytes");
     const { run } = setup();
     await run(
       [changes({ changes: [null], nextPageToken: "expired" }), changes({}, 410), ...full()],
@@ -713,7 +813,75 @@ describe("Drive malformed snapshots", () => {
     ).result;
     expect(requests).toHaveBeenCalledTimes(7);
     expect(items.mock.calls).toEqual([[1], [FILES.length]]);
-    expect(new Set([...requests.mock.contexts, ...items.mock.contexts]).size).toBe(1);
+    expect(bytes).toHaveBeenCalledTimes(3);
+    expect(
+      new Set([...requests.mock.contexts, ...items.mock.contexts, ...bytes.mock.contexts]).size,
+    ).toBe(1);
+  });
+
+  it.each([
+    "full",
+    "changes",
+    "expired cursor",
+  ])("bounds cumulative JSON bytes during %s before applying any snapshot mutations", async (mode) => {
+    const { run, pod, podWriter, state } = await imported();
+    const first = { ...BINARY, name: "x".repeat(2000) };
+    const second = { ...DOC, name: "y".repeat(2000) };
+    const fullPages: FixtureRoute[] = [
+      full()[0] as FixtureRoute,
+      { url: `${DRIVE_API}/files`, json: { files: [first], nextPageToken: "next" } },
+      { url: `${DRIVE_API}/files`, json: { files: [second] } },
+    ];
+    const changePages = [
+      changes({ changes: [{ fileId: first.id, file: first }], nextPageToken: "next" }),
+      changes({ changes: [{ fileId: second.id, file: second }], newStartPageToken: "2000" }),
+    ];
+    const routes =
+      mode === "full"
+        ? fullPages
+        : mode === "changes"
+          ? changePages
+          : [changePages[0] as FixtureRoute, changes({}, 410), ...fullPages];
+    // Every page fits independently; together the retained records exceed this limit.
+    const jsonBytes = (route: FixtureRoute) =>
+      new TextEncoder().encode(JSON.stringify(route.json)).byteLength;
+    const maxBytes =
+      mode === "expired cursor"
+        ? jsonBytes(changePages[0] as FixtureRoute) + jsonBytes(fullPages[0] as FixtureRoute)
+        : Math.max(...routes.map(jsonBytes)) +
+          (mode === "full" ? jsonBytes(fullPages[0] as FixtureRoute) : 0);
+    const originalMaxBytes = DEFAULT_RUN_LIMITS.maxBytes;
+    Object.assign(DEFAULT_RUN_LIMITS, { maxBytes });
+    try {
+      const before = pod.get(metaUrl(BINARY.id));
+      const remove = vi.spyOn(podWriter, "remove");
+      const read = vi.spyOn(podWriter, "read");
+      const write = vi.spyOn(podWriter, "write");
+      const binary = vi.spyOn(podWriter, "writeBinary");
+      const onState = vi.fn();
+      const { api, result } = run(routes, {
+        state,
+        cursor: mode === "full" ? "" : state.cursor,
+        onState,
+      });
+      await expect(result).rejects.toThrow("data budget");
+      expect(api.mock.calls).toHaveLength(mode === "full" ? 3 : mode === "changes" ? 2 : 4);
+      expect(remove).not.toHaveBeenCalled();
+      expect(binary).not.toHaveBeenCalled();
+      expect(read.mock.calls.map(([slug]) => slug)).not.toContain("drive/files/");
+      expect(write.mock.calls.map(([doc]) => doc.slug)).toEqual(["_provenance.ttl"]);
+      expect(pod.get(metaUrl(BINARY.id))).toBe(before);
+      expect(pod.bytes(contentUrl(BINARY))).toBeDefined();
+      expect(onState).toHaveBeenCalledWith(
+        expect.objectContaining({
+          cursor: state.cursor,
+          counts: state.counts,
+          lastOutcome: "error",
+        }),
+      );
+    } finally {
+      Object.assign(DEFAULT_RUN_LIMITS, { maxBytes: originalMaxBytes });
+    }
   });
 });
 

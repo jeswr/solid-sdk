@@ -50,15 +50,19 @@ Capture the start token before full listing, stage every changes page before app
 and only fall back once on changes-feed HTTP 404/410. Reconcile absent files after a valid
 full listing; malformed envelopes, missing arrays, or invalid pagination tokens must fail
 before pruning or checkpoint advancement. Use one shared RunBudget for every source request
-and page's item count, retaining it across an expired-cursor fallback. Owned binaries require
+and page's item count, passing it to `readJson` for every JSON response so cumulative response
+bytes are bounded too. Retain the budget across an expired-cursor fallback. Owned binaries require
 a known size under the cap; supported Google Workspace exports have capped PDF/text responses. Read with a byte
 cap and cancel oversized responses. Stage create-only `content-<v>[.pdf|.txt]` representations,
-where `<v>` is 24 SHA-256 hex characters of checksum, else modified time, else file id. Commit
+where `<v>` is 24 SHA-256 hex characters of checksum, else modified time, else downloaded bytes
+(the first representation for exports). Without source version fields, download on every import. Commit
 their links through the conditional metadata write before deleting previous versions; on
 failure, best-effort roll back staging without deleting currently linked representations.
 Serialize each file's Pod mutations and cleanup within the runtime. After every store,
 reconcile canonical representation children through an @solid/object Container listing,
 including legacy paths and orphaned exports regardless of previous encoding links.
+For deletions, remove representations before metadata so failed cleanup leaves a discoverable
+tombstone for replay or full reconciliation.
 A policy omission writes explanatory metadata without incrementing `skipped`.
 Drive tests wrap JSON `fixtureFetch` with synthetic media/export responses; do not broaden
 fixtureFetch or call live Google APIs. True streaming bodies await a future PodWriter port.

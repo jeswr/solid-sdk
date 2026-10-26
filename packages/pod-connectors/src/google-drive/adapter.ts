@@ -3,9 +3,8 @@
 import { Container } from "@solid/object";
 import { DataFactory, Store } from "n3";
 import { createGoogleOAuthConfig, GOOGLE_SCOPES } from "../adapters/google/oauth.js";
-import { RunBudget } from "../core/budget.js";
-import { IntegrationSyncError } from "../core/errors.js";
-import { getJson } from "../core/fixture-fetch.js";
+import { RunBudget, readJson } from "../core/budget.js";
+import { IntegrationSyncError, RateLimitedError } from "../core/errors.js";
 import { arr, optionalDate, optionalText } from "../core/safe.js";
 import type { BinaryDoc, ImportContext, IntegrationAdapter } from "../core/types.js";
 import { CLASSES, SCHEMA } from "../core/vocab.js";
@@ -80,9 +79,9 @@ function page<T>(value: unknown, field: "files" | "changes"): T {
   return value as T;
 }
 
-async function version(file: DriveFile): Promise<string> {
-  const value = optionalText(file.md5Checksum) ?? optionalText(file.modifiedTime) ?? file.id;
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+async function version(value: string | Uint8Array): Promise<string> {
+  const bytes = typeof value === "string" ? new TextEncoder().encode(value) : new Uint8Array(value);
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
   return [...new Uint8Array(digest)]
     .slice(0, 12)
     .map((byte) => byte.toString(16).padStart(2, "0"))
@@ -159,9 +158,27 @@ class Sync {
     };
   }
 
+  private async json(url: string): Promise<unknown> {
+    const res = await this.api(url);
+    if (res.status === 429) {
+      const retryAfter = res.headers.get("retry-after");
+      throw new RateLimitedError(
+        ID,
+        url,
+        retryAfter ? Number.parseInt(retryAfter, 10) || undefined : undefined,
+      );
+    }
+    if (!res.ok)
+      throw new IntegrationSyncError(ID, `The platform answered ${res.status} for ${url}.`, {
+        url,
+        status: res.status,
+      });
+    return readJson(res, ID, url, undefined, this.budget);
+  }
+
   async full(): Promise<Snapshot> {
     // Capture before listing so mutations during pagination are replayed next time.
-    const start = await getJson<unknown>(ID, this.api, `${DRIVE_API}/changes/startPageToken`);
+    const start = await this.json(`${DRIVE_API}/changes/startPageToken`);
     const cursor = record(start) ? token(start.startPageToken) : undefined;
     if (!cursor) throw new IntegrationSyncError(ID, "Drive omitted its start page token.");
     const files: Snapshot["files"] = new Map();
@@ -175,10 +192,7 @@ class Sync {
         spaces: "drive",
       });
       if (pageToken) params.set("pageToken", pageToken);
-      const listing = page<DriveFileList>(
-        await getJson<unknown>(ID, this.api, `${DRIVE_API}/files?${params}`),
-        "files",
-      );
+      const listing = page<DriveFileList>(await this.json(`${DRIVE_API}/files?${params}`), "files");
       this.budget.items(listing.files.length);
       for (const file of listing.files) {
         if (!validId(file?.id)) {
@@ -231,7 +245,7 @@ class Sync {
         spaces: "drive",
       });
       const listing = page<DriveChangeList>(
-        await getJson<unknown>(ID, this.api, `${DRIVE_API}/changes?${params}`),
+        await this.json(`${DRIVE_API}/changes?${params}`),
         "changes",
       );
       this.budget.items(listing.changes.length);
@@ -268,8 +282,9 @@ class Sync {
     const slug = `${path}meta.ttl`;
     await mutate(this.ctx.resolve(slug), async () => {
       await this.ctx.read(slug);
-      await this.ctx.remove(slug);
+      // Keep the source id discoverable for replay/full reconciliation if cleanup fails.
       await this.clean(path, new Set());
+      await this.ctx.remove(slug);
     });
   }
 
@@ -365,12 +380,14 @@ class Sync {
     else if (size !== undefined && (!Number.isSafeInteger(size) || size > this.maxBytes))
       reason = "size-cap-exceeded";
     else if (!exporting && size === undefined) reason = "unknown-size";
-    const basename = `content-${await version(file)}`;
-    const names = exporting
+    const sourceVersion = optionalText(file.md5Checksum) ?? optionalText(file.modifiedTime);
+    let revision = sourceVersion === undefined ? undefined : await version(sourceVersion);
+    const extensions = exporting
       ? mimeType === `${GOOGLE_APPS}document`
-        ? [`${basename}.pdf`, `${basename}.txt`]
-        : [`${basename}.pdf`]
-      : [basename];
+        ? [".pdf", ".txt"]
+        : [".pdf"]
+      : [""];
+    const names = () => extensions.map((extension) => `content-${revision}${extension}`);
     const sameVersion =
       (item.checksum !== undefined || item.dateModified !== undefined) &&
       item.checksum === old.checksum &&
@@ -379,12 +396,12 @@ class Sync {
       sameVersion &&
       old.encodingFormat === mimeType &&
       !old.contentSkipped &&
-      names.every((name) => old.encodings.has(this.ctx.resolve(`${path}${name}`)));
+      names().every((name) => old.encodings.has(this.ctx.resolve(`${path}${name}`)));
     const content: BinaryDoc[] = [];
     if (!reason && !unchanged) {
-      for (const name of names) {
+      for (const extension of extensions) {
         const type = exporting
-          ? name.endsWith("pdf")
+          ? extension === ".pdf"
             ? "application/pdf"
             : "text/plain"
           : binaryType(mimeType as string);
@@ -399,8 +416,10 @@ class Sync {
           reason = result.reason;
           break;
         }
+        // Without source version fields, the first representation identifies the copy.
+        revision ??= await version(result.body);
         content.push({
-          slug: `${path}${name}`,
+          slug: `${path}content-${revision}${extension}`,
           contentType: type,
           body: result.body,
           mode: "create",
@@ -408,7 +427,7 @@ class Sync {
       }
     }
     item.contentSkipped = reason;
-    if (!reason) for (const name of names) item.encodings.add(this.ctx.resolve(`${path}${name}`));
+    if (!reason) for (const name of names()) item.encodings.add(this.ctx.resolve(`${path}${name}`));
     return reason ? [] : content;
   }
 }
