@@ -17,6 +17,12 @@ export interface TokenProvider {
   upgrade(request: Request, challenge?: ChallengeContext): Promise<Request>;
 
   /**
+   * Throws if this provider's current resource policy forbids sending `request`. The client calls this
+   * synchronous guard immediately before transport initiation, after cleanup and fence validation.
+   */
+  assertAllowed?(request: Request): void;
+
+  /**
    * Marks the credentials attached to `upgraded` as rejected so the next {@link upgrade} renews them
    * (refresh grant or new authorization). Implementations must ignore the call when the cached
    * credentials have already been replaced by a concurrent renewal.
