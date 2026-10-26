@@ -30,7 +30,7 @@ import {
   unlinkSync,
   writeSync,
 } from "fs";
-import { homedir } from "os";
+import { homedir, hostname } from "os";
 import { isAbsolute, join } from "path";
 import { setTimeout as sleep } from "timers/promises";
 import { z } from "zod";
@@ -148,6 +148,12 @@ export const grantSchema = z.strictObject({
   updatedAt: iso,
 });
 export type Grant = z.infer<typeof grantSchema>;
+
+const lockOwnerSchema = z.strictObject({
+  token: z.string().regex(/^[0-9a-f]{64}$/),
+  pid: z.number().int().positive(),
+  hostname: z.string().min(1),
+});
 
 // ------------------------------------------------------------------ directory and files
 
@@ -431,20 +437,42 @@ export class CredentialStore {
     return true;
   }
 
+  private lockOwner(path: string): z.infer<typeof lockOwnerSchema> | undefined {
+    try {
+      return this.read(path, lockOwnerSchema);
+    } catch (error) {
+      // An incomplete/legacy record cannot prove a dead owner. Wait rather than steal it.
+      if (error instanceof HelperError && error.code === "invalid") return undefined;
+      throw error;
+    }
+  }
+
+  private releaseLock(path: string, token: string): void {
+    if (this.lockOwner(path)?.token === token) unlinkSync(path);
+  }
+
   /**
-   * Run `fn` holding the profile's exclusive lock (across processes). A lock older than
-   * `staleMs` is from a crashed holder and is broken; waiting is bounded.
+   * Run `fn` holding the profile's exclusive lock (across processes). Recover only a
+   * confirmed dead owner on this host; age never revokes ownership. Waiting is bounded.
    */
   async withLock<T>(
     name: string,
     fn: () => Promise<T>,
-    opts: { waitMs?: number; staleMs?: number } = {},
+    opts: {
+      waitMs?: number;
+      /** @deprecated Age no longer revokes locks. */
+      staleMs?: number;
+    } = {},
   ): Promise<T> {
     if (!NAME.test(name)) throw new HelperError("invalid", `invalid name “${name}”`);
     const path = join(this.dir, "locks", `${name}.lock`);
     this.guard(path);
     const deadline = Date.now() + (opts.waitMs ?? 20_000);
-    const staleMs = opts.staleMs ?? 60_000;
+    const owner = {
+      token: randomBytes(32).toString("hex"),
+      pid: process.pid,
+      hostname: hostname(),
+    };
     for (;;) {
       try {
         const fd = openSync(
@@ -453,7 +481,7 @@ export class CredentialStore {
           0o600,
         );
         try {
-          writeFully(fd, `${process.pid}\n`);
+          writeFully(fd, `${JSON.stringify(owner)}\n`);
         } catch (error) {
           closeSync(fd);
           unlinkSync(path); // never leave a lock we do not hold
@@ -464,8 +492,15 @@ export class CredentialStore {
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
         try {
-          checkOwnerOnly(path, "file");
-          if (Date.now() - lstatSync(path).mtimeMs > staleMs) unlinkSync(path);
+          const held = this.lockOwner(path);
+          if (held && held.hostname === owner.hostname) {
+            try {
+              process.kill(held.pid, 0);
+            } catch (probeError) {
+              if ((probeError as NodeJS.ErrnoException).code === "ESRCH")
+                this.releaseLock(path, held.token);
+            }
+          }
         } catch (lockError) {
           if ((lockError as NodeJS.ErrnoException).code !== "ENOENT") throw lockError;
         }
@@ -478,9 +513,9 @@ export class CredentialStore {
       return await fn();
     } finally {
       try {
-        unlinkSync(path);
+        this.releaseLock(path, owner.token);
       } catch {
-        // already gone
+        // Already gone, replaced or unreadable: never remove another owner's lock.
       }
     }
   }

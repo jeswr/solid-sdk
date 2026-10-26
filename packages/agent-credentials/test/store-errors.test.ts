@@ -1,8 +1,9 @@
 // biome-ignore-all lint/style/useNodejsImportProtocol: agent layer requires bare module specifiers
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+import { spawnSync } from "child_process";
 import * as fs from "fs";
-import { tmpdir } from "os";
+import { hostname, tmpdir } from "os";
 import { join } from "path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { provisionValue } from "../src/provision.js";
@@ -232,13 +233,10 @@ it("bounds records, rejects all group/world permissions, and validates before re
   fs.writeFileSync(join(dir, "providers/invalid_name.json"), "");
   expect(store.tokenFiles()).toEqual([]);
 });
-it("serializes profile locks, recovers stale locks, refuses insecure locks, and cleans failed locks", async () => {
+it("refuses insecure locks, waits for unknown owners, and cleans failed locks", async () => {
   const path = join(dir, "locks/fixture.lock");
   fs.writeFileSync(path, "fixture", { mode: 0o600 });
   fs.utimesSync(path, new Date(0), new Date(0));
-  expect(await store.withLock("fixture", async () => "ok")).toBe("ok");
-  expect(fs.existsSync(path)).toBe(false);
-  fs.writeFileSync(path, "fixture", { mode: 0o600 });
   await expect(store.withLock("fixture", async () => 1, { waitMs: -1 })).rejects.toThrow(
     /another helper/,
   );
@@ -264,6 +262,114 @@ it("serializes profile locks, recovers stale locks, refuses insecure locks, and 
     }),
   ).toBe(2);
 });
+it("keeps an old live owner's lock and releases only its own random token", async () => {
+  const path = join(dir, "locks/fixture.lock");
+  const contender = vi.fn(async () => "must not run");
+  const tokens: string[] = [];
+  for (let n = 0; n < 2; n++) {
+    await store.withLock("fixture", async () => {
+      const record = JSON.parse(fs.readFileSync(path, "utf8"));
+      expect(record).toEqual({
+        token: expect.stringMatching(/^[0-9a-f]{64}$/),
+        pid: process.pid,
+        hostname: hostname(),
+      });
+      tokens.push(record.token);
+      fs.utimesSync(path, new Date(0), new Date(0));
+      await expect(
+        new CredentialStore(dir).withLock("fixture", contender, { waitMs: -1, staleMs: 1 }),
+      ).rejects.toMatchObject({
+        code: "unavailable",
+        message: "another helper process holds this profile's lock",
+      });
+      expect(JSON.parse(fs.readFileSync(path, "utf8"))).toEqual(record);
+    });
+    expect(fs.existsSync(path)).toBe(false);
+  }
+  expect(tokens[0]).not.toBe(tokens[1]);
+  expect(contender).not.toHaveBeenCalled();
+});
+
+it("preserves a replacement lock when the original holder releases", async () => {
+  const path = join(dir, "locks/fixture.lock");
+  const replacement = { token: "a".repeat(64), pid: process.pid, hostname: hostname() };
+  await store.withLock("fixture", async () => {
+    fs.unlinkSync(path);
+    fs.writeFileSync(path, JSON.stringify(replacement), { mode: 0o600 });
+  });
+  expect(JSON.parse(fs.readFileSync(path, "utf8"))).toEqual(replacement);
+});
+
+it("recovers a confirmed dead local pid without relying on lock age", async () => {
+  const child = spawnSync(process.execPath, ["-e", ""], { stdio: "ignore" });
+  expect(child.status).toBe(0);
+  const path = join(dir, "locks/fixture.lock");
+  fs.writeFileSync(
+    path,
+    JSON.stringify({ token: "a".repeat(64), pid: child.pid, hostname: hostname() }),
+    { mode: 0o600 },
+  );
+  await expect(store.withLock("fixture", async () => "recovered")).resolves.toBe("recovered");
+  expect(fs.existsSync(path)).toBe(false);
+});
+
+it("waits for foreign hosts, unverifiable pids, and malformed owner records", async () => {
+  const path = join(dir, "locks/fixture.lock");
+  const probe = vi.spyOn(process, "kill").mockImplementation(() => {
+    throw errno("EPERM");
+  });
+  for (const record of [
+    { token: "a".repeat(64), pid: process.pid, hostname: "other.example" },
+    { token: "a".repeat(64), pid: process.pid, hostname: hostname() },
+    { token: "a".repeat(64), pid: 0, hostname: hostname() },
+  ]) {
+    fs.writeFileSync(path, JSON.stringify(record), { mode: 0o600 });
+    fs.utimesSync(path, new Date(0), new Date(0));
+    const run = vi.fn(async () => 1);
+    await expect(store.withLock("fixture", run, { waitMs: -1 })).rejects.toMatchObject({
+      code: "unavailable",
+    });
+    expect(JSON.parse(fs.readFileSync(path, "utf8"))).toEqual(record);
+    expect(run).not.toHaveBeenCalled();
+  }
+  expect(probe).toHaveBeenCalledExactlyOnceWith(process.pid, 0);
+});
+
+it("does not remove a lock replaced while probing a dead owner", async () => {
+  const path = join(dir, "locks/fixture.lock");
+  const dead = { token: "a".repeat(64), pid: process.pid, hostname: hostname() };
+  const replacement = { ...dead, token: "b".repeat(64) };
+  fs.writeFileSync(path, JSON.stringify(dead), { mode: 0o600 });
+  vi.spyOn(process, "kill").mockImplementation(() => {
+    fs.unlinkSync(path);
+    fs.writeFileSync(path, JSON.stringify(replacement), { mode: 0o600 });
+    throw errno("ESRCH");
+  });
+  await expect(store.withLock("fixture", async () => 1, { waitMs: -1 })).rejects.toMatchObject({
+    code: "unavailable",
+  });
+  expect(JSON.parse(fs.readFileSync(path, "utf8"))).toEqual(replacement);
+});
+
+it("tolerates a dead owner's lock disappearing during recovery", async () => {
+  const path = join(dir, "locks/fixture.lock");
+  fs.writeFileSync(
+    path,
+    JSON.stringify({ token: "a".repeat(64), pid: process.pid, hostname: hostname() }),
+    { mode: 0o600 },
+  );
+  vi.spyOn(process, "kill").mockImplementation(() => {
+    throw errno("ESRCH");
+  });
+  const unlink = fixtureValue(vi.mocked(fs.unlinkSync).getMockImplementation());
+  vi.mocked(fs.unlinkSync).mockImplementationOnce((target) => {
+    unlink(target);
+    throw errno("ENOENT");
+  });
+  await expect(store.withLock("fixture", async () => "recovered")).resolves.toBe("recovered");
+  expect(fs.existsSync(path)).toBe(false);
+});
+
 it("resolves a default dir without accessing it when filesystem creation is refused", () => {
   // No real default path is touched: the first filesystem operation is intercepted.
   vi.mocked(fs.mkdirSync).mockImplementationOnce(() => {
@@ -274,11 +380,11 @@ it("resolves a default dir without accessing it when filesystem creation is refu
 it("tolerates a lock released between its exclusive-open failure and owner check", async () => {
   const path = join(dir, "locks/fixture.lock");
   fs.writeFileSync(path, "fixture", { mode: 0o600 });
-  const original = fixtureValue(vi.mocked(fs.lstatSync).getMockImplementation());
-  vi.mocked(fs.lstatSync).mockImplementation((target, ...args) => {
-    if (target === path) {
+  const original = fixtureValue(vi.mocked(fs.openSync).getMockImplementation());
+  vi.mocked(fs.openSync).mockImplementation((target, ...args) => {
+    if (target === path && args[0] === (fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW)) {
       fs.unlinkSync(path);
-      vi.mocked(fs.lstatSync).mockImplementation(original);
+      vi.mocked(fs.openSync).mockImplementation(original);
       throw errno("ENOENT");
     }
     return original(target, ...args);
