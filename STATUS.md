@@ -144,3 +144,46 @@ Commits for this round:
 `roborev status` remains unavailable (exit 127); the dispatcher must provide automated review.
 No dependencies added or `check:packages` calls needed. No unfinished implementation work,
 new open questions, UI changes, or screenshots.
+
+## Fix round 3 — local-year cutoff
+
+Removed the local-year-9999 scan clamp so generated local dates in year 10000 can resolve
+to supported UTC instants. Window/UNTIL filtering and subsequent instant/interval validation
+remain in place. This fixes the reviewed Kiritimati omission without changing explicit-date
+validation, the public API, or dependencies.
+
+Regression tests assert all three expected UTC intervals for the reviewed
+`9999-12-30T00:00:00` Kiritimati start, using COUNT, UNTIL, and an unbounded daily rule.
+All three failed before the fix, returning only two intervals.
+
+Validation for this round:
+
+- `pnpm --filter @jeswr/app-suite exec vitest run test/calendar-recurrence-validation.test.ts --coverage.enabled=false`
+  — before the fix: 3 expected regression failures, 99 passes.
+- `pnpm --filter @jeswr/app-suite exec vitest run test/calendar-recurrence.test.ts test/calendar-recurrence-validation.test.ts test/calendar-recurrence-busy.test.ts --coverage.include='src/apps/calendar/lib/recurrence/**/*.ts'`
+  — PASS: 127 tests; recurrence coverage 100% statements (194), branches (140),
+  functions (32), and lines (176).
+- `pnpm --filter @jeswr/suite-ui run build` — PASS (existing app prerequisite).
+- `pnpm --filter @jeswr/app-suite run lint && pnpm --filter @jeswr/app-suite run build && pnpm --filter @jeswr/app-suite run typecheck && pnpm --filter @jeswr/app-suite run test`
+  — PASS: 30 files / 1,304 tests, all configured coverage metrics 100%. Lint retains
+  21 existing Money warnings.
+- `pnpm run lint:root` — PASS.
+- `TURBO_SCM_BASE=f73aa3c3477804925d5256219fd975bd7176554d pnpm run gate`
+  — PASS: 7/7 Turbo tasks, 0 cached.
+- `pnpm run gate:full` — FAIL after 227 successful / 299 planned tasks (5 cached),
+  in 1m42s, at the same two pre-existing `@jeswr/federation-codegen#test` failures:
+  `test/generator.test.ts:81` expects the old bookmarks namespace, and line 126
+  detects `ontology.ttl` drift. The diff relative to `f73aa3c34778` is empty for
+  `tools/federation-codegen` and `packages/solid-federation-vocab`. Remaining tasks
+  were aborted; unrelated repairs are outside this fix round.
+- `git diff f73aa3c3477804925d5256219fd975bd7176554d --check` — PASS.
+
+Commits for this round:
+
+- `68fcf085` — `fix(calendar): retain valid UTC starts beyond the local year`
+  (fix and regression tests).
+- Final `docs(calendar): record local-year fix validation` commit — this report, committed last.
+
+`roborev status` remains unavailable (exit 127); the dispatcher must provide automated review.
+No dependencies added or `check:packages` calls needed. No unfinished implementation work,
+new open questions, UI changes, or screenshots.
