@@ -1,7 +1,12 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { Store } from "n3";
-import { describe, expect, test } from "vitest";
-import { ContactsTransport, replacement } from "../src/apps/contacts/lib/model/transport";
+import { describe, expect, test, vi } from "vitest";
+import {
+  ContactsTransport,
+  MAX_RDF_BYTES,
+  MAX_RDF_QUADS,
+  replacement,
+} from "../src/apps/contacts/lib/model/transport";
 import { ALICE, MemoryPod, ROOT } from "./contacts-support";
 
 describe("contacts injected transport", () => {
@@ -57,4 +62,123 @@ describe("contacts injected transport", () => {
     ).rejects.toThrow("offline");
     expect(await transport.commit([])).toEqual([]);
   });
+});
+
+test("refuses JSON-LD before remote contexts can bypass the injected transport", async () => {
+  const globalFetch = vi
+    .spyOn(globalThis, "fetch")
+    .mockRejectedValue(new Error("Unexpected global fetch"));
+  try {
+    for (const context of ["https://evil.example/context", `${ROOT}context`]) {
+      const injected = vi.fn<typeof fetch>(async (_input, init) => {
+        expect(new Headers(init?.headers).get("accept")).toBe("text/turtle");
+        return new Response(JSON.stringify({ "@context": context, "@id": `${ALICE}#this` }), {
+          headers: { "content-type": "Application/LD+JSON; charset=utf-8" },
+        });
+      });
+      const transport = new ContactsTransport(ROOT, injected);
+      await expect(transport.read(ALICE, (dataset) => dataset)).rejects.toThrow(
+        "JSON-LD is unsupported",
+      );
+      expect(injected).toHaveBeenCalledTimes(1);
+      expect(globalFetch).not.toHaveBeenCalled();
+    }
+  } finally {
+    globalFetch.mockRestore();
+  }
+});
+
+test.each([
+  undefined,
+  "1",
+  String(MAX_RDF_BYTES + 1),
+])("bounds response bytes with absent, false or oversized length: %s", async (length) => {
+  let cancelled = false;
+  let pulls = 0;
+  const stream = new ReadableStream<Uint8Array>({
+    pull(controller) {
+      pulls++;
+      // Invalid RDF proves rejection happens before the parser is called.
+      controller.enqueue(new Uint8Array(MAX_RDF_BYTES / 2 + 1).fill(33));
+    },
+    cancel() {
+      cancelled = true;
+    },
+  });
+  const parse = vi.fn();
+  const transport = new ContactsTransport(
+    ROOT,
+    async () =>
+      new Response(stream, {
+        headers: {
+          "content-type": "text/turtle",
+          ...(length === undefined ? {} : { "content-length": length }),
+        },
+      }),
+  );
+  await expect(transport.read(ALICE, parse)).rejects.toThrow("byte limit");
+  expect(cancelled).toBe(true);
+  expect(pulls).toBeLessThanOrEqual(3);
+  expect(parse).not.toHaveBeenCalled();
+});
+
+test("rejects excessive datasets before application accessors run", async () => {
+  const body = `<#it> <https://example.org/value> ${Array.from({ length: MAX_RDF_QUADS + 1 }, (_, i) => `"${i}"`).join(",")} .`;
+  expect(new TextEncoder().encode(body).length).toBeLessThan(MAX_RDF_BYTES);
+  const transport = new ContactsTransport(
+    ROOT,
+    async () => new Response(body, { headers: { "content-type": "text/turtle" } }),
+  );
+  const parse = vi.fn();
+  await expect(transport.read(ALICE, parse)).rejects.toThrow("quad limit");
+  expect(parse).not.toHaveBeenCalled();
+});
+
+test("cancels a stalled response body and never parses after cancellation", async () => {
+  const controller = new AbortController();
+  let cancelled = false;
+  const transport = new ContactsTransport(
+    ROOT,
+    async () =>
+      new Response(
+        new ReadableStream({
+          start() {
+            queueMicrotask(() => controller.abort(new Error("cancelled body")));
+          },
+          cancel() {
+            cancelled = true;
+          },
+        }),
+      ),
+  );
+  const parse = vi.fn();
+  await expect(transport.read(ALICE, parse, controller.signal)).rejects.toThrow("cancelled body");
+  expect(cancelled).toBe(true);
+  expect(parse).not.toHaveBeenCalled();
+});
+
+test("aborts a pending stream read even when the injected response ignores the signal", async () => {
+  const controller = new AbortController();
+  let cancelled = false;
+  const body = new ReadableStream<Uint8Array>(
+    {
+      pull() {
+        controller.abort(new Error("pending read cancelled"));
+      },
+      cancel() {
+        cancelled = true;
+      },
+    },
+    { highWaterMark: 0 },
+  );
+  const transport = new ContactsTransport(ROOT, async () => new Response(body));
+  await expect(transport.read(ALICE, (dataset) => dataset, controller.signal)).rejects.toThrow(
+    "pending read cancelled",
+  );
+  expect(cancelled).toBe(true);
+});
+
+test("accepts a bodyless successful RDF response", async () => {
+  const transport = new ContactsTransport(ROOT, async () => new Response(null, { status: 204 }));
+  expect((await transport.read(ALICE, (dataset) => dataset.size)).data).toBe(0);
 });
