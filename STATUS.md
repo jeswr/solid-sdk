@@ -86,3 +86,42 @@ on conflict/partial completion. These are documented model boundaries, not hidde
 Unfinished verification: the unrelated full-workspace bootstrap failure and unavailable roborev.
 No implementation work is left pending within the selected interpretations. The questions above
 remain open to maintainer override; none blocks the supplied model API.
+
+## Fix round 1 — review of 00fc55619f89
+
+Implemented only the four supplied findings on `lane/sst-bi8j`:
+
+- `93c8c4ea` — `fix: address mail model review findings`: reject remote JSON-LD contexts
+  (including nested/scoped contexts, arrays and `@import`) before fetch-rdf can invoke its
+  unscoped loader, for both document and container reads. Inline contexts remain supported.
+  Generate collision-safe paths with reversible tilde escaping for account, message, thread,
+  folder and attachment identifiers, retaining original Message-IDs and label titles as RDF
+  metadata. Include the account in attachment keys. Preserve decoded HTML as inert `bodyHtml`
+  (`schema:articleBody`), prefer original plain text for `body`, and derive a readable text
+  fallback for HTML-only mail. Add regression tests and update the model documentation.
+- This final documentation commit — `docs: record mail review fix validation`.
+
+Verification before the final commit:
+
+| Command | Result |
+| --- | --- |
+| `pnpm --filter @jeswr/guarded-fetch run build && pnpm --filter @jeswr/suite-ui run build` | PASS; existing dependency output only, uncommitted |
+| `pnpm --filter @jeswr/app-suite run lint && pnpm --filter @jeswr/app-suite run build && pnpm --filter @jeswr/app-suite run typecheck && pnpm --filter @jeswr/app-suite run test` | PASS; lint, Next production build, strict tsc, 9 test files / 73 tests |
+| `pnpm --filter @jeswr/app-suite run test:coverage` | PASS; 100% statements (456/456), branches (234/234), functions (153/153), lines (407/407) |
+| `pnpm run lint:root` | PASS; workspace/transport/fetch/token checks and 74 contrast pairs |
+| `TURBO_SCM_BASE=00fc55619f890b59e11c33f9d56eda2a22d2bf67 pnpm run gate` | PASS; 7/7 tasks, 0 cached |
+| `git diff --check` | PASS |
+| `command -v roborev` | Exit 1; executable still unavailable, so no automated review verdict obtained |
+| `pnpm run gate:full` | Not run this round: the existing unstorage-solid bootstrap explicitly invokes a network `git clone`, prohibited by this fix lane; prior full-gate failures remain documented above |
+
+An initial direct Vitest run could not resolve the unbuilt guarded-fetch dependency. Building
+the existing workspace dependencies resolved it before the passing coverage and package gates.
+No dependencies were added or changed, so no new dependency policy check was required. No UI
+or screenshots apply. No network Git operations, branch switches, pushes, PRs or changes to
+other checkouts were performed.
+
+All four review findings are addressed. Conservative choices: refuse every remote JSON-LD
+context, including in-pod references, since fetch-rdf cannot inject a scoped context loader;
+keep HTML inert and use a small text reduction rather than introduce a dependency. The text
+fallback is not an HTML sanitiser. No new open questions or unfinished implementation work.
+Verification limitations remain the unavailable roborev executable and the unrelated full gate.
