@@ -201,8 +201,8 @@ ul {
   display: block;
   margin-bottom: var(--space-2);
 }
-input:not([data-slot]),
-button:not([data-slot]) {
+/* Bare-element defaults carry zero specificity so any component class wins. */
+:where(input:not([data-slot]), button:not([data-slot])) {
   font: inherit;
   border-radius: var(--radius-md);
   background: var(--surface);
@@ -215,11 +215,10 @@ button:not([data-slot]) {
   min-height: var(--control-h-sm);
   margin-top: var(--space-2);
 }
-input:not([data-slot]),
-select:not([data-slot]) {
+:where(input:not([data-slot]), select:not([data-slot])) {
   border: 1px solid var(--input);
 }
-button:not([data-slot]) {
+:where(button:not([data-slot])) {
   border: 1px solid var(--border-strong);
 }
 .density-grid-card {

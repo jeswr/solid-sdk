@@ -44,6 +44,11 @@ export function TagInput({ label, options, value, onChange, disabled = false }: 
   const selected = value.map(
     (tag) => options.find((option) => option.id === tag) ?? { id: tag, label: tag },
   );
+  /** Reopening for a new query replaces the last add/remove announcement with the match count. */
+  function reopen() {
+    setAnnouncement("");
+    setOpen(true);
+  }
   function add(option: TagOption) {
     if (disabled) return;
     onChange([...value, option.id]);
@@ -105,18 +110,18 @@ export function TagInput({ label, options, value, onChange, disabled = false }: 
           disabled={disabled}
           value={query}
           onFocus={() => !disabled && setOpen(true)}
-          onClick={() => !disabled && setOpen(true)}
+          onClick={() => !disabled && reopen()}
           onChange={(event) => {
             if (disabled) return;
             setQuery(event.target.value);
             setActive(undefined);
-            setOpen(true);
+            reopen();
           }}
           onKeyDown={(event) => {
             if (disabled || event.nativeEvent.isComposing) return;
             if (event.key === "ArrowDown" || event.key === "ArrowUp") {
               event.preventDefault();
-              setOpen(true);
+              reopen();
               const next =
                 activeIndex < 0
                   ? event.key === "ArrowDown"

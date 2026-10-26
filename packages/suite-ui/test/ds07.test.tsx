@@ -322,6 +322,18 @@ describe("TagInput", () => {
     expect(screen.queryByRole("button", { name: "Remove Work" })).toBeNull();
     expect(document.activeElement).toBe(input);
   });
+  it("replaces the add announcement with the suggestion count once the user filters again", async () => {
+    const user = userEvent.setup();
+    render(<Tags />);
+    const input = screen.getByRole("combobox", { name: "Labels" });
+    await user.click(input);
+    await user.type(input, "fin");
+    await user.keyboard("{ArrowDown}{Enter}");
+    const status = screen.getByRole("status");
+    expect(status.textContent).toBe("Finance added");
+    await user.type(input, "zzz");
+    expect(status.textContent).toBe("0 suggestions");
+  });
   it("supports pointer selection, no-results, Escape, and Tab leaving the composite", async () => {
     const user = userEvent.setup();
     render(<Tags />);
