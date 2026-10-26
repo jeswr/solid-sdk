@@ -11,14 +11,14 @@ import {
 
 describe("vocab", () => {
   it("pins the fedreg namespace", () => {
-    expect(FEDREG).toBe("https://w3id.org/jeswr/fedreg#");
+    expect(FEDREG).toBe("https://jeswr.org/ns/fedreg#");
   });
 
   it("maps each status name to its fedreg IRI", () => {
-    expect(MEMBERSHIP_STATUS.Active).toBe("https://w3id.org/jeswr/fedreg#Active");
-    expect(MEMBERSHIP_STATUS.Proposed).toBe("https://w3id.org/jeswr/fedreg#Proposed");
-    expect(MEMBERSHIP_STATUS.Suspended).toBe("https://w3id.org/jeswr/fedreg#Suspended");
-    expect(MEMBERSHIP_STATUS.Revoked).toBe("https://w3id.org/jeswr/fedreg#Revoked");
+    expect(MEMBERSHIP_STATUS.Active).toBe("https://jeswr.org/ns/fedreg#Active");
+    expect(MEMBERSHIP_STATUS.Proposed).toBe("https://jeswr.org/ns/fedreg#Proposed");
+    expect(MEMBERSHIP_STATUS.Suspended).toBe("https://jeswr.org/ns/fedreg#Suspended");
+    expect(MEMBERSHIP_STATUS.Revoked).toBe("https://jeswr.org/ns/fedreg#Revoked");
   });
 
   it("VALID_STATUS_IRIS holds exactly the four coded values", () => {
@@ -35,7 +35,7 @@ describe("vocab", () => {
   });
 
   it("statusName returns undefined for an unknown IRI", () => {
-    expect(statusName("https://w3id.org/jeswr/fedreg#Bogus")).toBeUndefined();
+    expect(statusName("https://jeswr.org/ns/fedreg#Bogus")).toBeUndefined();
     expect(statusName("not-an-iri")).toBeUndefined();
   });
 

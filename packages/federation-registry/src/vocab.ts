@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+// AUTHORED-BY Codex GPT-6.1-Sol
 //
 // Term IRIs for the Federation Catalogue / Registry vocabulary (fedreg:) and the
 // adjacent vocabularies it references (DCAT, Dublin Core Terms, RDF). These are
@@ -6,13 +7,13 @@
 // builders all key on.
 //
 // Source of truth: jeswr/solid-federation-vocab `fedreg.ttl`
-// (https://w3id.org/jeswr/fedreg#). Keep in lock-step with that ontology.
+// (https://jeswr.org/ns/fedreg#). Keep in lock-step with that ontology.
 
 /** The fedreg: namespace IRI (Catalogue / Registry). */
-export const FEDREG = "https://w3id.org/jeswr/fedreg#" as const;
+export const FEDREG = "https://jeswr.org/ns/fedreg#" as const;
 
 /** The fedapp: namespace IRI (app self-registration). */
-export const FEDAPP = "https://w3id.org/jeswr/fed#" as const;
+export const FEDAPP = "https://jeswr.org/ns/fed#" as const;
 
 /** The DCAT `dcat:` namespace IRI (catalogue spine). */
 export const DCAT = "http://www.w3.org/ns/dcat#" as const;
@@ -20,8 +21,8 @@ export const DCAT = "http://www.w3.org/ns/dcat#" as const;
 /** `rdf:type`. */
 export const RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type" as const;
 
-/** The sector base IRI (`https://w3id.org/jeswr/sectors/`). */
-export const SECTOR_BASE = "https://w3id.org/jeswr/sectors/" as const;
+/** The sector base IRI (`https://jeswr.org/ns/sectors/`). */
+export const SECTOR_BASE = "https://jeswr.org/ns/sectors/" as const;
 
 /** Classes. */
 export const FEDREG_REGISTRY = `${FEDREG}Registry` as const;
@@ -72,9 +73,14 @@ export const TRUSTED_STATUS: ReadonlySet<MembershipStatusName> = new Set(["Activ
 /** Map a status IRI back to its short name, or `undefined` if unknown. */
 export function statusName(iri: string): MembershipStatusName | undefined {
   for (const [name, statusIri] of Object.entries(MEMBERSHIP_STATUS)) {
-    if (statusIri === iri) {
+    if (statusIri === iri || legacyIri(statusIri) === iri) {
       return name as MembershipStatusName;
     }
   }
   return undefined;
+}
+
+/** Read alias for this package's vocabulary; never used by builders. @internal */
+export function legacyIri(iri: string): string {
+  return iri.replace("https://jeswr.org/ns/fedreg#", "https://w3id.org/jeswr/fedreg#");
 }
