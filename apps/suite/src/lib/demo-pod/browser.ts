@@ -74,7 +74,7 @@ function offline(pod: DemoPod): DemoPod {
   return {
     ...pod,
     fetch: async (input, init) => {
-      if (!navigator.onLine) throw new TypeError("Demo pod is offline");
+      if (navigator.onLine === false) throw new TypeError("Demo pod is offline");
       return pod.fetch(input, init);
     },
   };

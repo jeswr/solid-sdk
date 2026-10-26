@@ -115,7 +115,8 @@ async function podDocument(page: Page) {
         const db = open.result;
         const read = db.transaction("pods").objectStore("pods").get("https://alice.demo.pod/");
         read.onsuccess = () => {
-          resolve(read.result);
+          // The demo pod stores { revision, snapshot }; older saves held the bare snapshot.
+          resolve(read.result.snapshot ?? read.result);
           db.close();
         };
         read.onerror = () => {
