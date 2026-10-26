@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 "use client";
-import * as Progress from "@radix-ui/react-progress";
 import { Check, ChevronDown, ChevronUp, File, Upload } from "lucide-react";
+import { Progress } from "radix-ui";
 import { useId, useRef, useState } from "react";
 import { type UploadItem, uploadFailureCopy, uploadSummary } from "../uploads/queue.js";
 import { SurfaceFeedback, type SurfaceState } from "./surface-state.js";

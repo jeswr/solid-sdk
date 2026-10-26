@@ -2,7 +2,8 @@
 # @jeswr/suite-ui
 
 Normative tokens from `01-design-system` §2.1–2.7 and Amendment 2026-10-25. Import `styles/tokens.css`,
-`styles/theme.css` (Tailwind v4), and `styles/density.css`. Set `.dark` for dark
+`styles/theme.css` (Tailwind v4), `styles/density.css`, `styles/components.css`,
+and `styles/collections.css`, in that order. Set `.dark` for dark
 mode and `data-density="comfortable|compact"` for density. Coarse pointers force
 comfortable rows and 44px controls. Reduced motion zeros motion durations.
 
@@ -48,6 +49,9 @@ checks axe, keyboard interaction, focus, density, touch targets and 320px reflow
 full-page screenshots under repo-root `artifacts/screens/DS-02/`. Chromium execution and
 visual comparison belong to the dispatcher. Unit axe checks run in jsdom; contrast is
 covered by the token gate and the browser tests.
+
+## DS-06 collections and selection
+
 `DataTable`, `FileGrid` and `useSelection` are client components/hooks. Import
 `@jeswr/suite-ui/styles/collections.css` after the token and density styles. Both
 collections accept `items`, stable `getKey`, `getLabel`, `label`, `onOpen`, and optional
@@ -71,6 +75,9 @@ Loading uses skeletons, refreshing retains content, offline without cached items
 and zero items use first-use or `filterQuery` empty states (`emptyAction` / `onClearFilters`).
 Hosts render their refresh progress in TopBar and can supply session/conflict dialogs as error actions.
 Fixtures: `/dev/components/data-table` and `/dev/components/file-grid` in `apps/suite`.
+
+## DS-07 editing and navigation
+
 DS-07 exports `Toolbar`, `FilterChips`, `Breadcrumbs`, `EditableText`, and `TagInput`.
 Import `@jeswr/suite-ui/styles/components.css` after the token styles. Components use
 React 19, Radix dropdown menus, and Lucide icons. Consumers supply controlled values,
@@ -94,7 +101,7 @@ unique item IDs, and synchronous callbacks; persistence and remote fetching stay
 Interactive fixtures live in `apps/suite` at `/dev/components/<component>` (kebab-case).
 The component tests use Vitest, jsdom, Testing Library and axe-core; Playwright runs real
 layout, contrast, keyboard, and screenshot checks across the six viewport/theme projects.
-<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+## DS-11 uploads and previews
 
 DS-11 exports `UploadDock`, `DropZoneOverlay`, `PreviewPane`, and the pure
 `uploadQueueReducer`. Import `@jeswr/suite-ui/styles/components.css` after the token,
@@ -125,6 +132,9 @@ All three accept `state` (`ready`, `loading`, `empty`, `filtered-empty` with `qu
 `error` with a classified `SurfaceError`) and an `onAction` recovery callback. They do not
 classify SDK errors themselves. Fixtures live at `/dev/components/upload-dock`,
 `/dev/components/drop-zone-overlay`, and `/dev/components/preview-pane` in `apps/suite`.
+
+## DS-12 typed content and storage
+
 DS-12 adds `TypedView`, `DetailsPane`, and `PodMeter`. Import `styles/components.css`
 after the token styles. `TypedView` accepts a `TypedViewData` projection from typed RDF
 accessors; its registry maps RDF class IRIs to renderers and can be extended with a
@@ -137,4 +147,5 @@ native disclosure. Bind that prop to Settings › Advanced, never to the resourc
 in `people`, and `onManageAccess` to open the consuming screen's share dialog. The
 consumer hosts the pane in its responsive sheet and owns loading, refresh and errors.
 `PodMeter` takes usage in bytes and an optional quota; absent quota never implies a
-percentage. All three accept `SurfaceState` for loading, empty and classified errors.
+percentage. All three accept `ContentSurfaceState` for loading, empty and classified errors.
+Upload and preview components use the separately exported `SurfaceState`.

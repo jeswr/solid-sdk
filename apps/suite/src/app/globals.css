@@ -4,8 +4,8 @@
 @import "@jeswr/suite-ui/styles/theme.css";
 @import "@jeswr/suite-ui/styles/density.css";
 @import "@jeswr/suite-ui/styles/components.css";
-@source "../../../../packages/suite-ui/src";
 @import "@jeswr/suite-ui/styles/collections.css";
+@source "../../../../packages/suite-ui/src";
 
 * {
   box-sizing: border-box;
@@ -327,6 +327,7 @@ nav[aria-label="Component fixtures"] {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-3) var(--space-6);
+}
 
 .suite-fixture-controls {
   display: flex;
@@ -356,11 +357,6 @@ nav[aria-label="Component fixtures"] {
   gap: var(--space-8);
   min-width: 0;
 }
-.fixture-page > nav {
-  display: grid;
-  justify-items: start;
-  gap: var(--space-2);
-
 .ds07-stack {
   display: grid;
   gap: var(--space-4);
@@ -371,19 +367,14 @@ nav[aria-label="Component fixtures"] {
 .ds07-stack > .suite-button {
   justify-self: start;
 }
-.fixture-page > nav {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-4);
-}
 .ds07-page section {
   min-width: 0;
 }
-
 .ds07-narrow {
   width: 100%;
   max-width: 320px;
   min-width: 0;
+}
 .ds12-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
@@ -400,17 +391,10 @@ nav[aria-label="Component fixtures"] {
   display: flex;
   align-items: center;
   gap: var(--space-2);
+  min-height: 44px;
 }
 .ds12-setting input {
   width: 24px;
   height: 24px;
   accent-color: var(--primary);
-}
-.ds12-setting {
-  min-height: 44px;
-}
-nav[aria-label="Component fixtures"] {
-  display: grid;
-  justify-items: start;
-  gap: var(--space-2);
 }

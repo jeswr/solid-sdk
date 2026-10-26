@@ -1,11 +1,56 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 
+export type {
+  CollectionErrorKind,
+  CollectionState,
+  CollectionSurfaceProps,
+} from "./collections/collection-state.js";
+export type { DataColumn, DataTableProps } from "./collections/data-table.js";
+export { DataTable } from "./collections/data-table.js";
+export type { FileGridProps } from "./collections/file-grid.js";
+export { FileGrid } from "./collections/file-grid.js";
+export type { SelectionModel, SelectionOptions } from "./collections/use-selection.js";
+export { useSelection } from "./collections/use-selection.js";
 export * from "./components/atoms/app-icon.js";
 export * from "./components/atoms/count-badge.js";
 export * from "./components/atoms/file-type-icon.js";
 export * from "./components/atoms/kbd.js";
 export * from "./components/atoms/provenance-badge.js";
 export * from "./components/atoms/status-dot.js";
+export type { BreadcrumbItem, BreadcrumbsProps } from "./components/breadcrumbs.js";
+export { Breadcrumbs } from "./components/breadcrumbs.js";
+export type { SurfaceState as ContentSurfaceState } from "./components/content.js";
+export { formatBytes, plainText, surfaceErrors } from "./components/content.js";
+export type { AccessSummary, DetailsPaneProps } from "./components/details-pane.js";
+export { accessSummaryText, DetailsPane } from "./components/details-pane.js";
+export { DropZoneOverlay, type DropZoneOverlayProps } from "./components/drop-zone-overlay.js";
+export type { EditableTextProps } from "./components/editable-text.js";
+export { EditableText } from "./components/editable-text.js";
+export type { FilterChip, FilterChipsProps } from "./components/filter-chips.js";
+export { FilterChips } from "./components/filter-chips.js";
+export { PodMeter } from "./components/pod-meter.js";
+export {
+  PreviewPane,
+  type PreviewPaneProps,
+  type PreviewSource,
+  previewKind,
+} from "./components/preview-pane.js";
+export {
+  type SurfaceError,
+  type SurfaceState,
+  surfaceErrorCopy,
+} from "./components/surface-state.js";
+export type { TagInputProps, TagOption } from "./components/tag-input.js";
+export { TagInput } from "./components/tag-input.js";
+export type { ToolbarAction, ToolbarProps } from "./components/toolbar.js";
+export { Toolbar } from "./components/toolbar.js";
+export type {
+  TypedProperty,
+  TypedRendererProps,
+  TypedViewData,
+  TypedViewRegistry,
+} from "./components/typed-view.js";
+export { TypedView, typedViewRegistry } from "./components/typed-view.js";
 export * from "./components/ui/accordion.js";
 export * from "./components/ui/alert.js";
 export * from "./components/ui/alert-dialog.js";
@@ -43,52 +88,7 @@ export * from "./components/ui/textarea.js";
 export * from "./components/ui/toggle.js";
 export * from "./components/ui/toggle-group.js";
 export * from "./components/ui/tooltip.js";
-export type {
-  CollectionErrorKind,
-  CollectionState,
-  CollectionSurfaceProps,
-} from "./collections/collection-state.js";
-export type { DataColumn, DataTableProps } from "./collections/data-table.js";
-export { DataTable } from "./collections/data-table.js";
-export type { FileGridProps } from "./collections/file-grid.js";
-export { FileGrid } from "./collections/file-grid.js";
-export type { SelectionModel, SelectionOptions } from "./collections/use-selection.js";
-export { useSelection } from "./collections/use-selection.js";
-export type { BreadcrumbItem, BreadcrumbsProps } from "./components/breadcrumbs.js";
-export { Breadcrumbs } from "./components/breadcrumbs.js";
-export type { EditableTextProps } from "./components/editable-text.js";
-export { EditableText } from "./components/editable-text.js";
-export type { FilterChip, FilterChipsProps } from "./components/filter-chips.js";
-export { FilterChips } from "./components/filter-chips.js";
-export type { TagInputProps, TagOption } from "./components/tag-input.js";
-export { TagInput } from "./components/tag-input.js";
-export type { ToolbarAction, ToolbarProps } from "./components/toolbar.js";
-export { Toolbar } from "./components/toolbar.js";
-export { DropZoneOverlay, type DropZoneOverlayProps } from "./components/drop-zone-overlay.js";
-export {
-  PreviewPane,
-  type PreviewPaneProps,
-  type PreviewSource,
-  previewKind,
-} from "./components/preview-pane.js";
-export {
-  type SurfaceError,
-  type SurfaceState,
-  surfaceErrorCopy,
-} from "./components/surface-state.js";
 export { UploadDock, type UploadDockProps } from "./components/upload-dock.js";
-export type { SurfaceState } from "./components/content.js";
-export { formatBytes, plainText, surfaceErrors } from "./components/content.js";
-export type { AccessSummary, DetailsPaneProps } from "./components/details-pane.js";
-export { accessSummaryText, DetailsPane } from "./components/details-pane.js";
-export { PodMeter } from "./components/pod-meter.js";
-export type {
-  TypedProperty,
-  TypedRendererProps,
-  TypedViewData,
-  TypedViewRegistry,
-} from "./components/typed-view.js";
-export { TypedView, typedViewRegistry } from "./components/typed-view.js";
 export type { SuiteToken, TokenName } from "./tokens.js";
 export { tokens } from "./tokens.js";
 export {

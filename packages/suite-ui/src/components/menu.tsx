@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 "use client";
 
-import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+import { DropdownMenu } from "radix-ui";
 import type { ReactNode } from "react";
 
 export function MenuContent({ children, label }: { children: ReactNode; label: string }) {

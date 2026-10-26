@@ -1,8 +1,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 "use client";
 
-import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { ChevronRight, Ellipsis } from "lucide-react";
+import { DropdownMenu } from "radix-ui";
 import { type DragEventHandler, useLayoutEffect, useRef, useState } from "react";
 import { MenuContent } from "./menu.js";
 

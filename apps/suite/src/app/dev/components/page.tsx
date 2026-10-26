@@ -5,7 +5,7 @@ export default function ComponentsPage() {
     <main id="main-content" tabIndex={-1} className="fixture-page">
       <p className="eyebrow">Solid Suite · Design system</p>
       <h1>Component fixtures</h1>
-      <p>Tokens and foundations for the suite.</p>
+      <p>Tokens, foundations and shared components for the suite.</p>
       <nav aria-label="Component fixtures" className="grid gap-3">
         <a href="/dev/components/tokens">Tokens, typography and density</a>
         {fixtureNames.map((name) => (
