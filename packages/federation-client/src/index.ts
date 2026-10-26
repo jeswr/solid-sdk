@@ -2,7 +2,7 @@
 /**
  * `@jeswr/federation-client` — a typed TypeScript client for the Solid
  * app-registration / federation vocabulary (`fedapp:`) at
- * `https://w3id.org/jeswr/fed#`.
+ * `https://jeswr.org/ns/fed#`.
  *
  * Entry points:
  * - {@link verify} — fetch + validate an app's federation registration document.
