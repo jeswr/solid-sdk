@@ -180,3 +180,47 @@ client ID files were removed. No `dist/` is committed.
 
 The `roborev` executable is still unavailable, so automated per-commit verdicts
 could not be collected. No review tooling or tracker was installed.
+
+## Fix round 3 — review of `6f89db4b8f83`
+
+All three findings are fixed on `lane/sst-31t`. Changes are limited to the direct
+sender, its regression tests and this report.
+
+| Commit | Change |
+| --- | --- |
+| `0d6d30ab` | `fix: bind direct credentials to the delivery account` — snapshot and freeze the validated account reference before awaiting verification or credentials. Tests replace the caller's account and mutate its ID at both suspension points, checking credential scope and actual inbox delivery. |
+| `7339e73e` | `fix: share pending direct sends by mailbox` — share the pending set through a mailbox-keyed WeakMap. Tests cover separately constructed senders, verification and credential delays, success, rejection, isolated mailboxes and overlapping attempts. |
+| `e020ca8d` | `fix: snapshot direct lookup wire before verification` — use one checked wire snapshot throughout lookup. Tests replace the caller's wire while lookup verifies accepted bytes or a send paused at either asynchronous boundary. |
+| This final commit | `docs: record sst-31t round three verification` — this report. |
+
+Verification uses Node 24.22.1 with `PATH=/opt/node24/bin:$PATH` for all pnpm
+commands. Each regression was reproduced before its corresponding fix: three
+account-mutation cases requested credentials for the wrong account; the shared
+sender cases returned premature absence; all three lookup-mutation cases lost
+accepted or pending evidence. The existing safe account-replacement case during
+credential retrieval and same-sender overlap case continued to pass.
+
+| Command | Result |
+| --- | --- |
+| `pnpm exec turbo run build --filter=@jeswr/agent-channels` | PASS; 5/5 tasks, preparing workspace prerequisites absent from this fresh checkout. |
+| `pnpm exec vitest run --root packages/agent-channels test/direct.test.ts --coverage.enabled=false -t 'binds credentials'` (before the account fix) | Expected FAIL; 3 failed, 1 passed. |
+| `pnpm exec vitest run --root packages/agent-channels test/direct.test.ts --coverage.enabled=false -t 'shared senders\|shares pending'` (before the shared-state fix) | Expected FAIL; 3 failed, 1 passed. |
+| `pnpm exec vitest run --root packages/agent-channels test/direct.test.ts --coverage.enabled=false -t 'snapshots lookup'` (before the lookup fix) | Expected FAIL; all 3 regression cases reproduced. |
+| `pnpm --filter @jeswr/agent-channels run lint && pnpm --filter @jeswr/agent-channels run build && pnpm --filter @jeswr/agent-channels run typecheck && pnpm --filter @jeswr/agent-channels run test` | PASS; 4 test files, 72 tests. Enforced per-file coverage: statements 171/171, branches 116/116, functions 35/35, lines 164/164 — all 100%. |
+| `TURBO_SCM_BASE=6f89db4b8f833610cf073506fa6bc1c897956fc7 pnpm run gate` | PASS; root lint and 25/25 Turbo tasks, including 72 channel tests, 650 legacy-bridge tests, 121 model tests and 531 pilot tests. The supplied starting lane SHA scopes this fix round. |
+| `pnpm run gate:full` | FAIL outside this fix: 282/344 tasks completed successfully before the existing `@jeswr/federation-trust#test` delegation-credential snapshot failed at `test/characterization.test.ts:196`. Expected JWK property order is `crv,x,kty`; received order is `kty,crv,x`, matching the previous lane reports. All 747 root tests passed. |
+| `git diff --check` | PASS. |
+
+No dependencies were added, so no new `check:packages` run was required. Tests
+use only local signatures and fake grants. No coverage threshold, timeout
+configuration or unrelated source was changed. There were no new test flakes.
+The 16 generated app callback and client-ID files were removed; no `dist/` is
+committed. No remote was fetched, no branch was switched, and no other checkout
+was modified.
+
+All requested fixes and regression tests are complete, with no open questions
+or design changes. The unrelated federation-trust snapshot still blocks a green
+full-workspace gate and was left unchanged to respect scope. The `roborev`
+executable remains unavailable (`command -v roborev` found no executable), so
+automated per-commit verdicts could not be collected. No review tooling or
+tracker was installed.
