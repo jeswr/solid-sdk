@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { TypedView } from "@jeswr/suite-ui";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -126,6 +127,37 @@ test.each([
   expect(data.properties.find((property) => property.key === "telephone")?.values).toEqual([
     "+441234567890",
   ]);
+});
+
+test.each([
+  ["value", "iri"],
+  ["hasValue", "iri"],
+  ["value", "literal"],
+  ["hasValue", "literal"],
+])("labelled contact wrappers prefer vcard:%s %s values over their labels", async (predicate, kind) => {
+  const url = "https://pod.example/contact";
+  const email = kind === "iri" ? "<mailto:mira@example.test>" : '"mira@example.test"';
+  const phone = kind === "iri" ? "<tel:+441234567890>" : '"+441234567890"';
+  const dataset = await parseResource(
+    `@prefix v: <http://www.w3.org/2006/vcard/ns#> .
+     @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+     <#it> a v:Individual; v:fn "Mira";
+       v:hasEmail [ rdfs:label "Work email"; v:${predicate} ${email} ];
+       v:hasTelephone [ rdfs:label "Work phone"; v:${predicate} ${phone} ] .`,
+    "text/turtle",
+    url,
+  );
+  const data = await typedViewData(dataset, `${url}#it`);
+  expect(data.properties.find((property) => property.key === "email")?.values).toEqual([
+    "mira@example.test",
+  ]);
+  expect(data.properties.find((property) => property.key === "telephone")?.values).toEqual([
+    "+441234567890",
+  ]);
+  const text = visibleText(renderToStaticMarkup(createElement(TypedView, { data })));
+  expect(text).toContain("mira@example.test");
+  expect(text).toContain("+441234567890");
+  expect(text).not.toMatch(/mailto:|tel:/);
 });
 
 test.each([

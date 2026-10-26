@@ -1,8 +1,9 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 "use client";
 import { Check, ChevronDown, ChevronUp, File, Upload } from "lucide-react";
 import { Progress } from "radix-ui";
-import { useId, useRef, useState } from "react";
+import { useId, useLayoutEffect, useRef, useState } from "react";
 import { type UploadItem, uploadFailureCopy, uploadSummary } from "../uploads/queue.js";
 import { SurfaceFeedback, type SurfaceState } from "./surface-state.js";
 
@@ -44,6 +45,38 @@ export function UploadDock({
   const [collapsed, setCollapsed] = useState(initiallyCollapsed);
   const panelId = useId();
   const toggle = useRef<HTMLButtonElement>(null);
+  const queue = useRef<HTMLElement>(null);
+  const removedFocus = useRef<{
+    element: HTMLButtonElement;
+    index: number;
+    control: "action" | "cancel";
+  } | null>(null);
+  function rememberFocus(
+    element: HTMLButtonElement | null,
+    index: number,
+    control: "action" | "cancel",
+  ) {
+    if (!element) return;
+    // React detaches refs before removing the DOM node and losing its activeElement.
+    return () => {
+      if (document.activeElement === element) removedFocus.current = { element, index, control };
+    };
+  }
+  useLayoutEffect(() => {
+    const previous = removedFocus.current;
+    removedFocus.current = null;
+    if (!previous || previous.element.isConnected || document.activeElement !== document.body)
+      return;
+    const rows = Array.from(queue.current?.querySelectorAll(".su-upload-item") ?? []);
+    const next = [...rows.slice(previous.index + 1), ...rows.slice(0, previous.index)]
+      .map((row) =>
+        row.querySelector<HTMLButtonElement>(
+          `[data-upload-control="${previous.control}"]:not(:disabled)`,
+        ),
+      )
+      .find((button) => button !== null);
+    (next ?? toggle.current)?.focus();
+  });
   const summary = uploadSummary(items);
   const feedback = state ?? { status: items.length ? "ready" : "empty" };
   const collapse = () => {
@@ -78,6 +111,7 @@ export function UploadDock({
         </button>
       </div>
       <section
+        ref={queue}
         aria-label="Upload queue"
         id={panelId}
         hidden={collapsed}
@@ -94,7 +128,7 @@ export function UploadDock({
               {items.filter((item) => item.status === "done").length} of {items.length} uploaded
             </p>
             <ul className="su-upload-list">
-              {items.map((item) => {
+              {items.map((item, index) => {
                 const percent =
                   item.total === 0
                     ? item.status === "done"
@@ -131,6 +165,8 @@ export function UploadDock({
                     <div className="su-actions">
                       {(active || item.status === "paused" || item.status === "failed") && (
                         <button
+                          ref={(element) => rememberFocus(element, index, "action")}
+                          data-upload-control="action"
                           type="button"
                           className="su-button"
                           aria-label={`${item.status === "paused" ? "Resume" : item.status === "failed" ? "Retry" : "Pause"} ${item.name}`}
@@ -152,6 +188,8 @@ export function UploadDock({
                       )}
                       {!["done", "skipped"].includes(item.status) && (
                         <button
+                          ref={(element) => rememberFocus(element, index, "cancel")}
+                          data-upload-control="cancel"
                           type="button"
                           className="su-button"
                           aria-label={`Cancel ${item.name}`}

@@ -1,5 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { Upload } from "lucide-react";
+import type { Ref } from "react";
 export type SurfaceError =
   | "reauth"
   | "forbidden"
@@ -38,17 +40,21 @@ export function SurfaceFeedback({
   emptyTitle = "No uploads yet",
   emptyBody = "Upload files to get started",
   actionLabel = "Upload a file",
+  ref,
+  tabIndex,
 }: {
   state: SurfaceState;
   onAction?: (() => void) | undefined;
   emptyTitle?: string;
   emptyBody?: string;
   actionLabel?: string;
+  ref?: Ref<HTMLDivElement>;
+  tabIndex?: number;
 }) {
   if (state.status === "ready") return null;
   if (state.status === "loading")
     return (
-      <div className="su-feedback" role="status" aria-label="Loading">
+      <div ref={ref} tabIndex={tabIndex} className="su-feedback" role="status" aria-label="Loading">
         <span className="su-skeleton su-skeleton-title" />
         <span className="su-skeleton" />
         <span className="su-skeleton" />
@@ -58,7 +64,7 @@ export function SurfaceFeedback({
   const error = state.status === "error";
   const filtered = state.status === "filtered-empty";
   return (
-    <div className="su-feedback" role={error ? "alert" : "status"}>
+    <div ref={ref} tabIndex={tabIndex} className="su-feedback" role={error ? "alert" : "status"}>
       {!error && !filtered && (
         <span className="su-empty-tile">
           <Upload size={24} strokeWidth={1.5} aria-hidden="true" />

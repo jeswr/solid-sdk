@@ -1,7 +1,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 "use client";
 import { Upload } from "lucide-react";
-import { type ReactNode, useEffect, useId, useRef, useState } from "react";
+import { type ReactNode, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { captureDrop, type DroppedFiles, filesFromPicker, readDrop } from "../uploads/drop.js";
 import { SurfaceFeedback, type SurfaceState } from "./surface-state.js";
 export interface DropZoneOverlayProps {
@@ -30,7 +31,19 @@ export function DropZoneOverlay({
   const busy = useRef(false);
   const filesInput = useRef<HTMLInputElement>(null);
   const folderInput = useRef<HTMLInputElement>(null);
+  const previousFocus = useRef<HTMLElement | null>(null);
+  const loadingFeedback = useRef<HTMLDivElement>(null);
+  const retry = useRef<HTMLButtonElement>(null);
   const id = useId();
+  useLayoutEffect(() => {
+    if (reading) loadingFeedback.current?.focus();
+    else if (failed) retry.current?.focus();
+    else {
+      const previous = previousFocus.current;
+      previousFocus.current = null;
+      if (previous?.isConnected && !previous.closest("[inert]")) previous.focus();
+    }
+  }, [reading, failed]);
   const reset = () => {
     depth.current = 0;
     setDragging(false);
@@ -55,6 +68,10 @@ export function DropZoneOverlay({
   }, [dragging]);
   async function accept(read: () => Promise<DroppedFiles> | DroppedFiles) {
     if (busy.current || disabled) return;
+    // Keep the original target across failures and retries while the children stay mounted.
+    if (!failed)
+      previousFocus.current =
+        document.activeElement instanceof HTMLElement ? document.activeElement : null;
     busy.current = true;
     setReading(true);
     setFailed(false);
@@ -103,64 +120,71 @@ export function DropZoneOverlay({
         if (event.key === "Escape") reset();
       }}
     >
-      <div className="su-actions su-drop-actions">
-        <button
-          className="su-button su-button-primary"
-          type="button"
-          disabled={disabled || reading}
-          onClick={() => filesInput.current?.click()}
-        >
-          Upload files
-        </button>
-        <button
-          className="su-button"
-          type="button"
-          disabled={disabled || reading}
-          onClick={() => folderInput.current?.click()}
-        >
-          Upload folder
-        </button>
-        <input
-          ref={filesInput}
-          id={`${id}-files`}
-          aria-label="Choose files"
-          type="file"
-          multiple
-          hidden
-          onChange={(event) => {
-            const files = Array.from(event.currentTarget.files ?? []);
-            event.currentTarget.value = "";
-            void accept(() => filesFromPicker(files));
-          }}
-        />
-        <input
-          ref={folderInput}
-          id={`${id}-folder`}
-          aria-label="Choose folder"
-          type="file"
-          multiple
-          hidden
-          {...{ webkitdirectory: "" }}
-          onChange={(event) => {
-            const files = Array.from(event.currentTarget.files ?? []);
-            event.currentTarget.value = "";
-            void accept(() => filesFromPicker(files));
-          }}
-        />
+      {/* Pickers stay outside the inert region so Retry can still open them. */}
+      <input
+        ref={filesInput}
+        id={`${id}-files`}
+        aria-label="Choose files"
+        type="file"
+        multiple
+        hidden
+        onChange={(event) => {
+          const files = Array.from(event.currentTarget.files ?? []);
+          event.currentTarget.value = "";
+          void accept(() => filesFromPicker(files));
+        }}
+      />
+      <input
+        ref={folderInput}
+        id={`${id}-folder`}
+        aria-label="Choose folder"
+        type="file"
+        multiple
+        hidden
+        {...{ webkitdirectory: "" }}
+        onChange={(event) => {
+          const files = Array.from(event.currentTarget.files ?? []);
+          event.currentTarget.value = "";
+          void accept(() => filesFromPicker(files));
+        }}
+      />
+      <div inert={reading || failed}>
+        <div className="su-actions su-drop-actions">
+          <button
+            className="su-button su-button-primary"
+            type="button"
+            disabled={disabled || reading}
+            onClick={() => filesInput.current?.click()}
+          >
+            Upload files
+          </button>
+          <button
+            className="su-button"
+            type="button"
+            disabled={disabled || reading}
+            onClick={() => folderInput.current?.click()}
+          >
+            Upload folder
+          </button>
+        </div>
+        {state && state.status !== "ready" ? (
+          <SurfaceFeedback
+            state={state}
+            onAction={onAction ?? (() => filesInput.current?.click())}
+          />
+        ) : (
+          children
+        )}
       </div>
-      {state && state.status !== "ready" ? (
-        <SurfaceFeedback state={state} onAction={onAction ?? (() => filesInput.current?.click())} />
-      ) : (
-        children
-      )}
       {(reading || failed) && (
         <div className="su-drop-feedback">
           {reading ? (
-            <SurfaceFeedback state={{ status: "loading" }} />
+            <SurfaceFeedback ref={loadingFeedback} tabIndex={-1} state={{ status: "loading" }} />
           ) : (
             <div className="su-feedback" role="alert">
               <p>Can't read these files</p>
               <button
+                ref={retry}
                 className="su-button"
                 type="button"
                 onClick={() => filesInput.current?.click()}

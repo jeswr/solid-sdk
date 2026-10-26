@@ -1,7 +1,9 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 // @vitest-environment jsdom
 import { Blob as NodeBlob } from "node:buffer";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import axe from "axe-core";
 import { useReducer } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -52,6 +54,67 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 describe("UploadDock", () => {
+  it.each([
+    "Pause",
+    "Cancel",
+  ])("moves focused %s to the next task's corresponding control after transport completion", (control) => {
+    const uploading = item("uploading");
+    const queued = item("queued");
+    const { rerender } = render(
+      <UploadDock {...controls} items={[uploading, item("done"), queued]} />,
+    );
+    screen.getByRole("button", { name: `${control} uploading.txt` }).focus();
+    rerender(
+      <UploadDock
+        {...controls}
+        items={[{ ...uploading, status: "done", sent: 100 }, item("done"), queued]}
+      />,
+    );
+    expect(document.activeElement).toBe(
+      screen.getByRole("button", { name: `${control} queued.txt` }),
+    );
+  });
+
+  it.each([
+    "Pause",
+    "Cancel",
+  ])("returns focused %s to the dock toggle when transport completes the last task", (control) => {
+    const uploading = item("uploading");
+    const { rerender } = render(<UploadDock {...controls} items={[uploading]} />);
+    screen.getByRole("button", { name: `${control} uploading.txt` }).focus();
+    rerender(<UploadDock {...controls} items={[{ ...uploading, status: "done", sent: 100 }]} />);
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: /Uploads.*Collapse/ }));
+  });
+
+  it("leaves focus outside the dock when an unfocused task completes", () => {
+    const uploading = item("uploading");
+    const view = (task: UploadItem) => (
+      <>
+        <button type="button">Folder action</button>
+        <UploadDock {...controls} items={[task]} />
+      </>
+    );
+    const { rerender } = render(view(uploading));
+    screen.getByRole("button", { name: "Pause uploading.txt" }).focus();
+    const outside = screen.getByRole("button", { name: "Folder action" });
+    outside.focus();
+    rerender(view({ ...uploading, status: "done", sent: 100 }));
+    expect(document.activeElement).toBe(outside);
+  });
+
+  it("skips disabled pause controls when restoring focus after completion", () => {
+    const paused = item("paused");
+    const queued = item("queued");
+    const { rerender } = render(
+      <UploadDock {...controls} canPause={false} items={[paused, queued]} />,
+    );
+    screen.getByRole("button", { name: "Resume paused.txt" }).focus();
+    rerender(
+      <UploadDock {...controls} canPause={false} items={[{ ...paused, status: "done" }, queued]} />,
+    );
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: /Uploads.*Collapse/ }));
+  });
+
   it("keeps keyboard focus through pause/resume/retry and returns it after cancel", () => {
     function Controlled() {
       const [items, dispatch] = useReducer(uploadQueueReducer, [item("uploading"), item("failed")]);
@@ -168,6 +231,107 @@ describe("async feedback", () => {
     }
 });
 describe("DropZoneOverlay", () => {
+  it("makes covered controls inert and focuses the loading status until ingestion finishes", async () => {
+    const user = userEvent.setup();
+    let finish = () => {};
+    const pending = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    const openFolder = vi.fn();
+    render(
+      <DropZoneOverlay folderName="Projects" onFiles={() => pending}>
+        <button type="button" onClick={openFolder}>
+          Open folder
+        </button>
+      </DropZoneOverlay>,
+    );
+    const action = screen.getByRole("button", { name: "Open folder" });
+    action.focus();
+    fireEvent.change(screen.getByLabelText("Choose files"), {
+      target: { files: [new File(["a"], "one.txt")] },
+    });
+    const loading = screen.getByRole("status", { name: "Loading" });
+    expect(document.activeElement).toBe(loading);
+    expect(loading.tabIndex).toBe(-1);
+    expect(action.closest("[inert]")).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Upload files" }).closest("[inert]")).not.toBeNull();
+    await user.keyboard("{Enter}");
+    expect(openFolder).not.toHaveBeenCalled();
+    await act(async () => finish());
+    expect(action.closest("[inert]")).toBeNull();
+    expect(document.activeElement).toBe(action);
+    await user.keyboard("{Enter}");
+    expect(openFolder).toHaveBeenCalledOnce();
+  });
+
+  it("focuses retry after a rejected drop and restores the mounted folder action after retry", async () => {
+    const user = userEvent.setup();
+    const onFiles = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("read denied"))
+      .mockResolvedValue(undefined);
+    const openFolder = vi.fn();
+    render(
+      <DropZoneOverlay folderName="Projects" onFiles={onFiles}>
+        <button type="button" onClick={openFolder}>
+          Open folder
+        </button>
+      </DropZoneOverlay>,
+    );
+    const action = screen.getByRole("button", { name: "Open folder" });
+    action.focus();
+    const file = new File(["a"], "one.txt");
+    fireEvent.drop(screen.getByRole("region"), {
+      dataTransfer: {
+        types: ["Files"],
+        items: [{ kind: "file", getAsFile: () => file }],
+        files: [file],
+      },
+    });
+    const retry = await screen.findByRole("button", { name: "Choose files again" });
+    expect(document.activeElement).toBe(retry);
+    expect(action.closest("[inert]")).not.toBeNull();
+    const picker = screen.getByLabelText("Choose files");
+    const choose = vi.spyOn(picker, "click");
+    await user.keyboard("{Enter}");
+    expect(choose).toHaveBeenCalledOnce();
+    expect(openFolder).not.toHaveBeenCalled();
+    fireEvent.change(picker, { target: { files: [file] } });
+    await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
+    expect(screen.getByRole("button", { name: "Open folder" })).toBe(action);
+    expect(action.closest("[inert]")).toBeNull();
+    expect(document.activeElement).toBe(action);
+  });
+
+  it.each([
+    "removed",
+    "inert",
+  ])("does not restore ingestion focus to a previously focused control that is now %s", async (change) => {
+    let finish = () => {};
+    const pending = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    const onFiles = () => pending;
+    const view = (showAction: boolean) => (
+      <DropZoneOverlay folderName="Projects" onFiles={onFiles}>
+        {showAction && <button type="button">Open folder</button>}
+      </DropZoneOverlay>
+    );
+    const { rerender } = render(view(true));
+    const action = screen.getByRole("button", { name: "Open folder" });
+    action.focus();
+    fireEvent.change(screen.getByLabelText("Choose files"), {
+      target: { files: [new File(["a"], "one.txt")] },
+    });
+    expect(document.activeElement).toBe(screen.getByRole("status", { name: "Loading" }));
+    const focus = vi.spyOn(action, "focus");
+    if (change === "removed") rerender(view(false));
+    else action.setAttribute("inert", "");
+    await act(async () => finish());
+    expect(focus).not.toHaveBeenCalled();
+    expect(screen.queryByRole("status", { name: "Loading" })).toBeNull();
+  });
+
   it("keeps children mounted after failed ingestion and while retrying", async () => {
     function Contents() {
       const [count, increment] = useReducer((value: number) => value + 1, 0);

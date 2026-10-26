@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import type { TypedProperty, TypedViewData } from "@jeswr/suite-ui";
 import { canonicalize, NS } from "@jeswr/suite-vocab";
 import type { DatasetCore, Term } from "@rdfjs/types";
@@ -134,11 +135,13 @@ export async function typedViewData(
       const linked = subjectOf(dataset, term);
       // Both vCard forms wrap mailto/tel IRIs or literal contact values.
       const contact = [
-        ...linked.objects(`${NS.VCARD}value`),
         ...linked.objects(`${NS.VCARD}hasValue`),
+        ...linked.objects(`${NS.VCARD}value`),
       ].find(
         (value) => value.termType === "Literal" || /^(mailto:|tel:)/i.test(value.value),
       )?.value;
+      if (["email", "telephone"].includes(descriptor.key) && contact)
+        return contact.replace(/^(mailto:|tel:)/i, "");
       return linked.name ?? contact?.replace(/^(mailto:|tel:)/i, "") ?? "Linked item";
     });
     if (values.length) {
