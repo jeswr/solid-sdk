@@ -1,0 +1,44 @@
+{
+  "$comment": "AUTHORED-BY Claude Opus 5.5",
+  "name": "@jeswr/suite-native",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Native (Capacitor) seams for the Solid Suite: system-browser sign-in driver, share sheet in and out, mobile Client ID Document. Experimental, AI-agent-generated.",
+  "type": "module",
+  "sideEffects": false,
+  "securityCritical": true,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./capacitor": {
+      "types": "./dist/capacitor.d.ts",
+      "default": "./dist/capacitor.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "SKILL.md"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "biome check .",
+    "test": "vitest run"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@capacitor/core": "8.5.3"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.1",
+    "@vitest/coverage-v8": "^4.1.10",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.9"
+  }
+}

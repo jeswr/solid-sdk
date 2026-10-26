@@ -78,3 +78,33 @@ Fixtures: `/dev/components/app-rail`, `/dev/components/app-launcher`, and
 `/dev/components/bottom-tab-bar`. The DS-03 browser spec writes full-page screenshots to
 `artifacts/screens/DS-03/` for all configured widths/themes, with axe and 320px reflow checks.
 Run it again with `NEXT_PUBLIC_SHOW_BACKLOG_APPS=1` to capture the flagged backlog states.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Claude Opus 5.5 -->
+## DS-04 shell layout
+
+Shell components live in `@jeswr/suite-ui/shell`; also import `styles/shell.css`.
+`ShellFrame` accepts TopBar slots, a `SidebarNav` model, optional `DetailsPane`
+content, and rail/tab-bar slots. It owns the single visible page `h1`, the
+`main-content` skip target, the main scroll area and the document title
+(`shellDocumentTitle(page, app)`: `page · App · Solid Suite`). Next.js routes should
+also export `metadata.title` built with `shellDocumentTitle`, because the layout's
+metadata title replaces a title set on mount. Content should start
+at `h2`. Set `skipLink={false}` when the root layout already provides that link.
+
+`preferences` / `onPreferencesChange` connect to the consuming app's preferences
+hook. Both `sidebarOpen` and `detailsOpen` accept `null` for the responsive default
+(open at ≥1024, closed below). Explicit boolean choices override that default.
+The package performs no storage or network writes; the dev fixtures use a browser
+storage adapter until SDK-APP-11 is available. Bracket shortcuts ignore editable
+fields, modified/composing events and unrelated dialogs. Sheets trap focus and
+restore it to the corresponding TopBar control on close.
+On wide viewports an unconsumed Escape inside the details pane closes it
+(01-§6), except in editable fields and nested dialogs.
+
+Sidebar width is 264px; details width is 360px. Below 1024 both use modal side
+sheets and at most one is open: when saved preferences open both, the sidebar sheet
+shows, the details toggle reports collapsed, and any change writes back one region. At 768 the rail remains visible; below 768 the tab-bar slot replaces it
+and the TopBar is 48px. The details breakpoint follows the DS-04 task and 02-§2 (sheet below
+1024), not the ≥1280 persistent pane in 01-§4 and the mockups.
+Dev routes: `/dev/components/{shell,top-bar,sidebar-nav,details-pane}` in apps/suite.

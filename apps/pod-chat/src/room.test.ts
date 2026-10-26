@@ -122,7 +122,7 @@ describe("parseRoom edge cases", () => {
 
   it("reads a room parsed from raw Turtle, including participant labels", () => {
     const store = turtleToStore(
-      `@prefix pc: <https://w3id.org/jeswr/pod-chat#> .
+      `@prefix pc: <https://jeswr.org/ns/pod-chat#> .
        @prefix as: <https://www.w3.org/ns/activitystreams#> .
        @prefix dct: <http://purl.org/dc/terms/> .
        <#it> a as:Collection, pc:ChatRoom ;

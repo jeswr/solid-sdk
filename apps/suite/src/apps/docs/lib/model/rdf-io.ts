@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 // Ported from apps/pod-docs/src/rdf-io.ts.
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 /**
@@ -11,7 +12,7 @@
 import { type FetchedRdf, fetchRdf } from "@jeswr/fetch-rdf";
 import type { DatasetCore } from "@rdfjs/types";
 import { Writer } from "n3";
-import { ResourceDeleteError, ResourceWriteError } from "./errors.js";
+import { ConcurrencyValidatorError, ResourceDeleteError, ResourceWriteError } from "./errors.js";
 
 /**
  * Force conditional revalidation through any HTTP cache. Solid servers (CSS
@@ -48,7 +49,7 @@ export function serializeTurtle(
 
 /** Options for {@link writeRdf}. */
 export interface WriteOptions {
-  /** Strong ETag for conflict detection; weak ETags fall back to existence (`*`). */
+  /** A single strong ETag is required unless `createOnly` is true. */
   etag?: string | null | undefined;
   /** Send `If-None-Match: *` — create only, never overwrite (412 if it exists). */
   createOnly?: boolean | undefined;
@@ -63,6 +64,7 @@ export interface WriteOptions {
  * `Content-Type`. Servers that support it create intermediate containers on
  * PUT, so a deep path needs no separate container creation.
  *
+ * @throws ConcurrencyValidatorError before I/O when a replacement lacks a strong ETag.
  * @throws ResourceWriteError on any non-2xx answer (412 = precondition failed:
  *   a concurrent edit under `etag`, or "already exists" under `createOnly`).
  */
@@ -71,14 +73,21 @@ export async function writeRdf(
   dataset: DatasetCore,
   opts: WriteOptions,
 ): Promise<{ etag: string | null }> {
-  const body = await serializeTurtle(dataset, opts.prefixes);
   const headers: Record<string, string> = { "content-type": "text/turtle" };
-  // If-Match requires strong comparison: a weak validator can never match.
-  // Match the store's no-validator policy: require existence, without claiming
-  // to detect concurrent edits. Create-only writes retain their own precondition.
-  if (opts.etag && !opts.createOnly)
-    headers["if-match"] = opts.etag.startsWith("W/") ? "*" : opts.etag;
-  if (opts.createOnly) headers["if-none-match"] = "*";
+  if (opts.createOnly) {
+    headers["if-none-match"] = "*";
+  } else {
+    // One strong entity-tag, with an opaque value per HTTP's etagc grammar.
+    // The end assertion also rejects trailing newlines; never normalize a validator.
+    if (
+      typeof opts.etag !== "string" ||
+      !/^"[\x21\x23-\x7e\x80-\xff]*"(?![\s\S])/u.test(opts.etag)
+    ) {
+      throw new ConcurrencyValidatorError(url);
+    }
+    headers["if-match"] = opts.etag;
+  }
+  const body = await serializeTurtle(dataset, opts.prefixes);
   const init: RequestInit = { method: "PUT", headers, body };
   const res = await opts.fetchImpl(url, init);
   if (!res.ok) throw new ResourceWriteError(url, res.status);

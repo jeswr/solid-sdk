@@ -26,6 +26,7 @@
 
 import type { OdrlPolicy, OdrlRule } from "@jeswr/solid-odrl";
 import { policyToRdf } from "@jeswr/solid-odrl";
+import { termsEqual } from "@jeswr/suite-vocab";
 import type { DatasetCore } from "@rdfjs/types";
 import { DataFactory, Store } from "n3";
 import { grantOnResource, MODE_IRI, type WacMode } from "./acl.js";
@@ -121,7 +122,7 @@ export function resolveTargets(
   const classIris = new Set<string>();
   if (request.dataClass !== undefined) classIris.add(request.dataClass);
   for (const target of request.targets) {
-    const asClass = registrations.filter((r) => r.forClass === target);
+    const asClass = registrations.filter((r) => termsEqual(r.forClass, target));
     if (asClass.length > 0) {
       classIris.add(target);
     } else {
@@ -129,7 +130,7 @@ export function resolveTargets(
     }
   }
   for (const classIri of classIris) {
-    for (const reg of registrations.filter((r) => r.forClass === classIri)) {
+    for (const reg of registrations.filter((r) => termsEqual(r.forClass, classIri))) {
       for (const instance of reg.instances) out.add(instance);
       for (const resource of knownResources) {
         if (nodeInRegistration(resource, reg)) out.add(resource);

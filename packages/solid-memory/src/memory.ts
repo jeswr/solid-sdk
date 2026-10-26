@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-5
 /**
  * The typed agent-memory model — typed read/write accessors over a single
@@ -32,7 +33,16 @@ import {
 } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
 import { httpIriOrUndefined } from "./iri.js";
-import { dct, MEM_EMBEDDING_REF, MEMORY_CLASS, PREFIXES, prov, rdf, schema } from "./vocab.js";
+import {
+  dct,
+  LEGACY_MEMORY_NS,
+  MEM_EMBEDDING_REF,
+  MEMORY_CLASS,
+  PREFIXES,
+  prov,
+  rdf,
+  schema,
+} from "./vocab.js";
 
 // `isHttpIri` lives in the shared pure-IRI core (`./iri.ts`); re-exported here so
 // the `.` and `./memory` public entry points keep exporting it (matches how
@@ -113,7 +123,7 @@ export class MemoryItem extends TermWrapper {
 
   /** Whether this subject is a `mem:MemoryItem`. */
   get isMemory(): boolean {
-    return this.types.has(MEMORY_CLASS);
+    return this.types.has(MEMORY_CLASS) || this.types.has(`${LEGACY_MEMORY_NS}MemoryItem`);
   }
 
   /** `schema:text` — the memory body. */
@@ -164,9 +174,13 @@ export class MemoryItem extends TermWrapper {
 
   /** `mem:embeddingRef` — a sidecar embedding resource IRI (the M2 vector-search seam). */
   get embeddingRef(): string | undefined {
-    return OptionalFrom.subjectPredicate(this, MEM_EMBEDDING_REF, NamedNodeAs.string);
+    return (
+      OptionalFrom.subjectPredicate(this, MEM_EMBEDDING_REF, NamedNodeAs.string) ??
+      OptionalFrom.subjectPredicate(this, `${LEGACY_MEMORY_NS}embeddingRef`, NamedNodeAs.string)
+    );
   }
   set embeddingRef(value: string | undefined) {
+    OptionalAs.object(this, `${LEGACY_MEMORY_NS}embeddingRef`, undefined, NamedNodeFrom.string);
     OptionalAs.object(this, MEM_EMBEDDING_REF, value, NamedNodeFrom.string);
   }
 
