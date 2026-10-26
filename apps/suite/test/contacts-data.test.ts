@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { DataFactory, Store } from "n3";
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import {
   buildAddressBook,
   buildGroup,
@@ -207,13 +208,14 @@ test.each([
   const url = namedNode("http://www.w3.org/2006/vcard/ns#url");
   const edges = [...dataset.match(namedNode(contact.id), url)];
   const web = edges[0]?.object;
-  expect(web).toBeDefined();
+  expect(web?.termType).toBe("BlankNode");
+  if (web?.termType !== "BlankNode") throw new Error("Missing structured WebID node");
   const retained = [...dataset].filter(
     (quad) => !quad.subject.equals(web) && !edges[0]?.equals(quad),
   );
   applyContact(contact, webId === undefined ? { name: "Alice" } : { name: "Alice", webId });
   for (const quad of retained) expect(dataset.has(quad)).toBe(true);
-  expect(dataset.match(web).size).toBe(0);
+  expect(dataset.match(DataFactory.blankNode(web.value)).size).toBe(0);
   expect(contactData(contact).webId).toBe(webId);
   if (webId) {
     expect([...dataset].some((quad) => quad.object.value === webId)).toBe(true);
@@ -274,10 +276,15 @@ test("reconciles added and removed values without rebuilding retained or shared 
   const { namedNode } = DataFactory;
   const email = namedNode("http://www.w3.org/2006/vcard/ns#hasEmail");
   const subject = namedNode(contact.id);
-  const removed = [...dataset.match(subject, email)].find((edge) =>
-    [...dataset.match(edge.object)].some((quad) => quad.object.value === "mailto:old@example.org"),
+  const removed = [...dataset.match(subject, email)].find(
+    (edge) =>
+      edge.object.termType === "BlankNode" &&
+      [...dataset.match(DataFactory.blankNode(edge.object.value))].some(
+        (quad) => quad.object.value === "mailto:old@example.org",
+      ),
   )?.object;
-  expect(removed).toBeDefined();
+  expect(removed?.termType).toBe("BlankNode");
+  if (removed?.termType !== "BlankNode") throw new Error("Missing removed email node");
   applyContact(contact, {
     name: "Alicia",
     emails: ["direct@example.org", "work@example.org", "new@example.org"],
@@ -291,7 +298,7 @@ test("reconciles added and removed values without rebuilding retained or shared 
   ]);
   expect(contact.phones).toEqual(["tel:+44-123", "tel:+44567"]);
   expect(contact.webId).toBe("https://new.example/#me");
-  expect(dataset.match(removed).size).toBe(0);
+  expect(dataset.match(DataFactory.blankNode(removed.value)).size).toBe(0);
   // All surviving old nodes, including the other contact's shared node, keep their RDF.
   for (const quad of original) {
     if (
@@ -308,4 +315,43 @@ test("reconciles added and removed values without rebuilding retained or shared 
   expect(contactData(contact)).toEqual({ name: "Cleared" });
   expect(dataset.match(subject, email).size).toBe(0);
   expect(dataset.match(null, email).size).toBe(1);
+});
+
+// Independent N3 instances may mint the same automatic blank-node label.
+test("keeps newly minted contact nodes separate from parsed blank nodes", async () => {
+  const dataset = await parse(
+    `${VCARD_PREFIX}
+    <#this> a vcard:Individual; vcard:fn "Alice";
+      vcard:hasTelephone [ a vcard:Work; vcard:value <tel:+44123>; vcard:pref "1" ] .`,
+    ALICE,
+  );
+  const contact = new Contact(`${ALICE}#this`, dataset, DataFactory);
+  const original = [...dataset];
+  const retained = [
+    ...dataset.match(
+      DataFactory.namedNode(contact.id),
+      DataFactory.namedNode("http://www.w3.org/2006/vcard/ns#hasTelephone"),
+    ),
+  ][0]?.object;
+  expect(retained?.termType).toBe("BlankNode");
+  if (retained?.termType !== "BlankNode") throw new Error("Missing retained phone node");
+  const blankNode = DataFactory.blankNode;
+  const mint = vi
+    .spyOn(DataFactory, "blankNode")
+    .mockImplementation((label) => blankNode(label ?? retained.value));
+  try {
+    const data = {
+      name: "Alice",
+      emails: ["mailto:alice@example.org"],
+      phones: ["tel:+44123", "tel:+44567"],
+      webId: "https://alice.example/#me",
+    };
+    applyContact(contact, data);
+    expect(contactData(contact)).toEqual(data);
+    for (const quad of original) expect(dataset.has(quad)).toBe(true);
+    applyContact(contact, { name: "Alice" });
+    expect(contactData(contact)).toEqual({ name: "Alice" });
+  } finally {
+    mint.mockRestore();
+  }
 });

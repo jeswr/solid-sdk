@@ -147,6 +147,13 @@ export function validateContact(data: ContactData): void {
 // AUTHORED-BY Codex GPT-6
 const RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
 
+// Parsed RDF and shared packages can use separate N3 instances whose counters overlap.
+// Give newly minted nodes unique labels before copying them into the existing dataset.
+const contactFactory = {
+  ...DataFactory,
+  blankNode: (label?: string) => DataFactory.blankNode(label ?? `contacts-${crypto.randomUUID()}`),
+};
+
 function isWebIdNode(term: Term, dataset: DatasetCore): boolean {
   return (
     term.termType === "BlankNode" &&
@@ -172,7 +179,7 @@ function readWebId(contact: Contact): string | undefined {
 
 /** Persist a cleared selection so unrelated HTTP(S) URLs cannot become the WebID on reload. */
 function addClearedWebId(contact: Contact): void {
-  const term = DataFactory.blankNode();
+  const term = contactFactory.blankNode();
   SetFrom.subjectPredicate(contact, `${VCARD}url`, TermAs.term, TermFrom.itself).add(term);
   const child = new TermWrapper(term, contact.dataset, DataFactory);
   SetFrom.subjectPredicate(child, RDF_TYPE, NamedNodeAs.string, NamedNodeFrom.string).add(
@@ -248,7 +255,7 @@ function reconcileContactPoints(contact: Contact, desired: Contact): void {
 
 export function applyContact(contact: Contact, data: ContactData): void {
   validateContact(data);
-  const desired = new Contact(contact.id, new Store(), DataFactory);
+  const desired = new Contact(contact.id, new Store(), contactFactory);
   desired.setEmails(data.emails ?? []);
   desired.setPhones((data.phones ?? []).map((phone) => phone.replace(/[(). -]/g, "")));
   desired.setWebId(safeHttpIri(data.webId));
