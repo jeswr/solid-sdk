@@ -4,7 +4,7 @@
 import { readFile } from "node:fs/promises";
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { policyToTurtle } from "@jeswr/solid-odrl";
-import { Store } from "n3";
+import { DataFactory, Store } from "n3";
 import { isomorphic } from "rdf-isomorphic";
 import { expect, it, vi } from "vitest";
 import {
@@ -20,7 +20,7 @@ import {
   serializeNanopublications,
 } from "../src/index.js";
 import { podStatus } from "../src/pod-port.js";
-import { graph, NS, RdfNode } from "../src/rdf.js";
+import { graph, NS, putGraph, RdfNode } from "../src/rdf.js";
 import { createMemoryPodPort, exampleBuildOptions } from "../src/testing.js";
 
 const options = exampleBuildOptions();
@@ -54,6 +54,75 @@ function setup(overrides: Partial<PodPort> = {}) {
   const write = vi.spyOn(pod, "write");
   return { memory, pod, write, store: new NanopubStore(pod) };
 }
+
+async function sharedBlankAssertions() {
+  const value = await buildNanopublications(
+    {
+      batch_id: "shared-blank",
+      worker: { agent_id: "https://example.org/client", agent_label: "Test" },
+      claims: ["one", "two"].map((id) => ({
+        id,
+        epistemic: "SelfReportedExplicit",
+        assertion: createFactAssertion(identity.webId, {
+          template: "email",
+          value: "avery@example.org",
+        }),
+      })),
+    },
+    options,
+  );
+  const assertionId = value.nanopubs[0]!.assertionId;
+  for (const quad of [...value.dataset])
+    if (quad.graph.value === assertionId) value.dataset.delete(quad);
+  const assertion = new Store();
+  const preference = DataFactory.blankNode("preference");
+  const nested = DataFactory.blankNode("nested");
+  new RdfNode(identity.webId, assertion).add(`${NS.schema}hasPreference`, preference);
+  new RdfNode(preference, assertion)
+    .text(`${NS.schema}value`, "tea")
+    .add(`${NS.schema}additionalProperty`, nested);
+  new RdfNode(nested, assertion).text(`${NS.schema}value`, "hot");
+  putGraph(value.dataset as Store, assertionId, assertion);
+  return parseNanopublications(await serializeNanopublications(value));
+}
+
+it("deduplicates independently parsed copies of shared blank-node assertions on every listing", async () => {
+  const { store, pod } = setup();
+  const value = await sharedBlankAssertions();
+  await store.put(value);
+  const assertionId = value.nanopubs[0]!.assertionId;
+  expect(new Set(value.nanopubs.map((np) => np.assertionId)).size).toBe(1);
+  const copies = await Promise.all(value.nanopubs.map((np) => store.get(np.id)));
+  expect([...copies[0]!.dataset].some((q) => q.subject.termType === "BlankNode")).toBe(true);
+  const naive = new Store(copies.flatMap((copy) => [...copy.dataset]));
+  expect(graph(naive, assertionId).size).toBeGreaterThan(graph(value.dataset, assertionId).size);
+  for (let i = 0; i < 2; i++) {
+    const loaded = await store.list();
+    expect(loaded.nanopubs).toHaveLength(2);
+    expect(graph(loaded.dataset, assertionId).size).toBe(4);
+    expect(isomorphic([...loaded.dataset], [...value.dataset])).toBe(true);
+    expect(classifyNanopublications(loaded).map((np) => np.corroboration)).toEqual([2, 2]);
+  }
+  const list = pod.list;
+  pod.list = async (url) => (await list(url)).reverse();
+  expect(isomorphic([...(await store.list()).dataset], [...value.dataset])).toBe(true);
+});
+
+it("rejects inconsistent stored copies of a shared assertion instead of unioning them", async () => {
+  const { store, pod } = setup();
+  const value = await sharedBlankAssertions();
+  await store.put(value);
+  const np = value.nanopubs[1]!;
+  const altered = await store.get(np.id);
+  const assertion = graph(altered.dataset, np.assertionId);
+  new RdfNode(identity.webId, assertion).text(`${NS.schema}name`, "Conflicting copy");
+  putGraph(altered.dataset as Store, np.assertionId, assertion);
+  const url = store.url(np.id);
+  await pod.write(url, encode(await serializeNanopublications(altered)), "application/trig", {
+    ifMatch: (await pod.read(url)).etag,
+  });
+  await expect(store.list()).rejects.toThrow("Conflicting copies");
+});
 
 it("writes owner-only ACLs before containers/data, splits nanopubs, and reloads every graph", async () => {
   const { store, pod, write } = setup();

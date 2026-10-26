@@ -3,7 +3,7 @@
 import { safeHttpIri, serialize } from "@jeswr/rdf-serialize";
 import { type OdrlPolicy, policyToTurtle } from "@jeswr/solid-odrl";
 import { compareDateTimes } from "./chronology.js";
-import { pkgId } from "./ids.js";
+import { canonicalizeAssertion, pkgId } from "./ids.js";
 import {
   buildNanopublications,
   type Nanopublications,
@@ -105,13 +105,23 @@ export class NanopubStore {
     const dataset = new Store();
     const nanopubs: Nanopublications["nanopubs"] = [];
     const ids = new Set<string>();
+    const assertions = new Map<string, string>();
     for (const entry of await this.pod.list(this.container)) {
       if (entry.isContainer || !entry.url.startsWith(this.container)) continue;
       const id = `urn:uuid:${entry.url.slice(this.container.length).replace(/\.trig$/, "")}`;
       if (!uuid.test(id) || this.url(id) !== entry.url || ids.has(id)) continue;
       ids.add(id);
       const result = await this.get(id);
-      for (const quad of result.dataset) dataset.add(quad);
+      const assertionId = (result.nanopubs[0] as Nanopublications["nanopubs"][number]).assertionId;
+      const fingerprint = canonicalizeAssertion(graph(result.dataset, assertionId)).id;
+      const previous = assertions.get(assertionId);
+      if (previous !== undefined && previous !== fingerprint)
+        throw new Error("Conflicting copies of a shared assertion graph");
+      // Blank-node labels are document-local. Keep one validated graph instead
+      // of unioning independently parsed copies into duplicate structures.
+      for (const quad of result.dataset)
+        if (previous === undefined || quad.graph.value !== assertionId) dataset.add(quad);
+      assertions.set(assertionId, fingerprint);
       nanopubs.push(...result.nanopubs);
     }
     return { dataset, nanopubs };
