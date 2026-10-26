@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # sst-vcij — MCP-05 lane report
 
@@ -127,3 +128,61 @@ generated ontology bytes). `git diff f2d20696 --exit-code` confirms that the too
 and `packages/solid-federation-vocab` inputs are unchanged from this fix round's
 base. No unrelated fix was made. Generated web-public build artifacts were
 removed before the final documentation commit; the working tree is clean.
+
+## Fix round 2 — three review findings
+
+Fix base: `60da98b9c11fa742e16b3b4d6f66ad53993e8914`; branch remains `lane/sst-vcij`.
+
+- `45db1956` — `fix(pkg-memory): protect nanopub resource ACLs`: establish an
+  owner-only ACL for each destination before writing private bytes. Replace
+  orphan/public resource ACLs only with their strong ETag, create missing ACLs
+  conditionally, and stop on ACL read/write failures or concurrent changes.
+  Regressions cover all these cases and every resource in a multi-nanopub batch.
+- `cebf38b6` — `fix(pkg-memory): recheck ACL-created containers`: recheck a
+  previously absent container after its ACL write, avoiding a duplicate PUT when
+  CSS creates it implicitly. Fixtures exercise first-run nanopub and policy
+  writes, ACL-first ordering, and an unreadable container recheck.
+- `9d040e80` — `fix(pkg-memory): scope withdrawals to nanopub targets`: retain
+  the exact withdrawn nanopub identity in graph-scoped provenance alongside
+  the shared assertion revision link. Classification uses that explicit target,
+  allowing later identical facts to remain Current while keeping assertion
+  deduplication and corroboration. Email, preference, and nested medication
+  regressions cover reassertion, reversed input order, an omitted original,
+  and a second withdrawal targeting the reassertion alone.
+- Final documentation commit — `docs: record sst-vcij round two validation`:
+  this report, committed last after the required gates.
+
+Conservative compatibility choice: existing assertion-only revision links keep
+their assertion-wide semantics; new withdrawals identify their target envelope.
+No timestamp heuristic or history migration was added. No new design question
+was introduced. Tests use fictional identities and the memory PodPort; CSS
+implicit container creation is simulated under the lane's fixture-only rule.
+
+### Round two validation
+
+| Exact command | Result |
+| --- | --- |
+| `pnpm exec turbo run build --filter=@jeswr/pkg-memory...` | PASS; four dependency-first builds. |
+| `pnpm --filter @jeswr/pkg-memory run lint` | PASS. |
+| `pnpm --filter @jeswr/pkg-memory run build` | PASS. |
+| `pnpm --filter @jeswr/pkg-memory run typecheck` | PASS, including tests. |
+| `pnpm --filter @jeswr/pkg-memory run test` | PASS; 11 files, 486 tests; 100% statements, branches, functions, and lines. |
+| `pnpm run lint:root` (via the affected gate) | PASS. |
+| `TURBO_SCM_BASE=60da98b9c11fa742e16b3b4d6f66ad53993e8914 pnpm run gate` | PASS; 8 successful tasks. |
+| `pnpm run gate:full` | FAIL outside this lane; 284 successful tasks before `@jeswr/federation-codegen#test` stopped the run (2 failed, 23 passed tests). Root tests: 686 passed. |
+| `git diff --check 60da98b9c11fa742e16b3b4d6f66ad53993e8914` | PASS. |
+
+Targeted regression runs for each finding failed on the corresponding unfixed
+code before passing with the fixes. No dependencies, manifests, or lockfiles changed.
+`roborev` remains unavailable (`command -v roborev` found no executable), so
+automated independent per-commit review remains outstanding. All three requested
+findings are implemented. No pushes, PRs, branch switches, remote fetches/merges,
+tracker changes, or edits to other checkouts were performed.
+
+The full gate reproduced the previously documented namespace mismatches in
+`tools/federation-codegen/test/generator.test.ts`: the Bookmark target class and
+generated ontology bytes. `git diff 60da98b9c11fa742e16b3b4d6f66ad53993e8914 --exit-code --
+tools/federation-codegen packages/solid-federation-vocab` passed, confirming the
+tool and vocabulary inputs are unchanged from this fix round's base. No
+unrelated fix was made. Generated web-public build artifacts were removed before
+the final documentation commit; the working tree is clean.
