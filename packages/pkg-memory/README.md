@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # @jeswr/pkg-memory
 
@@ -135,9 +136,12 @@ runtime dependency on the MCP server. `put(result)` splits batches into one
 shared batch source/entity graphs. Writes are create-only; malformed input is
 rejected before mutations. Owner-only WAC ACLs are written before creating
 containers and data. Existing shared ancestor containers and their ACLs are
-preserved; replacement is limited to the store's own `mcp/` ACL and the policy
-document's dedicated ACL. The adapter must support the spec's `.acl` convention;
-ACL failures stop the operation. Existing ACL replacement needs a strong ETag.
+preserved; replacement is limited to the store's own `mcp/` ACL and the dedicated
+ACLs of nanopub and policy resources. Each nanopub's owner-only ACL is established
+conditionally before writing its private bytes, replacing any orphan resource ACL
+that would override the container default. The adapter must support the spec's
+`.acl` convention; ACL failures stop the operation. Existing ACL replacement needs
+a strong ETag.
 
 The store tries `application/trig` and reads the representation back. An HTTP 415
 or changed bytes/media type triggers the sole fallback, `application/octet-stream`,

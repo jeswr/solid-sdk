@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /** biome-ignore-all lint/style/noNonNullAssertion: fixtures guarantee these entries. */
 import { readFile } from "node:fs/promises";
 import { parseRdf } from "@jeswr/fetch-rdf";
@@ -73,6 +74,17 @@ it("writes owner-only ACLs before containers/data, splits nanopubs, and reloads 
     expect(auth.terms(`${acl}agentClass`).size).toBe(0);
   }
   for (const np of source.nanopubs) {
+    const aclUrl = `${store.url(np.id)}.acl`;
+    const resourceAcl = await parseRdf(decode((await pod.read(aclUrl)).body), "text/turtle");
+    const authorization = new RdfNode(`${aclUrl}#owner`, resourceAcl);
+    const acl = "http://www.w3.org/ns/auth/acl#";
+    expect(resourceAcl.size).toBe(6);
+    expect(authorization.oneIri(`${acl}agent`)).toBe(identity.webId);
+    expect(authorization.oneIri(`${acl}accessTo`)).toBe(store.url(np.id));
+    expect(authorization.terms(`${acl}default`).size).toBe(0);
+    expect(write.mock.calls.findIndex((call) => call[0] === aclUrl)).toBeLessThan(
+      write.mock.calls.findIndex((call) => call[0] === store.url(np.id)),
+    );
     const resource = await pod.read(store.url(np.id));
     expect(resource.contentType).toBe("application/trig");
     expect((await parseNanopublications(decode(resource.body))).nanopubs).toEqual([np]);
@@ -87,6 +99,71 @@ it("writes owner-only ACLs before containers/data, splits nanopubs, and reloads 
     new Set(source.nanopubs.map((np) => np.id)),
   );
   await expect(store.put(source)).rejects.toMatchObject({ status: 412 });
+});
+
+it("replaces an orphan public resource ACL conditionally before writing private bytes", async () => {
+  const { store, memory, write } = setup();
+  const value = await build();
+  const url = store.url(value.nanopubs[0]!.id);
+  const aclUrl = `${url}.acl`;
+  const publicAcl = `@prefix acl: <http://www.w3.org/ns/auth/acl#> .
+    <#public> a acl:Authorization; acl:agentClass <http://xmlns.com/foaf/0.1/Agent>;
+      acl:accessTo <${url}>; acl:mode acl:Read .`;
+  const before = await memory.write(aclUrl, encode(publicAcl), "text/turtle", {});
+  write.mockImplementation(async (target, body, type, cond) => {
+    if (target === url) {
+      const dataset = await parseRdf(decode((await memory.read(aclUrl)).body), "text/turtle");
+      expect(dataset.size).toBe(6);
+      const authorization = new RdfNode(`${aclUrl}#owner`, dataset);
+      expect(authorization.oneIri("http://www.w3.org/ns/auth/acl#agent")).toBe(identity.webId);
+      expect(authorization.oneIri("http://www.w3.org/ns/auth/acl#accessTo")).toBe(url);
+    }
+    return memory.write(target, body, type, cond);
+  });
+  await store.put(value);
+  expect(write.mock.calls.find((call) => call[0] === aclUrl)![3]).toEqual({
+    ifMatch: before.etag,
+  });
+});
+
+it.each([
+  "read failure",
+  "write failure",
+  "create race",
+  "replace race",
+  "missing ETag",
+  "weak ETag",
+])("writes no private bytes after a destination ACL %s", async (failure) => {
+  const { store, pod, memory, write } = setup();
+  const value = await build();
+  const url = store.url(value.nanopubs[0]!.id);
+  const aclUrl = `${url}.acl`;
+  const exists = ["replace race", "missing ETag", "weak ETag"].includes(failure);
+  if (exists) await memory.write(aclUrl, encode("existing ACL"), "text/turtle", {});
+  pod.read = async (target) => {
+    if (target === aclUrl && failure === "read failure") throw statusError(403);
+    const result = await memory.read(target);
+    return target === aclUrl && failure.endsWith("ETag")
+      ? { ...result, etag: failure === "weak ETag" ? 'W/"one"' : undefined }
+      : result;
+  };
+  write.mockImplementation(async (target, body, type, cond) => {
+    if (target === aclUrl) {
+      if (failure === "write failure") throw statusError(403);
+      if (failure.endsWith("race"))
+        await memory.write(target, encode("concurrent ACL"), "text/turtle", {});
+    }
+    return memory.write(target, body, type, cond);
+  });
+  if (failure.endsWith("ETag")) await expect(store.put(value)).rejects.toThrow("strong ETag");
+  else
+    await expect(store.put(value)).rejects.toMatchObject({
+      status: failure.endsWith("race") ? 412 : 403,
+    });
+  expect(write.mock.calls.some((call) => call[0] === url)).toBe(false);
+  await expect(memory.read(url)).rejects.toMatchObject({ status: 404 });
+  if (failure.endsWith("race"))
+    expect(decode((await memory.read(aclUrl)).body)).toBe("concurrent ACL");
 });
 
 it("keeps writes private on ACL failure and retries initialization on a later call", async () => {
@@ -104,10 +181,10 @@ it("conditionally replaces only the store's ACL and retains existing containers"
   await store.put(await build());
   write.mockClear();
   await new NanopubStore(pod).put(await build("second"));
-  expect(write.mock.calls.filter((call) => call[0].endsWith(".acl"))).toHaveLength(1);
+  expect(write.mock.calls.filter((call) => call[0].endsWith(".acl"))).toHaveLength(2);
   expect(write.mock.calls[0]![0]).toBe(`${store.container}.acl`);
-  for (const call of write.mock.calls.filter((call) => call[0].endsWith(".acl")))
-    expect(call[3].ifMatch).toBeDefined();
+  expect(write.mock.calls[0]![3].ifMatch).toBeDefined();
+  expect(write.mock.calls[1]![3]).toEqual({ ifNoneMatch: "*" });
   expect(write.mock.calls.some((call) => call[0].endsWith("/"))).toBe(false);
 });
 
@@ -128,14 +205,15 @@ it.each([
     before.push(await pod.read(`${url}.acl`));
   }
   write.mockClear();
-  await store.put(await build());
+  const value = await build();
+  await store.put(value);
   for (const [i, url] of ancestors.entries()) {
     expect(await pod.read(`${url}.acl`)).toEqual(before[i]);
     expect(write.mock.calls.some((call) => call[0] === `${url}.acl`)).toBe(false);
   }
   expect(
     write.mock.calls.filter((call) => call[0].endsWith(".acl")).map((call) => call[0]),
-  ).toEqual([`${store.container}.acl`]);
+  ).toEqual([`${store.container}.acl`, `${store.url(value.nanopubs[0]!.id)}.acl`]);
   const aclCall = write.mock.calls.findIndex((call) => call[0] === `${store.container}.acl`);
   const dataCall = write.mock.calls.findIndex((call) => call[0].endsWith(".trig"));
   expect(aclCall).toBeLessThan(dataCall);
@@ -145,10 +223,11 @@ it("leaves existing shared ancestors without local ACLs untouched", async () => 
   const { store, memory, write } = setup();
   for (const path of ["private/", "private/pkg/"])
     await memory.write(identity.root + path, encode(""), "text/turtle", {});
-  await store.put(await build());
+  const value = await build();
+  await store.put(value);
   expect(
     write.mock.calls.filter((call) => call[0].endsWith(".acl")).map((call) => call[0]),
-  ).toEqual([`${store.container}.acl`]);
+  ).toEqual([`${store.container}.acl`, `${store.url(value.nanopubs[0]!.id)}.acl`]);
 });
 
 it("uses only octet-stream, preserving exact TriG bytes after a 415 rejection", async () => {

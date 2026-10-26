@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { safeHttpIri, serialize } from "@jeswr/rdf-serialize";
 import { type OdrlPolicy, policyToTurtle } from "@jeswr/solid-odrl";
 import { compareDateTimes } from "./chronology.js";
@@ -265,6 +266,8 @@ export class NanopubStore {
     );
   }
   private async writeNanopub(url: string, bytes: Uint8Array): Promise<void> {
+    // A resource ACL overrides the container default, including orphan ACLs.
+    await this.protectResource(url, false, await this.readOptional(`${url}.acl`));
     try {
       await this.pod.write(url, bytes, "application/trig", { ifNoneMatch: "*" });
     } catch (error) {
