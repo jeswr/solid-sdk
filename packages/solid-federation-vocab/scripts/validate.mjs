@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
 // Validate the vocabulary sources:
@@ -14,7 +15,8 @@ import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import jsonld from "jsonld";
-import { Parser } from "n3";
+import { Parser, Store } from "n3";
+import SHACLValidator from "rdf-validate-shacl";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -37,7 +39,7 @@ for (const file of ttlFiles) {
   const ttl = readFileSync(join(ROOT, file), "utf8");
   let quads;
   try {
-    quads = new Parser({ baseIRI: `https://w3id.org/jeswr/${file}` }).parse(ttl);
+    quads = new Parser({ baseIRI: `https://jeswr.org/ns/${file}` }).parse(ttl);
   } catch (err) {
     fail(`parse error: ${err.message}`);
     continue;
@@ -49,8 +51,8 @@ for (const file of ttlFiles) {
   // carry only rdfs:label, exactly like the sector .shacl.ttl sidecars, which this
   // gate never term-checks. Skip the label/comment/isDefinedBy + ontology-node
   // loop for them (mirrors the sectors/ convention).
-  if (file.endsWith(".shacl.ttl")) {
-    ok("SHACL profile — not term-hygiene-checked (mirrors the sectors/ convention)");
+  if (file.endsWith(".shacl.ttl") || file === "legacy-w3id-alignments.ttl") {
+    ok("Profile or Mode-A sidecar — parsed without ontology term-hygiene checks");
     continue;
   }
 
@@ -69,7 +71,7 @@ for (const file of ttlFiles) {
   let termCount = 0;
   for (const [iri, info] of subjects) {
     if (info.types.has(OWL_ONTOLOGY)) continue; // ontology node — checked separately
-    if (info.types.size === 0 && !iri.startsWith("https://w3id.org/jeswr/")) continue;
+    if (info.types.size === 0 && !iri.startsWith("https://jeswr.org/ns/")) continue;
     termCount += 1;
     for (const required of [`${RDFS}label`, `${RDFS}comment`, `${RDFS}isDefinedBy`]) {
       if (!info.preds.has(required)) {
@@ -153,7 +155,7 @@ for (const file of ctxFiles) {
     const expanded = await jsonld.expand(admission);
     const [node] = expanded;
     const statusIri = node?.["https://jeswr.org/fedcon#conceptStatus"]?.[0]?.["@id"];
-    const assertedByIri = node?.["https://w3id.org/jeswr/fedreg#assertedBy"]?.[0]?.["@id"];
+    const assertedByIri = node?.["https://jeswr.org/ns/fedreg#assertedBy"]?.[0]?.["@id"];
     if (statusIri !== "https://jeswr.org/fedcon#Proposed")
       fail(`ConceptProposed did not expand to fedcon:Proposed (got ${statusIri})`);
     else if (assertedByIri !== "https://registry.example/card#me")
@@ -163,6 +165,72 @@ for (const file of ctxFiles) {
     else ok("fedreg + fedcon @protected contexts compose + expand (no protected-term clash)");
   } catch (err) {
     fail(`composed fedreg+fedcon context expansion failed: ${err.message}`);
+  }
+}
+
+// The widened OWL range must not turn existing compact dateTime strings into
+// xsd:string values. Explicitly typed all-day value objects must still win.
+console.log("\nJSON-LD: temporal context compatibility");
+for (const [file, ns, properties] of [
+  ["core-context.jsonld", "https://jeswr.org/ns/core#", ["validFrom", "validUntil"]],
+  [
+    "sectors/scheduling-context.jsonld",
+    "https://jeswr.org/ns/sectors/scheduling#",
+    ["startTime", "endTime", "dueTime", "until"],
+  ],
+]) {
+  const context = JSON.parse(readFileSync(join(ROOT, "docs", file), "utf8"))["@context"];
+  for (const property of properties) {
+    for (const [value, datatype] of [
+      ["2026-11-01T09:00:00Z", "dateTime"],
+      [{ "@value": "2026-11-01", "@type": "xsd:date" }, "date"],
+    ]) {
+      try {
+        const [expanded] = await jsonld.expand({
+          "@context": context,
+          id: "https://example.org/temporal",
+          [property]: value,
+        });
+        const actual = expanded?.[`${ns}${property}`]?.[0]?.["@type"];
+        if (actual !== `http://www.w3.org/2001/XMLSchema#${datatype}`)
+          fail(`${file}: ${property} expected xsd:${datatype}, got ${actual}`);
+        else ok(`${file}: ${property} preserves xsd:${datatype}`);
+      } catch (err) {
+        fail(`${file}: ${property} expansion failed: ${err.message}`);
+      }
+    }
+  }
+}
+
+// Exercise the actual profiles, including advisory constraints: a wrong datatype
+// must produce a result even when the profile grades it Warning or Info.
+console.log("\nSHACL: core validity and scheduling fixtures");
+const fixtureRoot = join(ROOT, "test", "fixtures", "scheduling");
+const shapes = new Store();
+for (const profile of ["core/core.shacl.ttl", "scheduling/scheduling.shacl.ttl"]) {
+  shapes.addQuads(new Parser().parse(readFileSync(join(ROOT, "sectors", profile), "utf8")));
+}
+for (const file of readdirSync(fixtureRoot)
+  .filter((f) => f.endsWith(".ttl"))
+  .sort()) {
+  try {
+    const data = new Store(new Parser().parse(readFileSync(join(fixtureRoot, file), "utf8")));
+    const report = await new SHACLValidator(shapes).validate(data);
+    const expectedValid = !file.endsWith(".invalid.ttl");
+    if (report.conforms !== expectedValid || (expectedValid && report.results.length > 0)) {
+      fail(
+        `${file}: expected ${expectedValid ? "no results" : "a constraint failure"}, got ${report.results.length} result(s)`,
+      );
+      for (const result of report.results) {
+        console.error(
+          `    ${result.focusNode.value}: ${result.path?.value ?? ""} ${result.message.map((m) => m.value).join("; ")}`,
+        );
+      }
+    } else {
+      ok(`${file}: ${expectedValid ? "conforms without warnings" : "rejected as expected"}`);
+    }
+  } catch (err) {
+    fail(`${file}: SHACL validation failed: ${err.message}`);
   }
 }
 

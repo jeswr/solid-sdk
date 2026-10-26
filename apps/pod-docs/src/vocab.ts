@@ -9,7 +9,7 @@
  * fits, with a small app-namespace (`pd:`) only for the rich-text body and the
  * provenance-history glue:
  *
- *   - `pd:Document` (`https://w3id.org/jeswr/pod-docs#Document`) — the class, the
+ *   - `pd:Document` (`https://jeswr.org/ns/pod-docs#Document`) — the class, the
  *     app's primary type-index class and the `fedapp:produces`/`consumes` shape.
  *   - `dct:title` — the document title.
  *   - `dct:created` / `dct:modified` — xsd:dateTime stamps.
@@ -32,20 +32,16 @@
  * typed `@rdfjs/wrapper` accessors in `document.ts` and `type-index.ts`.
  */
 
+import { NS as SUITE_NS } from "@jeswr/suite-vocab";
+
 /** Namespace base IRIs. */
 export const NS = {
-  /** Pod-Docs application vocabulary (rich-text body + history glue). */
-  PD: "https://w3id.org/jeswr/pod-docs#",
-  /** Dublin Core Terms — title / created / modified / creator. */
-  DCT: "http://purl.org/dc/terms/",
-  /** W3C PROV-O — the revision-history model. */
-  PROV: "http://www.w3.org/ns/prov#",
-  /** RDF core — rdf:type. */
-  RDF: "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
-  /** XSD datatypes. */
-  XSD: "http://www.w3.org/2001/XMLSchema#",
-  /** Solid terms — type index. */
-  SOLID: "http://www.w3.org/ns/solid/terms#",
+  PD: SUITE_NS.POD_DOCS,
+  DCT: SUITE_NS.DCT,
+  PROV: SUITE_NS.PROV,
+  RDF: SUITE_NS.RDF,
+  XSD: SUITE_NS.XSD,
+  SOLID: SUITE_NS.SOLID,
 } as const;
 
 /** `rdf:type`. */
@@ -59,6 +55,9 @@ export const PD = {
   body: `${NS.PD}body`,
   format: `${NS.PD}format`,
   currentRevision: `${NS.PD}currentRevision`,
+  updateLog: `${NS.PD}updateLog`,
+  assets: `${NS.PD}assets`,
+  comments: `${NS.PD}comments`,
 } as const;
 
 /** Dublin Core Terms predicates used by the document. */

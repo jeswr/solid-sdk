@@ -1,8 +1,8 @@
 # AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 #
-@prefix diet:    <https://w3id.org/jeswr/sectors/health/diet#> .
-@prefix health:  <https://w3id.org/jeswr/sectors/health#> .
-@prefix core:    <https://w3id.org/jeswr/core#> .
+@prefix diet:    <https://jeswr.org/ns/sectors/health/diet#> .
+@prefix health:  <https://jeswr.org/ns/sectors/health#> .
+@prefix core:    <https://jeswr.org/ns/core#> .
 @prefix owl:     <http://www.w3.org/2002/07/owl#> .
 @prefix rdf:     <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
 @prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
@@ -61,15 +61,15 @@
 # external terms referenced in axioms are declared as punned owl terms.
 # =============================================================================
 
-<https://w3id.org/jeswr/sectors/health/diet> a owl:Ontology ;
+<https://jeswr.org/ns/sectors/health/diet> a owl:Ontology ;
     dcterms:title "Solid Health Diet sub-sector Ontology"@en ;
     rdfs:label "Solid Health Diet sub-sector Ontology"@en ;
     vann:preferredNamespacePrefix "diet" ;
-    vann:preferredNamespaceUri "https://w3id.org/jeswr/sectors/health/diet#" ;
-    owl:imports <https://w3id.org/jeswr/core> ,
-                <https://w3id.org/jeswr/sectors/health> ;
-    owl:versionInfo "1.0.0" ;
-    owl:versionIRI <https://w3id.org/jeswr/sectors/health/diet/1.0.0> ;
+    vann:preferredNamespaceUri "https://jeswr.org/ns/sectors/health/diet#" ;
+    owl:imports <https://jeswr.org/ns/core> ,
+                <https://jeswr.org/ns/sectors/health> ;
+    owl:versionInfo "2.0.0" ;
+    owl:versionIRI <https://jeswr.org/ns/sectors/health/diet/2.0.0> ;
     dcterms:description """The nutrition & multi-intolerance food-diary domain for
         the coeliac & multi-intolerance app (@jeswr/solid-health-diary): meals and
         food items (with Open Food Facts allergen/trace/additive/category tags),
@@ -79,8 +79,8 @@
         conclusions, on-device-summarised HLA-DQ genetics, and the working diet
         plan. A sub-sector of the health sector; aligns Mode-A to schema.org
         FoodEvent/NutritionInformation, SNOMED CT / LOINC symptom concepts and FODMAP
-        concepts in diet-alignments.ttl."""@en ;
-    dcterms:modified "2026-07-03"^^xsd:date ;
+        concepts in diet-alignments.ttl. Version 2.0.0 rebases this ontology from its legacy w3id namespace to https://jeswr.org/ns/ (DECISIONS V1)."""@en ;
+    dcterms:modified "2026-10-25"^^xsd:date ;
     rdfs:comment "Sub-sector of the health sector (sectors/health). Decision support, not diagnosis — the app never asserts a disease; that framing is carried in the confidence + interpretation data."@en .
 
 # -----------------------------------------------------------------------------
@@ -904,10 +904,10 @@ diet:clinicalReport a diet:GeneticSourceType, skos:Concept ;
 # to this ontology.
 # =============================================================================
 
-<https://w3id.org/jeswr/sectors/health/diet#sector>
+<https://jeswr.org/ns/sectors/health/diet#sector>
     a skos:Concept ;
     rdfs:label "Diet sub-sector"@en ;
     rdfs:comment "The Diet (nutrition / food-intolerance) sub-sector of the Health sector. The value a food-diary app's fedapp:sector names in its Client Identifier Document. Backed by this sub-sector ontology; narrower than the Health sector."@en ;
-    rdfs:isDefinedBy <https://w3id.org/jeswr/sectors/health/diet> ;
-    skos:broader <https://w3id.org/jeswr/sectors/health#sector> ;
+    rdfs:isDefinedBy <https://jeswr.org/ns/sectors/health/diet> ;
+    skos:broader <https://jeswr.org/ns/sectors/health#sector> ;
     skos:prefLabel "Diet"@en .

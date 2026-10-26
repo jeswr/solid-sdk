@@ -1,7 +1,7 @@
 # AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 #
 # Shared Cross-App Task / Issue Model (the federation task vocabulary)
-# Namespace: https://w3id.org/jeswr/task#   (ADR-0013; beads pss-tof + pss-74i)
+# Namespace: https://jeswr.org/ns/task#   (ADR-0013; beads pss-tof + pss-74i)
 #
 # This is NOT a new ontology of task terms — it is the canonical, dereferenceable
 # RE-USE of established vocabularies (the SolidOS W3C workflow ontology `wf:`,
@@ -12,7 +12,7 @@
 # that agreement so the @context (task-context.jsonld) has a stable home and the
 # shared terms resolve.
 
-@prefix tm:      <https://w3id.org/jeswr/task#> .
+@prefix tm:      <https://jeswr.org/ns/task#> .
 @prefix wf:      <http://www.w3.org/2005/01/wf/flow#> .
 @prefix dct:     <http://purl.org/dc/terms/> .
 @prefix as:      <https://www.w3.org/ns/activitystreams#> .
@@ -23,8 +23,9 @@
 @prefix vann:    <http://purl.org/vocab/vann/> .
 @prefix xsd:     <http://www.w3.org/2001/XMLSchema#> .
 
-<https://w3id.org/jeswr/task>
-    a owl:Ontology ;
+<https://jeswr.org/ns/task> a owl:Ontology ;
+    owl:versionIRI <https://jeswr.org/ns/task/2.0.0> ;
+    owl:versionInfo "2.0.0" ;
     dct:title "Shared Cross-App Task / Issue Model"@en ;
     dct:description """The canonical, dereferenceable re-use of the W3C workflow
         ontology (wf:), Dublin Core Terms (dct:) and ActivityStreams 2.0 (as:)
@@ -36,13 +37,13 @@
         a wf:State), and an event-condition-action automation model
         (tm:Rule + tm:trigger / tm:condition / tm:action) for client-evaluated
         'when X then Y' tracker rules, reusing odrl:Constraint for the
-        condition."""@en ;
+        condition. Version 2.0.0 rebases this ontology from its legacy w3id namespace to https://jeswr.org/ns/ (DECISIONS V1)."""@en ;
     dct:creator "Claude Opus 4.8 (@jeswr PSS agent)" ;
     dct:issued "2026-06-15"^^xsd:date ;
-    dct:modified "2026-06-17"^^xsd:date ;
-    vann:preferredNamespaceUri "https://w3id.org/jeswr/task#" ;
+    dct:modified "2026-10-25"^^xsd:date ;
+    vann:preferredNamespaceUri "https://jeswr.org/ns/task#" ;
     vann:preferredNamespacePrefix "tm" ;
-    rdfs:seeAlso <https://w3id.org/jeswr/fed> ;
+    rdfs:seeAlso <https://jeswr.org/ns/fed> ;
     rdfs:comment "Experimental — AI-agent-generated; under active development, not production-hardened."@en .
 
 # ---------------------------------------------------------------------------
@@ -132,7 +133,7 @@ tm:wipMin
         no lower bound. A non-negative integer."""@en ;
     rdfs:domain wf:State ;
     rdfs:range xsd:nonNegativeInteger ;
-    rdfs:isDefinedBy <https://w3id.org/jeswr/task> .
+    rdfs:isDefinedBy <https://jeswr.org/ns/task> .
 
 tm:wipMax
     a rdf:Property, owl:DatatypeProperty ;
@@ -146,7 +147,7 @@ tm:wipMax
         integer."""@en ;
     rdfs:domain wf:State ;
     rdfs:range xsd:nonNegativeInteger ;
-    rdfs:isDefinedBy <https://w3id.org/jeswr/task> .
+    rdfs:isDefinedBy <https://jeswr.org/ns/task> .
 
 # ===========================================================================
 #  tm: extension 2 — automation rules: event-condition-action ("when X then Y")
@@ -176,7 +177,7 @@ tm:Rule
         Rules are persisted in the pod and evaluated CLIENT-side whenever fresh
         issue state is observed (pods have no server-side compute). The Jira/Monday
         automation model expressed in RDF."""@en ;
-    rdfs:isDefinedBy <https://w3id.org/jeswr/task> .
+    rdfs:isDefinedBy <https://jeswr.org/ns/task> .
 
 tm:Trigger
     a rdfs:Class, owl:Class ;
@@ -186,7 +187,7 @@ tm:Trigger
         tm:OnDueDatePassed, tm:OnAllSubtasksDone, tm:OnAssigned, tm:OnCreated. A
         trigger may carry refining data (e.g. the target status of a status-change)
         on app-defined properties; the coded value identifies the event class."""@en ;
-    rdfs:isDefinedBy <https://w3id.org/jeswr/task> .
+    rdfs:isDefinedBy <https://jeswr.org/ns/task> .
 
 tm:Action
     a rdfs:Class, owl:Class ;
@@ -197,7 +198,7 @@ tm:Action
         tm:AddComment, tm:CloseIssue. An action carries its parameter via
         tm:actionValue (e.g. the priority to set, the status slug, the assignee
         WebID, the comment body). The mutation is applied client-side."""@en ;
-    rdfs:isDefinedBy <https://w3id.org/jeswr/task> .
+    rdfs:isDefinedBy <https://jeswr.org/ns/task> .
 
 tm:rule
     a rdf:Property, owl:ObjectProperty ;
@@ -206,7 +207,7 @@ tm:rule
         set of rules a tracker's collaborators evaluate client-side."""@en ;
     rdfs:domain wf:Tracker ;
     rdfs:range tm:Rule ;
-    rdfs:isDefinedBy <https://w3id.org/jeswr/task> .
+    rdfs:isDefinedBy <https://jeswr.org/ns/task> .
 
 tm:trigger
     a rdf:Property, owl:ObjectProperty ;
@@ -217,7 +218,7 @@ tm:trigger
         rule."""@en ;
     rdfs:domain tm:Rule ;
     rdfs:range tm:Trigger ;
-    rdfs:isDefinedBy <https://w3id.org/jeswr/task> .
+    rdfs:isDefinedBy <https://jeswr.org/ns/task> .
 
 tm:condition
     a rdf:Property, owl:ObjectProperty ;
@@ -230,7 +231,7 @@ tm:condition
         with no condition fires whenever its trigger fires)."""@en ;
     rdfs:domain tm:Rule ;
     rdfs:range odrl:Constraint ;
-    rdfs:isDefinedBy <https://w3id.org/jeswr/task> .
+    rdfs:isDefinedBy <https://jeswr.org/ns/task> .
 
 tm:action
     a rdf:Property, owl:ObjectProperty ;
@@ -241,7 +242,7 @@ tm:action
         rule may carry several actions, all applied client-side."""@en ;
     rdfs:domain tm:Rule ;
     rdfs:range tm:Action ;
-    rdfs:isDefinedBy <https://w3id.org/jeswr/task> .
+    rdfs:isDefinedBy <https://jeswr.org/ns/task> .
 
 tm:actionValue
     a rdf:Property ;
@@ -253,7 +254,7 @@ tm:actionValue
         rdfs:range so it can hold either. Some actions (e.g. tm:CloseIssue) need no
         value."""@en ;
     rdfs:domain tm:Action ;
-    rdfs:isDefinedBy <https://w3id.org/jeswr/task> .
+    rdfs:isDefinedBy <https://jeswr.org/ns/task> .
 
 # --- coded-value triggers (instances of tm:Trigger) -------------------------
 
@@ -263,14 +264,14 @@ tm:OnStatusChange
     rdfs:comment """Trigger: an issue's workflow status changed. Pair with a
         tm:condition over the new status (an odrl:Constraint whose left-operand is
         the issue's status) to fire only on a specific transition."""@en ;
-    rdfs:isDefinedBy <https://w3id.org/jeswr/task> .
+    rdfs:isDefinedBy <https://jeswr.org/ns/task> .
 
 tm:OnDueDatePassed
     a tm:Trigger ;
     rdfs:label "on due date passed"@en ;
     rdfs:comment """Trigger: an open issue's due date has passed (it is overdue).
         The basis for the built-in 'escalate overdue issues' automation."""@en ;
-    rdfs:isDefinedBy <https://w3id.org/jeswr/task> .
+    rdfs:isDefinedBy <https://jeswr.org/ns/task> .
 
 tm:OnAllSubtasksDone
     a tm:Trigger ;
@@ -278,19 +279,19 @@ tm:OnAllSubtasksDone
     rdfs:comment """Trigger: every sub-task of a parent issue has reached a terminal
         (closed) state. The basis for the built-in 'complete parents automatically'
         automation."""@en ;
-    rdfs:isDefinedBy <https://w3id.org/jeswr/task> .
+    rdfs:isDefinedBy <https://jeswr.org/ns/task> .
 
 tm:OnAssigned
     a tm:Trigger ;
     rdfs:label "on assigned"@en ;
     rdfs:comment """Trigger: an issue was (re)assigned (its wf:assignee changed)."""@en ;
-    rdfs:isDefinedBy <https://w3id.org/jeswr/task> .
+    rdfs:isDefinedBy <https://jeswr.org/ns/task> .
 
 tm:OnCreated
     a tm:Trigger ;
     rdfs:label "on created"@en ;
     rdfs:comment """Trigger: a new issue was created in the tracker."""@en ;
-    rdfs:isDefinedBy <https://w3id.org/jeswr/task> .
+    rdfs:isDefinedBy <https://jeswr.org/ns/task> .
 
 # --- coded-value actions (instances of tm:Action) ---------------------------
 
@@ -299,35 +300,35 @@ tm:SetStatus
     rdfs:label "set status"@en ;
     rdfs:comment """Action: move the issue to a workflow status. The target status
         slug is carried on tm:actionValue."""@en ;
-    rdfs:isDefinedBy <https://w3id.org/jeswr/task> .
+    rdfs:isDefinedBy <https://jeswr.org/ns/task> .
 
 tm:SetPriority
     a tm:Action ;
     rdfs:label "set priority"@en ;
     rdfs:comment """Action: set the issue's priority. The target priority is carried
         on tm:actionValue (e.g. \"high\")."""@en ;
-    rdfs:isDefinedBy <https://w3id.org/jeswr/task> .
+    rdfs:isDefinedBy <https://jeswr.org/ns/task> .
 
 tm:Assign
     a tm:Action ;
     rdfs:label "assign"@en ;
     rdfs:comment """Action: set the issue's wf:assignee. The assignee WebID (an IRI)
         is carried on tm:actionValue."""@en ;
-    rdfs:isDefinedBy <https://w3id.org/jeswr/task> .
+    rdfs:isDefinedBy <https://jeswr.org/ns/task> .
 
 tm:AddComment
     a tm:Action ;
     rdfs:label "add comment"@en ;
     rdfs:comment """Action: add a comment to the issue. The comment body literal is
         carried on tm:actionValue."""@en ;
-    rdfs:isDefinedBy <https://w3id.org/jeswr/task> .
+    rdfs:isDefinedBy <https://jeswr.org/ns/task> .
 
 tm:CloseIssue
     a tm:Action ;
     rdfs:label "close issue"@en ;
     rdfs:comment """Action: close the issue (move it to the workflow's terminal
         status). Needs no tm:actionValue."""@en ;
-    rdfs:isDefinedBy <https://w3id.org/jeswr/task> .
+    rdfs:isDefinedBy <https://jeswr.org/ns/task> .
 
 # --- the re-used ODRL constraint shape (defined by odrl:, restated here) -----
 #  tm:condition's value is an odrl:Constraint. These are re-used, NOT minted —

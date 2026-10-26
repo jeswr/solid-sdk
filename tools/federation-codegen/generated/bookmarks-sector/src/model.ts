@@ -24,7 +24,7 @@ import {
   SCHEMA_URL,
 } from "./vocab.ts";
 
-/** Typed structural projection of <https://w3id.org/jeswr/sectors/bookmarks/shapes#BookmarkShape> for <https://w3id.org/jeswr/sectors/bookmarks#Bookmark>. */
+/** Typed structural projection of <https://jeswr.org/ns/sectors/bookmarks/shapes#BookmarkShape> for <https://jeswr.org/ns/sectors/bookmarks#Bookmark>. */
 export class Bookmark extends TermWrapper {
   /** rdf:type values as a live set of IRI strings. */
   get types(): Set<string> {
@@ -41,7 +41,7 @@ export class Bookmark extends TermWrapper {
     return this.types.has(BOOKMARK_CLASS);
   }
 
-  /** <https://w3id.org/jeswr/sectors/bookmarks#archived> (maxCount 1). */
+  /** <https://jeswr.org/ns/sectors/bookmarks#archived> (maxCount 1). */
   get archived(): boolean | undefined {
     return OptionalFrom.subjectPredicate(this, BOOKMARK_ARCHIVED, LiteralAs.boolean);
   }
@@ -57,7 +57,7 @@ export class Bookmark extends TermWrapper {
     OptionalAs.object(this, DCTERMS_DESCRIPTION, value, LiteralFrom.string);
   }
 
-  /** <https://w3id.org/jeswr/sectors/bookmarks#hasTag> (unbounded, class <http://www.w3.org/2004/02/skos/core#Concept>). Live RDF set; minCount/class constraints require SHACL validation. */
+  /** <https://jeswr.org/ns/sectors/bookmarks#hasTag> (unbounded, class <http://www.w3.org/2004/02/skos/core#Concept>). Live RDF set; minCount/class constraints require SHACL validation. */
   get hasTag(): Set<string> {
     return SetFrom.subjectPredicate(
       this,
@@ -67,7 +67,7 @@ export class Bookmark extends TermWrapper {
     );
   }
 
-  /** <https://w3id.org/jeswr/sectors/bookmarks#notes> (maxCount 1). */
+  /** <https://jeswr.org/ns/sectors/bookmarks#notes> (maxCount 1). */
   get notes(): string | undefined {
     return OptionalFrom.subjectPredicate(this, BOOKMARK_NOTES, LiteralAs.string);
   }

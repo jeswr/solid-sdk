@@ -144,6 +144,8 @@ export const BOOKMARKS_CONFIG: StoreConfig<Bookmark> = {
 export function bookmarksStore(opts: {
   podRoot: string;
   webId: string;
+  /** Final document URL from the session profile load. */
+  profileDocumentUrl?: string;
   fetchImpl?: typeof fetch;
 }): ProductivityStore<Bookmark> {
   return createStore(BOOKMARKS_CONFIG, opts);

@@ -66,8 +66,8 @@ describe("toTurtle", () => {
   });
 
   it("emits the documented prefixes", () => {
-    expect(PREFIXES.health).toBe("https://TBD.example/solid/health#");
-    expect(PREFIXES.ph).toBe("https://w3id.org/jeswr/pod-health#");
+    expect(PREFIXES.health).toBe("https://jeswr.org/ns/sectors/health#");
+    expect(PREFIXES.ph).toBe("https://jeswr.org/ns/pod-health#");
     expect(PREFIXES.unit).toBe("http://qudt.org/vocab/unit/");
     expect(Object.keys(PREFIXES)).toContain("solid");
   });
