@@ -37,8 +37,11 @@ All instants are integer Unix milliseconds at whole-second precision, in
 must be in that range. Local dates must also be in 2000–2099. A window may be
 empty, spans at most 366 elapsed days, and may resolve at most 1024 time slots.
 Split longer periods into bounded windows and aggregate counts before computing
-percentages. Generation checks every slot on eligible local dates touched by the
-window, even slots outside the instant window on those dates. A DST gap, overlap,
+percentages. Generation checks every slot on eligible dates in the conservative
+local-date envelope of the window (UTC endpoints expanded by ±14 hours, the
+calendar core's supported offset range). This includes slots and sometimes
+adjacent dates outside the instant window, so midnight rollbacks cannot hide a
+briefly visited date between the endpoints. A DST gap, overlap,
 or skipped local date rejects the entire call; nothing is shifted, duplicated,
 or omitted to invent a dosing policy. Unsupported zones/times use the stable
 `invalid-zoned-time` code. All invalid input raises `MedicationError` with a

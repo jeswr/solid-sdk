@@ -6,7 +6,9 @@
    libraries; HLT-L5 requires DST-safe generation but supplies no disambiguation
    policy. Options: move/omit a nonexistent time, choose an overlap occurrence, or
    reject. This lane rejects nonexistent and ambiguous times on eligible local
-   dates touched by the window, including slots outside the window on those dates.
+   dates in a conservative envelope (UTC endpoints expanded by ±14 hours),
+   including slots and adjacent dates outside the instant window. This ensures
+   midnight rollbacks cannot hide a briefly visited date between the endpoints.
    It reuses the calendar time-zone core's documented 2000–2099, whole-second
    instant support. Windows are half-open, limited to 366 elapsed days and 1024
    local-time conversions; unsupported input raises a typed medication error.

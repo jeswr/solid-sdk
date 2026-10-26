@@ -182,6 +182,23 @@ describe("medication schedule generation", () => {
     );
   });
 
+  it.each([
+    ["2009-11-01T03:00:00Z", "2009-11-01T03:02:00Z"],
+    ["2009-11-01T02:59:00Z", "2009-11-01T03:02:00Z"],
+  ])("rejects midnight rollbacks even when endpoint dates hide a visited date", (start, end) => {
+    // Goose Bay briefly visits November 1 before returning to October 31.
+    // The first window's dates run backwards; the second's both say October 31.
+    fails(
+      () =>
+        dates(
+          { ...base, startDate: "2009-01-01", times: ["00:00"] },
+          { start: at(start), end: at(end) },
+          "America/Goose_Bay",
+        ),
+      "invalid-zoned-time",
+    );
+  });
+
   it("does not resolve slots on excluded weekdays/dates and yields no as-needed doses", () => {
     expect(
       dates(

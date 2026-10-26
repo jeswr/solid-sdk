@@ -63,7 +63,8 @@ export function isDue(
 
 /**
  * Wall-clock recurrence in the supplied IANA zone; never adds elapsed 24h to a
- * previous dose. Every slot on eligible dates touched by the window is checked.
+ * previous dose. Check the conservative local-date envelope for all supported
+ * offsets (±14h), including dates briefly visited by a midnight rollback.
  */
 export function generateDueDoses(
   schedule: MedicationSchedule,
@@ -72,9 +73,11 @@ export function generateDueDoses(
 ): DueDose[] {
   const bounds = validateSchedule(schedule);
   validateWindow(window);
-  const first = dateDay(wallAt(window.start, timeZone).slice(0, 10));
+  wallAt(window.start, timeZone);
   if (window.start === window.end) return [];
-  const last = dateDay(wallAt(window.end - 1000, timeZone).slice(0, 10));
+  wallAt(window.end - 1000, timeZone);
+  const first = Math.floor((window.start - 14 * 3600_000) / DAY);
+  const last = Math.floor((window.end - 1000 + 14 * 3600_000) / DAY);
   const slots: { date: string; time: string }[] = [];
   for (let day = first; day <= last; day++) {
     if (!eligible(schedule, bounds, day)) continue;
