@@ -3,7 +3,7 @@
 // AUTHORED-BY Codex GPT-6
 
 // Agent DESIGN §2.2. Fold this into check-sdk-layers.mjs when sdk-core T-003 lands.
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, globSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { dirname, extname, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import ts from "typescript";
@@ -61,12 +61,18 @@ function allowedModuleSpecifier(specifier) {
   );
 }
 
-function context(root, file) {
+function context(root, file, projects) {
   const path = relative(root, file).replaceAll("\\", "/");
   const parts = path.split("/");
+  const owner = owningProject(projects, realpathSync(file));
   return {
     path,
-    project: parts[0] === "packages" ? parts[1] : undefined,
+    packageName: owner?.manifest.name,
+    project: owner?.manifest.name?.startsWith("@jeswr/")
+      ? owner.manifest.name.slice("@jeswr/".length)
+      : parts[0] === "packages"
+        ? parts[1]
+        : undefined,
     ownTest:
       /^packages\/agent-channels\/(?:src|test)\//.test(path) &&
       /\.(?:test|spec)\.[cm]?[jt]sx?$/.test(path),
@@ -77,14 +83,111 @@ function context(root, file) {
   };
 }
 
-// Normalize relative source paths too, so reaching into another package's src is no bypass.
-function importTarget(root, file, specifier) {
-  if (!specifier.startsWith(".") && !specifier.startsWith("/")) return specifier;
-  const target = relative(root, resolve(dirname(file), specifier)).replaceAll("\\", "/");
-  const match = /^packages\/([^/]+)\/(?:src|dist)\/(.*)$/.exec(target);
-  if (!match) return specifier;
-  const subpath = match[2].replace(/\.[cm]?[jt]sx?$/, "").replace(/\/index$/, "");
-  return `@jeswr/${match[1]}${subpath === "index" ? "" : `/${subpath}`}`;
+// Use pnpm's project globs, including nested projects, rather than assuming a layout.
+function workspaceProjects(root) {
+  const configPath = join(root, "pnpm-workspace.yaml");
+  const patterns = [];
+  if (existsSync(configPath)) {
+    const config = readFileSync(configPath, "utf8");
+    const block = /^packages:\s*\n((?:[ \t]+[^\n]*(?:\n|$)|\n)*)/m.exec(config)?.[1];
+    if (!block) throw new Error("Missing pnpm workspace packages list");
+    for (const line of block.trimEnd().split("\n")) {
+      if (/^\s*(?:#.*)?$/.test(line)) continue;
+      const match = /^\s*-\s*(?:"([^"]+)"|'([^']+)'|([^#\s]+))\s*(?:#.*)?$/.exec(line);
+      if (!match) throw new Error(`Unsupported pnpm workspace package glob: ${line}`);
+      patterns.push(match[1] ?? match[2] ?? match[3]);
+    }
+  }
+  const included = patterns.filter((pattern) => !pattern.startsWith("!"));
+  const excluded = patterns
+    .filter((pattern) => pattern.startsWith("!"))
+    .map((pattern) => `${pattern.slice(1)}/package.json`);
+  const manifests = globSync(
+    included.map((pattern) => `${pattern}/package.json`),
+    {
+      cwd: root,
+      exclude: excluded,
+    },
+  );
+  // pnpm also treats the workspace root as a project (scripts and root tests live here).
+  if (existsSync(join(root, "package.json"))) manifests.push("package.json");
+  return manifests
+    .map((path) => {
+      const manifest = JSON.parse(readFileSync(join(root, path), "utf8"));
+      return { directory: realpathSync(dirname(join(root, path))), manifest };
+    })
+    .sort((a, b) => b.directory.length - a.directory.length);
+}
+
+function owningProject(projects, path) {
+  return projects.find(({ directory }) => {
+    const suffix = relative(directory, path);
+    if (suffix.split("/").includes("node_modules")) return false;
+    return (
+      suffix === "" || (!suffix.startsWith("../") && suffix !== ".." && !suffix.startsWith("/"))
+    );
+  });
+}
+
+const resolutionOptions = {
+  allowJs: true,
+  resolveJsonModule: true,
+  moduleResolution: ts.ModuleResolutionKind.Bundler,
+  module: ts.ModuleKind.ESNext,
+};
+
+function resolvedFile(file, specifier) {
+  const literal = resolve(dirname(file), specifier);
+  if (specifier.startsWith(".") && existsSync(literal) && statSync(literal).isFile())
+    return realpathSync(literal);
+  const resolved = ts.resolveModuleName(specifier, file, resolutionOptions, ts.sys).resolvedModule;
+  return resolved && realpathSync(resolved.resolvedFileName);
+}
+
+function projectTarget(project, path) {
+  const subpath = relative(project.directory, path)
+    .replaceAll("\\", "/")
+    .replace(/^(?:src|dist)\//, "")
+    .replace(/(?:\.d)?\.[cm]?[jt]sx?$/, "")
+    .replace(/(?:^|\/)index$/, "");
+  return `${project.manifest.name}${subpath ? `/${subpath}` : ""}`;
+}
+
+function importTargets(projects, file, specifier) {
+  const sourceProject = owningProject(projects, realpathSync(file));
+  const relativeImport = specifier.startsWith(".");
+  let workspaceLink = false;
+  let linkedProject;
+  if (!relativeImport && allowedModuleSpecifier(specifier)) {
+    const name = packageName(specifier);
+    const version = [...dependencyFields, "devDependencies"]
+      .map((field) => sourceProject?.manifest[field]?.[name])
+      .find(Boolean);
+    workspaceLink = /^(?:workspace|link):/.test(version ?? "");
+    // Node searches ancestor node_modules directories; realpath identifies workspace aliases.
+    for (let directory = dirname(file); ; directory = dirname(directory)) {
+      const installed = join(directory, "node_modules", name);
+      if (existsSync(installed)) {
+        const linked = realpathSync(installed);
+        linkedProject = owningProject(projects, linked);
+        workspaceLink ||= Boolean(linkedProject);
+        break;
+      }
+      if (dirname(directory) === directory) break;
+    }
+  }
+  if (!relativeImport && !workspaceLink) return { targets: [specifier] };
+  const target = resolvedFile(file, specifier);
+  if (!target) return { error: "cannot resolve import target" };
+  const project = owningProject(projects, target);
+  if (!project) return { error: "import target is outside every workspace project" };
+  // Keep the actual module subpath so send entrypoints remain restricted within their own project.
+  const targets = [projectTarget(project, target)];
+  if (workspaceLink)
+    targets.push(
+      `${(linkedProject ?? project).manifest.name}${specifier.slice(packageName(specifier).length)}`,
+    );
+  return { targets: [...new Set(targets)] };
 }
 
 function importFailures(ctx, target, typeOnly = false, manifest = false) {
@@ -99,7 +202,9 @@ function importFailures(ctx, target, typeOnly = false, manifest = false) {
     failures.push("gateway must not import agent-audit");
   // Package self-imports and Node builtins are not cross-layer dependencies.
   const external =
-    !target.startsWith(".") && !target.startsWith("node:") && name !== `@jeswr/${ctx.project}`;
+    !target.startsWith(".") &&
+    !target.startsWith("node:") &&
+    name !== (ctx.packageName ?? `@jeswr/${ctx.project}`);
   if (external && !ctx.test) {
     const allowlist = allowed[ctx.project];
     if (allowlist && !allowlist.has(name) && !(ctx.project === "agent-executor" && send))
@@ -154,25 +259,11 @@ function isPropertyName(node) {
   );
 }
 
-function needsImportCheck(root, file, text) {
-  // Conservatively parse escaped ESM specifiers; the AST decodes their literals.
-  if (text.includes("\\")) return true;
-  return ts.preProcessFile(text, true, true).importedFiles.some(({ fileName }) => {
-    const target = importTarget(root, file, fileName);
-    return (
-      modelSdks.includes(packageName(target)) ||
-      /^@jeswr\/agent-channels\/.+\/send(?:\/|$)/.test(target)
-    );
-  });
-}
-
-function sourceFailures(root, file) {
-  const ctx = context(root, file);
+function sourceFailures(root, file, projects) {
+  const ctx = context(root, file, projects);
   const text = readFileSync(file, "utf8");
   const agentSource =
     ctx.project?.startsWith("agent-") || ctx.ui || ctx.path.startsWith("apps/agent-daemon/");
-  // Existing apps include large generated modules; avoid an AST when possible.
-  if (!agentSource && !needsImportCheck(root, file, text)) return [];
   const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true);
   const failures = [];
   const report = (node, message) =>
@@ -189,8 +280,14 @@ function sourceFailures(root, file) {
       report(node, `agent module specifier must be a bare package name or relative path: ${value}`);
       return;
     }
-    for (const failure of importFailures(ctx, importTarget(root, file, value), typeOnly))
-      report(node, `${failure}: ${value}`);
+    const { targets, error } = importTargets(projects, file, value);
+    if (error) {
+      report(node, `${error}: ${value}`);
+      return;
+    }
+    for (const target of targets)
+      for (const failure of importFailures(ctx, target, typeOnly))
+        report(node, `${failure}: ${value}`);
   }
   function visit(node) {
     // Reject capabilities at their reference, so wrappers and aliases cannot hide them.
@@ -238,12 +335,14 @@ function sourceFailures(root, file) {
 /** Check a workspace (or isolated fixture workspace) without executing any source. */
 export function checkAgentLayers(root = repoRoot) {
   const failures = [];
+  const projects = workspaceProjects(root);
   for (const base of ["packages", "apps", "tools", "scripts", "test"]) {
     for (const file of walk(join(root, base))) {
-      if (sourceExtensions.has(extname(file))) failures.push(...sourceFailures(root, file));
+      if (sourceExtensions.has(extname(file)))
+        failures.push(...sourceFailures(root, file, projects));
       if (file.endsWith("/package.json")) {
         const manifest = JSON.parse(readFileSync(file, "utf8"));
-        const ctx = context(root, file);
+        const ctx = context(root, file, projects);
         for (const field of [...dependencyFields, "devDependencies"]) {
           for (const [name, version] of Object.entries(manifest[field] ?? {})) {
             // Resolve npm aliases as well as direct dependency names.
