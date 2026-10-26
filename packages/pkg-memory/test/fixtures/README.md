@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 Five fictional claims, created for MCP-04. All person, agent, document, and entity
 IRIs use `example.org`; vocabulary namespaces retain their standard IRIs.
@@ -56,4 +57,13 @@ plain-string contract, since RDF/JS merges plain strings and explicit
 
 ```sh
 python3 ../generate-literal-fixtures.py /path/to/knowledge-graph/pipeline/np_builder.py
+```
+
+`review-parity.json` covers MCP-04H's language-tag deduplication finding.
+RDFlib 7.1.4 retains the first spelling of otherwise identical statements,
+comparing language tags without case. Both named and blank subjects pin the
+reference IDs and skolemized graphs for each first spelling. Regenerate with:
+
+```sh
+python3 ../generate-review-fixtures.py /path/to/knowledge-graph/pipeline/np_builder.py
 ```

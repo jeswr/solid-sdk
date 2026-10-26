@@ -67,6 +67,40 @@ export class ReferenceStore extends Store {
   constructor(quads: Quad[] = []) {
     super(quads, { factory: referenceFactory });
   }
+
+  override addQuad(quad: Quad): boolean;
+  override addQuad(
+    subject: Quad["subject"],
+    predicate: Quad["predicate"],
+    object: Quad["object"],
+    graph?: Quad["graph"],
+  ): boolean;
+  override addQuad(
+    subjectOrQuad: Quad["subject"] | Quad,
+    predicate?: Quad["predicate"],
+    object?: Quad["object"],
+    graph?: Quad["graph"],
+  ): boolean {
+    const quad = predicate
+      ? df.quad(subjectOrQuad as Quad["subject"], predicate, object as Quad["object"], graph)
+      : (subjectOrQuad as Quad);
+    const literal = quad.object;
+    if (literal.termType === "Literal" && literal.language) {
+      // RDFlib retains the first spelling of an equal language literal. Match
+      // only this statement's graph, subject and predicate, leaving its stored
+      // term untouched so serialization and assertion hashes keep that spelling.
+      for (const existing of this.getQuads(quad.subject, quad.predicate, null, quad.graph)) {
+        const other = existing.object;
+        if (
+          other.termType === "Literal" &&
+          other.value === literal.value &&
+          other.language.toLowerCase() === literal.language.toLowerCase()
+        )
+          return false;
+      }
+    }
+    return super.addQuad(quad);
+  }
 }
 
 /** Parse through the suite boundary while preserving reference LANGTAG spelling. */
