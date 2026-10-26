@@ -123,7 +123,25 @@ Internal helpers:
   Parse bytes first with `@jeswr/fetch-rdf`'s `parseRdf` and the description URL as `baseIRI`.
   The mapper does no fetching, origin validation, HTTP metadata handling, or dataset mutation.
 
-Feature derivation and other server fixtures arrive in later tasks.
+The parsers and existing `deriveFeatures` follow the merged
+[Solid Storage Service Description draft](https://jeswr.github.io/solid-specs/specs/service-description/)
+where it supersedes ADR-002. `ssd:` means `https://jeswr.org/ns/solid-sd#`.
+Listed `ssd:SolidNotificationService` entries read `notify:channelType` and merge with
+`notify:subscription` services having the same endpoint and channel (SSD-CLI-6), retaining
+profiles and combining notification features. Root `solid-sparql:endpoint` statements imply
+the ACQ profile and merge with listed `ssd:SparqlQueryService` entries at that endpoint
+(SSD-CLI-7). Flat `ssd:PatchSupport` capabilities have exactly one `ssd:source` and one or more
+`ssd:patchType` values, one capability per resource media type; their formats are unioned.
+`ssd:RecursiveDeleteService` advertises an endpoint for `POST {container}`. The deprecated
+`ssd:RecursiveDelete` capability is preserved as data and leaves that feature `unknown`.
+
+Read-only sparq compatibility remains for `ssd:channelType` (sparq-org/sparq#7234), nested
+`ssd:format` nodes, and CID `format` maps / `mediaType` members. Normative channel and flat
+patch fields take precedence. A malformed flat patch entry cannot fall back to legacy fields.
+The CID parser expands the draft's fixed compact type/subscription terms and scoped
+`channelType`/`model` values without fetching contexts; unknown terms and extras survive.
+The copied draft examples live in `src/fixtures/{css.ttl,sparq-solid.ttl,sparq-lws.jsonld}`
+with source headers, alongside the existing synthetic server exchanges.
 
 From the workspace root:
 
@@ -147,10 +165,27 @@ body limits. Both caches share a contract suite; IndexedDB is tested with fake-i
 ## Feature flags
 
 `deriveFeatures(description, probe?)` is pure and deterministic and implements the ADR-002 mapping
-table. `capabilities(url, options)` resolves the storage, probes a Solid root (OPTIONS, then HEAD)
+table with the draft's absence and profile rules. `capabilities(url, options)` resolves the storage, probes a Solid root (OPTIONS, then HEAD)
 only when the description leaves `accessControl` or `patch` unknown, caches the probe with the
 description, and returns `Features`. LWS storages are never probed. A failed probe leaves those
 features `unknown` and is retried on the next call.
+
+The public signatures and `FeatureState` union stay unchanged. A missing entry means `unknown`,
+even in a fetched description (SSD-CLI-10); applications must check `state === 'available'`
+before using a feature. An unsupported required profile also leaves the feature `unknown`.
+Query services require the ACQ profile, CRDT sync requires `ssd:y-protocol-v1`, and access
+request/grant services require `lws:AccessProfile`. Any one implemented profile in the list
+suffices (SSD-CLI-5/20). LWS service types work on both protocols; old SSD access aliases
+remain read-only compatibility forms. Resumable uploads require the tus profile
+`https://tus.io/protocols/resumable-upload`. Unknown type IRIs do not acquire semantics by
+sharing a recognised local name. Additional draft constants are exported through `./vocab`;
+`SSD.RecursiveDelete` is deprecated in favour of `SSD.RecursiveDeleteService`.
+
+Protocol guarantees and client fallbacks remain: Solid client type indexes, copy/delete move,
+and RDF negotiation; LWS JSON Patch baseline and pagination. Solid pagination is `unknown`
+without a `ssd:Pagination` entry. Missing LWS move, access grants/control, or RDF negotiation
+entries are `unknown`. A listed notification service with only channels this client cannot
+consume remains `unavailable`; this describes client usability, not a complete server inventory.
 
 ```ts
 import { capabilities } from '@jeswr/storage-capabilities';

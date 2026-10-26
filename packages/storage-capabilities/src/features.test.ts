@@ -1,11 +1,12 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6.1-Sol
 import fc from "fast-check";
 import { describe, expect, test } from "vitest";
 import { deriveFeatures } from "./features.js";
 import { parseLwsDescription } from "./lws-description.js";
 import { sparqLwsCid } from "./testing.js";
 import type { CapabilityEntry, ProbeResult, ServiceEntry, StorageDescription } from "./types.js";
-import { LWS, NOTIFY, SSD } from "./vocab.js";
+import { ACQ, LWS, NOTIFY, SSD } from "./vocab.js";
 
 const SSD_NS = "https://jeswr.org/ns/solid-sd#";
 const SOLID_ROOT = "https://pod.example/";
@@ -132,7 +133,7 @@ describe("deriveFeatures: one case per ADR-002 mapping row", () => {
       detail: { channels: ["legacy-ws"], endpoint: "wss://pod.example/" },
     });
     expect(deriveFeatures(solid()).liveUpdates).toEqual({
-      state: "unavailable",
+      state: "unknown",
       evidence: "solid-description:absent:SolidNotificationService",
       detail: { channels: [] },
     });
@@ -160,7 +161,7 @@ describe("deriveFeatures: one case per ADR-002 mapping row", () => {
       detail: { endpoint: `${SOLID_ROOT}.sync/tickets`, protocols: [`${SSD_NS}y-protocol-v1`] },
     });
     expect(deriveFeatures(solid([crdt(["urn:other"])])).realtimeCollab).toEqual({
-      state: "unavailable",
+      state: "unknown",
       evidence: "solid-description:absent:CrdtSyncService",
       detail: { protocols: [] },
     });
@@ -171,8 +172,13 @@ describe("deriveFeatures: one case per ADR-002 mapping row", () => {
     });
   });
 
-  test("serverSearch: SparqlQueryService on Solid (ACQ) and LWS, else unavailable", () => {
-    const sparql = { type: [SSD.SparqlQueryService], endpoint: `${SOLID_ROOT}sparql`, extra: {} };
+  test("serverSearch: SparqlQueryService on Solid (ACQ) and LWS, else unknown", () => {
+    const sparql = {
+      type: [SSD.SparqlQueryService],
+      endpoint: `${SOLID_ROOT}sparql`,
+      conformsTo: [ACQ.profile],
+      extra: {},
+    };
     expect(deriveFeatures(solid([sparql])).serverSearch).toEqual({
       state: "available",
       evidence: `solid-description:SparqlQueryService:${SOLID_ROOT}sparql`,
@@ -182,9 +188,9 @@ describe("deriveFeatures: one case per ADR-002 mapping row", () => {
       deriveFeatures(lws([{ ...sparql, endpoint: `${LWS_ROOT}sparql` }])).serverSearch.state,
     ).toBe("available");
     // ADR-008 §8: a foreign endpoint is not trusted.
-    expect(deriveFeatures(lws([sparql])).serverSearch.state).toBe("unavailable");
+    expect(deriveFeatures(lws([sparql])).serverSearch.state).toBe("unknown");
     expect(deriveFeatures(sparq).serverSearch).toEqual({
-      state: "unavailable",
+      state: "unknown",
       evidence: "lws-cid:absent:SparqlQueryService",
       detail: {},
     });
@@ -204,7 +210,7 @@ describe("deriveFeatures: one case per ADR-002 mapping row", () => {
       deriveFeatures(lws([{ type: [LWS.TypeIndexService], endpoint: `${LWS_ROOT}ti/`, extra: {} }]))
         .typeIndex,
     ).toEqual({
-      state: "unavailable",
+      state: "unknown",
       evidence: "lws-cid:absent:TypeSearchService",
       detail: { mode: "server", indexEndpoint: `${LWS_ROOT}ti/` },
     });
@@ -227,17 +233,22 @@ describe("deriveFeatures: one case per ADR-002 mapping row", () => {
       profiles: [LWS.AccessProfile],
     });
     expect(deriveFeatures(solid()).accessRequests).toEqual({
-      state: "unavailable",
+      state: "unknown",
       evidence: "solid-description:absent:AccessRequestService",
       detail: { profiles: [] },
     });
     const ssdGrants = solid([
-      { type: [`${SSD_NS}AccessGrantService`], endpoint: `${SOLID_ROOT}grants/`, extra: {} },
+      {
+        type: [`${SSD_NS}AccessGrantService`],
+        endpoint: `${SOLID_ROOT}grants/`,
+        conformsTo: [LWS.AccessProfile],
+        extra: {},
+      },
     ]);
     expect(deriveFeatures(ssdGrants).accessGrants).toEqual({
       state: "available",
       evidence: `solid-description:AccessGrantService:${SOLID_ROOT}grants/`,
-      detail: { endpoint: `${SOLID_ROOT}grants/`, profiles: [] },
+      detail: { endpoint: `${SOLID_ROOT}grants/`, profiles: [LWS.AccessProfile] },
     });
     expect(deriveFeatures(lws()).accessGrants.evidence).toBe("lws-cid:absent:AccessGrantService");
   });
@@ -249,7 +260,7 @@ describe("deriveFeatures: one case per ADR-002 mapping row", () => {
       detail: { model: "odrl-grants" },
     });
     expect(deriveFeatures(lws()).accessControl).toEqual({
-      state: "unavailable",
+      state: "unknown",
       evidence: "lws-cid:absent:AccessGrantService",
       detail: { model: "none" },
     });
@@ -291,7 +302,7 @@ describe("deriveFeatures: one case per ADR-002 mapping row", () => {
     });
   });
 
-  test("versioning / trash: ssd services, else unavailable when described", () => {
+  test("versioning / trash: ssd services, else unknown when described", () => {
     const d = solid([
       { type: [SSD.VersioningService], endpoint: `${SOLID_ROOT}v/{resource}`, extra: {} },
       { type: [SSD.TrashService], endpoint: `${SOLID_ROOT}trash/`, extra: {} },
@@ -303,7 +314,7 @@ describe("deriveFeatures: one case per ADR-002 mapping row", () => {
     });
     expect(deriveFeatures(d).trash.detail).toEqual({ endpoint: `${SOLID_ROOT}trash/` });
     expect(deriveFeatures(sparq).trash).toEqual({
-      state: "unavailable",
+      state: "unknown",
       evidence: "lws-cid:absent:TrashService",
       detail: {},
     });
@@ -339,7 +350,7 @@ describe("deriveFeatures: one case per ADR-002 mapping row", () => {
     });
     expect(deriveFeatures(moveCapability({})).move.detail.preservesIdentifier).toBeNull();
     expect(deriveFeatures(sparq).move).toEqual({
-      state: "unavailable",
+      state: "unknown",
       evidence: "lws-cid:absent:MoveResource",
       detail: { native: false, containers: false, preservesIdentifier: null },
     });
@@ -357,7 +368,7 @@ describe("deriveFeatures: one case per ADR-002 mapping row", () => {
           [],
           [
             {
-              type: ["https://example.org/ext#PatchSupport"],
+              type: [SSD.PatchSupport],
               extra: {
                 format: {
                   "text/turtle": ["text/n3", "application/sparql-update"],
@@ -440,11 +451,14 @@ describe("deriveFeatures: one case per ADR-002 mapping row", () => {
     });
   });
 
-  test("resumableUploads / recursiveDelete by capability local name; pagination by protocol", () => {
+  test("resumable uploads need a profile; recursive delete needs a service; LWS paging is baseline", () => {
     const d = lws(
       [],
       [
-        { type: ["https://example.org/ext#ResumableUploads"], extra: {} },
+        {
+          type: [SSD.ResumableUploads],
+          extra: { conformsTo: ["https://tus.io/protocols/resumable-upload"] },
+        },
         { type: [SSD.RecursiveDelete], extra: {} },
       ],
     );
@@ -453,10 +467,10 @@ describe("deriveFeatures: one case per ADR-002 mapping row", () => {
       evidence: "lws-cid:ResumableUploads",
       detail: undefined,
     });
-    expect(deriveFeatures(d).recursiveDelete.state).toBe("available");
+    expect(deriveFeatures(d).recursiveDelete.state).toBe("unknown");
     expect(deriveFeatures(sparq).recursiveDelete).toEqual({
-      state: "unavailable",
-      evidence: "lws-cid:absent:RecursiveDelete",
+      state: "unknown",
+      evidence: "lws-cid:absent:RecursiveDeleteService",
       detail: undefined,
     });
     expect(deriveFeatures(legacy).resumableUploads.state).toBe("unknown");
@@ -466,8 +480,8 @@ describe("deriveFeatures: one case per ADR-002 mapping row", () => {
       detail: undefined,
     });
     expect(deriveFeatures(solid()).pagination).toEqual({
-      state: "unavailable",
-      evidence: "solid-description:solid-no-paging",
+      state: "unknown",
+      evidence: "solid-description:absent:Pagination",
       detail: undefined,
     });
   });
@@ -479,8 +493,8 @@ describe("deriveFeatures: one case per ADR-002 mapping row", () => {
       detail: { formats: ["text/turtle", "application/ld+json"] },
     });
     expect(deriveFeatures(sparq).rdfConneg).toEqual({
-      state: "unavailable",
-      evidence: "lws-cid:opaque-bodies",
+      state: "unknown",
+      evidence: "lws-cid:absent:ContentNegotiation",
       detail: { formats: [] },
     });
     const conneg = lws(
@@ -519,7 +533,7 @@ describe("deriveFeatures trust and robustness", () => {
     );
     const features = deriveFeatures(d);
     expect(features.liveUpdates.state).toBe("available");
-    expect(features.serverSearch.state).toBe("unavailable");
+    expect(features.serverSearch.state).toBe("unknown");
     expect(features.accessControl.state).toBe("unknown");
     expect(features.versioning.state).toBe("unknown");
   });
@@ -629,7 +643,7 @@ describe("deriveFeatures trust and robustness", () => {
     };
     const features = deriveFeatures(d);
     expect(features.move.state).toBe("unknown");
-    expect(features.rdfConneg.state).toBe("unavailable");
+    expect(features.rdfConneg.state).toBe("unknown");
     expect(features.liveUpdates.state).toBe("unknown");
   });
 
@@ -658,7 +672,7 @@ describe("deriveFeatures trust and robustness", () => {
     );
     expect(deriveFeatures(acpLookalike).accessControl.state).toBe("unknown");
     const moveLookalike = lws([], [{ type: ["https://x.example/MoveResource"], extra: {} }]);
-    expect(deriveFeatures(moveLookalike).move.state).toBe("unavailable");
+    expect(deriveFeatures(moveLookalike).move.state).toBe("unknown");
   });
 
   test("a described storage cannot forge legacy-ws through rdf:type", () => {
@@ -743,8 +757,8 @@ describe("deriveFeatures trust and robustness", () => {
         extra: {},
       },
     ]);
-    expect(deriveFeatures(foreign).liveUpdates.state).toBe("unavailable");
-    expect(deriveFeatures(foreign).realtimeCollab.state).toBe("unavailable");
+    expect(deriveFeatures(foreign).liveUpdates.state).toBe("unknown");
+    expect(deriveFeatures(foreign).realtimeCollab.state).toBe("unknown");
     // An SSE-only LWS service.
     const sse = lws([
       {
@@ -863,7 +877,7 @@ describe("deriveFeatures trust and robustness", () => {
       [],
       [{ type: [`${SSD_NS}ContentNegotiation`] } as unknown as CapabilityEntry],
     );
-    expect(deriveFeatures(conneg).rdfConneg.state).toBe("unavailable");
+    expect(deriveFeatures(conneg).rdfConneg.state).toBe("unknown");
     const d = { ...solid(), services: undefined, capabilities: null, sources: undefined };
     expect(deriveFeatures(d as unknown as StorageDescription).protocol).toBe("solid");
   });

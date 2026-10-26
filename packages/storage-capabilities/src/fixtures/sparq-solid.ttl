@@ -1,0 +1,59 @@
+# // AUTHORED-BY Codex GPT-6.1-Sol
+# Source: /home/user/solid-specs/specs/service-description/examples/sparq-solid.ttl
+# AUTHORED-BY Claude Opus 5.5
+# A Solid storage that lists every service and capability type this specification defines:
+# what the sparq server's Solid mode serves once its open service asks land.
+@prefix pim:          <http://www.w3.org/ns/pim/space#> .
+@prefix lws:          <https://www.w3.org/ns/lws#> .
+@prefix did:          <https://www.w3.org/ns/did#> .
+@prefix notify:       <http://www.w3.org/ns/solid/notifications#> .
+@prefix solid-sparql: <http://www.w3.org/ns/solid/sparql#> .
+@prefix dct:          <http://purl.org/dc/terms/> .
+@prefix xsd:          <http://www.w3.org/2001/XMLSchema#> .
+@prefix ssd:          <https://jeswr.org/ns/solid-sd#> .
+
+<https://pod.example/> a pim:Storage, lws:Storage ;
+    notify:subscription <https://pod.example/.notifications/WebSocketChannel2023/> ;
+    solid-sparql:endpoint <https://pod.example/sparql> ;
+    did:service <https://pod.example/#storage-root> ,
+                <https://pod.example/.notifications/WebSocketChannel2023/> ,
+                <https://pod.example/#sparql> ,
+                <https://pod.example/#sync> ,
+                <https://pod.example/#versions> ,
+                <https://pod.example/#trash> ,
+                <https://pod.example/#recursive-delete> ;
+    lws:capability [ a ssd:AccessControl ; ssd:model ssd:WAC ] ,
+                   [ a ssd:PatchSupport ;
+                     ssd:source "text/turtle" ;
+                     ssd:patchType "text/n3", "application/sparql-update" ] ,
+                   [ a ssd:ContentNegotiation ;
+                     ssd:source "text/turtle" ;
+                     ssd:target "application/ld+json", "application/n-triples" ] .
+
+<https://pod.example/#storage-root> a lws:StorageRoot ;
+    did:serviceEndpoint <https://pod.example/> .
+
+# One node serves both forms: the notify:subscription object and the did:service entry.
+<https://pod.example/.notifications/WebSocketChannel2023/> a ssd:SolidNotificationService ;
+    did:serviceEndpoint <https://pod.example/.notifications/WebSocketChannel2023/> ;
+    notify:channelType notify:WebSocketChannel2023 ;
+    notify:feature notify:endAt, notify:rate .
+
+<https://pod.example/#sparql> a ssd:SparqlQueryService ;
+    did:serviceEndpoint <https://pod.example/sparql> ;
+    dct:conformsTo <https://jeswr.github.io/solid-specs/specs/access-controlled-query/> .
+
+<https://pod.example/#sync> a ssd:CrdtSyncService ;
+    did:serviceEndpoint <https://pod.example/.sync/tickets> ;
+    dct:conformsTo ssd:y-protocol-v1 ;
+    ssd:roomTemplate "wss://pod.example/.sync/rooms/{room}" .
+
+<https://pod.example/#versions> a ssd:VersioningService ;
+    did:serviceEndpoint <https://pod.example/.versions/> .
+
+<https://pod.example/#trash> a ssd:TrashService ;
+    did:serviceEndpoint <https://pod.example/.trash/> ;
+    ssd:retention "P30D"^^xsd:duration .
+
+<https://pod.example/#recursive-delete> a ssd:RecursiveDeleteService ;
+    did:serviceEndpoint <https://pod.example/.delete> .

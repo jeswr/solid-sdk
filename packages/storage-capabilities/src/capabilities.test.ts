@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6.1-Sol
 import { describe, expect, test, vi } from "vitest";
 import { createMemoryCache } from "./cache.js";
 import { capabilities } from "./capabilities.js";
@@ -47,7 +48,7 @@ describe("capabilities() over the ADR-002 fixtures", () => {
     expect(fetch.calls).toEqual([]);
   });
 
-  test("sparq LWS: webhook live updates, server type index, ODRL grants, no move, paging; never probed", async () => {
+  test("sparq LWS: webhook live updates, server type index, ODRL grants, move unknown, paging; never probed", async () => {
     const fetch = fixtureFetch(sparqLwsStorage);
     const features = await capabilities(sparqLwsStorage.resource, options(fetch));
     expect(features).toMatchObject({
@@ -55,7 +56,7 @@ describe("capabilities() over the ADR-002 fixtures", () => {
       liveUpdates: { state: "available", detail: { channels: ["webhook"] } },
       typeIndex: { state: "available", detail: { mode: "server" } },
       accessControl: { state: "available", detail: { model: "odrl-grants" } },
-      move: { state: "unavailable" },
+      move: { state: "unknown" },
       pagination: { state: "available" },
     });
     expect(fetch.calls.some((call) => call.startsWith("OPTIONS"))).toBe(false);
@@ -82,7 +83,7 @@ describe("capabilities() over the ADR-002 fixtures", () => {
       channels: ["legacy-ws"],
       endpoint: "wss://nss.example/",
     });
-    expect(features.serverSearch.state).toBe("unavailable");
+    expect(features.serverSearch.state).toBe("unknown");
     expect(features.realtimeCollab.state).toBe("unknown");
     expect(features.accessControl.detail.model).toBe("wac");
     expect(features.patch.detail.formats).toEqual({ "text/turtle": ["application/sparql-update"] });

@@ -2,7 +2,7 @@
 export type Protocol = "solid" | "lws";
 
 export interface ServiceEntry {
-  /** Expanded IRIs. Bare LWS terms expand to `https://www.w3.org/ns/lws#<Term>`. */
+  /** Expanded IRIs. Known solid-sd terms expand through its fixed context; other bare terms use LWS. */
   type: readonly string[];
   endpoint: string; // absolute URL
   id?: string;
@@ -48,6 +48,7 @@ export interface StorageDescription {
   }[];
 }
 
+/** Missing description entries mean unknown, never unavailable (SSD-CLI-10). */
 export type FeatureState = "available" | "unavailable" | "unknown";
 export interface Feature<T = undefined> {
   state: FeatureState;
@@ -86,6 +87,7 @@ export interface Features {
     >;
   }>;
   resumableUploads: Feature;
+  /** POST {container} through RecursiveDeleteService; not a change to resource DELETE. */
   recursiveDelete: Feature;
   pagination: Feature;
   /** RDF can be stored and content-negotiated (always available on Solid; on LWS bodies are opaque). */

@@ -2,10 +2,26 @@
 // AUTHORED-BY Codex GPT-6
 import { CapabilitiesError } from "./errors.js";
 import type { CapabilityEntry, ServiceEntry, StorageDescription } from "./types.js";
-import { LWS } from "./vocab.js";
+import { LWS, NOTIFY, SSD } from "./vocab.js";
 
 const LWS_NAMESPACE = "https://www.w3.org/ns/lws#";
 const DEFAULT_TTL_MS = 3_600_000;
+// The fixed terms from solid-sd/context/v1; no runtime context dereferencing.
+const SSD_TERMS: ReadonlySet<string> = new Set([
+  SSD.SolidNotificationService,
+  SSD.SparqlQueryService,
+  SSD.CrdtSyncService,
+  SSD.VersioningService,
+  SSD.TrashService,
+  SSD.RecursiveDeleteService,
+  SSD.AccessControl,
+  SSD.PatchSupport,
+  SSD.ResumableUploads,
+  SSD.Pagination,
+  SSD.ContentNegotiation,
+  SSD.SseSubscription,
+  SSD.WebSocketSubscription,
+]);
 
 /**
  * Parse an already decoded CID body, regardless of its response media type.
@@ -146,7 +162,9 @@ export function parseLwsDescription(
   }
 
   function expand(term: string): string {
-    return term.includes(":") ? term : `${LWS_NAMESPACE}${term}`;
+    if (term.includes(":")) return term;
+    const extension = `https://jeswr.org/ns/solid-sd#${term}`;
+    return SSD_TERMS.has(extension) ? extension : `${LWS_NAMESPACE}${term}`;
   }
 
   function types(value: unknown): string[] {
@@ -159,6 +177,30 @@ export function parseLwsDescription(
     if (extra.subscriptionType !== undefined) {
       const expanded = strings(extra.subscriptionType, "subscriptionType").map(expand);
       extra.subscriptionType = Array.isArray(extra.subscriptionType) ? expanded : expanded[0];
+    }
+    // Fixed scoped @vocab terms from solid-sd/context/v1. Unknown values survive;
+    // there is no runtime JSON-LD context processing or dereferencing here.
+    for (const [key, terms] of [
+      [
+        "channelType",
+        [
+          NOTIFY.WebSocketChannel2023,
+          NOTIFY.StreamingHTTPChannel2023,
+          NOTIFY.WebhookChannel2023,
+          NOTIFY.LDNChannel2023,
+          NOTIFY.WebPushChannel2023,
+        ],
+      ],
+      ["model", [SSD.WAC, SSD.ACP, SSD.ODRLGrants]],
+    ] as const) {
+      if (extra[key] === undefined) continue;
+      const values = Array.isArray(extra[key]) ? extra[key] : [extra[key]];
+      const expanded = values.map((value) =>
+        typeof value === "string"
+          ? (terms.find((iri) => iri.endsWith(`#${value}`)) ?? value)
+          : value,
+      );
+      extra[key] = Array.isArray(extra[key]) ? expanded : expanded[0];
     }
     return extra;
   }

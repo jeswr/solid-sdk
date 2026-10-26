@@ -18,11 +18,16 @@ The root entry point also exports types; `./vocab` exports vocabulary objects (`
 
 Before implementation, read SDK core ADR-001 D4 and `ADR-002-capabilities.md` in
 `solid-suite-planning/specs/sdk-core/`, alongside this repository's `AGENTS.md`.
+The merged `solid-specs/specs/service-description/` draft supersedes ADR-002 for the
+description shapes, entry merging, profiles and absent-feature semantics (sst-br1.6).
+Its `ssd:` namespace is `https://jeswr.org/ns/solid-sd#`.
 
 The CID parser consumes decoded compact JSON by shape, independent of Content-Type, without
 remote context processing. It checks URL-normalised id equality, Storage typing, exactly one
 StorageRoot, and same scheme/authority for the description/root and request. It preserves unknown
-types/extras and expands bare LWS type/subscriptionType terms; verification method crypto types
+types/extras and expands bare LWS type/subscriptionType terms plus the draft's fixed SSD terms;
+scoped compact `channelType` and `model` values expand through the draft context.
+Verification method crypto types
 stay verbatim. Only JWK-backed verification methods enter the public contract. The resolver must
 apply response cache metadata, injected clocks, and the response-size limit; parser defaults are
 `Date.now()`, null ETag, and one-hour TTL. Do not introduce fetching into the parser.
@@ -39,6 +44,15 @@ using the description URL as `baseIRI`; remote JSON-LD contexts need an explicit
 The tests supply the notifications context offline. The mapper finds `notify:subscription`
 on any subject, but reads `did:service`, `lws:capability`, and ACQ endpoints only on `rootUrl`.
 HTTP metadata and origin validation remain the resolver's responsibility.
+Listed `ssd:SolidNotificationService` entries use `notify:channelType`; merge them with
+`notify:subscription` entries by endpoint AND channel, unioning features (SSD-CLI-6).
+Root ACQ endpoints imply `ACQ.profile` and merge with listed query services at that endpoint
+(SSD-CLI-7). Flat `ssd:PatchSupport` entries use exactly one `ssd:source` and one or more
+`ssd:patchType` values, one capability per source. Preserve raw extras and union derived formats.
+Read-only sparq fallbacks: `ssd:channelType` (sparq-org/sparq#7234), nested `ssd:format`,
+CID `format` maps and `mediaType` entries. Normative fields win; malformed flat entries cannot
+fall back. `ssd:RecursiveDeleteService` is a service endpoint for POST `{container}`;
+deprecated `ssd:RecursiveDelete` capability data leaves the feature unknown.
 The resolver passes the internal third argument `notificationsOnly: true` for foreign Solid
 descriptions so generic root services/capabilities cannot masquerade as notifications.
 
@@ -93,15 +107,15 @@ the state: `<source>:<TypeLocalName>[:<endpoint>]`, `<source>:absent:<TypeLocalN
 |---|---|
 | `liveUpdates` | `detail.channels` in preference order `websocket`, `sse`, `webhook` (LWS only, needs the SDK relay), `legacy-ws` (NSS `Updates-Via`). Solid webhook/LDN-only storages are `unavailable`. |
 | `realtimeCollab` | A `ssd:CrdtSyncService` conforming to `ssd:y-protocol-v1`. `detail.endpoint` is the ticket endpoint. |
-| `serverSearch` | ACQ / `ssd:SparqlQueryService` endpoint. |
+| `serverSearch` | `ssd:SparqlQueryService` endpoint with the ACQ profile; the root ACQ predicate implies it. |
 | `typeIndex` | `mode: 'server'` (LWS, both TypeIndex and TypeSearch services) or `'client'` (Solid profile type indexes). |
-| `accessRequests` / `accessGrants` | LWS services or the `ssd:` Solid equivalents. `profiles` must include `lws:AccessProfile` before pod-access uses them. |
+| `accessRequests` / `accessGrants` | LWS services on either protocol (legacy `ssd:` aliases still read). At least one listed profile must be `lws:AccessProfile`. |
 | `accessControl` | `odrl-grants` / `none` on LWS. On Solid: the `ssd:AccessControl` capability, else the probe (ACP link beats acl link beats WAC-Allow). |
 | `versioning` / `trash` | `ssd:VersioningService` / `ssd:TrashService` endpoints. |
 | `move` | LWS `MoveResource` (`native: true`, `containers`, `preservesIdentifier`). On Solid it is always available as copy+delete emulation that changes the URL. |
 | `patch` | `formats` maps a resource media type to patch media types. LWS always includes JSON Patch for `application/json` and linksets. Solid uses the `ssd:PatchSupport` capability, else Accept-Patch, else N3 Patch. |
-| `resumableUploads` / `recursiveDelete` | Capability local names `ResumableUploads` / `RecursiveDelete`. |
-| `pagination` | Always on LWS, never on Solid. |
+| `resumableUploads` / `recursiveDelete` | `ssd:ResumableUploads` with the tus upload profile / `ssd:RecursiveDeleteService` endpoint. |
+| `pagination` | Always on LWS; on Solid, available with `ssd:Pagination`, otherwise unknown. |
 | `rdfConneg` | Always on Solid (Turtle, JSON-LD). On LWS only with a `ContentNegotiation` capability whose source is RDF. |
 
 Trust: only notification entries are read from a cross-origin Solid description. `legacy-ws` comes
@@ -109,6 +123,19 @@ only from the resolver's own `Updates-Via` mapping. An unrecognised `notify:chan
 becomes a service type. Unknown types are ignored, and `deriveFeatures` never throws (fast-check
 property test). Without a description document (NSS), rows that depend on the description are
 `unknown`, not `unavailable`.
+The public signatures and `FeatureState` union are unchanged. A missing entry is `unknown`
+even in a fetched description (SSD-CLI-10), including missing live notifications, sync, query,
+access requests/grants, versions, trash, resumable uploads, recursive delete, LWS move/type
+index/access control/RDF negotiation and Solid pagination. Protocol guarantees and existing
+client fallbacks remain: Solid client type indexes, emulated move, RDF negotiation; LWS JSON
+Patch and pagination. `unavailable` is reserved here for a listed notification service whose
+channels the client cannot consume. Services requiring a profile need any one implemented
+profile (SSD-CLI-5/20): ACQ, `ssd:y-protocol-v1`, or `lws:AccessProfile`, respectively. Missing
+or unsupported profiles leave the feature unknown. Resumable uploads require
+`https://tus.io/protocols/resumable-upload`. Unknown type IRIs are ignored even when their
+local name matches a recognised type. Draft examples with source headers are in
+`src/fixtures/{css.ttl,sparq-solid.ttl,sparq-lws.jsonld}`; keep the existing server fixtures too.
+
 Feature-bearing keys are matched exactly (`name`, `ssd:name`, or the full `ssd:`/`lws:` IRI); an
 unrelated predicate with the same local name is ignored. `AccessControl` models and `PatchSupport`
 formats are unioned across all matching capabilities. Every described service endpoint except

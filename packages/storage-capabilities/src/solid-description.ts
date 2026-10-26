@@ -95,6 +95,39 @@ function isNamedNode(term: Term): boolean {
   return term.termType === "NamedNode";
 }
 
+function notificationExtra(node: DescriptionNode, visited: Set<string>): Record<string, unknown> {
+  let channels = node.iris(NOTIFY.channelType);
+  // Read-only fallback for sparq's pre-draft property (sparq-org/sparq#7234).
+  // The draft's notify:channelType takes precedence whenever present.
+  if (channels.length === 0) channels = node.iris("https://jeswr.org/ns/solid-sd#channelType");
+  return {
+    ...node.extra(
+      [RDF_TYPE, DID.serviceEndpoint, DCT.conformsTo, NOTIFY.channelType, NOTIFY.feature],
+      visited,
+    ),
+    ...(channels.length > 0
+      ? { [NOTIFY.channelType]: channels.length === 1 ? channels[0] : channels }
+      : {}),
+    [NOTIFY.feature]: node.iris(NOTIFY.feature),
+  };
+}
+
+function channelTypes(extra: ServiceEntry["extra"]): string[] {
+  const value = extra[NOTIFY.channelType];
+  return (Array.isArray(value) ? value : [value]).filter((type) => CHANNEL_TYPES.has(type));
+}
+
+function mergeService(left: ServiceEntry, right: ServiceEntry): ServiceEntry {
+  const profiles = [...new Set([...(left.conformsTo ?? []), ...(right.conformsTo ?? [])])];
+  return {
+    ...left,
+    ...right,
+    type: [...new Set([...left.type, ...right.type])],
+    ...(profiles.length > 0 ? { conformsTo: profiles } : {}),
+    extra: { ...left.extra, ...right.extra },
+  };
+}
+
 /**
  * Map an already parsed Solid description (ADR-002 step 5c).
  * Parse bytes with `@jeswr/fetch-rdf`'s `parseRdf`, using the description URL as baseIRI.
@@ -111,23 +144,19 @@ export function parseSolidDescription(
   const visited = new Set<string>();
   const services: ServiceEntry[] = [];
   const subscriptions = new DescriptionDataset(dataset, DataFactory).subscriptions;
+  const subscriptionExtras = new Map<string, Record<string, unknown>>();
   const seen = new Set<string>();
   for (const subscription of subscriptions) {
     if (subscription.termType !== "NamedNode" || seen.has(subscription.value)) continue;
     seen.add(subscription.value);
-    const channels = subscription.iris(NOTIFY.channelType);
+    const extra = notificationExtra(subscription, visited);
+    subscriptionExtras.set(subscription.value, extra);
     services.push({
       // Only recognised channel types become service types; others stay in `extra` so a
       // description cannot pose as another service class through notify:channelType.
-      type: [SSD.SolidNotificationService, ...channels.filter((type) => CHANNEL_TYPES.has(type))],
+      type: [SSD.SolidNotificationService, ...channelTypes(extra)],
       endpoint: subscription.value,
-      extra: {
-        ...subscription.extra([RDF_TYPE, NOTIFY.channelType, NOTIFY.feature], visited),
-        ...(channels.length > 0
-          ? { [NOTIFY.channelType]: channels.length === 1 ? channels[0] : channels }
-          : {}),
-        [NOTIFY.feature]: subscription.iris(NOTIFY.feature),
-      },
+      extra,
     });
   }
   if (notificationsOnly) return { services, capabilities: [] };
@@ -135,16 +164,58 @@ export function parseSolidDescription(
     const endpoint = service.iris(DID.serviceEndpoint)[0];
     if (endpoint === undefined) continue;
     const conformsTo = service.iris(DCT.conformsTo);
-    services.push({
-      type: service.types,
+    const notification = service.types.includes(SSD.SolidNotificationService);
+    const extra = notification
+      ? (subscriptionExtras.get(service.value) ?? notificationExtra(service, visited))
+      : service.extra([RDF_TYPE, DID.serviceEndpoint, DCT.conformsTo], visited);
+    const entry: ServiceEntry = {
+      type: [...new Set([...service.types, ...(notification ? channelTypes(extra) : [])])],
       endpoint,
       ...service.identity,
       ...(conformsTo.length > 0 ? { conformsTo } : {}),
-      extra: service.extra([RDF_TYPE, DID.serviceEndpoint, DCT.conformsTo], visited),
-    });
+      extra,
+    };
+    // SSD-CLI-6: match both endpoint and channel, including unknown channel IRIs.
+    const duplicate = notification
+      ? services.findIndex(
+          (other) =>
+            other.type.includes(SSD.SolidNotificationService) &&
+            other.endpoint === endpoint &&
+            typeof extra[NOTIFY.channelType] === "string" &&
+            other.extra[NOTIFY.channelType] === extra[NOTIFY.channelType],
+        )
+      : -1;
+    if (duplicate === -1) services.push(entry);
+    else {
+      const previous = services[duplicate] as ServiceEntry;
+      services[duplicate] = {
+        ...mergeService(previous, entry),
+        extra: {
+          ...previous.extra,
+          ...extra,
+          [NOTIFY.feature]: [
+            ...new Set([
+              ...(previous.extra[NOTIFY.feature] as string[]),
+              ...(extra[NOTIFY.feature] as string[]),
+            ]),
+          ],
+        },
+      };
+    }
   }
   for (const endpoint of root.iris(ACQ.endpoint)) {
-    services.push({ type: [SSD.SparqlQueryService], endpoint, extra: {} });
+    // SSD-CLI-7: the root ACQ predicate supplies the query profile too.
+    const acq: ServiceEntry = {
+      type: [SSD.SparqlQueryService],
+      endpoint,
+      conformsTo: [ACQ.profile],
+      extra: {},
+    };
+    const duplicate = services.findIndex(
+      (service) => service.type.includes(SSD.SparqlQueryService) && service.endpoint === endpoint,
+    );
+    if (duplicate === -1) services.push(acq);
+    else services[duplicate] = mergeService(acq, services[duplicate] as ServiceEntry);
   }
   const capabilities: CapabilityEntry[] = root.nodes(LWS.capability).map((capability) => ({
     type: capability.types,

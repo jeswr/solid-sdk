@@ -1,0 +1,22 @@
+# // AUTHORED-BY Codex GPT-6.1-Sol
+# Source: /home/user/solid-specs/specs/service-description/examples/css.ttl
+# AUTHORED-BY Claude Opus 5.5
+# A storage description in the shape a Community Solid Server serves today: the storage and
+# its notification subscription services only, no did:service or lws:capability. Valid: this
+# specification adds statements and requires none of a storage that describes no services.
+@prefix pim:    <http://www.w3.org/ns/pim/space#> .
+@prefix notify: <http://www.w3.org/ns/solid/notifications#> .
+
+<https://pod.example/.well-known/solid>
+    notify:subscription <https://pod.example/.notifications/WebSocketChannel2023/> ,
+                        <https://pod.example/.notifications/StreamingHTTPChannel2023/> .
+
+<https://pod.example/> a pim:Storage .
+
+<https://pod.example/.notifications/WebSocketChannel2023/>
+    notify:channelType notify:WebSocketChannel2023 ;
+    notify:feature notify:accept, notify:endAt, notify:rate, notify:startAt, notify:state .
+
+<https://pod.example/.notifications/StreamingHTTPChannel2023/>
+    notify:channelType notify:StreamingHTTPChannel2023 ;
+    notify:feature notify:accept, notify:endAt, notify:rate, notify:startAt, notify:state .
