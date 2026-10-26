@@ -161,6 +161,43 @@ it("shares assertion graphs while keeping each claim's epistemic metadata isolat
   expect(another.nanopubs[0]!.id).not.toBe(built.nanopubs[0]!.id);
 });
 
+it.each([
+  "<https://example.org/np>",
+  "_:publication",
+])("treats assertion type statements about %s as data", async (subject) => {
+  const input = batch(`${subject} a np:Nanopublication .`);
+  const built = await buildNanopublications(input, options);
+  const parsed = await parseNanopublications(await serializeNanopublications(built));
+  expect(parsed.nanopubs).toEqual(built.nanopubs);
+  expect(parsed.nanopubs).toHaveLength(1);
+  const assertion = graph(parsed.dataset, parsed.nanopubs[0]!.assertionId);
+  expect([...assertion].map((q) => q.object.value)).toEqual([`${NS.np}Nanopublication`]);
+});
+
+it("allows nanopublication types in entity graphs", async () => {
+  const input = batch();
+  input.entities = [
+    {
+      id: "https://example.org/np",
+      label: "Described nanopublication",
+      types: ["np:Nanopublication"],
+    },
+  ];
+  const built = await buildNanopublications(input, options);
+  const parsed = await parseNanopublications(await serializeNanopublications(built));
+  expect(parsed.nanopubs).toEqual(built.nanopubs);
+  expect(
+    parsed.dataset.has(
+      df.quad(
+        df.namedNode("https://example.org/np"),
+        df.namedNode(`${NS.rdf}type`),
+        df.namedNode(`${NS.np}Nanopublication`),
+        [...built.dataset].find((q) => q.subject.value === "https://example.org/np")!.graph,
+      ),
+    ),
+  ).toBe(true);
+});
+
 it("records optional source, entity and evidence metadata without filesystem or network access", async () => {
   const input = batch();
   input.worker.started = "2026-10-25T12:00:00.000000Z";

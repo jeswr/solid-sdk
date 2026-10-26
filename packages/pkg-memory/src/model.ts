@@ -382,18 +382,18 @@ function optionalText(node: RdfNode, predicate: string): string | undefined {
 }
 function readNanopublications(dataset: Store): Nanopublications {
   const ids = new Set<string>();
-  for (const q of dataset.match(
-    null,
-    df.namedNode(`${NS.rdf}type`),
-    df.namedNode(`${NS.np}Nanopublication`),
-  )) {
-    if (q.subject.termType !== "NamedNode" || !q.subject.equals(q.graph))
-      throw new Error("Nanopub head must be its named graph");
-    ids.add(q.subject.value);
+  // A head links its component graphs from the nanopub's own named graph.
+  // Type statements elsewhere (including assertion/entity graphs) are data.
+  for (const predicate of ["hasAssertion", "hasProvenance", "hasPublicationInfo"]) {
+    for (const q of dataset.match(null, df.namedNode(NS.np + predicate))) {
+      if (q.subject.termType === "NamedNode" && q.subject.equals(q.graph)) ids.add(q.subject.value);
+    }
   }
   if (!ids.size) throw new Error("No nanopublications");
   const nanopubs = [...ids].sort().map((id) => {
     const head = new RdfNode(id, graph(dataset, id));
+    if (!iriValues(head, `${NS.rdf}type`).includes(`${NS.np}Nanopublication`))
+      throw new Error("Invalid nanopub head type");
     const assertionId = head.oneIri(`${NS.np}hasAssertion`);
     const provenanceId = head.oneIri(`${NS.np}hasProvenance`);
     const pubinfoId = head.oneIri(`${NS.np}hasPublicationInfo`);

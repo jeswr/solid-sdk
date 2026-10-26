@@ -367,22 +367,47 @@ it.each([
   ],
   [
     "cross-graph head",
-    (ds: Store, id: string) =>
-      ds.addQuad(
-        df.namedNode(id),
-        df.namedNode(`${NS.rdf}type`),
-        df.namedNode(`${NS.np}Nanopublication`),
-        df.namedNode("https://example.org/evil"),
-      ),
+    (ds: Store, id: string) => {
+      const head = ds.getQuads(null, null, null, df.namedNode(id));
+      ds.removeQuads(head);
+      for (const q of head)
+        ds.addQuad(q.subject, q.predicate, q.object, df.namedNode("https://example.org/other"));
+    },
   ],
   [
     "blank head",
-    (ds: Store) =>
-      ds.addQuad(
-        df.blankNode(),
-        df.namedNode(`${NS.rdf}type`),
-        df.namedNode(`${NS.np}Nanopublication`),
+    (ds: Store, id: string) => {
+      const blank = df.blankNode();
+      const head = ds.getQuads(null, null, null, df.namedNode(id));
+      ds.removeQuads(head);
+      for (const q of head) ds.addQuad(blank, q.predicate, q.object, blank);
+    },
+  ],
+  [
+    "missing head type",
+    (ds: Store, id: string) =>
+      ds.removeQuads(
+        ds.getQuads(df.namedNode(id), df.namedNode(`${NS.rdf}type`), null, df.namedNode(id)),
       ),
+  ],
+  ...["hasAssertion", "hasProvenance", "hasPublicationInfo"].map(
+    (predicate) =>
+      [
+        `missing ${predicate}`,
+        (ds: Store, id: string) =>
+          ds.removeQuads(
+            ds.getQuads(
+              df.namedNode(id),
+              df.namedNode(`${NS.np}${predicate}`),
+              null,
+              df.namedNode(id),
+            ),
+          ),
+      ] as const,
+  ),
+  [
+    "wrong head type",
+    (ds: Store, id: string) => replace(ds, id, `${NS.rdf}type`, `${NS.schema}Person`, id),
   ],
   [
     "duplicate graph link",
@@ -439,6 +464,21 @@ it.each([
   ],
 ] as const)("rejects malformed nanopub: %s", async (_, mutate) => {
   await expect(parseNanopublications(await altered(mutate))).rejects.toThrow();
+});
+
+it("ignores type-only declarations in assertion and other graphs during parsing", async () => {
+  const built = await buildNanopublications(batch(), options);
+  const n = built.nanopubs[0]!;
+  const type = df.namedNode(`${NS.rdf}type`);
+  const nanopublication = df.namedNode(`${NS.np}Nanopublication`);
+  // Even a self-named typed graph is data without the nanopub graph links.
+  for (const name of [n.assertionId, "https://example.org/entities"]) {
+    for (const subject of [df.namedNode(name), df.namedNode(n.id), df.blankNode()])
+      built.dataset.addQuad(subject, type, nanopublication, df.namedNode(name));
+  }
+  const parsed = await parseNanopublications(await serializeNanopublications(built));
+  expect(parsed.nanopubs).toEqual(built.nanopubs);
+  expect(parsed.dataset.size).toBe(built.dataset.size);
 });
 
 it("rejects no nanopubs and invalid annotation targets", async () => {
