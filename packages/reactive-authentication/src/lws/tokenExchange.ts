@@ -9,7 +9,7 @@ import { LWS_CONFIGURATION, TOKEN_EXCHANGE_GRANT, tokenTypeAliases } from "./con
  *
  * The draft only says the document is at the path `/.well-known/lws-configuration`; for issuers with a
  * path we insert the well-known segment before it, as RFC 8414 §3.1 does. oauth4webapi validates that the
- * document's `issuer` equals `as_uri`.
+ * document's `issuer` equals the selected authorization server identifier (`as_uri` for legacy challenges).
  */
 export async function discoverLwsAuthorizationServer(
   issuer: URL,
@@ -23,9 +23,11 @@ export async function discoverLwsAuthorizationServer(
       : `${LWS_CONFIGURATION}${issuer.pathname.replace(/\/$/, "")}`;
   const response = await secureFetch(
     url,
-    { signal, headers: { accept: "application/json" } },
+    { signal, credentials: "omit", headers: { accept: "application/json" } },
     http,
   );
+  if (response.redirected || response.type === "opaqueredirect")
+    throw new ReactiveAuthenticationError("LWS authorization server metadata must not redirect");
   return await oauth.processDiscoveryResponse(issuer, response);
 }
 

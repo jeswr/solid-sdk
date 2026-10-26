@@ -197,10 +197,22 @@ const manager = new ReactiveFetchManager({
 })
 ```
 
-On `401` with `WWW-Authenticate: Bearer as_uri="…", realm="…"`, the provider checks the binding against its
-trust policy (default: authorization server and realm on the requested resource's origin; use
-`trustAuthorizationServers` or `trustBindings` otherwise), verifies the resource is in the realm, discovers
-`/.well-known/lws-configuration`, exchanges the credential (`resource` = realm) and presents the Bearer token.
+On `401` with `WWW-Authenticate: Bearer resource_metadata="M"` and
+`Link: <S>; rel="https://www.w3.org/ns/lws#storage"`, the provider follows
+[LWS discovery](https://www.w3.org/TR/2026/WD-lws10-core-20261023/#discovery-validation-by-a-client)
+and [RFC 9728 §3.3](https://www.rfc-editor.org/rfc/rfc9728.html#section-3.3).
+It retrieves same-origin PRM without credentials or redirects, compares its `resource` exactly to the
+serialized `Request.url` with fragment stripped and query kept, and verifies S's same-origin, containing
+StorageRoot using this package's storage discovery. The first listed AS accepted by
+`trustAuthorizationServer` is selected (default: any listed AS). AS metadata at
+`/.well-known/lws-configuration` must identify that issuer and must not redirect. Only then is a credential
+obtained and exchanged with `resource=S`; the access token is presented as Bearer and cached per AS, S and
+credential context until 30 seconds before expiry, with session fencing, rejection renewal and logout.
+
+Legacy `Bearer as_uri="…", realm="…"` remains enabled by default: its AS and realm must share the resource's
+origin unless explicitly trusted through `trustAuthorizationServers` or `trustBindings`, and containment
+is checked before exchange. Set `new LwsTokenProvider(source, {legacyLwsChallenge: false})` to ignore legacy
+challenges. When both forms occur, `resource_metadata` takes precedence; failed validation never falls back.
 
 For the OpenID suite, construct one `SessionFence` and pass it to `OidcIdTokenSource`, `LwsTokenProvider`
 and `ReactiveFetchManager`. The source requires an explicit fence, and the LWS provider rejects a source
