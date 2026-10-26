@@ -180,3 +180,56 @@ and the existing absence of `roborev`. No review tooling, dependencies, tracker
 database or hooks were installed. No screenshots were needed for this pure-library
 fix. No implementation work or open questions remain. Tracker lifecycle remains
 with the dispatcher. No push, PR, branch switch, merge or other-checkout edit occurred.
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+## Fix round 3 — EOF bytes, CID ownership and unknown dispositions
+
+Review baseline: `60ae9da7f312ff42dd231b090d82a05e28b4e080`.
+
+- `6a8abf19` — `fix: preserve MIME bytes and reject ambiguous resources`: derive
+  the final line ending from the original byte span instead of accepting the
+  parser's synthetic LF. Retain actual trailing LF, CRLF and CR bytes. Reject CID
+  collisions between retained alternative branches with exported `MimeParseError`
+  (`EAMBIGUOUSCID`). Treat every nonempty disposition except `inline` as attached,
+  retaining the selected related-root exception and multipart download grouping.
+  Add 14 regression/guard cases and document the behavior.
+- This report commit — `docs: record final MIME review validation`.
+
+All three findings are addressed. The conservative choice permitted by the final
+round brief is to reject alternative-specific CID reuse with a typed error,
+because the current flat attachment API cannot safely represent its ownership.
+Distinct case-sensitive IDs remain supported; superseded branches are omitted
+before checking their containing alternative. No dependencies, UI or unrelated
+implementation changed.
+
+Validation before this final report commit:
+
+| Exact command | Result |
+| --- | --- |
+| `CI=true GIT_ALLOW_PROTOCOL=file pnpm install --frozen-lockfile --offline --ignore-scripts --store-dir /tmp/sst-ljwe-pnpm-store` | PASS; existing offline cache, unchanged manifests/lockfile, lifecycle scripts disabled |
+| `pnpm --filter @jeswr/suite-ui run build` | PASS; build the app's existing workspace dependency |
+| `pnpm --filter @jeswr/app-suite run test:mime` | PASS; 69 MIME tests, 100% statements/branches/functions/lines |
+| `pnpm --filter @jeswr/app-suite run lint && pnpm --filter @jeswr/app-suite run build && pnpm --filter @jeswr/app-suite run typecheck && pnpm --filter @jeswr/app-suite run test` | PASS; lint, production build, typecheck, 70 tests in 2 files; MIME coverage 100% (101 statements, 107 branches, 24 functions, 91 lines) |
+| `pnpm run lint:root` | PASS; workspace/transport/fetch/token guards and 74 contrast pairs |
+| `TURBO_SCM_BASE=4cf4b27fa3aced37aa3c8b9af1474d26340124a4 pnpm run gate` | PASS; 7/7 Turbo tasks, including 41 root tests |
+| `GIT_ALLOW_PROTOCOL=file pnpm run gate:full --env-mode=loose` | FAIL (exit 1); 28 successful tasks, 168 scheduled before fail-fast. Unchanged `@jeswr/unstorage-solid#build` attempts an HTTPS clone of `jeswr/fetch-rdf`; the no-remote-fetch guard rejects HTTPS transport before any remote clone/fetch occurs. |
+| `git diff --check` | PASS |
+
+Before implementation, `pnpm --filter @jeswr/app-suite exec vitest run
+test/mime.test.ts --coverage.enabled=false` reproduced all three findings: nine
+new cases failed, while the previous 55 cases and five new guards passed.
+The EOF regression tests exercise 50 combinations of transfer encoding, actual
+trailing ending and top-level/unterminated-child placement using sliced input.
+CID cases cover direct/nested collisions, distinct/case-sensitive IDs and
+superseded resources. Disposition cases cover text with/without filenames,
+multipart grouping and related-root precedence. The existing unencoded text
+expectation now also excludes the synthetic EOF newline. Coverage remains
+enforced at 100% per file, with real parser calls and no exclusions.
+
+Implementation is complete, with no open questions. Full-workspace validation
+remains limited by the unrelated build bootstrap above. `roborev` is unavailable,
+so automated per-commit review could not run; no review tooling or hooks were
+installed. No dependency checks or screenshots were needed for this pure-library
+fix. Tracker lifecycle remains with the dispatcher. No push, PR, branch switch,
+merge, remote fetch or other-checkout edit occurred. `STATUS.md` is committed last.
