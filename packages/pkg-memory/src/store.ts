@@ -160,6 +160,11 @@ export class NanopubStore {
     const policy = createDefaultPolicy(this.policyUrl, this.owner);
     const bytes = encode(await policyToTurtle(policy));
     await this.initialize();
+    await this.protectResource(
+      this.policyUrl,
+      false,
+      await this.readOptional(`${this.policyUrl}.acl`),
+    );
     try {
       await this.pod.write(this.policyUrl, bytes, "text/turtle", { ifNoneMatch: "*" });
       return policy;
@@ -196,20 +201,13 @@ export class NanopubStore {
   private async protectContainers(): Promise<void> {
     for (const path of ["private/", "private/pkg/", "private/pkg/mcp/"]) {
       const container = new URL(path, this.root).href;
-      const dataset = new Store();
-      const authorization = new RdfNode(`${container}.acl#owner`, dataset)
-        .link(`${NS.rdf}type`, `${acl}Authorization`)
-        .link(`${acl}agent`, this.owner)
-        .link(`${acl}accessTo`, container)
-        .link(`${acl}default`, container);
-      for (const mode of ["Read", "Write", "Control"]) authorization.link(`${acl}mode`, acl + mode);
-      await this.pod.write(
-        `${container}.acl`,
-        encode(await serialize([...dataset])),
-        "text/turtle",
-        this.condition(await this.readOptional(`${container}.acl`)),
-      );
-      if (!(await this.readOptional(container))) {
+      const existing = await this.readOptional(container);
+      // Ancestors are shared with other applications; only this store's subtree is ours.
+      if (container !== this.container && existing) continue;
+      const existingAcl = await this.readOptional(`${container}.acl`);
+      if (container === this.container || !existingAcl)
+        await this.protectResource(container, true, existingAcl);
+      if (!existing) {
         const description = new Store();
         new RdfNode(container, description).link(
           `${NS.rdf}type`,
@@ -220,6 +218,25 @@ export class NanopubStore {
         });
       }
     }
+  }
+  private async protectResource(
+    url: string,
+    inherit: boolean,
+    existing: { etag?: string } | undefined,
+  ) {
+    const dataset = new Store();
+    const authorization = new RdfNode(`${url}.acl#owner`, dataset)
+      .link(`${NS.rdf}type`, `${acl}Authorization`)
+      .link(`${acl}agent`, this.owner)
+      .link(`${acl}accessTo`, url);
+    if (inherit) authorization.link(`${acl}default`, url);
+    for (const mode of ["Read", "Write", "Control"]) authorization.link(`${acl}mode`, acl + mode);
+    await this.pod.write(
+      `${url}.acl`,
+      encode(await serialize([...dataset])),
+      "text/turtle",
+      this.condition(existing),
+    );
   }
   private async writeNanopub(url: string, bytes: Uint8Array): Promise<void> {
     try {

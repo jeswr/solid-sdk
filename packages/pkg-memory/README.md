@@ -132,8 +132,10 @@ exact query/pilot parity has not been verified.
 runtime dependency on the MCP server. `put(result)` splits batches into one
 `/private/pkg/mcp/<uuid>.trig` resource per nanopub, retaining its four graphs and
 shared batch source/entity graphs. Writes are create-only; malformed input is
-rejected before mutations. Owner-only WAC ACLs are written before the private
-containers and data. The adapter must support the spec's `.acl` convention;
+rejected before mutations. Owner-only WAC ACLs are written before creating
+containers and data. Existing shared ancestor containers and their ACLs are
+preserved; replacement is limited to the store's own `mcp/` ACL and the policy
+document's dedicated ACL. The adapter must support the spec's `.acl` convention;
 ACL failures stop the operation. Existing ACL replacement needs a strong ETag.
 
 The store tries `application/trig` and reads the representation back. An HTTP 415

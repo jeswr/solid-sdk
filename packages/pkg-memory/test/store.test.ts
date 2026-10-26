@@ -100,15 +100,56 @@ it("keeps writes private on ACL failure and retries initialization on a later ca
   await expect(store.put(value)).resolves.toHaveLength(1);
 });
 
-it("conditionally replaces existing ACLs and retains existing containers", async () => {
+it("conditionally replaces only the store's ACL and retains existing containers", async () => {
   const { store, pod, write } = setup();
   await store.put(await build());
   write.mockClear();
   await new NanopubStore(pod).put(await build("second"));
-  expect(write.mock.calls.filter((call) => call[0].endsWith(".acl"))).toHaveLength(3);
+  expect(write.mock.calls.filter((call) => call[0].endsWith(".acl"))).toHaveLength(1);
+  expect(write.mock.calls[0]![0]).toBe(`${store.container}.acl`);
   for (const call of write.mock.calls.filter((call) => call[0].endsWith(".acl")))
     expect(call[3].ifMatch).toBeDefined();
   expect(write.mock.calls.some((call) => call[0].endsWith("/"))).toBe(false);
+});
+
+it.each([
+  true,
+  false,
+])("preserves shared ancestor ACL bytes and ETags with existing containers: %s", async (containersExist) => {
+  const { store, pod, memory, write } = setup();
+  const ancestors = ["private/", "private/pkg/"].map((path) => identity.root + path);
+  const before = [];
+  for (const url of ancestors) {
+    // An unrelated authorization, including inherited public access, belongs to the owner.
+    const aclBody = `@prefix acl: <http://www.w3.org/ns/auth/acl#> .
+      <#other-app> a acl:Authorization; acl:agent <https://example.org/other-client>;
+        acl:accessTo <${url}>; acl:default <${url}>; acl:mode acl:Read .`;
+    await memory.write(`${url}.acl`, encode(aclBody), "text/turtle", {});
+    if (containersExist) await memory.write(url, encode(""), "text/turtle", {});
+    before.push(await pod.read(`${url}.acl`));
+  }
+  write.mockClear();
+  await store.put(await build());
+  for (const [i, url] of ancestors.entries()) {
+    expect(await pod.read(`${url}.acl`)).toEqual(before[i]);
+    expect(write.mock.calls.some((call) => call[0] === `${url}.acl`)).toBe(false);
+  }
+  expect(
+    write.mock.calls.filter((call) => call[0].endsWith(".acl")).map((call) => call[0]),
+  ).toEqual([`${store.container}.acl`]);
+  const aclCall = write.mock.calls.findIndex((call) => call[0] === `${store.container}.acl`);
+  const dataCall = write.mock.calls.findIndex((call) => call[0].endsWith(".trig"));
+  expect(aclCall).toBeLessThan(dataCall);
+});
+
+it("leaves existing shared ancestors without local ACLs untouched", async () => {
+  const { store, memory, write } = setup();
+  for (const path of ["private/", "private/pkg/"])
+    await memory.write(identity.root + path, encode(""), "text/turtle", {});
+  await store.put(await build());
+  expect(
+    write.mock.calls.filter((call) => call[0].endsWith(".acl")).map((call) => call[0]),
+  ).toEqual([`${store.container}.acl`]);
 });
 
 it("uses only octet-stream, preserving exact TriG bytes after a 415 rejection", async () => {
@@ -333,6 +374,13 @@ it("writes a default policy once behind the ACL, preserving owner edits", async 
   const { store, pod, memory, write } = setup();
   const policy = await store.writeDefaultPolicy();
   expect(write.mock.calls.at(-1)![0]).toBe(store.policyUrl);
+  const aclCall = write.mock.calls.at(-2)!;
+  expect(aclCall[0]).toBe(`${store.policyUrl}.acl`);
+  const policyAcl = await parseRdf(decode(aclCall[1]), "text/turtle");
+  const authorization = new RdfNode(`${store.policyUrl}.acl#owner`, policyAcl);
+  expect(authorization.oneIri("http://www.w3.org/ns/auth/acl#agent")).toBe(identity.webId);
+  expect(authorization.oneIri("http://www.w3.org/ns/auth/acl#accessTo")).toBe(store.policyUrl);
+  expect(authorization.terms("http://www.w3.org/ns/auth/acl#default").size).toBe(0);
   expect(
     purposeFilter(
       policy,
@@ -352,6 +400,17 @@ it("writes a default policy once behind the ACL, preserving owner edits", async 
     )({ categories: ["pd:Contact"] }),
   ).toBe(false);
   expect(write).not.toHaveBeenCalled();
+});
+
+it("does not write a policy if its dedicated ACL fails", async () => {
+  const { store, memory, write } = setup();
+  write.mockImplementation((url, body, type, cond) =>
+    url === `${store.policyUrl}.acl`
+      ? Promise.reject(statusError(403))
+      : memory.write(url, body, type, cond),
+  );
+  await expect(store.writeDefaultPolicy()).rejects.toMatchObject({ status: 403 });
+  expect(write.mock.calls.some((call) => call[0] === store.policyUrl)).toBe(false);
 });
 
 it("rejects a retraction earlier by one microsecond", async () => {
