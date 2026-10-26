@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6 — review regression tests
 import { assert, describe, expect, it, vi } from "vitest";
 import { buildDocument, parseDocument } from "../../src/apps/docs/lib/model/document.js";
 import {
@@ -131,14 +132,44 @@ describe("store creation and scope", () => {
     const hint = await s.store.create({ title: "Display" }, "Other name");
     expect(hint.url).toBe(`${POD}docs/other-name.ttl`);
   });
-  it("tolerates existing child containers, and propagates other creation errors", async () => {
+  it.each([
+    "container",
+    "updateLog",
+    "assets",
+    "comments",
+  ] as const)("skips a slug with an existing %s and preserves its old updates", async (child) => {
     const s = await server();
-    const layout = docContainerUrls(`${POD}docs/new.ttl`);
-    s.resources.set(layout.container, { body: "", etag: '"c"', contentType: "text/turtle" });
-    await expect(s.store.create({ title: "New" })).resolves.toHaveProperty(
-      "url",
-      `${POD}docs/new.ttl`,
-    );
+    s.resources.delete(DOC);
+    const layout = docContainerUrls(DOC);
+    const old = { body: "old container", etag: '"c"', contentType: "text/turtle" };
+    s.resources.set(layout[child], old);
+    const update = `${layout.updateLog}old-update`;
+    s.resources.set(update, { ...old, body: "unrelated CRDT state" });
+
+    const created = await s.store.create({ title: "Plan", body: "fresh content" });
+
+    expect(created.url).toBe(`${POD}docs/plan-2.ttl`);
+    expect(created.data.updateLog).toBe(`${POD}docs/plan-2/updates/`);
+    expect(s.resources.get(layout[child])).toEqual(old);
+    expect(s.resources.get(update)?.body).toBe("unrelated CRDT state");
+    expect(s.resources.has(DOC)).toBe(false);
+    const writes = s.calls.filter((c) => c.method === "PUT" && c.url.includes("/docs/"));
+    expect(writes.every((c) => c.headers["if-none-match"] === "*")).toBe(true);
+    expect(writes.at(-1)?.url).toBe(created.url);
+  });
+  it("allocates distinct resources and companions for simultaneous creates", async () => {
+    const s = await server();
+    s.resources.delete(DOC);
+    const created = await Promise.all([
+      s.store.create({ title: "Plan", body: "first" }),
+      s.store.create({ title: "Plan", body: "second" }),
+    ]);
+    expect(new Set(created.map((doc) => doc.url)).size).toBe(2);
+    expect(new Set(created.map((doc) => doc.data.updateLog)).size).toBe(2);
+    expect(created.map((doc) => doc.data.body).sort()).toEqual(["first", "second"]);
+  });
+  it("propagates container and document creation errors", async () => {
+    const s = await server();
     const f: typeof fetch = async (url, init) => {
       if (init?.method === "PUT" && String(url).endsWith("/updates/"))
         return new Response(null, { status: 403 });
@@ -146,6 +177,7 @@ describe("store creation and scope", () => {
     };
     const store = new DocsStore(POD, WEBID, f);
     await expect(store.create({ title: "Fail" })).rejects.toMatchObject({ status: 403 });
+    expect(s.resources.has(`${POD}docs/fail.ttl`)).toBe(false);
     const bad: typeof fetch = async (url, init) => {
       if (init?.method === "PUT" && String(url).endsWith("fail-2.ttl"))
         return new Response(null, { status: 507 });
@@ -363,6 +395,26 @@ describe("snapshot conflicts", () => {
 });
 
 describe("makeCopy", () => {
+  it("skips an orphaned companion when reserving a copy", async () => {
+    const s = await server();
+    const oldContainer = `${POD}docs/plan-copy/`;
+    const old = { body: "old updates", etag: '"old"', contentType: "text/turtle" };
+    s.resources.set(oldContainer, old);
+    const persistFullState = vi.fn(async () => {});
+    const copy = await s.store.makeCopy(await document(), {
+      assets: [],
+      snapshot: () => ({ body: "copied" }),
+      persistFullState,
+    });
+    expect(copy.url).toBe(`${POD}docs/plan-copy-2.ttl`);
+    expect(persistFullState).toHaveBeenCalledWith(
+      `${POD}docs/plan-copy-2/updates/`,
+      s.fetchImpl,
+      new Map(),
+    );
+    expect(s.resources.get(oldContainer)).toEqual(old);
+    expect(s.resources.has(`${POD}docs/plan-copy.ttl`)).toBe(false);
+  });
   it("copies the live body, referenced assets, new full-state log and derivation", async () => {
     const s = await server();
     const source = await document();

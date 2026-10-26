@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6 — fresh companion reservations
 // CRUD and LDP listing ported from apps/pod-docs/src/store.ts.
 import { RdfFetchError } from "@jeswr/fetch-rdf";
 import { termsEqual } from "@jeswr/suite-vocab";
@@ -139,11 +140,7 @@ export class DocsStore {
     const dataset = new Store();
     const container = new Container(url, dataset, DataFactory);
     container.type.add(`${NS.LDP}BasicContainer`);
-    try {
-      await writeRdf(url, dataset, { createOnly: true, fetchImpl: this.fetchImpl });
-    } catch (error) {
-      if (!(error instanceof ResourceWriteError && error.status === 412)) throw error;
-    }
+    await writeRdf(url, dataset, { createOnly: true, fetchImpl: this.fetchImpl });
   }
 
   /** Allocate the readable slug, using -2, -3, … on create-only collisions. */
@@ -170,6 +167,11 @@ export class DocsStore {
       });
       let etag: string | null;
       try {
+        // Reserve a fresh companion tree before publishing its links in the document.
+        // A collision anywhere belongs to another document, even if its .ttl is gone.
+        for (const child of [layout.container, layout.updateLog, layout.assets, layout.comments]) {
+          await this.createContainer(child);
+        }
         ({ etag } = await writeRdf(url, dataset, {
           createOnly: true,
           fetchImpl: this.fetchImpl,
@@ -178,9 +180,6 @@ export class DocsStore {
       } catch (error) {
         if (error instanceof ResourceWriteError && error.status === 412) continue;
         throw error;
-      }
-      for (const child of [layout.container, layout.updateLog, layout.assets, layout.comments]) {
-        await this.createContainer(child);
       }
       return { url, etag, data: parseDocument(url, dataset) as PodDocument };
     }
