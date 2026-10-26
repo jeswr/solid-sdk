@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { NS, node, parse, Store, serialize } from "../../src/apps/tasks/lib/model/rdf";
 export const storage = "https://pod.test/alice/";
 export const webId = `${storage}profile/card#me`;
@@ -13,6 +14,12 @@ export interface RequestRecord {
 export class Pod {
   readonly files = new Map<string, { body: string; version: number; etag?: string | null }>();
   readonly requests: RequestRecord[] = [];
+  readonly privatePolicies = new Set<string>();
+  readonly ensurePrivateIndexAccess = async (url: string, owner: string) => {
+    if (owner !== webId) throw new Error("Unexpected owner");
+    this.privatePolicies.add(url);
+    return true;
+  };
   intercept?:
     | ((request: RequestRecord) => Response | undefined | Promise<Response | undefined>)
     | undefined;

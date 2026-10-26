@@ -6,7 +6,7 @@ import { RdfIO, type Resource } from "./io";
 import { DataFactory, documentUrl, NS, requireTitle, Store, uniqueSlug } from "./rdf";
 import { createTask, type TaskDetails, TaskItem, taskDetails, validateTask } from "./task";
 import { createTracker, TaskTracker } from "./tracker";
-import { TypeIndex } from "./type-index";
+import { type PrivateIndexAccess, TypeIndex } from "./type-index";
 export interface StoredTask extends Resource {
   task: TaskItem;
 }
@@ -21,6 +21,8 @@ export interface StoreOptions {
   now?: () => Date;
   uuid?: () => string;
   typeIndex?: boolean;
+  /** Required for registration; verify/establish effective owner-only ACL/ACP access. */
+  ensurePrivateIndexAccess?: PrivateIndexAccess;
 }
 /** Hook-free port of Pod Manager's one-resource-per-item productivity store. */
 export class TaskStore {
@@ -33,7 +35,12 @@ export class TaskStore {
   constructor(private readonly options: StoreOptions) {
     this.projects = new URL("tasks/projects/", options.storage).href;
     this.io = new RdfIO(options.fetch);
-    this.index = new TypeIndex(this.io, options.storage, options.webId);
+    this.index = new TypeIndex(
+      this.io,
+      options.storage,
+      options.webId,
+      options.ensurePrivateIndexAccess,
+    );
     this.now = options.now ?? (() => new Date());
     this.uuid = options.uuid ?? (() => crypto.randomUUID());
   }

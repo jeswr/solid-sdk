@@ -1,10 +1,18 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 // Ported from Pod Manager's type-index(-write) typed registration/bootstrap pattern.
 import { canonicalize, termsEqual } from "@jeswr/suite-vocab";
 import { DatasetWrapper } from "@rdfjs/wrapper";
 import { ModelError } from "./errors";
 import type { RdfIO, Resource } from "./io";
 import { DataFactory, documentUrl, Node, NS, node, Store } from "./rdf";
+/**
+ * Establish or verify effective owner-only ACL/ACP access, including inherited
+ * policy. Return true only when access is confirmed; unsupported or unreadable
+ * policy must fail closed. The callback uses the caller's scoped access client.
+ */
+export type PrivateIndexAccess = (url: string, owner: string) => Promise<boolean>;
+
 export interface Registration {
   forClass: string;
   location: string;
@@ -20,6 +28,7 @@ export class TypeIndex {
     private readonly io: RdfIO,
     private readonly storage: string,
     private readonly webId: string,
+    private readonly ensurePrivateAccess?: PrivateIndexAccess,
   ) {}
   async locations(forClass: string): Promise<Registration[]> {
     const profile = await this.io.read(documentUrl(this.webId));
@@ -44,10 +53,17 @@ export class TypeIndex {
     return result;
   }
   private async privateIndex(): Promise<Resource> {
+    if (!this.ensurePrivateAccess)
+      throw new TypeError("A private Type Index ACL/ACP access verifier is required.");
     const profile = await this.io.read(documentUrl(this.webId));
     const anchor = node(this.webId, profile.dataset);
     const existing = anchor.iri(`${NS.SOLID}privateTypeIndex`);
-    if (existing) return this.io.read(existing);
+    if (existing) {
+      const resource = await this.io.read(existing);
+      if (!(await this.ensurePrivateAccess(resource.url, this.webId)))
+        throw new ModelError(403, resource.url);
+      return this.io.read(resource.url);
+    }
     const settings = new URL("settings/", this.storage).href;
     const url = new URL("privateTypeIndex.ttl", settings).href;
     await this.io.container(settings);
@@ -60,9 +76,12 @@ export class TypeIndex {
     } catch (error) {
       if (!(error instanceof ModelError && error.status === 412)) throw error;
     }
-    anchor.setIri(`${NS.SOLID}privateTypeIndex`, url);
+    const resource = await this.io.read(url);
+    if (!(await this.ensurePrivateAccess(resource.url, this.webId)))
+      throw new ModelError(403, resource.url);
+    anchor.setIri(`${NS.SOLID}privateTypeIndex`, resource.url);
     await this.io.write(profile.url, profile.dataset, { etag: profile.etag });
-    return this.io.read(url);
+    return this.io.read(resource.url);
   }
   /** Idempotent by (class, predicate, location). Re-read and merge on bounded 412 conflicts. */
   async register(registrations: readonly Registration[]): Promise<void> {

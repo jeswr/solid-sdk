@@ -17,6 +17,7 @@ function store(pod: Pod, extra = {}) {
     storage,
     webId,
     fetch: pod.fetch,
+    ensurePrivateIndexAccess: pod.ensurePrivateIndexAccess,
     now: () => now,
     uuid: () => "task-1",
     ...extra,
@@ -109,7 +110,7 @@ describe("project discovery and first use", () => {
         DataFactory.namedNode(`${projects}inbox/`),
       ).size,
     ).toBe(1);
-    const index = new TypeIndex(new RdfIO(pod.fetch), storage, webId);
+    const index = new TypeIndex(new RdfIO(pod.fetch), storage, webId, pod.ensurePrivateIndexAccess);
     expect(await index.locations(`${NS.WF}Task`)).toEqual([
       { forClass: `${NS.WF}Task`, location: `${projects}inbox/`, kind: "instanceContainer" },
     ]);
@@ -219,7 +220,7 @@ describe("project discovery and first use", () => {
     pod.seed(`${foreign}archive.ttl`, await serialize(archive.dataset));
     pod.seed(`${projects}stray.ttl`, `<#it> a <${NS.WF}Task>.`);
     pod.seed(`${projects}readme.txt`, "not RDF");
-    const index = new TypeIndex(new RdfIO(pod.fetch), storage, webId);
+    const index = new TypeIndex(new RdfIO(pod.fetch), storage, webId, pod.ensurePrivateIndexAccess);
     await index.register([
       { forClass: `${NS.WF}Tracker`, location: `${team}#this`, kind: "instance" },
       { forClass: `${NS.WF}Tracker`, location: foreign, kind: "instanceContainer" },
@@ -494,6 +495,101 @@ describe("Type Index merge and bootstrap", () => {
   const desired = [
     { forClass: `${NS.WF}Tracker`, location: projects, kind: "instanceContainer" as const },
   ];
+  it("fails closed without an ACL/ACP verifier before creating or linking an index", async () => {
+    const pod = new Pod();
+    const index = new TypeIndex(new RdfIO(pod.fetch), storage, webId);
+    await expect(index.register(desired)).rejects.toThrow("ACL/ACP access verifier");
+    expect(pod.mutations()).toEqual([]);
+  });
+  it("protects the empty index before linking or registering, then rechecks linked indexes", async () => {
+    const pod = new Pod();
+    const anonymous = (url: string) =>
+      pod.privatePolicies.has(url)
+        ? Promise.resolve(new Response(null, { status: 403 }))
+        : pod.fetch(url);
+    let checks = 0;
+    const protect = vi.fn(async (url: string, owner: string) => {
+      expect(owner).toBe(webId);
+      if (checks++ === 0) {
+        expect((await anonymous(url)).status).toBe(200);
+        expect(
+          node(webId, await pod.dataset(`${storage}profile/card`)).iri(
+            `${NS.SOLID}privateTypeIndex`,
+          ),
+        ).toBeUndefined();
+        expect(
+          (await pod.dataset(url)).match(null, DataFactory.namedNode(`${NS.SOLID}forClass`)).size,
+        ).toBe(0);
+        await pod.ensurePrivateIndexAccess(url, owner);
+      }
+      return (await anonymous(url)).status === 403;
+    });
+    pod.intercept = (request) => {
+      if (
+        request.method === "PUT" &&
+        (request.url === `${storage}profile/card` ||
+          (request.url === indexUrl && request.headers.has("If-Match")))
+      )
+        expect(pod.privatePolicies.has(indexUrl)).toBe(true);
+      return undefined;
+    };
+    const index = new TypeIndex(new RdfIO(pod.fetch), storage, webId, protect);
+    await index.register(desired);
+    expect((await anonymous(indexUrl)).status).toBe(403);
+    await index.register(desired);
+    expect(protect).toHaveBeenCalledTimes(2);
+    // Public/inherited access after a policy change must block even an idempotent registration.
+    pod.privatePolicies.clear();
+    const writes = pod.mutations().length;
+    await expect(index.register(desired)).rejects.toMatchObject({ status: 403 });
+    expect(pod.mutations()).toHaveLength(writes);
+  });
+  it.each([
+    "new",
+    "linked",
+    "raced",
+  ])("does not link or populate a %s index with unverified effective access", async (state) => {
+    const pod = new Pod();
+    const empty = `<${indexUrl}> a <${NS.SOLID}TypeIndex>, <${NS.SOLID}UnlistedDocument>.`;
+    if (state === "linked") {
+      pod.seed(indexUrl, empty);
+      pod.seed(`${storage}profile/card`, `<${webId}> <${NS.SOLID}privateTypeIndex> <${indexUrl}>.`);
+    }
+    if (state === "raced")
+      pod.intercept = (request) => {
+        if (request.method === "PUT" && request.url === indexUrl) {
+          pod.seed(indexUrl, empty);
+          return new Response(null, { status: 412 });
+        }
+        return undefined;
+      };
+    const verify = vi.fn(async () => false);
+    const index = new TypeIndex(new RdfIO(pod.fetch), storage, webId, verify);
+    await expect(index.register(desired)).rejects.toMatchObject({ status: 403 });
+    expect(verify).toHaveBeenCalledOnce();
+    expect(
+      (await pod.dataset(indexUrl)).match(null, DataFactory.namedNode(`${NS.SOLID}forClass`)).size,
+    ).toBe(0);
+    expect(pod.mutations().some((request) => request.url === `${storage}profile/card`)).toBe(false);
+    expect(
+      pod
+        .mutations()
+        .some((request) => request.url === indexUrl && request.headers.has("If-Match")),
+    ).toBe(false);
+  });
+  it("propagates unreadable access policy failures without linking the empty index", async () => {
+    const pod = new Pod();
+    const index = new TypeIndex(new RdfIO(pod.fetch), storage, webId, async () => {
+      throw new ModelError(403, `${indexUrl}.acl`);
+    });
+    await expect(index.register(desired)).rejects.toMatchObject({
+      status: 403,
+      url: `${indexUrl}.acl`,
+    });
+    expect(
+      node(webId, await pod.dataset(`${storage}profile/card`)).iri(`${NS.SOLID}privateTypeIndex`),
+    ).toBeUndefined();
+  });
   it("bootstraps privately even with a public-only profile; retains foreign registrations and finds aliases", async () => {
     const pod = new Pod();
     const publicUrl = `${storage}public.ttl`;
@@ -502,7 +598,7 @@ describe("Type Index merge and bootstrap", () => {
       publicUrl,
       `<#public> a <${NS.SOLID}TypeRegistration>; <${NS.SOLID}forClass> <${NS.WF}Tracker>; <${NS.SOLID}instance> <${storage}public-project.ttl>. <#empty> a <${NS.SOLID}TypeRegistration>.`,
     );
-    const index = new TypeIndex(new RdfIO(pod.fetch), storage, webId);
+    const index = new TypeIndex(new RdfIO(pod.fetch), storage, webId, pod.ensurePrivateIndexAccess);
     await index.register(desired);
     expect((await index.locations(`${NS.WF}Tracker`)).map((reg) => reg.location)).toEqual([
       projects,
@@ -529,7 +625,7 @@ describe("Type Index merge and bootstrap", () => {
   });
   it("re-reads and merges 412 writes without losing concurrent registrations", async () => {
     const pod = new Pod();
-    const index = new TypeIndex(new RdfIO(pod.fetch), storage, webId);
+    const index = new TypeIndex(new RdfIO(pod.fetch), storage, webId, pod.ensurePrivateIndexAccess);
     await index.register(desired);
     let conflict = false;
     pod.intercept = async (request) => {
@@ -577,7 +673,7 @@ describe("Type Index merge and bootstrap", () => {
       }
       return undefined;
     };
-    const index = new TypeIndex(new RdfIO(pod.fetch), storage, webId);
+    const index = new TypeIndex(new RdfIO(pod.fetch), storage, webId, pod.ensurePrivateIndexAccess);
     await index.register(desired);
     expect(await index.locations(`${NS.WF}Tracker`)).toHaveLength(1);
     pod.intercept = (request) =>
@@ -590,7 +686,12 @@ describe("Type Index merge and bootstrap", () => {
         ? new Response(null, { status: 403 })
         : undefined;
     await expect(
-      new TypeIndex(new RdfIO(denied.fetch), storage, webId).register(desired),
+      new TypeIndex(
+        new RdfIO(denied.fetch),
+        storage,
+        webId,
+        denied.ensurePrivateIndexAccess,
+      ).register(desired),
     ).rejects.toMatchObject({ status: 403 });
   });
 });
