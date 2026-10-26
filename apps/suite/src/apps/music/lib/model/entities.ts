@@ -2,7 +2,7 @@
 import { LiteralFrom, NamedNodeAs, NamedNodeFrom, OptionalAs, SetFrom } from "@rdfjs/wrapper";
 import type { Store } from "n3";
 import { MusicNode } from "./rdf";
-import { durationSeconds, httpIri, nonNegative } from "./validation";
+import { durationSeconds, httpIri, nonEmpty, nonNegative } from "./validation";
 import { M, MO, NS, S } from "./vocab";
 
 export interface MusicReference {
@@ -94,6 +94,16 @@ export class Album extends Recording {
 export class Track extends Recording {
   stampType(): this {
     return this.stamp(`${S}MusicRecording`, `${M}Track`);
+  }
+  override get title(): string {
+    return super.title;
+  }
+  override set title(value: string) {
+    const checked = nonEmpty(value);
+    this.clear(`${S}name`);
+    this.clear(`${NS.DCT}title`);
+    this.writeString(`${S}name`, checked);
+    this.writeString(`${NS.DCT}title`, checked);
   }
   setAlbum(iri: string | undefined): void {
     const checked = iri === undefined ? undefined : httpIri(iri);

@@ -193,6 +193,8 @@ describe("canonical typed writes", () => {
     album.setArtist(artistIri);
     const track = new Track(trackIri, dataset).stampType();
     track.title = 'A "quoted" title\nwith a newline';
+    expect(track.strings(`${S}name`)).toEqual([track.title]);
+    expect(track.strings(`${NS.DCT}title`)).toEqual([track.title]);
     track.setArtist(artistIri);
     track.setAlbum(albumIri);
     track.durationSeconds = 213.5;
@@ -370,6 +372,25 @@ describe("ordered playlists and liked songs", () => {
 });
 
 describe("editing foreign metadata", () => {
+  it.each([
+    "mo",
+    "schema",
+    "media",
+  ])("synchronizes schema and media titles when renaming %s tracks", async (model) => {
+    const dataset = await fixture(model);
+    const track = readLibrary(dataset).tracks[0] as Track;
+    expect(track.title).toBe("Song");
+    track.title = "Renamed";
+    track.title = "Renamed again";
+    expect(track.title).toBe("Renamed again");
+    expect(track.strings(`${S}name`)).toEqual(["Renamed again"]);
+    expect(track.strings(`${NS.DCT}title`)).toEqual(["Renamed again"]);
+    const parsed = await parseMusic(await serializeMusic(dataset), base);
+    const roundTrip = new Track(trackIri, parsed);
+    expect(roundTrip.strings(`${S}name`)).toEqual(["Renamed again"]);
+    expect(roundTrip.strings(`${NS.DCT}title`)).toEqual(["Renamed again"]);
+  });
+
   it("retains shared blank entries and named ListItems while collecting private blank entries", async () => {
     const dataset = await parse(`<#p> s:itemListElement _:shared, <#named>, "malformed".
       <#other> s:itemListElement _:shared.
