@@ -164,6 +164,72 @@ it("requires missing context and outstanding duties to be confirmed", async () =
     ),
   ).toEqual({ effect: "permit" });
 });
+it("validates active permission duty operands before accepting fulfillment", async () => {
+  const p = policy({
+    permissions: [
+      {
+        ...permit,
+        duties: [
+          {
+            action: "inform",
+            constraints: [{ leftOperand: "count", operator: "gteq", rightOperand: 1 }],
+          },
+        ],
+      },
+    ],
+  });
+  for (const count of [undefined, true, [], Number.NaN, Infinity, "z", [1, "z"]]) {
+    const q = intent({
+      action: "read",
+      attributes: {
+        "fulfilled:inform": true,
+        ...(count === undefined ? {} : { count }),
+      },
+    });
+    expect(await solidOdrlEngine.evaluate(p, q)).toEqual({ effect: "indeterminate" });
+    expect(await evaluateIntent({ ...mandate(), autonomous: p }, q)).toEqual({
+      decision: "confirm-required",
+      reason: "indeterminate",
+    });
+    expect(
+      await solidOdrlEngine.evaluate(
+        {
+          ...p,
+          prohibitions: [{ type: "prohibition", action: "read" }],
+        },
+        q,
+      ),
+    ).toEqual({ effect: "prohibited" });
+  }
+  expect(
+    await solidOdrlEngine.evaluate(
+      p,
+      intent({
+        action: "read",
+        attributes: { "fulfilled:inform": true, count: 1 },
+      }),
+    ),
+  ).toEqual({ effect: "permit" });
+  for (const rule of [
+    { ...p.permissions?.[0], ...permit, action: "write" },
+    { ...p.permissions?.[0], ...permit, target: "urn:other" },
+    { ...p.permissions?.[0], ...permit, assignee: "urn:other" },
+    {
+      ...p.permissions?.[0],
+      ...permit,
+      constraints: [{ leftOperand: "count", operator: "eq" as const, rightOperand: 2 }],
+    },
+  ])
+    expect(
+      await solidOdrlEngine.evaluate(
+        policy({ permissions: [permit, rule] }),
+        intent({
+          action: "read",
+          attributes: { count: 1, "fulfilled:inform": true },
+        }),
+      ),
+    ).toEqual({ effect: "permit" });
+});
 it.each([
   { name: "empty rules", permissions: [] },
   { name: "different action", permissions: [{ ...permit, action: "write" }] },

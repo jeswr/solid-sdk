@@ -4,6 +4,7 @@ import {
   constraintSatisfied,
   evaluate,
   LEFT_OPERANDS,
+  matchingPermissions,
   ODRL_ACTIONS,
   type OdrlDuty,
   type OdrlPolicy,
@@ -104,20 +105,32 @@ export const solidOdrlEngine: PolicyEngine = {
           action: "use",
           constraints: r.constraints as OdrlRule["constraints"],
         }));
+    const permissions = lower(p.permissions);
     const lowered: OdrlPolicy = {
       ...p,
       conflict: "prohibit",
-      permissions: lower(p.permissions),
+      permissions,
       prohibitions: lower(p.prohibitions),
       obligations: [], // Checked independently below, including when no rule matches.
     };
     const request = { ...q, action: "use" as const, attributes };
     const now = new Date(q.at);
-    const result = evaluate(lowered, request, { now });
+    const activeDuties = matchingPermissions(lowered, request, { now }).flatMap(
+      (r) => r.duties ?? [],
+    );
+    // Duty constraints are checked below before calling the upstream comparison fallback.
+    const result = evaluate(
+      {
+        ...lowered,
+        permissions: permissions.map((r) => ({ ...r, duties: [] })),
+      },
+      request,
+      { now },
+    );
     // A definite prohibition takes precedence even when another rule lacks context.
     if (result.matchedProhibitions.length > 0) return { effect: "prohibited" };
     // Policy obligations remain active even when the evaluator returns no matching rules/duties.
-    const unmetObligation = (p.obligations ?? []).some((d) => {
+    const unmetDuty = [...(p.obligations ?? []), ...activeDuties].some((d) => {
       const fulfilled = attributes[`fulfilled:${d.action}`];
       return (
         (fulfilled !== true && fulfilled !== "true" && fulfilled !== 1) ||
@@ -127,8 +140,7 @@ export const solidOdrlEngine: PolicyEngine = {
         )
       );
     });
-    if (!supported || missing || unmetObligation || result.duties.some((d) => !d.fulfilled))
-      return { effect: "indeterminate" };
+    if (!supported || missing || unmetDuty) return { effect: "indeterminate" };
     return { effect: result.decision === "permit" ? "permit" : "not-applicable" };
   },
 };
