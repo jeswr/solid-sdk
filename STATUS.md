@@ -116,3 +116,35 @@ functions (30/30), lines (199/199)**. No dependencies, manifests, UI, tracker st
 other packages, or other checkouts changed. No new open questions or unfinished implementation.
 Full-workspace verification remains blocked by the unrelated bootstrap failure. Roborev CLI
 remains unavailable; the supplied review was addressed directly without installing tooling.
+
+## Fix round 3 — review 916be5310251
+
+- `26a8566f fix: preserve folded escapes and telephone URIs` addresses both findings:
+  quoted-printable soft-break detection inspects the complete unfolded continuation, preserving
+  `=HH` escapes split across repeated space/tab folds; TEL parameter keys normalize to uppercase
+  before choosing TEXT or URI encoding, preserving telephone URI semicolons and version-specific
+  comma escaping without mutating the input object.
+- Conservative collision handling: TEL parameter names differing only by case are rejected with
+  the library's existing `SyntaxError`, rather than silently discarding or choosing a value.
+- Regression tests cover repeated folds, an empty continuation, multiple escaped bytes, a following
+  MIME soft break, preservation of the following EMAIL, v3/v4 lowercase/mixed/uppercase VALUE keys,
+  unchanged input parameters, and normalization collisions. Existing legacy soft-break tests pass.
+- Final documentation commit (`docs: record vCard final fix verification`) records these results;
+  STATUS.md is committed last.
+
+| Exact command | Result |
+| --- | --- |
+| `pnpm --filter @jeswr/app-suite exec vitest run test/vcard.test.ts --coverage.enabled=false` | Before fixes: 8 failed, 68 passed; reproduces both review findings and the ambiguous-key collision. |
+| `pnpm --filter @jeswr/app-suite run test` | PASS; 77 tests across 2 files, per-file 100% vCard coverage. |
+| `pnpm --filter @jeswr/suite-ui run build && pnpm --filter @jeswr/app-suite run lint && pnpm --filter @jeswr/app-suite run build && pnpm --filter @jeswr/app-suite run typecheck && pnpm --filter @jeswr/app-suite run test` | PASS; prerequisite build and full app gate, 77 tests. |
+| `pnpm run lint:root` | PASS; workspace, transport, fetch, token and contrast checks; 74 contrast pairs, 0 failures. |
+| `TURBO_SCM_BASE=a58472bfdfcb9ea8e19a222e3fa1f92583c4f5e5 GIT_ALLOW_PROTOCOL=file pnpm run gate` | PASS; 7/7 tasks, including root checks. |
+| `GIT_ALLOW_PROTOCOL=file pnpm run gate:full` | BLOCKED; unchanged `@jeswr/unstorage-solid#build` bootstrap fails during npm install with EROFS writing `/home/runner/.npm/_cacache`; 25/145 tasks successful before Turbo stopped. Remote Git transports were disabled. |
+| `git diff --check` | PASS. |
+
+Final per-file vCard coverage: **100% statements (244/244), branches (171/171),
+functions (30/30), lines (211/211)**. No dependencies, manifests, UI, tracker state,
+other packages, or other checkouts changed. No new open questions or unfinished implementation.
+Full-workspace verification remains blocked by the unrelated bootstrap failure. Roborev CLI and
+the post-commit hook remain unavailable; the supplied review was addressed directly without
+installing tooling. Integration and bead closure remain with the dispatcher.
