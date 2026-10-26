@@ -821,6 +821,43 @@ describe("deriveFeatures trust and robustness", () => {
     });
   });
 
+  test("round-4 regressions: repeated references read once; RDF/XML is an RDF source", () => {
+    const n = 9_000;
+    const shared = {
+      "@id": "_:f",
+      [`${SSD_NS}source`]: "text/turtle",
+      [`${SSD_NS}patchType`]: Array.from({ length: n }, () => "text/n3"),
+    };
+    const references = solid(
+      [],
+      [
+        { type: ["urn:other"], extra: { def: shared } },
+        {
+          type: [SSD.PatchSupport],
+          extra: { [`${SSD_NS}format`]: Array.from({ length: n }, () => ({ "@id": "_:f" })) },
+        },
+        { type: [SSD.PatchSupport], extra: { [`${SSD_NS}format`]: { "@id": "_:f" } } },
+      ],
+    );
+    const started = performance.now();
+    expect(deriveFeatures(references).patch.detail.formats).toEqual({ "text/turtle": ["text/n3"] });
+    expect(performance.now() - started).toBeLessThan(2000);
+
+    const rdfXml = lws(
+      [],
+      [
+        {
+          type: [`${SSD_NS}ContentNegotiation`],
+          extra: { source: "application/rdf+xml", target: "text/turtle" },
+        },
+      ],
+    );
+    expect(deriveFeatures(rdfXml).rdfConneg).toMatchObject({
+      state: "available",
+      detail: { formats: ["application/rdf+xml", "text/turtle"] },
+    });
+  });
+
   test("tolerates malformed descriptions without arrays", () => {
     const conneg = lws(
       [],

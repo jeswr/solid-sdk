@@ -20,6 +20,8 @@ const RDF_MEDIA_TYPES: ReadonlySet<string> = new Set([
   "application/n-quads",
   "application/trig",
   "text/n3",
+  // ADR-002 asks whether an RDF source is listed, independent of what the SDK can parse.
+  "application/rdf+xml",
 ]);
 const SOLID_RDF_FORMATS = ["text/turtle", "application/ld+json"] as const;
 /** RFC 6838 type/subtype (no parameters); also rules out "__proto__"-style keys. */
@@ -318,10 +320,12 @@ export function deriveFeatures(d: StorageDescription, probe?: ProbeResult): Feat
   // Union over every PatchSupport capability.
   const patchCapabilities = authoritative ? capabilitiesNamed("PatchSupport") : [];
   const declaredPatch = patchCapabilities[0];
+  // Each resolved format node is read once, however many capabilities or references name it.
+  const processed = new WeakSet<object>();
   const nodes =
     patchCapabilities.length > 0 ? indexNodes([...services, ...capabilities]) : new Map();
   const declaredFormats = merge(
-    ...patchCapabilities.map((entry) => patchFormats(entry.extra ?? {}, nodes)),
+    ...patchCapabilities.map((entry) => patchFormats(entry.extra ?? {}, nodes, processed)),
   ).formats;
   let patch: Features["patch"];
   if (lws) {
@@ -443,6 +447,7 @@ function indexNodes(
 function patchFormats(
   extra: Readonly<Record<string, unknown>>,
   nodes: ReadonlyMap<string, Readonly<Record<string, unknown>>> = new Map(),
+  processed: WeakSet<object> = new WeakSet(),
 ): Map<string, Set<string>> {
   const formats = new Map<string, Set<string>>();
   const normalise = (patchTypes: unknown[]) => {
@@ -463,6 +468,8 @@ function patchFormats(
     if (!record(value)) continue;
     const id = value["@id"];
     const format = (typeof id === "string" && nodes.get(id)) || value;
+    if (processed.has(format)) continue;
+    processed.add(format);
     const sourceTypes = values(format, "source");
     if (sourceTypes.length > 0) {
       const types = normalise(values(format, "patchType"));
