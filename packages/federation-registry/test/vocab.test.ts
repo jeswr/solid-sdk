@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+// AUTHORED-BY Codex GPT-6
 
 import { describe, expect, it } from "vitest";
 import {
@@ -21,22 +22,25 @@ describe("vocab", () => {
     expect(MEMBERSHIP_STATUS.Revoked).toBe("https://jeswr.org/ns/fedreg#Revoked");
   });
 
-  it("VALID_STATUS_IRIS holds exactly the four coded values", () => {
-    expect(VALID_STATUS_IRIS.size).toBe(4);
-    for (const iri of Object.values(MEMBERSHIP_STATUS)) {
-      expect(VALID_STATUS_IRIS.has(iri)).toBe(true);
-    }
-  });
-
-  it("statusName round-trips each known status IRI", () => {
+  it("VALID_STATUS_IRIS and statusName accept all four statuses in both namespaces", () => {
+    expect(VALID_STATUS_IRIS.size).toBe(8);
     for (const [name, iri] of Object.entries(MEMBERSHIP_STATUS)) {
+      const legacy = `https://w3id.org/jeswr/fedreg#${name}`;
+      expect(VALID_STATUS_IRIS.has(iri)).toBe(true);
+      expect(VALID_STATUS_IRIS.has(legacy)).toBe(true);
       expect(statusName(iri)).toBe(name);
+      expect(statusName(legacy)).toBe(name);
     }
   });
 
-  it("statusName returns undefined for an unknown IRI", () => {
-    expect(statusName("https://jeswr.org/ns/fedreg#Bogus")).toBeUndefined();
-    expect(statusName("not-an-iri")).toBeUndefined();
+  it.each([
+    "https://jeswr.org/ns/fedreg#Bogus",
+    "https://w3id.org/jeswr/fedreg#Bogus",
+    "https://example.org/Active",
+    "not-an-iri",
+  ])("VALID_STATUS_IRIS and statusName reject unknown status %s", (iri) => {
+    expect(VALID_STATUS_IRIS.has(iri)).toBe(false);
+    expect(statusName(iri)).toBeUndefined();
   });
 
   it("only Active is a trusted (live) status", () => {
