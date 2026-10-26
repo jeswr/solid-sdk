@@ -101,7 +101,7 @@ export function planRetention(
 
   const sorted = [...versions].sort((a, b) => {
     if (a.createdAt !== b.createdAt) return b.createdAt - a.createdAt;
-    return a.id < b.id ? -1 : 1;
+    return Number(a.id > b.id) - Number(a.id < b.id);
   });
   const buckets = new Set<string>();
   const retained = new Set<string>();
