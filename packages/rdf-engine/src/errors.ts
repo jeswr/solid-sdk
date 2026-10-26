@@ -15,3 +15,11 @@ export class PolicyIdentifierCollisionError extends TypeError {
     super(`Malformed policy: generated trace identifier collides with a named node: ${identifier}`);
   }
 }
+
+/** The projected policy ID cannot identify exactly one typed RDF subject. */
+export class PolicySubjectUnsupportedError extends TypeError {
+  override readonly name = "PolicySubjectUnsupportedError";
+  constructor(readonly identifier: string) {
+    super(`Policy trace requires one unambiguous typed subject for: ${identifier}`);
+  }
+}

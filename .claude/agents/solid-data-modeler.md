@@ -14,7 +14,7 @@ and they call those.
 
 - `skills/solid-object/SKILL.md` — the `@solid/object` typed wrapper surface (profiles,
   containers, WAC/ACP documents) and its untrusted-RDF rules.
-- `skills/solid-fetch-rdf/SKILL.md` — the sanctioned read path, `RdfFetchError`, ETags for
+- `packages/fetch-rdf/SKILL.md` — the sanctioned read path, `RdfFetchError`, ETags for
   conditional writes.
 - `skills/solid-type-index/SKILL.md` — discovery/registration by RDF class, index
   bootstrap, search bounds.

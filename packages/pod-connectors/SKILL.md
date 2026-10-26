@@ -25,5 +25,8 @@ registration; authenticated profile and Type Index operations refuse redirects.
 All tests use recorded fixtures and memory Pods. Use ./testing for consumers. Run lint,
 build, typecheck and test, then the workspace gates before completing a change.
 
-CON-01 only extracts the framework and ports. Incremental merge, provenance, recorder,
-vocabulary remapping and Node CLI are owned by later connector tasks.
+CON-02 adds the shared incremental write pipeline, host-owned ConnectorState, PROV activity
+recording and per-adapter vocab-map.ts hooks. Preserve ETags on automatic merges and never
+advance checkpoints on failure. The fixture recorder exposes only allowlisted non-personal JSON
+fields under configured public route prefixes; it never saves headers or dynamic URLs. Detailed
+adapter mappings and Node CLI remain owned by their follow-on connector tasks.

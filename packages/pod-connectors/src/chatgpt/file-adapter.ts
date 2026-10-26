@@ -1,3 +1,5 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /**
  * ChatGPT → Documents (Tier-C file import).
  *
@@ -17,6 +19,7 @@ import type { FileImportAdapter, FileImportContext, ImportFile } from "../core/f
 import { recordFragment } from "../core/slug.js";
 import type { IntegrationMetadata } from "../core/types.js";
 import { CLASSES, TextDocument } from "../core/vocab.js";
+import { vocabMap } from "./vocab-map.js";
 
 const ID = "chatgpt";
 
@@ -40,6 +43,7 @@ export interface FlatConversation {
 }
 
 export const chatgptFileAdapter: FileImportAdapter = {
+  vocabMap,
   metadata,
   accept: ".json,application/json",
   fileHint:
