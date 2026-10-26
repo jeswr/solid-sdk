@@ -1,0 +1,27 @@
+X-Fixture-Author: AUTHORED-BY Codex GPT-6
+From: Riley Example <riley@example.org>
+To: Morgan Example <morgan@example.org>
+Subject: Synthetic related HTML resources
+MIME-Version: 1.0
+Content-Type: multipart/related; boundary=related; type="text/html"; start="<Root@example.org>"
+
+--related
+Content-Type: text/html; charset=windows-1252
+Content-ID: <root@example.org>
+Content-Disposition: inline; filename="support.html"
+Content-Description: =?UTF-8?Q?Auxiliary_caf=C3=A9?=
+Content-Transfer-Encoding: quoted-printable
+
+<p>Auxiliary caf=E9</p>
+--related
+Content-Type: text/html; charset=utf-8
+Content-ID: <Root@example.org>
+
+<p>Root body</p><img src="cid:root@example.org"><script>bad()</script>
+--related
+Content-Type: text/plain
+Content-ID: <notes@example.org>
+Content-Transfer-Encoding: base64
+
+UmVzb3VyY2Ugbm90ZXM=
+--related--
