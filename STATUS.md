@@ -99,3 +99,34 @@ No pushes, PRs, publishing, remote git fetches/merges, real-home skill sync, or 
 service calls were performed. Validation uses fixtures and the repository's own test suites.
 The only added third-party declarations are the YAML/Markdown parsers required for D4;
 both passed `check:packages`, and no new parser versions were introduced to the lockfile.
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+## Fix round 2 — quoted HTML attributes
+
+- `821b54af` — `fix(skills): tokenize HTML link attributes`: replace the HTML
+  comment-removal and attribute-search pass with a tokenizer that consumes complete
+  quoted values and distinguishes tags, comments, attribute names, and text. Only
+  actual `href`/`src` attributes contribute links; quoted comment markers cannot hide
+  later attributes.
+- Add 12 regression cases for single/double quotes, apparent URLs inside other
+  attributes or text, `data-href`, quoted `>`/comment markers, case-insensitive
+  attribute names, and active broken URLs after quoted content. Ten cases fail on
+  the previous implementation; all pass after the fix.
+- The final `docs:` commit records these validation results. No dependencies added.
+
+| Exact command | Result |
+| --- | --- |
+| `pnpm exec vitest run test/check-skills.test.mjs` | PASS, 96 tests. |
+| `pnpm exec biome check scripts/check-skills.mjs test/check-skills.test.mjs` | PASS. |
+| `pnpm run lint:root` | PASS; 57 skills and current generated index. |
+| `TURBO_SCM_BASE=d4ac70cd5553de66b47e5db9abac9bcbafc6d1d2 pnpm run gate` | PASS on retry, all 841 root tests across 10 files. First attempt hit an unrelated 5000ms timeout in `test/agent-layers.test.mjs:509`. |
+| `pnpm run gate:full` | FAIL, 327 successful / 373 total tasks; the previously recorded `@jeswr/federation-trust#test` JWK-order snapshot mismatch at `test/characterization.test.ts:196`. All 841 root tests pass here too. |
+| `git diff --exit-code d4ac70cd5553de66b47e5db9abac9bcbafc6d1d2 -- packages/federation-trust packages/solid-vc` | PASS; the failing package and credential implementation are unchanged. |
+| `git diff --check` | PASS. |
+
+Removed the 16 generated app `clientid.jsonld`/`callback.html` files after the full
+gate. No distribution output is committed. `roborev` remains unavailable in this
+sandbox, so the dispatcher must obtain the mandated per-commit review before merge.
+The review finding is addressed; no new open questions or implementation work remain
+for this fix round. The unrelated full-gate failure remains outside this brief.
