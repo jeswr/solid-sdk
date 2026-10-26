@@ -3,10 +3,10 @@ import { type FetchedRdf, fetchRdf, RdfFetchError } from "@jeswr/fetch-rdf";
 import { assertWithinPodScope, createPodScopedFetch, normalizePodBase } from "@jeswr/guarded-fetch";
 import { serialize } from "@jeswr/rdf-serialize";
 import { DataFactory, Store } from "n3";
-import { DriveResource } from "./model.js";
+import { DriveResource, readContainer } from "./model.js";
 import { iri, quadsToTurtle } from "./serialize.js";
 import { buildDriveRootMarker, buildDriveRootRegistration, findDriveRoots } from "./type-index.js";
-import { LDP } from "./vocab.js";
+import { LDP, SOLID } from "./vocab.js";
 
 export class DriveWriteError extends Error {
   constructor(
@@ -67,16 +67,39 @@ export async function ensureDriveRoot(
       }
     }
     if (metadataUrl === undefined) throw new TypeError("The drive root needs a describedby link.");
-    const patched = await scopedFetch(metadataUrl, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/sparql-update" },
-      body: `INSERT DATA { ${await serialize(buildDriveRootMarker(rootUrl))} }`,
-    });
-    if (!patched.ok) throw new DriveWriteError(patched.status, metadataUrl);
-    const verified = await fetchRdf(rootUrl, { fetch: scopedFetch });
-    const root = new DriveResource(rootUrl, verified.dataset, DataFactory);
-    if (!root.isDriveRoot) {
-      throw new TypeError("The drive root marker was not persisted.");
+    try {
+      const patched = await scopedFetch(metadataUrl, {
+        method: "PATCH",
+        headers: { "Content-Type": "text/n3" },
+        body: `@prefix solid: <${SOLID.ns}>.\n_:patch a solid:InsertDeletePatch; solid:inserts { ${await serialize(buildDriveRootMarker(rootUrl))} }.`,
+      });
+      if (!patched.ok) throw new DriveWriteError(patched.status, metadataUrl);
+      const verified = await fetchRdf(rootUrl, { fetch: scopedFetch });
+      const root = new DriveResource(rootUrl, verified.dataset, DataFactory);
+      if (!root.isDriveRoot) {
+        throw new TypeError("The drive root marker was not persisted.");
+      }
+    } catch (error) {
+      // Only roll back our new, initially empty and unmarked container. Use the
+      // pre-PATCH snapshot's strong ETag: a concurrent edit (including a PATCH
+      // that succeeded despite a lost response) must prevent deletion. The
+      // server also refuses DELETE if children have since been added.
+      if (
+        current.etag !== null &&
+        !current.etag.startsWith("W/") &&
+        readContainer(rootUrl, current.dataset).contains.size === 0 &&
+        !new DriveResource(rootUrl, current.dataset, DataFactory).isDriveRoot
+      ) {
+        try {
+          await scopedFetch(rootUrl, {
+            method: "DELETE",
+            headers: { "If-Match": current.etag },
+          });
+        } catch {
+          // Cleanup is best effort; preserve the marker/verification failure.
+        }
+      }
+      throw error;
     }
   } else if (created.status === 409 || created.status === 412) {
     // Another initializer may still be PATCHing its newly created container.

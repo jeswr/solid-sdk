@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { RdfFetchError } from "@jeswr/fetch-rdf";
-import { DataFactory } from "n3";
+import { DataFactory, Parser, Store } from "n3";
 import { describe, expect, it } from "vitest";
 import { DriveResource } from "../../src/apps/drive/lib/model/model.js";
 import { ensureDriveRoot } from "../../src/apps/drive/lib/model/root.js";
@@ -9,7 +9,7 @@ import {
   buildDriveRootRegistration,
   findDriveRoots,
 } from "../../src/apps/drive/lib/model/type-index.js";
-import { LDP, PODDRIVE, SOLID } from "../../src/apps/drive/lib/model/vocab.js";
+import { LDP, PODDRIVE, RDF, SOLID } from "../../src/apps/drive/lib/model/vocab.js";
 import { turtle } from "./helpers.js";
 
 const storage = "https://pod.example/alice/";
@@ -65,15 +65,59 @@ function memory(existingStatus: 409 | 412 = 409) {
           response = new Response(null, { status: 201 });
         }
       } else if (method === "PATCH" && url === metadata) {
-        expect(headers.get("Content-Type")).toBe("application/sparql-update");
-        const inserts = /^INSERT DATA \{([\s\S]*)\}$/.exec(String(init?.body));
-        expect(inserts).not.toBeNull();
-        const current = files.get(root);
-        if (!current) throw new Error("Missing container");
-        const dataset = turtle(current.body);
-        dataset.addQuads([...turtle(inserts?.[1] ?? "")]);
-        files.set(root, { body: await quadsToTurtle(dataset), version: current.version + 1 });
-        response = new Response(null, { status: 205 });
+        // A conforming server need only support N3 Patch, not SPARQL Update.
+        if (headers.get("Content-Type") !== "text/n3") {
+          response = new Response(null, { status: 415 });
+        } else {
+          const patch = new Store(
+            new Parser({ format: "N3", baseIRI: url }).parse(String(init?.body)),
+          );
+          const inserts = patch.getQuads(
+            null,
+            `${SOLID.ns}inserts`,
+            null,
+            DataFactory.defaultGraph(),
+          );
+          expect(inserts).toHaveLength(1);
+          const insert = inserts[0];
+          if (!insert) throw new Error("Missing insert formula");
+          expect(
+            patch.getQuads(
+              insert.subject,
+              RDF.type,
+              `${SOLID.ns}InsertDeletePatch`,
+              DataFactory.defaultGraph(),
+            ),
+          ).toHaveLength(1);
+          expect(patch.getQuads(null, null, null, DataFactory.defaultGraph())).toHaveLength(2);
+          const current = files.get(root);
+          if (!current) throw new Error("Missing container");
+          const dataset = turtle(current.body);
+          // Apply the parsed insertion formula to the target document's default graph.
+          for (const quad of patch.match(null, null, null, insert.object)) {
+            expect(quad.subject.termType).toBe("NamedNode");
+            expect(quad.object.termType).toBe("NamedNode");
+            dataset.addQuad(quad.subject, quad.predicate, quad.object);
+          }
+          files.set(root, { body: await quadsToTurtle(dataset), version: current.version + 1 });
+          response = new Response(null, { status: 205 });
+        }
+      } else if (method === "DELETE" && url === root) {
+        if (!headers.has("If-Match")) throw new TypeError("Unconditional deletion");
+        if (headers.get("If-Match") !== `"${file?.version}"`) {
+          response = new Response(null, { status: 412 });
+        } else if (
+          turtle(file?.body ?? "").match(
+            DataFactory.namedNode(root),
+            DataFactory.namedNode(LDP.contains),
+            null,
+          ).size > 0
+        ) {
+          response = new Response(null, { status: 409 });
+        } else {
+          files.delete(root);
+          response = new Response(null, { status: 204 });
+        }
       } else throw new Error(`Unexpected method ${method}`);
     }
     Object.defineProperty(response, "url", { value: url });
@@ -101,7 +145,7 @@ async function registration(url = root) {
 }
 
 describe("ensureDriveRoot", () => {
-  it("creates and marks the root, registers privately, and does no writes on a second visit", async () => {
+  it("bootstraps against an N3-only server and does no writes on a second visit", async () => {
     const m = memory();
     expect(await ensureDriveRoot(m.fetch, { ...options, storageUrl: storage.slice(0, -1) })).toBe(
       root,
@@ -243,6 +287,7 @@ describe("ensureDriveRoot", () => {
     });
     expect(m.indexWrites).toBe(0);
     expect(m.files.get(root)?.body).toBe("");
+    expect(m.calls.some((call) => call.method === "PATCH" || call.method === "DELETE")).toBe(false);
   });
 
   it.each([
@@ -262,7 +307,7 @@ describe("ensureDriveRoot", () => {
 
   it.each([
     403, 409, 500,
-  ])("propagates metadata PATCH failure %s without registration", async (status) => {
+  ])("rolls back a failed metadata PATCH (%s) so the next call can bootstrap", async (status) => {
     const m = memory();
     m.setBefore((url, method) =>
       url === metadata && method === "PATCH" ? new Response(null, { status }) : undefined,
@@ -273,6 +318,175 @@ describe("ensureDriveRoot", () => {
       url: metadata,
     });
     expect(m.indexWrites).toBe(0);
+    expect(m.files.has(root)).toBe(false);
+    expect(m.calls.find((call) => call.method === "DELETE")?.headers.get("If-Match")).toBe('"1"');
+    m.setBefore(undefined);
+    expect(await ensureDriveRoot(m.fetch, options)).toBe(root);
+    expect(m.rootCreates).toBe(2);
+    expect(m.indexWrites).toBe(1);
+  });
+
+  it("rolls back after a rejected PATCH transport and preserves the original error", async () => {
+    const m = memory();
+    const failure = new TypeError("Disconnected");
+    const fetch: typeof globalThis.fetch = async (input, init) => {
+      if (init?.method === "PATCH") throw failure;
+      return m.fetch(input, init);
+    };
+    await expect(ensureDriveRoot(fetch, options)).rejects.toBe(failure);
+    expect(m.files.has(root)).toBe(false);
+    expect(await ensureDriveRoot(m.fetch, options)).toBe(root);
+  });
+
+  it("preserves a persisted marker when the PATCH response is lost and recovers on retry", async () => {
+    const m = memory();
+    const failure = new TypeError("Response lost");
+    const fetch: typeof globalThis.fetch = async (input, init) => {
+      const response = await m.fetch(input, init);
+      if (init?.method === "PATCH") throw failure;
+      return response;
+    };
+    await expect(ensureDriveRoot(fetch, options)).rejects.toBe(failure);
+    expect(m.calls.find((call) => call.method === "DELETE")?.status).toBe(412);
+    expect(
+      new DriveResource(root, turtle(m.files.get(root)?.body ?? ""), DataFactory).isDriveRoot,
+    ).toBe(true);
+    expect(await ensureDriveRoot(m.fetch, options)).toBe(root);
+    expect(m.rootCreates).toBe(1);
+    expect(m.calls.filter((call) => call.method === "PATCH")).toHaveLength(1);
+  });
+
+  it("preserves the root when marker verification fails after a persisted PATCH", async () => {
+    const m = memory();
+    let reads = 0;
+    m.setBefore((url, method) =>
+      url === root && method === "GET" && ++reads === 2
+        ? new Response(null, { status: 503 })
+        : undefined,
+    );
+    await expect(ensureDriveRoot(m.fetch, options)).rejects.toMatchObject({
+      name: "RdfFetchError",
+      status: 503,
+    });
+    expect(m.calls.find((call) => call.method === "DELETE")?.status).toBe(412);
+    m.setBefore(undefined);
+    expect(await ensureDriveRoot(m.fetch, options)).toBe(root);
+    expect(m.rootCreates).toBe(1);
+  });
+
+  it.each([
+    "metadata",
+    "child",
+  ])("preserves a concurrent %s write during rollback", async (change) => {
+    const m = memory();
+    const added =
+      change === "metadata"
+        ? `<${root}> <https://example.org/title> "Keep me".`
+        : `<${root}> <${LDP.contains}> <${root}file.txt>.`;
+    m.setBefore((url, method) => {
+      if (url === metadata && method === "PATCH") {
+        m.files.set(root, { body: `${containerBody}\n${added}`, version: 2 });
+        return new Response(null, { status: 500 });
+      }
+      return undefined;
+    });
+    await expect(ensureDriveRoot(m.fetch, options)).rejects.toMatchObject({
+      status: 500,
+      url: metadata,
+    });
+    expect(m.files.get(root)?.body).toContain(added);
+    expect(m.calls.find((call) => call.method === "DELETE")?.status).toBe(412);
+    expect(m.indexWrites).toBe(0);
+  });
+
+  it("preserves children added after the snapshot even if the container ETag stays the same", async () => {
+    const m = memory();
+    m.setBefore((url, method) => {
+      if (url === metadata && method === "PATCH") {
+        m.files.set(root, {
+          body: `${containerBody}\n<${root}> <${LDP.contains}> <${root}file.txt>.`,
+          version: 1,
+        });
+        return new Response(null, { status: 500 });
+      }
+      return undefined;
+    });
+    await expect(ensureDriveRoot(m.fetch, options)).rejects.toMatchObject({
+      status: 500,
+      url: metadata,
+    });
+    expect(m.files.get(root)?.body).toContain("file.txt");
+    expect(m.calls.find((call) => call.method === "DELETE")?.status).toBe(409);
+  });
+
+  it.each([
+    "child",
+    "marker",
+  ])("skips rollback when the first snapshot already has a %s", async (change) => {
+    const m = memory();
+    const added =
+      change === "child"
+        ? `<${root}> <${LDP.contains}> <${root}file.txt>.`
+        : `<${root}> a <${PODDRIVE.DriveRoot}>.`;
+    m.setBefore((url, method) => {
+      if (url === root && method === "GET")
+        m.files.set(root, { body: `${containerBody}\n${added}`, version: 2 });
+      return url === metadata && method === "PATCH"
+        ? new Response(null, { status: 500 })
+        : undefined;
+    });
+    await expect(ensureDriveRoot(m.fetch, options)).rejects.toMatchObject({
+      status: 500,
+      url: metadata,
+    });
+    expect(m.files.get(root)?.body).toContain(added);
+    expect(m.calls.some((call) => call.method === "DELETE")).toBe(false);
+  });
+
+  it.each([null, 'W/"1"'])("skips unsafe rollback with container ETag %s", async (etag) => {
+    const m = memory();
+    m.setBefore((url, method) => {
+      if (url === root && method === "GET") {
+        const headers = new Headers({
+          "Content-Type": "text/turtle",
+          Link: '<description>; rel="describedby"',
+        });
+        if (etag !== null) headers.set("ETag", etag);
+        return new Response(containerBody, { headers });
+      }
+      return url === metadata && method === "PATCH"
+        ? new Response(null, { status: 500 })
+        : undefined;
+    });
+    await expect(ensureDriveRoot(m.fetch, options)).rejects.toMatchObject({
+      status: 500,
+      url: metadata,
+    });
+    expect(m.files.has(root)).toBe(true);
+    expect(m.calls.some((call) => call.method === "DELETE")).toBe(false);
+  });
+
+  it.each([
+    403,
+    500,
+    "network",
+  ] as const)("preserves the marker failure if cleanup fails (%s)", async (failure) => {
+    const m = memory();
+    m.setBefore((url, method) => {
+      if (url === metadata && method === "PATCH") return new Response(null, { status: 503 });
+      if (url === root && method === "DELETE") {
+        if (failure === "network") throw new TypeError("Disconnected");
+        return new Response(null, { status: failure });
+      }
+      return undefined;
+    });
+    await expect(ensureDriveRoot(m.fetch, options)).rejects.toMatchObject({
+      name: "DriveWriteError",
+      status: 503,
+      url: metadata,
+    });
+    expect(m.files.has(root)).toBe(true);
+    expect(m.indexWrites).toBe(0);
   });
 
   it("verifies that a successful PATCH actually persisted the marker", async () => {
@@ -282,6 +496,9 @@ describe("ensureDriveRoot", () => {
     );
     await expect(ensureDriveRoot(m.fetch, options)).rejects.toThrow("marker was not persisted");
     expect(m.indexWrites).toBe(0);
+    expect(m.files.has(root)).toBe(false);
+    m.setBefore(undefined);
+    expect(await ensureDriveRoot(m.fetch, options)).toBe(root);
   });
 
   it.each([
