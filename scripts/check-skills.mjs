@@ -46,7 +46,8 @@ function assignmentValue(text, start) {
   let value = "";
   let cursor = start;
   const terminator = /[\s;&|`)]/;
-  while (cursor < text.length && !terminator.test(text[cursor]) && text[cursor] !== "#") {
+  // A hash is literal inside an assignment word, including immediately after =.
+  while (cursor < text.length && !terminator.test(text[cursor])) {
     const quote = text[cursor];
     if (quote === '"' || quote === "'") {
       cursor++;
@@ -92,11 +93,49 @@ function lineNumber(text, offset) {
   return text.slice(0, offset).split("\n").length;
 }
 
+const nonSecretSuffixes = [
+  "TTL",
+  "EXPIRY",
+  "EXPIRES",
+  "LIFETIME",
+  "LENGTH",
+  "LEN",
+  "SIZE",
+  "LIMIT",
+  "COUNT",
+  "MAX",
+  "MIN",
+  "TIMEOUT",
+  "URL",
+  "URI",
+  "ENDPOINT",
+  "PATH",
+  "FILE",
+  "DIR",
+  "NAME",
+  "ID",
+  "TYPE",
+  "HEADER",
+  "PREFIX",
+  "FORMAT",
+  "ALG",
+  "ALGORITHM",
+  "EXPIRES_IN",
+  "EXPIRES_AT",
+  "MAX_AGE",
+  "TTL_SECONDS",
+  "TTL_MS",
+  "LIFETIME_SECONDS",
+  "LIFETIME_MS",
+  "TIMEOUT_SECONDS",
+  "TIMEOUT_MS",
+].map((suffix) => suffix.split("_"));
+
 function isCredentialName(name) {
   const segments = name.split("_");
   return (
-    !/^(?:TTL|EXPIRY|EXPIRES|LIFETIME|LENGTH|LEN|SIZE|LIMIT|COUNT|MAX|MIN|TIMEOUT|URL|URI|ENDPOINT|PATH|FILE|DIR|NAME|ID|TYPE|HEADER|PREFIX|FORMAT|ALG|ALGORITHM)$/.test(
-      segments.at(-1),
+    !nonSecretSuffixes.some((suffix) =>
+      suffix.every((segment, index) => segment === segments.at(index - suffix.length)),
     ) &&
     segments.some((segment) =>
       /^(?:TOKEN|SECRET|PASSWORD|PASSWD|PASS|PWD|KEY|APIKEY|CREDENTIALS?)$/.test(segment),
@@ -167,16 +206,17 @@ function* rawMetadataSegments(text, quotedScalars) {
 }
 
 function scanLocalPaths(text, report) {
-  const urls = [...text.matchAll(/\b([a-z][a-z\d+.-]*):\/\/[^\s"'`<>]*/gi)];
+  // File URLs can omit the authority entirely. Other schemes need :// here.
+  const urls = [...text.matchAll(/\b(?:(file):|([a-z][a-z\d+.-]*):\/\/)[^\s"'`<>]*/gi)];
   const paths = /(?:\/(?:Users|home)\/|[a-zA-Z]:[\\/]Users[\\/])(?=[^\s/\\"'`<>()[\]])/g;
   for (const match of text.matchAll(paths)) {
     const url = urls.find(
       (url) => match.index >= url.index && match.index < url.index + url[0].length,
     );
     if (url) {
-      // file:// URLs expose filesystem paths; other URL schemes are public identifiers.
-      if (!/^file:\/\/[^/]*$/i.test(text.slice(url.index, match.index))) continue;
-    } else if (match.index > 0 && !/[\s"'([=:`<]/.test(text[match.index - 1])) continue;
+      // Check the whole file URL, including its authority and drive letters.
+      if ((url[1] ?? url[2]).toLowerCase() !== "file") continue;
+    } else if (match.index > 0 && /[a-zA-Z0-9.\-/\\]/.test(text[match.index - 1])) continue;
     report(match.index);
   }
 }

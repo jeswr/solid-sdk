@@ -562,6 +562,16 @@ describe("skill validation", () => {
     "(/home/bob/y)",
     "C:\\Users\\carol",
     "C:/Users/carol",
+    "file:///C:/Users/alice/private.txt",
+    "file://localhost/C:/Users/alice/private.txt",
+    String.raw`FILE://server/C:\Users\alice\private.txt`,
+    "file://server/share/home/alice/private.txt",
+    "file:/Users/alice/private.txt",
+    "file:C:/Users/alice/private.txt",
+    "**/home/alice/private.txt**",
+    "_/Users/alice/private.txt_",
+    "<code>/home/alice/private.txt</code>",
+    "~/home/alice/x",
   ];
   it.each(
     [
@@ -582,7 +592,11 @@ describe("skill validation", () => {
     "src/home/index.ts",
     "src/Users/index.ts",
     "./home/alice/x",
-    "~/home/alice/x",
+    "../home/alice/x",
+    "a.b/home/x",
+    "/var/home/alice/x",
+    "//home/alice/x",
+    String.raw`src\home/alice/x`,
     "~",
     "~/private",
     "https://example.org/Users/alice/x",
@@ -591,6 +605,11 @@ describe("skill validation", () => {
     "https://example.org/?path=/home/alice/x",
     "https://example.org/(/home/alice/x)",
     "https://example.org/C:/Users/carol",
+    String.raw`https://example.org/C:\Users\carol`,
+    "https://example.org/file:///C:/Users/carol",
+    "https://example.org/file:///home/alice/x",
+    "file+custom://example.org/home/alice/x",
+    "filex://example.org/Users/alice/x",
     "prefixC:\\Users\\carol",
     "/home/",
     "/Users/",
@@ -605,19 +624,16 @@ describe("skill validation", () => {
     expect(checkSkills(root, { write: true }).errors).toEqual([]);
   });
 
-  it.each([
-    " ",
-    '"',
-    "'",
-    "(",
-    "[",
-    "=",
-    ":",
-    "`",
-    "<",
-  ])("rejects home paths following a path-token delimiter %j", (delimiter) => {
+  it.each(
+    ["", " ", '"', "'", "(", "[", "=", ":", "`", "<", ">", "*", "_", "~", "]", "}", "!"].flatMap(
+      (prefix) =>
+        ["/home/alice/x", "/Users/alice/x", "C:/Users/alice/x", String.raw`C:\Users\alice\x`].map(
+          (path) => [prefix, path],
+        ),
+    ),
+  )("rejects absolute user paths after prefix %j: %s", (prefix, path) => {
     const root = fixture();
-    put(root, "skills/alpha/references/guide.md", `${delimiter}/home/alice/x`);
+    put(root, "skills/alpha/references/guide.md", `${prefix}${path}`);
     expect(checkSkills(root, { write: true }).errors).toEqual([
       "skills/alpha/references/guide.md: line 1: absolute user path is forbidden",
     ]);
@@ -759,11 +775,16 @@ describe("skill validation", () => {
     "OPENAI_API_KEY",
     "GH_TOKEN",
     "GITHUB_TOKEN",
+    "ACCESS_TOKEN",
     "CLIENT_SECRET",
     "API_KEY",
     "DB_PASSWORD",
     "PRIVATE_KEY",
     "TOKEN_VALUE",
+    "TOKEN_EXPIRES_IN_SECRET",
+    "TOKEN_MAX_AGE_VALUE",
+    "TOKEN_NOTTL",
+    "TTL_TOKEN",
   ];
   it.each(credentialNames)("rejects credential assignments named %s", (name) => {
     const root = fixture();
@@ -811,10 +832,21 @@ describe("skill validation", () => {
     "FORMAT",
     "ALG",
     "ALGORITHM",
+    "EXPIRES_IN",
+    "EXPIRES_AT",
+    "MAX_AGE",
+    "TTL_SECONDS",
+    "TTL_MS",
+    "LIFETIME_SECONDS",
+    "LIFETIME_MS",
+    "TIMEOUT_SECONDS",
+    "TIMEOUT_MS",
   ];
   it.each([
     "MAX_TOKENS=4096",
     "TOKEN_TTL=3600",
+    "ACCESS_TOKEN_EXPIRES_IN=3600",
+    "TOKEN_MAX_AGE=3600",
     "TOKENS=4096",
     "MAX_KEYS=4096",
     "KEYS=4096",
@@ -1047,7 +1079,11 @@ describe("skill validation", () => {
       1,
     ],
     ["hash inside unquoted value", "PASSWORD=fixture#credential-value", 1],
-    ["comment at value start", "PASSWORD=# comment", 0],
+    ["hash at value start", "PASSWORD=# comment", 1],
+    ["hash-prefixed command password", "PASSWORD=#a7z9Qp2M command", 1],
+    ["hash after empty quotes", "PASSWORD=''#fixture-credential-value command", 1],
+    ["hash after a quoted placeholder", 'PASSWORD="<token>"#credential-value', 1],
+    ["hash after a quoted variable", 'PASSWORD="$PASSWORD"#credential-value', 1],
     ["empty before separator", "API_TOKEN=;PASSWORD=fixture-credential-value", 1],
   ];
   it.each(
