@@ -323,6 +323,35 @@ describe("canonical typed writes", () => {
 });
 
 describe("ordered playlists and liked songs", () => {
+  it.each([
+    "<#entry>",
+    "_:entry",
+  ])("deduplicates aliased links to %s while retaining distinct repeated-track entries", async (entry) => {
+    const dataset = await parse(`
+      <#list> s:itemListElement ${entry}, <#repeat>, <#other>;
+        <http://schema.org/itemListElement> ${entry}, <#repeat>.
+      ${entry} s:position 1; s:item <#a>.
+      <#repeat> s:position 2; s:item <#a>.
+      <#other> s:position 3; s:item <#b>.
+    `);
+    const playlist = new Playlist(`${base}#list`, dataset);
+    const before = [...dataset];
+    expect(playlist.tracks).toEqual([`${base}#a`, `${base}#a`, `${base}#b`]);
+    expect([...dataset]).toEqual(before);
+    playlist.reorder(2, 0).addTrack(`${base}#b`);
+    expect(playlist.tracks).toEqual([`${base}#b`, `${base}#a`, `${base}#a`, `${base}#b`]);
+    const entries = playlist.objects(`${S}itemListElement`);
+    expect(entries).toHaveLength(4);
+    expect(entries.map((term) => new MusicNode(term, dataset).strings(`${S}position`)[0])).toEqual([
+      "1",
+      "2",
+      "3",
+      "4",
+    ]);
+    const parsed = await parseMusic(await serializeMusic(dataset), base);
+    expect(new Playlist(playlist.value, parsed).tracks).toEqual(playlist.tracks);
+  });
+
   it("creates, appends duplicates, reorders both ways, removes and retains dense positions", async () => {
     const dataset = new Store();
     const playlist = new Playlist(playlistIri, dataset).stampType();
@@ -401,6 +430,8 @@ describe("editing foreign metadata", () => {
       <#imported> <${label}> "Original", "Older";
         <http://schema.org/name> "Original"; s:description "Preserved metadata".
     `);
+    // Reproduce a previous schema-only edit with stale media and legacy labels.
+    new MusicNode(iri, dataset).title = "Previous schema edit";
     const entity = new Entity(iri, dataset);
     const before = [...dataset];
     expect(() => {

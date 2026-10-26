@@ -24,8 +24,12 @@ export class Playlist extends Recording {
   }
 
   get tracks(): string[] {
+    const seen = new Set<string>();
     const entries = this.objects(`${S}itemListElement`).flatMap((term) => {
       if (term.termType !== "NamedNode" && term.termType !== "BlankNode") return [];
+      const key = `${term.termType}:${term.value}`;
+      if (seen.has(key)) return [];
+      seen.add(key);
       const entry = new MusicNode(term, this.dataset as Store);
       const position = Number(entry.strings(`${S}position`)[0]);
       const item = entry.iris(`${S}item`)[0];
