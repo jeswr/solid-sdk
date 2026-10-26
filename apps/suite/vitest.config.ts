@@ -49,6 +49,7 @@ export default defineConfig({
         "src/apps/money/lib/forecast/**/*.ts",
         "src/apps/drive/lib/list/**/*.ts",
         "src/apps/mail/lib/threading/**/*.ts",
+        "src/apps/mail/lib/address/**/*.ts",
       ],
       reporter: ["text", "json-summary"],
       thresholds: {
