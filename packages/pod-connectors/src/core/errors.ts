@@ -2,6 +2,16 @@
  * Typed errors for the integrations framework. The UI branches on
  * `instanceof` (AGENTS.md Part 2 §TypeScript), never on message strings.
  */
+// AUTHORED-BY Codex GPT-6
+import { RdfFetchError } from "@jeswr/fetch-rdf";
+
+/** JSON-LD context URLs cannot use the host's global authenticated transport. */
+export class RemoteContextRefusedError extends RdfFetchError {
+  constructor(url: string) {
+    super("Remote JSON-LD contexts are disabled for connector RDF reads.", { url });
+    this.name = "RemoteContextRefusedError";
+  }
+}
 
 /** Base class: anything thrown by an integration adapter or the framework. */
 export class IntegrationError extends Error {

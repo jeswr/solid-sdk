@@ -44,6 +44,8 @@ read/update is pinned to the host-supplied canonical `profileDocumentUrl`, resol
 redirects during the host's existing profile load. The WebID remains the RDF subject.
 Registration never dereferences the redirecting WebID or makes an unauthenticated profile
 request, and all authenticated profile and Type Index operations refuse redirects.
+Every connector RDF read, including registration, rejects JSON-LD context URLs with
+`RemoteContextRefusedError` and never fetches a context. Inline context objects remain supported.
 Deterministic document paths and Type Index bootstrap
 behavior are preserved. The runner
 retains read preconditions for subsequent writes; explicit write conditions override them.
