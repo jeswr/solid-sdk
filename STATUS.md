@@ -186,3 +186,65 @@ tools/federation-codegen packages/solid-federation-vocab` passed, confirming the
 tool and vocabulary inputs are unchanged from this fix round's base. No
 unrelated fix was made. Generated web-public build artifacts were removed before
 the final documentation commit; the working tree is clean.
+
+## Fix round 3 — three review findings
+
+Review/fix base: `41f981fd54e7bf818aeae20c198b500b7e0dcc60`; branch remains
+`lane/sst-vcij`. The required affected-gate comparison remains
+`60da98b9c11fa742e16b3b4d6f66ad53993e8914`.
+
+- `7b7b5522` — `fix(pkg-memory): deny unavailable policy context`: deny policies
+  requiring context beyond purpose and the implicit evaluation time, including
+  prohibitions under every conflict strategy. Reject unparseable temporal
+  operands, unsupported datatypes/operators, and malformed operand cardinality
+  before evaluation. Regressions cover missing operands, RDF policy roundtrips,
+  permission/duty context, policy edits, and valid purpose/time evaluation.
+- `5ebe4277` — `fix(pkg-memory): deduplicate shared assertion graphs`: compare
+  independently parsed assertion copies using their canonical fingerprint and
+  retain one copy per shared graph during listing. Conflicting copies fail
+  closed. Regressions preserve nested blank-node structures, whole-dataset
+  isomorphism, corroboration, repeated reads, and reversed listing order.
+- `0099dd54` — `fix(pkg-memory): index belief classification lookups`: read
+  provenance once per nanopub and precompute replacements, inactivity,
+  corroboration, and live contradiction indexes. Regressions bound provenance
+  reads linearly at 24 and 48 unrelated nanopubs and cover multiple revisions,
+  missing targets, and self-revisions; existing belief/withdrawal tests pass.
+- Final documentation commit — `docs: record sst-vcij round three validation`:
+  this report, committed last after all required gate runs.
+
+Conservative policy choice: an unsupported context requirement denies the whole
+policy for this filter, even when attached to an otherwise unrelated rule or
+when the policy selects permission-wins conflict resolution. No context is
+invented, and invalid time operands never reach the evaluator's lexical fallback.
+No new design question was introduced.
+
+### Round three validation
+
+All commands ran in this checkout with Node v24.22.1 and pnpm 10.4.1.
+
+| Exact command | Result |
+| --- | --- |
+| `pnpm exec turbo run build --filter=@jeswr/pkg-memory...` | PASS; four dependency-first builds. |
+| `pnpm --filter @jeswr/pkg-memory run lint` | PASS. |
+| `pnpm --filter @jeswr/pkg-memory run build` | PASS. |
+| `pnpm --filter @jeswr/pkg-memory run typecheck` | PASS, including tests. |
+| `pnpm --filter @jeswr/pkg-memory run test` | PASS; 11 files, 510 tests; 100% statements, branches, functions, and lines. |
+| `pnpm run lint:root` | PASS. |
+| `TURBO_SCM_BASE=60da98b9c11fa742e16b3b4d6f66ad53993e8914 pnpm run gate` | PASS; 9 successful tasks, including 686 root tests. |
+| `pnpm run gate:full` | FAIL outside this lane; 261 successful tasks before `@jeswr/federation-codegen#test` stopped the run (2 failed, 23 passed tests). Root tests: 686 passed. |
+| `git diff --check 41f981fd54e7bf818aeae20c198b500b7e0dcc60` | PASS. |
+
+The full gate reproduced the two previously documented namespace mismatches in
+`tools/federation-codegen/test/generator.test.ts`: the Bookmark target class and
+generated ontology bytes. `git diff 60da98b9c11fa742e16b3b4d6f66ad53993e8914 --exit-code --
+tools/federation-codegen packages/solid-federation-vocab` passed, confirming the
+tool and vocabulary inputs are unchanged from the required lane base. No
+unrelated fix was made. Generated web-public build artifacts were removed.
+
+All three findings are implemented, with fixture-only regressions. No dependency,
+manifest, or lockfile changed; no dependency policy check was needed. `roborev`
+remains unavailable (`command -v roborev` found no executable), so independent
+automated per-commit review remains outstanding. No pushes, PRs, branch switches,
+remote fetches/merges, tracker changes, or edits to other checkouts were performed.
+There are no new open questions; earlier pilot/live-server verification limits
+remain as documented above.
