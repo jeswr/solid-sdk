@@ -146,6 +146,62 @@ describe("direct loopback", () => {
     }
   });
 
+  it.each([
+    "verification",
+    "credentials",
+  ] as const)("snapshots wire fields before pending %s, including retries", async (stage) => {
+    for (const retry of [false, true]) {
+      const config = options();
+      const verify = vi.fn(verifyMessage);
+      const send = vi.fn(config.tokens.send.bind(config.tokens));
+      const tokens = { read: config.tokens.read.bind(config.tokens), send };
+      const binding = createInMemoryDirectBinding({ ...config, verify, tokens });
+      const original = await binding.send.render(signed(), DIRECT);
+      const replacement = await binding.send.render(
+        signed({ ...message, id: "urn:example:message:replacement" }),
+        DIRECT,
+      );
+      const io = { account, tokens, dryRun: false };
+      const result = { outcome: "accepted", providerRef: `direct:${original.digest}` };
+      if (retry) expect(await binding.send.transmit(original, io)).toEqual(result);
+
+      const started = deferred<void>();
+      const resume = deferred<void>();
+      if (stage === "verification")
+        verify.mockImplementationOnce(async (jws) => {
+          started.resolve();
+          await resume.promise;
+          return verifyMessage(jws);
+        });
+      else
+        send.mockImplementationOnce(async (ref) => {
+          started.resolve();
+          await resume.promise;
+          return config.tokens.send(ref);
+        });
+
+      const wire = { ...original };
+      const pending = binding.send.transmit(wire, io);
+      await started.promise;
+      Object.assign(wire, replacement);
+      expect(await binding.send.lookup?.(original)).toMatchObject({
+        outcome: retry ? "found" : "unknown",
+      });
+      expect(await binding.send.lookup?.(replacement)).toEqual({ outcome: "absent" });
+      resume.resolve();
+      expect(await pending).toEqual(result);
+      expect(await binding.send.lookup?.(original)).toEqual({
+        outcome: "found",
+        providerRef: result.providerRef,
+      });
+      expect(await binding.send.lookup?.(replacement)).toEqual({ outcome: "absent" });
+      expect(await binding.send.transmit(original, io)).toEqual(result);
+      expect((await binding.ingest.list(account, undefined, limits)).items).toEqual([
+        { id: message.id, raw: original.bytes },
+      ]);
+    }
+  });
+
   it("tracks overlapping attempts separately and keeps accepted bytes as positive evidence", async () => {
     const config = options();
     const binding = createInMemoryDirectBinding(config);

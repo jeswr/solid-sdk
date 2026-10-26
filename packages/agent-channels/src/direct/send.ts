@@ -61,9 +61,11 @@ export function createDirectSend(
     async transmit(wire, io) {
       if (io.dryRun !== false) return { outcome: "rejected", detail: "dry-run" };
       const account = accountId(io.account);
-      const compactJws = assertWire(wire);
+      // Keep the checked bytes and their identity stable across asynchronous checks.
+      const snapshot = { ...wire };
+      const compactJws = assertWire(snapshot);
       // Register each attempt before verification or credentials can suspend it.
-      const attempt = { bytes: wire.bytes };
+      const attempt = { bytes: snapshot.bytes };
       pending.add(attempt);
       try {
         const message = await verified(compactJws);
@@ -71,14 +73,14 @@ export function createDirectSend(
         assertGrant(await io.tokens.send(io.account), "send");
         const previous = mailbox.accepted.get(message.id);
         if (previous) {
-          if (previous.bytes !== wire.bytes || previous.account !== account)
+          if (previous.bytes !== snapshot.bytes || previous.account !== account)
             throw new ProviderRejectedError("direct message id conflicts with accepted bytes");
           return { outcome: "accepted", providerRef: previous.providerRef };
         }
-        const providerRef = `direct:${wire.digest}`;
-        mailbox.accepted.set(message.id, { bytes: wire.bytes, providerRef, account });
+        const providerRef = `direct:${snapshot.digest}`;
+        mailbox.accepted.set(message.id, { bytes: snapshot.bytes, providerRef, account });
         const inbox = mailbox.inboxes.get(account) ?? [];
-        inbox.push({ id: message.id, raw: wire.bytes });
+        inbox.push({ id: message.id, raw: snapshot.bytes });
         mailbox.inboxes.set(account, inbox);
         return { outcome: "accepted", providerRef };
       } finally {
