@@ -298,3 +298,59 @@ independent automated per-commit review remains outstanding. No pushes, PRs,
 branch switches, remote fetches/merges, tracker changes, or edits to other
 checkouts were performed. There are no new open questions or design choices;
 earlier pilot/live-server verification limits remain as documented above.
+
+## Review fixes — client identity and shared batch graphs
+
+Review/fix base and affected-gate comparison:
+`7c4526fd2912413d60aabf9f1f674c89c7a8a623`; branch remains `lane/sst-vcij`.
+
+- `b162e971` — `fix(pkg-memory): preserve client authorization identity`: reject
+  client IDs whose IRI safety check changes their lexical identity, then pass
+  the unchanged ID to the ODRL evaluator. Regressions cover every escaped ASCII
+  character, policy-level and rule-level assignees, denial-message privacy,
+  already encoded IDs, host case, default ports, and dot segments.
+- `9f47a39f` — `fix(pkg-memory): retain shared batch graph identity`: validate
+  repeated source/entity graphs alongside assertions, retain one copy per graph
+  ID, and remap blank-node references throughout each incoming dataset. Retain
+  remapped node identities for newly encountered graphs. Conflicting content,
+  missing copies, and inconsistent cross-graph node mappings fail closed.
+  Regressions cover shared authors and entities, nested nodes, provenance and
+  publication references, independent batches, an assertion loaded from an
+  earlier batch, repeated reads, reversed listings, and dataset isomorphism.
+- Final documentation commit — `docs: record sst-vcij review fix validation`:
+  this report, committed last after the required gates.
+
+### Validation
+
+Commands ran in this checkout with Node v24.22.1 and pnpm 10.4.1, using
+`/opt/node24/bin` first on `PATH`.
+
+| Exact command | Result |
+| --- | --- |
+| `pnpm exec turbo run build --filter=@jeswr/pkg-memory...` | PASS; four dependency-first builds. |
+| `pnpm --filter @jeswr/pkg-memory exec vitest run test/purpose.test.ts test/store.test.ts -t 'requiring transformation\|retains shared source/entity\|conflicting stored copies of a shared (sources\|entities)' --coverage.enabled=false` | Expected FAIL on the unfixed implementation; 46 failing regression cases reproduced both findings. |
+| `pnpm --filter @jeswr/pkg-memory run lint` | PASS. |
+| `pnpm --filter @jeswr/pkg-memory run build` | PASS. |
+| `pnpm --filter @jeswr/pkg-memory run typecheck` | PASS, including tests. |
+| `pnpm --filter @jeswr/pkg-memory run test` | PASS; 11 files, 564 tests; 100% statements, branches, functions, and lines. |
+| `pnpm run lint:root` | PASS. |
+| `TURBO_SCM_BASE=7c4526fd2912413d60aabf9f1f674c89c7a8a623 pnpm run gate` | PASS; 8 successful tasks. |
+| `pnpm run gate:full` (first attempt) | FAIL outside this lane; root pathological-spec timing test measured 63.99 ms against its 50 ms limit; 685 other root tests passed. |
+| `pnpm exec turbo run test:root` | PASS without competing builds; all 686 root tests. |
+| `pnpm run gate:full` (retry) | FAIL outside this lane; 282 successful tasks before `@jeswr/federation-codegen#test` stopped the run (2 failed, 23 passed tests). The passing root tests were cached. |
+| `git diff --check 7c4526fd2912413d60aabf9f1f674c89c7a8a623` | PASS. |
+
+The full-gate retry reproduced the two previously documented namespace mismatches
+in `tools/federation-codegen/test/generator.test.ts`: the Bookmark target class
+and generated ontology bytes. The affected tool/vocabulary inputs and the root
+timing test/guard are unchanged from this review base, verified with
+`git diff 7c4526fd2912413d60aabf9f1f674c89c7a8a623 --exit-code -- tools/federation-codegen packages/solid-federation-vocab test/check-sdk-layers.test.mjs scripts/check-sdk-layers.mjs`.
+Generated web-public build artifacts were removed.
+
+Both requested findings are implemented with fixture-only regressions. No
+dependency, manifest, or lockfile changed; no dependency policy check was needed.
+`roborev` remains unavailable (`command -v roborev` found no executable), so
+independent automated per-commit review remains outstanding. No pushes, PRs,
+branch switches, remote fetches/merges, tracker changes, or edits to other
+checkouts were performed. No implementation work or new open questions remain;
+the earlier pilot/live-server verification limits still apply.
