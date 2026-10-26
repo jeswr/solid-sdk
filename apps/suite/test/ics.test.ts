@@ -161,6 +161,35 @@ describe("content lines", () => {
 
 describe("date values", () => {
   it.each([
+    ["03:15:00", "02:30:00"],
+    ["02:30:00", "03:15:00"],
+    ["03:15:00", "03:15:00"],
+  ])("defers same-TZID ordering across a DST gap %s to %s", (startTime, endTime) => {
+    const event = {
+      ...baseEvent,
+      start: `2026-03-08T${startTime}`,
+      end: `2026-03-08T${endTime}`,
+      tzid: "America/New_York",
+      endTzid: "America/New_York",
+    };
+    const calendar = parsed([
+      `DTSTART;TZID=America/New_York:20260308T${startTime.replaceAll(":", "")}`,
+      `DTEND;TZID=America/New_York:20260308T${endTime.replaceAll(":", "")}`,
+    ]);
+    expect(calendar.events).toEqual([event]);
+    expect(importICal(exported(event))).toEqual(calendar);
+  });
+  it.each([
+    [";VALUE=DATE", "20261025", "20261024"],
+    ["", "20261025T090000", "20261025T080000"],
+    ["", "20261025T090000Z", "20261025T080000Z"],
+  ])("still validates unzoned ordering %s %s", (parameters, startValue, earlier) => {
+    for (const endValue of [startValue, earlier])
+      expect(() =>
+        parsed([`DTSTART${parameters}:${startValue}`, `DTEND${parameters}:${endValue}`]),
+      ).toThrow("DTEND must be later");
+  });
+  it.each([
     { start: "2000-02-29" },
     { start: "0000-02-29" },
     { start: "2026-12-31T23:59:60Z" },
@@ -222,6 +251,36 @@ describe("date values", () => {
 
 describe("recurrence rules", () => {
   it.each([
+    "01MO",
+    "+01TU",
+    "-01WE",
+    "09TH",
+    "-09FR",
+    "+53SA",
+  ])("preserves valid BYDAY ordinal %s", (day) => {
+    const calendar = parsed([start, `RRULE:FREQ=MONTHLY;BYDAY=${day}`]);
+    expect(calendar.events[0]?.recurrence?.byDay).toEqual([day]);
+    const wire = exported({ recurrence: { frequency: "MONTHLY", byDay: [day] } });
+    expect(wire).toContain(`BYDAY=${day}`);
+    expect(importICal(wire)).toEqual(calendar);
+  });
+  it.each([
+    "0MO",
+    "00MO",
+    "+00MO",
+    "-00MO",
+    "001MO",
+    "54MO",
+    "-54MO",
+    "+MO",
+    "01XX",
+  ])("rejects invalid BYDAY ordinal %s", (day) => {
+    expect(() => parsed([start, `RRULE:FREQ=MONTHLY;BYDAY=${day}`])).toThrow("invalid BYDAY");
+    expect(() => exported({ recurrence: { frequency: "MONTHLY", byDay: [day] } })).toThrow(
+      "invalid BYDAY",
+    );
+  });
+  it.each([
     "FREQ=YEARLY;BYWEEKNO=-1,1;BYDAY=MO;BYSETPOS=-1;WKST=MO",
     "FREQ=YEARLY;BYYEARDAY=1,-366",
     "FREQ=MONTHLY;BYDAY=1MO",
@@ -281,6 +340,7 @@ describe("recurrence rules", () => {
     "FREQ=MONTHLY;BYSETPOS=0",
     "FREQ=DAILY;BYDAY=54MO",
     "FREQ=DAILY;BYDAY=1MO",
+    "FREQ=DAILY;BYDAY=01MO",
     "FREQ=WEEKLY;BYMONTHDAY=1",
     "FREQ=MONTHLY;BYWEEKNO=1",
     "FREQ=DAILY;BYYEARDAY=1",
@@ -331,6 +391,10 @@ describe("alarms", () => {
     ["ACTION:AUDIO", "TRIGGER:-PT1H", "REPEAT:1.5", "DURATION:PT1M"],
     ["ACTION:AUDIO", "TRIGGER:-PT1H", "REPEAT:-1", "DURATION:PT1M"],
     ["ACTION:AUDIO", "TRIGGER:-PT1H", "REPEAT:9007199254740992", "DURATION:PT1M"],
+    ["ACTION:AUDIO", "TRIGGER:-PT1H", "REPEAT:+9007199254740992", "DURATION:PT1M"],
+    ["ACTION:AUDIO", "TRIGGER:-PT1H", "REPEAT:+", "DURATION:PT1M"],
+    ["ACTION:AUDIO", "TRIGGER:-PT1H", "REPEAT:++2", "DURATION:PT1M"],
+    ["ACTION:AUDIO", "TRIGGER:-PT1H", "REPEAT:+1.5", "DURATION:PT1M"],
     ["ACTION:AUDIO", "TRIGGER:-PT1H", "REPEAT:0"],
     ["ACTION:AUDIO", "TRIGGER;RELATED=START,END:-PT1H"],
     [
@@ -357,11 +421,11 @@ describe("alarms", () => {
     ],
   ])("rejects invalid alarm %#", (...lines) =>
     expect(() => parsed([start, "BEGIN:VALARM", ...lines, "END:VALARM"])).toThrow());
-  it("round-trips explicit zero repeats with a duration", () => {
+  it.each(["0", "+0", "+2", "+02"])("round-trips REPEAT:%s with a duration", (repeat) => {
     const reminder: Reminder = {
       action: "AUDIO",
       triggerOffset: "-PT1H",
-      repeat: 0,
+      repeat: Number(repeat),
       duration: "PT1M",
     };
     const calendar = parsed([
@@ -369,7 +433,7 @@ describe("alarms", () => {
       "BEGIN:VALARM",
       "ACTION:AUDIO",
       "TRIGGER:-PT1H",
-      "REPEAT:0",
+      `REPEAT:${repeat}`,
       "DURATION:PT1M",
       "END:VALARM",
     ]);

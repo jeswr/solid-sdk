@@ -19,7 +19,7 @@ callers and AUDIO alarms. AUDIO accepts at most one attachment.
 
 Supplied VTIMEZONE definitions are retained as opaque components. Callers provide definitions
 when required for export; this module does not generate a timezone database or evaluate DST.
-Comparison of ends in different timezones is left to that engine.
+Ordering of TZID start/end values is left to that engine, even within the same timezone.
 
 Malformed supported fields throw `Error` prefixed `Invalid iCalendar:`. Unrelated components
 and unknown properties are ignored. This is a documented subset: event DURATION,

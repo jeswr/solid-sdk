@@ -109,7 +109,7 @@ export function readAlarm(component: Component): Reminder {
   }
   const repeat = one(component, "REPEAT");
   if (repeat) {
-    requireIcs(/^\d+$/.test(repeat.value), "invalid REPEAT");
+    requireIcs(/^\+?\d+$/.test(repeat.value), "invalid REPEAT");
     alarm.repeat = Number(repeat.value);
   }
   const interval = one(component, "DURATION");

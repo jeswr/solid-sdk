@@ -4,7 +4,7 @@ import { basicDate, readDate, validateDate } from "./dates";
 import type { RecurrenceRule } from "./types";
 
 const frequencies = ["SECONDLY", "MINUTELY", "HOURLY", "DAILY", "WEEKLY", "MONTHLY", "YEARLY"];
-const weekday = /^(?:[+-]?(?:[1-9]|[1-4]\d|5[0-3]))?(?:MO|TU|WE|TH|FR|SA|SU)$/;
+const weekday = /^(?:[+-]?(?:0?[1-9]|[1-4]\d|5[0-3]))?(?:MO|TU|WE|TH|FR|SA|SU)$/;
 const selectors = [
   ["BYSECOND", "bySecond", 0, 60],
   ["BYMINUTE", "byMinute", 0, 59],
