@@ -16,7 +16,7 @@ import {
 } from "@jeswr/suite-ui";
 import type { Editor } from "@tiptap/react";
 import { AlignLeft, MoreHorizontal } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { EditorAction } from "../editor/actions";
 import { keyboardLabel } from "../lib/editor/logic";
 import { tableCommands } from "./table-actions";
@@ -102,6 +102,24 @@ export function EditorToolbar({
   online: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  const activeControl = useRef<HTMLElement | null>(null);
+  const controls = () =>
+    Array.from(ref.current?.querySelectorAll<HTMLElement>("button, select") ?? []).filter(
+      (control) =>
+        !control.matches(":disabled") && (!control.closest(".docs-toolbar-undo") || !small),
+    );
+  const rove = (active: HTMLElement) => {
+    activeControl.current = active;
+    for (const control of ref.current?.querySelectorAll<HTMLElement>("button, select") ?? [])
+      control.tabIndex = control === active ? 0 : -1;
+  };
+  // Resize and connectivity changes may remove or disable the previous Tab stop.
+  useLayoutEffect(() => {
+    const available = controls();
+    const active = activeControl.current;
+    const target = active && available.includes(active) ? active : available[0];
+    if (target) rove(target);
+  });
   const [capacity, setCapacity] = useState(3);
   const [small, setSmall] = useState(false);
   const [wide, setWide] = useState(false);
@@ -145,7 +163,41 @@ export function EditorToolbar({
     shown.add("Clear formatting");
   }
   return (
-    <div ref={ref} className="docs-toolbar" role="toolbar" aria-label="Formatting">
+    <div
+      ref={ref}
+      className="docs-toolbar"
+      role="toolbar"
+      aria-label="Formatting"
+      onFocusCapture={(event) => {
+        const control = (event.target as HTMLElement).closest<HTMLElement>("button, select");
+        if (control && controls().includes(control)) rove(control);
+      }}
+      onKeyDown={(event) => {
+        if (
+          !["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key) ||
+          event.altKey ||
+          event.ctrlKey ||
+          event.metaKey
+        )
+          return;
+        const available = controls();
+        const index = available.indexOf(event.target as HTMLElement);
+        if (index < 0) return; // Portalled menus own their keyboard interaction.
+        event.preventDefault();
+        const next =
+          event.key === "Home"
+            ? 0
+            : event.key === "End"
+              ? available.length - 1
+              : (index + (event.key === "ArrowRight" ? 1 : -1) + available.length) %
+                available.length;
+        const target = available[next];
+        if (target) {
+          rove(target);
+          target.focus();
+        }
+      }}
+    >
       <div className="docs-toolbar-undo">
         {primary.slice(0, 2).map((action) => (
           <ToolButton key={action.label} action={action} mac={mac} />

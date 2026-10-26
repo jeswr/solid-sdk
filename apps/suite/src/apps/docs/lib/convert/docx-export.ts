@@ -59,6 +59,18 @@ function inline(node: JSONContent, quote: boolean): ParagraphChild[] {
 /** Convert PM JSON directly: no HTML, editor, pod writes or remote snapshot needed. */
 export async function toDocx(json: JSONContent, readImage: ReadExportImage): Promise<Document> {
   let listInstance = 0;
+  const numberingConfig = (reference: string, start: number, listLevel: number) => ({
+    reference,
+    levels: Array.from({ length: 9 }, (_, level) => ({
+      level,
+      start: level === listLevel ? start : 1,
+      format: reference === "bullets" ? LevelFormat.BULLET : LevelFormat.DECIMAL,
+      text: reference === "bullets" ? "•" : `%${level + 1}.`,
+      alignment: AlignmentType.LEFT,
+      style: { paragraph: { indent: { left: 720 * (level + 1), hanging: 360 } } },
+    })),
+  });
+  const config = [numberingConfig("bullets", 1, 0)];
   async function blocks(
     nodes: JSONContent[],
     depth = -1,
@@ -107,15 +119,18 @@ export async function toDocx(json: JSONContent, readImage: ReadExportImage): Pro
         case "orderedList":
         case "taskList": {
           const instance = ++listInstance;
+          const reference = node.type === "orderedList" ? `numbers-${instance}` : "bullets";
+          if (node.type === "orderedList")
+            config.push(
+              numberingConfig(reference, Number(node.attrs?.start ?? 1), Math.min(depth + 1, 8)),
+            );
           for (const item of content) {
             result.push(
               ...(await blocks(
                 children(item),
                 depth + 1,
                 quote,
-                node.type === "taskList"
-                  ? undefined
-                  : { reference: node.type === "bulletList" ? "bullets" : "numbers", instance },
+                node.type === "taskList" ? undefined : { reference, instance },
                 node.type === "taskList" ? (item.attrs?.checked ? "☑ " : "☐ ") : undefined,
               )),
             );
@@ -203,16 +218,6 @@ export async function toDocx(json: JSONContent, readImage: ReadExportImage): Pro
     }
     return result;
   }
-  const config = ["bullets", "numbers"].map((reference) => ({
-    reference,
-    levels: Array.from({ length: 9 }, (_, level) => ({
-      level,
-      format: reference === "bullets" ? LevelFormat.BULLET : LevelFormat.DECIMAL,
-      text: reference === "bullets" ? "•" : `%${level + 1}.`,
-      alignment: AlignmentType.LEFT,
-      style: { paragraph: { indent: { left: 720 * (level + 1), hanging: 360 } } },
-    })),
-  }));
   const document = new Document({
     numbering: { config },
     styles: {

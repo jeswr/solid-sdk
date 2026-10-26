@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex
+import { RdfFetchError } from "@jeswr/fetch-rdf";
 import { SolidPersistence } from "@jeswr/y-solid";
 import { generateJSON, getSchema, type JSONContent } from "@tiptap/react";
 import { prosemirrorJSONToYDoc } from "@tiptap/y-tiptap";
@@ -18,6 +19,12 @@ import {
 } from "../lib/model";
 import { baseExtensions } from "./extensions";
 
+interface PendingEdit {
+  title: string;
+  baseTitle: string;
+  baseModified: string | undefined;
+}
+
 /** One owner for the CRDT, mirrors and serial snapshot queue, independent of React mounts. */
 export class DocumentPersistence {
   readonly doc = new Doc();
@@ -33,6 +40,11 @@ export class DocumentPersistence {
   conflict: TitleConflictError | undefined;
   readOnly = false;
   online = true;
+  private creation: "draft" | "creating" | "created" = "draft";
+  private draftMirror: IndexeddbPersistence | undefined;
+  private pendingEdit: PendingEdit | undefined;
+  private offlineCopy = false;
+  private destroyed: Promise<void> | undefined;
   private version = 0;
   private savedVersion = 0;
   private tail: Promise<void> | undefined;
@@ -64,59 +76,98 @@ export class DocumentPersistence {
       this.bytes += update.byteLength;
     });
   }
+  private assertActive() {
+    if (this.stopped) throw new DOMException("Document closed", "AbortError");
+  }
   async open(url?: string, recover = false) {
-    if (!url) {
-      this.local = new IndexeddbPersistence(`suite.docs.draft:${this.session.webId}`, this.doc);
+    this.assertActive();
+    let pending: unknown;
+    let cached: { webId: string; document: StoredDocument } | undefined;
+    if (!recover || !url) {
+      this.local = new IndexeddbPersistence(
+        url ?? `suite.docs.draft:${this.session.webId}`,
+        this.doc,
+      );
       await this.local.whenSynced;
-      if (await this.local.get("pending")) {
-        const title = await this.local.get("title");
+      this.assertActive();
+      pending = await this.local.get("pending");
+      this.assertActive();
+      const edit = await this.metadata<PendingEdit>("edit");
+      this.assertActive();
+      if (pending) {
+        this.pendingEdit = edit;
+        const title = edit?.title ?? (await this.local.get("title"));
+        this.assertActive();
         if (typeof title === "string") this.title = title;
         this.version++;
+        this.needsFullState = true;
       }
-      return;
+      if (!url) {
+        const creating = await this.metadata<StoredDocument>("creating");
+        this.assertActive();
+        if (creating) {
+          this.stored = creating;
+          this.creation = "creating";
+        }
+        return;
+      }
+      cached = await this.metadata<{ webId: string; document: StoredDocument }>("stored");
+      this.assertActive();
     }
-    this.stored = await this.store.read(url);
+    try {
+      this.stored = await this.store.read(url);
+    } catch (error) {
+      this.assertActive();
+      // Authorization and missing resources must still surface, even with a cache.
+      if (
+        recover ||
+        !cached ||
+        cached.webId !== this.session.webId ||
+        cached.document.url !== url ||
+        (error instanceof RdfFetchError && error.status !== undefined && error.status < 500)
+      )
+        throw error;
+      this.stored = cached.document;
+      this.online = false;
+      this.offlineCopy = true;
+    }
+    this.assertActive();
     if (!this.stored) throw new Error("not-found");
-    this.title = this.stored.data.title;
+    this.creation = "created";
+    if (!pending) this.title = this.stored.data.title;
+    this.checkTitleConflict();
     this.body = this.stored.data.body;
     this.lastSaved = Date.parse(this.stored.data.modified ?? new Date().toISOString());
     this.readOnly = url.startsWith(this.store.legacyContainer);
     const layout = docContainerUrls(url);
-    let container = this.stored.data.updateLog ?? layout.updateLog;
-    // Stored metadata never gets to redirect the authenticated update provider elsewhere.
-    if (!container.endsWith("/") || !isDirectChild(container.slice(0, -1), layout.container))
-      throw new Error("Invalid update location");
+    let container = this.updateContainer();
     if (recover) {
       container = `${layout.container}updates-${Date.now()}/`;
+      await this.local?.destroy();
+      this.assertActive();
       await createSolidDriveClient({
         storageUrl: this.session.storageUrl,
         fetch: this.session.fetch,
       }).createFolder(container);
+      this.assertActive();
       this.stored = await this.store.save(
         this.stored,
         { updateLog: container, revisionLabel: "Recovered last saved copy" },
         { regenerate: () => ({ body: this.body, format: "text/html" }) },
       );
+      this.assertActive();
     }
-    if (!recover) {
-      this.local = new IndexeddbPersistence(url, this.doc);
-      await this.local.whenSynced;
-      if (await this.local.get("pending")) {
-        const localTitle = await this.local.get("title");
-        if (typeof localTitle === "string") this.title = localTitle;
-        this.version++;
-        this.needsFullState = true;
-      }
-    }
-    if (!this.readOnly) {
+    if (!this.readOnly && !this.offlineCopy) {
       this.attachProvider(container);
-      // A populated local mirror can render immediately while the remote log is loading.
       if (this.doc.getXmlFragment("prosemirror").length === 0) await this.provider?.whenSynced;
       else
         void this.provider?.whenSynced.catch(() => {
-          this.state = "retrying";
-          this.notify();
+          if (!this.stopped) {
+            this.state = "retrying";
+            this.notify();
+          }
         });
+      this.assertActive();
       if (this.providerError) throw this.providerError;
     }
     if (this.doc.getXmlFragment("prosemirror").length === 0) {
@@ -131,12 +182,57 @@ export class DocumentPersistence {
     }
     if (recover) {
       await clearDocument(url);
+      this.assertActive();
       this.local = new IndexeddbPersistence(url, this.doc);
       await this.local.whenSynced;
+      this.assertActive();
     }
-    this.state = this.version || (this.provider && !this.provider.synced) ? "saving" : "saved";
+    await this.cacheStored();
+    this.assertActive();
+    if (this.offlineCopy) this.scheduleRetry();
+    this.state = this.conflict
+      ? "failed"
+      : this.version || (this.provider && !this.provider.synced)
+        ? "saving"
+        : "saved";
+  }
+  private updateContainer() {
+    const stored = this.stored as StoredDocument;
+    const layout = docContainerUrls(stored.url);
+    const container = stored.data.updateLog ?? layout.updateLog;
+    if (!container.endsWith("/") || !isDirectChild(container.slice(0, -1), layout.container))
+      throw new Error("Invalid update location");
+    return container;
+  }
+  private checkTitleConflict() {
+    if (
+      this.stored &&
+      this.version !== this.savedVersion &&
+      this.stored.data.title !== this.pendingEdit?.baseTitle &&
+      this.stored.data.title !== this.title
+    ) {
+      this.conflict = new TitleConflictError(this.stored.url, this.title, this.stored.data.title);
+    }
+  }
+  private async metadata<T>(key: string): Promise<T | undefined> {
+    const raw = await this.local?.get(key);
+    if (typeof raw !== "string") return undefined;
+    try {
+      return JSON.parse(raw) as T;
+    } catch {
+      return undefined;
+    }
+  }
+  private async cacheStored() {
+    if (this.stored)
+      await this.local?.set(
+        "stored",
+        JSON.stringify({ webId: this.session.webId, document: this.stored }),
+      );
   }
   private attachProvider(container: string) {
+    this.assertActive();
+    this.provider?.destroy();
     this.provider = new SolidPersistence({ doc: this.doc, container, fetch: this.session.fetch });
     this.provider.on("synced", () => {
       if (this.version === this.savedVersion && !this.providerError) {
@@ -157,9 +253,9 @@ export class DocumentPersistence {
   change(body: string, json: JSONContent) {
     if (this.readOnly) return;
     this.capture(body, json);
-    if (!this.stored && !this.title) this.title = deriveTitle(json);
+    if (this.creation === "draft" && !this.title) this.title = deriveTitle(json);
     this.markDirty();
-    if (!this.stored) void this.flush();
+    if (this.creation !== "created") void this.flush();
   }
   rename(title: string) {
     if (this.readOnly || this.title === title) return;
@@ -168,10 +264,16 @@ export class DocumentPersistence {
     void this.flush();
   }
   private markDirty() {
+    this.pendingEdit = {
+      title: this.title,
+      baseTitle: this.pendingEdit?.baseTitle ?? this.stored?.data.title ?? this.title,
+      baseModified: this.pendingEdit?.baseModified ?? this.stored?.data.modified,
+    };
     this.version++;
     this.state = "saving";
     void this.local?.set("pending", 1);
     void this.local?.set("title", this.title);
+    void this.local?.set("edit", JSON.stringify(this.pendingEdit));
     this.notify();
     if (this.timer) clearTimeout(this.timer);
     this.timer = setTimeout(() => void this.flush(), 2000);
@@ -206,19 +308,48 @@ export class DocumentPersistence {
         };
         this.state = "saving";
         this.notify();
-        if (!this.stored) {
-          this.stored = await this.store.create({ ...snapshot, title });
-          const draftMirror = this.local;
-          this.local = new IndexeddbPersistence(this.stored.url, this.doc);
+        if (this.creation !== "created") {
+          if (this.creation === "draft") {
+            this.stored = await this.store.create({ ...snapshot, title });
+            this.creation = "creating";
+            await this.local?.set("creating", JSON.stringify(this.stored));
+          }
+          const stored = this.stored as StoredDocument;
+          if (this.local?.name !== stored.url) {
+            this.draftMirror = this.local;
+            this.local = new IndexeddbPersistence(stored.url, this.doc);
+          }
           await this.local.whenSynced;
-          this.attachProvider(this.stored.data.updateLog as string);
-          await this.provider?.whenSynced;
+          if (!this.provider?.synced) {
+            this.attachProvider(this.updateContainer());
+            await this.provider?.whenSynced;
+          }
           await this.provider?.persistFullState();
-          if (draftMirror) await draftMirror.clearData();
-          this.onCreated(this.stored.url);
+          this.needsFullState = false;
+          this.providerError = undefined;
+          if (this.draftMirror) {
+            await this.draftMirror.clearData();
+            await this.draftMirror.destroy();
+            this.draftMirror = undefined;
+          }
+          this.creation = "created";
+          this.onCreated(stored.url);
+          if (stored.data.body !== snapshot.body || stored.data.title !== title) {
+            this.stored = await this.store.save(
+              stored,
+              { ...snapshot, title },
+              {
+                regenerate: () => ({
+                  body: this.body,
+                  format: "text/html",
+                  wordCount: wordCount(this.json).words,
+                }),
+              },
+            );
+          }
         } else {
           this.stored = await this.store.save(
-            this.stored,
+            this.stored as StoredDocument,
             { ...snapshot, title },
             {
               regenerate: () => ({
@@ -229,19 +360,24 @@ export class DocumentPersistence {
             },
           );
         }
-        if (this.title === title) this.title = this.stored.data.title;
+        if (this.title === title) this.title = (this.stored as StoredDocument).data.title;
+        await this.provider?.flush();
         if (this.providerError || this.needsFullState) {
           // Failed incremental writes remain in IndexedDB; reconcile with one full update.
+          await this.provider?.persistFullState();
           this.providerError = undefined;
           this.needsFullState = false;
-          await this.provider?.persistFullState();
         }
         await this.provider?.flush();
         if (this.providerError) throw this.providerError;
         if (this.local) await storeState(this.local, true);
+        await this.cacheStored();
         this.savedVersion = version;
         this.lastSaved = Date.now();
-        if (this.version === version) await this.local?.set("pending", 0);
+        if (this.version === version) {
+          await this.local?.set("pending", 0);
+          this.pendingEdit = undefined;
+        }
       }
       this.state = "saved";
       if (this.provider && (this.updates >= 200 || this.bytes >= 2 * 1024 * 1024)) {
@@ -265,8 +401,7 @@ export class DocumentPersistence {
           error instanceof ResourceWriteError && [403, 413, 507].includes(error.status)
             ? "failed"
             : "retrying";
-        if (this.state === "retrying" && !this.stopped)
-          this.timer = setTimeout(() => void this.flush(), 4000);
+        if (this.state === "retrying" && !this.stopped) this.scheduleRetry();
       }
     }
     this.notify();
@@ -277,29 +412,66 @@ export class DocumentPersistence {
     if (!remote) return;
     if (!keepMine) this.title = remote.data.title;
     this.stored = remote;
+    this.pendingEdit = undefined;
     this.conflict = undefined;
     this.markDirty();
     await this.flush();
   }
+  private scheduleRetry() {
+    if (this.stopped) return;
+    if (this.timer) clearTimeout(this.timer);
+    this.timer = setTimeout(() => void this.reconnect(), 4000);
+  }
   async reconnect() {
+    if (this.stopped) return;
+    if (typeof navigator !== "undefined" && navigator.onLine === false) {
+      this.online = false;
+      this.scheduleRetry();
+      this.notify();
+      return;
+    }
     this.online = true;
     try {
+      if (this.offlineCopy && this.stored) {
+        const remote = await this.store.read(this.stored.url);
+        this.assertActive();
+        if (!remote) throw new Error("not-found");
+        this.stored = remote;
+        this.checkTitleConflict();
+        this.offlineCopy = false;
+      }
+      if (this.creation === "created" && !this.readOnly && !this.provider?.synced) {
+        this.attachProvider(this.updateContainer());
+        await this.provider?.whenSynced;
+      }
       await this.provider?.sync();
-      if (this.provider && this.version !== this.savedVersion)
-        await this.provider.persistFullState();
+      this.assertActive();
+      if (this.provider && this.version !== this.savedVersion) this.needsFullState = true;
       await this.flush();
     } catch {
+      if (this.stopped) return;
       this.state = "retrying";
+      this.scheduleRetry();
       this.notify();
     }
   }
-  async destroy() {
+  destroy(): Promise<void> {
+    if (this.destroyed) return this.destroyed;
     this.stopped = true;
     if (this.timer) clearTimeout(this.timer);
-    await this.flush();
-    await this.provider?.flush();
-    this.provider?.destroy();
-    await this.local?.destroy();
-    this.doc.destroy();
+    this.destroyed = (async () => {
+      // An incomplete open must never allocate resources after this teardown.
+      try {
+        await this.tail;
+        if (this.creation === "created") await this.flush();
+        await this.provider?.flush();
+      } finally {
+        this.provider?.destroy();
+        await this.local?.destroy();
+        await this.draftMirror?.destroy();
+        this.doc.destroy();
+      }
+    })();
+    return this.destroyed;
   }
 }

@@ -96,10 +96,53 @@ test("creates, saves, reloads and formats a document accessibly", async ({ page 
   expect(errors).toEqual([]);
 });
 
-test("find replaces atomically and syncs offline edits before reload", async ({
+// Keep the Next shell reachable across reloads while the injected pod transport is offline.
+// The demo pod fetch rejects whenever navigator.onLine is false, just like real pod fetch.
+async function demoOffline(page: Page, offline: boolean) {
+  await page.evaluate((value) => {
+    sessionStorage.setItem("docs-test-offline", value ? "1" : "0");
+    dispatchEvent(new Event(value ? "offline" : "online"));
+  }, offline);
+}
+async function podDocument(page: Page) {
+  return page.evaluate(async () => {
+    const snapshot = await new Promise<{
+      resources: [string, { body: Uint8Array }][];
+    }>((resolve, reject) => {
+      const open = indexedDB.open("solid-suite-demo", 1);
+      open.onerror = () => reject(open.error);
+      open.onsuccess = () => {
+        const db = open.result;
+        const read = db.transaction("pods").objectStore("pods").get("https://alice.demo.pod/");
+        read.onsuccess = () => {
+          resolve(read.result);
+          db.close();
+        };
+        read.onerror = () => {
+          reject(read.error);
+          db.close();
+        };
+      };
+    });
+    const entry = snapshot.resources.find(([url]) => url.endsWith("/docs/offline-notes.ttl"));
+    const url = entry?.[0] ?? "";
+    return {
+      body: entry ? new TextDecoder().decode(entry[1].body) : "",
+      updates: snapshot.resources.filter(([child]) =>
+        child.startsWith(`${url.slice(0, -4)}/updates/`),
+      ).length,
+    };
+  });
+}
+test("find replaces atomically and recovers failed offline writes across an offline reload", async ({
   page,
-  context,
 }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "onLine", {
+      configurable: true,
+      get: () => sessionStorage.getItem("docs-test-offline") !== "1",
+    });
+  });
   const body = await newDocument(page, "Offline notes");
   await body.pressSequentially("cat cat cat");
   await expect(
@@ -113,16 +156,31 @@ test("find replaces atomically and syncs offline edits before reload", async ({
   await expect(body).toContainText("dog dog dog");
   await page.getByRole("textbox", { name: "Find", exact: true }).press("Escape");
   await expect(body).toBeFocused();
-  await context.setOffline(true);
+  await expect(
+    page.getByRole("status").filter({ hasText: "Saved to your pod · just now" }),
+  ).toBeVisible();
+  await expect.poll(async () => (await podDocument(page)).body).toContain("dog dog dog");
+  const before = await podDocument(page);
+  await demoOffline(page, true);
   await body.press("Control+End");
   await body.pressSequentially(" safely offline");
   await expect(
     page.getByRole("status").filter({ hasText: "Offline — saved on this device" }),
   ).toBeVisible();
-  await context.setOffline(false);
+  const stillRemote = await podDocument(page);
+  expect(stillRemote.body).not.toContain("safely offline");
+  expect(stillRemote.updates).toBe(before.updates);
+  await page.reload();
+  await expect(body).toContainText("dog dog dog safely offline");
+  await expect(page.getByText("Offline copy — your edits are saved on this device.")).toBeVisible();
+  await demoOffline(page, false);
   await expect(
     page.getByRole("status").filter({ hasText: "Saved to your pod · just now" }),
   ).toBeVisible();
+  await expect
+    .poll(async () => (await podDocument(page)).body)
+    .toContain("dog dog dog safely offline");
+  await expect.poll(async () => (await podDocument(page)).updates).toBeGreaterThan(before.updates);
   await page.reload();
   await expect(body).toContainText("dog dog dog safely offline");
 });

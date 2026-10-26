@@ -62,6 +62,19 @@ describe("DOCX mapping rows", () => {
     for (const fallback of ["Georgia", "Arial", "Courier New"])
       expect(fonts).toContain(`w:val="${fallback}"`);
   });
+  it("preserves ordered list starts independently at each nesting level", async () => {
+    const list = (start: number | undefined, ...content: JSONContent[]): JSONContent => ({
+      type: "orderedList",
+      ...(start === undefined ? {} : { attrs: { start } }),
+      content: content.map((node) => ({ type: "listItem", content: [node] })),
+    });
+    const { numbering } = await xml(
+      doc(list(7, p("Seven"), list(3, p("Nested three"))), list(undefined, p("One"))),
+    );
+    expect(numbering).toContain('<w:start w:val="7"/>');
+    expect(numbering).toContain('<w:start w:val="3"/>');
+    expect(numbering).toContain('<w:start w:val="1"/>');
+  });
   it("maps alignment, each inline mark, hyperlinks, hard breaks and ignored comments", async () => {
     const marks = [
       "bold",

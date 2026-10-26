@@ -31,7 +31,7 @@ export function useDocument(session: PodSession, resource: string | undefined) {
     void next.open(resource, recovery > 0).then(
       () => {
         if (live) {
-          next.online = navigator.onLine;
+          next.online = next.online && navigator.onLine;
           setRuntime(next);
         }
       },
@@ -66,7 +66,7 @@ export function useDocument(session: PodSession, resource: string | undefined) {
     document.addEventListener("visibilitychange", visibility);
     const timer = setInterval(() => {
       if (document.visibilityState === "visible" && current.current?.online)
-        void current.current.provider?.sync().catch(() => {});
+        void current.current.reconnect();
       current.current?.notify();
     }, 30_000);
     return () => {

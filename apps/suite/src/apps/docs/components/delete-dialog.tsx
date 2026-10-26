@@ -25,9 +25,9 @@ export function DeleteDialog({
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Delete this document?</AlertDialogTitle>
+          <AlertDialogTitle>Move this document to trash?</AlertDialogTitle>
           <AlertDialogDescription>
-            This permanently deletes the document and its images. This action cannot be undone.
+            The document, its versions and images will be kept in Trash and can be restored.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
@@ -39,7 +39,7 @@ export function DeleteDialog({
               onConfirm();
             }}
           >
-            Delete document
+            Move to trash
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

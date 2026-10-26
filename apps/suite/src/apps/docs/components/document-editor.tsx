@@ -457,6 +457,9 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
             }}
           />
         )}
+        {!runtime.online && (
+          <p className="docs-view-only">Offline copy — your edits are saved on this device.</p>
+        )}
         {runtime.readOnly && (
           <p className="docs-view-only">View only — ask the owner for edit access</p>
         )}

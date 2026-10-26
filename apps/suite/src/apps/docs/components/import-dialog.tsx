@@ -25,6 +25,10 @@ export function ImportDialog({
   ) => Promise<{ skipped: SkippedItem[]; done: () => void }>;
   close: () => void;
 }) {
+  // Capture before Radix moves focus into this conditionally mounted dialog.
+  const invokingControl = useRef(
+    typeof document === "undefined" ? null : (document.activeElement as HTMLElement | null),
+  );
   const id = useId();
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
@@ -63,6 +67,10 @@ export function ImportDialog({
       }}
     >
       <DialogContent
+        onCloseAutoFocus={(event: Event) => {
+          event.preventDefault();
+          if (invokingControl.current?.isConnected) invokingControl.current.focus();
+        }}
         onEscapeKeyDown={(event: KeyboardEvent) => {
           if (busy) event.preventDefault();
         }}

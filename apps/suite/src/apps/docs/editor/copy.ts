@@ -4,7 +4,7 @@ import { generateHTML, generateJSON, getSchema, type JSONContent } from "@tiptap
 import { prosemirrorJSONToYDoc } from "@tiptap/y-tiptap";
 import type { PodSession } from "@/lib/session/pod-session";
 import { wordCount } from "../lib/editor/logic";
-import type { DocsStore, StoredDocument } from "../lib/model";
+import { type DocsStore, docContainerUrls, isDirectChild, type StoredDocument } from "../lib/model";
 import { baseExtensions } from "./extensions";
 export async function copyDocument(
   store: DocsStore,
@@ -19,7 +19,7 @@ export async function copyDocument(
     if (node.type === "image" && node.attrs?.src) {
       const source = String(node.attrs.src);
       if (mapping) node.attrs.src = mapping.get(source) ?? source;
-      else assets.push(source);
+      else if (isDirectChild(source, docContainerUrls(stored.url).assets)) assets.push(source);
     }
     node.content?.forEach((child) => {
       visit(child, mapping);
