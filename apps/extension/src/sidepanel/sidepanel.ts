@@ -16,6 +16,8 @@
 // Side-effect import: registers <jeswr-login-panel>, <jeswr-account-menu>, <jeswr-theme-toggle>, etc.
 import '@jeswr/solid-elements';
 import { mountAccountSurface, resolveAccountSurfaceElements } from '../popup/account-surface';
+import { GrantsController } from './grants-controller';
+import { mountGrantsView } from './grants-view';
 
 // Wire the shared account surface (busy → signed-in / signed-out, all the auth invariants).
 // The side panel is LONG-LIVED (persists across navigation), so — unlike the ephemeral popup —
@@ -23,6 +25,22 @@ import { mountAccountSurface, resolveAccountSurfaceElements } from '../popup/acc
 // `chrome.runtime.onMessage` listener (and its refresh() calls) would leak / accumulate across
 // any remount. (mountAccountSurface also guards against double-mounting the same document.)
 const { cleanup } = mountAccountSurface(resolveAccountSurfaceElements());
+const grants = new GrantsController({
+  send: (message) => chrome.runtime.sendMessage(message),
+  subscribe: (listener) => {
+    chrome.runtime.onMessage.addListener(listener);
+    return () => chrome.runtime.onMessage.removeListener(listener);
+  },
+});
+const cleanupGrants = mountGrantsView(document.getElementById('grants')!, grants);
 
 // `pagehide` fires when the panel document is torn down (closed / navigated away); detach there.
-globalThis.addEventListener?.('pagehide', cleanup, { once: true });
+globalThis.addEventListener?.(
+  'pagehide',
+  () => {
+    cleanupGrants();
+    grants.dispose();
+    cleanup();
+  },
+  { once: true },
+);

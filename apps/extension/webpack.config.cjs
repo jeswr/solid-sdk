@@ -49,6 +49,7 @@ module.exports = {
         { from: 'src/popup/profiles.css', to: 'popup/profiles.css' },
         { from: 'src/sidepanel/sidepanel.html', to: 'sidepanel/sidepanel.html' },
         { from: 'src/sidepanel/sidepanel.css', to: 'sidepanel/sidepanel.css' },
+        { from: 'src/sidepanel/grants.css', to: 'sidepanel/grants.css' },
         { from: 'src/consent/consent.html', to: 'consent/consent.html' },
         { from: 'src/consent/consent.css', to: 'consent/consent.css' },
         { from: 'src/icons', to: 'icons' },

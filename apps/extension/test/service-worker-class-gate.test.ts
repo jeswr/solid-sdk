@@ -1724,6 +1724,50 @@ describe('EXT-05 explicit origin grant authority (adversarial)', () => {
     ).toBe(false);
   });
 
+  it('never lets a concurrent longer expiry overwrite an earlier shortening', async () => {
+    const deadline = Date.now() + 60_000;
+    await boot([parent({ expiresAt: deadline })]);
+    // A replica commit holds the profile queue, so both managers validate against the
+    // original expiry and then wait to commit in order.
+    let release!: () => void;
+    const gateOpen = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let committing!: () => void;
+    const committed = new Promise<void>((resolve) => {
+      committing = resolve;
+    });
+    const cache = await caches.open('solid-ext-replica-bytes');
+    const put = cache.put.bind(cache);
+    cache.put = async (request: RequestInfo | URL, response: Response) => {
+      committing();
+      await gateOpen;
+      return put(request as Request, response);
+    };
+    vi.spyOn(caches, 'open').mockResolvedValue(cache);
+    const pending = fetchFinance();
+    await committed;
+    const managers = Promise.all([
+      send(
+        { type: 'SOLID_ORIGIN_GRANT_EXPIRY', origin: APPX.origin, expiresAt: deadline - 10_000 },
+        EXT_SENDER,
+      ),
+      send(
+        { type: 'SOLID_ORIGIN_GRANT_EXPIRY', origin: APPX.origin, expiresAt: deadline - 1000 },
+        EXT_SENDER,
+      ),
+    ]);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    release();
+    const [shorter, longer] = await managers;
+    await pending;
+    expect(shorter.ok).toBe(true);
+    expect(longer.error).toMatch(/only be shortened/);
+    expect((storage.get('solid:origin-grants') as OriginGrant[])[0].expiresAt).toBe(
+      deadline - 10_000,
+    );
+  });
+
   it.each([
     'nonexistent',
     'grant-1',

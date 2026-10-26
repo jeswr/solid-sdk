@@ -1554,7 +1554,20 @@ async function handleOriginGrants(message: OriginGrantRequest, sender: MessageSe
       if (target.profile.sessionState !== 'active') return { error: 'Profile is not active.' };
       cancelProfileOperations(message.profileId);
     }
+    // Two managers can both pass the check above; recheck against the committed grant so
+    // a later, longer expiry can never overwrite an earlier shortening.
+    let extended = false;
     await withProfileLifecycle(grant.profileId, async () => {
+      const shorten = (g: OriginGrant): OriginGrant => {
+        if (
+          message.type !== 'SOLID_ORIGIN_GRANT_EXPIRY' ||
+          (g.expiresAt !== undefined && message.expiresAt > g.expiresAt)
+        ) {
+          extended = true;
+          return g;
+        }
+        return { ...g, expiresAt: message.expiresAt };
+      };
       await originGrants.update((all) =>
         message.type === 'SOLID_ORIGIN_GRANT_REVOKE'
           ? all.filter((g) => g.origin !== message.origin)
@@ -1568,7 +1581,7 @@ async function handleOriginGrants(message: OriginGrantRequest, sender: MessageSe
                       createdAt: Date.now(),
                       scope: { pods: [], classes: [] },
                     }
-                  : { ...g, expiresAt: message.expiresAt },
+                  : shorten(g),
             ),
       );
       if (
@@ -1579,6 +1592,8 @@ async function handleOriginGrants(message: OriginGrantRequest, sender: MessageSe
         await purgeOriginSlice(grant, record.profile.webId);
       }
     });
+    if (extended)
+      return { error: 'Expiry may only be shortened; request fresh consent to extend it.' };
     await updateDefaultIconAndBroadcast();
   }
   return { ok: true, grants: await originGrants.list() };
