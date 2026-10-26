@@ -49,6 +49,9 @@ importers:
       '@jeswr/solid-session-restore':
         specifier: workspace:*
         version: link:../../packages/solid-session-restore
+      '@jeswr/suite-vocab':
+        specifier: workspace:*
+        version: link:../../packages/suite-vocab
       '@lit/react':
         specifier: ^1.0.8
         version: 1.0.8(@types/react@19.2.17)
@@ -386,6 +389,9 @@ importers:
       '@jeswr/solid-task-model':
         specifier: workspace:*
         version: link:../../packages/solid-task-model
+      '@jeswr/suite-vocab':
+        specifier: workspace:*
+        version: link:../../packages/suite-vocab
       '@rdfjs/wrapper':
         specifier: ^0.34.0
         version: 0.34.0
@@ -1724,6 +1730,9 @@ importers:
       '@jeswr/fetch-rdf':
         specifier: workspace:*
         version: link:../../packages/fetch-rdf
+      '@jeswr/suite-vocab':
+        specifier: workspace:*
+        version: link:../../packages/suite-vocab
       '@rdfjs/wrapper':
         specifier: ^0.34.0
         version: 0.34.0
