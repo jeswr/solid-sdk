@@ -70,12 +70,27 @@ const numericOperands = new Set([
   `${AGENT}costExceeds`,
 ]);
 
+/** Canonical decimal identity, including exponent notation from Number#toString. */
+function decimalIdentity(value: string): string {
+  const [mantissa, exponent = "0"] = value.toLowerCase().split("e") as [string, string?];
+  const [integer, fraction = ""] = mantissa.replace(/^[+-]/, "").split(".") as [string, string?];
+  const digits = `${integer}${fraction}`.replace(/^0+/, "");
+  const significant = digits.replace(/0+$/, "");
+  if (significant === "") return "0";
+  const power = Number(exponent) - fraction.length + digits.length - significant.length;
+  return `${mantissa.startsWith("-") ? "-" : ""}${significant}e${power}`;
+}
+
 function numeric(value: unknown, datatype: string): boolean {
   if (typeof value !== "string" && typeof value !== "number") return false;
   if (!numericPattern.test(String(value)) || !Number.isFinite(Number(value))) return false;
   if (datatype === `${XSD}integer`)
     return /^[+-]?\d+$/.test(String(value)) && Number.isSafeInteger(Number(value));
-  if (datatype === `${XSD}decimal`) return !/[eE]/.test(String(value));
+  if (datatype === `${XSD}decimal`)
+    return (
+      !/[eE]/.test(String(value)) &&
+      decimalIdentity(String(value)) === decimalIdentity(String(Number(value)))
+    );
   return true;
 }
 
@@ -84,7 +99,7 @@ function temporal(value: unknown, datatype: string): boolean {
   const pattern =
     datatype === `${XSD}date`
       ? /^\d{4}-\d{2}-\d{2}$/
-      : /^\d{4}-\d{2}-\d{2}T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
+      : /^\d{4}-\d{2}-\d{2}T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d{1,3}0*)?(?:Z|[+-]\d{2}:\d{2})$/;
   return (
     pattern.test(value) &&
     Number.isFinite(Date.parse(value)) &&
