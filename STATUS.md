@@ -112,3 +112,54 @@ screenshots apply. Chromium was not launched. Formula recalculation, editor UI
 bundle/accessibility, RDF/network persistence and editing subscriptions are
 outside this headless spike, as recorded in REPORT.md. The full gate environment
 failure and unavailable roborev are the remaining validation limitations.
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+## Fix round 2 — 2026-10-26
+
+Starting head: `00431a154dbcd9e8e9d2676d778ea7872bc4fdf8`.
+Only the two findings from the supplied round-2 review were addressed.
+
+- `d615cbee` — `fix: preserve Univer cell value semantics`: rich-text content
+  takes precedence over scalar values and uses Univer's `getPlainText` helper
+  to remove document control markers and the final paragraph terminator.
+  Boolean cells use Univer's `getCellValue` helper, correctly handling
+  string-valued false/true and numeric representations. Added 17 regression
+  cases covering real headless load/save, CSV, storage round-trips and column
+  inference, plus scalar fallback for absent rich-text content.
+- Final commit `docs: record sst-fwm1 round two validation` records this round's
+  results; its hash is available in the lane's git log.
+
+Validation ran before the final commit:
+
+```sh
+pnpm --filter @jeswr/suite-ui run build
+pnpm --filter @jeswr/app-suite run lint && pnpm --filter @jeswr/app-suite run build && pnpm --filter @jeswr/app-suite run typecheck && pnpm --filter @jeswr/app-suite run test
+pnpm run lint:root
+TURBO_SCM_BASE=00431a154dbcd9e8e9d2676d778ea7872bc4fdf8 pnpm run gate
+```
+
+PASS: dependency build, app lint/production build/typecheck/test and root guards.
+All 73 tests passed (72 spike tests and the existing fixture-access test).
+Spike coverage remains 100%: 126/126 statements, 108/108 branches,
+25/25 functions and 112/112 lines. The affected Turbo gate passed 6/6 tasks.
+The new tests first reproduced both reported conversion errors before the fix.
+
+```sh
+pnpm run gate:full
+```
+
+FAIL outside the changed app: `@jeswr/unstorage-solid#build` again invokes
+`npm install --no-audit --no-fund --ignore-scripts --prefer-offline` through
+`scripts/build-deps.mjs` and fails with `EROFS` opening npm's read-only cache
+under `/home/runner/.npm/_cacache/tmp/`. Turbo reported 24 successful / 70 total
+tasks, 2 cached, before stopping. This is the same environment limitation
+recorded above; no unrelated source or build configuration was changed.
+
+`git diff --check` passed. `roborev status` remains unavailable (exit 127,
+`roborev: command not found`), so no automatic per-commit verdict was available.
+No dependencies were added; no dependency-policy check was needed. No UI or
+screenshots apply. No push, PR, branch switch or remote fetch/merge occurred.
+Both requested findings are fixed, with no unfinished implementation or new
+open questions. Earlier SHT-00 integration limitations remain outside this
+fix round.
