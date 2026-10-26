@@ -133,3 +133,45 @@ No dependencies, UI, screenshots or new product decisions apply to this fix roun
 `roborev` remains unavailable, so automated per-commit reviews could not run here.
 No implementation work or open questions remain for these two findings; the unrelated
 full-workspace gate blocker and dispatcher review remain outstanding.
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+## Fix round 3 — review of `1ed039656755`
+
+All three requested findings are addressed by `2cebb2ae`
+(`fix: preserve chat token boundaries with bounded scans`):
+
+- Scan explicit mention destinations with balanced parentheses, preserving the complete
+  WebID. Incomplete or unsupported mentions stay opaque and literal, including invalid
+  destinations containing whitespace, newlines or markup; no partial identity is emitted.
+- Share URL recognition between inline parsing and emphasis searches. URL-internal
+  markers remain opaque; active closing delimiters close enclosing emphasis, including
+  adjacent same-marker and mixed-marker nested spans.
+- Replace suffix-wide failed-match charges with bounded character scanners for code,
+  mentions, URLs and emoji. Charge actual inspected lookahead and stop at the shared
+  work limit. Ordinary punctuation-heavy input retains formatting, links and mentions;
+  genuinely exhausted scans still preserve the entire source literally.
+
+Regression tests cover every finding, nested destination parentheses, malformed mentions,
+URL path markers and adjacent formatting closures, failed token scans inside and outside
+emphasis, long malformed mention inputs, and shared-budget exhaustion.
+
+Validation before the final `docs: record final chat parser fix validation` commit:
+
+| Command | Result |
+| --- | --- |
+| `pnpm --filter @jeswr/suite-ui run build` | PASS; existing app dependency. |
+| `pnpm --filter @jeswr/app-suite run lint && pnpm --filter @jeswr/app-suite run build && pnpm --filter @jeswr/app-suite run typecheck && pnpm --filter @jeswr/app-suite run test` | PASS; 83 tests (82 chat + 1 existing). |
+| `pnpm run lint:root` | PASS; all root guards and 74 contrast pairs. |
+| `GIT_ALLOW_PROTOCOL=file TURBO_SCM_BASE=b875edd55174679032dfaeed51d0634f95ec5f8c pnpm run gate` | PASS; 7/7 tasks, none cached. |
+| `GIT_ALLOW_PROTOCOL=file pnpm run gate:full` | BLOCKED outside this lane: existing `@jeswr/unstorage-solid#build` npm bootstrap fails with `EROFS` writing `/home/runner/.npm/_cacache/tmp/`; 5 successful / 50 scheduled tasks before abort. Remote Git protocols were disabled for both Turbo gates to honor the lane restriction. |
+| `git diff --check` | PASS. |
+
+Coverage remains 100% per file for statements, branches, functions and lines:
+271/271 statements, 208/208 branches, 14/14 functions and 248/248 lines.
+No dependencies were added; UI, screenshots and package-policy checks do not apply.
+Conservative handling follows the fix brief: unsupported explicit mentions remain whole
+literal text. No implementation work or new open questions remain for these findings.
+`roborev` remains unavailable; automated per-commit verdicts could not be obtained.
+The unrelated full-workspace gate blocker and dispatcher review remain outstanding.
+Tracker changes remain with the dispatcher; this lane stays inside its dedicated checkout.
