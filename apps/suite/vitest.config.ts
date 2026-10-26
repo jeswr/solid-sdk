@@ -34,6 +34,7 @@ export default defineConfig({
         "src/apps/drive/lib/upload/**/*.ts",
         "src/apps/chat/lib/text/**/*.ts",
         "src/apps/photos/lib/exif/**/*.ts",
+        "src/apps/photos/lib/transform/**/*.ts",
         "src/apps/photos/lib/timeline/**/*.ts",
         "src/apps/music/lib/queue/**/*.ts",
         "src/apps/music/lib/model/**/*.ts",
