@@ -11,6 +11,9 @@
  * The incremental cursor lives for the page's lifetime — a second click on
  * "Import again" syncs incrementally where the platform supports it.
  */
+// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
+import { createFetchPodWriter, createSourceAuth } from "@jeswr/pod-connectors";
 import { useCallback, useRef, useState } from "react";
 import { NoStorageError } from "@/lib/errors";
 import { authorize } from "@/lib/integrations/core/oauth";
@@ -33,7 +36,7 @@ export interface ConnectState {
 }
 
 export function useConnect(adapter: IntegrationAdapter | undefined) {
-  const { webId, profile, activeStorage } = useSession();
+  const { webId, profile, activeStorage, podFetch, sourceFetch } = useSession();
   const [state, setState] = useState<ConnectState>({ phase: "idle" });
   const cursorRef = useRef<string | undefined>(undefined);
   // Tier-B is approval-gated by contract (registry.statusOf never returns "live"
@@ -44,7 +47,7 @@ export function useConnect(adapter: IntegrationAdapter | undefined) {
   const live = adapter ? adapter.metadata.tier !== "B" && isLive(adapter) : false;
 
   const start = useCallback(async () => {
-    if (!adapter || !webId) return;
+    if (!adapter || !webId || !profile) return;
     const podRoot = activeStorage ?? profile?.storages[0];
     if (!podRoot) {
       setState({ phase: "error", error: new NoStorageError(webId) });
@@ -54,17 +57,22 @@ export function useConnect(adapter: IntegrationAdapter | undefined) {
       let token = getToken(adapter.metadata.id);
       if (live && !token && adapter.oauth) {
         setState({ phase: "authorizing" });
-        token = await authorize(adapter.metadata.id, adapter.oauth);
+        token = await authorize(adapter.metadata.id, adapter.oauth, sourceFetch);
         setToken(adapter.metadata.id, token);
       }
 
       setState({ phase: "importing" });
       const report = await runImport({
         adapter,
-        webId,
-        podRoot,
+        podWriter: createFetchPodWriter({
+          adapterId: adapter.metadata.id,
+          webId,
+          profileDocumentUrl: profile.profileDocumentUrl,
+          podRoot,
+          fetch: podFetch,
+        }),
         mode: live ? "live" : "demo",
-        token: live ? token : undefined,
+        sourceAuth: live ? createSourceAuth(adapter.metadata.id, adapter, token, sourceFetch) : undefined,
         cursor: cursorRef.current,
         onProgress: (progress) =>
           setState((s) => ({ ...s, phase: "importing", progress })),
@@ -77,7 +85,7 @@ export function useConnect(adapter: IntegrationAdapter | undefined) {
         error: e instanceof Error ? e : new Error(String(e)),
       });
     }
-  }, [adapter, webId, profile, activeStorage, live]);
+  }, [adapter, webId, profile, activeStorage, live, podFetch, sourceFetch]);
 
   const reset = useCallback(() => setState({ phase: "idle" }), []);
 

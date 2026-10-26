@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol — HTTP coverage gate
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
@@ -13,6 +14,9 @@ export default defineConfig({
       reporter: ["text", "json-summary", "json"],
       include: ["src/**/*.ts"],
       exclude: ["src/**/*.d.ts", "src/cli.ts"],
+      thresholds: {
+        "src/http.ts": { branches: 100, functions: 100, lines: 100, statements: 100 },
+      },
     },
   },
 });

@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-5
 /**
  * The public RECONCILER — read either chat shape into the canonical model, write
@@ -24,6 +25,7 @@ import type { DatasetCore } from "@rdfjs/types";
 import type { Store } from "n3";
 import { type As2MessageDoc, as2MessageSubject, buildAs2Message, parseAs2Message } from "./as2.js";
 import type { CanonicalMessage } from "./canonical.js";
+import { activityStreamsDocumentLoader } from "./context-loader.js";
 import {
   buildLongChatMessage,
   type LongChatMessageDoc,
@@ -260,7 +262,10 @@ async function parseToDataset(
 ): Promise<DatasetCore> {
   const resolvedContentType = contentType ?? "text/turtle";
   const { parseRdf } = await import("@jeswr/fetch-rdf");
-  return parseRdf(body, resolvedContentType, { baseIRI: baseIri });
+  return parseRdf(body, resolvedContentType, {
+    baseIRI: baseIri,
+    documentLoader: activityStreamsDocumentLoader,
+  });
 }
 
 // --- Round-trip (shared-field-preservation) ---------------------------------

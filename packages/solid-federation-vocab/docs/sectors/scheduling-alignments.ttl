@@ -1,8 +1,8 @@
 # AUTHORED-BY Codex GPT-6.1-Sol
 # AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 #
-@prefix sched:   <https://w3id.org/jeswr/sectors/scheduling#> .
-@prefix core:    <https://w3id.org/jeswr/core#> .
+@prefix sched:   <https://jeswr.org/ns/sectors/scheduling#> .
+@prefix core:    <https://jeswr.org/ns/core#> .
 @prefix owl:     <http://www.w3.org/2002/07/owl#> .
 @prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
 @prefix skos:    <http://www.w3.org/2004/02/skos/core#> .
@@ -35,12 +35,13 @@
 # default to closeMatch — the conservative seam that keeps Core∪Sector clean.
 # =============================================================================
 
-<https://w3id.org/jeswr/sectors/scheduling/alignments> a owl:Ontology ;
+<https://jeswr.org/ns/sectors/scheduling/alignments> a owl:Ontology ;
+    dcterms:description "Version 2.0.0 rebases this ontology from its legacy w3id namespace to https://jeswr.org/ns/ (DECISIONS V1)."@en ;
     dcterms:title "Solid Scheduling — external alignments (gUFO re-base)"@en ;
-    owl:imports <https://w3id.org/jeswr/sectors/scheduling> ;
-    owl:versionInfo "1.1.0" ;
+    owl:imports <https://jeswr.org/ns/sectors/scheduling> ;
+    owl:versionInfo "2.0.0" ;
     dcterms:modified "2026-10-25"^^xsd:date ;
-    owl:versionIRI <https://w3id.org/jeswr/sectors/scheduling/alignments/1.1.0> ;
+    owl:versionIRI <https://jeswr.org/ns/sectors/scheduling/alignments/2.0.0> ;
     rdfs:comment "Mode-A thin alignments (separate file, not in the reasoned closure) to iCalendar (RFC 5545 / W3C cal:), schema.org and W3C OWL-Time. Reuse-before-mint. "@en .
 
 dcterms:title a owl:AnnotationProperty .

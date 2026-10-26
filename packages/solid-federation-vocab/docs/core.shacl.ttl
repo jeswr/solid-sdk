@@ -1,7 +1,7 @@
 # AUTHORED-BY Codex GPT-6.1-Sol
 # AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 #
-@prefix core:  <https://w3id.org/jeswr/core#> .
+@prefix core:  <https://jeswr.org/ns/core#> .
 @prefix sh:    <http://www.w3.org/ns/shacl#> .
 @prefix owl:   <http://www.w3.org/2002/07/owl#> .
 @prefix rdf:   <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
@@ -30,9 +30,11 @@
 # (conformingSet(P@J) ⊆ conformingSet(G), R11 §3.4).
 # =============================================================================
 
-<https://w3id.org/jeswr/core/shapes> a owl:Ontology ;
+<https://jeswr.org/ns/core/shapes> a owl:Ontology ;
+    dcterms:description "Version 2.0.0 rebases this ontology from its legacy w3id namespace to https://jeswr.org/ns/ (DECISIONS V1)."@en ;
+    owl:versionIRI <https://jeswr.org/ns/core/shapes/2.0.0> ;
     dcterms:title "Solid Core Ontology — SHACL profile"@en ;
-    owl:versionInfo "1.1.0" ;
+    owl:versionInfo "2.0.0" ;
     dcterms:modified "2026-10-25"^^xsd:date ;
     rdfs:comment "F4 node shapes for the instantiable gUFO-rebased Core classes. Open by default; MUST=Violation, SHOULD=Warning. v1.1.0 validates optional validity dates as date or dateTime. v1.0.1 added core:QuantityShape (numericValue MUST, unit SHOULD)."@en .
 
