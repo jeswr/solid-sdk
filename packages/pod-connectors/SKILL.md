@@ -16,7 +16,9 @@ Runners receive PodWriter and SourceAuth explicitly. Every adapter uses ctx.api 
 I/O and ctx.write for Pod I/O. Keep credentials on their own transport. Fetch-backed writes
 are confined to the adapter container; Type Index documents must be within a `pim:storage`
 or `solid:storage` root advertised by the user's WebID, independently of the import destination.
-Preserve ETags and conditional PUT semantics. Use typed RDF wrappers and N3 Writer, never inline quads.
+Preserve ETags and conditional PUT semantics. Runners allow one run per connector container
+at a time (an overlapping run in the same process is refused); hosts sharing a pod across
+processes must serialise runs of the same connector. Use typed RDF wrappers and N3 Writer, never inline quads.
 Hosts pass the canonical `profileDocumentUrl` from their existing profile load into
 createFetchPodWriter. Pin profile reads and updates to that document while keeping the WebID
 as the RDF subject. Do not resolve redirects or fetch an unauthenticated profile during
