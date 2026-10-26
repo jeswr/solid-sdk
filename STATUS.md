@@ -108,3 +108,56 @@ edge cases before final validation. No dependencies, UI, screenshots, tracker st
 PRs, branch switches or merges are part of this fix round. All four requested parser findings
 are addressed. Full-workspace validation and roborev remain limited as above; there are no
 open implementation questions or unfinished parser changes.
+
+## Fix round 3 — sst-oi07
+
+Addresses the complete review at `solid-sdk-lane-sst-oi07-d2cd0d3bfceb.md` on
+`lane/sst-oi07`; affected-gate base remains `e896d0c579080dcf4f21ed0fbcc45b1a49a6e577`.
+
+### Commits
+
+- `8045a282` — `fix: preserve quick-add deadline meaning`: resolve current week/month/year
+  boundaries from the injected calendar; leave unsupported anchored offsets unparsed; retain
+  all compact compound duration units; mask reminder calendar qualifiers connected by `on`
+  without consuming a separate adjacent deadline. Add regression tests for all four findings
+  and document the conservative anchor policy in the parser README.
+- `e5c84dc4` — `fix: retain unanchored signed durations`: distinguish signed offsets from an
+  explicit anchor from standalone signed elapsed durations; preserve existing positive,
+  negative and `from now` forms with compatibility regressions.
+- `f8412a82` — `fix: preserve recurrence text in unresolved anchors`: detect anchors before
+  recurrence extraction, so `2 hours before every Monday` stays intact. Preserve all scheduling
+  text in unsupported anchored inputs while continuing to parse metadata.
+- Final `docs: record quick-add round-three validation` commit updates this report last.
+
+### Final validation
+
+| Exact command | Result |
+| --- | --- |
+| `pnpm --filter @jeswr/suite-ui build` | PASS; dependency build only, no suite-ui source changes. |
+| `pnpm --filter @jeswr/app-suite run lint && pnpm --filter @jeswr/app-suite run build && pnpm --filter @jeswr/app-suite run typecheck && TZ=UTC pnpm --filter @jeswr/app-suite run test` | PASS; lint, production build, typecheck, 265 tests. Quickadd coverage: 196/196 statements, 168/168 branches, 24/24 functions, 172/172 lines (100%). |
+| `TZ=America/New_York pnpm --filter @jeswr/app-suite test` | PASS; 265 tests, 100% quickadd coverage. |
+| `TZ=Asia/Kolkata pnpm --filter @jeswr/app-suite test` | PASS; 265 tests, 100% quickadd coverage. |
+| `pnpm run lint:root` | PASS; workspace guards and 74 contrast pairs. Also passes in the affected gate. |
+| `TURBO_SCM_BASE=e896d0c579080dcf4f21ed0fbcc45b1a49a6e577 pnpm run gate` | PASS; 7/7 affected Turbo tasks. Repeated with this report present before the final commit. |
+| `GIT_ALLOW_PROTOCOL=file pnpm run gate:full --env-mode=loose` | BLOCKED outside this lane: `@jeswr/unstorage-solid#build` attempts a remote `fetch-rdf` clone. Git rejects it with `fatal: transport 'https' not allowed`; 28 successful / 169 scheduled tasks before abort. |
+| `roborev status` | UNAVAILABLE; command not found (exit 127), so no automated verdict obtained. |
+| `git diff --check` | PASS. |
+
+The full gate explicitly uses Turbo's loose environment mode so the Git protocol restriction
+reaches dependency bootstrap scripts. The remote clone was blocked before network access;
+no remote fetch or merge ran. The full gate was not retried because its blocker is unchanged
+by the final anchor-preservation adjustments. All touched-app checks and the affected
+gate were rerun after those adjustments. An intermediate focused run caught chrono discarding
+the time prefix of a negative anchored offset; the final guard checks the separately parsed
+adjacent anchor and all regression cases pass in the three required host zones.
+
+Conservative choice required by the final-round brief: anchored offsets remain title text,
+with no due span or inferred deadline, rather than applying their duration to now. For an
+input containing an unsupported unmasked anchor, all deadline text stays unparsed; metadata
+tokens still parse and recurrence text stays literal. Unknown connected reminder qualifiers likewise stay
+literal rather than producing a partial deadline. Exact anchored-offset scheduling is
+intentionally unsupported and documented, not unfinished implementation work.
+
+No dependencies, UI, screenshots, tracker mutations, pushes, PRs, branch switches, remote
+fetches/merges or other-checkout edits were introduced. All four requested findings are
+addressed. Full-workspace validation and roborev remain limited as above. No open questions.
