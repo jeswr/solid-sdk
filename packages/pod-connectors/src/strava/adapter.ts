@@ -74,6 +74,8 @@ export function createStravaAdapter(limits?: RunLimits): IntegrationAdapter {
             ID,
             ctx.api,
             `${API}/athlete/activities?per_page=100${after}${before === undefined ? "" : `&before=${before}`}`,
+            undefined,
+            budget,
           ),
         );
         budget.items(batch.length);

@@ -15,6 +15,7 @@ import { createGithubAdapter } from "./adapter.js";
 import { USER } from "./fixtures.js";
 
 const first = Array.from({ length: 100 }, (_, id) => ({ id, name: `repository-${id}` }));
+const jsonBytes = (value: unknown) => new TextEncoder().encode(JSON.stringify(value)).byteLength;
 
 describe("GitHub pagination bounds", () => {
   it.each([
@@ -31,6 +32,24 @@ describe("GitHub pagination bounds", () => {
       requests: 3,
     },
     { limits: { maxRequests: 3, maxItems: 0 }, second: [], error: "item budget", requests: 1 },
+    {
+      limits: { maxRequests: 3, maxItems: 200, maxBytes: jsonBytes(USER) - 1 },
+      second: [{ id: 100 }],
+      error: "data budget",
+      requests: 1,
+    },
+    {
+      limits: { maxRequests: 3, maxItems: 200, maxBytes: jsonBytes(USER) + jsonBytes(first) - 1 },
+      second: [{ id: 100 }],
+      error: "data budget",
+      requests: 2,
+    },
+    {
+      limits: { maxRequests: 3, maxItems: 200, maxBytes: jsonBytes(USER) + jsonBytes(first) },
+      second: [{ id: 100 }],
+      error: "data budget",
+      requests: 3,
+    },
     { limits: undefined, second: first, error: "non-advancing repository page", requests: 3 },
     { limits: undefined, second: [first[0]], error: "non-advancing repository page", requests: 3 },
   ])("retains the checkpoint on $error ($requests requests)", async ({
@@ -79,7 +98,10 @@ describe("GitHub pagination bounds", () => {
   });
 
   it("starts a fresh budget each run of the same adapter", async () => {
-    const adapter = createGithubAdapter({ maxRequests: 2, maxItems: 4 });
+    const maxBytes = createGithubAdapter()
+      .fixtures()
+      .reduce((total, route) => total + jsonBytes(route.json), 0);
+    const adapter = createGithubAdapter({ maxRequests: 2, maxItems: 4, maxBytes });
     const first = await demoImport(adapter);
     const second = await demoImport(adapter, { pod: first.pod });
     expect(second.report.state?.counts.items).toBe(4);

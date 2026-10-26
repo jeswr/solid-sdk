@@ -60,7 +60,7 @@ export function createGithubAdapter(limits?: RunLimits): IntegrationAdapter {
 
       ctx.progress({ label: "Fetching your GitHub profile…", done: 0, total: 2 });
       budget.request();
-      const user = (await getJson<GitHubUser>(ID, ctx.api, `${API}/user`)) ?? {};
+      const user = (await getJson<GitHubUser>(ID, ctx.api, `${API}/user`, undefined, budget)) ?? {};
       budget.items(1);
 
       const profileDoc = ctx.resolve("work/profile.ttl");
@@ -96,6 +96,8 @@ export function createGithubAdapter(limits?: RunLimits): IntegrationAdapter {
             ctx.api,
             // Pushes must not move unseen repositories ahead of a page already read.
             `${API}/user/repos?sort=created&direction=asc&per_page=100&page=${page}`,
+            undefined,
+            budget,
           ),
         );
         budget.items(batch.length);

@@ -147,6 +147,26 @@ describe("Strava timestamp windows", () => {
       error: "item budget",
       requests: 2,
     },
+    {
+      limits: {
+        maxRequests: 3,
+        maxItems: 10,
+        maxBytes: new TextEncoder().encode(JSON.stringify(first)).byteLength - 1,
+      },
+      second: [{ id: 3 }],
+      error: "data budget",
+      requests: 1,
+    },
+    {
+      limits: {
+        maxRequests: 3,
+        maxItems: 10,
+        maxBytes: new TextEncoder().encode(JSON.stringify(first)).byteLength,
+      },
+      second: [first[1]],
+      error: "data budget",
+      requests: 2,
+    },
     { limits: undefined, second: first, error: "non-advancing activity window", requests: 2 },
     {
       limits: undefined,
@@ -203,7 +223,13 @@ describe("Strava timestamp windows", () => {
   });
 
   it("starts a fresh budget each run of the same adapter", async () => {
-    const adapter = createStravaAdapter({ maxRequests: 2, maxItems: 3 });
+    const maxBytes = stravaAdapter
+      .fixtures()
+      .reduce(
+        (total, route) => total + new TextEncoder().encode(JSON.stringify(route.json)).byteLength,
+        0,
+      );
+    const adapter = createStravaAdapter({ maxRequests: 2, maxItems: 3, maxBytes });
     const first = await demoImport(adapter);
     const second = await demoImport(adapter, { pod: first.pod });
     expect(second.report.state?.counts.items).toBe(3);

@@ -131,12 +131,17 @@ posts newest-first to the last saved fullname and snapshots subscribed communiti
 Both use framework subject replacement for incremental writes. A cursor-free import
 replaces these collections, including items removed at the source.
 
-GitHub and Strava create one shared-core `RunBudget` per import. Hosts can inject
-`{ maxRequests, maxItems }` through `createGithubAdapter(limits)` or
-`createStravaAdapter(limits)` from their adapter entry points; the existing singleton exports
-use the shared defaults. GitHub's profile and repository requests share the same budget.
-Items are counted before buffering, including overlaps and malformed entries. Exceeding a
-budget fails without advancing the checkpoint. GitHub also rejects a page whose valid IDs have
+GitHub, Strava and Reddit create one shared-core `RunBudget` per import. Hosts can inject
+`{ maxRequests, maxItems, maxBytes? }` through `createGithubAdapter(limits)`,
+`createStravaAdapter(limits)` or `createRedditAdapter(limits)` from their adapter entry points;
+the existing singleton exports use the shared defaults: 20,000 requests, 2,000,000 items and
+512 MiB of cumulative response bytes. Omitting `maxBytes` retains that default byte limit.
+Every JSON response is charged as bytes stream in and also retains the 32 MiB per-response cap.
+GitHub's profile and repository requests share the same budget; Reddit's identity lookup,
+saved posts and subscribed communities likewise share one budget. Identity/profile lookups
+count as one item. Page items are counted before buffering, including overlaps, malformed
+entries and entries beyond Reddit's saved checkpoint. Exceeding a budget fails without
+advancing the checkpoint. GitHub also rejects a page whose valid IDs have
 all been seen. Strava rejects any activity at or after the requested `before` timestamp;
 a window with no new activity IDs ends traversal successfully, including an overlap-only
 terminal window. More than 100 activities sharing a start second can end traversal early.
