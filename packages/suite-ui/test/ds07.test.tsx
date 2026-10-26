@@ -140,6 +140,24 @@ describe("Toolbar", () => {
     await user.keyboard("{Escape}");
     expect(document.activeElement).toBe(screen.getByRole("button", { name: "More" }));
   });
+  it("keeps focus in the toolbar when a reorder moves the focused action into overflow", () => {
+    const { rerender } = render(<Toolbar label="Files" actions={actions} />);
+    screen.getByRole("button", { name: "Upload" }).focus();
+    const [upload, folder, share, ...rest] = actions as [
+      (typeof actions)[number],
+      (typeof actions)[number],
+      (typeof actions)[number],
+      ...typeof actions,
+    ];
+    rerender(<Toolbar label="Files" actions={[share, upload, folder, ...rest]} />);
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Upload" }));
+    rerender(<Toolbar label="Files" actions={[folder, share, upload, ...rest]} />);
+    expect(screen.queryByRole("button", { name: "Upload" })).toBeNull();
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "More" }));
+    act(() => (document.activeElement as HTMLElement).blur());
+    rerender(<Toolbar label="Files" actions={actions} />);
+    expect(document.activeElement).toBe(document.body);
+  });
   it("leaves modified arrow keys to the browser", () => {
     available = 900;
     render(<Toolbar label="Files" actions={actions} />);

@@ -6,17 +6,38 @@ import { defaultRangeExtractor } from "@tanstack/react-virtual";
 import { type KeyboardEvent, useLayoutEffect, useRef, useState } from "react";
 import type { SelectionModel } from "./use-selection.js";
 
+// Widget roles own their activation even when they are not natively focusable.
+const WIDGET_ROLES = [
+  "button",
+  "link",
+  "checkbox",
+  "radio",
+  "switch",
+  "tab",
+  "option",
+  "listbox",
+  "combobox",
+  "textbox",
+  "searchbox",
+  "slider",
+  "spinbutton",
+  "menuitem",
+  "menuitemcheckbox",
+  "menuitemradio",
+  "treeitem",
+];
+const INTERACTIVE = [
+  "button, a, input, label, select, textarea, summary, [contenteditable]",
+  "[data-row-interactive], [tabindex]",
+  ...WIDGET_ROLES.map((role) => `[role="${role}"]`),
+].join(", ");
+
 /** Descendant controls own their activation; clicks on the row itself still select it. */
 export function isInteractiveDescendant(event: {
   target: EventTarget;
   currentTarget: HTMLElement;
 }) {
-  const control =
-    event.target instanceof Element
-      ? event.target.closest(
-          'button, a, input, label, select, textarea, summary, details > summary, [role="menuitem"], [contenteditable], [data-row-interactive], [role="button"], [role="link"], [role="combobox"], [tabindex]',
-        )
-      : null;
+  const control = event.target instanceof Element ? event.target.closest(INTERACTIVE) : null;
   return control !== null && control !== event.currentTarget;
 }
 

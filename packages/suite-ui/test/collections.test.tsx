@@ -491,6 +491,11 @@ for (const kind of ["table", "grid"] as const) {
             <input type="checkbox" />
             <span>Custom label</span>
           </label>
+          <div role="listbox" aria-label="Custom suggestions">
+            <div role="option" aria-selected="false">
+              <span>Custom option</span>
+            </div>
+          </div>
         </>
       );
     const props = { items, getKey, getLabel, label: "Files", onOpen };
@@ -518,6 +523,7 @@ for (const kind of ["table", "grid"] as const) {
       screen.getByText("Custom editor"),
       screen.getByText("Custom interactive area"),
       screen.getByText("Custom label"),
+      screen.getByText("Custom option"),
     ]) {
       await user.click(control);
       for (const name of ["Alpha", "Beta"])

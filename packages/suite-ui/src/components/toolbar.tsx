@@ -26,6 +26,8 @@ export function Toolbar({ label, actions }: ToolbarProps) {
   const more = useRef<HTMLButtonElement>(null);
   const restoreFocus = useRef(false);
   const expandFocus = useRef(false);
+  /** The toolbar button that last held focus, to recover it if a re-render unmounts it. */
+  const lastFocused = useRef<HTMLElement | null>(null);
   const [visible, setVisible] = useState(actions.length);
   const [tabStop, setTabStop] = useState<string | undefined>(undefined);
   const [open, setOpen] = useState(false);
@@ -92,6 +94,23 @@ export function Toolbar({ label, actions }: ToolbarProps) {
     }
   }, [visible, actions.length]);
 
+  useLayoutEffect(() => {
+    const lost = lastFocused.current;
+    if (!lost || lost.isConnected) return;
+    lastFocused.current = null;
+    const active = document.activeElement;
+    if (active && active !== document.body) return;
+    // The focused action was reordered into overflow (or removed): keep focus in the toolbar.
+    const same = Array.from(
+      root.current?.querySelectorAll<HTMLButtonElement>("button[data-action-id]") ?? [],
+    ).find((button) => button.dataset.actionId === lost.dataset.actionId && !button.disabled);
+    (
+      same ??
+      more.current ??
+      root.current?.querySelector<HTMLButtonElement>("button:not(:disabled)")
+    )?.focus();
+  });
+
   const shown = actions.slice(0, visible);
   const hidden = actions.slice(visible);
   const enabledIds = shown.filter((action) => !action.disabled).map((action) => action.id);
@@ -105,6 +124,14 @@ export function Toolbar({ label, actions }: ToolbarProps) {
         className="suite-toolbar"
         role="toolbar"
         aria-label={label}
+        onFocus={(event) => {
+          lastFocused.current = event.target;
+        }}
+        onBlur={(event) => {
+          // Focus deliberately left the toolbar; only an unmounted button is recovered.
+          if (event.relatedTarget && !event.currentTarget.contains(event.relatedTarget))
+            lastFocused.current = null;
+        }}
         onKeyDown={(event) => {
           if (
             event.target instanceof HTMLElement &&
