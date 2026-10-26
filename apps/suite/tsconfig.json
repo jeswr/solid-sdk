@@ -19,7 +19,8 @@
       }
     ],
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "yjs": ["./node_modules/yjs"]
     },
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true
