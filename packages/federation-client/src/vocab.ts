@@ -1,14 +1,15 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+// AUTHORED-BY Codex GPT-6.1-Sol
 //
 // Term IRIs for the Federation App-Registration vocabulary (fedapp:) and the
 // adjacent vocabularies it references. These are the single source of the
 // string IRIs the typed wrappers, the validator and the serialiser all key on.
 //
 // Source of truth: jeswr/solid-federation-vocab `fedapp.ttl`
-// (https://w3id.org/jeswr/fed#). Keep in lock-step with that ontology.
+// (https://jeswr.org/ns/fed#). Keep in lock-step with that ontology.
 
 /** The fedapp: namespace IRI. */
-export const FEDAPP = "https://w3id.org/jeswr/fed#" as const;
+export const FEDAPP = "https://jeswr.org/ns/fed#" as const;
 
 /** The WAC `acl:` namespace IRI (access modes). */
 export const ACL = "http://www.w3.org/ns/auth/acl#" as const;
@@ -19,8 +20,8 @@ export const SHACL = "http://www.w3.org/ns/shacl#" as const;
 /** `rdf:type`. */
 export const RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type" as const;
 
-/** The sector base IRI (`https://w3id.org/jeswr/sectors/`). */
-export const SECTOR_BASE = "https://w3id.org/jeswr/sectors/" as const;
+/** The sector base IRI (`https://jeswr.org/ns/sectors/`). */
+export const SECTOR_BASE = "https://jeswr.org/ns/sectors/" as const;
 
 /** Classes. */
 export const FEDAPP_APP = `${FEDAPP}App` as const;
@@ -66,7 +67,7 @@ export const KNOWN_SECTOR_SLUGS = [
 /** A known sector slug. */
 export type SectorSlug = (typeof KNOWN_SECTOR_SLUGS)[number];
 
-/** The full IRI of a known sector (`https://w3id.org/jeswr/sectors/<slug>`). */
+/** The full IRI of a known sector (`https://jeswr.org/ns/sectors/<slug>`). */
 export function sectorIri(slug: SectorSlug): string {
   return `${SECTOR_BASE}${slug}`;
 }
@@ -79,4 +80,9 @@ export function accessModeName(iri: string): AccessMode | undefined {
     }
   }
   return undefined;
+}
+
+/** Read alias for this package's vocabulary; never used by builders. @internal */
+export function legacyIri(iri: string): string {
+  return iri.replace("https://jeswr.org/ns/fed#", "https://w3id.org/jeswr/fed#");
 }
