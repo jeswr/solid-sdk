@@ -409,6 +409,83 @@ describe("recurrence arithmetic", () => {
       ),
     ).toEqual(allDay("9999-12-31"));
   });
+  it.each<RepeatRule>([
+    rule("DAILY"),
+    rule("WEEKLY"),
+    rule("WEEKLY", { byDay: ["MO"] }),
+    rule("MONTHLY"),
+    rule("YEARLY"),
+    rule("DAILY", { interval: Number.MAX_SAFE_INTEGER }),
+    rule("MONTHLY", { interval: Number.MAX_SAFE_INTEGER }),
+    rule("YEARLY", { interval: Number.MAX_SAFE_INTEGER }),
+  ])("exhausts a timed %j before rejecting calendar overflow", (repeat) => {
+    const due = timed("9999-12-31T12:00:00Z");
+    for (const until of [due, timed("9999-12-31T23:59:59.999Z")]) {
+      const recurrence = { ...repeat, until };
+      const original = task("final-timed", { due, recurrence });
+      const before = structuredClone(original);
+      const options = context(undefined, "UTC");
+      expect(nextOccurrence(due, recurrence, options)).toBeUndefined();
+      expect(completeTask(original, options)).toEqual({
+        task: {
+          ...original,
+          state: "completed",
+          completedAt: "2026-10-26T12:00:00.000Z",
+          modifiedAt: "2026-10-26T12:00:00.000Z",
+        },
+      });
+      expect(original).toEqual(before);
+    }
+  });
+  it("exhausts timed overflow from the completion clock or without a due", () => {
+    const options = context("9999-12-31T12:00:00Z", "UTC");
+    const recurrence = rule("DAILY", {
+      from: "completion",
+      until: timed("9999-12-31T23:59:59.999Z"),
+    });
+    for (const due of [undefined, timed("2026-10-26T12:00:00Z")]) {
+      expect(nextOccurrence(due, recurrence, options)).toBeUndefined();
+      const original = task("final-completion", {
+        ...(due === undefined ? {} : { due }),
+        recurrence,
+      });
+      expect(completeTask(original, options).task.state).toBe("completed");
+    }
+  });
+  it("compares overflowing local dates against the timed cutoff's instant", () => {
+    const due = timed("9999-12-30T10:00:00Z");
+    const options = context(undefined, "Pacific/Kiritimati");
+    expect(
+      nextOccurrence(due, rule("DAILY", { until: timed("9999-12-31T09:59:59.999Z") }), options),
+    ).toBeUndefined();
+    for (const until of ["9999-12-31T10:00:00Z", "9999-12-31T23:59:59.999Z"]) {
+      fails(
+        () => nextOccurrence(due, rule("DAILY", { until: timed(until) }), options),
+        "date-out-of-range",
+      );
+    }
+  });
+  it("keeps the final supported timed occurrence at an inclusive cutoff", () => {
+    expect(
+      nextOccurrence(
+        timed("9999-12-30T12:00:00Z"),
+        rule("DAILY", { until: timed("9999-12-31T12:00:00Z") }),
+        context(undefined, "UTC"),
+      ),
+    ).toEqual(timed("9999-12-31T12:00:00.000Z"));
+  });
+  it.each<RepeatRule>([
+    rule("DAILY"),
+    rule("WEEKLY"),
+    rule("MONTHLY"),
+    rule("YEARLY"),
+    rule("MONTHLY", { interval: Number.MAX_SAFE_INTEGER }),
+  ])("still rejects timed %j overflow without a cutoff", (repeat) => {
+    fails(
+      () => nextOccurrence(timed("9999-12-31T12:00:00Z"), repeat, context(undefined, "UTC")),
+      "date-out-of-range",
+    );
+  });
   it("fails closed on impossible calendar cycles and date overflow", () => {
     fails(
       () =>

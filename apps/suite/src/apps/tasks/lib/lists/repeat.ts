@@ -58,7 +58,7 @@ function weekday(local: number): number {
 }
 
 function boundedLocal(local: number, until?: number): number | undefined {
-  return until !== undefined && local > until ? undefined : range(local);
+  return until !== undefined && local > until ? undefined : local;
 }
 
 function nextLocal(base: number, rule: RepeatRule, until?: number): number | undefined {
@@ -90,7 +90,9 @@ function nextLocal(base: number, rule: RepeatRule, until?: number): number | und
       // Every supported all-day cutoff precedes this year, even when the
       // interval is too large for Date.UTC to represent the candidate.
       if (until !== undefined) return undefined;
-      throw new TaskListError("date-out-of-range", "Next occurrence is after year 9999");
+      // Preserve year 10000 for instant-based timed exhaustion near the boundary.
+      // Later years exceed every supported instant, regardless of the IANA offset.
+      if (targetYear > 10000) return Infinity;
     }
     const candidate = new Date(Date.UTC(targetYear, targetMonth, day)).getTime();
     if (new Date(candidate).getUTCDate() === day)
@@ -138,7 +140,7 @@ export function nextOccurrence(
   );
   if (local === undefined) return undefined;
   if (allDay) {
-    return { kind: "all-day", date: new Date(local).toISOString().slice(0, 10) };
+    return { kind: "all-day", date: new Date(range(local)).toISOString().slice(0, 10) };
   }
   const at = resolveLocal(
     local,

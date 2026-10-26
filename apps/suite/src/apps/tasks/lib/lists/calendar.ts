@@ -128,7 +128,6 @@ export function resolveLocal(
   format: Intl.DateTimeFormat,
   until?: number,
 ): number | undefined {
-  range(local);
   const offsets = new Set<number>();
   // All supported post-1970 IANA transitions are isolated by more than six hours.
   for (let hours = -48; hours <= 48; hours += 6) {
@@ -149,6 +148,9 @@ export function resolveLocal(
       : local > localTime(until, format))
   )
     return undefined;
+  // Overflowing candidates can still exhaust a valid timed rule. Enforce the
+  // supported civil range only after comparing possible instants with until.
+  range(local);
   if (matches.length !== 1) {
     throw new TaskListError(
       "unresolvable-local-time",
