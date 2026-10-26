@@ -92,3 +92,57 @@ Roborev remains unavailable (`command -v roborev` found no executable), so no
 per-commit review verdict could be obtained. No review tooling was installed.
 This is the only external review limitation; no implementation or required
 validation is unfinished or blocked. Open design questions: none.
+
+## Fix round 2 — review ca6adbd7eede
+
+Resumed from `ca6adbd7` on 2026-10-26. Read the complete review at
+`solid-suite-tracker/lanes/reviews/solid-sdk-lane-sst-8xm.59-ca6adbd7eede.md`,
+both earlier briefs, and the applicable package, repository and ADR guidance.
+Addressed exactly its two findings, with LocalIndex membership as the source
+of truth as directed by the fix brief.
+
+Commits for this round:
+
+- `ae90c058` — `fix: align index graph membership and SELECT comments`:
+  backend deltas explicitly create added graph names (including empty graphs)
+  and drop removed or evicted graph names. Restore synchronizes graph names
+  and quads with the capped replacement contents. SELECT comment skipping
+  accepts standalone CR as well as LF and CRLF, including within prologues.
+  Real-engine regressions cover empty/populated graph creation, replacement,
+  removal, re-creation, empty-graph and blank-node graph eviction, restoration
+  into an existing index with overlapping/stale graphs and quad caps, empty
+  restores, and both SELECT methods with each supported line ending.
+- Final commit — `docs: record round two fixes and validation`: this update,
+  committed last after all required gates passed.
+
+Regression verification first reproduced seven failing cases against the old
+implementation. The targeted real-engine contract then passed all 36 tests
+after the fixes. All final gates passed with exit status 0:
+
+```sh
+pnpm --filter @jeswr/rdf-engine run lint && pnpm --filter @jeswr/rdf-engine run build && pnpm --filter @jeswr/rdf-engine run typecheck && pnpm --filter @jeswr/rdf-engine run test
+pnpm exec turbo run build typecheck test --filter=...@jeswr/rdf-engine
+pnpm run lint:root
+git diff --check
+```
+
+- Package lint: 27 files checked. Build and typecheck passed.
+- Tests: 9 files, 109 tests passed. Coverage: statements 99.78%, branches
+  98.10%, functions 99.35%, lines 99.75%; configured 90% thresholds passed.
+  `sparq-index.ts` has 100% coverage in all four measures.
+- Dependant gate: 3 successful tasks; only rdf-engine was in scope.
+- Root lint and guards passed, including 83 SDK manifests and 74 contrast
+  pairs with zero failures. Whole-workspace gates were not run, as the lane
+  brief directs.
+
+No dependencies were added; check:packages was unnecessary. No manifests,
+lockfiles, other packages or checkouts were changed. No dist artifacts were
+committed. No push, PR, branch switch or remote fetch/merge was performed.
+The existing gzip N-Quads format still omits empty graphs; restore rebuilds
+membership from the graphs represented in the snapshot, without adding a new
+snapshot format.
+
+Roborev is still unavailable (`command -v roborev` found no executable), so
+automated per-commit review could not run; no review tooling was installed.
+Both supplied review findings are fixed. No implementation or required gate
+is unfinished or blocked. Open questions: none.
