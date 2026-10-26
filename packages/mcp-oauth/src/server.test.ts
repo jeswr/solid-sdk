@@ -877,4 +877,17 @@ describe("HTTP parser and configuration", () => {
     expect(() => fixture({ resource: `${RESOURCE}?query=1` })).toThrow("queries");
     expect(() => fixture({ scopes: ["invalid scope"] })).toThrow("scope tokens");
   });
+
+  it.each([
+    { issuer: `${ISSUER}?` },
+    { issuer: "https://mcp.example/?" },
+    { resource: `${RESOURCE}?` },
+    { resource: "https://mcp.example/?" },
+  ])("rejects empty query components in configuration: %o", (options) => {
+    expect(() => fixture(options)).toThrow("queries");
+  });
+
+  it("allows encoded question marks in issuer and resource paths", () => {
+    expect(() => fixture({ issuer: `${ISSUER}%3F`, resource: `${RESOURCE}%3F` })).not.toThrow();
+  });
 });

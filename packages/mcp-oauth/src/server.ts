@@ -43,7 +43,7 @@ export class AuthorizationServer {
   constructor(private readonly options: AuthorizationServerOptions) {
     const issuer = secureUrl(options.issuer);
     const resource = secureUrl(options.resource);
-    if (issuer.search || resource.search)
+    if (issuer.href.includes("?") || resource.href.includes("?"))
       throw new Error("Issuer and resource must not contain queries");
     this.issuer = options.issuer;
     this.resource = options.resource;
