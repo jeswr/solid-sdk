@@ -55,7 +55,7 @@
   },
   "homepage": "https://github.com/jeswr/solid-api-auth#readme",
   "dependencies": {
-    "@jeswr/fetch-rdf": "^0.1.0",
+    "@jeswr/fetch-rdf": "workspace:*",
     "jose": "^6.2.3",
     "oauth4webapi": "^3.8.6",
     "undici": "8.5.0"
