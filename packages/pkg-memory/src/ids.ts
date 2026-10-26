@@ -69,7 +69,11 @@ function discrete(colors: Color[]): boolean {
   return colors.every((c) => c.nodes.length === 1);
 }
 
-function labels(store: DatasetCore, maxWork: number): Map<string, string> {
+function labels(
+  store: DatasetCore,
+  maxWork: number,
+  requiredUniqueNodes: ReadonlySet<string> | undefined,
+): Map<string, string> {
   const blank = new Map<string, Term>();
   const others = new Map<string, Term>();
   for (const q of store) {
@@ -152,8 +156,18 @@ function labels(store: DatasetCore, maxWork: number): Map<string, string> {
     }
     return a.length - b.length;
   }
+  const refined = refine(initial, initial);
+  // Storage correspondence cannot rely on arbitrary individuation of tied nodes.
+  if (
+    requiredUniqueNodes &&
+    refined.some(
+      (color) =>
+        color.nodes.length > 1 && color.nodes.some((node) => requiredUniqueNodes.has(node.value)),
+    )
+  )
+    throw new Error("Ambiguous shared blank-node identity");
   return new Map(
-    distinguish(refine(initial, initial))
+    distinguish(refined)
       .filter((c) => c.nodes[0]?.termType === "BlankNode")
       .map((c) => [(c.nodes[0] as Term).value, `cb${colorHash(c)}`]),
   );
@@ -191,7 +205,10 @@ export function canonicalizeAssertionWithLabels(
 /** Internal graph comparison preserves RDF terms; only blank-node labels change. */
 export function canonicalizeGraphWithLabels(
   dataset: DatasetCore,
-  { maxWork = 10000 }: { maxWork?: number } = {},
+  {
+    maxWork = 10000,
+    requiredUniqueNodes,
+  }: { maxWork?: number; requiredUniqueNodes?: ReadonlySet<string> } = {},
 ): { id: string; dataset: Store; labels: Map<string, string> } {
   if (dataset.size === 0) throw new Error("Empty assertion");
   for (const q of dataset) {
@@ -199,7 +216,7 @@ export function canonicalizeGraphWithLabels(
       throw new Error("Assertion must be a single default graph");
     for (const t of [q.subject, q.predicate, q.object]) validateTermSafety(t);
   }
-  const names = labels(dataset, maxWork);
+  const names = labels(dataset, maxWork, requiredUniqueNodes);
   const canonical = (t: Term): Term =>
     t.termType === "BlankNode" ? df.blankNode(names.get(t.value) as string) : t;
   const lines = [...dataset]

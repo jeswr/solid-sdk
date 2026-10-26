@@ -78,7 +78,7 @@ export class NanopubStore {
         putGraph(dataset, name, graph(parsed.dataset, name));
       return { np, dataset, sharedGraphs };
     });
-    validateBlankNodeSharing(parts);
+    validateBlankNodeSharing(parsed.dataset, parts);
     const resources = await Promise.all(
       parts.map(async ({ np, dataset }) => ({
         url: this.url(np.id),
@@ -136,8 +136,8 @@ export class NanopubStore {
           throw new Error("Conflicting copies of a shared nanopublication graph");
         duplicates.add(name);
       }
-      // A symmetric graph cannot choose node correspondence alone. Match the
-      // duplicate graphs jointly, preserving graph identity in the hash input.
+      // Match duplicate graphs jointly; unresolved structural ties must reject
+      // rather than choose a correspondence based on document-local ordering.
       const incoming = sharedGraphLabels(result.dataset, duplicates);
       const retained = sharedGraphLabels(dataset, duplicates);
       if (incoming.id !== retained.id)
@@ -343,21 +343,32 @@ export class NanopubStore {
 }
 
 /** Encode (graph, predicate) pairs only for joint matching, never for stored RDF. */
-function sharedGraphLabels(dataset: DatasetCore, names: Set<string>) {
+function sharedGraphLabels(
+  dataset: DatasetCore,
+  names: Set<string>,
+  requiredUniqueNodes?: ReadonlySet<string>,
+) {
   const combined = new Store();
+  const nodes = new Set<string>();
   for (const name of names)
-    for (const quad of graph(dataset, name))
+    for (const quad of graph(dataset, name)) {
       new RdfNode(quad.subject, combined).add(
         pkgId("store", "shared-predicate", name, quad.predicate.value),
         quad.object,
       );
+      for (const term of [quad.subject, quad.object])
+        if (term.termType === "BlankNode") nodes.add(term.value);
+    }
   return combined.size === 0
     ? { id: "", labels: new Map<string, string>() }
-    : canonicalizeGraphWithLabels(combined);
+    : canonicalizeGraphWithLabels(combined, { requiredUniqueNodes: requiredUniqueNodes ?? nodes });
 }
 
 /** Every cross-resource node needs a common graph through which list() can align it. */
-function validateBlankNodeSharing(parts: { dataset: DatasetCore; sharedGraphs: string[] }[]): void {
+function validateBlankNodeSharing(
+  dataset: DatasetCore,
+  parts: { dataset: DatasetCore; sharedGraphs: string[] }[],
+): void {
   const anchors = new Map<string, Set<string>>();
   for (const { dataset, sharedGraphs } of parts) {
     const nodes = new Map<string, Set<string>>();
@@ -378,6 +389,18 @@ function validateBlankNodeSharing(parts: { dataset: DatasetCore; sharedGraphs: s
       }
     }
   }
+  // Only graphs common to every resource using a node can establish its identity.
+  // Refinement must give unique structural labels without tie-breaking search.
+  const groups = new Map<string, { names: Set<string>; nodes: Set<string> }>();
+  for (const [node, names] of anchors) {
+    // Validate even one-resource puts: later calls can repeat these graphs.
+    if (names.size === 0) continue;
+    const key = JSON.stringify([...names].sort());
+    const group = groups.get(key) ?? { names, nodes: new Set<string>() };
+    group.nodes.add(node);
+    groups.set(key, group);
+  }
+  for (const { names, nodes } of groups.values()) sharedGraphLabels(dataset, names, nodes);
 }
 
 function equalBytes(a: Uint8Array, b: Uint8Array): boolean {

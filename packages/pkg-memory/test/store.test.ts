@@ -141,6 +141,28 @@ async function sharedBlankBatchGraphs(batch = "shared-batch", ids = ["one", "two
   return value;
 }
 
+async function symmetricSharedAuthors(ids = ["one", "two"]) {
+  const value = await sharedBlankBatchGraphs("symmetric-authors", ids);
+  const source = "https://example.org/document";
+  const sourcesId = pkgId("batch", "symmetric-authors", "sources");
+  const entitiesId = pkgId("batch", "symmetric-authors", "entities");
+  const sources = graph(value.dataset, sourcesId);
+  const author = new RdfNode(source, sources).one(`${NS.schema}author`);
+  const other = DataFactory.blankNode();
+  new RdfNode(source, sources).add(`${NS.schema}author`, other);
+  for (const name of [sourcesId, entitiesId]) {
+    const contents = name === sourcesId ? sources : graph(value.dataset, name);
+    for (const quad of [...contents])
+      if (quad.subject.equals(author) || quad.object.equals(author))
+        new RdfNode(quad.subject.equals(author) ? other : quad.subject, contents).add(
+          quad.predicate.value,
+          quad.object.equals(author) ? other : quad.object,
+        );
+    putGraph(value.dataset as Store, name, contents);
+  }
+  return { value, author, other, sourcesId };
+}
+
 it.each([
   "provenance",
   "pubinfo",
@@ -338,6 +360,105 @@ it.each([
       );
     }
   }
+});
+
+it.each([
+  false,
+  true,
+])("rejects ambiguous shared authors before any write (reverse triples: %s)", async (reverse) => {
+  const { store, write } = setup();
+  const { value } = await symmetricSharedAuthors();
+  if (reverse) value.dataset = new Store([...value.dataset].reverse());
+  await expect(store.put(value)).rejects.toThrow("Ambiguous shared blank-node identity");
+  expect(write).not.toHaveBeenCalled();
+});
+
+it.each([
+  false,
+  true,
+])("rejects ambiguous existing shared authors on listing (reverse listing: %s)", async (reverse) => {
+  const { store, pod } = setup();
+  const { value, sourcesId } = await symmetricSharedAuthors();
+  // Seed external/older resources; put() must reject this dataset before writing.
+  for (const [index, np] of value.nanopubs.entries()) {
+    const names = [
+      np.id,
+      np.assertionId,
+      np.provenanceId,
+      np.pubinfoId,
+      sourcesId,
+      pkgId("batch", np.batch, "entities"),
+    ];
+    const dataset = new Store();
+    for (const name of names) {
+      const contents = graph(value.dataset, name);
+      putGraph(
+        dataset,
+        name,
+        index === 1 && name === sourcesId ? new Store([...contents].reverse()) : contents,
+      );
+    }
+    await pod.write(
+      store.url(np.id),
+      encode(await serializeNanopublications({ dataset, nanopubs: [np] })),
+      "application/trig",
+      { ifNoneMatch: "*" },
+    );
+  }
+  const list = pod.list;
+  if (reverse) pod.list = async (container) => (await list(container)).reverse();
+  for (let i = 0; i < 2; i++)
+    await expect(store.list()).rejects.toThrow("Ambiguous shared blank-node identity");
+});
+
+it("rejects ambiguous shared graph nodes even in a single-resource put before any write", async () => {
+  const { store, write } = setup();
+  const { value } = await symmetricSharedAuthors(["one"]);
+  await expect(store.put(value)).rejects.toThrow("Ambiguous shared blank-node identity");
+  expect(write).not.toHaveBeenCalled();
+});
+
+it("preserves symmetric nodes confined to one resource's private graphs", async () => {
+  const { store } = setup();
+  const value = await sharedBlankBatchGraphs("private-symmetry", ["one"]);
+  const np = value.nanopubs[0]!;
+  const local = DataFactory.blankNode();
+  const other = DataFactory.blankNode();
+  const provenance = graph(value.dataset, np.provenanceId);
+  new RdfNode(np.id, provenance).add(`${NS.schema}author`, local).add(`${NS.schema}author`, other);
+  for (const node of [local, other])
+    new RdfNode(node, provenance).text(`${NS.schema}name`, "Local author");
+  putGraph(value.dataset as Store, np.provenanceId, provenance);
+  const pubinfo = graph(value.dataset, np.pubinfoId);
+  new RdfNode(np.id, pubinfo).add(`${NS.schema}author`, local);
+  putGraph(value.dataset as Store, np.pubinfoId, pubinfo);
+  await store.put(value);
+  expect(isomorphic([...(await store.list()).dataset], [...value.dataset])).toBe(true);
+});
+
+it.each([
+  false,
+  true,
+])("distinguishes shared authors by exact literal lexical forms (reverse listing: %s)", async (reverse) => {
+  const { store, pod } = setup();
+  const { value, author, other, sourcesId } = await symmetricSharedAuthors();
+  const sources = graph(value.dataset, sourcesId);
+  new RdfNode(author, sources).text(
+    `${NS.schema}dateCreated`,
+    "2026-10-25T12:00:00Z",
+    `${NS.xsd}dateTime`,
+  );
+  new RdfNode(other, sources).text(
+    `${NS.schema}dateCreated`,
+    "2026-10-25T12:00:00+00:00",
+    `${NS.xsd}dateTime`,
+  );
+  putGraph(value.dataset as Store, sourcesId, sources);
+  await store.put(value);
+  const list = pod.list;
+  if (reverse) pod.list = async (container) => (await list(container)).reverse();
+  for (let i = 0; i < 2; i++)
+    expect(isomorphic([...(await store.list()).dataset], [...value.dataset])).toBe(true);
 });
 
 it.each([

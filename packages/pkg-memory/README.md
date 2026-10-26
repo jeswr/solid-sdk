@@ -138,6 +138,12 @@ runtime dependency on the MCP server. `put(result)` splits batches into one
 shared batch source/entity graphs. Writes are create-only; malformed input is
 rejected before mutations. A blank node shared across resources must occur in a
 common assertion, sources, or entities graph in every resource that uses it.
+Structural refinement across those common graphs must distinguish every shared
+blank node without tie-breaking search. Unresolved ties, including symmetric
+authors, reject before any Pod write, including single-resource puts whose graphs
+may recur in later calls. Listing older or externally written copies with such
+ties also rejects. Symmetry confined to private graphs in one resource remains
+supported.
 Other cross-resource sharing (such as evidence targets used only in separate
 provenance graphs) rejects before any Pod write; local cross-graph sharing remains
 supported. Owner-only WAC ACLs are written before creating
