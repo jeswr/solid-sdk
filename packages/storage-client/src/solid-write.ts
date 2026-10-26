@@ -24,7 +24,12 @@ const LDP_RESOURCE = '<http://www.w3.org/ns/ldp#Resource>; rel="type"';
 const BASE32 = "abcdefghijklmnopqrstuvwxyz234567";
 
 function header(value: unknown, name: string): asserts value is string {
-  if (typeof value !== "string" || value === "" || /[\r\n\0\u0100-\uFFFF]/.test(value))
+  if (
+    typeof value !== "string" ||
+    value === "" ||
+    value.trim() !== value ||
+    /[\r\n\0\u0100-\uFFFF]/.test(value)
+  )
     throw new TypeError(`Invalid ${name}`);
 }
 function contentType(value: unknown): asserts value is string {
@@ -262,13 +267,9 @@ export function solidWrites(options: SolidBackendOptions, client: () => StorageC
         dest = target("POST", new URL(location, parent).href);
         if (pathParent(dest, root) !== parent || dest.endsWith("/") !== (kind === "container"))
           throw new TypeError("Invalid Location child or kind");
-      } catch (cause) {
-        throw new StorageError("invalid-response", {
-          method: "POST",
-          url: parent,
-          cause,
-          message: "Invalid Location",
-        });
+      } catch {
+        // URL parsing and scope errors can carry the raw Location, including credentials.
+        throw error("invalid-response", "POST", parent, "Invalid Location");
       }
       return result(dest, response, opts.signal);
     },
@@ -280,17 +281,20 @@ export function solidWrites(options: SolidBackendOptions, client: () => StorageC
       const feature = client().features.patch;
       const formats = feature.detail.formats;
       if (patch.kind === "rdf") {
-        const formulas = await patchFormulas(patch, dest);
         const advertised = formats["text/turtle"] ?? [];
-        if (advertised.includes("text/n3") || feature.state !== "available") {
-          type = "text/n3";
+        const format =
+          advertised.includes("text/n3") || feature.state !== "available"
+            ? "text/n3"
+            : advertised.includes("application/sparql-update")
+              ? "application/sparql-update"
+              : null;
+        if (format === null)
+          throw new StorageError("unsupported", { method: "PATCH", url: dest, feature: "patch" });
+        const formulas = await patchFormulas(patch, dest, format);
+        type = format;
+        if (format === "text/n3") {
           body = n3Envelope(formulas);
-        } else if (
-          advertised.includes("application/sparql-update") &&
-          !patch.where?.length &&
-          !formulas.variables
-        ) {
-          type = "application/sparql-update";
+        } else if (!patch.where?.length && !formulas.variables) {
           body = [
             formulas.deletes ? `DELETE DATA {\n${formulas.deletes}}` : "",
             formulas.inserts ? `INSERT DATA {\n${formulas.inserts}}` : "",
@@ -429,30 +433,23 @@ export function solidWrites(options: SolidBackendOptions, client: () => StorageC
         }
       } catch (cause) {
         const keep = new Set<string>();
-        // A transport/unexpected-response failure may have committed the DELETE. Probe without
-        // the aborted signal and preserve uncertain copies, even before the first acknowledged
-        // source deletion, so a lost response can never turn cleanup into data loss.
-        const uncertain =
-          cause instanceof StorageError &&
-          (cause.code === "network" || cause.code === "invalid-response");
-        if (deleted.size || uncertain) {
-          for (const copy of copies) {
-            let exists = !deleted.has(copy.source);
-            if (exists) {
-              try {
-                await client().head(copy.source);
-              } catch {
-                exists = false;
-              }
-              // A failed HEAD is uncertain: preserve the copy rather than risk data loss.
+        // Any failed DELETE may have committed, including a gateway's 5xx. Probe without the
+        // caller's signal; only a successful HEAD makes removing a copy safe.
+        for (const copy of copies) {
+          let exists = !deleted.has(copy.source);
+          if (exists) {
+            try {
+              await client().head(copy.source);
+            } catch {
+              exists = false;
             }
-            if (!exists) keep.add(copy.url);
           }
-          // Preserve ancestors of every surviving copy.
-          for (const copy of copies)
-            if ([...keep].some((url) => url.startsWith(copy.url)) && copy.kind === "container")
-              keep.add(copy.url);
+          if (!exists) keep.add(copy.url);
         }
+        // Preserve ancestors of every surviving copy.
+        for (const copy of copies)
+          if ([...keep].some((url) => url.startsWith(copy.url)) && copy.kind === "container")
+            keep.add(copy.url);
         const failures = await rollback(copies, keep);
         throw new StorageError("conflict", {
           method: "MOVE",
@@ -461,8 +458,8 @@ export function solidWrites(options: SolidBackendOptions, client: () => StorageC
             ? new AggregateError([cause, ...failures], "Delete and rollback failed")
             : cause,
           message:
-            deleted.size || keep.size
-              ? "The move was partial; copies of deleted or unverifiable source resources were preserved"
+            deleted.size || keep.size || failures.length
+              ? "The move was partial; some copies were preserved or could not be removed"
               : "Source delete failed; the copy was rolled back",
         });
       }

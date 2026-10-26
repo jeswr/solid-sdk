@@ -11,14 +11,18 @@ export interface RdfPatchInput {
   where?: readonly Quad[];
 }
 
-// SPARQL 1.1 VARNAME: PN_CHARS_U / digit, then those plus combining characters.
+// SPARQL 1.1 VARNAME without leading digits, which n3's N3 parser (and CSS) rejects.
 const BASE =
   "A-Za-z_\\u00C0-\\u00D6\\u00D8-\\u00F6\\u00F8-\\u02FF\\u0370-\\u037D\\u037F-\\u1FFF\\u200C-\\u200D\\u2070-\\u218F\\u2C00-\\u2FEF\\u3001-\\uD7FF\\uF900-\\uFDCF\\uFDF0-\\uFFFD\\u{10000}-\\u{EFFFF}";
-const VARNAME = new RegExp(`^[${BASE}0-9][${BASE}0-9\\u00B7\\u0300-\\u036F\\u203F-\\u2040]*$`, "u");
+const VARNAME = new RegExp(`^[${BASE}][${BASE}0-9\\u00B7\\u0300-\\u036F\\u203F-\\u2040]*$`, "u");
 const terms = (q: Quad) => [q.subject, q.predicate, q.object];
 
 /** Validate before serialization; invalid RDF patches have no HTTP status. */
-export async function patchFormulas(input: RdfPatchInput, url = "") {
+export async function patchFormulas(
+  input: RdfPatchInput,
+  url = "",
+  format: "text/n3" | "application/sparql-update" = "text/n3",
+) {
   if (input.inserts.length === 0 && input.deletes.length === 0) throw new TypeError("empty patch");
   try {
     // Validate the rebuilt terms (plain n3 instances), so what is checked is what is written.
@@ -40,14 +44,14 @@ export async function patchFormulas(input: RdfPatchInput, url = "") {
         if (q.graph.termType !== "DefaultGraph")
           throw new TypeError("Patch formulas require the default graph");
         for (const term of terms(q)) {
-          if (term.termType === "BlankNode" && name !== "inserts")
-            throw new TypeError("Blank nodes are only allowed in inserts");
+          if (term.termType === "BlankNode" && (format === "text/n3" || name !== "inserts"))
+            throw new TypeError("Blank nodes are only allowed in SPARQL Update inserts");
           if (term.termType === "Variable" && (!VARNAME.test(term.value) || !bound.has(term.value)))
             throw new TypeError("Invalid or unbound patch variable");
         }
       }
     }
-    // One pass keeps insert labels consistent and reserves the envelope's _:patch subject.
+    // Keep SPARQL insert labels consistent and retain the _:patch reservation for stable bytes.
     const safe = injectionSafe([...where, ...deletes, ...inserts], true, new Set(["patch"]));
     const formula = (quads: readonly Quad[]) =>
       serialize(quads, { format: "application/n-triples" });

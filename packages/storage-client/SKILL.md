@@ -56,8 +56,9 @@ Solid write side (ADR-003 §6, T-022; implementation isolated in `src/solid-writ
   strings/Uint8Array/Blob pass directly. Abort signals are checked before/between requests.
 - `write`/`writeRdf` require a nonempty string `ifMatch`; `'*'` means no Solid precondition/header.
   `patch`/`delete`/`move`/`setMetadata` require a non-'*' ETag string (TypeError before requests).
-  Header values (contentType, ifMatch, Slug, patch media type) reject CR/LF/NUL and non-ByteString;
-  content types must be valid media types (parameters allowed). `write` and resource `create`
+  Header values (contentType, ifMatch, Slug, patch media type) reject leading/trailing whitespace,
+  CR/LF/NUL and non-ByteString with TypeError; check whitespace before comparing ifMatch to '*'.
+  Content types must be valid media types (parameters allowed). `write` and resource `create`
   require contentType. Wrong option types are TypeErrors.
 - PUT/PATCH/POST results use `created: status === 201`. ETag comes from the response, else a scoped
   `client.head` when `etagFollowUp` (default true). Any follow-up HEAD failure, including abort or
@@ -74,23 +75,27 @@ Solid write side (ADR-003 §6, T-022; implementation isolated in `src/solid-writ
   base32 Slug. Containers send BasicContainer Link type and empty text/turtle body; POST resources
   send Resource Link type, and null means empty body. Location is required, resolved against the
   parent, scoped, query/fragment-free, a direct child, and trailing-slash iff container. Invalid
-  Location is invalid-response; its URL is never fetched. `opts.links` is ignored: Solid types
+  Location is invalid-response; its URL is never fetched or retained in the error, including its
+  cause chain. The error names only the scoped container. `opts.links` is ignored: Solid types
   belong in RDF; metadata is never written implicitly (ADR's writable-describedby qualification).
 - RDF patches use `buildN3Patch`'s fixed InsertDeletePatch envelope; formula order is nonempty
   where, deletes, inserts. Every triple line is serialized through rdf-serialize/n3.Writer in
   N-Triples style; the final semicolon is followed by `.\n`. Serialization reuses rdf.ts IRI
-  escaping, deterministic collision-free blank-node relabeling (reserving `_:patch`) and language
-  checks. Reject non-default graphs and blank nodes in where/deletes; variables must match SPARQL
-  VARNAME and occur in where before use in inserts/deletes. Invalid RDF is bad-request, status null;
-  empty inserts+deletes is TypeError ('empty patch'). Compatibility limit: installed n3's N3
-  parser rejects digit-leading variable names although SPARQL VARNAME accepts them. The builder
-  preserves the required SPARQL validation/names; use letter/underscore-start names for CSS
-  interoperability (covered by an explicit upstream-compatibility regression test).
+  escaping and language checks. Reject non-default graphs and blank nodes in all N3 formulas
+  (where/deletes/inserts).
+  Solid Protocol §5.3.1 forbids blank nodes in insertions and deletions; this corrects ADR-003 §6's
+  "blank nodes in inserts are allowed by CSS" remark. CSS enforces the prohibition. Variables
+  must match SPARQL VARNAME minus the leading digit (start with a letter or underscore, as n3/CSS
+  require) and occur in where before use in inserts/deletes. Invalid RDF is bad-request, status
+  null, before any request; empty inserts+deletes is TypeError ('empty patch').
 - Format choice deliberately differs from ADR §6: prefer text/n3 when advertised for text/turtle,
   or patch state is not available (undescribed default). Use application/sparql-update only when
   N3 is absent, SPARQL advertised, and there is no nonempty where/variable; emit nonempty DELETE
-  DATA then INSERT DATA joined by `;\n`. Otherwise unsupported (`feature: 'patch'`). N3 requires
-  every deletion to match (409), preserving memory conflict semantics; SPARQL DELETE DATA silently
+  DATA then INSERT DATA joined by `;\n`. Select the format before the single validation pass:
+  SPARQL INSERT DATA allows insert blank nodes; where/deletes still refuse them. SPARQL retains
+  deterministic collision-free blank-node relabeling (reserving `_:patch`) for stable bytes.
+  Otherwise unsupported (`feature: 'patch'`). N3 requires every deletion to match (409),
+  preserving memory conflict semantics; SPARQL DELETE DATA silently
   ignores absent triples. JSON patch requires application/json-patch+json in any advertised format
   entry; ops must be an array of objects with a valid op/string path (TypeError otherwise), sent
   with JSON.stringify. Raw patch sends validated mediaType/body. Every PATCH sends If-Match.
@@ -112,14 +117,14 @@ Solid write side (ADR-003 §6, T-022; implementation isolated in `src/solid-writ
   during preflight to identify describedby documents before copying any members.
 - Copy failure rolls back completed copies deepest-first and rethrows the original error. Resource
   cleanup uses its create ETag when known, protecting concurrent changes; containers are removed
-  unconditionally after children. Source deletion failure before any successful source deletion
-  rolls back the whole copy and throws conflict, cause = delete error. After partial deletion,
-  retain deleted/uncertain source resources' copies and their ancestors; HEAD-check remaining
-  sources and remove only copies whose sources still exist, plus empty copied containers.
-  Transport/unexpected-response DELETE failures are ambiguous even before any acknowledged
-  deletion: probe the source and retain copies if absent/unverifiable. Throw
-  conflict with a partial-move message. Cleanup ignores the spent caller signal, continues after
-  failures, and reports original+rollback failures via AggregateError cause without masking them.
+  unconditionally after children. Any source DELETE failure (including 4xx/5xx) throws conflict,
+  cause = delete error. Retain acknowledged deleted sources' copies; before removing any other
+  copy, HEAD its source without the caller's signal. Remove it only if HEAD succeeds; any HEAD
+  failure (404, 5xx, network, scope, etc.) preserves the copy and its ancestor containers.
+  Report a rolled-back move only when all copies were removed and no source deletion succeeded;
+  otherwise report a partial move, including rollback failures. Cleanup ignores the spent caller
+  signal, continues after failures, and reports original+rollback failures via AggregateError
+  cause without masking them.
   Successful move returns target/created true and top create ETag; containers refresh it by HEAD
   when enabled (failure null).
 - `setMetadata` reads metadata(url), scopes the describedby target, checks the metadata ETag (412

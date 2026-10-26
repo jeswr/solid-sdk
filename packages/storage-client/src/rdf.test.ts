@@ -123,14 +123,23 @@ describe("foreign RDF/JS term serialization", () => {
     );
     const ground = expected.slice(1);
     const input = {
-      inserts: [...misleading, spoofedPattern],
+      inserts: [...misleading.slice(1), spoofedPattern],
       deletes: [...misleading.slice(1), spoofedPattern],
       where: [spoofedPattern],
     };
     expectPatch(await buildN3Patch(input), {
-      inserts: [...expected, pattern],
+      inserts: [...ground, pattern],
       deletes: [...ground, pattern],
       where: [pattern],
+    });
+  });
+
+  test("buildN3Patch refuses foreign blank nodes despite misleading ids", async () => {
+    await expect(
+      buildN3Patch({ inserts: misleading.slice(0, 1), deletes: [] }),
+    ).rejects.toMatchObject({
+      code: "bad-request",
+      status: null,
     });
   });
 

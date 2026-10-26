@@ -324,6 +324,15 @@ describe("mutation validation before requests", () => {
       5,
       "",
       "*",
+      " *",
+      "*\t",
+      "\t*",
+      "* ",
+      ` ${TAG}`,
+      `${TAG}\t`,
+      "\v*",
+      "*\f",
+      "\u00a0*",
       "bad\rheader",
       "bad\nheader",
       "bad\0header",
@@ -363,6 +372,10 @@ describe("mutation validation before requests", () => {
       "text/plain; charset",
       'text/plain; x="unterminated',
       "text/plain; x=a b",
+      " text/plain",
+      "text/plain ",
+      "\ttext/plain",
+      "text/plain\t",
     ]) {
       await expect(
         storage.write(URL, "x", { contentType: type, ifMatch: "*" } as WriteOptions),
@@ -385,6 +398,14 @@ describe("mutation validation before requests", () => {
     await expect(
       storage.writeRdf(URL, [quad(s, p, s, nn("urn:g"))], { ifMatch: "*" }),
     ).rejects.toThrow(TypeError);
+    expect(calls).toHaveLength(0);
+  });
+  test("RDF write content types reject surrounding whitespace before serialization", async () => {
+    const { storage, calls } = backend();
+    for (const contentType of [" text/turtle", "text/turtle ", "\ttext/turtle", "text/turtle\t"])
+      await expect(
+        storage.writeRdf(URL, [q], { ifMatch: "*", contentType: contentType as "text/turtle" }),
+      ).rejects.toThrow(TypeError);
     expect(calls).toHaveLength(0);
   });
 });
@@ -456,6 +477,28 @@ describe("create (CSS fixtures)", () => {
     await rejection(storage.create(NOTES, null, { contentType: "text/plain" }), "invalid-response");
     expect(calls).toHaveLength(1);
   });
+  test.each([
+    "https://user:location-secret@[",
+    "https://user:location-secret@evil.example/x",
+    "https://user:location-secret@css.example/alice/notes/x",
+  ])("Location errors discard credentials and parsing causes: %s", async (location) => {
+    const { storage, calls } = backend({
+      [`POST ${NOTES}`]: response(201, { location }),
+    });
+    const error = await rejection(
+      storage.create(NOTES, null, { contentType: "text/plain" }),
+      "invalid-response",
+    );
+    expect(error).toMatchObject({ message: "Invalid Location", url: NOTES });
+    expect(error.cause).toBeUndefined();
+    // Include non-enumerable Error fields and every nested cause in the disclosure check.
+    const serialized = JSON.stringify(error, (_key, value) =>
+      value instanceof Error ? { ...value, message: value.message, cause: value.cause } : value,
+    );
+    expect(serialized).not.toContain("location-secret");
+    expect(serialized).not.toContain(location);
+    expect(calls).toHaveLength(1);
+  });
   test("wrong container Location, missing content type and invalid names/kinds", async () => {
     const wrong = backend({ [`POST ${NOTES}`]: response(201, { location: "file" }) });
     await rejection(wrong.storage.create(NOTES, null, { kind: "container" }), "invalid-response");
@@ -501,7 +544,7 @@ describe("N3 Patch exact bytes and formulas", () => {
       n3([], [old]),
       n3([q], [old]),
       input,
-      n3([quad(blankNode("safe"), p, literal('a\n"b'))]),
+      n3([quad(variable("_x1"), p, literal('a\n"b'))], [], [quad(variable("_x1"), p, s)]),
       n3(
         [quad(variable("élève·"), p, literal("oui"))],
         [],
@@ -538,12 +581,14 @@ describe("N3 Patch exact bytes and formulas", () => {
       }
     }
   });
-  test("validation rejects named graphs, blank nodes in where/deletes, unbound/unsafe variables and tags", async () => {
+  test("validation rejects named graphs, blank nodes in every formula, unbound/unsafe variables and tags", async () => {
     const { storage, calls } = backend();
     const invalid = [
       n3([quad(s, p, s, nn("urn:g"))]),
       n3([q], [quad(s, p, s, nn("urn:g"))]),
       n3([q], [], [quad(s, p, s, nn("urn:g"))]),
+      n3([quad(blankNode("b"), p, s)]),
+      n3([quad(s, p, blankNode("b"))]),
       n3([q], [quad(blankNode("b"), p, s)]),
       n3([q], [], [quad(s, p, blankNode("b"))]),
       n3([quad(variable("unbound"), p, s)]),
@@ -553,6 +598,7 @@ describe("N3 Patch exact bytes and formulas", () => {
       n3([quad(s, p, literal("x", "en; injected"))]),
     ];
     for (const patch of invalid) {
+      expect(await rejection(buildN3Patch(patch), "bad-request")).toMatchObject({ status: null });
       expect(
         await rejection(storage.patch(URL, patch, { ifMatch: TAG }), "bad-request"),
       ).toMatchObject({ status: null, url: URL });
@@ -561,21 +607,17 @@ describe("N3 Patch exact bytes and formulas", () => {
     await expect(storage.patch(URL, n3([], []), { ifMatch: TAG })).rejects.toThrow(TypeError);
     expect(calls).toHaveLength(0);
   });
-  test("escapes IRIs/datatypes/literals, keeps languages, and deterministically relabels reserved/unsafe blanks", async () => {
+  test("escapes IRIs/datatypes/literals and keeps languages", async () => {
     const inserts = [
-      quad(blankNode("patch"), p, blankNode("unsafe label")),
-      quad(blankNode("unsafe label"), p, blankNode("x0")),
       quad(s, nn("urn:p> <urn:forged"), literal('"\n} . evil', nn("urn:d>t"))),
       quad(s, p, literal("bonjour", "fr")),
     ];
     const body = await buildN3Patch(n3(inserts));
     expect(body).toBe(await buildN3Patch(n3(inserts)));
-    expect(body).toContain("_:x1 <urn:p> _:x2 .");
-    expect(body).toContain("_:x2 <urn:p> _:x0 .");
     expect(body).toContain("<urn:p%3E%20%3Curn:forged>");
     expect(body).toContain("<urn:d%3Et>");
     const parsed = new Parser({ format: "text/n3" }).parse(body);
-    expect(parsed.filter((q) => q.graph.termType !== "DefaultGraph")).toHaveLength(4);
+    expect(parsed.filter((q) => q.graph.termType !== "DefaultGraph")).toHaveLength(2);
     expect(parsed.filter((q) => q.graph.termType === "DefaultGraph")).toHaveLength(2);
   });
 });
@@ -601,6 +643,10 @@ describe("patch format selection", () => {
       [n3(), 'INSERT DATA {\n<urn:s> <urn:p> "new" .\n}'],
       [n3([], [old]), 'DELETE DATA {\n<urn:s> <urn:p> "old" .\n}'],
       [
+        n3([quad(blankNode("safe"), p, literal("new"))]),
+        'INSERT DATA {\n_:safe <urn:p> "new" .\n}',
+      ],
+      [
         n3([q], [old]),
         'DELETE DATA {\n<urn:s> <urn:p> "old" .\n};\nINSERT DATA {\n<urn:s> <urn:p> "new" .\n}',
       ],
@@ -622,6 +668,30 @@ describe("patch format selection", () => {
     }
     const unavailable = backend({}, { features: withFormats({}) });
     await rejection(unavailable.storage.patch(URL, n3(), { ifMatch: TAG }), "unsupported");
+  });
+  test("SPARQL inserts relabel reserved/unsafe blanks, while deletes and where refuse blanks", async () => {
+    const features = withFormats({ "text/turtle": ["application/sparql-update"] });
+    const inserts = [
+      quad(blankNode("patch"), p, blankNode("unsafe label")),
+      quad(blankNode("unsafe label"), p, blankNode("x0")),
+    ];
+    const { storage, calls } = backend({}, { features });
+    for (let i = 0; i < 2; i++) await storage.patch(URL, n3(inserts), { ifMatch: TAG });
+    expect(calls[0]?.body).toBe("INSERT DATA {\n_:x1 <urn:p> _:x2 .\n_:x2 <urn:p> _:x0 .\n}");
+    expect(calls[1]?.body).toBe(calls[0]?.body);
+    for (const patch of [n3([q], inserts), n3([q], [], inserts)])
+      expect(
+        await rejection(storage.patch(URL, patch, { ifMatch: TAG }), "bad-request"),
+      ).toMatchObject({ status: null });
+    expect(calls).toHaveLength(2);
+    for (const features of [
+      undefined,
+      withFormats({ "text/turtle": ["text/n3", "application/sparql-update"] }),
+    ]) {
+      const n3Backend = backend({}, { features });
+      await rejection(n3Backend.storage.patch(URL, n3(inserts), { ifMatch: TAG }), "bad-request");
+      expect(n3Backend.calls).toHaveLength(0);
+    }
   });
   test("JSON support comes from any format entry, raw sends the validated body unchanged", async () => {
     const { storage } = backend();
@@ -837,6 +907,8 @@ describe("emulated move", () => {
       "conflict",
     );
     expect(error.cause).toMatchObject({ code: "precondition-failed", etag: '"changed"' });
+    expect(error.message).toBe("Source delete failed; the copy was rolled back");
+    expect(calls.at(-2)).toMatchObject({ method: "HEAD", url: URL, signal: undefined });
     expect(calls.at(-1)?.url).toBe(dest);
     expect(calls.at(-1)?.headers.get("if-match")).toBe('"copied"');
   });
@@ -886,6 +958,7 @@ describe("emulated move", () => {
         { code: "forbidden" },
         { code: "precondition-failed" },
       ]);
+      if (phase === "delete") expect(error.message).toContain("partial");
       expect(calls.at(-1)?.url).toBe(COPY);
     }
   });
@@ -1130,6 +1203,73 @@ describe("additional adversarial cases", () => {
 });
 
 describe("move data preservation", () => {
+  test("a 504 after a committed source DELETE preserves its copy and ancestor containers", async () => {
+    const fixture = await treeBackend({
+      [`DELETE ${SRC}sub/b`]: () => {
+        fixture.exchanges[`HEAD ${SRC}sub/b`] = response(404, {});
+        return response(504, {});
+      },
+    });
+    const error = await rejection(
+      fixture.storage.move(SRC, DEST, { ifMatch: '"source"' }),
+      "conflict",
+    );
+    expect(error.cause).toMatchObject({ code: "server", status: 504 });
+    expect(error.message).toContain("partial");
+    expect(fixture.calls.filter((c) => c.method === "DELETE").map((c) => c.url)).toEqual([
+      `${SRC}sub/b`,
+      `${COPY}a`,
+    ]);
+    expect(fixture.calls.find((c) => c.method === "HEAD" && c.url === `${SRC}sub/b`)).toMatchObject(
+      {
+        signal: undefined,
+      },
+    );
+  });
+  test("a 404 source DELETE preserves the copy when HEAD confirms the source is absent", async () => {
+    const dest = `${DEST}today.ttl`;
+    const { storage, calls } = backend({
+      [`PUT ${dest}`]: response(201),
+      [`DELETE ${URL}`]: response(404, {}),
+      [`HEAD ${URL}`]: response(404, {}),
+    });
+    const error = await rejection(storage.move(URL, DEST, { ifMatch: TAG }), "conflict");
+    expect(error.cause).toMatchObject({ code: "not-found", status: 404 });
+    expect(error.message).toContain("partial");
+    expect(calls.at(-1)).toMatchObject({ method: "HEAD", url: URL, signal: undefined });
+    expect(calls.some((c) => c.method === "DELETE" && c.url === dest)).toBe(false);
+  });
+  test.each([
+    403, 500, 504, 302,
+  ])("a failed source HEAD (%i) preserves a copy even after a 412 DELETE", async (status) => {
+    const dest = `${DEST}today.ttl`;
+    const { storage, calls } = backend({
+      [`PUT ${dest}`]: response(201),
+      [`DELETE ${URL}`]: response(412, {}),
+      [`HEAD ${URL}`]: response(status, {}),
+    });
+    const error = await rejection(storage.move(URL, DEST, { ifMatch: TAG }), "conflict");
+    expect(error.cause).toMatchObject({ code: "precondition-failed", status: 412 });
+    expect(error.message).toContain("partial");
+    expect(calls.some((c) => c.method === "DELETE" && c.url === dest)).toBe(false);
+  });
+  test.each([
+    "network",
+    "scope",
+  ] as const)("a source HEAD %s error preserves the copy", async (code) => {
+    const dest = `${DEST}today.ttl`;
+    const { storage, calls } = backend({
+      [`PUT ${dest}`]: response(201),
+      [`DELETE ${URL}`]: response(412, {}),
+    });
+    const head = vi
+      .spyOn(storage, "head")
+      .mockRejectedValueOnce(new StorageError(code, { method: "HEAD", url: URL }));
+    const error = await rejection(storage.move(URL, DEST, { ifMatch: TAG }), "conflict");
+    expect(error.message).toContain("partial");
+    expect(head).toHaveBeenCalledExactlyOnceWith(URL);
+    expect(calls.some((c) => c.method === "DELETE" && c.url === dest)).toBe(false);
+  });
   test("a lost DELETE response preserves the copy when the source disappeared or cannot be verified", async () => {
     for (const status of [404, 403])
       for (const failure of ["transport", "unexpected-response"] as const) {
@@ -1247,11 +1387,17 @@ test("JSON patch holes are invalid operations and cannot become null in the requ
   expect(calls).toHaveLength(0);
 });
 
-test("preserves SPARQL VARNAME's digit-leading names despite the upstream N3 parser restriction", async () => {
-  const statement = quad(variable("0"), p, s);
-  const body = await buildN3Patch(n3([statement], [], [statement]));
-  expect(body).toContain("?0 <urn:p> <urn:s> .\n");
-  // n3's N3 lexer has a narrower initial-character rule than SPARQL VARNAME. Keep the
-  // requested validation/names, and make this interoperability limit explicit in SKILL.md.
-  expect(() => new Parser({ format: "text/n3" }).parse(body)).toThrow('Unexpected "?0"');
+test.each([
+  "0",
+  "1x",
+  "9value",
+])("refuses digit-leading variable %s before any request", async (name) => {
+  const statement = quad(variable(name), p, s);
+  const patch = n3([statement], [], [statement]);
+  expect(await rejection(buildN3Patch(patch), "bad-request")).toMatchObject({ status: null });
+  const { storage, calls } = backend();
+  expect(await rejection(storage.patch(URL, patch, { ifMatch: TAG }), "bad-request")).toMatchObject(
+    { status: null },
+  );
+  expect(calls).toHaveLength(0);
 });
