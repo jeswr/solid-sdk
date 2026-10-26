@@ -1,8 +1,10 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 import { DataFactory } from "n3";
 import { describe, expect, it } from "vitest";
 import { demoImport, expectCleanTurtle, sparseImport, TEST_POD_ROOT } from "../core/testing.js";
 import { CLASSES, MusicPlaylist, MusicRecording } from "../core/vocab.js";
 import { spotifyAdapter } from "./adapter.js";
+import { SPOTIFY_FIXTURES } from "./fixtures.js";
 
 const ROOT = `${TEST_POD_ROOT}integrations/spotify/`;
 const TRACKS_DOC = `${ROOT}music/top-tracks.ttl`;
@@ -12,7 +14,10 @@ describe("spotify adapter contract", () => {
   it("writes top tracks as typed schema:MusicRecording into Media", async () => {
     const { pod, report } = await demoImport(spotifyAdapter);
 
-    expect(report.written.map((w) => w.url).sort()).toEqual([LISTS_DOC, TRACKS_DOC]);
+    expect(report.written.map((w) => w.url)).toEqual(
+      expect.arrayContaining([LISTS_DOC, TRACKS_DOC]),
+    );
+    expect(report.written).toHaveLength(10);
     expect(report.categories).toEqual(["media"]);
 
     const ds = pod.dataset(TRACKS_DOC);
@@ -60,6 +65,13 @@ describe("spotify adapter contract", () => {
   // exercised — `p.tracks.total` threw "Cannot read properties of undefined".
   it("survives a sparse live response (null entries, absent nested fields)", async () => {
     const { pod, report } = await sparseImport(spotifyAdapter, [
+      ...SPOTIFY_FIXTURES.filter(
+        (route) =>
+          ![
+            "https://api.spotify.com/v1/me/top/tracks",
+            "https://api.spotify.com/v1/me/playlists",
+          ].includes(route.url),
+      ),
       {
         url: "https://api.spotify.com/v1/me/top/tracks",
         json: {
@@ -98,11 +110,13 @@ describe("spotify adapter contract", () => {
       },
     ]);
 
-    // Completed without throwing and wrote both documents.
-    expect(report.written.map((w) => w.url).sort()).toEqual([LISTS_DOC, TRACKS_DOC]);
-    // Three items lacked a stable id (null track, id-less track, null
-    // playlist) → all skipped, none fatal.
-    expect(report.skipped).toBe(3);
+    // Completed without throwing and wrote every collection, including the original documents.
+    expect(report.written.map((w) => w.url)).toEqual(
+      expect.arrayContaining([LISTS_DOC, TRACKS_DOC]),
+    );
+    expect(report.written).toHaveLength(10);
+    // Two invalid tracks in each of three ranges and one null playlist are skipped.
+    expect(report.skipped).toBe(7);
 
     // Both documents are valid Turtle with no leaked undefined/null literals.
     const tracks = expectCleanTurtle(pod, TRACKS_DOC);

@@ -120,3 +120,47 @@ and unlisted JSON fields are omitted. Known token, cookie and personal keys cann
 allowlisted; empty allowlists are the default. Hosts must ensure every allowed scalar is
 non-personal and use synthetic replacements when replay requires personal fields. Tests use
 mocked source transports and memory Pods only.
+
+## Spotify Web API
+
+The Spotify adapter imports saved tracks, playlists with ordered items, followed artists,
+short/medium/long-term top tracks and artists, and recently-played history. The existing
+`music/top-tracks.ttl` remains the medium-term snapshot. Other top ranges use explicit
+range suffixes. Library collections replace snapshots; playback events merge by track id
+and played-at timestamp in `music/recently-played.ttl`.
+
+For live PKCE sessions, inject the public client id into `createRegistry` and use the
+Spotify-specific source transport so an expired token can refresh once after a 401:
+
+```ts
+import { createSpotifySourceAuth } from '@jeswr/pod-connectors/adapters/spotify';
+
+const sourceAuth = createSpotifySourceAuth({
+  clientId,
+  token, // from authorize(); memory only
+  fetch: pristineSourceFetch,
+  onToken: updated => { token = updated; }, // optional in-memory host update
+});
+// Pass sourceAuth and the configured Spotify adapter to runImport in live mode.
+```
+
+Only `api.spotify.com` receives bearer credentials. Refresh goes to Spotify's fixed token
+endpoint without a client secret or API bearer header; redirects are refused. Concurrent
+401s share one refresh. GET retries are limited to one refresh per request. API 429s wait
+for `Retry-After` (seconds or HTTP date), with at most three retries; other failures reach
+the host without advancing its checkpoint. Unusable or oversized delays surface as
+`RateLimitedError` for the host to schedule later.
+
+The opaque successful cursor is `after:<epoch-ms>` of the newest imported play. Hosts may
+supply `before:<epoch-ms>` for an explicit older-history import. Pagination follows the
+API's same-resource `next` URLs. Persist `report.state` only on success; history absent
+from subsequent API windows is retained. Spotify only exposes its available recent history,
+so this cannot reconstruct a full lifetime listening export. Events use the federation media
+contract incorporating solid-listening's shape: `media:PlaybackEvent` (+ `schema:ListenAction`),
+`media:playedWork` → Track, `core:atTime` → `time:Instant` → `time:inXSDDateTime`.
+The listener is the implicit Pod owner; no listening duration is inferred from track length.
+
+All demos remain fixture-backed. Public environment-variable configuration belongs to the
+host application. Playlist item requests use Spotify's current `/playlists/{id}/items`
+endpoint and accept both `item` and legacy `track` payloads. Availability and permission
+errors (including playlists inaccessible to the registered client) are surfaced to the host.

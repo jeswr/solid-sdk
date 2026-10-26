@@ -1,37 +1,48 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
-/**
- * Spotify → Media. Top tracks (`/me/top/tracks`) and playlists
- * (`/me/playlists`) as `schema:MusicRecording` / `schema:MusicPlaylist`.
- * Spotify supports secretless PKCE for public clients, so live mode needs
- * only a client id. Snapshot semantics (the API has no change cursor).
- */
 import { DataFactory, Store } from "n3";
-import { getJson } from "../core/fixture-fetch.js";
-import { arr, optionalNumber, optionalText, SkipCounter } from "../core/safe.js";
+import { IntegrationSyncError } from "../core/errors.js";
+import { arr, optionalDate, optionalNumber, optionalText, SkipCounter } from "../core/safe.js";
 import type { ImportContext, ImportOutcome, IntegrationAdapter } from "../core/types.js";
 import { CLASSES, MusicPlaylist, MusicRecording } from "../core/vocab.js";
-import { SPOTIFY_FIXTURES, type SpotifyPlaylists, type SpotifyTopTracks } from "./fixtures.js";
+import { API, pages } from "./api.js";
+import { SPOTIFY_FIXTURES, type SpotifyPlaylist, type SpotifyTrack } from "./fixtures.js";
+import { MEDIA, MediaThing, SCHEMA, TIME } from "./vocab.js";
 import { vocabMap } from "./vocab-map.js";
 
-const ID = "spotify";
-const API = "https://api.spotify.com/v1";
-const SCOPES = ["user-top-read", "playlist-read-private"] as const;
+export { createSpotifySourceAuth } from "./source-auth.js";
+
+const SCOPES = [
+  "user-top-read",
+  "playlist-read-private",
+  "playlist-read-collaborative",
+  "user-library-read",
+  "user-follow-read",
+  "user-read-recently-played",
+] as const;
+interface Artist {
+  id: string;
+  name?: string;
+  external_urls?: { spotify?: string };
+}
+interface TrackItem {
+  track?: SpotifyTrack | null;
+  item?: SpotifyTrack | null;
+  played_at?: string;
+}
 
 export const spotifyAdapter: IntegrationAdapter = {
   vocabMap,
   metadata: {
-    id: ID,
+    id: "spotify",
     name: "Spotify",
     tier: "A",
     authKind: "oauth-pkce",
     scopes: SCOPES,
     categories: ["media"],
-    whatYouGet: "Your top tracks and your playlists, saved as music records in Media.",
+    whatYouGet:
+      "Saved tracks, playlists and items, followed artists, top music and listening history.",
     requirements: [
-      "Create an app at developer.spotify.com/dashboard (no review needed for personal use).",
-      "Add <app-origin>/oauth-callback.html as a Redirect URI.",
-      "Set NEXT_PUBLIC_SPOTIFY_CLIENT_ID — Spotify supports secretless PKCE, no proxy needed.",
+      "Register a Spotify public PKCE client and redirect URI; inject its client id from the host.",
     ],
   },
   oauth: {
@@ -42,84 +53,207 @@ export const spotifyAdapter: IntegrationAdapter = {
     tokenExchange: "public",
   },
   fixtures: () => SPOTIFY_FIXTURES,
-
   async import(ctx: ImportContext): Promise<ImportOutcome> {
     const skipped = new SkipCounter();
-
-    ctx.progress({ label: "Fetching your top tracks…", done: 0, total: 2 });
-    const top = await getJson<SpotifyTopTracks>(ID, ctx.api, `${API}/me/top/tracks?limit=50`);
-
-    const tracksDoc = ctx.resolve("music/top-tracks.ttl");
-    const tracks = new Store();
-    for (const t of arr(top?.items)) {
-      // A track with no id has no stable fragment IRI — skip it.
-      if (!t || optionalText(t.id) === undefined) {
+    const checkpoint = parseCursor(ctx.cursor);
+    const write = async (slug: string, dataset: Store, forClass: string, merge = false) => {
+      await ctx.write({
+        slug,
+        dataset,
+        category: "media",
+        forClass,
+        writeMode: merge ? "merge" : "replace",
+      });
+    };
+    const track = (value: SpotifyTrack | null | undefined, slug: string, ds: Store) => {
+      const id = optionalText(value?.id);
+      if (!value || !id || value.type === "episode" || value.is_local) {
         skipped.skip();
-        continue;
+        return undefined;
       }
-      const rec = new MusicRecording(`${tracksDoc}#track-${t.id}`, tracks, DataFactory).mark();
-      rec.name = optionalText(t.name);
-      rec.identifier = t.id;
-      const artists = arr(t.artists)
-        .map((a) => optionalText(a?.name))
-        .filter((n): n is string => n !== undefined);
-      rec.byArtist = artists.length > 0 ? artists.join(", ") : undefined;
-      rec.inAlbum = optionalText(t.album?.name);
-      // FOLLOW-UP (typed-views P2 / docs §6 Q4): no album-art triple is imported
-      // today — only `album.name`. Adding e.g.
-      //   rec.image = optionalText(t.album?.images?.[0]?.url)
-      // (a `schema:image` setter on MusicRecording + `images` on SpotifyTrack)
-      // would populate real cover art; the music card already renders it `if
-      // present` and shows a music-note icon fallback otherwise. Left as a
-      // separate, reviewed change — not made here.
-      const ms = optionalNumber(t.duration_ms);
-      rec.duration = ms !== undefined ? isoDuration(ms) : undefined;
-      rec.sourceUrl = optionalText(t.external_urls?.spotify);
-    }
-    await ctx.write({
-      slug: "music/top-tracks.ttl",
-      category: "media",
-      forClass: CLASSES.MusicRecording,
-      dataset: tracks,
-    });
-
-    ctx.progress({ label: "Fetching your playlists…", done: 1, total: 2 });
-    const lists = await getJson<SpotifyPlaylists>(ID, ctx.api, `${API}/me/playlists?limit=50`);
-
-    const listsDoc = ctx.resolve("music/playlists.ttl");
-    const playlists = new Store();
-    for (const p of arr(lists?.items)) {
-      // Spotify can return null entries in the playlists array (collaborative
-      // playlists you've lost access to) — skip them. No id ⇒ no fragment IRI.
-      if (!p || optionalText(p.id) === undefined) {
-        skipped.skip();
-        continue;
+      const iri = `${ctx.resolve(slug)}#track-${encodeURIComponent(id)}`;
+      const rec = new MusicRecording(iri, ds, DataFactory).mark();
+      rec.name = optionalText(value.name);
+      rec.identifier = id;
+      rec.byArtist =
+        arr(value.artists)
+          .map((a) => optionalText(a?.name))
+          .filter((name): name is string => name !== undefined)
+          .join(", ") || undefined;
+      rec.inAlbum = optionalText(value.album?.name);
+      const ms = optionalNumber(value.duration_ms);
+      rec.duration = ms !== undefined && ms >= 0 ? isoDuration(ms) : undefined;
+      rec.sourceUrl =
+        optionalText(value.external_urls?.spotify) ??
+        `https://open.spotify.com/track/${encodeURIComponent(id)}`;
+      const media = new MediaThing(iri, ds, DataFactory);
+      media.types.add(`${MEDIA}Track`);
+      media.types.add(`${MEDIA}CreativeWork`);
+      media.title = rec.name ?? id;
+      return iri;
+    };
+    const tracks = async (slug: string, path: string, wrapped = false) => {
+      const ds = new Store();
+      for await (const page of pages<SpotifyTrack & TrackItem>(ctx, `${API}${path}`))
+        for (const item of arr(page.items)) track(wrapped ? item?.track : item, slug, ds);
+      await write(slug, ds, CLASSES.MusicRecording);
+    };
+    const artists = async (slug: string, path: string, followed = false) => {
+      const ds = new Store();
+      for await (const page of pages<Artist>(ctx, `${API}${path}`, (json) =>
+        followed ? (json.artists ?? {}) : json,
+      )) {
+        for (const value of arr(page.items)) {
+          const id = optionalText(value?.id);
+          if (!value || !id) {
+            skipped.skip();
+            continue;
+          }
+          const artist = new MediaThing(
+            `${ctx.resolve(slug)}#artist-${encodeURIComponent(id)}`,
+            ds,
+            DataFactory,
+          );
+          artist.types.add(`${MEDIA}Artist`);
+          artist.types.add(`${SCHEMA}MusicGroup`);
+          artist.name = optionalText(value.name);
+          artist.artistName = artist.name;
+          artist.identifier = id;
+          artist.sourceUrl =
+            optionalText(value.external_urls?.spotify) ??
+            `https://open.spotify.com/artist/${encodeURIComponent(id)}`;
+        }
       }
-      const pl = new MusicPlaylist(`${listsDoc}#playlist-${p.id}`, playlists, DataFactory).mark();
-      pl.name = optionalText(p.name);
-      pl.identifier = p.id;
-      pl.description = optionalText(p.description);
-      // The live bug: `tracks` is absent on some playlist items. Default to 0.
-      pl.numTracks = optionalNumber(p.tracks?.total) ?? 0;
-      pl.sourceUrl = optionalText(p.external_urls?.spotify);
-    }
-    await ctx.write({
-      slug: "music/playlists.ttl",
-      category: "media",
-      forClass: CLASSES.MusicPlaylist,
-      dataset: playlists,
-    });
+      await write(slug, ds, `${MEDIA}Artist`);
+    };
 
-    ctx.progress({ label: "Done", done: 2, total: 2 });
-    return { skipped: skipped.value };
+    ctx.progress({ label: "Fetching saved tracks and top music…", done: 0, total: 4 });
+    await tracks("music/saved-tracks.ttl", "/me/tracks?limit=50", true);
+    for (const range of ["short_term", "medium_term", "long_term"]) {
+      await tracks(
+        range === "medium_term" ? "music/top-tracks.ttl" : `music/top-tracks-${range}.ttl`,
+        `/me/top/tracks?limit=50&time_range=${range}`,
+      );
+      await artists(
+        `music/top-artists-${range}.ttl`,
+        `/me/top/artists?limit=50&time_range=${range}`,
+      );
+    }
+    ctx.progress({ label: "Fetching followed artists…", done: 1, total: 4 });
+    await artists("music/followed-artists.ttl", "/me/following?type=artist&limit=50", true);
+
+    ctx.progress({ label: "Fetching playlists and items…", done: 2, total: 4 });
+    const slug = "music/playlists.ttl";
+    const ds = new Store();
+    for await (const page of pages<SpotifyPlaylist>(ctx, `${API}/me/playlists?limit=50`)) {
+      for (const value of arr(page.items)) {
+        const id = optionalText(value?.id);
+        if (!value || !id) {
+          skipped.skip();
+          continue;
+        }
+        const playlist = new MusicPlaylist(
+          `${ctx.resolve(slug)}#playlist-${encodeURIComponent(id)}`,
+          ds,
+          DataFactory,
+        ).mark();
+        playlist.name = optionalText(value.name);
+        playlist.identifier = id;
+        playlist.description = optionalText(value.description);
+        playlist.numTracks = optionalNumber(value.items?.total ?? value.tracks?.total) ?? 0;
+        playlist.sourceUrl =
+          optionalText(value.external_urls?.spotify) ??
+          `https://open.spotify.com/playlist/${encodeURIComponent(id)}`;
+        const media = new MediaThing(
+          `${ctx.resolve(slug)}#playlist-${encodeURIComponent(id)}`,
+          ds,
+          DataFactory,
+        );
+        media.title = playlist.name;
+        // Keep repeated tracks and their order as named ListItems; snapshots remove deleted entries.
+        let position = 0;
+        for await (const items of pages<TrackItem>(
+          ctx,
+          `${API}/playlists/${encodeURIComponent(id)}/items?limit=50`,
+        )) {
+          for (const item of arr(items.items)) {
+            position++;
+            const work = track(item?.item ?? item?.track, slug, ds);
+            if (!work) continue;
+            const iri = `${ctx.resolve(slug)}#playlist-${encodeURIComponent(id)}-item-${position}`;
+            const entry = new MediaThing(iri, ds, DataFactory);
+            entry.types.add(`${SCHEMA}ListItem`);
+            entry.item = work;
+            entry.position = position;
+            media.entries.add(iri);
+          }
+        }
+      }
+    }
+    await write(slug, ds, CLASSES.MusicPlaylist);
+
+    ctx.progress({ label: "Fetching recently played…", done: 3, total: 4 });
+    const historySlug = "music/recently-played.ttl";
+    const history = new Store();
+    let newest = checkpoint?.direction === "after" ? checkpoint.time : undefined;
+    const query = checkpoint ? `&${checkpoint.direction}=${checkpoint.time}` : "";
+    for await (const page of pages<TrackItem>(
+      ctx,
+      `${API}/me/player/recently-played?limit=50${query}`,
+    )) {
+      for (const item of arr(page.items)) {
+        const date = optionalDate(item?.played_at);
+        if (!date) {
+          skipped.skip();
+          continue;
+        }
+        if (checkpoint?.direction === "after" && date.getTime() <= checkpoint.time) continue;
+        const work = track(item?.track, historySlug, history);
+        if (!work) continue;
+        const id = `${encodeURIComponent(item?.track?.id ?? "")}-${date.getTime()}`;
+        const event = new MediaThing(
+          `${ctx.resolve(historySlug)}#play-${id}`,
+          history,
+          DataFactory,
+        );
+        event.types.add(`${MEDIA}PlaybackEvent`);
+        event.types.add(`${SCHEMA}ListenAction`);
+        event.identifier = id;
+        event.sourceUrl = `https://open.spotify.com/track/${encodeURIComponent(item?.track?.id ?? "")}`;
+        event.playedWork = work;
+        event.playedVia = "https://open.spotify.com/";
+        const instantIri = `${ctx.resolve(historySlug)}#time-${date.getTime()}`;
+        event.atTime = instantIri;
+        const instant = new MediaThing(instantIri, history, DataFactory);
+        instant.types.add(`${TIME}Instant`);
+        instant.instant = date;
+        newest = Math.max(newest ?? 0, date.getTime());
+      }
+    }
+    await write(historySlug, history, `${MEDIA}PlaybackEvent`, true);
+    ctx.progress({ label: "Done", done: 4, total: 4 });
+    return {
+      skipped: skipped.value,
+      cursor: newest === undefined ? ctx.cursor : `after:${newest}`,
+    };
   },
 };
 
-/** 213573 ms → `PT3M33S` (schema:duration is ISO 8601). */
+function parseCursor(
+  cursor: string | undefined,
+): { direction: "before" | "after"; time: number } | undefined {
+  if (cursor === undefined) return undefined;
+  const match = /^(before|after):(\d+)$/.exec(cursor);
+  const time = Number(match?.[2]);
+  if (!match || !Number.isSafeInteger(time) || time < 0)
+    throw new IntegrationSyncError("spotify", "Invalid Spotify recently-played cursor.");
+  return { direction: match[1] as "before" | "after", time };
+}
+
+/** Spotify track length is metadata, never inferred as actual time listened. */
 function isoDuration(ms: number): string {
-  const totalSeconds = Math.round(ms / 1000);
-  const h = Math.floor(totalSeconds / 3600);
-  const m = Math.floor((totalSeconds % 3600) / 60);
-  const s = totalSeconds % 60;
-  return `PT${h > 0 ? `${h}H` : ""}${m > 0 ? `${m}M` : ""}${s}S`;
+  const seconds = Math.round(ms / 1000);
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  return `PT${h > 0 ? `${h}H` : ""}${m > 0 ? `${m}M` : ""}${seconds % 60}S`;
 }
