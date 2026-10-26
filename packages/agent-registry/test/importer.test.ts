@@ -68,6 +68,13 @@ describe("synthetic registry import", () => {
       ],
     });
     expect(report.settings.connections.every((a) => a.bindingState !== "connected")).toBe(true);
+    const mainUrl = `https://pod.example/agent/accounts/${main?.id}.ttl`;
+    expect(
+      ports.storage.resources
+        .get(mainUrl)
+        ?.dataset.getObjects(term(mainUrl), term(`${AGENT}identityConflict`), null)
+        .map((v) => JSON.parse(v.value)),
+    ).toEqual(main?.identityConflicts);
     expect(ports.storage.events[0]).toEqual({
       operation: "acl",
       url: "https://pod.example/agent/accounts/",
@@ -167,6 +174,8 @@ describe("synthetic registry import", () => {
       channel: "email",
       provider: "microsoft",
       identifier: "GMAIL-MAIN@example.com",
+      method: "historic_connector",
+      observedOn: "2026-10-20",
     });
     const settings = inventorySettings(snap, new Uint8Array(32));
     expect(settings.connections[0]).toMatchObject({

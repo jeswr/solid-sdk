@@ -7,19 +7,27 @@ export function connectionStatus(
   account: Account,
   now: Date,
 ): {
-  state: "inventory" | "setup-required" | "error" | "disabled";
+  state: "previously-checked" | "inventory" | "setup-required" | "error" | "disabled";
   stale: boolean;
   identityConflict: boolean;
 } {
-  const observed = Date.parse(account.inventory.lastTested ?? account.inventory.observedAt ?? "");
+  const historical = account.evidence
+    .map((e) => e.observedOn)
+    .sort()
+    .at(-1);
+  const observed = Date.parse(
+    historical ?? account.inventory.lastTested ?? account.inventory.observedAt ?? "",
+  );
   const age = now.getTime() - observed;
   return {
     state:
       account.bindingState === "error" || account.bindingState === "disabled"
         ? account.bindingState
-        : account.bindingState === "setup-required"
-          ? "setup-required"
-          : "inventory",
+        : historical
+          ? "previously-checked"
+          : account.bindingState === "setup-required"
+            ? "setup-required"
+            : "inventory",
     stale: !Number.isFinite(age) || age < 0 || age > 7 * 86_400_000,
     identityConflict: account.identityConflicts.length > 0,
   };
@@ -40,7 +48,12 @@ export function effectiveCapability(
   return {
     allowed: false,
     provider: false,
-    owner: capability === "send" ? false : account.restrictions[capability] === true,
+    owner:
+      capability === "send"
+        ? false
+        : capability === "triage"
+          ? account.restrictions.read === true && account.restrictions.triage === true
+          : account.restrictions[capability] === true,
     policy: capability === "send" ? false : policy?.defaultAllowed.includes(action) === true,
   };
 }

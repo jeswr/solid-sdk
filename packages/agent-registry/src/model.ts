@@ -22,6 +22,14 @@ export interface IdentityConflict {
   kind: "identity-mismatch" | "provider-mismatch";
   handleHashes: string[];
 }
+/** Historic connector evidence is not current provider access. */
+export interface HistoricEvidence {
+  channel: string;
+  provider: string;
+  handleHash: string;
+  observedOn: string;
+  method: string;
+}
 /** Privacy-safe settings connection and RDF account view. No raw identifiers or free-text notes. */
 export interface Account {
   id: string;
@@ -33,6 +41,7 @@ export interface Account {
   bindingState: BindingState;
   restrictions: Restrictions;
   identityConflicts: IdentityConflict[];
+  evidence: HistoricEvidence[];
   inventory: {
     setupStatus: string;
     observedAt?: string;
@@ -41,19 +50,22 @@ export interface Account {
 }
 /** Read-only communication policy evidence ported from the pilot settings model. */
 export interface WorkflowPolicy {
+  askWhenUncertain: string[];
   defaultAllowed: string[];
   requiresCurrentInstruction: string[];
   requiresFreshExplicitInstruction: string[];
+  taxonomy: Record<string, string>;
 }
 /** Account settings only; scheduling and hosted triage belong to other packages. */
 export interface Settings {
   version: 1;
   connections: Account[];
   workflowPolicy: WorkflowPolicy | null;
+  unmatchedEvidence: HistoricEvidence[];
 }
 /** Construct an empty, default-deny settings model. */
 export function emptySettings(): Settings {
-  return { version: 1, connections: [], workflowPolicy: null };
+  return { version: 1, connections: [], workflowPolicy: null, unmatchedEvidence: [] };
 }
 /** Coarse grouping retained from the pilot, including the Telegram control channel. */
 export function channelGroup(channel: string): "email" | "chat" | "calendar" | "other" {

@@ -32,7 +32,11 @@ function token(value: unknown): string {
 }
 function date(value: unknown): string {
   const text = string(value, 64);
-  if (!/^\d{4}-\d{2}-\d{2}(?:T.*Z)?$/.test(text) || !Number.isFinite(Date.parse(text)))
+  if (
+    !/^\d{4}-\d{2}-\d{2}(?:T.*Z)?$/.test(text) ||
+    !Number.isFinite(Date.parse(text)) ||
+    new Date(text).toISOString().slice(0, 10) !== text.slice(0, 10)
+  )
     return invalid();
   return text;
 }
@@ -55,7 +59,13 @@ export interface RegistrySnapshot {
   accounts: RegistryAccount[];
   notes: string[];
   observedAt?: string;
-  evidence: { channel: string; provider: string; identifier: string }[];
+  evidence: {
+    channel: string;
+    provider: string;
+    identifier: string;
+    method: string;
+    observedOn: string;
+  }[];
   workflowPolicy: Settings["workflowPolicy"];
 }
 function account(value: unknown): RegistryAccount {
@@ -169,11 +179,15 @@ export function parseSnapshot(value: unknown): RegistrySnapshot {
     ]);
     const actions = (v: unknown) => strings(v).map(token);
     workflowPolicy = {
+      askWhenUncertain: strings(decision.ask_when_uncertain_about).map(token),
       defaultAllowed: actions(p.default_allowed),
       requiresCurrentInstruction: actions(
         p.requires_current_instruction_or_narrow_active_authorization_rule,
       ),
       requiresFreshExplicitInstruction: actions(p.always_requires_fresh_explicit_instruction),
+      taxonomy: Object.fromEntries(
+        Object.entries(taxonomy).map(([key, value]) => [token(key), string(value, 300)]),
+      ),
     };
   }
   return {
@@ -189,7 +203,9 @@ export function parseSnapshot(value: unknown): RegistrySnapshot {
       return {
         channel: token(e.channel),
         provider: token(e.provider),
-        identifier: string(e.identifier),
+        identifier: isPlaceholder(string(e.identifier)) ? invalid() : string(e.identifier),
+        method: token(e.method),
+        observedOn: date(e.observedOn),
       };
     }),
     workflowPolicy,
@@ -227,9 +243,19 @@ export function inventorySettings(snapshot: RegistrySnapshot, salt: Uint8Array):
     ),
   ];
   const safe = (value: string) =>
-    rawHandles.some((h) => value.toLowerCase().includes(h)) || /@|op:\/\//i.test(value)
+    rawHandles.some((h) => normaliseHandle(value).includes(h)) || /@|op:\/\//i.test(value)
       ? "redacted"
       : value;
+  const evidenceFor = (e: RegistrySnapshot["evidence"][number]) => ({
+    channel: safe(e.channel),
+    provider: safe(e.provider),
+    handleHash: hashHandle(e.identifier, salt),
+    method: safe(e.method),
+    observedOn: e.observedOn,
+  });
+  const matches = (a: RegistryAccount, e: RegistrySnapshot["evidence"][number]) =>
+    a.channel === e.channel &&
+    a.handles.some((h) => normaliseHandle(h) === normaliseHandle(e.identifier));
   const settings: Settings = {
     version: 1,
     connections: accounts.map((a): Account => {
@@ -241,7 +267,7 @@ export function inventorySettings(snapshot: RegistrySnapshot, salt: Uint8Array):
           : a.provider;
       for (const note of snapshot.notes) {
         if (!/versus|contradict|conflict/i.test(note)) continue;
-        const mentioned = rawHandles.filter((h) => note.toLowerCase().includes(h));
+        const mentioned = rawHandles.filter((h) => normaliseHandle(note).includes(h));
         if (mentioned.some((h) => a.handles.some((own) => normaliseHandle(own) === h)))
           conflicts.push({
             kind: "identity-mismatch",
@@ -260,7 +286,7 @@ export function inventorySettings(snapshot: RegistrySnapshot, salt: Uint8Array):
           });
       }
       for (const ref of a.refs)
-        if (rawHandles.some((h) => ref.toLowerCase().includes(h)))
+        if (rawHandles.some((h) => normaliseHandle(ref).includes(h)))
           throw new Error("Credential reference contains a private identifier");
       return {
         id: accountId(a.id, salt),
@@ -272,6 +298,7 @@ export function inventorySettings(snapshot: RegistrySnapshot, salt: Uint8Array):
         bindingState: conflicts.length ? "error" : bindingStateFromSetup(a.setupStatus),
         restrictions: { ...DENY_ALL },
         identityConflicts: [...new Map(conflicts.map((c) => [JSON.stringify(c), c])).values()],
+        evidence: snapshot.evidence.filter((e) => matches(a, e)).map(evidenceFor),
         inventory: {
           setupStatus: safe(a.setupStatus),
           ...(snapshot.observedAt ? { observedAt: snapshot.observedAt } : {}),
@@ -279,8 +306,18 @@ export function inventorySettings(snapshot: RegistrySnapshot, salt: Uint8Array):
         },
       };
     }),
+    unmatchedEvidence: snapshot.evidence
+      .filter((e) => !accounts.some((a) => matches(a, e)))
+      .map(evidenceFor),
     workflowPolicy: snapshot.workflowPolicy
       ? {
+          askWhenUncertain: snapshot.workflowPolicy.askWhenUncertain.map(safe),
+          taxonomy: Object.fromEntries(
+            Object.entries(snapshot.workflowPolicy.taxonomy).map(([key, value]) => [
+              safe(key),
+              safe(value),
+            ]),
+          ),
           defaultAllowed: snapshot.workflowPolicy.defaultAllowed.map(safe),
           requiresCurrentInstruction: snapshot.workflowPolicy.requiresCurrentInstruction.map(safe),
           requiresFreshExplicitInstruction:

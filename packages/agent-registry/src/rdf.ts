@@ -41,6 +41,8 @@ export function accountDataset(account: Account, url: string): Store {
   if (account.inventory.lastTested) node.text("lastTested", account.inventory.lastTested);
   for (const hash of account.channelHandles) node.literals("channelHandle").add(hash);
   for (const ref of account.credentialRefs) node.literals("credentialRef").add(ref);
+  for (const evidence of account.evidence)
+    node.literals("historicEvidence").add(JSON.stringify(evidence));
   for (const conflict of account.identityConflicts)
     node.literals("identityConflict").add(JSON.stringify(conflict));
   const restrictions = new AccountNode(`${url}#restrictions`, store, factory);

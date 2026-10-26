@@ -22,6 +22,7 @@ export {
   channelGroup,
   DENY_ALL,
   emptySettings,
+  type HistoricEvidence,
   type IdentityConflict,
   type Restrictions,
   type Settings,
