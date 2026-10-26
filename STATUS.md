@@ -1,9 +1,76 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # sst-4s8h — MCP-12 lane status
 
 Implemented on `lane/sst-4s8h`, based on `917d3be9c7967622829adc43c1aaabb0964ec993`.
 No push, PR, publish, branch switch, remote fetch/merge, or dependency lifecycle scripts.
+
+## Fix round 3 — in-pod WebID profile redirects
+
+Review: `solid-sdk-lane-sst-4s8h-98263b131213.md`, read in full. Exactly its one
+finding is addressed; only `packages/solid-mcp/src/pod.ts` and the existing
+profile-discovery regression test file changed, plus this status update.
+
+- `07a284d4` — `fix: follow scoped WebID profile redirects`: route in-pod profile
+  reads through the existing `scopedFetch` guard. Redirects stay within the pod,
+  obey the existing ten-hop limit, and receive a fresh DPoP proof per request.
+  Off-pod profile discovery retains its existing anonymous transport.
+- Final commit — `docs: record WebID redirect fix validation`: this status update,
+  written and committed last.
+
+Eight new regressions cover 301/302/303/307/308 profile redirects, relative
+locations, real ES256 signatures and URI/token binding on every hop, unique
+proof IDs, foreign-origin and same-origin out-of-pod redirects, the hop limit,
+and best-effort fallback scanning. All eight failed before the fix and pass
+after it; the discovery test file now passes 20 tests.
+
+Validation on Node `v24.22.1`, pnpm `10.4.1`:
+
+```sh
+GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=protocol.allow GIT_CONFIG_VALUE_0=never bash -c 'pnpm --filter @jeswr/solid-mcp run lint && pnpm --filter @jeswr/solid-mcp run build && pnpm --filter @jeswr/solid-mcp run typecheck && pnpm --filter @jeswr/solid-mcp run test'
+```
+
+PASS: lint, build, typecheck, and all 151 tests in 7 files.
+
+```sh
+pnpm run lint:root
+```
+
+PASS: Biome and all root guards.
+
+```sh
+GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=protocol.allow GIT_CONFIG_VALUE_0=never TURBO_SCM_BASE=e500fa2444ea4932c37d19c681e88d9cf6208e9a pnpm run gate
+```
+
+PASS: 8/8 tasks successful (3 cached).
+
+```sh
+GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=protocol.allow GIT_CONFIG_VALUE_0=never pnpm run gate:full
+```
+
+FAIL outside this fix: 214 successful / 275 tasks (7 cached), stopping at
+`@jeswr/federation-trust#test`, `test/characterization.test.ts:196`,
+“delegation credential structure is stable”. The existing snapshot expects
+serialized JWK keys in `crv,x,kty` order; the runtime emits `kty,crv,x`.
+`packages/federation-trust` has no diff from the supplied lane base `e500fa24`.
+The full run also emitted a `solid-offline` test-worker `EPIPE` while stopping;
+its reported failed task is federation-trust. The solid-mcp gate tasks passed.
+No unrelated source or snapshots were changed. Generated app
+`web/public/{callback.html,clientid.jsonld}` files were removed after validation.
+
+As in the original implementation, the installed Git-pinned `fetch-rdf` artifact
+lacked `dist`. Its pristine source at the exact pinned commit
+`a8359a3764cb6b3c763e09ea211542a5dc7edc33` was read from the existing local
+temporary cache, copied into this checkout's ignored `node_modules/.cache`, and
+compiled with installed dependencies. Only this checkout's ignored installed
+artifact received the built output. Git transport was disabled during gates;
+no remote clone/fetch, dependency addition, installation, or lifecycle script ran.
+
+`git diff --check` passes. No implementation work or new questions remain for
+this review. Full-workspace validation retains the unrelated failure above.
+`roborev` is unavailable (`command -v roborev` finds no executable), so per-commit
+automated verdicts could not be obtained; reviewer configuration is unchanged.
 
 ## Commits
 
