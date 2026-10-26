@@ -1,4 +1,5 @@
 import { fetchRdf, RdfFetchError } from "@jeswr/fetch-rdf";
+import { canonicalizeTaskDataset } from "./canonical-vocab";
 import { Store, DataFactory, Writer } from "n3";
 import type { DatasetCore } from "@rdfjs/types";
 import { ContainerDataset } from "@solid/object";
@@ -195,7 +196,7 @@ function wacAllowsWrite(response: Response): boolean {
 
 function serialize(dataset: DatasetCore): Promise<string> {
   const writer = new Writer({ format: "text/turtle" });
-  for (const q of dataset) writer.addQuad(q);
+  for (const q of canonicalizeTaskDataset(dataset, DataFactory)) writer.addQuad(q);
   return new Promise((resolve, reject) =>
     writer.end((err, result) => (err ? reject(err) : resolve(result))),
   );
