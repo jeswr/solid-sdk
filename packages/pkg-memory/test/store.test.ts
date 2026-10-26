@@ -142,6 +142,68 @@ async function sharedBlankBatchGraphs(batch = "shared-batch", ids = ["one", "two
 }
 
 it.each([
+  "provenance",
+  "pubinfo",
+])("rejects blank nodes shared only between private %s graphs before any write", async (kind) => {
+  const { store, write } = setup();
+  const value = await sharedBlankBatchGraphs();
+  const target = DataFactory.blankNode();
+  for (const np of value.nanopubs) {
+    const name = kind === "provenance" ? np.provenanceId : np.pubinfoId;
+    const contents = graph(value.dataset, name);
+    new RdfNode(np.id, contents).add(`${NS.prov}primarySource`, target);
+    new RdfNode(target, contents).text(`${NS.schema}name`, "Shared evidence target");
+    putGraph(value.dataset as Store, name, contents);
+  }
+  await expect(store.put(value)).rejects.toThrow("Unsupported cross-resource blank-node sharing");
+  expect(write).not.toHaveBeenCalled();
+});
+
+it("preserves a local blank node shared between one nanopub's provenance and publication graphs", async () => {
+  const { store } = setup();
+  const value = await sharedBlankBatchGraphs();
+  const np = value.nanopubs[0]!;
+  const target = DataFactory.blankNode();
+  for (const name of [np.provenanceId, np.pubinfoId]) {
+    const contents = graph(value.dataset, name);
+    new RdfNode(np.id, contents).add(`${NS.prov}primarySource`, target);
+    new RdfNode(target, contents).text(`${NS.schema}name`, "Local evidence target");
+    putGraph(value.dataset as Store, name, contents);
+  }
+  await store.put(value);
+  expect(isomorphic([...(await store.list()).dataset], [...value.dataset])).toBe(true);
+});
+
+it("rejects sharing across different batch graphs without a common graph before any write", async () => {
+  const { store, write } = setup();
+  const first = await sharedBlankBatchGraphs("first-batch", ["one"]);
+  const second = await sharedBlankBatchGraphs("second-batch", ["two"]);
+  const source = "https://example.org/document";
+  const author = new RdfNode(
+    source,
+    graph(first.dataset, pkgId("batch", "first-batch", "sources")),
+  ).one(`${NS.schema}author`);
+  const other = new RdfNode(
+    source,
+    graph(second.dataset, pkgId("batch", "second-batch", "sources")),
+  ).one(`${NS.schema}author`);
+  const dataset = new Store(first.dataset);
+  for (const quad of second.dataset)
+    dataset.add(
+      DataFactory.quad(
+        quad.subject.equals(other) ? (author as typeof quad.subject) : quad.subject,
+        quad.predicate,
+        quad.object.equals(other) ? (author as typeof quad.object) : quad.object,
+        quad.graph,
+      ),
+    );
+  await expect(
+    store.put({ dataset, nanopubs: [...first.nanopubs, ...second.nanopubs] }),
+  ).rejects.toThrow("Unsupported cross-resource blank-node sharing");
+  expect(write).not.toHaveBeenCalled();
+});
+
+it.each([
   false,
   true,
 ])("retains shared source/entity graphs and their blank-node references (reverse listing: %s)", async (reverse) => {

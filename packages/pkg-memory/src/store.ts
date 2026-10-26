@@ -2,7 +2,7 @@
 // AUTHORED-BY Codex GPT-6
 import { safeHttpIri, serialize } from "@jeswr/rdf-serialize";
 import { type OdrlPolicy, policyToTurtle } from "@jeswr/solid-odrl";
-import type { Term } from "@rdfjs/types";
+import type { DatasetCore, Term } from "@rdfjs/types";
 import { DataFactory as df } from "n3";
 import { compareDateTimes } from "./chronology.js";
 import { canonicalizeAssertionWithLabels, pkgId } from "./ids.js";
@@ -67,23 +67,23 @@ export class NanopubStore {
   /** Persist each nanopub separately, create-only; graph metadata is parsed before any write. */
   async put(value: Nanopublications): Promise<string[]> {
     const parsed = await parseNanopublications(await serializeNanopublications(value));
+    const parts = parsed.nanopubs.map((np) => {
+      const sharedGraphs = [
+        np.assertionId,
+        pkgId("batch", np.batch, "sources"),
+        pkgId("batch", np.batch, "entities"),
+      ];
+      const dataset = new Store();
+      for (const name of [np.id, np.provenanceId, np.pubinfoId, ...sharedGraphs])
+        putGraph(dataset, name, graph(parsed.dataset, name));
+      return { np, dataset, sharedGraphs };
+    });
+    validateBlankNodeSharing(parts);
     const resources = await Promise.all(
-      parsed.nanopubs.map(async (np) => {
-        const dataset = new Store();
-        for (const name of [
-          np.id,
-          np.assertionId,
-          np.provenanceId,
-          np.pubinfoId,
-          pkgId("batch", np.batch, "sources"),
-          pkgId("batch", np.batch, "entities"),
-        ])
-          putGraph(dataset, name, graph(parsed.dataset, name));
-        return {
-          url: this.url(np.id),
-          bytes: encode(await serializeNanopublications({ dataset, nanopubs: [np] })),
-        };
-      }),
+      parts.map(async ({ np, dataset }) => ({
+        url: this.url(np.id),
+        bytes: encode(await serializeNanopublications({ dataset, nanopubs: [np] })),
+      })),
     );
     await this.initialize();
     for (const resource of resources) await this.writeNanopub(resource.url, resource.bytes);
@@ -352,6 +352,31 @@ export class NanopubStore {
       throw new Error("Pod did not preserve nanopublication bytes in octet-stream fallback");
   }
 }
+
+/** Every cross-resource node needs a common graph through which list() can align it. */
+function validateBlankNodeSharing(parts: { dataset: DatasetCore; sharedGraphs: string[] }[]): void {
+  const anchors = new Map<string, Set<string>>();
+  for (const { dataset, sharedGraphs } of parts) {
+    const nodes = new Map<string, Set<string>>();
+    for (const quad of dataset)
+      for (const term of [quad.subject, quad.object]) {
+        if (term.termType !== "BlankNode") continue;
+        const names = nodes.get(term.value) ?? new Set<string>();
+        if (sharedGraphs.includes(quad.graph.value)) names.add(quad.graph.value);
+        nodes.set(term.value, names);
+      }
+    for (const [node, names] of nodes) {
+      const previous = anchors.get(node);
+      if (previous === undefined) anchors.set(node, names);
+      else {
+        const common = new Set([...previous].filter((name) => names.has(name)));
+        if (common.size === 0) throw new Error("Unsupported cross-resource blank-node sharing");
+        anchors.set(node, common);
+      }
+    }
+  }
+}
+
 function equalBytes(a: Uint8Array, b: Uint8Array): boolean {
   return a.length === b.length && a.every((value, i) => value === b[i]);
 }

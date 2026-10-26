@@ -134,7 +134,11 @@ exact query/pilot parity has not been verified.
 runtime dependency on the MCP server. `put(result)` splits batches into one
 `/private/pkg/mcp/<uuid>.trig` resource per nanopub, retaining its four graphs and
 shared batch source/entity graphs. Writes are create-only; malformed input is
-rejected before mutations. Owner-only WAC ACLs are written before creating
+rejected before mutations. A blank node shared across resources must occur in a
+common assertion, sources, or entities graph in every resource that uses it.
+Other cross-resource sharing (such as evidence targets used only in separate
+provenance graphs) rejects before any Pod write; local cross-graph sharing remains
+supported. Owner-only WAC ACLs are written before creating
 containers and data. Existing shared ancestor containers and their ACLs are
 preserved; replacement is limited to the store's own `mcp/` ACL and the dedicated
 ACLs of nanopub and policy resources. Each nanopub's owner-only ACL is established
