@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Fable 5
 // (Ported verbatim — plus the pristine-brand integration — from
 // @jeswr/solid-elements `src/auth/proactive-fetch.ts` (Opus 4.8-authored original,
@@ -165,9 +166,9 @@ export function isProviderOAuthRequest(
 
 /**
  * Inputs to {@link deriveProactiveAllowedOrigins}: the post-login resource origins the
- * token may ride to. The WebID + issuer origins are folded in by the seam's
- * `computeAllowedOrigins` default (toggle with {@link includeWebIdOrigin} /
- * {@link includeIssuerOrigin}).
+ * token may ride to. The WebID origin is included by default; set
+ * `includeWebIdOrigin: false` when the WebID document is not served by the pod.
+ * The issuer origin is excluded unless `includeIssuerOrigin: true` opts in.
  */
 export interface ProactiveAllowedOriginsInputs {
   /** The pod / storage root URL known post-login (its origin is the primary target). */
@@ -180,11 +181,11 @@ export interface ProactiveAllowedOriginsInputs {
   extraOrigins?: string[];
   /** The authenticated WebID (its origin is included by default). */
   webId?: string;
-  /** The resolved issuer href (its origin is included by default). */
+  /** The resolved issuer href (its origin is excluded unless explicitly opted in). */
   issuer?: string;
   /** Include the WebID's origin in the allowed set. Default true. */
   includeWebIdOrigin?: boolean;
-  /** Include the issuer's origin in the allowed set. Default true. */
+  /** Include the issuer's origin in the allowed set. Default false. */
   includeIssuerOrigin?: boolean;
   /** Allow `http:` for loopback hosts only (dev against a local CSS / a test). */
   allowInsecureLoopback?: boolean;
@@ -192,12 +193,14 @@ export interface ProactiveAllowedOriginsInputs {
 
 /**
  * The credential boundary for the proactive fetch — the set of resource origins the
- * session token may be attached to. Delegates ENTIRELY to the seam's pure
+ * session token may be attached to. Delegates origin validation to the seam's pure
  * {@link computeAllowedOrigins} (https-only + loopback-http-under-opt-in; fail-closed), so
  * the boundary logic is the one already exhaustively unit-tested in this package. The pod
  * root (+ any `extraOrigins`) is passed as an explicit allowed origin (a pod on a DIFFERENT
- * host than the WebID is a valid Solid topology and MUST be listed); the WebID + issuer
- * origins are added by the seam's defaults.
+ * host than the WebID is a valid Solid topology and MUST be listed). The WebID origin is
+ * included by default; disable it when the WebID document is not served by the pod.
+ * The issuer origin is excluded by default; `includeIssuerOrigin: true` opts in.
+ * A pod served from the issuer origin remains allowed through `podRoot`.
  */
 export function deriveProactiveAllowedOrigins(
   inputs: ProactiveAllowedOriginsInputs,
@@ -212,9 +215,7 @@ export function deriveProactiveAllowedOrigins(
     ...(inputs.includeWebIdOrigin !== undefined
       ? { includeWebIdOrigin: inputs.includeWebIdOrigin }
       : {}),
-    ...(inputs.includeIssuerOrigin !== undefined
-      ? { includeIssuerOrigin: inputs.includeIssuerOrigin }
-      : {}),
+    includeIssuerOrigin: inputs.includeIssuerOrigin ?? false,
     ...(inputs.allowInsecureLoopback !== undefined
       ? { allowInsecureLoopback: inputs.allowInsecureLoopback }
       : {}),
