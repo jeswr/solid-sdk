@@ -24,6 +24,64 @@ import {
 const newPerson = `${ROOT}contacts/people/new.ttl`;
 const newGroup = `${ROOT}contacts/groups/new.ttl`;
 
+// AUTHORED-BY Codex GPT-6
+test.each(
+  [
+    "https://new.example/#me",
+    "https://alice.example/home",
+    "https://alice.example/direct",
+    undefined,
+  ].flatMap((webId) => [true, false].map((structured) => ({ webId, structured }))),
+)("round-trips WebID edits with other URLs ($webId, structured=$structured)", async ({
+  webId,
+  structured,
+}) => {
+  const { model, pod, book } = await setup();
+  const original = structured
+    ? fixture("alice")
+    : `${VCARD_PREFIX} <#this> a vcard:Individual; vcard:fn "Alice";
+        vcard:url <https://alice.example/profile#me> .`;
+  pod.seed(
+    ALICE,
+    `${original}
+    <#this> vcard:url _:homepage, <https://alice.example/direct> .
+    _:homepage a vcard:Home; vcard:value <https://alice.example/home>; vcard:pref "2" .`,
+  );
+  const person = await model.loadContact(ALICE);
+  expect(person.data.webId).toBe("https://alice.example/profile#me");
+  const { webId: _previous, ...fields } = person.data;
+  const data = webId === undefined ? fields : { ...fields, webId };
+  for (const edit of [data, fields, { ...fields, webId: "https://restored.example/#me" }]) {
+    await model.updateContact(book, await model.loadContact(ALICE), edit);
+    let loaded = await model.loadContact(ALICE);
+    // A second save must preserve the selection, including an explicitly cleared field.
+    await model.updateContact(book, loaded, loaded.data);
+    loaded = await model.loadContact(ALICE);
+    expect(loaded.data).toEqual(edit);
+    const { namedNode } = DataFactory;
+    const vcard = "http://www.w3.org/2006/vcard/ns#";
+    const urls = [...loaded.dataset.match(namedNode(`${ALICE}#this`), namedNode(`${vcard}url`))];
+    expect(urls.some((edge) => edge.object.value === "https://alice.example/direct")).toBe(true);
+    const homepage = [...loaded.dataset.match(null, namedNode(`${vcard}value`))].find(
+      (quad) => quad.object.value === "https://alice.example/home",
+    );
+    expect(homepage).toBeDefined();
+    expect(urls.some((edge) => edge.object.equals(homepage?.subject))).toBe(true);
+    expect([...loaded.dataset.match(homepage?.subject)].map((quad) => quad.object.value)).toEqual([
+      `${vcard}Home`,
+      "https://alice.example/home",
+      "2",
+    ]);
+    expect(
+      loaded.dataset.match(
+        null,
+        namedNode("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
+        namedNode(`${vcard}WebId`),
+      ).size,
+    ).toBe(1);
+  }
+});
+
 describe("address book CRUD with protocol preconditions", () => {
   test("creates the canonical book and empty indexes without overwriting existing resources", async () => {
     const pod = new MemoryPod();

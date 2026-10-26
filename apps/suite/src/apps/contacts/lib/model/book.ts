@@ -11,12 +11,12 @@ import {
   type ContactGroupData,
   parseAddressBook,
   parseGroup,
-  parsePerson,
 } from "@jeswr/solid-task-model/contacts";
 import { DataFactory, Store } from "n3";
 import {
   applyContact,
   ContactsDataset,
+  contactData,
   contactIdentifier,
   documentUrl,
   flatContacts,
@@ -56,7 +56,10 @@ export class ContactsModel {
 
   loadContact(id: string): Promise<Snapshot<ContactData>> {
     const doc = this.transport.url(id);
-    return this.transport.read(doc, (dataset) => requireData(parsePerson(doc, dataset)));
+    return this.transport.read(doc, (dataset) => {
+      const contact = new Contact(`${doc}#this`, dataset, DataFactory);
+      return requireData(contact.isIndividual ? contactData(contact) : undefined);
+    });
   }
 
   loadGroup(id: string): Promise<Snapshot<ContactGroupData>> {

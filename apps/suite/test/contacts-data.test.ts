@@ -209,17 +209,35 @@ test.each([
   const web = edges[0]?.object;
   expect(web).toBeDefined();
   const retained = [...dataset].filter(
-    (quad) => !quad.subject.equals(web) && !edges.slice(0, 2).some((edge) => edge.equals(quad)),
+    (quad) => !quad.subject.equals(web) && !edges[0]?.equals(quad),
   );
   applyContact(contact, webId === undefined ? { name: "Alice" } : { name: "Alice", webId });
   for (const quad of retained) expect(dataset.has(quad)).toBe(true);
   expect(dataset.match(web).size).toBe(0);
-  expect([...dataset].some((quad) => quad.object.value === "https://alice.example/#me")).toBe(
-    false,
-  );
+  expect(contactData(contact).webId).toBe(webId);
   if (webId) {
     expect([...dataset].some((quad) => quad.object.value === webId)).toBe(true);
   }
+});
+
+test.each([
+  ["<https://alice.example/#me>", "https://alice.example/#me"],
+  ["<ftp://example.org/>", undefined],
+  ["<https://alice.example>", undefined],
+  [undefined, undefined],
+])("reads explicit WebID nodes independently of URL ordering (%s)", async (value, expected) => {
+  const dataset = await parse(
+    `${VCARD_PREFIX}
+    <#this> a vcard:Individual; vcard:fn "Alice";
+      vcard:url _:home, <https://alice.example/direct>, _:web .
+    _:home a vcard:Home; vcard:value <https://alice.example/home> .
+    _:web a vcard:WebId ${value ? `; vcard:value ${value}` : ""} .`,
+    ALICE,
+  );
+  expect(contactData(new Contact(`${ALICE}#this`, dataset, DataFactory))).toEqual({
+    name: "Alice",
+    ...(expected === undefined ? {} : { webId: expected }),
+  });
 });
 
 test("adding a first WebID preserves URL nodes outside the readable scalar field", async () => {

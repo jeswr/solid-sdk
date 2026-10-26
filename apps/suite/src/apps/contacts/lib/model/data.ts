@@ -1,5 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { safeHttpIri } from "@jeswr/rdf-serialize";
+import { isHttpIri, safeHttpIri } from "@jeswr/rdf-serialize";
 import {
   Contact,
   ContactBook,
@@ -7,7 +7,16 @@ import {
   ContactGroup,
 } from "@jeswr/solid-task-model/contacts";
 import type { DatasetCore, Term } from "@rdfjs/types";
-import { DatasetWrapper, NamedNodeAs, OptionalFrom, TermWrapper } from "@rdfjs/wrapper";
+import {
+  DatasetWrapper,
+  NamedNodeAs,
+  NamedNodeFrom,
+  OptionalFrom,
+  SetFrom,
+  TermAs,
+  TermFrom,
+  TermWrapper,
+} from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
 
 export const VCARD = "http://www.w3.org/2006/vcard/ns#";
@@ -75,7 +84,8 @@ export function contactData(contact: Contact): ContactData {
   if (phones.length) data.phones = phones;
   if (contact.note !== undefined) data.note = contact.note;
   if (contact.organization !== undefined) data.organization = contact.organization;
-  if (contact.webId !== undefined) data.webId = contact.webId;
+  const webId = readWebId(contact);
+  if (webId !== undefined) data.webId = webId;
   if (contact.created !== undefined) data.created = contact.created;
   if (contact.inAddressBook !== undefined) data.inAddressBook = contact.inAddressBook;
   return data;
@@ -135,6 +145,41 @@ export function validateContact(data: ContactData): void {
 }
 
 // AUTHORED-BY Codex GPT-6
+const RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
+
+function isWebIdNode(term: Term, dataset: DatasetCore): boolean {
+  return (
+    term.termType === "BlankNode" &&
+    dataset.match(term, DataFactory.namedNode(RDF_TYPE), DataFactory.namedNode(`${VCARD}WebId`))
+      .size > 0
+  );
+}
+
+/** Explicit WebID nodes take precedence over generic URLs, even after clearing their value. */
+function readWebId(contact: Contact): string | undefined {
+  let explicit = false;
+  for (const edge of contact.dataset.match(
+    DataFactory.namedNode(contact.id),
+    DataFactory.namedNode(`${VCARD}url`),
+  )) {
+    if (!isWebIdNode(edge.object, contact.dataset)) continue;
+    explicit = true;
+    const value = contactPointValue(edge.object, contact.dataset, `${VCARD}url`);
+    if (isHttpIri(value) && new URL(value).href === value) return value;
+  }
+  return explicit ? undefined : contact.webId;
+}
+
+/** Persist a cleared selection so unrelated HTTP(S) URLs cannot become the WebID on reload. */
+function addClearedWebId(contact: Contact): void {
+  const term = DataFactory.blankNode();
+  SetFrom.subjectPredicate(contact, `${VCARD}url`, TermAs.term, TermFrom.itself).add(term);
+  const child = new TermWrapper(term, contact.dataset, DataFactory);
+  SetFrom.subjectPredicate(child, RDF_TYPE, NamedNodeAs.string, NamedNodeFrom.string).add(
+    `${VCARD}WebId`,
+  );
+}
+
 /** Match the shared readers, retaining the original nodes for values still present. */
 function contactPointValue(term: Term, dataset: DatasetCore, predicate: string) {
   const value =
@@ -153,7 +198,10 @@ function contactPointValue(term: Term, dataset: DatasetCore, predicate: string) 
 /** Reuse the shared setters for new values; preserve metadata on every retained node. */
 function reconcileContactPoints(contact: Contact, desired: Contact): void {
   const subject = DataFactory.namedNode(contact.id);
-  const webId = contact.webId;
+  const webId = readWebId(contact);
+  const explicitWebId = [
+    ...contact.dataset.match(subject, DataFactory.namedNode(`${VCARD}url`)),
+  ].some((edge) => isWebIdNode(edge.object, contact.dataset));
   for (const field of ["hasEmail", "hasTelephone", "url"]) {
     // The scalar WebID exposes only one URL value, not the whole URL collection.
     if (field === "url" && webId === desired.webId) continue;
@@ -169,10 +217,18 @@ function reconcileContactPoints(contact: Contact, desired: Contact): void {
     for (const edge of [...contact.dataset.match(subject, node)]) {
       const value = contactPointValue(edge.object, contact.dataset, predicate);
       if (wanted.has(value)) {
-        pending.delete(value);
+        // Always write the explicit WebID node, including when selecting an existing homepage.
+        if (field !== "url") pending.delete(value);
         continue;
       }
-      if (field === "url" && (webId === undefined || value !== webId)) continue;
+      if (
+        field === "url" &&
+        (explicitWebId
+          ? !isWebIdNode(edge.object, contact.dataset)
+          : webId === undefined || value !== webId)
+      ) {
+        continue;
+      }
       contact.dataset.delete(edge);
       // A removed value node may still belong to another contact or property.
       if (
@@ -186,6 +242,7 @@ function reconcileContactPoints(contact: Contact, desired: Contact): void {
       contact.dataset.add(edge);
       for (const quad of desired.dataset.match(edge.object)) contact.dataset.add(quad);
     }
+    if (field === "url" && desired.webId === undefined) addClearedWebId(contact);
   }
 }
 
