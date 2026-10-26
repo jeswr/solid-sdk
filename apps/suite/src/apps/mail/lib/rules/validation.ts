@@ -37,6 +37,7 @@ function record(
 
 function array(value: unknown, code: MailRulesErrorCode): asserts value is unknown[] {
   requireValue(Array.isArray(value), code);
+  requireValue(Object.getPrototypeOf(value) === Array.prototype, code);
   // Dense data arrays only: no holes, extra properties, symbols, or getters.
   const keys = Reflect.ownKeys(value);
   requireValue(keys.length === value.length + 1, code);

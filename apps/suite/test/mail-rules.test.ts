@@ -289,6 +289,10 @@ describe("fail-closed validation", () => {
 
   it("accepts plain dense arrays and rejects holes, extras, symbols and accessors", () => {
     invalidRule(new Array(1));
+    invalidRule(Object.setPrototypeOf([rule()], null));
+    invalidRule(
+      Object.setPrototypeOf([rule()], { [Symbol.iterator]: () => [][Symbol.iterator]() }),
+    );
     invalidRule(Object.assign(new Array(1), { extra: true }));
     invalidRule(Object.assign([], { extra: true }));
     invalidRule(Object.assign([], { [Symbol("extra")]: true }));
