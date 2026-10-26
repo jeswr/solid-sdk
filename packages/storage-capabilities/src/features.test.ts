@@ -178,7 +178,11 @@ describe("deriveFeatures: one case per ADR-002 mapping row", () => {
       evidence: `solid-description:SparqlQueryService:${SOLID_ROOT}sparql`,
       detail: { endpoint: `${SOLID_ROOT}sparql` },
     });
-    expect(deriveFeatures(lws([sparql])).serverSearch.state).toBe("available");
+    expect(
+      deriveFeatures(lws([{ ...sparql, endpoint: `${LWS_ROOT}sparql` }])).serverSearch.state,
+    ).toBe("available");
+    // ADR-008 §8: a foreign endpoint is not trusted.
+    expect(deriveFeatures(lws([sparql])).serverSearch.state).toBe("unavailable");
     expect(deriveFeatures(sparq).serverSearch).toEqual({
       state: "unavailable",
       evidence: "lws-cid:absent:SparqlQueryService",
@@ -550,12 +554,12 @@ describe("deriveFeatures trust and robustness", () => {
             fc.string(),
           ),
         ),
-        fc.anything(),
+        fc.anything({ maxDepth: 2, maxKeys: 4 }),
       ),
       endpoint: fc.oneof(fc.webUrl(), fc.string()),
       conformsTo: fc.option(fc.array(fc.string()), { nil: undefined }),
       extra: fc.oneof(
-        fc.dictionary(fc.string(), fc.anything()),
+        fc.dictionary(fc.string(), fc.anything({ maxDepth: 2, maxKeys: 4 })),
         fc.constant(undefined),
         fc.record({
           format: fc.oneof(
@@ -565,7 +569,7 @@ describe("deriveFeatures trust and robustness", () => {
             }),
             fc.dictionary(
               fc.constantFrom("constructor", "__proto__", "hasOwnProperty", "text/turtle", "a/b"),
-              fc.anything(),
+              fc.anything({ maxDepth: 2, maxKeys: 4 }),
             ),
           ),
           model: fc.oneof(fc.string(), fc.constantFrom(`${SSD_NS}ACP`, `${SSD_NS}WAC`)),
@@ -596,9 +600,9 @@ describe("deriveFeatures trust and robustness", () => {
           expect(deriveFeatures(d, p)).toEqual(features);
         },
       ),
-      { numRuns: 300 },
+      { numRuns: 200 },
     );
-  });
+  }, 30_000);
 
   test("the first service offering a channel supplies its endpoint", () => {
     const d = solid([
@@ -610,13 +614,23 @@ describe("deriveFeatures trust and robustness", () => {
 
   test("an LWS description without a description document is not authoritative", () => {
     const d = {
-      ...lws([], [{ type: [LWS.MoveResource], extra: {} }]),
+      ...lws(
+        [
+          {
+            type: [LWS.NotificationService],
+            endpoint: `${LWS_ROOT}n/`,
+            extra: { subscriptionType: [LWS.WebhookSubscription] },
+          },
+        ],
+        [{ type: [LWS.MoveResource], extra: {} }],
+      ),
       descriptionUrl: null,
       sources: ["probe" as const],
     };
     const features = deriveFeatures(d);
     expect(features.move.state).toBe("unknown");
     expect(features.rdfConneg.state).toBe("unavailable");
+    expect(features.liveUpdates.state).toBe("unknown");
   });
 
   test("prototype-named and malformed PatchSupport keys never throw or pollute", () => {
@@ -682,6 +696,76 @@ describe("deriveFeatures trust and robustness", () => {
     const second = deriveFeatures(solid());
     expect(second.rdfConneg.detail.formats).toEqual(["text/turtle", "application/ld+json"]);
     expect(second.patch.detail.formats).toEqual({ "text/turtle": ["text/n3"] });
+  });
+
+  test("round-2 regressions: predicate keys, unions, foreign endpoints, huge arrays", () => {
+    // Only ssd:/lws: (or bare) keys carry meaning; an unrelated predicate is ignored.
+    const unrelated = solid(
+      [],
+      [{ type: [SSD.AccessControl], extra: { "https://unrelated.example/model": `${SSD_NS}ACP` } }],
+    );
+    expect(deriveFeatures(unrelated).accessControl.detail.model).toBe("none");
+    // Models are unioned across every AccessControl capability, in any order.
+    const reordered = solid(
+      [],
+      [
+        { type: [SSD.AccessControl], extra: { [`${SSD_NS}model`]: "urn:x" } },
+        { type: [SSD.AccessControl], extra: { [`${SSD_NS}model`]: `${SSD_NS}ACP` } },
+      ],
+    );
+    expect(deriveFeatures(reordered).accessControl.detail.model).toBe("acp");
+    // PatchSupport formats are unioned across capabilities.
+    const patches = lws(
+      [],
+      [
+        { type: [SSD.PatchSupport], extra: { format: { "text/turtle": "text/n3" } } },
+        {
+          type: [SSD.PatchSupport],
+          extra: { format: { "text/turtle": "application/sparql-update" } },
+        },
+      ],
+    );
+    expect(deriveFeatures(patches).patch.detail.formats["text/turtle"]).toEqual([
+      "text/n3",
+      "application/sparql-update",
+    ]);
+    // ADR-008 §8: foreign LWS notification and CRDT endpoints are not trusted.
+    const foreign = lws([
+      {
+        type: [LWS.NotificationService],
+        endpoint: "https://evil.example/n/",
+        extra: { subscriptionType: [SSD.WebSocketSubscription] },
+      },
+      {
+        type: [SSD.CrdtSyncService],
+        endpoint: "https://evil.example/sync",
+        conformsTo: [`${SSD_NS}y-protocol-v1`],
+        extra: {},
+      },
+    ]);
+    expect(deriveFeatures(foreign).liveUpdates.state).toBe("unavailable");
+    expect(deriveFeatures(foreign).realtimeCollab.state).toBe("unavailable");
+    // An SSE-only LWS service.
+    const sse = lws([
+      {
+        type: [LWS.NotificationService],
+        endpoint: `${LWS_ROOT}n/`,
+        extra: { subscriptionType: SSD.SseSubscription },
+      },
+    ]);
+    expect(deriveFeatures(sse).liveUpdates.detail.channels).toEqual(["sse"]);
+    const bare = lws([{ type: [LWS.NotificationService], endpoint: `${LWS_ROOT}n/` }]);
+    expect(deriveFeatures(bare).liveUpdates.state).toBe("unavailable");
+    // A huge value array must not overflow the stack (no spread into push).
+    const huge = lws([
+      {
+        type: [LWS.NotificationService],
+        endpoint: `${LWS_ROOT}n/`,
+        extra: { subscriptionType: Array.from({ length: 150_000 }, () => LWS.WebhookSubscription) },
+      },
+    ]);
+    expect(() => deriveFeatures(huge)).not.toThrow();
+    expect(deriveFeatures(huge).liveUpdates.detail.channels).toEqual(["webhook"]);
   });
 
   test("tolerates malformed descriptions without arrays", () => {

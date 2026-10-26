@@ -1,6 +1,7 @@
 // AUTHORED-BY Claude Opus 5.5
 import { CapabilitiesError } from "./errors.js";
 import { deriveFeatures } from "./features.js";
+import { sameDescription } from "./prefix.js";
 import { probe } from "./probe.js";
 import { defaultCache, resolveStorageDescription } from "./resolve.js";
 import type { Features, ResolveOptions } from "./types.js";
@@ -37,16 +38,18 @@ export async function capabilities(url: string, options: ResolveOptions): Promis
   }
   // Only attach the probe to the same cache generation: if the record was deleted (logout,
   // invalidation) or replaced while the probe was in flight, do not resurrect or overwrite it.
-  const current = await cache.get(description.id);
-  if (
-    current !== undefined &&
-    current.probe === undefined &&
-    current.description.fetchedAt === description.fetchedAt &&
-    current.description.etag === description.etag &&
-    current.description.root === description.root &&
-    current.description.descriptionUrl === description.descriptionUrl
-  ) {
-    await cache.set(description.id, { description: current.description, probe: result });
+  if (cache.attachProbe) {
+    await cache.attachProbe(description.id, description, result);
+  } else {
+    // Best effort for custom caches without the atomic method.
+    const current = await cache.get(description.id);
+    if (
+      current &&
+      current.probe === undefined &&
+      sameDescription(current.description, description)
+    ) {
+      await cache.set(description.id, { description: current.description, probe: result });
+    }
   }
   return deriveFeatures(description, result);
 }
