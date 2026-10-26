@@ -16,7 +16,7 @@ export function uint32(value: number, littleEndian = false) {
   new DataView(bytes.buffer).setUint32(0, value, littleEndian);
   return bytes;
 }
-const syncsafe = (value: number) =>
+export const syncsafe = (value: number) =>
   new Uint8Array([(value >> 21) & 127, (value >> 14) & 127, (value >> 7) & 127, value & 127]);
 
 // Four MPEG-1 Layer III frames, 128 kbps, 44.1 kHz. Payload is deliberately silent data.
@@ -44,6 +44,7 @@ export function id3(
   withPicture = true,
   title = "Paper Moon",
   numbers: { track?: string; year?: string } = { track: "7/12", year: "2024" },
+  pictures: readonly { mime: string; data: Uint8Array }[] = [{ mime: "image/png", data: png }],
 ) {
   function encoded(value: string) {
     if (encoding === 0) return Uint8Array.from(value, (char) => char.charCodeAt(0));
@@ -74,9 +75,11 @@ export function id3(
     frame(id as string, join(new Uint8Array([encoding]), encoded(value as string))),
   );
   if (withPicture) {
-    frames.push(
-      frame("APIC", join(new Uint8Array([0]), text("image/png"), new Uint8Array([0, 3, 0]), png)),
-    );
+    for (const { mime, data } of pictures) {
+      frames.push(
+        frame("APIC", join(new Uint8Array([0]), text(mime), new Uint8Array([0, 3, 0]), data)),
+      );
+    }
   }
   // A text frame longer than 127 bytes distinguishes v2.3 sizes from v2.4 syncsafe sizes.
   frames.push(
@@ -87,6 +90,26 @@ export function id3(
   );
   const body = join(...frames);
   return join(text("ID3"), new Uint8Array([version, 0, 0]), syncsafe(body.length), body);
+}
+
+// ID3v2.3 section 5: encode the whole body after calculating frame sizes.
+export function unsynchronisedId3v23(tag = id3(3)) {
+  const body = tag.subarray(10);
+  const encoded: number[] = [];
+  for (let i = 0; i < body.length; i++) {
+    const byte = body[i] as number;
+    encoded.push(byte);
+    if (
+      byte === 0xff &&
+      (i + 1 === body.length || body[i + 1] === 0 || (body[i + 1] as number) >= 0xe0)
+    ) {
+      encoded.push(0);
+    }
+  }
+  const header = tag.slice(0, 10);
+  header[5] = (header[5] as number) | 0x80;
+  header.set(syncsafe(encoded.length), 6);
+  return join(header, new Uint8Array(encoded));
 }
 
 // A synthetic PNG signature suffices for MIME sniffing; no image is rendered.
