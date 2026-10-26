@@ -220,3 +220,57 @@ GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=protocol.allow GIT_CONFIG_VALUE_0=never npm_
 ### Remaining work and conservative choices
 
 All three requested fixes and their regression tests are complete. No open questions remain. During active compensation, Inbox adoption returns a bounded conflict until cleanup finishes; it never bypasses the tracker cleanup state. Mutations still require a strong validator from PUT or a verified read-back. External verification limitations are the unrelated full-workspace build and unavailable roborev above. No UI changes, repository dependencies, pushes, PRs, branch switches, or remote fetches were made.
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+## Fix round 5 — review of `cf9043ee2c71`
+
+Read the complete supplied review, the original lane brief, and all earlier fix briefs. This round addresses its two findings with the prescribed design:
+
+- `79307302` — `fix: compare RDF read-back graphs by isomorphism`: use `rdf-isomorphic` at the already locked **2.0.1** version when an ordinary resource PUT omits its ETag. Equivalent recurrence/reminder graphs retain their read-back validators despite blank-node relabelling; changed named identities still produce 412. Add scheduled task creation/update and conflicting identity regressions.
+- `a85b7856` — `fix: resume persisted Inbox cleanup conditionally`: persist a unique cleanup owner token and the reserved resource URLs with their strong ETags in the tracker marker. `bootstrapInbox()` reconstructs that record after a store restart and conditionally claims the marker with `If-Match` before deleting resources. Every retry claims a fresh marker token, so stale creators/recoverers cannot delete an adopted tracker. Resource deletion keeps the recorded validators and the tracker is removed last. Tests cover interrupted container/tracker deletion, restart recovery without PUT validators, concurrent adoption, malformed records, and a cleanup transition between Inbox reads.
+- The cleanup commit also covers delayed deletes with content-based validators. Newly created task containers receive an optional generation token on servers that preserve client metadata. CSS ignores container PUT bodies and supplies its own creation/modification metadata, so read-back treats only that token as advisory while still requiring the container type, all other submitted statements, and an empty containment list. Existing-container replacement PUTs remain forbidden. The delayed-delete regression verifies that a recreated, usable Inbox survives the previous owner's request.
+- Final documentation commit — `docs: record tasks fix round five verification`: this report, committed last.
+
+### Verification for this round
+
+Passed in this checkout, with lifecycle scripts disabled:
+
+```sh
+export PATH="$PWD/node_modules/.bin:$PATH"
+pnpm --filter @jeswr/app-suite^... run build
+pnpm --filter @jeswr/app-suite run lint && pnpm --filter @jeswr/app-suite run build && pnpm --filter @jeswr/app-suite run typecheck && pnpm --filter @jeswr/app-suite run test
+pnpm run lint:root
+TURBO_SCM_BASE=061de204d40239031fa73c2d42f281b0fad59803 pnpm run gate
+pnpm install --frozen-lockfile --offline --ignore-scripts
+git diff --check
+```
+
+- App lint (29 files), production build, strict typecheck, and **141 unit tests across four files** passed. The final affected gate rebuilt and checked the final implementation: **10 successful tasks / 10 total**, zero cached.
+- Model coverage remains **100% statements (755/755), branches (509/509), functions (155/155), and lines (656/656)**. No thresholds or exclusions changed.
+- Root lint and workspace guards passed, including **74 contrast pairs, zero failures**.
+- `pnpm run check:packages rdf-isomorphic` passed. Only `rdf-isomorphic: "2.0.1"` and its existing lockfile resolution were added to the app importer. An initial offline `pnpm add` could not resolve unrelated cached metadata for `cosmiconfig`; wiring the already locked version and running the frozen offline install succeeded without unrelated lockfile changes.
+
+Actual **Community Solid Server 7.2.0** verification passed: **two integration tests**, with native PUT validators and with successful PUT ETags stripped. Both now exercise recurrence/reminder task creation and updates, project compensation, and interrupted Inbox cleanup followed by recovery in a new `TaskStore` and successful task creation. They retain the assertion that every conditional replacement PUT targets an ordinary document. The existing temporary CSS installation was reused; no verification-tool dependency was added to the repository.
+
+```sh
+node /tmp/sst-ef15-fix4-css/node_modules/@solid/community-server/bin/server.js -p 34815 -b http://localhost:34815/ -c @css:config/file-root.json -f /tmp/sst-ef15-fix5-css-data
+SST_TASKS_CSS_URL=http://localhost:34815/ pnpm --filter @jeswr/app-suite exec vitest run --config vitest.css.config.ts
+```
+
+The disposable server was stopped after verification. No UI or screenshots apply.
+
+Full-workspace verification was attempted with remote Git transports disabled and npm offline:
+
+```sh
+export PATH="$PWD/node_modules/.bin:$PATH"
+GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=protocol.allow GIT_CONFIG_VALUE_0=never npm_config_offline=true pnpm run gate:full --env-mode=loose
+```
+
+**Failed outside this lane** at unchanged `@jeswr/unstorage-solid#build` (exit 1). Its dependency-build script attempted an HTTPS clone, which Git rejected locally with `fatal: transport 'https' not allowed`. No remote fetch occurred. Turbo reported **4 successful tasks / 50 total** before stopping. No unrelated generated source changes remain.
+
+`roborev` remains unavailable (`command -v roborev` found no executable), so no automated per-commit verdicts could be read. No review tooling was installed.
+
+### Remaining work and conservative choices
+
+Both requested fixes and their regression tests are complete. Recovery requires a persisted owner token and valid reserved-resource validators; incomplete legacy markers and malformed records fail closed rather than guessing ownership. The resource list may authorize deletion only of the tracker's recorded stateStore. External verification limitations are the unrelated full-workspace gate failure and unavailable roborev above. No open questions, UI changes, pushes, PRs, branch switches, or remote fetches apply to this round.
