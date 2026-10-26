@@ -1,9 +1,11 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+import { assertImportSize } from "./errors";
 import type { Column, CsvOptions, Delimiter, ImportedTransaction } from "./types";
 import { parseAmount, parseDate, sniffDateFormat } from "./values";
 
 /** RFC 4180 quoting with CRLF/LF/CR, escaped quotes, BOM and blank-line support. */
 export function parseCsv(text: string, delimiter: Delimiter = ","): string[][] {
+  assertImportSize(text);
   const rows: string[][] = [];
   let row: string[] = [];
   let field = "";
@@ -49,6 +51,7 @@ export function parseCsv(text: string, delimiter: Delimiter = ","): string[][] {
 
 /** Choose the consistent multi-column delimiter; require a choice on ties. */
 export function sniffDelimiter(text: string): Delimiter {
+  assertImportSize(text);
   const candidates: Delimiter[] = [",", ";", "\t", "|"];
   const matches = candidates.filter((delimiter) => {
     try {

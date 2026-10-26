@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 export { importCsv, parseCsv, sniffDelimiter } from "./csv";
 export { detectDuplicates, transactionHash } from "./duplicates";
+export { BankImportError } from "./errors";
 export { importOfx } from "./ofx";
 export { categoriseTransactions } from "./rules";
 export type {

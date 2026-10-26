@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { describe, expect, it } from "vitest";
 import {
+  BankImportError,
   type CategoryRule,
   type CsvOptions,
   categoriseTransactions,
@@ -35,6 +36,36 @@ const xml = (body: string) => `<OFX>${body}</OFX>`;
 const record = (body: string) => xml(`<STMTTRN>${body}</STMTTRN>`);
 const fields =
   "<DTPOSTED>20261024</DTPOSTED><TRNAMT>-12.50</TRNAMT><NAME>Example Market, North</NAME>";
+
+describe("statement input size", () => {
+  const limit = 10 * 1024 * 1024;
+  it("accepts exactly 10 MiB of ASCII OFX text", () => {
+    const source = `${" ".repeat(limit - 11)}<OFX></OFX>`;
+    expect(importOfx(source)).toEqual([]);
+  });
+  it("measures multibyte text in UTF-8 bytes", () => {
+    const wrapper = "<OFX><!----></OFX>";
+    const source = `<OFX><!--${"é".repeat((limit - wrapper.length) / 2)}--></OFX>`;
+    expect(new TextEncoder().encode(source).byteLength).toBe(limit);
+    expect(importOfx(source)).toEqual([]);
+    expect(() => importOfx(`${source} `)).toThrow(BankImportError);
+    expect(() => importOfx(`${source} `)).toThrow("Statement exceeds the 10 MiB import limit");
+  });
+  it.each([
+    ["OFX", (source: string) => importOfx(source)],
+    ["CSV parser", (source: string) => parseCsv(source)],
+    ["CSV sniffing", (source: string) => sniffDelimiter(source)],
+    ["CSV import with sniffing", (source: string) => importCsv(source, csvOptions)],
+    [
+      "CSV import with delimiter",
+      (source: string) => importCsv(source, { ...csvOptions, delimiter: "," }),
+    ],
+  ] as const)("rejects oversized %s before parsing", (_name, parse) => {
+    const source = "!".repeat(limit + 1);
+    expect(() => parse(source)).toThrow(BankImportError);
+    expect(() => parse(source)).toThrow("Statement exceeds the 10 MiB import limit");
+  });
+});
 
 describe("dates and exact decimal amounts", () => {
   it.each([
@@ -259,12 +290,49 @@ describe("OFX/QFX SGML and XML", () => {
       (body: string) =>
         `OFXHEADER:100\n${record(body)
           .replace(/<\/(?:DTPOSTED|TRNAMT|MEMO|ADDR1|CITY|STATE|POSTALCODE|PHONE)>/g, "")
-          .replace(/<NAME>([^<]*)<\/NAME>/g, "<NAME>$1")}`,
+          .replace(/<(NAME|EXTDNAME)>([^<]*)<\/\1>/g, "<$1>$2")}`,
     ],
   ] as const)("PAYEE descriptions in %s", (_format, statement) => {
     const amounts = "<DTPOSTED>20261024</DTPOSTED><TRNAMT>-12.50</TRNAMT>";
     const payee =
       "<PAYEE><NAME> Example Market, North </NAME><ADDR1>1 Example Road</ADDR1><CITY>Exampleville</CITY><STATE>EX</STATE><POSTALCODE>00000</POSTALCODE><PHONE>0000000000</PHONE></PAYEE>";
+    it.each([
+      "",
+      "<MEMO>Example receipt</MEMO>",
+    ])("uses EXTDNAME before optional memo: %s", (memo) => {
+      const imported = importOfx(
+        statement(`${amounts}<EXTDNAME> Example Market, North </EXTDNAME>${memo}`),
+      );
+      expect(imported).toEqual([{ ...transaction, ...(memo ? { memo: "Example receipt" } : {}) }]);
+      expect(detectDuplicates(imported, [transaction]).duplicates).toEqual(imported);
+      expect(
+        categoriseTransactions(imported, [
+          { category: "Groceries", description: { match: "contains", value: "Market" } },
+        ])[0]?.category,
+      ).toBe("Groceries");
+    });
+    it("preserves NAME and PAYEE/NAME precedence over EXTDNAME", () => {
+      const extended = "<EXTDNAME>Other Example Merchant</EXTDNAME>";
+      expect(importOfx(statement(`${fields}${extended}`))).toEqual([transaction]);
+      expect(importOfx(statement(`${amounts}${payee}${extended}`))).toEqual([transaction]);
+    });
+    it("falls back to memo for an empty EXTDNAME", () => {
+      const extended = "<EXTDNAME> </EXTDNAME>";
+      expect(importOfx(statement(`${amounts}${extended}<MEMO>Receipt</MEMO>`))).toEqual([
+        { ...transaction, description: "Receipt", memo: "Receipt" },
+      ]);
+      expect(() => importOfx(statement(`${amounts}${extended}`))).toThrow(
+        "Missing transaction description",
+      );
+    });
+    it.each([
+      "<EXTDNAME>Example</EXTDNAME><EXTDNAME>Duplicate</EXTDNAME>",
+      "<EXTDNAME><X>Nested</X></EXTDNAME>",
+    ])("rejects malformed EXTDNAME even with another description: %s", (extended) => {
+      expect(() => importOfx(statement(`${fields}${extended}<MEMO>Receipt</MEMO>`))).toThrow(
+        BankImportError,
+      );
+    });
     it.each([
       "",
       "<MEMO>Receipt at https://example.org/receipt/1</MEMO>",
@@ -312,6 +380,12 @@ describe("OFX/QFX SGML and XML", () => {
     });
   });
   it.each([
+    ["550", "550"],
+    ["550.", "550"],
+    ["550,", "550"],
+    ["+00550.", "550"],
+    ["-550,", "-550"],
+    ["-0.", "0"],
     ["-12,500", "-12.5"],
     ["+0012,5000", "12.5"],
     ["-0,000", "0"],
@@ -332,6 +406,12 @@ describe("OFX/QFX SGML and XML", () => {
     "(12.50)",
     "$12",
     "1e3",
+    ".",
+    ",",
+    "550..",
+    "550,,",
+    "1,234.",
+    "1.234,",
   ])("rejects grouping and non-OFX numeric syntax: %s", (input) => {
     expect(() => importOfx(record(fields.replace("-12.50", input)))).toThrow("Invalid OFX amount");
     expect(() => importOfx(sgmlStatement.replace("-12.50", input))).toThrow("Invalid OFX amount");
@@ -471,6 +551,33 @@ describe("OFX/QFX SGML and XML", () => {
     "<OFX></OFX bad>",
     "<OFX><X></OFX>",
   ])("rejects invalid or unsafe markup: %s", (source) => expect(() => importOfx(source)).toThrow());
+  it.each([
+    "&",
+    "&amp",
+    "&;",
+    "&&amp;",
+    "&amp &amp;",
+    "&#;",
+    "&#x;",
+    "&".repeat(20_000),
+    `${"&".repeat(20_000)};`,
+  ])("rejects malformed entity input %# with a typed error", (entity) => {
+    expect(() => importOfx(record(fields.replace("Example Market, North", entity)))).toThrow(
+      BankImportError,
+    );
+  });
+  it("decodes many adjacent references once without changing their meaning", () => {
+    const entity = "&amp;lt;&#38;amp;&#x1f34e;";
+    const expected = "&lt;&amp;🍎";
+    expect(
+      importOfx(record(fields.replace("Example Market, North", entity.repeat(10_000))))[0]
+        ?.description,
+    ).toBe(expected.repeat(10_000));
+    expect(
+      importOfx(record(fields.replace("Example Market, North", "A &amp; B &lt; C")))[0]
+        ?.description,
+    ).toBe("A & B < C");
+  });
   it.each([
     "&unknown;",
     "&constructor;",
