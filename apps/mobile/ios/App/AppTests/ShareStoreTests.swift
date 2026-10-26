@@ -47,9 +47,14 @@ final class ShareStoreTests: XCTestCase {
         return root.appendingPathComponent(id, isDirectory: true)
     }
 
+    /// Batch directories only: the cross-process `.lock` file lives beside them.
+    private func entries() throws -> [String] {
+        return try FileManager.default.contentsOfDirectory(atPath: root.path).filter { !$0.hasPrefix(".") }
+    }
+
     private func assertRejected(_ items: [ShareStore.Incoming], file: StaticString = #filePath, line: UInt = #line) throws {
         XCTAssertThrowsError(try store.store(items, now: instant), file: file, line: line)
-        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: root.path), [], file: file, line: line)
+        XCTAssertEqual(try entries(), [], file: file, line: line)
     }
 
     func testCapsMatchTheSharedContract() {
@@ -62,7 +67,6 @@ final class ShareStoreTests: XCTestCase {
         XCTAssertEqual(ShareStore.maxTitleChars, 1000)
         XCTAssertEqual(ShareStore.maxChunkBytes, 512 * 1024)
         XCTAssertEqual(ShareStore.maxAge, 7 * 24 * 60 * 60)
-        XCTAssertEqual(ShareStore.maxPartialAge, 60 * 60)
     }
 
     func testStoresAMixedBatchReadsChunksAndAcknowledges() throws {
@@ -101,7 +105,7 @@ final class ShareStoreTests: XCTestCase {
 
         store.acknowledge(batch.id)
         XCTAssertTrue(store.pending().isEmpty())
-        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: root.path), [])
+        XCTAssertEqual(try entries(), [])
     }
 
     func testCapsChunksAt512KiBAndHandlesEmptyFiles() throws {
@@ -219,25 +223,30 @@ final class ShareStoreTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: directory(first).path))
     }
 
-    func testEvictsWeekOldBatchesAndOnlyStalePartials() throws {
+    func testEvictsWeekOldBatchesAndOnlyAbandonedCopies() throws {
         let old = try storeOne(0).id
         let fresh = try storeOne(ShareStore.maxAge).id
         XCTAssertEqual(store.pending().count, 2, "a batch exactly seven days old survives")
         let now = Date(timeIntervalSince1970: ShareStore.maxAge + 1)
-        let stale = directory("11111111-1111-1111-1111-111111111111")
-        let boundary = directory("22222222-2222-2222-2222-222222222222")
-        let recent = directory("33333333-3333-3333-3333-333333333333")
+        let unclaimed = directory("11111111-1111-1111-1111-111111111111")
+        let released = directory("22222222-2222-2222-2222-222222222222")
+        let active = directory("33333333-3333-3333-3333-333333333333")
         let unrelated = directory("keep-me")
-        for dir in [stale, boundary, recent, unrelated] {
+        for dir in [unclaimed, released, active, unrelated] {
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         }
-        try FileManager.default.setAttributes([.modificationDate: now.addingTimeInterval(-ShareStore.maxPartialAge - 1)], atPath: stale.path)
-        try FileManager.default.setAttributes([.modificationDate: now.addingTimeInterval(-ShareStore.maxPartialAge)], atPath: boundary.path)
-        try FileManager.default.setAttributes([.modificationDate: now], atPath: recent.path)
+        // A writer that exited leaves `.writing` unlocked; a live writer still holds its flock.
+        for dir in [released, active] {
+            XCTAssertTrue(FileManager.default.createFile(atPath: dir.appendingPathComponent(".writing").path, contents: nil))
+        }
+        let writer = open(active.appendingPathComponent(".writing").path, O_RDWR)
+        XCTAssertGreaterThanOrEqual(writer, 0)
+        XCTAssertEqual(flock(writer, LOCK_EX | LOCK_NB), 0)
+        defer { close(writer) }
         store.evict(now: now)
         XCTAssertEqual(store.pending().map { $0.id }, [fresh])
-        for dir in [directory(old), stale] { XCTAssertFalse(FileManager.default.fileExists(atPath: dir.path)) }
-        for dir in [boundary, recent, unrelated] { XCTAssertTrue(FileManager.default.fileExists(atPath: dir.path)) }
+        for dir in [directory(old), unclaimed, released] { XCTAssertFalse(FileManager.default.fileExists(atPath: dir.path)) }
+        for dir in [active, unrelated] { XCTAssertTrue(FileManager.default.fileExists(atPath: dir.path)) }
     }
 
     func testDropsCorruptManifestsAndRefusesReads() throws {
