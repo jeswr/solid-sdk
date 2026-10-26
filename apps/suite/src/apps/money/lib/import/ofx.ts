@@ -50,7 +50,7 @@ function readTree(text: string): Element {
       if (stack.length === 1) throw new Error("Text outside OFX root");
       parent.text += token.slice(9, -3);
     } else if (token.startsWith("</")) {
-      const closing = /^<\/([A-Z][A-Z0-9]*)\s*>$/i.exec(token);
+      const closing = /^<\/([A-Z][A-Z0-9.]*)\s*>$/i.exec(token);
       if (!closing) throw new Error("Invalid OFX closing tag");
       const name = (closing[1] as string).toUpperCase();
       if (sgml && parent.name !== name && parent.children.length === 0) {
@@ -61,7 +61,7 @@ function readTree(text: string): Element {
       stack.pop();
     } else if (token.startsWith("<")) {
       const opening =
-        /^<([A-Z][A-Z0-9]*)(?:\s+[A-Z][\w:-]*\s*=\s*(?:"[^"<>]*"|'[^'<>]*'))*\s*(\/?)>$/i.exec(
+        /^<([A-Z][A-Z0-9.]*)(?:\s+[A-Z][\w:-]*\s*=\s*(?:"[^"<>]*"|'[^'<>]*'))*\s*(\/?)>$/i.exec(
           token,
         );
       if (!opening) throw new Error("Invalid OFX opening tag");
@@ -105,6 +105,12 @@ function postingDate(value: string): string {
   return parseDate(`${match[1]}-${match[2]}-${match[3]}`, "YYYY-MM-DD");
 }
 
+function ofxAmount(value: string): string {
+  // OFX uses either decimal separator and never permits thousands grouping.
+  if (!/^[+-]?\d+(?:[.,]\d+)?$/.test(value)) throw new Error("Invalid OFX amount");
+  return parseAmount(value.replace(",", "."));
+}
+
 /** OFX/QFX 1.x SGML and 2.x XML bank/credit-card statements. Empty statements return []. */
 export function importOfx(text: string): ImportedTransaction[] {
   const root = readTree(text);
@@ -118,6 +124,14 @@ export function importOfx(text: string): ImportedTransaction[] {
       accountId = account ? field(account, "ACCTID") : "";
     }
     if (node.name === "STMTTRN") {
+      if (node.children.some((child) => child.name === "CURRENCY"))
+        throw new Error("OFX transaction currency overrides are unsupported");
+      if (
+        node.children.some(
+          (child) => child.name === "CORRECTFITID" || child.name === "CORRECTACTION",
+        )
+      )
+        throw new Error("OFX transaction corrections are unsupported");
       const name = field(node, "NAME");
       const memo = field(node, "MEMO");
       const description = name || memo;
@@ -125,7 +139,7 @@ export function importOfx(text: string): ImportedTransaction[] {
       const externalId = field(node, "FITID");
       transactions.push({
         date: postingDate(field(node, "DTPOSTED")),
-        amount: parseAmount(field(node, "TRNAMT")),
+        amount: ofxAmount(field(node, "TRNAMT")),
         description,
         ...(currency ? { currency } : {}),
         ...(accountId ? { accountId } : {}),

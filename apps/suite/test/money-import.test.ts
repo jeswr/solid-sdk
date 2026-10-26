@@ -16,7 +16,12 @@ import {
   sniffDelimiter,
   transactionHash,
 } from "../src/apps/money/lib/import";
-import { csvStatement, sgmlStatement, xmlStatement } from "./fixtures/money-statements";
+import {
+  csvStatement,
+  qfxStatement,
+  sgmlStatement,
+  xmlStatement,
+} from "./fixtures/money-statements";
 
 const transaction: ImportedTransaction = Object.freeze({
   date: "2026-10-24",
@@ -247,6 +252,88 @@ describe("CSV parsing, sniffing and mapping", () => {
 });
 
 describe("OFX/QFX SGML and XML", () => {
+  it.each([
+    ["-12,500", "-12.5"],
+    ["+0012,5000", "12.5"],
+    ["-0,000", "0"],
+    ["1234.50", "1234.5"],
+    ["9007199254740993,000000001", "9007199254740993.000000001"],
+  ])("parses OFX decimal %s exactly in XML and SGML", (input, amount) => {
+    expect(importOfx(record(fields.replace("-12.50", input)))).toEqual([
+      { ...transaction, amount },
+    ]);
+    expect(importOfx(sgmlStatement.replace("-12.50", input))[0]?.amount).toBe(amount);
+  });
+  it.each([
+    "1,234.50",
+    "1.234,50",
+    "1,234,567",
+    "1.234.567",
+    "1 234",
+    "(12.50)",
+    "$12",
+    "1e3",
+  ])("rejects grouping and non-OFX numeric syntax: %s", (input) => {
+    expect(() => importOfx(record(fields.replace("-12.50", input)))).toThrow("Invalid OFX amount");
+    expect(() => importOfx(sgmlStatement.replace("-12.50", input))).toThrow("Invalid OFX amount");
+  });
+  it.each([
+    "<CURRENCY><CURRATE>1.25</CURRATE><CURSYM>USD</CURSYM></CURRENCY>",
+    "<CURRENCY/>",
+  ])("rejects transaction currency overrides atomically: %s", (override) => {
+    const body = `<STMTRS><CURDEF>GBP</CURDEF><BANKTRANLIST><STMTTRN>${fields}</STMTTRN><STMTTRN>${fields}${override}</STMTTRN></BANKTRANLIST></STMTRS>`;
+    expect(() => importOfx(xml(body))).toThrow(
+      "OFX transaction currency overrides are unsupported",
+    );
+  });
+  it("rejects SGML currency overrides", () => {
+    const source = sgmlStatement.replace(
+      "</STMTTRN>",
+      "<CURRENCY><CURRATE>1.25<CURSYM>USD</CURRENCY></STMTTRN>",
+    );
+    expect(() => importOfx(source)).toThrow("OFX transaction currency overrides are unsupported");
+  });
+  it("keeps statement currency for amounts already converted from ORIGCURRENCY", () => {
+    const original = "<ORIGCURRENCY><CURRATE>0.8</CURRATE><CURSYM>USD</CURSYM></ORIGCURRENCY>";
+    expect(
+      importOfx(
+        xml(`<STMTRS><CURDEF>GBP</CURDEF><STMTTRN>${fields}${original}</STMTTRN></STMTRS>`),
+      ),
+    ).toEqual([{ ...transaction, currency: "GBP" }]);
+    expect(
+      importOfx(
+        sgmlStatement.replace(
+          "</STMTTRN>",
+          "<ORIGCURRENCY><CURRATE>0.8<CURSYM>USD</ORIGCURRENCY></STMTTRN>",
+        ),
+      )[0]?.currency,
+    ).toBe("GBP");
+  });
+  it.each([
+    "<CORRECTFITID>example-original</CORRECTFITID><CORRECTACTION>REPLACE</CORRECTACTION>",
+    "<CORRECTFITID>example-original</CORRECTFITID><CORRECTACTION>DELETE</CORRECTACTION>",
+    "<CORRECTFITID/>",
+    "<CORRECTACTION/>",
+  ])("rejects correction records atomically, including incomplete metadata: %s", (correction) => {
+    const original = `<STMTTRN>${fields}<FITID>example-original</FITID></STMTTRN>`;
+    const replacement = fields.replace("-12.50", "-20.00");
+    expect(() =>
+      importOfx(xml(`${original}<STMTTRN>${replacement}${correction}</STMTTRN>`)),
+    ).toThrow("OFX transaction corrections are unsupported");
+  });
+  it.each(["REPLACE", "DELETE"])("rejects SGML %s corrections", (action) => {
+    const source = sgmlStatement.replace(
+      "<FITID>example-2",
+      `<FITID>example-2<CORRECTFITID>example-1<CORRECTACTION>${action}`,
+    );
+    expect(() => importOfx(source)).toThrow("OFX transaction corrections are unsupported");
+  });
+  it("accepts QFX institution extension tags with implicit and explicit closing tags", () => {
+    expect(importOfx(qfxStatement)).toEqual(importOfx(sgmlStatement));
+    expect(
+      importOfx(qfxStatement.replace("<INTU.BID>000001", "<INTU.BID>000001</INTU.BID>")),
+    ).toEqual(importOfx(sgmlStatement));
+  });
   it("imports SGML implicit leaf endings and bank metadata", () => {
     expect(importOfx(sgmlStatement)).toEqual([
       {
