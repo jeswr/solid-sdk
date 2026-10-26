@@ -193,3 +193,46 @@ dependencies. Full-workspace green and roborev review remain unavailable as reco
 above. No screenshots apply to this model-only fix. No push, PR, branch switch, remote
 fetch/merge, or changes outside this checkout. The full gate left no untracked generated
 files in the checkout.
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+## Fix round 4
+
+Review: `solid-sdk-lane-sst-hd1k-72fd5a06322d.md`, read in full alongside the
+original and earlier fix briefs. The single WebID save/load finding is addressed.
+
+- `35b0592b` — `fix: persist explicit contact WebID selections`: make model reads
+  prefer structured `vcard:WebId` nodes over generic URLs, and use the same reader
+  when reconciling updates. Persist an empty typed WebID node when explicitly
+  clearing the field, so a retained homepage cannot become the selected WebID.
+  Selecting an existing homepage or direct URL writes a separate typed selection;
+  subsequent replacement/clearing preserves those original URLs and their metadata.
+  Route `loadContact` through the model reader. Add regression tests for direct and
+  structured legacy selections, replacement, clearing, selecting existing URLs,
+  repeated saves, restoring a cleared field, URL ordering, and invalid explicit values.
+- Final documentation commit — this report, committed last.
+
+Conservative scope reading: keep selection handling local to the contacts model and
+retain the shared reader's legacy fallback only when no explicit WebID node exists.
+The empty typed node distinguishes an explicit clear from untouched legacy data.
+No shared package sources, dependencies, public field types, or UI were changed.
+
+| Exact command | Result |
+| --- | --- |
+| `pnpm --filter '@jeswr/app-suite^...' run build` | PASS; build all five workspace dependencies before app checks. |
+| `pnpm --filter @jeswr/app-suite exec vitest run test/contacts-crud.test.ts` | Before the fix: 3 new round-trip cases fail, 31 tests pass; reproduces homepage promotion on replacement, clearing, and selecting another direct URL. |
+| `pnpm --filter @jeswr/app-suite run lint && pnpm --filter @jeswr/app-suite run build && pnpm --filter @jeswr/app-suite run typecheck && pnpm --filter @jeswr/app-suite run test` | PASS on the final implementation; production Next.js build, 5 test files, 90 tests. |
+| `pnpm --filter @jeswr/app-suite run test:coverage` | PASS; 100% statements (444/444), branches (235/235), functions (85/85), lines (393/393). |
+| `pnpm run lint:root` | PASS; repository guards and all 74 contrast pairs. |
+| `TURBO_SCM_BASE=d1909525ae4395fd3e91a1502bc6913537772cdc pnpm run gate` | PASS; 11/11 tasks, all 90 app tests. |
+| `npm_config_cache=/tmp/sst-hd1k-npm-cache pnpm run gate:full --env-mode=loose` | FAIL outside lane scope after 184 successful tasks: the two existing `@jeswr/federation-codegen#test` failures at `test/generator.test.ts:81` and `:126` compare `https://w3id.org/jeswr/` expectations against `https://jeswr.org/ns/` ontology inputs. Used the previously documented writable-cache workaround. |
+| `pnpm --filter @jeswr/federation-codegen exec vitest run test/generator.test.ts` | Reproduces both failures in isolation; 20 tests pass, 2 fail. No outputs or expectations updated. |
+| `git diff --exit-code d1909525ae4395fd3e91a1502bc6913537772cdc -- tools/federation-codegen packages/solid-federation-vocab` | PASS; the failing tool and vocabulary inputs are unchanged by this lane. |
+| `git diff d1909525ae4395fd3e91a1502bc6913537772cdc --check` | PASS. |
+| `roborev status` | Unavailable: `roborev: command not found`. No installation or configuration changes made. |
+
+No implementation work remains for the supplied finding; no open questions or new
+dependencies. Full-workspace green and roborev review remain unavailable as recorded
+above. No screenshots apply to this model-only fix. No push, PR, branch switch, remote
+fetch/merge, or changes outside this checkout. The full gate left no untracked generated
+files in the checkout.
