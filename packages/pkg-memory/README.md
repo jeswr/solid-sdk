@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # @jeswr/pkg-memory
 
@@ -76,6 +77,11 @@ applies to raw RDF/JS assertions, Turtle parsing, templates, batch metadata, Tri
 parsing and serialization, including caller-modified datasets. Serialization also
 checks every subject, predicate, object, graph name and literal datatype against
 the builder's IRI and language-tag guards before invoking the Writer.
+Blank-node labels must satisfy Turtle/TriG's `BLANK_NODE_LABEL` grammar;
+unsupported labels throw the exported `UnsupportedBlankNodeLabelError`
+(`TypeError`) before assertion hashing, building or serialization. Labels are
+validated without rewriting references, including blank-node graph names in
+caller-modified datasets.
 
 Nanopub, activity, message-fallback and annotation IDs use the reference UUIDv5
 namespace and name construction. Assertion IDs hash RDFlib 7's canonical N-Triples;
