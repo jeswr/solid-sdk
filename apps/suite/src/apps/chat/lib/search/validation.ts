@@ -59,7 +59,9 @@ export function validateTerm(term: SearchTerm): void {
     !validText(term.value) ||
     !fold(term.value).trim() ||
     typeof term.negated !== "boolean" ||
-    !["word", "phrase", "filter"].includes(term.type)
+    !["word", "phrase", "filter"].includes(term.type) ||
+    /\p{Cc}/u.test(term.value.replace(/[\t\r\n]/g, "")) ||
+    (term.type === "word" && /\s/u.test(term.value))
   ) {
     throw new SearchError("INVALID_QUERY");
   }

@@ -48,7 +48,7 @@ export function parseQuery(source: string): SearchQuery {
       (phrase && !raw.endsWith('"')) ||
       value.includes('"') ||
       value.includes("\\") ||
-      (!phrase && value.startsWith("-"))
+      (!phrase && !prefix && value.startsWith("-"))
     ) {
       throw new SearchError("INVALID_QUERY");
     }

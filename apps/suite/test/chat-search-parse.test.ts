@@ -46,6 +46,7 @@ describe("chat query grammar", () => {
       ],
     });
     expect(parseQuery('"from:Mira"').terms[0]?.type).toBe("phrase");
+    expect(parseQuery("unknown:-value").terms[0]?.value).toBe("unknown:-value");
     expect(parseQuery("from:https://example.org/mira#me").terms[0]?.value).toBe(
       "https://example.org/mira#me",
     );
@@ -151,6 +152,8 @@ describe("untrusted AST validation", () => {
     null,
     { value: "x", type: "oops", negated: false },
     { value: "x", type: "word", negated: 0 },
+    { value: "two words", type: "word", negated: false },
+    { value: "x\u0000", type: "phrase", negated: false },
     { value: "", type: "word", negated: false },
     { value: "x", type: "filter", field: "unknown", negated: false },
   ])("rejects invalid AST terms", (term) =>
