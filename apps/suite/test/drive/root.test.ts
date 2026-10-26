@@ -4,7 +4,7 @@ import { RdfFetchError } from "@jeswr/fetch-rdf";
 import { serialize } from "@jeswr/rdf-serialize";
 import { DataFactory, Parser, Store, Writer } from "n3";
 import { describe, expect, it } from "vitest";
-import { DriveResource } from "../../src/apps/drive/lib/model/model.js";
+import { DriveContainer, DriveResource } from "../../src/apps/drive/lib/model/model.js";
 import {
   DriveRootInitializationError,
   ensureDriveRoot,
@@ -31,8 +31,8 @@ function containerDescription(url: string): string {
   ]);
 }
 
-/** CSS-style storage: ignores container PUT bodies and PATCHes linked metadata only. */
-function memory(existingStatus: 409 | 412 = 409, storageUrl = storage) {
+/** CSS-style storage, optionally advertising conditional container PATCH support. */
+function memory(existingStatus: 409 | 412 = 409, storageUrl = storage, containerPatch = false) {
   const root = `${storageUrl}drive/`;
   const metadata = `${root}description`;
   const containerBody = containerDescription(root);
@@ -65,7 +65,14 @@ function memory(existingStatus: 409 | 412 = 409, storageUrl = storage) {
               headers: {
                 "Content-Type": "text/turtle",
                 ETag: `"${file.version}"`,
-                ...(url === root ? { Link: `<description>; rel="describedby"` } : {}),
+                ...(url === root
+                  ? {
+                      Link: `<description>; rel="describedby"`,
+                      ...(containerPatch
+                        ? { "Accept-Patch": "application/sparql-update, text/n3; charset=utf-8" }
+                        : {}),
+                    }
+                  : {}),
               },
             })
           : new Response(null, { status: 404 });
@@ -86,7 +93,7 @@ function memory(existingStatus: 409 | 412 = 409, storageUrl = storage) {
             headers: { ETag: `"${(file?.version ?? 0) + 1}"` },
           });
         }
-      } else if (method === "PATCH" && url === metadata) {
+      } else if (method === "PATCH" && (url === metadata || (url === root && containerPatch))) {
         // A conforming server need only support N3 Patch, not SPARQL Update.
         if (preconditionFails()) {
           response = new Response(null, { status: 412 });
@@ -130,7 +137,8 @@ function memory(existingStatus: 409 | 412 = 409, storageUrl = storage) {
           const current = files.get(root);
           if (!current) throw new Error("Missing container");
           const dataset = turtle(current.body);
-          const description = turtle(file?.body ?? "");
+          const descriptionFile = files.get(metadata);
+          const description = turtle(descriptionFile?.body ?? "");
           // Apply the parsed insertion formula to the target document's default graph.
           for (const quad of patch.match(null, null, null, insert.object)) {
             expect(quad.subject.termType).toBe("NamedNode");
@@ -146,7 +154,10 @@ function memory(existingStatus: 409 | 412 = 409, storageUrl = storage) {
             response = new Response(null, { status: 412 });
           } else {
             files.set(root, { body: rootBody, version: current.version + 1 });
-            files.set(metadata, { body: metadataBody, version: (file?.version ?? 0) + 1 });
+            files.set(metadata, {
+              body: metadataBody,
+              version: (descriptionFile?.version ?? 0) + 1,
+            });
             response = new Response(null, { status: 205 });
           }
         }
@@ -459,6 +470,193 @@ describe("ensureDriveRoot", () => {
     expect(m.files.get(root)?.body).toBe(replacement);
     expect(m.calls.filter((call) => call.method === "PATCH")).toHaveLength(patches);
     expect(m.indexWrites).toBe(0);
+  });
+
+  it.each([
+    undefined,
+    null,
+    'W/"1"',
+    '"1"',
+  ])("rejects a populated replacement even when the description PATCH succeeds (%s)", async (etag) => {
+    const m = memory();
+    const replacement = turtle(containerBody);
+    new DriveContainer(root, replacement, DataFactory).contains.add(
+      new DriveResource(`${root}unrelated.txt`, replacement, DataFactory),
+    );
+    const body = await quadsToTurtle(replacement);
+    m.setBefore((url, method) => {
+      if (url === metadata && method === "PATCH") {
+        m.files.delete(root);
+        m.files.set(root, { body, version: 9 });
+      }
+      return undefined;
+    });
+    const fetch: typeof globalThis.fetch = async (input, init) => {
+      const response = await m.fetch(input, init);
+      if (String(input) === root && init?.method !== "PUT" && etag !== undefined) {
+        if (etag === null) response.headers.delete("ETag");
+        else response.headers.set("ETag", etag);
+      }
+      return response;
+    };
+    const failure = await initializationFailure(ensureDriveRoot(fetch, options));
+    expect(m.calls.filter((call) => call.method === "PATCH").map((call) => call.status)).toEqual([
+      205,
+    ]);
+    expect(failure.cause).toMatchObject({ name: "DriveWriteError", status: 409, url: root });
+    expect(m.indexWrites).toBe(0);
+    expect(
+      new DriveResource(root, turtle(m.files.get(root)?.body ?? ""), DataFactory).isDriveRoot,
+    ).toBe(true);
+    m.setBefore(undefined);
+    const retried = await initializationFailure(failure.resume());
+    expect(retried.cause).toMatchObject({ name: "DriveWriteError", status: 409, url: root });
+    expect(m.indexWrites).toBe(0);
+    expect(m.calls.filter((call) => call.method === "PATCH")).toHaveLength(1);
+    expect(m.calls.some((call) => call.method === "DELETE")).toBe(false);
+  });
+
+  it.each([
+    "lost PATCH response",
+    "failed verification read",
+  ])("retains pre-PATCH identity after a %s on a replacement", async (stage) => {
+    const m = memory();
+    const replacement = turtle(containerBody);
+    new DriveContainer(root, replacement, DataFactory).contains.add(
+      new DriveResource(`${root}unrelated.txt`, replacement, DataFactory),
+    );
+    const body = await quadsToTurtle(replacement);
+    let reads = 0;
+    m.setBefore((url, method) => {
+      if (url === metadata && method === "PATCH") {
+        m.files.set(root, { body, version: 9 });
+      }
+      if (stage === "failed verification read" && url === root && method === "GET" && ++reads === 2)
+        return new Response(null, { status: 503 });
+      return undefined;
+    });
+    const cause = new TypeError("PATCH response lost");
+    const fetch: typeof globalThis.fetch = async (input, init) => {
+      const response = await m.fetch(input, init);
+      if (stage === "lost PATCH response" && init?.method === "PATCH") throw cause;
+      return response;
+    };
+    const failure = await initializationFailure(ensureDriveRoot(fetch, options));
+    if (stage === "lost PATCH response") expect(failure.cause).toBe(cause);
+    else expect(failure.cause).toMatchObject({ name: "RdfFetchError", status: 503 });
+    m.setBefore(undefined);
+    const retried = await initializationFailure(failure.resume());
+    expect(retried.cause).toMatchObject({ name: "DriveWriteError", status: 409, url: root });
+    expect(m.calls.filter((call) => call.method === "PATCH").map((call) => call.status)).toEqual([
+      205,
+    ]);
+    expect(m.indexWrites).toBe(0);
+  });
+
+  it.each([
+    false,
+    true,
+  ])("compares child identities after marking a created root (replaced: %s)", async (replaced) => {
+    const m = memory();
+    async function withChild(name: string) {
+      const dataset = turtle(containerBody);
+      new DriveContainer(root, dataset, DataFactory).contains.add(
+        new DriveResource(`${root}${name}`, dataset, DataFactory),
+      );
+      return quadsToTurtle(dataset);
+    }
+    const original = await withChild("default.txt");
+    const replacement = await withChild("unrelated.txt");
+    const fetch: typeof globalThis.fetch = async (input, init) => {
+      const response = await m.fetch(input, init);
+      // Model a server-created child included in the creation representation/ETag.
+      if (String(input) === root && init?.method === "PUT") {
+        m.files.set(root, { body: original, version: 1 });
+      }
+      return response;
+    };
+    m.setBefore((url, method) => {
+      if (replaced && url === metadata && method === "PATCH") {
+        m.files.set(root, { body: replacement, version: 9 });
+      }
+      return undefined;
+    });
+    if (replaced) {
+      const failure = await initializationFailure(ensureDriveRoot(fetch, options));
+      expect(failure.cause).toMatchObject({ name: "DriveWriteError", status: 409, url: root });
+      expect(m.indexWrites).toBe(0);
+    } else {
+      expect(await ensureDriveRoot(fetch, options)).toBe(root);
+      expect(m.indexWrites).toBe(1);
+    }
+  });
+
+  it.each([
+    null,
+    'W/"1"',
+    '"1"',
+  ])("conditions the advertised container PATCH on its strong validator (%s)", async (etag) => {
+    const m = memory(409, storage, true);
+    m.files.set(metadata, { body: "", version: 17 });
+    const fetch: typeof globalThis.fetch = async (input, init) => {
+      const response = await m.fetch(input, init);
+      if (String(input) === root && init?.method !== "PUT") {
+        if (etag === null) response.headers.delete("ETag");
+        else response.headers.set("ETag", etag);
+      }
+      return response;
+    };
+    expect(await ensureDriveRoot(fetch, options)).toBe(root);
+    const patch = m.calls.find((call) => call.method === "PATCH");
+    expect(patch?.url).toBe(etag === '"1"' ? root : metadata);
+    expect(patch?.headers.get("If-Match")).toBe(etag === '"1"' ? '"1"' : '"17"');
+    expect(m.indexWrites).toBe(1);
+  });
+
+  it("keeps using the description when the container advertises only another PATCH format", async () => {
+    const m = memory(409, storage, true);
+    const fetch: typeof globalThis.fetch = async (input, init) => {
+      const response = await m.fetch(input, init);
+      if (String(input) === root) response.headers.set("Accept-Patch", "application/sparql-update");
+      return response;
+    };
+    expect(await ensureDriveRoot(fetch, options)).toBe(root);
+    expect(m.calls.find((call) => call.method === "PATCH")?.url).toBe(metadata);
+  });
+
+  it("refuses a populated replacement when the container PATCH precondition fails", async () => {
+    const m = memory(409, storage, true);
+    const replacement = turtle(containerBody);
+    new DriveContainer(root, replacement, DataFactory).contains.add(
+      new DriveResource(`${root}unrelated.txt`, replacement, DataFactory),
+    );
+    const body = await quadsToTurtle(replacement);
+    m.setBefore((url, method) => {
+      if (url === root && method === "PATCH") m.files.set(root, { body, version: 9 });
+      return undefined;
+    });
+    const failure = await initializationFailure(ensureDriveRoot(m.fetch, options));
+    expect(failure.cause).toMatchObject({ name: "DriveWriteError", status: 409, url: root });
+    const patches = m.calls.filter((call) => call.method === "PATCH");
+    expect(patches.map((call) => call.status)).toEqual([412]);
+    expect(patches[0]?.headers.get("If-Match")).toBe('"1"');
+    expect(m.files.get(root)).toEqual({ body, version: 9 });
+    expect(m.files.has(metadata)).toBe(false);
+    expect(m.indexWrites).toBe(0);
+  });
+
+  it("bounds container PATCH precondition retries and resumes", async () => {
+    const m = memory(409, storage, true);
+    m.setBefore((url, method) =>
+      url === root && method === "PATCH" ? new Response(null, { status: 412 }) : undefined,
+    );
+    const failure = await initializationFailure(ensureDriveRoot(m.fetch, options));
+    expect(failure.cause).toMatchObject({ name: "DriveWriteError", status: 412, url: root });
+    expect(m.calls.filter((call) => call.method === "PATCH")).toHaveLength(2);
+    expect(m.indexWrites).toBe(0);
+    m.setBefore(undefined);
+    expect(await failure.resume()).toBe(root);
+    expect(m.indexWrites).toBe(1);
   });
 
   it("uses the description's strong ETag, independently of the container ETag", async () => {
