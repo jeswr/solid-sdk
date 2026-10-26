@@ -107,38 +107,66 @@ export class NanopubStore {
     const dataset = new Store();
     const nanopubs: Nanopublications["nanopubs"] = [];
     const ids = new Set<string>();
-    const assertions = new Map<string, { fingerprint: string; nodes: Map<string, string> }>();
+    const shared = new Map<string, { fingerprint: string; nodes: Map<string, string> }>();
     for (const entry of await this.pod.list(this.container)) {
       if (entry.isContainer || !entry.url.startsWith(this.container)) continue;
       const id = `urn:uuid:${entry.url.slice(this.container.length).replace(/\.trig$/, "")}`;
       if (!uuid.test(id) || this.url(id) !== entry.url || ids.has(id)) continue;
       ids.add(id);
       const result = await this.get(id);
-      const assertionId = (result.nanopubs[0] as Nanopublications["nanopubs"][number]).assertionId;
-      const assertion = canonicalizeAssertionWithLabels(graph(result.dataset, assertionId));
-      const previous = assertions.get(assertionId);
-      if (previous !== undefined && previous.fingerprint !== assertion.id)
-        throw new Error("Conflicting copies of a shared assertion graph");
+      const np = result.nanopubs[0] as Nanopublications["nanopubs"][number];
+      const graphs = [
+        np.assertionId,
+        pkgId("batch", np.batch, "sources"),
+        pkgId("batch", np.batch, "entities"),
+      ].map((name) => {
+        const contents = graph(result.dataset, name);
+        const canonical =
+          contents.size === 0
+            ? { id: "", labels: new Map<string, string>() }
+            : canonicalizeAssertionWithLabels(contents);
+        return { name, canonical, previous: shared.get(name) };
+      });
       // Blank-node labels are document-local. Keep one validated graph instead
       // of unioning copies, and align references throughout the incoming dataset.
       const replacements = new Map<string, string>();
-      if (previous !== undefined)
-        for (const [node, label] of assertion.labels)
-          replacements.set(node, previous.nodes.get(label) as string);
+      const originals = new Map<string, string>();
+      const duplicates = new Set<string>();
+      for (const { name, canonical, previous } of graphs) {
+        if (previous === undefined) continue;
+        if (previous.fingerprint !== canonical.id)
+          throw new Error("Conflicting copies of a shared nanopublication graph");
+        duplicates.add(name);
+        for (const [node, label] of canonical.labels) {
+          const retained = previous.nodes.get(label) as string;
+          if (
+            (replacements.has(node) && replacements.get(node) !== retained) ||
+            (originals.has(retained) && originals.get(retained) !== node)
+          )
+            throw new Error("Conflicting blank-node references in shared graphs");
+          replacements.set(node, retained);
+          originals.set(retained, node);
+        }
+      }
       const remap = <T extends Term>(term: T) =>
         term.termType === "BlankNode" && replacements.has(term.value)
           ? df.blankNode(replacements.get(term.value) as string)
           : term;
       for (const quad of result.dataset)
-        if (previous === undefined || quad.graph.value !== assertionId)
+        if (!duplicates.has(quad.graph.value))
           dataset.add(
             df.quad(remap(quad.subject), quad.predicate, remap(quad.object), remap(quad.graph)),
           );
-      if (previous === undefined)
-        assertions.set(assertionId, {
-          fingerprint: assertion.id,
-          nodes: new Map([...assertion.labels].map(([node, label]) => [label, node])),
-        });
+      for (const { name, canonical, previous } of graphs) {
+        if (previous === undefined) {
+          shared.set(name, {
+            fingerprint: canonical.id,
+            nodes: new Map(
+              [...canonical.labels].map(([node, label]) => [label, replacements.get(node) ?? node]),
+            ),
+          });
+        }
+      }
       nanopubs.push(...result.nanopubs);
     }
     return { dataset, nanopubs };

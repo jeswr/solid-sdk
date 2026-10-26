@@ -55,10 +55,10 @@ function setup(overrides: Partial<PodPort> = {}) {
   return { memory, pod, write, store: new NanopubStore(pod) };
 }
 
-async function sharedBlankAssertions(ids = ["one", "two"]) {
+async function sharedBlankAssertions(ids = ["one", "two"], batch = "shared-blank") {
   const value = await buildNanopublications(
     {
-      batch_id: "shared-blank",
+      batch_id: batch,
       worker: { agent_id: "https://example.org/client", agent_label: "Test" },
       claims: ids.map((id) => ({
         id,
@@ -85,6 +85,211 @@ async function sharedBlankAssertions(ids = ["one", "two"]) {
   putGraph(value.dataset as Store, assertionId, assertion);
   return parseNanopublications(await serializeNanopublications(value));
 }
+
+async function sharedBlankBatchGraphs(batch = "shared-batch", ids = ["one", "two", "three"]) {
+  const source = "https://example.org/document";
+  const value = await buildNanopublications(
+    {
+      batch_id: batch,
+      worker: { agent_id: "https://example.org/client", agent_label: "Test" },
+      sources: [{ id: "document", kind: "document", url: source }],
+      claims: ids.map((id) => ({
+        id,
+        epistemic: "SelfReportedExplicit",
+        assertion: createFactAssertion(identity.webId, {
+          template: "email",
+          value: `${id}@example.org`,
+        }),
+      })),
+    },
+    options,
+  );
+  const author = DataFactory.blankNode();
+  const nested = DataFactory.blankNode();
+  const sources = graph(value.dataset, pkgId("batch", batch, "sources"));
+  new RdfNode(source, sources).add(`${NS.schema}author`, author);
+  new RdfNode(author, sources)
+    .text(`${NS.schema}name`, "Avery")
+    .add(`${NS.schema}additionalProperty`, nested);
+  new RdfNode(nested, sources).text(`${NS.schema}value`, "source detail");
+  putGraph(value.dataset as Store, pkgId("batch", batch, "sources"), sources);
+  const entities = new Store();
+  new RdfNode(source, entities).add(`${NS.schema}author`, author);
+  new RdfNode(author, entities).text(`${NS.schema}description`, "Document author");
+  const entity = DataFactory.blankNode();
+  new RdfNode(source, entities).add(`${NS.schema}about`, entity);
+  new RdfNode(entity, entities)
+    .text(`${NS.schema}name`, "Example entity")
+    .add(`${NS.prov}wasAttributedTo`, author);
+  putGraph(value.dataset as Store, pkgId("batch", batch, "entities"), entities);
+  for (const np of value.nanopubs) {
+    const provenance = graph(value.dataset, np.provenanceId);
+    const local = DataFactory.blankNode();
+    new RdfNode(np.id, provenance)
+      .add(`${NS.prov}primarySource`, author)
+      .add(`${NS.prov}qualifiedAssociation`, local);
+    new RdfNode(local, provenance)
+      .text(`${NS.schema}name`, np.identifier)
+      .add(`${NS.prov}entity`, entity);
+    new RdfNode(author, provenance).link(`${NS.prov}wasDerivedFrom`, np.id);
+    new RdfNode(nested, provenance).text(`${NS.schema}description`, np.identifier);
+    putGraph(value.dataset as Store, np.provenanceId, provenance);
+    const pubinfo = graph(value.dataset, np.pubinfoId);
+    new RdfNode(np.id, pubinfo).add(`${NS.prov}primarySource`, entity);
+    putGraph(value.dataset as Store, np.pubinfoId, pubinfo);
+  }
+  return value;
+}
+
+it.each([
+  false,
+  true,
+])("retains shared source/entity graphs and their blank-node references (reverse listing: %s)", async (reverse) => {
+  const { store, pod } = setup();
+  const value = await sharedBlankBatchGraphs();
+  await store.put(value);
+  const sourcesId = pkgId("batch", "shared-batch", "sources");
+  const entitiesId = pkgId("batch", "shared-batch", "entities");
+  const copies = await Promise.all(value.nanopubs.map((np) => store.get(np.id)));
+  const naive = new Store(copies.flatMap((copy) => [...copy.dataset]));
+  for (const name of [sourcesId, entitiesId])
+    expect(graph(naive, name).size).toBeGreaterThan(graph(value.dataset, name).size);
+  const list = pod.list;
+  if (reverse) pod.list = async (url) => (await list(url)).reverse();
+  for (let i = 0; i < 2; i++) {
+    const loaded = await store.list();
+    expect(loaded.nanopubs).toHaveLength(3);
+    for (const name of [sourcesId, entitiesId])
+      expect(graph(loaded.dataset, name).size).toBe(graph(value.dataset, name).size);
+    expect(isomorphic([...loaded.dataset], [...value.dataset])).toBe(true);
+    const sources = graph(loaded.dataset, sourcesId);
+    const author = new RdfNode("https://example.org/document", sources).one(`${NS.schema}author`);
+    const nested = new RdfNode(author, sources).one(`${NS.schema}additionalProperty`);
+    const entities = graph(loaded.dataset, entitiesId);
+    expect(
+      new RdfNode("https://example.org/document", entities)
+        .one(`${NS.schema}author`)
+        .equals(author),
+    ).toBe(true);
+    const entity = new RdfNode("https://example.org/document", entities).one(`${NS.schema}about`);
+    for (const np of loaded.nanopubs) {
+      const provenance = graph(loaded.dataset, np.provenanceId);
+      const envelope = new RdfNode(np.id, provenance);
+      expect(envelope.one(`${NS.prov}primarySource`).equals(author)).toBe(true);
+      expect(new RdfNode(author, provenance).oneIri(`${NS.prov}wasDerivedFrom`)).toBe(np.id);
+      expect(new RdfNode(nested, provenance).oneText(`${NS.schema}description`)).toBe(
+        np.identifier,
+      );
+      const local = new RdfNode(envelope.one(`${NS.prov}qualifiedAssociation`), provenance);
+      expect(local.oneText(`${NS.schema}name`)).toBe(np.identifier);
+      expect(local.one(`${NS.prov}entity`).equals(entity)).toBe(true);
+      expect(
+        new RdfNode(np.id, graph(loaded.dataset, np.pubinfoId))
+          .one(`${NS.prov}primarySource`)
+          .equals(entity),
+      ).toBe(true);
+    }
+  }
+});
+
+it.each([
+  "sources",
+  "entities",
+])("rejects conflicting stored copies of a shared %s graph", async (kind) => {
+  for (const remove of [false, true]) {
+    const { store, pod } = setup();
+    const value = await sharedBlankBatchGraphs();
+    await store.put(value);
+    const np = value.nanopubs[1]!;
+    const altered = await store.get(np.id);
+    const name = pkgId("batch", np.batch, kind);
+    const contents = graph(altered.dataset, name);
+    for (const quad of [...altered.dataset])
+      if (quad.graph.value === name) altered.dataset.delete(quad);
+    if (!remove) {
+      new RdfNode("https://example.org/document", contents).text(`${NS.schema}name`, "Changed");
+      putGraph(altered.dataset as Store, name, contents);
+    }
+    const url = store.url(np.id);
+    await pod.write(url, encode(await serializeNanopublications(altered)), "application/trig", {
+      ifMatch: (await pod.read(url)).etag,
+    });
+    const list = pod.list;
+    await expect(store.list()).rejects.toThrow("Conflicting copies");
+    pod.list = async (container) => (await list(container)).reverse();
+    await expect(store.list()).rejects.toThrow("Conflicting copies");
+  }
+});
+
+it("keeps independent batches' blank-node source/entity descriptions distinct", async () => {
+  const { store } = setup();
+  const first = await sharedBlankBatchGraphs("first-batch", ["one"]);
+  const second = await sharedBlankBatchGraphs("second-batch", ["two"]);
+  await store.put(first);
+  await store.put(second);
+  const loaded = await store.list();
+  expect(loaded.nanopubs).toHaveLength(2);
+  expect(isomorphic([...loaded.dataset], [...first.dataset, ...second.dataset])).toBe(true);
+});
+
+it("retains remapped batch nodes when their assertion was loaded from an earlier batch", async () => {
+  const { store, pod } = setup();
+  const first = await sharedBlankAssertions(["seed"], "seed-batch");
+  const second = await sharedBlankAssertions(["one", "two"], "later-batch");
+  const assertionId = first.nanopubs[0]!.assertionId;
+  const assertion = graph(first.dataset, assertionId);
+  const preference = new RdfNode(identity.webId, assertion).one(`${NS.schema}hasPreference`);
+  const nested = new RdfNode(preference, assertion).one(`${NS.schema}additionalProperty`);
+  for (const quad of [...second.dataset])
+    if (quad.graph.value === assertionId) second.dataset.delete(quad);
+  putGraph(second.dataset as Store, assertionId, assertion);
+  for (const kind of ["sources", "entities"]) {
+    const name = pkgId("batch", "later-batch", kind);
+    const contents = graph(second.dataset, name);
+    new RdfNode("https://example.org/document", contents).add(`${NS.schema}author`, preference);
+    new RdfNode(preference, contents).add(`${NS.schema}additionalProperty`, nested);
+    new RdfNode(nested, contents).text(`${NS.schema}name`, kind);
+    putGraph(second.dataset as Store, name, contents);
+  }
+  await store.put(first);
+  await store.put(second);
+  const list = pod.list;
+  for (const reverse of [false, true]) {
+    if (reverse) pod.list = async (url) => (await list(url)).reverse();
+    const loaded = await store.list();
+    expect(loaded.nanopubs).toHaveLength(3);
+    expect(isomorphic([...loaded.dataset], [...first.dataset, ...second.dataset])).toBe(true);
+  }
+});
+
+it("rejects inconsistent blank-node identity across shared source/entity copies", async () => {
+  const { store, pod } = setup();
+  const value = await sharedBlankBatchGraphs();
+  await store.put(value);
+  const np = value.nanopubs[1]!;
+  const altered = await store.get(np.id);
+  const name = pkgId("batch", np.batch, "entities");
+  const entities = graph(altered.dataset, name);
+  const author = new RdfNode("https://example.org/document", entities).one(`${NS.schema}author`);
+  const separate = DataFactory.blankNode();
+  const changed = new Store();
+  for (const quad of entities)
+    new RdfNode(quad.subject.equals(author) ? separate : quad.subject, changed).add(
+      quad.predicate.value,
+      quad.object.equals(author) ? separate : quad.object,
+    );
+  for (const quad of [...altered.dataset])
+    if (quad.graph.value === name) altered.dataset.delete(quad);
+  putGraph(altered.dataset as Store, name, changed);
+  const url = store.url(np.id);
+  await pod.write(url, encode(await serializeNanopublications(altered)), "application/trig", {
+    ifMatch: (await pod.read(url)).etag,
+  });
+  const list = pod.list;
+  await expect(store.list()).rejects.toThrow("Conflicting blank-node references");
+  pod.list = async (container) => (await list(container)).reverse();
+  await expect(store.list()).rejects.toThrow("Conflicting blank-node references");
+});
 
 it("deduplicates independently parsed copies of shared blank-node assertions on every listing", async () => {
   const { store, pod } = setup();
