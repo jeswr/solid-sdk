@@ -52,16 +52,6 @@ export class TrashIndexWarning extends Error {
   }
 }
 
-export class TrashPartialError extends Error {
-  readonly kind = "trash-partial";
-  constructor() {
-    super(
-      "This folder only partly moved to Trash. Restore its missing items before deleting it for ever.",
-    );
-    this.name = "TrashPartialError";
-  }
-}
-
 export class TrashMovingError extends Error {
   readonly kind = "trash-moving";
   constructor() {
@@ -284,21 +274,54 @@ async function exists(client: DriveClient, url: string): Promise<boolean> {
   );
 }
 
-/** A surviving root alone does not prove that all source children survived. */
+/** Persist source identities in the intent; older records use byte comparison. */
+async function sourceVersions(client: DriveClient, url: string): Promise<string[]> {
+  try {
+    if (url.endsWith("/")) {
+      const children = await client.list(url);
+      return (await Promise.all(children.map((child) => sourceVersions(client, child.url)))).flat();
+    }
+    const { etag } = await client.stat(url);
+    return etag ? [JSON.stringify([url, etag])] : [];
+  } catch (error) {
+    // A missing source still gets its normal per-item move failure.
+    if (error instanceof DriveError && error.kind === "not-found") return [];
+    throw error;
+  }
+}
+
+/** Presence alone cannot identify a survivor: its URL may have been reused. */
+async function sameRecoveryFile(
+  client: DriveClient,
+  from: string,
+  to: string,
+  versions: ReadonlySet<string> = new Set(),
+): Promise<boolean> {
+  const target = await client.stat(to);
+  if (target.etag && !target.etag.startsWith("W/")) {
+    if (versions.has(JSON.stringify([to, target.etag]))) return true;
+    if ((await client.stat(from)).etag === target.etag) return true;
+  }
+  const [recovery, survivor] = await Promise.all([client.read(from), client.read(to)]);
+  if (recovery.size !== survivor.size) return false;
+  const [a, b] = await Promise.all([recovery.arrayBuffer(), survivor.arrayBuffer()]);
+  const bytes = new Uint8Array(b);
+  return new Uint8Array(a).every((value, index) => value === bytes[index]);
+}
+
+/** Every recovery child must still have the same original, including nested files. */
 async function holdsRecovery(
   client: DriveClient,
   from: string,
   original: string,
+  versions: ReadonlySet<string>,
 ): Promise<boolean> {
   if (!(await exists(client, original))) return false;
-  if (!from.endsWith("/")) return true;
+  if (!from.endsWith("/")) return sameRecoveryFile(client, from, original, versions);
   const source = new Set((await client.list(original)).map(({ url }) => url));
   for (const child of await client.list(from)) {
     const target = `${original}${child.url.slice(from.length)}`;
-    if (
-      !source.has(target) ||
-      (child.kind === "folder" && !(await holdsRecovery(client, child.url, target)))
-    )
+    if (!source.has(target) || !(await holdsRecovery(client, child.url, target, versions)))
       return false;
   }
   return true;
@@ -309,19 +332,19 @@ function recoveryMarker(driveRoot: string, entry: TrashEntry): string {
   return `${slotOf(driveRoot, entry)}${nameOf(entry.url) === "partial.ttl" ? ".partial.ttl" : "partial.ttl"}`;
 }
 
-async function hasRecoveryMarker(
+async function recoveryStatus(
   client: DriveClient,
   driveRoot: string,
   entry: TrashEntry,
-): Promise<boolean> {
+): Promise<"partial" | "complete" | undefined> {
   const current = await client.readRdf(recoveryMarker(driveRoot, entry));
-  if (!current) return false;
+  if (!current) return undefined;
   const record = trashIndexFrom(current.dataset).record(entry.url);
-  return (
-    record.status === "partial" &&
+  return (record.status === "partial" || record.status === "complete") &&
     record.originalLocation === entry.original &&
     record.trashedAt?.getTime() === entry.trashedAt.getTime()
-  );
+    ? record.status
+    : undefined;
 }
 
 /** A slot-local receipt keeps recovery discoverable if the shared index is unavailable. */
@@ -329,10 +352,12 @@ async function markRecovery(
   client: DriveClient,
   driveRoot: string,
   entry: TrashEntry,
+  status: "partial" | "complete",
 ): Promise<void> {
-  if (await hasRecoveryMarker(client, driveRoot, entry)) return;
+  if (await recoveryStatus(client, driveRoot, entry)) return;
   const receipt = emptyTrashIndex();
-  addTrashRecord(receipt, { ...entry, status: "partial" });
+  addTrashRecord(receipt, entry);
+  receipt.record(entry.url).status = status;
   await client.write(recoveryMarker(driveRoot, entry), await serializeTrashIndex(receipt), {
     contentType: "text/turtle",
     ifNoneMatch: "*",
@@ -343,11 +368,14 @@ async function reconcilePending(
   client: DriveClient,
   driveRoot: string,
   entry: TrashEntry,
+  versions: ReadonlySet<string>,
   durable = false,
-): Promise<boolean> {
-  if (!(await exists(client, entry.url))) return false;
-  const marked = await hasRecoveryMarker(client, driveRoot, entry);
-  if (!marked && (await holdsRecovery(client, entry.url, entry.original))) return false;
+): Promise<"partial" | "complete" | undefined> {
+  if (!(await exists(client, entry.url))) return undefined;
+  const marked = await recoveryStatus(client, driveRoot, entry);
+  if (!marked && (await holdsRecovery(client, entry.url, entry.original, versions)))
+    return undefined;
+  const status = marked ?? "partial";
   let promoted = true;
   try {
     await updateIndex(client, driveRoot, (index) => {
@@ -356,18 +384,18 @@ async function reconcilePending(
         record.originalLocation === entry.original &&
         record.trashedAt?.getTime() === entry.trashedAt.getTime() &&
         (record.status === "pending" || record.status === "partial");
-      if (promoted) record.status = "partial";
+      if (promoted) record.status = status;
     });
   } catch (error) {
     console.warn(new TrashIndexWarning(indexUrlOf(driveRoot), error));
     try {
-      await markRecovery(client, driveRoot, entry);
+      await markRecovery(client, driveRoot, entry, status);
     } catch (error) {
       if (durable) throw error;
       console.warn(new TrashIndexWarning(recoveryMarker(driveRoot, entry), error));
     }
   }
-  return promoted;
+  return promoted ? status : undefined;
 }
 
 async function recoveryItems(client: DriveClient, url: string): Promise<string[]> {
@@ -393,7 +421,14 @@ async function requireTrashEntry(
   )
     throw new DriveError("invalid-trash-record", 409, entry.url);
   if (!pending && record.status === "pending") {
-    if (await reconcilePending(client, driveRoot, entry, true)) return "partial";
+    const reconciled = await reconcilePending(
+      client,
+      driveRoot,
+      entry,
+      record.sourceVersions,
+      true,
+    );
+    if (reconciled) return reconciled;
     throw new TrashMovingError();
   }
   return record.status;
@@ -438,8 +473,13 @@ export async function listTrash(
     }
     let status = transferRecord(index, entry.url).status;
     if (status === "pending") {
-      if (!(await reconcilePending(client, driveRoot, entry))) continue;
-      status = "partial";
+      status = await reconcilePending(
+        client,
+        driveRoot,
+        entry,
+        index.record(entry.url).sourceVersions,
+      );
+      if (!status) continue;
     } else if (!(await exists(client, entry.url))) {
       // Restore/delete may have succeeded while their final index PUT failed.
       missing.push(entry.url);
@@ -489,10 +529,15 @@ export async function trashItems(
   }
   // No source may be removed until every intent is durably discoverable.
   try {
+    const intents = await Promise.all(
+      entries.map(async (entry) => [entry, await sourceVersions(client, entry.original)] as const),
+    );
     await updateIndex(client, driveRoot, (index) => {
-      for (const entry of entries) {
+      for (const [entry, versions] of intents) {
         addTrashRecord(index, entry);
-        transferRecord(index, entry.url).status = "pending";
+        const record = transferRecord(index, entry.url);
+        record.status = "pending";
+        for (const version of versions) record.sourceVersions.add(version);
       }
     });
   } catch (error) {
@@ -527,9 +572,14 @@ export async function trashItems(
     } catch (error) {
       // Preserve the completed side effects, but callers must withhold Undo
       // until the index has durably recorded completion.
-      for (const entry of partial) {
+      for (const entry of [...result.done, ...partial]) {
         try {
-          await markRecovery(client, driveRoot, entry);
+          await markRecovery(
+            client,
+            driveRoot,
+            entry,
+            partial.includes(entry) ? "partial" : "complete",
+          );
         } catch (markerError) {
           console.warn(new TrashIndexWarning(recoveryMarker(driveRoot, entry), markerError));
         }
@@ -614,7 +664,11 @@ async function restoreMissing(
       if (remaining.length === 0) await client.remove(from);
       return remaining;
     }
-    if (await exists(client, to)) throw new DriveError("conflict", 412, to);
+    if (await exists(client, to)) {
+      if (!(await sameRecoveryFile(client, from, to))) throw new DriveError("conflict", 412, to);
+      await client.remove(from);
+      return [];
+    }
     await client.move(from, to);
     return [];
   } catch (error) {
@@ -639,7 +693,7 @@ export async function restoreItems(
       if (status === "partial") {
         const remaining = await restoreMissing(client, entry.url, entry.original);
         if (remaining.length) throw new TrashRestorePartialError(remaining);
-        if (await hasRecoveryMarker(client, driveRoot, entry))
+        if (await recoveryStatus(client, driveRoot, entry))
           await client.remove(recoveryMarker(driveRoot, entry));
         await client.remove(slot).catch(() => undefined);
         result.done.push({ entry, url: entry.original, renamed: false });
@@ -662,6 +716,8 @@ export async function restoreItems(
       }
       // Moving recreates missing parent folders (PUT creates intermediate containers).
       const { url } = await client.move(entry.url, target);
+      if (await recoveryStatus(client, driveRoot, entry))
+        await client.remove(recoveryMarker(driveRoot, entry));
       // The slot may contain another writer's resources; only remove it empty.
       await client.remove(slot).catch(() => undefined);
       result.done.push({ entry, url, renamed });
@@ -686,9 +742,10 @@ export async function deleteForever(
   for (const entry of entries) {
     try {
       slotOf(driveRoot, entry);
-      if ((await requireTrashEntry(client, driveRoot, entry)) === "partial")
-        throw new TrashPartialError();
+      await requireTrashEntry(client, driveRoot, entry);
       await client.remove(entry.url, { recursive: true });
+      if (await recoveryStatus(client, driveRoot, entry))
+        await client.remove(recoveryMarker(driveRoot, entry));
       await client.remove(slotOf(driveRoot, entry)).catch(() => undefined);
       result.done.push(entry);
     } catch (error) {
@@ -720,7 +777,7 @@ export async function purgeExpired(
       onInvalid: (error) => invalid.push({ url: error.url, error }),
     })
   )
-    .filter((entry) => entry.trashedAt.getTime() < cutoff)
+    .filter((entry) => entry.status !== "partial" && entry.trashedAt.getTime() < cutoff)
     .slice(0, options.limit ?? 50);
   if (expired.length === 0) return { done: [], failed: invalid };
   const result = await deleteForever(client, driveRoot, expired);

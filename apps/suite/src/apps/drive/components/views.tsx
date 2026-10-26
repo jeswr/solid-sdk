@@ -339,11 +339,12 @@ export function TrashView() {
   const [snapshot, setSnapshot] = useState<{
     client: DriveClient;
     root: string;
-    entries: TrashEntry[];
+    entries?: TrashEntry[];
+    failed?: boolean;
   }>();
   const generation = useRef(0);
-  const entries =
-    snapshot?.client === client && snapshot.root === driveRoot ? snapshot.entries : undefined;
+  const current = snapshot?.client === client && snapshot.root === driveRoot ? snapshot : undefined;
+  const entries = current?.entries;
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const load = useCallback(() => {
     const request = ++generation.current;
@@ -351,7 +352,17 @@ export function TrashView() {
     const accept = (entries: TrashEntry[]) => {
       if (request === generation.current) setSnapshot({ client, root: driveRoot, entries });
     };
-    listTrash(client, driveRoot).then(accept, () => accept([]));
+    listTrash(client, driveRoot).then(accept, () => {
+      if (request !== generation.current) return;
+      setSnapshot((previous) => ({
+        client,
+        root: driveRoot,
+        ...(previous?.client === client && previous.root === driveRoot && previous.entries
+          ? { entries: previous.entries }
+          : {}),
+        failed: true,
+      }));
+    });
   }, [client, driveRoot]);
   useEffect(() => {
     load();
@@ -406,18 +417,28 @@ export function TrashView() {
         </div>
       </div>
       <div className="drv-content">
-        {!entries ? (
-          <div className="drv-state" role="status">
-            Loading…
+        {current?.failed ? (
+          <div role="alert">
+            <p>Couldn't refresh Trash. Your recovery items are kept. Try again.</p>
+            <Button variant="outline" onClick={load}>
+              Retry
+            </Button>
           </div>
-        ) : entries.length === 0 ? (
+        ) : null}
+        {!entries ? (
+          current?.failed ? null : (
+            <div className="drv-state" role="status">
+              Loading…
+            </div>
+          )
+        ) : entries.length === 0 && !current?.failed ? (
           <div className="drv-state">
             <div className="drv-state-icon" aria-hidden="true">
               <Trash2 size={32} />
             </div>
             <h2>Trash is empty</h2>
           </div>
-        ) : (
+        ) : entries.length === 0 ? null : (
           <table className="drv-table" aria-label="Trash">
             <thead>
               <tr>

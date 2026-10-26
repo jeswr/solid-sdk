@@ -330,6 +330,25 @@ function isInteractiveKey(event: KeyboardEvent): boolean {
     );
 }
 
+/** Escape belongs only to editors, media controls and open native popups. */
+function consumesEscape(event: KeyboardEvent): boolean {
+  return event.composedPath().some((target) => {
+    if (!(target instanceof Element)) return false;
+    if (
+      target.closest(
+        'audio, video, input, select, textarea, [contenteditable]:not([contenteditable="false"]), [role="combobox"], [role="listbox"], [role="menu"], dialog[open]',
+      )
+    )
+      return true;
+    // Older browsers may not support native popovers.
+    try {
+      return target.closest(":popover-open") !== null;
+    } catch {
+      return false;
+    }
+  });
+}
+
 /** The preview over a listing; ←/→ step through the listing's files. */
 export function PreviewDialog() {
   const { preview, setPreview } = useDriveUi();
@@ -358,7 +377,7 @@ export function PreviewDialog() {
         className="drv-preview-dialog"
         onEscapeKeyDown={(event) => {
           // Radix handles Escape during document capture, before React's key handlers.
-          if (isInteractiveKey(event)) event.preventDefault();
+          if (consumesEscape(event)) event.preventDefault();
         }}
         showCloseButton={false}
         onOpenAutoFocus={(event) => {

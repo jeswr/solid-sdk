@@ -29,7 +29,6 @@ import {
   renameItem,
   restoreItems,
   TrashMovingError,
-  TrashPartialError,
   TrashRestorePartialError,
   trashItems,
 } from "../lib/operations/operations";
@@ -159,11 +158,7 @@ export function useDriveUi(): DriveUiValue {
 
 /** User-facing message for a failed operation. */
 export function errorMessage(error: unknown, fallback = "Something went wrong"): string {
-  if (
-    error instanceof TrashMovingError ||
-    error instanceof TrashPartialError ||
-    error instanceof TrashRestorePartialError
-  )
+  if (error instanceof TrashMovingError || error instanceof TrashRestorePartialError)
     return error.message;
   if (error instanceof DriveError) {
     switch (error.kind) {
