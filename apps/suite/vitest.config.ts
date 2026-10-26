@@ -5,10 +5,23 @@ export default defineConfig({
     environment: "node",
     include: ["test/**/*.test.ts"],
     coverage: {
-      provider: "v8",
       enabled: true,
-      include: ["src/apps/sheets/lib/univer-spike/**/*.ts"],
-      thresholds: { statements: 100, branches: 100, functions: 100, lines: 100 },
+      provider: "v8",
+      include: [
+        "src/apps/photos/lib/library/**/*.ts",
+        "src/lib/order/**/*.ts",
+        "src/apps/docs/lib/anchoring/**/*.ts",
+        "src/apps/health/lib/stats/**/*.ts",
+        "src/apps/sheets/lib/univer-spike/**/*.ts",
+      ],
+      reporter: ["text", "json-summary"],
+      thresholds: {
+        perFile: true,
+        statements: 100,
+        branches: 100,
+        functions: 100,
+        lines: 100,
+      },
     },
   },
 });
