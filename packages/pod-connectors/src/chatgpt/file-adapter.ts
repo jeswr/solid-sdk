@@ -58,7 +58,7 @@ export const chatgptFileAdapter: FileImportAdapter = {
     const doc = ctx.resolve("documents/chatgpt-conversations.ttl");
     const store = new Store();
     let index = 0;
-    for await (const entry of jsonEntries(file, ["", "conversations"])) {
+    for await (const entry of jsonEntries(file, ["", "conversations"], [], ctx.skip)) {
       if (index >= ctx.maxRows) break;
       const conv = flattenConversation(entry.value, index);
       if (!conv) continue;

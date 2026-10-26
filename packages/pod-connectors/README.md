@@ -111,6 +111,10 @@ aliases, and are limited to 1,024 columns and 65,536 characters.
 OFX transactions use an incremental delimiter scanner and are limited to 64 KiB
 of UTF-8 text. Oversized or unfinished transactions are skipped and counted in
 `report.skipped` and `report.state.counts.skipped`.
+JSON parsing retains chunk slices with a 1 MiB UTF-8 token limit and a 4 MiB
+record limit. Oversized selected members or fields are discarded and counted
+once; overflow outside a selected record fails the file. Ignored strings are
+validated without retaining their text, and structural failures cancel the reader.
 Select the extracted export file, rather than the ZIP archive.
 
 Per-importer vocab maps retain legacy schema.org/FOAF types and source fields,
@@ -123,8 +127,7 @@ class. Financial lines are `fin:TransactionRecord`, viewing events are
 and all existing category/Type Index registration classes are preserved. See
 root `QUESTIONS.md` for conservative mappings where the spec leaves terms open.
 Sector mappings also carry the required shape properties: creative works have
-`dcterms:title`, notes have `social:content`, transaction records link through
-`core:about` to distinct local activities, and health records name an unnamed
+`dcterms:title`, notes have `social:content`, and health records name an unnamed
 local `core:Person` through `core:subject`. Financial records use the importing
 user's WebID as `core:subject`, typed `core:Agent`. The fetch-backed writer exposes
 its configured WebID; custom `PodWriter` implementations must supply `webId` for
@@ -134,6 +137,11 @@ as a `core:Agent` and `core:AccountHolder`, and to Steam's public site as a
 that identity is missing or invalid. Financial activities retain the broad
 `core:Activity` type because exports may omit the currency or posting time needed
 by the `fin:Transaction` shape; missing source facts are not inferred.
+The pinned core and finance ontologies provide no Record → Activity relation:
+`core:about` has the range `gufo:Endurant`, disjoint with an activity's `gufo:Event`.
+Financial activities remain separately typed without that link. For required
+`core:about` cardinality, `core:subject` supplies the data subject through its
+declared subproperty relation.
 Goodreads books, Steam items/accounts and conversations with a ChatGPT id carry
 their source item URL for provenance; other records use the connector export URN.
 No MCP-16 parser is present in this checkout, so ChatGPT reuses its existing
@@ -145,6 +153,8 @@ re-import. They assert the required predicates, cardinalities, datatypes and
 linked classes from the checked-in sector shapes, following the class hierarchy
 in the core and sector ontologies. Every Tier C fixture snapshot also validates inherited
 core constraints. These checks add no SHACL dependency.
+Domain/range consistency checks also follow named superclass and subproperty
+chains over the pinned ontology import closure, including gUFO disjointness.
 The Apple Health streaming test lazily generates over 50 MiB of
 `export.xml` and retains only workouts. Tests make no production requests.
 

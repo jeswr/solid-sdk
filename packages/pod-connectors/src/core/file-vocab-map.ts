@@ -95,11 +95,11 @@ export function createFileVocabMap(types: Readonly<Record<string, string>>): Voc
           );
         item.dataSubject = webId;
         new PodThing(webId, dataset, DataFactory).types.add(FEDERATION.Agent);
-        // A statement line documents an activity distinct from the record. The
-        // source may omit currency, amount or posting time, so do not assert the
-        // more specific fin:Transaction contract or invent those missing facts.
-        item.about = `${subject}-activity`;
-        new PodThing(item.about, dataset, DataFactory).types.add(FEDERATION.Activity);
+        // Keep the activity distinct, without a core:about link: its range is
+        // gufo:Endurant, disjoint with Activity's gufo:Event. The pinned core and
+        // finance vocabularies have no Record -> Activity relation. Source facts
+        // may also be insufficient for the more specific fin:Transaction type.
+        new PodThing(`${subject}-activity`, dataset, DataFactory).types.add(FEDERATION.Activity);
       }
     }
     return mapped;

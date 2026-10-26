@@ -64,6 +64,7 @@ export const steamFileAdapter: FileImportAdapter = {
       file,
       ["", "games", "response.games"],
       ["steamid", "personaname"],
+      ctx.skip,
     )) {
       if (entry.path === "steamid" || entry.path === "personaname") {
         if (typeof entry.value === "string") account[entry.path] = entry.value;

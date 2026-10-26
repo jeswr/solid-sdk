@@ -29,6 +29,8 @@ import { CLASSES, PodThing, SCHEMA } from "./vocab.js";
 const SH = "http://www.w3.org/ns/shacl#";
 const RDF_TYPE = DataFactory.namedNode("http://www.w3.org/1999/02/22-rdf-syntax-ns#type");
 const RDFS_SUBCLASS = "http://www.w3.org/2000/01/rdf-schema#subClassOf";
+const RDFS_SUBPROPERTY = "http://www.w3.org/2000/01/rdf-schema#subPropertyOf";
+const OWL = "http://www.w3.org/2002/07/owl#";
 const sectors = ["media", "finance", "health", "social"];
 function loadVocabulary(sector: string, extension: string) {
   return new Parser().parse(
@@ -42,23 +44,123 @@ function loadVocabulary(sector: string, extension: string) {
   );
 }
 const sectorShapes = new Store(sectors.flatMap((sector) => loadVocabulary(sector, "shacl.ttl")));
+
+/** Resolve every owl:imports edge through the checked-in catalogs; a missing
+ * pin fails the test instead of silently omitting axioms or using the network.
+ */
+function loadImportClosure(): Store {
+  const catalog = new Map<string, URL>();
+  for (const sector of ["core", ...sectors]) {
+    const url = new URL(
+      `../../../solid-federation-vocab/sectors/${sector}/catalog-v001.xml`,
+      import.meta.url,
+    );
+    for (const match of readFileSync(url, "utf8").matchAll(
+      /<uri name="([^"]+)" uri="([^"]+)"\s*\/>/g,
+    ))
+      catalog.set(required(match[1]), new URL(required(match[2]), url));
+  }
+  const closure = new Store();
+  const seen = new Set<string>();
+  const load = (iri: string): void => {
+    const url = required(catalog.get(iri));
+    if (seen.has(url.href)) return;
+    seen.add(url.href);
+    const ontology = new Store(new Parser().parse(readFileSync(url, "utf8")));
+    closure.addQuads([...ontology]);
+    for (const term of ontology.getObjects(null, `${OWL}imports`, null)) load(term.value);
+  };
+  for (const sector of sectors) load(`https://jeswr.org/ns/sectors/${sector}`);
+  load("http://www.w3.org/ns/prov-o");
+  return closure;
+}
+
 const profiles = new Store([
-  ...sectorShapes,
   ...loadVocabulary("core", "shacl.ttl"),
-  ...["core", ...sectors].flatMap((sector) => loadVocabulary(sector, "ttl")),
+  ...sectorShapes,
+  ...loadImportClosure(),
 ]);
 
-function isSubclassOf(type: Term, target: Term, seen = new Set<string>()): boolean {
+function inherits(type: Term, target: Term, predicate: string, seen = new Set<string>()): boolean {
   if (type.equals(target)) return true;
   if (seen.has(type.value)) return false;
   seen.add(type.value);
   return profiles
-    .getObjects(type, RDFS_SUBCLASS, null)
-    .some((parent) => parent.termType === "NamedNode" && isSubclassOf(parent, target, seen));
+    .getObjects(type, predicate, null)
+    .some((parent) => parent.termType === "NamedNode" && inherits(parent, target, predicate, seen));
 }
 
 function isInstanceOf(dataset: DatasetCore, subject: Term, target: Term): boolean {
-  return [...dataset.match(subject, RDF_TYPE)].some((quad) => isSubclassOf(quad.object, target));
+  return [...dataset.match(subject, RDF_TYPE)].some((quad) =>
+    inherits(quad.object, target, RDFS_SUBCLASS),
+  );
+}
+
+function disjointClassPairs(): { subject: Term; object: Term }[] {
+  const pairs: { subject: Term; object: Term }[] = profiles
+    .getQuads(null, `${OWL}disjointWith`, null, null)
+    .map((quad) => ({
+      subject: quad.subject,
+      object: quad.object,
+    }));
+  const lists = profiles.getObjects(null, `${OWL}disjointUnionOf`, null);
+  for (const group of profiles.getSubjects(RDF_TYPE, `${OWL}AllDisjointClasses`, null))
+    lists.push(...profiles.getObjects(group, `${OWL}members`, null));
+  const rdf = "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
+  for (const head of lists) {
+    const members: Term[] = [];
+    const seen = new Set<string>();
+    let tail = head;
+    while (tail.value !== `${rdf}nil`) {
+      if (seen.has(tail.value)) throw new Error("Cyclic ontology disjointness list");
+      seen.add(tail.value);
+      members.push(required(profiles.getObjects(tail, `${rdf}first`, null)[0]));
+      tail = required(profiles.getObjects(tail, `${rdf}rest`, null)[0]);
+    }
+    for (let i = 0; i < members.length; i++)
+      for (const other of members.slice(i + 1))
+        pairs.push({ subject: required(members[i]), object: other });
+  }
+  return pairs;
+}
+
+const disjoint = disjointClassPairs();
+
+/** Lightweight disjointness validation, not a general OWL reasoner. Both ends
+ * follow named subclass chains, and each predicate inherits its superproperties'
+ * domain/range constraints. Literal objects contribute their datatype as a type.
+ */
+function expectConsistentDomainsAndRanges(dataset: DatasetCore): void {
+  for (const quad of dataset) {
+    for (const direction of ["domain", "range"] as const) {
+      const node = direction === "domain" ? quad.subject : quad.object;
+      const types =
+        node.termType === "Literal"
+          ? [node.datatype]
+          : [...dataset.match(node, RDF_TYPE)].map((type) => type.object);
+      for (const constraint of profiles.getQuads(
+        null,
+        `http://www.w3.org/2000/01/rdf-schema#${direction}`,
+        null,
+        null,
+      )) {
+        if (!inherits(quad.predicate, constraint.subject, RDFS_SUBPROPERTY)) continue;
+        for (const type of types) {
+          const conflicts = disjoint.some(
+            (pair) =>
+              (inherits(type, pair.subject, RDFS_SUBCLASS) &&
+                inherits(constraint.object, pair.object, RDFS_SUBCLASS)) ||
+              (inherits(type, pair.object, RDFS_SUBCLASS) &&
+                inherits(constraint.object, pair.subject, RDFS_SUBCLASS)),
+          );
+          expect(
+            conflicts,
+            `${quad.predicate.value} ${direction}: ${node.value} (${type.value}) vs ${constraint.object.value}`,
+          ).toBe(false);
+        }
+      }
+    }
+  }
 }
 
 /** No shared SHACL helper is exported by the suite. Assert required predicates,
@@ -76,7 +178,9 @@ function expectRequiredProfileProperties(dataset: DatasetCore): void {
       if (severity && severity.value !== `${SH}Violation`) continue;
       const path = required(profiles.getObjects(property, `${SH}path`, null)[0]);
       for (const subject of nodes) {
-        const values = [...dataset.match(subject, path)].map((quad) => quad.object);
+        const values = [...dataset.match(subject)]
+          .filter((quad) => inherits(quad.predicate, path, RDFS_SUBPROPERTY))
+          .map((quad) => quad.object);
         const context = `${subject.value}: ${path.value}`;
         const min = profiles.getObjects(property, `${SH}minCount`, null)[0];
         const max = profiles.getObjects(property, `${SH}maxCount`, null)[0];
@@ -258,6 +362,7 @@ for (const fixture of fixtures) {
       for (const written of report.written) {
         const dataset = pod.dataset(written.url);
         expectRequiredProfileProperties(dataset);
+        expectConsistentDomainsAndRanges(dataset);
         for (const quad of dataset.match(
           null,
           RDF_TYPE,
@@ -337,6 +442,48 @@ for (const fixture of fixtures) {
 const financialFixtures = fixtures.filter((fixture) =>
   fixture.types.includes(FEDERATION.TransactionRecord),
 );
+
+it.each(
+  financialFixtures,
+)("rejects disjoint domain/range types for $adapter.metadata.id ($name)", async (fixture) => {
+  const { pod, report } = await fileImport(
+    fixture.adapter,
+    streamedFile(fixture.name, fixture.text),
+  );
+  const dataset = pod.dataset(
+    required(report.written.find((doc) => doc.category === "finance")).url,
+  );
+  const subject = required(
+    [...dataset.match(null, RDF_TYPE, DataFactory.namedNode(FEDERATION.TransactionRecord))][0],
+  ).subject.value;
+  const record = new SectorThing(subject, dataset, DataFactory);
+  const activity = new SectorThing(`${subject}-activity`, dataset, DataFactory);
+  expect(activity.types.has(FEDERATION.Activity)).toBe(true);
+  expect(record.about).toBeUndefined();
+  expectConsistentDomainsAndRanges(dataset);
+
+  // The former mapping must fail through Activity -> Event and the imported
+  // gUFO Event/Endurant disjointness, including its list-based declarations.
+  record.about = `${subject}-activity`;
+  expect(() => expectConsistentDomainsAndRanges(dataset)).toThrow(
+    `${FEDERATION_PROPERTIES.about} range`,
+  );
+  record.about = undefined;
+  activity.about = subject;
+  expect(() => expectConsistentDomainsAndRanges(dataset)).toThrow(
+    `${FEDERATION_PROPERTIES.about} domain`,
+  );
+  activity.about = undefined;
+
+  // core:subject must also inherit core:about's range restriction.
+  record.dataSubject = `${subject}-activity`;
+  expect(() => expectConsistentDomainsAndRanges(dataset)).toThrow(
+    `${FEDERATION_PROPERTIES.subject} range`,
+  );
+  record.dataSubject = TEST_WEBID;
+  expectConsistentDomainsAndRanges(dataset);
+  expectRequiredProfileProperties(dataset);
+});
 
 it("validates Steam's inherited account links and participant roles", async () => {
   const fixture = required(fixtures.find((entry) => entry.adapter === steamFileAdapter));
