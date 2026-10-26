@@ -1,0 +1,166 @@
+{
+  "name": "@jeswr/agent-channels",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Channel bindings and carriage profiles (experimental scaffold).",
+  "type": "module",
+  "license": "MIT",
+  "x-authored-by": "Codex GPT-6.1-Sol",
+  "sideEffects": false,
+  "securityCritical": true,
+  "engines": {
+    "node": ">=24"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./testing": {
+      "types": "./dist/testing.d.ts",
+      "default": "./dist/testing.js"
+    },
+    "./email-mime": {
+      "types": "./dist/email-mime.d.ts",
+      "default": "./dist/email-mime.js"
+    },
+    "./gmail": {
+      "types": "./dist/gmail.d.ts",
+      "default": "./dist/gmail.js"
+    },
+    "./graph-mail": {
+      "types": "./dist/graph-mail.d.ts",
+      "default": "./dist/graph-mail.js"
+    },
+    "./graph-teams": {
+      "types": "./dist/graph-teams.d.ts",
+      "default": "./dist/graph-teams.js"
+    },
+    "./matrix": {
+      "types": "./dist/matrix.d.ts",
+      "default": "./dist/matrix.js"
+    },
+    "./slack": {
+      "types": "./dist/slack.d.ts",
+      "default": "./dist/slack.js"
+    },
+    "./discord": {
+      "types": "./dist/discord.d.ts",
+      "default": "./dist/discord.js"
+    },
+    "./bluesky": {
+      "types": "./dist/bluesky.d.ts",
+      "default": "./dist/bluesky.js"
+    },
+    "./mastodon": {
+      "types": "./dist/mastodon.d.ts",
+      "default": "./dist/mastodon.js"
+    },
+    "./github": {
+      "types": "./dist/github.d.ts",
+      "default": "./dist/github.js"
+    },
+    "./telegram": {
+      "types": "./dist/telegram.d.ts",
+      "default": "./dist/telegram.js"
+    },
+    "./imessage": {
+      "types": "./dist/imessage.d.ts",
+      "default": "./dist/imessage.js"
+    },
+    "./a2a": {
+      "types": "./dist/a2a.d.ts",
+      "default": "./dist/a2a.js"
+    },
+    "./mcp": {
+      "types": "./dist/mcp.d.ts",
+      "default": "./dist/mcp.js"
+    },
+    "./public-http": {
+      "types": "./dist/public-http.d.ts",
+      "default": "./dist/public-http.js"
+    },
+    "./direct": {
+      "types": "./dist/direct.d.ts",
+      "default": "./dist/direct.js"
+    },
+    "./email-mime/send": {
+      "types": "./dist/email-mime/send.d.ts",
+      "default": "./dist/email-mime/send.js"
+    },
+    "./gmail/send": {
+      "types": "./dist/gmail/send.d.ts",
+      "default": "./dist/gmail/send.js"
+    },
+    "./graph-mail/send": {
+      "types": "./dist/graph-mail/send.d.ts",
+      "default": "./dist/graph-mail/send.js"
+    },
+    "./graph-teams/send": {
+      "types": "./dist/graph-teams/send.d.ts",
+      "default": "./dist/graph-teams/send.js"
+    },
+    "./matrix/send": {
+      "types": "./dist/matrix/send.d.ts",
+      "default": "./dist/matrix/send.js"
+    },
+    "./slack/send": {
+      "types": "./dist/slack/send.d.ts",
+      "default": "./dist/slack/send.js"
+    },
+    "./discord/send": {
+      "types": "./dist/discord/send.d.ts",
+      "default": "./dist/discord/send.js"
+    },
+    "./bluesky/send": {
+      "types": "./dist/bluesky/send.d.ts",
+      "default": "./dist/bluesky/send.js"
+    },
+    "./mastodon/send": {
+      "types": "./dist/mastodon/send.d.ts",
+      "default": "./dist/mastodon/send.js"
+    },
+    "./telegram/send": {
+      "types": "./dist/telegram/send.d.ts",
+      "default": "./dist/telegram/send.js"
+    },
+    "./imessage/send": {
+      "types": "./dist/imessage/send.d.ts",
+      "default": "./dist/imessage/send.js"
+    },
+    "./a2a/send": {
+      "types": "./dist/a2a/send.d.ts",
+      "default": "./dist/a2a/send.js"
+    },
+    "./mcp/send": {
+      "types": "./dist/mcp/send.d.ts",
+      "default": "./dist/mcp/send.js"
+    },
+    "./public-http/send": {
+      "types": "./dist/public-http/send.d.ts",
+      "default": "./dist/public-http/send.js"
+    },
+    "./direct/send": {
+      "types": "./dist/direct/send.d.ts",
+      "default": "./dist/direct/send.js"
+    },
+    "./testing/send": {
+      "types": "./dist/testing/send.d.ts",
+      "default": "./dist/testing/send.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "SKILL.md"
+  ],
+  "scripts": {
+    "build": "pnpm -w exec tsc -p packages/agent-channels/tsconfig.json",
+    "typecheck": "pnpm -w exec tsc -p packages/agent-channels/tsconfig.json --noEmit && pnpm -w exec tsc -p packages/agent-channels/tsconfig.test.json",
+    "lint": "pnpm -w exec biome check packages/agent-channels",
+    "test": "pnpm -w exec vitest run --root packages/agent-channels --coverage"
+  },
+  "devDependencies": {
+    "@vitest/coverage-v8": "^4.1.10"
+  }
+}
