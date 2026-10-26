@@ -82,10 +82,7 @@ export function expandRecurrence(input: RecurrenceInput, window: BusyInterval): 
     const seedDay = Math.floor(wall / DAY);
     check(matches(seedDay, seedDay, rule) && seed <= rule.until, "start-mismatch");
     // Offsets can cross the date line; two days is a conservative UTC/wall margin.
-    const lastDay = Math.min(
-      Math.floor(local("9999-12-31T00:00:00") / DAY),
-      Math.floor((Math.min(window.end, rule.until) + 2 * DAY) / DAY),
-    );
+    const lastDay = Math.floor((Math.min(window.end, rule.until) + 2 * DAY) / DAY);
     let count = 0;
     for (let day = seedDay; day <= lastDay && count < rule.count; day++) {
       check(day - seedDay < MAX_SCAN_DAYS, "limit-exceeded");

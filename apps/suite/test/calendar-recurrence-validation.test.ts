@@ -169,6 +169,26 @@ describe("recurrence rejects unsupported or malformed inputs", () => {
 
 describe("bounded, fail-closed expansion", () => {
   it.each([
+    "FREQ=DAILY;COUNT=3",
+    "FREQ=DAILY;UNTIL=99991231T235959Z",
+    "FREQ=DAILY",
+  ])("includes supported UTC starts beyond the last local year for %s", (rrule) => {
+    expect(
+      expandRecurrence(
+        { ...base, start: "9999-12-30T00:00:00", timeZone: "Pacific/Kiritimati", rrule },
+        {
+          start: Date.parse("9999-12-29T00:00:00Z"),
+          end: Date.parse("9999-12-31T23:59:59.999Z"),
+        },
+      ),
+    ).toEqual([
+      { start: Date.parse("9999-12-29T10:00:00Z"), end: Date.parse("9999-12-29T11:00:00Z") },
+      { start: Date.parse("9999-12-30T10:00:00Z"), end: Date.parse("9999-12-30T11:00:00Z") },
+      { start: Date.parse("9999-12-31T10:00:00Z"), end: Date.parse("9999-12-31T11:00:00Z") },
+    ]);
+  });
+
+  it.each([
     "FREQ=DAILY",
     "FREQ=DAILY;UNTIL=99991231T235959Z",
   ])("filters generated zoned starts beyond the supported instant range for %s", (rrule) => {
