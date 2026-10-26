@@ -82,7 +82,8 @@
     "@jeswr/agent-model-gateway",
     "@jeswr/agent-credentials",
     "@jeswr/agent-memory",
-    "@jeswr/agent-registry"
+    "@jeswr/agent-registry",
+    "@jeswr/fetch-rdf"
   ],
   "applications": [
     {

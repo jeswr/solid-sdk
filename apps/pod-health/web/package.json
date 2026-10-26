@@ -22,7 +22,7 @@
   },
   "dependencies": {
     "@jeswr/app-shell": "workspace:*",
-    "@jeswr/fetch-rdf": "^0.1.0",
+    "@jeswr/fetch-rdf": "workspace:*",
     "@jeswr/solid-elements": "workspace:*",
     "@jeswr/solid-session-restore": "workspace:*",
     "@lit/react": "^1.0.8",
