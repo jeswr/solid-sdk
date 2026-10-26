@@ -15,8 +15,9 @@ struct ShareStore {
     static let maxTitleChars = 1000
     static let maxChunkBytes = 512 * 1024
     static let maxAge: TimeInterval = 7 * 24 * 60 * 60
-    static let maxPartialAge: TimeInterval = 60 * 60
     private static let manifestName = "batch.json"
+    /// Held (flock) by the process copying a batch; a copy whose holder died is abandoned.
+    private static let writerName = ".writing"
 
     /// Calls `body` with a readable file URL that is valid only during the call.
     typealias FileSource = (_ body: @escaping (URL) throws -> Void) throws -> Void
@@ -102,6 +103,7 @@ struct ShareStore {
 
     /// Runs `body` holding an exclusive flock on share/.lock, which the app and the extension share,
     /// so publishing, quota eviction and acknowledgement never interleave across processes.
+    @discardableResult
     private func locked<T>(_ body: () throws -> T) rethrows -> T {
         try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         let fd = open(root.appendingPathComponent(".lock").path, O_CREAT | O_RDWR, 0o600)
@@ -122,7 +124,18 @@ struct ShareStore {
         let id = UUID().uuidString.lowercased()
         let dir = root.appendingPathComponent(id, isDirectory: true)
         let fm = FileManager.default
-        try fm.createDirectory(at: dir, withIntermediateDirectories: true)
+        // Created and claimed under the store lock, so evictors never see an unclaimed live copy.
+        let writer: Int32 = try locked {
+            try fm.createDirectory(at: dir, withIntermediateDirectories: true)
+            let fd = open(dir.appendingPathComponent(Self.writerName).path, O_CREAT | O_RDWR, 0o600)
+            guard fd >= 0, flock(fd, LOCK_EX | LOCK_NB) == 0 else {
+                if fd >= 0 { close(fd) }
+                try? fm.removeItem(at: dir)
+                throw Failure.rejected("cannot claim the batch")
+            }
+            return fd
+        }
+        defer { close(writer) }
         do {
             var batchBytes: Int64 = 0
             var json: [[String: Any]] = []
@@ -151,11 +164,11 @@ struct ShareStore {
             let data = try JSONSerialization.data(withJSONObject: manifest)
             try locked {
                 try data.write(to: dir.appendingPathComponent(Self.manifestName), options: .atomic)
-                evictOverflow(keeping: id)
+                guard evictOverflow(keeping: id) else { throw Failure.rejected("no room for the share") }
             }
             return Batch(id: id, receivedAt: now, json: manifest)
         } catch {
-            try? fm.removeItem(at: dir)
+            locked { try? fm.removeItem(at: dir) }
             throw error
         }
     }
@@ -216,22 +229,33 @@ struct ShareStore {
     }
 
     private func evictExpired(now: Date) {
-        let fm = FileManager.default
-        for id in batchIds() {
-            let dir = root.appendingPathComponent(id, isDirectory: true)
-            if !fm.fileExists(atPath: dir.appendingPathComponent(Self.manifestName).path) {
-                let modified = (try? fm.attributesOfItem(atPath: dir.path)[.modificationDate] as? Date) ?? .distantPast
-                if now.timeIntervalSince(modified) > Self.maxPartialAge { try? fm.removeItem(at: dir) }
-            }
-        }
+        dropAbandoned()
         for batch in pending() where now.timeIntervalSince(batch.receivedAt) > Self.maxAge {
             remove(batch.id)
         }
     }
 
-    /// Deletes the oldest batches (never `keeping`) until at most 10 batches and 500 MB remain.
-    /// Copies still in progress (no manifest yet) count towards the bytes. Caller holds the lock.
-    private func evictOverflow(keeping: String) {
+    /// Deletes copies without a manifest whose writer no longer holds `.writing`. Caller holds the lock.
+    private func dropAbandoned() {
+        let fm = FileManager.default
+        for id in batchIds() {
+            let dir = root.appendingPathComponent(id, isDirectory: true)
+            guard !fm.fileExists(atPath: dir.appendingPathComponent(Self.manifestName).path) else { continue }
+            let fd = open(dir.appendingPathComponent(Self.writerName).path, O_RDWR)
+            if fd < 0 {
+                try? fm.removeItem(at: dir)
+                continue
+            }
+            if flock(fd, LOCK_EX | LOCK_NB) == 0 { try? fm.removeItem(at: dir) }
+            close(fd)
+        }
+    }
+
+    /// Deletes abandoned copies, then the oldest batches (never `keeping`), until at most 10 batches
+    /// and 500 MB remain; copies in progress count towards the bytes. False when that cannot be
+    /// reached, so the caller drops `keeping`. Caller holds the lock.
+    private func evictOverflow(keeping: String) -> Bool {
+        dropAbandoned()
         let batches = pending()
         var sizes: [String: Int64] = [:]
         for id in batchIds() { sizes[id] = bytes(id) }
@@ -244,6 +268,7 @@ struct ShareStore {
             count -= 1
             remove(batch.id)
         }
+        return count <= Self.maxPendingBatches && total <= Self.maxPendingBytes
     }
 
     private func bytes(_ id: String) -> Int64 {

@@ -12,9 +12,11 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Properties;
+import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Pattern;
 
@@ -32,7 +34,6 @@ public final class ShareStore {
     public static final int MAX_TEXT_CHARS = 100_000;
     public static final int MAX_CHUNK_BYTES = 512 * 1024;
     public static final long MAX_AGE_MS = 7L * 24 * 60 * 60 * 1000;
-    static final long MAX_PARTIAL_AGE_MS = 60L * 60 * 1000;
 
     private static final Pattern BATCH_ID = Pattern.compile("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$");
     private static final Pattern MIME = Pattern.compile("^[a-z0-9][a-z0-9!#$&^_.+-]*/[a-z0-9][a-z0-9!#$&^_.+-]*$");
@@ -105,6 +106,10 @@ public final class ShareStore {
     }
 
     private final File root;
+    /** Batches being copied by this process. Every writer is in-process, so any other copy without a manifest is abandoned. */
+    private final Set<String> writing = new HashSet<>();
+    /** MAX_PENDING_BYTES; lowered by tests. */
+    long pendingCap = MAX_PENDING_BYTES;
 
     public ShareStore(File root) {
         this.root = root;
@@ -153,7 +158,10 @@ public final class ShareStore {
         evict(now);
         String id = UUID.randomUUID().toString();
         File dir = new File(root, id);
-        if (!dir.mkdirs()) throw new IOException("cannot create batch directory");
+        synchronized (this) {
+            if (!dir.mkdirs()) throw new IOException("cannot create batch directory");
+            writing.add(id);
+        }
         Properties manifest = new Properties();
         long batchBytes = 0;
         try {
@@ -188,11 +196,15 @@ public final class ShareStore {
                     manifest.store(out, null);
                 }
                 if (!partial.renameTo(new File(dir, MANIFEST))) throw new IOException("cannot publish batch");
-                evictOverflow(id);
+                writing.remove(id);
+                if (!evictOverflow(id)) throw new RejectedShare("no room for the share");
             }
             return new Batch(id, now, manifest);
         } catch (IOException | RejectedShare | RuntimeException e) {
-            delete(dir);
+            synchronized (this) {
+                writing.remove(id);
+                delete(dir);
+            }
             throw e;
         }
     }
@@ -253,31 +265,38 @@ public final class ShareStore {
 
     /** Drops batches older than seven days and copies a killed process left without a manifest. */
     public synchronized void evict(long now) {
-        for (String id : pendingIds()) {
-            File dir = new File(root, id);
-            if (!new File(dir, MANIFEST).isFile() && now - dir.lastModified() > MAX_PARTIAL_AGE_MS) delete(dir);
-        }
+        dropAbandoned();
         for (Batch batch : pending()) {
             if (now - batch.receivedAt > MAX_AGE_MS) acknowledge(batch.id);
         }
     }
 
+    private void dropAbandoned() {
+        for (String id : pendingIds()) {
+            File dir = new File(root, id);
+            if (!writing.contains(id) && !new File(dir, MANIFEST).isFile()) delete(dir);
+        }
+    }
+
     /**
-     * Deletes the oldest batches (never {@code keep}) until at most 10 batches and 500 MB remain.
-     * Copies still in progress (no manifest yet) count towards the bytes.
+     * Deletes abandoned copies, then the oldest batches (never {@code keep}), until at most 10
+     * batches and 500 MB remain; copies in progress count towards the bytes. False when that
+     * cannot be reached, so the caller drops {@code keep}.
      */
-    private void evictOverflow(String keep) {
+    private boolean evictOverflow(String keep) {
+        dropAbandoned();
         List<Batch> batches = pending();
         long total = 0;
         for (String id : pendingIds()) total += bytes(id);
         int count = batches.size();
         for (Batch batch : batches) {
-            if (count <= MAX_PENDING_BATCHES && total <= MAX_PENDING_BYTES) break;
+            if (count <= MAX_PENDING_BATCHES && total <= pendingCap) break;
             if (batch.id.equals(keep)) continue;
             total -= bytes(batch.id);
             count--;
             acknowledge(batch.id);
         }
+        return count <= MAX_PENDING_BATCHES && total <= pendingCap;
     }
 
     private long bytes(String id) {

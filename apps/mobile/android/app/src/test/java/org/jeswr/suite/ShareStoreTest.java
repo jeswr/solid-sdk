@@ -199,22 +199,68 @@ public class ShareStoreTest {
         assertTrue(ids.contains(b) && ids.contains(c));
     }
 
+    /** Writes {@code size} bytes, then waits for {@code release} before ending the stream. */
+    private static ShareStore.Source blockingAfter(long size, java.util.concurrent.CountDownLatch written,
+            java.util.concurrent.CountDownLatch release) {
+        return () -> new InputStream() {
+            long left = size;
+
+            @Override
+            public int read() throws IOException {
+                byte[] one = new byte[1];
+                return read(one, 0, 1) == -1 ? -1 : 0;
+            }
+
+            @Override
+            public int read(byte[] b, int off, int len) throws IOException {
+                if (left == 0) {
+                    written.countDown();
+                    try {
+                        release.await();
+                    } catch (InterruptedException e) {
+                        throw new IOException(e);
+                    }
+                    return -1;
+                }
+                int n = (int) Math.min(len, left);
+                Arrays.fill(b, off, off + n, (byte) 0);
+                left -= n;
+                return n;
+            }
+        };
+    }
+
     @Test
-    public void copiesInProgressCountTowardsThePendingBytes() throws Exception {
-        File partial = new File(root, "33333333-3333-3333-3333-333333333333");
-        assertTrue(partial.mkdirs());
-        try (java.io.OutputStream out = new java.io.FileOutputStream(new File(partial, "item-0"))) {
-            out.write(new byte[0]);
+    public void copiesInProgressCountTowardsTheCapAndAbandonedOnesAreReclaimed() throws Exception {
+        store.pendingCap = 1000;
+        File abandoned = new File(root, "33333333-3333-3333-3333-333333333333");
+        assertTrue(abandoned.mkdirs());
+        java.nio.file.Files.write(new File(abandoned, "item-0").toPath(), new byte[900]);
+        String older = store.store(Collections.singletonList(ShareStore.Incoming.file("o", "a/b", zeros(300))), 1).id;
+        assertFalse("a copy no writer owns is reclaimed", abandoned.exists());
+
+        java.util.concurrent.CountDownLatch written = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.CountDownLatch release = new java.util.concurrent.CountDownLatch(1);
+        Thread active = new Thread(() -> {
+            try {
+                store.store(Collections.singletonList(ShareStore.Incoming.file("a", "a/b", blockingAfter(600, written, release))), 2);
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        });
+        active.start();
+        assertTrue(written.await(5, java.util.concurrent.TimeUnit.SECONDS));
+        try {
+            store.store(Collections.singletonList(ShareStore.Incoming.file("n", "a/b", zeros(500))), 3);
+            fail("600 bytes in flight + 500 new exceed the cap even after evicting everything older");
+        } catch (ShareStore.RejectedShare expected) {
+            // rejected, and the older batch made way first
         }
-        java.io.RandomAccessFile big = new java.io.RandomAccessFile(new File(partial, "item-0"), "rw");
-        big.setLength(ShareStore.MAX_PENDING_BYTES - 10);
-        big.close();
-        String older = storeOne(1).id;
-        String newer = store.store(Collections.singletonList(ShareStore.Incoming.file("x", "a/b", zeros(20))), 2).id;
-        List<String> ids = store.pending().stream().map(x -> x.id).collect(java.util.stream.Collectors.toList());
-        assertFalse("the older batch makes room", ids.contains(older));
-        assertTrue(ids.contains(newer));
-        assertTrue("an active copy is never evicted", partial.exists());
+        assertTrue(store.pending().isEmpty());
+        assertFalse(store.pending().stream().anyMatch(b -> b.id.equals(older)));
+        release.countDown();
+        active.join(5000);
+        assertEquals("the active copy survived and published", 1, store.pending().size());
     }
 
     @Test
@@ -248,22 +294,18 @@ public class ShareStoreTest {
     }
 
     @Test
-    public void evictsWeekOldBatchesAndStalePartials() throws Exception {
+    public void evictsWeekOldBatchesAndAbandonedCopies() throws Exception {
         String old = storeOne(0).id;
         String fresh = storeOne(ShareStore.MAX_AGE_MS).id;
         File partial = new File(root, "11111111-1111-1111-1111-111111111111");
         assertTrue(partial.mkdirs());
-        assertTrue(partial.setLastModified(0));
-        File recentPartial = new File(root, "22222222-2222-2222-2222-222222222222");
-        assertTrue(recentPartial.mkdirs());
         File unrelated = new File(root, "keep-me");
         assertTrue(unrelated.mkdirs());
         store.evict(ShareStore.MAX_AGE_MS + 1);
         assertEquals(1, store.pending().size());
         assertEquals(fresh, store.pending().get(0).id);
-        assertNull(store.pending().stream().filter(b -> b.id.equals(old)).findFirst().orElse(null));
+        assertFalse(store.pending().stream().anyMatch(b -> b.id.equals(old)));
         assertFalse(partial.exists());
-        assertTrue("a copy in progress survives", recentPartial.exists() || recentPartial.lastModified() < 0);
         assertTrue(unrelated.exists());
     }
 
