@@ -1,13 +1,25 @@
-import { describe, expect, it } from "vitest";
+// AUTHORED-BY Codex GPT-6.1-Sol
+import { createRdfEngine } from "@jeswr/rdf-engine/node";
+import { afterAll, describe, expect, it } from "vitest";
+import type { ParseRdfOptions } from "../src/index.js";
 import {
   extractMediaType,
-  parseRdf,
+  parseRdf as implementation,
   RdfFetchError,
   SUPPORTED_RDF_MEDIA_TYPES,
 } from "../src/index.js";
 import { JSON_LD_SAMPLE, N_QUADS_SAMPLE, N_TRIPLES_SAMPLE, TURTLE_SAMPLE } from "./helpers.js";
 
-describe("parseRdf", () => {
+describe.each([
+  { name: "default", engine: undefined },
+  { name: "Node WASM", engine: createRdfEngine() },
+])("parseRdf ($name)", ({ engine }) => {
+  afterAll(() => engine?.dispose());
+  const parseRdf = (
+    body: Parameters<typeof implementation>[0],
+    contentType: string | null,
+    options: ParseRdfOptions = {},
+  ) => implementation(body, contentType, { ...options, engine });
   it("parses Turtle into a dataset", async () => {
     const ds = await parseRdf(TURTLE_SAMPLE, "text/turtle", {
       baseIRI: "http://example.org/",

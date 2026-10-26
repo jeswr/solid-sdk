@@ -1,8 +1,9 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
-import env from "@zazuko/env-node";
+import { parseRdf } from "@jeswr/fetch-rdf";
+import { createRdfEngine } from "@jeswr/rdf-engine/node";
 import { DataFactory, Parser, Store } from "n3";
-import SHACLValidator from "rdf-validate-shacl";
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 import {
   addressBookSubject,
   buildAddressBook,
@@ -561,25 +562,17 @@ describe("parse*Ttl (content-type dispatch via @jeswr/fetch-rdf)", () => {
   });
 });
 
-// rdf-validate-shacl needs a clownface-capable factory (@zazuko/env). Quads are
-// fed straight from an n3 Parser/Store into an env dataset — the exact pattern the
-// task + tracker shape tests use, so verdicts match across the suite.
-function toDataset(quads: Iterable<Parameters<ReturnType<typeof env.dataset>["add"]>[0]>) {
-  const ds = env.dataset();
-  for (const q of quads) ds.add(q);
-  return ds;
-}
+const engine = createRdfEngine();
+afterAll(() => engine.dispose());
 
-const contactsShapes = toDataset(new Parser().parse(addressBookShapeTtl()));
+const contactsShapes = addressBookShapeTtl();
 
 function validate(store: Store) {
-  return new SHACLValidator(contactsShapes, { factory: env }).validate(toDataset(store));
+  return engine.validate(store, contactsShapes);
 }
 
-function validateTtl(ttl: string, base: string) {
-  return new SHACLValidator(contactsShapes, { factory: env }).validate(
-    toDataset(new Parser({ baseIRI: base }).parse(ttl)),
-  );
+async function validateTtl(ttl: string, base: string) {
+  return engine.validate(await parseRdf(ttl, "text/turtle", { baseIRI: base }), contactsShapes);
 }
 
 describe("SHACL shape (shapes/contacts.ttl)", () => {
@@ -604,9 +597,7 @@ describe("SHACL shape (shapes/contacts.ttl)", () => {
     ]);
     const report = await validate(combined);
     // No violations (Warnings are advisory).
-    const violations = report.results.filter((r) =>
-      String(r.severity?.value).endsWith("Violation"),
-    );
+    const violations = report.results.filter((r) => String(r.severity).endsWith("Violation"));
     expect(violations).toHaveLength(0);
     expect(report.conforms).toBe(true);
   });
@@ -618,9 +609,7 @@ describe("SHACL shape (shapes/contacts.ttl)", () => {
     const store = buildPerson(PERSON, { name: "Loner", emails: ["loner@example.com"] });
     const report = await validate(store);
     expect(report.conforms).toBe(true);
-    const violations = report.results.filter((r) =>
-      String(r.severity?.value).endsWith("Violation"),
-    );
+    const violations = report.results.filter((r) => String(r.severity).endsWith("Violation"));
     expect(violations).toHaveLength(0);
   });
 
@@ -632,18 +621,15 @@ describe("SHACL shape (shapes/contacts.ttl)", () => {
     `;
     const report = await validateTtl(ttl, PERSON);
     // The missing-fn rule is sh:Warning → a result exists, but at Warning severity.
-    // (rdf-validate-shacl sets `conforms = false` on ANY result, even a Warning —
+    // (sparq sets `conforms = false` on ANY result, even a Warning —
     // so the meaningful federation property is "no VIOLATION", which we assert
     // directly rather than leaning on `conforms`; mirrors the tracker shape test.)
     expect(
       report.results.some(
-        (r) =>
-          String(r.path?.value).endsWith("fn") && String(r.severity?.value).endsWith("Warning"),
+        (r) => String(r.path).endsWith("fn>") && String(r.severity).endsWith("Warning"),
       ),
     ).toBe(true);
-    const violations = report.results.filter((r) =>
-      String(r.severity?.value).endsWith("Violation"),
-    );
+    const violations = report.results.filter((r) => String(r.severity).endsWith("Violation"));
     expect(violations).toHaveLength(0);
   });
 
@@ -658,7 +644,7 @@ describe("SHACL shape (shapes/contacts.ttl)", () => {
     `;
     const report = await validateTtl(ttl, BOOK);
     expect(report.conforms).toBe(false);
-    expect(report.results.some((r) => String(r.path?.value).endsWith("nameEmailIndex"))).toBe(true);
+    expect(report.results.some((r) => String(r.path).endsWith("nameEmailIndex>"))).toBe(true);
   });
 
   it("a bare literal email (not mailto: IRI, not structured) is non-conforming", async () => {
@@ -670,7 +656,7 @@ describe("SHACL shape (shapes/contacts.ttl)", () => {
     `;
     const report = await validateTtl(ttl, PERSON);
     expect(report.conforms).toBe(false);
-    expect(report.results.some((r) => String(r.path?.value).endsWith("hasEmail"))).toBe(true);
+    expect(report.results.some((r) => String(r.path).endsWith("hasEmail>"))).toBe(true);
   });
 
   it("BOTH email forms conform against the shape (direct IRI and structured node)", async () => {
@@ -704,12 +690,10 @@ describe("SHACL shape (shapes/contacts.ttl)", () => {
     `;
     const emailReport = await validateTtl(emailLiteral, PERSON);
     expect(emailReport.conforms).toBe(false);
-    expect(emailReport.results.some((r) => String(r.path?.value).endsWith("hasEmail"))).toBe(true);
+    expect(emailReport.results.some((r) => String(r.path).endsWith("hasEmail>"))).toBe(true);
     const phoneReport = await validateTtl(phoneLiteral, PERSON);
     expect(phoneReport.conforms).toBe(false);
-    expect(phoneReport.results.some((r) => String(r.path?.value).endsWith("hasTelephone"))).toBe(
-      true,
-    );
+    expect(phoneReport.results.some((r) => String(r.path).endsWith("hasTelephone>"))).toBe(true);
   });
 
   it("a group with NO vcard:fn is non-conforming (required)", async () => {
@@ -720,7 +704,7 @@ describe("SHACL shape (shapes/contacts.ttl)", () => {
     `;
     const report = await validateTtl(ttl, GROUP);
     expect(report.conforms).toBe(false);
-    expect(report.results.some((r) => String(r.path?.value).endsWith("fn"))).toBe(true);
+    expect(report.results.some((r) => String(r.path).endsWith("fn>"))).toBe(true);
   });
 });
 

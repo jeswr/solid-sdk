@@ -1,7 +1,7 @@
 {
   "name": "@jeswr/solid-memory",
   "version": "0.1.0",
-  "description": "A typed RDF agent-memory model + Solid-pod store + client-side search — the user-owned, portable, cross-agent AI-memory aggregator core (mem:MemoryItem reusing schema.org / Dublin Core / PROV-O / ActivityStreams), so a memory written by one agent is readable + searchable by another.",
+  "description": "A typed RDF agent-memory model + Solid-pod store + client-side search \u2014 the user-owned, portable, cross-agent AI-memory aggregator core (mem:MemoryItem reusing schema.org / Dublin Core / PROV-O / ActivityStreams), so a memory written by one agent is readable + searchable by another.",
   "type": "module",
   "license": "MIT",
   "author": "Jesse Wright",
@@ -71,7 +71,8 @@
     "@types/n3": "^1.26.1",
     "@types/node": "^20",
     "typescript": "^5",
-    "vitest": "^4.1.8"
+    "vitest": "^4.1.8",
+    "@jeswr/rdf-engine": "workspace:*"
   },
   "engines": {
     "node": ">=20"

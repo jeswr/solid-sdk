@@ -1,8 +1,9 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
-import env from "@zazuko/env-node";
+import { parseRdf } from "@jeswr/fetch-rdf";
+import { createRdfEngine } from "@jeswr/rdf-engine/node";
 import { DataFactory, Parser, Store } from "n3";
-import SHACLValidator from "rdf-validate-shacl";
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 import { trackerShapeTtl } from "./shape.js";
 import { parseTask, taskSubject } from "./task.js";
 import {
@@ -355,20 +356,14 @@ describe("parseTrackerTtl (content-type dispatch via @jeswr/fetch-rdf)", () => {
   });
 });
 
-// rdf-validate-shacl needs a clownface-capable factory (@zazuko/env). Quads are
-// fed straight from an n3 Parser/Store into an env dataset — the exact pattern
-// the task shape test uses, so verdicts match across the suite.
-function toDataset(quads: Iterable<Parameters<ReturnType<typeof env.dataset>["add"]>[0]>) {
-  const ds = env.dataset();
-  for (const q of quads) ds.add(q);
-  return ds;
-}
+const engine = createRdfEngine();
+afterAll(() => engine.dispose());
 
-const trackerShapes = toDataset(new Parser().parse(trackerShapeTtl()));
+const trackerShapes = trackerShapeTtl();
 
-function validateTtl(ttl: string) {
-  const data = toDataset(new Parser({ baseIRI: DOC }).parse(ttl));
-  return new SHACLValidator(trackerShapes, { factory: env }).validate(data);
+async function validateTtl(ttl: string) {
+  const data = await parseRdf(ttl, "text/turtle", { baseIRI: DOC });
+  return engine.validate(data, trackerShapes);
 }
 
 describe("SHACL shape (shapes/tracker.ttl)", () => {
@@ -390,16 +385,14 @@ describe("SHACL shape (shapes/tracker.ttl)", () => {
 
   it("buildTracker output conforms without serialising (store → dataset)", async () => {
     const store = buildTracker(DOC, { title: "Direct store", stateStore: STORE });
-    const report = await new SHACLValidator(trackerShapes, { factory: env }).validate(
-      toDataset(store),
-    );
+    const report = await engine.validate(store, trackerShapes);
     expect(report.conforms).toBe(true);
   });
 
   it("a tracker with NO title is non-conforming (title is required)", async () => {
     const report = await validateTtl(await serializeTracker(DOC, { title: "" }));
     expect(report.conforms).toBe(false);
-    expect(report.results.some((r) => String(r.path?.value).endsWith("title"))).toBe(true);
+    expect(report.results.some((r) => String(r.path).endsWith("title>"))).toBe(true);
   });
 
   it("two wf:issueClass values are non-conforming (maxCount 1)", async () => {
@@ -412,7 +405,7 @@ describe("SHACL shape (shapes/tracker.ttl)", () => {
     `;
     const report = await validateTtl(ttl);
     expect(report.conforms).toBe(false);
-    expect(report.results.some((r) => String(r.path?.value).endsWith("issueClass"))).toBe(true);
+    expect(report.results.some((r) => String(r.path).endsWith("issueClass>"))).toBe(true);
   });
 
   it("a tracker with NO wf:issueClass is non-conforming (required — SolidOS throws without it)", async () => {
@@ -424,7 +417,7 @@ describe("SHACL shape (shapes/tracker.ttl)", () => {
     `;
     const report = await validateTtl(ttl);
     expect(report.conforms).toBe(false);
-    expect(report.results.some((r) => String(r.path?.value).endsWith("issueClass"))).toBe(true);
+    expect(report.results.some((r) => String(r.path).endsWith("issueClass>"))).toBe(true);
   });
 
   it("a tracker with NO wf:initialState warns (soft compatibility requirement)", async () => {
@@ -438,9 +431,7 @@ describe("SHACL shape (shapes/tracker.ttl)", () => {
     // The missing-initialState rule is sh:Warning → a result, but advisory.
     expect(
       report.results.some(
-        (r) =>
-          String(r.path?.value).endsWith("initialState") &&
-          String(r.severity?.value).endsWith("Warning"),
+        (r) => String(r.path).endsWith("initialState>") && String(r.severity).endsWith("Warning"),
       ),
     ).toBe(true);
   });
@@ -455,7 +446,7 @@ describe("SHACL shape (shapes/tracker.ttl)", () => {
     `;
     const report = await validateTtl(ttl);
     expect(report.conforms).toBe(false);
-    expect(report.results.some((r) => String(r.path?.value).endsWith("issueCategory"))).toBe(true);
+    expect(report.results.some((r) => String(r.path).endsWith("issueCategory>"))).toBe(true);
   });
 
   it("a second wf:assigneeGroup warns (soft maxCount 1)", async () => {
@@ -468,6 +459,6 @@ describe("SHACL shape (shapes/tracker.ttl)", () => {
     `;
     const report = await validateTtl(ttl);
     // sh:Warning severity → a result, but advisory (does not fail conformance hard).
-    expect(report.results.some((r) => String(r.severity?.value).endsWith("Warning"))).toBe(true);
+    expect(report.results.some((r) => String(r.severity).endsWith("Warning"))).toBe(true);
   });
 });

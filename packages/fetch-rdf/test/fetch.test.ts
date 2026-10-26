@@ -1,12 +1,21 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { fetchRdf, RdfFetchError } from "../src/index.js";
+// AUTHORED-BY Codex GPT-6.1-Sol
+import { createRdfEngine } from "@jeswr/rdf-engine/node";
+import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
+import type { FetchRdfOptions } from "../src/index.js";
+import { fetchRdf as implementation, RdfFetchError } from "../src/index.js";
 import { JSON_LD_SAMPLE, makeResponse, TURTLE_SAMPLE } from "./helpers.js";
 
 const DEFAULT_ACCEPT = "text/turtle, application/ld+json;q=0.9";
 
 afterEach(() => vi.unstubAllGlobals());
 
-describe("fetchRdf", () => {
+describe.each([
+  { name: "default", engine: undefined },
+  { name: "Node WASM", engine: createRdfEngine() },
+])("fetchRdf ($name)", ({ engine }) => {
+  afterAll(() => engine?.dispose());
+  const fetchRdf = (url: string, options: FetchRdfOptions = {}) =>
+    implementation(url, { ...options, engine });
   it("uses global fetch by default and forwards the abort signal", async () => {
     const transport = vi.fn<typeof fetch>(async () => new Response(null, { status: 204 }));
     vi.stubGlobal("fetch", transport);
