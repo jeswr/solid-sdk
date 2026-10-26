@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+import { matchingFixtureRoute } from "./fixture-route.js";
 import type { FixtureRoute } from "./types.js";
 
 const REDACTED = "[REDACTED]";
@@ -68,16 +69,7 @@ export function createFixtureRecorder(options: {
     const method = (
       init?.method ?? (input instanceof Request ? input.method : "GET")
     ).toUpperCase();
-    const route = routes.find((r) => {
-      const prefix = new URL(r.url);
-      return (
-        url.origin === prefix.origin &&
-        (url.pathname === prefix.pathname ||
-          url.pathname.startsWith(
-            prefix.pathname.endsWith("/") ? prefix.pathname : `${prefix.pathname}/`,
-          ))
-      );
-    });
+    const route = matchingFixtureRoute(url, routes);
     if (!route) throw new Error("Request has no configured public recorder route.");
     const sequence = nextRequest++;
     const response = await options.fetch(input, init);

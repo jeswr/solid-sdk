@@ -53,6 +53,32 @@ describe("fixtureFetch", () => {
     expect(routes).toHaveLength(4);
   });
 
+  it("selects the most specific prefix within the method without falling back after exhaustion", async () => {
+    const replay = fixtureFetch("demo", [
+      { url: "https://api.test/items", json: { broad: true } },
+      { method: "POST", url: "https://api.test/items", json: { posted: true } },
+      { url: "https://api.test/items/special", json: { page: 1 } },
+      { url: "https://api.test/items/special", json: { page: 2 } },
+    ]);
+    expect(await (await replay("https://api.test/items/special")).json()).toEqual({ page: 1 });
+    expect(
+      await (await replay("https://api.test/items/special", { method: "POST" })).json(),
+    ).toEqual({ posted: true });
+    expect(await (await replay("https://api.test/items/special/child")).json()).toEqual({
+      page: 2,
+    });
+    await expect(replay("https://api.test/items/special")).rejects.toBeInstanceOf(
+      IntegrationSyncError,
+    );
+    expect(await (await replay("https://api.test/items/ordinary")).json()).toEqual({ broad: true });
+    await expect(replay("https://api.test/items-other")).rejects.toBeInstanceOf(
+      IntegrationSyncError,
+    );
+    await expect(replay("https://api.test.evil/items")).rejects.toBeInstanceOf(
+      IntegrationSyncError,
+    );
+  });
+
   it("keeps single-entry static fixtures reusable", async () => {
     const replay = fixtureFetch("demo", ROUTES);
     for (let i = 0; i < 2; i++)

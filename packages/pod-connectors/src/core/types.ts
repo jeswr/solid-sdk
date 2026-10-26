@@ -160,7 +160,7 @@ export interface ImportOutcome {
 export interface FixtureRoute {
   /** HTTP method (default GET). */
   readonly method?: string;
-  /** Exact URL or prefix the request URL must start with. */
+  /** URL prefix on the same origin and complete path segments; longest match wins. */
   readonly url: string;
   /** JSON body to answer with. */
   readonly json: unknown;

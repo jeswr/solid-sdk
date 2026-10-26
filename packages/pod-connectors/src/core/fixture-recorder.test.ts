@@ -173,6 +173,35 @@ describe("fixture recorder redaction", () => {
     await expect(replay("https://source.test/items?page=3")).rejects.toThrow("No fixture recorded");
   });
 
+  it.each([
+    false,
+    true,
+  ])("replays overlapping routes consistently with broad-first config %s", async (broadFirst) => {
+    const routes = [
+      { url: "https://source.test/items/special", safeFields: ["special"] },
+      { url: "https://source.test/items", safeFields: ["ordinary"] },
+    ];
+    const recorder = createFixtureRecorder({
+      routes: broadFirst ? routes.toReversed() : routes,
+      fetch: async () => Response.json({ special: 1, ordinary: 2 }),
+    });
+    await recorder.fetch("https://source.test/items/ordinary");
+    await recorder.fetch("https://source.test/items/special?cursor=synthetic");
+    const fixtures = recorder.fixtures();
+    expect(fixtures.map((route) => [route.url, route.json])).toEqual([
+      ["https://source.test/items", { ordinary: 2 }],
+      ["https://source.test/items/special", { special: 1 }],
+    ]);
+    const replay = fixtureFetch("recorder", fixtures);
+    expect(await (await replay("https://source.test/items/special?cursor=replay")).json()).toEqual({
+      special: 1,
+    });
+    expect(await (await replay("https://source.test/items/ordinary")).json()).toEqual({
+      ordinary: 2,
+    });
+    await expect(replay("https://source.test/items-other")).rejects.toThrow("No fixture recorded");
+  });
+
   it("leaves a Request body readable by the source transport and respects init overrides", async () => {
     const seen: string[] = [];
     const transport: typeof fetch = async (input, init) => {

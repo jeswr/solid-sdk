@@ -5,6 +5,7 @@
  * unmatched request throws instead of hitting the wire.
  */
 import { IntegrationSyncError, RateLimitedError } from "./errors.js";
+import { matchingFixtureRoute } from "./fixture-route.js";
 import type { FixtureRoute } from "./types.js";
 
 /** Build a `fetch`-shaped function answering from fixture routes.
@@ -31,8 +32,9 @@ export function fixtureFetch(adapterId: string, routes: readonly FixtureRoute[])
       init?.method ?? (input instanceof Request ? input.method : "GET")
     ).toUpperCase();
 
-    const match = routes.find(
-      (r) => (r.method ?? "GET").toUpperCase() === method && url.startsWith(r.url),
+    const match = matchingFixtureRoute(
+      new URL(url),
+      routes.filter((r) => (r.method ?? "GET").toUpperCase() === method),
     );
     const group = match ? groups.get(key(match)) : undefined;
     const route = group?.routes[group.routes.length === 1 ? 0 : group.next++];
