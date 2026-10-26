@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-5
 /**
  * The bookmark / read-it-later model — typed read/write accessors over a single
@@ -35,6 +36,7 @@ import {
   DCT_DESCRIPTION,
   DCT_MODIFIED,
   DCT_TITLE,
+  LEGACY_BOOK_NS,
   PREFIXES,
   RDF_TYPE,
   SCHEMA_KEYWORDS,
@@ -107,7 +109,7 @@ export class Bookmark extends TermWrapper {
 
   /** Whether this subject is a `book:Bookmark`. */
   get isBookmark(): boolean {
-    return this.types.has(BOOKMARK_CLASS);
+    return this.types.has(BOOKMARK_CLASS) || this.types.has(`${LEGACY_BOOK_NS}Bookmark`);
   }
 
   /** `schema:url` — the bookmarked URL (an http(s) IRI). */
@@ -136,9 +138,14 @@ export class Bookmark extends TermWrapper {
 
   /** `book:notes` — the user's markdown notes. */
   get notes(): string | undefined {
-    return OptionalFrom.subjectPredicate(this, BOOK_NOTES, LiteralAs.string);
+    return (
+      OptionalFrom.subjectPredicate(this, BOOK_NOTES, LiteralAs.string) ??
+      OptionalFrom.subjectPredicate(this, `${LEGACY_BOOK_NS}notes`, LiteralAs.string)
+    );
   }
   set notes(value: string | undefined) {
+    // Clear the read-only alias so an update or deletion cannot revive stale data.
+    OptionalAs.object(this, `${LEGACY_BOOK_NS}notes`, undefined, LiteralFrom.string);
     OptionalAs.object(this, BOOK_NOTES, value, LiteralFrom.string);
   }
 
@@ -149,9 +156,14 @@ export class Bookmark extends TermWrapper {
    * absence — except `undefined` clears it.
    */
   get archived(): boolean {
-    return OptionalFrom.subjectPredicate(this, BOOK_ARCHIVED, LiteralAs.boolean) ?? false;
+    return (
+      OptionalFrom.subjectPredicate(this, BOOK_ARCHIVED, LiteralAs.boolean) ??
+      OptionalFrom.subjectPredicate(this, `${LEGACY_BOOK_NS}archived`, LiteralAs.boolean) ??
+      false
+    );
   }
   set archived(value: boolean | undefined) {
+    OptionalAs.object(this, `${LEGACY_BOOK_NS}archived`, undefined, LiteralFrom.boolean);
     OptionalAs.object(this, BOOK_ARCHIVED, value, LiteralFrom.boolean);
   }
 

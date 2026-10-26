@@ -1,3 +1,4 @@
+# AUTHORED-BY Codex GPT-6.1-Sol
 # AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 #
 # SHACL shape for the bookmark / read-it-later model (@jeswr/solid-bookmark).
@@ -12,7 +13,7 @@
 # and on read of untrusted pod data (rdf-validate-shacl; see src/shape.test.ts).
 
 @prefix sh:     <http://www.w3.org/ns/shacl#> .
-@prefix book:   <https://w3id.org/jeswr/bookmark#> .
+@prefix book:   <https://jeswr.org/ns/bookmark#> .
 @prefix schema: <http://schema.org/> .
 @prefix dct:    <http://purl.org/dc/terms/> .
 @prefix xsd:    <http://www.w3.org/2001/XMLSchema#> .
