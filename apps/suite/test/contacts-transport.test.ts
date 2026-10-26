@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+import { serialize } from "@jeswr/rdf-serialize";
 import { Store } from "n3";
 import { describe, expect, test, vi } from "vitest";
 import {
@@ -7,7 +8,7 @@ import {
   MAX_RDF_QUADS,
   replacement,
 } from "../src/apps/contacts/lib/model/transport";
-import { ALICE, MemoryPod, ROOT } from "./contacts-support";
+import { ALICE, MemoryPod, parse, ROOT } from "./contacts-support";
 
 describe("contacts injected transport", () => {
   test("requires preconditions on deletion and rejects malformed ETags before writes", async () => {
@@ -181,4 +182,73 @@ test("aborts a pending stream read even when the injected response ignores the s
 test("accepts a bodyless successful RDF response", async () => {
   const transport = new ContactsTransport(ROOT, async () => new Response(null, { status: 204 }));
   expect((await transport.read(ALICE, (dataset) => dataset.size)).data).toBe(0);
+});
+
+// AUTHORED-BY Codex GPT-6
+test.each([
+  null,
+  '"1"',
+])("preflights every outgoing dataset's quad count before writes (etag %s)", async (etag) => {
+  const dataset = await parse(
+    `<#it> <https://example.org/value> ${Array.from({ length: MAX_RDF_QUADS + 1 }, (_, i) => `"${i}"`).join(",")} .`,
+    ALICE,
+  );
+  const pod = new MemoryPod();
+  const transport = new ContactsTransport(ROOT, pod.fetch);
+  expect(dataset.size).toBe(MAX_RDF_QUADS + 1);
+  await expect(
+    transport.commit([
+      { url: `${ROOT}first.ttl`, dataset: new Store(), etag: null },
+      { url: ALICE, dataset, etag },
+    ]),
+  ).rejects.toThrow("quad limit");
+  expect(pod.requests).toHaveLength(0);
+});
+
+test.each([
+  null,
+  '"1"',
+])("preflights serialized UTF-8 bytes before writes (etag %s)", async (etag) => {
+  const dataset = await parse(
+    `<#it> <https://example.org/value> "${"é".repeat(MAX_RDF_BYTES / 2)}" .`,
+    ALICE,
+  );
+  const body = await serialize([...dataset]);
+  expect(dataset.size).toBe(1);
+  expect(body.length).toBeLessThan(MAX_RDF_BYTES);
+  expect(new TextEncoder().encode(body).byteLength).toBeGreaterThan(MAX_RDF_BYTES);
+  const pod = new MemoryPod();
+  const transport = new ContactsTransport(ROOT, pod.fetch);
+  await expect(
+    transport.commit([
+      { url: `${ROOT}first.ttl`, dataset: new Store(), etag: null },
+      { url: ALICE, dataset, etag },
+    ]),
+  ).rejects.toThrow("byte limit");
+  expect(pod.requests).toHaveLength(0);
+});
+
+test("accepts writes at the quad and serialized UTF-8 byte limits and reads them back", async () => {
+  const quads = await parse(
+    `<#it> <https://example.org/value> ${Array.from({ length: MAX_RDF_QUADS }, (_, i) => `"${i}"`).join(",")} .`,
+    ALICE,
+  );
+  const bytesUrl = `${ROOT}bytes.ttl`;
+  const empty = await parse('<#it> <https://example.org/value> "" .', bytesUrl);
+  const overhead = new TextEncoder().encode(await serialize([...empty])).byteLength;
+  const bytes = await parse(
+    `<#it> <https://example.org/value> "${"é".repeat((MAX_RDF_BYTES - overhead) / 2)}${"a".repeat((MAX_RDF_BYTES - overhead) % 2)}" .`,
+    bytesUrl,
+  );
+  expect(quads.size).toBe(MAX_RDF_QUADS);
+  expect(new TextEncoder().encode(await serialize([...bytes])).byteLength).toBe(MAX_RDF_BYTES);
+  const pod = new MemoryPod();
+  const transport = new ContactsTransport(ROOT, pod.fetch);
+  await transport.commit([
+    { url: ALICE, dataset: quads, etag: null },
+    { url: bytesUrl, dataset: bytes, etag: null },
+  ]);
+  expect(pod.writes).toHaveLength(2);
+  expect((await transport.read(ALICE, (dataset) => dataset.size)).data).toBe(MAX_RDF_QUADS);
+  expect((await transport.read(bytesUrl, (dataset) => dataset.size)).data).toBe(1);
 });

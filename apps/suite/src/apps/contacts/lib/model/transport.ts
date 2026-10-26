@@ -124,7 +124,7 @@ export class ContactsTransport {
   }
 
   async commit(changes: readonly Change[]): Promise<(string | null)[]> {
-    // Preflight ALL scope and concurrency guards before the first request.
+    // Preflight ALL scope, concurrency and size guards before the first request.
     const prepared = await Promise.all(
       changes.map(async (change) => {
         const url = this.url(change.url);
@@ -140,8 +140,15 @@ export class ContactsTransport {
         }
         let body: string | undefined;
         if (change.dataset !== undefined) {
+          // AUTHORED-BY Codex GPT-6
+          if (change.dataset.size > MAX_RDF_QUADS) {
+            throw new RangeError("Contacts RDF dataset exceeds the quad limit.");
+          }
           headers.set("Content-Type", "text/turtle");
           body = await serialize([...change.dataset]);
+          if (new TextEncoder().encode(body).byteLength > MAX_RDF_BYTES) {
+            throw new RangeError("Contacts RDF document exceeds the byte limit.");
+          }
         }
         return { url, headers, body };
       }),
