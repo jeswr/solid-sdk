@@ -107,6 +107,42 @@ describe("Solid-OIDC pod broker", () => {
     expect(new Set(jwks).size).toBe(2);
   });
 
+  it.each([
+    ["text/turtle", "# Pod resource with a discovery pathname"],
+    ["application/json", JSON.stringify({ title: "Pod resource" })],
+    ["application/json", JSON.stringify({ issuer: "https://unrelated.example/" })],
+  ])("returns %s pod resources with a discovery pathname unchanged", async (contentType, body) => {
+    const f = brokerFixture();
+    const target = `${POD_ROOT}.well-known/openid-configuration`;
+    const requests: Request[] = [];
+    const fetcher: typeof fetch = async (input, init) => {
+      const request = new Request(input, init);
+      if (request.url === target) {
+        requests.push(request);
+        return new Response(body, { headers: { "content-type": contentType } });
+      }
+      return f.op.fetch(request);
+    };
+    const options = { ...f.options, fetch: fetcher };
+    const provider = createPodSessionProvider(options);
+    const begin = await provider.begin(POD_ISSUER, POD_CALLBACK);
+    const session = await provider.complete(f.op.callback(begin.authorizeUrl), begin.state);
+    for (const broker of [provider, createPodSessionProvider(options)]) {
+      const response = await (await broker.fetchFor(session.id))(target);
+      expect(response.status).toBe(200);
+      expect(response.headers.get("content-type")).toBe(contentType);
+      expect(await response.text()).toBe(body);
+    }
+    expect(requests).toHaveLength(2);
+    for (const request of requests) {
+      expect(request.headers.get("authorization")).toMatch(/^DPoP /u);
+      expect(request.headers.has("dpop")).toBe(true);
+    }
+    expect(f.op.captured.filter((r) => r.body.includes("grant_type=refresh_token"))).toHaveLength(
+      1,
+    );
+  });
+
   it("restores refresh + the same key across workers and persists rotations before fetching", async () => {
     const f = brokerFixture();
     const { session } = await f.login();
@@ -238,7 +274,9 @@ describe("Solid-OIDC pod broker", () => {
       return f.op.fetch(input, init);
     };
     const provider = createPodSessionProvider({ ...f.options, fetch: fetcher });
-    await expect(provider.begin(POD_ISSUER, POD_CALLBACK)).rejects.toThrow();
+    await expect(provider.begin(POD_ISSUER, POD_CALLBACK)).rejects.toMatchObject({
+      cause: { message: "Pod issuer mismatch" },
+    });
     const defaultClock = createPodSessionProvider({ ...f.options, now: undefined });
     f.op.controls.discoveryIssuer = POD_ISSUER;
     await defaultClock.begin(POD_ISSUER, POD_CALLBACK);

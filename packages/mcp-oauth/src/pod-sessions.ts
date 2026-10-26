@@ -135,8 +135,10 @@ export function createPodSessionProvider(options: PodSessionProviderOptions): Po
     const { dataset } = await fetchRdf(webUrl(webId).href, { fetch: fetcher });
     return new Profile(webId, dataset, DataFactory);
   };
-  const clientFor = async (issuer: string, key?: PrivateJwk) =>
-    createSolidOidcClient({
+  const clientFor = async (issuer: string, key?: PrivateJwk) => {
+    // Construction performs discovery; the same transport later fetches pod resources.
+    let discovering = true;
+    const client = await createSolidOidcClient({
       issuer,
       clientId: options.clientId,
       redirectUri: options.redirectUri,
@@ -145,14 +147,16 @@ export function createPodSessionProvider(options: PodSessionProviderOptions): Po
       fetch: async (input, init) => {
         const request = new Request(input, init);
         const response = await fetcher(request, { credentials: "omit" });
-        const url = new URL(request.url);
-        if (url.pathname.endsWith("/.well-known/openid-configuration") && response.status === 200) {
+        if (discovering && response.status === 200) {
           const metadata = JSON.parse(await readBody(response.clone()));
           if (metadata.issuer !== issuer) throw new Error("Pod issuer mismatch");
         }
         return response;
       },
     });
+    discovering = false;
+    return client;
+  };
   const readSession = async (id: string) => {
     pruneClients();
     try {
