@@ -8,6 +8,7 @@ export default defineConfig({
       enabled: true,
       provider: "v8",
       include: [
+        "src/apps/drive/lib/sharing/**/*.ts",
         "src/apps/chat/lib/text/**/*.ts",
         "src/apps/photos/lib/exif/**/*.ts",
         "src/apps/photos/lib/library/**/*.ts",
