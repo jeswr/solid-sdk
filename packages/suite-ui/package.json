@@ -21,7 +21,8 @@
     "./styles/theme.css": "./dist/styles/theme.css",
     "./styles/density.css": "./dist/styles/density.css",
     "./styles/components.css": "./dist/styles/components.css",
-    "./styles/collections.css": "./dist/styles/collections.css"
+    "./styles/collections.css": "./dist/styles/collections.css",
+    "./styles/navigation.css": "./dist/styles/navigation.css"
   },
   "files": [
     "dist",

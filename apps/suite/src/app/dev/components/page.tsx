@@ -26,6 +26,9 @@ export default function ComponentsPage() {
         <a href="/dev/components/typed-view">Typed views</a>
         <a href="/dev/components/details-pane">Details pane</a>
         <a href="/dev/components/pod-meter">Pod meter</a>
+        <a href="/dev/components/app-rail">AppRail</a>
+        <a href="/dev/components/app-launcher">AppLauncher</a>
+        <a href="/dev/components/bottom-tab-bar">BottomTabBar</a>
       </nav>
     </main>
   );
