@@ -237,6 +237,34 @@ describe("skill validation", () => {
   });
 
   it.each([
+    '<a href="references/guide.md" title="Set href=guide.md">guide</a>',
+    "<a title='Set src=missing.png and href=missing.md' href='references/guide.md'>guide</a>",
+    '<img alt="Set href=missing.md > src=missing.png" src="references/guide.md">',
+    '<a data-href="missing.md" href=references/guide.md>guide</a>',
+    '<div>Text href=missing.md and src=missing.png <a href="references/guide.md">guide</a></div>',
+    '<a title="<!-- href=missing.md -->" href="references/guide.md">guide</a>',
+  ])("checks only actual HTML URL attributes: %s", (body) => {
+    const root = fixture();
+    put(root, "skills/alpha/SKILL.md", skill({ body }));
+    expect(checkSkills(root, { write: true }).errors).toEqual([]);
+  });
+
+  it.each([
+    '<a title="<!--" href="missing.md">broken</a>',
+    "<img alt='<!--' src='missing.png'>",
+    '<div>\n<a title="<!-- >" HREF = missing.md>broken</a>\n<!-- actual comment -->\n</div>',
+    '<a title="<!--" href="missing.md">broken</a><!-- -->',
+    '<a title="<!-- -->" href="missing.md">broken</a>',
+    '<a title="Set href=references/guide.md" href="missing.md">broken</a>',
+  ])("checks active HTML URLs after quoted attribute contents: %s", (body) => {
+    const root = fixture();
+    put(root, "skills/alpha/SKILL.md", skill({ body }));
+    expect(checkSkills(root, { write: true }).errors).toEqual([
+      "skills/alpha/SKILL.md: relative link does not resolve (target omitted)",
+    ]);
+  });
+
+  it.each([
     "skills/alpha/references/guide.md",
     "packages/widget/references/nested/guide.md",
   ])("checks links in companion Markdown %s", (path) => {

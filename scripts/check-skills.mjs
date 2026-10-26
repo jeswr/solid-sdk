@@ -65,19 +65,55 @@ function decodeCharacterReferences(text) {
   );
 }
 
+function htmlLinksIn(html) {
+  const links = [];
+  // Recognize comments only between tags; attribute values are consumed in full below.
+  const tokens = /<!--(?:-?>|[\s\S]*?(?:-->|$))|<\/?[a-zA-Z][^\t\n\f\r />]*/g;
+  const whitespace = /[\t\n\f\r ]/;
+  for (let token = tokens.exec(html); token; token = tokens.exec(html)) {
+    if (token[0].startsWith("<!--")) continue;
+    const closing = token[0].startsWith("</");
+    let cursor = tokens.lastIndex;
+    const attributes = [];
+    while (cursor < html.length && html[cursor] !== ">") {
+      if (whitespace.test(html[cursor]) || html[cursor] === "/") {
+        cursor++;
+        continue;
+      }
+      const nameStart = cursor;
+      while (cursor < html.length && !/[\t\n\f\r /=>]/.test(html[cursor])) cursor++;
+      const name = html.slice(nameStart, cursor).toLowerCase();
+      while (cursor < html.length && whitespace.test(html[cursor])) cursor++;
+      if (html[cursor] !== "=") continue;
+      cursor++;
+      while (cursor < html.length && whitespace.test(html[cursor])) cursor++;
+      const quote = html[cursor];
+      let value;
+      if (quote === '"' || quote === "'") {
+        const start = ++cursor;
+        while (cursor < html.length && html[cursor] !== quote) cursor++;
+        value = html.slice(start, cursor);
+        if (cursor < html.length) cursor++;
+      } else {
+        const start = cursor;
+        while (cursor < html.length && !/[\t\n\f\r >]/.test(html[cursor])) cursor++;
+        value = html.slice(start, cursor);
+      }
+      if (!closing && (name === "href" || name === "src")) attributes.push(value);
+    }
+    // An incomplete tag does not create an element or active URL attributes.
+    if (html[cursor] === ">") links.push(...attributes);
+    tokens.lastIndex = cursor + 1;
+  }
+  return links;
+}
+
 function linksIn(text) {
   const tokens = marked.lexer(text);
   const links = Object.values(tokens.links).map((link) => link.href);
   marked.walkTokens(tokens, (token) => {
     if (token.type === "link" || token.type === "image") links.push(token.href);
-    if (token.type === "html") {
-      const html = token.text.replace(/<!--(?:-?>|[\s\S]*?(?:-->|$))/g, " ");
-      for (const match of html.matchAll(
-        /\b(?:href|src)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/gi,
-      )) {
-        links.push(match[1] ?? match[2] ?? match[3]);
-      }
-    }
+    if (token.type === "html") links.push(...htmlLinksIn(token.text));
   });
   return [...new Set(links.map(decodeCharacterReferences))];
 }
