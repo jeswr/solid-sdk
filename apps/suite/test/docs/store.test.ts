@@ -15,6 +15,7 @@ import { serializeTurtle } from "../../src/apps/docs/lib/model/rdf-io.js";
 import {
   createDocsStore,
   DocsStore,
+  type Snapshot,
   type StoredDocument,
 } from "../../src/apps/docs/lib/model/store.js";
 import { mockFetch, privateIndexPolicy, type RecordedCall, turtleToStore } from "./helpers.js";
@@ -164,12 +165,12 @@ describe("store redirect refusal", () => {
       : operation === "read"
         ? store.read(DOC)
         : operation === "save"
-          ? store.save(stored, {}, { regenerate: () => ({ body: "live" }) })
+          ? store.save(stored, {}, { regenerate: () => ({ format: "text/html", body: "live" }) })
           : operation === "create"
             ? store.create({ title: "New" })
             : store.makeCopy(stored, {
                 assets: [asset],
-                snapshot: () => ({ body: "copied" }),
+                snapshot: () => ({ format: "text/html", body: "copied" }),
                 persistFullState: async (updates, fetch) => {
                   await fetch(`${updates}state`, {
                     method: "PUT",
@@ -239,7 +240,7 @@ describe("store creation and scope", () => {
         ? await s.store.create({ title: "New" })
         : await s.store.makeCopy(await document(), {
             assets: [],
-            snapshot: () => ({ body: "copied" }),
+            snapshot: () => ({ format: "text/html", body: "copied" }),
             persistFullState: async () => {},
           });
     expect(await s.store.read(created.url)).toEqual(created);
@@ -343,7 +344,11 @@ describe("store creation and scope", () => {
     );
     const stored = await document();
     await expect(
-      s.store.save({ ...stored, url: legacy }, {}, { regenerate: () => ({ body: "" }) }),
+      s.store.save(
+        { ...stored, url: legacy },
+        {},
+        { regenerate: () => ({ format: "text/html", body: "" }) },
+      ),
     ).rejects.toBeInstanceOf(OutOfScopeError);
     expect(s.calls).toHaveLength(n);
     s.resources.set(`${POD}docs/stray.ttl`, { body: "", etag: '"s"', contentType: "text/turtle" });
@@ -409,6 +414,44 @@ describe("listing", () => {
 
 describe("snapshot conflicts", () => {
   it.each([
+    ["text/markdown", "text/html", "<p>Regenerated HTML</p>"],
+    ["text/html", "text/markdown", "# Regenerated Markdown"],
+  ])("keeps regenerated body and format together after a remote %s change", async (remoteFormat, format, body) => {
+    const s = await server();
+    const stored = await document();
+    const now = new Date(NOW.getTime() + 600_000);
+    s.resources.set(DOC, {
+      body: await serializeTurtle(
+        buildDocument(DOC, {
+          ...stored.data,
+          body: "Remote",
+          format: remoteFormat,
+          now,
+          priorRevisions: stored.data.revisions,
+          revisionLabel: "Remote format change",
+        }),
+      ),
+      etag: '"remote"',
+      contentType: "text/turtle",
+    });
+    const regenerate = vi.fn((): Snapshot => ({ body, format, wordCount: 2 }));
+    const saved = await s.store.save(
+      stored,
+      { body: "Stale", format: remoteFormat, now: new Date(now.getTime() + 600_000) },
+      { regenerate, wait: WAIT },
+    );
+    expect(regenerate).toHaveBeenCalledOnce();
+    const reopened = await s.store.read(DOC);
+    expect(reopened).toEqual(saved);
+    expect(saved.data).toMatchObject({ body, format, wordCount: 2 });
+    expect(saved.data.revisions[0]).toMatchObject({ body, format });
+    expect(saved.data.revisions[1]).toMatchObject({
+      body: "Remote",
+      format: remoteFormat,
+      label: "Remote format change",
+    });
+  });
+  it.each([
     "save",
     "copy",
   ])("completes %s without conflict retries on weak ETags", async (operation) => {
@@ -426,14 +469,14 @@ describe("snapshot conflicts", () => {
     const source = await store.read(DOC);
     assert(source);
     expect(source.etag).toBe('W/"v1"');
-    const regenerate = vi.fn(() => ({ body: "regenerated" }));
+    const regenerate = vi.fn(() => ({ format: "text/html", body: "regenerated" }));
     const wait = vi.fn(WAIT);
     const result =
       operation === "save"
         ? await store.save(source, { body: "live" }, { regenerate, wait })
         : await store.makeCopy(source, {
             assets: [],
-            snapshot: () => ({ body: "live" }),
+            snapshot: () => ({ format: "text/html", body: "live" }),
             persistFullState: async () => {},
           });
     expect(result.data.body).toBe("live");
@@ -462,7 +505,11 @@ describe("snapshot conflicts", () => {
       etag: '"remote"',
       contentType: "text/turtle",
     });
-    const regenerate = vi.fn(() => ({ body: "merged live state", wordCount: 3 }));
+    const regenerate = vi.fn(() => ({
+      format: "text/html",
+      body: "merged live state",
+      wordCount: 3,
+    }));
     const wait = vi.fn(WAIT);
     const saved = await s.store.save(
       stored,
@@ -491,7 +538,11 @@ describe("snapshot conflicts", () => {
       contentType: "text/turtle",
     });
     await expect(
-      s.store.save(stored, { title: "Mine" }, { regenerate: () => ({ body: "live" }), wait: WAIT }),
+      s.store.save(
+        stored,
+        { title: "Mine" },
+        { regenerate: () => ({ format: "text/html", body: "live" }), wait: WAIT },
+      ),
     ).rejects.toMatchObject({
       name: "TitleConflictError",
       localTitle: "Mine",
@@ -500,13 +551,18 @@ describe("snapshot conflicts", () => {
     const saved = await s.store.save(
       stored,
       { title: "Theirs" },
-      { regenerate: () => ({ body: "live" }), wait: WAIT },
+      { regenerate: () => ({ format: "text/html", body: "live" }), wait: WAIT },
     );
     expect(saved.data.title).toBe("Theirs");
     const same = await server();
     expect(
-      (await same.store.save(stored, { title: "Mine" }, { regenerate: () => ({ body: "unused" }) }))
-        .data.title,
+      (
+        await same.store.save(
+          stored,
+          { title: "Mine" },
+          { regenerate: () => ({ format: "text/html", body: "unused" }) },
+        )
+      ).data.title,
     ).toBe("Mine");
   });
   it("caps retries at three, backs off exponentially, and propagates terminal failures", async () => {
@@ -515,7 +571,7 @@ describe("snapshot conflicts", () => {
     const f: typeof fetch = async (url, init) =>
       init?.method === "PUT" ? new Response(null, { status: 412 }) : s.fetchImpl(url, init);
     const wait = vi.fn(WAIT);
-    const regenerate = vi.fn(() => ({ body: "live" }));
+    const regenerate = vi.fn(() => ({ format: "text/html", body: "live" }));
     await expect(
       new DocsStore(POD, WEBID, f).save(stored, {}, { regenerate, wait }),
     ).rejects.toBeInstanceOf(ResourceWriteError);
@@ -543,7 +599,7 @@ describe("snapshot conflicts", () => {
       const pending = new DocsStore(POD, WEBID, fetch).save(
         stored,
         {},
-        { regenerate: () => ({ body: "live" }) },
+        { regenerate: () => ({ format: "text/html", body: "live" }) },
       );
       const expectation = expect(pending).rejects.toBeInstanceOf(ResourceReadError);
       await vi.runAllTimersAsync();
@@ -559,7 +615,7 @@ describe("snapshot conflicts", () => {
     const saved = await s.store.save(
       stored,
       { body: "new", now: new Date(NOW.getTime() + 600_000) },
-      { regenerate: () => ({ body: "unused" }) },
+      { regenerate: () => ({ format: "text/html", body: "unused" }) },
     );
     expect(saved.data.creator).toBe("https://bob.example/#me");
     expect(saved.data.revisions[0]?.attributedTo).toBe(WEBID);
@@ -567,7 +623,11 @@ describe("snapshot conflicts", () => {
   it("preserves defaults and sends explicit If-Match on servers with no ETag", async () => {
     const s = await server();
     const stored = { ...(await document()), etag: null };
-    const result = await s.store.save(stored, {}, { regenerate: () => ({ body: "unused" }) });
+    const result = await s.store.save(
+      stored,
+      {},
+      { regenerate: () => ({ format: "text/html", body: "unused" }) },
+    );
     expect(result.data.body).toBe("old");
     expect(s.calls.find((c) => c.method === "PUT")?.headers["if-match"]).toBe("*");
   });
@@ -583,7 +643,7 @@ describe("makeCopy", () => {
     source.data.format = format;
     const copy = await s.store.makeCopy(source, {
       assets: [],
-      snapshot: () => ({ body: "# Live snapshot", wordCount: 2 }),
+      snapshot: () => ({ format, body: "# Live snapshot", wordCount: 2 }),
       persistFullState: async () => {},
     });
     expect(copy.data.format).toBe(format);
@@ -606,7 +666,7 @@ describe("makeCopy", () => {
     const persistFullState = vi.fn(async () => {});
     const copy = await s.store.makeCopy(await document(), {
       assets: [],
-      snapshot: () => ({ body: "copied" }),
+      snapshot: () => ({ format: "text/html", body: "copied" }),
       persistFullState,
     });
     expect(copy.url).toBe(`${POD}docs/plan-copy-2.ttl`);
@@ -637,7 +697,11 @@ describe("makeCopy", () => {
     const copy = await s.store.makeCopy(source, {
       assets: [asset, asset],
       persistFullState,
-      snapshot: (mapping) => ({ body: `<img src="${mapping.get(asset)}">live body`, wordCount: 2 }),
+      snapshot: (mapping) => ({
+        format: "text/html",
+        body: `<img src="${mapping.get(asset)}">live body`,
+        wordCount: 2,
+      }),
     });
     expect(copy.url).toBe(`${POD}docs/plan-copy.ttl`);
     expect(copy.data).toMatchObject({
@@ -672,7 +736,7 @@ describe("makeCopy", () => {
     };
     const copy = await new DocsStore(POD, WEBID, f).makeCopy(source, {
       assets: [asset],
-      snapshot: () => ({ body: "" }),
+      snapshot: () => ({ format: "text/html", body: "" }),
       persistFullState: async () => {},
     });
     expect(copy.url).toBe(`${POD}docs/document-copy.ttl`);
@@ -689,7 +753,7 @@ describe("makeCopy", () => {
     delete source.data.assets;
     const copy = await s.store.makeCopy(source, {
       assets: [],
-      snapshot: () => ({ body: "live" }),
+      snapshot: () => ({ format: "text/html", body: "live" }),
       persistFullState: async () => {},
     });
     expect(copy.url).toBe(`${POD}docs/${"a".repeat(48)}-copy.ttl`);
@@ -701,7 +765,7 @@ describe("makeCopy", () => {
     const source = await document();
     const state = {
       assets: ["https://evil.example/image"],
-      snapshot: () => ({ body: "" }),
+      snapshot: () => ({ format: "text/html", body: "" }),
       persistFullState: async () => {},
     };
     await expect(s.store.makeCopy(source, state)).rejects.toBeInstanceOf(OutOfScopeError);
@@ -727,7 +791,7 @@ describe("makeCopy", () => {
       await expect(
         new DocsStore(POD, WEBID, f).makeCopy(source, {
           assets: [asset],
-          snapshot: () => ({ body: "" }),
+          snapshot: () => ({ format: "text/html", body: "" }),
           persistFullState: async () => {},
         }),
       ).rejects.toBeInstanceOf(status === 404 ? ResourceReadError : ResourceWriteError);
@@ -736,7 +800,7 @@ describe("makeCopy", () => {
     await expect(
       s.store.makeCopy(await document(), {
         assets: [],
-        snapshot: () => ({ body: "" }),
+        snapshot: () => ({ format: "text/html", body: "" }),
         persistFullState: async () => {
           throw new Error("log failed");
         },

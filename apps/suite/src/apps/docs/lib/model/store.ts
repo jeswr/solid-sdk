@@ -39,15 +39,17 @@ export interface DocumentEntry {
 }
 export interface Snapshot {
   body: string;
+  /** Captured with the body so remote format changes cannot reinterpret it. */
+  format: string;
   wordCount?: number | undefined;
 }
 export interface SaveOptions {
-  /** Regenerate from the live editor after each conflict, never replay stale HTML. */
+  /** Regenerate body and format together from the live editor after each conflict. */
   regenerate: () => Snapshot | Promise<Snapshot>;
   /** Injectable clock/backoff seam; default uses real timers. */
   wait?: ((milliseconds: number) => Promise<void>) | undefined;
 }
-/** Callbacks must use one captured editor state so its log and HTML agree. */
+/** Callbacks must use one captured editor state so its log, body and format agree. */
 export interface CopyState {
   /** Only referenced assets, not every file left in the source container. */
   assets: readonly string[];
@@ -204,6 +206,7 @@ export class DocsStore {
     let current = stored;
     let snapshot: Snapshot = {
       body: input.body ?? stored.data.body,
+      format: input.format ?? stored.data.format,
       wordCount: input.wordCount ?? stored.data.wordCount,
     };
     const localTitle = input.title ?? stored.data.title;
