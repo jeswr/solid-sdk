@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6 — shutdown regression tests
+// AUTHORED-BY Codex GPT-6 — CORS and parse-error regression tests
 import { once } from "node:events";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { Readable } from "node:stream";
@@ -160,22 +161,26 @@ describe("authority and CORS", () => {
     expect(response.headers.get("cache-control")).toBe("no-store");
   });
 
-  it("answers allowed POST preflights without authentication or wildcard headers", async () => {
+  it.each([
+    "POST",
+    "GET",
+  ])("answers allowed %s preflights without authentication or wildcard headers", async (method) => {
     const { handler, authenticate, server } = setup();
     const response = await handler(
       new Request(RESOURCE, {
         method: "OPTIONS",
         headers: {
           Origin: ORIGIN,
-          "Access-Control-Request-Method": "POST",
+          "Access-Control-Request-Method": method,
           "Access-Control-Request-Headers": "authorization, content-type, mcp-protocol-version",
         },
       }),
     );
     expect(response.status).toBe(204);
     expect(response.headers.get("access-control-allow-origin")).toBe(ORIGIN);
-    expect(response.headers.get("access-control-allow-methods")).toBe("POST, OPTIONS");
+    expect(response.headers.get("access-control-allow-methods")).toBe("GET, POST, OPTIONS");
     expect(response.headers.get("access-control-allow-headers")).toContain("Authorization");
+    expect(response.headers.get("access-control-allow-headers")).toContain("MCP-Protocol-Version");
     expect([...response.headers.values()].some((value) => value.includes("*"))).toBe(false);
     expect(authenticate).not.toHaveBeenCalled();
     expect(server).not.toHaveBeenCalled();
@@ -237,8 +242,10 @@ describe("authentication and methods", () => {
 
   it.each(["GET", "DELETE", "PUT", "HEAD"])("authenticates then rejects %s", async (method) => {
     const { handler, authenticate, server } = setup();
-    const response = await handler(new Request(RESOURCE, { method }));
+    const response = await handler(new Request(RESOURCE, { method, headers: { Origin: ORIGIN } }));
     expect(response.status).toBe(405);
+    expect(response.headers.get("allow")).toBe("POST, OPTIONS");
+    expect(response.headers.get("access-control-allow-origin")).toBe(ORIGIN);
     expect(authenticate).toHaveBeenCalledOnce();
     expect(server).not.toHaveBeenCalled();
   });
@@ -257,14 +264,18 @@ describe("body limits", () => {
     "9007199254740992",
   ])("rejects invalid Content-Length %s", async (length) => {
     const { handler, server } = setup();
-    expect((await handler(request({ "Content-Length": length }))).status).toBe(400);
+    const response = await handler(request({ "Content-Length": length }));
+    expect(response.status).toBe(400);
+    expect((await response.json()).error.code).toBe(-32000);
     expect(server).not.toHaveBeenCalled();
   });
 
   it("rejects a declared oversize body without reading it", async () => {
     const { handler, server } = setup();
     const input = request({ "Content-Length": String(MAX_BYTES + 1) });
-    expect((await handler(input)).status).toBe(413);
+    const response = await handler(input);
+    expect(response.status).toBe(413);
+    expect((await response.json()).error.code).toBe(-32000);
     expect(input.bodyUsed).toBe(false);
     expect(server).not.toHaveBeenCalled();
   });
@@ -307,7 +318,13 @@ describe("body limits", () => {
     new Uint8Array([0xff]),
   ])("rejects empty or invalid JSON/UTF-8 (%s)", async (body) => {
     const { handler, server } = setup();
-    expect((await handler(request({}, body))).status).toBe(400);
+    const response = await handler(request({}, body));
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      jsonrpc: "2.0",
+      error: { code: -32700, message: "Invalid request body" },
+      id: null,
+    });
     expect(server).not.toHaveBeenCalled();
   });
 

@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6 — transport shutdown
+// AUTHORED-BY Codex GPT-6 — CORS and parse-error fixes
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
@@ -34,8 +35,8 @@ class BodyError extends Error {
   }
 }
 
-function errorResponse(status: number, message: string): Response {
-  return Response.json({ jsonrpc: "2.0", error: { code: -32000, message }, id: null }, { status });
+function errorResponse(status: number, message: string, code = -32000): Response {
+  return Response.json({ jsonrpc: "2.0", error: { code, message }, id: null }, { status });
 }
 
 function httpUrl(value: string): URL {
@@ -122,13 +123,14 @@ export function createMcpHttpHandler<Principal>(
     // Preflight requests carry no bearer token. Browser access is still restricted
     // to the explicit allow-list and fixed methods/headers.
     if (request.method === "OPTIONS") {
-      if (origin === null || request.headers.get("access-control-request-method") !== "POST") {
+      const method = request.headers.get("access-control-request-method");
+      if (origin === null || (method !== "POST" && method !== "GET")) {
         return new Response(null, { status: 405, headers: { Allow: ALLOW } });
       }
       return new Response(null, {
         status: 204,
         headers: {
-          "Access-Control-Allow-Methods": ALLOW,
+          "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
           "Access-Control-Allow-Headers": CORS_HEADERS,
         },
       });
@@ -153,7 +155,8 @@ export function createMcpHttpHandler<Principal>(
     try {
       parsedBody = await readJson(request);
     } catch (error) {
-      return errorResponse(error instanceof BodyError ? error.status : 400, "Invalid request body");
+      if (error instanceof BodyError) return errorResponse(error.status, "Invalid request body");
+      return errorResponse(400, "Invalid request body", -32700);
     }
 
     try {
