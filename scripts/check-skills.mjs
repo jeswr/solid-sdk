@@ -53,6 +53,12 @@ function scanSecrets(text, report) {
   }
 }
 
+function scanLocalPaths(text, report) {
+  for (const match of text.matchAll(/\/(?:Users|home)\/|[a-zA-Z]:[\\/]Users[\\/]/g)) {
+    report(match.index);
+  }
+}
+
 function decodeCharacterReferences(text) {
   // Decode once: &amp;copy; denotes the literal filename &copy;, not ©.
   return text.replace(
@@ -74,13 +80,34 @@ function decodeCharacterReferences(text) {
   );
 }
 
-function htmlLinksIn(html) {
+function htmlLinksIn(html, state) {
   const links = [];
   // Recognize comments only between tags; attribute values are consumed in full below.
   const tokens = /<!--(?:-?>|[\s\S]*?(?:-->|$))|<\/?[a-zA-Z][^\t\n\f\r />]*/g;
   const whitespace = /[\t\n\f\r ]/;
-  for (let token = tokens.exec(html); token; token = tokens.exec(html)) {
-    if (token[0].startsWith("<!--")) continue;
+  while (tokens.lastIndex < html.length) {
+    if (state.comment) {
+      const end = html.indexOf("-->", tokens.lastIndex);
+      if (end === -1) break;
+      state.comment = false;
+      tokens.lastIndex = end + 3;
+    }
+    if (state.textTag) {
+      // Raw-text/RCDATA contents cannot start tags or comments. Only a matching
+      // end tag returns to markup, even inside apparent quoted attributes.
+      const endTag = new RegExp(`</${state.textTag}(?=[\\t\\n\\f\\r />])`, "gi");
+      endTag.lastIndex = tokens.lastIndex;
+      const end = endTag.exec(html);
+      if (!end) break;
+      state.textTag = undefined;
+      tokens.lastIndex = end.index;
+    }
+    const token = tokens.exec(html);
+    if (!token) break;
+    if (token[0].startsWith("<!--")) {
+      state.comment = !/^(?:<!-->|<!--->)$/.test(token[0]) && !token[0].endsWith("-->");
+      continue;
+    }
     const closing = token[0].startsWith("</");
     const tag = token[0].slice(closing ? 2 : 1).toLowerCase();
     let cursor = tokens.lastIndex;
@@ -119,11 +146,7 @@ function htmlLinksIn(html) {
       html[cursor] === ">" &&
       /^(?:textarea|title|script|style|xmp|iframe|noembed|noframes)$/.test(tag)
     ) {
-      // Raw-text/RCDATA contents cannot start tags or comments. Only a matching
-      // end tag returns to markup, even inside apparent quoted attributes.
-      const endTag = new RegExp(`</${tag}(?=[\\t\\n\\f\\r />])`, "gi");
-      endTag.lastIndex = tokens.lastIndex;
-      tokens.lastIndex = endTag.exec(html)?.index ?? html.length;
+      state.textTag = tag;
     }
   }
   return links;
@@ -132,11 +155,21 @@ function htmlLinksIn(html) {
 function linksIn(text) {
   const tokens = marked.lexer(text);
   const links = Object.values(tokens.links).map((link) => decodeCharacterReferences(link.href));
+  // Marked splits inline HTML and blank-line-separated blocks into multiple tokens.
+  const htmlState = { comment: false, textTag: undefined };
   marked.walkTokens(tokens, (token) => {
-    if (token.type === "link" || token.type === "image")
+    if (
+      !htmlState.comment &&
+      !htmlState.textTag &&
+      (token.type === "link" || token.type === "image")
+    )
       links.push(decodeCharacterReferences(token.href));
-    if (token.type === "html") {
-      for (const href of htmlLinksIn(token.text)) {
+    if (
+      token.type === "html" ||
+      // A split comment's closing delimiter can be a plain text leaf token.
+      (htmlState.comment && token.type === "text" && !token.tokens)
+    ) {
+      for (const href of htmlLinksIn(token.text, htmlState)) {
         // HTML URL attributes allow surrounding ASCII whitespace, including encoded whitespace.
         links.push(decodeCharacterReferences(href).replace(/^[\t\n\f\r ]+|[\t\n\f\r ]+$/g, ""));
       }
@@ -225,11 +258,14 @@ export function checkSkills(root, { write = false } = {}) {
       continue;
     }
     const { name, description } = data;
-    // These decoded fields are emitted into the index; YAML escapes/folding can hide secrets.
+    // These decoded fields are emitted into the index; YAML escapes/folding can hide private data.
     for (const value of [name, description]) {
       if (typeof value !== "string") continue;
       scanSecrets(value, (category) => {
         report(path, `decoded metadata: possible ${category} (value omitted)`);
+      });
+      scanLocalPaths(value, () => {
+        report(path, "decoded metadata: absolute user path is forbidden (value omitted)");
       });
     }
     if (typeof name !== "string" || !name || name !== basename(skillDir)) {
@@ -252,9 +288,9 @@ export function checkSkills(root, { write = false } = {}) {
 
   for (const path of [...files].sort()) {
     const text = readFileSync(join(root, path), "utf8");
-    for (const match of text.matchAll(/\/Users\//g)) {
-      report(path, `line ${lineNumber(text, match.index)}: absolute user path is forbidden`);
-    }
+    scanLocalPaths(text, (offset) => {
+      report(path, `line ${lineNumber(text, offset)}: absolute user path is forbidden`);
+    });
     scanSecrets(text, (category, offset) => {
       report(path, `line ${lineNumber(text, offset)}: possible ${category} (value omitted)`);
     });

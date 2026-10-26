@@ -3,10 +3,12 @@
 
 import { spawnSync } from "node:child_process";
 import {
+  closeSync,
   cpSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
+  openSync,
   readFileSync,
   rmSync,
   writeFileSync,
@@ -47,7 +49,30 @@ function skill({
 }
 
 function cli(root, ...args) {
-  return spawnSync(process.execPath, [checker, "--root", root, ...args], { encoding: "utf8" });
+  return runNode([checker, "--root", root, ...args]);
+}
+
+function runNode(args) {
+  const output = mkdtempSync(join(tmpdir(), "check-skills-cli-"));
+  dirs.push(output);
+  const stdoutPath = join(output, "stdout");
+  const stderrPath = join(output, "stderr");
+  const stdout = openSync(stdoutPath, "w");
+  const stderr = openSync(stderrPath, "w");
+  let result;
+  try {
+    // File descriptors also capture CLI output in environments that restrict subprocess pipes.
+    result = spawnSync(process.execPath, args, { stdio: ["ignore", stdout, stderr] });
+    if (result.error) throw result.error;
+  } finally {
+    closeSync(stdout);
+    closeSync(stderr);
+  }
+  return {
+    ...result,
+    stdout: readFileSync(stdoutPath, "utf8"),
+    stderr: readFileSync(stderrPath, "utf8"),
+  };
 }
 
 describe("skill validation", () => {
@@ -275,6 +300,71 @@ describe("skill validation", () => {
     "noframes",
   ];
 
+  it.each(textElements)("preserves inline HTML %s state across tokens", (tag) => {
+    const root = fixture();
+    const body = `Example: <${tag}><a href="missing.md">literal text</a></${tag}>`;
+    put(root, "skills/alpha/SKILL.md", skill({ body }));
+    expect(checkSkills(root, { write: true }).errors).toEqual([]);
+    put(
+      root,
+      "skills/alpha/SKILL.md",
+      skill({ body: `${body} <a href="outside.md">active link</a>` }),
+    );
+    expect(checkSkills(root).errors).toEqual([
+      "skills/alpha/SKILL.md: relative link does not resolve (target omitted)",
+    ]);
+  });
+
+  it.each(textElements)("preserves HTML %s state across blank lines", (tag) => {
+    const root = fixture();
+    const body = `<div>\n<${tag}>\n\n<a href="missing.md">literal text</a>\n\n</${tag}>\n</div>`;
+    put(root, "skills/alpha/SKILL.md", skill({ body }));
+    expect(checkSkills(root, { write: true }).errors).toEqual([]);
+    put(
+      root,
+      "skills/alpha/SKILL.md",
+      skill({ body: `${body}\n\n<a href="outside.md">active link</a>` }),
+    );
+    expect(checkSkills(root).errors).toEqual([
+      "skills/alpha/SKILL.md: relative link does not resolve (target omitted)",
+    ]);
+  });
+
+  it("preserves HTML comments across tokens, including a plain text closing delimiter", () => {
+    const root = fixture();
+    const body = '<div>\n<!-- comment\n\n<a href="missing.md">comment</a>\n\n-->\n</div>';
+    put(root, "skills/alpha/SKILL.md", skill({ body }));
+    expect(checkSkills(root, { write: true }).errors).toEqual([]);
+    put(
+      root,
+      "skills/alpha/SKILL.md",
+      skill({ body: `${body}\n\n<a href="outside.md">active link</a>` }),
+    );
+    expect(checkSkills(root).errors).toEqual([
+      "skills/alpha/SKILL.md: relative link does not resolve (target omitted)",
+    ]);
+  });
+
+  it("ignores HTML links and text-state delimiters in fenced, indented, and inline code", () => {
+    const root = fixture();
+    const body = [
+      '`<textarea><a href="inline.md">literal</a><!--`',
+      '```html\n<style><a href="fenced.md">literal</a><!--\n```',
+      '    <title><a href="indented.md">literal</a><!--',
+      '<a href="references/guide.md">guide</a>',
+    ].join("\n\n");
+    put(root, "skills/alpha/SKILL.md", skill({ body }));
+    expect(checkSkills(root, { write: true }).errors).toEqual([]);
+    put(
+      root,
+      "skills/alpha/SKILL.md",
+      skill({ body: `${body}\n\n<a href="outside.md">active link</a>` }),
+    );
+    expect(checkSkills(root).errors).toEqual([
+      "skills/alpha/SKILL.md: relative link does not resolve (target omitted)",
+    ]);
+  });
+
   it.each(textElements)("checks active links after the end of HTML %s content", (tag) => {
     const root = fixture();
     put(
@@ -386,18 +476,53 @@ describe("skill validation", () => {
     );
   });
 
-  it.each([
-    "skills/alpha/SKILL.md",
-    "skills/alpha/references/guide.md",
-    "packages/widget/SKILL.md",
-  ])("rejects absolute user paths in %s", (path) => {
+  const localPaths = [
+    "/Users/someone/private",
+    "/home/someone/private",
+    "C:\\Users\\someone\\private",
+  ];
+  it.each(
+    [
+      "skills/alpha/SKILL.md",
+      "skills/alpha/references/guide.md",
+      "packages/widget/SKILL.md",
+    ].flatMap((path) => localPaths.map((value) => [path, value])),
+  )("rejects absolute user paths in %s (%s)", (path, value) => {
     const root = fixture();
+    put(root, path, skill({ name: path.includes("widget") ? "widget" : "alpha", body: value }));
+    const errors = checkSkills(root).errors.join("\n");
+    expect(errors).toContain("absolute user path is forbidden");
+    expect(errors).not.toContain(value);
+  });
+
+  it.each(
+    ["name", "description"].flatMap((field) => localPaths.map((value) => [field, value])),
+  )("rejects YAML-escaped local paths in %s (%s) without publishing them", (field, value) => {
+    const root = fixture();
+    const indexPath = join(root, "skills/INDEX.md");
+    const escaped = [...value]
+      .map((character) => `\\x${character.codePointAt(0).toString(16).padStart(2, "0")}`)
+      .join("");
     put(
       root,
-      path,
-      skill({ name: path.includes("widget") ? "widget" : "alpha", body: "/Users/someone/private" }),
+      "skills/alpha/SKILL.md",
+      skill({ [field]: `"${field === "description" ? "Use when reading " : ""}${escaped}"` }),
     );
-    expect(checkSkills(root).errors.join("\n")).toContain("absolute user path is forbidden");
+    for (const previousIndex of [undefined, "Previously generated index\n"]) {
+      if (previousIndex !== undefined) put(root, "skills/INDEX.md", previousIndex);
+      for (const args of [[], ["--write"]]) {
+        const result = cli(root, ...args);
+        expect(result.status).toBe(1);
+        expect(result.stderr).toContain(
+          "decoded metadata: absolute user path is forbidden (value omitted)",
+        );
+        expect(result.stderr).not.toContain(value);
+        expect(result.stderr).not.toContain(escaped);
+        expect(result.stdout).toBe("");
+        if (previousIndex === undefined) expect(existsSync(indexPath)).toBe(false);
+        else expect(readFileSync(indexPath, "utf8")).toBe(previousIndex);
+      }
+    }
   });
 
   // Synthetic examples only; construct credential-shaped strings so the test source contains no keys.
@@ -564,11 +689,11 @@ describe("generated skill index", () => {
   });
 
   it("imports without executing the CLI", () => {
-    const result = spawnSync(
-      process.execPath,
-      ["--input-type=module", "--eval", `await import(${JSON.stringify(checker)})`],
-      { encoding: "utf8" },
-    );
+    const result = runNode([
+      "--input-type=module",
+      "--eval",
+      `await import(${JSON.stringify(checker)})`,
+    ]);
     expect(result.status).toBe(0);
     expect(result.stdout + result.stderr).toBe("");
   });
