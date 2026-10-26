@@ -37,6 +37,7 @@ export default defineConfig({
         "src/apps/notes/lib/convert/**/*.ts",
         "src/lib/order/**/*.ts",
         "src/apps/tasks/lib/lists/**/*.ts",
+        "src/apps/tasks/lib/tree/**/*.ts",
         "src/lib/search/**/*.ts",
         "src/apps/docs/lib/anchoring/**/*.ts",
         "src/apps/docs/lib/outline/**/*.ts",
