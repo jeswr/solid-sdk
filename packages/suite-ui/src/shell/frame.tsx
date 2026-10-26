@@ -1,7 +1,15 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 "use client";
 
-import { type ReactNode, useEffect, useId, useRef, useSyncExternalStore } from "react";
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useSyncExternalStore,
+} from "react";
 import { DetailsPane, type DetailsPaneProps } from "./details-pane.js";
 import { SidebarNav, type SidebarNavProps } from "./navigation.js";
 import { isShellShortcut, type ShellPreferences, shellDocumentTitle } from "./preferences.js";
@@ -47,14 +55,28 @@ export function ShellFrame({
 }: ShellFrameProps) {
   const desktop = useSyncExternalStore(subscribe, desktopSnapshot, serverSnapshot);
   const frame = useRef<HTMLDivElement>(null);
+  const sidebarRegion = useRef<HTMLDivElement>(null);
+  const detailsRegion = useRef<HTMLDivElement>(null);
   const sidebarId = useId();
   const detailsId = useId();
   const sidebarOpen = preferences.sidebarOpen ?? desktop;
   const detailsOpen = Boolean(details) && (preferences.detailsOpen ?? desktop);
   const setSidebar = (open: boolean) => onPreferencesChange({ ...preferences, sidebarOpen: open });
   const setDetails = (open: boolean) => onPreferencesChange({ ...preferences, detailsOpen: open });
-  const restoreFocus = (label: string) =>
-    frame.current?.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)?.focus();
+  const restoreFocus = useCallback(
+    (label: string) =>
+      frame.current?.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)?.focus(),
+    [],
+  );
+
+  useLayoutEffect(() => {
+    // Radix handles sheet focus. Desktop regions remain mounted while hidden.
+    if (!desktop) return;
+    if (!sidebarOpen && sidebarRegion.current?.contains(document.activeElement))
+      restoreFocus("Toggle sidebar");
+    if (!detailsOpen && detailsRegion.current?.contains(document.activeElement))
+      restoreFocus("Toggle details pane");
+  }, [desktop, sidebarOpen, detailsOpen, restoreFocus]);
 
   useEffect(() => {
     document.title = shellDocumentTitle(pageTitle, topBar.appName);
@@ -111,6 +133,7 @@ export function ShellFrame({
       )}
       <div className="suite-rail-slot">{rail}</div>
       <div
+        ref={sidebarRegion}
         id={desktop ? sidebarId : undefined}
         className="suite-sidebar-slot"
         hidden={!desktop || !sidebarOpen}
@@ -134,6 +157,7 @@ export function ShellFrame({
         {children}
       </main>
       <div
+        ref={detailsRegion}
         id={desktop ? detailsId : undefined}
         className="suite-details-slot"
         hidden={!desktop || !detailsOpen}

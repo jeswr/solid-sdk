@@ -169,3 +169,22 @@ test("main scrolls independently and focus stays clear of both bars", async ({ p
   expect(await page.evaluate(() => window.scrollY)).toBe(0);
   await accessible(page);
 });
+
+test("collapsing a focused region returns focus to its toggle", async ({ page }, info) => {
+  await ready(page);
+  const sidebar = page.getByRole("button", { name: "Toggle sidebar" });
+  const details = page.getByRole("button", { name: "Toggle details pane" });
+  if ((await sidebar.getAttribute("aria-expanded")) === "false") await sidebar.click();
+  await page.getByRole("link", { name: "Work 12" }).focus();
+  await page.keyboard.press("[");
+  await expect(sidebar).toBeFocused();
+  await expect(sidebar).toHaveAttribute("aria-expanded", "false");
+
+  if ((await details.getAttribute("aria-expanded")) === "false") await details.click();
+  await page.getByRole("complementary").getByRole("link", { name: "Open file" }).focus();
+  await page.keyboard.press("]");
+  await expect(details).toBeFocused();
+  await expect(details).toHaveAttribute("aria-expanded", "false");
+  await capture(page, info, "shell-focus-after-collapse");
+  await reflow(page);
+});

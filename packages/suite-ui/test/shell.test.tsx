@@ -143,6 +143,28 @@ describe("shell layout", () => {
     consumed.preventDefault();
     expect(isShellShortcut(consumed, document.body)).toBe(false);
   });
+  it("returns focus from collapsed desktop regions to their toggles", () => {
+    render(<Frame />);
+    const sidebarLink = screen.getByRole("link", { name: "Work" });
+    sidebarLink.focus();
+    fireEvent.keyDown(sidebarLink, { key: "[" });
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Toggle sidebar" }));
+
+    const detailsClose = screen.getByRole("button", { name: "Close details" });
+    detailsClose.focus();
+    fireEvent.keyDown(detailsClose, { key: "]" });
+    expect(document.activeElement).toBe(
+      screen.getByRole("button", { name: "Toggle details pane" }),
+    );
+  });
+  it("preserves main content focus when collapsing desktop regions", () => {
+    render(<Frame />);
+    const main = screen.getByRole("main");
+    main.focus();
+    fireEvent.keyDown(main, { key: "[" });
+    fireEvent.keyDown(main, { key: "]" });
+    expect(document.activeElement).toBe(main);
+  });
   it("does not take shortcuts from another dialog", () => {
     render(
       <>
