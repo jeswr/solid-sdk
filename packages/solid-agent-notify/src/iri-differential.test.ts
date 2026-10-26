@@ -3,8 +3,9 @@ import {
   escapeIri as sharedEscapeIri,
   safeHttpIri as sharedSafeHttpIri,
 } from "@jeswr/rdf-serialize";
+import { DataFactory } from "n3";
 import { describe, expect, it } from "vitest";
-import { escapeIri, safeHttpIri } from "./activity.js";
+import { ActivityDoc, buildActivity, escapeIri, safeHttpIri } from "./activity.js";
 
 // Frozen from 0d884208, retained only as differential oracles.
 const IRIREF_FORBIDDEN_CHARS: ReadonlySet<number> = new Set(
@@ -97,10 +98,14 @@ for (const char of forbidden) {
 }
 
 describe("notification IRI guard differentials", () => {
+  it("re-exports the audited guards without wrappers", () => {
+    expect(escapeIri).toBe(sharedEscapeIri);
+    expect(safeHttpIri).toBe(sharedSafeHttpIri);
+  });
   it.each(corpus)("compares both historical copies with the shared guards for %j", (value) => {
     const old = legacySafeHttpIri(value);
     const shared = sharedSafeHttpIri(value);
-    expect(safeHttpIri(value)).toBe(old);
+    expect(safeHttpIri(value)).toBe(shared);
     // Canonical acceptance must be a subset of the old notification guard.
     if (shared !== undefined) expect(shared).toBe(old);
     if (value !== undefined) {
@@ -115,5 +120,14 @@ describe("notification IRI guard differentials", () => {
   ])("records the stricter shared authority requirement for %s", (value) => {
     expect(legacySafeHttpIri(value)).toBe(value);
     expect(sharedSafeHttpIri(value)).toBeUndefined();
+    expect(safeHttpIri(value)).toBeUndefined();
+    const store = buildActivity({ type: "Announce", actor: value, object: value, target: value });
+    const doc = new ActivityDoc("#it", store, DataFactory);
+    expect(doc.actor).toBeUndefined();
+    expect(doc.activityObject).toBeUndefined();
+    expect(doc.target).toBeUndefined();
+    expect(() =>
+      buildActivity({ type: "Announce", actor: "https://example.org/#me" }, value),
+    ).toThrow(TypeError);
   });
 });

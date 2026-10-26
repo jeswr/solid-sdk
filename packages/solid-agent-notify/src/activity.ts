@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-5
 /**
  * activity.ts — the typed ActivityStreams 2.0 (AS2.0) notification model + a
@@ -8,7 +9,7 @@
  * terms); {@link buildActivity} turns it into an n3 `Store`; {@link ActivityDoc}
  * is the typed view used both to write (send) and read (inbox parse).
  */
-import { serialize } from "@jeswr/rdf-serialize";
+import { safeHttpIri, serialize } from "@jeswr/rdf-serialize";
 import {
   LiteralAs,
   LiteralFrom,
@@ -54,95 +55,8 @@ export function isHttpIri(value: string | undefined): boolean {
   }
 }
 
-/**
- * The characters Turtle's `IRIREF` production forbids inside `<…>` — the full
- * `[^#x00-#x20<>"{}|^`\] ` complement, i.e. every code point U+0000–U+0020
- * (controls incl. SPACE, handled numerically in {@link escapeIri}) plus the
- * NON-control set below. `n3.Writer` escapes none of these, so any that reach a
- * NamedNode's value are emitted VERBATIM and can terminate the `<…>`.
- */
-const IRIREF_FORBIDDEN_CHARS: ReadonlySet<number> = new Set(
-  ["<", ">", '"', "{", "}", "|", "^", "`", "\\"].map((c) => c.charCodeAt(0)),
-);
-
-/**
- * LEXICAL, scheme-agnostic escape for an IRI destined for ANY term position:
- * percent-encode EXACTLY the characters the Turtle IRIREF grammar forbids
- * (U+0000–U+0020 plus `< > " { } | ^ ` \`) and NOTHING else. A well-formed IRI —
- * which contains none of those — round-trips BYTE-FOR-BYTE unchanged (so default
- * ports, host case, dot-segments etc. are preserved; RDF identity is lexical),
- * while an injection payload (whose `>`, SPACE, `<`, `"` would break out of the
- * `<…>` delimiters) is rendered inert. Mirrors the `@jeswr/federation-registry`
- * `escapeIri` reference implementation.
- */
-export function escapeIri(value: string): string {
-  let out = "";
-  for (const ch of value) {
-    const code = ch.codePointAt(0) as number;
-    if (code <= 0x20 || IRIREF_FORBIDDEN_CHARS.has(code)) {
-      out += `%${code.toString(16).toUpperCase().padStart(2, "0")}`;
-    } else {
-      out += ch;
-    }
-  }
-  return out;
-}
-
-/**
- * Validate an untrusted string as a SAFE absolute http(s) IRI and return its
- * LEXICAL, Turtle-safe form, or `undefined` if it is not a safe http(s) IRI.
- *
- * SECURITY (Turtle IRI-injection). `n3.Writer` does NOT escape IRIs: a string fed
- * straight to `NamedNodeFrom.string` is emitted VERBATIM between `<…>`, so a raw
- * `>` / space / `<` breaks out of the IRI and injects attacker-chosen triples into
- * the serialised document — which this package then POSTs to a peer's LDN inbox.
- * `isHttpIri` only returns a boolean and the callers used to write the RAW value,
- * so a hostile actor/target/assignee field could smuggle triples into a victim's
- * inbox. Routing every WRITE-side IRI through this validator closes that.
- *
- * We validate STRUCTURE + SCHEME via the WHATWG `URL` parser, but return the
- * LEXICALLY-preserved input via {@link escapeIri} rather than `URL.href`, because
- * RDF identity is lexical: `.href` would silently canonicalise the IRI (drop a
- * default port, lowercase the host, collapse dot-segments) and change which
- * resource the triple is about. {@link escapeIri} touches only the IRIREF-forbidden
- * characters, so the result contains no `<…>`-terminating character yet denotes the
- * exact IRI the caller supplied.
- *
- * The order is ESCAPE-FIRST, then VALIDATE-THE-ESCAPED, then EMIT-THE-ESCAPED —
- * the ONLY order that closes the WHATWG-stripping divergence. The URL parser both
- * TRIMS leading/trailing C0-control-or-space AND REMOVES *embedded* tab/newline/CR
- * (U+0009/000A/000D) from ANYWHERE before parsing, so validating the RAW value and
- * emitting an escaped copy could disagree (`ht\ntps://x` parses as `https://x` yet
- * `escapeIri` would emit `ht%0Atps://x`). By percent-encoding the FULL forbidden
- * set — including every C0 control (tab/nl/cr → `%09`/`%0A`/`%0D`) — BEFORE
- * `new URL()`, the parser has nothing left to strip, so the string we validate is
- * byte-identical to the string we emit. A leading/trailing C0-or-space is still
- * rejected outright (rather than emitted as a `%XX`-suffixed IRI) so a stray edge
- * byte can't silently change which resource the IRI denotes.
- */
-export function safeHttpIri(value: string | undefined): string | undefined {
-  if (typeof value !== "string") return undefined;
-  // Reject a leading/trailing C0-control-or-space (code point <= U+0020) outright:
-  // we do NOT want to emit a `%20`/`%0A`-suffixed IRI for a stray edge byte. (A
-  // char-code check, not a control-character regex, which the linter forbids; every
-  // such byte is in the BMP single-unit range, so `charCodeAt` is sufficient.)
-  const firstCode = value.charCodeAt(0);
-  const lastCode = value.charCodeAt(value.length - 1);
-  if (firstCode <= 0x20 || lastCode <= 0x20) return undefined;
-  // ESCAPE FIRST — percent-encode the full IRIREF-forbidden set (incl. every C0
-  // control) so the WHATWG parser cannot STRIP embedded tab/nl/cr out from under us.
-  const escaped = escapeIri(value);
-  let u: URL;
-  try {
-    u = new URL(escaped);
-  } catch {
-    return undefined;
-  }
-  if (u.protocol !== "http:" && u.protocol !== "https:") return undefined;
-  // Emit EXACTLY what we validated (the escaped string), never `u.href` — RDF
-  // identity is lexical, so default ports / host case / dot-segments are preserved.
-  return escaped;
-}
+// Preserve the public names while using the single audited implementation.
+export { escapeIri, safeHttpIri } from "@jeswr/rdf-serialize";
 
 /**
  * A safe same-document `#`-fragment: starts with `#` and contains ONLY RFC 3987

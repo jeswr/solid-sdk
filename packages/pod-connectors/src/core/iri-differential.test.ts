@@ -1,7 +1,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { escapeIri, safeIri as sharedSafeIri } from "@jeswr/rdf-serialize";
+import { DataFactory, Store } from "n3";
 import { describe, expect, it } from "vitest";
-import { safeIri } from "./vocab.js";
+import { PodThing, safeIri } from "./vocab.js";
 
 // Frozen from 0d884208, retained only as a differential oracle.
 // biome-ignore lint/suspicious/noControlCharactersInRegex: historical IRIREF exclusion set
@@ -71,7 +72,7 @@ describe("safeIri differential: preserve rejection of raw forbidden characters",
   it.each(corpus)("compares historical and shared results for %j", (value) => {
     const old = legacySafeIri(value);
     const shared = sharedSafeIri(value);
-    expect(safeIri(value)).toBe(old);
+    expect(safeIri(value)).toBe(old === undefined ? undefined : shared);
     if (old !== undefined && shared !== undefined) expect(shared).toBe(old);
     if (old === undefined && shared !== undefined) {
       // QUESTIONS.md Q2: retain drop-on-invalid instead of accepting an escaped value.
@@ -93,5 +94,12 @@ describe("safeIri differential: preserve rejection of raw forbidden characters",
   ])("records stricter absolute-IRI validation for %j", (value) => {
     expect(legacySafeIri(value)).toBe(value);
     expect(sharedSafeIri(value)).toBeUndefined();
+    expect(safeIri(value)).toBeUndefined();
+    const store = new Store();
+    const thing = new PodThing("https://pod.example/item#it", store, DataFactory);
+    thing.sourceUrl = "https://example.org/valid";
+    thing.sourceUrl = value;
+    expect(thing.sourceUrl).toBeUndefined();
+    expect(store.size).toBe(0);
   });
 });
