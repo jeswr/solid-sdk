@@ -266,6 +266,13 @@ describe("Vercel ignored-build step", () => {
     expect(result.stdout).toContain("VERCEL_GIT_PREVIOUS_SHA is unset");
   });
 
+  it("builds on a same-commit redeploy, which may carry environment changes", () => {
+    const { root, base } = fixture();
+    const result = ignore(root, base);
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain("same-commit redeploy");
+  });
+
   it("builds when git is unavailable", () => {
     const { root, base } = fixture();
     const result = ignore(root, base, packageName, {

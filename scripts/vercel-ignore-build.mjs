@@ -94,6 +94,10 @@ function ignoreBuild(root, name) {
     throw new Error("VERCEL_GIT_PREVIOUS_SHA is unavailable in this clone");
   }
   const base = commit.stdout.trim();
+  const head = git(["rev-parse", "--verify", "HEAD^{commit}"]);
+  if (head.error || head.status !== 0) throw new Error("HEAD is unavailable in this clone");
+  // A same-commit redeploy exists to pick up environment or settings changes the diff can't see.
+  if (head.stdout.trim() === base) throw new Error("same-commit redeploy");
   const ancestor = git(["merge-base", "--is-ancestor", base, "HEAD"]);
   if (ancestor.error || ancestor.status !== 0) {
     throw new Error("VERCEL_GIT_PREVIOUS_SHA is not a known ancestor of HEAD");
