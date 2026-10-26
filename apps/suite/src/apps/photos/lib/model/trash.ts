@@ -15,15 +15,23 @@ import { DataFactory } from "n3";
 import type { PhotoStorage } from "./io.js";
 import { buildPhoto, type Photo, parsePhoto } from "./photograph.js";
 import { documentUrl, httpIri, identifier, isoDate } from "./validation.js";
-import { RDF_TYPE } from "./vocab.js";
+import { RDF_TYPE, SCHEMA } from "./vocab.js";
 
 const PROV = "http://www.w3.org/ns/prov#";
 export interface TrashRecord {
   originalUrl: string;
   trashedAt: string;
   actor: string;
+  /** Absent on ordinary/legacy trash records. Purging permanently forbids restore. */
+  state?: "restoring" | "purging";
 }
 export class TrashDoc extends TermWrapper {
+  get state(): string | undefined {
+    return OptionalFrom.subjectPredicate(this, `${SCHEMA}creativeWorkStatus`, LiteralAs.string);
+  }
+  set state(value: string | undefined) {
+    OptionalAs.object(this, `${SCHEMA}creativeWorkStatus`, value, LiteralFrom.string);
+  }
   get types(): Set<string> {
     return SetFrom.subjectPredicate(this, RDF_TYPE, NamedNodeAs.string, NamedNodeFrom.string);
   }
@@ -63,6 +71,7 @@ export function buildTrash(url: string, photo: Photo, record: TrashRecord) {
   doc.types.add(`${PROV}Entity`);
   doc.originalUrl = record.originalUrl;
   doc.actor = record.actor;
+  doc.state = record.state;
   doc.trashedAt = new Date(isoDate(record.trashedAt));
   return dataset;
 }
@@ -73,6 +82,9 @@ export function parseTrash(
   const doc = new TrashDoc(`${documentUrl(url)}#trash`, dataset, DataFactory);
   if (!doc.types.has(`${PROV}Entity`) || !doc.originalUrl || !doc.actor || !doc.trashedAt)
     throw new TypeError("Invalid trash record");
+  const state = doc.state;
+  if (state !== undefined && state !== "restoring" && state !== "purging")
+    throw new TypeError("Invalid trash state");
   const photo = parsePhoto(doc.originalUrl, dataset);
   if (!photo) throw new TypeError("Missing trashed photograph");
   return {
@@ -81,6 +93,7 @@ export function parseTrash(
       originalUrl: documentUrl(doc.originalUrl),
       actor: httpIri(doc.actor),
       trashedAt: doc.trashedAt.toISOString(),
+      ...(state !== undefined ? { state } : {}),
     },
   };
 }
@@ -111,9 +124,23 @@ export async function restorePhoto(io: PhotoStorage, url: string): Promise<strin
   const { dataset, etag } = await io.read(url);
   const { photo, record } = parseTrash(url, dataset);
   const match = requireEtag(etag);
+  if (record.state === "purging") throw new TypeError("Cannot restore a purging photo");
+  const claimed = await claim(io, url, dataset, match, "restoring");
   await io.savePhoto(record.originalUrl, photo, { create: true });
-  await io.remove(url, match);
+  await io.remove(url, claimed);
   return record.originalUrl;
+}
+
+/** A conditional state write fences stale readers before any side effects. */
+async function claim(
+  io: PhotoStorage,
+  url: string,
+  dataset: DatasetCore,
+  etag: string,
+  state: NonNullable<TrashRecord["state"]>,
+): Promise<string> {
+  new TrashDoc(`${documentUrl(url)}#trash`, dataset, DataFactory).state = state;
+  return requireEtag((await io.write(url, dataset, { etag })).etag);
 }
 
 async function requireMissing(io: PhotoStorage, originalUrl: string): Promise<void> {
@@ -143,8 +170,10 @@ export async function purgePhoto(io: PhotoStorage, url: string): Promise<void> {
   ) {
     throw new TypeError("Cannot purge binaries outside the photo's managed paths");
   }
+  if (record.state === "restoring") throw new TypeError("Cannot purge a restoring photo");
   await requireMissing(io, record.originalUrl);
+  const claimed = await claim(io, url, dataset, match, "purging");
   await io.removeBinary(photo.contentUrl);
   if (photo.thumbnailUrl) await io.removeBinary(photo.thumbnailUrl);
-  await io.remove(url, match);
+  await io.remove(url, claimed);
 }

@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { DataFactory, Store } from "n3";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { photoStorage } from "../../src/apps/photos/lib/model/io.js";
 import { PhotographDoc } from "../../src/apps/photos/lib/model/photograph.js";
 import {
@@ -141,4 +141,93 @@ it("refuses to purge a recovery copy while the source still exists or cannot be 
   await expect(purgePhoto(io, url)).rejects.toMatchObject({ status: 403 });
   pod.failures.set(`GET ${originalUrl}`, 410);
   await purgePhoto(io, url);
+});
+
+it.each([
+  "restore",
+  "purge",
+] as const)("fences a stale %s before it can change metadata or binaries", async (loser) => {
+  const pod = mockPod();
+  const io = photoStorage(pod.fetch, storage);
+  await io.write(url, buildTrash(url, photo, record), { create: true });
+  for (const binary of [photo.contentUrl, photo.thumbnailUrl])
+    pod.files.set(binary, { body: new Blob(), type: "image/jpeg", etag: '"binary"' });
+  let resume!: () => void;
+  let arrived!: () => void;
+  const paused = new Promise<void>((resolve) => {
+    resume = resolve;
+  });
+  const reached = new Promise<void>((resolve) => {
+    arrived = resolve;
+  });
+  const write = io.write;
+  vi.spyOn(io, "write").mockImplementationOnce(async (...args) => {
+    arrived();
+    await paused;
+    return write(...args);
+  });
+  const losingOperation = loser === "restore" ? restorePhoto : purgePhoto;
+  const winningOperation = loser === "restore" ? purgePhoto : restorePhoto;
+  const outcome = expect(losingOperation(io, url)).rejects.toMatchObject({ status: 412 });
+  await reached;
+  await winningOperation(io, url);
+  resume();
+  await outcome;
+  expect(pod.files.has(originalUrl)).toBe(loser === "purge");
+  expect(pod.files.has(photo.contentUrl)).toBe(loser === "purge");
+  expect(pod.files.has(photo.thumbnailUrl)).toBe(loser === "purge");
+  expect(pod.files.has(url)).toBe(false);
+});
+
+it("blocks purge while restore owns the record and permits a create-only restore retry", async () => {
+  const pod = mockPod();
+  const io = photoStorage(pod.fetch, storage);
+  await io.write(url, buildTrash(url, photo, record), { create: true });
+  pod.failures.set(`PUT ${originalUrl}`, 503);
+  await expect(restorePhoto(io, url)).rejects.toMatchObject({ status: 503 });
+  expect(parseTrash(url, (await io.read(url)).dataset).record.state).toBe("restoring");
+  await expect(purgePhoto(io, url)).rejects.toThrow("restoring");
+  pod.failures.delete(`PUT ${originalUrl}`);
+  await restorePhoto(io, url);
+  expect((await io.loadPhoto(originalUrl)).photo).toEqual(photo);
+});
+
+it("persists purging after partial deletion, forbids restore, and permits purge retry", async () => {
+  const pod = mockPod();
+  const io = photoStorage(pod.fetch, storage);
+  await io.write(url, buildTrash(url, photo, record), { create: true });
+  for (const binary of [photo.contentUrl, photo.thumbnailUrl])
+    pod.files.set(binary, { body: new Blob(), type: "image/jpeg", etag: '"binary"' });
+  pod.failures.set(`DELETE ${photo.thumbnailUrl}`, 503);
+  await expect(purgePhoto(io, url)).rejects.toMatchObject({ status: 503 });
+  expect(pod.files.has(photo.contentUrl)).toBe(false);
+  expect(pod.files.has(photo.thumbnailUrl)).toBe(true);
+  expect(parseTrash(url, (await io.read(url)).dataset).record.state).toBe("purging");
+  await expect(restorePhoto(io, url)).rejects.toThrow("purging");
+  expect(pod.files.has(originalUrl)).toBe(false);
+  pod.failures.delete(`DELETE ${photo.thumbnailUrl}`);
+  await purgePhoto(io, url);
+  expect(pod.files.has(url)).toBe(false);
+});
+
+it("requires the claim write's ETag before any restore or purge side effects", async () => {
+  const pod = mockPod();
+  const io = photoStorage(pod.fetch, storage);
+  await io.write(url, buildTrash(url, photo, record), { create: true });
+  vi.spyOn(io, "write").mockResolvedValue({ etag: null });
+  await expect(restorePhoto(io, url)).rejects.toThrow("ETag");
+  await expect(purgePhoto(io, url)).rejects.toThrow("ETag");
+  expect(pod.files.has(originalUrl)).toBe(false);
+  expect(pod.fetch.mock.calls.some(([, init]) => init?.method === "DELETE")).toBe(false);
+});
+
+it("round-trips claimed states and rejects unknown persisted states", () => {
+  for (const state of ["restoring", "purging"] as const) {
+    const claimed = { ...record, state };
+    expect(parseTrash(url, buildTrash(url, photo, claimed))).toEqual({ photo, record: claimed });
+  }
+  const dataset = buildTrash(url, photo, record);
+  const doc = new TrashDoc(`${url}#trash`, dataset, DataFactory);
+  doc.state = "invalid";
+  expect(() => parseTrash(url, dataset)).toThrow("Invalid trash state");
 });
