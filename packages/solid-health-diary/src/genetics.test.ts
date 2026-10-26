@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 //
 // GeneticSummary round-trip + the PRIVACY invariant: the model can hold ONLY the
@@ -84,7 +85,7 @@ describe("interpretation is REQUIRED (the negative-predictive framing guardrail)
 
   it("parseGeneticSummary rejects a summary with no diet:geneticInterpretation", () => {
     const ttl = `
-      @prefix diet: <https://w3id.org/jeswr/sectors/health/diet#> .
+      @prefix diet: <https://jeswr.org/ns/sectors/health/diet#> .
       <${URL_}#it> a diet:GeneticSummary ; diet:enteredManually true .
     `;
     // Parse via the raw dataset path (no interpretation present).
@@ -154,14 +155,14 @@ describe("buildGeneticSummary fail-closed on an rsid-less HLA marker (SHACL MUST
       /interpretation|REQUIRED/i,
     );
     const ttl = `
-      @prefix diet: <https://w3id.org/jeswr/sectors/health/diet#> .
+      @prefix diet: <https://jeswr.org/ns/sectors/health/diet#> .
       <${URL_}#it> a diet:GeneticSummary ; diet:geneticInterpretation "   " .`;
     expect(await parseGeneticSummaryTtl(URL_, ttl)).toBeUndefined();
   });
 
   it("parseGeneticSummary DROPS a marker with a whitespace-only diet:rsid (mirror of the builder)", async () => {
     const ttl = `
-      @prefix diet: <https://w3id.org/jeswr/sectors/health/diet#> .
+      @prefix diet: <https://jeswr.org/ns/sectors/health/diet#> .
       <${URL_}#it> a diet:GeneticSummary ;
         diet:geneticInterpretation ${JSON.stringify(NEG_PREDICTIVE)} ;
         diet:hlaMarker <${URL_}#marker-0> , <${URL_}#marker-1> .
@@ -195,7 +196,7 @@ describe("consent guardrail — diet:consentGiven MUST be true to write (fail-cl
 
   it("parseGeneticSummary REJECTS a stored summary whose consentGiven is present-but-false", async () => {
     const ttl = `
-      @prefix diet: <https://w3id.org/jeswr/sectors/health/diet#> .
+      @prefix diet: <https://jeswr.org/ns/sectors/health/diet#> .
       @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
       <${URL_}#it> a diet:GeneticSummary ;
         diet:geneticInterpretation ${JSON.stringify(NEG_PREDICTIVE)} ;
@@ -205,7 +206,7 @@ describe("consent guardrail — diet:consentGiven MUST be true to write (fail-cl
 
   it("parseGeneticSummary ALLOWS a pre-refinement summary with NO consentGiven triple (back-compat)", async () => {
     const ttl = `
-      @prefix diet: <https://w3id.org/jeswr/sectors/health/diet#> .
+      @prefix diet: <https://jeswr.org/ns/sectors/health/diet#> .
       <${URL_}#it> a diet:GeneticSummary ;
         diet:geneticInterpretation ${JSON.stringify(NEG_PREDICTIVE)} ;
         diet:enteredManually true .`;
@@ -270,7 +271,7 @@ describe("NPV-only guardrail — 'risk-haplotype-absent' requires complete cover
 
   it("parseGeneticSummary REJECTS a stored summary asserting risk-haplotype-absent WITHOUT complete coverage", async () => {
     const ttl = `
-      @prefix diet: <https://w3id.org/jeswr/sectors/health/diet#> .
+      @prefix diet: <https://jeswr.org/ns/sectors/health/diet#> .
       <${URL_}#it> a diet:GeneticSummary ;
         diet:geneticInterpretation ${JSON.stringify(NEG_PREDICTIVE)} ;
         diet:consentGiven true ;
@@ -341,7 +342,7 @@ describe("provenance-consistency guardrail — sourceType vs enteredManually mus
 
   it("parseGeneticSummary REJECTS stored data whose sourceType and enteredManually contradict", async () => {
     const ttl = `
-      @prefix diet: <https://w3id.org/jeswr/sectors/health/diet#> .
+      @prefix diet: <https://jeswr.org/ns/sectors/health/diet#> .
       <${URL_}#it> a diet:GeneticSummary ;
         diet:geneticInterpretation ${JSON.stringify(NEG_PREDICTIVE)} ;
         diet:consentGiven true ;
@@ -353,7 +354,7 @@ describe("provenance-consistency guardrail — sourceType vs enteredManually mus
 
   it("parseGeneticSummary REJECTS a non-manual sourceType with enteredManually:true", async () => {
     const ttl = `
-      @prefix diet: <https://w3id.org/jeswr/sectors/health/diet#> .
+      @prefix diet: <https://jeswr.org/ns/sectors/health/diet#> .
       <${URL_}#it> a diet:GeneticSummary ;
         diet:geneticInterpretation ${JSON.stringify(NEG_PREDICTIVE)} ;
         diet:consentGiven true ;
@@ -364,7 +365,7 @@ describe("provenance-consistency guardrail — sourceType vs enteredManually mus
 
   it("parseGeneticSummary ALLOWS an agreeing stored pair (manual + enteredManually:true)", async () => {
     const ttl = `
-      @prefix diet: <https://w3id.org/jeswr/sectors/health/diet#> .
+      @prefix diet: <https://jeswr.org/ns/sectors/health/diet#> .
       <${URL_}#it> a diet:GeneticSummary ;
         diet:geneticInterpretation ${JSON.stringify(NEG_PREDICTIVE)} ;
         diet:consentGiven true ;
@@ -436,7 +437,7 @@ describe("rollup↔marker consistency guardrail — risk-haplotype-absent vs a p
 
   it("parseGeneticSummary REJECTS a stored risk-haplotype-absent summary with a PRESENT DQ2.5 marker", async () => {
     const ttl = `
-      @prefix diet: <https://w3id.org/jeswr/sectors/health/diet#> .
+      @prefix diet: <https://jeswr.org/ns/sectors/health/diet#> .
       <${URL_}#it> a diet:GeneticSummary ;
         diet:geneticInterpretation ${JSON.stringify(NEG_PREDICTIVE)} ;
         diet:consentGiven true ;
@@ -453,7 +454,7 @@ describe("rollup↔marker consistency guardrail — risk-haplotype-absent vs a p
 
   it("parseGeneticSummary ALLOWS a stored risk-haplotype-absent summary with an ABSENT DQ8 marker", async () => {
     const ttl = `
-      @prefix diet: <https://w3id.org/jeswr/sectors/health/diet#> .
+      @prefix diet: <https://jeswr.org/ns/sectors/health/diet#> .
       <${URL_}#it> a diet:GeneticSummary ;
         diet:geneticInterpretation ${JSON.stringify(NEG_PREDICTIVE)} ;
         diet:consentGiven true ;
@@ -474,7 +475,7 @@ describe("rollup↔marker consistency guardrail — risk-haplotype-absent vs a p
     // is DROPPED from the surfaced markers — the consistency check must still see it,
     // so the summary must fail closed rather than surface a false "coeliac unlikely".
     const ttl = `
-      @prefix diet: <https://w3id.org/jeswr/sectors/health/diet#> .
+      @prefix diet: <https://jeswr.org/ns/sectors/health/diet#> .
       <${URL_}#it> a diet:GeneticSummary ;
         diet:geneticInterpretation ${JSON.stringify(NEG_PREDICTIVE)} ;
         diet:consentGiven true ;

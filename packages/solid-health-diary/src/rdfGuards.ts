@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 /**
  * Fail-closed parse guards over an RDF/JS `DatasetCore`.
@@ -23,6 +24,7 @@
 
 import type { DatasetCore } from "@rdfjs/types";
 import { DataFactory } from "n3";
+import { vocabularyAliases } from "./vocab.js";
 
 const { namedNode } = DataFactory;
 
@@ -41,12 +43,14 @@ export function assertSubjectSingletons(
   const s = namedNode(subject);
   for (const predicate of singletonPredicates) {
     let count = 0;
-    for (const _q of dataset.match(s, namedNode(predicate), null)) {
-      if (++count > 1) {
-        throw new Error(
-          `duplicate value for single-valued predicate <${predicate}> on <${subject}> ` +
-            "(sh:maxCount 1) — refusing to parse an ambiguous record with an arbitrary value.",
-        );
+    for (const iri of vocabularyAliases(predicate)) {
+      for (const _q of dataset.match(s, namedNode(iri), null)) {
+        if (++count > 1) {
+          throw new Error(
+            `duplicate value for single-valued predicate <${predicate}> on <${subject}> ` +
+              "(sh:maxCount 1) — refusing to parse an ambiguous record with an arbitrary value.",
+          );
+        }
       }
     }
   }

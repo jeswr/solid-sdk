@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 /**
  * Vocabulary IRIs for the shared multi-intolerance health-diary model.
@@ -11,10 +12,10 @@
  *   (the super-class of `diet:Meal` — a real schema.org type, `⊑ schema:Event`;
  *   note schema.org has NO `schema:Meal`), `schema:name`, `schema:startTime`,
  *   `schema:endTime`, `schema:location`, `schema:image`.
- * - **`health:` — the suite health sector** (`https://w3id.org/jeswr/sectors/health#`,
+ * - **`health:` — the suite health sector** (`https://jeswr.org/ns/sectors/health#`,
  *   FHIR/SNOMED/LOINC-aligned, gUFO-rooted): `health:Patient` (the pod owner),
  *   `health:Observation` (the super-class a `diet:Symptom` is stamped with).
- * - **`core:` — the suite gUFO core** (`https://w3id.org/jeswr/core#`): `core:about`
+ * - **`core:` — the suite gUFO core** (`https://jeswr.org/ns/core#`): `core:about`
  *   links a record entry to the `health:Patient` it concerns (each diary entry is
  *   `core:about` the pod-owner Patient — DESIGN §2.2).
  * - **`prov:` — W3C PROV-O**: `prov:wasDerivedFrom` (an Exposure/Conclusion is
@@ -27,14 +28,14 @@
  *   SKOS concept), `skos:prefLabel`.
  *
  * ### `diet:` — the new nutrition/intolerance namespace
- * `https://w3id.org/jeswr/sectors/health/diet#` — a SUB-MODULE of the health
+ * `https://jeswr.org/ns/sectors/health/diet#` — a SUB-MODULE of the health
  * sector (so it inherits Core-rooting). The formal ontology + SHACL are authored
  * in `solid-federation-vocab` (coeliac-app Brief 1B) **in parallel**; this package
  * uses the term IRIs DESIGN §2.2 specifies. Where DESIGN named a concept but not
  * its exact IRI form, the term is marked `INVENTED (1B-reconcile)` below and
  * listed in the package's hand-off report so 1B and this package converge before
- * the committed `dist/` is treated as final. The w3id redirect for the namespace
- * is a `needs:user` item.
+ * the built output is treated as final. Writers use the canonical namespace;
+ * legacy aliases remain readable.
  */
 
 // --- Namespaces ---------------------------------------------------------------
@@ -42,15 +43,22 @@
 /** schema.org (canonical http scheme) — `schema:FoodEvent`, `schema:startTime`, … */
 export const SCHEMA = "http://schema.org/";
 /** The suite health sector — `health:Patient`, `health:Observation`. */
-export const HEALTH = "https://w3id.org/jeswr/sectors/health#";
+// Source: @jeswr/suite-vocab NS.HEALTH.
+export const HEALTH = "https://jeswr.org/ns/sectors/health#";
 /** The suite gUFO core — `core:about` (record → the Person/Patient it concerns). */
-export const CORE = "https://w3id.org/jeswr/core#";
+// Source: @jeswr/suite-vocab NS.CORE.
+export const CORE = "https://jeswr.org/ns/core#";
 /**
  * The NEW nutrition/intolerance namespace, a sub-module of the health sector.
- * Formal ontology authored in `solid-federation-vocab` (Brief 1B); w3id redirect
- * is a `needs:user` item.
+ * Formal ontology authored in `solid-federation-vocab` (Brief 1B).
  */
-export const DIET = "https://w3id.org/jeswr/sectors/health/diet#";
+// Source: @jeswr/suite-vocab NS.HEALTH_DIET.
+export const DIET = "https://jeswr.org/ns/sectors/health/diet#";
+/** Read-only legacy aliases; writers use the canonical bases above. */
+export const LEGACY_HEALTH_NS = "https://w3id.org/jeswr/sectors/health#";
+export const LEGACY_CORE_NS = "https://w3id.org/jeswr/core#";
+export const LEGACY_DIET_NS = "https://w3id.org/jeswr/sectors/health/diet#";
+
 /** W3C PROV-O — `prov:wasDerivedFrom`, `prov:wasGeneratedBy`. */
 export const PROV = "http://www.w3.org/ns/prov#";
 /** Dublin Core Terms — `dcterms:created`/`modified`/`source`. */
@@ -223,7 +231,20 @@ export function triggerIri(slug: TriggerSlug): string {
  * not one of the canonical trigger concepts. The inverse of {@link triggerIri}.
  */
 export function triggerSlugFromIri(iri: string): TriggerSlug | undefined {
-  if (!iri.startsWith(DIET)) return undefined;
-  const local = iri.slice(DIET.length);
+  const base = [DIET, LEGACY_DIET_NS].find((ns) => iri.startsWith(ns));
+  if (!base) return undefined;
+  const local = iri.slice(base.length);
   return isTriggerSlug(local) ? local : undefined;
+}
+
+/** Predicate/class alternatives, canonical first. Resource identifiers stay unchanged. */
+export function vocabularyAliases(iri: string): readonly string[] {
+  for (const [canonical, legacy] of [
+    [DIET, LEGACY_DIET_NS],
+    [HEALTH, LEGACY_HEALTH_NS],
+    [CORE, LEGACY_CORE_NS],
+  ] as const) {
+    if (iri.startsWith(canonical)) return [iri, legacy + iri.slice(canonical.length)];
+  }
+  return [iri];
 }

@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 //
 // Round-trip (parse∘build == identity) + untrusted-input discipline for the
@@ -96,7 +97,7 @@ describe("Meal round-trip (parse∘build == identity)", () => {
 
   it("rejects a Meal with NO ingestion time (never coerces to the 1970 epoch)", async () => {
     const ttl = `
-      @prefix diet: <https://w3id.org/jeswr/sectors/health/diet#> .
+      @prefix diet: <https://jeswr.org/ns/sectors/health/diet#> .
       <${URL_}#it> a diet:Meal ; diet:hasItem <${URL_}#item-0> .
       <${URL_}#item-0> a diet:FoodItem .
     `;
@@ -165,7 +166,7 @@ describe("Meal untrusted-input discipline", () => {
   it("parseMeal FAILS CLOSED on a duplicated single-valued predicate (two schema:startTime)", async () => {
     // sh:maxCount 1: two startTime values must NOT be parsed with an arbitrary one.
     const dupStart = `
-      @prefix diet: <https://w3id.org/jeswr/sectors/health/diet#> .
+      @prefix diet: <https://jeswr.org/ns/sectors/health/diet#> .
       @prefix schema: <http://schema.org/> .
       @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
       <${URL_}#it> a diet:Meal ;
@@ -181,7 +182,7 @@ describe("Meal untrusted-input discipline", () => {
     // owl:sameAs, foreign metadata) are NOT sh:maxCount 1 and must NOT invalidate
     // the parse — only the model's OWN singleton fields are checked.
     const withExtensions = `
-      @prefix diet: <https://w3id.org/jeswr/sectors/health/diet#> .
+      @prefix diet: <https://jeswr.org/ns/sectors/health/diet#> .
       @prefix schema: <http://schema.org/> .
       @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
       @prefix owl: <http://www.w3.org/2002/07/owl#> .
@@ -274,7 +275,7 @@ describe("Meal untrusted-input discipline", () => {
     // date mapper THROW; the tryRead guard must catch it and return undefined rather
     // than crash the read on a malformed/hostile pod document.
     const wrongType = `
-      @prefix diet: <https://w3id.org/jeswr/sectors/health/diet#> .
+      @prefix diet: <https://jeswr.org/ns/sectors/health/diet#> .
       @prefix schema: <http://schema.org/> .
       @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
       <${URL_}#it> a diet:Meal ;
@@ -302,7 +303,7 @@ describe("Meal untrusted-input discipline", () => {
     // A malformed date literal parses to a truthy `Invalid Date`; a bare truthiness
     // check would let it through and corrupt every lag calculation. Must reject.
     const bad = `
-      @prefix diet: <https://w3id.org/jeswr/sectors/health/diet#> .
+      @prefix diet: <https://jeswr.org/ns/sectors/health/diet#> .
       @prefix schema: <http://schema.org/> .
       @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
       <${URL_}#it> a diet:Meal ;
@@ -317,7 +318,7 @@ describe("Meal untrusted-input discipline", () => {
     // parseFoodItem must reject the non-http(s) subject, so the item is dropped and
     // (being the only item) the whole meal fails closed to undefined.
     const hostile = `
-      @prefix diet: <https://w3id.org/jeswr/sectors/health/diet#> .
+      @prefix diet: <https://jeswr.org/ns/sectors/health/diet#> .
       @prefix schema: <http://schema.org/> .
       @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
       <${URL_}#it> a diet:Meal ;
@@ -332,7 +333,7 @@ describe("Meal untrusted-input discipline", () => {
     // unusable intake record, so it is dropped; with no valid item left the whole
     // meal is unusable and parseMeal returns undefined (never a food-less meal).
     const namelessTtl = `
-      @prefix diet: <https://w3id.org/jeswr/sectors/health/diet#> .
+      @prefix diet: <https://jeswr.org/ns/sectors/health/diet#> .
       @prefix schema: <http://schema.org/> .
       @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
       <${URL_}#it> a diet:Meal ;
@@ -344,7 +345,7 @@ describe("Meal untrusted-input discipline", () => {
 
   it("parseMeal FAILS CLOSED on a meal with no FoodItem at all (SHACL MUST: ≥1 item)", async () => {
     const noItemsTtl = `
-      @prefix diet: <https://w3id.org/jeswr/sectors/health/diet#> .
+      @prefix diet: <https://jeswr.org/ns/sectors/health/diet#> .
       @prefix schema: <http://schema.org/> .
       @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
       <${URL_}#it> a diet:Meal ;
@@ -354,7 +355,7 @@ describe("Meal untrusted-input discipline", () => {
 
   it("parseExposure returns undefined for a non-http(s) subject (direct hostile-subject call)", async () => {
     const ds = await parseRdf(
-      `@prefix diet: <https://w3id.org/jeswr/sectors/health/diet#> .
+      `@prefix diet: <https://jeswr.org/ns/sectors/health/diet#> .
        <javascript:steal()> a diet:Exposure ;
          diet:trigger diet:sulphites ;
          diet:exposureLevel diet:possibleUndeclared .`,
@@ -366,7 +367,7 @@ describe("Meal untrusted-input discipline", () => {
 
   it("parseFoodItem returns undefined for a FoodItem missing schema:name (fail-closed)", async () => {
     const ds = await parseRdf(
-      `@prefix diet: <https://w3id.org/jeswr/sectors/health/diet#> .
+      `@prefix diet: <https://jeswr.org/ns/sectors/health/diet#> .
        <${URL_}#item-0> a diet:FoodItem .`,
       "text/turtle",
       { baseIRI: URL_ },
@@ -379,9 +380,9 @@ describe("Meal untrusted-input discipline", () => {
     // fields (location, patient, offRef, exposure derivedFrom). The read path must be
     // symmetric with the writer and drop every one, never surfacing a dangerous IRI.
     const hostile = `
-      @prefix diet: <https://w3id.org/jeswr/sectors/health/diet#> .
+      @prefix diet: <https://jeswr.org/ns/sectors/health/diet#> .
       @prefix schema: <http://schema.org/> .
-      @prefix health: <https://w3id.org/jeswr/sectors/health#> .
+      @prefix health: <https://jeswr.org/ns/sectors/health#> .
       @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
       <${URL_}#it> a diet:Meal ;
         schema:startTime "2026-07-01T08:30:00.000Z"^^xsd:dateTime ;
