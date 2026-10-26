@@ -21,7 +21,7 @@
 .su-wrap {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-1 0.5);
+  gap: calc(var(--space-3) / 2);
   min-width: 0;
 }
 .su-label {
@@ -51,7 +51,6 @@
 .su-button,
 .su-chip,
 .su-input,
-.su-radio,
 .su-checkbox,
 .su-switch,
 .su-permission-trigger {
@@ -79,7 +78,6 @@
 .su-button:disabled,
 .su-chip:disabled,
 .su-input:disabled,
-.su-radio:disabled,
 .su-checkbox:disabled,
 .su-switch:disabled {
   cursor: not-allowed;
@@ -89,10 +87,10 @@
 .su-input:disabled {
   color: var(--foreground-muted);
 }
+.su-role-option:focus-visible,
 .su-button:focus-visible,
 .su-chip:focus-visible,
 .su-input:focus-visible,
-.su-radio:focus-visible,
 .su-checkbox:focus-visible,
 .su-switch:focus-visible,
 .su-permission-trigger:focus-visible {
@@ -109,7 +107,7 @@
 .su-input {
   width: 100%;
   min-width: 0;
-  padding: var(--space-1 0.5) var(--space-3);
+  padding: calc(var(--space-3) / 2) var(--space-3);
 }
 .su-picker-input {
   display: grid;
@@ -151,7 +149,7 @@
 }
 .su-person-label {
   display: grid;
-  gap: var(--space-0 0.5);
+  gap: calc(var(--space-1) / 2);
   min-width: 0;
   flex: 1;
   overflow-wrap: anywhere;
@@ -187,21 +185,50 @@
   color: var(--destructive);
   font-size: var(--text-sm);
 }
-.su-role-list {
-  display: grid;
-  gap: var(--space-3);
-}
-.su-role {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: var(--space-2);
+/* Radix Select uses the mockups' control and popover dimensions. */
+.su-role-trigger {
+  display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  width: 100%;
 }
-.su-role label {
+.su-role-menu {
+  z-index: 60;
+  min-width: var(--radix-select-trigger-width);
+  max-width: calc(100vw - var(--space-8));
+  max-height: var(--radix-select-content-available-height);
+  overflow-y: auto;
+  padding: var(--space-1);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  color: var(--foreground);
+  box-shadow: var(--shadow-2);
+  border: 1px solid var(--border-strong);
+}
+.su-role-option {
+  position: relative;
   min-height: var(--control-h);
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-8) var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
   cursor: pointer;
+  outline-offset: -2px;
 }
-.su-radio,
+.su-role-option[data-highlighted] {
+  background: var(--primary-soft);
+  color: var(--primary-soft-foreground);
+}
+.su-role-option[data-disabled] {
+  color: var(--foreground-muted);
+  cursor: not-allowed;
+}
+.su-role-indicator {
+  position: absolute;
+  right: var(--space-2);
+  top: var(--space-2);
+}
 .su-checkbox {
   display: inline-flex;
   align-items: center;
@@ -212,19 +239,10 @@
   padding: 0;
   flex: none;
 }
-.su-radio {
-  border-radius: var(--radius-full);
-}
-.su-radio-dot {
-  width: var(--space-3);
-  height: var(--space-3);
-  background: var(--primary);
-  border-radius: var(--radius-full);
-}
 .su-chip {
   min-height: var(--control-h-sm);
   border-radius: var(--radius-full);
-  padding: var(--space-0 0.5) var(--space-3);
+  padding: calc(var(--space-1) / 2) var(--space-3);
   font-size: var(--text-sm);
   cursor: pointer;
 }
@@ -303,7 +321,7 @@
 .su-source {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-1 0.5);
+  gap: calc(var(--space-3) / 2);
   min-height: var(--space-6);
   padding: 0 var(--space-2);
   border: 1px solid var(--border);
@@ -397,7 +415,7 @@
   width: var(--space-10);
   height: var(--space-6);
   min-height: var(--space-6);
-  padding: var(--space-0 0.5);
+  padding: calc(var(--space-1) / 2);
   background: var(--surface-3);
   border-radius: var(--radius-full);
 }
@@ -479,16 +497,15 @@
   }
 }
 @media (pointer: coarse) {
+  .su-role-option,
   .su-button,
   .su-chip,
   .su-input,
-  .su-radio,
   .su-checkbox,
   .su-switch,
   .su-permission-trigger {
     min-height: 44px;
   }
-  .su-radio,
   .su-checkbox {
     min-width: 44px;
   }

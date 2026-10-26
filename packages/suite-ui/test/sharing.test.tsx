@@ -18,6 +18,7 @@ import { RoleSelect } from "../src/sharing/role-select.js";
 import type { SharingState } from "../src/sharing/state.js";
 
 afterEach(cleanup);
+Element.prototype.scrollIntoView = vi.fn();
 const contact = {
   webId: "https://bram.example/profile#me",
   displayName: "Bram Kerst",
@@ -170,18 +171,39 @@ describe("roles and durations", () => {
           options={{ [role]: { disabled: true, reason: "Not available on this storage" } }}
         />,
       );
-      const disabled = screen.getByRole("radio", {
+      if (!screen.queryByRole("listbox"))
+        fireEvent.keyDown(screen.getByRole("combobox"), { key: "ArrowDown" });
+      const disabled = screen.getByRole("option", {
         name: new RegExp(role, "i"),
       }) as HTMLButtonElement;
-      expect(disabled.disabled).toBe(true);
+      expect(disabled.getAttribute("aria-disabled")).toBe("true");
       expect(
         document.getElementById(disabled.getAttribute("aria-describedby") ?? "")?.textContent,
       ).toContain("Not available on this storage");
       fireEvent.click(disabled);
       expect(onChange).not.toHaveBeenCalled();
     }
-    fireEvent.click(screen.getByRole("radio", { name: "Editor" }));
+    fireEvent.click(screen.getByRole("option", { name: "Editor" }));
     expect(onChange).toHaveBeenCalledWith("editor");
+  });
+  it("keeps the open role menu axe clean with disabled reasons", async () => {
+    render(
+      <RoleSelect
+        value="viewer"
+        onChange={vi.fn()}
+        options={{ manager: { disabled: true, reason: "Not available on this storage" } }}
+      />,
+    );
+    fireEvent.keyDown(screen.getByRole("combobox"), { key: "ArrowDown" });
+    expect(screen.getByRole("option", { name: "Manager" }).getAttribute("aria-disabled")).toBe(
+      "true",
+    );
+    const result = await axe.run(document.body, {
+      rules: { "color-contrast": { enabled: false } },
+    });
+    expect(
+      result.violations.filter((item) => item.impact === "serious" || item.impact === "critical"),
+    ).toEqual([]);
   });
   it("disables the entire duration group including its custom date", () => {
     const onChange = vi.fn();
