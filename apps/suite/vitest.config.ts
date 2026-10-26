@@ -9,9 +9,12 @@ export default defineConfig({
       provider: "v8",
       include: [
         "src/apps/photos/lib/library/**/*.ts",
+        "src/apps/notes/lib/**/*.ts",
         "src/lib/order/**/*.ts",
         "src/apps/docs/lib/anchoring/**/*.ts",
+        "src/apps/sheets/lib/refs/**/*.ts",
         "src/apps/calendar/lib/layout/**/*.ts",
+        "src/apps/chat/lib/timeline/**/*.ts",
         "src/apps/health/lib/stats/**/*.ts",
         "src/apps/sheets/lib/univer-spike/**/*.ts",
         "src/apps/money/lib/rules/**/*.ts",
