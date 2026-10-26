@@ -73,6 +73,7 @@ describe("metadata and complete OAuth flow", () => {
       code_challenge_methods_supported: ["S256"],
       scopes_supported: ["mcp", "read"],
       client_id_metadata_document_supported: true,
+      authorization_response_iss_parameter_supported: true,
     });
     const rs = await f.server.handle(
       new Request("https://mcp.example/.well-known/oauth-protected-resource/mcp"),
@@ -236,32 +237,105 @@ describe("metadata and complete OAuth flow", () => {
 
 describe("authorization restrictions and upstream transactions", () => {
   it.each([
-    ["code_challenge_method", "plain", "invalid_request"],
-    ["code_challenge_method", undefined, "invalid_request"],
-    ["code_challenge", undefined, "invalid_request"],
-    ["code_challenge", "short", "invalid_request"],
-    ["state", undefined, "invalid_request"],
-    ["state", "", "invalid_request"],
-    ["redirect_uri", "https://evil.example/cb", "invalid_request"],
-    ["redirect_uri", `${REDIRECT}&extra=1`, "invalid_request"],
-    ["response_type", "token", "unsupported_response_type"],
-    ["resource", "https://pod.example/", "invalid_target"],
-    ["scope", "write", "invalid_scope"],
-    ["scope", "mcp  read", "invalid_scope"],
-    ["webid", undefined, "invalid_request"],
-    ["client_id", undefined, "invalid_request"],
-  ])("rejects %s=%s before pod login", async (field, value, error) => {
+    ["state", undefined],
+    ["state", ""],
+    ["redirect_uri", undefined],
+    ["redirect_uri", ""],
+    ["redirect_uri", "https://evil.example/cb"],
+    ["redirect_uri", `${REDIRECT}&extra=1`],
+    ["client_id", undefined],
+    ["client_id", ""],
+  ])("keeps untrusted %s=%s errors local", async (field, value) => {
     const f = fixture();
     const clientId = await f.register();
     const response = await f.server.handle(f.authRequest(clientId, { [field]: value }));
     expect(response.status).toBe(400);
-    expect(await response.json()).toEqual({ error });
+    expect(await response.json()).toEqual({ error: "invalid_request" });
+    expect(response.headers.has("location")).toBe(false);
+    expect(f.provider.begin).not.toHaveBeenCalled();
+    expect(f.consent).not.toHaveBeenCalled();
+  });
+
+  it("keeps unknown client errors local even with a registered redirect", async () => {
+    const f = fixture();
+    const response = await f.server.handle(f.authRequest("unknown-client"));
+    expect(response.status).toBe(401);
+    expect(await response.json()).toEqual({ error: "invalid_client" });
     expect(response.headers.has("location")).toBe(false);
     expect(f.provider.begin).not.toHaveBeenCalled();
   });
 
-  it("denies consent and preserves exact state without issuing a code", async () => {
+  it.each([
+    "client_id",
+    "redirect_uri",
+    "state",
+  ])("keeps duplicate %s errors local", async (name) => {
     const f = fixture();
+    const id = await f.register();
+    const request = new Request(`${f.authRequest(id).url}&${name}=ambiguous`);
+    const response = await f.server.handle(request);
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: "invalid_request" });
+    expect(response.headers.has("location")).toBe(false);
+    expect(f.provider.begin).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["code_challenge_method", "plain", "invalid_request"],
+    ["code_challenge_method", undefined, "invalid_request"],
+    ["code_challenge", undefined, "invalid_request"],
+    ["code_challenge", "short", "invalid_request"],
+    ["response_type", "token", "unsupported_response_type"],
+    ["response_type", undefined, "invalid_request"],
+    ["resource", "https://pod.example/", "invalid_target"],
+    ["resource", undefined, "invalid_request"],
+    ["scope", "write", "invalid_scope"],
+    ["scope", "mcp  read", "invalid_scope"],
+    ["webid", undefined, "invalid_request"],
+  ])("redirects trusted %s=%s errors before pod login", async (field, value, error) => {
+    const f = fixture();
+    const clientId = await f.register();
+    const state = "client-state +&=#/?";
+    const response = await f.server.handle(f.authRequest(clientId, { [field]: value, state }));
+    expect(response.status).toBe(302);
+    const location = new URL(response.headers.get("location") as string);
+    expect(location.origin + location.pathname).toBe("https://client.example/callback");
+    expect(Object.fromEntries(location.searchParams)).toEqual({
+      existing: "1",
+      error,
+      state,
+      iss: ISSUER,
+    });
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(f.provider.begin).not.toHaveBeenCalled();
+    expect(f.consent).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { scope: "write", error: "invalid_scope" },
+    { response_type: "token", error: "unsupported_response_type" },
+  ])("redirects trusted completion validation errors: $error", async ({ error, ...changes }) => {
+    const issuer = "https://MCP.EXAMPLE:443/auth/";
+    const f = fixture({ issuer });
+    const id = await f.register();
+    const response = await f.server.authorize(f.authRequest(id, changes), SESSION);
+    expect(response.status).toBe(302);
+    expect(
+      Object.fromEntries(new URL(response.headers.get("location") as string).searchParams),
+    ).toEqual({
+      existing: "1",
+      error,
+      state: "client-state",
+      iss: issuer,
+    });
+    expect(f.consent).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ISSUER,
+    "https://MCP.EXAMPLE:443/auth/",
+  ])("identifies issuer %s on consent denial", async (issuer) => {
+    const f = fixture({ issuer });
     f.consent.mockResolvedValue(false);
     const clientId = await f.register();
     const response = await f.server.authorize(f.authRequest(clientId), SESSION);
@@ -270,8 +344,13 @@ describe("authorization restrictions and upstream transactions", () => {
       existing: "1",
       error: "access_denied",
       state: "client-state",
+      iss: issuer,
     });
     expect(response.headers.get("referrer-policy")).toBe("no-referrer");
+    await f.server.handle(f.authRequest(clientId));
+    const callback = await f.server.handle(new Request(`${ISSUER}/callback?state=upstream-state`));
+    expect(callback.status).toBe(302);
+    expect(callback.headers.get("location")).toBe(response.headers.get("location"));
   });
 
   it("isolates consent snapshots from the grant", async () => {
@@ -334,24 +413,33 @@ describe("authorization restrictions and upstream transactions", () => {
       authorizeUrl: "http://evil.example/",
       state: "x",
     });
-    expect((await f.server.handle(f.authRequest(id))).status).toBe(400);
+    const unsafe = await f.server.handle(f.authRequest(id));
+    expect(unsafe.status).toBe(302);
+    expect(new URL(unsafe.headers.get("location") as string).searchParams.get("error")).toBe(
+      "invalid_request",
+    );
     vi.mocked(f.provider.begin).mockResolvedValueOnce({
       authorizeUrl: "https://pod.example/",
       state: "",
     });
-    expect(await (await f.server.handle(f.authRequest(id))).json()).toEqual({
-      error: "server_error",
-    });
-    await expect(
-      f.server.authorize(f.authRequest(id), { id: "", webId: SESSION.webId }),
-    ).rejects.toThrow("Pod identity");
-    await expect(
-      f.server.authorize(f.authRequest(id), { id: SESSION.id, webId: "" }),
-    ).rejects.toThrow("Pod identity");
+    const assertServerError = (response: Response) => {
+      expect(response.status).toBe(302);
+      expect(
+        Object.fromEntries(new URL(response.headers.get("location") as string).searchParams),
+      ).toEqual({
+        existing: "1",
+        error: "server_error",
+        state: "client-state",
+        iss: ISSUER,
+      });
+    };
+    assertServerError(await f.server.handle(f.authRequest(id)));
+    assertServerError(
+      await f.server.authorize(f.authRequest(id), { id: "", webId: SESSION.webId }),
+    );
+    assertServerError(await f.server.authorize(f.authRequest(id), { id: SESSION.id, webId: "" }));
     vi.mocked(f.provider.begin).mockRejectedValueOnce(new Error("sensitive broker detail"));
-    expect(await (await f.server.handle(f.authRequest(id))).json()).toEqual({
-      error: "server_error",
-    });
+    assertServerError(await f.server.handle(f.authRequest(id)));
   });
 });
 

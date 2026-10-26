@@ -74,6 +74,7 @@ export class AuthorizationServer {
       code_challenge_methods_supported: ["S256"],
       scopes_supported: [...this.scopes],
       client_id_metadata_document_supported: true,
+      authorization_response_iss_parameter_supported: true,
     };
   }
 
@@ -146,10 +147,9 @@ export class AuthorizationServer {
 
   /** Complete a trusted, browser-authenticated flow (MCP-11 owns UI/CSRF protection). */
   async authorize(request: Request, session: PodSession): Promise<Response> {
-    const { authorization, client } = await this.validateAuthorization(
-      new URL(request.url).searchParams,
+    return this.authorizationResponse(new URL(request.url).searchParams, (authorization, client) =>
+      this.finish(request, authorization, client, session),
     );
-    return this.finish(request, authorization, client, session);
   }
 
   /** Verify signature, issuer, exact audience, expiry and live family before returning identity. */
@@ -178,51 +178,55 @@ export class AuthorizationServer {
     };
   }
 
-  private async validateAuthorization(
+  private async authorizationResponse(
     params: URLSearchParams,
-  ): Promise<{ authorization: Authorization; client: Client }> {
+    complete: (authorization: Authorization, client: Client) => Promise<Response>,
+  ): Promise<Response> {
     unique(params);
     const client = await this.clients.get(parameter(params, "client_id"));
     const redirectUri = parameter(params, "redirect_uri");
     if (!client.redirect_uris.includes(redirectUri)) throw new OAuthError("invalid_request");
-    if (parameter(params, "response_type") !== "code")
-      throw new OAuthError("unsupported_response_type");
-    if (parameter(params, "code_challenge_method") !== "S256")
-      throw new OAuthError("invalid_request");
-    const challenge = parameter(params, "code_challenge");
-    if (!/^[A-Za-z0-9_-]{43}$/u.test(challenge)) throw new OAuthError("invalid_request");
-    const resource = parameter(params, "resource");
-    if (resource !== this.resource) throw new OAuthError("invalid_target");
-    const scope = params.get("scope") ?? "";
-    if (scope.length > 0 && scope.split(" ").some((item) => !this.scopes.includes(item)))
-      throw new OAuthError("invalid_scope");
-    return {
-      client,
-      authorization: {
-        clientId: client.client_id,
-        redirectUri,
-        resource,
-        scope,
-        challenge,
-        state: parameter(params, "state"),
-      },
-    };
+    const state = parameter(params, "state");
+    try {
+      if (parameter(params, "response_type") !== "code")
+        throw new OAuthError("unsupported_response_type");
+      if (parameter(params, "code_challenge_method") !== "S256")
+        throw new OAuthError("invalid_request");
+      const challenge = parameter(params, "code_challenge");
+      if (!/^[A-Za-z0-9_-]{43}$/u.test(challenge)) throw new OAuthError("invalid_request");
+      const resource = parameter(params, "resource");
+      if (resource !== this.resource) throw new OAuthError("invalid_target");
+      const scope = params.get("scope") ?? "";
+      if (scope.length > 0 && scope.split(" ").some((item) => !this.scopes.includes(item)))
+        throw new OAuthError("invalid_scope");
+      return await complete(
+        { clientId: client.client_id, redirectUri, resource, scope, challenge, state },
+        client,
+      );
+    } catch (error) {
+      return redirect(redirectUri, {
+        error: error instanceof OAuthError ? error.error : "server_error",
+        state,
+        iss: this.issuer,
+      });
+    }
   }
 
   private async begin(request: Request): Promise<Response> {
     const params = new URL(request.url).searchParams;
-    const { authorization } = await this.validateAuthorization(params);
-    const upstream = await this.options.podSessions.begin(
-      parameter(params, "webid"),
-      `${this.base}/callback`,
-    );
-    secureUrl(upstream.authorizeUrl);
-    if (!upstream.state) throw new Error("Pod broker returned no state");
-    await this.stores.pending.put(digest(upstream.state), {
-      authorization,
-      expiresAt: this.now() + LOGIN_TTL,
+    return this.authorizationResponse(params, async (authorization) => {
+      const upstream = await this.options.podSessions.begin(
+        parameter(params, "webid"),
+        `${this.base}/callback`,
+      );
+      secureUrl(upstream.authorizeUrl);
+      if (!upstream.state) throw new Error("Pod broker returned no state");
+      await this.stores.pending.put(digest(upstream.state), {
+        authorization,
+        expiresAt: this.now() + LOGIN_TTL,
+      });
+      return redirect(upstream.authorizeUrl, {});
     });
-    return redirect(upstream.authorizeUrl, {});
   }
 
   private async callback(request: Request): Promise<Response> {
@@ -256,6 +260,7 @@ export class AuthorizationServer {
       return redirect(authorization.redirectUri, {
         error: "access_denied",
         state: authorization.state,
+        iss: this.issuer,
       });
     const id = opaque();
     await this.stores.grants.put(id, {
