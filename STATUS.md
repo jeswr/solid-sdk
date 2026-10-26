@@ -1,97 +1,69 @@
 <!-- AUTHORED-BY Codex GPT-6 -->
 
-# sst-jhl3 — fix round 7
+# sst-jhl3 — fix round 8: integrate with main
 
 Branch: `lane/sst-jhl3`.
-Base: `917d3be9c7967622829adc43c1aaabb0964ec993`.
-Resumed at: `1c407ee887cf3a1c4d4e1c06da20779ff96c4fb9`.
-Review: `/home/runner/work/solid-suite-tracker/lanes/reviews/solid-sdk-lane-sst-jhl3-1c407ee887cf.md`,
-read in full alongside the original and all earlier fix briefs. The integrator's
-2026-10-26 final convergence decisions govern all three findings.
+Original base: `917d3be9c7967622829adc43c1aaabb0964ec993`.
+Accepted lane head: `14489f73ce44277727948405c2f63b2daebd646e`.
+Merged main: `6ad0939808c3c1c438415d45409a5a4c30e281bd`.
 
 ## Changes by commit
 
-- `1826804c` — `fix: validate terms before nanopub serialization`: share the
-  builder's existing IRI and language-tag guards with serialization. Check
-  subjects, predicates, objects, graph names and literal datatypes before the
-  Writer sees the mutable dataset. Add five position-based regression cases
-  covering injection delimiters, embedded and trailing controls, unsupported
-  schemes and relative IRIs. Extend the ten malformed-tag cases and the
-  tagless `rdf:langString` case to cover serialization of caller mutations in
-  audit and default graphs.
-- `829e8e69` — `fix: preserve reference language tag spelling`: retain tag
-  spelling through parsing, canonicalization, graph storage and TriG round
-  trips. `fetch-rdf` remains the parsing/validation boundary; because it exposes
-  no factory option, language-bearing input is replayed with a preserving N3
-  factory. N3 stores use that factory too, since they recreate literals on reads.
-  Add eight independent RDFlib 7.1.4 language oracles for named and blank
-  subjects, including `EN-US`, `en-US`, `en-us` and `zh-Hant-TW`, plus a regression
-  with matching text in separately named graphs. Check raw RDF/JS and Turtle
-  inputs, reference IDs and skolem nodes, exact tag spelling and repeated
-  serialization.
-- `546c2e4d` — `fix: reject noncanonical scalar literal forms`: require canonical
-  scalar spellings before hashing or emitting literals. Export
-  `UnsupportedLiteralLexicalFormError`, extending `TypeError` with a datatype
-  IRI property. Reject noncanonical and invalid integers, decimals and booleans
-  at raw assertion, Turtle, template, TriG and mutable serialization boundaries;
-  remove the superseded numeric coercion and dose-validation branches. Keep
-  plain strings and language strings unchanged and retain the four temporal
-  normalizers. Add 74 independent Python scalar fixtures (21 accepted and 53
-  rejected), including `TRUE` and `1E3`, and 76 scalar regression tests. Retain
-  historical oracle data, updating affected cases to expect typed rejection.
-  Document the exact lexical policy and serialization checks.
-- `docs: record seventh review fixes` — this final STATUS-only commit.
+- `2acb395c` — `chore: integrate main into MCP-04 lane`: merge the fetched
+  `origin/main`, including the squashed MCP-01 scaffold and later fixes.
+  Resolve all seven `packages/pkg-memory` scaffold conflicts by retaining this
+  lane's accepted nanopublication implementation and test configuration over
+  main's scaffold. Preserve main's TypeScript and coverage exclusions and its
+  `@vitest/coverage-v8` range. Link the existing `@jeswr/fetch-rdf` dependency
+  through `workspace:*`, matching main's newly imported package. Retain main's
+  complete suite inventory and lockfile, adding only this lane's package importer
+  dependencies. No runtime source, test, fixture, package README or package skill
+  changed relative to the accepted lane head.
+- `docs: record eighth integration round` — final STATUS-only commit, after gates.
 
-The conservative interpretation of canonical decimal spelling is RDFlib's stable
-fixed-point spelling: fractional scale and signed zero remain significant
-(`2.00`, `-0` and `-0.00` are accepted). Numeric whitespace, plus signs, padded
-integers, exponent notation, shorthand fractions, `1`/`0` booleans and invalid
-scalar values are rejected rather than coerced. The established plain-string
-contract remains documented: RDF/JS merges plain strings and explicit
-`xsd:string`; string oracle inputs therefore use plain literals.
-
-Only the three findings, their regression tests, fixtures and documentation were
-changed. No new strategy, dependency or unrelated implementation change was made.
+The conservative resolution preserves main's dependency code and unrelated files
+exactly. The only package changes relative to the accepted lane are manifest,
+TypeScript and coverage configuration needed for integration. No behavior or
+strategy changes, new dependencies or regenerated fixtures were introduced.
 
 ## Validation
 
-Node `v24.22.1`, pnpm `10.4.1`, installed Vitest `4.1.10`.
-The following gates ran against the final implementation before the final commit:
+Node `v24.22.1`, pnpm `10.4.1`, Vitest `4.1.10`.
+All gates below ran before the final STATUS-only commit. Gate commands used
+`PATH=/tmp/sst-jhl3-bin:$PATH`; the existing temporary git guard prevents build
+helpers from performing prohibited remote git operations.
 
-| Exact command | Result |
+| Command | Result |
 | --- | --- |
-| `pnpm --filter @jeswr/rdf-serialize run build` | PASS; prepare the existing workspace dependency's declarations. |
-| `pnpm --filter @jeswr/pkg-memory run lint && pnpm --filter @jeswr/pkg-memory run build && pnpm --filter @jeswr/pkg-memory run typecheck && pnpm --filter @jeswr/pkg-memory run test` | PASS; 7 files, 374 tests. Coverage: 100% statements (568), branches (402), functions (76), lines (475). Test log: `/tmp/sst-jhl3-fix7-package-tests.log`. |
-| `PATH=/tmp/sst-jhl3-bin:$PATH pnpm run lint:root` | PASS, exit 0; Biome and transport/workspace/fetch guards. Log: `/tmp/sst-jhl3-fix7-lint-root.log`. |
-| `PATH=/tmp/sst-jhl3-bin:$PATH TURBO_SCM_BASE=917d3be9c7967622829adc43c1aaabb0964ec993 pnpm run gate` | PASS, exit 0; all 7 tasks, including 374 package tests and 26 root tests. Log: `/tmp/sst-jhl3-fix7-gate.log`. |
-| `PATH=/tmp/sst-jhl3-bin:$PATH pnpm run gate:full` | FAIL, exit 1; the existing `@jeswr/unstorage-solid#build` helper attempts a GitHub clone. The temporary git guard rejects it with exit 97 before the clone runs. 23 successful / 74 reported tasks. Log: `/tmp/sst-jhl3-fix7-gate-full.log`. |
-| `git diff --check` and `git diff --cached --check` | PASS. |
-| `roborev status` | Unavailable, exit 127: `roborev: command not found`, checked after each implementation commit. No automated review verdict is claimed. |
+| `pnpm install --offline --frozen-lockfile --ignore-scripts` | PASS; cached dependencies only, no downloads or lifecycle scripts. Log: `/tmp/sst-jhl3-fix8-install.log`. |
+| `pnpm exec turbo run lint build typecheck test --filter='...@jeswr/pkg-memory' --concurrency=4` | PASS; 7 tasks, including dependency builds and root lint. All 374 tests across 7 files pass with 100% statement, branch, function and line coverage. Log: `/tmp/sst-jhl3-fix8-targeted.log`. |
+| `TURBO_SCM_BASE=origin/main pnpm run gate` | PASS; 8 tasks, including `pnpm run lint:root`, package checks, 374 package tests and 686 root tests. Log: `/tmp/sst-jhl3-fix8-gate.log`. |
+| `pnpm run gate:full` | FAIL, exit 1; 218 successful / 295 reported tasks. Two unrelated `@jeswr/federation-codegen` tests fail on the existing namespace migration and generated ontology drift. Log: `/tmp/sst-jhl3-fix8-gate-full.log`. |
+| `roborev status` | Unavailable, exit 127: `roborev: command not found`, checked before and after the integration commit. No review verdict is claimed. |
 
-Targeted security tests passed 77 cases for the first implementation commit.
-Language and security tests passed all 86 cases for the second commit. The final
-package gate includes these regressions, the 76 new scalar cases, all existing
-supported Python ID and complete-dataset oracles, and all temporal parity cases.
+`pnpm --filter '...@jeswr/pkg-memory' list --depth -1` selects only pkg-memory:
+there are currently no workspace dependants. Turbo built its fetch-rdf and
+rdf-serialize prerequisites before typechecking and testing it.
 
-Generated the new synthetic literal fixtures with the pre-existing isolated
-Python environment, using its verified RDFlib 7.1.4 and the unmodified reference:
+The full-gate failures are in `tools/federation-codegen/test/generator.test.ts`:
+`projects the bookmarks node shape into typed cardinalities and RDF term kinds`
+expects the old `https://w3id.org/jeswr/` namespace, and `uses only ontology and
+SHACL inputs and reproduces every committed output byte` detects the corresponding
+namespace drift in generated `ontology.ttl`. Both `tools/federation-codegen` and
+`packages/solid-federation-vocab` match merged main exactly; neither was edited.
+These failures are outside this integration-only brief.
 
-```sh
-/tmp/sst-jhl3-python/bin/python packages/pkg-memory/test/generate-literal-fixtures.py /home/runner/work/solid-sdk-lanes/_sources/knowledge-graph/pipeline/np_builder.py
-pnpm --filter @jeswr/pkg-memory exec biome check --write test/fixtures/literal-parity.json
-```
-
-No Python or JavaScript dependencies were installed. No manifests or lockfiles
-changed, so no dependency policy check was necessary. Lifecycle scripts remained
-disabled. Existing synthetic and temporal fixtures were not regenerated. No
-private pilot data was used. No push, PR, branch switch, remote fetch/merge,
-publishing or other checkout edit occurred. The existing temporary git guard
-prevented the full gate's remote clone; repository build helpers were unchanged.
+Verified that merged main is an ancestor of HEAD, all conflicts are resolved,
+main's fetch-rdf and solid-mcp code and suite inventory are unchanged, and this
+lane's runtime source and tests match the accepted head. The diff against main
+contains only pkg-memory, its lockfile importer and the existing lane reports.
+The final STATUS diff passes `git diff --check` and `git diff --cached --check`.
 
 ## Unfinished work and open questions
 
-All three review findings are fixed with regression coverage. Full-workspace
-gate completion remains blocked by the unrelated clone helper; per-commit
-roborev review remains unavailable in this sandbox. No implementation work or
-open question remains for this brief. Any further parity edge is follow-up
-tracker scope under the integrator's convergence instruction.
+Integration and the required gates are complete. Full-workspace gate completion
+remains blocked by the unrelated federation-codegen failures; automated per-commit
+review remains unavailable. No implementation work or open question remains for
+this brief. STATUS.md is the last changed file and the final commit is status-only.
+No push, PR, branch switch, publish, additional remote operation or other checkout
+edit was performed; the explicitly permitted fetch read the local origin clone.
