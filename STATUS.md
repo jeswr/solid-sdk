@@ -92,3 +92,38 @@ Conservative readings are recorded in [QUESTIONS.md](QUESTIONS.md):
    qualifying profile. Expanding every collection subject needs spec clarification.
 
 No push, PR, branch switch, merge or mirror publish was performed.
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+## Fix round 2 — review of c08bee62c4f5
+
+Commit `150fb7dd` — `fix: preserve Home profile and modification metadata`:
+
+- Resolve the exact WebID subject for profile cards, independently of statement
+  counts and preferred fragments on unrelated subjects. Test supplied and fetched
+  profiles with larger linked email nodes, including an unrelated `#it` subject.
+- Merge container modification metadata after resource deduplication, normalizing
+  resource fragments and preserving resource-level dates. Test both registration
+  orders, date precedence, ordering and one fetch per resource.
+- Fall back from valid Dublin Core dates to POSIX modification date-times or epoch
+  seconds. Test malformed sibling values, zero/negative/fractional epochs, date
+  range overflow and selection of the six most recent Drive files.
+
+Validation ran before the final report commit. Root `node_modules/.bin` was added
+to the command PATH for workspace packages relying on root tooling. Missing
+ignored dependency output was rebuilt with
+`pnpm exec turbo run build --filter='@jeswr/app-suite^...' --concurrency=4`.
+
+| Command | Result |
+| --- | --- |
+| `pnpm --filter @jeswr/app-suite run lint && pnpm --filter @jeswr/app-suite run build && pnpm --filter @jeswr/app-suite run typecheck && pnpm --filter @jeswr/app-suite run test` | PASS. Lint, production build, typecheck, 159 tests across 6 files. Model coverage: 100% statements (308/308), branches (233/233), functions (71/71), lines (267/267). |
+| `pnpm run lint:root` | PASS. Workspace guards and 74 contrast pairs. |
+| `TURBO_SCM_BASE=c08bee62c4f52ecde59372a0f6996345e2e60d40 pnpm run gate` | PASS. 8/8 tasks. |
+| `pnpm run gate:full` | FAIL outside this lane: two tests in `tools/federation-codegen/test/generator.test.ts` expect legacy `https://w3id.org/jeswr/` bookmark namespaces and generated ontology output, while the input uses `https://jeswr.org/ns/`. Turbo stopped at `@jeswr/federation-codegen#test` with 182 successful tasks of 252 scheduled. |
+| `git diff --check` | PASS. |
+
+All three requested findings are fixed. No dependencies or unrelated source files
+were changed. No UI or screenshots apply. No open questions remain for this fix
+round; full-workspace validation is blocked by the unrelated tests above.
+`roborev` remains unavailable in this environment, so automated review is left to
+the dispatcher/integrator. The final documentation commit records this report.
