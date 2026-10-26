@@ -3,6 +3,33 @@
 
 # sst-qucd / CAL-00 lane report
 
+## Fix round 2 — 2026-10-26
+
+Based on `74e38dd9847413b18c41e6ed0b35525de62a0bc8`, on `lane/sst-qucd`. All eight supplied review findings are addressed, with changes confined to the calendar model, its existing tests/documentation, and this report.
+
+- `55531d97` — `fix: replace legacy calendar predicates`: write both schema:name and sched:summary; accept scheduling-only summaries; clear supported canonical/legacy scalar predicates and recurrence sets on replacement, including reminder triggers. Regression tests cover canonical and legacy scheduling input, clearing/replacing values, and removing old recurrence selectors.
+- `ac2ce6d8` — `fix: preserve recurrence instants across rollback`: preserve the explicit DTSTART instant in repeated hours and compare inclusive instant UNTIL cutoffs after timezone conversion. Cases cover London cutoff boundaries and later-overlap starts in London, New York, and Lord Howe, including range filtering, exceptions, duration, count, and until.
+- `ebd91ca6` — `fix: reject lossy ICS conversions`: reject unsupported named-zone timed exports, mixed DTSTART/EXDATE kinds, and nominal day/week alarm imports; export fixed day/week offsets in seconds. Update the model API documentation and ICS regressions while retaining all 20 fixture round-trips.
+- `55d28166` — `fix: confine cutoff bounds to event expansion`: use the padded expansion range as the conservative candidate bound for instant UNTIL; preserve the raw rrule helper's UTC cutoff behavior with an explicit assertion.
+- The final documentation commit records this round's validation.
+
+Conservative options explicitly allowed by the review: reject named-zone timed exports instead of generating VTIMEZONE definitions (also prevents later-overlap local-time loss); reject mismatched exception date kinds instead of converting day-wide exclusions; reject imported nominal day/week alarms instead of adding timezone-aware reminder durations. All-day export remains timezone-independent; UTC timed export preserves explicit instants. Imports still return timezone context for expansion. The model retains fixed-duration offsets internally, including day/week spellings. No new design questions or unfinished implementation work.
+
+All pnpm commands ran with `export PATH="$PWD/node_modules/.bin:$PATH"` so package scripts resolve root tools.
+
+| Exact command | Result |
+| --- | --- |
+| `pnpm exec turbo run build --filter '@jeswr/app-suite^...'` | PASS: workspace build dependencies prepared. |
+| `pnpm --filter @jeswr/app-suite run lint && pnpm --filter @jeswr/app-suite run build && pnpm --filter @jeswr/app-suite run typecheck && pnpm --filter @jeswr/app-suite run test` | PASS: Biome, production Next.js build, strict TypeScript, and all 101 tests across four files. The final affected gate below reran the app checks after the last source adjustment. |
+| `pnpm --filter @jeswr/app-suite run test:coverage` | PASS after the final source adjustment: 101 tests; model statements 595/595, branches 396/396, functions 154/154, lines 517/517 — all 100%. |
+| `pnpm run lint:root` | PASS: root lint and all transport/workspace/fetch/token/contrast guards. |
+| `TURBO_SCM_BASE=74e38dd9847413b18c41e6ed0b35525de62a0bc8 pnpm run gate` | PASS after the final source adjustment: 9/9 tasks successful, including app lint/build/typecheck/test. |
+| `GIT_ALLOW_PROTOCOL=file pnpm run gate:full --env-mode=loose` | BLOCKED outside this lane: existing `@jeswr/unstorage-solid#build` attempted a remote clone for its missing fetch-rdf build dependency. Git refused it with `fatal: transport 'https' not allowed`. Remote Git transport was disabled to honor the lane restriction; loose Turbo environment mode passes it to child commands. No remote clone/fetch/merge completed and no unrelated source was changed. |
+| `git diff 74e38dd9847413b18c41e6ed0b35525de62a0bc8 --check` | PASS before this documentation commit. |
+| `roborev status` | UNAVAILABLE (exit 127): `roborev: command not found`; automated per-commit review could not run. |
+
+No dependencies, manifests, lockfiles, UI, screenshots, or other checkouts changed. No dependency checks or installs were needed. No pushes, PRs, branch switches, or completed remote Git operations. Remaining verification limits are the full-workspace gate and unavailable roborev above; no new open questions.
+
 ## Fix round 1 — 2026-10-26
 
 Based on `451f9918cfa318c46ad8c2e1139bfce638b9b117`, on the same `lane/sst-qucd` branch. All six supplied review findings are addressed; changes are limited to three calendar model files, their two existing test files, and this report.
