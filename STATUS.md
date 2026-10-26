@@ -3,6 +3,73 @@
 
 # sst-vuhh — CON-02 lane report
 
+## Fix round 1 — 2026-10-26
+
+Starting revision: `a102f825919ca24abf07a0633e2121b0044f8242` on `lane/sst-vuhh`.
+Only the three supplied review findings were addressed.
+
+- `aba2a4ec` — `fix: preserve connector items sharing identifiers`: merge by deterministic
+  named subject, retaining distinct Amazon order lines with the same order identifier; count
+  those subjects separately. Tests cover first import, re-import, and shared identifiers across
+  incremental pages without mutating inputs.
+- `243bbaea` — `fix: preserve connector snapshot replacement semantics`: add document
+  `writeMode: 'replace' | 'merge'`. Conservatively restore replacement as the default for
+  existing adapters; incremental pages opt into merge. Tests cover shrinking and empty Spotify
+  and GitHub snapshots, explicit/default replacement after read-edit-write deletion, and the
+  existing incremental/state/ETag behavior. Existing adapters that merge their read datasets
+  continue to own those edits and deletions.
+- `5c524f46` — `fix: replay repeated fixture routes in request order`: repeated normalized
+  method/static-prefix keys replay in array order, then fail on exhaustion. Single-entry keys
+  remain reusable for existing demo fixtures. The recorder preserves request order even when
+  responses complete out of order. Tests cover different pages/statuses, independent method
+  sequences, fresh replay cursors, redaction and static URLs without saving dynamic URLs.
+- Final `docs: record connector review fix results` commit — this round's lane report.
+
+Validation on the final source revision:
+
+```sh
+pnpm --filter @jeswr/pod-connectors^... run build
+pnpm --filter @jeswr/pod-connectors run lint && pnpm --filter @jeswr/pod-connectors run build && pnpm --filter @jeswr/pod-connectors run typecheck && pnpm --filter @jeswr/pod-connectors run test
+GIT_ALLOW_PROTOCOL=file TURBO_SCM_BASE=a102f825919ca24abf07a0633e2121b0044f8242 pnpm run gate
+GIT_ALLOW_PROTOCOL=file pnpm run gate:full
+GIT_ALLOW_PROTOCOL=file pnpm run gate:full --env-mode=loose
+pnpm run test:root
+```
+
+- Workspace dependency build: exit 0. The first targeted test attempt could not resolve
+  guarded-fetch's absent dist in the fresh checkout; tests passed after this dependency build.
+- Package gate: exit 0; lint has 36 existing warnings, build/typecheck pass,
+  **44 test files and 310 tests pass**. Targeted regressions also passed before each fix commit.
+- Affected workspace gate: exit 0, **10/10 tasks**. Root lint/guards pass; Pod Manager's
+  build/typecheck/tests pass (**930 passed, 1 skipped**).
+- First full workspace gate: interrupted (exit 130). Turbo's default strict environment
+  filtered out `GIT_ALLOW_PROTOCOL`, so unstorage-solid's existing dependency bootstrap
+  unexpectedly cloned its pinned fetch-rdf dependency from the network. The gate was stopped
+  on discovering this lane-rule violation; the bootstrap had already finished and removed its
+  temporary clone. This was an implementation-lane execution mistake, not an authorized fetch.
+- Full workspace gate retry with explicit `--env-mode=loose`: exit 1, **60/231 tasks**
+  completed. The unchanged root test `test/agent-layers.test.mjs:509`,
+  `rejects disallowed path characters globally: require(TARGET);`, exceeded its existing
+  5000 ms timeout under the full gate. Root results: **685 passed, 1 failed** across 7 files.
+  No additional network clone occurred in this retry. Unrelated files/timeouts were not changed.
+- Standalone root test suite: exit 0; **7 files and 686 tests pass**. The full-gate
+  timeout did not reproduce in the standalone run. Full-workspace verification remains incomplete.
+- `git diff --check`: passed.
+
+The full-gate retry explicitly uses `--env-mode=loose` so child tasks inherit
+`GIT_ALLOW_PROTOCOL=file`, restricting Git to local transports. The initial full-gate mistake
+above is disclosed rather than claiming that no network clone occurred.
+No dependency, manifest or lockfile changed; `check:packages` is not applicable. Lifecycle
+scripts were never enabled. Tests use fixtures and memory Pods, with no real accounts or
+production API calls. `roborev` is not installed, so asynchronous review remains unavailable;
+it was not installed or reconfigured. No pushes, PRs, branch switches, merges or publishing.
+
+All three requested fixes are implemented. No new open questions or unfinished implementation.
+Full-workspace verification and review limitations are recorded above. The original round's
+report below is retained as historical context.
+
+---
+
 Branch: `lane/sst-vuhh`.
 Base: `752a62440676306177bc6dac88d3e0cee069e2fb`.
 Environment: Node `v24.22.1`, pnpm `10.4.1`.
