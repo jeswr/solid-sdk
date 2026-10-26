@@ -4,7 +4,7 @@
     "@protected": true,
 
     "fedcon": "https://jeswr.org/fedcon#",
-    "fedreg": "https://w3id.org/jeswr/fedreg#",
+    "fedreg": "https://jeswr.org/ns/fedreg#",
     "oa": "http://www.w3.org/ns/oa#",
     "prov": "http://www.w3.org/ns/prov#",
     "dcat": "http://www.w3.org/ns/dcat#",

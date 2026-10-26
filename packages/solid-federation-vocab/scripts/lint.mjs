@@ -14,7 +14,7 @@ const WORKSPACE_ROOT = join(ROOT, "..", "..");
 // model that actually authored a file — older files carry "Claude Opus 4.8", newer
 // ones "Claude Sonnet 5", etc.). Still requires a concrete model token after the
 // name, so a genuinely missing marker is caught.
-const MARKER = /AUTHORED-BY Claude \S+/;
+const MARKER = /AUTHORED-BY (?:Claude|Codex) \S+/;
 
 let failures = 0;
 const fail = (m) => {

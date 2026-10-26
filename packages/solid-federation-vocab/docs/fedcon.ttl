@@ -5,8 +5,8 @@
 #
 # The GOVERNANCE / GLUE vocabulary for the concept-federation registry's
 # contribution + admission lifecycle. It is the WRITE-side companion to the
-# DISCOVERY-side fedreg: (https://w3id.org/jeswr/fedreg#) and the SELF-ASSERTED
-# fedapp: (https://w3id.org/jeswr/fed#): where fedreg: describes WHO is a member
+# DISCOVERY-side fedreg: (https://jeswr.org/ns/fedreg#) and the SELF-ASSERTED
+# fedapp: (https://jeswr.org/ns/fed#): where fedreg: describes WHO is a member
 # and WHICH specs a storage accepts, fedcon: describes HOW a concept crystallises
 # into a federation — proposed, publicly commented, and admitted (or rejected) by
 # a registry authority.
@@ -29,14 +29,10 @@
 #     (SHACL-enforced), a direct port of the unite fut:SharedFuture dissent annex —
 #     manufactured consensus is never permitted.
 #
-# NAMESPACE NOTE — https://jeswr.org/fedcon# (NOT w3id.org/jeswr): unlike the
-# sibling governance vocabularies (fedapp:/fedreg:/task:/core:/the sectors), which
-# are w3id.org-rooted, fedcon: mints under the maintainer's now-live jeswr.org
-# domain. This avoids a dependency on the still-pending w3id.org redirect PR for
-# NEW work; LIVE resolution of https://jeswr.org/fedcon is a pending jeswr.org
-# hosting/DNS decision (out of scope for this vocab-only phase). Cross-namespace
-# references (a fedcon: term pointing at a w3id.org fedreg: term, and vice-versa)
-# are ordinary RDF and completely fine.
+# NAMESPACE NOTE — https://jeswr.org/fedcon# is preserved by DECISIONS V1.
+# The sibling fedapp:/fedreg:/task:/core: and sector vocabularies now use
+# https://jeswr.org/ns/. References to those siblings follow their new bases;
+# fedcon's own ontology identity, term IRIs and version are unchanged.
 #
 # REUSE, DON'T REINVENT (the LD/SW house rule): fedcon: mints ONLY the federation
 # contribution/admission + content-addressed-snapshot glue. Web Annotation (oa:) for
@@ -57,7 +53,7 @@
 # n3.Writer / @rdfjs/wrapper typed accessors — never hand-built quads.
 
 @prefix fedcon:  <https://jeswr.org/fedcon#> .
-@prefix fedreg:  <https://w3id.org/jeswr/fedreg#> .
+@prefix fedreg:  <https://jeswr.org/ns/fedreg#> .
 @prefix dcat:    <http://www.w3.org/ns/dcat#> .
 @prefix hydra:   <http://www.w3.org/ns/hydra/core#> .
 @prefix oa:      <http://www.w3.org/ns/oa#> .
@@ -88,7 +84,7 @@
     dcterms:modified "2026-07-07"^^xsd:date ;
     vann:preferredNamespaceUri "https://jeswr.org/fedcon#" ;
     vann:preferredNamespacePrefix "fedcon" ;
-    rdfs:seeAlso <https://w3id.org/jeswr/fedreg> ;
+    rdfs:seeAlso <https://jeswr.org/ns/fedreg> ;
     rdfs:comment "Experimental — AI-agent-generated; under active development, not production-hardened."@en .
 
 #################################################################
