@@ -2,6 +2,7 @@
 // AUTHORED-BY Codex GPT-6 — fresh companion reservations
 // CRUD and LDP listing ported from apps/pod-docs/src/store.ts.
 import { RdfFetchError } from "@jeswr/fetch-rdf";
+import { refuseRedirects } from "@jeswr/guarded-fetch";
 import { termsEqual } from "@jeswr/suite-vocab";
 import { Container, ContainerDataset } from "@solid/object";
 import { DataFactory, Store } from "n3";
@@ -68,6 +69,9 @@ export class DocsStore {
     private readonly webId: string,
     private readonly fetchImpl: typeof fetch,
   ) {
+    // Account requests, including copy adapters and profile reads, must never
+    // follow a server-selected destination with the caller's credentials.
+    this.fetchImpl = refuseRedirects(fetchImpl);
     this.container = new URL(DOCS_SLUG, podRoot).href;
     this.legacyContainer = new URL(LEGACY_DOCS_SLUG, podRoot).href;
   }

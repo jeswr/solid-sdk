@@ -1,5 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6 — review regression tests
+
+import { RedirectRefusedError } from "@jeswr/guarded-fetch";
 import { assert, describe, expect, it, vi } from "vitest";
 import { buildDocument, parseDocument } from "../../src/apps/docs/lib/model/document.js";
 import {
@@ -110,6 +112,87 @@ async function server() {
 function listing(children: string[]): string {
   return `@prefix ldp: <http://www.w3.org/ns/ldp#>. <> a ldp:Container; ldp:contains ${children.map((u) => `<${u}>`).join(", ")}.`;
 }
+
+describe("store redirect refusal", () => {
+  it.each([
+    ["read", "GET", DOC],
+    ["save", "PUT", DOC],
+    ["list", "GET", WEBID],
+    ["list", "GET", `${POD}docs/`],
+    ["list", "GET", `${POD}pod-docs/`],
+    ["list child", "GET", DOC],
+    ["create", "PUT", `${POD}docs/new/`],
+    ["create", "PUT", `${POD}docs/new/updates/`],
+    ["create", "PUT", `${POD}docs/new/assets/`],
+    ["create", "PUT", `${POD}docs/new/comments/`],
+    ["create", "PUT", `${POD}docs/new.ttl`],
+    ["copy", "GET", `${POD}docs/plan/assets/chart.png`],
+    ["copy", "PUT", `${POD}docs/plan-copy/assets/chart.png`],
+    ["copy", "PUT", `${POD}docs/plan-copy/updates/state`],
+    ["copy finalization", "PUT", `${POD}docs/plan-copy.ttl`],
+  ])("refuses %s %s redirects at %s", async (operation, method, target) => {
+    const s = await server();
+    s.resources.set(`${POD}docs/`, {
+      body: listing([DOC]),
+      etag: '"c"',
+      contentType: "text/turtle",
+    });
+    if (target === `${POD}pod-docs/`) {
+      const index = s.resources.get(INDEX);
+      assert(index);
+      index.body = `@prefix solid: <http://www.w3.org/ns/solid/terms#>.
+        <#legacy> a solid:TypeRegistration; solid:forClass <https://jeswr.org/ns/pod-docs#Document>;
+        solid:instanceContainer <${target}>.`;
+    }
+    const asset = `${POD}docs/plan/assets/chart.png`;
+    s.resources.set(asset, { body: "png", etag: '"a"', contentType: "image/png" });
+    const destination = "https://evil.example/stolen";
+    let targetCalls = 0;
+    const fetchImpl = vi.fn<typeof fetch>(async (url, init) => {
+      if (String(url) === target && (init?.method ?? "GET") === method) {
+        targetCalls++;
+        if (operation !== "copy finalization" || targetCalls === 2) {
+          return new Response(null, { status: 307, headers: { location: destination } });
+        }
+      }
+      return s.fetchImpl(url, init);
+    });
+    const store = new DocsStore(POD, WEBID, fetchImpl);
+    const stored = await document();
+    const pending = operation.startsWith("list")
+      ? store.list()
+      : operation === "read"
+        ? store.read(DOC)
+        : operation === "save"
+          ? store.save(stored, {}, { regenerate: () => ({ body: "live" }) })
+          : operation === "create"
+            ? store.create({ title: "New" })
+            : store.makeCopy(stored, {
+                assets: [asset],
+                snapshot: () => ({ body: "copied" }),
+                persistFullState: async (updates, fetch) => {
+                  await fetch(`${updates}state`, {
+                    method: "PUT",
+                    body: "state",
+                    redirect: "follow",
+                  });
+                },
+              });
+    if (operation === "list child") await expect(pending).resolves.toEqual([]);
+    else
+      await expect(pending).rejects.toMatchObject(
+        method === "GET" && operation !== "copy"
+          ? { cause: expect.any(RedirectRefusedError) }
+          : expect.any(RedirectRefusedError),
+      );
+    expect(targetCalls).toBe(operation === "copy finalization" ? 2 : 1);
+    expect(
+      fetchImpl.mock.calls.every(
+        ([url, init]) => String(url) !== destination && init?.redirect === "manual",
+      ),
+    ).toBe(true);
+  });
+});
 
 describe("store creation and scope", () => {
   it("creates both documents when first-use profile linking races", async () => {
@@ -491,7 +574,7 @@ describe("makeCopy", () => {
     expect(copy.url).toBe(`${POD}docs/plan-copy-2.ttl`);
     expect(persistFullState).toHaveBeenCalledWith(
       `${POD}docs/plan-copy-2/updates/`,
-      s.fetchImpl,
+      expect.any(Function),
       new Map(),
     );
     expect(s.resources.get(oldContainer)).toEqual(old);
@@ -504,7 +587,7 @@ describe("makeCopy", () => {
     s.resources.set(asset, { body: "png bytes", contentType: "image/png", etag: '"a"' });
     const persistFullState = vi.fn(
       async (updates: string, fetchImpl: typeof fetch, mapping: ReadonlyMap<string, string>) => {
-        expect(fetchImpl).toBe(s.fetchImpl);
+        expect(fetchImpl).toEqual(expect.any(Function));
         expect(mapping.get(asset)).toBe(`${POD}docs/plan-copy/assets/chart.png`);
         await fetchImpl(`${updates}state`, {
           method: "PUT",
