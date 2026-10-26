@@ -11,8 +11,8 @@
  * are documented follow-ups; the resolver is structured so they slot in as additional passes.
  *
  * RDF is parsed with N3.js (the house rule — never regex over Turtle). The pure parse helpers
- * are unit-testable against fixtures; `resolveClassTargets` takes an INJECTED authed fetch so
- * the network walk is testable without a live pod and reuses the SW's DPoP egress in prod.
+ * are unit-testable against fixtures; `resolveClassTargets` takes an injected fetch that
+ * distinguishes public discovery from authenticated private-index reads.
  *
  * FAIL-CLOSED / defence-in-depth:
  *   - only `NamedNode`, http(s), same-*credential*-origin targets are kept (a type index that
@@ -33,14 +33,19 @@ const FOR_CLASS = `${SOLID}forClass`;
 const INSTANCE = `${SOLID}instance`;
 const INSTANCE_CONTAINER = `${SOLID}instanceContainer`;
 
-/** An injected fetch returning the body text + ok flag. In prod: the SW's authed DPoP egress. */
-export type ResolveFetch = (url: string) => Promise<{ ok: boolean; text: string }>;
+/** Public documents must never carry credentials, even on an authenticated pod origin. */
+export type ResolveFetch = (
+  url: string,
+  authenticated: boolean,
+) => Promise<{ ok: boolean; text: string }>;
 
 export interface ResolveOptions {
   /** The active session's WebID (the profile document to read the type-index refs from). */
   readonly webId: string;
-  /** The injected authed fetch. */
+  /** The injected fetch, with credential use explicit for each document. */
   readonly fetch: ResolveFetch;
+  /** Origins permitted for private-index reads. Omit to discover public documents only. */
+  readonly authenticatedOrigins?: ReadonlySet<string>;
   /**
    * The pod/credential origins a target is allowed to live on (defence in depth). When given,
    * a resolved target on any other origin is DROPPED. Omit to keep all http(s) targets.
@@ -69,11 +74,15 @@ function normaliseTargetUrl(value: string): { url: string; origin: string } | nu
 
 /**
  * The type-index document URLs advertised on the WebID subject (`solid:publicTypeIndex` +
- * `solid:privateTypeIndex`), NamedNode + http(s) only, deduped in document order. PURE.
+ * `solid:privateTypeIndex`), NamedNode + http(s) only. Public refs take precedence when a
+ * document is advertised both ways, so it is fetched once without credentials. PURE.
  */
-export function parseTypeIndexRefs(webId: string, profileTurtle: string): string[] {
+export function parseTypeIndexRefs(
+  webId: string,
+  profileTurtle: string,
+): Array<{ url: string; authenticated: boolean }> {
   const store = parse(webId, profileTurtle);
-  const out: string[] = [];
+  const out: Array<{ url: string; authenticated: boolean }> = [];
   for (const pred of [PUBLIC_TYPE_INDEX, PRIVATE_TYPE_INDEX]) {
     for (const q of store.getQuads(
       DataFactory.namedNode(webId),
@@ -83,7 +92,8 @@ export function parseTypeIndexRefs(webId: string, profileTurtle: string): string
     )) {
       if (q.object.termType !== 'NamedNode') continue;
       const n = normaliseTargetUrl(q.object.value);
-      if (n && !out.includes(q.object.value)) out.push(q.object.value);
+      if (n && !out.some((ref) => ref.url === q.object.value))
+        out.push({ url: q.object.value, authenticated: pred === PRIVATE_TYPE_INDEX });
     }
   }
   return out;
@@ -151,10 +161,10 @@ export async function resolveClassTargets(
   classIRI: string,
   opts: ResolveOptions,
 ): Promise<PinnedTarget[]> {
-  const profile = await safeFetch(opts.fetch, opts.webId);
+  const profile = await safeFetch(opts.fetch, opts.webId, false);
   if (profile === null) return [];
 
-  let refs: string[];
+  let refs: ReturnType<typeof parseTypeIndexRefs>;
   try {
     refs = parseTypeIndexRefs(opts.webId, profile);
   } catch {
@@ -164,15 +174,18 @@ export async function resolveClassTargets(
   const seen = new Set<string>();
   const out: PinnedTarget[] = [];
   for (const ref of refs) {
-    // Defence in depth: when confined to pod origins, NEVER fetch a type-index document on a
-    // foreign origin — a compromised/hostile profile could point `publicTypeIndex` at an
-    // attacker URL and turn resolution into an SW-side SSRF. Skip any off-pod ref.
-    if (opts.allowedOrigins && !isAllowedOrigin(ref, opts.allowedOrigins)) continue;
-    const body = await safeFetch(opts.fetch, ref);
+    // Public indexes may live beside the WebID or on any other http(s) host. Only
+    // private-index egress is confined to authenticated origins; targets are filtered below.
+    if (
+      ref.authenticated &&
+      (!opts.authenticatedOrigins || !isAllowedOrigin(ref.url, opts.authenticatedOrigins))
+    )
+      continue;
+    const body = await safeFetch(opts.fetch, ref.url, ref.authenticated);
     if (body === null) continue;
     let targets: PinnedTarget[];
     try {
-      targets = parseTargetsForClass(ref, body, classIRI, opts.allowedOrigins);
+      targets = parseTargetsForClass(ref.url, body, classIRI, opts.allowedOrigins);
     } catch {
       continue;
     }
@@ -195,9 +208,13 @@ function isAllowedOrigin(url: string, allowed: ReadonlySet<string>): boolean {
   }
 }
 
-async function safeFetch(fetchFn: ResolveFetch, url: string): Promise<string | null> {
+async function safeFetch(
+  fetchFn: ResolveFetch,
+  url: string,
+  authenticated: boolean,
+): Promise<string | null> {
   try {
-    const { ok, text } = await fetchFn(url);
+    const { ok, text } = await fetchFn(url, authenticated);
     return ok ? text : null;
   } catch {
     return null;

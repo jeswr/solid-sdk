@@ -19,11 +19,10 @@ Chromium (`channel: 'chromium'`, which supports extensions). No display server i
 needed. The suite has zero retries.
 
 Popup sign-in does not grant unrelated web origins access. The fetch/navigation
-tests explicitly opt the test site in using `SOLID_SET_CLIENT_ID` from its
-browser-attested isolated world, await the worker's acknowledgement, and reload to
-read the granted state. The fetch test also checks that the ungranted site receives
-no WebID and its private fetch is denied. The app-login scenario separately drives
-the public `window.solid.setClientId` API.
+tests first check that the ungranted test site gets only the `window.solid` stub, then
+grant it through the real flow: a user click calls `window.solid.requestAccess`, and the
+test approves the consent window (profile picker included). The revocation test checks
+that a captured `fetch` stops working on the next request.
 
 On runners with a read-only home directory, Chromium can fail before any test with
 `chrome_crashpad_handler: --database is required`. The launches disable crash

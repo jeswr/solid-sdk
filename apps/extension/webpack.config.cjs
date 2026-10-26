@@ -12,6 +12,7 @@ module.exports = {
     'popup/popup': './src/popup/popup.ts',
     'sidepanel/sidepanel': './src/sidepanel/sidepanel.ts',
     'content/content-script': './src/content/content-script.ts',
+    'inject/fetch-patch': './src/inject/fetch-patch.ts',
     'inject/inject': './src/inject/inject.ts',
     'consent/consent': './src/consent/consent.ts',
   },

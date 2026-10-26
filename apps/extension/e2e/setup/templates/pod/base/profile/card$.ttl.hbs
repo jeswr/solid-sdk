@@ -12,5 +12,6 @@
     {{#if name}}foaf:name "{{name}}";{{/if}}
     vcard:hasPhoto "{{base.path}}profile/photo.jpg";
     {{#if oidcIssuer}}solid:oidcIssuer <{{oidcIssuer}}>;{{/if}}
+    solid:publicTypeIndex <{{base.path}}profile/type-index>;
     pim:storage <{{base.path}}>;
     a foaf:Person.

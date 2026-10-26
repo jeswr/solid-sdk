@@ -55,6 +55,17 @@ function freshWindow(): void {
 async function importInject(): Promise<void> {
   vi.resetModules();
   await import('../src/inject/inject');
+  dom.window.dispatchEvent(
+    new dom.window.MessageEvent('message', {
+      source: dom.window,
+      data: {
+        channel: 'solid-browser-ext',
+        dir: 'to-page',
+        type: 'SOLID_STATE_UPDATE',
+        webId: 'https://pod.example/#me',
+      },
+    }),
+  );
 }
 
 beforeEach(() => {
@@ -95,7 +106,9 @@ describe('inject — installs window.solid + patches fetch', () => {
     // 2. the one-shot event — for a listener attached before the inject ran.
     expect(readyEvents).toHaveLength(1);
     // The announce carries NO identity: webId stays on window.solid (null until auth).
-    expect((dom.window as unknown as { solid: { webId: unknown } }).solid.webId).toBeNull();
+    expect((dom.window as unknown as { solid: { webId: unknown } }).solid.webId).toBe(
+      'https://pod.example/#me',
+    );
   });
 });
 
@@ -320,4 +333,27 @@ describe('inject — MEDIUM #2: a double injection is INERT (no throw on the sec
     await expect(importInject()).resolves.toBeUndefined();
     expect((dom.window as unknown as { solid: { sentinel?: boolean } }).solid.sentinel).toBe(true);
   });
+});
+
+it('keeps an ungranted origin stub-only, preserving native fetch; removes capabilities on revoke', async () => {
+  vi.resetModules();
+  await import('../src/inject/inject');
+  const stub = (dom.window as unknown as { solid: Record<string, unknown> }).solid;
+  expect(Object.keys(stub).sort()).toEqual(['login', 'requestAccess']);
+  expect(stub.webId).toBeUndefined();
+  expect(stub.fetch).toBeUndefined();
+  expect(dom.window.fetch).toBe(nativeFetch);
+  const update = (webId: string | null) =>
+    dom.window.dispatchEvent(
+      new dom.window.MessageEvent('message', {
+        source: dom.window,
+        data: { channel: 'solid-browser-ext', dir: 'to-page', type: 'SOLID_STATE_UPDATE', webId },
+      }),
+    );
+  update('https://pod.example/#me');
+  expect(typeof stub.fetch).toBe('function');
+  expect(dom.window.fetch).not.toBe(nativeFetch);
+  update(null);
+  expect(Object.keys(stub).sort()).toEqual(['login', 'requestAccess']);
+  expect(dom.window.fetch).toBe(nativeFetch);
 });

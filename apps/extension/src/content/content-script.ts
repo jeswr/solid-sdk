@@ -112,13 +112,16 @@ window.addEventListener('message', (event) => {
       break;
 
     case 'SOLID_LOGOUT':
-      chrome.runtime.sendMessage({ type: 'SOLID_LOGOUT' }, (response) => {
-        toPage({
-          type: 'SOLID_ACTION_RESPONSE',
-          actionId: data.actionId,
-          error: response?.error ?? null,
-        });
-      });
+      chrome.runtime.sendMessage(
+        { type: 'SOLID_LOGOUT', stampedOrigin: window.location.origin },
+        (response) => {
+          toPage({
+            type: 'SOLID_ACTION_RESPONSE',
+            actionId: data.actionId,
+            error: response?.error ?? null,
+          });
+        },
+      );
       break;
 
     // --- Access management (Phase 2) — all origin-sensitive, so the REAL page origin is
@@ -192,7 +195,7 @@ window.addEventListener('message', (event) => {
 
 // Relay worker -> page state broadcasts.
 chrome.runtime.onMessage.addListener((message) => {
-  if (message?.type === 'SOLID_STATE_CHANGED') {
+  if (message?.type === 'SOLID_STATE_CHANGED' && message.origin === window.location.origin) {
     toPage({ type: 'SOLID_STATE_UPDATE', webId: message.webId ?? null });
   }
 });

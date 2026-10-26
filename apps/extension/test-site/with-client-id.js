@@ -20,7 +20,7 @@ async function init() {
     var config = await configRes.json();
 
     if (config.clientIdUrl) {
-      window.solid.setClientId(config.clientIdUrl);
+      if (typeof window.solid.setClientId === 'function') window.solid.setClientId(config.clientIdUrl);
       clientIdEl.textContent = config.clientIdUrl;
       clientIdEl.className = '';
       statusEl.textContent = 'Client ID set. Enter your WebID and click Login.';
@@ -59,6 +59,7 @@ async function init() {
   var interval = setInterval(async function () {
     if (!window.solid.webId) return;
     clearInterval(interval);
+    if (config && config.clientIdUrl) window.solid.setClientId(config.clientIdUrl);
 
     webidEl.textContent = window.solid.webId;
     webidEl.className = '';

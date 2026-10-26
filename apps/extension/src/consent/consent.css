@@ -69,3 +69,15 @@ body {
 .btn-primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .error { color: var(--danger); margin-top: 12px; }
+
+#profile {
+  display: block;
+  width: 100%;
+  margin-block: 0.5rem 1rem;
+  padding: 0.65rem;
+  color: inherit;
+  background: var(--bg);
+  border: 1px solid currentColor;
+  border-radius: 0.5rem;
+  font: inherit;
+}

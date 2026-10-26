@@ -1,35 +1,7 @@
-import type { BrowserContext, Page } from '@playwright/test';
-import { expect } from '../fixtures';
+import { type BrowserContext, expect, type Page } from '@playwright/test';
 
 /** The seeded CSS test WebID (see e2e/setup/seed.json). */
 export const TEST_WEBID = 'http://localhost:3000/test-pod/profile/card#me';
-
-/**
- * Opt a test app into the popup's session through the real, origin-verified content
- * script path. Popup login alone deliberately grants no unrelated website access.
- * Await the worker's acknowledgement before loading the app again for its state read.
- */
-export async function grantTestSite(context: BrowserContext, page: Page): Promise<void> {
-  const origin = new URL(page.url()).origin;
-  const result = await context.serviceWorkers()[0].evaluate(async (appOrigin) => {
-    const tabs = await chrome.tabs.query({ url: `${appOrigin}/*` });
-    const tabId = tabs[0]?.id;
-    if (tabId === undefined) throw new Error('Test app tab not found');
-    const [reply] = await chrome.scripting.executeScript({
-      target: { tabId },
-      world: 'ISOLATED',
-      func: () =>
-        chrome.runtime.sendMessage({
-          type: 'SOLID_SET_CLIENT_ID',
-          origin: location.origin,
-          clientId: `${location.origin}/client-id`,
-        }),
-    });
-    return reply.result;
-  }, origin);
-  expect(result).toEqual({ ok: true });
-  await page.reload();
-}
 
 /**
  * Complete the CSS OIDC login + consent flow on the window
@@ -65,15 +37,53 @@ export async function performLogin(
   const popupPage = await context.newPage();
   await popupPage.goto(`chrome-extension://${extensionId}/popup/popup.html`);
   // The signed-out surface is now <jeswr-login-panel>; drive its shadow parts.
-  // CSS descendants pierce the open shadow root and reach controls nested in the form.
-  // `>>>` is parsed as `>>` then `>` and incorrectly requires a direct child.
-  await popupPage.fill('#login-panel [part="webid-input"]', webId);
+  // Playwright's CSS engine pierces the (open) shadow root, so `part=` selectors work.
+  await popupPage.getByLabel('Your WebID').fill(webId);
 
   const loginPagePromise = context.waitForEvent('page');
-  await popupPage.click('#login-panel [part="login-button"]');
+  await popupPage.getByRole('button', { name: 'Sign in', exact: true }).click();
   await completeOidcLogin(await loginPagePromise);
 
   await popupPage.goto(`chrome-extension://${extensionId}/popup/popup.html`);
   await popupPage.locator('#signed-in').waitFor({ state: 'visible', timeout: 15_000 });
   await popupPage.close();
+}
+
+/** Drive the actual gesture-gated origin/class consent against the local CSS fixture. */
+export async function grantOrigin(context: BrowserContext, page: Page): Promise<void> {
+  await page.waitForFunction(
+    () =>
+      typeof (window as unknown as { solid?: { requestAccess?: unknown } }).solid?.requestAccess ===
+      'function',
+  );
+  await page.evaluate(() => {
+    const button = document.createElement('button');
+    button.id = 'grant-origin-fixture';
+    button.textContent = 'Grant origin access';
+    button.addEventListener('click', () => {
+      const solid = (
+        window as unknown as {
+          solid: { requestAccess(request: unknown): Promise<{ ok: boolean }> };
+        }
+      ).solid;
+      void solid
+        .requestAccess({
+          classes: ['https://schema.org/TextDigitalDocument'],
+          modes: ['read'],
+          duration: 'P1D',
+        })
+        .then((result) => {
+          button.dataset.approved = String(result.ok);
+        });
+    });
+    document.body.appendChild(button);
+  });
+  const consentPromise = context.waitForEvent('page');
+  await page.getByRole('button', { name: 'Grant origin access' }).click();
+  const consent = await consentPromise;
+  await consent.waitForURL('**/consent/consent.html?*');
+  await expect(consent.getByLabel('Share from profile')).toBeVisible();
+  await expect(consent.locator('.targets')).toContainText('/private/notes');
+  await consent.getByRole('button', { name: 'Approve selected' }).click();
+  await expect(page.locator('#grant-origin-fixture')).toHaveAttribute('data-approved', 'true');
 }

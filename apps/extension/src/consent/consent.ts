@@ -47,6 +47,7 @@ function renderClasses(view: PendingConsentView): Map<string, HTMLInputElement> 
   const container = document.getElementById('classes');
   const boxes = new Map<string, HTMLInputElement>();
   if (!container) return boxes;
+  container.replaceChildren();
   let anyTargets = false;
 
   for (const c of view.classes) {
@@ -89,11 +90,12 @@ function renderClasses(view: PendingConsentView): Map<string, HTMLInputElement> 
   return boxes;
 }
 
-function sendDecision(consentId: string, approvedClasses: string[]): void {
+function sendDecision(consentId: string, approvedClasses: string[], profileId?: string): void {
   const msg: ConsentDecisionMessage = {
     type: 'SOLID_CONSENT_DECISION',
     consentId,
     approvedClasses,
+    profileId,
   };
   chrome.runtime.sendMessage(msg, () => {
     // Close regardless — the worker has recorded the decision (or the window was already gone).
@@ -127,12 +129,43 @@ async function main(): Promise<void> {
   const webidEl = document.getElementById('webid');
   if (webidEl) webidEl.textContent = `(${view.webId})`;
 
-  const boxes = renderClasses(view);
+  let boxes = renderClasses(view);
+  let selectedProfileId = view.profileId;
+  const picker = document.getElementById('profile') as HTMLSelectElement;
+  for (const profile of view.profiles) {
+    const option = el('option', { text: profile.label });
+    option.value = profile.id;
+    picker.appendChild(option);
+  }
+  picker.value = selectedProfileId;
+  picker.addEventListener('change', async () => {
+    const requested = picker.value;
+    const approve = document.getElementById('approve') as HTMLButtonElement;
+    approve.disabled = true;
+    try {
+      const next = (await chrome.runtime.sendMessage({
+        type: 'SOLID_GET_PENDING_CONSENT',
+        consentId,
+        profileId: requested,
+      })) as PendingConsentView | null;
+      if (picker.value !== requested) return;
+      if (!next) {
+        showError('This profile is no longer available.');
+        return;
+      }
+      selectedProfileId = next.profileId;
+      if (webidEl) webidEl.textContent = `(${next.webId})`;
+      boxes = renderClasses(next);
+      approve.disabled = false;
+    } catch {
+      showError('Could not load the selected profile.');
+    }
+  });
 
   document.getElementById('approve')?.addEventListener('click', () => {
     const approved: string[] = [];
     for (const [dataClass, box] of boxes) if (box.checked) approved.push(dataClass);
-    sendDecision(consentId, approved);
+    sendDecision(consentId, approved, selectedProfileId);
   });
   document.getElementById('deny')?.addEventListener('click', () => {
     sendDecision(consentId, []);

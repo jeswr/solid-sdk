@@ -59,6 +59,7 @@ export interface LoginRequest {
 
 export interface LogoutRequest {
   readonly type: 'SOLID_LOGOUT';
+  readonly stampedOrigin?: string;
 }
 
 export interface GetStateRequest {
@@ -161,6 +162,8 @@ export interface ResolveClassRequest {
 
 /** The worker's reply to any of the four access-management requests (correlated by requestId). */
 export interface AccessResponse {
+  /** Sent only after explicit origin consent; enables the newly granted API before resolving. */
+  readonly webId?: string;
   readonly requestId: string;
   readonly ok?: boolean;
   readonly grants?: readonly GrantSummary[];
@@ -173,6 +176,7 @@ export interface AccessResponse {
 export interface GetPendingConsentRequest {
   readonly type: 'SOLID_GET_PENDING_CONSENT';
   readonly consentId: string;
+  readonly profileId?: string;
 }
 
 /** The consent surface → worker decision (from the extension's own consent window only). */
@@ -181,6 +185,7 @@ export interface ConsentDecisionMessage {
   readonly consentId: string;
   /** The data-class IRIs the user APPROVED (a subset of the requested set); [] ⇒ denied all. */
   readonly approvedClasses: readonly string[];
+  readonly profileId?: string;
 }
 
 /** What the consent window renders — a token-free view of the pending request. */
@@ -188,6 +193,8 @@ export interface PendingConsentView {
   readonly consentId: string;
   readonly origin: string;
   readonly webId: string;
+  readonly profileId: string;
+  readonly profiles: readonly Pick<Profile, 'id' | 'label' | 'webId'>[];
   readonly classes: ReadonlyArray<{
     readonly dataClass: string;
     readonly modes: readonly string[];
@@ -198,7 +205,22 @@ export interface PendingConsentView {
   }>;
 }
 
+export type OriginGrantRequest =
+  | { readonly type: 'SOLID_ORIGIN_GRANTS_LIST' }
+  | { readonly type: 'SOLID_ORIGIN_GRANT_REVOKE'; readonly origin: string }
+  | {
+      readonly type: 'SOLID_ORIGIN_GRANT_PROFILE';
+      readonly origin: string;
+      readonly profileId: string;
+    }
+  | {
+      readonly type: 'SOLID_ORIGIN_GRANT_EXPIRY';
+      readonly origin: string;
+      readonly expiresAt: number;
+    };
+
 export type WorkerRequest =
+  | OriginGrantRequest
   | ProfileRequest
   | FetchRequest
   | LoginRequest
@@ -262,5 +284,7 @@ export interface ActionResult {
 /** Broadcast from the worker to all tabs/popup when auth state changes. */
 export interface StateChanged {
   readonly type: 'SOLID_STATE_CHANGED';
+  /** Required for tab delivery; omitted for trusted extension-context broadcasts. */
+  readonly origin?: string;
   readonly webId: string | null;
 }

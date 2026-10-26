@@ -56,3 +56,44 @@ export const noLegacy = (): Promise<LegacyProfile> =>
     podOrigins: [],
     classGrants: [],
   });
+
+/** Explicit parent grants for pre-existing gate/replica test scenarios. This is fixture setup,
+ * never production migration: those tests continue to exercise the same class/egress policy. */
+export function seedOriginGrantFixtures(storage: Map<string, unknown>, db: MemoryProfileDb): void {
+  if (storage.has('solid:origin-grants')) return;
+  const records = db.state.records.length
+    ? db.state.records
+    : [
+        {
+          profile: { id: '1' },
+          session: storage.get('solid:session') as StoredSession | undefined,
+          grantedOrigins: (storage.get('solid:granted-origins') ?? []) as string[],
+          podOrigins: (storage.get('solid:pod-origins') ?? []) as string[],
+          classGrants: (storage.get('solid:class-grants') ?? []) as ClassGrant[],
+        },
+      ];
+  const grants = records.flatMap((r) => {
+    if (!r.session) return [];
+    const pods = [
+      ...new Set([
+        new URL(r.session.webId).origin,
+        new URL(r.session.issuer).origin,
+        ...r.podOrigins,
+      ]),
+    ];
+    const explicit = r.grantedOrigins.map((origin) => new URL(origin).origin);
+    const origins = [...new Set([...explicit, ...r.classGrants.map((g) => g.origin)])];
+    return origins.map((origin) => ({
+      origin,
+      profileId: r.profile.id,
+      createdAt: Date.now(),
+      scope: {
+        pods,
+        ...(explicit.includes(origin)
+          ? {}
+          : { classes: r.classGrants.filter((g) => g.origin === origin) }),
+      },
+    }));
+  });
+  storage.set('solid:origin-grants', grants);
+}

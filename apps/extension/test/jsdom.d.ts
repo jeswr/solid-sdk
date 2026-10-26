@@ -9,6 +9,7 @@ declare module 'jsdom' {
     url?: string;
   }
   export class JSDOM {
+    reconfigure(options: { url: string }): void;
     constructor(html?: string, options?: ConstructorOptions);
     readonly window: Window & typeof globalThis;
   }

@@ -1,3 +1,5 @@
+import type { OriginGrant } from '../src/background/core/origin-grant';
+import { seedOriginGrantFixtures } from './profile-fixtures';
 // AUTHORED-BY Claude Opus 4.8
 //
 // INTEGRATION tests for the Phase-2 PER-DATA-CLASS gate AS WIRED INTO the service worker. These
@@ -138,6 +140,8 @@ let messageListeners: MessageListener[];
 let fetchCalls: Array<{ url: string; init?: RequestInit }>;
 let fetchImpl: (url: string, init?: RequestInit) => Promise<Response>;
 let createdWindows: string[];
+let registrations: Map<string, chrome.scripting.RegisteredContentScript>;
+let alarmListener: (alarm: { name: string }) => void;
 
 const EXTENSION_ID = 'abcdefghijklmnopabcdefghijklmnop';
 const EXT_SENDER: CapturedSender = {
@@ -152,8 +156,27 @@ function installChrome(): void {
   messageListeners = [];
   fetchCalls = [];
   createdWindows = [];
+  registrations = new Map();
 
   const chromeStub = {
+    scripting: {
+      getRegisteredContentScripts: async () => [...registrations.values()],
+      registerContentScripts: async (scripts: chrome.scripting.RegisteredContentScript[]) => {
+        for (const script of scripts) registrations.set(script.id, script);
+      },
+      unregisterContentScripts: async ({ ids }: { ids: string[] }) => {
+        for (const id of ids) registrations.delete(id);
+      },
+    },
+    alarms: {
+      clear: vi.fn(async () => true),
+      create: vi.fn(async () => {}),
+      onAlarm: {
+        addListener: (fn: typeof alarmListener) => {
+          alarmListener = fn;
+        },
+      },
+    },
     runtime: {
       id: EXTENSION_ID,
       lastError: undefined as { message?: string } | undefined,
@@ -272,6 +295,7 @@ function classGrant(overrides: Partial<ClassGrant> = {}): ClassGrant {
 }
 
 async function loadWorker(): Promise<void> {
+  seedOriginGrantFixtures(storage, profileDb);
   messageListeners.length = 0;
   vi.resetModules();
   await import('../src/background/service-worker');
@@ -373,7 +397,10 @@ describe('Phase-2 per-data-class gate (wired into the SW)', () => {
     // An expired grant no longer makes the origin a granted requester → forbidden-origin.
     expect(res.status).toBe(403);
     // The expired grant was pruned on the fetch path.
-    expect(profileDb.state.records[0]?.classGrants).toEqual([]);
+    expect(
+      (storage.get('solid:origin-grants') as Array<{ scope: { classes: unknown[] } }>)[0].scope
+        .classes,
+    ).toEqual([]);
   });
 
   it('an UNKNOWN / unresolved class (empty targets) is fail-closed DENY even if unexpired', async () => {
@@ -403,7 +430,7 @@ describe('Phase-2 per-data-class gate (wired into the SW)', () => {
     expect(res.status).toBe(403);
   });
 
-  it('BACKWARDS COMPAT: a legacy origin-only grant keeps WHOLE-POD access', async () => {
+  it('an explicit whole-pod origin grant keeps WHOLE-POD access', async () => {
     await seedSession();
     // pm.example is a legacy full grant; NO class grant. It may read ANY pod resource.
     storage.set('solid:granted-origins', ['https://pm.example']);
@@ -422,7 +449,7 @@ describe('Phase-2 per-data-class gate (wired into the SW)', () => {
     expect(b.status).toBe(200);
   });
 
-  it('a full-grant origin that ALSO holds a class grant keeps whole-pod access (full wins)', async () => {
+  it('an explicit whole-pod scope that ALSO has old standalone class records keeps whole-pod access (full wins)', async () => {
     await seedSession();
     storage.set('solid:granted-origins', ['https://appx.example']);
     storage.set('solid:class-grants', [classGrant()]); // finance-only
@@ -721,21 +748,21 @@ describe('Phase-2 per-data-class gate (wired into the SW)', () => {
     expect(otherClass.targets).toBeUndefined();
   });
 
-  it('resolveClass does NOT follow a type-index ref on the ISSUER origin (pod-only, SSRF)', async () => {
+  it('resolveClass reads public indexes on the issuer without credentials and drops issuer targets', async () => {
     await seedSession(); // issuer = https://idp.example/
     storage.set('solid:granted-origins', ['https://pm.example']);
     await loadWorker();
-    const issuerFetches: string[] = [];
     fetchImpl = async (url) => {
-      if (url.startsWith('https://idp.example')) issuerFetches.push(url);
       if (url.includes('/profile/card'))
-        // A hostile profile points the type index at the ISSUER origin.
         return new Response(
           `@prefix solid: <http://www.w3.org/ns/solid/terms#> .
            <${WEBID}> solid:publicTypeIndex <https://idp.example/typeindex.ttl> .`,
           { status: 200 },
         );
-      return new Response('', { status: 200 });
+      return new Response(
+        `<#fin> <http://www.w3.org/ns/solid/terms#forClass> <${classGrant().dataClass}> ;
+          <http://www.w3.org/ns/solid/terms#instanceContainer> <https://idp.example/private/> .`,
+      );
     };
 
     const pm = { origin: 'https://pm.example', url: 'https://pm.example/app' };
@@ -749,8 +776,15 @@ describe('Phase-2 per-data-class gate (wired into the SW)', () => {
       pm,
     );
     expect(res.targets).toEqual([]);
-    // The issuer-hosted type-index ref was NEVER fetched.
-    expect(issuerFetches.filter((u) => u.includes('typeindex'))).toEqual([]);
+    expect(fetchCalls.map((call) => call.url)).toEqual([
+      WEBID,
+      'https://idp.example/typeindex.ttl',
+    ]);
+    for (const call of fetchCalls) {
+      expect(new Headers(call.init?.headers).has('Authorization')).toBe(false);
+      expect(new Headers(call.init?.headers).has('DPoP')).toBe(false);
+      expect(call.init?.credentials).toBe('omit');
+    }
   });
 
   it('resolveClass FOLLOWS a same-origin type-index ref when the pod IS the issuer (CSS single-origin)', async () => {
@@ -826,6 +860,67 @@ describe('Phase-2 per-data-class gate (wired into the SW)', () => {
     const grants = res.grants as Array<{ grantId: string }>;
     expect(grants.map((g) => g.grantId)).toEqual(['mine']);
   });
+  it.each([
+    'expiry',
+    'relogin',
+    'rebind',
+    'logout',
+  ] as const)('listGrants withholds private targets when %s occurs during session lookup', async (change) => {
+    await seedSession();
+    storage.set('solid:class-grants', [classGrant()]);
+    await loadWorker();
+    const { ProfileStore: WorkerStore } = await import('../src/background/core/profile-store');
+    const session = WorkerStore.prototype.session;
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let entered!: () => void;
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const lookup = vi
+      .spyOn(WorkerStore.prototype, 'session')
+      .mockImplementationOnce(async function (this: ProfileStore, id) {
+        const result = await session.call(this, id);
+        entered();
+        await held;
+        return result;
+      });
+    try {
+      const pending = send(
+        { type: 'SOLID_LIST_GRANTS', requestId: 'held-list', stampedOrigin: APPX.origin },
+        APPX,
+      );
+      await started;
+      if (change === 'logout') await send({ type: 'SOLID_LOGOUT' }, EXT_SENDER);
+      if (change === 'relogin') {
+        const replacement = await profileCredentials('replacement');
+        const replacementSession = { ...replacement.session, webId: WEBID };
+        await new ProfileStore(profileDb, async () => {}).login(
+          replacementSession,
+          replacement.keyPair,
+          { ...replacement.display, webId: WEBID },
+        );
+      }
+      if (change === 'expiry' || change === 'rebind') {
+        const parents = storage.get('solid:origin-grants') as OriginGrant[];
+        storage.set('solid:origin-grants', [
+          {
+            ...parents[0],
+            ...(change === 'expiry' ? { expiresAt: Date.now() - 1 } : { profileId: 'other' }),
+          },
+        ]);
+      }
+      release();
+      const result = await pending;
+      expect(result.grants).toEqual([]);
+      expect(JSON.stringify(result)).not.toContain('/finance/');
+    } finally {
+      release();
+      lookup.mockRestore();
+    }
+  });
 });
 
 describe('Phase-2 requestAccess → consent → grant (wired)', () => {
@@ -845,6 +940,74 @@ describe('Phase-2 requestAccess → consent → grant (wired)', () => {
       return Promise.resolve(new Response(INDEX, { status: 200 }));
     return Promise.resolve(new Response('ok', { status: 200 }));
   }
+
+  it.each([
+    'logout',
+    'relogin',
+    'expiry',
+    'revoke',
+  ] as const)('requestAccess stops discovery held across %s before using stale credentials', async (change) => {
+    await seedSession();
+    storage.set('solid:granted-origins', [APPX.origin]);
+    await loadWorker();
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    fetchImpl = async (url) => {
+      if (url === WEBID) await held;
+      return routeFetch(url);
+    };
+    let settled = false;
+    const pending = send(
+      {
+        type: 'SOLID_REQUEST_ACCESS',
+        requestId: 'stale-discovery',
+        classes: [classGrant().dataClass],
+        modes: ['read'],
+        duration: 'P1D',
+        stampedOrigin: APPX.origin,
+        userActivated: true,
+      },
+      APPX,
+    ).then((result) => {
+      settled = true;
+      return result;
+    });
+    await vi.waitFor(() => expect(fetchCalls.some((call) => call.url === WEBID)).toBe(true));
+    if (change === 'logout') await send({ type: 'SOLID_LOGOUT' }, EXT_SENDER);
+    if (change === 'relogin') {
+      const replacement = await profileCredentials('replacement');
+      const session = { ...replacement.session, webId: WEBID };
+      await new ProfileStore(profileDb, async () => {}).login(session, replacement.keyPair, {
+        ...replacement.display,
+        webId: WEBID,
+      });
+    }
+    if (change === 'expiry') {
+      const parents = storage.get('solid:origin-grants') as OriginGrant[];
+      storage.set('solid:origin-grants', [{ ...parents[0], expiresAt: Date.now() - 1 }]);
+    }
+    if (change === 'revoke')
+      await send({ type: 'SOLID_ORIGIN_GRANT_REVOKE', origin: APPX.origin }, EXT_SENDER);
+    if (change === 'logout' || change === 'revoke')
+      expect(fetchCalls.find((call) => call.url === WEBID)?.init?.signal?.aborted).toBe(true);
+    release();
+    await vi.waitFor(() => expect(settled || createdWindows.length > 0).toBe(true));
+    // Settle the vulnerable implementation too, so its failure leaves no consent timer.
+    if (createdWindows.length)
+      await send(
+        {
+          type: 'SOLID_CONSENT_DECISION',
+          approvedClasses: [],
+          consentId: new URL(createdWindows[0]).searchParams.get('consentId'),
+        },
+        EXT_SENDER,
+      );
+    await pending;
+    expect(fetchCalls.filter((call) => call.url.includes('/settings/'))).toEqual([]);
+    expect(createdWindows).toEqual([]);
+  });
 
   it('resolves the class, opens consent, mints a PINNED grant on approve, and enforces it', async () => {
     await seedSession();
@@ -885,6 +1048,7 @@ describe('Phase-2 requestAccess → consent → grant (wired)', () => {
     await send(
       {
         type: 'SOLID_CONSENT_DECISION',
+        profileId: '1',
         consentId,
         approvedClasses: ['https://w3id.org/jeswr/sectors/finance#Transaction'],
       },
@@ -910,6 +1074,92 @@ describe('Phase-2 requestAccess → consent → grant (wired)', () => {
       APPX,
     );
     expect(denied.status).toBe(403);
+  });
+
+  it.each([
+    { type: 'privateTypeIndex', indexOrigin: 'https://separate.pod.example' },
+    { type: 'publicTypeIndex', indexOrigin: 'https://alice.pod.example' },
+    { type: 'publicTypeIndex', indexOrigin: 'https://separate.pod.example' },
+    { type: 'publicTypeIndex', indexOrigin: 'http://public-index.example' },
+  ])('discovers $type on $indexOrigin after real split-host pod-only consent', async ({
+    type,
+    indexOrigin,
+  }) => {
+    await seedSession();
+    await loadWorker();
+    const pod = 'https://separate.pod.example';
+    await new ProfileStore(profileDb, async () => {}).capabilities('1', (record) => {
+      record.podOrigins = [pod];
+    });
+    const index = `${indexOrigin}/settings/${type}.ttl`;
+    const target = `${pod}/finance/`;
+    const outOfScopeIndex = 'https://alice.pod.example/settings/private.ttl';
+    let probeScope = false;
+    fetchImpl = async (url) =>
+      new Response(
+        url === WEBID
+          ? `<${WEBID}> <http://www.w3.org/ns/solid/terms#${type}> <${index}> .
+            ${probeScope ? `<${WEBID}> <http://www.w3.org/ns/solid/terms#privateTypeIndex> <${outOfScopeIndex}> .` : ''}`
+          : `<#r> <http://www.w3.org/ns/solid/terms#forClass> <${classGrant().dataClass}> ;
+          <http://www.w3.org/ns/solid/terms#instanceContainer>
+          <${target}> ${probeScope ? ', <https://alice.pod.example/private/>' : ''} .`,
+      );
+    const pending = send(
+      {
+        type: 'SOLID_REQUEST_ACCESS',
+        requestId: 'split-consent',
+        classes: [classGrant().dataClass],
+        modes: ['read'],
+        duration: 'P1D',
+        stampedOrigin: APPX.origin,
+        userActivated: true,
+      },
+      APPX,
+    );
+    await vi.waitFor(() => expect(createdWindows).toHaveLength(1));
+    await send(
+      {
+        type: 'SOLID_CONSENT_DECISION',
+        profileId: '1',
+        consentId: new URL(createdWindows[0]).searchParams.get('consentId'),
+        approvedClasses: [classGrant().dataClass],
+      },
+      EXT_SENDER,
+    );
+    expect((await pending).ok).toBe(true);
+    const parents = storage.get('solid:origin-grants') as OriginGrant[];
+    expect(parents[0].scope.pods).toEqual([pod]);
+    const consentWebId = fetchCalls.find((call) => call.url === WEBID);
+    expect(new Headers(consentWebId?.init?.headers).has('Authorization')).toBe(false);
+    expect(new Headers(consentWebId?.init?.headers).has('DPoP')).toBe(false);
+    expect(consentWebId?.init?.credentials).toBe('omit');
+    const consentIndex = fetchCalls.find((call) => call.url === index);
+    const authenticated = type === 'privateTypeIndex';
+    probeScope = true;
+    fetchCalls.length = 0;
+    const result = await send(
+      {
+        type: 'SOLID_RESOLVE_CLASS',
+        requestId: 'split-resolve',
+        classIRI: classGrant().dataClass,
+        stampedOrigin: APPX.origin,
+      },
+      APPX,
+    );
+    expect(result.targets).toEqual([{ url: target, kind: 'container' }]);
+    expect(fetchCalls.map((call) => call.url)).toEqual([WEBID, index]);
+    const headers = new Headers(fetchCalls[0].init?.headers);
+    expect(headers.has('Authorization')).toBe(false);
+    expect(headers.has('DPoP')).toBe(false);
+    expect(fetchCalls[0].init?.credentials).toBe('omit');
+    expect(new Headers(fetchCalls[1].init?.headers).has('Authorization')).toBe(authenticated);
+    expect(new Headers(fetchCalls[1].init?.headers).has('DPoP')).toBe(authenticated);
+    expect(fetchCalls[1].init?.credentials).toBe('omit');
+    expect(fetchCalls[1].init?.redirect).toBe('error');
+    expect(new Headers(consentIndex?.init?.headers).has('Authorization')).toBe(authenticated);
+    expect(new Headers(consentIndex?.init?.headers).has('DPoP')).toBe(authenticated);
+    expect(consentIndex?.init?.credentials).toBe('omit');
+    expect(consentIndex?.init?.redirect).toBe('error');
   });
 
   it.each([
@@ -953,6 +1203,7 @@ describe('Phase-2 requestAccess → consent → grant (wired)', () => {
     await send(
       {
         type: 'SOLID_CONSENT_DECISION',
+        profileId: '1',
         consentId,
         approvedClasses: ['https://w3id.org/jeswr/sectors/finance#Transaction'],
       },
@@ -962,10 +1213,140 @@ describe('Phase-2 requestAccess → consent → grant (wired)', () => {
     expect((await store.get('2')).classGrants).toEqual([]);
     if (action === 'switch') {
       expect(result.ok).toBe(true);
-      expect((await store.get('1')).classGrants).toHaveLength(1);
+      expect(storage.get('solid:origin-grants')).toMatchObject([
+        { profileId: '1', scope: { classes: [{ origin: APPX.origin }] } },
+      ]);
     } else {
       expect(result.error).toMatch(/session changed/);
       expect(profileDb.state.records.every((r) => r.classGrants.length === 0)).toBe(true);
+    }
+  });
+
+  it.each([
+    30_000, 120_000,
+  ])('new Person consent preserves Finance effective expiry (%i ms)', async (childLifetime) => {
+    const now = Date.now();
+    const deadline = now + 60_000;
+    await seedSession();
+    storage.set('solid:class-grants', [classGrant({ expiresAt: now + childLifetime })]);
+    await loadWorker();
+    await send(
+      { type: 'SOLID_ORIGIN_GRANT_EXPIRY', origin: APPX.origin, expiresAt: deadline },
+      EXT_SENDER,
+    );
+    const person = 'https://schema.org/Person';
+    fetchImpl = async (url) =>
+      new Response(
+        url.includes('/profile/card')
+          ? PROFILE
+          : `
+      @prefix solid: <http://www.w3.org/ns/solid/terms#> .
+      <#person> solid:forClass <${person}> ;
+        solid:instanceContainer <https://alice.pod.example/people/> .`,
+      );
+    const pending = send(
+      {
+        type: 'SOLID_REQUEST_ACCESS',
+        requestId: 'person',
+        classes: [person],
+        modes: ['read'],
+        duration: 'P1D',
+        stampedOrigin: APPX.origin,
+        userActivated: true,
+      },
+      APPX,
+    );
+    await vi.waitFor(() => expect(createdWindows).toHaveLength(1));
+    await send(
+      {
+        type: 'SOLID_CONSENT_DECISION',
+        profileId: '1',
+        consentId: new URL(createdWindows[0]).searchParams.get('consentId'),
+        approvedClasses: [person],
+      },
+      EXT_SENDER,
+    );
+    expect((await pending).ok).toBe(true);
+    const clock = vi
+      .spyOn(Date, 'now')
+      .mockReturnValue(Math.min(deadline, now + childLifetime) + 1);
+    try {
+      expect(
+        (
+          await sendFetch(
+            { url: 'https://alice.pod.example/finance/x.ttl', stampedOrigin: APPX.origin },
+            APPX,
+          )
+        ).status,
+      ).toBe(403);
+      expect(
+        (
+          await sendFetch(
+            { url: 'https://alice.pod.example/people/x.ttl', stampedOrigin: APPX.origin },
+            APPX,
+          )
+        ).status,
+      ).toBe(200);
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
+  it('merges consent with the current parent after a concurrent class revoke', async () => {
+    await seedSession();
+    storage.set('solid:class-grants', [classGrant({ grantId: 'revoked' })]);
+    await loadWorker();
+    fetchImpl = routeFetch;
+    const pending = send(
+      {
+        type: 'SOLID_REQUEST_ACCESS',
+        requestId: 'consent-race',
+        classes: [classGrant().dataClass],
+        modes: ['read'],
+        duration: 'P1D',
+        stampedOrigin: APPX.origin,
+        userActivated: true,
+      },
+      APPX,
+    );
+    await vi.waitFor(() => expect(createdWindows).toHaveLength(1));
+    const consentId = new URL(createdWindows[0]).searchParams.get('consentId');
+    const { OriginGrantStore } = await import('../src/background/core/origin-grant');
+    const update = OriginGrantStore.prototype.update;
+    // Commit the revoke after consent reads the parent, before its queued update runs.
+    const queued = vi
+      .spyOn(OriginGrantStore.prototype, 'update')
+      .mockImplementationOnce(async function (this: InstanceType<typeof OriginGrantStore>, change) {
+        expect(
+          (
+            await send(
+              {
+                type: 'SOLID_REVOKE_GRANT',
+                grantId: 'revoked',
+                stampedOrigin: APPX.origin,
+              },
+              APPX,
+            )
+          ).ok,
+        ).toBe(true);
+        return update.call(this, change);
+      });
+    try {
+      await send(
+        {
+          type: 'SOLID_CONSENT_DECISION',
+          profileId: '1',
+          consentId,
+          approvedClasses: [classGrant().dataClass],
+        },
+        EXT_SENDER,
+      );
+      expect((await pending).ok).toBe(true);
+      const parents = storage.get('solid:origin-grants') as OriginGrant[];
+      expect(parents[0].scope.classes).toHaveLength(1);
+      expect(parents[0].scope.classes?.[0].grantId).not.toBe('revoked');
+    } finally {
+      queued.mockRestore();
     }
   });
 
@@ -990,7 +1371,10 @@ describe('Phase-2 requestAccess → consent → grant (wired)', () => {
       await new Promise((r) => setTimeout(r, 5));
     }
     const consentId = new URL(createdWindows[0]).searchParams.get('consentId');
-    await send({ type: 'SOLID_CONSENT_DECISION', consentId, approvedClasses: [] }, EXT_SENDER);
+    await send(
+      { type: 'SOLID_CONSENT_DECISION', profileId: '1', consentId, approvedClasses: [] },
+      EXT_SENDER,
+    );
 
     const res = await reqPromise;
     expect(res.ok).toBe(false);
@@ -1024,6 +1408,7 @@ describe('Phase-2 requestAccess → consent → grant (wired)', () => {
     await send(
       {
         type: 'SOLID_CONSENT_DECISION',
+        profileId: '1',
         consentId,
         approvedClasses: ['https://w3id.org/jeswr/sectors/finance#Transaction'],
       },
@@ -1087,4 +1472,636 @@ describe('Phase-2 requestAccess → consent → grant (wired)', () => {
     expect(r4.error).toMatch(/too many/i);
     expect(createdWindows.length).toBe(3);
   });
+});
+
+describe('EXT-05 explicit origin grant authority (adversarial)', () => {
+  function parent(extra: Partial<OriginGrant> = {}): OriginGrant {
+    return {
+      origin: APPX.origin,
+      profileId: '1',
+      createdAt: Date.now(),
+      scope: { pods: ['https://alice.pod.example'], classes: [classGrant()] },
+      ...extra,
+    };
+  }
+  function fetchFinance(extra: Record<string, unknown> = {}) {
+    return sendFetch(
+      { url: 'https://alice.pod.example/finance/x.ttl', stampedOrigin: APPX.origin, ...extra },
+      APPX,
+    );
+  }
+  async function boot(grants: OriginGrant[] = [parent()]) {
+    await seedSession();
+    storage.set('solid:origin-grants', grants);
+    await loadWorker();
+  }
+
+  it('ignores standalone class/login grants and client-id declarations without a parent', async () => {
+    storage.set('solid:granted-origins', [APPX.origin]);
+    storage.set('solid:class-grants', [classGrant()]);
+    await boot([]);
+    expect(
+      (
+        await send(
+          { type: 'SOLID_SET_CLIENT_ID', origin: APPX.origin, clientId: `${APPX.origin}/clientid` },
+          APPX,
+        )
+      ).ok,
+    ).toBe(true);
+    expect((await fetchFinance()).status).toBe(403);
+    expect(
+      (await send({ type: 'SOLID_GET_STATE', stampedOrigin: APPX.origin }, APPX)).webId,
+    ).toBeNull();
+    expect(
+      (
+        await send(
+          { type: 'SOLID_LIST_GRANTS', requestId: 'list', stampedOrigin: APPX.origin },
+          APPX,
+        )
+      ).grants,
+    ).toEqual([]);
+    expect(
+      (
+        await send(
+          {
+            type: 'SOLID_RESOLVE_CLASS',
+            requestId: 'resolve',
+            classIRI: 'https://schema.org/Person',
+            stampedOrigin: APPX.origin,
+          },
+          APPX,
+        )
+      ).error,
+    ).toBeTruthy();
+    expect(
+      (await send({ type: 'SOLID_LOGOUT', stampedOrigin: APPX.origin }, APPX)).error,
+    ).toBeTruthy();
+    expect(fetchCalls).toHaveLength(0);
+    expect(registrations.size).toBe(0);
+  });
+
+  it('rejects a spoofed isolated-origin stamp with zero cache or pod access', async () => {
+    await boot();
+    const result = await sendFetch(
+      {
+        url: 'https://alice.pod.example/finance/x.ttl',
+        stampedOrigin: APPX.origin,
+        profileId: '1',
+      },
+      { origin: 'https://evil.example', url: 'https://evil.example/' },
+    );
+    expect(result.status).toBe(403);
+    expect(fetchCalls).toHaveLength(0);
+    expect(cacheStore.size).toBe(0);
+  });
+
+  it.each([
+    'SOLID_ORIGIN_GRANTS_LIST',
+    'SOLID_ORIGIN_GRANT_REVOKE',
+    'SOLID_ORIGIN_GRANT_PROFILE',
+    'SOLID_ORIGIN_GRANT_EXPIRY',
+  ])('refuses page-supplied management %s', async (type) => {
+    await boot();
+    expect(
+      (await send({ type, origin: APPX.origin, expiresAt: Date.now() + 1 }, APPX)).error,
+    ).toMatch(/extension context/);
+    expect((await fetchFinance()).status).toBe(200);
+  });
+
+  it('revokes a warm origin slice, unregisters, and denies a captured patch on its next request', async () => {
+    await boot();
+    expect(registrations.size).toBe(1);
+    expect([...registrations.values()][0].matches).toEqual([`${APPX.origin}:443/*`]);
+    expect((await fetchFinance()).status).toBe(200);
+    expect(cacheStore.size).toBe(1);
+    expect(
+      (await send({ type: 'SOLID_ORIGIN_GRANT_REVOKE', origin: APPX.origin }, EXT_SENDER)).ok,
+    ).toBe(true);
+    expect(registrations.size).toBe(0);
+    expect(cacheStore.size).toBe(0);
+    fetchCalls.length = 0;
+    expect((await fetchFinance()).status).toBe(403);
+    expect(await fetchFinance({ autoDivert: true })).toEqual({
+      requestId: 'r1',
+      passthrough: true,
+    });
+    expect(fetchCalls).toHaveLength(0);
+    expect((await send({ type: 'SOLID_ORIGIN_GRANTS_LIST' }, EXT_SENDER)).grants).toEqual([]);
+  });
+
+  it('denies expiry immediately even if the alarm has not fired; alarm removes the persisted registration', async () => {
+    const deadline = Date.now() + 60_000;
+    await boot([parent({ expiresAt: deadline })]);
+    expect(chrome.alarms.create).toHaveBeenCalledWith('solid-origin-expiry', { when: deadline });
+    expect((await fetchFinance()).status).toBe(200);
+    const now = vi.spyOn(Date, 'now').mockReturnValue(deadline);
+    try {
+      expect((await fetchFinance()).status).toBe(403);
+      alarmListener({ name: 'solid-origin-expiry' });
+      await vi.waitFor(() => expect(registrations.size).toBe(0));
+      expect(cacheStore.size).toBe(0);
+      expect(
+        (await send({ type: 'SOLID_GET_STATE', stampedOrigin: APPX.origin }, APPX)).webId,
+      ).toBeNull();
+    } finally {
+      now.mockRestore();
+    }
+  });
+
+  it.each(
+    [
+      { gate: 'last egress', method: 'PUT', pruneWrite: 4 },
+      { gate: 'final response', method: 'GET', pruneWrite: 6 },
+    ].flatMap((stage) => ['parent', 'child'].map((expiry) => ({ ...stage, expiry }))),
+  )('denies $expiry expiry during pruning in the $gate gate without an alarm', async ({
+    method,
+    pruneWrite,
+    expiry,
+  }) => {
+    const deadline = Date.now() + 60_000;
+    await boot([
+      parent({
+        expiresAt: deadline + (expiry === 'parent' ? 0 : 60_000),
+        scope: {
+          pods: ['https://alice.pod.example'],
+          classes: [
+            classGrant({
+              modes: ['read', 'write'],
+              expiresAt: deadline + (expiry === 'child' ? 0 : 60_000),
+            }),
+          ],
+        },
+      }),
+    ]);
+    fetchImpl = async () => new Response('private finance bytes');
+    const now = vi.spyOn(Date, 'now').mockReturnValue(deadline - 1);
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let writes = 0;
+    const set = chrome.storage.local.set;
+    const pruning = vi.spyOn(chrome.storage.local, 'set').mockImplementation(async (items) => {
+      // Gates run at entry, replica entry, egress and signed egress; a GET also gates
+      // persistence before its final response. Hold the write at the requested boundary.
+      if ('solid:origin-grants' in items && ++writes === pruneWrite) await held;
+      return set(items);
+    });
+    const pending = fetchFinance({ method, body: method === 'PUT' ? 'updated finance' : null });
+    try {
+      await vi.waitFor(() => expect(writes).toBe(pruneWrite));
+      expect(fetchCalls).toHaveLength(method === 'PUT' ? 0 : 1);
+      if (method === 'GET')
+        expect(new Headers(fetchCalls[0].init?.headers).get('Authorization')).toBe(
+          'DPoP access-token-xyz',
+        );
+      // Cross the real deadline while storage is suspended, leaving the alarm unfired.
+      now.mockReturnValue(deadline);
+      release();
+      const result = await pending;
+      expect(fetchCalls).toHaveLength(method === 'PUT' ? 0 : 1);
+      expect(result.status).not.toBe(200);
+      expect(result.error).toBe(
+        expiry === 'parent' ? 'Origin not granted access' : 'No access grant for this data',
+      );
+      expect(result.body).toBeUndefined();
+      expect(registrations.size).toBe(1);
+    } finally {
+      release();
+      await pending;
+      pruning.mockRestore();
+      now.mockRestore();
+    }
+  });
+
+  it('checks the bound parent pod scope even when a child grant pins another pod', async () => {
+    await boot([parent({ scope: { pods: [], classes: [classGrant()] } })]);
+    expect((await fetchFinance()).status).toBe(403);
+    expect(fetchCalls).toHaveLength(0);
+  });
+
+  it('rejects invalid/missing profiles and duplicate origin bindings, without falling back to the default', async () => {
+    await boot([parent({ profileId: 'missing' }), parent({ profileId: '2' })]);
+    expect((await fetchFinance()).status).toBe(403);
+    expect(fetchCalls).toHaveLength(0);
+    expect(registrations.size).toBe(0);
+  });
+
+  it('only shortens expiry through trusted management; malformed and missing origins fail closed', async () => {
+    const deadline = Date.now() + 60_000;
+    await boot([parent({ expiresAt: deadline })]);
+    for (const expiresAt of [NaN, Date.now() - 1, deadline + 1]) {
+      expect(
+        (
+          await send(
+            { type: 'SOLID_ORIGIN_GRANT_EXPIRY', origin: APPX.origin, expiresAt },
+            EXT_SENDER,
+          )
+        ).error,
+      ).toBeTruthy();
+    }
+    expect(
+      (
+        await send(
+          { type: 'SOLID_ORIGIN_GRANT_EXPIRY', origin: APPX.origin, expiresAt: deadline - 1000 },
+          EXT_SENDER,
+        )
+      ).ok,
+    ).toBe(true);
+    expect((storage.get('solid:origin-grants') as OriginGrant[])[0].expiresAt).toBe(
+      deadline - 1000,
+    );
+    expect(
+      (await send({ type: 'SOLID_ORIGIN_GRANT_REVOKE', origin: '*://*/*' }, EXT_SENDER)).error,
+    ).toBeTruthy();
+    expect(
+      (
+        await send(
+          { type: 'SOLID_ORIGIN_GRANT_REVOKE', origin: 'https://absent.example' },
+          EXT_SENDER,
+        )
+      ).ok,
+    ).toBe(false);
+  });
+
+  it.each([
+    'nonexistent',
+    'grant-1',
+  ])('class revoke %s only cancels its own origin after an actual removal', async (grantId) => {
+    const appB = { origin: 'https://appy.example', url: 'https://appy.example/app' };
+    await boot([
+      parent(),
+      parent({
+        origin: appB.origin,
+        scope: {
+          pods: ['https://alice.pod.example'],
+          classes: [classGrant({ origin: appB.origin })],
+        },
+      }),
+    ]);
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    fetchImpl = async () => {
+      await held;
+      return new Response('private bytes');
+    };
+    const own = fetchFinance();
+    const other = sendFetch(
+      { url: 'https://alice.pod.example/finance/other.ttl', stampedOrigin: appB.origin },
+      appB,
+    );
+    await vi.waitFor(() => expect(fetchCalls).toHaveLength(2));
+    const result = await send(
+      { type: 'SOLID_REVOKE_GRANT', grantId, stampedOrigin: APPX.origin },
+      APPX,
+    );
+    expect(result.ok).toBe(grantId === 'grant-1');
+    release();
+    expect((await other).status).toBe(200);
+    const ownResult = await own;
+    if (grantId === 'grant-1') {
+      expect(ownResult.body).toBeUndefined();
+      expect(ownResult.error).toBeTruthy();
+    } else expect(ownResult.status).toBe(200);
+  });
+
+  it('aborts a pending response on revoke before serving or persisting any bytes', async () => {
+    await boot();
+    let entered!: () => void;
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    let release!: (response: Response) => void;
+    fetchImpl = async () => {
+      entered();
+      return new Promise((resolve) => {
+        release = resolve;
+      });
+    };
+    const pending = fetchFinance();
+    await started;
+    await send({ type: 'SOLID_ORIGIN_GRANT_REVOKE', origin: APPX.origin }, EXT_SENDER);
+    release(new Response('private fixture bytes'));
+    const result = await pending;
+    expect(result.body).toBeUndefined();
+    expect(result.error).toBeTruthy();
+    expect(cacheStore.size).toBe(0);
+  });
+
+  it.each(
+    ['WebID', 'index'].flatMap((stage) =>
+      ['origin revoke', 'profile rebind', 'class revoke', 'expiry'].map((change) => ({
+        stage,
+        change,
+      })),
+    ),
+  )('stops discovery held at $stage after $change', async ({ stage, change }) => {
+    await boot();
+    if (change === 'profile rebind') {
+      const b = await profileCredentials('bob');
+      await new ProfileStore(profileDb, async () => {}).login(b.session, b.keyPair, b.display);
+    }
+    const indexUrl = 'https://alice.pod.example/settings/private.ttl';
+    const profile = `<${WEBID}> <http://www.w3.org/ns/solid/terms#privateTypeIndex> <${indexUrl}> .`;
+    const index = `<#r> <http://www.w3.org/ns/solid/terms#forClass> <${classGrant().dataClass}> ;
+      <http://www.w3.org/ns/solid/terms#instanceContainer> <https://alice.pod.example/finance/> .`;
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let entered!: () => void;
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    fetchImpl = async (url) => {
+      if ((stage === 'WebID' && url.includes('/profile/card')) || url === indexUrl) {
+        entered();
+        await held;
+      }
+      return new Response(url === indexUrl ? index : profile);
+    };
+    const pending = send(
+      {
+        type: 'SOLID_RESOLVE_CLASS',
+        requestId: 'discovery-race',
+        classIRI: classGrant().dataClass,
+        stampedOrigin: APPX.origin,
+      },
+      APPX,
+    );
+    await started;
+    if (change === 'expiry') {
+      const parents = storage.get('solid:origin-grants') as OriginGrant[];
+      storage.set('solid:origin-grants', [{ ...parents[0], expiresAt: Date.now() - 1 }]);
+    } else if (change === 'class revoke') {
+      expect(
+        (
+          await send(
+            { type: 'SOLID_REVOKE_GRANT', grantId: 'grant-1', stampedOrigin: APPX.origin },
+            APPX,
+          )
+        ).ok,
+      ).toBe(true);
+    } else {
+      expect(
+        (
+          await send(
+            {
+              type:
+                change === 'origin revoke'
+                  ? 'SOLID_ORIGIN_GRANT_REVOKE'
+                  : 'SOLID_ORIGIN_GRANT_PROFILE',
+              origin: APPX.origin,
+              profileId: '2',
+            },
+            EXT_SENDER,
+          )
+        ).error,
+      ).toBeUndefined();
+    }
+    release();
+    const result = await pending;
+    expect(result).toMatchObject({ requestId: 'discovery-race', error: expect.any(String) });
+    expect(result.targets).toBeUndefined();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(fetchCalls).toHaveLength(stage === 'WebID' ? 1 : 2);
+    if (change !== 'expiry') expect(fetchCalls.at(-1)?.init?.signal?.aborted).toBe(true);
+  });
+
+  it.each([
+    false,
+    true,
+  ])('confines discovery requests and targets to parent pods (nested classes: %s)', async (nested) => {
+    await boot([
+      parent({
+        scope: {
+          pods: ['https://alice.pod.example'],
+          ...(nested ? { classes: [classGrant()] } : {}),
+        },
+      }),
+    ]);
+    await new ProfileStore(profileDb, async () => {}).capabilities('1', (record) => {
+      record.podOrigins = ['https://other.pod.example'];
+    });
+    const indexA = 'https://alice.pod.example/settings/private.ttl';
+    const indexB = 'https://other.pod.example/settings/private.ttl';
+    fetchImpl = async (url) =>
+      new Response(
+        url.includes('/profile/card')
+          ? `<${WEBID}> <http://www.w3.org/ns/solid/terms#privateTypeIndex> <${indexA}>, <${indexB}> .`
+          : `<#r> <http://www.w3.org/ns/solid/terms#forClass> <${classGrant().dataClass}> ;
+            <http://www.w3.org/ns/solid/terms#instanceContainer>
+              <https://alice.pod.example/finance/>, <https://other.pod.example/finance/> .`,
+      );
+    const result = await send(
+      {
+        type: 'SOLID_RESOLVE_CLASS',
+        requestId: 'scoped-discovery',
+        classIRI: classGrant().dataClass,
+        stampedOrigin: APPX.origin,
+      },
+      APPX,
+    );
+    expect(result.error).toBeUndefined();
+    expect(result.targets).toEqual([
+      { url: 'https://alice.pod.example/finance/', kind: 'container' },
+    ]);
+    expect(fetchCalls.map((call) => call.url)).toEqual([WEBID, indexA]);
+  });
+
+  it('filters discovery targets against the live pod scope before delivery', async () => {
+    await boot();
+    const indexUrl = 'https://alice.pod.example/settings/private.ttl';
+    fetchImpl = async (url) => {
+      if (url.includes('/profile/card'))
+        return new Response(
+          `<${WEBID}> <http://www.w3.org/ns/solid/terms#privateTypeIndex> <${indexUrl}> .`,
+        );
+      const parents = storage.get('solid:origin-grants') as OriginGrant[];
+      storage.set('solid:origin-grants', [
+        { ...parents[0], scope: { ...parents[0].scope, pods: [] } },
+      ]);
+      return new Response(`<#r> <http://www.w3.org/ns/solid/terms#forClass> <${classGrant().dataClass}> ;
+        <http://www.w3.org/ns/solid/terms#instanceContainer> <https://alice.pod.example/finance/> .`);
+    };
+    const result = await send(
+      {
+        type: 'SOLID_RESOLVE_CLASS',
+        requestId: 'scope-shrink',
+        classIRI: classGrant().dataClass,
+        stampedOrigin: APPX.origin,
+      },
+      APPX,
+    );
+    expect(result.targets).toEqual([]);
+    expect(fetchCalls).toHaveLength(2);
+  });
+
+  it('does not authenticate a discovery WebID fetch outside the parent pod scope', async () => {
+    await boot([parent({ scope: { pods: [] } })]);
+    const result = await send(
+      {
+        type: 'SOLID_RESOLVE_CLASS',
+        requestId: 'empty-scope',
+        classIRI: classGrant().dataClass,
+        stampedOrigin: APPX.origin,
+      },
+      APPX,
+    );
+    expect(result.targets).toEqual([]);
+    expect(fetchCalls.map((call) => call.url)).toEqual([WEBID]);
+    expect(new Headers(fetchCalls[0].init?.headers).has('Authorization')).toBe(false);
+    expect(new Headers(fetchCalls[0].init?.headers).has('DPoP')).toBe(false);
+    expect(fetchCalls[0].init?.credentials).toBe('omit');
+  });
+
+  it('selects profile 2 in consent, swaps the binding, and never transfers profile 1 targets or credentials', async () => {
+    await boot();
+    expect((await fetchFinance()).status).toBe(200);
+    const b = await profileCredentials('bob');
+    const store = new ProfileStore(profileDb, async () => {});
+    await store.login(b.session, b.keyPair, b.display);
+    const cls = 'https://schema.org/Person';
+    fetchImpl = async (url) => {
+      if (url === b.session.webId)
+        return new Response(
+          `<${b.session.webId}> <http://www.w3.org/ns/solid/terms#publicTypeIndex> <https://pod.example/bob/index> .`,
+        );
+      if (url === 'https://pod.example/bob/index')
+        return new Response(
+          `<#registration> <http://www.w3.org/ns/solid/terms#forClass> <${cls}>; <http://www.w3.org/ns/solid/terms#instanceContainer> <https://pod.example/bob/private/> .`,
+        );
+      return new Response('fixture resource');
+    };
+    const request = send(
+      {
+        type: 'SOLID_REQUEST_ACCESS',
+        requestId: 'swap',
+        classes: [cls],
+        modes: ['read'],
+        duration: 'P30D',
+        stampedOrigin: APPX.origin,
+        userActivated: true,
+        profileId: '1',
+      },
+      APPX,
+    );
+    await vi.waitFor(() => expect(createdWindows).toHaveLength(1));
+    const consentId = new URL(createdWindows[0]).searchParams.get('consentId');
+    expect(await send({ type: 'SOLID_GET_PENDING_CONSENT', consentId }, APPX)).toBeNull();
+    expect(
+      await send(
+        { type: 'SOLID_GET_PENDING_CONSENT', consentId, profileId: 'unknown' },
+        EXT_SENDER,
+      ),
+    ).toBeNull();
+    const view = await send(
+      { type: 'SOLID_GET_PENDING_CONSENT', consentId, profileId: '2' },
+      EXT_SENDER,
+    );
+    expect(view.profileId).toBe('2');
+    expect(view.profiles).toMatchObject([{ id: '1' }, { id: '2', label: 'bob' }]);
+    expect(view.classes).toMatchObject([
+      { targets: [{ url: 'https://pod.example/bob/private/' }] },
+    ]);
+    await send(
+      { type: 'SOLID_CONSENT_DECISION', consentId, profileId: '2', approvedClasses: [cls] },
+      EXT_SENDER,
+    );
+    expect((await request).ok).toBe(true);
+    expect(cacheStore.size).toBe(0);
+    expect((await fetchFinance()).status).toBe(403);
+    expect((await send({ type: 'SOLID_GET_STATE', stampedOrigin: APPX.origin }, APPX)).webId).toBe(
+      b.session.webId,
+    );
+    fetchCalls.length = 0;
+    const result = await sendFetch(
+      { url: 'https://pod.example/bob/private/item', stampedOrigin: APPX.origin, profileId: '1' },
+      APPX,
+    );
+    expect(result.status).toBe(200);
+    expect(new Headers(fetchCalls[0].init?.headers).get('authorization')).toBe(
+      `DPoP ${b.session.accessToken}`,
+    );
+    expect((storage.get('solid:origin-grants') as OriginGrant[])[0]).toMatchObject({
+      profileId: '2',
+      scope: { classes: [{ webId: b.session.webId }] },
+    });
+  });
+});
+
+it('trusted profile rebinding clears old pod/class scopes and cached data before returning', async () => {
+  await seedSession();
+  storage.set('solid:origin-grants', [
+    {
+      origin: APPX.origin,
+      profileId: '1',
+      createdAt: 0,
+      scope: { pods: ['https://alice.pod.example'], classes: [classGrant()] },
+    },
+  ]);
+  await loadWorker();
+  const b = await profileCredentials('bob');
+  await new ProfileStore(profileDb, async () => {}).login(b.session, b.keyPair, b.display);
+  expect(
+    (
+      await sendFetch(
+        { url: 'https://alice.pod.example/finance/a', stampedOrigin: APPX.origin },
+        APPX,
+      )
+    ).status,
+  ).toBe(200);
+  expect(
+    (
+      await send(
+        { type: 'SOLID_ORIGIN_GRANT_PROFILE', origin: APPX.origin, profileId: '2' },
+        EXT_SENDER,
+      )
+    ).ok,
+  ).toBe(true);
+  expect(cacheStore.size).toBe(0);
+  expect(storage.get('solid:origin-grants')).toMatchObject([
+    { profileId: '2', scope: { pods: [], classes: [] } },
+  ]);
+  expect((await send({ type: 'SOLID_GET_STATE', stampedOrigin: APPX.origin }, APPX)).webId).toBe(
+    b.session.webId,
+  );
+  fetchCalls.length = 0;
+  expect(
+    (await sendFetch({ url: 'https://pod.example/private', stampedOrigin: APPX.origin }, APPX))
+      .status,
+  ).toBe(403);
+  expect(fetchCalls).toHaveLength(0);
+});
+
+it('unregisters a revoked origin even when replica stores cannot open', async () => {
+  await seedSession();
+  storage.set('solid:origin-grants', [
+    {
+      origin: APPX.origin,
+      profileId: '1',
+      createdAt: 0,
+      scope: { pods: ['https://alice.pod.example'], classes: [classGrant()] },
+    },
+  ]);
+  await loadWorker();
+  const open = vi.spyOn(caches, 'open').mockRejectedValue(new Error('fixture replica unavailable'));
+  try {
+    expect(
+      (await send({ type: 'SOLID_ORIGIN_GRANT_REVOKE', origin: APPX.origin }, EXT_SENDER)).ok,
+    ).toBe(true);
+    expect(registrations.size).toBe(0);
+    expect(
+      (
+        await sendFetch(
+          { url: 'https://alice.pod.example/finance/a', stampedOrigin: APPX.origin },
+          APPX,
+        )
+      ).status,
+    ).toBe(403);
+  } finally {
+    open.mockRestore();
+  }
 });

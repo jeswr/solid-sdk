@@ -26,6 +26,31 @@ function mockFetch(impl: (url: string, init?: RequestInit) => Promise<Response>)
 }
 
 describe('authenticatedFetch — credential boundary', () => {
+  it('rejects redirects on the nonce retry as well as the first authenticated request', async () => {
+    const session = await makeSession();
+    const foreign = vi.fn(() => ok());
+    const fetchImpl = mockFetch(async (_url, init) => {
+      if (fetchImpl.mock.calls.length === 1)
+        return new Response(null, {
+          status: 401,
+          headers: { 'WWW-Authenticate': 'DPoP error="use_dpop_nonce"', 'DPoP-Nonce': 'fresh' },
+        });
+      if (init?.redirect === 'error') throw new TypeError('Redirect rejected');
+      return foreign();
+    });
+    await expect(
+      authenticatedFetch(session, {
+        url: 'https://alice.pod.example/redirect',
+        method: 'GET',
+        headers: {},
+        fetchImpl,
+      }),
+    ).rejects.toThrow(/redirect/i);
+    expect(foreign).not.toHaveBeenCalled();
+    expect(fetchImpl.mock.calls).toHaveLength(2);
+    expect(fetchImpl.mock.calls.every(([, init]) => init?.redirect === 'error')).toBe(true);
+  });
+
   it('attaches a DPoP-bound token for an allowed origin', async () => {
     const session = await makeSession();
     const fetchImpl = mockFetch(async () => ok());

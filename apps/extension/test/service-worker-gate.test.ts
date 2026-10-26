@@ -1,3 +1,4 @@
+import { seedOriginGrantFixtures } from './profile-fixtures';
 // AUTHORED-BY Claude Opus 4.8
 //
 // INTEGRATION tests for the Phase-0 per-requesting-origin gate AS WIRED INTO the service
@@ -185,6 +186,7 @@ function installChrome(): void {
     },
     tabs: {
       query: async () => [] as Array<{ id?: number; url?: string }>,
+      get: async (id: number) => (await chrome.tabs.query({})).find((tab) => tab.id === id),
       sendMessage: async () => {},
     },
     action: {
@@ -278,6 +280,7 @@ async function seedSession(overrides: Partial<StoredSession> = {}): Promise<void
  * response instead of exercising the new one.
  */
 async function loadWorker(): Promise<void> {
+  seedOriginGrantFixtures(storage, profileDb);
   messageListeners.length = 0;
   vi.resetModules();
   await import('../src/background/service-worker');
@@ -334,6 +337,31 @@ function installIconCanvas(): void {
 }
 
 describe('service-worker per-requesting-origin gate (wired)', () => {
+  it.each([
+    ['https://pm.example/redirect', false],
+    ['https://pm.example/redirect', true],
+    ['https://alice.pod.example/redirect', false],
+  ])('rejects redirects from authorized URLs without reading foreign bytes (%s, auto=%s)', async (url, autoDivert) => {
+    await seedSession();
+    storage.set('solid:granted-origins', ['https://pm.example']);
+    await loadWorker();
+    const foreign = vi.fn(() => new Response('foreign private bytes'));
+    // Model native fetch: without a redirect policy it follows under the worker's host access.
+    fetchImpl = async (_url, init) => {
+      if (init?.redirect === 'error') throw new TypeError('Redirect rejected');
+      if (init?.redirect === 'manual') return new Response(null, { status: 302 });
+      return foreign();
+    };
+    const response = await sendFetch(
+      { url, autoDivert, stampedOrigin: 'https://pm.example' },
+      { origin: 'https://pm.example', url: 'https://pm.example/app' },
+    );
+    expect(foreign).not.toHaveBeenCalled();
+    expect(response.body).toBeUndefined();
+    expect(response.error).toMatch(/redirect/i);
+    expect(fetchCalls.at(-1)?.init?.redirect).toBe('error');
+  });
+
   it('the legitimate owner path: a GRANTED app reads its pod → SUCCEEDS with egress', async () => {
     await seedSession();
     storage.set('solid:granted-origins', ['https://pm.example']);
@@ -387,7 +415,7 @@ describe('service-worker per-requesting-origin gate (wired)', () => {
     expect(fetchCalls.some((c) => c.url.startsWith('https://alice.pod.example'))).toBe(true);
   });
 
-  it('a credential-origin app (served FROM the pod) reads without a separate grant', async () => {
+  it('DENIES a credential-origin app without an explicit origin grant', async () => {
     await seedSession();
     // no explicit grants — the pod origin is auto-granted as a requester.
     await loadWorker();
@@ -395,7 +423,8 @@ describe('service-worker per-requesting-origin gate (wired)', () => {
       { url: 'https://alice.pod.example/x.ttl', stampedOrigin: 'https://alice.pod.example' },
       { origin: 'https://alice.pod.example', url: 'https://alice.pod.example/app' },
     );
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(403);
+    expect(fetchCalls).toHaveLength(0);
   });
 
   it('DENIES a FORGED sender.origin (renderer spoofs a granted origin) — NO egress', async () => {
@@ -533,12 +562,12 @@ describe('service-worker per-requesting-origin gate (wired)', () => {
       { url: 'https://alice.pod.example/x', stampedOrigin: 'https://pm.example' },
       { origin: 'https://pm.example', url: 'https://pm.example/x' },
     );
-    expect(res.error).toBe('Not authenticated');
+    expect(res.error).toBe('Origin not granted access');
     expect(fetchCalls.some((c) => c.url.startsWith('https://alice.pod.example'))).toBe(false);
   });
 });
 
-describe('login GRANTS the requesting origin ONLY on success (privilege-escalation guard)', () => {
+describe('login never grants an origin without consent', () => {
   // High #2: the grant must be persisted ONLY AFTER a successful, owner-approved login — never
   // before initiateLogin. In these tests the real OIDC flow has no IdP, so initiateLogin THROWS;
   // therefore a SOLID_LOGIN here represents a CANCELLED/FAILED login and must leave the grant
@@ -601,7 +630,7 @@ describe('login GRANTS the requesting origin ONLY on success (privilege-escalati
     expect(fetchCalls.some((c) => c.url.startsWith('https://alice.pod.example'))).toBe(false);
   });
 
-  it('a SUCCESSFUL login GRANTS the verified origin and a subsequent fetch SUCCEEDS', async () => {
+  it('a SUCCESSFUL login does not replace origin consent', async () => {
     // Mock initiateLogin to succeed, returning a fresh session, so we exercise the success path
     // where the grant SHOULD now be persisted. The real `completeLogin` would also have called
     // `mintAndPersistDpopKeyPair` — seed the fake DPoP key store the same way.
@@ -632,9 +661,10 @@ describe('login GRANTS the requesting origin ONLY on success (privilege-escalati
     );
     expect(loginRes.ok).toBe(true);
     const grants = (profileDb.state.records[0]?.grantedOrigins as string[]) ?? [];
-    expect(grants).toContain('https://newapp.example');
+    expect(grants).not.toContain('https://newapp.example');
 
-    // The now-granted origin can read its pod.
+    // Login may fetch display metadata, but it never authorizes the app's data fetch.
+    fetchCalls.length = 0;
     const fetchRes = await sendFetch(
       {
         url: 'https://alice.pod.example/private/notes.ttl',
@@ -642,8 +672,8 @@ describe('login GRANTS the requesting origin ONLY on success (privilege-escalati
       },
       { origin: 'https://newapp.example', url: 'https://newapp.example/app.html' },
     );
-    expect(fetchRes.status).toBe(200);
-    expect(fetchCalls.some((c) => c.url.startsWith('https://alice.pod.example'))).toBe(true);
+    expect(fetchRes.status).toBe(403);
+    expect(fetchCalls).toHaveLength(0);
     vi.doUnmock('../src/background/auth-flow');
   });
 
@@ -1075,17 +1105,140 @@ describe('ProfileStore runtime API and adversarial isolation', () => {
     const send = vi.spyOn(chrome.tabs, 'sendMessage');
     await loadWorker();
     expect(send.mock.calls).toEqual([
-      [1, { type: 'SOLID_STATE_CHANGED', webId: a.session.webId }],
-      [2, { type: 'SOLID_STATE_CHANGED', webId: null }],
-      [3, { type: 'SOLID_STATE_CHANGED', webId: null }],
+      [
+        1,
+        { type: 'SOLID_STATE_CHANGED', origin: PROFILE_APP_A.origin, webId: a.session.webId },
+        { frameId: 0 },
+      ],
+      [
+        2,
+        { type: 'SOLID_STATE_CHANGED', origin: PROFILE_APP_B.origin, webId: b.session.webId },
+        { frameId: 0 },
+      ],
+      [
+        3,
+        { type: 'SOLID_STATE_CHANGED', origin: 'https://ungranted.example', webId: null },
+        { frameId: 0 },
+      ],
     ]);
     send.mockClear();
     await profileMessage('SOLID_PROFILE_SET_DEFAULT', { profileId: '2' });
     expect(send.mock.calls).toEqual([
-      [1, { type: 'SOLID_STATE_CHANGED', webId: null }],
-      [2, { type: 'SOLID_STATE_CHANGED', webId: b.session.webId }],
-      [3, { type: 'SOLID_STATE_CHANGED', webId: null }],
+      [
+        1,
+        { type: 'SOLID_STATE_CHANGED', origin: PROFILE_APP_A.origin, webId: a.session.webId },
+        { frameId: 0 },
+      ],
+      [
+        2,
+        { type: 'SOLID_STATE_CHANGED', origin: PROFILE_APP_B.origin, webId: b.session.webId },
+        { frameId: 0 },
+      ],
+      [
+        3,
+        { type: 'SOLID_STATE_CHANGED', origin: 'https://ungranted.example', webId: null },
+        { frameId: 0 },
+      ],
     ]);
+  });
+
+  it.each([
+    'expiry',
+    'rebind',
+    'relogin',
+    'signout',
+  ] as const)('withholds a captured identity when %s occurs while tabs.get awaits', async (change) => {
+    const { store, b } = await twoProfiles();
+    await loadWorker();
+    const tab = { id: 2, url: PROFILE_APP_B.url };
+    chrome.tabs.query = vi.fn().mockResolvedValue([tab]);
+    const send = vi.spyOn(chrome.tabs, 'sendMessage');
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let entered!: () => void;
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const lookup = vi.spyOn(chrome.tabs, 'get').mockImplementationOnce(async () => {
+      entered();
+      await held;
+      return tab as chrome.tabs.Tab;
+    });
+    try {
+      const pending = profileMessage('SOLID_PROFILE_RENAME', { profileId: '1', label: 'Personal' });
+      await started;
+      if (change === 'expiry' || change === 'rebind') {
+        const grants = storage.get('solid:origin-grants') as Array<Record<string, unknown>>;
+        storage.set(
+          'solid:origin-grants',
+          grants.map((grant) =>
+            grant.origin === PROFILE_APP_B.origin
+              ? {
+                  ...grant,
+                  ...(change === 'expiry' ? { expiresAt: Date.now() - 1 } : { profileId: '1' }),
+                }
+              : grant,
+          ),
+        );
+      }
+      if (change === 'relogin') {
+        const replacement = await profileCredentials('bob');
+        await store.login(replacement.session, replacement.keyPair, replacement.display);
+      }
+      if (change === 'signout') await store.signOut('2');
+      release();
+      await pending;
+      expect(
+        send.mock.calls.some(
+          ([, message]) => (message as { webId: string | null }).webId === b.session.webId,
+        ),
+      ).toBe(false);
+    } finally {
+      release();
+      lookup.mockRestore();
+    }
+  });
+
+  it('drops a P2 identity broadcast when the tab navigates during its session lookup', async () => {
+    await twoProfiles();
+    await loadWorker();
+    const tab = { id: 2, url: PROFILE_APP_B.url };
+    chrome.tabs.query = vi.fn().mockResolvedValue([tab]);
+    chrome.tabs.get = vi.fn().mockImplementation(async () => ({ ...tab }));
+    const send = vi.spyOn(chrome.tabs, 'sendMessage');
+    const { ProfileStore: WorkerStore } = await import('../src/background/core/profile-store');
+    const session = WorkerStore.prototype.session;
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let entered!: () => void;
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const lookup = vi.spyOn(WorkerStore.prototype, 'session').mockImplementation(async function (
+      this: ProfileStore,
+      id,
+    ) {
+      const result = await session.call(this, id);
+      if (id === '2') {
+        entered();
+        await held;
+      }
+      return result;
+    });
+    try {
+      const pending = profileMessage('SOLID_PROFILE_RENAME', { profileId: '1', label: 'Personal' });
+      await started;
+      tab.url = 'https://ungranted.example/';
+      release();
+      await pending;
+      expect(send).not.toHaveBeenCalled();
+    } finally {
+      lookup.mockRestore();
+    }
   });
 
   it('never authorizes an earlier identity with a newly selected profile grant', async () => {
@@ -1113,10 +1266,19 @@ describe('ProfileStore runtime API and adversarial isolation', () => {
     await profileMessage('SOLID_PROFILE_SET_DEFAULT', { profileId: '2' });
     release();
     await old;
-    expect(send.mock.calls).toEqual([[2, { type: 'SOLID_STATE_CHANGED', webId: b.session.webId }]]);
+    expect(send.mock.calls).toEqual([
+      [
+        2,
+        { type: 'SOLID_STATE_CHANGED', origin: PROFILE_APP_B.origin, webId: b.session.webId },
+        { frameId: 0 },
+      ],
+    ]);
   });
 
-  it('discards a broadcast held across a default change, including the runtime copy', async () => {
+  it.each([
+    'query',
+    'get',
+  ])('discards a broadcast held in tabs.%s across a default change, including the runtime copy', async (stage) => {
     const { b } = await twoProfiles();
     await loadWorker();
     let release!: (tabs: Array<{ id: number; url: string }>) => void;
@@ -1128,13 +1290,23 @@ describe('ProfileStore runtime API and adversarial isolation', () => {
       release = resolve;
     });
     const tabs = [{ id: 2, url: PROFILE_APP_B.url }];
-    chrome.tabs.query = vi
-      .fn()
-      .mockImplementationOnce(() => {
-        entered();
-        return held;
-      })
-      .mockResolvedValue(tabs);
+    chrome.tabs.query = vi.fn().mockResolvedValue(tabs);
+    if (stage === 'query')
+      chrome.tabs.query = vi
+        .fn()
+        .mockImplementationOnce(() => {
+          entered();
+          return held;
+        })
+        .mockResolvedValue(tabs);
+    else
+      chrome.tabs.get = vi
+        .fn()
+        .mockImplementationOnce(async () => {
+          entered();
+          return (await held)[0];
+        })
+        .mockResolvedValue(tabs[0]);
     const send = vi.spyOn(chrome.tabs, 'sendMessage');
     const runtime = vi.spyOn(chrome.runtime, 'sendMessage');
     const old = profileMessage('SOLID_PROFILE_RENAME', { profileId: '1', label: 'Personal' });
@@ -1142,7 +1314,13 @@ describe('ProfileStore runtime API and adversarial isolation', () => {
     await profileMessage('SOLID_PROFILE_SET_DEFAULT', { profileId: '2' });
     release(tabs);
     await old;
-    expect(send.mock.calls).toEqual([[2, { type: 'SOLID_STATE_CHANGED', webId: b.session.webId }]]);
+    expect(send.mock.calls).toEqual([
+      [
+        2,
+        { type: 'SOLID_STATE_CHANGED', origin: PROFILE_APP_B.origin, webId: b.session.webId },
+        { frameId: 0 },
+      ],
+    ]);
     expect(runtime.mock.calls).toEqual([[{ type: 'SOLID_STATE_CHANGED', webId: b.session.webId }]]);
   });
 
@@ -1241,19 +1419,20 @@ describe('ProfileStore runtime API and adversarial isolation', () => {
     expect((await profileFetch()).status).toBe(200);
     await profileMessage('SOLID_PROFILE_SET_DEFAULT', { profileId: '2' });
     const before = fetchCalls.length;
-    expect((await profileFetch(PROFILE_APP_A, { profileId: '1' })).status).toBe(403);
-    expect(fetchCalls).toHaveLength(before);
+    expect((await profileFetch(PROFILE_APP_A, { profileId: '2' })).status).toBe(200);
+    expect(fetchCalls).toHaveLength(before + 1);
     const hidden = await sendMessage(
       { type: 'SOLID_GET_STATE', stampedOrigin: PROFILE_APP_A.origin },
       PROFILE_APP_A,
     );
-    expect(hidden.webId).toBeNull();
+    expect(hidden.webId).toBe(a.session.webId);
     expect((await profileFetch(PROFILE_APP_B, { profileId: '1' })).status).toBe(200);
     const podCalls = fetchCalls.filter((c) => c.url === 'https://pod.example/private/notes');
-    expect(podCalls).toHaveLength(2);
+    expect(podCalls).toHaveLength(3);
     for (const [call, credentials] of [
       [podCalls[0], a],
-      [podCalls[1], b],
+      [podCalls[1], a],
+      [podCalls[2], b],
     ] as const) {
       const headers = new Headers(call.init?.headers);
       expect(headers.get('authorization')).toBe(`DPoP ${credentials.session.accessToken}`);
@@ -1634,7 +1813,7 @@ describe('ProfileStore runtime API and adversarial isolation', () => {
     expect([...idbMeta.values()].filter((row) => row.webId === a.session.webId)).toHaveLength(2);
     expect(cacheStore.has(failedKey)).toBe(true);
     expect(cacheStore.size).toBe(2);
-    expect((await profileFetch()).error).toBe('Not authenticated');
+    expect((await profileFetch()).error).toBe('Origin not granted access');
 
     await loadWorker();
     expect((await profileMessage('SOLID_PROFILES_LIST')).error).toBe(
@@ -1668,7 +1847,7 @@ describe('ProfileStore runtime API and adversarial isolation', () => {
     });
     expect(profileDb.state.records[0].profile.sessionState).toBe('signed-out');
     expect(profileDb.state.records[1].session).toEqual(b.session);
-    expect((await profileFetch()).error).toBe('Not authenticated');
+    expect((await profileFetch()).error).toBe('Origin not granted access');
     expect(fetchCalls).toHaveLength(0);
     expect(profileDb.state.records[0].profile.webId).toBe(a.session.webId);
     await profileMessage('SOLID_PROFILE_SET_DEFAULT', { profileId: '2' });
@@ -1821,11 +2000,16 @@ describe('ProfileStore runtime API and adversarial isolation', () => {
       expect(badge).toHaveBeenLastCalledWith({ text: '' });
       expect(title).toHaveBeenLastCalledWith({ title: 'Sign in to Solid' });
       expect(broadcast).toHaveBeenLastCalledWith({ type: 'SOLID_STATE_CHANGED', webId: null });
-      for (const tabId of [1, 2])
-        expect(tabBroadcast).toHaveBeenCalledWith(tabId, {
-          type: 'SOLID_STATE_CHANGED',
-          webId: null,
-        });
+      expect(tabBroadcast).toHaveBeenCalledWith(
+        1,
+        { type: 'SOLID_STATE_CHANGED', origin: PROFILE_APP_A.origin, webId: null },
+        { frameId: 0 },
+      );
+      expect(tabBroadcast).toHaveBeenCalledWith(
+        2,
+        { type: 'SOLID_STATE_CHANGED', origin: PROFILE_APP_B.origin, webId: b.session.webId },
+        { frameId: 0 },
+      );
     });
     expect(profileDb.state.records[0]).toMatchObject({
       profile: { sessionState: 'signed-out' },
@@ -1837,7 +2021,7 @@ describe('ProfileStore runtime API and adversarial isolation', () => {
     expect(profileDb.state.records[1]).toEqual(survivor);
     expect([...idbMeta.values()]).toEqual(metadata);
     expect([...cacheStore.keys()]).toEqual(bytes);
-    expect((await profileFetch()).error).toBe('Not authenticated');
+    expect((await profileFetch()).error).toBe('Origin not granted access');
 
     fail = false;
     await loadWorker();
@@ -1966,7 +2150,7 @@ describe('ProfileStore runtime API and adversarial isolation', () => {
     expect((await pending).isActive).toBe(true);
     expect(profileDb.state.records[0].session).toEqual(replacement.session);
     expect(profileDb.state.records[0].profile.sessionState).toBe('active');
-    expect(profileDb.state.records[0].grantedOrigins).toContain('https://relogin.example');
+    expect(profileDb.state.records[0].grantedOrigins).not.toContain('https://relogin.example');
     expect(profileDb.state.records[0].classGrants).toEqual(grants);
     expect(profileDb.state.records[1].session).toEqual(b.session);
   });
@@ -2070,7 +2254,7 @@ describe('ProfileStore runtime API and adversarial isolation', () => {
     const started = new Promise<void>((resolve) => {
       entered = resolve;
     });
-    vi.spyOn(WorkerStore.prototype, 'getDefault').mockImplementationOnce(async () => {
+    vi.spyOn(WorkerStore.prototype, 'get').mockImplementationOnce(async () => {
       entered();
       await held;
       return selected;
@@ -2132,7 +2316,7 @@ describe('ProfileStore runtime API and adversarial isolation', () => {
     await loadWorker();
     expect(profileDb.state.records[0].profile.sessionState).toBe('signed-out');
     expect(profileDb.state.records[0].session).toBeNull();
-    expect((await profileFetch()).error).toBe('Not authenticated');
+    expect((await profileFetch()).error).toBe('Origin not granted access');
     expect(fetchCalls).toHaveLength(0);
   });
 

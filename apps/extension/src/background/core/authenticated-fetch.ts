@@ -14,6 +14,8 @@
  *   3. NONCE RETRY (RFC 9449 §8). On a pure `use_dpop_nonce` 401, the proof is re-minted
  *      with the server `DPoP-Nonce` and the request retried ONCE.
  *   4. SINGLE RETRY. Exactly one retry, so a misbehaving server cannot loop us.
+ *   5. NO REDIRECTS. Never forward DPoP or return bytes from an unchecked redirect target,
+ *      including on the credential-free path and the nonce retry.
  *
  * The re-entrancy guard (a fetch the SW itself issues for discovery/token/refresh must
  * never recurse into THIS path) is the caller's responsibility: discovery/token use the
@@ -89,7 +91,12 @@ export async function authenticatedFetch(
 
   if (!mayAttach) {
     // Foreign / public / token-endpoint: a plain, credential-free fetch.
-    const response = await fetchImpl(url, { method, headers: safeHeaders, body });
+    const response = await fetchImpl(url, {
+      method,
+      headers: safeHeaders,
+      body,
+      redirect: 'error',
+    });
     return { response, authenticated: false };
   }
 
@@ -109,6 +116,7 @@ export async function authenticatedFetch(
         DPoP: proof,
       },
       body,
+      redirect: 'error',
     });
   };
 

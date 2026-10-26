@@ -1,57 +1,89 @@
-# Manifest permissions — rationale (Phase 0)
+# Manifest permissions — rationale (EXT-05)
 
-> AUTHORED-BY Claude Opus 4.8
+The host permission enables worker egress to user-chosen Solid servers. Explicit origin
+consent, independently checked by the worker, controls which pages can use that egress.
 
-`manifest.json` cannot carry comments, so this file is the durable record of WHY each
-permission and host-permission is requested, and what the Phase-0 hardening reviewed.
-Reviewed against the shared-replica design `docs/design/shared-replica-architecture.md`
-§4.3 ("PII broadcast", "Foreign-origin fetch") and §5.7.
+## Permissions
 
-## `permissions`
+| Permission | Purpose |
+|---|---|
+| `storage` | Settings, recent-account display metadata, client IDs, transient PKCE parameters, and `solid:origin-grants`. The origin table contains `{origin, profileId, scope: {pods, classes?}, createdAt, expiresAt?}`; class grants nest under their parent. Tokens and non-extractable DPoP keys remain in worker-owned profile IndexedDB. Legacy implicit grants do not authorize access. |
+| `identity` | Solid-OIDC authorization-code + PKCE through `chrome.identity.launchWebAuthFlow`. |
+| `sidePanel` | The persistent account surface; EXT-06 owns its grants-manager UI. |
+| `contextMenus` | The toolbar's “Open Solid side panel” menu entry. |
+| `scripting` | Register the MAIN-world fetch-patch entry only for explicitly granted origins, with one exact `scheme://host:port/*` match per origin (including explicit default ports), no wildcard hosts or schemes, top frame only. Reconcile on worker wake, install/update, grant changes, and expiry. Remove the legacy `solid-main-world-inject` all-origins registration. |
+| `alarms` | Wake the worker at the earliest origin-grant expiry to unregister scripts and clear page capabilities. Alarms are a cleanup mechanism: every request independently checks expiry, even if the alarm is late. |
 
-| Permission | Why it is required | Could it be narrowed? |
-|---|---|---|
-| `storage` | Stores recent-account display metadata, per-origin client ids, transient PKCE parameters and onboarding settings in `chrome.storage.local`. Legacy session/grant/pod settings are read once for migration. Per-profile tokens, grants, pod settings and non-extractable DPoP `CryptoKey`s now live atomically in worker-owned IndexedDB (`profile-db.ts`, an unpermissioned Web Platform API); legacy credentials and the singleton key record are cleared after that transaction commits. | No — still needed for settings and the auth redirect. |
-| `identity` | `chrome.identity.launchWebAuthFlow` drives the Solid-OIDC auth-code + PKCE redirect (a service worker has no `window`). | No. |
-| `sidePanel` | The persistent side-panel account surface. | No. |
-| `contextMenus` | The right-click "Open Solid side panel" entry. | No. |
-
-No `tabs` permission is requested: `broadcastStateChange` reads tab URLs via the existing
-`<all_urls>` host permission (host access implies tab-URL visibility), and the WebID it
-sends is scoped per-tab to GRANTED origins only (a non-granted tab receives `webId: null`).
+No `tabs` permission is requested. Existing host access permits tab-URL visibility for
+scoped state broadcasts. Each tab receives only its bound profile's WebID; other tabs
+receive null. The worker revalidates each tab's URL origin immediately before sending to
+the top frame. Tab messages include the intended `origin`; the ISOLATED bridge drops a
+message unless it equals its own `location.origin`, closing navigation races during delivery.
+Switching the default profile does not change origin bindings.
 
 ## `host_permissions: ["<all_urls>"]`
 
-**Required, and genuinely broad — documented rather than removed.** The service worker is
-the sole egress: it makes cross-origin `fetch`es to **arbitrary, user-chosen** Solid pod
-origins, IdP issuer origins, token endpoints, and WebID profile documents (discovery, token
-exchange, refresh, profile, and every authenticated resource read/write). A Solid pod can be
-hosted on **any** origin the owner picks, so the set of origins the SW must reach is
-unbounded at install time. Without `<all_urls>` host permission these credentialed
-cross-origin fetches would be subject to extension CORS restrictions and could not reliably
-read response bodies/headers, breaking the core auth flow against arbitrary pods.
+The worker discovers arbitrary user-chosen WebID, pod and issuer origins and performs
+cross-origin discovery, token exchange/refresh and authenticated resource access. These
+hosts cannot be enumerated at installation. The broad host permission does not grant
+web pages access to any profile or pod.
 
-This breadth is NOT the security boundary. The boundary is the SW-enforced, fail-closed
-gates, all of which run regardless of host permissions:
+The worker enforces these boundaries before cache access or egress:
 
-- **Target-origin credential gate** (`origin-policy.ts`): the access token is attached ONLY
-  to the WebID / issuer / configured-pod origins — never a foreign origin, never `/token`,
-  never over cleartext (loopback dev excepted). A fetch to any other origin is a plain,
-  token-free fetch.
-- **Per-requesting-origin default-deny gate** (`requesting-origin.ts`, Phase 0): the calling
-  app's origin must be GRANTED (an explicit per-origin grant, or a session credential/pod
-  origin) before any pod egress or cache read. The requesting origin is the **browser-
-  attested** `sender` cross-checked against the page stamp; opaque/`null`/mismatched → DENY.
-- **Same-origin-or-deny foreign-fetch policy** (Phase 0): a request to a non-credential
-  ("foreign") origin is allowed only when it targets the requesting app's OWN origin, so the
-  extension cannot be used as an ambient-cookie proxy to arbitrary third parties.
+- The ISOLATED bridge overwrites any page-supplied origin with `window.location.origin`.
+  It also reads transient user activation itself. The worker requires agreement with
+  Chrome's sender origin/URL; mismatched, opaque and missing anchors fail closed.
+- A live explicit origin grant selects exactly one profile. Login, a client-ID declaration,
+  a pod/issuer origin, a default-profile switch, and standalone legacy class records do not
+  grant a page access. Removed/signed-out profiles cannot supply credentials.
+- Credential targets must be in both the profile's allowed-origin set and the parent
+  grant's pod scope. Nested class grants additionally enforce pinned targets, mode, WebID
+  and expiry. A child cannot bypass an absent, revoked or expired parent.
+- Page-supplied `Authorization`/`DPoP` headers are stripped. Tokens attach only to approved
+  profile credential origins, never the token endpoint, never remote cleartext HTTP.
+- Foreign targets are permitted only on the calling app's own origin without Solid
+  credentials. A declined automatic diversion returns a sentinel, with no worker network;
+  the page performs its own native fetch with normal CORS semantics.
 
-## `content_scripts` matches: `["<all_urls>"]`
+Revocation unregisters future injections, cancels pending profile operations and purges
+that origin's replica slice. Existing pages also lose their privileged API/patch on the
+state broadcast. A captured function remains subject to the worker gate on its next call.
+Grant expiry is checked before serving cached bytes, before egress and before returning
+results. Registration failure does not confer authority.
 
-**Required.** `window.solid` (the cooperation surface) must be available on any page that
-might be a Solid app — the owner chooses which apps to use, so the match set is unbounded.
-Presence of `window.solid` is a UX/cooperation signal, NOT a security boundary (design
-§5.7): the credential never leaves the SW, and the per-requesting-origin gate denies any
-non-granted origin even though the script is injected everywhere. Identity (the WebID) is
-NOT exposed to a page merely because the script is injected — `SOLID_GET_STATE` returns the
-WebID only to a verified, granted origin.
+## Manifest content scripts: `["<all_urls>"]`
+
+The ISOLATED bridge and MAIN-world **stub** remain available on arbitrary pages so a new
+app can request consent. Without an origin grant `window.solid` has only `login` and
+`requestAccess`, plus the credential-free DOM presence marker/event. There is no `webId`,
+`fetch`, client-ID setter, logout or class-management API, and native `window.fetch` is
+preserved. The stub enables these capabilities only after a grant-backed state response.
+The dynamic registration is scoped to granted origins, never `<all_urls>`.
+
+Presence and page-side capability state are cooperation signals, not authentication:
+a page can spoof messages to its own MAIN-world scripts, but cannot mint an origin grant,
+select a different profile's credentials or bypass worker enforcement.
+
+## Trusted management seam
+
+Only browser-attested extension contexts may list origin grants (`SOLID_ORIGIN_GRANTS_LIST`),
+revoke (`SOLID_ORIGIN_GRANT_REVOKE`), shorten expiry (`SOLID_ORIGIN_GRANT_EXPIRY`), or change
+profile (`SOLID_ORIGIN_GRANT_PROFILE`). Mutations name the exact `origin`; expiry uses an
+epoch-millisecond `expiresAt`, profile changes use `profileId`. Profile rebinding clears the
+old pod/class scope and cached slice; fresh class consent is required for data access.
+The consent picker resolves and displays each profile's own targets, never transfers the
+previous profile's targets.
+
+Chrome's [content-script registration](https://developer.chrome.com/docs/extensions/reference/api/scripting#method-registerContentScripts)
+and [match-pattern documentation](https://developer.chrome.com/docs/extensions/develop/concepts/match-patterns)
+describe the browser API; the worker's canonical-origin comparison remains the authority.
+
+Dynamic registrations always specify a port: HTTPS uses `:443` and HTTP uses `:80` when
+its canonical origin omits the default port. Chrome treats an omitted pattern port as a
+wildcard, so `https://app.example/*` would also inject into `https://app.example:8443`.
+An explicit default port also matches port-less URLs; no wildcard-port fallback is needed.
+This follows Chrome's [port matching documentation](https://developer.chrome.com/docs/extensions/develop/concepts/match-patterns)
+and Chromium's [`ExtensionURLPatternTest.Match17`](https://chromium.googlesource.com/chromium/src/+/main/extensions/common/url_pattern_unittest.cc),
+which checks default-port matching and rejection of alternate ports. Unit regressions model
+these port semantics for HTTPS, HTTP, custom ports and IPv6, including replacement of old
+wildcard-port registrations on wake.

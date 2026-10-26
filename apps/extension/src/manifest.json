@@ -4,7 +4,7 @@
   "version": "0.2.0",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAivtuQP2w3AxZ/8dBdOYDSwtknAIMzs1TE2hmiCHXe9Zndt/zrn/MsBybc9E27jwZVn41hNKHI1zsFpIyaKezVBUQrSMzE/i6z3Qto4/oz2TBSWkiaz/f18V6qskPBZASoB3/slTTS+7Yx5JpaUOHbB7pN2lgLlKtyxHJ1H4+4htpPNltseZFPu/ID4yVGuLeGgfNUpM3IxMf6Ttt2syq+s24tCrNZY5YJoYPog2+9wTIOgBPvmar099++gxim84WfTtopyz2252cJRl/nkVk/fygGZFZ1PkbERmUWdgQ8XXl7uprfHAwyObCGdUbLnBEVNVVgburf/CsfI8G/WXK+wIDAQAB",
   "description": "Sign in to Solid at the browser level — injects window.solid (DPoP-authenticated fetch) and a pinned account menu.",
-  "permissions": ["storage", "identity", "sidePanel", "contextMenus", "scripting"],
+  "permissions": ["storage", "identity", "sidePanel", "contextMenus", "scripting", "alarms"],
   "host_permissions": ["<all_urls>"],
   "background": {
     "service_worker": "background/service-worker.js",

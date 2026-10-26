@@ -37,12 +37,21 @@ const PUBLIC_INDEX = `
 describe('parseTypeIndexRefs', () => {
   it('returns the public + private type-index URLs on the WebID subject', () => {
     expect(parseTypeIndexRefs(WEBID, PROFILE)).toEqual([
-      'https://alice.pod.example/settings/publicTypeIndex.ttl',
-      'https://alice.pod.example/settings/privateTypeIndex.ttl',
+      { url: 'https://alice.pod.example/settings/publicTypeIndex.ttl', authenticated: false },
+      { url: 'https://alice.pod.example/settings/privateTypeIndex.ttl', authenticated: true },
     ]);
   });
   it('is empty for a profile with no type index', () => {
     expect(parseTypeIndexRefs(WEBID, '<x> <y> <z> .')).toEqual([]);
+  });
+  it('keeps a public index credential-free when it is also advertised as private', () => {
+    expect(
+      parseTypeIndexRefs(
+        WEBID,
+        `<${WEBID}> <http://www.w3.org/ns/solid/terms#privateTypeIndex> <https://pod.example/index> ;
+          <http://www.w3.org/ns/solid/terms#publicTypeIndex> <https://pod.example/index> .`,
+      ),
+    ).toEqual([{ url: 'https://pod.example/index', authenticated: false }]);
   });
 });
 
@@ -92,37 +101,55 @@ describe('resolveClassTargets — the walk', () => {
   }
 
   it('walks profile → indexes → unions targets', async () => {
+    const fetched: Array<{ url: string; authenticated: boolean }> = [];
+    const documents = fetcher({
+      [WEBID]: PROFILE,
+      'https://alice.pod.example/settings/publicTypeIndex.ttl': PUBLIC_INDEX,
+      // Private index unreachable (returns non-ok) — degrades gracefully.
+    });
     const targets = await resolveClassTargets(FINANCE, {
       webId: WEBID,
-      fetch: fetcher({
-        [WEBID]: PROFILE,
-        'https://alice.pod.example/settings/publicTypeIndex.ttl': PUBLIC_INDEX,
-        // private index unreachable (returns non-ok) — degrades gracefully.
-      }),
+      fetch: async (url, authenticated) => {
+        fetched.push({ url, authenticated });
+        return documents(url);
+      },
+      authenticatedOrigins: new Set(['https://alice.pod.example']),
       allowedOrigins: new Set(['https://alice.pod.example']),
     });
     expect(targets).toEqual([
       { url: 'https://alice.pod.example/finance/summary.ttl', kind: 'instance' },
       { url: 'https://alice.pod.example/finance/', kind: 'container' },
     ]);
+    expect(fetched).toEqual([
+      { url: WEBID, authenticated: false },
+      { url: 'https://alice.pod.example/settings/publicTypeIndex.ttl', authenticated: false },
+      { url: 'https://alice.pod.example/settings/privateTypeIndex.ttl', authenticated: true },
+    ]);
   });
 
-  it('does NOT fetch a type-index ref on a FOREIGN origin when confined (SSRF guard)', async () => {
-    const evilProfile = `
+  it('fetches foreign public indexes without credentials while confining targets', async () => {
+    const profile = `
       @prefix solid: <http://www.w3.org/ns/solid/terms#> .
-      <${WEBID}> solid:publicTypeIndex <https://evil.example/index.ttl> .`;
-    const fetched: string[] = [];
+      <${WEBID}> solid:publicTypeIndex <http://public.example/index.ttl> ;
+        solid:privateTypeIndex <https://evil.example/private.ttl> .`;
+    const fetched: Array<{ url: string; authenticated: boolean }> = [];
     const targets = await resolveClassTargets(FINANCE, {
       webId: WEBID,
-      fetch: async (url: string) => {
-        fetched.push(url);
-        return url === WEBID ? { ok: true, text: evilProfile } : { ok: true, text: PUBLIC_INDEX };
+      fetch: async (url, authenticated) => {
+        fetched.push({ url, authenticated });
+        return { ok: true, text: url === WEBID ? profile : PUBLIC_INDEX };
       },
+      authenticatedOrigins: new Set(['https://alice.pod.example']),
       allowedOrigins: new Set(['https://alice.pod.example']),
     });
-    expect(targets).toEqual([]);
-    // The foreign index URL was NEVER fetched (only the profile was).
-    expect(fetched).toEqual([WEBID]);
+    expect(targets).toEqual([
+      { url: 'https://alice.pod.example/finance/summary.ttl', kind: 'instance' },
+      { url: 'https://alice.pod.example/finance/', kind: 'container' },
+    ]);
+    expect(fetched).toEqual([
+      { url: WEBID, authenticated: false },
+      { url: 'http://public.example/index.ttl', authenticated: false },
+    ]);
   });
 
   it('returns [] when the profile is unreachable (fail-closed, never throws)', async () => {
@@ -141,6 +168,7 @@ describe('resolveClassTargets — the walk', () => {
         'https://alice.pod.example/settings/publicTypeIndex.ttl': PUBLIC_INDEX,
         'https://alice.pod.example/settings/privateTypeIndex.ttl': PUBLIC_INDEX,
       }),
+      authenticatedOrigins: new Set(['https://alice.pod.example']),
     });
     // Same registrations in both indexes → one entry each.
     expect(targets).toEqual([

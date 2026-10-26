@@ -11,15 +11,8 @@ export {};
 
 const CHANNEL = 'solid-browser-ext';
 
-// --- Idempotency guard (Medium #2) -----------------------------------------------------
-//
-// inject.js is now injected by a SINGLE mechanism — the SW's dynamic
-// `chrome.scripting.registerContentScripts` (the manifest MAIN-world declaration was removed,
-// see manifest.json / global-fetch-register.ts — declaring it BOTH ways let it run twice and
-// the second run THREW on `Object.defineProperty(window,'solid',{configurable:false})` below).
-// This guard remains as DEFENCE-IN-DEPTH: even an accidental double-run (a reload race, a
-// re-registration) must be an inert no-op, never a throw. The marker covers a re-run after our
-// own install; the `'solid' in window` check covers a prior install from any other code path.
+// The manifest supplies the stub on all pages; granted-origin dynamic scripts request a
+// fresh state check. Duplicate execution never replaces a page's permanent window.solid.
 declare global {
   interface Window {
     __solidInjected?: boolean;
@@ -46,6 +39,7 @@ interface AccessRequestArgs {
 
 /** The worker's reply to an access-management call, as relayed to the page. */
 interface AccessResponseData {
+  readonly webId?: string;
   readonly requestId: string;
   readonly ok?: boolean;
   readonly grants?: SolidGrant[];
@@ -123,7 +117,8 @@ function installSolidInjection(): void {
   // back to: when the SW returns a passthrough sentinel, the page completes the request with
   // its OWN native fetch in the page's origin context (round-2 High #1) — so the extension is
   // never a cross-origin proxy and native CORS / credentials / header semantics are preserved.
-  const PRISTINE_FETCH = window.fetch.bind(window);
+  const nativeFetch = window.fetch;
+  const PRISTINE_FETCH = nativeFetch.bind(window);
 
   /**
    * Duck-type a `URL`-like input rather than `instanceof URL`. `instanceof` is CROSS-REALM
@@ -203,6 +198,7 @@ function installSolidInjection(): void {
       }
       case 'SOLID_STATE_UPDATE':
         currentWebId = data.webId ?? null;
+        setGranted(currentWebId !== null);
         break;
     }
   });
@@ -308,6 +304,10 @@ function installSolidInjection(): void {
         purpose: request?.purpose,
         duration: request?.duration,
       });
+      if (res.ok && res.webId) {
+        currentWebId = res.webId;
+        setGranted(true);
+      }
       return { ok: res.ok === true, grants: res.grants ?? [] };
     },
     async listGrants() {
@@ -324,7 +324,34 @@ function installSolidInjection(): void {
     },
   };
 
-  Object.defineProperty(window, 'solid', { value: Object.freeze(solid), configurable: false });
+  // The permanent surface is a stub. Privileged properties exist only while granted.
+  const stub = { login: solid.login, requestAccess: solid.requestAccess };
+  const privileged = [
+    'webId',
+    'fetch',
+    'setClientId',
+    'logout',
+    'listGrants',
+    'revokeGrant',
+    'resolveClass',
+  ] as const;
+  function setGranted(granted: boolean): void {
+    for (const key of privileged) {
+      if (granted)
+        Object.defineProperty(stub, key, {
+          ...Object.getOwnPropertyDescriptor(solid, key),
+          configurable: true,
+        });
+      else Reflect.deleteProperty(stub, key);
+    }
+    try {
+      if (granted) window.fetch = patchedFetch;
+      else if (window.fetch === patchedFetch) window.fetch = nativeFetch;
+    } catch {
+      /* best effort */
+    }
+  }
+  Object.defineProperty(window, 'solid', { value: stub, configurable: false });
 
   // --- Presence announce (apps de-dupe their own account chrome) --------------------------
   //
@@ -416,12 +443,9 @@ function installSolidInjection(): void {
     return PRISTINE_FETCH(input as RequestInfo, init);
   };
 
-  try {
-    window.fetch = patchedFetch;
-  } catch {
-    // If a page froze `fetch`, transparency is simply unavailable on it (the SW path via
-    // window.solid.fetch still works). The patch is best-effort by design.
-  }
+  window.addEventListener('solid-extension:grant-patch', () =>
+    postToContent({ type: 'SOLID_GET_STATE' }),
+  );
 
   // Ask the worker for the current session state on load (populates window.solid.webId).
   postToContent({ type: 'SOLID_GET_STATE' });

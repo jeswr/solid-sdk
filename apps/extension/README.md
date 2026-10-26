@@ -1,9 +1,9 @@
 # Solid Browser Extension
 
 A Manifest V3 browser extension that brings **Solid sign-in to the browser itself**. It
-injects a `window.solid` API into every page (a DPoP-authenticated `fetch`, the user's
-`webId`, `login`/`logout`/`setClientId`, and per-data-class access grants) and provides a
-toolbar account menu whose icon is the signed-in WebID's avatar. The UI is built with
+injects a `window.solid` consent stub into every page (`login` and `requestAccess`).
+Explicit origin consent adds DPoP-authenticated `fetch`, the bound profile's `webId`,
+and class-management APIs. The toolbar account menu shows the signed-in WebID's avatar. The UI is built with
 [`@jeswr/solid-elements`](https://github.com/jeswr/solid-elements)
 so it is visually consistent with [Pod Manager](https://github.com/jeswr/solid-pod-manager)
 and the rest of the [@jeswr Solid app suite](https://github.com/jeswr).
@@ -40,11 +40,11 @@ Four contexts, with the access token held in exactly one of them (the service wo
 - **Every proxied pod read/write is gated before cache access or egress.** The worker
   cross-checks the content script's origin stamp against Chrome's sender, then checks
   origin grants and, for class-only origins, the pinned targets, modes, and expiry.
-  Ungranted pages receive `webId: null`.
+  Ungranted pages have no `webId` or `fetch` property.
 
 ### The credential boundary (security heart)
 
-Because `solid.fetch` is callable from **any** page, the worker must never hand a foreign
+Because any page can send proxy messages, the worker must never hand a foreign
 origin the user's token. `core/origin-policy.ts` + `core/authenticated-fetch.ts` enforce,
 fail-closed:
 
@@ -66,6 +66,8 @@ WebID/origin-mismatch test that genuinely fails without the guard.
 ## `window.solid`
 
 ```ts
+// Ungranted origins receive only login() and requestAccess().
+// These additional properties become available after explicit origin consent.
 interface SolidExtension {
   readonly webId: string | null;
   fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response>;
@@ -99,9 +101,10 @@ interface SolidGrant {
 ```
 
 Presence can also be detected using the `solid-extension:ready` event or the sticky
-`<html data-solid-extension="1">` marker. These carry no identity. The best-effort global
-`fetch` patch routes cross-origin HTTP(S) requests through the worker; requests the worker
-does not authorize fall back to the page's captured native fetch with normal CORS behavior.
+`<html data-solid-extension="1">` marker. These carry no identity. The best-effort
+`fetch` patch is registered only on granted origins; other pages retain native fetch.
+Requests the worker does not authorize fall back to the page's captured native fetch
+with normal CORS behavior.
 Explicit `solid.fetch` calls retain the worker's denial response.
 
 ## Auth + session
@@ -119,14 +122,15 @@ Explicit `solid.fetch` calls retain the worker's denial response.
   The public key belongs in `manifest.key`; the extension signing private key stays with Jesse.
   A page may still declare its own Client ID Document via `solid.setClientId(...)`.
 - **Profiles:** `ProfileStore` supports up to eight distinct WebIDs. Each profile has its own
-  access/refresh token set, non-extractable DPoP keypair, pod settings and grants, persisted
-  atomically in IndexedDB under the profile id. The current single session migrates to profile
+  access/refresh token set, non-extractable DPoP keypair and pod settings, persisted
+  atomically in IndexedDB under the profile id. Explicit origin grants bind those profile IDs
+  in worker-owned `chrome.storage.local`. The current single session migrates to profile
   `1`, keeping its matching key. A missing/mismatched key retains the display entry and requires
   re-login. Legacy token/key storage is cleared only after migration commits.
-- **Default and restore:** the default profile supplies the existing account surface and page
-  APIs. Requests capture that profile's id; a default switch cannot substitute another
-  profile's credentials mid-request. Refresh is single-flight per profile, reuses its persisted
-  key, and commits rotated tokens before use. Reopening the worker restores from IndexedDB.
+- **Default and restore:** the default profile supplies the account surface. Each origin
+  grant binds one profile independently of that default. Requests capture the bound profile's
+  id; a default switch cannot substitute another profile's credentials mid-request. Refresh
+  is single-flight per profile, reuses its persisted key, and commits rotated tokens before use. Reopening the worker restores from IndexedDB.
 - **Removal and logout:** removing a profile revokes its grants, cancels pending replica fetches,
   finishes local replica commits, purges its WebID's replica slices and deletes its credentials.
   Interrupted removal resumes on worker wake. Logout signs out only the default profile, retaining its display entry; other
@@ -152,9 +156,13 @@ The worker API accepts the following messages **only from browser-attested exten
 
 A successful legacy `SOLID_LOGIN` selects the logged-in profile as default. Re-login updates
 only the same WebID. Removing the default selects the oldest survivor; an empty store has no
-default. Per-origin
-profile bindings and the consent profile picker belong to EXT-05; this lane scopes the existing
-grants to each profile without adding that origin-grant model.
+default. Per-origin bindings and the consent profile picker are implemented. `requestAccess`
+requires a click, opens extension-owned consent, and shows the selected profile's pinned class targets.
+Approved class grants nest under `{origin, profileId, scope: {pods, classes}, createdAt, expiresAt}`.
+Every request rechecks the parent and its class constraints. Revocation/expiry unregisters
+the origin's patch, clears page capabilities and denies captured functions on their next call.
+Legacy implicit grants require fresh consent. The trusted grants-manager worker seam is
+documented in [manifest permissions](docs/manifest-permissions.md); its side-panel UI is EXT-06.
 
 The trusted `clientIdMode` setting is stored as `solid:client-id-mode` in
 `chrome.storage.local`. It accepts `document` or `dcr`, defaulting to `dcr` while Pages
@@ -226,23 +234,23 @@ document.querySelector('#share-contacts').addEventListener('click', async () => 
 ```
 
 - **`requestAccess`** opens a consent window in extension chrome showing the verified app
-  origin, classes, modes, purpose, expiry, and resolved targets. It requires transient user
+  origin, profile picker, classes, modes, purpose, expiry, and resolved targets. It requires transient user
   activation and is limited to three admitted requests per origin per minute (best-effort
   in-memory throttle, reset on worker restart). At least one valid HTTP(S) class IRI and
   recognized mode are required. `duration` is optional in the TypeScript shape but mandatory
   at runtime: a positive ISO-8601 duration, capped at 365 days. Years/months use 365/30 days.
   Approval returns one grant per approved class; denying all returns `{ ok: false, grants: [] }`.
   Invalid requests, missing activation/session, or throttling reject the promise.
-- **`listGrants`** returns only this origin's non-expired class grants for the active WebID;
-  no session or an unverifiable origin yields `[]`. Summaries contain no WebID or credential.
+- **`listGrants`** returns only this origin's non-expired class grants for the bound profile's WebID;
+  no live parent/session or an unverifiable origin yields `[]`. Summaries contain no WebID or credential.
 - **`revokeGrant`** removes this origin's class grant and returns whether it was removed.
   Removal precedes replica-slice purging, so even a purge failure cannot keep access live.
   Cached bytes still covered by another live read grant of the same origin are retained.
-  This cannot withdraw a separate legacy whole-pod origin grant.
+  The parent origin binding is managed separately from its nested class records.
 - **`resolveClass`** walks the WebID's public/private Solid Type Indexes for `solid:forClass`
   and returns `solid:instance` / `solid:instanceContainer` targets on allowed pod origins.
   It requires a verified, granted origin and an active session. Class-only origins can
-  resolve only classes they currently hold; legacy full-grant origins can resolve any class.
+  resolve only classes they currently hold beneath their parent origin grant.
   It returns `shape: null` today: SAI discovery and SHACL validation are not implemented.
   An unknown/unreachable class resolves to an empty target set.
 
@@ -251,11 +259,10 @@ expiry, including on cache hits. Instances cover an exact resource path; contain
 their path and descendants. GET/HEAD require `read`, POST requires `append`, and
 PUT/PATCH/DELETE require `write`; `write` also satisfies `append`, but does not imply `read`.
 Empty target sets authorize nothing. Re-resolution does not widen an existing grant.
-`purpose` is an audit/display value, not an enforced usage restriction. Legacy whole-pod
-origin grants remain broader and take precedence over class grants: successful page login
-and a verified `setClientId` call create those grants, and credential origins are granted
-automatically. To request only class-scoped access, sign in through the extension UI and
-call `requestAccess` without first opting the app into whole-pod access.
+`purpose` is an audit/display value, not an enforced usage restriction. Login,
+`setClientId` and credential origins confer no implicit access. The origin parent and its
+nested class scopes are both required. Changing the default profile does not rebind apps;
+changing an origin's profile clears its old pod/class scope before fresh consent.
 
 ## Build & load the unpacked extension
 

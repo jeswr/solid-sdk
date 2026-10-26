@@ -16,7 +16,7 @@ export default defineConfig({
     coverage: {
       enabled: true,
       provider: 'v8',
-      include: ['src/background/core/profile-store.ts'],
+      include: ['src/background/core/profile-store.ts', 'src/background/core/origin-grant.ts'],
       reporter: ['text', 'json'],
       thresholds: { branches: 100, functions: 100, lines: 100, statements: 100 },
     },

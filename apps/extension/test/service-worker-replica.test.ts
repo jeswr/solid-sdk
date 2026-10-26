@@ -1,3 +1,4 @@
+import { seedOriginGrantFixtures } from './profile-fixtures';
 // AUTHORED-BY Claude Opus 4.8
 //
 // WIRED Phase-1 integration tests: the shared replica AS DRIVEN by the real service-worker
@@ -262,6 +263,7 @@ async function seedSession(overrides: Partial<StoredSession> = {}): Promise<void
 }
 
 async function loadWorker(): Promise<void> {
+  seedOriginGrantFixtures(storage, profileDb);
   // A fresh worker import models an SW (re)start: a NEW module instance with empty in-memory
   // caches that re-hydrates durable state from storage / IDB / Cache. Drop any prior import's
   // registered listener so a stale module instance cannot intercept the next message (each
