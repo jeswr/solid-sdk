@@ -188,7 +188,7 @@ describe("tool registry over a fetch-free portable pod", () => {
 
   it("shares the portable search budget across profile, index, direct instance and listing reads", async () => {
     const pod = portablePod();
-    pod.webId = `${ROOT}profile/card#me`;
+    pod.webId = "https://identity.example/card#me";
     const index = `${ROOT}index.ttl`;
     const note = `${ROOT}note`;
     pod.read.mockImplementation(async (url) => ({
@@ -200,6 +200,7 @@ describe("tool registry over a fetch-free portable pod", () => {
             : '<> <http://schema.org/text> "portable needle" .',
       ),
       contentType: "text/turtle",
+      url: url === pod.webId ? "https://identity.example/card" : url,
     }));
     expect(await search(pod, "needle", { maxResources: 2 })).toEqual([]);
     expect(pod.read.mock.calls.map(([url]) => url)).toEqual([pod.webId, index]);

@@ -616,6 +616,15 @@ async function searchRdf(
   const { body, contentType, url: finalUrl } = await pod.read(url, { accept: RDF_ACCEPT });
   if (body.byteLength > MAX_CONTENT_BYTES) throw new RdfLimitError();
   const base = finalUrl ?? url;
-  if (!profile || base !== pod.webId) requirePodScopedUrl({ podRoot: pod.root }, base);
+  // HTTP representation URLs omit WebID fragments; retain the configured-profile exception.
+  const expectedProfile = profile ? new URL(pod.webId) : undefined;
+  const finalDocument = new URL(base);
+  if (expectedProfile) {
+    expectedProfile.hash = "";
+    finalDocument.hash = "";
+  }
+  if (expectedProfile?.href !== finalDocument.href) {
+    requirePodScopedUrl({ podRoot: pod.root }, base);
+  }
   return parseBoundedRdf(new TextDecoder().decode(body), contentType, base);
 }
