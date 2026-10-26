@@ -11,12 +11,18 @@ const local = (value: string): string =>
 const opt = (key: string, value: JsonValue | undefined): Record<string, JsonValue> =>
   value === undefined ? {} : { [key]: value };
 
+function supportedFields(value: object, fields: readonly string[]): void {
+  if (Object.keys(value).some((key) => !fields.includes(key)))
+    throw new Error("Unsupported field in mandate policy");
+}
+
 function validateScalarCardinality(operator: string, count: number): void {
   if (["eq", "neq", "gt", "gteq", "lt", "lteq"].includes(local(operator)) && count !== 1)
     throw new Error("Expected exactly one right operand for a scalar operator");
 }
 
 function encodeConstraint(c: Constraint): JsonValue {
+  supportedFields(c, ["leftOperand", "operator", "rightOperand", "datatype"]);
   validateScalarCardinality(c.operator, Array.isArray(c.rightOperand) ? c.rightOperand.length : 1);
   return {
     [`${ODRL}leftOperand`]: uri(c.leftOperand),
@@ -26,6 +32,7 @@ function encodeConstraint(c: Constraint): JsonValue {
   };
 }
 function encodeDuty(d: OdrlDuty): JsonValue {
+  supportedFields(d, ["action", "id", "target", "constraints"]);
   return {
     [`${ODRL}action`]: uri(d.action),
     ...opt(`${ODRL}uid`, d.id),
@@ -34,6 +41,16 @@ function encodeDuty(d: OdrlDuty): JsonValue {
   };
 }
 function encodeRule(r: Rule): JsonValue {
+  supportedFields(r, [
+    "type",
+    "action",
+    "id",
+    "target",
+    "assigner",
+    "assignee",
+    "constraints",
+    "duties",
+  ]);
   return {
     [`${ODRL}action`]: uri(r.action),
     ...opt(`${ODRL}uid`, r.id),
@@ -46,6 +63,17 @@ function encodeRule(r: Rule): JsonValue {
 }
 /** Lower the policy into the signed RDF graph using solid-vc's RDF writer. */
 export function encodePolicy(p: Policy): JsonValue {
+  supportedFields(p, [
+    "id",
+    "type",
+    "assigner",
+    "assignee",
+    "conflict",
+    "profile",
+    "permissions",
+    "prohibitions",
+    "obligations",
+  ]);
   return {
     [RDF_TYPE]: `${ODRL}${p.type ?? "Set"}`,
     [`${ODRL}uid`]: p.id,
@@ -62,9 +90,10 @@ export function encodePolicy(p: Policy): JsonValue {
 export const encodeProhibitions = (rules: readonly Rule[]): JsonValue[] => rules.map(encodeRule);
 /** Encode an executor limit as an ODRL constraint plus agent:enforcement. */
 export function encodeLimit(c: Limit): JsonValue {
+  const { enforcement, ...constraint } = c;
   return {
-    ...(encodeConstraint(c) as Record<string, JsonValue>),
-    [`${AGENT}enforcement`]: c.enforcement,
+    ...(encodeConstraint(constraint) as Record<string, JsonValue>),
+    [`${AGENT}enforcement`]: enforcement,
   };
 }
 function optional(n: Node, predicate: string): string | undefined {

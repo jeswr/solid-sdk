@@ -5,6 +5,7 @@ import {
   buildAgentAuthorizationCredential,
   type Credential,
   credentialToRdf,
+  digestQuads,
   issue,
   type KeyPair,
   type VerifiableCredential,
@@ -209,7 +210,7 @@ export function createVcMandateVerifier(options: VcMandateOptions): MandateVerif
           return undefined;
         const limits = root.values(`${ODRL}constraint`).map(decodeLimit);
         if (limits.some((c) => !LIMIT_OPERANDS.includes(c.leftOperand))) return undefined;
-        return {
+        const mandate: Mandate = {
           id: vc.id,
           issuer,
           subject,
@@ -220,6 +221,15 @@ export function createVcMandateVerifier(options: VcMandateOptions): MandateVerif
           prohibitions: decodeProhibitions(root),
           limits,
         };
+        // Every entry path must preserve the entire signed claim graph, including restrictions.
+        // Decoding a known subset must never erase a signed field before evaluation.
+        const reconstructed = mandateCredential(mandate, statuses[0]);
+        if (
+          (await digestQuads(credentialToRdf(vc))) !==
+          (await digestQuads(credentialToRdf(reconstructed)))
+        )
+          return undefined;
+        return mandate;
       } catch {
         return undefined;
       }

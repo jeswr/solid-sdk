@@ -202,6 +202,79 @@ it("rejects signed scalar operands in either RDF order during verification and T
   }
   expect(digests[0]).toBe(digests[1]);
 });
+it("rejects unsupported fields during issuance at every policy depth", async () => {
+  const constraint = { leftOperand: "count", operator: "eq", rightOperand: 1 } as const;
+  const duty = { action: "inform" as const };
+  const rule = { type: "permission" as const, action: "read" };
+  for (const changes of [
+    { autonomous: { ...mandate().autonomous, delegatedUnder: "urn:parent" } },
+    { withApproval: { ...mandate().withApproval, refinement: "urn:restriction" } },
+    { autonomous: { ...mandate().autonomous, permissions: [{ ...rule, refinement: "x" }] } },
+    { prohibitions: [{ ...rule, type: "prohibition" as const, refinement: "x" }] },
+    {
+      autonomous: {
+        ...mandate().autonomous,
+        permissions: [{ ...rule, constraints: [{ ...constraint, unit: "urn:unit" }] }],
+      },
+    },
+    {
+      autonomous: {
+        ...mandate().autonomous,
+        permissions: [{ ...rule, duties: [{ ...duty, consequence: "urn:consequence" }] }],
+      },
+    },
+    { withApproval: { ...mandate().withApproval, obligations: [{ ...duty, consequence: "x" }] } },
+    { limits: [{ ...limitConstraint(LIMIT_OPERANDS[0] as string, 1, "hard"), unit: "urn:unit" }] },
+  ])
+    await expect(
+      issueMandate({ ...mandate(), ...changes }, key, {
+        statusListCredential: STATUS,
+        statusListIndex: "1",
+      }),
+    ).rejects.toThrow("Unsupported field");
+});
+it("rejects complete signed graphs containing unrepresentable restrictions on every verification path", async () => {
+  const paths = [
+    [],
+    [`${AGENT}agreement`],
+    [`${AGENT}agreement`, `${AGENT}withApproval`],
+    [`${AGENT}agreement`, `${AGENT}withApproval`, `${ODRL}permission`, 0],
+    [`${AGENT}agreement`, `${AGENT}withApproval`, `${ODRL}permission`, 0, `${ODRL}constraint`, 0],
+    [`${AGENT}agreement`, `${ODRL}prohibition`, 0],
+    [`${AGENT}agreement`, `${AGENT}autonomous`, `${ODRL}obligation`, 0],
+    [`${AGENT}agreement`, `${AGENT}withApproval`, `${ODRL}permission`, 0, `${ODRL}duty`, 0],
+    [`${AGENT}agreement`, `${ODRL}constraint`, 0],
+  ];
+  for (const path of paths) {
+    const m = mandate();
+    const claims = mandateCredential(
+      {
+        ...m,
+        autonomous: { ...m.autonomous, obligations: [{ action: "inform" }] },
+        withApproval: {
+          ...m.withApproval,
+          permissions: m.withApproval.permissions?.map((r) => ({
+            ...r,
+            duties: [{ action: "inform" }],
+          })),
+        },
+        limits: [limitConstraint(LIMIT_OPERANDS[0] as string, 1, "hard")],
+      },
+      { statusListCredential: STATUS, statusListIndex: "1" },
+    );
+    let restricted = claims.credentialSubject as JsonValue;
+    for (const key of path)
+      restricted = (restricted as Record<string | number, JsonValue>)[key] as JsonValue;
+    (restricted as Record<string, JsonValue>)[`${ODRL}refinement`] = {
+      [`${ODRL}and`]: "urn:restriction",
+    };
+    const signed = await issue({ credential: claims, key, options: { created: NOW } });
+    expect(
+      await createVcMandateVerifier({ ...options, read: async () => signed }).load(),
+    ).toBeUndefined();
+    expect(await parseMandateCredential(await mandateToTurtle(signed))).toBeUndefined();
+  }
+});
 it("rejects unavailable credentials, status and invalid proofs", async () => {
   for (const changes of [
     { read: async () => undefined },
