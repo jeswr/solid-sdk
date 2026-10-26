@@ -1,9 +1,11 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { describe, expect, it } from "vitest";
 import {
   type DroppedEntry,
   diffFolderTree,
   type ExistingEntry,
+  encodeUploadPath,
   planUploads,
   type UploadPlanInput,
   UploadPlanningError,
@@ -124,6 +126,30 @@ describe("pure upload plans", () => {
       }),
     );
     expect(result.files[0]?.path).toEqual(["a (4).txt"]);
+  });
+
+  it("keeps capped paths stable and numbers existing and pending collisions", () => {
+    const name = "a".repeat(179);
+    const longName = `${name} tail`;
+    const parent = "b".repeat(179);
+    const result = planUploads(
+      input({
+        entries: [file([longName]), file([`${name} other`]), file([`${parent} tail`, longName])],
+        existing: [remote([name])],
+      }),
+    );
+    expect(result.files.map((item) => item.path)).toEqual([
+      [`${"a".repeat(176)} (1)`],
+      [`${"a".repeat(176)} (2)`],
+      [parent, name],
+    ]);
+    for (const item of result.files) {
+      expect(encodeUploadPath(item.path, "file")).toBe(item.targetPath);
+      expect(item.targetUrl).toBe(destination + item.targetPath);
+    }
+    for (const item of result.folders) {
+      expect(encodeUploadPath(item.path, "folder")).toBe(item.targetPath);
+    }
   });
 
   it("replaces only an existing file with its supplied strong ETag", () => {

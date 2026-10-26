@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import type { UploadKind, UploadPath } from "./types";
 import { hasControls, kind, path, requireValue, segment } from "./validation";
 
@@ -27,8 +28,9 @@ export function normalizeUploadName(name: string, entryKind: UploadKind = "file"
     .map((char) => (hasControls(char) || "/\\:#?%*".includes(char) ? "-" : char))
     .join("")
     .trim();
-  requireValue(cleaned.length > 0 && cleaned !== "." && cleaned !== "..", "invalid-name");
-  return fitName(cleaned, "", entryKind);
+  const fitted = fitName(cleaned, "", entryKind).trim();
+  requireValue(fitted.length > 0 && fitted !== "." && fitted !== "..", "invalid-name");
+  return fitted;
 }
 
 /** First free positive suffix, preserving the full extension chain and 180-character cap. */

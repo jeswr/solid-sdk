@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { describe, expect, it } from "vitest";
 import {
   encodeUploadPath,
@@ -35,6 +36,31 @@ describe("Drive upload names", () => {
     expect(() => normalizeUploadName(`a.${"x".repeat(179)}`)).toThrowError(
       new UploadPlanningError("invalid-name"),
     );
+  });
+
+  it.each(["file", "folder"] as const)("trims whitespace exposed by capping a %s", (kind) => {
+    const expected = "a".repeat(179);
+    for (const whitespace of [" ", "\u00a0", "\u2003"]) {
+      const normalized = normalizeUploadName(`${expected}${whitespace}tail`, kind);
+      expect(normalized).toBe(expected);
+      expect(normalizeUploadName(normalized, kind)).toBe(normalized);
+      expect(encodeUploadPath([normalized], kind)).toBe(
+        encodeURIComponent(normalized) + (kind === "folder" ? "/" : ""),
+      );
+    }
+  });
+
+  it.each(["file", "folder"] as const)("rejects dot names exposed by capping a %s", (kind) => {
+    for (const dots of [".", ".."]) {
+      expect(() =>
+        normalizeUploadName(`${dots}${" ".repeat(180 - dots.length)}tail`, kind),
+      ).toThrowError(new UploadPlanningError("invalid-name"));
+    }
+  });
+
+  it("numbers collisions after trimming a capped name", () => {
+    const name = "a".repeat(179);
+    expect(keepBothName(`${name} tail`, [name])).toBe(`${"a".repeat(176)} (1)`);
   });
 
   it.each([
