@@ -81,10 +81,11 @@ describe.each([
       await client.close();
     });
 
-    it("registers search/fetch, canonical pod tools and compatibility aliases", async () => {
+    it("registers search/fetch, canonical tools, aliases and fetch-backed chat tools", async () => {
       const { tools } = await client.listTools();
       const names = tools.map((t) => t.name).sort();
       expect(names).toEqual([
+        ...(mode === "legacy config + aliases" ? ["chat_get", "chat_list", "chat_save"] : []),
         "fetch",
         "pod_list",
         "pod_read",

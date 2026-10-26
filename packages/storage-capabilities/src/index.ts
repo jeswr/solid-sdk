@@ -1,5 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-/** Storage capability contracts from ADR-002. Runtime discovery follows in later tasks. */
+/** Storage capability contracts and CID parsing from ADR-002. */
+export { CapabilitiesError } from "./errors.js";
+export { parseLwsDescription } from "./lws-description.js";
 export type {
   CapabilityEntry,
   DescriptionCache,

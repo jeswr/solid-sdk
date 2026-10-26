@@ -1,0 +1,10 @@
+# AUTHORED-BY Codex GPT-6.1-Sol
+@prefix mo: <http://purl.org/ontology/mo/> .
+@prefix s: <https://schema.org/> .
+@prefix dct: <http://purl.org/dc/terms/> .
+@prefix media: <https://jeswr.org/ns/sectors/media#> .
+<https://pod.test/music/tracks/a.ttl#it> a mo:Track; dct:title "Song"; mo:performer <https://pod.test/music/artists/a.ttl#it>; mo:record <https://pod.test/music/albums/a.ttl#it>; mo:duration 213; mo:isrc "GB123"; s:url <https://open.spotify.com/track/123>; s:image <https://images.test/cover.jpg>; media:loved true .
+<https://pod.test/music/artists/a.ttl#it> a mo:MusicArtist; dct:title "Artist" .
+<https://pod.test/music/albums/a.ttl#it> a mo:Record; dct:title "Album"; mo:track <https://pod.test/music/tracks/a.ttl#it> .
+<https://pod.test/music/playlists/a.ttl#it> a mo:Playlist; dct:title "Playlist"; mo:track <https://pod.test/music/tracks/a.ttl#it> .
+<https://pod.test/music/history/2026-10.ttl#play> a s:ListenAction; s:object <https://pod.test/music/tracks/a.ttl#it>; s:startTime "2026-10-25T12:00:00Z" .

@@ -1,5 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { describe, expect, it } from "vitest";
+import { smartAlbum } from "../src/apps/photos/lib/albums";
 import { ExifError, type ExifErrorCode, parseExif } from "../src/apps/photos/lib/exif";
 
 type Field = { tag: number; type: 2 | 3 | 4 | 5; value: string | number[] };
@@ -394,6 +396,29 @@ describe("requested metadata validation", () => {
     expect(parseExif(fixture({ root: [ascii(0x010f, " Example ")] }).jpeg())).toEqual({
       make: " Example ",
     });
+  });
+  it.each([
+    ["A B", ""],
+    ["", "Model One"],
+    ["", ""],
+    [" ", "  "],
+  ])("accepts parsed blank camera metadata in smart albums (%j, %j)", (make, model) => {
+    const root = [ascii(0x010f, make), ascii(0x0110, model)];
+    const metadata = parseExif(fixture({ root }).jpeg());
+    expect(metadata).toEqual({ make, model });
+    const photos = [
+      { id: "without-gps", ...metadata },
+      { id: "with-gps", ...parseExif(fixture({ root, gps }).jpeg()) },
+    ];
+    expect(smartAlbum(photos, [])).toEqual(photos);
+    expect(smartAlbum(photos, [{ kind: "has-gps", value: true }])).toEqual([photos[1]]);
+    expect(smartAlbum(photos, [{ kind: "has-gps", value: false }])).toEqual([photos[0]]);
+    expect(smartAlbum(photos, [{ kind: "camera", make: "A B" }])).toEqual(
+      make === "A B" ? photos : [],
+    );
+    expect(smartAlbum(photos, [{ kind: "camera", model: "Model One" }])).toEqual(
+      model === "Model One" ? photos : [],
+    );
   });
   it.each([
     short(0x010f, 1),
