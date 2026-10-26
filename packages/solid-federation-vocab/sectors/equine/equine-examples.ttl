@@ -15,8 +15,8 @@
 # (schema:Invoice + schema:totalPaymentDue, coded eq:expenseCategory). Every
 # private predicate is a SHARED eq: term, not a per-resource #flg. fragment IRI.
 #
-@prefix eq:      <https://w3id.org/jeswr/sectors/equine#> .
-@prefix core:    <https://w3id.org/jeswr/core#> .
+@prefix eq:      <https://jeswr.org/ns/sectors/equine#> .
+@prefix core:    <https://jeswr.org/ns/core#> .
 @prefix schema:  <http://schema.org/> .
 @prefix dcterms: <http://purl.org/dc/terms/> .
 @prefix xsd:     <http://www.w3.org/2001/XMLSchema#> .

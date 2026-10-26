@@ -1,5 +1,6 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { requirePodScopedUrl, type SolidMcpConfig, scopedFetch } from "./auth.js";
+import { requirePodScopedUrl, scopedFetch } from "./auth.js";
 import { parseBoundedRdf, RdfLimitError, serializeBoundedTurtle } from "./bounded-rdf.js";
 import {
   decodePrefix,
@@ -9,6 +10,7 @@ import {
   resourceTitle,
 } from "./content.js";
 import { RDF_MEDIA_TYPES } from "./pod.js";
+import { asPodPort, fetchConfig, type PodSource } from "./pod-port.js";
 
 /** ChatGPT fetch result; binary bodies are omitted from text. */
 export interface FetchResult {
@@ -25,12 +27,31 @@ export interface FetchResult {
 }
 
 /** Fetch one absolute pod URL with a 1 MiB input and output cap. */
-export async function fetchDocument(config: SolidMcpConfig, id: string): Promise<FetchResult> {
+export async function fetchDocument(source: PodSource, id: string): Promise<FetchResult> {
+  const pod = asPodPort(source);
+  const config = fetchConfig(source);
   // Unlike the lower-level pod helpers, tool ids must be absolute resource URLs.
-  const target = requirePodScopedUrl(config, new URL(id).toString());
-  const response = await scopedFetch(config)(target, {
-    headers: { accept: "text/turtle, text/plain;q=0.9, */*;q=0.1" },
-  });
+  const target = requirePodScopedUrl({ podRoot: pod.root }, new URL(id).toString());
+  const accept = "text/turtle, text/plain;q=0.9, */*;q=0.1";
+  let response: Response;
+  if (config) {
+    response = await scopedFetch(config)(target, { headers: { accept } });
+  } else {
+    const read = await pod.read(target, { accept });
+    const finalUrl = requirePodScopedUrl({ podRoot: pod.root }, read.url ?? target);
+    response = new Response(
+      new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(read.body);
+          controller.close();
+        },
+      }),
+      {
+        headers: { "content-type": read.contentType, ...(read.etag ? { etag: read.etag } : {}) },
+      },
+    );
+    Object.defineProperty(response, "url", { value: finalUrl });
+  }
   if (!response.ok) {
     void response.body?.cancel().catch(() => {});
     throw new Error(`Failed to fetch pod resource: HTTP ${response.status}`);

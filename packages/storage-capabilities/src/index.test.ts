@@ -1,12 +1,11 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { expect, test } from "vitest";
-import * as entry1 from "./cache.js";
-import * as entry0 from "./index.js";
-import * as entry3 from "./testing.js";
-import * as entry2 from "./vocab.js";
+import * as cache from "./cache.js";
+import * as api from "./index.js";
+import * as testing from "./testing.js";
 
-test("scaffold entry points load without exposing an implementation", () => {
-  for (const entry of [entry0, entry1, entry2, entry3]) {
-    expect(Object.keys(entry)).toEqual([]);
-  }
+test("type-only public API and reserved runtime entry points load", () => {
+  expect(Object.keys(api)).toEqual([]);
+  expect(Object.keys(cache)).toEqual([]);
+  expect(Object.keys(testing)).toEqual([]);
 });

@@ -207,7 +207,7 @@ describe("parseDocument", () => {
 
   it("round-trips a hand-written Turtle document", () => {
     const ttl = `
-      @prefix pd: <https://w3id.org/jeswr/pod-docs#> .
+      @prefix pd: <https://jeswr.org/ns/pod-docs#> .
       @prefix dct: <http://purl.org/dc/terms/> .
       @prefix prov: <http://www.w3.org/ns/prov#> .
       @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
@@ -237,7 +237,7 @@ describe("parseDocument", () => {
 
   it("defaults a revision's body/format/timestamp when the entity is sparse", () => {
     const ttl = `
-      @prefix pd: <https://w3id.org/jeswr/pod-docs#> .
+      @prefix pd: <https://jeswr.org/ns/pod-docs#> .
       @prefix prov: <http://www.w3.org/ns/prov#> .
       <#it> a pd:Document ; pd:currentRevision <#rev-0> .
       <#rev-0> a prov:Entity .
@@ -251,7 +251,7 @@ describe("parseDocument", () => {
 
   it("yields an empty history when currentRevision is absent", () => {
     const ttl = `
-      @prefix pd: <https://w3id.org/jeswr/pod-docs#> .
+      @prefix pd: <https://jeswr.org/ns/pod-docs#> .
       <#it> a pd:Document ; pd:body "x" .
     `;
     expect(parseDocument(RES, turtleToStore(ttl, RES))?.revisions).toHaveLength(0);
@@ -259,7 +259,7 @@ describe("parseDocument", () => {
 
   it("stops the walk when the linked revision is not a prov:Entity", () => {
     const ttl = `
-      @prefix pd: <https://w3id.org/jeswr/pod-docs#> .
+      @prefix pd: <https://jeswr.org/ns/pod-docs#> .
       <#it> a pd:Document ; pd:currentRevision <#rev-0> .
       <#rev-0> pd:body "orphan, not an Entity" .
     `;
@@ -268,7 +268,7 @@ describe("parseDocument", () => {
 
   it("breaks a self-referential / cyclic wasRevisionOf chain", () => {
     const ttl = `
-      @prefix pd: <https://w3id.org/jeswr/pod-docs#> .
+      @prefix pd: <https://jeswr.org/ns/pod-docs#> .
       @prefix prov: <http://www.w3.org/ns/prov#> .
       <#it> a pd:Document ; pd:currentRevision <#rev-1> .
       <#rev-1> a prov:Entity ; pd:body "1" ; prov:wasRevisionOf <#rev-0> .

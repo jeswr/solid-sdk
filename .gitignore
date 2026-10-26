@@ -12,3 +12,6 @@ coverage/
 *.log
 .vitest/
 .DS_Store
+
+# Playwright screenshots / traces written by lanes and e2e runs
+/artifacts/

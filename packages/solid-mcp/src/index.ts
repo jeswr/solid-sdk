@@ -33,4 +33,14 @@ export {
   search,
   writeResource,
 } from "./pod.js";
-export { createSolidMcpServer } from "./server.js";
+export {
+  createFetchPodPort,
+  type PodConditions,
+  type PodEntry,
+  type PodPort,
+  type PodReadOptions,
+  type PodReadResult,
+  type PodSource,
+} from "./pod-port.js";
+export { createSolidMcpServer, type SolidMcpServerConfig } from "./server.js";
+export { createPodToolRegistry, type PodTool, registerPodTools } from "./tools.js";

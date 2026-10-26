@@ -1,0 +1,14 @@
+{
+  "$comment": "AUTHORED-BY Codex GPT-6.1-Sol",
+  "package": "@sparq-org/sparq",
+  "version": "0.1.5",
+  "artifact": "wasm/sparq_wasm_bg.wasm",
+  "rawBytes": 3909895,
+  "gzipBytes": 1444432,
+  "gzipLevel": 9,
+  "sha256": "87889d775213322547f7328e80bae8d4fce47a70d3b313ce960561e91af224e0",
+  "budget": {
+    "rawBytes": 4194304,
+    "gzipBytes": 1572864
+  }
+}

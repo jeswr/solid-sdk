@@ -1,10 +1,12 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { SolidMcpConfig } from "../src/auth.js";
-import { fetchDocument } from "../src/fetch.js";
+import { fetchDocument as fetchSourceDocument } from "../src/fetch.js";
+import { createFetchPodPort } from "../src/pod-port.js";
 import { createSolidMcpServer } from "../src/server.js";
 import { containerTurtle, makeFakePod } from "./fake-pod.js";
 
@@ -16,11 +18,13 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
-async function connect(
+async function connectClient(
   fetch: typeof globalThis.fetch,
-  searchLimits?: SolidMcpConfig["searchLimits"],
+  searchLimits: SolidMcpConfig["searchLimits"],
+  portable: boolean,
 ) {
-  const server = createSolidMcpServer({ fetch, podRoot: POD, searchLimits });
+  const config = { fetch, podRoot: POD, searchLimits };
+  const server = createSolidMcpServer(portable ? { pod: createFetchPodPort(config) } : config);
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: "fixture", version: "1" });
   clients.push(client);
@@ -45,7 +49,9 @@ function streamed(body: Uint8Array, contentType = "text/plain", headers: Headers
   return { config: { fetch, podRoot: POD }, cancel, fetch };
 }
 
-describe("ChatGPT tool contracts", () => {
+describe.each([false, true])("ChatGPT tool contracts (fetch PodPort: %s)", (portable) => {
+  const connect = (fetch: typeof globalThis.fetch, searchLimits?: SolidMcpConfig["searchLimits"]) =>
+    connectClient(fetch, searchLimits, portable);
   it("advertises exact inputs and read-only annotations", async () => {
     const client = await connect(makeFakePod({}).fetch);
     const { tools } = await client.listTools();
@@ -164,7 +170,12 @@ describe("ChatGPT tool contracts", () => {
   });
 });
 
-describe("fetch representations and byte cap", () => {
+describe.each([
+  false,
+  true,
+])("fetch representations and byte cap (fetch PodPort: %s)", (portable) => {
+  const fetchDocument = (config: SolidMcpConfig, id: string) =>
+    fetchSourceDocument(portable ? createFetchPodPort(config) : config, id);
   it("uses the hostname as the title when the pod root has no path segment", async () => {
     const root = "https://alice.example/";
     const pod = makeFakePod({ [root]: { contentType: "text/plain", body: "Hello" } });
