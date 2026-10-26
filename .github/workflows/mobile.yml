@@ -1,0 +1,220 @@
+# AUTHORED-BY Claude Opus 5.5
+# AUTHORED-BY GPT-5.6 Codex
+# Cloud builds of the iOS and Android shells (solid-suite-planning specs/mobile/DESIGN.md D8).
+# Unsigned builds; iOS policy tests exercise Debug and Release configurations.
+name: mobile
+
+on:
+  pull_request:
+    paths:
+      - "apps/mobile/**"
+      - "packages/suite-native/**"
+      - ".github/workflows/mobile.yml"
+      - "pnpm-lock.yaml"
+  push:
+    branches: [main]
+    paths:
+      - "apps/mobile/**"
+      - "packages/suite-native/**"
+      - ".github/workflows/mobile.yml"
+      - "pnpm-lock.yaml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mobile-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @jeswr/app-mobile run sync:android
+      - name: Gradle lint, unit tests, debug APK
+        working-directory: apps/mobile/android
+        run: ./gradlew --no-daemon --stacktrace lint testDebugUnitTest assembleDebug
+      - uses: actions/upload-artifact@v4
+        with:
+          name: solid-suite-debug-apk
+          path: apps/mobile/android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 14
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-reports
+          path: |
+            apps/mobile/android/app/build/reports/
+            apps/mobile/android/app/build/test-results/
+          retention-days: 7
+
+  android-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      SUITE_URL: http://localhost:4173
+      MOBILE_DEBUG: "1"
+      E2E_PORT: "4173"
+      E2E_IFRAME_PORT: "4174"
+      ANDROID_SERIAL: emulator-5554
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - run: pnpm install --frozen-lockfile
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          test -r /dev/kvm && test -w /dev/kvm
+      - name: Install Android SDK and API 35 emulator image
+        run: |
+          export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$PATH"
+          echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
+          echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
+          echo "$ANDROID_HOME/emulator" >> "$GITHUB_PATH"
+          # yes can receive SIGPIPE once sdkmanager has consumed all licence answers.
+          set +o pipefail
+          yes | sdkmanager --licenses > /dev/null
+          set -o pipefail
+          sdkmanager "platform-tools" "emulator" "platforms;android-36" "build-tools;36.0.0" "system-images;android-35;google_apis;x86_64"
+      - name: Create and boot the AVD
+        timeout-minutes: 10
+        run: |
+          mkdir -p apps/mobile/e2e/artifacts
+          # avdmanager and the emulator disagree on the default AVD directory on hosted runners.
+          export ANDROID_AVD_HOME="$RUNNER_TEMP/avd"
+          mkdir -p "$ANDROID_AVD_HOME"
+          echo no | avdmanager create avd --force --name suite-e2e --package "system-images;android-35;google_apis;x86_64" --device pixel_6
+          emulator -avd suite-e2e -port 5554 -no-window -no-audio -no-boot-anim -no-snapshot -no-metrics -gpu swiftshader_indirect -accel on > apps/mobile/e2e/artifacts/emulator.log 2>&1 &
+          emulator_pid=$!
+          booted=0
+          # A wall-clock deadline inside the step timeout, so a failure reaches the diagnostics steps.
+          deadline=$((SECONDS + 420))
+          while [ "$SECONDS" -lt "$deadline" ]; do
+            kill -0 "$emulator_pid" || { cat apps/mobile/e2e/artifacts/emulator.log; exit 1; }
+            if [ "$(timeout 10 adb shell getprop sys.boot_completed | tr -d '\r')" = "1" ]; then
+              booted=1
+              break
+            fi
+            sleep 2
+          done
+          test "$booted" = "1" || { echo "Android boot timed out"; exit 1; }
+          timeout 10 adb shell input keyevent 82
+          timeout 10 adb shell settings put global window_animation_scale 0
+          timeout 10 adb shell settings put global transition_animation_scale 0
+          timeout 10 adb shell settings put global animator_duration_scale 0
+      - name: Sync the fixture origin into the debug shell
+        run: pnpm --filter @jeswr/app-mobile run sync:android
+      - name: Build fixture debug APK
+        working-directory: apps/mobile/android
+        run: ./gradlew --no-daemon --stacktrace assembleDebug
+      - name: Exercise the fixture WebView and share receiver
+        run: node apps/mobile/e2e/android-e2e.mjs
+      - name: Print the emulator log
+        if: failure()
+        timeout-minutes: 1
+        run: tail -n 200 apps/mobile/e2e/artifacts/emulator.log || true
+      - name: Collect emulator logcat
+        if: failure()
+        timeout-minutes: 1
+        run: |
+          mkdir -p apps/mobile/e2e/artifacts
+          timeout 30 adb logcat -d -v threadtime > apps/mobile/e2e/artifacts/logcat.txt 2>&1 || true
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-e2e-diagnostics
+          path: apps/mobile/e2e/artifacts/
+          retention-days: 7
+
+  ios:
+    runs-on: macos-15
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      # Capacitor 8 needs Xcode 26 or later; pick the newest installed one, never the image default.
+      - name: Select Xcode 26+
+        run: |
+          xcode="$(ls -d /Applications/Xcode_2[6-9]*.app 2>/dev/null | sort -V | tail -1)"
+          test -n "$xcode" || { echo "No Xcode 26+ on this runner"; ls /Applications; exit 1; }
+          sudo xcode-select -s "$xcode"
+          xcodebuild -version
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @jeswr/app-mobile run sync:ios
+      - name: Simulator compile (no signing)
+        working-directory: apps/mobile/ios/App
+        run: >
+          xcodebuild -project App.xcodeproj -scheme App -configuration Debug
+          -sdk iphonesimulator -destination "generic/platform=iOS Simulator"
+          CODE_SIGNING_ALLOWED=NO build
+      - name: Select an available iPhone simulator
+        id: simulator
+        run: |
+          xcrun simctl list devices available -j > "$RUNNER_TEMP/suite-simulators.json"
+          python3 <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          devices = json.loads((Path(os.environ["RUNNER_TEMP"]) / "suite-simulators.json").read_text())["devices"]
+          candidates = []
+          for runtime, entries in devices.items():
+              if not runtime.startswith("com.apple.CoreSimulator.SimRuntime.iOS-"):
+                  continue
+              version = tuple(int(part) for part in runtime.split("iOS-", 1)[1].split("-"))
+              for device in entries:
+                  is_phone = device.get("deviceTypeIdentifier", "").startswith("com.apple.CoreSimulator.SimDeviceType.iPhone")
+                  if version >= (16,) and device.get("isAvailable") and is_phone:
+                      candidates.append((version, device["udid"]))
+          if not candidates:
+              raise SystemExit("No available iPhone simulator with iOS 16 or later")
+          _, udid = max(candidates)
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              print(f"destination=platform=iOS Simulator,id={udid}", file=output)
+          PY
+      - name: XCTest policies (Debug and Release, no signing)
+        working-directory: apps/mobile/ios/App
+        env:
+          TEST_DESTINATION: ${{ steps.simulator.outputs.destination }}
+        run: |
+          for configuration in Debug Release; do
+            xcodebuild -project App.xcodeproj -scheme App -configuration "$configuration" \
+              -sdk iphonesimulator -destination "$TEST_DESTINATION" \
+              -parallel-testing-enabled NO -only-testing:AppTests \
+              -resultBundlePath "$RUNNER_TEMP/AppTests-$configuration.xcresult" \
+              ENABLE_TESTABILITY=YES CODE_SIGNING_ALLOWED=NO test
+          done
+      - name: XCTest results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-test-results
+          path: ${{ runner.temp }}/AppTests-*.xcresult
+          if-no-files-found: ignore
+          retention-days: 7

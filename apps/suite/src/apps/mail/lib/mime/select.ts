@@ -44,6 +44,8 @@ interface Selection {
   plain?: string | undefined;
   html?: string | undefined;
   attachments: Attachment[];
+  /** Propagate only while this selection survives its enclosing alternatives. */
+  ambiguousCid?: boolean;
 }
 
 const bareId = (id: string) => id.trim().replace(/^<|>$/g, "");
@@ -154,6 +156,7 @@ export function selectMimeContent(
       const retained = children.filter(
         (child) => chosen.has(child) || (child.plain === undefined && child.html === undefined),
       );
+      let ambiguousCid = retained.some((child) => child.ambiguousCid);
       const ids = new Set<string>();
       for (const child of retained) {
         const childIds = new Set(
@@ -161,8 +164,8 @@ export function selectMimeContent(
         );
         for (const id of childIds) {
           // A flat CID namespace cannot represent resources with different
-          // alternative owners. Fail closed rather than bind HTML to wrong bytes.
-          if (ids.has(id)) throw new MimeParseError();
+          // alternative owners. Defer rejection until enclosing selection ends.
+          if (ids.has(id)) ambiguousCid = true;
           ids.add(id);
         }
       }
@@ -170,10 +173,14 @@ export function selectMimeContent(
         plain: plain?.plain,
         html: html?.html,
         attachments: retained.flatMap((child) => child.attachments),
+        ambiguousCid,
       };
     }
 
-    const result: Selection = { attachments: children.flatMap((child) => child.attachments) };
+    const result: Selection = {
+      attachments: children.flatMap((child) => child.attachments),
+      ambiguousCid: children.some((child) => child.ambiguousCid),
+    };
     for (const type of ["plain", "html"] as const) {
       const bodies = children.flatMap((child) => (child[type] === undefined ? [] : [child[type]]));
       if (bodies.length) result[type] = bodies.join("\n");
@@ -181,5 +188,7 @@ export function selectMimeContent(
     return result;
   };
 
-  return select(decoded.root);
+  const selected = select(decoded.root);
+  if (selected.ambiguousCid) throw new MimeParseError();
+  return selected;
 }
