@@ -33,6 +33,8 @@ export function foldContentLine(line: string): string {
 }
 export function formatICalDate(value: CalendarDate): string {
   asDate(value);
+  if (typeof value !== "string" && value.getUTCMilliseconds() !== 0)
+    throw new TypeError("ICS dates require whole-second precision");
   return typeof value === "string"
     ? value.replace(/-/g, "")
     : value
@@ -128,7 +130,9 @@ export function exportICal(opts: {
     if (!uid?.trim()) throw new TypeError("ICS export requires a persistent UID or source URL");
     lines.push("BEGIN:VEVENT");
     prop("UID", uid);
-    lines.push(`DTSTAMP:${formatICalDate(opts.now ?? new Date())}`);
+    // Generated metadata has second precision; modeled dates must round-trip exactly.
+    const stamp = new Date(Math.floor(+(opts.now ?? new Date()) / 1000) * 1000);
+    lines.push(`DTSTAMP:${formatICalDate(stamp)}`);
     prop("SUMMARY", event.name);
     dateProp("DTSTART", event.start);
     if (event.end !== undefined) dateProp("DTEND", event.end);

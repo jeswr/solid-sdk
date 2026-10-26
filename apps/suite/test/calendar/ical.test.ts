@@ -35,6 +35,28 @@ describe("ICS fixture round-trips", () => {
   });
 });
 describe("ICS compatibility and validation", () => {
+  it("rejects subsecond event dates instead of collapsing or changing them", () => {
+    const base: CalendarEvent = {
+      uid: "seconds@example.test",
+      name: "Subsecond",
+      start: new Date("2026-03-01T09:00:00Z"),
+    };
+    const subsecond = new Date("2026-03-01T09:00:00.100Z");
+    const events: CalendarEvent[] = [
+      { ...base, start: subsecond, end: new Date("2026-03-01T09:00:00.900Z") },
+      { ...base, end: subsecond },
+      { ...base, recurrence: { frequency: "DAILY", until: subsecond } },
+      { ...base, recurrence: { frequency: "DAILY", exceptDate: [subsecond] } },
+      { ...base, reminders: [{ triggerTime: subsecond }] },
+    ];
+    for (const event of events)
+      expect(() => exportICal({ events: [event] })).toThrow("whole-second precision");
+    expect(() => formatICalDate(subsecond)).toThrow("whole-second precision");
+    const exact = { ...base, end: new Date("2026-03-01T09:00:01Z") };
+    const exported = exportICal({ events: [exact], now: subsecond });
+    expect(exported).toContain("DTSTAMP:20260301T090000Z");
+    expect(importICal(exported).events[0]).toMatchObject(exact);
+  });
   it("requires persistent identities for otherwise indistinguishable events", () => {
     const base: CalendarEvent = {
       name: "Meeting",
