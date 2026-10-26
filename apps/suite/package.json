@@ -13,7 +13,8 @@
     "test:e2e": "pnpm --filter @jeswr/suite-ui run build && playwright test",
     "measure:univer": "node test/univer-spike.measure.mjs",
     "test:mime": "vitest run test/mime.test.ts --coverage",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "coverage:music": "vitest run --coverage"
   },
   "dependencies": {
     "@jeswr/suite-ui": "workspace:*",
