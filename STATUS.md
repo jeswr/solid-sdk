@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # DOC-L3 lane report — sst-cldc
 
@@ -75,3 +76,28 @@ The four nonblocking interpretation questions and conservative choices are recor
 `QUESTIONS.md`: projection boundaries/code point offsets, Unicode slug/hierarchy rules,
 grapheme counts/fractional minutes, and the supported first-cut schema. No blocking question
 remains. No other checkout, branch, PR or remote publication was changed.
+
+## Fix round 1 — property-name character budget
+
+`19c023e6` — `fix: count document property names toward character limit` makes property
+names and string values consume the same UTF-16 character budget during JSON validation.
+Regression tests cover exact-limit acceptance, oversized Unicode metadata keys, nested keys,
+and combined key/value overflow through all four public derivation functions. The earlier
+string-value boundary fixture now accounts for its property names.
+
+| Exact command | Result |
+| --- | --- |
+| `pnpm --filter @jeswr/app-suite exec vitest run test/docs-outline.test.ts --coverage.include='src/apps/docs/lib/outline/**/*.ts'` | PASS: 93 tests; outline statements, branches, functions and lines all 100%. |
+| `pnpm --filter @jeswr/app-suite run lint` | PASS after formatting the updated test; 21 existing Money budget warnings. |
+| `pnpm --filter @jeswr/suite-ui run build && pnpm --filter @jeswr/app-suite run build && pnpm --filter @jeswr/app-suite run typecheck && pnpm --filter @jeswr/app-suite run test` | PASS: production build, typecheck, 28 test files and 1,270 tests; configured coverage metrics all 100%. |
+| `TURBO_SCM_BASE=901338e2d167a5cb335d62af3ef6a2576e975f46 pnpm run gate` | PASS: 6/6 tasks, including root lint/guards and the suite app checks. |
+| `pnpm run gate:full` | FAIL (exit 1): 269 successful tasks / 346 scheduled; the same two existing `@jeswr/federation-codegen#test` failures detailed above (bookmarks namespace and generated ontology drift). |
+| `git diff --check` | PASS. |
+| `roborev status` | UNAVAILABLE: exit 127, `roborev: command not found`; dispatcher review remains necessary. |
+
+The final documentation commit records these fix-round results. Generated, untracked
+`apps/pod-*/web/public/{callback.html,clientid.jsonld}` build artifacts were removed after
+the full gate. No dependencies or UI were added, and no tracker state, other checkout,
+branch selection, or remote was changed. The review finding is addressed; no new
+interpretation questions arose. The unrelated full-gate failures and unavailable roborev
+tooling remain the only validation limitations.
