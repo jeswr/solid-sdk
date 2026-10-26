@@ -109,9 +109,19 @@ explicit revisions take precedence regardless of extraction/publication order.
 Current Documented facts are definite; current
 explicit/summary facts need no unresolved contradiction in either direction.
 Other live claims are `might`, except `Mentioned`. Retired contradictory claims
-do not block current explicit facts. Mentioned claims never contribute contradictions
-or revisions, and other past claims cannot revise facts; explicit withdrawals remain
-effective. The source dataset is never modified.
+do not block current explicit facts. Ordinary revisions require a non-Mentioned
+claim with Current or Contradicted validity and no provenance invalidation.
+The builder applies the same eligibility rule before writing an invalidation time
+on a superseded claim; ineligible revisions remain audit links. Self-revisions do
+not invalidate their own envelope. Mentioned claims never contribute contradictions.
+An explicit Retracted withdrawal with an envelope `prov:wasRevisionOf` retires its
+target regardless of either claim's epistemic status, including Mentioned.
+Legacy assertion-only factual withdrawals retain their assertion-wide semantics;
+Mentioned withdrawals require an envelope target.
+Existing valid `prov:invalidatedAtTime` values in a claim's own provenance remain
+authoritative: they do not identify the causing revision, so the classifier cannot
+prove that an ineligible revision was their only source and will not revive a claim
+on that assumption. The source dataset is never modified.
 Consumers acting on a fact must additionally require `validity === "Current"`.
 
 `purposeFilter(policy, purpose, clientId)` returns an array-filter predicate over

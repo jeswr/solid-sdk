@@ -1877,6 +1877,65 @@ it.each([
   );
 });
 
+it.each([
+  "Mentioned",
+  "SelfReportedExplicit",
+] as const)("retires a stored %s memory through put, retract, list and classify", async (epistemic) => {
+  const { store, pod } = setup();
+  const original = await buildNanopublications(
+    {
+      batch_id: "withdraw-memory",
+      worker: { agent_id: "https://example.org/client", agent_label: "Test" },
+      claims: [
+        {
+          id: "memory",
+          epistemic,
+          assertion: createFactAssertion(identity.webId, {
+            template: "email",
+            value: "avery@example.org",
+          }),
+        },
+      ],
+    },
+    options,
+  );
+  const previous = original.nanopubs[0]!;
+  await store.put(original);
+  const before = await pod.read(store.url(previous.id));
+  expect(classifyNanopublications(await store.list())[0]).toMatchObject({
+    validity: "Current",
+    belief: epistemic === "Mentioned" ? "mentioned" : "definitely",
+    replacedBy: [],
+  });
+  const withdrawal = (
+    await store.retract(previous.id, {
+      batchId: "withdraw-memory-retraction",
+      clientId: "https://example.org/client",
+      generatedAt: "2026-10-26T12:00:00Z",
+    })
+  ).nanopubs[0]!;
+  expect(withdrawal).toMatchObject({ epistemic, validity: "Retracted" });
+  expect(await pod.read(store.url(previous.id))).toEqual(before);
+  const listed = await store.list();
+  expect(listed.nanopubs).toHaveLength(2);
+  for (const nanopubs of [listed.nanopubs, [...listed.nanopubs].reverse()]) {
+    const classified = classifyNanopublications({ ...listed, nanopubs });
+    expect(classified.find((np) => np.id === previous.id)).toMatchObject({
+      validity: "Current",
+      belief: "past",
+      replacedBy: [withdrawal.id],
+    });
+    expect(classified.find((np) => np.id === withdrawal.id)).toMatchObject({
+      belief: "past",
+      replacedBy: [],
+    });
+    // The read includes mentions; no withdrawn item is live.
+    expect(classified.filter((np) => np.validity === "Current" && np.belief !== "past")).toEqual(
+      [],
+    );
+  }
+});
+
 it("writes a default policy once behind the ACL, preserving owner edits", async () => {
   const { store, pod, memory, write } = setup();
   const policy = await store.writeDefaultPolicy();

@@ -276,6 +276,162 @@ describe("KG §4.1 belief view", () => {
     }
   });
 
+  it.each(
+    EPISTEMIC_STATUSES,
+  )("applies revision eligibility before timestamp invalidation for %s", async (epistemic) => {
+    for (const validity of VALIDITY_STATUSES) {
+      for (const reverse of [false, true]) {
+        const claims: Claim[] = [
+          { id: "old", epistemic: "SelfReportedExplicit", assertion: assertion("old") },
+          {
+            id: "new",
+            epistemic,
+            validity,
+            assertion: assertion("new"),
+            supersedes: ["old"],
+            contradicts: ["old"],
+            evidence: [{ source: "doc", timestamp: "2026-10-25T12:00:00Z" }],
+          },
+        ];
+        const built = await buildNanopublications(
+          {
+            batch_id: "belief",
+            worker: { agent_id: "https://example.org/client", agent_label: "Test" },
+            sources: [{ id: "doc", kind: "document", url: "https://example.org/document" }],
+            claims: reverse ? claims.reverse() : claims,
+          },
+          options,
+        );
+        const parsed = await parseNanopublications(await serializeNanopublications(built));
+        const eligible =
+          epistemic !== "Mentioned" && validity !== "Historical" && validity !== "Superseded";
+        for (const value of [built, parsed]) {
+          const old = value.nanopubs.find((np) => np.identifier === "belief/old")!;
+          const newer = value.nanopubs.find((np) => np.identifier === "belief/new")!;
+          const invalidation = new RdfNode(
+            old.assertionId,
+            graph(value.dataset, old.provenanceId),
+          ).terms(`${NS.prov}invalidatedAtTime`);
+          expect([...invalidation].map((term) => term.value)).toEqual(
+            eligible ? ["2026-10-25T12:00:00+00:00"] : [],
+          );
+          // Revision links remain audit data even when they cannot retire a fact.
+          expect(newer.supersedes).toEqual([old.assertionId]);
+          for (const nanopubs of [value.nanopubs, [...value.nanopubs].reverse()]) {
+            expect(
+              classifyNanopublications({ ...value, nanopubs }).find((np) => np.id === old.id),
+            ).toMatchObject({
+              validity: "Current",
+              belief: eligible ? "past" : "definitely",
+              replacedBy: eligible ? [newer.id] : [],
+            });
+          }
+        }
+      }
+    }
+  });
+
+  it.each(
+    EPISTEMIC_STATUSES,
+  )("honours envelope withdrawals by %s regardless of their target's epistemic status", async (epistemic) => {
+    for (const original of EPISTEMIC_STATUSES) {
+      const value = await build([
+        { id: "old", epistemic: original, assertion: assertion("shared") },
+        { id: "copy", epistemic: original, assertion: assertion("shared") },
+        {
+          id: "withdrawal",
+          epistemic,
+          validity: "Retracted",
+          assertion: assertion("shared"),
+          supersedes: ["old"],
+          contradicts: ["old"],
+        },
+      ]);
+      const old = value.nanopubs.find((np) => np.identifier === "belief/old")!;
+      const withdrawal = value.nanopubs.find((np) => np.identifier === "belief/withdrawal")!;
+      const provenance = graph(value.dataset, withdrawal.provenanceId);
+      new RdfNode(withdrawal.id, provenance).link(`${NS.prov}wasRevisionOf`, old.id);
+      putGraph(value.dataset, withdrawal.provenanceId, provenance);
+      const parsed = await parseNanopublications(await serializeNanopublications(value));
+      for (const nanopubs of [parsed.nanopubs, [...parsed.nanopubs].reverse()]) {
+        const classified = classifyNanopublications({ ...parsed, nanopubs });
+        expect(classified.find((np) => np.id === old.id)).toMatchObject({
+          belief: "past",
+          replacedBy: [withdrawal.id],
+        });
+        expect(classified.find((np) => np.id === withdrawal.id)).toMatchObject({
+          belief: "past",
+          replacedBy: [],
+        });
+        expect(classified.find((np) => np.identifier === "belief/copy")).toMatchObject({
+          belief:
+            original === "Mentioned"
+              ? "mentioned"
+              : ["Documented", "DocumentedViaSummary", "SelfReportedExplicit"].includes(original)
+                ? "definitely"
+                : "might",
+          replacedBy: [],
+        });
+      }
+    }
+  });
+
+  it("keeps existing invalidation authoritative when revision causation is unknown", async () => {
+    const value = await build([
+      { id: "old", epistemic: "SelfReportedExplicit", assertion: assertion("old") },
+      {
+        id: "mention",
+        epistemic: "Mentioned",
+        assertion: assertion("mention"),
+        supersedes: ["old"],
+      },
+    ]);
+    const old = value.nanopubs.find((np) => np.identifier === "belief/old")!;
+    const provenance = graph(value.dataset, old.provenanceId);
+    new RdfNode(old.assertionId, provenance).text(
+      `${NS.prov}invalidatedAtTime`,
+      options.generatedAt,
+      `${NS.xsd}dateTime`,
+    );
+    putGraph(value.dataset, old.provenanceId, provenance);
+    const parsed = await parseNanopublications(await serializeNanopublications(value));
+    expect(classifyNanopublications(parsed).find((np) => np.id === old.id)).toMatchObject({
+      belief: "past",
+      replacedBy: [],
+    });
+  });
+
+  it("does not write a self-revision invalidation timestamp", async () => {
+    const built = await buildNanopublications(
+      {
+        batch_id: "self-revision",
+        worker: { agent_id: "https://example.org/client", agent_label: "Test" },
+        sources: [{ id: "doc", kind: "document", url: "https://example.org/document" }],
+        claims: [
+          {
+            id: "self",
+            epistemic: "SelfReportedExplicit",
+            assertion: assertion("self"),
+            supersedes: ["self"],
+            evidence: [{ source: "doc", timestamp: options.generatedAt }],
+          },
+        ],
+      },
+      options,
+    );
+    const parsed = await parseNanopublications(await serializeNanopublications(built));
+    const np = parsed.nanopubs[0]!;
+    expect(
+      new RdfNode(np.assertionId, graph(parsed.dataset, np.provenanceId)).terms(
+        `${NS.prov}invalidatedAtTime`,
+      ).size,
+    ).toBe(0);
+    expect(classifyNanopublications(parsed)[0]).toMatchObject({
+      belief: "definitely",
+      replacedBy: [],
+    });
+  });
+
   it("tracks later revisions even when the old validity remains Current", async () => {
     const value = await build([
       { id: "old", epistemic: "SelfReportedExplicit", assertion: assertion("old") },

@@ -3,6 +3,7 @@
 
 import type { Nanopublication, Nanopublications } from "./model.js";
 import { dateTime, graph, NS, RdfNode } from "./rdf.js";
+import { canRevise } from "./revision.js";
 
 /** Consumer-facing belief levels from KG DESIGN §4.1. */
 export type Belief = "definitely" | "might" | "mentioned" | "past";
@@ -52,19 +53,13 @@ export function classifyNanopublications(value: Nanopublications): ClassifiedNan
       )
     )
       inactive.add(np.id);
-    for (const other of previous) {
-      if (
-        np.epistemic === "Mentioned" ||
-        // Explicit withdrawals retire their targets even though the withdrawal
-        // itself is past. Other past claims cannot supply belief revisions.
-        (inactive.has(np.id) && np.validity !== "Retracted") ||
-        other.id === np.id
-      )
-        continue;
-      const next = replacements.get(other.id) ?? new Set<string>();
-      next.add(np.id);
-      replacements.set(other.id, next);
-    }
+    if (canRevise(np, { invalidated: inactive.has(np.id), envelopeTarget: targets.length > 0 }))
+      for (const other of previous) {
+        if (other.id === np.id) continue;
+        const next = replacements.get(other.id) ?? new Set<string>();
+        next.add(np.id);
+        replacements.set(other.id, next);
+      }
   }
   for (const id of replacements.keys()) inactive.add(id);
   const liveAssertions = new Set(

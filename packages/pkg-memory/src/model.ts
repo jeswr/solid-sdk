@@ -19,6 +19,7 @@ import {
   validateLiterals,
   validateTermSafety,
 } from "./rdf.js";
+import { canRevise } from "./revision.js";
 
 /** How a claim entered the graph, orthogonal to validity. */
 export const EPISTEMIC_STATUSES = [
@@ -339,7 +340,11 @@ export async function buildNanopublications(
     for (const old of c.supersedes ?? []) {
       const previous = ref(old);
       a.link(`${NS.prov}wasRevisionOf`, previous.assertion.id);
-      if (earliest)
+      if (
+        earliest &&
+        previous.id !== id &&
+        canRevise({ epistemic: c.epistemic, validity: c.validity ?? "Current" })
+      )
         node(previous.prov, previous.assertion.id).text(
           `${NS.prov}invalidatedAtTime`,
           dateTime(earliest),
