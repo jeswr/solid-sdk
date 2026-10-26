@@ -16,10 +16,12 @@
   },
   "scripts": {
     "lint": "pnpm run lint:root && turbo run lint --affected --concurrency=4",
-    "lint:root": "biome check scripts test guardrails skills package.json turbo.json vitest.config.ts && pnpm run check:lockfile-transport && pnpm run check:app-workspace && pnpm run check:fetch && pnpm check:tokens && pnpm check:contrast",
+    "lint:root": "biome check scripts test guardrails skills package.json turbo.json vitest.config.ts && pnpm run check:lockfile-transport && pnpm run check:app-workspace && pnpm run check:sdk-layers && pnpm run check:fetch && pnpm check:tokens && pnpm check:contrast && pnpm run check:agent-layers",
+    "check:agent-layers": "node scripts/check-agent-layers.mjs",
     "lint:fix": "biome check --write .",
     "check:lockfile-transport": "node scripts/check-lockfile-transport.mjs",
     "check:app-workspace": "node scripts/check-app-workspace.mjs",
+    "check:sdk-layers": "node scripts/check-sdk-layers.mjs",
     "check:fetch": "pnpm --filter solid-agent-notify run check:fetch",
     "check:packages": "node guardrails/scripts/check-packages.mjs --ecosystem npm",
     "typecheck": "turbo run typecheck --affected --concurrency=4",
@@ -43,6 +45,7 @@
     "overrides": {
       "ajv@8": "^8.18.0",
       "esbuild@>=0.27.0 <0.28.1": "^0.28.1",
+      "@jeswr/guarded-fetch>undici": "8.9.0",
       "nodemailer": "^9.0.1",
       "postcss": "^8.5.10",
       "ws": "^8.21.0"
