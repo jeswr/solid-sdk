@@ -146,10 +146,13 @@ function duration(amount: string, unit: string, line: number): Pick<TodoistTaskD
   )
     throw new TodoistImportError("INVALID_DURATION", line);
   // Reject decimal precision loss rather than silently rounding a template value.
-  const canonical = amount
-    .replace(/^0+(?=\d)/, "")
-    .replace(/(\.\d*?)0+$/, "$1")
-    .replace(/\.$/, "");
+  let canonical = amount.replace(/^0+(?=\d)/, "");
+  if (canonical.includes(".")) {
+    let end = canonical.length;
+    while (canonical[end - 1] === "0") end--;
+    if (canonical[end - 1] === ".") end--;
+    canonical = canonical.slice(0, end);
+  }
   if (value.toString() !== canonical) throw new TodoistImportError("INVALID_DURATION", line);
   return { duration: { amount: value, unit } };
 }

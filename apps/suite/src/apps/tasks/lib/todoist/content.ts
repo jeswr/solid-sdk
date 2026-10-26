@@ -16,9 +16,13 @@ export function splitContent(content: string): { title: string; labels: string[]
       const newline = content.indexOf("\n", i);
       const end = newline < 0 ? content.length : newline;
       const sourceLine = content.slice(i, end);
-      const marker = /^ {0,3}(~{3,})(.*)$/.exec(sourceLine);
+      const marker = /^ {0,3}(~{3,})/.exec(sourceLine);
       if (fence) {
-        if (marker && (marker[1] as string).length >= fence && (marker[2] as string).trim() === "")
+        if (
+          marker &&
+          (marker[1] as string).length >= fence &&
+          sourceLine.slice(marker[0].length).trim() === ""
+        )
           fence = 0;
         i = end;
         continue;

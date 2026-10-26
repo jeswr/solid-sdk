@@ -478,6 +478,19 @@ describe("validation", () => {
 });
 
 describe("input budgets", () => {
+  it("rejects a long inexact decimal without a backtracking suffix expression", () => {
+    error(
+      csv([task({ DURATION: `1.${"0".repeat(100_000)}1`, DURATION_UNIT: "minute" })]),
+      "INVALID_DURATION",
+    );
+  });
+  it("preserves long Markdown fences containing a bare CR without backtracking", () => {
+    const fence = "~".repeat(100_000);
+    const title = `Title\n${fence}\rtext\n@literal\n${fence}`;
+    const result = parseTodoistCsv(csv([task({ CONTENT: `${title}\n@real` })]), options).tasks[0]!;
+    expect(result.title).toBe(title);
+    expect(result.labels).toEqual(["real"]);
+  });
   it("accepts exactly 4 MiB and rejects bound+1 before CSV syntax or timezone work", () => {
     const prefix = "TYPE,CONTENT\ntask,";
     const atBound = prefix + "a".repeat(MAX_TODOIST_CSV_BYTES - prefix.length);
