@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+import { findExactRanges } from "./exact";
 import { findFuzzyRanges } from "./fuzzy";
 import { createSelectors, validateRange } from "./selectors";
 import type { AnchorResult, ReanchorOptions, TextRange, TextSelectors } from "./types";
@@ -37,6 +38,8 @@ function chooseRange(
  * Re-anchor in a consistent caller-supplied plain-text projection (no normalization).
  * Position → global exact quote search → bounded fuzzy search; inputs are immutable.
  * Fuzzy confidence is 1 - edits / original quote length, with default threshold 0.5.
+ * Fuzzy setup, scanning and recovery share a 10,000,000-unit work budget;
+ * exhaustion returns an orphan with confidence 0. Exact search has no quote-length cap.
  * The supplied position must describe the original quote, but may now be out of bounds.
  * Existing editor marks and persistence are the consuming editor's responsibility.
  */
@@ -75,27 +78,7 @@ export function reanchor(
   if (points.slice(start, end).join("") === selectors.quote.exact) {
     return anchored({ start, end }, "position", 1);
   }
-  const exactRanges: TextRange[] = [];
-  // Walk code point boundaries once while indexOf finds even overlapping hits.
-  // Boundary validation also prevents a lone surrogate matching half an astral character.
-  let unitOffset = 0;
-  let pointOffset = 0;
-  for (
-    let offset = text.indexOf(selectors.quote.exact);
-    offset !== -1;
-    offset = text.indexOf(selectors.quote.exact, offset + 1)
-  ) {
-    while (unitOffset < offset) {
-      unitOffset += (points[pointOffset] as string).length;
-      pointOffset++;
-    }
-    if (
-      unitOffset === offset &&
-      points.slice(pointOffset, pointOffset + pattern.length).join("") === selectors.quote.exact
-    ) {
-      exactRanges.push({ start: pointOffset, end: pointOffset + pattern.length });
-    }
-  }
+  const exactRanges = findExactRanges(points, pattern);
   const exact = chooseRange(points, exactRanges, selectors);
   if (exact) return anchored(exact, "quote", 1);
   const fuzzyRanges = findFuzzyRanges(
