@@ -65,3 +65,52 @@ The full gate's build scripts generated untracked callback/client-ID files under
 pod apps' `web/public/` directories. Those generated files were removed after the gate; none
 were committed. The affected/application gates and model coverage are the lane's passing
 checks. Full-workspace green and roborev review remain unverified for the reasons above.
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+## Fix round 1
+
+Review base: `fe2bcc8e4632b73c78807a3427b122389968b63f`.
+All four supplied review findings are addressed, without changing shared packages or dependencies.
+
+- `6af454a1` — `fix: bound contacts RDF transport reads`: request Turtle and refuse JSON-LD
+  before the dependency can resolve remote contexts through global fetch. Cap every RDF
+  response at 512 KiB while streaming, independently of absent or false Content-Length;
+  reject datasets above 10,000 quads before application accessors run. Cancel response
+  readers on abort, including injected streams that ignore the fetch signal.
+- `d02f6996` — `fix: refuse lossy contact migrations and identifiers`: refuse migration
+  before any writes when source quads cannot be represented by the mapped flat contact
+  fields. Existing UID, photo, unrelated RDF, structured values, extra field values and
+  language-tagged literals remain in the untouched source. Require canonical HTTP(S)
+  identifiers for WebIDs and group members, matching the shared setters.
+- `4604aca3` — `fix: collect discovered contacts within bounds`: iterate flat contacts
+  lazily, materialize fields only for accepted results, stop further source/container
+  traversal at the result/read caps, and check cancellation while traversing.
+- Final documentation commit — this fix-round verification report.
+
+Conservative choices explicitly permitted by the review: JSON-LD responses are refused
+entirely because the current parser cannot accept a scoped/refusing document loader;
+lossy source migrations are refused instead of deleting unsupported RDF; noncanonical
+identifiers are rejected instead of normalized. Supported canonical identifiers round-trip
+through create/update and membership operations.
+
+Fix-round verification:
+
+| Exact command | Result |
+| --- | --- |
+| `pnpm --filter '@jeswr/app-suite^...' run build` | PASS; workspace declarations built before checking the app. |
+| `pnpm --filter @jeswr/app-suite run lint && pnpm --filter @jeswr/app-suite run build && pnpm --filter @jeswr/app-suite run typecheck && pnpm --filter @jeswr/app-suite run test` | PASS; production Next.js build, 5 test files, 64 tests. |
+| `pnpm --filter @jeswr/app-suite run test:coverage` | PASS; 100% statements (389/389), branches (189/189), functions (78/78), lines (344/344). |
+| `pnpm run lint:root` | PASS, including all 74 contrast pairs and repository guards. |
+| `TURBO_SCM_BASE=fe2bcc8e4632b73c78807a3427b122389968b63f pnpm run gate` | PASS; 10/10 tasks, all 64 app tests. |
+| `npm_config_cache=/tmp/sst-hd1k-npm-cache pnpm run gate:full --env-mode=loose` | FAIL outside lane scope: 239 tasks succeeded; `@jeswr/federation-codegen#test` fails two existing namespace/output assertions in `test/generator.test.ts:81` and `:126`. Expected `https://w3id.org/jeswr/…`; vocabulary inputs use `https://jeswr.org/ns/…`. Used the previously documented writable-cache workaround for this sandbox. |
+| `pnpm --filter @jeswr/federation-codegen run test` | Reproduces both failures independently: 23 tests pass, 2 fail. |
+| `git diff --exit-code fe2bcc8e4632b73c78807a3427b122389968b63f -- tools/federation-codegen packages/solid-federation-vocab` | PASS; the failing tool, generated expectations and vocabulary inputs are unchanged by this fix round. |
+| `git diff fe2bcc8e4632b73c78807a3427b122389968b63f --check` | PASS. |
+| `roborev status` | Unavailable: `roborev: command not found`. No installation or configuration changes made. |
+
+No implementation work remains for the supplied four findings. Full-workspace green and
+roborev review remain unavailable for the reasons above. No open questions, dependency
+additions, UI changes or screenshots. The full gate's generated pod-app callback/client-ID
+files were removed; only contacts model/tests and this report are committed. No push, PR,
+branch switch, or remote fetch/merge was performed.
