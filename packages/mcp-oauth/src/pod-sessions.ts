@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { fetchRdf } from "@jeswr/fetch-rdf";
 import { isWithinPodScope } from "@jeswr/guarded-fetch";
 import { createNodeGuardedFetch, refuseRedirects } from "@jeswr/guarded-fetch/node";
@@ -26,8 +27,11 @@ import type { SessionVault } from "./vault.js";
 
 const OIDC_ISSUER = "http://www.w3.org/ns/solid/terms#oidcIssuer";
 const STORAGE = "http://www.w3.org/ns/pim/space#storage";
+const MAX_CACHED_CLIENTS = 256;
+const CLIENT_CACHE_TTL = 300;
 const encode = (value: unknown) => Buffer.from(JSON.stringify(value));
 type PrivateJwk = Awaited<ReturnType<typeof exportDpopKeyPairJwk>>;
+type CachedClient = { bytes: Uint8Array; client: SolidOidcClient };
 
 class Profile extends TermWrapper {
   get issuers(): Set<string> {
@@ -84,7 +88,40 @@ export function createPodSessionProvider(options: PodSessionProviderOptions): Po
       createNodeGuardedFetch({ maxBytes: 1024 * 1024, timeoutMs: 8_000, maxRedirects: 0 }),
   );
   const vault = options.vault;
-  const clients = new Map<string, { bytes: Uint8Array; client: SolidOidcClient }>();
+  const clients = new Map<
+    string,
+    CachedClient & { expiresAt: number; timer: ReturnType<typeof setTimeout> }
+  >();
+  const forgetClient = (id: string) => {
+    const cached = clients.get(id);
+    if (cached) {
+      clearTimeout(cached.timer);
+      clients.delete(id);
+    }
+  };
+  const pruneClients = () => {
+    for (const [id, cached] of clients) {
+      if (cached.expiresAt <= now()) forgetClient(id);
+    }
+  };
+  const cacheClient = (
+    value: Pick<StoredPodSession, "identity" | "expiresAt" | "accessExpiresAt">,
+    bytes: Uint8Array,
+    client: SolidOidcClient,
+  ) => {
+    pruneClients();
+    const id = value.identity.id;
+    forgetClient(id);
+    const cached = { bytes, client };
+    const expiresAt = Math.min(value.expiresAt, value.accessExpiresAt, now() + CLIENT_CACHE_TTL);
+    if (expiresAt > now()) {
+      if (clients.size >= MAX_CACHED_CLIENTS) forgetClient(clients.keys().next().value as string);
+      const timer = setTimeout(() => forgetClient(id), (expiresAt - now()) * 1000);
+      timer.unref();
+      clients.set(id, { ...cached, expiresAt, timer });
+    }
+    return cached;
+  };
   const pendingKey = (state: string) => `login:${digest(state)}`;
   const sessionKey = (id: string) => `session:${id}`;
   const webUrl = (value: string) => {
@@ -117,19 +154,31 @@ export function createPodSessionProvider(options: PodSessionProviderOptions): Po
       },
     });
   const readSession = async (id: string) => {
-    const bytes = await vault.get(sessionKey(id));
-    if (!bytes) return undefined;
-    const value = JSON.parse(Buffer.from(bytes).toString("utf8")) as StoredPodSession;
-    if (
-      value.kind !== "session" ||
-      value.identity.id !== id ||
-      value.clientId !== options.clientId ||
-      value.redirect !== options.redirectUri
-    )
-      throw new Error("Invalid pod session");
-    return { bytes, value };
+    pruneClients();
+    try {
+      const bytes = await vault.get(sessionKey(id));
+      if (!bytes) {
+        forgetClient(id);
+        return undefined;
+      }
+      const value = JSON.parse(Buffer.from(bytes).toString("utf8")) as StoredPodSession;
+      if (
+        value.kind !== "session" ||
+        value.identity.id !== id ||
+        value.clientId !== options.clientId ||
+        value.redirect !== options.redirectUri
+      )
+        throw new Error("Invalid pod session");
+      if (!(value.expiresAt > now())) {
+        forgetClient(id);
+        return undefined;
+      }
+      return { bytes, value };
+    } catch (error) {
+      forgetClient(id);
+      throw error;
+    }
   };
-  const active = (session: StoredPodSession) => session.expiresAt > now();
   const provider = {
     async begin(webIdOrIssuer: string, redirect: string) {
       if (redirect !== options.redirectUri) throw new Error("Pod callback mismatch");
@@ -216,18 +265,17 @@ export function createPodSessionProvider(options: PodSessionProviderOptions): Po
       const secret = encode(stored);
       if (!(await vault.compareAndSwap(sessionKey(identity.id), undefined, secret)))
         throw new Error("Pod session collision");
-      clients.set(identity.id, { bytes: secret, client });
+      cacheClient(stored, secret, client);
       return { ...identity };
     },
     async isActive(id: string) {
-      const stored = await readSession(id);
-      return stored !== undefined && active(stored.value);
+      return (await readSession(id)) !== undefined;
     },
     async fetchFor(id: string): Promise<typeof fetch> {
       if (!(await provider.isActive(id))) throw new Error("Pod session is inactive");
       return async (input, init) => {
         const stored = await readSession(id);
-        if (!stored || !active(stored.value)) throw new Error("Pod session is inactive");
+        if (!stored) throw new Error("Pod session is inactive");
         const { value, bytes } = stored;
         const url = input instanceof Request ? input.url : input.toString();
         if (!value.roots.some((root) => isWithinPodScope(root, url)))
@@ -242,8 +290,9 @@ export function createPodSessionProvider(options: PodSessionProviderOptions): Po
           requestHeaders.has("cookie")
         )
           throw new Error("Caller credentials are forbidden");
-        let cached = clients.get(id);
+        let cached: CachedClient | undefined = clients.get(id);
         if (!cached || !Buffer.from(cached.bytes).equals(bytes) || value.accessExpiresAt <= now()) {
+          forgetClient(id);
           if (value.refreshing) throw new Error("Pod refresh is already claimed");
           const claimed = encode({ ...value, refreshing: true });
           if (!(await vault.compareAndSwap(sessionKey(id), bytes, claimed)))
@@ -254,18 +303,18 @@ export function createPodSessionProvider(options: PodSessionProviderOptions): Po
             const webId = client.currentWebId();
             if (webId !== undefined && webId !== value.identity.webId)
               throw new Error("Refreshed WebID mismatch");
-            const secret = encode({
+            const updated = {
               ...value,
               refreshToken: tokens.refreshToken,
               accessExpiresAt: now() + (tokens.expiresIn ?? 0),
               refreshing: false,
-            });
+            };
+            const secret = encode(updated);
             if (!(await vault.compareAndSwap(sessionKey(id), claimed, secret)))
               throw new Error("Pod session was revoked");
-            cached = { bytes: secret, client };
-            clients.set(id, cached);
+            cached = cacheClient(updated, secret, client);
           } catch (error) {
-            clients.delete(id);
+            forgetClient(id);
             await vault.delete(sessionKey(id));
             throw error;
           }
@@ -275,8 +324,8 @@ export function createPodSessionProvider(options: PodSessionProviderOptions): Po
       };
     },
     async revoke(id: string) {
+      forgetClient(id);
       await vault.delete(sessionKey(id));
-      clients.delete(id);
     },
   };
   return provider;

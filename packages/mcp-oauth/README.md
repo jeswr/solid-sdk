@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # @jeswr/mcp-oauth
 
@@ -107,6 +108,8 @@ the WebID profile's `pim:storage` roots, refuses caller Authorization/DPoP/Cooki
 browser credentials, and refuses redirects. It restores with the original DPoP key and refreshes
 on access expiry, persisting token rotation before sending a resource request. The existing
 Solid client handles bounded nonce retries at both the token and resource endpoints.
+Private clients are capped at 256 cached entries and evicted after at most five minutes or
+at access/session expiry, whichever comes first. Failed liveness checks remove cached credentials.
 Default network transport pins DNS, refuses SSRF targets, caps responses at 1 MiB and sets an
 eight-second deadline. An injected `fetch` must supply equivalent network protections.
 
@@ -116,6 +119,7 @@ during a claimed refresh requires a new login. File lock files left by a crashed
 operator cleanup while the store is offline. Deleted IDs retain irreversible tombstones: never
 reuse them or remove tombstones while an old request could still complete. Local `revoke()`
 destroys credentials and retires the session; it does not require a remote revocation endpoint.
+Retirement retries CAS contention until a deletion tombstone is durable.
 Sessions expire absolutely after thirty days; login state expires after ten minutes. Expired
 record/tombstone cleanup and request rate limits belong to the deployment.
 

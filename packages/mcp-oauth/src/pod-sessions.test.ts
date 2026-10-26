@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { fixture, RESOURCE } from "../test/fixtures.js";
 import {
   POD_CALLBACK,
@@ -14,6 +14,11 @@ import { createPodSessionProvider } from "./pod-sessions.js";
 import { digest, GRANT_TTL, LOGIN_TTL } from "./protocol.js";
 import { createSessionVault } from "./vault.js";
 import { MemoryVaultStore } from "./vault-stores.js";
+
+afterEach(() => {
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+});
 
 function brokerFixture() {
   const op = podIssuer();
@@ -362,6 +367,116 @@ describe("Solid-OIDC pod broker", () => {
     });
     await expect(fetcher(`${POD_ROOT}notes`)).rejects.toThrow("inactive");
     expect(f.op.captured.filter((r) => r.url.startsWith(POD_ROOT))).toHaveLength(0);
+  });
+
+  it("bounds private clients and restores an evicted session with its original key", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const f = brokerFixture();
+    const first = await f.login();
+    let last = first;
+    for (let index = 0; index < 256; index++) last = await f.login();
+    expect(vi.getTimerCount()).toBe(256);
+    const refreshes = () =>
+      f.op.captured.filter((r) => r.url.endsWith("/token") && r.body.includes("refresh_token="));
+    await (await f.provider.fetchFor(last.session.id))(`${POD_ROOT}notes`);
+    expect(refreshes()).toHaveLength(0);
+    await (await f.provider.fetchFor(first.session.id))(`${POD_ROOT}notes`);
+    expect(refreshes()).toHaveLength(1);
+    expect(vi.getTimerCount()).toBe(256);
+  }, 20_000);
+
+  it("evicts idle clients on a timer and when the injected clock advances", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    for (const timer of [true, false]) {
+      const f = brokerFixture();
+      const { session } = await f.login();
+      expect(vi.getTimerCount()).toBe(1);
+      f.advance(300);
+      if (timer) {
+        await vi.advanceTimersByTimeAsync(300_000);
+        expect(vi.getTimerCount()).toBe(0);
+      }
+      await (await f.provider.fetchFor(session.id))(`${POD_ROOT}notes`);
+      expect(
+        f.op.captured.filter((r) => r.url.endsWith("/token") && r.body.includes("refresh_token=")),
+      ).toHaveLength(1);
+      expect(vi.getTimerCount()).toBe(1);
+      await f.provider.revoke(session.id);
+      expect(vi.getTimerCount()).toBe(0);
+    }
+  });
+
+  it("expires cached credentials at the earlier access or session deadline", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    for (const deadline of ["access", "session"]) {
+      const f = brokerFixture();
+      if (deadline === "access") f.op.controls.expiresIn = 30;
+      const { session } = await f.login();
+      if (deadline === "session") {
+        const key = `session:${session.id}`;
+        const value = JSON.parse(Buffer.from((await f.vault.get(key)) as Uint8Array).toString());
+        await f.vault.put(
+          key,
+          Buffer.from(JSON.stringify({ ...value, expiresAt: f.options.now() + 30 })),
+        );
+        await (await f.provider.fetchFor(session.id))(`${POD_ROOT}notes`);
+      }
+      expect(vi.getTimerCount()).toBe(1);
+      f.advance(30);
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(vi.getTimerCount()).toBe(0);
+      expect(await f.provider.isActive(session.id)).toBe(deadline === "access");
+    }
+  });
+
+  it("drops cached credentials when another worker revokes, expiry is observed, or liveness fails", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    for (const failure of ["revocation", "expiry", "corrupt", "outage"]) {
+      const f = brokerFixture();
+      const { session } = await f.login();
+      const fetcher = await f.provider.fetchFor(session.id);
+      expect(vi.getTimerCount()).toBe(1);
+      if (failure === "revocation") await createPodSessionProvider(f.options).revoke(session.id);
+      if (failure === "expiry") f.advance(GRANT_TTL);
+      if (failure === "corrupt") await f.vault.put(`session:${session.id}`, Buffer.from("invalid"));
+      if (failure === "outage") vi.spyOn(f.vault, "get").mockRejectedValue(new Error("offline"));
+      await expect(fetcher(`${POD_ROOT}notes`)).rejects.toThrow();
+      expect(vi.getTimerCount()).toBe(0);
+      expect(f.op.captured.filter((r) => r.url.startsWith(POD_ROOT))).toHaveLength(0);
+    }
+  });
+
+  it("drops stale clients before refresh contention and even when retirement storage fails", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    for (const failure of ["claimed", "conflict", "retirement"]) {
+      const f = brokerFixture();
+      const { session } = await f.login();
+      expect(vi.getTimerCount()).toBe(1);
+      if (failure === "retirement") {
+        vi.spyOn(f.vault, "delete").mockRejectedValueOnce(new Error("offline"));
+        await expect(f.provider.revoke(session.id)).rejects.toThrow("offline");
+      } else {
+        const fetcher = await f.provider.fetchFor(session.id);
+        const key = `session:${session.id}`;
+        const value = JSON.parse(Buffer.from((await f.vault.get(key)) as Uint8Array).toString());
+        await f.vault.put(
+          key,
+          Buffer.from(
+            JSON.stringify({
+              ...value,
+              expiresAt: value.expiresAt - 1,
+              refreshing: failure === "claimed",
+            }),
+          ),
+        );
+        if (failure === "conflict")
+          vi.spyOn(f.vault, "compareAndSwap").mockResolvedValueOnce(false);
+        await expect(fetcher(`${POD_ROOT}notes`)).rejects.toThrow(
+          failure === "claimed" ? "claimed" : "conflict",
+        );
+      }
+      expect(vi.getTimerCount()).toBe(0);
+    }
   });
 });
 
