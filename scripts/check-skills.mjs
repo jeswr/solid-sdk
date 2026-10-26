@@ -82,6 +82,7 @@ function htmlLinksIn(html) {
   for (let token = tokens.exec(html); token; token = tokens.exec(html)) {
     if (token[0].startsWith("<!--")) continue;
     const closing = token[0].startsWith("</");
+    const tag = token[0].slice(closing ? 2 : 1).toLowerCase();
     let cursor = tokens.lastIndex;
     const attributes = [];
     while (cursor < html.length && html[cursor] !== ">") {
@@ -113,6 +114,17 @@ function htmlLinksIn(html) {
     // An incomplete tag does not create an element or active URL attributes.
     if (html[cursor] === ">") links.push(...attributes);
     tokens.lastIndex = cursor + 1;
+    if (
+      !closing &&
+      html[cursor] === ">" &&
+      /^(?:textarea|title|script|style|xmp|iframe|noembed|noframes)$/.test(tag)
+    ) {
+      // Raw-text/RCDATA contents cannot start tags or comments. Only a matching
+      // end tag returns to markup, even inside apparent quoted attributes.
+      const endTag = new RegExp(`</${tag}(?=[\\t\\n\\f\\r />])`, "gi");
+      endTag.lastIndex = tokens.lastIndex;
+      tokens.lastIndex = endTag.exec(html)?.index ?? html.length;
+    }
   }
   return links;
 }

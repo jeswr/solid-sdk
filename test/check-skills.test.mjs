@@ -264,6 +264,67 @@ describe("skill validation", () => {
     ]);
   });
 
+  const textElements = [
+    "textarea",
+    "title",
+    "script",
+    "style",
+    "xmp",
+    "iframe",
+    "noembed",
+    "noframes",
+  ];
+
+  it.each(textElements)("checks active links after the end of HTML %s content", (tag) => {
+    const root = fixture();
+    put(
+      root,
+      "skills/alpha/SKILL.md",
+      skill({
+        body: `<div>\n<${tag}><a title="</${tag}>\n<a href="missing.md">broken</a>\n</div>`,
+      }),
+    );
+    expect(checkSkills(root, { write: true }).errors).toEqual([
+      "skills/alpha/SKILL.md: relative link does not resolve (target omitted)",
+    ]);
+  });
+
+  it.each(textElements)("ignores apparent tags inside HTML %s content", (tag) => {
+    const root = fixture();
+    put(
+      root,
+      "skills/alpha/SKILL.md",
+      skill({
+        body: `<div>\n<${tag}><a href="missing.md"><img src="missing.png"></${tag}-extra><a href="also-missing.md"></${tag}>\n<a href="references/guide.md">guide</a>\n</div>`,
+      }),
+    );
+    expect(checkSkills(root, { write: true }).errors).toEqual([]);
+  });
+
+  it.each(textElements)("treats unclosed HTML %s content as text to the end", (tag) => {
+    const root = fixture();
+    put(
+      root,
+      "skills/alpha/SKILL.md",
+      skill({ body: `<div>\n<${tag}><a href="missing.md"><img src="missing.png">\n</div>` }),
+    );
+    expect(checkSkills(root, { write: true }).errors).toEqual([]);
+  });
+
+  it.each([
+    '<div>\n<TEXTAREA><a title="</TeXtArEa >\n<a href="missing.md">broken</a>\n</div>',
+    '<div>\n<textarea/><a title="</textarea>\n<a href="missing.md">broken</a>\n</div>',
+    '<div>\n<textarea><!-- </textarea>\n<a href="missing.md">broken</a>\n</div>',
+    '<div>\n<style>&lt;/style><a title="</style\n>\n<a href="missing.md">broken</a>\n</div>',
+    '<div>\n<script src="missing.js"><a href="ignored.md"></script>\n</div>',
+  ])("respects HTML text boundaries and opening URL attributes: %s", (body) => {
+    const root = fixture();
+    put(root, "skills/alpha/SKILL.md", skill({ body }));
+    expect(checkSkills(root, { write: true }).errors).toEqual([
+      "skills/alpha/SKILL.md: relative link does not resolve (target omitted)",
+    ]);
+  });
+
   it.each([
     '<a href=" references/guide.md ">guide</a>',
     "<img src=' \t\nreferences/guide.md\r\f '>",
