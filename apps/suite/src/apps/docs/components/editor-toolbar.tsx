@@ -165,11 +165,16 @@ export function EditorToolbar({
         <>
           <span className="docs-toolbar-divider" />
           <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon-sm" aria-label="Text alignment">
-                <AlignLeft aria-hidden="true" />
-              </Button>
-            </DropdownMenuTrigger>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon-sm" aria-label="Text alignment">
+                    <AlignLeft aria-hidden="true" />
+                  </Button>
+                </DropdownMenuTrigger>
+              </TooltipTrigger>
+              <TooltipContent>Text alignment</TooltipContent>
+            </Tooltip>
             <DropdownMenuContent>
               {align.map((action) => (
                 <DropdownMenuItem key={action.label} onSelect={action.run}>
@@ -183,11 +188,16 @@ export function EditorToolbar({
         </>
       )}
       <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon-sm" aria-label="More formatting">
-            <MoreHorizontal aria-hidden="true" />
-          </Button>
-        </DropdownMenuTrigger>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon-sm" aria-label="More formatting">
+                <MoreHorizontal aria-hidden="true" />
+              </Button>
+            </DropdownMenuTrigger>
+          </TooltipTrigger>
+          <TooltipContent>More formatting</TooltipContent>
+        </Tooltip>
         <DropdownMenuContent align="end" className="docs-more-menu">
           <DropdownMenuLabel>Formatting</DropdownMenuLabel>
           {actions

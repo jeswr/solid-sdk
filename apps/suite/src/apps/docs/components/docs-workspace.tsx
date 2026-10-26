@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex
 "use client";
-import { Toaster } from "@jeswr/suite-ui";
+import { Toaster, TooltipProvider } from "@jeswr/suite-ui";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { decodeRef } from "@/lib/refs";
@@ -34,13 +34,13 @@ export function DocsWorkspace() {
     }
   }
   return (
-    <>
+    <TooltipProvider>
       <Toaster />
       {pathname === "/docs" ? (
         <DocumentList session={state.session} />
       ) : (
         <DocumentEditor session={state.session} resource={resource} />
       )}
-    </>
+    </TooltipProvider>
   );
 }

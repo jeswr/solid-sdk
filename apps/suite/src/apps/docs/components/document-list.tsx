@@ -17,6 +17,9 @@ import {
   IconButton,
   Input,
   Skeleton,
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
   toast,
 } from "@jeswr/suite-ui";
 import { MoreHorizontal, Plus, RefreshCw, Star } from "lucide-react";
@@ -242,11 +245,16 @@ export function DocumentList({ session }: { session: PodSession }) {
             </tbody>
           </table>
         )}
-        <Button asChild className="docs-fab" size="icon" aria-label="New document">
-          <Link href="/docs/new">
-            <Plus aria-hidden="true" />
-          </Link>
-        </Button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button asChild className="docs-fab" size="icon" aria-label="New document">
+              <Link href="/docs/new">
+                <Plus aria-hidden="true" />
+              </Link>
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>New document</TooltipContent>
+        </Tooltip>
         <Dialog open={renaming !== null} onOpenChange={(open) => !open && setRenaming(null)}>
           <DialogContent>
             <DialogTitle>Rename document</DialogTitle>
