@@ -425,3 +425,28 @@ describe("deriveExposures integrated into a built Meal", () => {
     expect(parsed?.exposures?.[0]?.derivedFrom).toEqual([item0]);
   });
 });
+
+// AUTHORED-BY Codex GPT-6
+it.each([
+  "restaurant",
+  "home",
+])("accepts agreeing context aliases and rejects a conflict: %s", async (legacyContext) => {
+  const ttl = await serializeMeal(URL_, fullMeal());
+  const parsed = await parseMealTtl(
+    URL_,
+    `${ttl}
+<${URL_}#it> <https://w3id.org/jeswr/sectors/health/diet#context> <https://jeswr.org/ns/sectors/health/diet#${legacyContext}> .`,
+  );
+  if (legacyContext === "restaurant") expect(parsed).toEqual(fullMeal());
+  else expect(parsed).toBeUndefined();
+});
+
+it("accepts a legacy context object that agrees with the canonical one", async () => {
+  const ttl = await serializeMeal(URL_, fullMeal());
+  const parsed = await parseMealTtl(
+    URL_,
+    `${ttl}
+<${URL_}#it> <https://w3id.org/jeswr/sectors/health/diet#context> <https://w3id.org/jeswr/sectors/health/diet#restaurant> .`,
+  );
+  expect(parsed).toEqual(fullMeal());
+});

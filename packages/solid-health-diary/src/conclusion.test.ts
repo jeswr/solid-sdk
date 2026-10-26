@@ -157,3 +157,18 @@ describe("buildDietPlan fail-closed on non-canonical excludes", () => {
     expect(await parseDietPlanTtl(PLAN_URL, ttl)).toBeUndefined();
   });
 });
+
+// AUTHORED-BY Codex GPT-6
+it("deduplicates excluded trigger slugs after decoding both namespaces", async () => {
+  const diet = "https://jeswr.org/ns/sectors/health/diet#";
+  const legacy = "https://w3id.org/jeswr/sectors/health/diet#";
+  const parsed = await parseDietPlanTtl(
+    PLAN_URL,
+    `
+    <${PLAN_URL}#it> a <${diet}DietPlan> ;
+      <${diet}excludes> <${diet}gluten>, <${diet}lactose>, <${diet}sulphites> ;
+      <${legacy}excludes> <${legacy}gluten>, <${legacy}lactose>, <${legacy}sulphites> .
+  `,
+  );
+  expect(parsed?.excludes).toEqual(["gluten", "lactose", "sulphites"]);
+});

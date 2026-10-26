@@ -426,13 +426,13 @@ function parseDietPlanImpl(url: string, dataset: DatasetCore): DietPlanData | un
   // an unknown/hostile `diet:excludes` IRI and returning a PLAN WITH FEWER EXCLUSIONS
   // is dangerous (under-restriction). If any excludes triple exists but does not map
   // to a known TriggerClass, reject the whole plan rather than under-apply it.
-  const rawExcludes = [...doc.excludes];
-  const excludes = rawExcludes
-    .map((iri) => triggerSlugFromIri(iri))
-    .filter((s): s is TriggerSlug => s !== undefined)
-    .sort();
-  if (excludes.length !== rawExcludes.length) return undefined;
-  data.excludes = excludes;
+  const excludes = new Set<TriggerSlug>();
+  for (const iri of doc.excludes) {
+    const slug = triggerSlugFromIri(iri);
+    if (slug === undefined) return undefined;
+    excludes.add(slug);
+  }
+  data.excludes = [...excludes].sort();
   const restsOn = sortedStrings(doc.restsOn).filter(isHttpIri);
   if (restsOn.length) data.restsOn = restsOn;
   return data;

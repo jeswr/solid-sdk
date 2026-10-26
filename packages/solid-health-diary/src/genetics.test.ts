@@ -488,3 +488,19 @@ describe("rollup↔marker consistency guardrail — risk-haplotype-absent vs a p
     expect(await parseGeneticSummaryTtl(URL_, ttl)).toBeUndefined();
   });
 });
+
+// AUTHORED-BY Codex GPT-6
+it.each([
+  true,
+  false,
+])("accepts agreeing consent aliases and rejects a conflict: %s", async (legacyConsent) => {
+  const data = summary();
+  const ttl = await serializeGeneticSummary(URL_, data);
+  const parsed = await parseGeneticSummaryTtl(
+    URL_,
+    `${ttl}
+<${URL_}#it> <https://w3id.org/jeswr/sectors/health/diet#consentGiven> ${legacyConsent} .`,
+  );
+  if (legacyConsent) expect(parsed).toEqual(data);
+  else expect(parsed).toBeUndefined();
+});

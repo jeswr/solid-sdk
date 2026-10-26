@@ -248,3 +248,15 @@ export function vocabularyAliases(iri: string): readonly string[] {
   }
   return [iri];
 }
+
+/** The canonical spelling of a vocabulary IRI; other IRIs are returned unchanged. */
+export function canonicalVocabularyIri(iri: string): string {
+  for (const [canonical, legacy] of [
+    [DIET, LEGACY_DIET_NS],
+    [HEALTH, LEGACY_HEALTH_NS],
+    [CORE, LEGACY_CORE_NS],
+  ] as const) {
+    if (iri.startsWith(legacy)) return canonical + iri.slice(legacy.length);
+  }
+  return iri;
+}

@@ -17,20 +17,21 @@
  * legitimately carry additional/extension triples on the subject (multilingual
  * `rdfs:label`s, `owl:sameAs`, foreign metadata) that are NOT `sh:maxCount 1`, and
  * those must never invalidate the parse. Each entity parser passes exactly the
- * predicates it reads as scalars; a duplicate on one of THOSE throws, and each
+ * predicates it reads as scalars; conflicting objects on one of THOSE throw, and each
  * parser body runs inside a `tryRead` guard so the throw becomes a fail-closed
  * `undefined` (the record — or, for a sub-node like a FoodItem, that node — drops).
  */
 
-import type { DatasetCore } from "@rdfjs/types";
+import type { DatasetCore, Term } from "@rdfjs/types";
 import { DataFactory } from "n3";
-import { vocabularyAliases } from "./vocab.js";
+import { canonicalVocabularyIri, vocabularyAliases } from "./vocab.js";
 
 const { namedNode } = DataFactory;
 
 /**
  * Throw if `subject` carries more than one object for any of the given
- * single-valued (`sh:maxCount 1`) predicates. Predicates NOT listed are ignored
+ * single-valued (`sh:maxCount 1`) predicates, counting equal RDF objects across
+ * namespace aliases once. Predicates NOT listed are ignored
  * (the model is open — they may repeat). Call at the top of an entity parser
  * (inside its `tryRead` guard) so an ambiguous document fails CLOSED instead of
  * being parsed with an arbitrary value.
@@ -42,10 +43,14 @@ export function assertSubjectSingletons(
 ): void {
   const s = namedNode(subject);
   for (const predicate of singletonPredicates) {
-    let count = 0;
+    const values: Term[] = [];
     for (const iri of vocabularyAliases(predicate)) {
-      for (const _q of dataset.match(s, namedNode(iri), null)) {
-        if (++count > 1) {
+      for (const q of dataset.match(s, namedNode(iri), null)) {
+        const object =
+          q.object.termType === "NamedNode" ? namedNode(canonicalVocabularyIri(q.object.value)) : q.object;
+        if (values.some((value) => value.equals(object))) continue;
+        values.push(object);
+        if (values.length > 1) {
           throw new Error(
             `duplicate value for single-valued predicate <${predicate}> on <${subject}> ` +
               "(sh:maxCount 1) — refusing to parse an ambiguous record with an arbitrary value.",
