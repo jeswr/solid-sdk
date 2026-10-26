@@ -17,7 +17,10 @@ export * from "./components/atoms/file-type-icon.js";
 export * from "./components/atoms/kbd.js";
 export * from "./components/atoms/provenance-badge.js";
 export * from "./components/atoms/status-dot.js";
-export type { BreadcrumbItem, BreadcrumbsProps } from "./components/breadcrumbs.js";
+export type {
+  BreadcrumbItem as BreadcrumbsItem,
+  BreadcrumbsProps,
+} from "./components/breadcrumbs.js";
 export { Breadcrumbs } from "./components/breadcrumbs.js";
 export type { SurfaceState as ContentSurfaceState } from "./components/content.js";
 export { formatBytes, plainText, surfaceErrors } from "./components/content.js";

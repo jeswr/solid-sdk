@@ -89,7 +89,7 @@ unique item IDs, and synchronous callbacks; persistence and remote fetching stay
 - `FilterChips`: `options`, selected `value` IDs, `onChange`, and `resultCount`; announces the
   result count politely. Clear removes every selection.
 - `Breadcrumbs`: `items` with `id`, `label`, `href`, optional `onDrop`; preserves first/current
-  segments and collapses middle segments when they do not fit. Supply a keyboard move action in
+  segments and collapses middle segments when they do not fit. Its item type is `BreadcrumbsItem`. Supply a keyboard move action in
   the consuming app alongside drag and drop. Links remain native anchors, including in the menu.
 - `EditableText`: `label`, `value`, `onCommit`, optional `validate` returning an error string,
   optional `disabled`. Click/F2 edits, Enter validates and commits, Escape cancels. Blur leaves
@@ -123,7 +123,7 @@ The returned paths are display paths: the app's upload planner applies storage n
 The owning app supplies parsed typed data through `typedView={<TypedView ... />}`; the
 preview never parses or displays raw data files. Unsupported types and failed media keep a
 local download action. Image zoom (100–400%) supports +/−, arrow-key panning and pointer drag.
-Text/Markdown offers rendered/raw views. Markdown HTML is ignored, unsafe link schemes are
+Text/Markdown offers rendered/raw views for blobs up to 1 MiB; larger files keep the download action. Markdown HTML is ignored, unsafe link schemes are
 removed, and remote image requests are suppressed. Object URLs are revoked on replacement
 and unmount. Supply blobs already read through the SDK; this package makes no network reads.
 The host owns preview navigation, metadata retrieval, headings and the enclosing dialog.

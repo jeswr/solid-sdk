@@ -1,16 +1,16 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 "use client";
 import {
+  type ContentSurfaceState,
   DetailsPane,
   PodMeter,
-  type SurfaceState,
   surfaceErrors,
   TypedView,
   type TypedViewData,
 } from "@jeswr/suite-ui";
 import { useState } from "react";
 
-const states: { name: string; state: SurfaceState }[] = [
+const states: { name: string; state: ContentSurfaceState }[] = [
   { name: "Loading", state: { status: "loading" } },
   { name: "First use", state: { status: "empty" } },
   { name: "Filtered empty", state: { status: "empty", query: "summer" } },
@@ -30,7 +30,7 @@ function StateExample({
   data: TypedViewData;
 }) {
   const [ready, setReady] = useState(false);
-  const state: SurfaceState = ready
+  const state: ContentSurfaceState = ready
     ? { status: "ready" }
     : {
         ...example.state,
