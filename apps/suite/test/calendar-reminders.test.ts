@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { describe, expect, it } from "vitest";
 import {
   createReminderState,
@@ -145,6 +146,44 @@ describe("TRIGGER instants", () => {
 });
 
 describe("windows, ordering and wakeups", () => {
+  it.each<ReminderTrigger>([
+    { kind: "absolute", at: 8_640_000_000_000_000 },
+    { kind: "relative", offset: "PT0S" },
+  ])("delivers a maximum-instant trigger using the window-end sentinel: %j", (trigger) => {
+    const maximum = 8_640_000_000_000_000;
+    const events = [{ ...event(trigger), start: maximum, end: maximum }];
+    const atMaximum = () => maximum;
+    expect(nextWakeup(events, empty, clock)).toBe(maximum);
+    expect(dueReminders(events, { to: maximum }, empty, atMaximum)).toEqual([]);
+    const due = dueReminders(events, { to: maximum + 1 }, empty, atMaximum);
+    expect(due).toHaveLength(1);
+    expect(due[0]).toMatchObject({ key, triggerAt: maximum, dueAt: maximum, revision: 0 });
+    const delivered = reminderReducer(empty, { type: "deliver", key, revision: 0 }, atMaximum);
+    expect(nextWakeup(events, delivered, atMaximum)).toBeNull();
+    expect(dueReminders(events, { to: maximum + 1 }, delivered, atMaximum)).toEqual([]);
+  });
+  it("delivers a snooze at the maximum instant", () => {
+    const maximum = 8_640_000_000_000_000;
+    const snoozed = reminderReducer(empty, { type: "snooze", key, until: maximum }, clock);
+    expect(nextWakeup([event()], snoozed, clock)).toBe(maximum);
+    expect(dueReminders([event()], { to: maximum }, snoozed, clock)).toEqual([]);
+    expect(
+      dueReminders([event()], { from: maximum, to: maximum + 1 }, snoozed, clock),
+    ).toMatchObject([{ key, triggerAt: NOW, dueAt: maximum, revision: 1 }]);
+  });
+  it("accepts the sentinel only as a window end", () => {
+    const sentinel = 8_640_000_000_000_001;
+    fails(() => scan([event({ kind: "absolute", at: sentinel })]), "invalid-instant");
+    fails(() => dueReminders([], { to: sentinel }, empty, () => sentinel), "invalid-clock");
+    fails(
+      () => reminderReducer(empty, { type: "snooze", key, until: sentinel }, clock),
+      "invalid-action",
+    );
+    fails(
+      () => scan([], state({ status: "snoozed", until: sentinel, revision: 1 })),
+      "invalid-state",
+    );
+  });
   it("uses half-open boundaries and explicit catch-up, including epoch zero", () => {
     const events = [event({ kind: "absolute", at: NOW })];
     expect(dueReminders(events, { from: NOW - 1, to: NOW }, empty, clock)).toEqual([]);
@@ -209,6 +248,10 @@ describe("windows, ordering and wakeups", () => {
     { to: NaN },
     { to: Infinity },
     { to: 0.1 },
+    { to: 8_640_000_000_000_002 },
+    { to: -8_640_000_000_000_001 },
+    { to: "8640000000000001" },
+    { from: 8_640_000_000_000_001, to: 8_640_000_000_000_001 },
     { from: null, to: NOW },
     { from: "0", to: NOW },
     {},

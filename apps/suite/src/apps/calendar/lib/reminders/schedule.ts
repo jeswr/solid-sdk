@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { reminderKey } from "./state";
 import { triggerInstant } from "./triggers";
 import type { Clock, DueReminder, ReminderEvent, ReminderState, ReminderWindow } from "./types";
@@ -58,7 +59,8 @@ export function dueReminders(
   const currentTime = now(clock);
   record(window, ["from", "to"], "invalid-window");
   const from = instant(window.from === undefined ? currentTime : window.from, "invalid-window");
-  const to = instant(window.to, "invalid-window");
+  // A window may end one millisecond beyond the Date range to include its last instant.
+  const to = window.to === 8_640_000_000_000_001 ? window.to : instant(window.to, "invalid-window");
   if (from > to) throw new ReminderError("invalid-window");
   return pending(events, state).filter((reminder) => reminder.dueAt >= from && reminder.dueAt < to);
 }

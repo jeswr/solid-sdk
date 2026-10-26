@@ -1,10 +1,13 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # Reminder scheduling
 
 Pure TypeScript; import from `./reminders/index`. No timers, notifications, storage, RDF,
 React or ambient clock. Times are integer epoch milliseconds within the JavaScript Date
 range. Supply a `Clock` function; every operation samples it exactly once.
+The exclusive window end alone may be `8_640_000_000_000_001`, one millisecond beyond
+that range, so reminders at the maximum instant can become due.
 
 `ReminderEvent` represents one pre-expanded occurrence, with stable `id` and `occurrenceId`,
 resolved `start`, optional `end` (inclusive equality is allowed), and reminders with stable

@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 
 export type ReminderTrigger =
   | { readonly kind: "relative"; readonly offset: string; readonly related?: "start" | "end" }
@@ -22,6 +23,7 @@ export type Clock = () => number;
 
 export interface ReminderWindow {
   readonly from?: number;
+  /** Exclusive end; 8_640_000_000_000_001 is allowed to include the maximum Date instant. */
   readonly to: number;
 }
 
