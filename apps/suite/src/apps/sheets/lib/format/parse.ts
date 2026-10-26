@@ -7,16 +7,19 @@ function invalid(message: string): never {
   throw new SheetFormatError("invalid-input", message);
 }
 
-/** ASCII or locale digits are accepted, but mixing the two is ambiguous. */
+/** Normalize locale digits without imposing numeric rules on text labels. */
 function normalizeDigits(text: string, locale: string): string {
   const formatter = new Intl.NumberFormat(locale, { useGrouping: false });
   const digits = Array.from({ length: 10 }, (_, i) => formatter.format(i));
-  const native = digits[0] !== "0" && digits.some((digit) => text.includes(digit));
-  if (native && /[0-9]/.test(text)) invalid("Mixed digit systems are unsupported");
   return Array.from(text, (char) => {
     const index = digits.indexOf(char);
     return index < 0 ? char : String(index);
   }).join("");
+}
+
+/** ASCII or locale digits are accepted in typed values, but mixing them is ambiguous. */
+function validateDigits(text: string, normalized: string): void {
+  if (normalized !== text && /[0-9]/.test(text)) invalid("Mixed digit systems are unsupported");
 }
 
 function unwrap(
@@ -117,15 +120,21 @@ export function parseCellInput(input: string, locale: string, code = "General"):
     return { type: "boolean", value: text.toLowerCase() === "true" };
   const normalized = normalizeDigits(text, language);
   const date = parseDate(normalized, language, format.kind === "date");
-  if (date !== null) return { type: "date", value: date };
+  if (date !== null) {
+    validateDigits(text, normalized);
+    return { type: "date", value: date };
+  }
   if (format.kind === "date") invalid("Input does not match a supported date or time");
   // Markers in labels do not imply numbers. Prefix affixes must lead into numeric syntax.
   const numericStart = /^[\p{N}+\-−.,\u061c\u200e\u200f]/u;
   const numericCandidate =
     numericStart.test(normalized) ||
-    /^(?:[%٪\p{Sc}]\s*[\p{N}+\-−.,\u061c\u200e\u200f]|[A-Z]{3}\s*\d)/u.test(normalized) ||
+    /^(?:[%٪\p{Sc}]\s*[\p{N}+\-−.,\u061c\u200e\u200f]|[A-Z]{3}\s*[+\-−\u061c\u200e\u200f]*\d)/u.test(
+      normalized,
+    ) ||
     /^(?:NaN|[+-]?Infinity|∞)$/.test(text);
   if (!numericCandidate) return { type: "text", value: input };
+  validateDigits(text, normalized);
   if (format.kind === "number" && format.options.style === "currency") {
     return { type: "number", value: parseNumber(text, language, format.options) };
   }

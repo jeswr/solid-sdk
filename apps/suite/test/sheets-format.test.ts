@@ -199,6 +199,24 @@ describe("cell input", () => {
     rejects(() => parseCellInput("EUR 12.00", "en-US", "USD"), "invalid-input");
     rejects(() => parseCellInput("$12.00", "en-US", "USD"), "invalid-input");
   });
+  it.each(["nl-NL", "fy-NL"])("parses signed currency displays in %s", (locale) => {
+    for (const value of [-1234.5, -0, 1234.5]) {
+      for (const code of ["USD", "EUR"]) {
+        const display = formatCellValue(number(value), code, locale);
+        expect(parseCellInput(display, locale, code)).toEqual(number(value));
+        const signed = new Intl.NumberFormat(locale, {
+          style: "currency",
+          currency: code,
+          currencyDisplay: "code",
+          signDisplay: "always",
+        }).format(value);
+        expect(parseCellInput(signed, locale, code)).toEqual(number(value));
+      }
+    }
+    for (const input of ["USD --1.234,50", "USD -1.23,50", "USD -12oops"]) {
+      rejects(() => parseCellInput(input, locale, "USD"), "invalid-input");
+    }
+  });
   it.each([
     ["2024-02-29", "en-US", "2024-02-29T00:00:00.000Z"],
     ["2024-02-29 13:05", "en-US", "2024-02-29T13:05:00.000Z"],
@@ -301,6 +319,8 @@ describe("cell input", () => {
     ["$ budget", "en-US"],
     ["Budget €", "de-DE"],
     ["USD budget", "en-US"],
+    ["USD + EUR", "nl-NL"],
+    ["USD - budget", "nl-NL"],
     ["Infinity pool", "en-US"],
     ["NaN label", "en-US"],
     ["Pool ∞", "en-US"],
@@ -312,6 +332,25 @@ describe("cell input", () => {
     for (const code of ["General", "%", "USD"]) {
       expect(parseCellInput(value, locale, code)).toEqual({ type: "text", value });
     }
+  });
+  it.each([
+    ["الفصل 1 و٢", "ar-EG"],
+    ["  الفصل ٢ و1  ", "ar-EG"],
+    ["章 1 と二", "ja-JP-u-nu-hanidec"],
+  ])("preserves mixed digits in text %j in %s", (value, locale) => {
+    for (const code of ["General", "%", "USD"]) {
+      expect(parseCellInput(value, locale, code)).toEqual({ type: "text", value });
+    }
+  });
+  it.each([
+    ["١2", "General"],
+    ["1٢", "General"],
+    ["١2٪؜", "%"],
+    ["؜-\u200f١2٫٥٠ USD", "USD"],
+    ["202٦-01-02", "General"],
+    ["٢٠٢٦-01-٠٢", "yyyy-mm-dd"],
+  ])("rejects mixed digits in numeric or date input %j with %s", (input, code) => {
+    rejects(() => parseCellInput(input, "ar-EG", code), "invalid-input");
   });
   it.each([
     "1,23",
