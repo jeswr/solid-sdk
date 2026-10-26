@@ -4,8 +4,11 @@ import { parseLinkHeaders } from "./link.js";
 import type { ProbeResult, WacMode } from "./types.js";
 import { ACP } from "./vocab.js";
 
-/** Parse WAC §6.1 groups, ignoring extensions while rejecting malformed syntax. */
-function parseWacAllow(value: string): ProbeResult["wacAllow"] {
+/**
+ * Parse a WAC-Allow field (WAC §6.1) into user/public modes, ignoring extensions; undefined when
+ * the syntax is malformed. Exported for `@jeswr/storage-client` (ReadResult.allow).
+ */
+export function parseWacAllow(value: string): ProbeResult["wacAllow"] {
   const permissions: { user: WacMode[]; public: WacMode[] } = { user: [], public: [] };
   const scope = /[ \t]*([A-Za-z]+)[ \t]*=[ \t]*"([^"\r\n]*)"[ \t]*(?:,|$)/y;
   let cursor = 0;

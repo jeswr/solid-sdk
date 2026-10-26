@@ -14,6 +14,8 @@ Requires Node.js >=24 and the root pnpm workspace tooling.
 
 The package root exports the ADR-002 type contracts, including `StorageDescription`, `Features`,
 `ResolveOptions`, `DescriptionCache`, `ProbeResult`, `ProbeEvidence`, and `WacMode`.
+It also exports the header parsers `parseLinkHeaders(values, responseUrl)` (RFC 8288) and
+`parseWacAllow(value)` so that `@jeswr/storage-client` reuses them instead of copying them.
 `@jeswr/storage-capabilities/vocab` exports `LWS`, `DID`, `SEC`, `DCT`, `NOTIFY`, `SOLID`,
 `PIM`, `ACQ`, `ACL`, `ACP`, and `SSD` objects with full IRI values (for example, `LWS.Storage`).
 The package's TypeScript configuration includes DOM types for the ADR's Web Crypto `JsonWebKey` contract.

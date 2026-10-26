@@ -9,7 +9,9 @@ test("public parser, errors, fixture and cache entry points load", () => {
     "CapabilitiesError",
     "capabilities",
     "deriveFeatures",
+    "parseLinkHeaders",
     "parseLwsDescription",
+    "parseWacAllow",
     "probe",
     "resolveStorageDescription",
   ]);
