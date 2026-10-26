@@ -53,13 +53,19 @@ interface Identity {
   sub?: string;
   email?: string;
   email_verified?: boolean;
+  hd?: string;
   oid?: string;
   tid?: string;
   preferred_username?: string;
 }
 /** A local stand-in for the providers' token, key, and calendar-list endpoints. */
 class FakeProvider {
-  identity: Identity = { sub: "google-sub-1", email: ACCOUNT, email_verified: true };
+  identity: Identity = {
+    sub: "google-sub-1",
+    email: ACCOUNT,
+    email_verified: true,
+    hd: "example.org",
+  };
   grantScope = `openid ${GOOGLE.CALENDAR_READ} https://www.googleapis.com/auth/userinfo.email`;
   issueRefresh = true;
   signWith: "right" | "other" = "right";
@@ -423,30 +429,70 @@ describe("Google login (installed-app loopback + PKCE + OIDC)", () => {
             sub: "google-sub-2",
             email: "someone.else@example.org",
             email_verified: true,
+            hd: "example.org",
           }),
       ],
       [
         "same address, other subject",
-        () => (fake.identity = { sub: "google-sub-9", email: ACCOUNT, email_verified: true }),
+        () =>
+          (fake.identity = {
+            sub: "google-sub-9",
+            email: ACCOUNT,
+            email_verified: true,
+            hd: "example.org",
+          }),
       ],
       [
         "unverified email",
-        () => (fake.identity = { sub: "google-sub-1", email: ACCOUNT, email_verified: false }),
+        () =>
+          (fake.identity = {
+            sub: "google-sub-1",
+            email: ACCOUNT,
+            email_verified: false,
+            hd: "example.org",
+          }),
       ],
       ["foreign signature", () => (fake.signWith = "other")],
       ["other audience", () => (fake.audience = "someone-else.apps.googleusercontent.com")],
       ["replayed nonce", () => (fake.nonceOverride = "not-this-login")],
     ];
     for (const [what, arrange] of attempts) {
-      fake.identity = { sub: "google-sub-1", email: ACCOUNT, email_verified: true };
+      fake.identity = {
+        sub: "google-sub-1",
+        email: ACCOUNT,
+        email_verified: true,
+        hd: "example.org",
+      };
       fake.signWith = "right";
       fake.audience = undefined;
       fake.nonceOverride = undefined;
       arrange();
       const r = (await browserLogin(fake)).result;
       await expect(r, what).rejects.toMatchObject({ code: "account" });
+      if (what === "same address, other subject")
+        await expect(r).rejects.toThrow(/different account.*pinned/);
       expect(readFileSync(grantFile(), "utf8"), what).toBe(before);
     }
+  });
+  it("refuses first consent for non-authoritative or mismatched Google domains", async () => {
+    const fake = await setupGoogle();
+    for (const hd of [undefined, "other.example", "", 7]) {
+      fake.identity = { sub: "google-sub-1", email: ACCOUNT, email_verified: true };
+      Object.assign(fake.identity, { hd });
+      await expect((await browserLogin(fake)).result).rejects.toMatchObject({
+        code: "account",
+        message: "Google is not authoritative for this email domain",
+      });
+      expect(new CredentialStore(dir).grant("personal")).toBeUndefined();
+    }
+    fake.identity.hd = "example.org";
+    await expect((await browserLogin(fake)).result).resolves.toMatchObject({
+      account: { username: ACCOUNT },
+    });
+    expect(new CredentialStore(dir).grant("personal")?.account).toEqual({
+      subject: "google-sub-1",
+      username: ACCOUNT,
+    });
   });
   it("no refresh token, or calendar scope not granted: nothing stored", async () => {
     const fake = await setupGoogle();
@@ -848,7 +894,7 @@ describe("review corrections: ID-token claims, stored times, grant binding, comp
   const keysOnly: Transport = async () =>
     new Response(JSON.stringify({ keys: [publicJwk] }), { status: 200 });
   const t0 = Math.floor(NOW0 / 1000);
-  const identity = { sub: "google-sub-1", email: ACCOUNT, email_verified: true };
+  const identity = { sub: "google-sub-1", email: ACCOUNT, email_verified: true, hd: "example.org" };
   /** A correctly SIGNED Google ID token, with claims shaped by `shape`. */
   const signed = (shape: (j: SignJWT) => SignJWT, claims: Record<string, unknown> = identity) =>
     shape(
@@ -872,13 +918,30 @@ describe("review corrections: ID-token claims, stored times, grant binding, comp
       .setAudience(GOOGLE_CLIENT)
       .setIssuedAt(t0)
       .setExpirationTime(t0 + 3600);
+  it.each([
+    "gmail.com",
+    "googlemail.com",
+  ])("accepts verified synthetic %s identities without hd", async (domain) => {
+    const email = `fixture.${"0".repeat(40)}@${domain}`;
+    await expect(
+      verifyIdentity(
+        keysOnly,
+        { ...googleProfile, account: email },
+        { clientId: GOOGLE_CLIENT },
+        await signed(good, { sub: "google-sub-1", email, email_verified: true }),
+        "n-1",
+        undefined,
+        new Date(NOW0),
+      ),
+    ).resolves.toEqual({ subject: "google-sub-1", username: email });
+  });
   it("a correctly signed ID token missing exp/iat/sub, stale, future, over-long, or for another party is refused", async () => {
     await expect(verify(await signed(good))).resolves.toMatchObject({ subject: "google-sub-1" });
     const bad: [string, string][] = [
       ["no exp", await signed((j) => j.setAudience(GOOGLE_CLIENT).setIssuedAt(t0))],
       ["no iat", await signed((j) => j.setAudience(GOOGLE_CLIENT).setExpirationTime(t0 + 3600))],
       ["no exp, no iat", await signed((j) => j.setAudience(GOOGLE_CLIENT))],
-      ["no sub", await signed(good, { email: ACCOUNT, email_verified: true })],
+      ["no sub", await signed(good, { email: ACCOUNT, email_verified: true, hd: "example.org" })],
       [
         "issued an hour ago",
         await signed((j) =>
@@ -1215,7 +1278,7 @@ describe("credential lifecycle races and fail-closed status", () => {
       true,
     );
     expect(result.revoked).toBe(true);
-    expect(store.grant("personal")).toBeUndefined();
+    expect(new CredentialStore(dir).grant("personal")).toBeUndefined();
     const profile = fixtureValue(store.profile("personal"));
     store.putProfile({
       ...profile,
@@ -1344,8 +1407,8 @@ it("refuses signed tokens with non-string nonce, missing identity claims and a c
       .setExpirationTime(t + 3600)
       .sign(signingKey);
   for (const claims of [
-    { sub: "fixture", email: ACCOUNT, email_verified: true, nonce: 7 },
-    { sub: "fixture", email_verified: true, nonce: "nonce" },
+    { sub: "fixture", email: ACCOUNT, email_verified: true, hd: "example.org", nonce: 7 },
+    { sub: "fixture", email_verified: true, hd: "example.org", nonce: "nonce" },
   ])
     await expect(
       verifyIdentity(

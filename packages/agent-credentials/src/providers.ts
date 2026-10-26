@@ -453,6 +453,13 @@ export async function verifyIdentity(
     const email = String(claims.email ?? "").toLowerCase();
     if (claims.email_verified !== true || !email)
       throw new HelperError("account", "Google did not assert a verified email for this account");
+    const domain = email.slice(email.lastIndexOf("@") + 1);
+    if (
+      !email.endsWith("@gmail.com") &&
+      !email.endsWith("@googlemail.com") &&
+      (typeof claims.hd !== "string" || claims.hd !== domain)
+    )
+      throw new HelperError("account", "Google is not authoritative for this email domain");
     if (email !== expected || typeof claims.sub !== "string")
       throw new HelperError(
         "account",
