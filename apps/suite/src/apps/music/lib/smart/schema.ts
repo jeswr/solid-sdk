@@ -6,7 +6,14 @@ import type {
   SmartPlaylistSort,
   TextField,
 } from "./types";
-import { dataRecord, isNumber, isText, requireSmart, SmartPlaylistError } from "./validation";
+import {
+  dataArray,
+  dataRecord,
+  isNumber,
+  isText,
+  requireSmart,
+  SmartPlaylistError,
+} from "./validation";
 
 const textFields: readonly string[] = ["artist", "album", "genre"];
 const numberFields: readonly string[] = ["year", "playCount", "lastPlayedAt", "rating"];
@@ -58,8 +65,7 @@ export function validateSmartPlaylist(input: unknown): SmartPlaylist {
     value.version === 1 && (value.mode === "all" || value.mode === "any"),
     "invalid-playlist",
   );
-  requireSmart(Array.isArray(value.rules), "invalid-playlist");
-  // Array.from visits holes rather than silently omitting invalid rules.
+  dataArray(value.rules, "invalid-playlist");
   const rules = Array.from(value.rules, rule);
   const result: SmartPlaylist = { version: 1, mode: value.mode, rules };
   const sorting = Object.hasOwn(value, "sort") ? { sort: sort(value.sort) } : {};

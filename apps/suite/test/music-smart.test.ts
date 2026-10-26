@@ -73,6 +73,52 @@ describe("smart playlist evaluation", () => {
     expect(evaluateSmartPlaylist(library, definition([rule]))).toEqual(expected);
   });
 
+  it("compares each numeric field at equal, lower and upper thresholds", () => {
+    for (const field of ["year", "playCount", "lastPlayedAt", "rating"] as const) {
+      for (const [operator, expected] of [
+        ["eq", [false, true, false]],
+        ["ne", [true, false, true]],
+        ["lt", [false, false, true]],
+        ["lte", [false, true, true]],
+        ["gt", [true, false, false]],
+        ["gte", [true, true, false]],
+      ] as const) {
+        for (const [index, delta] of [-1, 0, 1].entries()) {
+          const rule: SmartPlaylistRule = {
+            field,
+            operator,
+            value: (a[field] as number) + delta * (field === "rating" ? 0.25 : 1),
+          };
+          const playlist = parseSmartPlaylist(serializeSmartPlaylist(definition([rule])));
+          expect(evaluateSmartPlaylist([a], playlist)).toEqual(expected[index] ? [a] : []);
+        }
+      }
+    }
+  });
+
+  it("matches each text operator literally for every text field", () => {
+    for (const field of ["artist", "album", "genre"] as const) {
+      const value = field === "album" ? a.albumTitle : (a[field] as string);
+      for (const [operator, query, match] of [
+        ["eq", value, true],
+        ["eq", value.toUpperCase(), false],
+        ["ne", value, false],
+        ["ne", value.toUpperCase(), true],
+        ["contains", value.slice(1, -1), true],
+        ["contains", "[a-z]", false],
+        ["startsWith", value.slice(0, 2), true],
+        ["startsWith", value.slice(1), false],
+        ["endsWith", value.slice(-2), true],
+        ["endsWith", value.slice(0, -1), false],
+      ] as const) {
+        const playlist = parseSmartPlaylist(
+          serializeSmartPlaylist(definition([{ field, operator, value: query }])),
+        );
+        expect(evaluateSmartPlaylist([a], playlist)).toEqual(match ? [a] : []);
+      }
+    }
+  });
+
   it("combines all/any rules and defines empty groups", () => {
     const rules: SmartPlaylistRule[] = [
       { field: "artist", operator: "eq", value: "Mira Vale" },
@@ -133,9 +179,7 @@ describe("smart playlist evaluation", () => {
     const ascending =
       field === "year" || field === "playCount" || field === "lastPlayedAt" || field === "rating"
         ? [b, a]
-        : field === "genre"
-          ? [a, b]
-          : [a, b];
+        : [a, b];
     expect(
       evaluateSmartPlaylist([b, a], definition([], { sort: { field, direction: "asc" } })),
     ).toEqual(ascending);
@@ -347,6 +391,28 @@ describe("library validation", () => {
         ),
       "invalid-library",
     );
+  });
+
+  it("rejects array overrides and accessors without running caller code", () => {
+    const trap = () => {
+      throw new Error("must not run");
+    };
+    const extra = Object.assign([a], { filter: trap });
+    const accessor = Object.defineProperty([a], 0, { get: trap });
+    const hidden = Object.defineProperty([a], 0, { value: a, enumerable: false });
+    const custom = Object.setPrototypeOf([a], Object.create(Array.prototype));
+    const holeAndExtra = Object.assign(Array(1), { extra: a });
+    for (const value of [extra, accessor, hidden, custom, holeAndExtra]) {
+      fails(() => evaluateSmartPlaylist(value, definition()), "invalid-library");
+    }
+    const rule = { field: "year", operator: "eq", value: 2024 };
+    for (const rules of [
+      Object.assign([rule], { [Symbol.iterator]: trap }),
+      Object.defineProperty([rule], 0, { get: trap }),
+      Object.assign([rule], { extra: true }),
+    ]) {
+      fails(() => validateSmartPlaylist({ ...definition(), rules }), "invalid-playlist");
+    }
   });
 
   it("validates filtered-out records and does not echo caller data into errors", () => {

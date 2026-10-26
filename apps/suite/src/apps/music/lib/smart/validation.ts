@@ -30,6 +30,19 @@ export function dataRecord(
   }
 }
 
+/** Dense ordinary arrays only, so custom iterators or filter methods cannot rewrite inputs. */
+export function dataArray(
+  value: unknown,
+  code: SmartPlaylistErrorCode,
+): asserts value is unknown[] {
+  requireSmart(Array.isArray(value) && Object.getPrototypeOf(value) === Array.prototype, code);
+  requireSmart(Reflect.ownKeys(value).length === value.length + 1, code);
+  for (let index = 0; index < value.length; index++) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, index);
+    requireSmart(descriptor?.enumerable && "value" in descriptor, code);
+  }
+}
+
 export function isText(value: unknown): value is string {
   return (
     typeof value === "string" &&
@@ -55,7 +68,7 @@ export function isNumber(field: NumberField, value: unknown): value is number {
 }
 
 export function validateLibrary(tracks: readonly SmartPlaylistTrack[]): void {
-  requireSmart(Array.isArray(tracks), "invalid-library");
+  dataArray(tracks, "invalid-library");
   for (const track of tracks) dataRecord(track, "invalid-library");
   try {
     validateTracks(tracks);

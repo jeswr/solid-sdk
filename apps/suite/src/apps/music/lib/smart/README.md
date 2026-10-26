@@ -31,7 +31,7 @@ const restored = parseSmartPlaylist(serializeSmartPlaylist(playlist));
 The runtime schema is `validateSmartPlaylist(unknown)`. It returns independent data records
 and rejects unknown keys at every object level, unsupported versions, nested groups, invalid
 operators, mismatched value types, explicit undefined options, accessors, non-enumerable keys,
-symbol keys, and custom object prototypes. Parsing invalid JSON raises
+symbol keys, custom object prototypes, sparse arrays and array overrides. Parsing invalid JSON raises
 `SmartPlaylistError("invalid-json")`; a structurally invalid definition raises
 `SmartPlaylistError("invalid-playlist")`. Serialization validates first and constructs plain
 JSON data without invoking a caller's `toJSON`.
