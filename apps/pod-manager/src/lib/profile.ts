@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 /**
  * Profile reading — the WebID profile as a plain, serialisable shape the UI
  * can render directly (the UI layer never touches RDF; AGENTS.md Part 2
@@ -13,6 +14,8 @@ import { NoStorageError } from "./errors.js";
 /** A rendered profile — everything the UI needs, no RDF terms. */
 export interface PodProfile {
   webId: string;
+  /** Final profile document URL after redirects, retained for connector registration. */
+  profileDocumentUrl: string;
   /** Display name with the full fallback chain; never empty (falls back to WebID). */
   displayName: string;
   avatarUrl?: string;
@@ -36,8 +39,11 @@ export function readProfile(
 ): PodProfile {
   const agent = new ProfileAgent(webId, dataset, DataFactory);
   const main = new WebIdDataset(dataset, DataFactory).mainSubject;
+  const document = new URL(webId);
+  document.hash = "";
   return {
     webId,
+    profileDocumentUrl: document.href,
     displayName: agent.displayName,
     avatarUrl: agent.avatarUrl ?? undefined,
     bio: agent.bio ?? undefined,
@@ -56,8 +62,10 @@ export async function fetchProfile(
   webId: string,
   fetchImpl?: typeof fetch,
 ): Promise<PodProfile> {
-  const { dataset } = await freshRdf(webId, fetchImpl);
-  return readProfile(webId, dataset);
+  const { dataset, url } = await freshRdf(webId, fetchImpl);
+  const document = new URL(url);
+  document.hash = "";
+  return { ...readProfile(webId, dataset), profileDocumentUrl: document.href };
 }
 
 /**

@@ -63,7 +63,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.0.0",
-    "@jeswr/fetch-rdf": "github:jeswr/fetch-rdf#main",
+    "@jeswr/fetch-rdf": "workspace:*",
     "@rdfjs/types": "^2.0.1",
     "@types/n3": "^1.16.0",
     "@types/node": "^22.0.0",

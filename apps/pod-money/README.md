@@ -25,14 +25,14 @@ MIREOT module. The typed accessors cover:
 | Monetary amount | `fin:MonetaryAmount` | decimal value + ISO 4217 currency code |
 | Balance | `fin:Balance` | point-in-time statement of an account's amount |
 | Holding | `fin:Holding` | a position in a `fin:FinancialInstrument` within an investment account |
-| Category | `pm:Category` | user-defined spending category (an app-local concept) |
+| Category | `fin:BudgetCategory` | user-defined spending category; hierarchy via `skos:broader` |
 
 ### Sector namespace
 
-The finance sector ontology publishes under its canonical `w3id.org` base
-`https://w3id.org/jeswr/sectors/finance#` (the `vann:preferredNamespaceUri` declared in
+The finance sector ontology uses the canonical suite base
+`https://jeswr.org/ns/sectors/finance#` (the `vann:preferredNamespaceUri` declared in
 [`jeswr/solid-federation-vocab`](https://github.com/jeswr/solid-federation-vocab) →
-`sectors/finance/finance.ttl`). Pod Money reads and writes that base, with every term
+`sectors/finance/finance.ttl`). Pod Money writes that base and reads its legacy predecessor, with every term
 centralised in [`src/vocab.ts`](src/vocab.ts) — so the base is a one-line change if it ever moves.
 
 ## The RDF stack — never a bespoke parser
@@ -90,7 +90,7 @@ const where = await store.discover(MoneyStore.primaryClass);  // type-index look
 ## Federation — registry-ready
 
 Pod Money ships a [`public/clientid.jsonld`](public/clientid.jsonld) Client Identifier Document
-that publishes the **`fedapp:` block** from [`https://w3id.org/jeswr/fed`](https://github.com/jeswr/solid-federation-vocab):
+that publishes the **`fedapp:` block** from [`https://jeswr.org/ns/fed`](https://github.com/jeswr/solid-federation-vocab):
 `fedapp:sector` = finance, with `fedapp:consumes` / `fedapp:produces` declaring the
 `fin:Transaction` / `fin:FinancialAccount` / `fin:Balance` classes it works with. This lets a
 data-federation registry reason about the app before any consent — **membership remains the
@@ -125,8 +125,16 @@ work):
   well-known servers and that the unit-coverage floor never regresses.
 - **Federation membership.** Assert Pod Money's `fedreg` membership on the finance sector once the
   `fedapp:` namespace is frozen — the finance sector namespace is now the canonical
-  `https://w3id.org/jeswr/sectors/finance#` (`src/vocab.ts` + the `clientid.jsonld` fedapp block).
+  `https://jeswr.org/ns/sectors/finance#` (`src/vocab.ts` + the `clientid.jsonld` fedapp block).
 
 ## License
 
 MIT.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+Writes use `https://jeswr.org/ns/` suite vocabulary bases only. Legacy w3id suite
+vocabulary remains readable; resource identifiers and literal contents are preserved.
+Legacy `pm:Category` becomes `fin:BudgetCategory`, and `pm:parent` becomes
+`skos:broader` in memory. The next conditional save persists the migration.
+`Category.parent` reads and writes `skos:broader`; `PmClass.Category` remains an API
+alias for `FinClass.BudgetCategory`. Other existing money glue terms use `NS.POD_MONEY`.
