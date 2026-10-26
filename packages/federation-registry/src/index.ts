@@ -2,7 +2,7 @@
 /**
  * `@jeswr/federation-registry` — a typed TypeScript client for the Solid
  * Federation **Catalogue / Registry** vocabulary (`fedreg:`) at
- * `https://w3id.org/jeswr/fedreg#`.
+ * `https://jeswr.org/ns/fedreg#`.
  *
  * This is the **discovery axis** of a Solid data federation (one of the five
  * federation services in the architecture: Scheme Authority, Conformance

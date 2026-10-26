@@ -1,9 +1,17 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 
 import { createLocalIndex } from "./local-index.js";
+import { evaluatePolicy } from "./policy.js";
 import { decode, formatName, groundCanonical, hasBlankNode, parseN3, writeN3 } from "./rdf.js";
+import { resultStream } from "./result-stream.js";
 import type { LocalIndex, QuadSource, RdfEngine, ValidationReport } from "./types.js";
 
+export {
+  FormGraphUnsupportedError,
+  PolicyIdentifierCollisionError,
+  PolicySubjectUnsupportedError,
+} from "./errors.js";
 export type * from "./types.js";
 
 /** A capability intentionally excluded from the small, WASM-free test engine. */
@@ -14,8 +22,17 @@ export class FakeEngineUnsupportedError extends Error {
   }
 }
 
-/** Configure validation results without pretending that the fake evaluates SHACL. */
+/** Inject query results without evaluating SPARQL or importing Sparq. */
+export type FakeQueryHandlers = {
+  [K in "select" | "selectStream" | "ask" | "construct"]?: (
+    sparql: string,
+  ) => Awaited<ReturnType<LocalIndex[K]>> | ReturnType<LocalIndex[K]>;
+};
+
+/** Configure validation and query results without implementing SHACL or SPARQL. */
 export interface FakeRdfEngineOptions {
+  /** Inject query results; omitted methods throw FakeEngineUnsupportedError. */
+  query?: FakeQueryHandlers;
   validate?:
     | ValidationReport
     | ((
@@ -42,7 +59,7 @@ export function createFakeRdfEngine(opts: FakeRdfEngineOptions = {}): RdfEngine 
       return loaded;
     },
     get features() {
-      return loaded ? { serialize: false, parseShaclCompact: false } : null;
+      return loaded ? { serialize: false, parseShaclCompact: false, policyEvaluate: false } : null;
     },
     async parse(input, mediaType, options) {
       await ready();
@@ -73,17 +90,57 @@ export function createFakeRdfEngine(opts: FakeRdfEngineOptions = {}): RdfEngine 
       }
       return groundCanonical(quads);
     },
-    async createIndex() {
+    async evaluatePolicy(policy, ctx) {
       await ready();
       check();
-      const index = createLocalIndex(
-        () => {},
-        () => {
-          indexes.delete(index);
+      return evaluatePolicy(policy, ctx);
+    },
+    async deriveForm() {
+      await ready();
+      check();
+      throw new FakeEngineUnsupportedError("form derivation");
+    },
+    async createIndex(options) {
+      await ready();
+      check();
+      let index: LocalIndex;
+      const unsupported = (operation: string): never => {
+        throw new FakeEngineUnsupportedError(operation);
+      };
+      return createLocalIndex(
+        {
+          delta() {},
+          release() {
+            indexes.delete(index);
+          },
+          async select(sparql) {
+            return opts.query?.select ? opts.query.select(sparql) : unsupported("select");
+          },
+          async ask(sparql) {
+            return opts.query?.ask ? opts.query.ask(sparql) : unsupported("ask");
+          },
+          async construct(sparql) {
+            return opts.query?.construct ? opts.query.construct(sparql) : unsupported("construct");
+          },
+          async selectStream(sparql) {
+            if (opts.query?.selectStream) return opts.query.selectStream(sparql);
+            if (!opts.query?.select) return unsupported("selectStream");
+            const rows = (await opts.query.select(sparql))[Symbol.iterator]();
+            return resultStream(
+              () => rows.next(),
+              () => {},
+            );
+          },
+          async decodeZstd() {
+            return unsupported("zstd snapshots");
+          },
+        },
+        options,
+        (owned) => {
+          index = owned;
+          indexes.add(owned);
         },
       );
-      indexes.add(index);
-      return index;
     },
     dispose() {
       disposed = true;

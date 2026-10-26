@@ -25,12 +25,37 @@ export type { ValidationReport, ValidationResult } from "@sparq-org/sparq";
 
 import type { ValidationReport } from "@sparq-org/sparq";
 
-/** Lazy, disposable single-document RDF engine (ADR-007 / T-070). */
+/** Request inputs supported by the authoritative solid-odrl evaluator. */
+export interface PolicyContext {
+  action: string;
+  target: string;
+  assignee?: string;
+  purpose?: string;
+  now?: Date;
+}
+/** Decision and stable identifiers of matching rules and active unfulfilled duties. */
+export interface PolicyResult {
+  allow: boolean;
+  matched: string[];
+  unmet: string[];
+}
+/** Options passed verbatim to Sparq's form derivation. */
+export interface FormOptions {
+  mode: "edit" | "view";
+  shape?: string;
+}
+
+/** Lazy, disposable RDF engine and local named-graph indexes (ADR-007). */
 export interface RdfEngine {
   ready(): Promise<void>;
   readonly loaded: boolean;
   /** Optional Sparq build features, detected at initialization; null before loading. */
-  readonly features: { serialize: boolean; parseShaclCompact: boolean } | null;
+  readonly features: {
+    serialize: boolean;
+    parseShaclCompact: boolean;
+    /** A versioned policy export is available; no WASM policy adapter is enabled yet. */
+    policyEvaluate: boolean;
+  } | null;
   /** Materialize an RDF/JS DatasetCore with fresh, document-scoped blank-node identities. */
   parse(
     input: string | Uint8Array,
@@ -40,12 +65,50 @@ export interface RdfEngine {
   serialize(data: QuadSource, format: RdfMediaType, opts?: SerializeOptions): Promise<string>;
   validate(data: QuadSource, shapes: QuadSource | string): Promise<ValidationReport>;
   canonicalize(data: QuadSource): Promise<string>;
-  /** Create the named-graph lifecycle foundation; query/persistence arrive in T-071. */
-  createIndex(): Promise<LocalIndex>;
+  /**
+   * Evaluate the first policy using solid-odrl; unfulfilled duties remain advisory.
+   * @throws {PolicyIdentifierCollisionError} If a generated trace ID aliases a named node.
+   */
+  evaluatePolicy(policy: DatasetCore, ctx: PolicyContext): Promise<PolicyResult>;
+  /**
+   * Return Sparq's FormDescription JSON without reconstructing its fields.
+   * @throws {FormGraphUnsupportedError} If data or shapes contain non-default graph quads.
+   */
+  deriveForm(
+    data: DatasetCore,
+    shapes: DatasetCore,
+    focus: string,
+    opts: FormOptions,
+  ): Promise<unknown>;
+  /** Create an owned local named-graph SPARQL index. */
+  createIndex(opts?: IndexOptions): Promise<LocalIndex>;
   dispose(): void;
 }
 
-/** LocalIndex graph lifecycle. T-071 adds SPARQL, snapshots, persistence and LRU. */
+/** RDF/JS solution rows, with string or Variable lookup. */
+export type { Bindings } from "@rdfjs/types";
+
+import type { Bindings } from "@rdfjs/types";
+
+/** Single-use pull stream. Exhaustion, return(), or dispose() releases its cursor. */
+export interface ResultStream<T> extends AsyncIterableIterator<T> {
+  dispose(): void;
+}
+
+/** Optional compressed-snapshot storage. Mutations await save; initialization awaits load. */
+export interface IndexPersistence {
+  load(): Promise<Uint8Array | null>;
+  save(bytes: Uint8Array): Promise<void>;
+}
+
+/** Local index memory and persistence settings. */
+export interface IndexOptions {
+  /** Maximum deduplicated quads, default 2,000,000. Oversized single graphs are rejected. */
+  maxQuads?: number;
+  persist?: IndexPersistence;
+}
+
+/** One resource per named graph, with graph-level LRU eviction. */
 export interface LocalIndex {
   /** Replace all quads in a graph, assigning the resource IRI as their graph name. */
   put(graphIri: string, data: QuadSource): Promise<void>;
@@ -53,6 +116,16 @@ export interface LocalIndex {
   has(graphIri: string): boolean;
   /** Number of deduplicated quads across indexed graphs. */
   size(): number;
+  /** Resource IRIs, ordered least to most recently put or successfully checked with has(). */
+  list(): string[];
+  select(sparql: string): Promise<Bindings[]>;
+  selectStream(sparql: string): Promise<ResultStream<Bindings>>;
+  ask(sparql: string): Promise<boolean>;
+  construct(sparql: string): Promise<Quad[]>;
+  /** N-Quads compressed as a single gzip member. Empty graphs have no N-Quads representation. */
+  snapshot(): Promise<Uint8Array>;
+  /** Replace the index from gzip or zstd N-Quads; apply the configured cap in graph order. */
+  restore(bytes: Uint8Array): Promise<void>;
   dispose(): void;
 }
 
