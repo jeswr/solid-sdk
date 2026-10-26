@@ -1,0 +1,543 @@
+From sender@example.org Sat Oct 24 10:00:00 2026
+Message-ID: <m0@example.org>
+From: Sender <sender@example.org>
+To: Reader <reader@example.org>
+Subject: Conversation 0
+Date: Sat, 24 Oct 2026 10:00:00 +0000
+X-Gmail-Labels: Inbox, Work, Unread
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="fixture-boundary"
+
+--fixture-boundary
+Content-Type: text/plain; charset=utf-8
+
+First message
+>From quoted body
+--fixture-boundary
+Content-Type: application/octet-stream
+Content-Disposition: attachment; filename="../../secret.bin"
+Content-Transfer-Encoding: base64
+
+AAEC/w==
+--fixture-boundary--
+From sender@example.org Sat Oct 24 10:00:00 2026
+Message-ID: <m1@example.org>
+From: Sender <sender@example.org>
+To: Reader <reader@example.org>
+Subject: Conversation 0
+Date: Sat, 24 Oct 2026 10:01:00 +0000
+X-Gmail-Labels: Inbox, Work, Starred, Read
+In-Reply-To: <m0@example.org>
+References: <m0@example.org>
+
+Body 1
+From sender@example.org Sat Oct 24 10:00:00 2026
+Message-ID: <m2@example.org>
+From: Sender <sender@example.org>
+To: Reader <reader@example.org>
+Subject: Conversation 0
+Date: Sat, 24 Oct 2026 10:02:00 +0000
+X-Gmail-Labels: Inbox, Work, Unread
+In-Reply-To: <m1@example.org>
+References: <m0@example.org>
+
+Body 2
+From sender@example.org Sat Oct 24 10:00:00 2026
+Message-ID: <m3@example.org>
+From: Sender <sender@example.org>
+To: Reader <reader@example.org>
+Subject: Conversation 0
+Date: Sat, 24 Oct 2026 10:03:00 +0000
+X-Gmail-Labels: Inbox, Work, Starred, Read
+In-Reply-To: <m2@example.org>
+References: <m0@example.org>
+
+Body 3
+From sender@example.org Sat Oct 24 10:00:00 2026
+Message-ID: <m4@example.org>
+From: Sender <sender@example.org>
+To: Reader <reader@example.org>
+Subject: Conversation 0
+Date: Sat, 24 Oct 2026 10:04:00 +0000
+X-Gmail-Labels: Inbox, Work, Unread
+In-Reply-To: <m3@example.org>
+References: <m0@example.org>
+
+Body 4
+From sender@example.org Sat Oct 24 10:00:00 2026
+Message-ID: <m5@example.org>
+From: Sender <sender@example.org>
+To: Reader <reader@example.org>
+Subject: Conversation 5
+Date: Sat, 24 Oct 2026 10:05:00 +0000
+X-Gmail-Labels: Inbox, Work, Starred, Read
+
+Body 5
+From sender@example.org Sat Oct 24 10:00:00 2026
+Message-ID: <m6@example.org>
+From: Sender <sender@example.org>
+To: Reader <reader@example.org>
+Subject: Conversation 5
+Date: Sat, 24 Oct 2026 10:06:00 +0000
+X-Gmail-Labels: Inbox, Work, Unread
+In-Reply-To: <m5@example.org>
+References: <m5@example.org>
+
+Body 6
+From sender@example.org Sat Oct 24 10:00:00 2026
+Message-ID: <m7@example.org>
+From: Sender <sender@example.org>
+To: Reader <reader@example.org>
+Subject: Conversation 5
+Date: Sat, 24 Oct 2026 10:07:00 +0000
+X-Gmail-Labels: Inbox, Work, Starred, Read
+In-Reply-To: <m6@example.org>
+References: <m5@example.org>
+
+Body 7
+From sender@example.org Sat Oct 24 10:00:00 2026
+Message-ID: <m8@example.org>
+From: Sender <sender@example.org>
+To: Reader <reader@example.org>
+Subject: Conversation 5
+Date: Sat, 24 Oct 2026 10:08:00 +0000
+X-Gmail-Labels: Inbox, Work, Unread
+In-Reply-To: <m7@example.org>
+References: <m5@example.org>
+
+Body 8
+From sender@example.org Sat Oct 24 10:00:00 2026
+Message-ID: <m9@example.org>
+From: Sender <sender@example.org>
+To: Reader <reader@example.org>
+Subject: Conversation 5
+Date: Sat, 24 Oct 2026 10:09:00 +0000
+X-Gmail-Labels: Inbox, Work, Starred, Read
+In-Reply-To: <m8@example.org>
+References: <m5@example.org>
+
+Body 9
+From sender@example.org Sat Oct 24 10:00:00 2026
+Message-ID: <m10@example.org>
+From: Sender <sender@example.org>
+To: Reader <reader@example.org>
+Subject: Conversation 10
+Date: Sat, 24 Oct 2026 10:10:00 +0000
+X-Gmail-Labels: Inbox, Work, Unread
+
+Body 10
+From sender@example.org Sat Oct 24 10:00:00 2026
+Message-ID: <m11@example.org>
+From: Sender <sender@example.org>
+To: Reader <reader@example.org>
+Subject: Conversation 10
+Date: Sat, 24 Oct 2026 10:11:00 +0000
+X-Gmail-Labels: Inbox, Work, Starred, Read
+In-Reply-To: <m10@example.org>
+References: <m10@example.org>
+
+Body 11
+From sender@example.org Sat Oct 24 10:00:00 2026
+Message-ID: <m12@example.org>
+From: Sender <sender@example.org>
+To: Reader <reader@example.org>
+Subject: Conversation 10
+Date: Sat, 24 Oct 2026 10:12:00 +0000
+X-Gmail-Labels: Inbox, Work, Unread
+In-Reply-To: <m11@example.org>
+References: <m10@example.org>
+
+Body 12
+From sender@example.org Sat Oct 24 10:00:00 2026
+Message-ID: <m13@example.org>
+From: Sender <sender@example.org>
+To: Reader <reader@example.org>
+Subject: Conversation 10
+Date: Sat, 24 Oct 2026 10:13:00 +0000
+X-Gmail-Labels: Inbox, Work, Starred, Read
+In-Reply-To: <m12@example.org>
+References: <m10@example.org>
+
+Body 13
+From sender@example.org Sat Oct 24 10:00:00 2026
+Message-ID: <m14@example.org>
+From: Sender <sender@example.org>
+To: Reader <reader@example.org>
+Subject: Conversation 10
+Date: Sat, 24 Oct 2026 10:14:00 +0000
+X-Gmail-Labels: Inbox, Work, Unread
+In-Reply-To: <m13@example.org>
+References: <m10@example.org>
+
+Body 14
+From sender@example.org Sat Oct 24 10:00:00 2026
+Message-ID: <m15@example.org>
+From: Sender <sender@example.org>
+To: Reader <reader@example.org>
+Subject: Conversation 15
+Date: Sat, 24 Oct 2026 10:15:00 +0000
+X-Gmail-Labels: Inbox, Work, Starred, Read
+
+Body 15
+From sender@example.org Sat Oct 24 10:00:00 2026
+Message-ID: <m16@example.org>
+From: Sender <sender@example.org>
+To: Reader <reader@example.org>
+Subject: Conversation 15
+Date: Sat, 24 Oct 2026 10:16:00 +0000
+X-Gmail-Labels: Inbox, Work, Unread
+In-Reply-To: <m15@example.org>
+References: <m15@example.org>
+
+Body 16
+From sender@example.org Sat Oct 24 10:00:00 2026
+Message-ID: <m17@example.org>
+From: Sender <sender@example.org>
+To: Reader <reader@example.org>
+Subject: Conversation 15
+Date: Sat, 24 Oct 2026 10:17:00 +0000
+X-Gmail-Labels: Inbox, Work, Starred, Read
+In-Reply-To: <m16@example.org>
+References: <m15@example.org>
+
+Body 17
+From sender@example.org Sat Oct 24 10:00:00 2026
+Message-ID: <m18@example.org>
+From: Sender <sender@example.org>
+To: Reader <reader@example.org>
+Subject: Conversation 15
+Date: Sat, 24 Oct 2026 10:18:00 +0000
+X-Gmail-Labels: Inbox, Work, Unread
+In-Reply-To: <m17@example.org>
+References: <m15@example.org>
+
+Body 18
+From sender@example.org Sat Oct 24 10:00:00 2026
+Message-ID: <m19@example.org>
+From: Sender <sender@example.org>
+To: Reader <reader@example.org>
+Subject: Conversation 15
+Date: Sat, 24 Oct 2026 10:19:00 +0000
+X-Gmail-Labels: Inbox, Work, Starred, Read
+In-Reply-To: <m18@example.org>
+References: <m15@example.org>
+
+Body 19
+From sender@example.org Sat Oct 24 10:00:00 2026
+Message-ID: <m20@example.org>
+From: Sender <sender@example.org>
+To: Reader <reader@example.org>
+Subject: Conversation 20
+Date: Sat, 24 Oct 2026 10:20:00 +0000
+X-Gmail-Labels: Inbox, Work, Unread
+
+Body 20
+From sender@example.org Sat Oct 24 10:00:00 2026
+Message-ID: <m21@example.org>
+From: Sender <sender@example.org>
+To: Reader <reader@example.org>
+Subject: Conversation 20
+Date: Sat, 24 Oct 2026 10:21:00 +0000
+X-Gmail-Labels: Inbox, Work, Starred, Read
+In-Reply-To: <m20@example.org>
+References: <m20@example.org>
+
+Body 21
+From sender@example.org Sat Oct 24 10:00:00 2026
+Message-ID: <m22@example.org>
+From: Sender <sender@example.org>
+To: Reader <reader@example.org>
+Subject: Conversation 20
+Date: Sat, 24 Oct 2026 10:22:00 +0000
+X-Gmail-Labels: Inbox, Work, Unread
+In-Reply-To: <m21@example.org>
+References: <m20@example.org>
+
+Body 22
+From sender@example.org Sat Oct 24 10:00:00 2026
+Message-ID: <m23@example.org>
+From: Sender <sender@example.org>
+To: Reader <reader@example.org>
+Subject: Conversation 20
+Date: Sat, 24 Oct 2026 10:23:00 +0000
+X-Gmail-Labels: Inbox, Work, Starred, Read
+In-Reply-To: <m22@example.org>
+References: <m20@example.org>
+
+Body 23
+From sender@example.org Sat Oct 24 10:00:00 2026
+Message-ID: <m24@example.org>
+From: Sender <sender@example.org>
+To: Reader <reader@example.org>
+Subject: Conversation 20
+Date: Sat, 24 Oct 2026 10:24:00 +0000
+X-Gmail-Labels: Inbox, Work, Unread
+In-Reply-To: <m23@example.org>
+References: <m20@example.org>
+
+Body 24
+From sender@example.org Sat Oct 24 10:00:00 2026
+Message-ID: <m25@example.org>
+From: Sender <sender@example.org>
+To: Reader <reader@example.org>
+Subject: Conversation 25
+Date: Sat, 24 Oct 2026 10:25:00 +0000
+X-Gmail-Labels: Inbox, Work, Starred, Read
+
+Body 25
+From sender@example.org Sat Oct 24 10:00:00 2026
+Message-ID: <m26@example.org>
+From: Sender <sender@example.org>
+To: Reader <reader@example.org>
+Subject: Conversation 25
+Date: Sat, 24 Oct 2026 10:26:00 +0000
+X-Gmail-Labels: Inbox, Work, Unread
+In-Reply-To: <m25@example.org>
+References: <m25@example.org>
+
+Body 26
+From sender@example.org Sat Oct 24 10:00:00 2026
+Message-ID: <m27@example.org>
+From: Sender <sender@example.org>
+To: Reader <reader@example.org>
+Subject: Conversation 25
+Date: Sat, 24 Oct 2026 10:27:00 +0000
+X-Gmail-Labels: Inbox, Work, Starred, Read
+In-Reply-To: <m26@example.org>
+References: <m25@example.org>
+
+Body 27
+From sender@example.org Sat Oct 24 10:00:00 2026
+Message-ID: <m28@example.org>
+From: Sender <sender@example.org>
+To: Reader <reader@example.org>
+Subject: Conversation 25
+Date: Sat, 24 Oct 2026 10:28:00 +0000
+X-Gmail-Labels: Inbox, Work, Unread
+In-Reply-To: <m27@example.org>
+References: <m25@example.org>
+
+Body 28
+From sender@example.org Sat Oct 24 10:00:00 2026
+Message-ID: <m29@example.org>
+From: Sender <sender@example.org>
+To: Reader <reader@example.org>
+Subject: Conversation 25
+Date: Sat, 24 Oct 2026 10:29:00 +0000
+X-Gmail-Labels: Inbox, Work, Starred, Read
+In-Reply-To: <m28@example.org>
+References: <m25@example.org>
+
+Body 29
+From sender@example.org Sat Oct 24 10:00:00 2026
+Message-ID: <m30@example.org>
+From: Sender <sender@example.org>
+To: Reader <reader@example.org>
+Subject: Conversation 30
+Date: Sat, 24 Oct 2026 10:30:00 +0000
+X-Gmail-Labels: Inbox, Work, Unread
+
+Body 30
+From sender@example.org Sat Oct 24 10:00:00 2026
+Message-ID: <m31@example.org>
+From: Sender <sender@example.org>
+To: Reader <reader@example.org>
+Subject: Conversation 30
+Date: Sat, 24 Oct 2026 10:31:00 +0000
+X-Gmail-Labels: Inbox, Work, Starred, Read
+In-Reply-To: <m30@example.org>
+References: <m30@example.org>
+
+Body 31
+From sender@example.org Sat Oct 24 10:00:00 2026
+Message-ID: <m32@example.org>
+From: Sender <sender@example.org>
+To: Reader <reader@example.org>
+Subject: Conversation 30
+Date: Sat, 24 Oct 2026 10:32:00 +0000
+X-Gmail-Labels: Inbox, Work, Unread
+In-Reply-To: <m31@example.org>
+References: <m30@example.org>
+
+Body 32
+From sender@example.org Sat Oct 24 10:00:00 2026
+Message-ID: <m33@example.org>
+From: Sender <sender@example.org>
+To: Reader <reader@example.org>
+Subject: Conversation 30
+Date: Sat, 24 Oct 2026 10:33:00 +0000
+X-Gmail-Labels: Inbox, Work, Starred, Read
+In-Reply-To: <m32@example.org>
+References: <m30@example.org>
+
+Body 33
+From sender@example.org Sat Oct 24 10:00:00 2026
+Message-ID: <m34@example.org>
+From: Sender <sender@example.org>
+To: Reader <reader@example.org>
+Subject: Conversation 30
+Date: Sat, 24 Oct 2026 10:34:00 +0000
+X-Gmail-Labels: Inbox, Work, Unread
+In-Reply-To: <m33@example.org>
+References: <m30@example.org>
+
+Body 34
+From sender@example.org Sat Oct 24 10:00:00 2026
+Message-ID: <m35@example.org>
+From: Sender <sender@example.org>
+To: Reader <reader@example.org>
+Subject: Conversation 35
+Date: Sat, 24 Oct 2026 10:35:00 +0000
+X-Gmail-Labels: Inbox, Work, Starred, Read
+
+Body 35
+From sender@example.org Sat Oct 24 10:00:00 2026
+Message-ID: <m36@example.org>
+From: Sender <sender@example.org>
+To: Reader <reader@example.org>
+Subject: Conversation 35
+Date: Sat, 24 Oct 2026 10:36:00 +0000
+X-Gmail-Labels: Inbox, Work, Unread
+In-Reply-To: <m35@example.org>
+References: <m35@example.org>
+
+Body 36
+From sender@example.org Sat Oct 24 10:00:00 2026
+Message-ID: <m37@example.org>
+From: Sender <sender@example.org>
+To: Reader <reader@example.org>
+Subject: Conversation 35
+Date: Sat, 24 Oct 2026 10:37:00 +0000
+X-Gmail-Labels: Inbox, Work, Starred, Read
+In-Reply-To: <m36@example.org>
+References: <m35@example.org>
+
+Body 37
+From sender@example.org Sat Oct 24 10:00:00 2026
+Message-ID: <m38@example.org>
+From: Sender <sender@example.org>
+To: Reader <reader@example.org>
+Subject: Conversation 35
+Date: Sat, 24 Oct 2026 10:38:00 +0000
+X-Gmail-Labels: Inbox, Work, Unread
+In-Reply-To: <m37@example.org>
+References: <m35@example.org>
+
+Body 38
+From sender@example.org Sat Oct 24 10:00:00 2026
+Message-ID: <m39@example.org>
+From: Sender <sender@example.org>
+To: Reader <reader@example.org>
+Subject: Conversation 35
+Date: Sat, 24 Oct 2026 10:39:00 +0000
+X-Gmail-Labels: Inbox, Work, Starred, Read
+In-Reply-To: <m38@example.org>
+References: <m35@example.org>
+
+Body 39
+From sender@example.org Sat Oct 24 10:00:00 2026
+Message-ID: <m40@example.org>
+From: Sender <sender@example.org>
+To: Reader <reader@example.org>
+Subject: Conversation 40
+Date: Sat, 24 Oct 2026 10:40:00 +0000
+X-Gmail-Labels: Inbox, Work, Unread
+
+Body 40
+From sender@example.org Sat Oct 24 10:00:00 2026
+Message-ID: <m41@example.org>
+From: Sender <sender@example.org>
+To: Reader <reader@example.org>
+Subject: Conversation 40
+Date: Sat, 24 Oct 2026 10:41:00 +0000
+X-Gmail-Labels: Inbox, Work, Starred, Read
+In-Reply-To: <m40@example.org>
+References: <m40@example.org>
+
+Body 41
+From sender@example.org Sat Oct 24 10:00:00 2026
+Message-ID: <m42@example.org>
+From: Sender <sender@example.org>
+To: Reader <reader@example.org>
+Subject: Conversation 40
+Date: Sat, 24 Oct 2026 10:42:00 +0000
+X-Gmail-Labels: Inbox, Work, Unread
+In-Reply-To: <m41@example.org>
+References: <m40@example.org>
+
+Body 42
+From sender@example.org Sat Oct 24 10:00:00 2026
+Message-ID: <m43@example.org>
+From: Sender <sender@example.org>
+To: Reader <reader@example.org>
+Subject: Conversation 40
+Date: Sat, 24 Oct 2026 10:43:00 +0000
+X-Gmail-Labels: Inbox, Work, Starred, Read
+In-Reply-To: <m42@example.org>
+References: <m40@example.org>
+
+Body 43
+From sender@example.org Sat Oct 24 10:00:00 2026
+Message-ID: <m44@example.org>
+From: Sender <sender@example.org>
+To: Reader <reader@example.org>
+Subject: Conversation 40
+Date: Sat, 24 Oct 2026 10:44:00 +0000
+X-Gmail-Labels: Inbox, Work, Unread
+In-Reply-To: <m43@example.org>
+References: <m40@example.org>
+
+Body 44
+From sender@example.org Sat Oct 24 10:00:00 2026
+Message-ID: <m45@example.org>
+From: Sender <sender@example.org>
+To: Reader <reader@example.org>
+Subject: Conversation 45
+Date: Sat, 24 Oct 2026 10:45:00 +0000
+X-Gmail-Labels: Inbox, Work, Starred, Read
+
+Body 45
+From sender@example.org Sat Oct 24 10:00:00 2026
+Message-ID: <m46@example.org>
+From: Sender <sender@example.org>
+To: Reader <reader@example.org>
+Subject: Conversation 45
+Date: Sat, 24 Oct 2026 10:46:00 +0000
+X-Gmail-Labels: Inbox, Work, Unread
+In-Reply-To: <m45@example.org>
+References: <m45@example.org>
+
+Body 46
+From sender@example.org Sat Oct 24 10:00:00 2026
+Message-ID: <m47@example.org>
+From: Sender <sender@example.org>
+To: Reader <reader@example.org>
+Subject: Conversation 45
+Date: Sat, 24 Oct 2026 10:47:00 +0000
+X-Gmail-Labels: Inbox, Work, Starred, Read
+In-Reply-To: <m46@example.org>
+References: <m45@example.org>
+
+Body 47
+From sender@example.org Sat Oct 24 10:00:00 2026
+Message-ID: <m48@example.org>
+From: Sender <sender@example.org>
+To: Reader <reader@example.org>
+Subject: Conversation 45
+Date: Sat, 24 Oct 2026 10:48:00 +0000
+X-Gmail-Labels: Inbox, Work, Unread
+In-Reply-To: <m47@example.org>
+References: <m45@example.org>
+
+Body 48
+From sender@example.org Sat Oct 24 10:00:00 2026
+Message-ID: <m49@example.org>
+From: Sender <sender@example.org>
+To: Reader <reader@example.org>
+Subject: Conversation 45
+Date: Sat, 24 Oct 2026 10:49:00 +0000
+X-Gmail-Labels: Inbox, Work, Starred, Read
+In-Reply-To: <m48@example.org>
+References: <m45@example.org>
+
+Body 49

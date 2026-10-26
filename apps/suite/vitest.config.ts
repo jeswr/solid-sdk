@@ -8,6 +8,7 @@ export default defineConfig({
       enabled: true,
       provider: "v8",
       include: [
+        "src/apps/mail/lib/model/**/*.ts",
         "src/apps/sheets/lib/model/**/*.ts",
         "src/apps/photos/lib/library/**/*.ts",
         "src/apps/docs/lib/diff/**/*.ts",
