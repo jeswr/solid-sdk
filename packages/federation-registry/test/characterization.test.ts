@@ -135,19 +135,19 @@ describe("characterization — emitted RDF (canonical sorted quads)", () => {
     });
     expect(canonicalQuads(built.quads)).toMatchInlineSnapshot(`
       [
-        "<https://registry.example/federation#m-music> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/jeswr/fedreg#Membership> .",
-        "<https://registry.example/federation#m-music> <https://w3id.org/jeswr/fedreg#app> <https://music.example/clientid.jsonld> .",
-        "<https://registry.example/federation#m-music> <https://w3id.org/jeswr/fedreg#asserted> "2026-06-16T10:00:00Z"^^<http://www.w3.org/2001/XMLSchema#dateTime> .",
-        "<https://registry.example/federation#m-music> <https://w3id.org/jeswr/fedreg#assertedBy> <https://registry.example/profile/card#me> .",
-        "<https://registry.example/federation#m-music> <https://w3id.org/jeswr/fedreg#status> <https://w3id.org/jeswr/fedreg#Active> .",
-        "<https://registry.example/federation> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/jeswr/fedreg#Registry> .",
-        "<https://registry.example/federation> <https://w3id.org/jeswr/fedreg#member> <https://registry.example/federation#m-music> .",
-        "<https://registry.example/federation> <https://w3id.org/jeswr/fedreg#member> _:b0 .",
-        "_:b0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/jeswr/fedreg#Membership> .",
-        "_:b0 <https://w3id.org/jeswr/fedreg#app> <https://drive.example/clientid.jsonld> .",
-        "_:b0 <https://w3id.org/jeswr/fedreg#asserted> "2026-06-16T11:00:00Z"^^<http://www.w3.org/2001/XMLSchema#dateTime> .",
-        "_:b0 <https://w3id.org/jeswr/fedreg#assertedBy> <https://registry.example/profile/card#me> .",
-        "_:b0 <https://w3id.org/jeswr/fedreg#status> <https://w3id.org/jeswr/fedreg#Revoked> .",
+        "<https://registry.example/federation#m-music> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://jeswr.org/ns/fedreg#Membership> .",
+        "<https://registry.example/federation#m-music> <https://jeswr.org/ns/fedreg#app> <https://music.example/clientid.jsonld> .",
+        "<https://registry.example/federation#m-music> <https://jeswr.org/ns/fedreg#asserted> "2026-06-16T10:00:00Z"^^<http://www.w3.org/2001/XMLSchema#dateTime> .",
+        "<https://registry.example/federation#m-music> <https://jeswr.org/ns/fedreg#assertedBy> <https://registry.example/profile/card#me> .",
+        "<https://registry.example/federation#m-music> <https://jeswr.org/ns/fedreg#status> <https://jeswr.org/ns/fedreg#Active> .",
+        "<https://registry.example/federation> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://jeswr.org/ns/fedreg#Registry> .",
+        "<https://registry.example/federation> <https://jeswr.org/ns/fedreg#member> <https://registry.example/federation#m-music> .",
+        "<https://registry.example/federation> <https://jeswr.org/ns/fedreg#member> _:b0 .",
+        "_:b0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://jeswr.org/ns/fedreg#Membership> .",
+        "_:b0 <https://jeswr.org/ns/fedreg#app> <https://drive.example/clientid.jsonld> .",
+        "_:b0 <https://jeswr.org/ns/fedreg#asserted> "2026-06-16T11:00:00Z"^^<http://www.w3.org/2001/XMLSchema#dateTime> .",
+        "_:b0 <https://jeswr.org/ns/fedreg#assertedBy> <https://registry.example/profile/card#me> .",
+        "_:b0 <https://jeswr.org/ns/fedreg#status> <https://jeswr.org/ns/fedreg#Revoked> .",
       ]
     `);
   });
@@ -162,11 +162,11 @@ describe("characterization — emitted RDF (canonical sorted quads)", () => {
     });
     expect(canonicalQuads(built.quads)).toMatchInlineSnapshot(`
       [
-        "<https://registry.example/federation#m1> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/jeswr/fedreg#Membership> .",
-        "<https://registry.example/federation#m1> <https://w3id.org/jeswr/fedreg#app> <https://music.example/clientid.jsonld> .",
-        "<https://registry.example/federation#m1> <https://w3id.org/jeswr/fedreg#asserted> "2026-06-16T10:00:00Z"^^<http://www.w3.org/2001/XMLSchema#dateTime> .",
-        "<https://registry.example/federation#m1> <https://w3id.org/jeswr/fedreg#assertedBy> <https://registry.example/profile/card#me> .",
-        "<https://registry.example/federation#m1> <https://w3id.org/jeswr/fedreg#status> <https://w3id.org/jeswr/fedreg#Suspended> .",
+        "<https://registry.example/federation#m1> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://jeswr.org/ns/fedreg#Membership> .",
+        "<https://registry.example/federation#m1> <https://jeswr.org/ns/fedreg#app> <https://music.example/clientid.jsonld> .",
+        "<https://registry.example/federation#m1> <https://jeswr.org/ns/fedreg#asserted> "2026-06-16T10:00:00Z"^^<http://www.w3.org/2001/XMLSchema#dateTime> .",
+        "<https://registry.example/federation#m1> <https://jeswr.org/ns/fedreg#assertedBy> <https://registry.example/profile/card#me> .",
+        "<https://registry.example/federation#m1> <https://jeswr.org/ns/fedreg#status> <https://jeswr.org/ns/fedreg#Suspended> .",
       ]
     `);
   });
@@ -180,11 +180,11 @@ describe("characterization — emitted RDF (canonical sorted quads)", () => {
     });
     expect(canonicalQuads(built.quads)).toMatchInlineSnapshot(`
       [
-        "<https://registry.example/catalog#alice> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/jeswr/fedreg#StorageDescription> .",
-        "<https://registry.example/catalog#alice> <https://w3id.org/jeswr/fedreg#acceptsSpec> <https://w3id.org/jeswr/sectors/scheduling#1.0.0> .",
-        "<https://registry.example/catalog#alice> <https://w3id.org/jeswr/fedreg#acceptsSpec> <https://w3id.org/jeswr/sectors/scheduling#1.1.0> .",
-        "<https://registry.example/catalog#alice> <https://w3id.org/jeswr/fedreg#storage> <https://alice.pod.example/> .",
-        "<https://registry.example/catalog#alice> <https://w3id.org/jeswr/fedreg#supportsSector> <https://w3id.org/jeswr/sectors/scheduling#sector> .",
+        "<https://registry.example/catalog#alice> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://jeswr.org/ns/fedreg#StorageDescription> .",
+        "<https://registry.example/catalog#alice> <https://jeswr.org/ns/fedreg#acceptsSpec> <https://w3id.org/jeswr/sectors/scheduling#1.0.0> .",
+        "<https://registry.example/catalog#alice> <https://jeswr.org/ns/fedreg#acceptsSpec> <https://w3id.org/jeswr/sectors/scheduling#1.1.0> .",
+        "<https://registry.example/catalog#alice> <https://jeswr.org/ns/fedreg#storage> <https://alice.pod.example/> .",
+        "<https://registry.example/catalog#alice> <https://jeswr.org/ns/fedreg#supportsSector> <https://w3id.org/jeswr/sectors/scheduling#sector> .",
       ]
     `);
   });
@@ -193,8 +193,8 @@ describe("characterization — emitted RDF (canonical sorted quads)", () => {
     const built = describeStorage({ id: STORAGE, acceptsSpec: [SPEC_SCHED_100] });
     expect(canonicalQuads(built.quads)).toMatchInlineSnapshot(`
       [
-        "<https://alice.pod.example/> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/jeswr/fedreg#StorageDescription> .",
-        "<https://alice.pod.example/> <https://w3id.org/jeswr/fedreg#acceptsSpec> <https://w3id.org/jeswr/sectors/scheduling#1.0.0> .",
+        "<https://alice.pod.example/> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://jeswr.org/ns/fedreg#StorageDescription> .",
+        "<https://alice.pod.example/> <https://jeswr.org/ns/fedreg#acceptsSpec> <https://w3id.org/jeswr/sectors/scheduling#1.0.0> .",
       ]
     `);
   });
@@ -239,7 +239,7 @@ describe("characterization — verify issues (exact code/message/order)", () => 
       [
         {
           "code": "invalid-term-type",
-          "message": "Expected an IRI (NamedNode) for <https://w3id.org/jeswr/fedreg#app> but found a Literal ("https://music.example/clientid.jsonld").",
+          "message": "Expected an IRI (NamedNode) for <https://jeswr.org/ns/fedreg#app> but found a Literal ("https://music.example/clientid.jsonld").",
           "subject": "https://registry.example/federation#m1",
           "value": "https://music.example/clientid.jsonld",
         },
@@ -331,7 +331,7 @@ describe("characterization — build → parse round-trip view equivalence", () 
           ],
           "id": "https://registry.example/federation#m-music",
           "status": "Active",
-          "statusIri": "https://w3id.org/jeswr/fedreg#Active",
+          "statusIri": "https://jeswr.org/ns/fedreg#Active",
         },
       ]
     `);

@@ -3,7 +3,11 @@
 import { createEngine } from "./engine.js";
 import type { RdfEngine } from "./types.js";
 
-export { FormGraphUnsupportedError, PolicyIdentifierCollisionError } from "./errors.js";
+export {
+  FormGraphUnsupportedError,
+  PolicyIdentifierCollisionError,
+  PolicySubjectUnsupportedError,
+} from "./errors.js";
 export type * from "./types.js";
 
 /** Use the prebuilt Node WASM module; its synchronous initialization occurs lazily. */

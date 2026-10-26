@@ -136,6 +136,13 @@ If a generated anonymous ID collides with any named node in the supplied dataset
 (including graph names and literal datatype IRIs), `evaluatePolicy` throws the
 exported `PolicyIdentifierCollisionError`, with the colliding `identifier` property.
 This signals a malformed policy, even for a request whose action would not match.
+Policy tracing preserves the selected subject's RDF term identity, so an unrelated
+blank node sharing a named policy's value cannot contribute rules or obligations.
+If distinct typed policy subjects share the selected ID value, tracing rejects with
+`PolicySubjectUnsupportedError` (`identifier` is that value) rather than guessing
+which subject the projected string ID represents. Repeated type assertions for the
+same RDF term are supported. This error extends `TypeError` and is exported from
+all four entry points.
 
 The experimental Sparq policy probe is never invoked. `features.policyEvaluate`
 is true only for a callable export with a finite numeric `policyContractVersion`
