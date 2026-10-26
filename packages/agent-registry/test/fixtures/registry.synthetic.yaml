@@ -1,0 +1,447 @@
+# AUTHORED-BY Codex GPT-6.1-Sol
+# AUTHORED-BY Codex GPT-6
+# Synthetic pilot-compatible registry; no live accounts or credentials.
+version: 1
+source: synthetic fixture
+observedAt: 2026-10-25T12:00:00Z
+registryUpdated: 2026-10-25
+accounts:
+  - id: gmail-main
+    channel: email
+    provider: google
+    label: "gmail-main@example.com"
+    organization: "personal"
+    identifiers:
+      primary: "gmail-main@example.com"
+      aliases: [to_confirm]
+    credential_ref: op://test-vault/account-01/credential
+    connector:
+      target: google_api
+      setup_status: connected
+      last_tested: 2026-10-20
+      last_test_result: success
+      available_in_mcp: true
+  - id: gmail-secondary
+    channel: email
+    provider: google
+    label: "gmail-secondary@example.com"
+    organization: "personal"
+    identifiers:
+      primary: "gmail-secondary@example.com"
+      aliases: [to_confirm]
+    credential_ref: op://test-vault/account-02/credential
+    connector:
+      target: google_api
+      setup_status: planned
+      last_tested: 2026-10-20
+      last_test_result: success
+      available_in_mcp: true
+  - id: gmail-legacy-one
+    channel: email
+    provider: google
+    label: "gmail-legacy-one@example.com"
+    organization: "personal"
+    identifiers:
+      primary: "gmail-legacy-one@example.com"
+      aliases: [to_confirm]
+    credential_ref: op://test-vault/account-03/credential
+    connector:
+      target: google_api
+      setup_status: not_configured
+      last_tested: 2026-10-20
+      last_test_result: success
+      available_in_mcp: true
+  - id: gmail-legacy-two
+    channel: email
+    provider: google
+    label: "gmail-legacy-two@example.com"
+    organization: "personal"
+    identifiers:
+      primary: "gmail-legacy-two@example.com"
+      aliases: [to_confirm]
+    credential_ref: op://test-vault/account-04/credential
+    connector:
+      target: google_api
+      setup_status: disabled
+      last_tested: 2026-10-20
+      last_test_result: success
+      available_in_mcp: true
+  - id: custom-mail
+    channel: email
+    provider: google
+    label: "custom-mail@example.com"
+    organization: "personal"
+    identifiers:
+      primary: "custom-mail@example.com"
+      aliases: [to_confirm]
+    credential_ref: op://test-vault/account-05/credential
+    connector:
+      target: google_api
+      setup_status: error
+      last_tested: 2026-10-20
+      last_test_result: success
+      available_in_mcp: true
+  - id: odi-mail
+    channel: email
+    provider: microsoft
+    label: "odi-mail@example.com"
+    organization: "ODI"
+    identifiers:
+      primary: "odi-mail@example.com"
+      aliases: [to_confirm]
+    credential_ref: op://test-vault/account-06/credential
+    connector:
+      target: microsoft_api
+      setup_status: connected
+      last_tested: 2026-10-20
+      last_test_result: success
+      available_in_mcp: true
+  - id: university-mail
+    channel: email
+    provider: microsoft
+    label: "university-mail@example.com"
+    organization: "Example University"
+    identifiers:
+      primary: "university-mail@example.com"
+      aliases: [to_confirm]
+    credential_ref: op://test-vault/account-07/credential
+    connector:
+      target: microsoft_api
+      setup_status: planned
+      last_tested: 2026-10-20
+      last_test_result: success
+      available_in_mcp: true
+  - id: google-calendar
+    channel: calendar
+    provider: google
+    label: "google-calendar@example.com"
+    organization: "personal"
+    identifiers:
+      primary: "google-calendar@example.com"
+      aliases: [to_confirm]
+    credential_ref: op://test-vault/account-08/credential
+    connector:
+      target: google_api
+      setup_status: not_configured
+      last_tested: 2026-10-20
+      last_test_result: success
+      available_in_mcp: true
+  - id: microsoft-calendar
+    channel: calendar
+    provider: microsoft
+    label: "microsoft-calendar@example.com"
+    organization: "Example University"
+    identifiers:
+      primary: "microsoft-calendar@example.com"
+      aliases: [to_confirm]
+    credential_ref: op://test-vault/account-09/credential
+    connector:
+      target: microsoft_api
+      setup_status: disabled
+      last_tested: 2026-10-20
+      last_test_result: success
+      available_in_mcp: true
+  - id: slack-1
+    channel: slack
+    provider: slack
+    label: "slack-1@example.com"
+    organization: "Example Workspace 1"
+    identifiers:
+      primary: "slack-1@example.com"
+      aliases: [to_confirm]
+    credential_ref: op://test-vault/account-10/credential
+    connector:
+      target: slack_api
+      setup_status: error
+      last_tested: 2026-10-20
+      last_test_result: success
+      available_in_mcp: true
+  - id: slack-2
+    channel: slack
+    provider: slack
+    label: "slack-2@example.com"
+    organization: "Example Workspace 2"
+    identifiers:
+      primary: "slack-2@example.com"
+      aliases: [to_confirm]
+    credential_ref: op://test-vault/account-11/credential
+    connector:
+      target: slack_api
+      setup_status: connected
+      last_tested: 2026-10-20
+      last_test_result: success
+      available_in_mcp: true
+  - id: slack-3
+    channel: slack
+    provider: slack
+    label: "slack-3@example.com"
+    organization: "Example Workspace 3"
+    identifiers:
+      primary: "slack-3@example.com"
+      aliases: [to_confirm]
+    credential_ref: op://test-vault/account-12/credential
+    connector:
+      target: slack_api
+      setup_status: planned
+      last_tested: 2026-10-20
+      last_test_result: success
+      available_in_mcp: true
+  - id: slack-4
+    channel: slack
+    provider: slack
+    label: "slack-4@example.com"
+    organization: "Example Workspace 4"
+    identifiers:
+      primary: "slack-4@example.com"
+      aliases: [to_confirm]
+    credential_ref: op://test-vault/account-13/credential
+    connector:
+      target: slack_api
+      setup_status: not_configured
+      last_tested: 2026-10-20
+      last_test_result: success
+      available_in_mcp: true
+  - id: slack-5
+    channel: slack
+    provider: slack
+    label: "slack-5@example.com"
+    organization: "Example Workspace 5"
+    identifiers:
+      primary: "slack-5@example.com"
+      aliases: [to_confirm]
+    credential_ref: op://test-vault/account-14/credential
+    connector:
+      target: slack_api
+      setup_status: disabled
+      last_tested: 2026-10-20
+      last_test_result: success
+      available_in_mcp: true
+  - id: matrix-one
+    channel: matrix
+    provider: matrix
+    label: "matrix-one@example.com"
+    organization: "personal"
+    identifiers:
+      primary: "matrix-one@example.com"
+      aliases: [to_confirm]
+    credential_ref: op://test-vault/account-15/credential
+    connector:
+      target: matrix_api
+      setup_status: error
+      last_tested: 2026-10-20
+      last_test_result: success
+      available_in_mcp: true
+  - id: matrix-two
+    channel: matrix
+    provider: matrix
+    label: "matrix-two@example.com"
+    organization: "personal"
+    identifiers:
+      primary: "matrix-two@example.com"
+      aliases: [to_confirm]
+    credential_ref: op://test-vault/account-16/credential
+    connector:
+      target: matrix_api
+      setup_status: connected
+      last_tested: 2026-10-20
+      last_test_result: success
+      available_in_mcp: true
+  - id: teams-one
+    channel: microsoft_teams
+    provider: microsoft
+    label: "teams-one@example.com"
+    organization: "ODI"
+    identifiers:
+      primary: "teams-one@example.com"
+      aliases: [to_confirm]
+    credential_ref: op://test-vault/account-17/credential
+    connector:
+      target: microsoft_api
+      setup_status: planned
+      last_tested: 2026-10-20
+      last_test_result: success
+      available_in_mcp: true
+  - id: teams-two
+    channel: microsoft_teams
+    provider: microsoft
+    label: "teams-two@example.com"
+    organization: "Example University"
+    identifiers:
+      primary: "teams-two@example.com"
+      aliases: [to_confirm]
+    credential_ref: op://test-vault/account-18/credential
+    connector:
+      target: microsoft_api
+      setup_status: not_configured
+      last_tested: 2026-10-20
+      last_test_result: success
+      available_in_mcp: true
+  - id: github
+    channel: github_notifications
+    provider: github
+    label: "github@example.com"
+    organization: "personal"
+    identifiers:
+      primary: "github@example.com"
+      aliases: [to_confirm]
+    credential_ref: op://test-vault/account-19/credential
+    connector:
+      target: github_api
+      setup_status: disabled
+      last_tested: 2026-10-20
+      last_test_result: success
+      available_in_mcp: true
+  - id: discord
+    channel: discord
+    provider: discord
+    label: "discord@example.com"
+    organization: "personal"
+    identifiers:
+      primary: "discord@example.com"
+      aliases: [to_confirm]
+    credential_ref: op://test-vault/account-20/credential
+    connector:
+      target: discord_api
+      setup_status: error
+      last_tested: 2026-10-20
+      last_test_result: success
+      available_in_mcp: true
+  - id: bluesky
+    channel: bluesky
+    provider: atproto
+    label: "bluesky@example.com"
+    organization: "personal"
+    identifiers:
+      primary: "bluesky@example.com"
+      aliases: [to_confirm]
+    credential_ref: op://test-vault/account-21/credential
+    connector:
+      target: atproto_api
+      setup_status: connected
+      last_tested: 2026-10-20
+      last_test_result: success
+      available_in_mcp: true
+  - id: mastodon
+    channel: mastodon
+    provider: mastodon
+    label: "mastodon@example.com"
+    organization: "personal"
+    identifiers:
+      primary: "mastodon@example.com"
+      aliases: [to_confirm]
+    credential_ref: op://test-vault/account-22/credential
+    connector:
+      target: mastodon_api
+      setup_status: planned
+      last_tested: 2026-10-20
+      last_test_result: success
+      available_in_mcp: true
+  - id: phone
+    channel: phone_messages
+    provider: apple
+    label: "phone@example.com"
+    organization: "personal"
+    identifiers:
+      primary: "phone@example.com"
+      aliases: [to_confirm]
+    credential_ref: op://test-vault/account-23/credential
+    connector:
+      target: apple_api
+      setup_status: not_configured
+      last_tested: 2026-10-20
+      last_test_result: success
+      available_in_mcp: true
+  - id: signal
+    channel: signal
+    provider: matrix_bridge
+    label: "signal@example.com"
+    organization: "personal"
+    identifiers:
+      primary: "signal@example.com"
+      aliases: [to_confirm]
+    credential_ref: op://test-vault/account-24/credential
+    connector:
+      target: matrix_bridge_api
+      setup_status: disabled
+      last_tested: 2026-10-20
+      last_test_result: success
+      available_in_mcp: true
+  - id: whatsapp
+    channel: whatsapp
+    provider: matrix_bridge
+    label: "whatsapp@example.com"
+    organization: "personal"
+    identifiers:
+      primary: "whatsapp@example.com"
+      aliases: [to_confirm]
+    credential_ref: op://test-vault/account-25/credential
+    connector:
+      target: matrix_bridge_api
+      setup_status: error
+      last_tested: 2026-10-20
+      last_test_result: success
+      available_in_mcp: true
+  - id: linkedin
+    channel: linkedin
+    provider: email_proxy
+    label: "linkedin@example.com"
+    organization: "personal"
+    identifiers:
+      primary: "linkedin@example.com"
+      aliases: [to_confirm]
+    credential_ref: op://test-vault/account-26/credential
+    connector:
+      target: email_proxy_api
+      setup_status: connected
+      last_tested: 2026-10-20
+      last_test_result: success
+      available_in_mcp: true
+  - id: social-x
+    channel: x
+    provider: x
+    label: "social-x@example.com"
+    organization: "personal"
+    identifiers:
+      primary: "social-x@example.com"
+      aliases: [to_confirm]
+    credential_ref: op://test-vault/account-27/credential
+    connector:
+      target: x_api
+      setup_status: planned
+      last_tested: 2026-10-20
+      last_test_result: success
+      available_in_mcp: true
+  - id: matrix-bot
+    channel: matrix_bot
+    provider: matrix
+    label: "matrix-bot@example.com"
+    organization: "personal"
+    identifiers:
+      primary: "matrix-bot@example.com"
+      aliases: [to_confirm]
+    credential_ref: op://test-vault/account-28/credential
+    connector:
+      target: matrix_api
+      setup_status: not_configured
+      last_tested: 2026-10-20
+      last_test_result: success
+      available_in_mcp: true
+notes:
+  - "Main Gmail identity conflict: gmail-main@example.com versus alternate-main@example.org. Unresolved."
+evidence:
+  - channel: email
+    provider: google_workspace
+    identifier: odi-mail@example.com
+    method: historic_connector
+    source: synthetic fixture
+    observedOn: 2026-10-20
+communicationRules:
+  last_updated: 2026-10-25
+  decision_policy:
+    ask_when_uncertain_about: [identity]
+  capability_policy:
+    default_allowed: [read_via_approved_workflow, classify, draft]
+    requires_current_instruction_or_narrow_active_authorization_rule: [draft]
+    always_requires_fresh_explicit_instruction: [send_after_exact_draft_review]
+  triage_taxonomy:
+    action: Needs owner attention
