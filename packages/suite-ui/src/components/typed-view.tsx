@@ -72,13 +72,35 @@ export function ContactRenderer({ data }: TypedRendererProps) {
   );
 }
 export function TrackRenderer({ data }: TypedRendererProps) {
+  const artist = data.properties.find((property) => property.key === "artist")?.values.join(" · ");
+  const album = data.properties.find((property) => property.key === "album")?.values.join(" · ");
+  const duration = data.properties
+    .find((property) => property.key === "duration")
+    ?.values.join(" · ");
+  const hasArtwork =
+    data.image &&
+    (safeLink(data.image.src) ||
+      (data.image.src.startsWith("/") && !data.image.src.startsWith("//")));
   return (
-    <div className="suite-content-row">
-      <Picture data={data} />
-      <Music2 aria-hidden="true" size={24} strokeWidth={1.5} />
+    <div className="suite-track">
+      {hasArtwork ? (
+        <Picture data={data} />
+      ) : (
+        <span className="suite-track-placeholder">
+          <Music2 aria-hidden="true" size={20} strokeWidth={1.75} />
+        </span>
+      )}
       <div className="suite-grow">
         <Title data={data} fallback="Track" />
-        <Properties data={data} keys={["artist", "album", "duration"]} />
+        <p className="suite-muted">
+          {[artist, album]
+            .filter(Boolean)
+            .map((value) => plainText(value ?? ""))
+            .join(" · ")}
+        </p>
+      </div>
+      <div className="suite-track-actions">
+        {duration && <span className="suite-muted">{plainText(duration)}</span>}
         <SourceLink data={data} />
       </div>
     </div>

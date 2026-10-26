@@ -123,6 +123,7 @@ export function DetailsPane({
         <SurfaceFeedback
           state={state ?? { status: "empty" }}
           empty="Select an item to see its details"
+          action="Select an item"
         />
       )}
     </aside>
