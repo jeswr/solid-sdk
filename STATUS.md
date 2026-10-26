@@ -103,3 +103,31 @@ Conservative choice: preserve direct NAME precedence if both alternatives are su
 Import-directory coverage remains **100% statements (317/317), branches (322/322), functions (42/42) and lines (268/268)**, enforced by the ordinary app test command. All checks ran in this checkout before the final report commit. No dependency additions, screenshots, browser runs, pushes or branch switches. No generated artifacts committed.
 
 The requested finding is addressed. No implementation work or open questions remain. Package and affected gates pass; full-workspace validation and roborev retain the unrelated environmental limitations above.
+
+## Fix round 3 — review of 73812780be2f
+
+Scope: exactly the three requested OFX findings, the required 10 MiB import limit, regression tests and related importer documentation. No dependencies, manifests, UI or unrelated source changes.
+
+Commits:
+
+- `4a768459` — `fix: close OFX import review gaps`: replace overlapping entity matching with a forward-only scanner; enforce a 10 MiB UTF-8 text limit before CSV parsing/sniffing/import and OFX import; export `BankImportError` for oversized input and OFX structural/entity validation; read and validate `EXTDNAME` before memo fallback; accept and canonicalise trailing decimal points/commas while preserving grouping rejection. Add 41 regression cases.
+- Final `docs: record final OFX review validation` commit — this report, committed last.
+
+Conservative choices: the size limit counts UTF-8 bytes of the already-decoded text, including headers and whitespace, and permits exactly 10,485,760 bytes. Malformed/unterminated entity references, including bare ampersands, reject with `BankImportError` rather than attempting recovery. Entities decode once. Description priority remains direct NAME, PAYEE/NAME, EXTDNAME, then MEMO; every supplied field is validated even when a higher-priority description exists. Empty EXTDNAME retains memo fallback or missing-description rejection. Trailing decimal commas follow the same rules as decimal points.
+
+| Exact command | Result |
+| --- | --- |
+| `pnpm --filter @jeswr/app-suite run test` (new regressions before implementation) | Expected FAIL; reproduced extended-description loss, trailing-decimal rejection, missing size limits and malformed-entity acceptance. Log: `/tmp/sst-esit-r3-red.log`. Two fixture assumptions were subsequently corrected: explicit root closing tags and retaining explicit closing tags around malformed nested SGML fields. |
+| `pnpm --filter @jeswr/app-suite exec biome check --write src/apps/money/lib/import/errors.ts src/apps/money/lib/import/index.ts src/apps/money/lib/import/csv.ts src/apps/money/lib/import/ofx.ts test/money-import.test.ts` | PASS. |
+| `pnpm --filter @jeswr/app-suite run test` (after fixes) | PASS; 220 tests. Log: `/tmp/sst-esit-r3-test.log`. |
+| `pnpm --filter @jeswr/suite-ui run build` | PASS; existing workspace dependency. Log: `/tmp/sst-esit-r3-dependency-build.log`. |
+| `pnpm --filter @jeswr/app-suite run lint && pnpm --filter @jeswr/app-suite run build && pnpm --filter @jeswr/app-suite run typecheck && pnpm --filter @jeswr/app-suite run test` | PASS (exit 0); lint, Next.js production build, strict typecheck and 220 tests. |
+| `pnpm run lint:root` | PASS (exit 0), including 74 contrast pairs with zero failures. Log: `/tmp/sst-esit-r3-root-lint.log`. |
+| `TURBO_SCM_BASE=9def91cfea4a68b507f1c1b9e93659bec888a6e5 pnpm run gate` | PASS (exit 0); 7/7 tasks. Log: `/tmp/sst-esit-r3-affected-gate.log`. |
+| `GIT_ALLOW_PROTOCOL=file pnpm run gate:full --env-mode=loose` | FAIL (exit 1); 6 successful tasks before the unchanged `@jeswr/unstorage-solid#build` failed. Its dependency script attempts an HTTPS clone, blocked by the lane's protocol guard with `fatal: transport 'https' not allowed`. No remote clone completed. Log: `/tmp/sst-esit-r3-full-gate.log`. |
+| `git diff --check` | PASS. |
+| `command -v roborev` | Unavailable; automated per-commit review cannot run. |
+
+Import-directory coverage remains **100% statements (342/342), branches (337/337), functions (42/42) and lines (292/292)**, enforced per executable source file by the ordinary app test command. Regression cases cover ASCII/multibyte size boundaries, all CSV entry paths, repeated ampersands with/without a terminator, many adjacent references without recursive decoding, XML/SGML EXTDNAME with and without memo, malformed/empty/duplicate fields, description precedence, duplicate detection, categorisation and trailing decimal separators with signed/zero amounts and grouping rejection.
+
+All required checks ran before this final report commit. No browser, screenshots, dependency additions, pushes, PRs, branch switches or changes to other checkouts. No generated artifacts committed. All three findings are addressed; no implementation work or blocking questions remain. The full-workspace gate and automated review retain the unrelated limitations above.
