@@ -46,6 +46,17 @@ advance checkpoints on failure. The fixture recorder exposes only allowlisted no
 fields under configured public route prefixes; it never saves headers or dynamic URLs. Detailed
 adapter mappings remain owned by their follow-on connector tasks.
 
+Keep item accounting bounded by written documents: retain document counters, never run-long
+subject identifiers. Replacement resets a document's count to its adapter-supplied local subjects
+(excluding the document URL); merging adds only subjects whose previous stored provenance
+does not name the current run. Removal drops the counter. Sector-map-added subjects stay
+uncounted. Test the shared session through runFileImport after Takeout manifest release.
+Keep run provenance a bounded summary: `MAX_RUN_SOURCES = 1,000` distinct source IRIs,
+always adding the connector's own source first. The session's `maxRunSources` option may
+lower that limit (minimum 1). Stop retaining origins once full while preserving complete
+`prov:wasDerivedFrom` on each written document and item. Cover distinct item source URLs
+across entries after reconciliation manifests are released, plus the persisted run summary.
+
 CON-14 adds the optional `PodWriter.writeBinary`/`remove` ports and `ctx.writeBinary`/`ctx.remove`
 for non-RDF resources and source deletions. Keep binaries inside the connector container, never send RDF through it, default
 to create-only, and replace only under a strong ETag.
@@ -147,3 +158,61 @@ even when its source version is unchanged.
 A policy omission writes explanatory metadata without incrementing `skipped`.
 Drive tests wrap JSON `fixtureFetch` with synthetic media/export responses; do not broaden
 fixtureFetch or call live Google APIs. True streaming bodies await a future PodWriter port.
+
+CON-08 extends the existing google-takeout adapter with signature-detected streaming ZIPs
+and legacy MyActivity JSON. Read `src/google-takeout/dispatch.ts`, `zip-reader.ts`, `mbox.ts`
+and `readers.ts` before changing archive behavior. Archives require `ImportFile.stream()`
+for signature sniffing plus `slice(start, end): { stream(): ReadableStream<Uint8Array> }`
+(exclusive end; native File/Blob). Never fall back to whole-file text/buffering. Parse the
+central directory streamingly (64 MiB cap, 100,000 entries), including ZIP64 locator,
+record and extra fields; reject multi-disk/structurally invalid archives before dispatch.
+Validate local headers, names/methods/flags and non-overlapping data ranges before any
+writes. Stream exactly the central compressed range, await downstream work after at most
+64 KiB, and require DEFLATE completion at that boundary, declared size and CRC-32.
+The pinned fflate Inflate completion/pending-state bridge needs boundary/memory tests on
+upgrade. Data descriptors never frame content. Keep whole-file/message/Drive, total
+inflation and path-depth caps. The first message header of the first valid mbox (64 KiB)
+alone selects Delivered-To; no second full archive pass. Never fetch export URLs.
+The Node CLI supplies stat size and fs read-stream-backed ranges for streaming adapters;
+its text port stays bounded, and MAX_FILE_BYTES applies to non-streaming uploads only.
+
+Reuse `calendarEvents`, `personDocument`/`writeContactIndex`, Gmail's shared system-label map,
+`DriveMetadata`/`binaryType` and `createMailWriter`; do not fork their mapping/layouts.
+Escape every path segment with mail `pathId`, reject empty/dot/traversal/absolute paths,
+and keep Drive metadata in a separate tree from copied source files. Raw Records.json is
+unsupported; list unknown products on the report. Fit uses the existing ExerciseAction
+activity model with typed daily metrics. Synthetic fixtures only, including a generated
+>50 MiB stream and 100% branch coverage for reader/dispatch modules.
+
+`FileImportContext.read` comes from the import session and preserves conditional-write
+preconditions. File adapters may return `{ skipped?, unsupported? }` instead of void; surface
+both through ImportReport, count skips in state, and allow unsupported-only reports.
+`streaming: true` bypasses the runner's whole-upload cap only when the adapter enforces its
+own byte limits. Keep legacy JSON capped. Product snapshots reconcile deletions/replacements only after all entries of that
+product succeed; otherwise merge successful items and retain earlier membership. An
+archive-wide inflation limit makes every destructive product incomplete; an entry-count
+ceiling rejects before dispatch. Reject nonempty vCards without a card, normalize TYPE
+tokens (including repeated TYPE and comma lists), and rebuild recurrence properties from
+parsed, unquoted parameters for shared Calendar mapping. Complete empty activity category
+documents are removed after reading their ETag; clearing-only imports succeed. MailWriter
+flushes folders/threads once per run. Keep 100% branch coverage for zip/readers/dispatch;
+cover descriptor signatures, CRC/size/DEFLATE boundary failures, overlap and ZIP64 offsets.
+
+Deferred snapshot/contacts reconciliation shares one run budget: 1,000,000 retained
+identifiers and 64 MiB of UTF-8 identifier text (also charge retained contact names).
+Check each unique subject before retaining it, without first materializing all quad subjects.
+On overflow, mark that product incomplete, report `reconciliation-state-cap-exceeded`,
+release its manifests and continue adds/updates only; other products still reconcile.
+Validate calendar BEGIN/END names with a stack (VCALENDAR > VEVENT, other components
+balanced and skipped); reject nested vCards and missing/mismatched END markers as entry
+parse failures. Charge actual inflater output before any size/CRC/boundary rejection,
+including failed entries and mailbox-header sniffing, against one shared 16 GiB budget.
+Exhaustion stops the archive with an error before deferred destructive reconciliation.
+Any fflate decoder exception also aborts the archive, including during mailbox-header
+sniffing: it may have produced internal bytes without invoking the accounting callback.
+Size/CRC/boundary failures detected by our own checks still skip the entry.
+Only an activitySegment object is a recognized non-visit location row; malformed
+placeVisit values (including missing/invalid location or duration) and all other row
+shapes count as skips and make location incomplete. Contacts use an independent
+run-level row counter, including duplicate cards, across retained and capped paths;
+manifest release never resets the counter. Excess rows skip before any Pod writes.

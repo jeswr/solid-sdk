@@ -25,14 +25,26 @@ import { safeIri } from "./vocab.js";
 const RUNS = "_provenance.ttl";
 /** Connector containers with a run in progress in this process. */
 const active = new Set<string>();
+/** Run provenance is a bounded summary; documents retain every item origin. */
+export const MAX_RUN_SOURCES = 1_000;
+
+export interface ImportSessionOptions extends ConnectorStateOptions {
+  /** Lower the run provenance source ceiling; includes the connector source, minimum 1. */
+  readonly maxRunSources?: number;
+}
+
 /** Shared write pipeline for API and file runners; host owns state persistence. */
 export function createImportSession(
   writer: PodWriter,
   id: string,
   source: string,
-  options: ConnectorStateOptions,
+  options: ImportSessionOptions,
   vocabMap?: VocabMap,
 ) {
+  const requestedSources = options.maxRunSources ?? MAX_RUN_SOURCES;
+  if (!Number.isSafeInteger(requestedSources) || requestedSources < 1)
+    throw new RangeError("Run provenance source limit must be a positive safe integer.");
+  const maxRunSources = Math.min(requestedSources, MAX_RUN_SOURCES);
   // One run per connector container at a time: imports reconcile against their own reads
   // (source inventories, collection documents), which an overlapping run would invalidate.
   const claim = writer.resolve(RUNS);
@@ -47,7 +59,8 @@ export function createImportSession(
   const used = new Set<string>([source]);
   const written: WrittenDoc[] = [];
   const registrations = new Map<string, TypeRegistrationRequest>();
-  const itemKeys = new Set<string>();
+  // Retain one counter per document, never identifiers for every imported subject.
+  const itemCounts = new Map<string, number>();
   const conditionFor = (
     existing: Awaited<ReturnType<PodWriter["read"]>>,
   ): WriteConditions | undefined =>
@@ -78,6 +91,20 @@ export function createImportSession(
     const subjects = new Set(
       [...incoming].filter((q) => q.subject.termType === "NamedNode").map((q) => q.subject.value),
     );
+    let itemCount = doc.writeMode === "merge" ? (itemCounts.get(url) ?? 0) : 0;
+    for (const subject of subjects) {
+      // Counts describe adapter-supplied local source items; mapped resources stay uncounted.
+      if (subject === url || !subject.startsWith(connectorRoot) || !sourceSubjects.has(subject))
+        continue;
+      // The stored dataset already records which subjects this run wrote. Inspect it
+      // before incoming descriptions/provenance replace those subjects on a merge.
+      if (
+        doc.writeMode !== "merge" ||
+        !previous ||
+        !new Provenance(subject, previous.dataset, DataFactory).generatedBy.has(activityUrl)
+      )
+        itemCount++;
+    }
     // Only adapter-supplied subjects replace existing descriptions; provenance adds the URL.
     const dataset = doc.writeMode === "merge" ? mergeItems(previous?.dataset, incoming) : incoming;
     const fallback = safeIri(input.sourceUrl) ?? source;
@@ -94,11 +121,7 @@ export function createImportSession(
       document.derivedFrom.add(origin);
       item.generatedBy.clear();
       item.generatedBy.add(activityUrl);
-      used.add(origin);
-      // Sector maps can add linked people/activities. Counts describe the
-      // adapter's local source items; local mapped resources also get provenance.
-      if (subject !== url && sourceSubjects.has(subject))
-        itemKeys.add(JSON.stringify([url, subject]));
+      if (used.size < maxRunSources) used.add(origin);
     }
     const result = await writer.write({ ...doc, dataset }, conditions ?? conditionFor(previous));
     let registered = result;
@@ -111,6 +134,7 @@ export function createImportSession(
     for (const request of registrationsFor([registered])) {
       registrations.set(JSON.stringify([request.forClass, request.container]), request);
     }
+    itemCounts.set(url, itemCount);
     reads.delete(url);
     const index = written.findIndex((w) => w.url === result.url);
     if (index === -1) written.push(registered);
@@ -134,6 +158,7 @@ export function createImportSession(
     const previous = reads.get(url);
     reads.delete(url);
     await writer.remove(slug, previous?.etag ? { ifMatch: previous.etag } : undefined);
+    itemCounts.delete(url);
     const index = written.findIndex((w) => w.url === url);
     if (index !== -1) written.splice(index, 1);
   }
@@ -175,7 +200,11 @@ export function createImportSession(
       cursor: success ? (outcome.cursor ?? options.state?.cursor) : options.state?.cursor,
       lastOutcome: success ? "success" : "error",
       counts: success
-        ? { documents: written.length, items: itemKeys.size, skipped: outcome.skipped ?? 0 }
+        ? {
+            documents: written.length,
+            items: [...itemCounts.values()].reduce((total, count) => total + count, 0),
+            skipped: outcome.skipped ?? 0,
+          }
         : (options.state?.counts ?? { documents: 0, items: 0, skipped: 0 }),
     };
   }
@@ -185,6 +214,10 @@ export function createImportSession(
     writeBinary,
     remove,
     written,
+    /** Document-level accounting, exposed read-only for diagnostics. */
+    itemCounts: itemCounts as ReadonlyMap<string, number>,
+    /** Bounded run provenance summary, exposed read-only for diagnostics. */
+    used: used as ReadonlySet<string>,
     registrations: () => [...registrations.values()],
     finish,
     state,
