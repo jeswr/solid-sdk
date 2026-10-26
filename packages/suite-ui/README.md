@@ -69,6 +69,8 @@ The package performs no storage or network writes; the dev fixtures use a browse
 storage adapter until SDK-APP-11 is available. Bracket shortcuts ignore editable
 fields, modified/composing events and unrelated dialogs. Sheets trap focus and
 restore it to the corresponding TopBar control on close.
+On wide viewports an unconsumed Escape inside the details pane closes it
+(01-§6), except in editable fields and nested dialogs.
 
 Sidebar width is 264px; details width is 360px. Below 1024 both use modal side
 sheets and at most one is open: when saved preferences open both, the sidebar sheet

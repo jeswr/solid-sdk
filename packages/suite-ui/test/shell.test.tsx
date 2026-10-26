@@ -173,6 +173,33 @@ describe("shell layout", () => {
       screen.getByRole("button", { name: "Toggle details pane" }),
     );
   });
+  // AUTHORED-BY Claude Opus 5.5
+  it("closes the desktop details pane with Escape and returns focus to its toggle", () => {
+    render(<Frame detailsContent={<textarea aria-label="Note" />} />);
+    const note = screen.getByRole("textbox", { name: "Note" });
+    note.focus();
+    fireEvent.keyDown(note, { key: "Escape" });
+    expect(screen.getByRole("complementary")).toBeTruthy();
+    const close = screen.getByRole("button", { name: "Close details" });
+    close.focus();
+    fireEvent.keyDown(close, { key: "Escape", shiftKey: true });
+    expect(screen.getByRole("complementary")).toBeTruthy();
+    const consumed = new KeyboardEvent("keydown", {
+      key: "Escape",
+      bubbles: true,
+      cancelable: true,
+    });
+    consumed.preventDefault();
+    close.dispatchEvent(consumed);
+    expect(screen.getByRole("complementary")).toBeTruthy();
+    expect(update).not.toHaveBeenCalled();
+    fireEvent.keyDown(close, { key: "Escape" });
+    expect(update).toHaveBeenLastCalledWith({ sidebarOpen: null, detailsOpen: false });
+    expect(screen.queryByRole("complementary")).toBeNull();
+    expect(document.activeElement).toBe(
+      screen.getByRole("button", { name: "Toggle details pane" }),
+    );
+  });
   it("preserves main content focus when collapsing desktop regions", () => {
     render(<Frame />);
     const main = screen.getByRole("main");

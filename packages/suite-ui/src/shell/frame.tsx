@@ -14,7 +14,12 @@ import {
 } from "react";
 import { DetailsPane, type DetailsPaneProps } from "./details-pane.js";
 import { SidebarNav, type SidebarNavProps } from "./navigation.js";
-import { isShellShortcut, type ShellPreferences, shellDocumentTitle } from "./preferences.js";
+import {
+  isShellShortcut,
+  type ShellPreferences,
+  shellDocumentTitle,
+  shouldClosePaneOnEscape,
+} from "./preferences.js";
 import { ShellSheet } from "./sheet.js";
 import { TopBar, type TopBarProps } from "./top-bar.js";
 
@@ -185,11 +190,20 @@ export function ShellFrame({
         <h1 id="suite-page-title">{pageTitle}</h1>
         {children}
       </main>
+      {/* biome-ignore lint/a11y/noStaticElementInteractions: Escape bubbles from the pane's own controls. */}
       <div
         ref={detailsRegion}
         id={desktop ? detailsId : undefined}
         className="suite-details-slot"
         hidden={!desktop || !detailsOpen}
+        onKeyDown={(event) => {
+          // On wide viewports the pane is not a dialog, so Escape (01-§6 "close pane")
+          // is handled here. Nested layers (Radix menus/dialogs) and editors consume it first.
+          if (!desktop || !shouldClosePaneOnEscape(event.nativeEvent, event.target)) return;
+          event.preventDefault();
+          setDetails(false);
+          restoreFocus("Toggle details pane");
+        }}
       >
         {desktop && details && (
           <DetailsPane
