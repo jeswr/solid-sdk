@@ -16,7 +16,13 @@ export default defineConfig({
     coverage: {
       enabled: true,
       provider: 'v8',
-      include: ['src/background/core/profile-store.ts', 'src/background/core/origin-grant.ts'],
+      include: [
+        'src/background/core/profile-store.ts',
+        'src/background/core/origin-grant.ts',
+        'src/background/core/formfill-data.ts',
+        'src/content/formfill/*.ts',
+        'src/shared/formfill-values.ts',
+      ],
       reporter: ['text', 'json'],
       thresholds: { branches: 100, functions: 100, lines: 100, statements: 100 },
     },
