@@ -565,3 +565,59 @@ it("round-trips recurrence through TaskItem and validates remaining reminders on
   expect(() => (task.allDay = "invalid")).toThrow("all-day");
   expect(() => (task.reminders = [{ id: "urn:reminder", offset: "PT0S" }])).toThrow("HTTP");
 });
+
+it.each([
+  "<#alarm>",
+  "_:alarm",
+])("preserves foreign reminder metadata on edits and removal: %s", async (id) => {
+  const dataset = await parse(
+    taskUrl,
+    `
+    <#it> a <${NS.WF}Task>; <${NS.SCHEDULING}hasReminder> ${id}.
+    ${id} a <${NS.SCHEDULING}Reminder>, <https://example.test/Annotated>;
+      <${NS.SCHEDULING}triggerOffset> "-PT1H";
+      <${NS.DCT}description> "Keep this annotation";
+      <${NS.DCT}source> <https://example.test/calendar>.
+  `,
+  );
+  const task = node(`${taskUrl}#it`, dataset);
+  const original = [...task.nodes(`${NS.SCHEDULING}hasReminder`)][0];
+  const reminder = readReminders(task)[0];
+  writeReminders(task, [{ id: reminder?.id, time: now }], now);
+  const changed = [...task.nodes(`${NS.SCHEDULING}hasReminder`)][0];
+  expect(changed?.value).toBe(original?.value);
+  expect(changed?.text(`${NS.DCT}description`)).toBe("Keep this annotation");
+  expect(changed?.iri(`${NS.DCT}source`)).toBe("https://example.test/calendar");
+  expect(changed?.types.has("https://example.test/Annotated")).toBe(true);
+  expect(readReminders(task)).toEqual([{ id: readReminders(task)[0]?.id, time: now }]);
+  writeReminders(task, [], now);
+  expect(original?.text(`${NS.DCT}description`)).toBe("Keep this annotation");
+  expect(original?.text(`${NS.SCHEDULING}triggerTime`)).toBeUndefined();
+  expect(original?.types.has(`${NS.SCHEDULING}Reminder`)).toBe(false);
+});
+
+it("copies a shared reminder on edit and keeps shared nodes intact on removal", async () => {
+  const dataset = await parse(
+    taskUrl,
+    `
+    <#it> <${NS.SCHEDULING}hasReminder> <#alarm>.
+    <#other> <${NS.SCHEDULING}hasReminder> <#alarm>.
+    <#alarm> a <${NS.SCHEDULING}Reminder>; <${NS.SCHEDULING}triggerOffset> "-PT1H";
+      <${NS.DCT}description> "Shared alarm".
+  `,
+  );
+  const task = node(`${taskUrl}#it`, dataset);
+  const other = node(`${taskUrl}#other`, dataset);
+  writeReminders(task, [{ id: `${taskUrl}#alarm`, offset: "PT0S" }], now);
+  expect(readReminders(other)).toEqual([{ id: `${taskUrl}#alarm`, offset: "-PT1H" }]);
+  expect(readReminders(task)[0]?.offset).toBe("PT0S");
+  expect([...task.nodes(`${NS.SCHEDULING}hasReminder`)][0]?.text(`${NS.DCT}description`)).toBe(
+    "Shared alarm",
+  );
+  // A fresh task can attach an already-referenced named reminder without mutating it.
+  writeReminders(task, [{ id: `${taskUrl}#alarm`, time: now }], now);
+  expect(readReminders(other)[0]?.offset).toBe("-PT1H");
+  task.nodes(`${NS.SCHEDULING}hasReminder`).add(node(`${taskUrl}#alarm`, dataset));
+  writeReminders(task, [], now);
+  expect(readReminders(other)[0]?.offset).toBe("-PT1H");
+});

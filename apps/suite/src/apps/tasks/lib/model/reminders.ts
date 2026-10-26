@@ -1,6 +1,15 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { TermFrom } from "@rdfjs/wrapper";
-import { aliases, Node, NS, requireDate, requireHttp, SCHED } from "./rdf";
+// AUTHORED-BY Codex GPT-6
+import {
+  aliases,
+  clearSchedulingNode,
+  editableNode,
+  Node,
+  NS,
+  requireDate,
+  requireHttp,
+  SCHED,
+} from "./rdf";
 
 export type Reminder =
   | { id?: string | undefined; offset: string; time?: never }
@@ -56,16 +65,23 @@ export function writeReminders(
   due: Date | undefined,
 ): void {
   validateReminders(reminders, due);
-  for (const p of aliases(`${SCHED}hasReminder`))
-    for (const old of task.nodes(p)) {
-      for (const q of [...old.dataset.match(TermFrom.instance(old, old.factory))])
-        old.dataset.delete(q);
+  const old = aliases(`${SCHED}hasReminder`).flatMap((p) => [...task.nodes(p)]);
+  // Pair synthetic blank-node IDs with their original nodes before triggers change.
+  const ids = readReminders(task).map((reminder) => reminder.id);
+  const desired = reminders.map((reminder) => {
+    if (reminder.id) {
+      requireHttp(reminder.id);
+      return old[ids.indexOf(reminder.id)] ?? new Node(reminder.id, task.dataset, task.factory);
     }
+    return task.child();
+  });
   task.clear(`${SCHED}hasReminder`);
-  for (const reminder of reminders) {
-    const value = reminder.id
-      ? new Node(requireHttp(reminder.id), task.dataset, task.factory)
-      : task.child();
+  const values = desired.map(editableNode);
+  const fields = [`${SCHED}triggerOffset`, `${SCHED}triggerTime`];
+  for (const previous of old) clearSchedulingNode(previous, fields, `${SCHED}Reminder`);
+  for (const [index, reminder] of reminders.entries()) {
+    const value = values[index] as Node;
+    clearSchedulingNode(value, fields, `${SCHED}Reminder`);
     value.types.add(`${SCHED}Reminder`);
     value.setTyped(`${SCHED}triggerOffset`, reminder.offset, `${NS.XSD}duration`);
     value.setDate(`${SCHED}triggerTime`, reminder.time);

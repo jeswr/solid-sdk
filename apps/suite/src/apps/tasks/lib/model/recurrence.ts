@@ -1,7 +1,15 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
-import { TermFrom } from "@rdfjs/wrapper";
-import { aliases, type Node, NS, requireDate, SCHED, SCHEMA } from "./rdf";
+import {
+  aliases,
+  clearSchedulingNode,
+  editableNode,
+  type Node,
+  NS,
+  requireDate,
+  SCHED,
+  SCHEMA,
+} from "./rdf";
 
 export const weekdays = [
   "Monday",
@@ -73,15 +81,21 @@ export function readRecurrence(task: Node): RecurrenceRule | undefined {
 }
 export function writeRecurrence(task: Node, rule: RecurrenceRule | undefined): void {
   if (rule) validateRule(rule);
-  // Remove only this property's linked subgraph; task/foreign RDF stays intact.
-  for (const p of aliases(`${SCHED}recurrence`))
-    for (const old of task.nodes(p)) {
-      for (const q of [...old.dataset.match(TermFrom.instance(old, old.factory))])
-        old.dataset.delete(q);
-    }
+  const old = aliases(`${SCHED}recurrence`).flatMap((p) => [...task.nodes(p)]);
   task.clear(`${SCHED}recurrence`);
-  if (!rule) return;
-  const value = task.child();
+  const value = rule ? (old[0] ? editableNode(old[0]) : task.child()) : undefined;
+  const fields = [
+    `${SCHED}frequency`,
+    `${SCHED}interval`,
+    `${SCHED}count`,
+    `${SCHED}until`,
+    `${SCHEMA}byMonthDay`,
+    `${SCHEMA}byDay`,
+  ];
+  for (const previous of old) clearSchedulingNode(previous, fields, `${SCHED}RecurrenceRule`);
+  if (!value || !rule) return;
+  // A shared node's copy still contains the old recognized fields.
+  clearSchedulingNode(value, fields, `${SCHED}RecurrenceRule`);
   value.types.add(`${SCHED}RecurrenceRule`);
   value.setText(`${SCHED}frequency`, rule.frequency);
   value.setNumber(`${SCHED}interval`, rule.interval, true);

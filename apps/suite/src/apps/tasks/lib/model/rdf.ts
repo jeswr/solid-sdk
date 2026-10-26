@@ -89,6 +89,25 @@ export class Node extends TermWrapper {
   }
 }
 
+/** Preserve shared linked nodes; edits receive a copy with the same foreign metadata. */
+export function editableNode(value: Node): Node {
+  if (!value.dataset.match(null, null, TermFrom.instance(value, value.factory)).size) return value;
+  const copy = value.child();
+  for (const quad of value.dataset.match(TermFrom.instance(value, value.factory)))
+    copy.nodes(quad.predicate.value).add(new Node(quad.object, value.dataset, value.factory));
+  return copy;
+}
+/** Drop only fields owned by this model, and only after the node is unlinked everywhere. */
+export function clearSchedulingNode(
+  value: Node,
+  predicates: readonly string[],
+  type: string,
+): void {
+  if (value.dataset.match(null, null, TermFrom.instance(value, value.factory)).size) return;
+  for (const predicate of predicates) value.clear(predicate);
+  for (const iri of aliases(type)) value.types.delete(iri);
+}
+
 export function node(id: string, dataset: DatasetCore): Node {
   return new Node(id, dataset, DataFactory);
 }

@@ -262,3 +262,57 @@ describe("recurrence export and copy", () => {
     );
   });
 });
+
+it.each([
+  "<#rule>",
+  "_:rule",
+])("preserves foreign recurrence metadata when editing a linked node: %s", async (id) => {
+  const url = "https://pod.test/task.ttl";
+  const dataset = await parse(
+    url,
+    `
+    <#it> <${NS.SCHEDULING}recurrence> ${id}.
+    ${id} a <${NS.SCHEDULING}RecurrenceRule>, <https://example.test/Annotated>;
+      <${NS.SCHEDULING}frequency> "WEEKLY"; <${SCHEMA}byDay> <${SCHEMA}Monday>;
+      <${NS.DCT}description> "Keep this annotation".
+  `,
+  );
+  const task = node(`${url}#it`, dataset);
+  const original = [...task.nodes(`${NS.SCHEDULING}recurrence`)][0];
+  writeRecurrence(task, { frequency: "DAILY" });
+  expect([...task.nodes(`${NS.SCHEDULING}recurrence`)][0]?.value).toBe(original?.value);
+  expect(readRecurrence(task)?.frequency).toBe("DAILY");
+  expect(readRecurrence(task)?.byDay).toBeUndefined();
+  expect(original?.text(`${NS.DCT}description`)).toBe("Keep this annotation");
+  expect(original?.types.has("https://example.test/Annotated")).toBe(true);
+  writeRecurrence(task, undefined);
+  expect(original?.text(`${NS.DCT}description`)).toBe("Keep this annotation");
+  expect(original?.text(`${NS.SCHEDULING}frequency`)).toBeUndefined();
+});
+
+it("copies shared recurrence nodes on edit and preserves them on unlink", async () => {
+  const url = "https://pod.test/task.ttl";
+  const dataset = await parse(
+    url,
+    `
+    <#it> <${NS.SCHEDULING}recurrence> <#rule>.
+    <#other> <${NS.SCHEDULING}recurrence> <#rule>.
+    <#rule> a <${NS.SCHEDULING}RecurrenceRule>;
+      <${NS.SCHEDULING}frequency> "WEEKLY"; <${SCHEMA}byDay> <${SCHEMA}Monday>;
+      <${NS.DCT}description> "Shared rule".
+  `,
+  );
+  const task = node(`${url}#it`, dataset);
+  const other = node(`${url}#other`, dataset);
+  writeRecurrence(task, { frequency: "DAILY" });
+  expect(readRecurrence(other)?.frequency).toBe("WEEKLY");
+  expect(readRecurrence(other)?.byDay).toEqual(["Monday"]);
+  expect(readRecurrence(task)?.frequency).toBe("DAILY");
+  expect(readRecurrence(task)?.byDay).toBeUndefined();
+  expect([...task.nodes(`${NS.SCHEDULING}recurrence`)][0]?.text(`${NS.DCT}description`)).toBe(
+    "Shared rule",
+  );
+  task.nodes(`${NS.SCHEDULING}recurrence`).add(node(`${url}#rule`, dataset));
+  writeRecurrence(task, undefined);
+  expect(readRecurrence(other)?.frequency).toBe("WEEKLY");
+});
