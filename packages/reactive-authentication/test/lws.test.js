@@ -62,7 +62,12 @@ function lwsManager(source, options = {}) {
   });
   return {
     provider,
-    manager: new ReactiveFetchManager({ providers: [provider], boundary, fetch: transport }),
+    manager: new ReactiveFetchManager({
+      providers: [provider],
+      boundary,
+      fence: source.fence,
+      fetch: transport,
+    }),
   };
 }
 
@@ -114,14 +119,15 @@ test("LWS OpenID suite: ID token from the OpenID provider exchanged for a realm-
     insecure,
   ).getAuthorizationServer(new Request("https://unused.example/"));
   const code = automaticCodeProvider();
+  const fence = new SessionFence("lws-openid", { broadcast: false });
   const source = new OidcIdTokenSource(
     openIdProvider,
     callback,
     code,
     new DynamicRegistrationClientProvider(insecure),
-    { http: insecure },
+    { http: insecure, fence },
   );
-  const { manager } = lwsManager(source);
+  const { manager } = lwsManager(source, { fence });
 
   const response = await manager.fetch(`${lws.url}/root/doc`);
   assert.equal(response.status, 200);
@@ -141,6 +147,81 @@ test("LWS OpenID suite: ID token from the OpenID provider exchanged for a realm-
   assert.equal((await manager.fetch(`${lws.url}/root/other`)).status, 200);
   assert.equal(lws.stats.exchanges.length, exchanges);
   assert.equal(code.calls, 1);
+  fence.close();
+});
+
+test("LWS OIDC requires one explicit fence for its source and provider", () => {
+  const fence = new SessionFence("lws-explicit-fence", { broadcast: false });
+  const other = new SessionFence(fence.namespace, { broadcast: false });
+  const sourceWith = (options) =>
+    new OidcIdTokenSource({ issuer: op.issuer }, callback, {}, {}, options);
+  try {
+    for (const options of [undefined, null, {}, { fence: null }, { http: insecure }]) {
+      assert.throws(() => sourceWith(options), /requires.*SessionFence/);
+    }
+    const source = sourceWith({ fence });
+    assert.equal(source.fence, fence);
+    assert.throws(() => new LwsTokenProvider(source), /share.*SessionFence/);
+    assert.throws(() => new LwsTokenProvider(source, { fence: other }), /share.*SessionFence/);
+    assert.doesNotThrow(() => new LwsTokenProvider(source, { fence }));
+  } finally {
+    fence.close();
+    other.close();
+  }
+});
+
+test("LWS manager logs out and logs in again with its provider and OIDC source sharing one fence", async () => {
+  const namespace = `lws-login-${crypto.randomUUID()}`;
+  const fence = new SessionFence(namespace, { broadcast: false });
+  const code = automaticCodeProvider();
+  const metadata = await new XASProvider(
+    { getIssuer: async () => new URL(op.issuer) },
+    insecure,
+  ).getAuthorizationServer(new Request("https://unused.example/"));
+  const source = new OidcIdTokenSource(
+    metadata,
+    callback,
+    code,
+    new DynamicRegistrationClientProvider(insecure),
+    { http: insecure, fence },
+  );
+  const provider = new LwsTokenProvider(source, { http: insecure, fence });
+  const manager = new ReactiveFetchManager({
+    providers: [provider],
+    boundary: new CredentialBoundary([`${lws.url}/root/`], { allowInsecureHttp: true }),
+    fence,
+    fetch: transport,
+  });
+  const url = `${lws.url}/root/logout-login`;
+  const exchanges = lws.stats.exchanges.length;
+  const grants = op.stats.token.length;
+  let previousToken;
+  try {
+    assert.equal((await transport(url)).status, 401, "the resource requires authentication");
+    for (let session = 0; session < 3; session++) {
+      const response = await manager.fetch(url);
+      assert.equal(response.status, 200);
+      assert.equal(await response.text(), "hello https://id.example/alice#me");
+      assert.equal((await source.identity()).subject, "https://id.example/alice#me");
+      assert.equal(code.calls, session + 1);
+      assert.equal(op.stats.token.length - grants, session + 1);
+      assert.equal(lws.stats.exchanges.length - exchanges, session + 1);
+      const token = lws.stats.exchanges.at(-1).subject_token;
+      assert.notEqual(token, previousToken, "logout discarded the old OIDC credential");
+      previousToken = token;
+      assert.equal((await manager.fetch(url)).status, 200);
+      assert.equal(lws.stats.exchanges.length - exchanges, session + 1, "cached until logout");
+
+      const generation = await fence.generation();
+      const signal = fence.signal;
+      await manager.logout();
+      assert.ok((await fence.generation()) > generation);
+      assert.equal(signal.aborted, true);
+      assert.equal(await source.identity(), undefined);
+    }
+  } finally {
+    fence.close();
+  }
 });
 
 test("LWS preserves its captured generation when a peer logs out before OIDC credential acquisition", async () => {
@@ -564,6 +645,7 @@ test("review-3 #2: forget() during an LWS exchange prevents the late token from 
 
 test("review-3 #4: the LWS OpenID suite refuses ID tokens without a URI subject", async () => {
   const opaque = await startOpenIdProvider({ subject: "opaque-123" });
+  const fence = new SessionFence("lws-claims", { broadcast: false });
   try {
     const metadata = await new XASProvider(
       { getIssuer: async () => new URL(opaque.issuer) },
@@ -574,21 +656,28 @@ test("review-3 #4: the LWS OpenID suite refuses ID tokens without a URI subject"
       callback,
       automaticCodeProvider(),
       new DynamicRegistrationClientProvider(insecure),
-      { http: insecure },
+      { http: insecure, fence },
     );
     const exchanges = lws.stats.exchanges.length;
-    await assert.rejects(lwsManager(source).manager.fetch(`${lws.url}/root/o`), /sub is not a URI/);
+    await assert.rejects(
+      lwsManager(source, { fence }).manager.fetch(`${lws.url}/root/o`),
+      /sub is not a URI/,
+    );
     assert.equal(lws.stats.exchanges.length, exchanges);
     const strict = new OidcIdTokenSource(
       metadata,
       callback,
       automaticCodeProvider(),
       new DynamicRegistrationClientProvider(insecure),
-      { http: insecure, requireAudience: true },
+      { http: insecure, fence, requireAudience: true },
     );
     opaque.setSubject("https://id.example/bob");
-    await assert.rejects(lwsManager(strict).manager.fetch(`${lws.url}/root/o`), /audience/);
+    await assert.rejects(
+      lwsManager(strict, { fence }).manager.fetch(`${lws.url}/root/o`),
+      /audience/,
+    );
   } finally {
+    fence.close();
     await opaque.close();
   }
 });
@@ -729,19 +818,19 @@ test("follow-through #2: OIDC credential source IDs separate accounts sharing an
     { getIssuer: async () => new URL(op.issuer) },
     insecure,
   ).getAuthorizationServer(new Request("https://unused.example/"));
+  const [fence] = (await import("./helpers/solid.js")).sharedFences();
   const source = (account) =>
     new OidcIdTokenSource(
       metadata,
       callback,
       automaticCodeProvider(),
       new DynamicRegistrationClientProvider(insecure),
-      { http: insecure, account },
+      { http: insecure, account, fence },
     );
   const [alice, bob] = [source("alice"), source("bob")];
   assert.notEqual(alice.id, bob.id);
   assert.equal(alice.id.includes("eyJ"), false, "no tokens in identifiers");
 
-  const [fence] = (await import("./helpers/solid.js")).sharedFences();
   const shared = { namespace: "shared", tokenStore: createMemoryStore(), fence };
   assert.equal((await lwsManager(alice, shared).manager.fetch(`${lws.url}/root/acct`)).status, 200);
   const exchanges = lws.stats.exchanges.length;

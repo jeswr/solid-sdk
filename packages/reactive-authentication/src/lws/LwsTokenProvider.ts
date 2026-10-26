@@ -38,7 +38,10 @@ export interface LwsTokenProviderOptions {
    */
   readonly trustAuthorizationServer?: AuthorizationServerPolicy;
 
-  /** Shared with other providers/tabs to fence logout; defaults to a private fence. */
+  /**
+   * Shared with the manager and session-backed source; required when the source supplies a fence.
+   * Defaults to a private fence for sources without one.
+   */
   readonly fence?: SessionFence;
 
   /** Required with supplied stores. */
@@ -102,6 +105,8 @@ export class LwsTokenProvider implements TokenProvider {
   #requests = new WeakMap<Request, string>();
 
   constructor(source: CredentialSource, options: LwsTokenProviderOptions = {}) {
+    if (source.fence !== undefined && source.fence !== options.fence)
+      throw new TypeError("LWS provider and credential source must share the same SessionFence");
     if (options.metadataStore !== undefined && !options.namespace)
       throw new TypeError("A namespace is required when supplying a store");
     this.#source = source;

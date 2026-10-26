@@ -9,6 +9,7 @@ import {
   DynamicRegistrationClientProvider,
   OidcIdTokenSource,
   OidcSession,
+  SessionFence,
   SolidUmaTokenProvider,
   XASProvider,
 } from "../src/mod.js";
@@ -80,7 +81,7 @@ test("an ID credential retains a validated signed token when its cache expiry me
     callback,
     automaticCodeProvider(),
     new DynamicRegistrationClientProvider(insecure),
-    { http: insecure },
+    { http: insecure, fence: new SessionFence("id-token-expiry", { broadcast: false }) },
   );
   // Fault injection affects only optional cache metadata, after a real code grant
   // and claim validation. Signature, audience, issuer and expiry remain in the JWT.
@@ -102,4 +103,5 @@ test("an ID credential retains a validated signed token when its cache expiry me
   assert.equal(payload.sub, "https://alice.example/#me");
   assert.equal("expiresAt" in credential, false);
   await source.forget();
+  source.fence.close();
 });

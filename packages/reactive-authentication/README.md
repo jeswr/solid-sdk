@@ -202,6 +202,10 @@ trust policy (default: authorization server and realm on the requested resource'
 `trustAuthorizationServers` or `trustBindings` otherwise), verifies the resource is in the realm, discovers
 `/.well-known/lws-configuration`, exchanges the credential (`resource` = realm) and presents the Bearer token.
 
+For the OpenID suite, construct one `SessionFence` and pass it to `OidcIdTokenSource`, `LwsTokenProvider`
+and `ReactiveFetchManager`. The source requires an explicit fence, and the LWS provider rejects a source
+whose fence differs from its own. See [`examples/lws-openid.js`](examples/lws-openid.js).
+
 ## Logout, persistence and multiple tabs
 
 ```js

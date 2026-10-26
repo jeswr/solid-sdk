@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // LWS OpenID Connect suite: the user's ID token is the authentication credential; the storage's
 // authorization server exchanges it (RFC 8693) for an access token bound to the storage (realm).
 import {
@@ -6,6 +7,7 @@ import {
   LwsTokenProvider,
   OidcIdTokenSource,
   ReactiveFetchManager,
+  SessionFence,
   XASProvider,
 } from "@jeswr/reactive-authentication";
 
@@ -14,18 +16,21 @@ const openIdProvider = await new XASProvider({
   getIssuer: async () => new URL("https://openid.example"),
 }).getAuthorizationServer(new Request("https://openid.example"));
 
+// Share one fence across the manager, LWS provider and OIDC credential session.
+const fence = new SessionFence("lws-openid");
 const source = new OidcIdTokenSource(
   openIdProvider,
   "https://app.example/callback.html",
   document.querySelector("authorization-code-flow"), // or any CodeProvider
   new DynamicRegistrationClientProvider(),
-  { requireAudience: false }, // true: refuse ID tokens whose aud omits the AS
+  { fence, requireAudience: false }, // true: refuse ID tokens whose aud omits the AS
 );
 
 // By default the authorization server and realm named by the 401 must be on the resource's origin.
 const manager = new ReactiveFetchManager({
-  providers: [new LwsTokenProvider(source)],
+  providers: [new LwsTokenProvider(source, { fence })],
   boundary: new CredentialBoundary(["https://storage.example/root/"]),
+  fence,
 });
 
 const response = await manager.fetch("https://storage.example/root/notes");

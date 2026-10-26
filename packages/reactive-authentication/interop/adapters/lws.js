@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // External LWS adapter: the library's LWS support (LwsTokenProvider + one CredentialSource per authentication
 // suite) against a real, configured Linked Web Storage deployment. The storage answers 401 with a Bearer
 // challenge naming `as_uri` and `realm`; the client exchanges a suite credential (RFC 8693) for a realm-bound
@@ -28,6 +29,7 @@ import {
   ReactiveFetchManager,
   SamlAssertionSource,
   SelfIssuedJwtSource,
+  SessionFence,
   TOKEN_EXCHANGE_GRANT,
   trustAuthorizationServers,
   XASProvider,
@@ -338,6 +340,7 @@ export async function scenarios(config, env) {
 
   /** A fresh application instance: its own credential source, token cache and recorder. */
   async function client({ managerBoundary = [], automatic } = {}) {
+    const fence = new SessionFence(`lws-interop-${crypto.randomUUID()}`, { broadcast: false });
     const recorder = recordingFetch();
     const http = recorder.http(insecure);
     let source;
@@ -354,6 +357,7 @@ export async function scenarios(config, env) {
           : registeredClient(config.openid);
       source = new OidcIdTokenSource(openIdProvider, config.redirectUri, code, clients, {
         http,
+        fence,
         requireAudience: config.openid.requireAudience === true,
       });
     } else if (config.suite === "saml") {
@@ -378,6 +382,7 @@ export async function scenarios(config, env) {
     }
     const provider = new LwsTokenProvider(source, {
       http,
+      fence,
       ...(authorizationServers === undefined
         ? {}
         : { trustAuthorizationServer: trustAuthorizationServers(authorizationServers) }),
@@ -390,6 +395,7 @@ export async function scenarios(config, env) {
     const manager = new ReactiveFetchManager({
       providers: [provider],
       boundary,
+      fence,
       fetch: recorder.fetch,
     });
     return { manager, recorder, source, code, boundary };

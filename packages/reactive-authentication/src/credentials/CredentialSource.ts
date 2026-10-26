@@ -1,4 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+import type { SessionFence } from "../SessionFence.js";
+
 /** An authentication credential to present to an authorization server as an RFC 8693 subject token. */
 export interface SubjectCredential {
   /** The serialized credential (a JWT, or a base64url-encoded SAML assertion). */
@@ -39,6 +41,9 @@ export interface CredentialSource {
    * to key access-token caches so different identities never share tokens.
    */
   readonly id: string;
+
+  /** Session-backed sources require the enclosing provider to use this same fence. */
+  readonly fence?: SessionFence;
 
   getCredential(request: CredentialRequest): Promise<SubjectCredential>;
 
