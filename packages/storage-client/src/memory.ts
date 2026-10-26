@@ -143,7 +143,6 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
             },
           ]
         : []),
-      ...(lws ? [{ type: [SSD.RecursiveDelete], extra: {} }] : []),
       {
         type: [SSD.PatchSupport],
         extra: {

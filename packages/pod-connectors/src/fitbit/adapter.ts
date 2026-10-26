@@ -44,6 +44,7 @@ export const fitbitAdapter: IntegrationAdapter = {
     scopes: SCOPES,
     tokenExchange: "proxy",
     tokenProxyUrl: undefined,
+    tokenRequest: "basic-form",
   },
   fixtures: () => FITBIT_FIXTURES,
 
