@@ -449,3 +449,53 @@ The full-workspace snapshot failure remains outside this brief. Roborev is unava
 (`command -v roborev` exits 1), so automated per-commit review could not run; no tool was
 installed. Integration review and any tracker follow-up remain with the integration owner.
 Open questions: none. No design changes or new ambiguous choices were required.
+
+## Fix round 3 — review of `9475360601c0`
+
+- `04b260a8` — `fix(credentials): bind inventory issuance to validated profile`:
+  pass the validated provider, connection, purpose and resource into `accessToken` before
+  inventory dispatch. Four profile-replacement regressions assert refusal before any grant
+  read or provider call, including otherwise valid grants with overlapping scopes.
+- `cd0be31c` — `fix(credentials): derive scopes for omitted token fields`:
+  accept optional OAuth response scope. Code exchange defaults to the authorization request's
+  scopes; Microsoft refresh defaults to its explicit scope request, while Google refresh
+  preserves the stored grant's scopes. Explicit empty or insufficient scopes still refuse,
+  and malformed fields never use the omission default. Tests cover verified login, refresh,
+  refresh-token rotation and persisted scopes with fake providers.
+- `adaf096c` — `fix(credentials): validate normalized calendar request path`:
+  reject empty identifiers and initial Microsoft calendar URLs whose normalized path differs
+  from the selected operation before calendar dispatch. Test dot segments and preservation of
+  encoded identifiers through initial and paged requests.
+- Final `docs: record credential fix round three verification` commit — this record,
+  committed last.
+
+Verification used Node 24.22.1 (`PATH=/opt/node24/bin:$PATH` for every pnpm command):
+
+| Command | Result |
+| --- | --- |
+| `pnpm exec vitest run --root packages/agent-credentials test/grants.test.ts --coverage.enabled=false -t 'binds inventory issuance'` | Expected FAIL before the inventory source fix: all four regressions resolved with a calendar list. PASS after the fix: all four refuse. |
+| `pnpm exec vitest run --root packages/agent-credentials test/pilot.test.ts --coverage.enabled=false -t 'omits scope\|omit scope\|explicit Microsoft scopes'` | Expected FAIL before the scope source fix: three omitted-scope regressions failed with unexpected token answer shape; two explicit-scope refusal cases passed. |
+| `pnpm exec vitest run --root packages/agent-credentials test/pilot.test.ts test/provider-errors.test.ts --coverage.enabled=false` | PASS after the scope fix: 59 tests. |
+| `pnpm exec vitest run --root packages/agent-credentials test/providers.test.ts --coverage.enabled=false -t 'initial calendar identifier\|encoded calendar identifier'` | Expected FAIL before the calendar source fix: empty, `.` and `..` identifiers reported successful coverage; four encoded-identifier cases passed. |
+| `pnpm exec vitest run --root packages/agent-credentials test/providers.test.ts --coverage.enabled=false` | PASS after the calendar fix: all 43 tests. |
+| `pnpm --filter @jeswr/agent-credentials run lint && pnpm --filter @jeswr/agent-credentials run build && pnpm --filter @jeswr/agent-credentials run typecheck && pnpm --filter @jeswr/agent-credentials run test` | PASS: all four package checks; 9 files, 185 tests; 100% statements, branches, functions and lines. Per-file thresholds are unchanged. |
+| `TURBO_SCM_BASE=9475360601c0633b2a1d6b9bded809f8005851e3 pnpm run gate` | PASS: 5/5 tasks, all uncached, including root lint; 33.398s. The supplied starting SHA selects this round's changed package and dependents because `agent/integration` is unavailable locally. |
+| `pnpm run lint:root` (invoked by the affected and full gates) | PASS: all root guards. |
+| `pnpm run gate:full` | FAIL in unchanged root test `test/check-sdk-layers.test.mjs:328`: a pathological dependency-spec check took 149.93 ms against its 50 ms limit. Root tests: 744 passed, 1 failed. Turbo stopped after 48 successful tasks out of 211 scheduled, in 1m51.168s. |
+| `pnpm exec vitest run test/check-sdk-layers.test.mjs -t 'validates pathological specs'` | PASS in isolation: 1 passed, 299 skipped; test 34 ms, run 263 ms. No timeout or performance threshold was changed. |
+| `git diff --exit-code 9475360601c0633b2a1d6b9bded809f8005851e3 -- test scripts` | PASS: root tests and guards are unchanged from the supplied starting commit. |
+| `git diff --check` and `git show --check --oneline` for each fix commit | PASS. |
+
+All three requested fixes and their regression tests are complete. The full-workspace gate
+remains unsuccessful on the load-sensitive root timing assertion, which passes in isolation
+and is outside this brief. No dependencies were added, so no dependency policy check was
+needed. Manifests, lockfile, timeout settings and coverage settings are unchanged.
+
+Tests use temporary stores, synthetic credentials, injected fake providers and fake op
+executables. No live provider, real credential store or real op was accessed. No generated
+build artifacts are committed. No push, PR, branch switch, remote fetch, merge, external
+tracker or other checkout was involved.
+
+Roborev remains unavailable (`command -v roborev` exits 1), so automated per-commit review
+could not run; no tool was installed. Integration review and any tracker follow-up remain
+with the integration owner. Open questions: none. No design changes were required.
