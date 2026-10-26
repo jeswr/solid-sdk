@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { describe, expect, it } from "vitest";
 import {
   ComposeError,
@@ -161,7 +162,7 @@ describe("RFC 5322 composition", () => {
     expect(decodedWords(headers(result.raw).values.get("subject") as string)).toBe(subject);
     const words = result.raw.match(/=\?UTF-8\?B\?[^?]+\?=/g) ?? [];
     for (const word of words) expect(word.length).toBeLessThanOrEqual(75);
-    for (const line of result.raw.split("\r\n")) expect(line.length).toBeLessThanOrEqual(78);
+    for (const line of result.raw.split("\r\n")) expect(line.length).toBeLessThanOrEqual(76);
   });
 
   it("encodes Unicode names outside quotes, including multiword and literal encoded-word names", () => {
@@ -171,6 +172,56 @@ describe("RFC 5322 composition", () => {
       expect(from).toMatch(/^=\?UTF-8\?B\?/);
       expect(decodedWords(from)).toBe(`${name} <${alice.email}>`);
     }
+  });
+
+  it.each([
+    "from",
+    "to",
+    "cc",
+    "replyTo",
+  ] as const)("folds encoded %s fields at name and mailbox boundaries within 76 columns", (field) => {
+    const recipients = [
+      { email: "a@b.org", name: "é".repeat(21) },
+      { email: "second@example.org", name: "東京 🐬".repeat(25) },
+      { email: "third@example.org", name: 'ASCII "quoted" <name>' },
+    ];
+    const raw = build({ [field]: field === "from" ? recipients[0] : recipients }).raw;
+    const fieldName = field === "replyTo" ? "Reply-To" : field;
+    const emitted = raw
+      .slice(0, raw.indexOf("\r\n\r\n"))
+      .match(new RegExp(`^${fieldName}:.*(?:\\r\\n .*)*`, "im"))?.[0] as string;
+    for (const line of emitted.split("\r\n")) expect(line.length).toBeLessThanOrEqual(76);
+    for (const word of emitted.match(/=\?UTF-8\?B\?[^?]+\?=/g) ?? [])
+      expect(word.length).toBeLessThanOrEqual(75);
+    const expected = (field === "from" ? recipients.slice(0, 1) : recipients)
+      .map(({ name, email }) =>
+        name.startsWith("ASCII")
+          ? '"ASCII \\"quoted\\" <name>" <third@example.org>'
+          : `${name} <${email}>`,
+      )
+      .join(", ");
+    expect(decodedWords(headers(raw).values.get(fieldName.toLowerCase()) as string)).toBe(expected);
+  });
+
+  it("counts the field name and continuation space at the 76-column encoded-field limit", () => {
+    const name = "é".repeat(21); // One 68-character encoded word.
+    const raw = build({ replyTo: [{ name, email: "a@b.org" }] }).raw;
+    expect(raw).toContain("Reply-To:\r\n =?UTF-8?B?");
+    expect(raw).toContain("?=\r\n <a@b.org>\r\n");
+
+    const fitting = build({ from: { name: "é", email: `${"a".repeat(39)}@example.org` } }).raw;
+    expect(fitting).toContain(`From: =?UTF-8?B?w6k=?= <${"a".repeat(39)}@example.org>\r\n`);
+    const folded = build({ from: { name: "é", email: `${"a".repeat(40)}@example.org` } }).raw;
+    expect(folded).toContain(`From: =?UTF-8?B?w6k=?=\r\n <${"a".repeat(40)}@example.org>\r\n`);
+  });
+
+  it("folds before long mailboxes and rejects indivisible tokens exceeding an encoded field limit", () => {
+    const email = `${"a".repeat(61)}@example.org`;
+    const raw = build({ from: { name: "é", email } }).raw;
+    expect(raw).toContain(`From: =?UTF-8?B?w6k=?=\r\n <${email}>\r\n`);
+    expect(decodedWords(headers(raw).values.get("from") as string)).toBe(`é <${email}>`);
+    rejects(() => build({ from: { name: "é", email: `${"a".repeat(62)}@example.org` } }));
+    rejects(() => build({ to: [{ name: "é", email }, bob] }));
   });
 
   it("supports empty bodies, empty optional lists, and Bcc-only envelopes", () => {

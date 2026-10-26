@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # Mail composition (MAI-L3)
 
@@ -28,7 +29,9 @@ subjects/display names, split at code-point boundaries (≤75 characters per enc
 ASCII display names are quoted with escaped quotes/backslashes; encoded-words appear outside
 quotes. Whitespace-sensitive, long and literal encoded-word-looking subjects are also encoded.
 Headers fold at address/encoded-word/identifier boundaries. Long indivisible tokens may exceed
-the recommended 78 characters; the RFC 5322 hard limit of 998 is enforced.
+the recommended 78 characters; the RFC 5322 hard limit of 998 is enforced. Fields containing
+encoded-words use the mandatory 76-character line limit, including the field name and continuation
+whitespace; indivisible tokens that cannot fit that limit are rejected.
 
 Plain text is required, HTML optional (no HTML-to-text conversion or sanitization). Text line
 endings are canonicalized to CRLF before UTF-8 encoding. Both text and binary attachments use

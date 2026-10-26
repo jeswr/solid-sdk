@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import type { MailAddress } from "./types";
 import { headerText, requireInput } from "./validation";
 
@@ -40,11 +41,25 @@ export const quoted = (value: string) => `"${value.replace(/["\\]/g, "\\$&")}"`;
 export function formatAddress(value: MailAddress): string {
   if (value.name === undefined) return value.email;
   const name = encodeHeader(value.name);
-  return `${name.startsWith("=?") ? name : quoted(name)} <${value.email}>`;
+  // Expose a safe fold boundary without splitting quoted names or mailbox tokens.
+  return `${name.startsWith("=?") ? name : quoted(name)}\r\n <${value.email}>`;
 }
 export function header(name: string, value: string): string {
-  const firstLine = value.split("\r\n")[0] as string;
-  return `${name}:${name.length + firstLine.length + 2 > 78 ? "\r\n " : " "}${value}`;
+  const limit = /(?:^|\r\n )=\?UTF-8\?B\?[^?]+\?=(?=\r\n |$)/.test(value) ? 76 : 78;
+  const lines: string[] = [];
+  let line = `${name}:`;
+  for (const part of value.split("\r\n ")) {
+    if (line.length + part.length + 1 > limit) {
+      lines.push(line);
+      line = ` ${part}`;
+    } else {
+      line += ` ${part}`;
+    }
+    // Encoded fields have a mandatory limit, even for indivisible mailbox tokens.
+    requireInput(limit !== 76 || line.length <= limit, "lineLength");
+  }
+  lines.push(line);
+  return lines.join("\r\n");
 }
 export function filenameParameter(filename: string): string {
   headerText(filename, "filename");
