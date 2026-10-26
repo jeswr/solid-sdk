@@ -51,8 +51,9 @@ Solid write side (ADR-003 §6, T-022; implementation isolated in `src/solid-writ
   unexpected 2xx/3xx are `invalid-response` and unread bodies are discarded. Only 200/201/204/205
   succeed. Errors use `failed`/`storageErrorFrom` (412 includes the response ETag, 409 is conflict,
   405 method-not-allowed, 415 unsupported-media-type, 422 bad-request).
-- Transport failures are retryable `network`; aborts and transport failures with a spent
-  ReadableStream request body are non-retryable. Streams pass through with `duplex: 'half'`;
+- Transport failures are retryable `network`; aborts and all failures with a ReadableStream
+  request body (including HTTP errors) are non-retryable, retaining code/status/retry delay.
+  Streams pass through with `duplex: 'half'`;
   strings/Uint8Array/Blob pass directly. Abort signals are checked before/between requests.
 - `write`/`writeRdf` require a nonempty string `ifMatch`; `'*'` means no Solid precondition/header.
   `patch`/`delete`/`move`/`setMetadata` require a non-'*' ETag string (TypeError before requests).
@@ -107,16 +108,22 @@ Solid write side (ADR-003 §6, T-022; implementation isolated in `src/solid-writ
 - Solid move is emulated (features.move.detail.native false): refuse the root, require a container
   destination, reject self/subtree container cycles with conflict, validate/encode an explicit name
   or retain the raw source segment. Read/head the source and compare its ETag before any writes.
-  Resources copy their bytes/Content-Type with If-None-Match:* then DELETE source with If-Match.
+  Resources stream their GET body/Content-Type into PUT with If-None-Match:* then DELETE source
+  with If-Match matching that GET's ETag. Missing GET ETags or missing/malformed Content-Type
+  are invalid-response errors identifying the source GET, before its destination PUT.
 - Container moves walk listAll recursively before writes, capped at 2000 resources including the
-  top container (unsupported/feature move above the cap). Copy breadth-first, creating containers
-  before their children; record each created URL/ETag. Source deletion is depth-first and
-  unconditional after the initial top ETag check. Listed .acl/.acr and advertised describedby
-  documents are excluded from implicit copies; source teardown still deletes listed auxiliary
-  members. ACLs and metadata are not copied implicitly. Resource representations are buffered
-  during preflight to identify describedby documents before copying any members.
+  top container (unsupported/feature move above the cap). Preflight HEADs every member to discover
+  describedby exclusions and rejects unversioned copied resources before writes. No resource GET
+  bodies are read during preflight. Copy breadth-first, creating containers before children and
+  streaming one resource at a time without buffering. Record each GET ETag for depth-first source
+  deletion: copied resources use that validator, auxiliary members use their HEAD ETag when present,
+  containers remain unconditional because membership changes their ETag. Listed .acl/.acr and
+  advertised describedby documents are excluded from implicit copies; source teardown still deletes
+  listed auxiliary members. ACLs and metadata are not copied implicitly.
 - Copy failure rolls back completed copies deepest-first and rethrows the original error. Resource
-  cleanup uses its create ETag when known, protecting concurrent changes; containers are removed
+  cleanup trusts only its own PUT-response ETag; follow-up HEAD observations are kept separately
+  for successful results. Copies without a create-response ETag and their ancestors are preserved,
+  reporting a partial move (conflict with the original cause). Validated containers are removed
   unconditionally after children. Any source DELETE failure (including 4xx/5xx) throws conflict,
   cause = delete error. Retain acknowledged deleted sources' copies; before removing any other
   copy, HEAD its source without the caller's signal. Remove it only if HEAD succeeds; any HEAD

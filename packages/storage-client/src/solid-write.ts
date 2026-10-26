@@ -3,8 +3,8 @@
 import type { DatasetCore, Quad } from "@jeswr/fetch-rdf";
 import { escapeIri } from "@jeswr/rdf-serialize";
 import { DataFactory, Store } from "n3";
-import { StorageError, type StorageErrorCode } from "./errors.js";
-import { discard, failed, scoped, send } from "./http.js";
+import { StorageError, type StorageErrorCode, storageErrorFrom } from "./errors.js";
+import { discard, scoped, send } from "./http.js";
 import { pathParent } from "./internal.js";
 import { serializeQuads, WRITABLE_RDF } from "./rdf.js";
 import type { SolidBackendOptions } from "./solid-backend.js";
@@ -56,6 +56,7 @@ interface Node {
 interface Copy extends Node {
   source: string;
   etag: string | null;
+  creationEtag: string | null;
 }
 
 /** Attach mutations without changing the read implementation or its closure. */
@@ -96,6 +97,11 @@ export function solidWrites(options: SolidBackendOptions, client: () => StorageC
     if (current !== expected)
       throw new StorageError("precondition-failed", { method, url, status: 412, etag: current });
   }
+  function requireEtag(read: ReadResult, method: string): string {
+    if (read.etag) return read.etag;
+    discard(read.body);
+    throw error("invalid-response", method, read.url, "Conditional moves require source ETags");
+  }
   async function etag(
     url: string,
     value: string | null,
@@ -119,7 +125,12 @@ export function solidWrites(options: SolidBackendOptions, client: () => StorageC
   ): Promise<Response> {
     const response = await send(fetch, method, target(method, url), headers, signal, body);
     if (![200, 201, 204, 205].includes(response.status)) {
-      if (response.status < 200 || response.status >= 400) await failed(method, url, response);
+      if (response.status < 200 || response.status >= 400) {
+        const cause = await storageErrorFrom(method, url, response);
+        throw body instanceof ReadableStream
+          ? new StorageError(cause.code, { ...cause, message: cause.message, retryable: false })
+          : cause;
+      }
       discard(response.body);
       throw new StorageError("invalid-response", { method, url, status: response.status });
     }
@@ -145,7 +156,7 @@ export function solidWrites(options: SolidBackendOptions, client: () => StorageC
     body: Body,
     type: string,
     signal?: AbortSignal,
-  ): Promise<WriteResult> {
+  ): Promise<{ result: WriteResult; creationEtag: string | null }> {
     const url = target(
       "PUT",
       `${container("PUT", parent)}${segment}${kind === "container" ? "/" : ""}`,
@@ -168,7 +179,10 @@ export function solidWrites(options: SolidBackendOptions, client: () => StorageC
         });
       throw cause;
     }
-    return result(url, response, signal);
+    return {
+      result: await result(url, response, signal),
+      creationEtag: response.headers.get("etag"),
+    };
   }
   async function remove(url: string, signal?: AbortSignal, ifMatch?: string): Promise<void> {
     await request("DELETE", url, ifMatch === undefined ? {} : { "If-Match": ifMatch }, signal);
@@ -197,15 +211,23 @@ export function solidWrites(options: SolidBackendOptions, client: () => StorageC
   }
   // Cleanup is independent of the caller's aborted signal. Continue after failures to free every
   // safe copy, but retain each failure so the original error can never disappear.
-  async function rollback(copies: readonly Copy[], keep: ReadonlySet<string>): Promise<unknown[]> {
+  async function rollback(copies: readonly Copy[], keep: Set<string>): Promise<unknown[]> {
     const failures: unknown[] = [];
+    // Only a resource's own create validator can make its deletion safe; an emptied container
+    // is removed unconditionally (a concurrent member makes its DELETE fail with 409).
+    for (const copy of copies)
+      if (copy.kind === "resource" && !copy.creationEtag) keep.add(copy.url);
+    // A retained descendant also prevents cleanup of its containing copies.
+    for (const copy of copies)
+      if (copy.kind === "container" && [...keep].some((url) => url.startsWith(copy.url)))
+        keep.add(copy.url);
     for (const copy of [...copies].reverse()) {
       if (keep.has(copy.url)) continue;
       try {
         await remove(
           copy.url,
           undefined,
-          copy.kind === "resource" ? (copy.etag ?? undefined) : undefined,
+          copy.kind === "resource" ? (copy.creationEtag as string) : undefined,
         );
       } catch (cause) {
         failures.push(cause);
@@ -244,7 +266,7 @@ export function solidWrites(options: SolidBackendOptions, client: () => StorageC
       const type = kind === "container" ? "text/turtle" : (opts.contentType as string);
       const segment = nameFor("POST", parent, opts.name);
       if (segment !== undefined)
-        return createExact(parent, segment, kind, body ?? "", type, opts.signal);
+        return (await createExact(parent, segment, kind, body ?? "", type, opts.signal)).result;
       const slug = [...crypto.getRandomValues(new Uint8Array(16))]
         .map((byte) => BASE32[byte % 32])
         .join("");
@@ -370,65 +392,94 @@ export function solidWrites(options: SolidBackendOptions, client: () => StorageC
         kind === "container"
           ? await client().head(source, { signal: opts.signal })
           : await client().read(source, { signal: opts.signal });
+      requireEtag(first, kind === "resource" ? "GET" : "HEAD");
       if (first.etag !== opts.ifMatch) discard(first.body);
       checkEtag("MOVE", source, first.etag, opts.ifMatch);
       const nodes: Node[] =
         kind === "container" ? await tree(source, 2000, opts.signal) : [{ url: source, kind }];
-      const data = new Map<string, { body: Uint8Array; type: string | null }>();
+      const sourceEtags = new Map<string, string | null>();
       const excluded = new Set<string>();
       for (const node of nodes) {
-        if (node.url !== source && (excluded.has(node.url) || /\.(acl|acr)$/.test(node.url))) {
-          excluded.add(node.url);
-          continue;
-        }
-        const read: ReadResult =
-          node.url === source
-            ? first
-            : node.kind === "container"
-              ? await client().head(node.url, { signal: opts.signal })
-              : await client().read(node.url, { signal: opts.signal });
+        if (node.url !== source && /\.(acl|acr)$/.test(node.url)) excluded.add(node.url);
+        // Preflight only headers: discover every metadata exclusion before any body is copied.
+        const read =
+          node.url === source ? first : await client().head(node.url, { signal: opts.signal });
         if (read.metadataUrl) {
           const metadataUrl = target("GET", read.metadataUrl);
           if (metadataUrl !== source) excluded.add(metadataUrl);
         }
-        if (node.kind === "resource")
-          data.set(node.url, { body: await read.bytes(), type: read.contentType });
+        sourceEtags.set(node.url, read.etag);
       }
       const planned = nodes.filter((node) => !excluded.has(node.url));
-      // Metadata can precede its resource in the listing; validate only representations that
-      // will actually be copied, after all describedby links have been discovered.
-      for (const [url, value] of data) if (!excluded.has(url)) contentType(value.type);
+      // Reject unversioned members before creating the destination tree. GET validators are
+      // checked again when streaming, since those alone identify the bytes actually copied.
+      for (const node of planned)
+        if (node.kind === "resource" && !sourceEtags.get(node.url))
+          throw error(
+            "invalid-response",
+            "HEAD",
+            node.url,
+            "Conditional moves require source ETags",
+          );
       const copies: Copy[] = [];
       try {
         for (const node of planned) {
           const copyUrl = dest + node.url.slice(source.length);
           const copyParent = pathParent(copyUrl, root) as string;
           const copySegment = copyUrl.slice(copyParent.length).replace(/\/$/, "");
-          const value = data.get(node.url);
+          let body: Body = "";
+          let type = "text/turtle";
+          if (node.kind === "resource") {
+            const read =
+              node.url === source ? first : await client().read(node.url, { signal: opts.signal });
+            sourceEtags.set(node.url, requireEtag(read, "GET"));
+            try {
+              contentType(read.contentType);
+            } catch {
+              discard(read.body);
+              throw error("invalid-response", "GET", node.url, "Invalid source Content-Type");
+            }
+            body = read.body ?? "";
+            type = read.contentType;
+          }
           const copied = await createExact(
             copyParent,
             copySegment,
             node.kind,
-            value?.body ?? "",
-            value?.type ?? "text/turtle",
+            body,
+            type,
             opts.signal,
           );
-          copies.push({ ...node, source: node.url, url: copied.url, etag: copied.etag });
+          copies.push({
+            ...node,
+            source: node.url,
+            url: copied.result.url,
+            etag: copied.result.etag,
+            creationEtag: copied.creationEtag,
+          });
         }
       } catch (cause) {
-        const failures = await rollback(copies, new Set());
-        if (failures.length)
+        const keep = new Set<string>();
+        const failures = await rollback(copies, keep);
+        if (failures.length || keep.size)
           throw new StorageError("conflict", {
             method: "MOVE",
             url: source,
-            cause: new AggregateError([cause, ...failures], "Copy and rollback failed"),
+            cause: failures.length
+              ? new AggregateError([cause, ...failures], "Copy and rollback failed")
+              : cause,
+            message: "The move was partial; some copies were preserved or could not be removed",
           });
         throw cause;
       }
       const deleted = new Set<string>();
       try {
         for (const node of [...nodes].sort((a, b) => (a.url < b.url ? 1 : -1))) {
-          await remove(node.url, opts.signal, kind === "resource" ? opts.ifMatch : undefined);
+          await remove(
+            node.url,
+            opts.signal,
+            node.kind === "resource" ? (sourceEtags.get(node.url) ?? undefined) : undefined,
+          );
           deleted.add(node.url);
         }
       } catch (cause) {
@@ -446,10 +497,6 @@ export function solidWrites(options: SolidBackendOptions, client: () => StorageC
           }
           if (!exists) keep.add(copy.url);
         }
-        // Preserve ancestors of every surviving copy.
-        for (const copy of copies)
-          if ([...keep].some((url) => url.startsWith(copy.url)) && copy.kind === "container")
-            keep.add(copy.url);
         const failures = await rollback(copies, keep);
         throw new StorageError("conflict", {
           method: "MOVE",

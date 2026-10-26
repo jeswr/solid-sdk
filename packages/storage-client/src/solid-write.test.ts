@@ -44,7 +44,10 @@ interface Call {
   redirect: string | undefined;
   duplex: unknown;
 }
-type Exchange = RecordedResponse | ((call: Call) => RecordedResponse | Promise<RecordedResponse>);
+type TestResponse = Omit<RecordedResponse, "body"> & {
+  body?: string | ReadableStream<Uint8Array>;
+};
+type Exchange = TestResponse | ((call: Call) => TestResponse | Promise<TestResponse>);
 function backend(
   overrides: Record<string, Exchange> = {},
   options: { etagFollowUp?: boolean; features?: Features } = {},
@@ -74,7 +77,9 @@ function backend(
     return new Response(
       call.method === "HEAD" || recorded.body === undefined
         ? null
-        : new TextEncoder().encode(recorded.body),
+        : typeof recorded.body === "string"
+          ? new TextEncoder().encode(recorded.body)
+          : recorded.body,
       recorded,
     );
   });
@@ -297,6 +302,47 @@ describe("CSS write fixtures and HTTP plumbing", () => {
       "network",
     );
     expect(before.calls).toHaveLength(0);
+  });
+  test.each([
+    429, 503,
+  ])("consumed upload streams cannot retry HTTP %i on write or create", async (status) => {
+    for (const operation of ["write", "create-named", "create-unnamed"] as const) {
+      const method = operation === "create-unnamed" ? "POST" : "PUT";
+      const url = operation === "create-unnamed" ? NOTES : URL;
+      const { storage } = backend({
+        [`${method} ${url}`]: async (call) => {
+          expect(call.body).toBeInstanceOf(ReadableStream);
+          expect(await new Response(call.body as ReadableStream).text()).toBe("upload");
+          return response(
+            status,
+            {
+              "retry-after": "7",
+              "content-type": "application/problem+json",
+            },
+            '{"title":"Busy"}',
+          );
+        },
+      });
+      const body = new Blob(["upload"]).stream();
+      const error = await rejection(
+        operation === "write"
+          ? storage.write(URL, body, { contentType: "text/plain", ifMatch: "*" })
+          : storage.create(NOTES, body, {
+              contentType: "text/plain",
+              ...(operation === "create-named" ? { name: "today.ttl" } : {}),
+            }),
+        status === 429 ? "rate-limited" : "server",
+      );
+      expect(error).toMatchObject({
+        status,
+        method,
+        url,
+        retryable: false,
+        retryAfterMs: 7000,
+        problem: { title: "Busy" },
+      });
+      expect(body.locked).toBe(true);
+    }
   });
 });
 
@@ -841,7 +887,9 @@ describe("emulated move", () => {
       ["DELETE", src],
     ]);
     expect(calls[0]?.headers.get("accept")).toBe("*/*");
-    expect(calls[1]?.body).toEqual(new TextEncoder().encode("raw bytes"));
+    expect(calls[1]?.body).toBeInstanceOf(ReadableStream);
+    expect(calls[1]?.duplex).toBe("half");
+    expect(await new Response(calls[1]?.body as ReadableStream).text()).toBe("raw bytes");
     expect(calls[1]?.headers.get("content-type")).toBe("image/png");
     expect(calls[1]?.headers.get("if-none-match")).toBe("*");
     expect(calls[2]?.headers.get("if-match")).toBe('"source"');
@@ -877,12 +925,19 @@ describe("emulated move", () => {
     expect(
       calls.filter((c) => c.method === "DELETE").map((c) => [c.url, c.headers.get("if-match")]),
     ).toEqual([
-      [`${SRC}sub/b`, null],
+      [`${SRC}sub/b`, '"source"'],
       [`${SRC}sub/`, null],
-      [`${SRC}a`, null],
+      [`${SRC}a`, '"source"'],
       [SRC, null],
     ]);
     expect(calls.at(-1)?.method).toBe("HEAD");
+  });
+  test("a stale top-container ETag rejects the move before preflight or writes", async () => {
+    const { storage, calls } = await treeBackend();
+    expect(
+      await rejection(storage.move(SRC, DEST, { ifMatch: '"stale"' }), "precondition-failed"),
+    ).toMatchObject({ status: 412, etag: '"source"' });
+    expect(calls.map((c) => [c.method, c.url])).toEqual([["HEAD", SRC]]);
   });
   test("copy failure rolls back all completed copies, deepest first, and rethrows the original", async () => {
     const { storage, calls } = await treeBackend({ [`PUT ${COPY}sub/b`]: response(403, {}) });
@@ -940,7 +995,7 @@ describe("emulated move", () => {
       let heads = 0;
       const { storage, calls } = await treeBackend({
         [`DELETE ${SRC}sub/`]: response(409, {}),
-        [`HEAD ${SRC}a`]: () => response(++heads > 0 ? status : 200, {}),
+        [`HEAD ${SRC}a`]: () => response(++heads > 1 ? status : 200, { etag: '"source"' }),
       });
       await rejection(storage.move(SRC, DEST, { ifMatch: '"source"' }), "conflict");
       expect(calls.filter((c) => c.method === "DELETE" && c.url.startsWith(COPY))).toHaveLength(0);
@@ -962,18 +1017,23 @@ describe("emulated move", () => {
       expect(calls.at(-1)?.url).toBe(COPY);
     }
   });
-  test("rolls back resource copies unconditionally only when no ETag is known", async () => {
+  test.each([
+    true,
+    false,
+  ])("preserves unvalidated copies despite concurrent edits (etagFollowUp=%s)", async (etagFollowUp) => {
     const dest = `${DEST}today.ttl`;
     const { storage, calls } = backend(
       {
         [`PUT ${dest}`]: response(201, {}),
+        [`HEAD ${dest}`]: response(200, { etag: '"concurrent"' }),
         [`DELETE ${URL}`]: response(403, {}),
         [`DELETE ${dest}`]: response(),
       },
-      { etagFollowUp: false },
+      { etagFollowUp },
     );
-    await rejection(storage.move(URL, DEST, { ifMatch: TAG }), "conflict");
-    expect(calls.at(-1)?.headers.has("if-match")).toBe(false);
+    const error = await rejection(storage.move(URL, DEST, { ifMatch: TAG }), "conflict");
+    expect(error.message).toContain("partial");
+    expect(calls.some((call) => call.method === "DELETE" && call.url === dest)).toBe(false);
   });
   test("abort during copy cleans completed copies without the spent signal", async () => {
     const c = new AbortController();
@@ -1013,12 +1073,13 @@ describe("emulated move", () => {
     );
     const { storage, calls } = await treeBackend({
       [`GET ${SRC}`]: response(200, { "content-type": "text/turtle" }, body),
-      [`GET ${SRC}a`]: response(
-        200,
-        { "content-type": "text/plain", link: `<${SRC}meta>; rel="describedby"` },
-        "content",
-      ),
-      [`GET ${SRC}meta`]: response(200, { "content-type": "text/turtle" }, ""),
+      [`HEAD ${SRC}a`]: response(200, {
+        etag: '"source"',
+        link: `<${SRC}meta>; rel="describedby"`,
+      }),
+      [`HEAD ${SRC}meta`]: response(200, {}),
+      [`HEAD ${SRC}a.acl`]: response(200, {}),
+      [`HEAD ${SRC}a.acr`]: response(200, {}),
       [`DELETE ${SRC}a.acl`]: response(),
       [`DELETE ${SRC}a.acr`]: response(),
       [`DELETE ${SRC}meta`]: response(),
@@ -1179,7 +1240,12 @@ describe("additional adversarial cases", () => {
     };
     for (const u of [early, late, deep]) {
       extra[`HEAD ${u}`] = response(200, { etag: '"source"' });
-      if (u !== early) extra[`GET ${u}`] = response(200, { "content-type": "text/plain" }, "bytes");
+      if (u !== early)
+        extra[`GET ${u}`] = response(
+          200,
+          { etag: '"source"', "content-type": "text/plain" },
+          "bytes",
+        );
       extra[`PUT ${COPY}${u.slice(SRC.length)}`] = response(201);
       extra[`DELETE ${u}`] = response();
     }
@@ -1203,6 +1269,233 @@ describe("additional adversarial cases", () => {
 });
 
 describe("move data preservation", () => {
+  test.each([
+    { members: 1, chunks: 64, chunkSize: 1024 * 1024 },
+    { members: 1999, chunks: 1, chunkSize: 8 * 1024 * 1024 },
+  ])("streams $members resources of $chunks × $chunkSize bytes without collecting bodies", async ({
+    members,
+    chunks,
+    chunkSize,
+  }) => {
+    const isTree = members > 1;
+    const urls = Array.from({ length: members }, (_, i) => (isTree ? `${SRC}file${i}` : URL));
+    const chunk = new Uint8Array(chunkSize);
+    let uploading = false,
+      activeBodies = 0,
+      completed = 0,
+      bytes = 0,
+      rootCreated = !isTree;
+    const exchanges: Record<string, Exchange> = {};
+    for (const url of urls) {
+      const dest = isTree ? COPY + url.slice(SRC.length) : `${DEST}today.ttl`;
+      exchanges[`HEAD ${url}`] = response(200, { etag: '"source"' });
+      exchanges[`GET ${url}`] = () => {
+        expect(rootCreated).toBe(true);
+        expect(activeBodies++).toBe(0);
+        let sent = 0;
+        return {
+          status: 200,
+          headers: { etag: '"source"', "content-type": "application/octet-stream" },
+          body: new ReadableStream<Uint8Array>(
+            {
+              pull(controller) {
+                // No client-side collection, including collection of a single large resource.
+                expect(uploading).toBe(true);
+                if (sent++ < chunks) controller.enqueue(chunk);
+                else {
+                  activeBodies--;
+                  controller.close();
+                }
+              },
+            },
+            { highWaterMark: 0 },
+          ),
+        };
+      };
+      exchanges[`PUT ${dest}`] = async (call) => {
+        expect(call.body).toBeInstanceOf(ReadableStream);
+        expect(call.duplex).toBe("half");
+        expect(activeBodies).toBe(1);
+        uploading = true;
+        const reader = (call.body as ReadableStream<Uint8Array>).getReader();
+        let size = 0;
+        for (let item = await reader.read(); !item.done; item = await reader.read())
+          size += item.value.byteLength;
+        expect(size).toBe(chunks * chunkSize);
+        bytes += size;
+        completed++;
+        uploading = false;
+        return response(201);
+      };
+      exchanges[`DELETE ${url}`] = (call) => {
+        expect(completed).toBe(members);
+        expect(call.headers.get("if-match")).toBe('"source"');
+        return response();
+      };
+    }
+    if (isTree) {
+      exchanges[`GET ${SRC}`] = response(
+        200,
+        { "content-type": "text/turtle" },
+        await serializeQuads(
+          urls.map((url) => quad(nn(SRC), nn("http://www.w3.org/ns/ldp#contains"), nn(url))),
+          "text/turtle",
+        ),
+      );
+      exchanges[`PUT ${COPY}`] = () => {
+        rootCreated = true;
+        return response(201);
+      };
+    }
+    const { storage } = isTree ? await treeBackend(exchanges) : backend(exchanges);
+    await storage.move(isTree ? SRC : URL, DEST, { ifMatch: '"source"' });
+    expect(bytes).toBe(members * chunks * chunkSize);
+    expect(activeBodies).toBe(0);
+  });
+  test("a concurrent child update fails its DELETE with the copied GET ETag and preserves the new source", async () => {
+    const child = `${SRC}sub/b`;
+    const fixture = await treeBackend({
+      [`GET ${child}`]: response(
+        200,
+        { etag: '"read-version"', "content-type": "text/plain" },
+        "original",
+      ),
+      [`PUT ${COPY}sub/b`]: async (call) => {
+        expect(await new Response(call.body as ReadableStream).text()).toBe("original");
+        fixture.exchanges[`GET ${child}`] = response(
+          200,
+          { etag: '"updated"', "content-type": "text/plain" },
+          "concurrent update",
+        );
+        return response(201, { etag: '"copy"' });
+      },
+    });
+    const error = await rejection(
+      fixture.storage.move(SRC, DEST, { ifMatch: '"source"' }),
+      "conflict",
+    );
+    expect(error.cause).toMatchObject({
+      code: "precondition-failed",
+      status: 412,
+      etag: '"updated"',
+    });
+    expect(
+      fixture.calls.find((c) => c.method === "DELETE" && c.url === child)?.headers.get("if-match"),
+    ).toBe('"read-version"');
+    expect(fixture.calls.filter((c) => c.method === "DELETE").map((c) => c.url)).toEqual([
+      child,
+      `${COPY}sub/b`,
+      `${COPY}sub/`,
+      `${COPY}a`,
+      COPY,
+    ]);
+    expect(await (await fixture.storage.read(child)).text()).toBe("concurrent update");
+  });
+  test.each([
+    "resource",
+    "container",
+  ])("a missing source ETag rejects a %s move before writes", async (kind) => {
+    const url = kind === "resource" ? URL : SRC;
+    const method = kind === "resource" ? "GET" : "HEAD";
+    const { storage, calls } = backend({
+      [`${method} ${url}`]: response(200, { "content-type": "text/plain" }, "bytes"),
+    });
+    expect(
+      await rejection(storage.move(url, DEST, { ifMatch: TAG }), "invalid-response"),
+    ).toMatchObject({ method, url });
+    expect(calls.map((c) => c.method)).toEqual([method]);
+  });
+  test("preflight rejects unversioned members before creating the tree", async () => {
+    const { storage, calls } = await treeBackend({ [`HEAD ${SRC}a`]: response(200, {}) });
+    expect(
+      await rejection(storage.move(SRC, DEST, { ifMatch: '"source"' }), "invalid-response"),
+    ).toMatchObject({ method: "HEAD", url: `${SRC}a` });
+    expect(calls.every((c) => c.method === "HEAD" || c.method === "GET")).toBe(true);
+    expect(calls.some((c) => c.method === "GET" && !c.url.endsWith("/"))).toBe(false);
+  });
+  test("a member GET losing its ETag after HEAD rolls back completed copies without deleting sources", async () => {
+    const { storage, calls } = await treeBackend({
+      [`GET ${SRC}sub/b`]: response(200, { "content-type": "text/plain" }, "bytes"),
+    });
+    expect(
+      await rejection(storage.move(SRC, DEST, { ifMatch: '"source"' }), "invalid-response"),
+    ).toMatchObject({ method: "GET", url: `${SRC}sub/b` });
+    expect(calls.filter((c) => c.method === "DELETE").map((c) => c.url)).toEqual([
+      `${COPY}sub/`,
+      `${COPY}a`,
+      COPY,
+    ]);
+  });
+  test.each([
+    "copy",
+    "delete",
+  ] as const)("%s failure preserves unvalidated copies and ancestors for every follow-up configuration", async (phase) => {
+    for (const etagFollowUp of [true, false])
+      for (const headStatus of [200, 503]) {
+        const { storage, calls } = await treeBackend(
+          {
+            [`PUT ${COPY}a`]: response(201, {}),
+            [`HEAD ${COPY}a`]: response(headStatus, { etag: '"concurrent-edit"' }),
+            [phase === "copy" ? `PUT ${COPY}sub/b` : `DELETE ${SRC}sub/b`]: response(403, {}),
+          },
+          { etagFollowUp },
+        );
+        const error = await rejection(storage.move(SRC, DEST, { ifMatch: '"source"' }), "conflict");
+        expect(error.message).toContain("partial");
+        expect(error.cause).toMatchObject({ code: "forbidden" });
+        expect(
+          calls.filter((c) => c.method === "DELETE" && c.url.startsWith(COPY)).map((c) => c.url),
+        ).toEqual(phase === "copy" ? [`${COPY}sub/`] : [`${COPY}sub/b`, `${COPY}sub/`]);
+      }
+  });
+  test("a successful resource move retains follow-up ETag behavior", async () => {
+    const dest = `${DEST}today.ttl`;
+    const { storage } = backend({
+      [`PUT ${dest}`]: response(201, {}),
+      [`HEAD ${dest}`]: response(200, { etag: '"observed"' }),
+      [`DELETE ${URL}`]: response(),
+    });
+    expect((await storage.move(URL, DEST, { ifMatch: TAG })).etag).toBe('"observed"');
+  });
+  test("a bodyless resource still moves with its content type and conditional DELETE", async () => {
+    const dest = `${DEST}today.ttl`;
+    const { storage, calls } = backend({
+      [`GET ${URL}`]: response(200, { etag: TAG, "content-type": "text/plain" }),
+      [`PUT ${dest}`]: response(201),
+      [`DELETE ${URL}`]: response(),
+    });
+    await storage.move(URL, DEST, { ifMatch: TAG });
+    expect(calls[1]?.body).toBe("");
+    expect(calls[2]?.headers.get("if-match")).toBe(TAG);
+  });
+  test("a failed streamed PUT rolls back earlier copies and never deletes sources", async () => {
+    const { storage, calls } = await treeBackend({
+      [`GET ${SRC}sub/b`]: {
+        status: 200,
+        headers: { etag: '"source"', "content-type": "text/plain" },
+        body: new ReadableStream(
+          {
+            pull(controller) {
+              controller.error(new Error("source stream failed"));
+            },
+          },
+          { highWaterMark: 0 },
+        ),
+      },
+      [`PUT ${COPY}sub/b`]: async (call) => {
+        await new Response(call.body as ReadableStream).arrayBuffer();
+        return response(201);
+      },
+    });
+    expect(
+      await rejection(storage.move(SRC, DEST, { ifMatch: '"source"' }), "network"),
+    ).toMatchObject({ retryable: false });
+    expect(calls.filter((c) => c.method === "DELETE").map((c) => c.url)).toEqual([
+      `${COPY}sub/`,
+      `${COPY}a`,
+      COPY,
+    ]);
+  });
   test("a 504 after a committed source DELETE preserves its copy and ancestor containers", async () => {
     const fixture = await treeBackend({
       [`DELETE ${SRC}sub/b`]: () => {
@@ -1220,11 +1513,11 @@ describe("move data preservation", () => {
       `${SRC}sub/b`,
       `${COPY}a`,
     ]);
-    expect(fixture.calls.find((c) => c.method === "HEAD" && c.url === `${SRC}sub/b`)).toMatchObject(
-      {
-        signal: undefined,
-      },
-    );
+    expect(
+      fixture.calls.findLast((c) => c.method === "HEAD" && c.url === `${SRC}sub/b`),
+    ).toMatchObject({
+      signal: undefined,
+    });
   });
   test("a 404 source DELETE preserves the copy when HEAD confirms the source is absent", async () => {
     const dest = `${DEST}today.ttl`;
@@ -1319,10 +1612,14 @@ describe("move data preservation", () => {
     );
     const { storage, calls } = await treeBackend({
       [`GET ${SRC}`]: response(200, { "content-type": "text/turtle" }, body),
-      [`GET ${meta}`]: response(200, {}, "ignored metadata"),
+      [`HEAD ${meta}`]: response(200, {}),
+      [`HEAD ${resource}`]: response(200, {
+        etag: '"source"',
+        link: `<${meta}>; rel="describedby"`,
+      }),
       [`GET ${resource}`]: response(
         200,
-        { "content-type": "text/plain", link: `<${meta}>; rel="describedby"` },
+        { etag: '"source"', "content-type": "text/plain", link: `<${meta}>; rel="describedby"` },
         "bytes",
       ),
       [`PUT ${COPY}z-resource`]: response(201),
@@ -1334,6 +1631,7 @@ describe("move data preservation", () => {
       COPY,
       `${COPY}z-resource`,
     ]);
+    expect(calls.some((c) => c.method === "GET" && c.url === meta)).toBe(false);
   });
   test("a resource can describe itself; access-control URLs are excluded only from implicit subtree copies", async () => {
     const src = `${ROOT}explicit.acl`,
@@ -1348,11 +1646,24 @@ describe("move data preservation", () => {
       [`DELETE ${src}`]: response(),
     });
     expect((await storage.move(src, DEST, { ifMatch: '"source"' })).url).toBe(dest);
-    expect(calls[1]?.body).toEqual(new TextEncoder().encode("explicit bytes"));
+    expect(calls[1]?.body).toBeInstanceOf(ReadableStream);
+    expect(await new Response(calls[1]?.body as ReadableStream).text()).toBe("explicit bytes");
   });
-  test("resource representations with missing Content-Type fail before creating any copies", async () => {
-    const { storage, calls } = backend({ [`GET ${URL}`]: response(200, { etag: TAG }, "bytes") });
-    await expect(storage.move(URL, DEST, { ifMatch: TAG })).rejects.toThrow(TypeError);
+  test.each([
+    undefined,
+    "broken",
+    'text/plain; charset="unterminated',
+  ])("invalid source Content-Type %s is a GET invalid-response", async (type) => {
+    const { storage, calls } = backend({
+      [`GET ${URL}`]: response(
+        200,
+        { etag: TAG, ...(type === undefined ? {} : { "content-type": type }) },
+        "bytes",
+      ),
+    });
+    expect(
+      await rejection(storage.move(URL, DEST, { ifMatch: TAG }), "invalid-response"),
+    ).toMatchObject({ method: "GET", url: URL });
     expect(calls).toHaveLength(1);
   });
   test("a target collision never deletes the existing destination", async () => {
