@@ -3,6 +3,7 @@
 @import "@jeswr/suite-ui/styles/tokens.css";
 @import "@jeswr/suite-ui/styles/theme.css";
 @import "@jeswr/suite-ui/styles/density.css";
+@import "@jeswr/suite-ui/styles/navigation.css";
 @import "@jeswr/suite-ui/styles/components.css";
 @source "../../../../packages/suite-ui/src";
 
@@ -266,6 +267,72 @@ button:not([data-slot]) {
     animation: none;
     transition: none;
     scroll-behavior: auto;
+  }
+}
+
+/* DS-03 fixture framing; component anatomy lives in suite-ui. */
+.navigation-fixture {
+  min-height: 100dvh;
+}
+.navigation-fixture-rail {
+  display: flex;
+}
+.navigation-fixture-content {
+  flex: 1;
+  align-content: start;
+  padding-bottom: calc(80px + env(safe-area-inset-bottom));
+}
+.fixture-state {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: start;
+}
+.fixture-state select {
+  font: inherit;
+  background: var(--surface);
+  color: var(--foreground);
+  border-radius: var(--radius-md);
+  min-height: 36px;
+  padding: var(--space-2);
+}
+.fixture-avatar {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-full);
+  background: var(--surface-3);
+  color: var(--foreground);
+  border: 2px solid var(--presence-drive);
+  font-size: var(--text-xs);
+}
+.fixture-avatar::before {
+  content: attr(data-initials);
+}
+.fixture-unread {
+  position: absolute;
+  top: 0;
+  right: 0;
+  min-width: 16px;
+  border-radius: var(--radius-full);
+  background: var(--primary);
+  color: var(--primary-foreground);
+  font-size: var(--text-xs);
+}
+.fixture-feedback {
+  min-height: 24px;
+}
+.fixture-desktop-launcher {
+  display: none;
+}
+@media (min-width: 768px) {
+  .fixture-desktop-launcher {
+    display: block;
+  }
+}
+@media (pointer: coarse) {
+  .fixture-state select {
+    min-height: 44px;
   }
 }
 .fixture-density,
