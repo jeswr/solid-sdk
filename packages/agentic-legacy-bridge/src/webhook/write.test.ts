@@ -2,6 +2,7 @@
 // AUTHORED-BY Codex GPT-6
 import { Parser, Store } from "n3";
 import { describe, expect, it } from "vitest";
+import { buildBridgeAclTurtle } from "../acl.js";
 import { slackEventToBridgeMessage } from "../slack.js";
 import { RawResourceMismatchError, writeMessageCreateOnly } from "./write.js";
 
@@ -131,6 +132,56 @@ describe("writeMessageCreateOnly — create-only + idempotency", () => {
     });
     // The raw anchor 412'd (already there) but the graph + chat were newly created.
     expect(result.created).toBe(true);
+  });
+
+  it.each([
+    "graph",
+    "chat",
+  ])("repairs a failed %s write and replays with the provisioned inbound ACL", async (failedResource) => {
+    const inbound = "https://alice.example/agents/inbound#me";
+    const { inbox } = await buildBridgeAclTurtle({
+      container: CONTAINER,
+      ownerWebId: "https://alice.example/profile/card#me",
+      inboundWebId: inbound,
+    });
+    const acl = new Store(new Parser().parse(inbox));
+    const aclNs = "http://www.w3.org/ns/auth/acl#";
+    const auth = acl.getSubjects(`${aclNs}agent`, inbound, null)[0];
+    if (auth === undefined) throw new Error("missing inbound authorization");
+    expect(acl.countQuads(auth, `${aclNs}default`, CONTAINER, null)).toBe(1);
+    const modes = new Set(acl.getObjects(auth, `${aclNs}mode`, null).map((mode) => mode.value));
+    const resources = new Map<string, NonNullable<RequestInit["body"]>>();
+    let failNext = true;
+    const writeFetch = (async (input, init) => {
+      const url = String(input);
+      if (init?.method === "GET") {
+        if (!modes.has(`${aclNs}Read`)) return new Response(null, { status: 403 });
+        return new Response(resources.get(url), { status: resources.has(url) ? 200 : 404 });
+      }
+      if (!modes.has(`${aclNs}Append`)) return new Response(null, { status: 403 });
+      expect(new Headers(init?.headers).get("if-none-match")).toBe("*");
+      if (resources.has(url)) return new Response(null, { status: 412 });
+      const isChat = url.endsWith(".chat.ttl");
+      const isGraph = url.endsWith(".ttl") && !isChat;
+      if (failNext && (failedResource === "graph" ? isGraph : isChat)) {
+        failNext = false;
+        return new Response(null, { status: 500 });
+      }
+      resources.set(url, init?.body ?? "");
+      return new Response(null, { status: 201 });
+    }) as typeof fetch;
+    const raw = slackEvent("retry with the inbound ACL");
+    const options = {
+      message: slackEventToBridgeMessage(enc(raw)),
+      raw,
+      container: CONTAINER,
+      writeFetch,
+    };
+    await expect(writeMessageCreateOnly(options)).rejects.toThrow(/pod write failed/);
+    await expect(writeMessageCreateOnly(options)).resolves.toMatchObject({ created: true });
+    expect(resources.size).toBe(3);
+    await expect(writeMessageCreateOnly(options)).resolves.toMatchObject({ created: false });
+    expect(resources.size).toBe(3);
   });
 
   it.each([

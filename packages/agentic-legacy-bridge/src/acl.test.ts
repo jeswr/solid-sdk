@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
+// AUTHORED-BY Codex GPT-6
 import { Parser, type Quad } from "n3";
 import { describe, expect, it } from "vitest";
 import { buildBridgeAclTurtle, buildOwnerOnlyAclTurtle } from "./acl.js";
@@ -100,9 +101,9 @@ describe("buildBridgeAclTurtle — the M2.5a least-privilege two-container split
     expect(modesFor(inbox, INTERPRETER).has("Write")).toBe(false);
   });
 
-  it("grants the inbound webhook identity APPEND ONLY on BOTH containers", async () => {
+  it("grants inbound Read+Append on the inbox for replay checks, Append only on graphs", async () => {
     const { inbox, graphs } = await bridgeAcl();
-    expect(modesFor(inbox, INBOUND)).toEqual(new Set(["Append"]));
+    expect(modesFor(inbox, INBOUND)).toEqual(new Set(["Read", "Append"]));
     expect(modesFor(graphs as string, INBOUND)).toEqual(new Set(["Append"]));
   });
 
@@ -148,7 +149,7 @@ describe("buildBridgeAclTurtle — the M2.5a least-privilege two-container split
     expect(graphs).toBeUndefined();
     expect(modesFor(inbox, INTERPRETER)).toEqual(new Set(["Read", "Write"]));
     expect(modesFor(inbox, INTERPRETER).has("Control")).toBe(false);
-    expect(modesFor(inbox, INBOUND)).toEqual(new Set(["Append"]));
+    expect(modesFor(inbox, INBOUND)).toEqual(new Set(["Read", "Append"]));
     expect(modesFor(inbox, OWNER)).toEqual(new Set(["Read", "Write", "Control"]));
   });
 
@@ -208,7 +209,7 @@ describe("buildBridgeAclTurtle — the M2.5a least-privilege two-container split
         graphsContainer: GRAPHS,
       }),
     ).rejects.toThrow();
-    // inbound === owner ⇒ the append-only isolation is defeated.
+    // inbound === owner ⇒ the create-only isolation is defeated.
     await expect(
       buildBridgeAclTurtle({ container: CONTAINER, ownerWebId: OWNER, inboundWebId: OWNER }),
     ).rejects.toThrow();
@@ -223,7 +224,7 @@ describe("buildBridgeAclTurtle — the M2.5a least-privilege two-container split
       graphsContainer: GRAPHS,
     });
     expect(modesFor(inbox, "https://pod.example/profile/card#inbound")).toEqual(
-      new Set(["Append"]),
+      new Set(["Read", "Append"]),
     );
     expect(modesFor(inbox, "https://pod.example/profile/card#interpreter")).toEqual(
       new Set(["Read"]),

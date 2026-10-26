@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
+// AUTHORED-BY Codex GPT-6
 /**
  * Owner-only WAC ACL — everything the bridge writes is OWNER-PRIVATE by default
  * (LEGACY-INTEROP.md §6). Inbound legacy messages are third-party data (the
@@ -101,10 +102,11 @@ export interface BridgeAclOptions {
   /** The pod OWNER — granted full `Read`/`Write`/`Control` on every container. */
   readonly ownerWebId: string;
   /**
-   * The INBOUND webhook identity (`bridge-inbound`) — granted `acl:Append` ONLY. It can
-   * create new resources (the raw anchor, chat, and the initial `Pending` graph) but can
-   * NEVER read, modify, or delete anything already there (tamper-evidence by construction,
-   * M2.5a §1.5). Omit to leave it ungranted.
+   * The INBOUND webhook identity (`bridge-inbound`) — granted `acl:Read` + `acl:Append`
+   * on the inbox so retries can digest-check retained raw anchors. It can create new
+   * resources (the raw anchor, chat, and the initial `Pending` graph) but can NEVER
+   * modify or delete anything already there (tamper-evidence by construction,
+   * M2.5a §1.5). A separate graphs container grants it only Append. Omit to leave it ungranted.
    */
   readonly inboundWebId?: string;
   /**
@@ -132,7 +134,7 @@ export interface BridgeAclOptions {
 /** The two ACL documents authored by {@link buildBridgeAclTurtle}. */
 export interface BridgeAclDocuments {
   /**
-   * The `<container>.acl` Turtle (inbox: owner RWC, inbound Append, interpreter Read-only in
+   * The `<container>.acl` Turtle (inbox: owner RWC, inbound Read+Append, interpreter Read-only in
    * the two-container layout / Read+Write in the single-container layout).
    */
   readonly inbox: string;
@@ -151,7 +153,7 @@ export interface BridgeAclDocuments {
  * | Identity | inbox (`container`) | graphs (`graphsContainer`, two-container only) |
  * |---|---|---|
  * | owner | Read/Write/Control | Read/Write/Control |
- * | `bridge-inbound` (webhook) | Append | Append |
+ * | `bridge-inbound` (webhook) | Read/Append | Append |
  * | `bridge-interpreter` (sweep) | Read [+Write single-container] | Read/Write (never Control) |
  *
  * **Two-container (least privilege, `graphsContainer` supplied):** the interpreter — the
@@ -164,7 +166,8 @@ export interface BridgeAclDocuments {
  * graph resource), NOT ACL-enforced. This default MATCHES the sweep's single-container default
  * (both write graphs into `container`); the two-container least-privilege layout is a
  * maintainer-gated write-LAYOUT migration (see `sweepPendingInterpretations`). Either way the
- * webhook stays Append-only and neither bridge identity holds `acl:Control`.
+ * webhook can read anchors and append resources but never modify or delete them, and neither
+ * bridge identity holds `acl:Control`.
  *
  * The DISTINCT-identity requirement is ENFORCED, not merely documented: WAC authorizations are
  * ADDITIVE (an agent's effective modes are the union of every authorization naming it), so
@@ -242,7 +245,7 @@ export async function buildBridgeAclTurtle(options: BridgeAclOptions): Promise<B
   const twoContainer = safeGraphs !== undefined;
   const interpreterInboxModes: AclMode[] = twoContainer ? ["Read"] : ["Read", "Write"];
 
-  // --- inbox ACL: owner RWC, inbound Append, interpreter Read(+Write in single-container) ---
+  // --- inbox ACL: owner RWC, inbound Read+Append, interpreter Read(+Write in single-container) ---
   const inboxBase = `${safeContainer}.acl`;
   const inboxStore = new Store();
   addAuthorization(inboxStore, inboxBase, "owner", safeOwner, safeContainer, [
@@ -251,7 +254,10 @@ export async function buildBridgeAclTurtle(options: BridgeAclOptions): Promise<B
     "Control",
   ]);
   if (safeInbound !== undefined) {
-    addAuthorization(inboxStore, inboxBase, "inbound", safeInbound, safeContainer, ["Append"]);
+    addAuthorization(inboxStore, inboxBase, "inbound", safeInbound, safeContainer, [
+      "Read",
+      "Append",
+    ]);
   }
   if (safeInterpreter !== undefined) {
     // NEVER Control. Read-only in the two-container layout (anchors immutable); Read+Write in

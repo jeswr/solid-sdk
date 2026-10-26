@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Fable 5
+// AUTHORED-BY Codex GPT-6
 /**
  * The framework-free inbound-webhook HANDLER (M2-DESIGN.md §3) — the deployable core
  * that receives a raw channel event, AUTHENTICATES THE SOURCE before any processing,
@@ -107,7 +108,7 @@ export interface WebhookHandlerOptions {
   /** The owner-locked pod container to write into (validated at construction). */
   readonly container: string;
   /**
-   * The bridge agent's authed pod `fetch` (Append-only on the container). Injectable —
+   * The bridge agent's authed pod `fetch` (Read+Append on the inbox container). Injectable —
    * the handler is fully testable with a fake fetch (no live pod, no credentials).
    */
   readonly writeFetch: typeof globalThis.fetch;
