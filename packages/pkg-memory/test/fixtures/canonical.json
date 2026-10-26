@@ -1,0 +1,107 @@
+{
+  "$comment": "AUTHORED-BY Codex GPT-6.1-Sol; generated using RDFlib 7.1.4",
+  "cases": [
+    {
+      "name": "symmetric",
+      "assertion": "_:a schema:knows _:b . _:b schema:knows _:a .",
+      "id": "urn:uuid:f7e3075c-5b9e-5a5d-a27c-ef26f4546756",
+      "graph": "<urn:uuid:1a1b7b97-33e6-5165-a1bd-17bd6c6e0b4f> <https://schema.org/knows> <urn:uuid:08718006-8821-55ef-9a16-8a8beeddce7e> .\n<urn:uuid:08718006-8821-55ef-9a16-8a8beeddce7e> <https://schema.org/knows> <urn:uuid:1a1b7b97-33e6-5165-a1bd-17bd6c6e0b4f> .\n"
+    },
+    {
+      "name": "disconnected",
+      "assertion": "_:a schema:name \"same\" . _:b schema:name \"same\" .",
+      "id": "urn:uuid:5531bc55-3de8-5c9a-931a-ec25edc71dc3",
+      "graph": "<urn:uuid:afc8b30f-104d-5e00-9216-58c6e4af923d> <https://schema.org/name> \"same\" .\n<urn:uuid:0e1d0851-2410-5bf1-9d41-4f01913b3ec2> <https://schema.org/name> \"same\" .\n"
+    },
+    {
+      "name": "cycle",
+      "assertion": "_:a schema:knows _:b . _:b schema:knows _:c . _:c schema:knows _:a .",
+      "id": "urn:uuid:286fdbfe-5fb2-5e78-977a-dc814fc23008",
+      "graph": "<urn:uuid:82af5ea2-92b0-52cd-ab82-2a76daba1acd> <https://schema.org/knows> <urn:uuid:4b1cff60-b1b8-5014-98b9-f96a26961216> .\n<urn:uuid:4b1cff60-b1b8-5014-98b9-f96a26961216> <https://schema.org/knows> <urn:uuid:af430113-9cfb-5a71-9863-95f36bb69efc> .\n<urn:uuid:af430113-9cfb-5a71-9863-95f36bb69efc> <https://schema.org/knows> <urn:uuid:82af5ea2-92b0-52cd-ab82-2a76daba1acd> .\n"
+    },
+    {
+      "name": "unequal",
+      "assertion": "_:a schema:knows _:b . _:b schema:knows _:c . _:c schema:name \"end\" .",
+      "id": "urn:uuid:32bbec15-b715-5416-8af8-50e773904292",
+      "graph": "<urn:uuid:4421c159-ab74-5ca4-9439-c4595bf12e7d> <https://schema.org/name> \"end\" .\n<urn:uuid:e8840bb6-ead9-524c-80b0-787ed28ec5c1> <https://schema.org/knows> <urn:uuid:dcd2d653-7872-5d2c-a612-d7dfa1db1258> .\n<urn:uuid:dcd2d653-7872-5d2c-a612-d7dfa1db1258> <https://schema.org/knows> <urn:uuid:4421c159-ab74-5ca4-9439-c4595bf12e7d> .\n"
+    },
+    {
+      "name": "branch",
+      "assertion": "_:a schema:knows _:b, _:c . _:b schema:name \"same\" . _:c schema:name \"same\" .",
+      "id": "urn:uuid:d1a89950-9454-5bf2-8fe4-0d2c077c3484",
+      "graph": "<urn:uuid:5777c934-f8dd-5cb9-b8dd-63773b93b358> <https://schema.org/name> \"same\" .\n<urn:uuid:e298a607-649f-5f38-86c1-dd3b0f98e791> <https://schema.org/knows> <urn:uuid:bcf0660f-1433-56c3-8422-67bb2bdb8bab> .\n<urn:uuid:bcf0660f-1433-56c3-8422-67bb2bdb8bab> <https://schema.org/name> \"same\" .\n<urn:uuid:e298a607-649f-5f38-86c1-dd3b0f98e791> <https://schema.org/knows> <urn:uuid:5777c934-f8dd-5cb9-b8dd-63773b93b358> .\n"
+    },
+    {
+      "name": "multiline",
+      "assertion": "_:a schema:name \"\"\"A line\nanother \"line\" and \\\\slash\"\"\" . _:b schema:name \"Autre\"@fr .",
+      "id": "urn:uuid:24c009f3-2fc8-5728-a0ad-2357c4c7440e",
+      "graph": "<urn:uuid:e5c4d08f-cd92-5021-b466-b20457471fd6> <https://schema.org/name> \"A line\\nanother \\\"line\\\" and \\\\slash\" .\n<urn:uuid:c6389774-55eb-5ec4-8ea5-9f558865eddc> <https://schema.org/name> \"Autre\"@fr .\n"
+    },
+    {
+      "name": "unicode-order",
+      "assertion": "<https://example.org/\ud800\udc00> schema:name \"\ud800\udc00\" . <https://example.org/\ue000> schema:name \"\ue000\" .",
+      "id": "urn:uuid:36420733-3752-5262-8871-009a5987c80b",
+      "graph": "<https://example.org/\ud800\udc00> <https://schema.org/name> \"\ud800\udc00\" .\n<https://example.org/\ue000> <https://schema.org/name> \"\ue000\" .\n"
+    },
+    {
+      "name": "terminal-quote",
+      "assertion": "_:a schema:name \"\"\"A line\nending with a \\\"\"\"\" . _:b schema:name \"different\" .",
+      "id": "urn:uuid:6ec503fd-6ec4-5299-8330-7e081c3627ef",
+      "graph": "<urn:uuid:171bc905-1254-5621-94e7-05a8b6fa9e33> <https://schema.org/name> \"A line\\nending with a \\\"\" .\n<urn:uuid:37cefa14-3db2-5c42-a2a1-9b09038a4491> <https://schema.org/name> \"different\" .\n"
+    },
+    {
+      "name": "typed",
+      "assertion": "_:a schema:value \"0001\"^^xsd:integer, \"1\"^^xsd:boolean, \"2026-01-01T00:00:00.1Z\"^^xsd:dateTime . _:b schema:value \"false\"^^xsd:boolean .",
+      "id": "urn:uuid:805eb63f-b778-577a-b672-7ebe8317df8f",
+      "graph": "<urn:uuid:d65e7fb0-c35a-5d35-82b2-67f891c60ac8> <https://schema.org/value> \"2026-01-01T00:00:00.100000+00:00\"^^<http://www.w3.org/2001/XMLSchema#dateTime> .\n<urn:uuid:d65e7fb0-c35a-5d35-82b2-67f891c60ac8> <https://schema.org/value> \"true\"^^<http://www.w3.org/2001/XMLSchema#boolean> .\n<urn:uuid:d65e7fb0-c35a-5d35-82b2-67f891c60ac8> <https://schema.org/value> \"1\"^^<http://www.w3.org/2001/XMLSchema#integer> .\n<urn:uuid:5d00a3ce-b4d7-502b-84c9-c03cac3a9a55> <https://schema.org/value> \"false\"^^<http://www.w3.org/2001/XMLSchema#boolean> .\n"
+    },
+    {
+      "name": "unequal-regular",
+      "assertion": "_:a schema:knows _:b . _:b schema:knows _:c . _:c schema:knows _:a . _:d schema:knows _:e . _:e schema:knows _:f . _:f schema:knows _:g . _:g schema:knows _:d .",
+      "id": "urn:uuid:adab185b-41db-5adb-9eaa-4fe90a960443",
+      "graph": "<urn:uuid:ce41b8da-44b0-51e7-be9d-674fba715177> <https://schema.org/knows> <urn:uuid:93c8ee1b-ee4d-54f7-8a02-c3c5ac54777b> .\n<urn:uuid:17c72e05-d83f-5c12-b08f-713ca5406011> <https://schema.org/knows> <urn:uuid:e6f4735b-cee0-53b6-9e39-e7475662ca32> .\n<urn:uuid:2cfbef41-b608-561a-b9e4-4b00c7609596> <https://schema.org/knows> <urn:uuid:ce41b8da-44b0-51e7-be9d-674fba715177> .\n<urn:uuid:3fff575e-3ab7-5014-87e3-f2b3cb40ef5f> <https://schema.org/knows> <urn:uuid:17c72e05-d83f-5c12-b08f-713ca5406011> .\n<urn:uuid:e6f4735b-cee0-53b6-9e39-e7475662ca32> <https://schema.org/knows> <urn:uuid:3fff575e-3ab7-5014-87e3-f2b3cb40ef5f> .\n<urn:uuid:9dfc3d35-51e8-5ed8-8a3d-c9b08a13aca0> <https://schema.org/knows> <urn:uuid:2cfbef41-b608-561a-b9e4-4b00c7609596> .\n<urn:uuid:93c8ee1b-ee4d-54f7-8a02-c3c5ac54777b> <https://schema.org/knows> <urn:uuid:9dfc3d35-51e8-5ed8-8a3d-c9b08a13aca0> .\n"
+    },
+    {
+      "name": "self-loop",
+      "assertion": "_:a schema:knows _:a . _:b schema:knows _:b .",
+      "id": "urn:uuid:a3402465-590c-5327-98de-5e09762150a7",
+      "graph": "<urn:uuid:69eebf83-5a8b-5314-816c-1111ed3d0451> <https://schema.org/knows> <urn:uuid:69eebf83-5a8b-5314-816c-1111ed3d0451> .\n<urn:uuid:b4f8ea97-f15a-54c8-b816-f3b40fdb7868> <https://schema.org/knows> <urn:uuid:b4f8ea97-f15a-54c8-b816-f3b40fdb7868> .\n"
+    },
+    {
+      "name": "decimal",
+      "assertion": "_:a schema:value \"0002.00\"^^xsd:decimal, \"+0003.\"^^xsd:decimal, \".00500\"^^xsd:decimal, \"-.50\"^^xsd:decimal, \"-000.00\"^^xsd:decimal, \" 000123456789012345678901234567890.123456789000 \"^^xsd:decimal .",
+      "id": "urn:uuid:1eda785b-5940-5dee-a470-eeba63153513",
+      "graph": "<urn:uuid:539eb4ba-71fe-586d-b305-dbdff73cb829> <https://schema.org/value> \"2.00\"^^<http://www.w3.org/2001/XMLSchema#decimal> .\n<urn:uuid:539eb4ba-71fe-586d-b305-dbdff73cb829> <https://schema.org/value> \"-0.00\"^^<http://www.w3.org/2001/XMLSchema#decimal> .\n<urn:uuid:539eb4ba-71fe-586d-b305-dbdff73cb829> <https://schema.org/value> \"123456789012345678901234567890.123456789000\"^^<http://www.w3.org/2001/XMLSchema#decimal> .\n<urn:uuid:539eb4ba-71fe-586d-b305-dbdff73cb829> <https://schema.org/value> \"3\"^^<http://www.w3.org/2001/XMLSchema#decimal> .\n<urn:uuid:539eb4ba-71fe-586d-b305-dbdff73cb829> <https://schema.org/value> \"-0.50\"^^<http://www.w3.org/2001/XMLSchema#decimal> .\n<urn:uuid:539eb4ba-71fe-586d-b305-dbdff73cb829> <https://schema.org/value> \"0.00500\"^^<http://www.w3.org/2001/XMLSchema#decimal> .\n"
+    },
+    {
+      "name": "derived-integers",
+      "assertion": "_:a schema:value \" +0009007199254740993 \"^^xsd:integer . _:a schema:value \"-0002\"^^xsd:nonPositiveInteger . _:a schema:value \"-0003\"^^xsd:negativeInteger . _:a schema:value \"+0004\"^^xsd:long . _:a schema:value \"-0005\"^^xsd:int . _:a schema:value \"0006\"^^xsd:short . _:a schema:value \"+0007\"^^xsd:byte . _:a schema:value \"-0000\"^^xsd:nonNegativeInteger . _:a schema:value \"00018446744073709551615\"^^xsd:unsignedLong . _:a schema:value \"0008\"^^xsd:unsignedInt . _:a schema:value \"0009\"^^xsd:unsignedShort . _:a schema:value \"0010\"^^xsd:unsignedByte . _:a schema:value \"+0011\"^^xsd:positiveInteger .",
+      "id": "urn:uuid:fbe5410b-3ff1-5929-b74c-9f1d2532d37b",
+      "graph": "<urn:uuid:78f92610-4147-5c1d-bea2-9155b8936f29> <https://schema.org/value> \"7\"^^<http://www.w3.org/2001/XMLSchema#byte> .\n<urn:uuid:78f92610-4147-5c1d-bea2-9155b8936f29> <https://schema.org/value> \"18446744073709551615\"^^<http://www.w3.org/2001/XMLSchema#unsignedLong> .\n<urn:uuid:78f92610-4147-5c1d-bea2-9155b8936f29> <https://schema.org/value> \"-2\"^^<http://www.w3.org/2001/XMLSchema#nonPositiveInteger> .\n<urn:uuid:78f92610-4147-5c1d-bea2-9155b8936f29> <https://schema.org/value> \"-5\"^^<http://www.w3.org/2001/XMLSchema#int> .\n<urn:uuid:78f92610-4147-5c1d-bea2-9155b8936f29> <https://schema.org/value> \"8\"^^<http://www.w3.org/2001/XMLSchema#unsignedInt> .\n<urn:uuid:78f92610-4147-5c1d-bea2-9155b8936f29> <https://schema.org/value> \"0\"^^<http://www.w3.org/2001/XMLSchema#nonNegativeInteger> .\n<urn:uuid:78f92610-4147-5c1d-bea2-9155b8936f29> <https://schema.org/value> \"10\"^^<http://www.w3.org/2001/XMLSchema#unsignedByte> .\n<urn:uuid:78f92610-4147-5c1d-bea2-9155b8936f29> <https://schema.org/value> \"11\"^^<http://www.w3.org/2001/XMLSchema#positiveInteger> .\n<urn:uuid:78f92610-4147-5c1d-bea2-9155b8936f29> <https://schema.org/value> \"6\"^^<http://www.w3.org/2001/XMLSchema#short> .\n<urn:uuid:78f92610-4147-5c1d-bea2-9155b8936f29> <https://schema.org/value> \"-3\"^^<http://www.w3.org/2001/XMLSchema#negativeInteger> .\n<urn:uuid:78f92610-4147-5c1d-bea2-9155b8936f29> <https://schema.org/value> \"4\"^^<http://www.w3.org/2001/XMLSchema#long> .\n<urn:uuid:78f92610-4147-5c1d-bea2-9155b8936f29> <https://schema.org/value> \"9\"^^<http://www.w3.org/2001/XMLSchema#unsignedShort> .\n<urn:uuid:78f92610-4147-5c1d-bea2-9155b8936f29> <https://schema.org/value> \"9007199254740993\"^^<http://www.w3.org/2001/XMLSchema#integer> .\n"
+    },
+    {
+      "name": "floating-point",
+      "assertion": "_:a schema:value \"0002.00\"^^xsd:float . _:a schema:value \"-000.0\"^^xsd:float . _:a schema:value \"0\"^^xsd:float . _:a schema:value \".1250\"^^xsd:float . _:a schema:value \"1e-4\"^^xsd:float . _:a schema:value \"1e-5\"^^xsd:float . _:a schema:value \"1e-12\"^^xsd:float . _:a schema:value \"1e15\"^^xsd:float . _:a schema:value \"1e16\"^^xsd:float . _:a schema:value \"1e20\"^^xsd:float . _:a schema:value \"-2.5e30\"^^xsd:float . _:a schema:value \"INF\"^^xsd:float . _:a schema:value \"-INF\"^^xsd:float . _:a schema:value \"+INF\"^^xsd:float . _:a schema:value \"NaN\"^^xsd:float . _:a schema:value \"1e999\"^^xsd:float . _:a schema:value \"-1e999\"^^xsd:float . _:a schema:value \"0002.00\"^^xsd:double . _:a schema:value \"-000.0\"^^xsd:double . _:a schema:value \"0\"^^xsd:double . _:a schema:value \".1250\"^^xsd:double . _:a schema:value \"1e-4\"^^xsd:double . _:a schema:value \"1e-5\"^^xsd:double . _:a schema:value \"1e-12\"^^xsd:double . _:a schema:value \"1e15\"^^xsd:double . _:a schema:value \"1e16\"^^xsd:double . _:a schema:value \"1e20\"^^xsd:double . _:a schema:value \"-2.5e30\"^^xsd:double . _:a schema:value \"INF\"^^xsd:double . _:a schema:value \"-INF\"^^xsd:double . _:a schema:value \"+INF\"^^xsd:double . _:a schema:value \"NaN\"^^xsd:double . _:a schema:value \"1e999\"^^xsd:double . _:a schema:value \"-1e999\"^^xsd:double .",
+      "id": "urn:uuid:2f4698e6-44a4-5899-a73e-5897e42d69cd",
+      "graph": "<urn:uuid:a52f2f3a-0614-5352-a3ca-01f5435adddd> <https://schema.org/value> \"0.0\"^^<http://www.w3.org/2001/XMLSchema#float> .\n<urn:uuid:a52f2f3a-0614-5352-a3ca-01f5435adddd> <https://schema.org/value> \"1000000000000000.0\"^^<http://www.w3.org/2001/XMLSchema#float> .\n<urn:uuid:a52f2f3a-0614-5352-a3ca-01f5435adddd> <https://schema.org/value> \"inf\"^^<http://www.w3.org/2001/XMLSchema#float> .\n<urn:uuid:a52f2f3a-0614-5352-a3ca-01f5435adddd> <https://schema.org/value> \"2.0\"^^<http://www.w3.org/2001/XMLSchema#float> .\n<urn:uuid:a52f2f3a-0614-5352-a3ca-01f5435adddd> <https://schema.org/value> \"0.0\"^^<http://www.w3.org/2001/XMLSchema#double> .\n<urn:uuid:a52f2f3a-0614-5352-a3ca-01f5435adddd> <https://schema.org/value> \"0.125\"^^<http://www.w3.org/2001/XMLSchema#double> .\n<urn:uuid:a52f2f3a-0614-5352-a3ca-01f5435adddd> <https://schema.org/value> \"-inf\"^^<http://www.w3.org/2001/XMLSchema#double> .\n<urn:uuid:a52f2f3a-0614-5352-a3ca-01f5435adddd> <https://schema.org/value> \"1e+16\"^^<http://www.w3.org/2001/XMLSchema#double> .\n<urn:uuid:a52f2f3a-0614-5352-a3ca-01f5435adddd> <https://schema.org/value> \"1e-05\"^^<http://www.w3.org/2001/XMLSchema#double> .\n<urn:uuid:a52f2f3a-0614-5352-a3ca-01f5435adddd> <https://schema.org/value> \"-0.0\"^^<http://www.w3.org/2001/XMLSchema#float> .\n<urn:uuid:a52f2f3a-0614-5352-a3ca-01f5435adddd> <https://schema.org/value> \"-2.5e+30\"^^<http://www.w3.org/2001/XMLSchema#double> .\n<urn:uuid:a52f2f3a-0614-5352-a3ca-01f5435adddd> <https://schema.org/value> \"1e+20\"^^<http://www.w3.org/2001/XMLSchema#double> .\n<urn:uuid:a52f2f3a-0614-5352-a3ca-01f5435adddd> <https://schema.org/value> \"0.0001\"^^<http://www.w3.org/2001/XMLSchema#float> .\n<urn:uuid:a52f2f3a-0614-5352-a3ca-01f5435adddd> <https://schema.org/value> \"1e-05\"^^<http://www.w3.org/2001/XMLSchema#float> .\n<urn:uuid:a52f2f3a-0614-5352-a3ca-01f5435adddd> <https://schema.org/value> \"-0.0\"^^<http://www.w3.org/2001/XMLSchema#double> .\n<urn:uuid:a52f2f3a-0614-5352-a3ca-01f5435adddd> <https://schema.org/value> \"-inf\"^^<http://www.w3.org/2001/XMLSchema#float> .\n<urn:uuid:a52f2f3a-0614-5352-a3ca-01f5435adddd> <https://schema.org/value> \"1e+16\"^^<http://www.w3.org/2001/XMLSchema#float> .\n<urn:uuid:a52f2f3a-0614-5352-a3ca-01f5435adddd> <https://schema.org/value> \"inf\"^^<http://www.w3.org/2001/XMLSchema#double> .\n<urn:uuid:a52f2f3a-0614-5352-a3ca-01f5435adddd> <https://schema.org/value> \"1e+20\"^^<http://www.w3.org/2001/XMLSchema#float> .\n<urn:uuid:a52f2f3a-0614-5352-a3ca-01f5435adddd> <https://schema.org/value> \"1e-12\"^^<http://www.w3.org/2001/XMLSchema#float> .\n<urn:uuid:a52f2f3a-0614-5352-a3ca-01f5435adddd> <https://schema.org/value> \"-2.5e+30\"^^<http://www.w3.org/2001/XMLSchema#float> .\n<urn:uuid:a52f2f3a-0614-5352-a3ca-01f5435adddd> <https://schema.org/value> \"1e-12\"^^<http://www.w3.org/2001/XMLSchema#double> .\n<urn:uuid:a52f2f3a-0614-5352-a3ca-01f5435adddd> <https://schema.org/value> \"0.0001\"^^<http://www.w3.org/2001/XMLSchema#double> .\n<urn:uuid:a52f2f3a-0614-5352-a3ca-01f5435adddd> <https://schema.org/value> \"nan\"^^<http://www.w3.org/2001/XMLSchema#float> .\n<urn:uuid:a52f2f3a-0614-5352-a3ca-01f5435adddd> <https://schema.org/value> \"1000000000000000.0\"^^<http://www.w3.org/2001/XMLSchema#double> .\n<urn:uuid:a52f2f3a-0614-5352-a3ca-01f5435adddd> <https://schema.org/value> \"nan\"^^<http://www.w3.org/2001/XMLSchema#double> .\n<urn:uuid:a52f2f3a-0614-5352-a3ca-01f5435adddd> <https://schema.org/value> \"0.125\"^^<http://www.w3.org/2001/XMLSchema#float> .\n<urn:uuid:a52f2f3a-0614-5352-a3ca-01f5435adddd> <https://schema.org/value> \"2.0\"^^<http://www.w3.org/2001/XMLSchema#double> .\n"
+    },
+    {
+      "name": "invalid-numerics",
+      "assertion": "_:a schema:value \"not-a-number\"^^xsd:decimal, \"1.2\"^^xsd:int, \"invalid\"^^xsd:float, \"invalid\"^^xsd:double .",
+      "id": "urn:uuid:dc6b92e2-8acc-506b-92e8-53468a80e284",
+      "graph": "<urn:uuid:03bd80e4-c941-52ae-87bf-e761459ca425> <https://schema.org/value> \"not-a-number\"^^<http://www.w3.org/2001/XMLSchema#decimal> .\n<urn:uuid:03bd80e4-c941-52ae-87bf-e761459ca425> <https://schema.org/value> \"invalid\"^^<http://www.w3.org/2001/XMLSchema#float> .\n<urn:uuid:03bd80e4-c941-52ae-87bf-e761459ca425> <https://schema.org/value> \"invalid\"^^<http://www.w3.org/2001/XMLSchema#double> .\n<urn:uuid:03bd80e4-c941-52ae-87bf-e761459ca425> <https://schema.org/value> \"1.2\"^^<http://www.w3.org/2001/XMLSchema#int> .\n"
+    },
+    {
+      "name": "negative-zero-utc",
+      "assertion": "<https://example.org/residence> schema:validFrom \"2026-01-01T12:00:00-00:00\"^^xsd:dateTime .",
+      "id": "urn:uuid:bad8048c-883e-569f-b9e7-c2e7af875bc1",
+      "graph": "<https://example.org/residence> <https://schema.org/validFrom> \"2026-01-01T12:00:00+00:00\"^^<http://www.w3.org/2001/XMLSchema#dateTime> .\n"
+    },
+    {
+      "name": "negative-zero-utc-fraction",
+      "assertion": "<https://example.org/residence> schema:validFrom \"2026-01-01T12:00:00.1-00:00\"^^xsd:dateTime .",
+      "id": "urn:uuid:69681deb-54af-595d-b600-2fbc424db007",
+      "graph": "<https://example.org/residence> <https://schema.org/validFrom> \"2026-01-01T12:00:00.100000+00:00\"^^<http://www.w3.org/2001/XMLSchema#dateTime> .\n"
+    }
+  ]
+}

@@ -1,3 +1,5 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /**
  * Bank statements → Finance (Tier-C file import).
  *
@@ -20,6 +22,7 @@ import type { FileImportAdapter, FileImportContext, ImportFile } from "../core/f
 import { recordFragment } from "../core/slug.js";
 import type { IntegrationMetadata } from "../core/types.js";
 import { CLASSES, Invoice } from "../core/vocab.js";
+import { vocabMap } from "./vocab-map.js";
 
 const ID = "bank-statements";
 
@@ -43,6 +46,7 @@ export interface Transaction {
 }
 
 export const bankStatementsFileAdapter: FileImportAdapter = {
+  vocabMap,
   metadata,
   accept: ".csv,.ofx,.qfx,text/csv,application/x-ofx",
   fileHint:
