@@ -3,7 +3,11 @@
 import { DataFactory, Store } from "n3";
 import { describe, expect, it, vi } from "vitest";
 import { pageThreads } from "../../src/apps/mail/lib/model/helpers.js";
-import { parseEmail, persistImportedMail } from "../../src/apps/mail/lib/model/importer.js";
+import {
+  importMbox,
+  parseEmail,
+  persistImportedMail,
+} from "../../src/apps/mail/lib/model/importer.js";
 import { MailError, MailStore } from "../../src/apps/mail/lib/model/io.js";
 import { MailboxDataset } from "../../src/apps/mail/lib/model/mailbox.js";
 import {
@@ -207,6 +211,77 @@ describe("injected pod I/O", () => {
     expect(loaded.etag).toBe('"jsonld"');
     expect(await store.list(`${root}folders/`)).toEqual([documentOf(inbox)]);
   });
+  it.each([
+    {
+      context:
+        '"@context":"https://evil.example/context","@context":{"schema":"http://schema.org/","ldp":"http://www.w3.org/ns/ldp#"}',
+      messageContext: "",
+    },
+    {
+      context: '"@context":{"schema":"http://schema.org/","ldp":"http://www.w3.org/ns/ldp#"}',
+      messageContext: '"@context":"https://evil.example/context","@context":{},',
+    },
+  ])("parses only the validated representation of duplicate JSON keys: %j", async ({
+    context,
+    messageContext,
+  }) => {
+    const globalFetch = vi
+      .spyOn(globalThis, "fetch")
+      .mockRejectedValue(new Error("Unscoped request"));
+    const url = `${root}final.jsonld`;
+    const fetch = vi.fn(async () => {
+      const response = new Response(
+        `{${context},"@graph":[{${messageContext}"@id":"#it","@type":"schema:EmailMessage","schema:headline":"Canonical"},{"@id":"${root}folders/","@type":"ldp:Container","ldp:contains":{"@id":"${documentOf(inbox)}"}}]}`,
+        {
+          headers: {
+            "content-type": "application/ld+json",
+            etag: '"canonical"',
+            "content-length": "9999",
+          },
+        },
+      );
+      Object.defineProperty(response, "url", { value: url });
+      return response;
+    });
+    try {
+      const store = new MailStore(fetch, storage);
+      const loaded = await store.load(`${root}original`);
+      expect(loaded.url).toBe(url);
+      expect(loaded.etag).toBe('"canonical"');
+      expect(loaded.mailbox.message(`${url}#it`).subjectLine).toBe("Canonical");
+      expect(await store.list(`${root}folders/`)).toEqual([documentOf(inbox)]);
+      expect(fetch).toHaveBeenCalledTimes(2);
+      expect(globalFetch).not.toHaveBeenCalled();
+    } finally {
+      globalFetch.mockRestore();
+    }
+  });
+  it.each([
+    ["application/trig", `<${root}graph> { <${message}> <http://schema.org/headline> "Graph". }`],
+    ["application/n-quads", `<${message}> <http://schema.org/headline> "Graph" <${root}graph> .`],
+    [
+      "application/ld+json",
+      JSON.stringify({
+        "@id": `${root}graph`,
+        "@graph": [{ "@id": message, "http://schema.org/headline": "Graph" }],
+      }),
+    ],
+  ])("rejects named graphs loaded as %s before a Turtle PUT", async (contentType, body) => {
+    const fetch = vi.fn(
+      async () =>
+        new Response(body, {
+          headers: { "content-type": contentType, etag: '"graph"' },
+        }),
+    );
+    const store = new MailStore(fetch, storage);
+    const loaded = await store.load(documentOf(message));
+    expect(loaded.mailbox.size).toBeGreaterThan(0);
+    expect([...loaded.mailbox].every((q) => q.graph.termType === "NamedNode")).toBe(true);
+    await expect(store.save(loaded)).rejects.toThrow("Named graphs");
+    expect(loaded.etag).toBe('"graph"');
+    expect(loaded.exists).toBe(true);
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
   it("enumerates typed containers and combines documents without duplicating them", async () => {
     const s = server();
     seedMailbox(s);
@@ -388,6 +463,45 @@ describe("injected pod I/O", () => {
     await persistImportedMail(s.store, follow);
     expect((await s.store.load(documentOf(item.thread))).mailbox.thread(item.thread).size).toBe(2);
     await expect(persistImportedMail(s.store, item)).rejects.toMatchObject({ code: "conflict" });
+  });
+  it("conditionally reconciles already persisted provisional threads when References arrives", async () => {
+    const headers = [
+      "Message-ID: <a>\nIn-Reply-To: <b>",
+      "Message-ID: <early>\nIn-Reply-To: <a>",
+      "Message-ID: <c>\nIn-Reply-To: <a>\nReferences: <root> <b> <a>",
+      "Message-ID: <later>\nIn-Reply-To: <early>",
+      "Message-ID: <b>",
+      "Message-ID: <root>",
+    ];
+    async function* source() {
+      for (const header of headers)
+        yield new TextEncoder().encode(`From sender\n${header}\nSubject: Conversation\n\nBody\n`);
+    }
+    const s = server();
+    const imported = [];
+    for await (const item of importMbox(source(), storage, "personal", () => "fallback")) {
+      imported.push(item);
+      await persistImportedMail(s.store, item);
+    }
+    const canonical = `${mailDocument(root, "threads", "<root>")}#it`;
+    const provisional = `${mailDocument(root, "threads", "<b>")}#it`;
+    const members = (await s.store.load(documentOf(canonical))).mailbox.thread(canonical);
+    expect([...members.messageIris].sort()).toEqual(imported.map((item) => item.message).sort());
+    for (const item of imported) {
+      const loaded = await s.store.load(documentOf(item.message));
+      expect(loaded.mailbox.message(item.message).partOfThread).toBe(canonical);
+      expect(loaded.mailbox.message(item.message).body).toContain("Body");
+    }
+    expect((await s.store.load(documentOf(provisional))).mailbox.thread(provisional).size).toBe(0);
+    expect((await loadThreads(s.store, inbox)).total).toBe(1);
+
+    // A consumer may persist only selected yielded items; absent provisional docs stay absent.
+    const selected = server();
+    await persistImportedMail(selected.store, imported[2]!);
+    expect(selected.files.has(documentOf(provisional))).toBe(false);
+    expect((await selected.store.load(documentOf(canonical))).mailbox.thread(canonical).size).toBe(
+      1,
+    );
   });
   it("persists nested labels and delimiter-bearing message identifiers and accounts", async () => {
     const s = server();

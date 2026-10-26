@@ -63,8 +63,19 @@ export class MailStore {
       if (
         response.ok &&
         extractMediaType(response.headers.get("content-type")) === "application/ld+json"
-      )
-        assertLocalContexts(JSON.parse(await response.clone().text()));
+      ) {
+        const value: unknown = JSON.parse(await response.text());
+        assertLocalContexts(value);
+        // The streaming parser must see the same duplicate-key semantics as the guard.
+        const canonical = new Response(JSON.stringify(value), {
+          status: response.status,
+          statusText: response.statusText,
+          headers: response.headers,
+        });
+        canonical.headers.delete("content-length");
+        Object.defineProperty(canonical, "url", { value: response.url });
+        return canonical;
+      }
       return response;
     };
     this.writeFetch = createPodScopedFetch(storage, { fetch, maxRedirects: 0 });

@@ -107,6 +107,9 @@ export interface ImportedMail {
   id: string;
   message: string;
   thread: string;
+  references: string[];
+  /** Provisional thread documents to reconcile when this item is persisted. */
+  mergedThreads?: string[];
   folders: { iri: string; title: string }[];
   raw: Uint8Array;
   attachments: { url: string; name: string; contentType: string; content: ArrayBuffer }[];
@@ -201,6 +204,7 @@ export async function parseEmail(
     id,
     message: message.value,
     thread: message.partOfThread,
+    references: references.map((id) => `${mailDocument(root, "messages", id)}#it`),
     folders,
     raw,
     attachments,
@@ -218,11 +222,25 @@ export async function* importMbox(
     const item = await parseEmail(raw, storage, account, mintId());
     const message = item.mailbox.message(item.message);
     const parent = message.inReplyTo;
-    const knownThread = parent === undefined ? undefined : threads.get(parent);
-    if (knownThread !== undefined) {
-      item.thread = knownThread;
-      message.partOfThread = knownThread;
+    if (item.references.length > 0) {
+      // References supplies the root even when an earlier reply had incomplete ancestry.
+      const ancestors = parent === undefined ? item.references : [...item.references, parent];
+      const merged = new Set<string>();
+      for (const ancestor of ancestors) {
+        const previous = threads.get(ancestor);
+        if (previous !== undefined && previous !== item.thread) merged.add(previous);
+      }
+      if (merged.size > 0)
+        for (const [iri, thread] of threads) if (merged.has(thread)) threads.set(iri, item.thread);
+      item.mergedThreads = [...merged];
+      for (const ancestor of ancestors) threads.set(ancestor, item.thread);
+    } else {
+      const knownThread =
+        threads.get(item.message) ?? (parent === undefined ? undefined : threads.get(parent));
+      if (knownThread !== undefined) item.thread = knownThread;
     }
+    message.partOfThread = item.thread;
+    if (parent !== undefined) threads.set(parent, item.thread);
     threads.set(item.message, item.thread);
     yield item;
   }
@@ -248,7 +266,22 @@ export async function persistImportedMail(store: MailStore, item: ImportedMail):
   const thread = threadDoc.mailbox.createThread(item.thread);
   if (thread.title === undefined) thread.title = message.subjectLine;
   thread.addMessage(item.message);
+  const mergedDocuments = [];
+  for (const previous of item.mergedThreads ?? []) {
+    const loaded = await store.load(previous.split("#")[0] as string, true);
+    if (!loaded.exists) continue;
+    const oldThread = loaded.mailbox.thread(previous);
+    for (const iri of [...oldThread.messageIris]) {
+      const member = await store.load(iri.split("#")[0] as string);
+      member.mailbox.message(iri).partOfThread = item.thread;
+      await store.save(member);
+      thread.addMessage(iri);
+      oldThread.removeMessage(iri);
+    }
+    mergedDocuments.push(loaded);
+  }
   await store.save(threadDoc);
+  for (const loaded of mergedDocuments) await store.save(loaded);
   for (const folder of item.folders) {
     const loaded = await store.load(folder.iri.split("#")[0] as string, true);
     const wrapper = loaded.mailbox.createFolder(folder.iri);

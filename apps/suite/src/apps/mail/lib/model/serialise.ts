@@ -34,6 +34,9 @@ export const MailPrefixes: Record<string, string> = {
  * an async hop.
  */
 export function serialiseToTurtle(dataset: DatasetCore): string {
+  for (const quad of dataset)
+    if (quad.graph.termType !== "DefaultGraph")
+      throw new TypeError("Named graphs cannot be serialised as Turtle");
   const writer = new Writer({ prefixes: MailPrefixes });
   writer.addQuads([...dataset]);
   // For an in-memory writer (no file descriptor) the `end` callback fires

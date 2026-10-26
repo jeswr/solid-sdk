@@ -370,6 +370,45 @@ it("threads In-Reply-To-only chains through previously imported mail", async () 
   )) as Awaited<ReturnType<typeof parseEmail>>[];
   expect(new Set(items.map((i) => i.thread)).size).toBe(1);
 });
+it("honors References roots and reconciles cached descendants and missing ancestors", async () => {
+  const input = [
+    "Message-ID: <independent>",
+    "Message-ID: <a>\nIn-Reply-To: <b>",
+    "Message-ID: <early>\nIn-Reply-To: <a>",
+    "Message-ID: <c>\nIn-Reply-To: <a>\nReferences: <root> <b> <a>",
+    "Message-ID: <later>\nIn-Reply-To: <early>",
+    "Message-ID: <b>",
+    "Message-ID: <root>",
+    "Message-ID: <standalone>\nReferences: <unseen>",
+    "Message-ID: <reply>\nIn-Reply-To: <unknown>\nReferences: <unseen>",
+  ]
+    .map((headers) => `From sender\n${headers}\n\nBody\n`)
+    .join("");
+  const items = (await collect(
+    importMbox(chunks(bytes(input)), storage, "personal", () => "id"),
+  )) as Awaited<ReturnType<typeof parseEmail>>[];
+  const provisional = `${mailDocument(root, "threads", "<b>")}#it`;
+  const canonical = `${mailDocument(root, "threads", "<root>")}#it`;
+  expect(items.map((item) => item.thread)).toEqual([
+    `${mailDocument(root, "threads", "<independent>")}#it`,
+    provisional,
+    provisional,
+    canonical,
+    canonical,
+    canonical,
+    canonical,
+    `${mailDocument(root, "threads", "<unseen>")}#it`,
+    `${mailDocument(root, "threads", "<unseen>")}#it`,
+  ]);
+  expect(items[3]!.mergedThreads).toEqual([provisional]);
+  expect(items[7]!.mergedThreads).toEqual([]);
+  expect(items[8]!.mergedThreads).toEqual([]);
+  expect(items[3]!.references).toEqual(
+    ["<root>", "<b>", "<a>"].map((id) => `${mailDocument(root, "messages", id)}#it`),
+  );
+  for (const item of items)
+    expect(item.mailbox.message(item.message).partOfThread).toBe(item.thread);
+});
 it("sorts equal-dated threads stably and resolves message-side membership alone", () => {
   const mailbox = new MailboxDataset(new Store(), DataFactory);
   for (const id of ["b", "a"]) {
