@@ -40,6 +40,8 @@ export interface TrashEntry {
   readonly size?: number;
   /** Recovery copy from an interrupted transfer; restore merges missing files. */
   readonly status?: "partial";
+  /** Remaining recovery resource URLs, derived from the current recovery tree. */
+  readonly remaining?: readonly string[];
 }
 
 export class TrashRecord extends TermWrapper {

@@ -238,6 +238,15 @@ describe("Drive client against a seeded demo pod", () => {
       url: `${DRIVE}Moved/`,
       etag: (await client.stat(`${DRIVE}Moved/`)).etag,
       children: [`${DRIVE}Moved/Budget%202026.csv`, `${DRIVE}Moved/Report.pdf`],
+      tree: [
+        {
+          url: `${DRIVE}Moved/`,
+          etag: expect.any(String),
+          children: [`${DRIVE}Moved/Budget%202026.csv`, `${DRIVE}Moved/Report.pdf`],
+        },
+        { url: `${DRIVE}Moved/Budget%202026.csv`, etag: expect.any(String) },
+        { url: `${DRIVE}Moved/Report.pdf`, etag: expect.any(String) },
+      ],
     });
     expect(pod.has(`${DRIVE}Work/`)).toBe(false);
     await expect(client.remove(`${DRIVE}Moved/`)).rejects.toMatchObject({

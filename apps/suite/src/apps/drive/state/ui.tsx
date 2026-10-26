@@ -30,6 +30,7 @@ import {
   restoreItems,
   TrashMovingError,
   TrashPartialError,
+  TrashRestorePartialError,
   trashItems,
 } from "../lib/operations/operations";
 import type { TrashEntry } from "../lib/operations/trash-index";
@@ -49,7 +50,7 @@ export interface PreviewState {
 }
 
 interface DriveUiValue {
-  readonly dialog: DriveDialog | undefined;
+  readonly dialog: (DriveDialog & { readonly id: number }) | undefined;
   readonly openDialog: (dialog: DriveDialog) => void;
   readonly closeDialog: () => void;
   readonly restoreDialogFocus: (event: Event) => void;
@@ -71,7 +72,7 @@ interface DriveUiValue {
 const DriveUiContext = createContext<DriveUiValue | undefined>(undefined);
 
 export function DriveUiProvider({ children }: { children: ReactNode }) {
-  const [dialog, setDialog] = useState<DriveDialog>();
+  const [dialog, setDialog] = useState<DriveUiValue["dialog"]>();
   const [preview, setPreview] = useState<PreviewState>();
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [detailsItems, setDetailsItems] = useState<readonly DriveItem[]>([]);
@@ -80,7 +81,8 @@ export function DriveUiProvider({ children }: { children: ReactNode }) {
   const dialogFocus = useRef<{ element: HTMLElement | null; url: string | undefined } | undefined>(
     undefined,
   );
-  const dialogOpen = useRef(false);
+  const dialogOpen = useRef<number | undefined>(undefined);
+  const nextDialog = useRef(0);
   const openDialog = useCallback((next: DriveDialog) => {
     const item =
       next.kind === "rename" ? next.item : next.kind === "move" ? next.items[0] : undefined;
@@ -92,17 +94,20 @@ export function DriveUiProvider({ children }: { children: ReactNode }) {
           : null,
       url,
     };
-    dialogOpen.current = true;
-    setDialog(next);
+    const id = ++nextDialog.current;
+    dialogOpen.current = id;
+    setDialog({ ...next, id });
   }, []);
   const closeDialog = useCallback(() => {
-    dialogOpen.current = false;
+    // Async submissions retain the close callback of their own opening.
+    if (dialogOpen.current !== dialog?.id) return;
+    dialogOpen.current = undefined;
     setDialog(undefined);
-  }, []);
+  }, [dialog?.id]);
   const restoreDialogFocus = useCallback((event: Event) => {
     event.preventDefault();
     // Name -> extension confirmation replaces one dialog with another.
-    if (dialogOpen.current) return;
+    if (dialogOpen.current !== undefined) return;
     const saved = dialogFocus.current;
     const row = saved?.url
       ? document.querySelector<HTMLElement>(`[data-url="${CSS.escape(saved.url)}"]`)
@@ -154,7 +159,12 @@ export function useDriveUi(): DriveUiValue {
 
 /** User-facing message for a failed operation. */
 export function errorMessage(error: unknown, fallback = "Something went wrong"): string {
-  if (error instanceof TrashMovingError || error instanceof TrashPartialError) return error.message;
+  if (
+    error instanceof TrashMovingError ||
+    error instanceof TrashPartialError ||
+    error instanceof TrashRestorePartialError
+  )
+    return error.message;
   if (error instanceof DriveError) {
     switch (error.kind) {
       case "conflict":
@@ -288,7 +298,7 @@ export function useDriveActions() {
           ({ identity }) =>
             identity.etag &&
             !identity.etag.startsWith("W/") &&
-            (!identity.url.endsWith("/") || identity.children !== undefined),
+            (!identity.url.endsWith("/") || identity.tree !== undefined),
         );
       const label = folderLabel(target, driveRoot);
       const first = result.done[0];
@@ -311,7 +321,7 @@ export function useDriveActions() {
                         to,
                         from,
                         identity.etag,
-                        ...(identity.children ? ([identity.children] as const) : ([] as const)),
+                        ...(identity.tree ? ([identity.tree] as const) : ([] as const)),
                       );
                       invalidate(to);
                       invalidate(from);
@@ -393,6 +403,11 @@ export function useDriveActions() {
       for (const { entry, url } of result.done) {
         invalidate(entry.url);
         invalidate(url);
+      }
+      for (const { url } of result.failed) {
+        invalidate(url);
+        const entry = entries.find((entry) => entry.url === url);
+        if (entry) invalidate(entry.original);
       }
       const first = result.done[0];
       if (result.failed.length > 0)

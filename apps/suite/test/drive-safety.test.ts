@@ -48,6 +48,176 @@ function setup(
 afterEach(() => vi.restoreAllMocks());
 
 describe("Drive data-safety regressions", () => {
+  it("partial restore retains the only recovery copy when an original URL is occupied", async () => {
+    const { pod, client } = setup(async (url, init) =>
+      url === `${FROM}b` && init?.method === "DELETE"
+        ? new Response(null, { status: 403 })
+        : undefined,
+    );
+    await trashItems(client, DRIVE, [await client.stat(FROM)]);
+    const [entry] = await listTrash(client, DRIVE);
+    if (!entry) throw new Error("Missing partial recovery copy");
+    await client.write(`${FROM}a`, "unrelated replacement", {
+      contentType: "text/plain",
+      ifNoneMatch: "*",
+    });
+    const result = await restoreItems(client, DRIVE, [entry]);
+    expect(result.done).toEqual([]);
+    expect(result.failed[0]?.error).toMatchObject({
+      message: "2 items could not be restored because their location is in use",
+    });
+    expect(await (await client.read(`${entry.url}a`)).text()).toBe("A");
+    expect(await (await client.read(`${FROM}a`)).text()).toBe("unrelated replacement");
+    expect((await listTrash(client, DRIVE))[0]).toMatchObject({ status: "partial" });
+    expect(pod.has(entry.url)).toBe(true);
+  });
+
+  it("reconciles a stranded pending tree and permits restore even when partial index saves fail", async () => {
+    let writes = 0;
+    const { client } = setup(async (url, init) => {
+      if (url === INDEX && init?.method === "PUT" && ++writes > 1)
+        return new Response(null, { status: 500 });
+      if (url === `${FROM}b` && init?.method === "DELETE")
+        return new Response(null, { status: 403 });
+      return undefined;
+    });
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const trashed = await trashItems(client, DRIVE, [await client.stat(FROM)]);
+    expect(trashed.warnings?.[0]).toMatchObject({ kind: "trash-index-persistence" });
+    const current = await client.readRdf(INDEX);
+    if (!current) throw new Error("Missing durable intent");
+    expect(trashIndexFrom(current.dataset).records[0]?.status).toBe("pending");
+    const [entry] = await listTrash(client, DRIVE);
+    expect(entry).toMatchObject({ status: "partial", original: FROM });
+    if (!entry) throw new Error("Hidden recovery copy");
+    const result = await restoreItems(client, DRIVE, [entry]);
+    expect(result.failed[0]?.error).not.toMatchObject({ kind: "trash-moving" });
+    expect(await (await client.read(`${FROM}a`)).text()).toBe("A");
+    expect(await (await client.read(`${entry.url}b`)).text()).toBe("B");
+    expect((await listTrash(client, DRIVE))[0]).toMatchObject({
+      status: "partial",
+      remaining: [`${entry.url}b`],
+    });
+  });
+
+  it.each([
+    "direct",
+    "nested",
+  ])("reconciles legacy pending recovery after a %s child disappears", async (missing) => {
+    let failIndex = false;
+    const { client } = setup(async (url, init) =>
+      failIndex && url === INDEX && init?.method === "PUT"
+        ? new Response(null, { status: 500 })
+        : undefined,
+    );
+    await client.write(`${FROM}nested/note`, "nested", {
+      contentType: "text/plain",
+      ifNoneMatch: "*",
+    });
+    const copy = client.copy.bind(client);
+    vi.spyOn(client, "move").mockImplementation(async (from, to) => {
+      await copy(from, to);
+      throw new Error("interrupted before deletion");
+    });
+    await trashItems(client, DRIVE, [await client.stat(FROM)]);
+    expect(await listTrash(client, DRIVE)).toEqual([]);
+    await client.remove(`${FROM}${missing === "direct" ? "a" : "nested/note"}`);
+    failIndex = true;
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const [entry] = await listTrash(client, DRIVE);
+    expect(entry).toMatchObject({ status: "partial" });
+    if (!entry) throw new Error("Hidden legacy recovery");
+    expect(entry.remaining).toEqual([`${entry.url}a`, `${entry.url}b`, `${entry.url}nested/note`]);
+  });
+
+  it("keeps matching pending file copies hidden as in-flight", async () => {
+    const { client } = setup();
+    const copy = client.copy.bind(client);
+    vi.spyOn(client, "move").mockImplementation(async (from, to) => {
+      await copy(from, to);
+      throw new Error("interrupted before deletion");
+    });
+    await trashItems(client, DRIVE, [await client.stat(`${FROM}a`)]);
+    expect(await listTrash(client, DRIVE)).toEqual([]);
+  });
+
+  it("keeps recovery visible if both index promotion and the fallback receipt fail, and refuses to drain it", async () => {
+    let writes = 0;
+    let failReceipt = false;
+    const { client } = setup(async (url, init) => {
+      if (url === INDEX && init?.method === "PUT" && ++writes > 1)
+        return new Response(null, { status: 500 });
+      if (failReceipt && url.endsWith("/partial.ttl") && init?.method === "PUT")
+        return new Response(null, { status: 500 });
+      if (url === `${FROM}b` && init?.method === "DELETE")
+        return new Response(null, { status: 403 });
+      return undefined;
+    });
+    failReceipt = true;
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const trashed = await trashItems(client, DRIVE, [await client.stat(FROM)]);
+    expect(trashed.warnings).toHaveLength(1);
+    const [entry] = await listTrash(client, DRIVE);
+    expect(entry).toMatchObject({ status: "partial" });
+    if (!entry) throw new Error("Hidden recovery");
+    expect((await restoreItems(client, DRIVE, [entry])).failed[0]?.error).toMatchObject({
+      status: 500,
+    });
+    expect(await (await client.read(`${entry.url}a`)).text()).toBe("A");
+    expect(warn).toHaveBeenCalledWith(
+      expect.objectContaining({ url: expect.stringContaining("/partial.ttl") }),
+    );
+  });
+
+  it("removes a fallback receipt and its record only after fully draining the recovery copy", async () => {
+    let writes = 0;
+    const { pod, client } = setup(async (url, init) =>
+      url === INDEX && init?.method === "PUT" && ++writes === 2
+        ? new Response(null, { status: 500 })
+        : undefined,
+    );
+    const result = await trashItems(client, DRIVE, [await client.stat(`${FROM}a`)]);
+    const entry = result.done[0];
+    if (!entry) throw new Error("Missing entry");
+    // Keep the durable intent pending and force its first promotion to fail.
+    vi.spyOn(client, "write").mockRejectedValueOnce(new DriveError("failed", 500, INDEX));
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    expect((await listTrash(client, DRIVE))[0]).toMatchObject({ status: "partial" });
+    const slot = new URL(".", entry.url).href;
+    expect(pod.has(`${slot}partial.ttl`)).toBe(true);
+    const remove = client.remove.bind(client);
+    vi.spyOn(client, "remove").mockImplementation(async (url, options) => {
+      if (url === slot) throw new DriveError("forbidden", 403, url);
+      await remove(url, options);
+    });
+    expect((await restoreItems(client, DRIVE, [entry])).done).toHaveLength(1);
+    expect(pod.has(entry.url)).toBe(false);
+    expect(pod.has(`${slot}partial.ttl`)).toBe(false);
+    expect(await listTrash(client, DRIVE)).toEqual([]);
+  });
+
+  it("keeps the fallback receipt separate from a trashed file named partial.ttl", async () => {
+    let writes = 0;
+    const { client } = setup(async (url, init) =>
+      url === INDEX && init?.method === "PUT" && ++writes > 1
+        ? new Response(null, { status: 500 })
+        : undefined,
+    );
+    await client.write(`${FROM}partial.ttl`, "unique recovery bytes", {
+      contentType: "text/plain",
+      ifNoneMatch: "*",
+    });
+    const {
+      done: [entry],
+    } = await trashItems(client, DRIVE, [await client.stat(`${FROM}partial.ttl`)]);
+    if (!entry) throw new Error("Missing entry");
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    expect((await listTrash(client, DRIVE))[0]).toMatchObject({ status: "partial" });
+    expect(await (await client.read(entry.url)).text()).toBe("unique recovery bytes");
+    expect((await restoreItems(client, DRIVE, [entry])).done).toHaveLength(1);
+    expect(await (await client.read(entry.original)).text()).toBe("unique recovery bytes");
+  });
+
   it.each([
     "changed",
     "missing",
@@ -132,8 +302,8 @@ describe("Drive data-safety regressions", () => {
     const foreign = new URL("../foreign", entry.url).href;
     await pod.fetch(foreign, { method: "PUT", body: "foreign slot child" });
     const restored = await restoreItems(client, DRIVE, [entry]);
-    expect(restored.failed).toEqual([]);
-    expect(restored.done).toMatchObject([{ url: FROM, renamed: false }]);
+    expect(restored.failed[0]?.error).toMatchObject({ kind: "trash-restore-partial" });
+    expect(restored.done).toEqual([]);
     expect(await (await client.read(`${FROM}a`)).text()).toBe("A");
     expect(await (await client.read(`${FROM}b`)).text()).toBe("new B");
     expect(await (await client.read(`${FROM}nested/new`)).text()).toBe("new child");
@@ -141,7 +311,11 @@ describe("Drive data-safety regressions", () => {
       ([url, init]) => url === `${FROM}a` && init?.method === "PUT",
     );
     expect(new Headers(write?.[1]?.headers).get("if-none-match")).toBe("*");
-    expect(await listTrash(client, DRIVE)).toEqual([]);
+    expect((await listTrash(client, DRIVE))[0]).toMatchObject({
+      status: "partial",
+      remaining: [`${entry.url}b`],
+    });
+    expect(await (await client.read(`${entry.url}b`)).text()).toBe("B");
     expect(await (await client.read(foreign)).text()).toBe("foreign slot child");
   });
 
@@ -186,12 +360,12 @@ describe("Drive data-safety regressions", () => {
     const result = await restoreItems(client, DRIVE, [entry]);
     expect(intervened).toBe(true);
     if (failure.endsWith("race")) {
-      expect(result.failed).toEqual([]);
+      expect(result.failed).toHaveLength(failure === "file-race" ? 1 : 0);
       expect(await (await client.read(`${FROM}a`)).text()).toBe(
         failure === "file-race" ? "concurrent" : "A",
       );
       expect(await (await client.read(`${FROM}nested/note`)).text()).toBe("nested");
-      expect(await listTrash(client, DRIVE)).toEqual([]);
+      expect(await listTrash(client, DRIVE)).toHaveLength(failure === "file-race" ? 1 : 0);
     } else {
       expect(result.done).toEqual([]);
       expect(result.failed).toHaveLength(1);
@@ -320,7 +494,7 @@ describe("Drive data-safety regressions", () => {
     expect(trashEntries(trashIndexFrom(current.dataset))).toEqual([]);
   });
 
-  it("promotes a pending intent only after source removal and a persisted completion on next load", async () => {
+  it("reconciles a pending intent with a missing source to partial before restore", async () => {
     let writes = 0;
     const { client } = setup(async (url, init) =>
       url === INDEX && init?.method === "PUT" && ++writes === 2
@@ -330,19 +504,17 @@ describe("Drive data-safety regressions", () => {
     const result = await trashItems(client, DRIVE, [await client.stat(`${FROM}a`)]);
     const entry = result.done[0];
     if (!entry) throw new Error("Missing moved entry");
-    expect((await restoreItems(client, DRIVE, [entry])).failed[0]?.error).toMatchObject({
-      kind: "trash-moving",
-    });
+    expect(await listTrash(client, DRIVE)).toMatchObject([{ ...entry, status: "partial" }]);
     expect((await deleteForever(client, DRIVE, [entry])).failed[0]?.error).toMatchObject({
-      kind: "trash-moving",
+      kind: "trash-partial",
     });
-    expect(await listTrash(client, DRIVE)).toEqual([entry]);
     expect((await restoreItems(client, DRIVE, [entry])).done).toHaveLength(1);
   });
 
   it.each([
     "removed",
     "changed",
+    "partial",
   ])("does not resurrect a pending intent %s by another tab during reconciliation", async (change) => {
     let writes = 0;
     const { client } = setup(async (url, init) =>
@@ -355,18 +527,21 @@ describe("Drive data-safety regressions", () => {
     } = await trashItems(client, DRIVE, [await client.stat(`${FROM}a`)]);
     if (!entry) throw new Error("Missing moved entry");
     const read = client.readRdf.bind(client);
-    vi.spyOn(client, "readRdf")
-      .mockImplementationOnce(read)
-      .mockImplementationOnce(async (url) => {
-        const current = await read(url);
-        if (!current) throw new Error("Missing index");
-        const index = trashIndexFrom(current.dataset);
-        if (change === "removed") index.record(entry.url).clear();
-        else index.record(entry.url).originalLocation = `${FROM}b`;
-        await client.write(INDEX, await serializeTrashIndex(index), { contentType: "text/turtle" });
-        return read(url);
-      });
-    expect(await listTrash(client, DRIVE)).toEqual([]);
+    let reads = 0;
+    vi.spyOn(client, "readRdf").mockImplementation(async (url) => {
+      if (url !== INDEX || ++reads !== 2) return read(url);
+      const current = await read(url);
+      if (!current) throw new Error("Missing index");
+      const index = trashIndexFrom(current.dataset);
+      if (change === "removed") index.record(entry.url).clear();
+      else if (change === "changed") index.record(entry.url).originalLocation = `${FROM}b`;
+      else index.record(entry.url).status = "partial";
+      await client.write(INDEX, await serializeTrashIndex(index), { contentType: "text/turtle" });
+      return read(url);
+    });
+    expect(await listTrash(client, DRIVE)).toMatchObject(
+      change === "partial" ? [{ ...entry, status: "partial" }] : [],
+    );
   });
 
   it("copies a folder through the operation API with its trailing slash intact", async () => {
@@ -711,7 +886,9 @@ describe("Drive data-safety regressions", () => {
     expect(result.failed).toEqual([]);
     expect(result.warnings).toMatchObject([{ kind: "trash-index-persistence", cause: { status } }]);
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
-    expect(await listTrash(client, DRIVE)).toEqual([]);
+    expect(await listTrash(client, DRIVE)).toMatchObject([
+      { ...result.done[0], status: "partial" },
+    ]);
     expect(warn).toHaveBeenCalledWith(expect.objectContaining({ kind: "trash-index-persistence" }));
     expect(pod.has(`${FROM}a`)).toBe(false);
   });
