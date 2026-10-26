@@ -16,7 +16,9 @@ public class SuiteAuthSessionPlugin: CAPPlugin, CAPBridgedPlugin, ASWebAuthentic
 
     static let callbackScheme = "org.jeswr.suite"
     static let callbackPath = "/oauth/callback"
+    // Main queue only. The pending call is settled exactly once, by the session or by cancel().
     private var session: ASWebAuthenticationSession?
+    private var pendingCall: CAPPluginCall?
 
     @objc func authenticate(_ call: CAPPluginCall) {
         guard call.getString("callbackScheme") == Self.callbackScheme else {
@@ -32,9 +34,13 @@ public class SuiteAuthSessionPlugin: CAPPlugin, CAPBridgedPlugin, ASWebAuthentic
                 call.reject("A sign-in is already in progress", "BUSY")
                 return
             }
+            weak var started: ASWebAuthenticationSession?
             let session = ASWebAuthenticationSession(url: url, callbackURLScheme: Self.callbackScheme) { callback, error in
                 DispatchQueue.main.async {
+                    // A late completion from a cancelled or replaced session is dropped.
+                    guard let current = started, self.session === current else { return }
                     self.session = nil
+                    self.pendingCall = nil
                     if let callback = callback, Self.isCallback(callback) {
                         call.resolve(["url": callback.absoluteString])
                     } else if let error = error as? ASWebAuthenticationSessionError, error.code == .canceledLogin {
@@ -48,9 +54,12 @@ public class SuiteAuthSessionPlugin: CAPPlugin, CAPBridgedPlugin, ASWebAuthentic
             }
             session.presentationContextProvider = self
             session.prefersEphemeralWebBrowserSession = false
+            started = session
             self.session = session
+            self.pendingCall = call
             if !session.start() {
                 self.session = nil
+                self.pendingCall = nil
                 call.reject("Could not start the sign-in session", "NATIVE_ERROR")
             }
         }
@@ -58,8 +67,13 @@ public class SuiteAuthSessionPlugin: CAPPlugin, CAPBridgedPlugin, ASWebAuthentic
 
     @objc func cancel(_ call: CAPPluginCall) {
         DispatchQueue.main.async {
-            // The pending authenticate call then completes with canceledLogin.
-            self.session?.cancel()
+            // cancel() does not run the session's completion handler, so settle the call here.
+            let session = self.session
+            let pending = self.pendingCall
+            self.session = nil
+            self.pendingCall = nil
+            session?.cancel()
+            pending?.reject("Sign-in was cancelled", "USER_CANCELLED")
             call.resolve()
         }
     }
