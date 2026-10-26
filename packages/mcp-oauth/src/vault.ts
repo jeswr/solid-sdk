@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
-import { MemoryVaultStore, type VaultStore } from "./vault-stores.js";
+import { KvVaultStore, type VaultStore } from "./vault-stores.js";
 
 /** Server-only secret vault. Deleted identifiers are permanently retired. */
 export interface SessionVault {
@@ -18,6 +18,7 @@ export interface SessionVault {
 export interface SessionVaultOptions {
   /** Exactly 32 bytes in canonical padded base64; defaults to MCP_VAULT_KEY. */
   key?: string;
+  /** Defaults to Upstash/Vercel KV configured through its REST environment variables. */
   store?: VaultStore;
 }
 
@@ -27,7 +28,7 @@ export function createSessionVault(options: SessionVaultOptions = {}): SessionVa
   const key = Buffer.from(encoded, "base64");
   if (key.length !== 32 || key.toString("base64") !== encoded)
     throw new Error("MCP_VAULT_KEY must be 32 bytes in base64");
-  const store = options.store ?? new MemoryVaultStore();
+  const store = options.store ?? new KvVaultStore();
   const aad = (id: string) => Buffer.from(`mcp-vault:1:${id}`);
   const encrypt = (id: string, secret: Uint8Array) => {
     const iv = randomBytes(12);

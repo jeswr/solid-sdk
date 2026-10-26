@@ -26,7 +26,10 @@ describe("authenticated session vault", () => {
     for (const key of [undefined, "", "invalid", Buffer.alloc(31).toString("base64"), `${KEY}\n`])
       expect(() => createSessionVault({ key })).toThrow("MCP_VAULT_KEY");
     vi.stubEnv("MCP_VAULT_KEY", KEY);
-    const vault = createSessionVault();
+    vi.stubEnv("KV_REST_API_URL", "https://kv.example");
+    vi.stubEnv("KV_REST_API_TOKEN", "fixture-rest-key");
+    expect(createSessionVault()).toBeDefined();
+    const vault = createSessionVault({ store: new MemoryVaultStore() });
     await vault.put("id", secret);
     expect(await vault.get("id")).toEqual(secret);
   });

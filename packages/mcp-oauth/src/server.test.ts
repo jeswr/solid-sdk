@@ -192,7 +192,7 @@ describe("metadata and complete OAuth flow", () => {
     });
     expect((await f.refresh(clientId, rotated.refresh_token)).status).toBe(400);
     expect(f.provider.fetchFor).not.toHaveBeenCalled();
-    expect(f.provider.revoke).not.toHaveBeenCalled();
+    expect(f.provider.revoke).toHaveBeenCalledWith(SESSION.id);
   });
 
   it("supports root issuer paths, defaults and empty scopes", async () => {

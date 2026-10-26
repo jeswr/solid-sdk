@@ -168,6 +168,7 @@ export class AuthorizationServer {
     ) {
       throw new OAuthError("invalid_token", 401);
     }
+    if (!(await this.sessionActive(grant))) throw new OAuthError("invalid_token", 401);
     return {
       clientId: grant.clientId,
       webId: grant.session.webId,
@@ -261,6 +262,11 @@ export class AuthorizationServer {
   ): Promise<Response> {
     const identity = { id: session.id, webId: session.webId };
     if (!identity.id || !identity.webId) throw new Error("Pod identity is required");
+    if (
+      this.options.podSessions.isActive &&
+      !(await this.options.podSessions.isActive(identity.id))
+    )
+      throw new OAuthError("access_denied");
     const permitted = await this.options.consent(
       structuredCloneContext(request, client, authorization, identity),
     );
@@ -331,6 +337,7 @@ export class AuthorizationServer {
     const grant = await this.stores.grants.get(grantId);
     if (!grant || grant.revoked || grant.expiresAt <= this.now() || grant.resource !== resource)
       throw new OAuthError("invalid_grant");
+    if (!(await this.sessionActive(grant))) throw new OAuthError("invalid_grant");
     const requestedScopes = new Set((params.get("scope") ?? grant.scope).split(" "));
     const grantedScopes = new Set(grant.scope.split(" "));
     if (
@@ -345,7 +352,7 @@ export class AuthorizationServer {
         ? await this.stores.codes.consume(hash)
         : await this.stores.refreshTokens.consume(hash);
     if (!used?.firstUse) {
-      await this.stores.grants.revoke(grantId);
+      await this.revokeGrant(grant);
       throw new OAuthError("invalid_grant");
     }
     if (expiresAt <= this.now()) throw new OAuthError("invalid_grant");
@@ -361,6 +368,7 @@ export class AuthorizationServer {
     // Re-read after asynchronous writes so concurrent replay/revocation cannot resurrect a grant.
     const current = await this.stores.grants.get(grantId);
     if (!current || current.revoked) throw new OAuthError("invalid_grant");
+    if (!(await this.sessionActive(current))) throw new OAuthError("invalid_grant");
     return json({
       access_token: accessToken,
       token_type: "Bearer",
@@ -385,8 +393,24 @@ export class AuthorizationServer {
         if (!(error instanceof OAuthError)) throw error;
       }
     }
-    if (grant && grant.clientId === clientId) await this.stores.grants.revoke(grant.id);
+    if (grant && grant.clientId === clientId) await this.revokeGrant(grant);
     return new Response(null, { status: 200, headers: { "cache-control": "no-store" } });
+  }
+
+  private async revokeGrant(grant: Grant): Promise<void> {
+    // MCP revocation is durable first, even if upstream credential retirement fails.
+    await this.stores.grants.revoke(grant.id);
+    await this.options.podSessions.revoke(grant.session.id);
+  }
+
+  private async sessionActive(grant: Grant): Promise<boolean> {
+    if (
+      !this.options.podSessions.isActive ||
+      (await this.options.podSessions.isActive(grant.session.id))
+    )
+      return true;
+    await this.stores.grants.revoke(grant.id);
+    return false;
   }
 }
 

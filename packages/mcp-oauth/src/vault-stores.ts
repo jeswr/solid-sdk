@@ -66,6 +66,12 @@ export class FileVaultStore implements VaultStore {
         await file.close();
       }
       await rename(temporary, path);
+      const directory = await open(this.directory, "r");
+      try {
+        await directory.sync();
+      } finally {
+        await directory.close();
+      }
       return true;
     } finally {
       await rm(temporary, { force: true });

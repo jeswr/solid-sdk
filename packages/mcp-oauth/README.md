@@ -15,7 +15,7 @@ import { createAuthorizationServer } from "@jeswr/mcp-oauth";
 const oauth = createAuthorizationServer({
   issuer: "https://mcp.example/auth",
   resource: "https://mcp.example/mcp",
-  podSessions, // injected MCP-10 PodSessionProvider
+  podSessions, // createPodSessionProvider(), configured below
   consent: async ({ client, authorization, session, request }) => {
     return consentService.isApproved({ client, authorization, session, request });
   },
@@ -64,7 +64,60 @@ the presented refresh token. Replaying a code or refresh token revokes its entir
 `/revoke` also revokes the family for either kind of token and returns 200 for unknown tokens.
 `verifyAccessToken` checks ES256, kid, issuer, audience, time, claims and current family status;
 use it for immediate family revocation. JWT-only external verifiers cannot observe family
-revocation before access-token expiry. MCP-10 owns upstream session revocation and its cascade.
+revocation before access-token expiry. MCP revocation and code/refresh reuse retire the bound
+pod session as well. The built-in broker's durable `isActive` check rejects every grant bound
+to a retired or expired session during access verification and token issuance. Direct broker
+revocation has the same effect; affected grant records are marked revoked when next checked.
+Legacy injected providers may omit `isActive`, retaining grant-local verification behavior.
+
+```ts
+import { createPodSessionProvider, createSessionVault } from "@jeswr/mcp-oauth";
+
+const vault = createSessionVault();
+const podSessions = createPodSessionProvider({
+  clientId: "https://mcp.example/client-id.jsonld",
+  redirectUri: "https://mcp.example/auth/callback",
+  vault,
+});
+```
+
+Set `MCP_VAULT_KEY` to a persistent, securely generated 32-byte key in canonical padded base64.
+The default encrypted store uses Upstash Redis REST through `KV_REST_API_URL` and
+`KV_REST_API_TOKEN`, falling back to `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN`.
+No KV SDK is required. For a local filesystem, pass `store: new FileVaultStore(directory)`;
+for isolated tests, pass `store: new MemoryVaultStore()`. Both are exported from this package.
+All stores receive only AES-256-GCM ciphertext (fresh 96-bit IV; version and record ID bound as
+authenticated data). The file store uses hashed filenames, 0600 files, 0700 new directories,
+fsynced writes and atomic rename. Use a dedicated private directory on a local filesystem.
+The key and store must be shared across restarts/workers. Losing the key requires new logins.
+
+The broker uses the server's public Solid Client ID Document, served by MCP-11. It must declare
+the exact callback URI, `token_endpoint_auth_method: "none"`, and
+`scope: "openid webid offline_access"`. The broker requests consent, PKCE S256, state, nonce and
+a new ES256 DPoP key for each login. It resolves an issuer directly, or falls back to the input
+WebID's profile only when discovery returns HTTP 404. Ambiguous/missing profile issuers fail;
+malformed discovery, transport failures and issuer mismatches never trigger fallback. After
+OIDC completion, the verified WebID must match a supplied WebID and advertise the selected issuer
+in its own profile. Remote JSON-LD contexts are refused by the RDF parser.
+
+`complete()` consumes pending login state atomically and returns only `{ id, webId }`. The
+refresh token and private DPoP JWK stay in the vault; access/ID tokens stay in process memory.
+`fetchFor(id)` returns a fetch that checks durable session liveness on every call, permits only
+the WebID profile's `pim:storage` roots, refuses caller Authorization/DPoP/Cookie headers, omits
+browser credentials, and refuses redirects. It restores with the original DPoP key and refreshes
+on access expiry, persisting token rotation before sending a resource request. The existing
+Solid client handles bounded nonce retries at both the token and resource endpoints.
+Default network transport pins DNS, refuses SSRF targets, caps responses at 1 MiB and sets an
+eight-second deadline. An injected `fetch` must supply equivalent network protections.
+
+Vault CAS operations atomically consume callbacks and claim refresh ownership across workers.
+Contention fails closed instead of redeeming a rotating refresh token twice. A process crash
+during a claimed refresh requires a new login. File lock files left by a crashed writer require
+operator cleanup while the store is offline. Deleted IDs retain irreversible tombstones: never
+reuse them or remove tombstones while an old request could still complete. Local `revoke()`
+destroys credentials and retires the session; it does not require a remote revocation endpoint.
+Sessions expire absolutely after thirty days; login state expires after ten minutes. Expired
+record/tombstone cleanup and request rate limits belong to the deployment.
 
 Default client-document fetches use `@jeswr/guarded-fetch/node` (DNS pinning, SSRF checks,
 64 KiB cap, eight-second timeout, no redirects). Documents must be JSON, HTTP 200, with a

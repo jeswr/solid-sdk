@@ -13,6 +13,8 @@ export interface PodSessionProvider {
   complete(callbackUrl: string, state: string): Promise<PodSession>;
   fetchFor(sessionId: string): Promise<typeof fetch>;
   revoke(sessionId: string): Promise<void>;
+  /** Durable liveness for cascade revocation. MCP-10's broker always implements this. */
+  isActive?(sessionId: string): Promise<boolean>;
 }
 
 /** The supported public-client registration metadata. */
