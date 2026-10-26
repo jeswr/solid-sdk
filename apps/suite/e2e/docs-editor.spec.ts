@@ -64,6 +64,9 @@ test("creates, saves, reloads and formats a document accessibly", async ({ page 
   await body.press("Control+Home");
   await page.getByRole("combobox", { name: "Block type", exact: true }).selectOption("h1");
   await expect(body.locator("h1")).toHaveText("A clear plan for the launch.");
+  // TipTap returns focus on the next animation frame; a key pressed before it lands
+  // would be undone when the editor re-applies its stored selection.
+  await expect(body).toBeFocused();
   await body.press("Control+End");
   await body.press("Enter");
   await format(page, "Checklist");

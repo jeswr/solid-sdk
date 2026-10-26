@@ -6,11 +6,14 @@ import { PodSessionProvider } from "@/lib/session/pod-session";
 import "@/apps/docs/components/docs.css";
 export default function DocsLayout({ children }: { children: ReactNode }) {
   return (
-    <PodSessionProvider>
-      <Suspense fallback={<DocumentSkeleton />}>
+    // The session lives inside the boundary so it only settles once the boundary has
+    // hydrated: a session resolving above a boundary whose code is still loading makes it
+    // hydrate the ready workspace against the server's loading markup (a mismatch).
+    <Suspense fallback={<DocumentSkeleton />}>
+      <PodSessionProvider>
         <DocsWorkspace />
         {children}
-      </Suspense>
-    </PodSessionProvider>
+      </PodSessionProvider>
+    </Suspense>
   );
 }
