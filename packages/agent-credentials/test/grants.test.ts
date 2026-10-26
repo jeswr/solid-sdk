@@ -265,7 +265,7 @@ it("dry-run and real provisioning use only the fake op and never echo its values
   expect(out).toBe(refs.map((credentialRef) => `${JSON.stringify({ credentialRef })}\n`).join(""));
   expect(readFileSync(log, "utf8")).toBe(`${refs.join("\n")}\n`);
   expect(new CredentialStore(dir).tokenFiles()).toHaveLength(2);
-  // A failing op may write partial stdout: without the success marker it must not be stored.
+  // A failing op may write arbitrary partial output: only exit status can signal success.
   writeFileSync(
     fakeOp,
     '#!/bin/sh\nprintf "test-partial-token-0123456789"\nprintf "test-secret-error" >&2\nexit 1\n',
@@ -277,6 +277,15 @@ it("dry-run and real provisioning use only the fake op and never echo its values
   expect(failed.status).toBe(1);
   expect(failed.stdout).toBe("");
   expect(failed.stderr).not.toContain("test-");
+  writeFileSync(fakeOp, '#!/bin/sh\nprintf "test-partial-token-0123456789\\000"\nexit 1\n');
+  const binaryFailure = spawnSync("bash", [...args.slice(0, -2), fixtureValue(refs[0])], {
+    env,
+    encoding: "utf8",
+  });
+  expect(binaryFailure.status).toBe(1);
+  expect(binaryFailure.stdout).toBe("");
+  expect(new CredentialStore(dir).tokenFiles()).toHaveLength(2);
+
   expect(
     spawnSync("bash", [script, "--dir", dir, "--provider", "unknown", ...refs], { env }).status,
   ).toBe(1);

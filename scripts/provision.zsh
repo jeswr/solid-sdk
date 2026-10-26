@@ -4,7 +4,7 @@
 set +x
 set -eu
 # No token is put in argv, a shell variable, or an external temporary file.
-# The NUL marks a successful op exit, so partial output from a failed op is refused.
+# The writer pipes op stdout privately and checks its exit status before committing.
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 node "$script_dir/provision-writer.mjs" --validate "$@"
 dry_run=false
@@ -17,8 +17,7 @@ for reference do
       if [ "$dry_run" = true ]; then
         printf 'Would read %s\n' "$reference"
       else
-        { op read "$reference" 2>/dev/null && printf '\000'; } |
-          node "$script_dir/provision-writer.mjs" --reference "$reference" "$@"
+        node "$script_dir/provision-writer.mjs" --reference "$reference" "$@"
       fi
       ;;
   esac
