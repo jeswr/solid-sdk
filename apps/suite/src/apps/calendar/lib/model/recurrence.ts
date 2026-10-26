@@ -29,18 +29,27 @@ export function wallClock(date: Date, timeZone: string): Date {
     ),
   );
 }
-/** Resolve a wall time to its first occurrence; reject nonexistent DST-gap times. */
-export function fromWallClock(wall: Date, timeZone: string): Date {
+/** Resolve the first occurrence; explicit ICS gap times may use the pre-transition offset. */
+export function fromWallClock(
+  wall: Date,
+  timeZone: string,
+  gap: "reject" | "offset-before" = "reject",
+): Date {
   let earliest = Infinity;
+  let afterGap = Infinity;
   // Sample both sides of a transition, then test each observed offset explicitly.
   // An overlap has two matching instants; a gap has none.
   for (const delta of [-86400000, 0, 86400000]) {
     const sample = new Date(+wall + delta);
     const offset = +wallClock(sample, timeZone) - +sample;
     const candidate = new Date(+wall - offset);
-    if (+wallClock(candidate, timeZone) === +wall) earliest = Math.min(earliest, +candidate);
+    const resolved = +wallClock(candidate, timeZone);
+    if (resolved === +wall) earliest = Math.min(earliest, +candidate);
+    // In a gap, applying the old offset shifts the wall time forward by the gap.
+    if (resolved > +wall) afterGap = Math.min(afterGap, +candidate);
   }
   if (Number.isFinite(earliest)) return new Date(earliest);
+  if (gap === "offset-before" && Number.isFinite(afterGap)) return new Date(afterGap);
   throw new TypeError("Local time does not exist in this timezone");
 }
 export function toRRule(rule: RecurrenceRule, start: CalendarDate, timeZone = "UTC"): RRule {

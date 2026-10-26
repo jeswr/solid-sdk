@@ -9,6 +9,7 @@ import {
   exportICal,
   foldContentLine,
   formatICalDate,
+  fromWallClock,
   importICal,
   parseICalDate,
   ruleToICal,
@@ -35,6 +36,55 @@ describe("ICS fixture round-trips", () => {
   });
 });
 describe("ICS compatibility and validation", () => {
+  it.each([
+    ["Europe/London", "20260329T013000", "2026-03-29T01:30Z"],
+    ["America/New_York", "20260308T023000", "2026-03-08T07:30Z"],
+    ["Australia/Lord_Howe", "20261004T021500", "2026-10-03T15:45Z"],
+  ])("uses the offset before explicit gap times in %s", (zone, local, instant) => {
+    expect(parseICalDate(local, zone)).toEqual(new Date(instant));
+    const imported = importICal(
+      ics("").replace("DTSTART:20260301T090000Z", `DTSTART;TZID=${zone}:${local}`),
+    );
+    expect(imported.warnings).toEqual([]);
+    expect(imported.skipped).toBe(0);
+    expect(imported.events[0]?.start).toEqual(new Date(instant));
+    expect(imported.timeZones).toEqual([zone]);
+    const floating = importICal(
+      ics("").replace("DTSTART:20260301T090000Z", `DTSTART:${local}`),
+      zone,
+    );
+    expect(floating.events[0]?.start).toEqual(new Date(instant));
+  });
+  it("applies explicit gap semantics to end dates and exceptions but skips generated gaps", () => {
+    const imported = importICal(
+      ics(
+        "DTEND;TZID=Europe/London:20260328T020000\nRRULE:FREQ=DAILY;COUNT=3\nEXDATE;TZID=Europe/London:20260329T013000",
+      ).replace("DTSTART:20260301T090000Z", "DTSTART;TZID=Europe/London:20260328T013000"),
+    );
+    expect(imported.warnings).toEqual([]);
+    const event = imported.events[0] as CalendarEvent;
+    expect(event.recurrence?.exceptDate).toEqual([new Date("2026-03-29T01:30Z")]);
+    expect(
+      expandEvent(event, new Date("2026-03-28Z"), new Date("2026-04-01Z"), "Europe/London").map(
+        (event) => event.start,
+      ),
+    ).toEqual([
+      new Date("2026-03-28T01:30Z"),
+      new Date("2026-03-30T00:30Z"),
+      new Date("2026-03-31T00:30Z"),
+    ]);
+    expect(
+      importICal(
+        ics("DTEND;TZID=Europe/London:20260329T013000").replace(
+          "DTSTART:20260301T090000Z",
+          "DTSTART;TZID=Europe/London:20260329T003000",
+        ),
+      ).events[0]?.end,
+    ).toEqual(new Date("2026-03-29T01:30Z"));
+    expect(() => fromWallClock(new Date("2026-03-29T01:30Z"), "Europe/London")).toThrow(
+      "Local time does not exist",
+    );
+  });
   it("rejects subsecond event dates instead of collapsing or changing them", () => {
     const base: CalendarEvent = {
       uid: "seconds@example.test",
@@ -79,7 +129,9 @@ describe("ICS compatibility and validation", () => {
     expect(importICal(exportICal({ events: imported.events }))).toEqual(imported);
     const edited = { ...base, uid: "persistent@example.test", name: "Renamed", location: "New" };
     expect(
-      importICal(exportICal({ events: [{ data: edited, url: items[0]?.url }] })).events[0]?.uid,
+      importICal(
+        exportICal({ events: [{ data: edited, url: "https://pod.example/events/0.ttl" }] }),
+      ).events[0]?.uid,
     ).toBe(edited.uid);
     expect(events.every((event) => event.uid === undefined)).toBe(true);
   });

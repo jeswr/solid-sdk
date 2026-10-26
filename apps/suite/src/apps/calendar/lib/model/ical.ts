@@ -51,7 +51,7 @@ export function parseICalDate(value: string, timeZone = "UTC"): CalendarDate {
   const wall = new Date(`${date}T${m[4]}:${m[5]}:${m[6]}.000Z`);
   if (!Number.isFinite(+wall) || wall.toISOString().slice(11, 19) !== `${m[4]}:${m[5]}:${m[6]}`)
     throw new TypeError("Invalid ICS time");
-  return m[7] ? wall : fromWallClock(wall, timeZone);
+  return m[7] ? wall : fromWallClock(wall, timeZone, "offset-before");
 }
 export function ruleToICal(rule: RecurrenceRule): string {
   validateRule(rule);
