@@ -163,3 +163,60 @@ GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=protocol.allow GIT_CONFIG_VALUE_0=never npm_
 Access-control evaluation remains at the caller's injected boundary: `ensurePrivateIndexAccess` must establish or verify effective owner-only ACL/ACP access, including inherited policy, and return true only after confirmation. Missing/unsupported/unreadable protection fails closed. The model does not select a server policy dialect or assume that an unlisted document is confidential. This is the conservative interpretation of finding 1 within the model-only scope.
 
 All four requested fixes and their regressions are complete. External verification limitations are the unrelated full-workspace build and unavailable roborev above. No open questions, new dependencies, UI work, pushes, PRs, branch switches, or remote fetches apply to this round.
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+## Fix round 4 — review of `1c1c8e902262`
+
+Read the complete supplied review, the original lane brief, and the earlier fix briefs. This round addresses exactly the three requested findings:
+
+- `4a8dd50e` — `fix: make project initialization compatible with CSS`: remove container replacement claims. Read existing containers before attempting creation, and verify raced containers after CSS's 409 or a 412. Coordinate Inbox adoption and compensation through conditional tracker writes. Compensation first marks the tracker as cleaning up, keeps it present while deleting its reserved container, and removes the tracker last. Adoption refuses that state, so delayed cleanup cannot delete a successfully adopted Inbox.
+- The same commit reads back successful PUTs that omit ETags. Verify RDF graph equivalence before attaching the GET validator to an ordinary resource. For a newly created container, allow server-added metadata while requiring the submitted graph and an empty containment list. Conflicting read-backs never authorize claims or deletion.
+- The same commit groups compensation by project and retires stale 404/412 ownership outcomes. Recoverable cleanup failures remain retryable for the originating project without blocking unrelated titles. Regression tests cover adoption/finalization races, delayed cleanup, stale tracker/container validators, recoverable failures, read-back ownership changes, omitted PUT validators, and CSS container creation races. The pod test double now rejects existing-container PUTs before evaluating preconditions, matching the observed CSS behavior.
+- Final documentation commit — `docs: record tasks fix round four verification`: this report, committed last.
+
+### Verification for this round
+
+Passed in this checkout:
+
+```sh
+export PATH="$PWD/node_modules/.bin:$PATH"
+pnpm --filter @jeswr/app-suite^... run build
+pnpm --filter @jeswr/app-suite run lint && pnpm --filter @jeswr/app-suite run build && pnpm --filter @jeswr/app-suite run typecheck && pnpm --filter @jeswr/app-suite run test
+pnpm run lint:root
+TURBO_SCM_BASE=061de204d40239031fa73c2d42f281b0fad59803 pnpm run gate
+git diff --check
+```
+
+- App lint (29 files), Next.js production build, strict typecheck, and **132 tests across four files** passed.
+- Model coverage remains **100% statements (725/725), branches (498/498), functions (152/152), and lines (629/629)**. No thresholds or exclusions changed.
+- Root lint and guards passed, including **74 contrast pairs, zero failures**.
+- Final affected gate passed: **10 successful tasks / 10 total**, four cached.
+
+Actual Community Solid Server verification also passed: **two integration tests against CSS 7.2.0**, using its `file-root.json` configuration with disposable storage. The tests create and adopt an Inbox, create/read a task, compensate a failed project, reuse its slug, and create an unrelated project. They run both with native PUT validators and with successful PUT ETags stripped by the injected transport. The tests assert that every conditional replacement PUT targets an ordinary document. They use `typeIndex: false` to isolate container/ownership behavior; private-index ACL/ACP verification remains covered by the existing unit tests.
+
+The CSS executable was installed only under `/tmp` as a verification tool; no repository dependency, manifest, or lockfile changed. Reproduction commands:
+
+```sh
+npm --cache /tmp/sst-ef15-fix4-npm install --prefix /tmp/sst-ef15-fix4-css --ignore-scripts --no-audit --no-fund @solid/community-server@7.2.0
+node /tmp/sst-ef15-fix4-css/node_modules/@solid/community-server/bin/server.js -p 34815 -b http://localhost:34815/ -c @css:config/file-root.json -f /tmp/sst-ef15-fix4-css-data
+# In another terminal, while the disposable server is running:
+SST_TASKS_CSS_URL=http://localhost:34815/ pnpm --filter @jeswr/app-suite exec vitest run --config vitest.css.config.ts
+```
+
+The disposable server was stopped after verification. No browser or screenshots apply to this model-only fix.
+
+Full-workspace verification was attempted with remote Git transports disabled and npm offline:
+
+```sh
+export PATH="$PWD/node_modules/.bin:$PATH"
+GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=protocol.allow GIT_CONFIG_VALUE_0=never npm_config_offline=true pnpm run gate:full --env-mode=loose
+```
+
+**Failed outside this lane** at unchanged `@jeswr/unstorage-solid#build` (exit 1). Its dependency-build script attempted an HTTPS clone, which Git rejected locally with `fatal: transport 'https' not allowed`. No remote fetch occurred. Turbo reported **28 successful tasks / 168 total** before stopping. The full-workspace gate is not green; no unrelated generated source changes remain.
+
+`roborev` remains unavailable (`command -v roborev` found no executable), so automated per-commit verdicts could not be read. No review tooling was installed.
+
+### Remaining work and conservative choices
+
+All three requested fixes and their regression tests are complete. No open questions remain. During active compensation, Inbox adoption returns a bounded conflict until cleanup finishes; it never bypasses the tracker cleanup state. Mutations still require a strong validator from PUT or a verified read-back. External verification limitations are the unrelated full-workspace build and unavailable roborev above. No UI changes, repository dependencies, pushes, PRs, branch switches, or remote fetches were made.
