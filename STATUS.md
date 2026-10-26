@@ -5,8 +5,9 @@
 Date: 2026-10-26. Branch: `lane/sst-8xm.60`.
 Original base: `302faf455f37e31ba6855975ad8dc34eb7ad06d0`.
 
-The latest fix-round-2 report is appended below. The original implementation
-report and its environment notes remain as historical context.
+The latest fix-round-3 integration report is appended below. Earlier reports
+and their environment notes remain as historical context; round 3 supersedes
+the outstanding integration and dependency-artifact limitations.
 
 Implemented T-072 using ADR-007's Amendment 2026-10-26 (2). Deleted the answered
 QUESTIONS.md. solid-odrl remains authoritative; no WASM policy adapter is enabled.
@@ -193,3 +194,56 @@ checkouts were made.
 No implementation work is unfinished or blocked. No open design questions remain.
 The conservative interpretation of "any named node" includes graph names and
 literal datatype IRIs; malformed-policy errors also apply to unmatched requests.
+
+
+## Fix round 3 — integrate with main
+
+### Commits
+
+- `ec640e17 chore(rdf-engine): integrate main into T-072 lane`: merge fetched
+  `origin/main` at `6ad0939808c3c1c438415d45409a5a4c30e281bd`, which includes
+  T-071 squash `5532f589` and the workspace fetch-rdf import. Resolve all four
+  conflicts in browser.ts, engine.ts, testing.ts and types.ts with main's
+  LocalIndex implementation and signatures authoritative. Retain only T-072's
+  policy/form additions, capability detection, errors, tests and measurements.
+- `docs: record sst-8xm.60 integration validation` (this final commit): update
+  only STATUS.md, last, with this round's result.
+
+### Validation
+
+Node v24.22.1; pnpm 10.4.1; dependency lifecycle scripts remained disabled.
+
+| Exact command | Result |
+| --- | --- |
+| `git fetch -q origin && git merge origin/main` | Fetched successfully; four conflicts resolved and merge committed |
+| `pnpm install --offline --frozen-lockfile --ignore-scripts --filter @jeswr/rdf-engine...` | PASS; lockfile unchanged; workspace dependency links refreshed |
+| `pnpm exec turbo run lint build typecheck test --filter ...@jeswr/rdf-engine --concurrency=4` | PASS: 8 tasks successful, none cached; dependency-first builds and root lint included |
+| `pnpm run lint:root` | PASS: Biome and all guards, including agent layers and 74 contrast pairs |
+| `git diff --check origin/main` | PASS |
+
+The dependant selector includes rdf-engine and every workspace dependant; there
+are currently no other workspace dependants of rdf-engine. Dependency-first
+builds compiled rdf-serialize, fetch-rdf and solid-odrl from workspace sources.
+The package suite passed **206 tests in 11 files**, covering both T-071 and T-072.
+Coverage: statements **99.45%**, branches **97.75%**, functions **99.45%**, lines
+**99.79%**, above the existing 90% thresholds. The scoped gate follows this
+round's explicit brief; no whole-workspace gate or benchmark rerun was needed.
+
+Diff inspection against fetched main confirms its LocalIndex backend, streams,
+compression, IndexedDB implementation and T-071 regression tests are unchanged.
+Browser createIndex retains main's default persistence; real/fake createIndex
+retain its options and ownership/disposal behavior. Only the lane's own T-072
+changes remain on top of main. No new behavior or design choice was introduced.
+
+### Environment and handoff
+
+The earlier fetch-rdf artifact limitation is resolved by main's workspace import:
+solid-odrl now links to workspace fetch-rdf, built by Turbo before solid-odrl.
+This round used no copied dependency artifact and added no dependency. The only
+network git operation was the expressly permitted fetch of origin; no push, PR,
+branch switch or change to another checkout was made.
+
+`roborev` remains unavailable on PATH, so automated per-commit review could not
+run. No tools or hooks were installed. Manual conflict/diff review and all
+requested gates passed. No implementation work is unfinished or blocked, and
+there are no open questions. STATUS.md is the last changed file and final commit.
