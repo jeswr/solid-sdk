@@ -541,6 +541,7 @@ describe("calendar, offset and reminder regressions", () => {
     "2 hours before 5pm",
     "2 hours after 5pm",
     "2 hours before Monday",
+    "2 hours before every Monday",
     "2 days after 3 November",
     "2 hours before tomorrow 5pm",
     "2 hours before an unresolved event",
@@ -555,7 +556,8 @@ describe("calendar, offset and reminder regressions", () => {
       const input = `Call ${recurrence}${phrase} p1 @calls`;
       const result = parseQuickAdd(input, { ...ctx, tz: "UTC" });
       expect(result.due).toBeUndefined();
-      expect(result.title).toBe(`Call ${phrase}`);
+      expect(result.title).toBe(`Call ${recurrence}${phrase}`);
+      expect(result.recurrence).toBeUndefined();
       expect(result.priority).toBe(1);
       expect(result.labels).toEqual(["calls"]);
       expect(result.spans.some((span) => span.kind === "due")).toBe(false);

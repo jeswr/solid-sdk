@@ -80,16 +80,6 @@ export function parseQuickAdd(text: string, ctx: QuickAddContext): QuickAddResul
       mask(marker.index, marker[0].length + length);
     }
   }
-  let recurrence: RecurrenceRule | undefined;
-  for (const match of working.matchAll(recurrencePattern)) {
-    mask(match.index, match[0].length);
-    if (recurrence) continue;
-    const rule = parseRecurrence(match[0]);
-    if (!rule) continue;
-    recurrence = rule;
-    addSpan("recurrence", match.index, match[0].length);
-  }
-  if (recurrence) result.recurrence = recurrence;
   // Chrono merges anchored offsets into relative results, discarding their anchor.
   // Until exact anchor resolution is supported, preserve all deadline text in that input.
   const parsed = parser.parse(working, { instant: today, timezone: 0 }, { forwardDate: true });
@@ -108,8 +98,22 @@ export function parseQuickAdd(text: string, ctx: QuickAddContext): QuickAddResul
               /^\s*$/.test(working.slice(anchor.index + anchor.text.length, candidate.index)),
             )),
     );
+  let recurrence: RecurrenceRule | undefined;
+  for (const match of unresolvedAnchor ? [] : working.matchAll(recurrencePattern)) {
+    mask(match.index, match[0].length);
+    if (recurrence) continue;
+    const rule = parseRecurrence(match[0]);
+    if (!rule) continue;
+    recurrence = rule;
+    addSpan("recurrence", match.index, match[0].length);
+  }
+  if (recurrence) result.recurrence = recurrence;
   // A UTC surrogate supplies the injected zone's wall clock to chrono, independent of host TZ.
-  const matches = (unresolvedAnchor ? [] : parsed).flatMap((candidate) => {
+  const matches = (
+    unresolvedAnchor
+      ? []
+      : parser.parse(working, { instant: today, timezone: 0 }, { forwardDate: true })
+  ).flatMap((candidate) => {
     const tags = candidate.start.tags();
     const elapsed = tags.has("result/relativeDateAndTime") || tags.has("casualReference/now");
     if (elapsed || !candidate.start.isCertain("timezoneOffset")) return [candidate];

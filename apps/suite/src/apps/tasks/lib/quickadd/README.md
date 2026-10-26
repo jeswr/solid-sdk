@@ -33,7 +33,7 @@ named timezone recognised by chrono overrides the injected zone for that phrase'
 
 Anchored offsets (`2 hours before 5pm`, `2 days after Monday`, `5pm +2 hours`) remain literal.
 When an unmasked offset has an anchor, the parser leaves all deadline text in that input unparsed
-and does not infer a due date from recurrence; metadata and recurrence tokens still parse.
+and does not parse recurrence or infer a due date; metadata tokens still parse.
 This avoids resolving the offset against now or consuming only part of its anchor. Elapsed
 phrases such as `in 1h30m` and `two hours ago` still resolve against the injected instant.
 Time-first reminders include calendar qualifiers explicitly connected by `on` (`!9am on Monday`);
