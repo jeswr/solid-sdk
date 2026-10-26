@@ -387,3 +387,85 @@ the program lead is which main revision contains the MCP-02 work referenced by
 this brief. Full-workspace validation, unfrozen lockfile regeneration and roborev
 retain the limitations above; scoped implementation and final affected validation
 are complete.
+
+## Fix round 5 — guard MCP search profile redirects
+
+- `bac5c207 fix(mcp): guard search profile redirects` addresses only finding 2
+  in the review of `ec9ba67c4a2a`. Fetch-backed search now applies the adapter's
+  discovery policy: the configured off-pod WebID is requested with manual
+  redirects, and every redirect from that profile is refused, including one
+  pointing into the pod. In-pod profiles use the existing pod-scoped redirect
+  loop over the budget-wrapped transport, validating and charging each permitted
+  hop before making its request. Streaming body, RDF and deadline limits remain
+  in force.
+- `docs: record redirect guard validation` is the final commit, touching only
+  `STATUS.md`.
+
+Added 44 regression cases across legacy configuration and injected fetch-backed
+PodPorts. They cover all five redirect statuses; off-pod identity redirects to
+internal services, other origins, the identity origin and the pod; in-pod
+profile redirects escaping the pod; successful relative redirects and effective
+RDF bases; cancellation without reading redirect bodies; shared resource caps
+across two profile hops, index discovery and scanning; and deadline cancellation
+of a stalled redirected profile. Forty cases failed against the unfixed source;
+all new cases pass with the fix. The complete MCP suite has **387 passing tests
+across 8 files**.
+
+### Validation
+
+All verification used the existing temporary network guard and local-only Git
+transport restriction:
+
+```sh
+export NODE_OPTIONS=--require=/tmp/sst-9s2-network-guard.cjs
+export GIT_ALLOW_PROTOCOL=file
+```
+
+Successful explicit package/root commands (exit 0 each):
+
+```sh
+pnpm --filter @jeswr/solid-mcp run lint
+pnpm --filter @jeswr/solid-mcp run build
+pnpm --filter @jeswr/solid-mcp run typecheck
+pnpm --filter @jeswr/solid-mcp run test
+pnpm run lint:root
+```
+
+Workspace dependency builds were absent initially; they were built locally with
+`pnpm exec turbo run build --filter=@jeswr/solid-mcp...` (exit 0) before regression
+verification. The focused search-limit file passes **82 tests**.
+
+Gate against the supplied lane base (exit 1; **74 successful tasks out of 248**,
+3 cached):
+
+```sh
+TURBO_SCM_BASE=1743fe2d9e035a62944fc4fe27896982fa8f00e8 pnpm run gate
+```
+
+Full-workspace gate (exit 1; **92 successful tasks out of 274**, 73 cached):
+
+```sh
+pnpm run gate:full
+```
+
+Both stop at the unchanged `@jeswr/app-suite#build`: `next/font` attempts to
+download Onest, Source Code Pro and Source Serif 4 from Google Fonts, refused by
+the fixture-only network guard. Root tests pass **745 tests across 9 files**.
+
+Gate scoped against the existing local main reference (exit 0; **18/18 tasks
+successful**, 8 cached):
+
+```sh
+TURBO_SCM_BASE=origin/main pnpm run gate
+```
+
+This includes the dependent personal-agent checks (**531 tests across 56 files**)
+without modifying that package. `roborev status` exits 127 because roborev remains
+unavailable. `git diff --check` passes. No dependencies, manifests or lockfile
+changed; `check:packages` is not applicable. No remote Git fetch/merge, push,
+publication or production-service access occurred.
+
+The requested MCP finding is fixed. The personal-agent RDF-loader finding is
+excluded as instructed and remains tracked separately as A-002F. Broad workspace
+validation and automated review retain the environmental limitations above.
+No implementation work or open questions remain for this fix round.
