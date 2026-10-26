@@ -107,6 +107,20 @@ it.each([
   expect(assertion[0]!.object.equals(literal)).toBe(true);
 });
 
+it("rejects rdf:langString literals without a language tag", async () => {
+  const assertion = new Store([
+    df.quad(
+      df.namedNode(owner),
+      df.namedNode(`${NS.schema}name`),
+      df.literal("Synthetic label", df.namedNode(`${NS.rdf}langString`)),
+    ),
+  ]);
+  const input = batch();
+  input.claims[0]!.assertion = assertion;
+  expect(() => canonicalizeAssertion(assertion)).toThrow("Invalid language tag");
+  await expect(buildNanopublications(input, options)).rejects.toThrow("Invalid language tag");
+});
+
 it("escapes IRIREF delimiters at all builder IRI boundaries without adding statements", async () => {
   const payload =
     'https://example.org/iri> . <https://example.org/evil> <https://schema.org/name> "injected" #';

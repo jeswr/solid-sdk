@@ -188,7 +188,7 @@ export function canonicalizeAssertion(
     // Turtle LANGTAG syntax; the end assertion also excludes a trailing newline.
     if (
       q.object.termType === "Literal" &&
-      q.object.language &&
+      (q.object.language || q.object.datatype.value === `${NS.rdf}langString`) &&
       !/^[a-z]+(?:-[a-z0-9]+)*(?![\s\S])/i.test(q.object.language)
     )
       throw new Error("Invalid language tag");
