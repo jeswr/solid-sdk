@@ -70,9 +70,11 @@ Pass host-owned `state: ConnectorState` into `runImport` (or `runFileImport`) an
 successful cursor, sync time and counts. State contains ISO date strings and never tokens or
 exception text. An explicit `cursor` overrides the state's cursor for API imports.
 
-The shared write pipeline reads each deterministic slug before writing, merges by named item
-subject / `schema:identifier`, replaces descriptions of incoming items and retains items absent
-from the current page. Adapters must use deterministic linked-node identifiers and implement
+The shared write pipeline reads each deterministic slug before writing, merges by deterministic named item
+subject, replaces descriptions of incoming items and retains items absent
+from the current page. `schema:identifier` is descriptive metadata and may be shared by
+distinct items (for example, lines of one Amazon order). Adapters must use deterministic
+linked-node identifiers and implement
 source-specific deletions. ETags and create-only conditions protect automatic merges; a 412
 surfaces to the host without advancing its checkpoint. Repeated writes re-read the current ETag.
 

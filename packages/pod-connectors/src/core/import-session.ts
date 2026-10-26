@@ -65,7 +65,7 @@ export function createImportSession(
       item.generatedBy.clear();
       item.generatedBy.add(activityUrl);
       used.add(origin);
-      if (subject !== url) itemKeys.add(`${url}#${item.identifier ?? subject}`);
+      if (subject !== url) itemKeys.add(JSON.stringify([url, subject]));
     }
     const dataset = mergeItems(previous?.dataset, incoming);
     const result = await writer.write({ ...doc, dataset }, conditions ?? conditionFor(previous));

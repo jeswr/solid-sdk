@@ -66,17 +66,14 @@ describe("CON-02 incremental writes", () => {
     });
   }
 
-  it("replaces incoming item descriptions by ID and preserves unseen items without mutating inputs", () => {
+  it("replaces incoming item descriptions by deterministic subject and preserves unseen items without mutating inputs", () => {
     const old = new Store();
     song(old, "https://pod.test/items#old", "same", "Old");
     song(old, "https://pod.test/items#kept", "kept", "Kept");
     const next = new Store();
-    song(next, "https://pod.test/items#new", "same", "New");
+    song(next, "https://pod.test/items#old", "same", "New");
     const merged = mergeItems(old, next);
-    expect(
-      new MusicRecording("https://pod.test/items#old", merged, DataFactory).name,
-    ).toBeUndefined();
-    expect(new MusicRecording("https://pod.test/items#new", merged, DataFactory).name).toBe("New");
+    expect(new MusicRecording("https://pod.test/items#old", merged, DataFactory).name).toBe("New");
     expect(new MusicRecording("https://pod.test/items#kept", merged, DataFactory).name).toBe(
       "Kept",
     );
@@ -85,14 +82,26 @@ describe("CON-02 incremental writes", () => {
     expect(copyDataset(next)).not.toBe(next);
   });
 
-  it("deduplicates repeated item IDs within an incoming page with the last description winning", () => {
+  it("preserves distinct subjects sharing an identifier within and across incremental pages", () => {
     const incoming = new Store();
     song(incoming, "https://pod.test/items#first", "one", "First");
     song(incoming, "https://pod.test/items#last", "one", "Last");
     const result = mergeItems(undefined, incoming);
     expect(
       [...result].filter((q) => q.predicate.value === "https://schema.org/identifier"),
-    ).toHaveLength(1);
+    ).toHaveLength(2);
+    expect(new MusicRecording("https://pod.test/items#first", result, DataFactory).name).toBe(
+      "First",
+    );
+    const next = new Store();
+    song(next, "https://pod.test/items#last", "one", "Updated");
+    const merged = mergeItems(result, next);
+    expect(new MusicRecording("https://pod.test/items#first", merged, DataFactory).name).toBe(
+      "First",
+    );
+    expect(new MusicRecording("https://pod.test/items#last", merged, DataFactory).name).toBe(
+      "Updated",
+    );
     expect(new MusicRecording("https://pod.test/items#last", result, DataFactory).name).toBe(
       "Last",
     );
