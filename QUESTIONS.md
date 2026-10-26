@@ -1,0 +1,9 @@
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+
+# sst-7wpk — conservative interpretations
+
+1. **Reference model and bounds** (10-pure-libraries-2, SHT-L2; 07, Sheets maximum size open point): zero-based engine coordinates or spreadsheet coordinates; engine-specific limits or safe integers? Use one-based positive safe integers, without inventing a workbook size limit. R1C1 conversion requires an explicit one-based origin. Reversed ranges are rejected rather than reordered; equal endpoints canonicalise to a cell.
+2. **Union semantics** (SHT-L2 “range intersection/union helpers”): bounding rectangle or exact set union? Return one rectangle only when the union is rectangular; otherwise return both rectangles (possibly overlapping), so no cells are invented. Geometry results are absolute. Unqualified and qualified references are different scopes; callers must qualify local references before combining them with qualified ones.
+3. **Formula dialect and structural edits** (10-pure-libraries-2 fail-closed rule; 07 Sheets formulas): full engine grammar or a documented subset? Support A1 and R1C1 references, ordinary function calls, numbers, booleans, strings, errors, arithmetic/comparison/concatenation and percent. Reject names, arrays, external/3D/structured references, dynamic spill, implicit intersection and reference intersection operators with a typed error. Named ranges are explicitly “later” in 07. Structural insertions occur before the specified index; deletion contracts surviving ranges and produces #REF! only when no target survives. Absolute markers do not prevent structural movement. R1C1 formula origins move with their sheet; a deleted origin is rejected because that formula no longer exists.
+
+These choices do not block the pure library. An engine adapter can later extend the accepted subset explicitly.
