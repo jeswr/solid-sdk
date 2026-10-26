@@ -372,8 +372,23 @@ function checkBinding(g: Grant, p: Profile, client: ClientInfo): void {
  * concurrent callers refresh once, and a rotated refresh token is never lost). A refused refresh
  * (invalid_grant) marks the grant as needing re-consent and removes its tokens.
  */
-export async function accessToken(deps: Deps, name: string): Promise<IssuedToken> {
+export async function accessToken(
+  deps: Deps,
+  name: string,
+  expected?: Pick<Profile, "provider" | "connectionId" | "purpose" | "resource">,
+): Promise<IssuedToken> {
   const p = loadProfile(deps.store, name);
+  if (
+    expected &&
+    (p.provider !== expected.provider ||
+      p.connectionId !== expected.connectionId ||
+      p.purpose !== expected.purpose ||
+      p.resource !== expected.resource)
+  )
+    throw new HelperError(
+      "refused",
+      "the requested credential binding does not match this profile",
+    );
   const client = clientFor(deps.store, p);
   const first = deps.store.grant(name);
   if (!first) throw new HelperError("revoked", "no grant for this profile (log in first)");

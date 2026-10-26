@@ -216,6 +216,48 @@ it("never supplies read grants to send or send grants to read, even with overlap
   expect(exchange.exit).toBe(2);
   expect(exchange.stdout).toBeUndefined();
 });
+it("rejects a profile whose embedded name redirects selection to another binding", async () => {
+  const selected = profile();
+  const other = profile({ name: "send", purpose: "send", connectionId: "other" });
+  store.putProfile(other);
+  store.putGrant(grant(other));
+  writeFileSync(
+    join(store.dir, "profiles", `${selected.name}.json`),
+    JSON.stringify({ ...selected, name: other.name }),
+    { mode: 0o600 },
+  );
+  const transport = vi.fn(noTransport);
+  await expect(
+    new StoreTokenProvider("google", { store, transport, now: () => now }).read("owner"),
+  ).rejects.toMatchObject({ code: "invalid", message: expect.stringMatching(/another name/) });
+  expect(transport).not.toHaveBeenCalled();
+});
+it.each([
+  { provider: "microsoft" as const },
+  { connectionId: "other" },
+  { purpose: "send" as const },
+  { resource: "calendar" as const },
+])("rechecks the requested tuple when the selected profile changes: %j", async (change) => {
+  const selected = profile();
+  store.putProfile(selected);
+  // Replace the actual file after selection reads it, before accessToken reloads it.
+  const read = store.profile.bind(store);
+  vi.spyOn(store, "profile").mockImplementationOnce((name) => {
+    const result = read(name);
+    const replacement = profile(change);
+    store.putProfile(replacement);
+    store.putGrant(grant(replacement));
+    return result;
+  });
+  const transport = vi.fn(noTransport);
+  await expect(
+    new StoreTokenProvider("google", { store, transport, now: () => now }).read("owner"),
+  ).rejects.toMatchObject({
+    code: "refused",
+    message: expect.stringMatching(/requested credential binding/),
+  });
+  expect(transport).not.toHaveBeenCalled();
+});
 it("refuses missing cached scopes, duplicates and a send-only account on the read path", async () => {
   const p = profile();
   store.putProfile(p);

@@ -365,7 +365,10 @@ export class CredentialStore {
   }
 
   profile(name: string): Profile | undefined {
-    return this.read(this.path("profiles", name), profileSchema);
+    const profile = this.read(this.path("profiles", name), profileSchema);
+    if (profile && profile.name !== name)
+      throw new HelperError("invalid", "the profile record belongs to another name");
+    return profile;
   }
   profiles(): string[] {
     this.guard(join(this.dir, "profiles", "probe"));

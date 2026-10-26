@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { accessToken, type Deps } from "./operations.js";
 import { noTransport } from "./providers.js";
 import {
@@ -58,7 +59,14 @@ export class StoreTokenProvider implements TokenProvider {
         );
       if (profiles.length !== 1)
         throw new HelperError("setup", "exactly one matching credential profile is required");
-      return (await accessToken(this.deps, (profiles[0] as Profile).name)).token;
+      return (
+        await accessToken(this.deps, (profiles[0] as Profile).name, {
+          provider: this.provider,
+          connectionId: account,
+          purpose,
+          resource: this.resource,
+        })
+      ).token;
     }
     const records = store
       .tokenFiles()

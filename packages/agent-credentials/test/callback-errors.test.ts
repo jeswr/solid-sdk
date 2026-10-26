@@ -65,10 +65,16 @@ it("refuses malformed callback requests and closes the listener when the operato
   expect(vi.mocked(createServer).mock.results.at(-1)?.value.listening).toBe(false);
   expect(store.grant(p.name)).toBeUndefined();
 });
-it("keeps IPv4 available if the optional IPv6 loopback listener is unavailable", async () => {
+it.each([
+  true,
+  false,
+])("closes callbacks when the optional listener succeeds: %s", async (available) => {
   const actual = await vi.importActual<typeof import("http")>("http");
   const v6 = actual.createServer();
-  vi.spyOn(v6, "listen").mockImplementation(() => {
+  const listen = v6.listen.bind(v6);
+  vi.spyOn(v6, "listen").mockImplementation((_options, callback) => {
+    // Exercise both outcomes even on hosts without IPv6; only fake callbacks use this port.
+    if (available) return listen({ host: "127.0.0.1", port: 0 }, callback as () => void);
     queueMicrotask(() => v6.emit("error", new Error("IPv6 unavailable")));
     return v6;
   });
@@ -88,6 +94,7 @@ it("keeps IPv4 available if the optional IPv6 loopback listener is unavailable",
     login({ store, now, transport: noTransport }, p.name, {
       onUrl: (url) => {
         expect(new URL(url).searchParams.get("redirect_uri")).toContain("localhost");
+        expect(v6.listening).toBe(available);
         throw new Error("operator cancelled");
       },
     }),
