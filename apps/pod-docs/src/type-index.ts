@@ -10,6 +10,7 @@
  * bootstraps a private index when missing.
  */
 import { RdfFetchError } from "@jeswr/fetch-rdf";
+import { canonicalize, termsEqual } from "@jeswr/suite-vocab";
 import type { DatasetCore } from "@rdfjs/types";
 import {
   DatasetWrapper,
@@ -77,7 +78,7 @@ export class TypeIndexDataset extends DatasetWrapper {
     return out;
   }
   locate(classIri: string): RegisteredLocation[] {
-    return this.all().filter((l) => l.forClass === classIri);
+    return this.all().filter((l) => termsEqual(l.forClass, classIri));
   }
 }
 
@@ -209,15 +210,18 @@ export async function ensureTypeRegistrations(opts: {
 
   let added = 0;
   for (const desired of registrations) {
-    const exists = index.locate(desired.forClass).some((l) => l.container === desired.container);
+    const classIri = canonicalize(desired.forClass);
+    const exists = index
+      .all()
+      .some((l) => l.forClass === classIri && l.container === desired.container);
     if (exists) continue;
     const reg = new TypeRegistration(
-      `${indexUrl}#reg-${fragmentFor(desired)}`,
+      `${indexUrl}#reg-${fragmentFor({ ...desired, forClass: classIri })}`,
       indexDs,
       DataFactory,
     );
     reg.markRegistration();
-    reg.forClass = desired.forClass;
+    reg.forClass = classIri;
     reg.instanceContainer = desired.container;
     added += 1;
   }

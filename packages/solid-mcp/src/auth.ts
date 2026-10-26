@@ -62,7 +62,7 @@ export interface SolidMcpConfig {
   webId?: string;
   /**
    * Whether the server is read-only. Defaults to `true` (writes disabled). Set to
-   * `false` to enable the `solid_write` tool / `writeResource`.
+   * `false` to enable the `pod_write` / `solid_write` tool / `writeResource`.
    */
   readOnly?: boolean;
 }

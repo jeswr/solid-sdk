@@ -1,12 +1,27 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { expect, test } from "vitest";
-import * as entry1 from "./cache.js";
-import * as entry0 from "./index.js";
-import * as entry3 from "./testing.js";
-import * as entry2 from "./vocab.js";
+import * as cache from "./cache.js";
+import * as api from "./index.js";
+import * as testing from "./testing.js";
 
-test("scaffold entry points load without exposing an implementation", () => {
-  for (const entry of [entry0, entry1, entry2, entry3]) {
-    expect(Object.keys(entry)).toEqual([]);
-  }
+test("public parser, errors, fixture and reserved cache entry points load", () => {
+  expect(Object.keys(api).sort()).toEqual(["CapabilitiesError", "parseLwsDescription"]);
+  expect(Object.keys(cache)).toEqual([]);
+  expect(Object.keys(testing)).toEqual(["sparqLwsCid"]);
+  expect(testing.sparqLwsCid.type).toEqual(["Storage"]);
+});
+
+test("CapabilitiesError carries the discovery code, URL, message and optional HTTP status", () => {
+  const error = new api.CapabilitiesError("description-invalid", "https://pod.example/cid");
+  expect(error).toBeInstanceOf(Error);
+  expect(error).toMatchObject({
+    name: "CapabilitiesError",
+    message: "description-invalid",
+    code: "description-invalid",
+    url: "https://pod.example/cid",
+    status: undefined,
+  });
+  expect(
+    new api.CapabilitiesError("description-unreachable", error.url, "Missing CID", 404),
+  ).toMatchObject({ message: "Missing CID", status: 404 });
 });

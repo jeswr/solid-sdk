@@ -3,8 +3,8 @@
     "@version": 1.1,
     "@protected": true,
 
-    "fedapp": "https://w3id.org/jeswr/fed#",
-    "tm": "https://w3id.org/jeswr/task#",
+    "fedapp": "https://jeswr.org/ns/fed#",
+    "tm": "https://jeswr.org/ns/task#",
     "wf": "http://www.w3.org/2005/01/wf/flow#",
     "dct": "http://purl.org/dc/terms/",
     "as": "https://www.w3.org/ns/activitystreams#",

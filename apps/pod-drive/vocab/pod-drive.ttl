@@ -1,0 +1,16 @@
+# AUTHORED-BY Codex GPT-6.1-Sol
+@prefix poddrive: <https://jeswr.org/ns/pod-drive#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix ldp: <http://www.w3.org/ns/ldp#> .
+@prefix vann: <http://purl.org/vocab/vann/> .
+
+<https://jeswr.org/ns/pod-drive> a owl:Ontology ;
+    rdfs:label "Pod Drive vocabulary" ;
+    vann:preferredNamespacePrefix "poddrive" ;
+    vann:preferredNamespaceUri "https://jeswr.org/ns/pod-drive#" .
+
+poddrive:DriveRoot a owl:Class ;
+    rdfs:label "Drive root" ;
+    rdfs:comment "An LDP container registered as a root of a user's drive." ;
+    rdfs:subClassOf ldp:Container .

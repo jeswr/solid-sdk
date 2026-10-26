@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-5
 /**
  * Pod operations over the injected authenticated `fetch`, all pod-scope-guarded.
@@ -7,19 +8,14 @@
  * (`ContainerDataset`), and any RDF representation we hand back to a client is
  * re-serialised with `@jeswr/rdf-serialize` over the parsed quads.
  */
-import { fetchRdf } from "@jeswr/fetch-rdf";
+import { parseRdf } from "@jeswr/fetch-rdf";
 import { isContainerUrl } from "@jeswr/guarded-fetch";
 import { serialize } from "@jeswr/rdf-serialize";
-import { ContainerDataset } from "@solid/object";
 import { DataFactory } from "n3";
-import {
-  podScopedUrlOrUndefined,
-  requirePodScopedUrl,
-  requirePodScopedWriteUrl,
-  type SolidMcpConfig,
-  scopedFetch,
-  writesEnabled,
-} from "./auth.js";
+import { podScopedUrlOrUndefined, requirePodScopedUrl, requirePodScopedWriteUrl } from "./auth.js";
+import { asPodPort, type PodSource } from "./pod-port.js";
+
+const RDF_ACCEPT = "text/turtle, application/ld+json;q=0.9";
 
 /** A typed child of an LDP container, mapped to absolute URLs. */
 export interface PodChild {
@@ -108,14 +104,6 @@ function isTextualContentType(ct: string | undefined): boolean {
   return textApps.includes(m);
 }
 
-/** Strip parameters off a Content-Type header to its bare media type, lowercased. */
-function bareMediaType(header: string | null): string | undefined {
-  if (!header) return undefined;
-  const semi = header.indexOf(";");
-  const mt = (semi === -1 ? header : header.slice(0, semi)).trim().toLowerCase();
-  return mt.length > 0 ? mt : undefined;
-}
-
 /**
  * List the children of an LDP container at `url` (pod-scoped). Parses the
  * container listing via fetch-rdf + @solid/object's ContainerDataset; maps each
@@ -129,37 +117,17 @@ function bareMediaType(header: string | null): string | undefined {
  * fetch an arbitrary URL (SSRF). Callers can rely on every returned `child.url`
  * being in-pod.
  */
-export async function listContainer(config: SolidMcpConfig, url: string): Promise<PodChild[]> {
+export async function listContainer(source: PodSource, url: string): Promise<PodChild[]> {
+  const pod = asPodPort(source);
+  const config = { podRoot: pod.root };
   const target = requirePodScopedUrl(config, url);
-  const { dataset } = await fetchRdf(target, { fetch: scopedFetch(config) });
-  const container = new ContainerDataset(dataset, DataFactory).container;
-  const children: PodChild[] = [];
-  for (const r of container?.contains ?? []) {
-    // child.id may be relative to the container; resolve against the container URL,
-    // then re-validate it is within the pod (the listing is untrusted — drop any
-    // entry that escapes the pod scope rather than trusting it).
-    let resolvedChild: string;
-    try {
-      resolvedChild = new URL(r.id, target).toString();
-    } catch {
-      continue; // unparseable child id — skip.
-    }
-    const childUrl = podScopedUrlOrUndefined(config, resolvedChild);
-    if (childUrl === undefined) {
-      continue; // out-of-pod child entry in the listing — drop it (SSRF guard).
-    }
-    const child: PodChild = {
-      url: childUrl,
-      name: r.name,
-      isContainer: r.isContainer,
-      type: [...r.type],
-    };
-    if (r.mimeType !== undefined) child.mimeType = r.mimeType;
-    if (r.size !== undefined) child.size = r.size;
-    if (r.modified !== undefined) child.modified = r.modified.toISOString();
-    children.push(child);
-  }
-  return children;
+  return (await pod.list(target)).flatMap((child) => {
+    const scoped = podScopedUrlOrUndefined(config, child.url);
+    if (scoped === undefined) return [];
+    return [
+      { ...child, url: scoped, name: child.name ?? resourceName(scoped), type: child.type ?? [] },
+    ];
+  });
 }
 
 /**
@@ -168,28 +136,16 @@ export async function listContainer(config: SolidMcpConfig, url: string): Promis
  * by content-type. Fails CLOSED on 401/403 with a clear "supply an authenticated
  * fetch" error, and on any other non-2xx with the status.
  */
-export async function readResource(config: SolidMcpConfig, url: string): Promise<ReadResult> {
-  const target = requirePodScopedUrl(config, url);
-  const res = await scopedFetch(config)(target, { method: "GET" });
-  if (res.status === 401 || res.status === 403) {
-    throw new Error(
-      `unauthenticated/forbidden (${res.status}) reading ${target} — supply an authenticated fetch ` +
-        "(the Solid-MCP server holds no credentials of its own).",
-    );
-  }
-  if (!res.ok) {
-    throw new Error(`failed to read ${target}: HTTP ${res.status} ${res.statusText}`);
-  }
-  const contentType = bareMediaType(res.headers.get("content-type"));
-  const etag = res.headers.get("etag") ?? undefined;
-  const result: ReadResult = {};
-  if (contentType !== undefined) result.contentType = contentType;
-  if (etag !== undefined) result.etag = etag;
+export async function readResource(source: PodSource, url: string): Promise<ReadResult> {
+  const pod = asPodPort(source);
+  const target = requirePodScopedUrl({ podRoot: pod.root }, url);
+  const { body, contentType: rawContentType, etag } = await pod.read(target);
+  const contentType = (rawContentType.split(";").shift() ?? "").trim().toLowerCase();
+  const result: ReadResult = { ...(contentType ? { contentType } : {}), ...(etag ? { etag } : {}) };
   if (isTextualContentType(contentType)) {
-    result.text = await res.text();
+    result.text = new TextDecoder().decode(body);
   } else {
-    const buf = await res.arrayBuffer();
-    result.base64 = Buffer.from(buf).toString("base64");
+    result.base64 = Buffer.from(body).toString("base64");
   }
   return result;
 }
@@ -198,9 +154,13 @@ export async function readResource(config: SolidMcpConfig, url: string): Promise
  * Fetch an RDF resource (pod-scoped) and return a canonical Turtle view (never
  * hand-concatenated) plus the parsed dataset.
  */
-export async function readRdf(config: SolidMcpConfig, url: string): Promise<ReadRdfResult> {
-  const target = requirePodScopedUrl(config, url);
-  const { dataset } = await fetchRdf(target, { fetch: scopedFetch(config) });
+export async function readRdf(source: PodSource, url: string): Promise<ReadRdfResult> {
+  const pod = asPodPort(source);
+  const target = requirePodScopedUrl({ podRoot: pod.root }, url);
+  const { body, contentType, url: finalUrl } = await pod.read(target, { accept: RDF_ACCEPT });
+  const dataset = await parseRdf(new TextDecoder().decode(body), contentType || null, {
+    baseIRI: finalUrl ?? target,
+  });
   const turtle = await serializeTurtle(dataset);
   return { turtle, dataset };
 }
@@ -263,16 +223,17 @@ class RankedMatches {
  * outside the pod is ignored.
  */
 async function seedContainers(
-  config: SolidMcpConfig,
+  source: PodSource,
   q: string,
   scope: string,
   matches: RankedMatches,
 ): Promise<Set<string>> {
+  const config = { podRoot: asPodPort(source).root };
   const seeds = new Set<string>([scope]);
-  if (!config.webId) return seeds;
+  if (!asPodPort(source).webId) return seeds;
   let hints: string[];
   try {
-    hints = await typeIndexContainers(config);
+    hints = await typeIndexContainers(source);
   } catch {
     return seeds; // No type index / unreadable profile — plain scan from scope.
   }
@@ -301,7 +262,7 @@ async function seedContainers(
 
 /** A single RDF resource child matched against `q` for a literal hit (rank 2). */
 async function matchChildLiteral(
-  config: SolidMcpConfig,
+  source: PodSource,
   child: PodChild,
   q: string,
   matches: RankedMatches,
@@ -309,7 +270,7 @@ async function matchChildLiteral(
   // A container listing often does NOT advertise a child's mimeType, so we also
   // try resources whose URL carries a known RDF file extension. Best-effort.
   if (!(isRdfLike(child.mimeType) || hasRdfExtension(child.url))) return;
-  const literalHit = await literalMatch(config, child.url, q);
+  const literalHit = await literalMatch(source, child.url, q);
   if (literalHit) {
     matches.add({ url: child.url, name: child.name, snippet: `literal: ${literalHit}` }, 2);
   }
@@ -322,7 +283,7 @@ async function matchChildLiteral(
  * are enqueued until the depth cap. All matches are added to `matches`.
  */
 async function scanContainers(
-  config: SolidMcpConfig,
+  source: PodSource,
   q: string,
   seeds: Set<string>,
   maxDepth: number,
@@ -341,7 +302,7 @@ async function scanContainers(
 
     let children: PodChild[];
     try {
-      children = await listContainer(config, url);
+      children = await listContainer(source, url);
     } catch {
       continue; // unreadable container — skip.
     }
@@ -355,7 +316,7 @@ async function scanContainers(
       if (child.isContainer) {
         if (depth + 1 <= maxDepth) queue.push({ url: child.url, depth: depth + 1 });
       } else {
-        await matchChildLiteral(config, child, q, matches);
+        await matchChildLiteral(source, child, q, matches);
       }
     }
   }
@@ -376,21 +337,22 @@ async function scanContainers(
  * Returns de-duplicated, ranked matches (name/url hits first, then literal hits).
  */
 export async function search(
-  config: SolidMcpConfig,
+  source: PodSource,
   query: string,
   options: SearchOptions = {},
 ): Promise<SearchMatch[]> {
+  const pod = asPodPort(source);
   const q = (query ?? "").trim().toLowerCase();
   if (q.length === 0) {
     return [];
   }
   const maxDepth = options.maxDepth ?? 4;
   const maxResources = options.maxResources ?? 500;
-  const scope = requirePodScopedUrl(config, options.scope ?? config.podRoot);
+  const scope = requirePodScopedUrl({ podRoot: pod.root }, options.scope ?? pod.root);
 
   const matches = new RankedMatches();
-  const seeds = await seedContainers(config, q, scope, matches); // (1) seed
-  await scanContainers(config, q, seeds, maxDepth, maxResources, matches); // (2) scan
+  const seeds = await seedContainers(pod, q, scope, matches); // (1) seed
+  await scanContainers(pod, q, seeds, maxDepth, maxResources, matches); // (2) scan
   return matches.ranked(); // (3) rank
 }
 
@@ -419,19 +381,19 @@ function hasRdfExtension(url: string): boolean {
  * (case-insensitive), truncated to a short snippet, or `undefined`. Never throws.
  */
 async function literalMatch(
-  config: SolidMcpConfig,
+  source: PodSource,
   url: string,
   q: string,
 ): Promise<string | undefined> {
   // Defense-in-depth: never fetch a URL we cannot confirm is in-pod, even though
   // callers pass scope-filtered URLs (the listing is untrusted — SSRF guard).
-  const target = podScopedUrlOrUndefined(config, url);
+  const target = podScopedUrlOrUndefined({ podRoot: asPodPort(source).root }, url);
   if (target === undefined) {
     return undefined;
   }
   let dataset: import("n3").Store;
   try {
-    ({ dataset } = await fetchRdf(target, { fetch: scopedFetch(config) }));
+    ({ dataset } = await readRdf(source, target));
   } catch {
     return undefined;
   }
@@ -462,12 +424,17 @@ async function literalMatch(
  * within the pod, and (b) only EMIT instance/instanceContainer URLs that are
  * within the pod. This prevents the profile from steering `search` into an SSRF.
  */
-async function typeIndexContainers(config: SolidMcpConfig): Promise<string[]> {
-  const webId = config.webId;
+async function typeIndexContainers(source: PodSource): Promise<string[]> {
+  const pod = asPodPort(source);
+  const config = { podRoot: pod.root };
+  const webId = pod.webId;
   if (!webId) return [];
   const solidNs = "http://www.w3.org/ns/solid/terms#";
   const out = new Set<string>();
-  const { dataset: profile } = await fetchRdf(webId, { fetch: config.fetch });
+  const { body, contentType, url: finalUrl } = await pod.read(webId, { accept: RDF_ACCEPT });
+  const profile = await parseRdf(new TextDecoder().decode(body), contentType || null, {
+    baseIRI: finalUrl ?? webId,
+  });
   const indexes = new Set<string>();
   for (const p of [`${solidNs}publicTypeIndex`, `${solidNs}privateTypeIndex`]) {
     for (const quad of profile.getQuads(null, DataFactory.namedNode(p), null, null)) {
@@ -482,7 +449,7 @@ async function typeIndexContainers(config: SolidMcpConfig): Promise<string[]> {
     try {
       // The index URL is in-pod (validated above); use scopedFetch so a redirect
       // out of the pod is still blocked (redirect-based SSRF guard).
-      const { dataset: ti } = await fetchRdf(index, { fetch: scopedFetch(config) });
+      const { dataset: ti } = await readRdf(pod, index);
       for (const p of [`${solidNs}instance`, `${solidNs}instanceContainer`]) {
         for (const quad of ti.getQuads(null, DataFactory.namedNode(p), null, null)) {
           if (quad.object.termType === "NamedNode") {
@@ -505,44 +472,23 @@ async function typeIndexContainers(config: SolidMcpConfig): Promise<string[]> {
  * response it throws with the status.
  */
 export async function writeResource(
-  config: SolidMcpConfig,
+  source: PodSource,
   url: string,
   content: string,
   contentType: string,
 ): Promise<{ url: string; etag?: string }> {
-  if (!writesEnabled(config)) {
-    throw new Error("write disabled: server is read-only (set readOnly:false to enable writes).");
+  const pod = asPodPort(source);
+  const target = requirePodScopedWriteUrl({ podRoot: pod.root }, url);
+  const result = await pod.write(target, new TextEncoder().encode(content), contentType, {});
+  return { url: target, ...result };
+}
+
+/** Derive a name when a portable backend only supplies URL and container status. */
+function resourceName(url: string): string {
+  const name = new URL(url).pathname.replace(/\/$/, "").split("/").pop() ?? url;
+  try {
+    return decodeURIComponent(name);
+  } catch {
+    return name;
   }
-  // Write-target semantics: the target must be strictly UNDER the pod root, never
-  // the root itself nor its slashless alias (a parent-container resource). See
-  // requirePodScopedWriteUrl — reads may address the root; writes may not.
-  const target = requirePodScopedWriteUrl(config, url);
-  // Manual redirect: never replay a write body to a redirect target (a 3xx on a
-  // PUT could steer the write out of the pod — redirect-based SSRF guard). Treat
-  // any redirect on a write as a failure rather than following it.
-  const res = await config.fetch(target, {
-    method: "PUT",
-    headers: { "content-type": contentType },
-    body: content,
-    redirect: "manual",
-  });
-  if (res.status >= 300 && res.status < 400) {
-    throw new Error(
-      `refusing to follow a redirect (${res.status}) on a write to ${target} ` +
-        "(a redirected write could escape the pod — SSRF guard).",
-    );
-  }
-  if (res.status === 401 || res.status === 403) {
-    throw new Error(
-      `unauthenticated/forbidden (${res.status}) writing ${target} — supply an authenticated fetch ` +
-        "with write access.",
-    );
-  }
-  if (!res.ok) {
-    throw new Error(`failed to write ${target}: HTTP ${res.status} ${res.statusText}`);
-  }
-  const etag = res.headers.get("etag") ?? undefined;
-  const result: { url: string; etag?: string } = { url: target };
-  if (etag !== undefined) result.etag = etag;
-  return result;
 }

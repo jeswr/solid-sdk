@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+// AUTHORED-BY Codex GPT-6
 //
 // list(...) — discover app registrations. Two shapes are supported, matching
 // Linked-Data-API conventions:
@@ -13,6 +14,7 @@ import { fetchRdf } from "@jeswr/fetch-rdf";
 import type { DatasetCore } from "@rdfjs/types";
 import { ContainerDataset } from "@solid/object";
 import { DataFactory } from "n3";
+import { federationDocumentLoader } from "./context-loader.js";
 import type { AppRegistration, VerificationIssue } from "./types.js";
 import { verifyApp } from "./verify.js";
 import { wrap } from "./wrappers.js";
@@ -54,7 +56,7 @@ export async function list(
   source: string,
   options: ListOptions = {},
 ): Promise<ListedRegistration[]> {
-  const fetchOpts = options.fetch ? { fetch: options.fetch } : {};
+  const fetchOpts = { fetch: options.fetch, documentLoader: federationDocumentLoader };
   const { dataset } = await fetchRdf(source, fetchOpts);
 
   const inline = registrationsFromDataset(dataset, source);

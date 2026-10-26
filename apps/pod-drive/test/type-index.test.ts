@@ -14,7 +14,7 @@ import { turtle } from "./helpers.js";
 
 const INDEX = `
 @prefix solid: <http://www.w3.org/ns/solid/terms#> .
-@prefix poddrive: <https://w3id.org/jeswr/pod-drive#> .
+@prefix poddrive: <https://jeswr.org/ns/pod-drive#> .
 @prefix wf: <http://www.w3.org/2005/01/wf/flow#> .
 
 <https://pod.example/settings/publicTypeIndex.ttl> a solid:TypeIndex, solid:ListedDocument .
@@ -61,7 +61,7 @@ describe("findDriveRoots", () => {
     // preserve the blank-node term, not reconstruct a NamedNode from `.value`.
     const bnode = turtle(`
       @prefix solid: <http://www.w3.org/ns/solid/terms#> .
-      @prefix poddrive: <https://w3id.org/jeswr/pod-drive#> .
+      @prefix poddrive: <https://jeswr.org/ns/pod-drive#> .
       [] a solid:TypeRegistration ;
         solid:forClass poddrive:DriveRoot ;
         solid:instanceContainer <https://pod.example/drive/> .
@@ -72,7 +72,7 @@ describe("findDriveRoots", () => {
   it("de-dupes the same container registered twice", () => {
     const dup = turtle(`
       @prefix solid: <http://www.w3.org/ns/solid/terms#> .
-      @prefix poddrive: <https://w3id.org/jeswr/pod-drive#> .
+      @prefix poddrive: <https://jeswr.org/ns/pod-drive#> .
       <#a> a solid:TypeRegistration ; solid:forClass poddrive:DriveRoot ;
         solid:instanceContainer <https://pod.example/drive/> .
       <#b> a solid:TypeRegistration ; solid:forClass poddrive:DriveRoot ;

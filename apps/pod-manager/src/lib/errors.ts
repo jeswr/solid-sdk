@@ -5,13 +5,9 @@
  * cases that library does not model.
  */
 
-/** Base class so the UI can catch "anything from the data layer" if it wants. */
-export class PodDataError extends Error {
-  constructor(message: string, options?: { cause?: unknown }) {
-    super(message, options);
-    this.name = "PodDataError";
-  }
-}
+// AUTHORED-BY Codex GPT-6.1-Sol
+import { PodDataError } from "@jeswr/pod-connectors/pod/resource";
+export { PodDataError } from "@jeswr/pod-connectors/pod/resource";
 
 /** The WebID profile has no `solid:storage` / `pim:storage` — no pod to browse. */
 export class NoStorageError extends PodDataError {
@@ -98,18 +94,8 @@ export class AcpUnsupportedError extends PodDataError {
   }
 }
 
-/** A pod write (PUT) was rejected by the server. */
-export class ResourceWriteError extends PodDataError {
-  readonly url: string;
-  /** HTTP status the server answered with (412 = precondition failed). */
-  readonly status: number;
-  constructor(url: string, status: number) {
-    super(`Could not save to your pod (${status}) at ${url}.`);
-    this.name = "ResourceWriteError";
-    this.url = url;
-    this.status = status;
-  }
-}
+// AUTHORED-BY Codex GPT-6.1-Sol
+export { ResourceWriteError } from "@jeswr/pod-connectors/pod/resource";
 
 /** A single item could not be read or parsed from the pod. */
 export class ItemReadError extends PodDataError {
