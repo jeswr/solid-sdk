@@ -204,8 +204,10 @@ describe("canonical typed writes", () => {
     const dataset = new Store();
     const artist = new Artist(artistIri, dataset).stampType().stampType();
     artist.title = "Artist";
+    expect(artist.strings(`${NS.FOAF}name`)).toEqual(["Artist"]);
     const album = new Album(albumIri, dataset).stampType();
     album.title = "Album";
+    expect(album.strings(`${NS.DCT}title`)).toEqual(["Album"]);
     album.setArtist(artistIri);
     const track = new Track(trackIri, dataset).stampType();
     track.title = 'A "quoted" title\nwith a newline';
@@ -222,6 +224,7 @@ describe("canonical typed writes", () => {
     album.addTrack(trackIri);
     const playlist = new Playlist(playlistIri, dataset).stampType();
     playlist.title = "Playlist";
+    expect(playlist.strings(`${NS.DCT}title`)).toEqual(["Playlist"]);
     playlist.setTracks([trackIri, trackIri]);
     expect(album.tracks).toEqual([trackIri]);
     expect(track.artists).toEqual([{ iri: artistIri, name: "Artist" }]);
@@ -388,6 +391,36 @@ describe("ordered playlists and liked songs", () => {
 });
 
 describe("editing foreign metadata", () => {
+  it.each([
+    ["artist", Artist, `${NS.FOAF}name`],
+    ["album", Album, `${NS.DCT}title`],
+    ["playlist", Playlist, `${NS.DCT}title`],
+  ] as const)("synchronizes schema and media labels when renaming an imported %s", async (_kind, Entity, label) => {
+    const iri = `${base}#imported`;
+    const dataset = await parse(`
+      <#imported> <${label}> "Original", "Older";
+        <http://schema.org/name> "Original"; s:description "Preserved metadata".
+    `);
+    const entity = new Entity(iri, dataset);
+    const before = [...dataset];
+    expect(() => {
+      entity.title = " ";
+    }).toThrow(InvalidMusicError);
+    expect([...dataset]).toEqual(before);
+    entity.title = "Renamed";
+    entity.title = "Renamed again";
+    expect(entity.title).toBe("Renamed again");
+    expect(entity.strings(`${S}name`)).toEqual(["Renamed again"]);
+    expect(entity.strings(label)).toEqual(["Renamed again"]);
+    expect(dataset.countQuads(iri, "http://schema.org/name", null, null)).toBe(0);
+    const parsed = await parseMusic(await serializeMusic(dataset), base);
+    const roundTrip = new Entity(iri, parsed);
+    expect(roundTrip.title).toBe("Renamed again");
+    expect(roundTrip.strings(`${S}name`)).toEqual(["Renamed again"]);
+    expect(roundTrip.strings(label)).toEqual(["Renamed again"]);
+    expect(roundTrip.strings(`${S}description`)).toEqual(["Preserved metadata"]);
+  });
+
   it.each([
     "mo",
     "schema",

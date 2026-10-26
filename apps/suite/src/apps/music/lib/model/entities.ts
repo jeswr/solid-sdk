@@ -75,11 +75,31 @@ export class Artist extends Recording {
   stampType(): this {
     return this.stamp(`${S}MusicGroup`, `${M}Artist`);
   }
+  override get title(): string {
+    return super.title;
+  }
+  override set title(value: string) {
+    const checked = nonEmpty(value);
+    this.clear(`${S}name`);
+    this.clear(`${NS.FOAF}name`);
+    this.writeString(`${S}name`, checked);
+    this.writeString(`${NS.FOAF}name`, checked);
+  }
 }
 
 export class Album extends Recording {
   stampType(): this {
     return this.stamp(`${S}MusicAlbum`, `${M}Album`);
+  }
+  override get title(): string {
+    return super.title;
+  }
+  override set title(value: string) {
+    const checked = nonEmpty(value);
+    this.clear(`${S}name`);
+    this.clear(`${NS.DCT}title`);
+    this.writeString(`${S}name`, checked);
+    this.writeString(`${NS.DCT}title`, checked);
   }
   get tracks(): string[] {
     return [...new Set(this.iris(`${S}track`, `${MO}track`))];

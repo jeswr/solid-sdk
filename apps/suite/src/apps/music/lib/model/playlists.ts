@@ -1,15 +1,26 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { LiteralFrom, OptionalAs, SetFrom, TermAs, TermFrom } from "@rdfjs/wrapper";
 import type { Store } from "n3";
 import { Recording, type Track } from "./entities";
 import { DataFactory, MusicNode } from "./rdf";
-import { httpIri, InvalidMusicError } from "./validation";
+import { httpIri, InvalidMusicError, nonEmpty } from "./validation";
 import { M, MO, NS, S } from "./vocab";
 
 /** Ported Pod Music ListItem ordering; duplicates are deliberately retained. */
 export class Playlist extends Recording {
   stampType(): this {
     return this.stamp(`${S}MusicPlaylist`, `${M}Playlist`);
+  }
+  override get title(): string {
+    return super.title;
+  }
+  override set title(value: string) {
+    const checked = nonEmpty(value);
+    this.clear(`${S}name`);
+    this.clear(`${NS.DCT}title`);
+    this.writeString(`${S}name`, checked);
+    this.writeString(`${NS.DCT}title`, checked);
   }
 
   get tracks(): string[] {
