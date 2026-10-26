@@ -401,7 +401,7 @@ describe("demo pod HTTP contract", () => {
     expect(snapshot.resources.map(([, resource]) => resource.etag)).not.toContain(
       write.headers.get("etag"),
     );
-    expect(restored.snapshot().etagSeq).toBe(snapshot.etagSeq + 1);
+    expect(restored.snapshot().etagSeq).toBe(snapshot.etagSeq + 2);
     expect(pod.has(`${DEMO_ROOT}new`)).toBe(false);
     snapshot.resources[0]?.[1].body.fill(0);
     expect(await (await restored.fetch(`${DEMO_ROOT}profile/card`)).text()).toContain(DEMO_NAME);

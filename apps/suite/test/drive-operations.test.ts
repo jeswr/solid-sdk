@@ -478,7 +478,7 @@ describe("app-managed trash against the demo pod", () => {
   it.each([
     new Error("offline"),
     new DriveError("forbidden", 403, NOTES),
-  ])("collects batch failures without touching the index (%s)", async (error) => {
+  ])("collects batch failures while retaining durable pending intents (%s)", async (error) => {
     const { client } = await setup();
     const notes = await item(client);
     const move = vi.spyOn(client, "move").mockRejectedValue(error);
@@ -488,7 +488,7 @@ describe("app-managed trash against the demo pod", () => {
       failed: [{ url: NOTES, error }],
     });
     const entry: TrashEntry = {
-      url: `${DRIVE}.trash/slot/notes.md`,
+      url: `${DRIVE}.trash/00000000-0000-0000-0000-000000000000/notes.md`,
       original: NOTES,
       name: "notes.md",
       trashedAt: new Date(NOW),
@@ -504,7 +504,7 @@ describe("app-managed trash against the demo pod", () => {
       done: [],
       failed: [{ url: entry.url, error }],
     });
-    expect(write).not.toHaveBeenCalled();
+    expect(write).toHaveBeenCalledTimes(1);
   });
 
   it("continues after a missing trash source and ignores failure to remove an empty restored slot", async () => {
@@ -537,7 +537,7 @@ describe("app-managed trash against the demo pod", () => {
   ])("retries one real concurrent index update and preserves it (second conflict: %s)", async (twice) => {
     const { pod } = await setup();
     const concurrent: TrashEntry = {
-      url: `${DRIVE}.trash/other/file`,
+      url: `${DRIVE}.trash/00000000-0000-0000-0000-000000000001/file`,
       original: `${DRIVE}other`,
       name: "other",
       trashedAt: new Date(NOW - DAY),
@@ -572,7 +572,7 @@ describe("app-managed trash against the demo pod", () => {
       const result = await operation;
       expect(await listTrash(client, DRIVE)).toEqual([result.done[0], concurrent]);
     }
-    expect(writes).toBe(2);
+    expect(writes).toBe(twice ? 2 : 3);
     expectConditionalWrites(fetch);
   });
 

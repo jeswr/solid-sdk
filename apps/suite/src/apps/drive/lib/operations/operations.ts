@@ -7,6 +7,8 @@
  * they return `{ done, failed }` so the UI can report partial results.
  */
 
+import { LiteralAs, LiteralFrom, OptionalAs, OptionalFrom } from "@rdfjs/wrapper";
+import { DataFactory } from "n3";
 import { type DriveClient, DriveError, type DriveItem, nameOf, parentOf } from "../client/client";
 import { guessContentType } from "../files";
 import { keepBothName, normalizeUploadName } from "../upload";
@@ -16,9 +18,28 @@ import {
   removeTrashRecord,
   serializeTrashIndex,
   type TrashEntry,
+  TrashRecord,
   trashEntries,
   trashIndexFrom,
 } from "./trash-index";
+
+/** A durable intent remains discoverable even if completion cannot be saved. */
+class TransferRecord extends TrashRecord {
+  get status(): string | undefined {
+    return OptionalFrom.subjectPredicate(
+      this,
+      "http://purl.org/dc/terms/description",
+      LiteralAs.string,
+    );
+  }
+  set status(value: string) {
+    OptionalAs.object(this, "http://purl.org/dc/terms/description", value, LiteralFrom.string);
+  }
+}
+
+function transferRecord(index: ReturnType<typeof emptyTrashIndex>, url: string): TransferRecord {
+  return new TransferRecord(url, index, DataFactory);
+}
 
 export interface BatchResult<T> {
   readonly done: T[];
@@ -167,7 +188,7 @@ export async function copyItem(client: DriveClient, url: string): Promise<string
   const parent = parentOf(url) as string;
   const taken = (await client.list(parent)).map((item) => item.name);
   const name = keepBothName(`Copy of ${nameOf(url)}`, taken);
-  const to = childUrl(parent, name);
+  const to = childUrl(parent, name, url.endsWith("/"));
   await client.copy(url, to);
   return to;
 }
@@ -208,9 +229,38 @@ async function updateIndex(
   }
 }
 
-export async function listTrash(client: DriveClient, driveRoot: string): Promise<TrashEntry[]> {
+export async function listTrash(
+  client: DriveClient,
+  driveRoot: string,
+  options: { onInvalid?: (error: DriveError) => void } = {},
+): Promise<TrashEntry[]> {
   const current = await client.readRdf(indexUrlOf(driveRoot));
-  return current ? trashEntries(trashIndexFrom(current.dataset)) : [];
+  if (!current) return [];
+  const index = trashIndexFrom(current.dataset);
+  const entries: TrashEntry[] = [];
+  for (const entry of trashEntries(index)) {
+    try {
+      slotOf(driveRoot, entry);
+    } catch (error) {
+      if (options.onInvalid) options.onInvalid(error as DriveError);
+      else console.warn(error);
+      continue;
+    }
+    // Pending records precede the move. Hide intents with no destination yet,
+    // but retain their durable record in case another tab is still moving.
+    if (transferRecord(index, entry.url).status === "pending") {
+      const exists = await client.stat(entry.url).then(
+        () => true,
+        (error: unknown) => {
+          if (error instanceof DriveError && error.kind === "not-found") return false;
+          throw error;
+        },
+      );
+      if (!exists) continue;
+    }
+    entries.push(entry);
+  }
+  return entries;
 }
 
 export async function trashItems(
@@ -221,35 +271,92 @@ export async function trashItems(
 ): Promise<BatchResult<TrashEntry>> {
   const result: BatchResult<TrashEntry> = { done: [], failed: [] };
   const trash = trashFolderOf(driveRoot);
-  for (const item of items) {
+  const entries = items.map((item) => {
+    const slot = `${trash}${crypto.randomUUID()}/`;
+    const to = childUrl(slot, item.name, item.kind === "folder");
+    return {
+      url: to,
+      original: item.url,
+      trashedAt: options.now ?? new Date(),
+      name: item.name,
+      ...(options.webId ? { trashedBy: options.webId } : {}),
+      ...(item.contentType ? { contentType: item.contentType } : {}),
+      ...(item.size !== undefined ? { size: item.size } : {}),
+    };
+  });
+  if (!entries.length) return result;
+  for (const entry of entries) {
+    slotOf(driveRoot, entry);
+    validateOriginal(driveRoot, entry);
+  }
+  // No source may be removed until every intent is durably discoverable.
+  await updateIndex(client, driveRoot, (index) => {
+    for (const entry of entries) {
+      addTrashRecord(index, entry);
+      transferRecord(index, entry.url).status = "pending";
+    }
+  });
+  for (const entry of entries) {
     try {
-      const slot = `${trash}${crypto.randomUUID()}/`;
-      const to = childUrl(slot, item.name, item.kind === "folder");
-      await client.move(item.url, to);
-      result.done.push({
-        url: to,
-        original: item.url,
-        trashedAt: options.now ?? new Date(),
-        name: item.name,
-        ...(options.webId ? { trashedBy: options.webId } : {}),
-        ...(item.contentType ? { contentType: item.contentType } : {}),
-        ...(item.size !== undefined ? { size: item.size } : {}),
-      });
+      await client.move(entry.original, entry.url);
+      result.done.push(entry);
     } catch (error) {
-      result.failed.push({ url: item.url, error });
+      result.failed.push({ url: entry.original, error });
     }
   }
   if (result.done.length > 0) {
-    await updateIndex(client, driveRoot, (index) => {
-      for (const entry of result.done) addTrashRecord(index, entry);
-    });
+    try {
+      await updateIndex(client, driveRoot, (index) => {
+        for (const entry of result.done) transferRecord(index, entry.url).status = "complete";
+      });
+    } catch (error) {
+      // Keep successful items in done so callers can offer Undo. Pending
+      // records already point to them; listTrash reconciles their existence.
+      result.failed.push({ url: indexUrlOf(driveRoot), error });
+    }
   }
   return result;
 }
 
 /** The uuid slot folder that holds a trashed item. */
-function slotOf(entry: Pick<TrashEntry, "url">): string {
-  return parentOf(entry.url) as string;
+function slotOf(driveRoot: string, entry: Pick<TrashEntry, "url">): string {
+  const trash = trashFolderOf(driveRoot);
+  try {
+    const url = new URL(entry.url);
+    const suffix = entry.url.slice(trash.length);
+    if (
+      url.href !== entry.url ||
+      url.search ||
+      url.hash ||
+      !entry.url.startsWith(trash) ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/[^/]+\/?$/i.test(suffix)
+    )
+      throw new Error("invalid slot");
+    const name = decodeURIComponent(suffix.slice(suffix.indexOf("/") + 1).replace(/\/$/, ""));
+    if (name === "." || name === ".." || /[/\\]/.test(name)) throw new Error("invalid name");
+    return parentOf(entry.url) as string;
+  } catch {
+    throw new DriveError("invalid-trash-record", 409, entry.url);
+  }
+}
+
+function validateOriginal(driveRoot: string, entry: TrashEntry): void {
+  try {
+    const original = new URL(entry.original);
+    if (
+      original.href !== entry.original ||
+      original.search ||
+      original.hash ||
+      !entry.original.startsWith(driveRoot) ||
+      entry.original === driveRoot ||
+      entry.original.startsWith(trashFolderOf(driveRoot)) ||
+      /%2f|%5c/i.test(original.pathname) ||
+      entry.original.endsWith("/") !== entry.url.endsWith("/")
+    )
+      throw new Error("invalid original location");
+  } catch {
+    throw new DriveError("invalid-trash-record", 409, entry.url);
+  }
 }
 
 function restoredName(name: string): string {
@@ -268,6 +375,8 @@ export async function restoreItems(
   };
   for (const entry of entries) {
     try {
+      const slot = slotOf(driveRoot, entry);
+      validateOriginal(driveRoot, entry);
       const folder = entry.original.endsWith("/");
       const parent = parentOf(entry.original) as string;
       let target = entry.original;
@@ -285,7 +394,8 @@ export async function restoreItems(
       }
       // Moving recreates missing parent folders (PUT creates intermediate containers).
       const url = await client.move(entry.url, target);
-      await client.remove(slotOf(entry), { recursive: true }).catch(() => undefined);
+      // The slot may contain another writer's resources; only remove it empty.
+      await client.remove(slot).catch(() => undefined);
       result.done.push({ entry, url, renamed });
     } catch (error) {
       result.failed.push({ url: entry.url, error });
@@ -307,7 +417,9 @@ export async function deleteForever(
   const result: BatchResult<TrashEntry> = { done: [], failed: [] };
   for (const entry of entries) {
     try {
-      await client.remove(slotOf(entry), { recursive: true });
+      slotOf(driveRoot, entry);
+      await client.remove(entry.url, { recursive: true });
+      await client.remove(slotOf(driveRoot, entry)).catch(() => undefined);
       result.done.push(entry);
     } catch (error) {
       if (error instanceof DriveError && error.kind === "not-found") result.done.push(entry);
@@ -332,11 +444,18 @@ export async function purgeExpired(
 ): Promise<BatchResult<TrashEntry>> {
   const now = (options.now ?? new Date()).getTime();
   const cutoff = now - (options.days ?? 30) * DAY;
-  const expired = (await listTrash(client, driveRoot))
+  const invalid: BatchResult<TrashEntry>["failed"] = [];
+  const expired = (
+    await listTrash(client, driveRoot, {
+      onInvalid: (error) => invalid.push({ url: error.url, error }),
+    })
+  )
     .filter((entry) => entry.trashedAt.getTime() < cutoff)
     .slice(0, options.limit ?? 50);
-  if (expired.length === 0) return { done: [], failed: [] };
-  return deleteForever(client, driveRoot, expired);
+  if (expired.length === 0) return { done: [], failed: invalid };
+  const result = await deleteForever(client, driveRoot, expired);
+  result.failed.push(...invalid);
+  return result;
 }
 
 // ---------------------------------------------------------------- recent

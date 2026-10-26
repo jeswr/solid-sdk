@@ -261,8 +261,8 @@ describe("Drive client against a seeded demo pod", () => {
       return pod.fetch(input, init);
     });
     await expect(client.move(from, to)).rejects.toMatchObject({
-      kind: "forbidden",
-      status: 403,
+      kind: rollbackFails ? "partial-failure" : "forbidden",
+      status: rollbackFails ? 409 : 403,
       url: from,
     });
     expect(requests).toEqual([from, to]);
