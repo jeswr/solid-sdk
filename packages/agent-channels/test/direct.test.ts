@@ -1,16 +1,28 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { canonicalJson, digestBytes } from "@jeswr/agent-model";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { type DirectMailbox, envelope } from "../src/direct/shared.js";
 import { createDirectReader } from "../src/direct.js";
 import {
   ChannelParseError,
   DIRECT,
   ProviderRejectedError,
+  type SendGrant,
   type TokenProvider,
 } from "../src/index.js";
 import { createInMemoryDirectBinding } from "../src/testing.js";
 import { account, limits, message, options, signed, verifyMessage } from "./fixtures/signed.js";
+
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<T>((onResolve, onReject) => {
+    resolve = onResolve;
+    reject = onReject;
+  });
+  return { promise, resolve, reject };
+}
 
 describe("direct loopback", () => {
   it("round-trips real signed bytes, with dry-run, scope separation and positive evidence", async () => {
@@ -73,6 +85,126 @@ describe("direct loopback", () => {
     expect(
       createDirectReader({ inboxes: new Map(), accepted: new Map() }, config.tokens).send,
     ).toBeUndefined();
+  });
+
+  it.each([
+    "verification",
+    "credentials",
+  ] as const)("keeps absence unknown during pending %s until delivery or rejection", async (stage) => {
+    for (const accepted of [true, false]) {
+      const config = options();
+      const verify = vi.fn(verifyMessage);
+      const send = vi.fn(config.tokens.send.bind(config.tokens));
+      const tokens = { read: config.tokens.read.bind(config.tokens), send };
+      const binding = createInMemoryDirectBinding({ ...config, verify, tokens });
+      const wire = await binding.send.render(signed(), DIRECT);
+      const unrelated = await binding.send.render(
+        signed({ ...message, id: "urn:example:message:unrelated" }),
+        DIRECT,
+      );
+      const started = deferred<void>();
+      const resume = deferred<void>();
+      const pause = async () => {
+        started.resolve();
+        await resume.promise;
+      };
+      if (stage === "verification")
+        verify.mockImplementationOnce(async (jws) => {
+          await pause();
+          return verifyMessage(jws);
+        });
+      else
+        send.mockImplementationOnce(async (ref) => {
+          await pause();
+          return config.tokens.send(ref);
+        });
+
+      const pending = binding.send.transmit(wire, { account, tokens, dryRun: false });
+      await started.promise;
+      expect(binding.send.finalAbsence).toBe(true);
+      expect(await binding.send.lookup?.(wire)).toMatchObject({ outcome: "unknown" });
+      expect(await binding.send.lookup?.(unrelated)).toEqual({ outcome: "absent" });
+      expect((await binding.ingest.list(account, undefined, limits)).items).toEqual([]);
+      if (accepted) {
+        resume.resolve();
+        expect(await pending).toEqual({
+          outcome: "accepted",
+          providerRef: `direct:${wire.digest}`,
+        });
+        expect(await binding.send.lookup?.(wire)).toEqual({
+          outcome: "found",
+          providerRef: `direct:${wire.digest}`,
+        });
+        expect((await binding.ingest.list(account, undefined, limits)).items).toHaveLength(1);
+      } else {
+        const rejected = expect(pending).rejects.toThrow("test refusal");
+        resume.reject(new Error("test refusal"));
+        await rejected;
+        expect(await binding.send.lookup?.(wire)).toEqual({ outcome: "absent" });
+        expect((await binding.ingest.list(account, undefined, limits)).items).toEqual([]);
+      }
+    }
+  });
+
+  it("tracks overlapping attempts separately and keeps accepted bytes as positive evidence", async () => {
+    const config = options();
+    const binding = createInMemoryDirectBinding(config);
+    const wire = await binding.send.render(signed(), DIRECT);
+    const firstGrant = deferred<SendGrant>();
+    const secondGrant = deferred<SendGrant>();
+    const firstStarted = deferred<void>();
+    const secondStarted = deferred<void>();
+    const tokens: TokenProvider = {
+      read: config.tokens.read.bind(config.tokens),
+      send: vi
+        .fn()
+        .mockImplementationOnce(() => {
+          firstStarted.resolve();
+          return firstGrant.promise;
+        })
+        .mockImplementationOnce(() => {
+          secondStarted.resolve();
+          return secondGrant.promise;
+        }),
+    };
+    const io = { account, tokens, dryRun: false };
+    const first = binding.send.transmit(wire, io);
+    await firstStarted.promise;
+    const second = binding.send.transmit(wire, io);
+    await secondStarted.promise;
+    expect(await binding.send.lookup?.(wire)).toMatchObject({ outcome: "unknown" });
+    const rejected = expect(first).rejects.toThrow("test refusal");
+    firstGrant.reject(new Error("test refusal"));
+    await rejected;
+    expect(await binding.send.lookup?.(wire)).toMatchObject({ outcome: "unknown" });
+    secondGrant.resolve(await config.tokens.send(account));
+    const result = await second;
+    expect(result).toEqual({ outcome: "accepted", providerRef: `direct:${wire.digest}` });
+    expect(await binding.send.lookup?.(wire)).toEqual({
+      outcome: "found",
+      providerRef: `direct:${wire.digest}`,
+    });
+
+    const retryStarted = deferred<void>();
+    const retryGrant = deferred<SendGrant>();
+    const retry = binding.send.transmit(wire, {
+      ...io,
+      tokens: {
+        ...tokens,
+        send: () => {
+          retryStarted.resolve();
+          return retryGrant.promise;
+        },
+      },
+    });
+    await retryStarted.promise;
+    expect(await binding.send.lookup?.(wire)).toEqual({
+      outcome: "found",
+      providerRef: `direct:${wire.digest}`,
+    });
+    retryGrant.resolve(await config.tokens.send(account));
+    expect(await retry).toEqual(result);
+    expect((await binding.ingest.list(account, undefined, limits)).items).toHaveLength(1);
   });
 
   it("bounds aggregate bytes, item count and cursors across isolated accounts", async () => {

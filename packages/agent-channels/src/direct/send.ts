@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { canonicalJson, digestBytes, validateMessage } from "@jeswr/agent-model";
 import type { CarriageProfile, ChannelBinding } from "../binding.js";
 import { createDirectReader } from "../direct.js";
@@ -19,6 +20,7 @@ export function createDirectSend(
   options: DirectOptions,
 ): NonNullable<ChannelBinding["send"]> {
   const now = options.now ?? Date.now;
+  const pending = new Set<{ readonly bytes: string }>();
   async function verified(compactJws: string) {
     const result = validateMessage(await options.verify(compactJws));
     if (!result.ok) throw new ChannelParseError("unverifiable direct message");
@@ -59,28 +61,37 @@ export function createDirectSend(
     async transmit(wire, io) {
       if (io.dryRun !== false) return { outcome: "rejected", detail: "dry-run" };
       const account = accountId(io.account);
-      const message = await verified(assertWire(wire));
-      assertCurrent(message);
-      assertGrant(await io.tokens.send(io.account), "send");
-      const previous = mailbox.accepted.get(message.id);
-      if (previous) {
-        if (previous.bytes !== wire.bytes || previous.account !== account)
-          throw new ProviderRejectedError("direct message id conflicts with accepted bytes");
-        return { outcome: "accepted", providerRef: previous.providerRef };
+      const compactJws = assertWire(wire);
+      // Register each attempt before verification or credentials can suspend it.
+      const attempt = { bytes: wire.bytes };
+      pending.add(attempt);
+      try {
+        const message = await verified(compactJws);
+        assertCurrent(message);
+        assertGrant(await io.tokens.send(io.account), "send");
+        const previous = mailbox.accepted.get(message.id);
+        if (previous) {
+          if (previous.bytes !== wire.bytes || previous.account !== account)
+            throw new ProviderRejectedError("direct message id conflicts with accepted bytes");
+          return { outcome: "accepted", providerRef: previous.providerRef };
+        }
+        const providerRef = `direct:${wire.digest}`;
+        mailbox.accepted.set(message.id, { bytes: wire.bytes, providerRef, account });
+        const inbox = mailbox.inboxes.get(account) ?? [];
+        inbox.push({ id: message.id, raw: wire.bytes });
+        mailbox.inboxes.set(account, inbox);
+        return { outcome: "accepted", providerRef };
+      } finally {
+        pending.delete(attempt);
       }
-      const providerRef = `direct:${wire.digest}`;
-      mailbox.accepted.set(message.id, { bytes: wire.bytes, providerRef, account });
-      const inbox = mailbox.inboxes.get(account) ?? [];
-      inbox.push({ id: message.id, raw: wire.bytes });
-      mailbox.inboxes.set(account, inbox);
-      return { outcome: "accepted", providerRef };
     },
     async lookup(wire) {
       const message = await verified(assertWire(wire));
       const entry = mailbox.accepted.get(message.id);
-      return entry?.bytes === wire.bytes
-        ? { outcome: "found", providerRef: entry.providerRef }
-        : { outcome: "absent" };
+      if (entry?.bytes === wire.bytes) return { outcome: "found", providerRef: entry.providerRef };
+      if ([...pending].some((attempt) => attempt.bytes === wire.bytes))
+        return { outcome: "unknown", detail: "direct send is pending" };
+      return { outcome: "absent" };
     },
     finalAbsence: true,
   };
