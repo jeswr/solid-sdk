@@ -231,3 +231,150 @@ it("rejects malformed IRIs, non-instants and terms outside the pilot subset", as
       }),
     ).toBeUndefined();
 });
+it.each([
+  "autonomous",
+  "withApproval",
+] as const)("rejects signed unsupported fields throughout %s policies", async (set) => {
+  for (const field of ["delegatedUnder", "inheritFrom", "unknownRestriction"]) {
+    expect(
+      await loadSigned({
+        ...fixture.payload,
+        [set]: { ...fixture.payload[set], [field]: "urn:restricted" },
+      }),
+    ).toBeUndefined();
+  }
+  for (const collection of ["permissions", "prohibitions"] as const) {
+    const rule = {
+      type: collection === "permissions" ? "permission" : "prohibition",
+      action: "read",
+      target: "urn:target",
+    };
+    for (const field of ["refinement", "remedy", "consequence", "unknownRestriction"]) {
+      expect(
+        await loadSigned({
+          ...fixture.payload,
+          [set]: { id: "urn:policy", [collection]: [{ ...rule, [field]: { action: "inform" } }] },
+        }),
+      ).toBeUndefined();
+    }
+    for (const field of [
+      "unit",
+      "status",
+      "and",
+      "or",
+      "rightOperandReference",
+      "unknownRestriction",
+    ]) {
+      expect(
+        await loadSigned({
+          ...fixture.payload,
+          [set]: {
+            id: "urn:policy",
+            [collection]: [
+              {
+                ...rule,
+                constraints: [
+                  {
+                    leftOperand: "purpose",
+                    operator: "eq",
+                    rightOperand: "urn:purpose",
+                    [field]: "urn:restriction",
+                  },
+                ],
+              },
+            ],
+          },
+        }),
+      ).toBeUndefined();
+    }
+    expect(
+      await loadSigned({
+        ...fixture.payload,
+        [set]: {
+          id: "urn:policy",
+          [collection]: [
+            { ...rule, type: collection === "permissions" ? "prohibition" : "permission" },
+          ],
+        },
+      }),
+    ).toBeUndefined();
+  }
+});
+it("rejects signed unsupported mandate fields and malformed supported metadata", async () => {
+  for (const field of ["prohibitions", "limits", "unknownRestriction"])
+    expect(await loadSigned({ ...fixture.payload, [field]: [] })).toBeUndefined();
+  expect(await loadSigned({ ...fixture.payload, note: {} })).toBeUndefined();
+  for (const patch of [{ type: "Unknown" }, { assigner: "relative" }, { assignee: "relative" }])
+    expect(
+      await loadSigned({
+        ...fixture.payload,
+        autonomous: { ...fixture.payload.autonomous, ...patch },
+      }),
+    ).toBeUndefined();
+  for (const patch of [{ assigner: "relative" }, { assignee: "relative" }])
+    expect(
+      await loadSigned({
+        ...fixture.payload,
+        autonomous: {
+          id: "urn:policy",
+          permissions: [{ type: "permission", action: "read", target: "urn:target", ...patch }],
+        },
+      }),
+    ).toBeUndefined();
+  expect(
+    await loadSigned({
+      ...fixture.payload,
+      autonomous: {
+        id: "urn:policy",
+        permissions: [
+          {
+            type: "permission",
+            action: "read",
+            target: "urn:target",
+            constraints: [
+              {
+                leftOperand: "purpose",
+                operator: "eq",
+                rightOperand: "urn:purpose",
+                datatype: "relative",
+              },
+            ],
+          },
+        ],
+      },
+    }),
+  ).toBeUndefined();
+  const { note: _note, ...withoutNote } = fixture.payload;
+  expect(await loadSigned(withoutNote)).toMatchObject({ id: fixture.payload.id });
+  expect(
+    await loadSigned({
+      ...fixture.payload,
+      autonomous: {
+        id: "urn:policy",
+        type: "Agreement",
+        assigner: OWNER,
+        assignee: ACTOR,
+        obligations: [],
+        permissions: [
+          {
+            id: "urn:rule",
+            type: "permission",
+            action: "read",
+            target: "urn:target",
+            assigner: OWNER,
+            assignee: ACTOR,
+            duties: [],
+            constraints: [
+              {
+                leftOperand: "purpose",
+                operator: "eq",
+                rightOperand: "urn:purpose",
+                datatype: "http://www.w3.org/2001/XMLSchema#anyURI",
+              },
+            ],
+          },
+        ],
+      },
+    }),
+  ).toMatchObject({ id: fixture.payload.id });
+});
