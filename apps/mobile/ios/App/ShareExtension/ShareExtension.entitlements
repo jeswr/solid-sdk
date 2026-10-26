@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- AUTHORED-BY Claude Opus 5.5: the App Group the Share Extension hands batches through (DESIGN D7) -->
+<plist version="1.0">
+<dict>
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>group.org.jeswr.suite</string>
+	</array>
+</dict>
+</plist>
