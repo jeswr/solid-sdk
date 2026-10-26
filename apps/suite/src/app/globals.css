@@ -331,6 +331,7 @@ button:not([data-slot]) {
   .fixture-state select {
     min-height: 44px;
   }
+}
 .fixture-density,
 .fixture-field {
   display: grid;
