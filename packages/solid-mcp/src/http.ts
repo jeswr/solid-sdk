@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6 — transport shutdown
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
@@ -165,11 +166,17 @@ export function createMcpHttpHandler<Principal>(
         sessionIdGenerator: undefined,
         enableJsonResponse: true,
       });
+      let transportClosed = false;
+      transport.onclose = () => {
+        transportClosed = true;
+      };
       try {
         await server.connect(transport);
         return await transport.handleRequest(request, { parsedBody });
       } finally {
-        await Promise.allSettled([server.close(), transport.close()]);
+        await Promise.allSettled([server.close()]);
+        // The server owns shutdown; fall back if connect/close failed before closing the transport.
+        if (!transportClosed) await Promise.allSettled([transport.close()]);
       }
     } catch {
       return errorResponse(500, "Internal server error");

@@ -1,10 +1,12 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6 — shutdown regression tests
 import { once } from "node:events";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { Readable } from "node:stream";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createMcpHttpHandler, type McpHttpHandler, type McpHttpOptions } from "../src/http.js";
 
@@ -334,6 +336,7 @@ describe("SDK lifecycle", () => {
       server: () => {
         const server = principalServer("alice");
         vi.spyOn(server, "close");
+        server.server.onclose = vi.fn();
         servers.push(server);
         return server;
       },
@@ -350,7 +353,10 @@ describe("SDK lifecycle", () => {
     expect(transport.sessionId).toBeUndefined();
     expect(servers.length).toBeGreaterThanOrEqual(3);
     expect(new Set(servers).size).toBe(servers.length);
-    for (const server of servers) expect(server.close).toHaveBeenCalledOnce();
+    for (const server of servers) {
+      expect(server.close).toHaveBeenCalledOnce();
+      expect(server.server.onclose).toHaveBeenCalledOnce();
+    }
   });
 
   it("supports the SDK client with a Web fetch adapter", async () => {
@@ -405,17 +411,66 @@ describe("SDK lifecycle", () => {
     const server = principalServer("alice");
     vi.spyOn(server, "connect").mockRejectedValue(new Error("private diagnostic"));
     const close = vi.spyOn(server, "close");
+    const transportClose = vi.spyOn(WebStandardStreamableHTTPServerTransport.prototype, "close");
     const { handler } = setup({ server: () => server });
     expect((await handler(request())).status).toBe(500);
     expect(close).toHaveBeenCalledOnce();
+    expect(transportClose).toHaveBeenCalledOnce();
   });
 
   it("closes the transport even if server cleanup fails", async () => {
     const server = principalServer("alice");
     vi.spyOn(server, "close").mockRejectedValue(new Error("private diagnostic"));
+    const transportClose = vi.spyOn(WebStandardStreamableHTTPServerTransport.prototype, "close");
+    server.server.onclose = vi.fn();
     const { handler } = setup({ server: () => server });
     expect((await handler(request())).status).toBe(200);
     expect(server.server.transport).toBeUndefined();
+    expect(transportClose).toHaveBeenCalledOnce();
+    expect(server.server.onclose).toHaveBeenCalledOnce();
+  });
+
+  it("does not repeat transport cleanup if server cleanup fails after closing it", async () => {
+    const server = principalServer("alice");
+    const close = server.close.bind(server);
+    vi.spyOn(server, "close").mockImplementation(async () => {
+      await close();
+      throw new Error("private diagnostic");
+    });
+    const transportClose = vi.spyOn(WebStandardStreamableHTTPServerTransport.prototype, "close");
+    server.server.onclose = vi.fn();
+    const { handler } = setup({ server: () => server });
+    expect((await handler(request())).status).toBe(200);
+    expect(transportClose).toHaveBeenCalledOnce();
+    expect(server.server.onclose).toHaveBeenCalledOnce();
+  });
+
+  it("closes once when SDK request handling fails", async () => {
+    const server = principalServer("alice");
+    server.server.onclose = vi.fn();
+    vi.spyOn(WebStandardStreamableHTTPServerTransport.prototype, "handleRequest").mockRejectedValue(
+      new Error("private diagnostic"),
+    );
+    const transportClose = vi.spyOn(WebStandardStreamableHTTPServerTransport.prototype, "close");
+    const { handler } = setup({ server: () => server });
+    const response = await handler(request());
+    expect(response.status).toBe(500);
+    expect(await response.text()).not.toContain("private diagnostic");
+    expect(transportClose).toHaveBeenCalledOnce();
+    expect(server.server.onclose).toHaveBeenCalledOnce();
+  });
+
+  it("preserves the response when fallback cleanup rejects", async () => {
+    const server = principalServer("alice");
+    vi.spyOn(server, "close").mockRejectedValue(new Error("private diagnostic"));
+    const transportClose = vi.spyOn(WebStandardStreamableHTTPServerTransport.prototype, "close");
+    server.server.onclose = vi.fn(() => {
+      throw new Error("private diagnostic");
+    });
+    const { handler } = setup({ server: () => server });
+    expect((await handler(request())).status).toBe(200);
+    expect(transportClose).toHaveBeenCalledOnce();
+    expect(server.server.onclose).toHaveBeenCalledOnce();
   });
 
   it.each([
@@ -425,9 +480,11 @@ describe("SDK lifecycle", () => {
   ])("preserves SDK validation: %s", async (header, value, status) => {
     const server = principalServer("alice");
     const close = vi.spyOn(server, "close");
+    server.server.onclose = vi.fn();
     const { handler } = setup({ server: () => server });
     expect((await handler(request({ [header]: value }))).status).toBe(status);
     expect(close).toHaveBeenCalledOnce();
+    expect(server.server.onclose).toHaveBeenCalledOnce();
   });
 
   it("returns 202 for initialized notifications", async () => {
