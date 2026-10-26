@@ -367,6 +367,36 @@ describe("fetch representations and byte cap", () => {
     expect(result.metadata.truncated).toBe(true);
   });
 
+  it.each([
+    "text/turtle",
+    "application/ld+json",
+  ])("bounds expanded terms while parsing %s", async (contentType) => {
+    const iri = `https://example.org/${"long".repeat(4096)}`;
+    const body =
+      contentType === "text/turtle"
+        ? `@prefix p: <${iri}> .\n${'<#s> p:name "a" .\n'.repeat(100)}"unterminated`
+        : `{"@context":{"name":"${iri}"},"@graph":[${Array.from(
+            { length: 100 },
+            (_, i) => `{"@id":"#${i}","name":"a"}`,
+          ).join(",")}]}`;
+    expect(Buffer.byteLength(body)).toBeLessThan(CAP);
+    const id = `${POD}data`;
+    const pod = makeFakePod({ [id]: { contentType, body } });
+    const result = await fetchDocument({ fetch: pod.fetch, podRoot: POD }, id);
+    expect(result.text).toBe("");
+    expect(result.metadata.truncated).toBe(true);
+  });
+
+  it("caps Turtle escaping even when parsed term bytes fit the budget", async () => {
+    const id = `${POD}data`;
+    const body = `<> <https://schema.org/text> "${"🌱".repeat(150_000)}" .`;
+    expect(Buffer.byteLength(body)).toBeLessThan(CAP);
+    const pod = makeFakePod({ [id]: { contentType: "text/turtle", body } });
+    const result = await fetchDocument({ fetch: pod.fetch, podRoot: POD }, id);
+    expect(result.text).toBe("");
+    expect(result.metadata.truncated).toBe(true);
+  });
+
   it.each([401, 403, 404, 500])("fails closed on HTTP %s", async (status) => {
     const pod = makeFakePod({
       [`${POD}data`]: { contentType: "text/plain", body: "private", status },

@@ -1,15 +1,11 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { parseRdf } from "@jeswr/fetch-rdf";
-import { serialize } from "@jeswr/rdf-serialize";
-import { NamedGraphDataset } from "@rdfjs/wrapper";
-import { DataFactory, Store } from "n3";
 import { requirePodScopedUrl, type SolidMcpConfig, scopedFetch } from "./auth.js";
+import { parseBoundedRdf, RdfLimitError, serializeBoundedTurtle } from "./bounded-rdf.js";
 import {
   decodePrefix,
   limitedBody,
   MAX_CONTENT_BYTES,
   mediaType,
-  normalizeLocalJsonLd,
   resourceTitle,
 } from "./content.js";
 import { RDF_MEDIA_TYPES } from "./pod.js";
@@ -59,25 +55,11 @@ export async function fetchDocument(config: SolidMcpConfig, id: string): Promise
     // A partial RDF input cannot safely be parsed; empty text is valid Turtle.
     if (truncated) return result;
     const decoded = decodePrefix(bytes, false);
-    const source = contentType === "application/ld+json" ? normalizeLocalJsonLd(decoded) : decoded;
-    const dataset = await parseRdf(
-      source,
-      contentType === "application/x-turtle" ? "text/turtle" : contentType,
-      { baseIRI: response.url || target },
-    );
-    // Turtle represents a graph, not a dataset. Use the typed wrapper's graph
-    // projection to render a union view without constructing RDF statements.
-    const view = new Store();
-    for (const graph of dataset.getGraphs(null, null, null)) {
-      view.addQuads([...new NamedGraphDataset(graph, dataset, DataFactory)]);
-    }
-    result.text = await serialize(view.getQuads(null, null, null, null), {
-      format: "text/turtle",
-      emptyAsEmptyString: false,
-    });
-    // Serialization can expand relative IRIs. Never emit broken partial Turtle.
-    if (Buffer.byteLength(result.text) > MAX_CONTENT_BYTES) {
-      result.text = "";
+    try {
+      const dataset = await parseBoundedRdf(decoded, contentType, response.url || target);
+      result.text = serializeBoundedTurtle(dataset);
+    } catch (error) {
+      if (!(error instanceof RdfLimitError)) throw error;
       result.metadata.truncated = true;
     }
   } else {

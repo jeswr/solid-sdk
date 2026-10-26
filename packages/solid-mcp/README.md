@@ -58,13 +58,14 @@ The shared discovery/scan limits default to depth 4, 500 distinct resources, and
 configuration to override them. Discovery, redirect hops, and hinted resources
 consume the same resource budget. A deadline returns the matches found so far;
 the exact search response has no additional completeness fields. Each scanned
-response is also limited to 1 MiB.
+response is also limited to 1 MiB. Direct Type Index instances are negotiated
+as RDF even when their URLs have no file extension.
 
 `fetch` accepts `{id}` (an absolute pod URL) and returns one MCP text block
 containing `{id,title,text,url,metadata}`. Titles use the decoded filename.
 Metadata contains `contentType`, `truncated`, and an optional `etag`. RDF is
-parsed using `@jeswr/fetch-rdf` and serialized as Turtle; `text/*` is returned as
-text. Named-graph RDF is rendered as a union graph (Turtle has no graph labels).
+parsed with bounded N3/JSON-LD parsers and serialized as Turtle; `text/*` is
+returned as text. Named-graph RDF is rendered as a union graph (Turtle has no graph labels).
 Other media types, including non-RDF `application/json`, return empty text
 and metadata without downloading the body.
 
@@ -73,6 +74,11 @@ UTF-8 prefix and `metadata.truncated: true` when capped. Oversized RDF returns
 empty text with that flag, since a partial document may be invalid RDF. Missing
 Content-Type is treated as binary. JSON-LD inline contexts are supported; remote
 contexts and `@import` are refused to prevent parser-initiated network requests.
+Parsing stops before storing more than 16,384 quads (including duplicate input
+statements), 1 MiB of expanded term values, or 1 MiB of term bytes across quads.
+The Turtle writer retains at most 1 MiB and stops as soon as its output exceeds
+that limit. These parsing budgets also apply to search profiles, Type Indexes,
+container listings, and literal reads; search skips documents that exceed them.
 All fetch URLs and redirect hops are validated against the configured pod scope.
 
 ## Links

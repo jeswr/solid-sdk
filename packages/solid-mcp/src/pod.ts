@@ -21,6 +21,7 @@ import {
   scopedFetch,
   writesEnabled,
 } from "./auth.js";
+import { fetchBoundedRdf } from "./bounded-rdf.js";
 import { resourceTitle } from "./content.js";
 import { SearchBudget, searchLimit } from "./search-budget.js";
 
@@ -135,8 +136,16 @@ function bareMediaType(header: string | null): string | undefined {
  * being in-pod.
  */
 export async function listContainer(config: SolidMcpConfig, url: string): Promise<PodChild[]> {
+  return containerChildren(config, url, fetchRdf);
+}
+
+async function containerChildren(
+  config: SolidMcpConfig,
+  url: string,
+  read: typeof fetchBoundedRdf,
+): Promise<PodChild[]> {
   const target = requirePodScopedUrl(config, url);
-  const { dataset } = await fetchRdf(target, { fetch: scopedFetch(config) });
+  const { dataset } = await read(target, { fetch: scopedFetch(config) });
   const container = new ContainerDataset(dataset, DataFactory).container;
   const children: PodChild[] = [];
   for (const r of container?.contains ?? []) {
@@ -301,6 +310,7 @@ async function seedContainers(
           q,
           matches,
           budget,
+          true,
         );
       }
     } catch {
@@ -317,10 +327,12 @@ async function matchChildLiteral(
   q: string,
   matches: RankedMatches,
   budget: SearchBudget,
+  directInstance = false,
 ): Promise<void> {
   // A container listing often does NOT advertise a child's mimeType, so we also
-  // try resources whose URL carries a known RDF file extension. Best-effort.
-  if (!(isRdfLike(child.mimeType) || hasRdfExtension(child.url))) return;
+  // try resources whose URL carries a known RDF file extension. Type Index
+  // instances are explicit discovery hints: negotiate RDF regardless of name.
+  if (!(directInstance || isRdfLike(child.mimeType) || hasRdfExtension(child.url))) return;
   const literalHit = await literalMatch(config, child.url, q);
   if (literalHit && budget.active) {
     matches.add({ url: child.url, name: child.name, snippet: `literal: ${literalHit}` }, 2);
@@ -352,7 +364,7 @@ async function scanContainers(
 
     let children: PodChild[];
     try {
-      children = await listContainer(config, url);
+      children = await containerChildren(config, url, fetchBoundedRdf);
     } catch {
       continue; // unreadable container — skip.
     }
@@ -467,7 +479,7 @@ async function literalMatch(
   }
   let dataset: import("n3").Store;
   try {
-    ({ dataset } = await fetchRdf(target, { fetch: scopedFetch(config) }));
+    ({ dataset } = await fetchBoundedRdf(target, { fetch: scopedFetch(config) }));
   } catch {
     return undefined;
   }
@@ -503,7 +515,7 @@ async function typeIndexContainers(config: SolidMcpConfig): Promise<string[]> {
   if (!webId) return [];
   const solidNs = "http://www.w3.org/ns/solid/terms#";
   const out = new Set<string>();
-  const { dataset: profile } = await fetchRdf(webId, { fetch: config.fetch });
+  const { dataset: profile } = await fetchBoundedRdf(webId, { fetch: config.fetch });
   const indexes = new Set<string>();
   for (const p of [`${solidNs}publicTypeIndex`, `${solidNs}privateTypeIndex`]) {
     for (const quad of profile.getQuads(null, DataFactory.namedNode(p), null, null)) {
@@ -518,7 +530,7 @@ async function typeIndexContainers(config: SolidMcpConfig): Promise<string[]> {
     try {
       // The index URL is in-pod (validated above); use scopedFetch so a redirect
       // out of the pod is still blocked (redirect-based SSRF guard).
-      const { dataset: ti } = await fetchRdf(index, { fetch: scopedFetch(config) });
+      const { dataset: ti } = await fetchBoundedRdf(index, { fetch: scopedFetch(config) });
       for (const p of [`${solidNs}instance`, `${solidNs}instanceContainer`]) {
         for (const quad of ti.getQuads(null, DataFactory.namedNode(p), null, null)) {
           if (quad.object.termType === "NamedNode") {

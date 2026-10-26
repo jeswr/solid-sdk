@@ -69,6 +69,78 @@ describe("one bounded search across discovery and scanning", () => {
     expect(hits.map((hit) => hit.url).sort()).toEqual([chat, note].sort());
   });
 
+  it("negotiates RDF for extensionless direct instances and skips non-RDF instances", async () => {
+    const note = `${POD}memory/123`;
+    const binary = `${POD}memory/456`;
+    const pod = makeFakePod({
+      [WEBID]: {
+        contentType: "text/turtle",
+        body: `<${WEBID}> <${SOLID}privateTypeIndex> <${INDEX}>.`,
+      },
+      [INDEX]: {
+        contentType: "text/turtle",
+        body: `<#r> <${SOLID}instance> <${note}>, <${binary}>.`,
+      },
+      [note]: { contentType: "text/turtle", body: '<> <https://schema.org/text> "avocado".' },
+      [binary]: { contentType: "image/png", body: "avocado" },
+      [POD]: { contentType: "text/turtle", body: containerTurtle(POD, []) },
+    });
+    const fetch = vi.fn(pod.fetch);
+    const hits = await search({ fetch, podRoot: POD, webId: WEBID }, "avocado");
+    expect(hits).toEqual([{ url: note, name: "123", snippet: "literal: avocado" }]);
+    expect(fetch.mock.calls.map(([url]) => url)).toEqual([WEBID, INDEX, note, binary, POD]);
+    for (const [, init] of fetch.mock.calls) {
+      expect(new Headers(init?.headers).get("accept")).toContain("text/turtle");
+    }
+  });
+
+  it.each([
+    "profile",
+    "index",
+    "container",
+    "literal",
+  ])("enforces expanded RDF budgets in the search %s read", async (stage) => {
+    const note = `${POD}note.ttl`;
+    const iri = `https://example.org/${"long".repeat(4096)}`;
+    const expansion = `@prefix p: <${iri}> .\n${'<#s> p:name "avocado" .\n'.repeat(100)}`;
+    const pod = makeFakePod({
+      [WEBID]: {
+        contentType: "text/turtle",
+        body: `${stage === "profile" ? expansion : ""}<${WEBID}> <${SOLID}publicTypeIndex> <${INDEX}>.`,
+      },
+      [INDEX]: {
+        contentType: "text/turtle",
+        body: `${stage === "index" ? expansion : ""}<#r> <${SOLID}instance> <${note}>.`,
+      },
+      [POD]: {
+        contentType: "text/turtle",
+        body:
+          stage === "container"
+            ? expansion + containerTurtle(POD, [{ name: "note.ttl" }])
+            : containerTurtle(POD, []),
+      },
+      [note]: {
+        contentType: "text/turtle",
+        body: stage === "literal" ? expansion : '<> <https://schema.org/text> "avocado".',
+      },
+    });
+    const fetch = vi.fn(pod.fetch);
+    const hits = await search(
+      { fetch, podRoot: POD, ...(stage === "container" ? {} : { webId: WEBID }) },
+      "avocado",
+    );
+    expect(hits).toEqual([]);
+    expect(fetch.mock.calls.map(([url]) => url)).toEqual(
+      stage === "profile"
+        ? [WEBID, POD]
+        : stage === "index"
+          ? [WEBID, INDEX, POD]
+          : stage === "container"
+            ? [POD]
+            : [WEBID, INDEX, note, POD],
+    );
+  });
+
   it("resolves redirected container children against the effective URL", async () => {
     const finalUrl = `${POD}actual/`;
     const child = `${finalUrl}match.ttl`;
