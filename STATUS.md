@@ -106,3 +106,33 @@ See `QUESTIONS.md`: details use a 360px persistent pane at ≥1024 and a Sheet b
 The base contained tokens but no DS-02 primitives or SDK usePreferences hook.
 The public frame exposes controlled preferences for future SDK integration; dev
 fixtures persist only in browser storage. No pod preferences implementation was added.
+
+## Revalidation — 2026-10-26
+
+The resumed lane started at `864f4f71` with all implementation commits present
+and a clean tree. Read the required specs, reference shell CSS and local skills;
+no additional implementation changes were needed. The final documentation commit
+records this verification. No dependencies were added during revalidation.
+
+Exact commands rerun:
+
+```sh
+pnpm --filter @jeswr/suite-ui run lint && pnpm --filter @jeswr/suite-ui run build && pnpm --filter @jeswr/suite-ui run typecheck && pnpm --filter @jeswr/suite-ui run test
+PATH="$PWD/node_modules/.bin:$PATH" pnpm --filter @jeswr/app-suite run lint && PATH="$PWD/node_modules/.bin:$PATH" pnpm --filter @jeswr/app-suite run build && PATH="$PWD/node_modules/.bin:$PATH" pnpm --filter @jeswr/app-suite run typecheck && PATH="$PWD/node_modules/.bin:$PATH" pnpm --filter @jeswr/app-suite run test
+pnpm run lint:root
+PATH="$PWD/node_modules/.bin:$PATH" TURBO_SCM_BASE=3696bed75683e5c7aa253ba8a7cc163f5b8a1e07 pnpm run gate
+PATH="$PWD/node_modules/.bin:$PATH" pnpm run gate:full
+pnpm --filter @jeswr/app-suite exec playwright test --list e2e/ds-04-shell.spec.ts
+git diff --check
+```
+
+PASS: both changed projects' lint/build/typecheck/tests (20 suite-ui tests;
+5,825 app-suite tests), root lint, affected gate (14/14 tasks, 10 cached),
+Playwright collection (102 tests), and whitespace validation. App lint retains
+the same 54 existing warnings. Full gate: FAIL at the same unrelated
+`@jeswr/federation-trust` characterization snapshot above (53 tests pass, 1 fails;
+204 successful tasks, 346 scheduled, 193 cached). No unrelated files were changed.
+
+Browser execution, screenshots and visual/complete browser axe verification remain
+for the dispatcher; none were attempted here. `roborev` remains unavailable.
+The conservative choices in `QUESTIONS.md` remain unchanged.
