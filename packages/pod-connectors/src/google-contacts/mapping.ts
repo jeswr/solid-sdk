@@ -51,6 +51,21 @@ export function birthday(date: GoogleBirthday["date"]): string | undefined {
   return year === 0 ? `--${suffix}` : `${String(year).padStart(4, "0")}-${suffix}`;
 }
 
+/** RFC 6068: encode address data once, retaining only the final @ as the separator. */
+function mailto(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  const at = value.lastIndexOf("@");
+  if (at <= 0 || at === value.length - 1 || /\p{Cc}/u.test(value)) return undefined;
+  try {
+    return safeIri(
+      `mailto:${encodeURIComponent(value.slice(0, at))}@${encodeURIComponent(value.slice(at + 1))}`,
+    );
+  } catch {
+    // A lone surrogate in an optional email must not abort the import.
+    return undefined;
+  }
+}
+
 export function personDocument(
   person: GooglePerson,
   id: string,
@@ -82,8 +97,7 @@ export function personDocument(
     new ContactName(`${url}#name`, dataset, DataFactory).parts = name;
   }
   for (const [index, email] of fields(person.emailAddresses).entries()) {
-    const value = text(email.value);
-    const iri = value && safeIri(`mailto:${value}`);
+    const iri = mailto(text(email.value));
     if (!iri) continue;
     const node = `${url}#email-${index}`;
     contact.emails.add(node);

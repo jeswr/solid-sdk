@@ -59,6 +59,31 @@ describe("Google Contacts mapping", () => {
     expect(mapped.dataset).not.toBe(doc.dataset);
   });
 
+  it.each([
+    ["what?@example.test", "what%3F@example.test"],
+    ["a&b@example.test", "a%26b@example.test"],
+    ["a%b@example.test", "a%25b@example.test"],
+    ["a%40b@example.test", "a%2540b@example.test"],
+    ["a#b@example.test", "a%23b@example.test"],
+    ["a/b@example.test", "a%2Fb@example.test"],
+    ['"a b"@example.test', "%22a%20b%22@example.test"],
+    ["a+b@example.test", "a%2Bb@example.test"],
+    ['"a,b;=c"@example.test', "%22a%2Cb%3B%3Dc%22@example.test"],
+    ['"a@b"@example.test', "%22a%40b%22@example.test"],
+    ["a@[192.0.2.1]", "a@%5B192.0.2.1%5D"],
+    ["a?subject=x&cc=other@example.test", "a%3Fsubject%3Dx%26cc%3Dother@example.test"],
+  ])("encodes reserved email characters without adding mailto recipients or headers: %s", (value, encoded) => {
+    const { doc } = personDocument({ emailAddresses: [{ value }] }, "c1", resolve);
+    const values = [...doc.dataset.match(null, DataFactory.namedNode(`${VCARD}value`), null)];
+    expect(values.map((quad) => [quad.object.termType, quad.object.value])).toEqual([
+      ["NamedNode", `mailto:${encoded}`],
+    ]);
+    const iri = new URL(`mailto:${encoded}`);
+    expect(iri.search).toBe("");
+    expect(iri.hash).toBe("");
+    expect(decodeURIComponent(iri.pathname)).toBe(value);
+  });
+
   it("retains unnamed people and skips malformed optional fields without constructing unsafe IRIs", () => {
     const person: GooglePerson = JSON.parse(
       JSON.stringify({
@@ -68,6 +93,10 @@ describe("Google Contacts mapping", () => {
           {},
           { value: " " },
           { value: "bad> . <x> <y> <z>" },
+          { value: "@example.test" },
+          { value: "missing-domain@" },
+          { value: "bad\ud800@example.test" },
+          { value: "bad\r\n@example.test" },
           { value: "safe@example.test" },
         ],
         phoneNumbers: [

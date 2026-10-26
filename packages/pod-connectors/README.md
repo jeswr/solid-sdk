@@ -97,14 +97,17 @@ are untrusted: RDF and malformed types are stored as `application/octet-stream`.
 follows every page, persisting only the final `nextSyncToken`. An expired token (HTTP
 410 or HTTP 400 with `EXPIRED_SYNC_TOKEN` in error details) discards partial pages and
 retries a full sync once. Source errors and missing final checkpoints cause no contact
-writes or deletions. Pod failures retain the previous checkpoint; writes across separate
+writes or deletions. The shared JSON byte cap and one run budget bound source responses,
+page requests and buffered people, including discarded pages before a full-sync retry.
+Pod failures retain the previous checkpoint; writes across separate
 documents are not transactional and a retry reapplies the source changes.
 
 The connector contains the SolidOS vCard layout: `contacts/index.ttl#this` is the
 `vcard:AddressBook`, `contacts/people.ttl` holds names and `vcard:inAddressBook` links,
 and `contacts/Person/<pathId>/index.ttl#this` holds each `vcard:Individual`. Names,
 emails, phones, addresses, organizations and birthdays use vCard predicates and named
-linked nodes where appropriate. Organization `jobDescription` maps to `vcard:role`, and
+linked nodes where appropriate. Email addresses are percent-encoded for `mailto:` URI syntax,
+preserving the address separator. Organization `jobDescription` maps to `vcard:role`, and
 `title` to `vcard:title`. Year-less birthdays use `xsd:gMonthDay`; invalid dates are omitted.
 Unusable phone IRIs retain their raw literal, and malformed optional fields are omitted.
 Malformed person ids count as skipped; nameless people retain an unnamed-contact label.
@@ -112,8 +115,10 @@ Each person document derives from its Google Contacts page. The Type Index regis
 only `vcard:AddressBook` for `contacts/`. No contacts sector constant exists in the current
 federation bridge, so its `vocabMap` preserves vCard without adding an alignment type.
 
-Incremental deletions remove person documents through `ctx.remove`; full resyncs also
-remove previously indexed people absent from the snapshot. Unchanged people survive
+Incremental deletions and validated `metadata.previousResourceNames` remove former person
+documents through conditional `ctx.remove` calls. Full resyncs list canonical person documents
+under `contacts/Person/` and remove those absent from the snapshot, recovering unindexed writes
+left by a failed run. Unchanged people survive
 increments, and `people.ttl` is replaced once per successful run. A missing local membership
 index forces a full sync. Synthetic fixtures, memory Pods and the sorted Turtle mapping
 snapshot exercise these paths without contacting Google.

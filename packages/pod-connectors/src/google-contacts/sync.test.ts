@@ -1,5 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { DataFactory, Writer } from "n3";
+import type { Term } from "@rdfjs/types";
+import { SetFrom, TermAs, TermFrom, TermWrapper } from "@rdfjs/wrapper";
+import { DataFactory, Store, Writer } from "n3";
 import { describe, expect, it, vi } from "vitest";
 import { runImport } from "../core/import-runner.js";
 import { createFetchPodWriter } from "../core/pod-writer.js";
@@ -26,6 +28,28 @@ const expired = {
     ],
   },
 };
+
+class Listing extends TermWrapper {
+  get children() {
+    return SetFrom.subjectPredicate(
+      this,
+      "http://www.w3.org/ns/ldp#contains",
+      TermAs.term,
+      TermFrom.itself,
+    );
+  }
+}
+
+async function listing(url: string, children: Term[]): Promise<string> {
+  const dataset = new Store();
+  const container = new Listing(url, dataset, DataFactory);
+  for (const child of children) container.children.add(child);
+  const writer = new Writer();
+  writer.addQuads([...dataset]);
+  return new Promise((resolve, reject) =>
+    writer.end((error, value) => (error ? reject(error) : resolve(value))),
+  );
+}
 
 function setup() {
   const pod = createMemoryPod();
@@ -134,6 +158,207 @@ describe("Google Contacts synchronization", () => {
     expect(new Headers(deletion?.[1]?.headers).get("if-match")).toMatch(/^"/);
     await run([route({ nextSyncToken: "empty-increment" })], next.state).result;
     expect(fn("c102", true)).toBe("Sam Example");
+  });
+
+  it.each([
+    false,
+    true,
+  ])("recovers unindexed person writes on the next full resync (expired token: %s)", async (hasCheckpoint) => {
+    const { run, pod, podFetch, podWriter, fn } = setup();
+    const initial = hasCheckpoint ? await run([route(CONNECTIONS)]).result : undefined;
+    const orphan = `${ROOT}${personSlug("orphan")}`;
+    const onState = vi.fn();
+    podFetch.mockImplementation(async (input, init) =>
+      String(input) === INDEX && init?.method === "PUT"
+        ? new Response(null, { status: 503 })
+        : pod.fetch(input, init),
+    );
+    await expect(
+      runImport({
+        adapter: googleContactsAdapter,
+        mode: "live",
+        podWriter,
+        state: initial?.state,
+        onState,
+        sourceAuth: {
+          fetch: fixtureFetch("google-contacts", [
+            route({
+              connections: [{ resourceName: "people/orphan" }],
+              nextSyncToken: "failed-write",
+            }),
+          ]),
+        },
+      }),
+    ).rejects.toMatchObject({ status: 503 });
+    expect(onState.mock.calls[0]?.[0].cursor).toBe(initial?.cursor);
+    expect(pod.get(orphan)).toBeDefined();
+    expect(fn("orphan", true)).toBeUndefined();
+    podFetch.mockImplementation(pod.fetch);
+    const full = route({ connections: [PEOPLE[1]], nextSyncToken: "recovered" });
+    await run(hasCheckpoint ? [route({}, 410), full] : [full], onState.mock.calls[0]?.[0]).result;
+    expect(pod.get(orphan)).toBeUndefined();
+    expect(fn("c102", true)).toBe("Sam Example");
+    const deletion = podFetch.mock.calls.find(
+      ([url, init]) => String(url) === orphan && init?.method === "DELETE",
+    );
+    expect(new Headers(deletion?.[1]?.headers).get("if-match")).toMatch(/^"/);
+  });
+
+  it("confines full-resync traversal to canonical person containers and their index documents", async () => {
+    const { run, pod, podFetch } = setup();
+    await run([route(CONNECTIONS)]).result;
+    const root = `${ROOT}contacts/Person/`;
+    const child = `${root}c101/`;
+    const foreign = "https://elsewhere.test/contacts/Person/a/";
+    const unmanaged = [
+      foreign,
+      `${root}a/b/`,
+      `${root}~ZZ/`,
+      `${root}./`,
+      `${root}../`,
+      `${root}not-container/index.ttl`,
+    ];
+    await pod.fetch(root, {
+      method: "PUT",
+      body: await listing(root, [
+        ...[child, `${root}missing/`, ...unmanaged].map(DataFactory.namedNode),
+        DataFactory.blankNode("foreign"),
+        DataFactory.literal(child),
+      ]),
+    });
+    await pod.fetch(child, {
+      method: "PUT",
+      body: await listing(child, [
+        ...[`${child}index.ttl`, `${child}other.ttl`, `${child}nested/`, foreign].map(
+          DataFactory.namedNode,
+        ),
+        DataFactory.blankNode("index"),
+        DataFactory.literal(`${child}index.ttl`),
+      ]),
+    });
+    const before = podFetch.mock.calls.length;
+    await run([route({ connections: [PEOPLE[1]], nextSyncToken: "confined" })]).result;
+    const calls = podFetch.mock.calls.slice(before);
+    for (const url of [...unmanaged, `${child}other.ttl`, `${child}nested/`])
+      expect(calls.some(([input]) => String(input) === url)).toBe(false);
+    expect(pod.get(`${child}index.ttl`)).toBeUndefined();
+    expect(pod.get(`${root}c102/index.ttl`)).toBeDefined();
+  });
+
+  it("removes former resource names on rename and then deletes the current identity", async () => {
+    const { run, pod, fn, podFetch } = setup();
+    const initial = await run([route(CONNECTIONS)]).result;
+    const renamed = await run(
+      [
+        route({ connections: [PEOPLE[0]], nextPageToken: "rename" }),
+        route({
+          connections: [
+            {
+              resourceName: "people/renamed",
+              metadata: {
+                previousResourceNames: ["people/c101", "people/renamed", "people/c101"],
+              },
+              names: [{ displayName: "Alex Renamed" }],
+            },
+          ],
+          nextSyncToken: "renamed",
+        }),
+      ],
+      initial.state,
+    ).result;
+    expect(fn("renamed", true)).toBe("Alex Renamed");
+    expect(fn("c101", true)).toBeUndefined();
+    expect(pod.get(`${ROOT}${personSlug("c101")}`)).toBeUndefined();
+    expect(fn("c102", true)).toBe("Sam Example");
+    const deletion = podFetch.mock.calls.find(
+      ([url, init]) => String(url) === `${ROOT}${personSlug("c101")}` && init?.method === "DELETE",
+    );
+    expect(new Headers(deletion?.[1]?.headers).get("if-match")).toMatch(/^"/);
+    await run(
+      [
+        route({
+          connections: [{ resourceName: "people/renamed", metadata: { deleted: true } }],
+          nextSyncToken: "deleted",
+        }),
+      ],
+      renamed.state,
+    ).result;
+    expect(pod.get(`${ROOT}${personSlug("renamed")}`)).toBeUndefined();
+    expect(fn("renamed", true)).toBeUndefined();
+    expect(fn("c101", true)).toBeUndefined();
+  });
+
+  it("validates former identifiers and encodes unusual ones before deleting", async () => {
+    const { run, pod, fn, podFetch } = setup();
+    const id = "../../odd/#?%~>";
+    const initial = await run([
+      route({ connections: [{ resourceName: `people/${id}` }], nextSyncToken: "initial" }),
+    ]).result;
+    const result = await run(
+      [
+        route({
+          connections: [
+            {
+              resourceName: "people/new",
+              metadata: {
+                previousResourceNames: [
+                  null,
+                  7,
+                  "",
+                  "elsewhere/x",
+                  "people/",
+                  "people/.",
+                  "people/..",
+                  "people/\ud800",
+                  `people/${id}`,
+                ],
+              },
+            },
+            { resourceName: "people/ignored", metadata: { previousResourceNames: "people/new" } },
+            { metadata: { previousResourceNames: ["people/new"] } },
+          ],
+          nextSyncToken: "renamed",
+        }),
+      ],
+      initial.state,
+    ).result;
+    expect(result.skipped).toBe(1);
+    expect(fn("new", true)).toBe("(unnamed contact)");
+    expect(pod.get(`${ROOT}${personSlug(id)}`)).toBeUndefined();
+    const deletes = podFetch.mock.calls.filter(([, init]) => init?.method === "DELETE");
+    expect(deletes.map(([url]) => String(url))).toEqual([`${ROOT}${personSlug(id)}`]);
+  });
+
+  it("retains the checkpoint and membership when deleting a former identity fails", async () => {
+    const { run, pod, podFetch, podWriter, fn } = setup();
+    const initial = await run([route(CONNECTIONS)]).result;
+    const onState = vi.fn();
+    const rename = route({
+      connections: [
+        { resourceName: "people/new", metadata: { previousResourceNames: ["people/c101"] } },
+      ],
+      nextSyncToken: "renamed",
+    });
+    podFetch.mockImplementation(async (input, init) =>
+      init?.method === "DELETE" ? new Response(null, { status: 412 }) : pod.fetch(input, init),
+    );
+    await expect(
+      runImport({
+        adapter: googleContactsAdapter,
+        mode: "live",
+        podWriter,
+        state: initial.state,
+        onState,
+        sourceAuth: { fetch: fixtureFetch("google-contacts", [rename]) },
+      }),
+    ).rejects.toMatchObject({ status: 412 });
+    expect(onState.mock.calls[0]?.[0].cursor).toBe(initial.cursor);
+    expect(fn("c101", true)).toBe("Dr Alex Morgan Example Jr");
+    expect(pod.get(`${ROOT}${personSlug("new")}`)).toBeUndefined();
+    podFetch.mockImplementation(pod.fetch);
+    await run([rename], onState.mock.calls[0]?.[0]).result;
+    expect(fn("c101", true)).toBeUndefined();
+    expect(fn("new", true)).toBe("(unnamed contact)");
   });
 
   it.each([

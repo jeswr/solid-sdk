@@ -1,7 +1,9 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import type { DatasetCore } from "@rdfjs/types";
+import { Container } from "@solid/object";
 import { DataFactory, Store } from "n3";
 import { createGoogleOAuthConfig, GOOGLE_SCOPES } from "../adapters/google/oauth.js";
+import { RunBudget, readJson } from "../core/budget.js";
 import { IntegrationSyncError } from "../core/errors.js";
 import { getJson } from "../core/fixture-fetch.js";
 import type { ImportContext, ImportOutcome, IntegrationAdapter } from "../core/types.js";
@@ -17,6 +19,7 @@ import { AddressBook, Contact, VCARD, vocabMap } from "./vocab-map.js";
 const ID = "google-contacts";
 const INDEX = "contacts/index.ttl";
 const PEOPLE = "contacts/people.ttl";
+const PERSON_ROOT = "contacts/Person/";
 const PERSON_FIELDS =
   "names,emailAddresses,phoneNumbers,addresses,organizations,birthdays,metadata";
 class ExpiredSyncToken extends IntegrationSyncError {}
@@ -42,6 +45,7 @@ export const googleContactsAdapter: IntegrationAdapter = {
   oauth: createGoogleOAuthConfig("contacts"),
   fixtures: () => GOOGLE_CONTACTS_FIXTURES,
   async import(ctx: ImportContext): Promise<ImportOutcome> {
+    const budget = new RunBudget(ID);
     ctx.progress({ label: "Fetching your contacts…", done: 0 });
     const existing = await ctx.read(PEOPLE);
     const bookIri = `${ctx.resolve(INDEX)}#this`;
@@ -49,7 +53,7 @@ export const googleContactsAdapter: IntegrationAdapter = {
     let syncToken = existing ? ctx.cursor : undefined;
     let batch: Awaited<ReturnType<typeof connections>>;
     try {
-      batch = await connections(ctx, syncToken);
+      batch = await connections(ctx, budget, syncToken);
     } catch (error) {
       if (
         !syncToken ||
@@ -61,10 +65,11 @@ export const googleContactsAdapter: IntegrationAdapter = {
         throw error;
       // No local mutations have happened: discard partial pages and retry a full snapshot once.
       syncToken = undefined;
-      batch = await connections(ctx);
+      batch = await connections(ctx, budget);
     }
     const current = syncToken ? new Map(previous) : new Map<string, string>();
     const changes = new Map<string, GooglePerson>();
+    const formerIds = new Set<string>();
     let skipped = 0;
     for (const person of batch.people) {
       const id = personId(person?.resourceName);
@@ -73,9 +78,22 @@ export const googleContactsAdapter: IntegrationAdapter = {
         continue;
       }
       changes.set(id, person);
+      const formerNames = person.metadata?.previousResourceNames;
+      if (Array.isArray(formerNames))
+        for (const name of formerNames) {
+          const formerId = personId(name);
+          if (formerId !== undefined && formerId !== id) formerIds.add(formerId);
+        }
     }
     const docs = [];
     const removed = new Set<string>();
+    // A former identity may also occur on an earlier page. Never recreate it after deletion.
+    for (const id of formerIds) {
+      changes.delete(id);
+      const slug = personSlug(id);
+      current.delete(slug);
+      removed.add(slug);
+    }
     for (const [id, person] of changes) {
       const slug = personSlug(id);
       if (person.metadata?.deleted === true) {
@@ -87,8 +105,12 @@ export const googleContactsAdapter: IntegrationAdapter = {
         current.set(slug, fn);
       }
     }
-    // A full resync also removes contacts no longer present in the source snapshot.
-    if (!syncToken) for (const slug of previous.keys()) if (!current.has(slug)) removed.add(slug);
+    // Enumerate actual documents too: a failed membership write may have left an unindexed person.
+    if (!syncToken) {
+      const stored = await managedPeople(ctx);
+      for (const slug of previous.keys()) stored.add(slug);
+      for (const slug of stored) if (!current.has(slug)) removed.add(slug);
+    }
     for (const slug of removed) {
       await ctx.read(slug); // retain its ETag for the delete port
       await ctx.remove(slug);
@@ -134,32 +156,53 @@ function members(
 ): Map<string, string> {
   const result = new Map<string, string>();
   if (!dataset) return result;
-  const root = ctx.resolve("contacts/Person/");
-  const suffix = "/index.ttl#this";
   for (const quad of dataset.match(
     null,
     DataFactory.namedNode(`${VCARD}inAddressBook`),
     DataFactory.namedNode(book),
   )) {
     const subject = quad.subject;
-    if (
-      subject.termType !== "NamedNode" ||
-      !subject.value.startsWith(root) ||
-      !subject.value.endsWith(suffix)
-    )
-      continue;
-    const part = subject.value.slice(root.length, -suffix.length);
-    if (!/^(?:[A-Za-z0-9_!.'()*-]|~[0-9A-F]{2})+$/.test(part) || part === "." || part === "..")
-      continue;
-    const slug = `contacts/Person/${part}/index.ttl`;
+    if (subject.termType !== "NamedNode" || !subject.value.endsWith("#this")) continue;
+    const slug = managedPersonSlug(ctx, subject.value.slice(0, -"#this".length));
+    if (!slug) continue;
     const contact = new Contact(subject.value, dataset, DataFactory);
     result.set(slug, contact.fn ?? "(unnamed contact)");
   }
   return result;
 }
 
+/** Canonical pathId segment only; shared by membership reads and container traversal. */
+function managedPersonSlug(ctx: ImportContext, iri: string): string | undefined {
+  const root = ctx.resolve(PERSON_ROOT);
+  const suffix = "/index.ttl";
+  if (!iri.startsWith(root) || !iri.endsWith(suffix)) return undefined;
+  const part = iri.slice(root.length, -suffix.length);
+  if (!/^(?:[A-Za-z0-9_!.'()*-]|~[0-9A-F]{2})+$/.test(part) || part === "." || part === "..")
+    return undefined;
+  return `${PERSON_ROOT}${part}/index.ttl`;
+}
+
+async function managedPeople(ctx: ImportContext): Promise<Set<string>> {
+  const result = new Set<string>();
+  const dataset = await ctx.read(PERSON_ROOT);
+  if (!dataset) return result;
+  const root = new Container(ctx.resolve(PERSON_ROOT), dataset, DataFactory);
+  for (const child of root.contains) {
+    if (child.termType !== "NamedNode" || !child.id.endsWith("/")) continue;
+    const slug = managedPersonSlug(ctx, `${child.id}index.ttl`);
+    if (!slug) continue;
+    const listing = await ctx.read(slug.slice(0, -"index.ttl".length));
+    if (!listing) continue;
+    const container = new Container(child.id, listing, DataFactory);
+    for (const resource of container.contains)
+      if (resource.termType === "NamedNode" && resource.id === ctx.resolve(slug)) result.add(slug);
+  }
+  return result;
+}
+
 async function connections(
   ctx: ImportContext,
+  budget: RunBudget,
   syncToken?: string,
 ): Promise<{ people: GooglePerson[]; cursor: string }> {
   const people: GooglePerson[] = [];
@@ -173,6 +216,7 @@ async function connections(
     });
     if (syncToken) params.set("syncToken", syncToken);
     if (pageToken) params.set("pageToken", pageToken);
+    budget.request();
     // getJson preserves the framework's 401/403/429/5xx errors. Inspect only the 400
     // body for Google's documented google.rpc.ErrorInfo reason; never match error text.
     const page = await getJson<GoogleConnectionsList>(
@@ -180,10 +224,12 @@ async function connections(
       async (input, init) => {
         const response = await ctx.api(input, init);
         if (response.status === 400) {
-          const body = (await response
-            .clone()
-            .json()
-            .catch(() => undefined)) as { error?: { details?: { reason?: string }[] } } | undefined;
+          const body = (await readJson(response, ID, PEOPLE_API).catch((error: unknown) => {
+            // Preserve the HTTP error mapping for invalid JSON; size and stream failures propagate.
+            if (error instanceof IntegrationSyncError && error.cause instanceof SyntaxError)
+              return undefined;
+            throw error;
+          })) as { error?: { details?: { reason?: string }[] } } | undefined;
           const details = body?.error?.details;
           if (
             Array.isArray(details) &&
@@ -206,7 +252,8 @@ async function connections(
       (page.nextPageToken !== undefined && typeof page.nextPageToken !== "string")
     )
       throw new IntegrationSyncError(ID, "Google Contacts returned an invalid connections page.");
-    people.push(...(page.connections ?? []));
+    budget.items(page.connections?.length ?? 0);
+    for (const person of page.connections ?? []) people.push(person);
     if (!page.nextPageToken) {
       if (typeof page.nextSyncToken !== "string" || !page.nextSyncToken.trim())
         throw new IntegrationSyncError(ID, "Google Contacts did not return a final sync token.");

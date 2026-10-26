@@ -40,7 +40,7 @@ export interface GoogleBirthday {
 }
 export interface GooglePerson {
   resourceName?: string;
-  metadata?: { deleted?: boolean };
+  metadata?: { deleted?: boolean; previousResourceNames?: string[] };
   names?: GoogleName[];
   emailAddresses?: GoogleContactValue[];
   phoneNumbers?: GooglePhone[];
