@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 "use client";
 
 import { useVirtualizer } from "@tanstack/react-virtual";
@@ -76,7 +77,7 @@ export function FileGrid<T>({
   }, [virtual, metrics.height, columns]);
   const content = hasCollectionContent(surface.state, items.length);
   return (
-    <div className="suite-collection" data-collection="grid">
+    <div ref={navigation.collection} className="suite-collection" data-collection="grid">
       <div className="suite-collection-toolbar">
         <button
           type="button"

@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 "use client";
 
 import { defaultRangeExtractor } from "@tanstack/react-virtual";
@@ -13,7 +14,7 @@ export function isInteractiveDescendant(event: {
   const control =
     event.target instanceof Element
       ? event.target.closest(
-          'button, a, input, select, textarea, [role="menuitem"], [contenteditable], [data-row-interactive], [role="button"], [role="link"], [role="combobox"], [tabindex]',
+          'button, a, input, select, textarea, summary, details > summary, [role="menuitem"], [contenteditable], [data-row-interactive], [role="button"], [role="link"], [role="combobox"], [tabindex]',
         )
       : null;
   return control !== null && control !== event.currentTarget;
@@ -86,13 +87,22 @@ export function useCollectionNavigation({
   const [storedKey, setKey] = useState<string | undefined>(keys[0]);
   const activeKey = storedKey !== undefined && keys.includes(storedKey) ? storedKey : keys[0];
   const activeIndex = activeKey === undefined ? -1 : keys.indexOf(activeKey);
+  const collection = useRef<HTMLDivElement>(null);
   const elements = useRef(new Map<string, HTMLElement>());
   const pendingFocus = useRef<string | null>(null);
   const hadFocus = useRef(false);
 
   // Restore focus when filtering/removal or responsive card reparenting unmounts its DOM node.
   useLayoutEffect(() => {
-    if (!hadFocus.current || activeKey === undefined || columns < 1) return;
+    if (!hadFocus.current) return;
+    if (
+      document.activeElement !== document.body &&
+      !collection.current?.contains(document.activeElement)
+    ) {
+      hadFocus.current = false;
+      return;
+    }
+    if (activeKey === undefined || columns < 1) return;
     if (activeKey !== storedKey) {
       scrollToIndex(0);
       elements.current.get(activeKey)?.focus({ preventScroll: true });
@@ -163,6 +173,7 @@ export function useCollectionNavigation({
   }
 
   return {
+    collection,
     activeKey,
     // Keep the focused item mounted when a pointer scroll moves it outside the viewport.
     rangeExtractor: (range: Parameters<typeof defaultRangeExtractor>[0]) => {

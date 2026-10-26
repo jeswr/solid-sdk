@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -96,6 +97,7 @@ function Fixture({
   return (
     <main>
       <h1>Files</h1>
+      <input aria-label="Search" />
       {kind === "table" ? <DataTable {...props} columns={columns} /> : <FileGrid {...props} />}
       <output aria-label="Selection">{[...selection.selectedKeys].join(",")}</output>
     </main>
@@ -163,6 +165,25 @@ for (const kind of ["table", "grid"] as const) {
       rerender(<Fixture kind={kind} data={[items[2] as Item]} />);
       expect(screen.getByRole(itemRole, { name: "Charlie" }).tabIndex).toBe(0);
       expect(document.activeElement?.getAttribute("aria-label")).toBe("Charlie");
+    });
+    it("keeps focus on Search when results arrive after an empty collection", () => {
+      const { rerender } = render(<Fixture kind={kind} />);
+      act(() => screen.getByRole(itemRole, { name: "Beta" }).focus());
+      rerender(<Fixture kind={kind} data={[]} />);
+      expect(document.activeElement).toBe(document.body);
+      const search = screen.getByRole("textbox", { name: "Search" });
+      act(() => search.focus());
+      rerender(<Fixture kind={kind} data={[items[0] as Item]} />);
+      expect(screen.getByRole(itemRole, { name: "Alpha" }).tabIndex).toBe(0);
+      expect(document.activeElement).toBe(search);
+    });
+    it("restores focus after an empty collection when the removed item still owns focus", () => {
+      const { rerender } = render(<Fixture kind={kind} />);
+      act(() => screen.getByRole(itemRole, { name: "Beta" }).focus());
+      rerender(<Fixture kind={kind} data={[]} />);
+      expect(document.activeElement).toBe(document.body);
+      rerender(<Fixture kind={kind} data={[items[0] as Item]} />);
+      expect(document.activeElement).toBe(screen.getByRole(itemRole, { name: "Alpha" }));
     });
     it("renders actual component DOM with no serious or critical axe violations", async () => {
       const { container } = render(<Fixture kind={kind} />);
@@ -398,6 +419,48 @@ it.each([
 });
 
 for (const kind of ["table", "grid"] as const) {
+  it.each(["Enter", " "])(`${kind} lets native summaries own %j and disclosure clicks`, (key) => {
+    const controls = (item: Item) => (
+      <details>
+        <summary>
+          <span>More about {item.name}</span>
+        </summary>
+        Extra metadata
+      </details>
+    );
+    const props = { items, getKey, getLabel, label: "Files", onOpen, onDetails };
+    render(
+      kind === "table" ? (
+        <DataTable
+          {...props}
+          columns={[
+            columns[0] as DataColumn<Item>,
+            { ...(columns[1] as DataColumn<Item>), render: controls },
+          ]}
+        />
+      ) : (
+        <FileGrid {...props} renderMetadata={controls} />
+      ),
+    );
+    for (const name of ["Alpha", "Beta"])
+      fireEvent.click(screen.getByRole("checkbox", { name: `Select ${name}` }));
+    const label = screen.getByText("More about Alpha");
+    const summary = label.closest("summary") as HTMLElement;
+    act(() => summary.focus());
+    // jsdom does not synthesize a summary's keyboard click; verify the native default is allowed.
+    for (const target of [summary, label]) expect(fireEvent.keyDown(target, { key })).toBe(true);
+    expect(onOpen).not.toHaveBeenCalled();
+    expect(onDetails).not.toHaveBeenCalled();
+    fireEvent.click(label);
+    expect(label.closest("details")?.open).toBe(true);
+    for (const name of ["Alpha", "Beta"])
+      expect(
+        screen
+          .getByRole(kind === "table" ? "row" : "gridcell", { name })
+          .getAttribute("aria-selected"),
+      ).toBe("true");
+  });
+
   it(`${kind} preserves selection for clicks inside every interactive descendant`, async () => {
     const user = userEvent.setup();
     const controls = (item: Item) =>

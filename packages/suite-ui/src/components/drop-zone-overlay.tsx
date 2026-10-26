@@ -32,16 +32,22 @@ export function DropZoneOverlay({
   const filesInput = useRef<HTMLInputElement>(null);
   const folderInput = useRef<HTMLInputElement>(null);
   const previousFocus = useRef<HTMLElement | null>(null);
+  const feedback = useRef<HTMLDivElement>(null);
   const loadingFeedback = useRef<HTMLDivElement>(null);
   const retry = useRef<HTMLButtonElement>(null);
   const id = useId();
   useLayoutEffect(() => {
+    // Removing the focused feedback node returns focus to body during this commit.
+    const ownsFocus =
+      document.activeElement === document.body ||
+      feedback.current?.contains(document.activeElement);
     if (reading) loadingFeedback.current?.focus();
-    else if (failed) retry.current?.focus();
-    else {
+    else if (failed) {
+      if (ownsFocus) retry.current?.focus();
+    } else {
       const previous = previousFocus.current;
       previousFocus.current = null;
-      if (previous?.isConnected && !previous.closest("[inert]")) previous.focus();
+      if (ownsFocus && previous?.isConnected && !previous.closest("[inert]")) previous.focus();
     }
   }, [reading, failed]);
   const reset = () => {
@@ -117,7 +123,10 @@ export function DropZoneOverlay({
         );
       }}
       onKeyDown={(event) => {
-        if (event.key === "Escape") reset();
+        if (event.key === "Escape") {
+          reset();
+          setFailed(false);
+        }
       }}
     >
       {/* Pickers stay outside the inert region so Retry can still open them. */}
@@ -177,7 +186,7 @@ export function DropZoneOverlay({
         )}
       </div>
       {(reading || failed) && (
-        <div className="su-drop-feedback">
+        <div ref={feedback} className="su-drop-feedback">
           {reading ? (
             <SurfaceFeedback ref={loadingFeedback} tabIndex={-1} state={{ status: "loading" }} />
           ) : (
@@ -190,6 +199,9 @@ export function DropZoneOverlay({
                 onClick={() => filesInput.current?.click()}
               >
                 Choose files again
+              </button>
+              <button className="su-button" type="button" onClick={() => setFailed(false)}>
+                Dismiss
               </button>
             </div>
           )}

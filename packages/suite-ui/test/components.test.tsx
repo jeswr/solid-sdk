@@ -231,6 +231,96 @@ describe("async feedback", () => {
     }
 });
 describe("DropZoneOverlay", () => {
+  for (const failure of ["read", "callback"] as const) {
+    it.each([
+      "Dismiss",
+      "Escape",
+    ])(`restores browsing with %s after a ${failure} failure and cancelled retry picker`, async (dismiss) => {
+      const user = userEvent.setup();
+      const onFiles = vi.fn().mockRejectedValue(new Error("callback failed"));
+      const openFolder = vi.fn();
+      render(
+        <DropZoneOverlay folderName="Projects" onFiles={onFiles}>
+          <button type="button" onClick={openFolder}>
+            Open folder
+          </button>
+        </DropZoneOverlay>,
+      );
+      const action = screen.getByRole("button", { name: "Open folder" });
+      action.focus();
+      const picker = screen.getByLabelText("Choose files");
+      if (failure === "read") {
+        fireEvent.drop(screen.getByRole("region"), {
+          dataTransfer: {
+            types: ["Files"],
+            files: [],
+            items: [
+              {
+                kind: "file",
+                getAsFile: () => null,
+                webkitGetAsEntry: () => ({
+                  name: "one.txt",
+                  isFile: true,
+                  isDirectory: false,
+                  file: (_success: (file: File) => void, reject: (error: DOMException) => void) =>
+                    reject(new DOMException("read denied")),
+                }),
+              },
+            ],
+          },
+        });
+      } else {
+        fireEvent.change(picker, { target: { files: [new File(["a"], "one.txt")] } });
+      }
+      const retry = await screen.findByRole("button", { name: "Choose files again" });
+      expect(document.activeElement).toBe(retry);
+      expect(action.closest("[inert]")).not.toBeNull();
+      expect(onFiles).toHaveBeenCalledTimes(failure === "read" ? 0 : 1);
+      for (const label of ["Choose files", "Choose folder"])
+        expect(screen.getByLabelText(label).closest("[inert]")).toBeNull();
+      const choose = vi.spyOn(picker, "click");
+      await user.click(retry);
+      expect(choose).toHaveBeenCalledOnce();
+      fireEvent(picker, new Event("cancel", { bubbles: true }));
+      if (dismiss === "Escape") await user.keyboard("{Escape}");
+      else await user.click(screen.getByRole("button", { name: "Dismiss" }));
+      expect(screen.queryByRole("alert")).toBeNull();
+      expect(action.closest("[inert]")).toBeNull();
+      expect(document.activeElement).toBe(action);
+      await user.keyboard("{Enter}");
+      expect(openFolder).toHaveBeenCalledOnce();
+    });
+  }
+
+  it.each([
+    "success",
+    "failure",
+  ])("keeps outside focus when ingestion settles with %s", async (outcome) => {
+    let settle = () => {};
+    const pending = new Promise<void>((resolve, reject) => {
+      settle = outcome === "success" ? resolve : () => reject(new Error("callback failed"));
+    });
+    render(
+      <>
+        <button type="button">Search</button>
+        <DropZoneOverlay folderName="Projects" onFiles={() => pending}>
+          <button type="button">Open folder</button>
+        </DropZoneOverlay>
+      </>,
+    );
+    screen.getByRole("button", { name: "Open folder" }).focus();
+    fireEvent.change(screen.getByLabelText("Choose files"), {
+      target: { files: [new File(["a"], "one.txt")] },
+    });
+    expect(document.activeElement).toBe(screen.getByRole("status", { name: "Loading" }));
+    const outside = screen.getByRole("button", { name: "Search" });
+    outside.focus();
+    await act(async () => settle());
+    expect(screen.getByRole("region").getAttribute("aria-busy")).toBe("false");
+    expect(Boolean(screen.queryByRole("alert"))).toBe(outcome === "failure");
+    expect(document.activeElement).toBe(outside);
+  });
+
   it("makes covered controls inert and focuses the loading status until ingestion finishes", async () => {
     const user = userEvent.setup();
     let finish = () => {};

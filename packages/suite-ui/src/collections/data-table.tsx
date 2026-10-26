@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 "use client";
 
 import {
@@ -187,7 +188,7 @@ export function DataTable<T>({
   const content = hasCollectionContent(surface.state, items.length);
 
   return (
-    <div className="suite-collection" data-collection="table">
+    <div ref={navigation.collection} className="suite-collection" data-collection="table">
       <div className="suite-collection-toolbar">
         <details className="suite-column-options">
           <summary>Columns</summary>
