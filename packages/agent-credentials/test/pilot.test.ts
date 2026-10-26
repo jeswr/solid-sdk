@@ -1,5 +1,6 @@
 // biome-ignore-all lint/style/useNodejsImportProtocol: agent layer requires bare module specifiers
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /**
  * Credential helper — tests against a LOCAL fake OAuth provider (injected transport; signed ID
  * tokens from a key generated here). No real consent, token exchange or provider call happens:
@@ -27,6 +28,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vite
 import { main } from "../src/cli.js";
 import { accessToken, helperExchange, login } from "../src/operations.js";
 import { loadProviderConfig } from "../src/providers/credentials.js";
+import { googleFreeBusy } from "../src/providers/google.js";
 import { GOOGLE, MICROSOFT, type Transport, verifyIdentity } from "../src/providers.js";
 import { CredentialStore, type Grant, HelperError, writeFully } from "../src/store.js";
 
@@ -121,7 +123,18 @@ class FakeProvider {
     if (this.down) return json(503, { error: "temporarily_unavailable" });
     const u = new URL(url);
     if (url === GOOGLE.jwks || u.pathname.endsWith("/discovery/v2.0/keys"))
-      return json(200, { keys: [publicJwk] });
+      return json(200, {
+        keys: [
+          {
+            ...publicJwk,
+            ...(url === GOOGLE.jwks
+              ? {}
+              : {
+                  issuer: `${MICROSOFT.authority}/{tenantid}/v2.0`,
+                }),
+          },
+        ],
+      });
     if (url === GOOGLE.token || u.pathname.endsWith("/oauth2/v2.0/token")) {
       const f = new URLSearchParams(body);
       if (f.get("client_id") !== this.clientId) return json(400, { error: "invalid_client" });
@@ -290,11 +303,11 @@ const secretsIn = (fake: FakeProvider, grant?: Grant) => [
 const grantFile = () => join(dir, "grants", "personal.json");
 const readGrant = () => JSON.parse(readFileSync(grantFile(), "utf8")) as Grant;
 /** A GET with an explicit Host header (fetch does not allow setting one). */
-const rawGet = (url: string, host: string) =>
+const rawGet = (url: string, host: string, target?: string) =>
   new Promise<number>((resolve, reject) => {
     const u = new URL(url);
     const req = httpRequest(
-      { host: u.hostname, port: u.port, path: u.pathname + u.search, headers: { host } },
+      { host: u.hostname, port: u.port, path: target ?? u.pathname + u.search, headers: { host } },
       (res) => {
         res.resume();
         resolve(res.statusCode ?? 0);
@@ -366,6 +379,8 @@ describe("Google login (installed-app loopback + PKCE + OIDC)", () => {
     const { result } = await browserLogin(fake, "personal", async (url) => {
       const a = fake.authorize(url);
       const base = a.redirectUri;
+      statuses.push(await rawGet(base, new URL(base).host, "http://[invalid"));
+      expect(new CredentialStore(dir).grant("personal")).toBeUndefined();
       statuses.push((await loopback(`${base}/?code=${a.code}&state=forged`)).status);
       statuses.push((await loopback(`${base}/?code=${a.code}`)).status);
       statuses.push((await loopback(`${base}/other?code=${a.code}&state=${a.state}`)).status);
@@ -373,7 +388,7 @@ describe("Google login (installed-app loopback + PKCE + OIDC)", () => {
       statuses.push((await loopback(`${base}/?code=${a.code}&state=${a.state}`)).status);
     });
     await expect(result).resolves.toMatchObject({ account: { username: ACCOUNT } });
-    expect(statuses).toEqual([400, 400, 404, 404, 200]);
+    expect(statuses).toEqual([400, 400, 400, 404, 404, 200]);
   });
   it("a denied consent, a timeout or an unreachable provider store nothing and close the listener", async () => {
     const fake = await setupGoogle();
@@ -455,6 +470,40 @@ describe("helper token mode (the action contract)", () => {
     store: new CredentialStore(dir),
     transport: fake.transport,
     now,
+  });
+  it("supplies a normal calendar login grant to the Google freeBusy adapter", async () => {
+    const fake = await setupGoogle();
+    await (await browserLogin(fake)).result;
+    const timeWindow = { start: "2026-10-20T00:00:00Z", end: "2026-10-21T00:00:00Z" };
+    const transport = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            timeMin: timeWindow.start,
+            timeMax: timeWindow.end,
+            calendars: { primary: { busy: [] } },
+          }),
+          { headers: { "content-type": "application/json" } },
+        ),
+    );
+    const result = await googleFreeBusy(
+      {
+        mode: "fixture",
+        transport,
+        tokens: {
+          getAccessToken: async (req) => {
+            const answer = await helperExchange(deps(fake), "personal", JSON.stringify(req));
+            expect(answer.exit).toBe(0);
+            const value = JSON.parse(answer.stdout as string);
+            return { token: value.access_token, grantedScopes: value.scope.split(" ") };
+          },
+        },
+      },
+      { connectionId: "acct-google", calendarIds: ["primary"], window: timeWindow },
+      () => now().toISOString(),
+    );
+    expect(result.get("primary")).toMatchObject({ ok: true, busy: [] });
+    expect(transport).toHaveBeenCalledOnce();
   });
   it("answers from the cached token, refreshes after expiry, and checks the request against the profile", async () => {
     const fake = await setupGoogle();
@@ -712,6 +761,18 @@ describe("private store and human-facing commands", () => {
   it("logout (no --revoke) forgets the local grant without any provider call; provider-config is a valid, secret-free action config", async () => {
     const fake = await setupGoogle();
     await (await browserLogin(fake)).result;
+    const store = new CredentialStore(dir);
+    const calendar = store.profile("personal");
+    expect(calendar).toBeDefined();
+    for (const resource of ["mail", "teams"] as const) {
+      store.putProfile({ ...fixtureValue(calendar), name: `a-${resource}`, resource });
+    }
+    store.putProfile({
+      ...fixtureValue(calendar),
+      name: "a-send",
+      purpose: "send",
+      resource: "mail",
+    });
     const out = join(dir, "..", "providers.json");
     const pc = await run(fake, "provider-config", "--out", out);
     expect(pc.code, pc.all()).toBe(0);
@@ -1247,7 +1308,17 @@ it("refuses signed tokens with non-string nonce, missing identity claims and a c
     createdAt: now().toISOString(),
   };
   const t = Math.floor(NOW0 / 1000);
-  const keys: Transport = async () => new Response(JSON.stringify({ keys: [publicJwk] }));
+  const keys: Transport = async () =>
+    new Response(
+      JSON.stringify({
+        keys: [
+          {
+            ...publicJwk,
+            issuer: `${MICROSOFT.authority}/{tenantid}/v2.0`,
+          },
+        ],
+      }),
+    );
   const sign = (claims: Record<string, unknown>, issuer: string) =>
     new SignJWT(claims)
       .setProtectedHeader({ alg: "RS256", kid: "fixture-1" })
@@ -1325,3 +1396,69 @@ it("refuses signed tokens with non-string nonce, missing identity claims and a c
 });
 
 import { fixtureValue } from "./fixture.js";
+
+it("enforces Microsoft signing-key issuers, including tenant templates, before selecting a key", async () => {
+  const issuer = `${MICROSOFT.authority}/${MS_WORK_TID}/v2.0`;
+  const profile = {
+    version: 1 as const,
+    name: "fixture",
+    provider: "microsoft" as const,
+    purpose: "read" as const,
+    resource: "calendar" as const,
+    connectionId: "owner",
+    account: ACCOUNT,
+    inventory: false,
+    createdAt: now().toISOString(),
+    microsoft: { accountType: "work-or-school" as const, tenant: "organizations" as const },
+  };
+  const token = await new SignJWT({
+    sub: "fixture",
+    oid: "fixture-oid",
+    tid: MS_WORK_TID,
+    preferred_username: ACCOUNT,
+    nonce: "nonce",
+  })
+    .setProtectedHeader({ alg: "RS256", kid: publicJwk.kid })
+    .setIssuer(issuer)
+    .setAudience(MS_CLIENT)
+    .setIssuedAt(NOW0 / 1000)
+    .setExpirationTime(NOW0 / 1000 + 3600)
+    .sign(signingKey);
+  const verify = (keys: unknown[]) =>
+    verifyIdentity(
+      async () => new Response(JSON.stringify({ keys })),
+      profile,
+      { clientId: MS_CLIENT },
+      token,
+      "nonce",
+      undefined,
+      now(),
+    );
+  for (const allowed of [issuer, `${MICROSOFT.authority}/{tenantid}/v2.0`])
+    await expect(verify([{ ...publicJwk, issuer: allowed }])).resolves.toMatchObject({
+      subject: "fixture-oid",
+      tenant: MS_WORK_TID,
+    });
+  for (const restricted of [
+    undefined,
+    7,
+    "",
+    `${MICROSOFT.authority}/${MICROSOFT.CONSUMERS_TID}/v2.0`,
+    "https://evil.example/{tenantid}/v2.0",
+    `${MICROSOFT.authority}/{tenantid}/v1.0`,
+  ]) {
+    // An unrelated permitted key must not authorize the restricted signing key.
+    await expect(
+      verify([
+        { ...publicJwk, issuer: restricted },
+        { ...publicJwk, kid: "other", issuer },
+      ]),
+    ).rejects.toMatchObject({ code: "account" });
+  }
+  await expect(
+    verify([
+      { ...publicJwk, issuer: "https://evil.example/{tenantid}/v2.0" },
+      { ...publicJwk, issuer },
+    ]),
+  ).resolves.toMatchObject({ subject: "fixture-oid" });
+});

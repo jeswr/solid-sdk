@@ -1,5 +1,6 @@
 // biome-ignore-all lint/style/useNodejsImportProtocol: agent layer requires bare module specifiers
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /**
  * awp-credentials — the provider credential helper (docs/PROVIDER-SETUP.md).
  *
@@ -514,7 +515,10 @@ async function run(
         const cli = fileURLToPath(import.meta.url);
         const accounts = store
           .profiles()
-          .filter((name) => store.profile(name)?.purpose === "read")
+          .filter((name) => {
+            const p = store.profile(name) as Profile;
+            return p.purpose === "read" && p.resource === "calendar";
+          })
           .map((name) => {
             const p = store.profile(name) as Profile;
             const args = [cli, "--dir", store.dir, "token", "--profile", name];

@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import type { Transport } from "../providers.js";
 import { type AccessTokenProvider, CredentialError, type ProviderFamily } from "./credentials.js";
 /**
@@ -237,7 +238,16 @@ export function zonedToUtcChecked(
   };
   const guess = zonedToUtc(date, minutes, timeZone);
   if (!matches(guess)) return undefined;
-  const candidates = [guess - 3_600_000, guess, guess + 3_600_000].filter(matches);
+  const wanted = Date.parse(`${date}T00:00:00Z`) + minutes * 60_000;
+  // Sample both sides of the transition and derive candidates from the actual offsets.
+  // DST changes need not be one hour (Lord Howe changes by thirty minutes).
+  const candidates = [guess - 86_400_000, guess, guess + 86_400_000]
+    .map((sample) => {
+      const p = localParts(new Date(sample), timeZone);
+      const local = Date.parse(`${p.date}T00:00:00Z`) + p.minutes * 60_000;
+      return wanted - (local - sample);
+    })
+    .filter(matches);
   return prefer === "earliest" ? Math.min(...candidates) : Math.max(...candidates);
 }
 

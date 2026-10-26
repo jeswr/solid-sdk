@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /**
  * Google Calendar availability via `freeBusy.query` (one request for up to 50 calendar IDs of one
  * account). https://developers.google.com/workspace/calendar/api/v3/reference/freebusy/query
@@ -73,7 +74,7 @@ export async function googleFreeBusy(
       env,
       "google",
       input.connectionId,
-      [GOOGLE_MIN_SCOPE],
+      ["https://www.googleapis.com/auth/calendar.readonly"],
       GOOGLE_ACCEPTED_SCOPES,
     );
     const body = await fetchJson(

@@ -1,5 +1,6 @@
 // biome-ignore-all lint/style/useNodejsImportProtocol: agent layer requires bare module specifiers
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /**
  * The credential helper's operations. Only `login` opens a listener (and, with `--open`, a
  * browser); nothing else ever starts a sign-in. `accessToken` is the one place a token is
@@ -101,7 +102,13 @@ function awaitCallback(
       res.end(text);
     };
     const handle = (req: IncomingMessage, res: ServerResponse) => {
-      const url = new URL(req.url ?? "/", "http://callback.invalid");
+      let url: URL;
+      try {
+        url = new URL(req.url ?? "/", "http://callback.invalid");
+      } catch {
+        page(res, 400, "Malformed sign-in response; it was ignored.");
+        return;
+      }
       if (
         done ||
         req.method !== "GET" ||

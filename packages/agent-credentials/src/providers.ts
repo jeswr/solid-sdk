@@ -1,5 +1,6 @@
 // biome-ignore-all lint/style/useNodejsImportProtocol: agent layer requires bare module specifiers
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /**
  * Google and Microsoft specifics for the credential helper: FIXED official endpoints, the scopes
  * requested and why, OIDC ID-token verification, token exchange/refresh and the explicit
@@ -63,10 +64,25 @@ export async function call(
   }
   let text: string;
   try {
-    const buf = await res.arrayBuffer();
-    if (buf.byteLength > MAX_BODY)
-      throw new HelperError("unavailable", `${what}: answer too large`);
-    text = new TextDecoder().decode(buf);
+    if (!res.body) throw new Error("missing response body");
+    const reader = res.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let size = 0;
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        size += value.byteLength;
+        if (size > MAX_BODY) {
+          await reader.cancel();
+          throw new HelperError("unavailable", `${what}: answer too large`);
+        }
+        chunks.push(value);
+      }
+      text = new TextDecoder().decode(Buffer.concat(chunks));
+    } finally {
+      reader.releaseLock();
+    }
   } catch (error) {
     if (error instanceof HelperError) throw error;
     throw new HelperError("unavailable", `${what}: the answer could not be read`);
@@ -393,11 +409,21 @@ export async function verifyIdentity(
   const keys = jwksAnswer.safeParse(body);
   if (status !== 200 || !keys.success)
     throw new HelperError("unavailable", "the provider's signing keys could not be read");
+  // Microsoft keys are scoped to their issuer (possibly a tenant-independent template).
+  // Filter before jose selects a key: jose itself ignores this Microsoft-specific metadata.
+  const eligibleKeys =
+    p.provider === "microsoft"
+      ? keys.data.keys.filter(
+          (key) =>
+            typeof key.issuer === "string" &&
+            key.issuer.replaceAll("{tenantid}", String(unverified.tid)) === issuer[0],
+        )
+      : keys.data.keys;
   let claims: JWTPayload;
   try {
     ({ payload: claims } = await jwtVerify(
       idToken,
-      createLocalJWKSet(keys.data as Parameters<typeof createLocalJWKSet>[0]),
+      createLocalJWKSet({ keys: eligibleKeys } as Parameters<typeof createLocalJWKSet>[0]),
       {
         issuer,
         audience: client.clientId,

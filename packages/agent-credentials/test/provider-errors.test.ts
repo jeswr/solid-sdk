@@ -1,5 +1,6 @@
 // biome-ignore-all lint/style/useNodejsImportProtocol: agent layer requires bare module specifiers
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { mkdtempSync, rmSync, writeFileSync } from "fs";
 import type { JWTPayload } from "jose";
 import { tmpdir } from "os";
@@ -727,3 +728,111 @@ it("refuses malformed calendar pages, intervals, encoded paging paths and absent
 });
 
 import { fixtureValue } from "./fixture.js";
+
+it("bounds streamed OAuth answers before EOF and cancels as soon as the limit is exceeded", async () => {
+  const max = 256 * 1024;
+  let pulls = 0;
+  const cancel = vi.fn();
+  const response = new Response(
+    new ReadableStream<Uint8Array>(
+      {
+        pull(controller) {
+          pulls++;
+          controller.enqueue(new Uint8Array(pulls === 1 ? max : 1));
+        },
+        cancel,
+      },
+      { highWaterMark: 0 },
+    ),
+  );
+  await expect(call(async () => response, GOOGLE.token, {}, "test")).rejects.toThrow(/too large/);
+  expect(pulls).toBe(2);
+  expect(cancel).toHaveBeenCalledOnce();
+  expect(response.body?.locked).toBe(false);
+});
+it("accepts the exact OAuth body limit and decodes UTF-8 across chunk boundaries", async () => {
+  const payload = JSON.stringify({ message: "é", padding: "x".repeat(256 * 1024 - 29) });
+  const bytes = new TextEncoder().encode(payload);
+  expect(bytes.byteLength).toBe(256 * 1024);
+  const split = bytes.indexOf(0xc3) + 1;
+  const response = new Response(
+    new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(bytes.subarray(0, split));
+        controller.enqueue(bytes.subarray(split));
+        controller.close();
+      },
+    }),
+  );
+  expect(await call(async () => response, GOOGLE.token, {}, "test")).toEqual({
+    status: 200,
+    body: JSON.parse(payload),
+  });
+  expect(response.body?.locked).toBe(false);
+  await expect(call(async () => new Response(null), GOOGLE.token, {}, "test")).rejects.toThrow(
+    /could not be read/,
+  );
+});
+it("sanitizes a failed cancellation of an oversized OAuth answer", async () => {
+  const response = new Response(
+    new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array(256 * 1024 + 1));
+      },
+      cancel() {
+        throw new Error("test-secret");
+      },
+    }),
+  );
+  await expect(call(async () => response, GOOGLE.token, {}, "test")).rejects.toThrow(
+    "test: the answer could not be read",
+  );
+  expect(response.body?.locked).toBe(false);
+});
+it("resolves thirty-minute DST overlaps from actual Lord Howe offsets and rejects gaps", () => {
+  for (const [prefer, expected] of [
+    ["earliest", "2026-04-04T14:45:00Z"],
+    ["latest", "2026-04-04T15:15:00Z"],
+  ] as const) {
+    expect(zonedToUtcChecked("2026-04-05", 105, "Australia/Lord_Howe", prefer)).toBe(
+      Date.parse(expected),
+    );
+    expect(zonedToUtcChecked("2026-10-04", 135, "Australia/Lord_Howe", prefer)).toBeUndefined();
+    expect(zonedToUtcChecked("2026-04-05", 180, "Australia/Lord_Howe", prefer)).toBe(
+      Date.parse("2026-04-04T16:30:00Z"),
+    );
+  }
+});
+it("widens Microsoft busy intervals across Lord Howe's thirty-minute DST overlap", async () => {
+  const result = await microsoftCalendarView(
+    {
+      ...fixtureProviders(),
+      transport: async () =>
+        json({
+          value: [
+            {
+              showAs: "busy",
+              start: { dateTime: "2026-04-05T01:40:00", timeZone: "Australia/Lord_Howe" },
+              end: { dateTime: "2026-04-05T01:50:00", timeZone: "Australia/Lord_Howe" },
+            },
+          ],
+        }),
+    },
+    {
+      connectionId: "owner",
+      calendarId: "primary",
+      ownerTimeZone: "Australia/Lord_Howe",
+      window: { start: "2026-04-04T00:00:00Z", end: "2026-04-06T00:00:00Z" },
+    },
+    () => instant.toISOString(),
+  );
+  expect(result).toMatchObject({
+    ok: true,
+    busy: [
+      {
+        start: "2026-04-04T14:40:00.000Z",
+        end: "2026-04-04T15:20:00.000Z",
+      },
+    ],
+  });
+});
