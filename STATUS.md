@@ -3,8 +3,78 @@
 
 # sst-4s8h — MCP-12 lane status
 
-Implemented on `lane/sst-4s8h`, based on `917d3be9c7967622829adc43c1aaabb0964ec993`.
-No push, PR, publish, branch switch, remote fetch/merge, or dependency lifecycle scripts.
+Implemented on `lane/sst-4s8h`, originally based on
+`917d3be9c7967622829adc43c1aaabb0964ec993`. Round 5 integrates local `origin/main`
+at `73879200bba1baa53b1634101a0e33e113b6d55c`.
+No push, PR, publish, branch switch, network remote fetch/merge, or dependency lifecycle scripts.
+
+## Fix round 5 — integrate main
+
+- `65887325` — `chore: integrate main into stdio lane`: fetch from the prescribed
+  local origin (`/home/runner/work/solid-sdk`) and merge `origin/main`. Main remains
+  authoritative outside the existing lane changes. Resolve the README conflict
+  with main's Node requirement and preserve the stdio configuration documentation.
+- Final commit — `docs: record main integration validation`: this status update,
+  written and committed last.
+
+`packages/solid-mcp/src/pod.ts` is byte-for-byte identical to main. Its PodPort,
+tool registry, canonical tools, aliases and HTTP entry point are retained. The
+fetch adapter recognizes the CLI's existing guarded anonymous transport through
+an internal WeakSet, so configured external WebID discovery still follows bounded,
+validated, credential-free same-origin redirects. Ordinary injected fetch functions
+retain main's manual redirect policy. In-pod profiles retain the adapter's scoped
+redirect loop and fresh DPoP proofs. No public API or dependency was added.
+
+Preserve all lane regressions; extend the redirected discovery test to exercise
+both legacy fetch configuration and PodPort. Real stdio subprocess tests now call
+the canonical tools and all compatibility aliases, including both write names'
+read-only enforcement. The earlier absence of MCP-01's data seam is resolved by
+the main integration; earlier rounds below describe their original baselines.
+
+Seed the lockfile from main and regenerate it with pnpm, rather than merge its
+text. The successful command was:
+
+```sh
+GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=protocol.allow GIT_CONFIG_VALUE_0=never pnpm --filter @jeswr/solid-mcp install --lockfile-only --offline --ignore-scripts --config.dedupe-peer-dependents=false
+```
+
+The generated diff from main adds the lane's existing workspace `solid-dpop`
+edge and adjusts one shared Vitest coverage peer resolution. Initial unfiltered
+and default-deduplication attempts tried to resolve inherited Git branch pins;
+disabled Git transport prevented network access. The filtered command above
+succeeded without Git resolution. The subsequent frozen offline installation
+passed with zero downloads and lifecycle scripts disabled. Main now provides
+fetch-rdf as a workspace package, built locally before the package checks.
+
+Validation on Node `v24.22.1`, pnpm `10.4.1` (Git transport disabled for builds,
+tests and gates):
+
+- PASS: dependency-first build of all four solid-mcp workspace dependencies.
+- PASS: lint, build, typecheck and test for both touched packages:
+  solid-mcp **355 tests / 10 files**, solid-dpop **82 tests / 6 files**.
+  Existing solid-dpop lint warnings remain non-fatal.
+- PASS: `pnpm run lint:root`, including every workspace guard.
+- PASS: `pnpm run test:root`, **745 tests / 9 files**.
+- FAIL outside the lane: `pnpm run gate`, using
+  `TURBO_SCM_BASE=73879200bba1baa53b1634101a0e33e113b6d55c`:
+  **329 successful / 374 tasks**, 4 cached. Stops at
+  `@jeswr/federation-trust#test`, `test/characterization.test.ts:196`,
+  “delegation credential structure is stable”. The snapshot expects serialized
+  JWK keys in `crv,x,kty` order; the runtime emits `kty,crv,x`.
+- FAIL outside the lane: final `pnpm run gate:full` attempt:
+  **335 successful / 372 tasks**, 208 cached, with the same federation-trust
+  snapshot failure. All 745 root tests passed in this attempt. The first full
+  attempt stopped on a 5000 ms timeout at `test/agent-layers.test.mjs:509`;
+  its 13 affected cases passed separately, and the full-gate retry passed the
+  entire root suite. Neither failing file nor federation-trust differs from main.
+
+Generated app `web/public/{callback.html,clientid.jsonld}` files were removed
+after validation. `git diff --check origin/main` passes for the lane changes.
+No unrelated source, snapshot or configuration was changed during resolution.
+No implementation work or open questions remain for this fix round; a green
+workspace gate is blocked by the inherited snapshot mismatch. `roborev` is still
+unavailable (`command -v roborev` finds no executable), so automated per-commit
+verdicts could not be obtained; reviewer configuration is unchanged.
 
 ## Fix round 4 — anonymous redirect destination safety
 
