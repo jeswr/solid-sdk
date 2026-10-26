@@ -12,6 +12,7 @@ export default defineConfig({
       provider: "v8",
       include: [
         "src/apps/calendar/lib/model/**/*.ts",
+        "src/apps/calendar/lib/drag/**/*.ts",
         "src/apps/photos/lib/model/**/*.ts",
         "src/apps/home/lib/model/**/*.ts",
         "src/apps/docs/lib/model/**/*.ts",
