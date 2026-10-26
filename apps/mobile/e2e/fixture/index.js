@@ -1,11 +1,12 @@
 // AUTHORED-BY GPT-5.6 Codex
 (() => {
+  const platform =
+    window.Capacitor?.getPlatform?.() === "ios" || window.webkit?.messageHandlers?.bridge
+      ? "ios"
+      : "android";
   const state = {
     page: "index",
-    platform:
-      window.Capacitor?.getPlatform?.() === "ios" || window.webkit?.messageHandlers?.bridge
-        ? "ios"
-        : "android",
+    platform,
     documentId: crypto.randomUUID(),
     origin: location.origin,
     done: false,
@@ -17,7 +18,7 @@
       serviceWorker: typeof navigator.serviceWorker === "object",
     },
     topBridge: false,
-    listenerReady: false,
+    ...(platform === "ios" ? { listenerSubscriptionRequested: false } : { listenerReady: false }),
     hostile: null,
     shares: { events: [], pending: [] },
   };
@@ -79,7 +80,12 @@
       intake.addListener("shareReceived", (batch) => state.shares.events.push(batch)),
       5000,
     );
-    state.listenerReady = true;
+    if (state.platform === "ios") {
+      // The synchronous JS removal handle is no acknowledgment from native code.
+      state.listenerSubscriptionRequested = true;
+    } else {
+      state.listenerReady = true;
+    }
     await window.__e2eRefreshShares();
     state.topBridge = true;
     state.hostile = await deadline(hostile, 10000);

@@ -129,7 +129,7 @@ const fixtureEvidence = () => ({
   platform: "ios",
   origin: suite,
   topBridge: true,
-  listenerReady: true,
+  listenerSubscriptionRequested: true,
   errors: [],
   capabilities: Object.fromEntries(CAPABILITIES.map((key) => [key, true])),
   shares: { pending: [], events: [] },
@@ -207,6 +207,10 @@ describe("iOS host driver verdict and cleanup", () => {
     expect(report.status).toBe("passed");
     expect(report.realSuite.status).toBe("deferred");
     expect(report.shareIn.status).toBe("deferred");
+    expect(report.shareListener).toEqual({
+      status: "deferred",
+      reason: expect.stringContaining("real shareReceived event"),
+    });
   });
   test("a successful XCTest exit cannot mask vacuous iframe evidence", async () => {
     const { report } = await scenario({ vacuous: true });

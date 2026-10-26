@@ -52,6 +52,42 @@ describe("iOS project", () => {
     expect(withLocalNetworking(plist, {})).toBe(plist);
   });
 
+  test("the App target guards the processed plist after resources and extension copying", () => {
+    const guard = pbxproj.match(
+      /([A-F0-9]{24}) \/\* Guard non-Debug ATS \*\/ = \{\s*isa = PBXShellScriptBuildPhase;([\s\S]*?)\n\t\t\};/,
+    );
+    expect(guard).not.toBeNull();
+    const phases = pbxproj.match(
+      /504EC3031FED79650016851F \/\* App \*\/ = \{\s*isa = PBXNativeTarget;[\s\S]*?buildPhases = \(([\s\S]*?)\);/,
+    )?.[1];
+    expect(phases).toContain(`${guard?.[1]} /* Guard non-Debug ATS */`);
+    expect(phases?.indexOf("/* Resources */")).toBeLessThan(
+      phases?.indexOf("/* Guard non-Debug ATS */") ?? -1,
+    );
+    expect(phases?.indexOf("/* Embed Foundation Extensions */")).toBeLessThan(
+      phases?.indexOf("/* Guard non-Debug ATS */") ?? -1,
+    );
+    const phase = guard?.[2] ?? "";
+    expect(phase).toMatch(
+      /inputPaths = \(\s*"\$\(TARGET_BUILD_DIR\)\/\$\(INFOPLIST_PATH\)",\s*\);/,
+    );
+    expect(phase).toMatch(
+      /outputPaths = \(\s*"\$\(DERIVED_FILE_DIR\)\/non-debug-ats-guard\.stamp",\s*\);/,
+    );
+    expect(phase).toContain("alwaysOutOfDate = 1;");
+    expect(phase).toContain("runOnlyForDeploymentPostprocessing = 0;");
+    expect(phase).toContain("shellPath = /bin/sh;");
+    const script = JSON.parse(phase.match(/shellScript = ("(?:\\.|[^"\\])*");/)?.[1] ?? '""');
+    expect(script).toContain('if [ "$CONFIGURATION" != "Debug" ]; then');
+    expect(script).toContain('plist="$TARGET_BUILD_DIR/$INFOPLIST_PATH"');
+    expect(script).toContain('/usr/bin/plutil -lint "$plist"');
+    expect(script).toContain('/usr/libexec/PlistBuddy -c "Print :NSAppTransportSecurity" "$plist"');
+    expect(script).toContain("error: NSAppTransportSecurity is forbidden in non-Debug builds");
+    expect(script).toContain("exit 1");
+    expect(script).toContain('touch "$SCRIPT_OUTPUT_FILE_0"');
+    expect(script).not.toMatch(/MOBILE_DEBUG|INFOPLIST_FILE/);
+  });
+
   test.each(["localhost", "127.0.0.1"])("generates reversible debug-only ATS for %s", (host) => {
     const env = { SUITE_URL: `http://${host}:4173`, MOBILE_DEBUG: "1" };
     const generated = withLocalNetworking(plist, env);
@@ -426,10 +462,12 @@ describe("mobile CI iOS fixture guardrails", () => {
   const workflow = read("../../.github/workflows/mobile.yml");
   const job = workflow.match(/^ {2}ios-e2e:\n[\s\S]*?(?=^ {2}[\w-]+:|$(?![\s\S]))/m)?.[0] ?? "";
   const ios = workflow.match(/^ {2}ios:\n[\s\S]*?(?=^ {2}[\w-]+:|$(?![\s\S]))/m)?.[0] ?? "";
+  const releaseGuard =
+    ios.match(/ {6}- name: Reject fixture ATS in Release builds\n[\s\S]*?(?= {6}- )/)?.[0] ?? "";
 
   test("keeps fixture debug settings out of the policy build", () => {
     expect(ios).toContain("pnpm --filter @jeswr/app-mobile run sync:ios");
-    expect(ios).not.toMatch(/MOBILE_DEBUG|SUITE_URL|ios-e2e\.mjs/);
+    expect(ios.replace(releaseGuard, "")).not.toMatch(/MOBILE_DEBUG|SUITE_URL|ios-e2e\.mjs/);
     expect(job).toContain("runs-on: macos-15");
     expect(job).toContain("timeout-minutes: 45");
     expect(job).toContain("node-version: 24");
@@ -437,6 +475,32 @@ describe("mobile CI iOS fixture guardrails", () => {
     expect(job).toContain('MOBILE_DEBUG: "1"');
     expect(job).toContain("pnpm --filter @jeswr/app-mobile run sync:ios");
     expect(job).toContain("node apps/mobile/e2e/ios-e2e.mjs");
+  });
+
+  test("requires a Release build to reject fixture ATS and restores production preparation", () => {
+    expect(releaseGuard).toContain(
+      "SUITE_URL=http://localhost:4173 MOBILE_DEBUG=1 pnpm --filter @jeswr/app-mobile run www",
+    );
+    expect(releaseGuard).not.toContain("cap sync");
+    expect(releaseGuard).toContain("if env -u SUITE_URL -u MOBILE_DEBUG xcodebuild");
+    expect(releaseGuard).toContain("-configuration Release");
+    expect(releaseGuard).toContain(
+      '-sdk iphonesimulator -destination "generic/platform=iOS Simulator"',
+    );
+    expect(releaseGuard).toContain(
+      "ENABLE_USER_SCRIPT_SANDBOXING=YES CODE_SIGNING_ALLOWED=NO build",
+    );
+    expect(releaseGuard).toContain("Release build unexpectedly accepted fixture ATS");
+    expect(releaseGuard).toContain("exit 1");
+    expect(releaseGuard).toContain(
+      'grep -F "error: NSAppTransportSecurity is forbidden in non-Debug builds"',
+    );
+    expect(releaseGuard).toContain("trap restore_production EXIT");
+    expect(releaseGuard).toContain(
+      "env -u SUITE_URL -u MOBILE_DEBUG pnpm --filter @jeswr/app-mobile run www",
+    );
+    expect(ios.indexOf("Simulator compile (no signing)")).toBeLessThan(ios.indexOf(releaseGuard));
+    expect(ios.indexOf(releaseGuard)).toBeLessThan(ios.indexOf("XCTest policies"));
   });
 
   test("mirrors Xcode and iPhone selection, and bounds simulator pre-boot", () => {

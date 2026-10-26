@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY GPT-5.6 Codex
 import { readFileSync, writeFileSync } from "node:fs";
 import { type MobileEnv, suiteOrigin } from "./config.ts";
 
@@ -25,7 +26,7 @@ const LOCAL_ATS_START = "<!-- BEGIN GENERATED DEBUG LOCAL NETWORKING -->";
 const LOCAL_ATS_END = "<!-- END GENERATED DEBUG LOCAL NETWORKING -->";
 const LOCAL_ATS = new RegExp(`\\n\\t${LOCAL_ATS_START}[\\s\\S]*?${LOCAL_ATS_END}\\n`);
 
-/** A reversible ATS exception for debug loopback builds only; never a production plist setting. */
+/** Reversible debug loopback ATS; the App build phase rejects it in every non-Debug product. */
 export function withLocalNetworking(plist: string, env: MobileEnv): string {
   const origin = suiteOrigin(env);
   const clean = plist.replace(LOCAL_ATS, "\n");

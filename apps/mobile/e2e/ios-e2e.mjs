@@ -157,6 +157,11 @@ export async function runIOS({
       status: "deferred",
       reason: "XCUITest cannot reliably drive another app's share sheet",
     },
+    shareListener: {
+      status: "deferred",
+      reason:
+        "Native listener verification needs a real shareReceived event; deferred with share-sheet intake",
+    },
   };
   const bundle = join(artifacts, "AppUITests.xcresult");
   const attachments = join(artifacts, "ios-attachments");

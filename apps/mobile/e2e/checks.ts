@@ -45,7 +45,9 @@ export function checkFixture(
     if (capabilities[key] !== true) failures.push(`Missing capability: ${key}`);
   }
   if (result.topBridge !== true) failures.push("Top-frame SuiteShareIntake.getPending failed");
-  if (result.listenerReady !== true) failures.push("Share listener was not registered");
+  // iOS addListener returns a JS handle without acknowledging native registration.
+  if (platform === "android" && result.listenerReady !== true)
+    failures.push("Share listener was not registered");
   if (!Array.isArray(result.errors) || result.errors.length)
     failures.push("Fixture reported errors");
   const hostile = record(result.hostile);
