@@ -1,38 +1,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+import { longestPrefix, type Prefix, prefixUrl } from "./prefix.js";
 import type { DescriptionCache } from "./types.js";
 
 type CacheRecord = NonNullable<Awaited<ReturnType<DescriptionCache["get"]>>>;
-type Prefix = { root: string; storageId: string };
-
-function prefixUrl(value: string): URL {
-  const url = new URL(value);
-  url.search = "";
-  url.hash = "";
-  return url;
-}
-
-/** Match path boundaries as well as origins; /alice must never match /alice-other. */
-function longestPrefix(value: string, prefixes: Iterable<Prefix>): string | undefined {
-  const url = prefixUrl(value);
-  let longest = -1;
-  let storageId: string | undefined;
-  for (const prefix of prefixes) {
-    const root = prefixUrl(prefix.root);
-    if (
-      root.origin === url.origin &&
-      (url.pathname === root.pathname ||
-        url.pathname.startsWith(
-          root.pathname.endsWith("/") ? root.pathname : `${root.pathname}/`,
-        )) &&
-      root.pathname.length > longest
-    ) {
-      longest = root.pathname.length;
-      storageId = prefix.storageId;
-    }
-  }
-  return storageId;
-}
-
 /** Create an isolated in-memory cache. Reads and writes copy public metadata. */
 export function createMemoryCache(): DescriptionCache {
   const descriptions = new Map<string, CacheRecord>();
@@ -49,6 +19,10 @@ export function createMemoryCache(): DescriptionCache {
     },
     async rememberPrefix(root, storageId) {
       const normalised = prefixUrl(root).href;
+      // A storage has one root: a moved root must not keep routing its old prefix here.
+      for (const [key, prefix] of prefixes) {
+        if (prefix.storageId === storageId && key !== normalised) prefixes.delete(key);
+      }
       prefixes.set(normalised, { root: normalised, storageId });
     },
     async lookupPrefix(url) {
@@ -115,9 +89,22 @@ export function createIndexedDbCache({
       await transact("descriptions", "readwrite", (store) => store.delete(storageId));
     },
     async rememberPrefix(root, storageId) {
-      await transact("prefixes", "readwrite", (store) =>
-        store.put({ root: prefixUrl(root).href, storageId }),
-      );
+      const normalised = prefixUrl(root).href;
+      await transact("prefixes", "readwrite", (store) => {
+        // Same transaction: a moved root replaces, never coexists with, the old mapping.
+        const cursor = store.openCursor();
+        cursor.onsuccess = () => {
+          const current = cursor.result;
+          if (!current) {
+            store.put({ root: normalised, storageId });
+            return;
+          }
+          const prefix = current.value as Prefix;
+          if (prefix.storageId === storageId && prefix.root !== normalised) current.delete();
+          current.continue();
+        };
+        return cursor;
+      });
     },
     async lookupPrefix(url) {
       const prefixes = await transact<Prefix[]>("prefixes", "readonly", (store) => store.getAll());

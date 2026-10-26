@@ -6,6 +6,7 @@ import { discardBody, httpUrl, readBody, request } from "./http.js";
 import { parseLinkHeaders } from "./link.js";
 import { parseLwsDescription } from "./lws-description.js";
 import { notificationDocumentLoader } from "./notification-context.js";
+import { isWithinRoot } from "./prefix.js";
 import { parseSolidDescription } from "./solid-description.js";
 import type { ResolveOptions, StorageDescription } from "./types.js";
 import { PIM, SOLID, SSD } from "./vocab.js";
@@ -157,7 +158,7 @@ export async function resolveStorageDescription(
   const resource = httpUrl(url).href;
   const cache = options.cache ?? defaultCache;
   const storageId = await cache.lookupPrefix(resource);
-  const cached = storageId === undefined ? undefined : await cache.get(storageId);
+  let cached = storageId === undefined ? undefined : await cache.get(storageId);
   let invalidationId = storageId;
   try {
     if (cached) {
@@ -173,6 +174,13 @@ export async function resolveStorageDescription(
           "Cached storage has a foreign origin",
         );
       }
+      if (!isWithinRoot(resource, cached.description.root)) {
+        // A stale prefix (the storage root moved): rediscover instead of misattributing.
+        cached = undefined;
+        invalidationId = undefined;
+      }
+    }
+    if (cached) {
       if (
         (options.now ?? Date.now)() <
         cached.description.fetchedAt + cached.description.maxAgeMs
@@ -195,7 +203,9 @@ export async function resolveStorageDescription(
             : {}),
         });
         await cache.rememberPrefix(description.root, description.id);
-        return description;
+        if (isWithinRoot(resource, description.root)) return description;
+        // The refreshed root no longer contains this resource: discover its storage afresh.
+        invalidationId = undefined;
       }
     }
     const headers = options.seedHeaders ?? (await head(resource, options));

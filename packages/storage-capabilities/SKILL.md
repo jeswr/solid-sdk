@@ -60,11 +60,15 @@ records one response through `parseProbeHeaders`. Never invoke it automatically 
 
 Cache factories store the public description and optional probe. Prefix lookup matches the longest
 normalised root with origin/path boundaries; get/set copy metadata. Deleting a record invalidates
-it even though its prefix mapping can remain until rediscovery. IndexedDB uses raw browser APIs,
+it even though its prefix mapping can remain until rediscovery. A storage has one root:
+`rememberPrefix` drops that storage's other prefixes, and the resolver ignores (and, after a
+refresh, rediscovers past) a record whose root no longer contains the requested URL. IndexedDB uses raw browser APIs,
 lazy opening, transaction completion before resolving writes, and closes each connection after
 its transaction. fake-indexeddb is a policy-approved development dependency for the shared contract
 and persistence/error tests. Keep the package's configured 100% coverage thresholds unchanged.
 
+Only the five recognised `notify:` channel classes become notification service types; any other
+`notify:channelType` value stays in `extra` so it cannot pose as another service class.
 Extras use expanded predicate keys. IRIs and literal lexical values are strings; singleton
 values are scalars and repeated values are arrays. Notification features are always arrays.
 Nested blank nodes become property objects with an `@id` matching later references;

@@ -239,7 +239,7 @@ describe("parseSolidDescription", () => {
           },
         },
         {
-          type: [SSD.SolidNotificationService, "urn:channel:unknown"],
+          type: [SSD.SolidNotificationService],
           endpoint: `${ROOT}unknown`,
           extra: { [NOTIFY.channelType]: "urn:channel:unknown", [NOTIFY.feature]: [] },
         },
@@ -251,6 +251,23 @@ describe("parseSolidDescription", () => {
       ],
       capabilities: [],
     });
+  });
+
+  test("an unrecognised channel type cannot give a subscription another service type", async () => {
+    const dataset = await turtle(`
+      <description> notify:subscription <spoof> .
+      <spoof> notify:channelType <${SSD.CrdtSyncService}>, notify:WebhookChannel2023 .
+    `);
+    expect(parseSolidDescription(dataset, ROOT).services).toEqual([
+      {
+        type: [SSD.SolidNotificationService, NOTIFY.WebhookChannel2023],
+        endpoint: `${ROOT}spoof`,
+        extra: {
+          [NOTIFY.channelType]: [SSD.CrdtSyncService, NOTIFY.WebhookChannel2023],
+          [NOTIFY.feature]: [],
+        },
+      },
+    ]);
   });
 
   test("keeps cyclic blank-node extras finite", async () => {

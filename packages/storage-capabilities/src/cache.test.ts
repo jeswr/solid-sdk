@@ -67,6 +67,18 @@ describe.each([
     await cache.rememberPrefix("https://pod.example/alice", "new-alice");
     expect(await cache.lookupPrefix("https://pod.example/alice/file")).toBe("new-alice");
   });
+
+  test("a storage keeps one root: remembering a moved root drops only its own old prefix", async () => {
+    const cache = makeCache();
+    await cache.rememberPrefix("https://pod.example/old/", "storage");
+    await cache.rememberPrefix("https://pod.example/other/", "other");
+    await cache.rememberPrefix("https://pod.example/new/", "storage");
+    expect(await cache.lookupPrefix("https://pod.example/old/file")).toBeUndefined();
+    expect(await cache.lookupPrefix("https://pod.example/new/file")).toBe("storage");
+    expect(await cache.lookupPrefix("https://pod.example/other/file")).toBe("other");
+    await cache.rememberPrefix("https://pod.example/new/?x#y", "storage");
+    expect(await cache.lookupPrefix("https://pod.example/new/file")).toBe("storage");
+  });
 });
 
 test("memory cache instances are isolated", async () => {

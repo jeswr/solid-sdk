@@ -35,6 +35,17 @@ function cid(headers: HeadersInit = {}, body: unknown = sparqLwsCid) {
   return new Response(JSON.stringify(body), { headers });
 }
 
+const MOVED_ROOT = "https://lws.example/v2/";
+
+function movedCid() {
+  return {
+    ...sparqLwsCid,
+    service: sparqLwsCid.service.map((service) =>
+      service.type === "StorageRoot" ? { ...service, serviceEndpoint: MOVED_ROOT } : service,
+    ),
+  };
+}
+
 function rdf(body = TURTLE, headers: HeadersInit = {}) {
   return new Response(body, { headers: { "Content-Type": "text/turtle", ...headers } });
 }
@@ -416,6 +427,50 @@ describe("refresh", () => {
       code: "root-mismatch",
     });
     expect(await options.cache?.get(first.id)).toBeUndefined();
+  });
+
+  test("a refreshed root that no longer contains the resource rediscovers and drops the old prefix", async () => {
+    const { fetch, options } = setup();
+    fetch
+      .mockResolvedValueOnce(head(LWS_LINK))
+      .mockResolvedValueOnce(cid({ "Cache-Control": "max-age=0" }));
+    const first = await resolveStorageDescription(LWS_RESOURCE, options);
+    expect(first.root).toBe("https://lws.example/");
+    fetch.mockClear();
+    fetch
+      .mockResolvedValueOnce(cid({ "Cache-Control": "max-age=60" }, movedCid()))
+      .mockResolvedValueOnce(head(LWS_LINK))
+      .mockResolvedValueOnce(cid({ "Cache-Control": "max-age=60" }, movedCid()));
+    const moved = await resolveStorageDescription(LWS_RESOURCE, options);
+    expect(moved).toMatchObject({ id: first.id, root: MOVED_ROOT });
+    expect(fetch.mock.calls.map(([url, init]) => [url, init?.method])).toEqual([
+      [sparqLwsCid.id, "GET"],
+      [LWS_RESOURCE, "HEAD"],
+      [sparqLwsCid.id, "GET"],
+    ]);
+    expect(await options.cache?.lookupPrefix("https://lws.example/data/other")).toBeUndefined();
+    expect(await options.cache?.lookupPrefix(`${MOVED_ROOT}file`)).toBe(first.id);
+    fetch.mockClear();
+    expect(await resolveStorageDescription(`${MOVED_ROOT}file`, options)).toEqual(moved);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  test("a fresh record reached through a stale prefix is not used for a resource outside its root", async () => {
+    const { fetch, options } = setup();
+    const description = {
+      ...parseLwsDescription(movedCid(), sparqLwsCid.id, `${MOVED_ROOT}file`),
+      fetchedAt: 1000,
+    };
+    await options.cache?.set(description.id, { description });
+    await options.cache?.rememberPrefix("https://lws.example/", description.id);
+    fetch.mockResolvedValueOnce(head());
+    await expect(resolveStorageDescription(LWS_RESOURCE, options)).rejects.toMatchObject({
+      code: "no-storage-link",
+    });
+    expect(fetch.mock.calls.map(([url, init]) => [url, init?.method])).toEqual([
+      [LWS_RESOURCE, "HEAD"],
+    ]);
+    expect(await options.cache?.get(description.id)).toEqual({ description });
   });
 });
 
