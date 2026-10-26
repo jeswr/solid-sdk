@@ -362,3 +362,65 @@ Both requested findings are fixed and tested. No implementation work is unfinish
 there are no open questions. `roborev` remains unavailable on PATH, so fresh automated per-commit
 verdicts could not be obtained locally. Dispatcher/security review remains outstanding; this
 security-critical package has not been merged.
+
+## Fix round 5 — review `d37d8edce5e5`
+
+Completed the sole finding in `solid-sdk-lane-sst-8xm.28-d37d8edce5e5.md`.
+Only `packages/reactive-authentication` and this report changed. No dependencies were added.
+
+| Commit | Change |
+| --- | --- |
+| `2e465bdc` | Carry the LWS exchange's original fence generation through `CredentialRequest.expectedGeneration` into `OidcSession.get`. Reuse the session's generation checks before acquisition and its fenced credential commits. Add a peer-logout regression that checks login, token grants, LWS exchange, memory credentials and durable refresh records, then verifies a fresh operation succeeds. |
+| Final documentation commit (this commit) | Record round-5 verification and the review-tool limitation. |
+
+The credential-request field is optional for direct source callers. LWS exchanges always supply their
+captured generation; credential sessions use the same fence. The regression disables broadcasts and
+delays the validation immediately before credential acquisition, so cancellation cannot mask a lost
+generation. It verifies that the stale operation writes neither credential store.
+
+### Round-5 verification
+
+PASS required package gate and root checks, run before the final documentation commit:
+
+```sh
+pnpm --filter @jeswr/reactive-authentication run lint && pnpm --filter @jeswr/reactive-authentication run build && pnpm --filter @jeswr/reactive-authentication run typecheck && pnpm --filter @jeswr/reactive-authentication run test
+pnpm run lint:root
+git diff --check
+```
+
+- Package lint: zero errors; **65 warnings** and **22 informational diagnostics**, unchanged from round 4.
+- Build and typecheck: pass, including the SDK type-contract checks.
+- Tests: **285/285** pass in **29/29** files, with no skips.
+- Enforced coverage: statements **2059/2059**, branches **1520/1520**, functions **467/467**,
+  lines **1857/1857** — **100% in every metric**. Coverage configuration and thresholds are unchanged.
+- Root lint: Biome, lockfile transport, app workspace and raw-fetch guards pass.
+- Whitespace validation: pass.
+
+Regression sensitivity was checked before the implementation fix:
+
+```sh
+pnpm --filter @jeswr/reactive-authentication exec vitest run test/lws.test.js --coverage.enabled=false '--testNamePattern=captured generation'
+```
+
+Expected baseline result: the selected regression failed because the stale operation started one login,
+obtained one OIDC token grant and committed both memory and durable credentials under generation 1.
+The eventual LWS rejection did not remove those credentials. With the fix, all those counts are zero,
+and a fresh operation authorizes and commits under generation 1.
+
+Focused verification also passed all **22/22** LWS tests:
+
+```sh
+pnpm --filter @jeswr/reactive-authentication exec vitest run test/lws.test.js --coverage.enabled=false
+```
+
+Validation used Node `24.22.1` and pnpm `10.4.1`. No `check:packages` run was needed because no dependency
+was added. No workspace package depends on this package, so no dependant gate applies. Per the lane
+brief, no whole-workspace gate or `gate:full` ran. No push, PR, branch switch, network Git operation or
+edits to another checkout were performed. The working tree is clean after this final report commit.
+
+### Round-5 remaining work and questions
+
+The requested finding is fixed and tested. No implementation work is unfinished or blocked;
+there are no open questions. `roborev` remains unavailable on PATH, so fresh automated per-commit
+verdicts could not be obtained locally. Dispatcher/security review remains outstanding; this
+security-critical package has not been merged.
