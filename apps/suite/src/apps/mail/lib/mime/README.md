@@ -32,6 +32,16 @@ Attached multipart groups remain single downloads with their original body bytes
 including nested boundaries. A selected related root's supported content type
 takes precedence over its disposition. Attachment downloads retain transfer-decoded
 octets for every media type, including calendar line endings and legacy charsets.
+EOF never adds a synthetic newline to decoded content; actual trailing line
+endings are preserved. Only absent or `inline` dispositions are ordinary body
+candidates; unknown dispositions receive attachment handling, including multipart
+groups, with the selected related-root exception described above.
+
+When retained branches of an alternative reuse a Content-ID, parsing rejects with
+the exported `MimeParseError` (`code: "EAMBIGUOUSCID"`). The flat attachment API
+cannot safely represent that alternative-specific ownership. IDs remain
+case-sensitive; superseded alternatives are discarded before this check.
+
 Selection uses a small internal-tree adapter specific to pinned `postal-mime`
 4.1.4; run the regression tests when upgrading it.
 

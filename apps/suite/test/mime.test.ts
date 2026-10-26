@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
-import { parseMimeMessage, sanitizeMessageHtml } from "../src/apps/mail/lib/mime";
+import { MimeParseError, parseMimeMessage, sanitizeMessageHtml } from "../src/apps/mail/lib/mime";
 
 const fixture = (name: string) => readFile(new URL(`./fixtures/mime/${name}.eml`, import.meta.url));
 
@@ -193,6 +193,99 @@ describe("RFC 5322 and MIME parsing", () => {
   });
 
   it.each([
+    false,
+    true,
+  ])("rejects colliding resource IDs across selected related alternatives (nested: %s)", async (nested) => {
+    const related = (type: string, boundary: string) =>
+      `Content-Type: multipart/related; boundary=${boundary}\n\n--${boundary}\nContent-Type: text/${type}\n\n${type === "html" ? '<p>HTML</p><img src="cid:shared@example.org">' : "Plain"}\n--${boundary}\nContent-Type: image/png\nContent-ID: <shared@example.org>\n\n${type} resource\n--${boundary}--`;
+    let input = `Content-Type: multipart/alternative; boundary=a\n\n--a\n${related("plain", "p")}\n--a\n${related("html", "h")}\n--a--`;
+    if (nested) {
+      input = `Content-Type: multipart/mixed; boundary=m\n\n--m\n${input}\n--m--`;
+    }
+    const result = parseMimeMessage(input);
+    await expect(result).rejects.toBeInstanceOf(MimeParseError);
+    await expect(result).rejects.toMatchObject({
+      name: "MimeParseError",
+      code: "EAMBIGUOUSCID",
+    });
+  });
+
+  it.each([
+    "distinct@example.org",
+    "Shared@example.org",
+  ])("keeps non-colliding related alternative resources: %s", async (htmlId) => {
+    const related = (type: string, boundary: string, id: string) =>
+      `Content-Type: multipart/related; boundary=${boundary}\n\n--${boundary}\nContent-Type: text/${type}\n\n${type === "html" ? `<img src="cid:${id}">` : "Plain"}\n--${boundary}\nContent-Type: image/png\nContent-ID: <${id}>\n\n${type} resource\n--${boundary}--`;
+    const message = await parseMimeMessage(
+      `Content-Type: multipart/alternative; boundary=a\n\n--a\n${related("plain", "p", "shared@example.org")}\n--a\n${related("html", "h", htmlId)}\n--a--`,
+    );
+    expect(message.text).toBe("Plain");
+    expect(message.html).toContain(`data-inline-cid="${htmlId}"`);
+    expect(message.attachments.map((part) => part.contentId)).toEqual([
+      "shared@example.org",
+      htmlId,
+    ]);
+  });
+
+  it("discards colliding IDs belonging only to a superseded related alternative", async () => {
+    const related = (boundary: string, body: string) =>
+      `Content-Type: multipart/related; boundary=${boundary}\n\n--${boundary}\nContent-Type: text/html\n\n<p>${body}</p><img src="cid:shared@example.org">\n--${boundary}\nContent-Type: image/png\nContent-ID: <shared@example.org>\n\n${body}\n--${boundary}--`;
+    const message = await parseMimeMessage(
+      `Content-Type: multipart/alternative; boundary=a\n\n--a\n${related("p", "Old")}\n--a\n${related("h", "Current")}\n--a--`,
+    );
+    expect(message.html).toContain("<p>Current</p>");
+    expect(message.attachments).toHaveLength(1);
+    expect(message.attachments[0]?.content).toEqual(new TextEncoder().encode("Current"));
+  });
+
+  it.each([
+    "x-download; filename=synthetic.txt",
+    "x-download",
+  ])("downloads an unknown text disposition: %s", async (disposition) => {
+    const message = await parseMimeMessage(
+      `Content-Type: multipart/mixed; boundary=m\n\n--m\nContent-Type: text/plain\n\nReading body\n--m\nContent-Type: text/plain\nContent-Disposition: ${disposition}\n\nDownload only\n--m--`,
+    );
+    expect(message.text).toBe("Reading body");
+    expect(message.html).toBeNull();
+    expect(message.attachments).toHaveLength(1);
+    expect(message.attachments[0]).toMatchObject({
+      disposition: "x-download",
+      inline: false,
+      content: new TextEncoder().encode("Download only"),
+    });
+  });
+
+  it("keeps an unknown multipart disposition as a grouped download", async () => {
+    const body = "--a\nContent-Type: text/plain\n\nDownload only\n--a--";
+    const message = await parseMimeMessage(
+      `Content-Type: multipart/mixed; boundary=a\nContent-Disposition: x-download; filename=synthetic.mime\n\n${body}`,
+    );
+    expect(message.text).toBe("");
+    expect(message.html).toBeNull();
+    expect(message.attachments).toHaveLength(1);
+    expect(message.attachments[0]).toMatchObject({
+      filename: "synthetic.mime",
+      disposition: "x-download",
+      content: new TextEncoder().encode(body),
+    });
+  });
+
+  it("overrides an unknown disposition only for the selected related root", async () => {
+    const message = await parseMimeMessage(
+      "Content-Type: multipart/related; boundary=r\n\n--r\nContent-Type: text/html\nContent-Disposition: x-download; filename=root.html\n\n<p>Root</p>\n--r\nContent-Type: text/plain\nContent-Disposition: x-download; filename=resource.txt\nContent-ID: <resource@example.org>\n\nResource\n--r--",
+    );
+    expect(message.text).toBe("");
+    expect(message.html).toBe("<p>Root</p>");
+    expect(message.attachments).toHaveLength(1);
+    expect(message.attachments[0]).toMatchObject({
+      filename: "resource.txt",
+      disposition: "x-download",
+      contentId: "resource@example.org",
+      inline: true,
+    });
+  });
+
+  it.each([
     "\n",
     "\r\n",
   ])("preserves an attached multipart group and its wire bytes with %j delimiters", async (newline) => {
@@ -380,6 +473,38 @@ describe("RFC 5322 and MIME parsing", () => {
     "7bit",
     "8bit",
     "binary",
+    "quoted-printable",
+    "base64",
+  ])("preserves exact %s attachment bytes at EOF", async (transfer) => {
+    for (const nested of [false, true]) {
+      for (const ending of ["", "\n", "\r\n", "\r\n\r\n", "\r"]) {
+        const content = new Uint8Array([0, 128, 255, ...new TextEncoder().encode(ending)]);
+        const body =
+          transfer === "base64"
+            ? Buffer.from(content).toString("base64")
+            : transfer === "quoted-printable"
+              ? `=00=80=FF${ending}`
+              : String.fromCharCode(...content);
+        const headers = `Content-Type: application/octet-stream\r\nContent-Disposition: attachment; filename=eof.bin\r\nContent-Transfer-Encoding: ${transfer}\r\n\r\n`;
+        // Missing closing delimiters also leave a child attachment at EOF.
+        const prefix = nested ? "Content-Type: multipart/mixed; boundary=m\r\n\r\n--m\r\n" : "";
+        const input = Buffer.from(`!${prefix}${headers}${body}!`, "latin1");
+        const message = await parseMimeMessage(input.subarray(1, -1));
+        expect(message.attachments).toHaveLength(1);
+        expect(message.attachments[0]).toMatchObject({
+          filename: "eof.bin",
+          size: content.length,
+        });
+        expect(message.attachments[0]?.content).toEqual(content);
+        expect(message.text).toBe("");
+      }
+    }
+  });
+
+  it.each([
+    "7bit",
+    "8bit",
+    "binary",
     "x-unknown",
   ])("decodes %s body octets from a sliced byte input", async (encoding) => {
     const header = new TextEncoder().encode(
@@ -387,7 +512,7 @@ describe("RFC 5322 and MIME parsing", () => {
     );
     const framed = new Uint8Array([42, ...header, 99, 97, 102, 233, 32, 128, 42]);
     const message = await parseMimeMessage(framed.subarray(1, -1));
-    expect(message.text).toBe("café €\n");
+    expect(message.text).toBe("café €");
   });
 
   it.each([

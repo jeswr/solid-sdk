@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6
 import type PostalMime from "postal-mime";
 import type { Attachment } from "postal-mime";
+import { MimeParseError } from "./errors";
 
 // postal-mime 4.1.4 exposes its decoded tree at runtime, but omits it from its
 // public declarations. Keep this version-specific seam here; regression tests
@@ -80,7 +81,12 @@ export function retainMultipartContent(parser: PostalMime): (node: MimeNode) => 
       };
     }
     lineOffset = line.byteOffset;
-    await processLine(line, lineBreak, isFinal);
+    // readLine invents LF at EOF without a newline. Derive the final break from
+    // the wire span instead, retaining real CR/LF bytes without appending any.
+    const ending = isFinal
+      ? decoded.av.subarray(line.byteOffset + line.byteLength, decoded.readPos)
+      : lineBreak;
+    await processLine(line, ending, isFinal);
   };
   let lineOffset = 0;
   return (node) => {
@@ -105,10 +111,11 @@ export function selectMimeContent(
     related = false,
     relatedRoot = false,
   ): Selection => {
-    const attached = node.contentDisposition.parsed.value === "attachment" && !relatedRoot;
+    const disposition = node.contentDisposition.parsed.value;
+    const attached = disposition !== "" && disposition !== "inline" && !relatedRoot;
     if (!node.contentType.multipart || attached) {
       const supported = ["text/plain", "text/html"].includes(node.contentType.parsed.value);
-      if (!resource && supported && (relatedRoot || decoded.isInlineTextNode(node))) {
+      if (!resource && !attached && supported && (relatedRoot || decoded.isInlineTextNode(node))) {
         const type = node.contentType.parsed.value === "text/html" ? "html" : "plain";
         return { [type]: node.getTextContent(), attachments: [] };
       }
@@ -144,14 +151,25 @@ export function selectMimeContent(
       const plain = children.findLast((child) => child.plain !== undefined);
       const html = children.findLast((child) => child.html !== undefined);
       const chosen = new Set([plain, html]);
+      const retained = children.filter(
+        (child) => chosen.has(child) || (child.plain === undefined && child.html === undefined),
+      );
+      const ids = new Set<string>();
+      for (const child of retained) {
+        const childIds = new Set(
+          child.attachments.flatMap((part) => (part.contentId ? [bareId(part.contentId)] : [])),
+        );
+        for (const id of childIds) {
+          // A flat CID namespace cannot represent resources with different
+          // alternative owners. Fail closed rather than bind HTML to wrong bytes.
+          if (ids.has(id)) throw new MimeParseError();
+          ids.add(id);
+        }
+      }
       return {
         plain: plain?.plain,
         html: html?.html,
-        attachments: children
-          .filter(
-            (child) => chosen.has(child) || (child.plain === undefined && child.html === undefined),
-          )
-          .flatMap((child) => child.attachments),
+        attachments: retained.flatMap((child) => child.attachments),
       };
     }
 
