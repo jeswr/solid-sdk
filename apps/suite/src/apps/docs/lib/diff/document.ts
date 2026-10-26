@@ -254,7 +254,8 @@ function inlineDiff(
 
 /**
  * Top-level blocks are aligned by normalized JSON with Myers; unmatched runs pair in order
- * as modifications, then deletions/insertions. Moves are deletion + insertion. Nested changes
+ * as modifications after reserving exact unmatched counterparts across all runs as moves.
+ * Moves are deletion + insertion. Nested changes
  * belong to their outer block. Snapshots are normalized JSON, including structural/attr edits.
  * Inline ranges use UTF-16 PM positions relative to that block, excluding surrogate splits.
  * Standard image/hardBreak/horizontalRule nodes are atoms; other nodes are containers.
@@ -269,21 +270,50 @@ export function diffDocuments(before: DocumentNode, after: DocumentNode): BlockC
   const left = documents[0]?.content as readonly DocumentNode[],
     right = documents[1]?.content as readonly DocumentNode[];
   const budget = { remaining: DIFF_LIMITS.work };
-  const edits = myers(
-    left.map((n) => stable(n)),
-    right.map((n) => stable(n)),
-    budget,
-  );
+  const leftKeys = left.map((n) => stable(n)),
+    rightKeys = right.map((n) => stable(n));
+  const edits = myers(leftKeys, rightKeys, budget);
+  const unmatched = new Map<string, { before: number[]; after: number[] }>();
+  let beforeIndex = 0,
+    afterIndex = 0;
+  for (const edit of edits) {
+    if (edit === "equal") {
+      beforeIndex++;
+      afterIndex++;
+    } else {
+      const key = (edit === "delete" ? leftKeys[beforeIndex] : rightKeys[afterIndex]) as string;
+      const matches = unmatched.get(key) ?? { before: [], after: [] };
+      if (edit === "delete") matches.before.push(beforeIndex++);
+      else matches.after.push(afterIndex++);
+      unmatched.set(key, matches);
+    }
+  }
+  const movedBefore = new Set<number>(),
+    movedAfter = new Set<number>();
+  for (const matches of unmatched.values()) {
+    for (let i = 0; i < Math.min(matches.before.length, matches.after.length); i++) {
+      movedBefore.add(matches.before[i] as number);
+      movedAfter.add(matches.after[i] as number);
+    }
+  }
   const changes: BlockChange[] = [];
   let x = 0,
     y = 0,
     deleted: number[] = [],
     inserted: number[] = [];
   function flush(): void {
-    for (let i = 0; i < Math.max(deleted.length, inserted.length); i++) {
+    let i = 0,
+      j = 0;
+    while (i < deleted.length || j < inserted.length) {
       const a = deleted[i],
-        b = inserted[i];
-      if (a !== undefined && b !== undefined) {
+        b = inserted[j];
+      if (a !== undefined && movedBefore.has(a)) {
+        changes.push({ kind: "deleted", beforeIndex: a, before: left[a] as DocumentNode });
+        i++;
+      } else if (b !== undefined && movedAfter.has(b)) {
+        changes.push({ kind: "inserted", afterIndex: b, after: right[b] as DocumentNode });
+        j++;
+      } else if (a !== undefined && b !== undefined) {
         const old = left[a] as DocumentNode,
           next = right[b] as DocumentNode;
         changes.push({
@@ -294,14 +324,19 @@ export function diffDocuments(before: DocumentNode, after: DocumentNode): BlockC
           after: next,
           inline: inlineDiff(old, next, budget),
         });
-      } else if (a !== undefined)
+        i++;
+        j++;
+      } else if (a !== undefined) {
         changes.push({ kind: "deleted", beforeIndex: a, before: left[a] as DocumentNode });
-      else
+        i++;
+      } else {
         changes.push({
           kind: "inserted",
           afterIndex: b as number,
           after: right[b as number] as DocumentNode,
         });
+        j++;
+      }
     }
     deleted = [];
     inserted = [];

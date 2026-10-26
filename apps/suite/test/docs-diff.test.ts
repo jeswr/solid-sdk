@@ -74,6 +74,63 @@ describe("document block alignment", () => {
     expect(result.map((c) => c.kind)).toEqual(["deleted", "inserted"]);
     expect(result).toEqual(diffDocuments(before, after));
   });
+  it("reserves moved blocks across unmatched runs before pairing modifications", () => {
+    const before = doc(...["a", "b", "c", "d"].map(paragraph));
+    const after = doc(...["b", "a", "d", "c"].map(paragraph));
+    const changes = diffDocuments(before, after);
+    expect(changes.filter((change) => change.kind === "modified")).toEqual([]);
+    expect(changes.filter((change) => change.kind === "deleted")).toMatchObject([
+      { beforeIndex: 0, before: { content: [{ text: "a" }] } },
+      { beforeIndex: 2, before: { content: [{ text: "c" }] } },
+    ]);
+    expect(changes.filter((change) => change.kind === "inserted")).toMatchObject([
+      { afterIndex: 1, after: { content: [{ text: "a" }] } },
+      { afterIndex: 3, after: { content: [{ text: "c" }] } },
+    ]);
+    const mixed = diffDocuments(
+      doc(...(before.content as DocumentNode[]), paragraph("old")),
+      doc(...(after.content as DocumentNode[]), paragraph("new")),
+    );
+    expect(mixed.filter((change) => change.kind !== "modified")).toEqual(changes);
+    expect(mixed.filter((change) => change.kind === "modified")).toEqual([
+      { ...modified(paragraph("old"), paragraph("new")), beforeIndex: 4, afterIndex: 4 },
+    ]);
+  });
+  it("never reports text modifications for permutations, including duplicate blocks", () => {
+    function permutations(values: string[]): string[][] {
+      if (values.length === 0) return [[]];
+      return values.flatMap((value, i) =>
+        permutations(values.filter((_, j) => i !== j)).map((rest) => [value, ...rest]),
+      );
+    }
+    for (const values of [
+      ["a", "b", "c", "d"],
+      ["a", "a", "b", "b"],
+    ]) {
+      const before = doc(...values.map(paragraph));
+      for (const order of permutations(values)) {
+        const after = doc(...order.map(paragraph));
+        const changes = diffDocuments(before, after);
+        expect(changes.every((change) => change.kind !== "modified")).toBe(true);
+        expect(changes).toEqual(diffDocuments(before, after));
+      }
+    }
+  });
+  it("reserves only as many moved duplicates as have exact unmatched counterparts", () => {
+    const before = doc(...["a", "b", "c", "d", "c", "old"].map(paragraph));
+    const after = doc(...["b", "a", "d", "c", "new"].map(paragraph));
+    const changes = diffDocuments(before, after);
+    expect(changes.filter((change) => change.kind === "modified")).toMatchObject([
+      { beforeIndex: 5, afterIndex: 4, before: { content: [{ text: "old" }] } },
+    ]);
+    expect(changes.filter((change) => change.kind === "deleted")).toMatchObject([
+      { beforeIndex: 0 },
+      { beforeIndex: 2 },
+    ]);
+    expect(changes.filter((change) => change.kind === "inserted")).toMatchObject([
+      { afterIndex: 1 },
+    ]);
+  });
   it("retains structural, attribute and atom changes even without text changes", () => {
     const p = paragraph("same");
     const heading = { ...p, type: "heading", attrs: { level: 2, textAlign: "center" } };
@@ -382,7 +439,7 @@ describe("bounded untrusted documents", () => {
     });
     const attrs = {
       ["x".repeat(DIFF_LIMITS.json)]: null,
-      get late() {
+      get late(): never {
         throw new Error("Over-budget object entry must not be read");
       },
     };
