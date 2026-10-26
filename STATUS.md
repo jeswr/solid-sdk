@@ -469,3 +469,87 @@ The requested MCP finding is fixed. The personal-agent RDF-loader finding is
 excluded as instructed and remains tracked separately as A-002F. Broad workspace
 validation and automated review retain the environmental limitations above.
 No implementation work or open questions remain for this fix round.
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+## Fix round 6 — integrate with main
+
+- `6f8f0de7 chore(mcp): merge main and retain search/fetch coverage` merges
+  local `origin/main` at `67abf7f1d67285756c2e31e6b2ab801d93cea95a` into
+  `lane/sst-9s2`. The only conflicts were the expected README and server test.
+  Both resolutions start from main: its complete chat/HTTP documentation and
+  server tests are preserved, with the existing MCP-03 search/fetch section and
+  `fetch` registration assertion restored on top. The registration expectation
+  retains main's conditional fetch-backed chat tools. All existing MCP-03
+  contract, representation, budget and redirect regression files are unchanged.
+- `docs: record round six integration validation` is the final commit, touching
+  only `STATUS.md`.
+
+No runtime behavior was changed for this integration. Main's server, chat tools
+and HTTP transport are retained exactly, as are the lane's search/fetch sources.
+Everything outside `packages/solid-mcp`, `QUESTIONS.md` and `STATUS.md` matches
+main, including the lockfile. The conservative resolution combines the existing
+surfaces without introducing new transport or tool behavior.
+
+### Validation
+
+Successful requested gates (exit 0 each):
+
+```sh
+pnpm --filter ./packages/solid-mcp run lint
+pnpm --filter ./packages/solid-mcp run typecheck
+pnpm --filter ./packages/solid-mcp run test
+pnpm run lint:root
+```
+
+The combined MCP suite passes **495 tests across 10 files**. Dependency-first
+build verification also passes all **7/7 tasks**:
+
+```sh
+pnpm exec turbo run build --filter=@jeswr/solid-mcp...
+```
+
+Repository affected gate (exit 0; **23/23 tasks successful**, 7 cached):
+
+```sh
+TURBO_SCM_BASE=origin/main pnpm run gate
+```
+
+This includes **745 root tests across 9 files**, **531 personal-agent tests
+across 56 files** and **121 agent-model tests across 7 files**.
+
+Full-workspace gate (exit 1; **86 successful tasks out of 255**, 12 cached):
+
+```sh
+pnpm run gate:full
+```
+
+The unchanged `@jeswr/app-suite#build` fails when `next/font` tries to download
+Onest, Source Code Pro and Source Serif 4 from Google Fonts. The existing
+temporary network guard refuses non-loopback connections. No unrelated source
+was changed to address this environmental failure.
+
+All validation used the following environment; the root tool directory is
+needed for packages such as suite-vocab that use the root TypeScript compiler:
+
+```sh
+export PATH="$PWD/node_modules/.bin:$PATH"
+export NODE_OPTIONS=--require=/tmp/sst-9s2-network-guard.cjs
+export GIT_ALLOW_PROTOCOL=file
+```
+
+The initial dependency build without the explicit root tool path failed with
+`tsc: not found`; it passed after setting that path. The frozen offline install
+(`pnpm install --offline --frozen-lockfile --ignore-scripts`) succeeded using
+cached packages, without downloads or lifecycle scripts. No dependencies were
+added beyond main's incoming manifest changes, and no lockfile was regenerated.
+
+`roborev status` exits 127 because roborev is unavailable; automated per-commit
+review remains unavailable. Whitespace and scope checks pass. Git ancestry
+confirms that local main is merged. The fetch used only the prescribed local
+source clone at `/home/runner/work/solid-sdk`; no network remote was fetched or
+merged, no branch was switched, and nothing was pushed or published.
+
+The requested integration is complete. Full-workspace validation and automated
+review retain the environmental limitations above. No open questions or
+unfinished implementation work remain for this round.
