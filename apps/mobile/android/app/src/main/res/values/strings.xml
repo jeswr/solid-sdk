@@ -1,0 +1,8 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Solid Suite</string>
+    <string name="title_activity_main">Solid Suite</string>
+    <string name="package_name">org.jeswr.suite</string>
+    <string name="custom_url_scheme">org.jeswr.suite</string>
+    <string name="webview_too_old">Solid Suite needs a newer Android System WebView. Update it from Google Play, then open the app again.</string>
+</resources>
