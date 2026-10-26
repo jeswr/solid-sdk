@@ -799,6 +799,119 @@ describe("token replay, binding, expiry and revocation", () => {
   });
 });
 
+describe("access token size policy", () => {
+  it.each([
+    { flow: "trusted", field: "scope" },
+    { flow: "trusted", field: "clientId" },
+    { flow: "trusted", field: "webId" },
+    { flow: "broker", field: "scope" },
+    { flow: "broker", field: "clientId" },
+    { flow: "broker", field: "webId" },
+  ])("rejects oversized $field claims in the $flow flow before issuing credentials", async ({
+    flow,
+    field,
+  }) => {
+    const f = fixture();
+    let id = await f.register();
+    if (field === "clientId") {
+      id = `https://client.example/${"x".repeat(13_000)}`;
+      f.metadataFetch.mockResolvedValue(
+        Response.json({ client_id: id, redirect_uris: [REDIRECT] }),
+      );
+    }
+    const request = f.authRequest(
+      id,
+      field === "scope" ? { scope: "mcp ".repeat(4_000).trim() } : {},
+    );
+    const session = {
+      ...SESSION,
+      webId: field === "webId" ? `https://alice.example/${"é".repeat(7_000)}` : SESSION.webId,
+    };
+    const grants = vi.spyOn(f.stores.grants, "put");
+    const codes = vi.spyOn(f.stores.codes, "put");
+    const refreshTokens = vi.spyOn(f.stores.refreshTokens, "put");
+    let response: Response;
+    if (flow === "broker") {
+      expect((await f.server.handle(request)).status).toBe(302);
+      vi.mocked(f.provider.complete).mockResolvedValueOnce(session);
+      response = await f.server.handle(new Request(`${ISSUER}/callback?state=upstream-state`));
+    } else {
+      response = await f.server.authorize(request, session);
+    }
+    expect(response.status).toBe(302);
+    expect(
+      Object.fromEntries(new URL(response.headers.get("location") as string).searchParams),
+    ).toEqual({
+      existing: "1",
+      error: "invalid_request",
+      state: "client-state",
+      iss: ISSUER,
+    });
+    expect(grants).not.toHaveBeenCalled();
+    expect(codes).not.toHaveBeenCalled();
+    expect(refreshTokens).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    "authorization_code",
+    "refresh_token",
+  ])("rejects oversized stored claims before consuming a %s", async (type) => {
+    const f = fixture();
+    const id = await f.register();
+    const code = await f.code(id);
+    const record = await f.stores.codes.get(digest(code));
+    const grant = await f.stores.grants.get(record?.grantId as string);
+    if (!grant) throw new Error("Missing fixture grant");
+    const original =
+      type === "refresh_token" ? await (await f.exchange(id, code)).json() : undefined;
+    const consume = vi.spyOn(
+      type === "authorization_code" ? f.stores.codes : f.stores.refreshTokens,
+      "consume",
+    );
+    const refreshWrites = vi.spyOn(f.stores.refreshTokens, "put");
+    const revoke = vi.spyOn(f.stores.grants, "revoke");
+    // Simulate a grant persisted before the size policy was enforced.
+    vi.spyOn(f.stores.grants, "get").mockResolvedValueOnce({
+      ...grant,
+      session: { ...SESSION, webId: `https://alice.example/${"é".repeat(7_000)}` },
+    });
+    const exchange = () =>
+      type === "authorization_code" ? f.exchange(id, code) : f.refresh(id, original.refresh_token);
+    const rejected = await exchange();
+    expect(rejected.status).toBe(400);
+    expect(await rejected.json()).toEqual({ error: "invalid_request" });
+    expect(consume).not.toHaveBeenCalled();
+    expect(refreshWrites).not.toHaveBeenCalled();
+    expect(revoke).not.toHaveBeenCalled();
+    if (original)
+      await expect(
+        f.server.verifyAccessToken(original.access_token, RESOURCE),
+      ).resolves.toBeDefined();
+    const retried = await exchange();
+    expect(retried.status).toBe(200);
+    const tokens = await retried.json();
+    await expect(f.server.verifyAccessToken(tokens.access_token, RESOURCE)).resolves.toBeDefined();
+  });
+
+  it("issues and refreshes verifiable tokens with large claims within the limit", async () => {
+    const f = fixture();
+    const id = await f.register();
+    const scope = "mcp ".repeat(2_500).trim();
+    const response = await f.exchange(id, await f.code(id, { scope }));
+    expect(response.status).toBe(200);
+    const original = await response.json();
+    const refreshed = await f.refresh(id, original.refresh_token);
+    expect(refreshed.status).toBe(200);
+    for (const tokens of [original, await refreshed.json()]) {
+      expect(tokens.access_token.length).toBeGreaterThan(13_000);
+      expect(tokens.access_token.length).toBeLessThanOrEqual(16_384);
+      await expect(
+        f.server.verifyAccessToken(tokens.access_token, RESOURCE),
+      ).resolves.toMatchObject({ scope });
+    }
+  });
+});
+
 describe("HTTP parser and configuration", () => {
   it.each([
     ["/token", "GET", 405],

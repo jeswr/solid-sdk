@@ -46,6 +46,61 @@ describe("ES256 validation", () => {
     expect(jwt.verify(token({}, { nbf: f.now() }), RESOURCE)).toHaveProperty("nbf", f.now());
   });
 
+  it("issues verifiable tokens up to the size limit and rejects the next payload byte", () => {
+    const empty = jwt.issue({ ...grant, scope: "" });
+    const [header, payload, signature] = empty.split(".") as [string, string, string];
+    const payloadBudget = Math.floor(((16_384 - header.length - signature.length - 2) * 3) / 4);
+    const scope = "x".repeat(payloadBudget - Buffer.from(payload, "base64url").length);
+    const accepted = jwt.issue({ ...grant, scope });
+    expect(accepted.length).toBeGreaterThanOrEqual(16_383);
+    expect(accepted.length).toBeLessThanOrEqual(16_384);
+    expect(jwt.verify(accepted, RESOURCE)).toHaveProperty("scope", scope);
+    expect(() => jwt.issue({ ...grant, scope: `${scope}x` })).toThrow("invalid_request");
+    const acceptedClaims = JSON.parse(
+      Buffer.from(accepted.split(".")[1] as string, "base64url").toString(),
+    );
+    const oversized = token({}, { ...acceptedClaims, scope: `${scope}x` });
+    expect(oversized.length).toBeGreaterThan(16_384);
+    expect(() => jwt.verify(oversized, RESOURCE)).toThrow("invalid_token");
+  });
+
+  it.each([
+    "issuer",
+    "kid",
+    "webId",
+    "clientId",
+    "resource",
+    "scope",
+    "id",
+  ] as const)("rejects issuance when encoded %s exceeds the token size limit", (field) => {
+    const oversized = {
+      issuer: ISSUER,
+      kid: f.key.kid,
+      webId: SESSION.webId,
+      clientId: grant.clientId,
+      resource: RESOURCE,
+      scope: grant.scope,
+      id: grant.id,
+      [field]:
+        field === "webId"
+          ? "é".repeat(7_000)
+          : field === "scope"
+            ? "\\".repeat(7_000)
+            : "x".repeat(13_000),
+    };
+    const service = new JwtService({ ...f.key, kid: oversized.kid }, oversized.issuer, f.now);
+    expect(() =>
+      service.issue({
+        ...grant,
+        clientId: oversized.clientId,
+        resource: oversized.resource,
+        scope: oversized.scope,
+        id: oversized.id,
+        session: { ...SESSION, webId: oversized.webId },
+      }),
+    ).toThrow("invalid_request");
+  });
+
   it.each([
     { alg: "none" },
     { typ: "JWT" },

@@ -3,6 +3,10 @@ import { createPublicKey, generateKeyPairSync, sign, verify } from "node:crypto"
 import { ACCESS_TTL, OAuthError, object, opaque } from "./protocol.js";
 import type { Grant, SigningKey } from "./types.js";
 
+const MAX_TOKEN_LENGTH = 16_384;
+// A 64-byte IEEE-P1363 ES256 signature occupies 86 base64url characters without padding.
+const SIGNATURE_LENGTH = 86;
+
 /** Generate an ES256 key for a single process; production callers persist and inject it. */
 export function generateSigningKey(): SigningKey {
   return {
@@ -37,7 +41,11 @@ export class JwtService {
     };
   }
 
-  issue(grant: Grant): string {
+  assertSize(grant: Grant): void {
+    this.signingInput(grant);
+  }
+
+  private signingInput(grant: Grant): string {
     const now = this.now();
     const header = encode({ alg: "ES256", typ: "at+jwt", kid: this.key.kid });
     const payload = encode({
@@ -52,6 +60,13 @@ export class JwtService {
       jti: opaque(),
     });
     const input = `${header}.${payload}`;
+    if (input.length + 1 + SIGNATURE_LENGTH > MAX_TOKEN_LENGTH)
+      throw new OAuthError("invalid_request");
+    return input;
+  }
+
+  issue(grant: Grant): string {
+    const input = this.signingInput(grant);
     return `${input}.${sign("sha256", Buffer.from(input), {
       key: this.key.privateKey,
       dsaEncoding: "ieee-p1363",
@@ -60,7 +75,7 @@ export class JwtService {
 
   verify(token: string, resource: string): Record<string, unknown> {
     try {
-      if (token.length > 16_384) throw new Error();
+      if (token.length > MAX_TOKEN_LENGTH) throw new Error();
       const parts = token.split(".");
       if (parts.length !== 3 || parts.some((part) => !/^[A-Za-z0-9_-]+$/u.test(part)))
         throw new Error();

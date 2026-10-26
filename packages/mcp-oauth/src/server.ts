@@ -271,7 +271,7 @@ export class AuthorizationServer {
         iss: this.issuer,
       });
     const id = opaque();
-    await this.stores.grants.put(id, {
+    const grant: Grant = {
       id,
       clientId: authorization.clientId,
       session: identity,
@@ -280,7 +280,9 @@ export class AuthorizationServer {
       expiresAt: this.now() + GRANT_TTL,
       revoked: false,
       refreshAllowed: client.grant_types.includes("refresh_token"),
-    });
+    };
+    this.jwt.assertSize(grant);
+    await this.stores.grants.put(id, grant);
     const code = opaque();
     await this.stores.codes.put(digest(code), {
       authorization,
@@ -336,7 +338,8 @@ export class AuthorizationServer {
       [...requestedScopes].some((scope) => !grantedScopes.has(scope))
     )
       throw new OAuthError("invalid_scope");
-    // Validate the request before atomically consuming its credential; invalid scope is retryable.
+    // Validate scope and encoded token size before consuming a credential so rejection is retryable.
+    const accessToken = this.jwt.issue(grant);
     const used =
       type === "authorization_code"
         ? await this.stores.codes.consume(hash)
@@ -346,7 +349,6 @@ export class AuthorizationServer {
       throw new OAuthError("invalid_grant");
     }
     if (expiresAt <= this.now()) throw new OAuthError("invalid_grant");
-    const accessToken = this.jwt.issue(grant);
     let refreshToken: string | undefined;
     if (grant.refreshAllowed) {
       refreshToken = opaque();
