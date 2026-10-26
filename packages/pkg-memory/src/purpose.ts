@@ -88,6 +88,8 @@ function evaluableConstraint(constraint: OdrlConstraint): boolean {
 }
 
 function evaluablePolicy(policy: OdrlPolicy): boolean {
+  // The core evaluator cannot interpret profiles or verify delegation authority.
+  if (policy.profile !== undefined || policy.delegatedUnder !== undefined) return false;
   const rules = [...(policy.permissions ?? []), ...(policy.prohibitions ?? [])];
   const duties = [...(policy.obligations ?? []), ...rules.flatMap((rule) => rule.duties ?? [])];
   return [...rules, ...duties].every((rule) => (rule.constraints ?? []).every(evaluableConstraint));

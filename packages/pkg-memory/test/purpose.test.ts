@@ -60,6 +60,33 @@ it("requires a supported purpose and safe client identity", () => {
 });
 
 it.each([
+  { profile: "https://example.org/unsupported-profile" },
+  { profile: ["https://example.org/unsupported-profile"] },
+  { profile: [] },
+  { profile: "" },
+  { delegatedUnder: "https://example.org/unverified-parent" },
+  { delegatedUnder: "" },
+  {
+    profile: "https://example.org/delegation-profile",
+    delegatedUnder: "https://example.org/unverified-parent",
+  },
+] satisfies Partial<OdrlPolicy>[])("denies unsupported policy semantics on every read: %j", (fields) => {
+  const mutable: OdrlPolicy = {
+    id: policy.id,
+    permissions: [{ type: "permission", action: "read" }],
+  };
+  const fact = { categories: ["pd:Contact"] };
+  for (const purpose of Object.keys(MEMORY_PURPOSES) as MemoryPurpose[]) {
+    const current = { ...mutable };
+    const filter = purposeFilter(current, purpose, client);
+    expect(filter(fact)).toBe(true);
+    Object.assign(current, fields);
+    expect(filter(fact)).toBe(false);
+    expect(purposeFilter({ ...mutable, ...fields }, purpose, client)(fact)).toBe(false);
+  }
+});
+
+it.each([
   ...Array.from({ length: 0x21 }, (_, code) => code),
   ...["<", ">", '"', "{", "}", "|", "^", "`", "\\"].map((character) => character.charCodeAt(0)),
 ])("rejects client identities requiring transformation of code point %i", (code) => {
