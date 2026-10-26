@@ -138,6 +138,13 @@ function projectTarget(project, path) {
 }
 
 function importTargets(projects, file, specifier) {
+  if (
+    (specifier.startsWith(".") || isAbsolute(specifier) || /^file:/i.test(specifier)) &&
+    /[?#%]/.test(specifier)
+  )
+    return {
+      error: "relative, absolute and file: module specifiers must not contain ?, # or %",
+    };
   let target;
   if (/^file:/i.test(specifier)) {
     try {
@@ -334,23 +341,26 @@ function sourceFailures(root, file, projects) {
 export function checkAgentLayers(root = repoRoot) {
   const failures = [];
   const projects = workspaceProjects(root);
+  const files = readdirSync(root, { withFileTypes: true })
+    .filter((entry) => entry.isFile())
+    .map((entry) => join(root, entry.name));
   for (const base of ["packages", "apps", "tools", "scripts", "test"]) {
-    for (const file of walk(join(root, base))) {
-      if (sourceExtensions.has(extname(file)))
-        failures.push(...sourceFailures(root, file, projects));
-      if (file.endsWith("/package.json")) {
-        const manifest = JSON.parse(readFileSync(file, "utf8"));
-        const ctx = context(root, file, projects);
-        for (const field of [...dependencyFields, "devDependencies"]) {
-          for (const [name, version] of Object.entries(manifest[field] ?? {})) {
-            // Resolve npm aliases as well as direct dependency names.
-            const target = version.startsWith("npm:")
-              ? version.slice(4).replace(/@[^@/]*$/, "")
-              : name;
-            const dependencyContext = field === "devDependencies" ? { ...ctx, test: true } : ctx;
-            for (const failure of importFailures(dependencyContext, target, false, true))
-              failures.push(`${ctx.path}: ${failure}: ${target}`);
-          }
+    files.push(...walk(join(root, base)));
+  }
+  for (const file of files) {
+    if (sourceExtensions.has(extname(file))) failures.push(...sourceFailures(root, file, projects));
+    if (file.endsWith("/package.json")) {
+      const manifest = JSON.parse(readFileSync(file, "utf8"));
+      const ctx = context(root, file, projects);
+      for (const field of [...dependencyFields, "devDependencies"]) {
+        for (const [name, version] of Object.entries(manifest[field] ?? {})) {
+          // Resolve npm aliases as well as direct dependency names.
+          const target = version.startsWith("npm:")
+            ? version.slice(4).replace(/@[^@/]*$/, "")
+            : name;
+          const dependencyContext = field === "devDependencies" ? { ...ctx, test: true } : ctx;
+          for (const failure of importFailures(dependencyContext, target, false, true))
+            failures.push(`${ctx.path}: ${failure}: ${target}`);
         }
       }
     }

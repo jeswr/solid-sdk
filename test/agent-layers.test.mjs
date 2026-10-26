@@ -469,6 +469,7 @@ describe("global restrictions across module load forms", () => {
       "tools/ordinary/index.ts",
       "scripts/ordinary.ts",
       "test/ordinary.test.ts",
+      "index.ts",
     ]) {
       for (const [target, reason] of [
         ["openai/resources", "gateway-only"],
@@ -491,10 +492,10 @@ describe("global restrictions across module load forms", () => {
         const directory = workspace({
           "apps/ordinary/web/package.json": '{"name":"@jeswr/ordinary-web"}',
           "apps/ordinary/web/src/index.ts": "",
-          "tools/provider store/package.json": JSON.stringify({ name }),
+          "tools/provider-store/package.json": JSON.stringify({ name }),
         });
         const file = join(directory, "apps/ordinary/web/src/index.ts");
-        const target = join(directory, "tools/provider store", subpath);
+        const target = join(directory, "tools/provider-store", subpath);
         const specifier = kind.startsWith("file")
           ? pathToFileURL(target).href.replace(/^file:/, kind === "file-upper" ? "FILE:" : "file:")
           : kind === "absolute"
@@ -503,6 +504,40 @@ describe("global restrictions across module load forms", () => {
         writeFileSync(file, form.replace("TARGET", JSON.stringify(specifier)));
         expect(checkAgentLayers(directory).join("\n")).toContain(reason);
       }
+  });
+
+  it.each(forms)("rejects URL suffixes and escapes globally: %s", (form) => {
+    for (const kind of ["relative", "absolute", "file", "file-upper"])
+      for (const suffix of ["?raw", "#fragment", "%2ejs", "%zz"]) {
+        const directory = workspace({ "tools/ordinary/index.ts": "" });
+        const file = join(directory, "tools/ordinary/index.ts");
+        const target = join(directory, "tools/ordinary/local.js");
+        const specifier =
+          (kind.startsWith("file")
+            ? pathToFileURL(target).href.replace(
+                /^file:/,
+                kind === "file-upper" ? "FILE:" : "file:",
+              )
+            : kind === "absolute"
+              ? target
+              : "./local.js") + suffix;
+        writeFileSync(file, form.replace("TARGET", JSON.stringify(specifier)));
+        expect(checkAgentLayers(directory)).toContain(
+          `tools/ordinary/index.ts:1: relative, absolute and file: module specifiers must not contain ?, # or %: ${specifier}`,
+        );
+      }
+  });
+
+  it.each([
+    "../../../packages/agent-channels/src/gmail/send.js?raw",
+    "../../../packages/agent-channels/src/gmail/send.js#fragment",
+    "../../../packages/agent-channels/src/gmail/%73end.js",
+    "../../../packages/agent-channels/src/gmail/send%2ejs",
+    "../../../packages/%61gent-channels/src/gmail/send.js",
+  ])("rejects escaped and suffixed cross-project targets: %s", (specifier) => {
+    expect(
+      scan("apps/ordinary/src/index.ts", `import ${JSON.stringify(specifier)};`).join("\n"),
+    ).toContain("module specifiers must not contain ?, # or %");
   });
 
   it("checks literal templates and wrapped literals outside agent projects", () => {
@@ -757,6 +792,71 @@ describe("agent module load allowlist", () => {
     expect(scan(path, 'import "file:///tmp/module.js";').join("\n")).toContain(
       "agent module specifier must be a bare package name or relative path",
     );
+  });
+});
+
+describe("root project enforcement", () => {
+  it.each([
+    "dependencies",
+    "optionalDependencies",
+    "peerDependencies",
+    "devDependencies",
+  ])("checks root manifest %s including npm aliases", (field) => {
+    for (const [name, version, reason] of [
+      ["openai", "^6.0.0", "gateway-only"],
+      ["sdk", "npm:@anthropic-ai/sdk@^1.0.0", "gateway-only"],
+      ["send", "npm:@jeswr/agent-channels/gmail/send@0.1.0", "executor-only"],
+    ]) {
+      const directory = workspace({
+        "package.json": JSON.stringify({
+          name: "@jeswr/test-workspace",
+          [field]: { [name]: version },
+        }),
+      });
+      const failures = checkAgentLayers(directory);
+      expect(failures).toHaveLength(1);
+      expect(failures[0]).toContain(
+        `package.json: ${reason === "gateway-only" ? "model SDKs are gateway-only" : "send subpaths are executor-only"}`,
+      );
+    }
+  });
+
+  it.each([
+    "ts",
+    "tsx",
+    "mts",
+    "cts",
+    "js",
+    "jsx",
+    "mjs",
+    "cjs",
+  ])("checks root .%s sources", (extension) => {
+    expect(scan(`index.${extension}`, 'import "openai";').join("\n")).toContain("gateway-only");
+    expect(
+      scan(
+        `index.${extension}`,
+        'export * from "./packages/agent-channels/src/gmail/send.js";',
+      ).join("\n"),
+    ).toContain("executor-only");
+    expect(scan(`index.${extension}`, 'await import("./local.js?raw");').join("\n")).toContain(
+      "module specifiers must not contain ?, # or %",
+    );
+  });
+
+  it("allows ordinary root dependencies and lexical imports without built output", () => {
+    expect(
+      checkAgentLayers(
+        workspace({
+          "package.json": JSON.stringify({
+            name: "@jeswr/test-workspace",
+            devDependencies: { typescript: "^6.0.0" },
+          }),
+          "index.mjs":
+            'import "typescript"; import "./missing.js"; import "./packages/agent-model/dist/index.js";',
+          "packages/agent-model/package.json": '{"name":"@jeswr/agent-model"}',
+        }),
+      ),
+    ).toEqual([]);
   });
 });
 
