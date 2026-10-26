@@ -248,3 +248,222 @@ test("RDFC-1.0 canonicalization ignores blank-node labels and input order", asyn
   expect(canonical).toContain("_:c14n");
   expect(await engine.canonicalize(second)).toBe(canonical);
 });
+
+test("LocalIndex SELECT/ASK/CONSTRUCT correctness over 1000 resource graphs", async () => {
+  const index = await engine.createIndex();
+  const data = await engine.parse(
+    '<https://example/s> <https://example/p> "bonjour"@fr .',
+    "text/turtle",
+  );
+  await Promise.all(
+    Array.from({ length: 1000 }, (_, i) => index.put(`https://example/${i}`, data)),
+  );
+  const query = "SELECT ?g ?s ?p ?o WHERE { GRAPH ?g { ?s ?p ?o } } ORDER BY ?g";
+  const rows = await index.select(query);
+  expect(rows).toHaveLength(1000);
+  expect(new Set(rows.map((row) => row.get("g")?.value)).size).toBe(1000);
+  expect(rows[0]?.get("o")).toMatchObject({
+    termType: "Literal",
+    value: "bonjour",
+    language: "fr",
+  });
+  expect(rows[0]?.get("s")?.value).toBe("https://example/s");
+  expect(rows[0]?.get("p")?.value).toBe("https://example/p");
+  expect(rows[0]?.get("unbound")).toBeUndefined();
+  const streamed = [];
+  for await (const row of await index.selectStream(query)) streamed.push(row);
+  expect(streamed).toHaveLength(1000);
+  expect(streamed.every((row, i) => row.equals(rows[i]))).toBe(true);
+  const ask = 'ASK { GRAPH <https://example/0> { ?s <https://example/p> "bonjour"@fr } }';
+  expect(await index.ask(ask)).toBe(true);
+  const result = await index.construct("CONSTRUCT { ?s ?p ?o } WHERE { GRAPH ?g { ?s ?p ?o } }");
+  expect(result).toHaveLength(1);
+  expect(result[0]?.graph.termType).toBe("DefaultGraph");
+  expect(await engine.canonicalize(result)).toBe(await engine.canonicalize(data));
+  await index.put(
+    "https://example/0",
+    await engine.parse("<https://example/new> <https://example/p> 42 .", "text/turtle"),
+  );
+  expect(await index.ask(ask)).toBe(false);
+  expect(
+    (await index.select("SELECT ?o { GRAPH <https://example/0> { ?s ?p ?o } }"))[0]?.get("o"),
+  ).toMatchObject({
+    value: "42",
+    datatype: { value: "http://www.w3.org/2001/XMLSchema#integer" },
+  });
+  for (let i = 0; i < 1000; i += 2) await index.remove(`https://example/${i}`);
+  expect(await index.select(query)).toHaveLength(500);
+  const restored = await engine.createIndex();
+  await restored.restore(await index.snapshot());
+  expect(await restored.select(query)).toEqual(await index.select(query));
+});
+
+test("LocalIndex preserves blank nodes across rows, OPTIONAL unbound variables and restores", async () => {
+  const index = await engine.createIndex();
+  await index.put(
+    "https://example/g",
+    await engine.parse('_:a <https://example/p> _:a; <https://example/label> "x" .', "text/turtle"),
+  );
+  const rows = await index.select(
+    "SELECT ?s ?p ?o ?missing { GRAPH ?g { ?s ?p ?o OPTIONAL { ?s <https://example/missing> ?missing } } } ORDER BY ?p",
+  );
+  expect(rows).toHaveLength(2);
+  expect(rows[0]?.get("s")?.equals(rows[1]?.get("s"))).toBe(true);
+  expect(rows[0]?.get("missing")).toBeUndefined();
+  expect(rows[1]?.get("s")?.equals(rows[1]?.get("o"))).toBe(true);
+  const before = await index.construct("CONSTRUCT { ?s ?p ?o } { GRAPH ?g { ?s ?p ?o } }");
+  await index.restore(await index.snapshot());
+  expect(
+    await engine.canonicalize(
+      await index.construct("CONSTRUCT { ?s ?p ?o } { GRAPH ?g { ?s ?p ?o } }"),
+    ),
+  ).toBe(await engine.canonicalize(before));
+});
+
+test("LocalIndex restores existing gzip/fromCompressed and zstd snapshots", async () => {
+  const { zstdCompressSync } = await import("node:zlib");
+  const { SparqStore } = await import("@sparq-org/sparq");
+  const { gunzipSync } = await import("node:zlib");
+  const index = await engine.createIndex();
+  const text = '<https://example/s> <https://example/p> "café" <https://example/g> .';
+  const zstd = new Uint8Array(zstdCompressSync(text));
+  await index.restore(zstd);
+  expect(index.list()).toEqual(["https://example/g"]);
+  expect(index.size()).toBe(1);
+  const snapshot = await index.snapshot();
+  expect(gunzipSync(snapshot).toString()).toContain('"café"');
+  const compatible = await SparqStore.fromCompressed(snapshot, "nquads", { dataset: true });
+  try {
+    expect(compatible.countQuads()).toBe(1);
+  } finally {
+    compatible.free();
+  }
+  const skippable = new Uint8Array(8 + zstd.length);
+  skippable.set([0x50, 0x2a, 0x4d, 0x18, 0, 0, 0, 0]);
+  skippable.set(zstd, 8);
+  await index.restore(skippable);
+  expect(index.size()).toBe(1);
+  await expect(index.restore(new Uint8Array([0x28, 0xb5, 0x2f, 0xfd]))).rejects.toThrow();
+  expect(index.size()).toBe(1);
+});
+
+test("LocalIndex rejects malformed and mismatched query forms without changing the store", async () => {
+  const index = await engine.createIndex();
+  await expect(index.select("invalid SPARQL")).rejects.toThrow();
+  await expect(index.ask("SELECT * {}")).rejects.toThrow();
+  await expect(index.construct("SELECT * {}")).rejects.toThrow();
+  await expect(index.select("ASK {}")).rejects.toThrow("SELECT");
+  await expect(
+    index.select("INSERT DATA { <https://example/s> <https://example/p> 1 }"),
+  ).rejects.toThrow();
+  expect(index.size()).toBe(0);
+  expect(await index.select("SELECT * { GRAPH ?g { ?s ?p ?o } }")).toEqual([]);
+  const empty = await index.selectStream("SELECT * { GRAPH ?g { ?s ?p ?o } }");
+  expect(await empty.next()).toEqual({ done: true, value: undefined });
+});
+
+test.each(["\n", "\r\n", "\r"])("SELECT accepts comments terminated by %j", async (ending) => {
+  const index = await engine.createIndex();
+  const query = `# comment${ending}SELECT * {}`;
+  expect(await index.select(query)).toHaveLength(1);
+  const rows = [];
+  for await (const row of await index.selectStream(query)) rows.push(row);
+  expect(rows).toEqual(await index.select(query));
+});
+
+test.each([
+  "\n",
+  "\r\n",
+  "\r",
+])("SELECT accepts prologue comments terminated by %j and rejects malformed declarations", async (ending) => {
+  const index = await engine.createIndex();
+  const query =
+    "# comment\n bAse # base\n <https://example/#base>\n PREFIX # prefix\n ex: # iri\n <https://example/#>\n select ?x { VALUES ?x { ex:s } }".replaceAll(
+      "\n",
+      ending,
+    );
+  expect((await index.select(query))[0]?.get("x")?.value).toBe("https://example/#s");
+  const stream = await index.selectStream(query);
+  expect((await stream.next()).value?.get("x")?.value).toBe("https://example/#s");
+  stream.dispose();
+  for (const invalid of [
+    "PREFIX invalid SELECT * {}",
+    "PREFIX ex: invalid SELECT * {}",
+    "BASE invalid SELECT * {}",
+  ])
+    await expect(index.selectStream(invalid)).rejects.toThrow("SELECT");
+});
+
+test.each([
+  "empty",
+  "populated",
+])("LocalIndex synchronizes %s graph membership on put, replacement and remove", async (kind) => {
+  const index = await engine.createIndex();
+  const data = await engine.parse("<urn:s> <urn:p> <urn:o> .", "text/turtle");
+  const ask = "ASK { GRAPH <urn:g> {} }";
+  const query = "SELECT ?g { GRAPH ?g {} }";
+  await index.put("urn:g", kind === "empty" ? [] : data);
+  expect(index.has("urn:g")).toBe(true);
+  expect(await index.ask(ask)).toBe(true);
+  expect((await index.select(query)).map((row) => row.get("g")?.value)).toEqual(index.list());
+  await index.put("urn:g", []);
+  expect(index.size()).toBe(0);
+  expect(index.has("urn:g")).toBe(true);
+  expect(await index.ask(ask)).toBe(true);
+  await index.remove("urn:g");
+  expect(index.has("urn:g")).toBe(false);
+  expect(await index.ask(ask)).toBe(false);
+  expect(await index.select(query)).toEqual([]);
+  await index.remove("urn:g");
+  await index.put("urn:g", data);
+  expect(await index.ask(ask)).toBe(true);
+  expect(index.size()).toBe(1);
+});
+
+test.each([
+  1, 2,
+])("restore rebuilds graph membership and applies the %i-quad cap", async (maxQuads) => {
+  const source = await engine.createIndex();
+  const data = await engine.parse("<urn:s> <urn:p> <urn:o> .", "text/turtle");
+  await source.put("urn:shared", data);
+  await source.put("urn:new", data);
+  const index = await engine.createIndex({ maxQuads });
+  await index.put("urn:stale", data);
+  await index.put("urn:empty", []);
+  await index.put("urn:shared", []);
+  await index.restore(await source.snapshot());
+  const expected = maxQuads === 1 ? ["urn:new"] : ["urn:new", "urn:shared"];
+  expect(index.list().sort()).toEqual(expected);
+  expect(index.size()).toBe(maxQuads);
+  expect(
+    (await index.select("SELECT ?g { GRAPH ?g {} }")).map((row) => row.get("g")?.value).sort(),
+  ).toEqual(expected);
+  for (const graph of ["urn:stale", "urn:empty", "urn:shared", "urn:new"]) {
+    expect(await index.ask(`ASK { GRAPH <${graph}> {} }`)).toBe(index.has(graph));
+  }
+  expect(await index.select("SELECT * { GRAPH ?g { ?s ?p ?o } }")).toHaveLength(maxQuads);
+  const empty = await engine.createIndex();
+  await index.restore(await empty.snapshot());
+  expect(index.list()).toEqual([]);
+  expect(index.size()).toBe(0);
+  expect(await index.ask("ASK { GRAPH ?g {} }")).toBe(false);
+});
+
+test("eviction and removal delete actual WASM graph quads, including blank nodes", async () => {
+  const index = await engine.createIndex({ maxQuads: 1 });
+  const data = await engine.parse("_:a <https://example/p> _:a .", "text/turtle");
+  await index.put("https://example/empty", []);
+  await index.put("https://example/a", data);
+  expect(await index.ask("ASK { GRAPH <https://example/a> { ?s ?p ?o } }")).toBe(true);
+  await index.put("https://example/b", data);
+  expect(index.has("https://example/empty")).toBe(false);
+  expect(index.has("https://example/a")).toBe(false);
+  expect(await index.ask("ASK { GRAPH <https://example/empty> {} }")).toBe(false);
+  expect(await index.ask("ASK { GRAPH <https://example/a> {} }")).toBe(false);
+  expect(await index.ask("ASK { GRAPH <https://example/b> {} }")).toBe(true);
+  expect(await index.ask("ASK { GRAPH <https://example/a> { ?s ?p ?o } }")).toBe(false);
+  expect(await index.select("SELECT * { GRAPH ?g { ?s ?p ?o } }")).toHaveLength(1);
+  await index.remove("https://example/b");
+  expect(await index.ask("ASK { GRAPH ?g {} }")).toBe(false);
+  expect(await index.ask("ASK { GRAPH ?g { ?s ?p ?o } }")).toBe(false);
+});

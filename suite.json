@@ -72,7 +72,8 @@
     "@jeswr/pkg-memory",
     "@jeswr/mcp-oauth",
     "@jeswr/agent-session-capture",
-    "@jeswr/suite-vocab"
+    "@jeswr/suite-vocab",
+    "@jeswr/pod-connectors"
   ],
   "applications": [
     {
