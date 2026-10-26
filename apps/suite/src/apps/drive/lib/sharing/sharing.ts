@@ -26,6 +26,11 @@ function origin(grants: Grant[]): AccessOrigin {
   };
 }
 function project(input: SharingInput, grants: Grant[], comments: Grant[]): SharingState {
+  if (comments.some((grant) => grant.principal === PUBLIC && grant.modes.size > 0)) {
+    throw new SharingError(
+      "Anonymous comments permissions cannot be expressed by the sharing model",
+    );
+  }
   const data = grants.filter((grant) => grant.resource === input.access.resource);
   const management = grants.filter(
     (grant) => grant.document.model === "acp" && grant.resource === grant.document.source,

@@ -25,6 +25,10 @@ Read+Write access to both the resource and its ACR. Management-only principals,
 partial ACR permissions and all anonymous ACR permissions throw `SharingError` in
 both projection and diff planning. Empty ACR grants confer no permissions.
 
+Anonymous comments permissions cannot be expressed by the sharing shape and throw
+`SharingError` in both projection and diff planning, including inherited grants.
+Empty anonymous comments grants confer no permissions and are ignored.
+
 `link` represents anonymous access, not a secret bearer capability. Its Read also appears
 as `public: "viewer"`; link Editor is still publicly readable. To restrict anonymous access,
 set both fields to `"none"`. Requesting public Viewer without link access produces the same

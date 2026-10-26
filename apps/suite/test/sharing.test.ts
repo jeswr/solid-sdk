@@ -88,6 +88,75 @@ for (const model of ["wac", "acp"] as const) {
       ]);
       expect(diffSharing(value, restricted)).toHaveLength(2);
     });
+    it.each(
+      [false, true].flatMap((inherited) =>
+        [["Read"], ["Append"], ["Write"]].map((modes) => ({ inherited, modes })),
+      ),
+    )("rejects anonymous comments permissions $modes (inherited: $inherited)", ({
+      inherited,
+      modes,
+    }) => {
+      const doc = document(model);
+      const comment = document(model, inherited, COMMENTS);
+      grant(comment, PUBLIC, modes);
+      const value = { ...input(doc), comments: { resource: COMMENTS, documents: [comment] } };
+      const snapshot = [...comment.dataset];
+      // Anonymous comments matter even without a named file-access row.
+      expect(() => readSharing(value)).toThrow(SharingError);
+      expect(() => diffSharing(value, restricted)).toThrow(SharingError);
+      grant(doc, ALICE, ["Read"]);
+      expect(() => readSharing(value)).toThrow(SharingError);
+      expect(() => diffSharing(value, select(ALICE, "viewer"))).toThrow(SharingError);
+      expect(() => diffSharing(value, select(ALICE, "editor"))).toThrow(SharingError);
+      grant(doc, PUBLIC, ["Read"]);
+      expect(() => readSharing(value)).toThrow(SharingError);
+      expect(() => diffSharing(value, restricted)).toThrow(SharingError);
+      expect([...comment.dataset]).toEqual(snapshot);
+    });
+    it.each([
+      false,
+      true,
+    ])("ignores empty anonymous comments grants (inherited: %s)", (inherited) => {
+      const doc = document(model);
+      const comment = document(model, inherited, COMMENTS);
+      grant(doc, ALICE, ["Read"]);
+      grant(comment, PUBLIC, []);
+      grant(comment, PUBLIC, ["Append"], "https://example.org/unrelated/");
+      const value = { ...input(doc), comments: { resource: COMMENTS, documents: [comment] } };
+      const state = readSharing(value);
+      expect(state.people).toEqual([
+        { webId: ALICE, role: "viewer", inherited: false, explicit: true, sources: [doc.source] },
+      ]);
+      expect(state.general).toEqual({ inherited: false, explicit: false, sources: [] });
+      expect(diffSharing(value, state)).toEqual([]);
+      expect(diffSharing(value, select(ALICE, "editor"))).toEqual([
+        {
+          model,
+          source: doc.source,
+          resource: FILE,
+          principal: { kind: "webid", webId: ALICE },
+          add: ["Write"],
+          remove: [],
+          inherited: false,
+        },
+      ]);
+    });
+    it.each([false, true])("rejects authenticated-agent comments (inherited: %s)", (inherited) => {
+      const doc = document(model);
+      const comment = document(model, inherited, COMMENTS);
+      grant(doc, ALICE, ["Read"]);
+      if (model === "wac") {
+        const auth = authorization(comment, ALICE, ["Append"]);
+        auth.agent.clear();
+        auth.agentClass.add(`${ACL}AuthenticatedAgent`);
+      } else {
+        policy(comment, `${ACP}AuthenticatedAgent`, ["Append"]);
+      }
+      const value = { ...input(doc), comments: { resource: COMMENTS, documents: [comment] } };
+      expect(() => readSharing(value)).toThrow(SharingError);
+      expect(() => diffSharing(value, select(ALICE, "viewer"))).toThrow(SharingError);
+      expect(() => diffSharing(value, restricted)).toThrow(SharingError);
+    });
     it("marks inherited access and refuses removing it", () => {
       const doc = document(model, true);
       grant(doc, ALICE, ["Read"]);
