@@ -319,7 +319,84 @@ describe("explicit Link parsing bounds", () => {
     for (const limit of [-1, 0.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1]) {
       expect(() => parseLinkHeaders(null, base, { maxBytes: limit })).toThrow(RangeError);
       expect(() => parseLinkHeaders(null, base, { maxMembers: limit })).toThrow(RangeError);
+      expect(() => parseLinkHeaders(null, base, { maxResolvedBytes: limit })).toThrow(RangeError);
     }
+  });
+
+  test.each([
+    "truncate",
+    "throw",
+  ] as const)("%s accepts exact cumulative target and context lengths across fields", (onOverflow) => {
+    const values = ["<#a>; rel=next", '<urn:b>; rel=prev; anchor="#context"'];
+    const expected = parseLinkHeaders(values, base);
+    const maxResolvedBytes = expected.reduce(
+      (sum, { target, context }) => sum + target.length + context.length,
+      0,
+    );
+    expect(parseLinkHeaders(values, base, { maxResolvedBytes, onOverflow })).toEqual(expected);
+    expect(parseLinkHeaders(values.join(","), base, { maxResolvedBytes, onOverflow })).toEqual(
+      expected,
+    );
+    const options = { maxResolvedBytes: maxResolvedBytes - 1, onOverflow };
+    if (onOverflow === "throw") {
+      expect(() => parseLinkHeaders(values, base, options)).toThrow(LinkHeaderOverflowError);
+      expect(() => parseLinkHeaders(values, base, options)).toThrow("maxResolvedBytes");
+    } else {
+      // Stop at the overflowing member, even if a later link would fit.
+      expect(parseLinkHeaders([...values, "<urn:x>; rel=x; anchor=urn:y"], base, options)).toEqual(
+        expected.slice(0, 1),
+      );
+    }
+  });
+
+  test("counts duplicate targets and contexts, but only once per member with repeated relations", () => {
+    const member = '<#same>; rel="next next prev"; anchor="#same"; anchor="#ignored"';
+    const maxResolvedBytes = 2 * `${base}#same`.length;
+    expect(parseLinkHeaders(member, base, { maxResolvedBytes, onOverflow: "throw" })).toHaveLength(
+      1,
+    );
+    expect(() =>
+      parseLinkHeaders([member, member], base, { maxResolvedBytes, onOverflow: "throw" }),
+    ).toThrow("maxResolvedBytes");
+  });
+
+  test("counts resolved URL code units after non-ASCII references are serialised", () => {
+    const member = '<urn:📖>; rel=x; anchor="urn:🔖"';
+    const expected = parseLinkHeaders(member, base);
+    const target = "urn:%F0%9F%93%96";
+    const context = "urn:%F0%9F%94%96";
+    const maxResolvedBytes = target.length + context.length;
+    expect(parseLinkHeaders(member, base, { maxResolvedBytes, onOverflow: "throw" })).toEqual(
+      expected,
+    );
+    expect(expected).toMatchObject([{ target, context }]);
+    expect(parseLinkHeaders(member, base, { maxResolvedBytes: maxResolvedBytes - 1 })).toEqual([]);
+  });
+
+  test("a zero resolved budget accepts empty and invalid members only", () => {
+    const options = { maxResolvedBytes: 0, onOverflow: "throw" } as const;
+    expect(parseLinkHeaders(null, base, options)).toEqual([]);
+    expect(
+      parseLinkHeaders(
+        'malformed, <no-rel>, <http://[>; rel=x, <x>; rel=x; anchor="http://["',
+        base,
+        options,
+      ),
+    ).toEqual([]);
+    expect(() => parseLinkHeaders("<urn:x>; rel=x", base, options)).toThrow("maxResolvedBytes");
+  });
+
+  test("resolved lengths are unlimited by default; an explicit budget bounds long-base expansion", () => {
+    const longBase = `${base}?token=${"x".repeat(9000)}`;
+    const values = Array.from({ length: 64 }, (_, i) => `<#${i}>; rel=x`);
+    const links = parseLinkHeaders(values, longBase);
+    expect(links).toHaveLength(64);
+    expect(
+      links.reduce((sum, { target, context }) => sum + target.length + context.length, 0),
+    ).toBeGreaterThan(1024 * 1024);
+    expect(() =>
+      parseLinkHeaders(values, longBase, { maxResolvedBytes: 1024 * 1024, onOverflow: "throw" }),
+    ).toThrow("maxResolvedBytes");
   });
 });
 

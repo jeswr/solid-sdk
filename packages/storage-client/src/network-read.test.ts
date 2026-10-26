@@ -204,6 +204,64 @@ describe.each(factories)("$protocol request scope", ({ create, protocol }) => {
 });
 
 describe.each(factories)("$protocol authoritative Link bounds", ({ create, protocol }) => {
+  test("accepts 1024 relative targets against a long URL within the resolved budget", async () => {
+    const prefix = `${ROOT}?token=`;
+    const url = `${prefix}${"x".repeat(500 - prefix.length)}`;
+    const targets = Array.from({ length: 1024 }, (_, i) => `#${i}`);
+    const link = targets.map((target) => `<${target}>; rel=x`).join(",");
+    expect(url.length).toBeLessThan(8192);
+    expect(link.length).toBeLessThan(65536);
+    const storage = create({
+      root: ROOT,
+      fetch: async () => new Response(null, { headers: { link } }),
+    });
+    const result = await storage.head(url);
+    expect(result.links.get("x")).toEqual(
+      targets.map((target) => ({ target: `${url}${target}`, params: {} })),
+    );
+  });
+
+  test.each([
+    0, 1,
+  ])("bounds resolved targets and implicit contexts at exactly 1 MiB (excess %i)", async (excess) => {
+    const prefix = `${ROOT}?token=`;
+    const url = `${prefix}${"x".repeat(511 - prefix.length)}`;
+    const link = [...Array(1023).fill("<#0>; rel=x"), `<#0${"x".repeat(excess)}>; rel=x`].join(",");
+    const cancel = vi.fn();
+    const storage = create({
+      root: ROOT,
+      fetch: async () =>
+        new Response(new ReadableStream<Uint8Array>({ cancel }), { headers: { link } }),
+    });
+    const result = storage.read(url);
+    if (excess) {
+      await expect(result).rejects.toMatchObject({
+        code: "invalid-response",
+        cause: { name: "LinkHeaderOverflowError", limit: "maxResolvedBytes" },
+      });
+      expect(cancel).toHaveBeenCalledTimes(1);
+    } else {
+      const read = await result;
+      expect(read.links.get("x")).toHaveLength(1024);
+      await read.body?.cancel();
+    }
+  });
+
+  test("rejects expanded anchors before ignoring their foreign contexts", async () => {
+    const url = `${ROOT}?token=${"x".repeat(8000)}`;
+    const link = Array.from({ length: 1024 }, (_, i) => `<urn:t>; rel=x; anchor="#${i}"`).join(",");
+    expect(url.length).toBeLessThan(8192);
+    expect(link.length).toBeLessThan(65536);
+    const storage = create({
+      root: ROOT,
+      fetch: async () => new Response(null, { headers: { link } }),
+    });
+    await expect(storage.head(url)).rejects.toMatchObject({
+      code: "invalid-response",
+      cause: { name: "LinkHeaderOverflowError", limit: "maxResolvedBytes" },
+    });
+  });
+
   test("deduplicates 32000 repeated relations in one 64 KiB member", async () => {
     const prefix = `<urn:t>; rel="${Array(32000).fill("a").join(" ")}"; title="`;
     const title = "x".repeat(65536 - prefix.length - 1);

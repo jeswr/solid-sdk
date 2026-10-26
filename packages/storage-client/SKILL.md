@@ -52,9 +52,12 @@ Solid read side (ADR-003 §6):
   RDF (`unsupported` when none is advertised).
 - `Link` and WAC-Allow parsing reuse `@jeswr/storage-capabilities` (`parseLinkHeaders`,
   `parseWacAllow`). Both backends parse authoritative Link headers with explicit overflow rejection:
-  at most **64 KiB UTF-8 per combined field value** and **1,024 nonempty members** (including malformed
-  members). Overflow gives `invalid-response` and discards the body before storage validation or
-  type, next, describedby, up or linkset discovery can use partial results. Exact limits are accepted.
+  at most **64 KiB UTF-8 per combined field value**, **1,024 nonempty members** (including malformed
+  members), and **1 MiB of cumulative resolved target + anchor context URL lengths**, measured in
+  UTF-16 code units before retaining each member. Every retained member counts both URLs, including
+  duplicates and the response URL used when no anchor is supplied. Overflow gives `invalid-response`
+  and discards the body before storage validation or type, next, describedby, up or linkset discovery
+  can use partial results. Exact limits are accepted.
   Repeated relation tokens within one member add only one target per relation; separate members
   retain their order and duplicates. Targets append without copying earlier entries.
 
@@ -100,8 +103,10 @@ Solid read side (ADR-003 §6):
   `next` uses the first response-context next Link, resolved against that URL; foreign/unsafe or
   self links → `invalid-response`. Compare next links with the current page after scoping and
   canonicalisation (including the slashless root alias), and return canonical cursor URLs with
-  opaque queries preserved. `listAll` uses shared paginate: loop guard, 10,000 pages maximum,
-  abort between entries. No client sorting or cursor reconstruction.
+  opaque queries preserved. A canonical `next` cursor exceeding **8,192 UTF-16 code units** gives
+  `invalid-response`; the exact limit is accepted. This also stops page-by-page cursor growth before
+  short Link targets can amplify an oversized response URL. `listAll` uses shared paginate: loop guard,
+  10,000 pages maximum, abort between entries. No client sorting or cursor reconstruction.
 - HEAD/read/readRdf share status, GET/HEAD headers, range validation, conditional 304, body buffering,
   transport/abort mapping and RDF parsing with Solid (`src/read.ts`, `src/http.ts`). Accept defaults
   to */*, readRdf to `text/turtle, application/ld+json;q=0.9`; 304 gives an empty dataset and

@@ -215,6 +215,38 @@ describe("sparq fixtures and pagination", () => {
     expect((await listing().storage.list(CONTAINER)).next).toBeNull();
   });
 
+  test.each([
+    0, 1,
+  ])("bounds canonical next cursors at 8192 characters (excess %i)", async (excess) => {
+    const next = `${CONTAINER}?token=${"x".repeat(8192 - CONTAINER.length - 7 + excess)}`;
+    expect(next).toHaveLength(8192 + excess);
+    const result = listing(pageBody(), { link: `<${next}>; rel=next` }).storage.list(CONTAINER);
+    if (excess) await rejects(result);
+    else expect((await result).next).toEqual({ url: next });
+  });
+
+  test("listAll stops growing cursors before a long-base Link fan-out can exhaust the heap", async () => {
+    const segment = `${"x".repeat(7999)}/`;
+    const fanOut = Array.from({ length: 1024 }, (_, i) => `<#${i}>; rel=x`).join(",");
+    const fetch = vi.fn<AuthFetch>(async (input) => {
+      const url = String(input);
+      // Fail safely if the cursor guard regresses, without allocating the attack's hundreds of MiB.
+      if (url.length > 8192) throw new Error("Oversized cursor was fetched");
+      return new Response(JSON.stringify(pageBody()), {
+        headers: {
+          "content-type": "application/lws+json",
+          link: url.length >= 256000 ? fanOut : `<${segment}>; rel=next`,
+        },
+      });
+    });
+    const storage = createLwsBackend({ root: ROOT, fetch });
+    await rejects(collect(storage.listAll(CONTAINER)));
+    expect(fetch.mock.calls.map(([url]) => String(url))).toEqual([
+      CONTAINER,
+      `${CONTAINER}${segment}`,
+    ]);
+  });
+
   test("a slashless root next link is compared and returned in canonical form", async () => {
     const root = `${ROOT}storage/`;
     const alias = root.slice(0, -1);

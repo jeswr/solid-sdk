@@ -16,13 +16,15 @@ export interface ParseLinkHeadersOptions {
   maxBytes?: number;
   /** Maximum nonempty members across all fields (default 64); includes malformed members. */
   maxMembers?: number;
-  /** Ignore oversized fields and stop at the member limit, or reject incomplete inspection. */
+  /** Cumulative resolved target + context UTF-16 code units (default unlimited); a non-negative safe integer. */
+  maxResolvedBytes?: number;
+  /** Ignore oversized fields and stop at member/resolved limits, or reject incomplete inspection. */
   onOverflow?: "truncate" | "throw";
 }
 
 /** The authoritative Link fields could not be fully inspected within the configured bounds. */
 export class LinkHeaderOverflowError extends Error {
-  constructor(readonly limit: "maxBytes" | "maxMembers") {
+  constructor(readonly limit: "maxBytes" | "maxMembers" | "maxResolvedBytes") {
     super(`Link header exceeds ${limit}`);
     this.name = "LinkHeaderOverflowError";
   }
@@ -136,7 +138,10 @@ function parseLinkValue(tokens: LinkToken[], base: string): ParsedLink | undefin
  * By default, fields over 8 KiB (UTF-8) are ignored; at most 64 nonempty members are read,
  * including malformed members. Malformed members are skipped at the next unquoted comma outside
  * a target; an unterminated quote/target consumes the rest of its field. Invalid URLs and links
- * without relations are ignored. With onOverflow: 'throw', exceeding either bound throws
+ * without relations are ignored. maxResolvedBytes optionally bounds cumulative resolved target +
+ * context lengths in UTF-16 code units, counting both URLs for every retained member, including
+ * duplicates and implicit response-URL contexts. Its default is unlimited; truncation stops before
+ * retaining an overflowing member. With onOverflow: 'throw', exceeding any bound throws
  * LinkHeaderOverflowError instead of returning partial links; exactly reaching a bound is valid.
  * An invalid response URL throws TypeError; invalid limits throw RangeError.
  */
@@ -146,13 +151,14 @@ export function parseLinkHeaders(
   options: ParseLinkHeadersOptions = {},
 ): readonly ParsedLink[] {
   const base = new URL(responseUrl).href;
-  const { maxBytes = 8192, maxMembers = 64, onOverflow = "truncate" } = options;
-  for (const limit of [maxBytes, maxMembers]) {
-    if (!Number.isSafeInteger(limit) || limit < 0)
+  const { maxBytes = 8192, maxMembers = 64, maxResolvedBytes, onOverflow = "truncate" } = options;
+  for (const limit of [maxBytes, maxMembers, maxResolvedBytes]) {
+    if (limit !== undefined && (!Number.isSafeInteger(limit) || limit < 0))
       throw new RangeError("Link header limits must be non-negative safe integers");
   }
   const links: ParsedLink[] = [];
   let members = 0;
+  let resolvedBytes = 0;
   for (const value of typeof values === "string" ? [values] : (values ?? [])) {
     // The cheap length check also avoids encoding an arbitrarily large string.
     if (value.length > maxBytes || new TextEncoder().encode(value).byteLength > maxBytes) {
@@ -165,7 +171,14 @@ export function parseLinkHeaders(
         return links;
       }
       const link = parseLinkValue(tokens, base);
-      if (link) links.push(link);
+      if (link) {
+        resolvedBytes += link.target.length + link.context.length;
+        if (maxResolvedBytes !== undefined && resolvedBytes > maxResolvedBytes) {
+          if (onOverflow === "throw") throw new LinkHeaderOverflowError("maxResolvedBytes");
+          return links;
+        }
+        links.push(link);
+      }
       if (++members === maxMembers && onOverflow === "truncate") return links;
     }
   }

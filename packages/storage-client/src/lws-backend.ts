@@ -24,6 +24,8 @@ const LWS = "https://www.w3.org/ns/lws#";
 /** A hard byte limit, enforced while streaming (never trust Content-Length). */
 const MAX_JSON_BYTES = 16 * 1024 * 1024;
 const MAX_LIST_ITEMS = 10000;
+/** Maximum canonical next cursor length, measured in UTF-16 code units. */
+const MAX_CURSOR_LENGTH = 8192;
 /** Cumulative resolved item id lengths, measured in UTF-16 code units before filtering. */
 const MAX_LIST_URL_LENGTH = 4 * 1024 * 1024;
 const MAX_LINKSET_TARGETS = 10000;
@@ -308,7 +310,8 @@ export function createLwsBackend(options: LwsBackendOptions): StorageClient {
         } catch {
           throw invalid(result.url, "Invalid next page URL");
         }
-        if (next === result.url) throw invalid(result.url, "Invalid next page URL");
+        if (next.length > MAX_CURSOR_LENGTH || next === result.url)
+          throw invalid(result.url, "Invalid next page URL");
       }
       return {
         items,

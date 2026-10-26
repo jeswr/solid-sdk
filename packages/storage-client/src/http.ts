@@ -123,6 +123,7 @@ export function linksOf(
     parsed = parseLinkHeaders(response.headers.get("link"), url, {
       maxBytes: 64 * 1024,
       maxMembers: 1024,
+      maxResolvedBytes: 1024 * 1024,
       onOverflow: "throw",
     });
   } catch (cause) {
