@@ -139,3 +139,44 @@ callback/client-ID files were removed, and no `dist/` is committed.
 
 The `roborev` executable remains unavailable in this sandbox, so automated
 per-commit verdicts could not be collected. No review tooling was installed.
+
+## Fix round 2 — review of `d084d70392b4`
+
+Both transmission findings are fixed on `lane/sst-31t`. Changes are limited to
+the direct sender, its regression tests and this report.
+
+| Commit | Change |
+| --- | --- |
+| `ec88d5cc` | `fix: snapshot direct wire before asynchronous checks` — copy the wire before integrity checking and the first await; use the copy for verification, pending attempts, idempotency, provider references, accepted evidence and inbox delivery. Tests mutate the caller's wire during verification and credential retrieval, covering new sends and retries. |
+| `911132dc` | `fix: recheck direct message freshness before delivery` — recheck the verified message after credentials resolve and before synchronous mailbox access. Tests cover just before expiry, exact expiry, after expiry, clock rollback and a non-finite clock; rejected attempts leave no delivery or pending evidence. |
+| This final commit | `docs: record sst-31t round two verification` — this report. |
+
+Verification uses Node 24.22.1 with `PATH=/opt/node24/bin:$PATH`. Both regressions
+were demonstrated before applying their respective fixes: mutation returned the
+replacement wire's provider reference at both suspension points, and delayed
+credentials allowed delivery in all four cases with invalid times. The case just
+before expiry already passed. All cases pass with the fixes.
+
+| Command | Result |
+| --- | --- |
+| `pnpm exec turbo run build --filter=@jeswr/agent-channels` | PASS; 5/5 tasks, preparing the workspace prerequisites absent from this fresh checkout. |
+| `pnpm exec vitest run --root packages/agent-channels test/direct.test.ts --coverage.enabled=false -t snapshots` (before the snapshot fix) | Expected FAIL; both async-boundary regressions reproduced. |
+| `pnpm exec vitest run --root packages/agent-channels test/direct.test.ts --coverage.enabled=false` (after the snapshot fix) | PASS; 13 tests at that point. |
+| `pnpm exec vitest run --root packages/agent-channels test/direct.test.ts --coverage.enabled=false -t 'rechecks freshness'` (before the freshness fix) | Expected FAIL; 4 invalid-time cases delivered, while the just-before-expiry case passed. |
+| `pnpm --filter @jeswr/agent-channels run lint && pnpm --filter @jeswr/agent-channels run build && pnpm --filter @jeswr/agent-channels run typecheck && pnpm --filter @jeswr/agent-channels run test` | PASS; 4 test files, 62 tests. Enforced per-file coverage: statements 167/167, branches 114/114, functions 35/35, lines 159/159 — all 100%. |
+| `pnpm run lint:root` | PASS; all root lint and guard checks. |
+| `TURBO_SCM_BASE=d084d70392b45599c147abdf4665283b71995db1 pnpm run gate` | PASS; 25/25 tasks, including 62 channel tests, 650 legacy-bridge tests, 121 model tests and 531 pilot tests. The starting lane SHA scopes this fix round; the original brief's `agent/integration` ref is still absent, as confirmed locally without fetching. |
+| `pnpm run gate:full` | FAIL outside this fix: 282/345 tasks completed successfully before the existing `@jeswr/federation-trust#test` delegation-credential snapshot failed at `test/characterization.test.ts:196`. Expected JWK property order is `crv,x,kty`; received order is `kty,crv,x`, matching the previous lane reports. All 747 root tests passed in this run. |
+| `git diff --check` | PASS. |
+
+No dependencies were added, so no new `check:packages` run was required. Tests
+use only local signatures, fake grants and the existing loopback transport.
+No coverage threshold, timeout configuration or unrelated source was changed.
+
+Both review findings are complete, with no open questions. The full-workspace
+gate remains blocked by the unrelated federation-trust snapshot; that package
+was left unchanged to respect fix-round scope. The 16 generated app callback and
+client ID files were removed. No `dist/` is committed.
+
+The `roborev` executable is still unavailable, so automated per-commit verdicts
+could not be collected. No review tooling or tracker was installed.
