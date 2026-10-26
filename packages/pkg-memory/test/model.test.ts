@@ -13,6 +13,7 @@ import {
   type Fact,
   parseAssertion,
   parseNanopublications,
+  pkgId,
   serializeNanopublications,
 } from "../src/index.js";
 import { graph, NS, RdfNode } from "../src/rdf.js";
@@ -48,6 +49,63 @@ it("matches all Python fixture ids byte-for-byte and the complete dataset isomor
   expect(parsed.nanopubs).toEqual(result.nanopubs);
   expect(isomorphic([...result.dataset], [...parsed.dataset])).toBe(true);
   expect(parsed.dataset.size).toBe(223);
+});
+
+it("returns worker and activity metadata for a minimal empty claim batch", async () => {
+  const input = batch();
+  input.claims = [];
+  const result = await buildNanopublications(input, options);
+  expect(result.nanopubs).toEqual([]);
+  const sourcesId = pkgId("batch", input.batch_id, "sources");
+  expect(new Set([...result.dataset].map((q) => q.graph.value))).toEqual(new Set([sourcesId]));
+  expect(result.dataset.size).toBe(5);
+  const sources = graph(result.dataset, sourcesId);
+  const agent = new RdfNode(input.worker.agent_id, sources);
+  expect(agent.oneText(`${NS.rdfs}label`)).toBe(input.worker.agent_label);
+  expect(agent.oneIri(`${NS.rdf}type`)).toBe(`${NS.prov}SoftwareAgent`);
+  const activity = new RdfNode(pkgId("batch", input.batch_id, "activity"), sources);
+  expect(activity.oneIri(`${NS.prov}wasAssociatedWith`)).toBe(input.worker.agent_id);
+  expect(activity.oneIri(`${NS.rdf}type`)).toBe(`${NS.prov}Activity`);
+});
+
+it("retains source, entity and skipped-sensitive audit data when every claim is skipped", async () => {
+  const input = batch();
+  input.claims = [];
+  input.worker.started = "2026-10-25T10:00:00Z";
+  input.worker.finished = "2026-10-25T11:00:00Z";
+  input.sources = [
+    { id: "doc", kind: "document", url: "https://example.org/document", title: "Synthetic source" },
+  ];
+  input.entities = [{ id: owner, types: ["schema:Person"], label: "Avery Example" }];
+  input.skipped_sensitive = [
+    { category: "pd:Identifying", source: "doc", note: "Synthetic value omitted." },
+  ];
+  const result = await buildNanopublications(input, options);
+  expect(result.nanopubs).toEqual([]);
+  const sourcesId = pkgId("batch", input.batch_id, "sources");
+  const entitiesId = pkgId("batch", input.batch_id, "entities");
+  const activityId = pkgId("batch", input.batch_id, "activity");
+  expect(new Set([...result.dataset].map((q) => q.graph.value))).toEqual(
+    new Set([sourcesId, entitiesId]),
+  );
+  const sources = graph(result.dataset, sourcesId);
+  const activity = new RdfNode(activityId, sources);
+  expect(activity.oneIri(`${NS.prov}used`)).toBe("https://example.org/document");
+  expect(activity.oneDateTime(`${NS.prov}startedAtTime`)).toBe("2026-10-25T10:00:00+00:00");
+  expect(activity.oneDateTime(`${NS.prov}endedAtTime`)).toBe("2026-10-25T11:00:00+00:00");
+  expect(new RdfNode("https://example.org/document", sources).oneText(`${NS.schema}name`)).toBe(
+    "Synthetic source",
+  );
+  const entity = new RdfNode(owner, graph(result.dataset, entitiesId));
+  expect(entity.oneText(`${NS.rdfs}label`)).toBe("Avery Example");
+  expect(entity.oneIri(`${NS.prov}wasGeneratedBy`)).toBe(activityId);
+  const skipped = new RdfNode(pkgId("batch", input.batch_id, "skipped", "0"), sources);
+  expect(skipped.oneIri(`${NS.dpv}hasPersonalData`)).toBe(`${NS.pd}Identifying`);
+  expect(skipped.oneIri(`${NS.prov}wasDerivedFrom`)).toBe("https://example.org/document");
+  expect(skipped.oneIri(`${NS.prov}wasGeneratedBy`)).toBe(activityId);
+  expect(skipped.oneText(`${NS.rdfs}comment`)).toBe("Synthetic value omitted.");
+  const parsed = await parseRdf(await serializeNanopublications(result), "application/trig");
+  expect(isomorphic([...result.dataset], [...parsed])).toBe(true);
 });
 
 const examples: Fact[] = [

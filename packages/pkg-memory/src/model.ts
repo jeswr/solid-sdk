@@ -368,6 +368,7 @@ export async function buildNanopublications(
   }
   putGraph(dataset, sourcesId, sources);
   putGraph(dataset, pkgId("batch", batch.batch_id, "entities"), entities);
+  if (batch.claims.length === 0) return { dataset, nanopubs: [] };
   return readNanopublications(dataset);
 }
 

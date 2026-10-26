@@ -42,6 +42,12 @@ prefixes (`me:` resolves to the required owner WebID). Turtle bodies are RDF syn
 use typed templates for untrusted structured tool values. Source hashes are supplied
 by the caller; the model performs no filesystem reads or network requests.
 
+`claims: []` is valid: the builder returns an empty `nanopubs` list alongside the
+batch's worker, activity, source, entity and `skipped_sensitive` audit graphs.
+These metadata-only results can be serialized as TriG. `parseNanopublications`
+continues to require at least one nanopub head; use an RDF parser to read an
+audit-only dataset.
+
 Literal datatypes are limited to `xsd:string` (including plain strings),
 `rdf:langString`, `xsd:integer`, `xsd:decimal`, `xsd:boolean`, `xsd:dateTime`,
 `xsd:date`, `xsd:gYear` and `xsd:gYearMonth`. Only these datatypes have supported
