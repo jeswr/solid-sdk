@@ -26,6 +26,7 @@ import {
   parseCalendar,
   parseEvent,
   type RecurrenceRule,
+  readReminder,
   readRule,
   selectMonthListings,
   serializeDataset,
@@ -36,6 +37,7 @@ import {
   validateReminder,
   validateRule,
   wallClock,
+  writeReminder,
   writeRule,
 } from "../../src/apps/calendar/lib/model";
 
@@ -132,6 +134,88 @@ describe("typed RDF model", () => {
       url,
     );
     expect(() => parseEvent(url, untitled)).toThrow("title");
+  });
+  it("writes both title predicates and accepts scheduling-only summaries", async () => {
+    const ds = buildEvent(url, { name: "Title", start: "2026-03-01" });
+    const doc = new EventDoc(`${url}#it`, ds, DataFactory);
+    expect(doc.text(`${NS.SCHEMA}name`)).toBe("Title");
+    expect(doc.text(`${NS.SCHEDULING}summary`)).toBe("Title");
+    for (const sched of [NS.SCHEDULING, "https://w3id.org/jeswr/sectors/scheduling#"]) {
+      const ds = await deserializeDataset(
+        `<#it> a <${sched}CalendarEvent>; <${sched}summary> "Scheduling"; <${sched}startTime> "2026-03-01"^^<${NS.XSD}date>.`,
+        url,
+      );
+      expect(parseEvent(url, ds)).toMatchObject({ name: "Scheduling", start: "2026-03-01" });
+      const doc = new EventDoc(`${url}#it`, ds, DataFactory);
+      doc.name = "Changed";
+      expect(doc.text(`${NS.SCHEDULING}summary`)).toBe("Changed");
+      doc.name = undefined;
+      expect(doc.name).toBeUndefined();
+    }
+  });
+  it("replaces and clears supported legacy scalar and recurrence aliases", async () => {
+    const ds = await deserializeDataset(
+      `@prefix sc: <http://schema.org/>. @prefix sched: <https://w3id.org/jeswr/sectors/scheduling#>. @prefix xsd: <${NS.XSD}>.
+      <#it> a sc:Event; sc:name "Old"; sc:startDate "2026-03-01"^^xsd:date; sc:endDate "2026-03-02"^^xsd:date; sched:endTime "2026-03-02"^^xsd:date; sched:inCalendar <https://pod.example/old>; sched:recurrence <#rule>.
+      <#rule> sched:frequency "WEEKLY"; sched:interval 2; sched:count 3; sched:until "2026-03-10"^^xsd:date; sc:byDay sc:Monday; sc:byMonth 3; sc:byMonthDay 2; sc:exceptDate "2026-03-02"^^xsd:date.
+      <#reminder> sched:triggerOffset "-PT1H"^^xsd:duration; sched:triggerTime "2026-03-01T08:00:00Z"^^xsd:dateTime.`,
+      url,
+    );
+    const doc = new EventDoc(`${url}#it`, ds, DataFactory);
+    doc.end = undefined;
+    expect(doc.end).toBeUndefined();
+    doc.start = "2026-03-04";
+    doc.name = "New";
+    doc.inCalendar = "https://pod.example/new";
+    expect(doc.start).toBe("2026-03-04");
+    expect(doc.name).toBe("New");
+    expect(doc.inCalendar).toBe("https://pod.example/new");
+    doc.inCalendar = undefined;
+    expect(doc.inCalendar).toBeUndefined();
+    const rule = doc.nodes(`${NS.SCHEDULING}recurrence`)[0] as ModelNode;
+    writeRule(rule, { frequency: "DAILY" });
+    expect(readRule(rule)).toEqual({
+      frequency: "DAILY",
+      interval: undefined,
+      count: undefined,
+      until: undefined,
+      byDay: [],
+      byMonth: [],
+      byMonthDay: [],
+      exceptDate: [],
+    });
+    writeRule(rule, {
+      frequency: "MONTHLY",
+      interval: 1,
+      byDay: ["TU"],
+      byMonth: [4],
+      byMonthDay: [7],
+      exceptDate: ["2026-04-07"],
+    });
+    expect(readRule(rule)).toMatchObject({
+      frequency: "MONTHLY",
+      interval: 1,
+      byDay: ["TU"],
+      byMonth: [4],
+      byMonthDay: [7],
+      exceptDate: ["2026-04-07"],
+    });
+    const reminder = new ModelNode(`${url}#reminder`, ds, DataFactory);
+    writeReminder(reminder, { triggerOffset: "-PT2H" });
+    expect(readReminder(reminder)).toEqual({ triggerOffset: "-PT2H", triggerTime: undefined });
+    writeReminder(reminder, { triggerTime: date("2026-03-01T07:00Z") });
+    expect(readReminder(reminder)).toEqual({
+      triggerOffset: undefined,
+      triggerTime: date("2026-03-01T07:00Z"),
+    });
+    expect(
+      [...ds].some(
+        (q) =>
+          q.predicate.value.startsWith("http://schema.org/") ||
+          (q.predicate.value.startsWith("https://w3id.org/jeswr/sectors/scheduling#") &&
+            q.subject.value.endsWith("#rule")),
+      ),
+    ).toBe(false);
   });
   it("replaces rule sets and rejects malformed RDF datatypes", async () => {
     const ds = new Store();

@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { serialize } from "@jeswr/rdf-serialize";
 import { canonicalize, LEGACY_NAMESPACES, NS } from "@jeswr/suite-vocab";
@@ -75,14 +76,21 @@ export class ModelNode extends TermWrapper {
   text(p: string): string | undefined {
     return this.read(p, LiteralAs.string);
   }
+  clear(p: string): void {
+    for (const predicate of aliases(p))
+      SetFrom.subjectPredicate(this, predicate, wrapperIdentity, wrapperTerm).clear();
+  }
   setText(p: string, v: string | undefined): void {
+    this.clear(p);
     OptionalAs.object(this, p, v, LiteralFrom.string);
   }
   iri(p: string): string | undefined {
     return this.read(p, NamedNodeAs.string);
   }
   setIri(p: string, v: string | undefined): void {
-    OptionalAs.object(this, p, v === undefined ? undefined : httpIri(v), NamedNodeFrom.string);
+    const iri = v === undefined ? undefined : httpIri(v);
+    this.clear(p);
+    OptionalAs.object(this, p, iri, NamedNodeFrom.string);
   }
   date(p: string): CalendarDate | undefined {
     return this.read(p, (t) => this.dateValue(t));
@@ -92,6 +100,7 @@ export class ModelNode extends TermWrapper {
     return t.datatype.value === `${NS.XSD}date` ? t.value : date;
   }
   setDate(p: string, v: CalendarDate | undefined): void {
+    this.clear(p);
     OptionalAs.object(this, p, v, (date, f) =>
       f.literal(
         typeof date === "string" ? date : date.toISOString(),
@@ -103,6 +112,7 @@ export class ModelNode extends TermWrapper {
     return this.read(p, LiteralAs.number);
   }
   setNumber(p: string, v: number | undefined, positive = false): void {
+    this.clear(p);
     OptionalAs.object(this, p, v, (n, f) =>
       f.literal(String(n), f.namedNode(`${NS.XSD}${positive ? "positiveInteger" : "integer"}`)),
     );
@@ -137,10 +147,11 @@ export class CalendarDoc extends ModelNode {
 }
 export class EventDoc extends ModelNode {
   get name() {
-    return this.text(`${s}name`);
+    return this.text(`${s}name`) ?? this.text(`${c}summary`);
   }
   set name(v: string | undefined) {
     this.setText(`${s}name`, v);
+    this.setText(`${c}summary`, v);
   }
   get start() {
     return this.date(`${s}startDate`) ?? this.date(`${c}startTime`);
@@ -194,14 +205,14 @@ export function writeRule(node: ModelNode, rule: RecurrenceRule): void {
     NamedNodeAs.string,
     NamedNodeFrom.string,
   );
-  days.clear();
+  node.clear(`${s}byDay`);
   for (const day of rule.byDay ?? []) days.add(`${s}${WEEKDAYS[day]}`);
   for (const [p, values] of [
     ["byMonthDay", rule.byMonthDay],
     ["byMonth", rule.byMonth],
   ] as const) {
     const set = SetFrom.subjectPredicate(node, s + p, LiteralAs.number, LiteralFrom.integer);
-    set.clear();
+    node.clear(s + p);
     for (const value of values ?? []) set.add(value);
   }
   const exceptions = SetFrom.subjectPredicate(
@@ -214,7 +225,7 @@ export function writeRule(node: ModelNode, rule: RecurrenceRule): void {
         f.namedNode(`${NS.XSD}${typeof value === "string" ? "date" : "dateTime"}`),
       ),
   );
-  exceptions.clear();
+  node.clear(`${s}exceptDate`);
   for (const date of rule.exceptDate ?? []) exceptions.add(date);
 }
 export function readRule(node: ModelNode): RecurrenceRule {
@@ -239,6 +250,7 @@ export function readRule(node: ModelNode): RecurrenceRule {
 export function writeReminder(node: ModelNode, reminder: Reminder): void {
   validateReminder(reminder);
   node.types.add(`${c}Reminder`);
+  node.clear(`${c}triggerOffset`);
   OptionalAs.object(node, `${c}triggerOffset`, reminder.triggerOffset, (v, f) =>
     f.literal(v, f.namedNode(`${NS.XSD}duration`)),
   );
