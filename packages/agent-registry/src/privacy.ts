@@ -6,7 +6,7 @@ import { createHmac } from "crypto";
 /** NFC and trim; preserve Matrix case, otherwise lowercase. Never merge aliases. */
 export function normaliseHandle(handle: string, channel?: string): string {
   const normalised = handle.normalize("NFC").trim();
-  return channel === "matrix" ? normalised : normalised.toLowerCase();
+  return channel === "matrix" || channel === "matrix_bot" ? normalised : normalised.toLowerCase();
 }
 /** HMAC-SHA-256(salt, normalised handle), lowercase hex. Salt must have at least 256 bits. */
 export function hashHandle(handle: string, salt: Uint8Array, channel?: string): string {
