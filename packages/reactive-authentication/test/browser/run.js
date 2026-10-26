@@ -5,7 +5,8 @@
 //                  requests with body replay, and no credentials outside the boundary.
 //                  An authenticated write answered by a redirect yields the opaque response, written once.
 // 2. sw.html     — a module service worker intercepting fetches in two tabs; each tab receives only its
-//                  own authorization interaction through the message bridge.
+//                  own authorization interaction through the message bridge. Hidden redirects produce a
+//                  readable 300 for follow mode, preserve manual/error modes, and never replay writes.
 // 3. popup.html  — popup lifecycle: forged callbacks from another origin or source are ignored, a queued
 //                  flow can be aborted, closing the popup cancels, a genuine callback resolves.
 // 4. auto.html   — automatic boundary: roots from a storage description and from ancestor traversal.
@@ -94,10 +95,18 @@ const rs = await startSolidStorage(op, {
       { headers: { "content-type": "text/html" } },
     );
   },
-  after: async (request) =>
-    new URL(request.url).pathname === "/alice/redirect-write"
-      ? new Response(null, { status: 303, headers: { location: "/alice/page" } })
-      : undefined,
+  after: async (request) => {
+    const path = new URL(request.url).pathname;
+    if (path === "/alice/redirect-write")
+      return new Response(null, { status: 303, headers: { location: "/alice/page" } });
+    const workerRedirect = path.match(/^\/alice\/worker-redirect-(303|307)$/);
+    if (workerRedirect)
+      return new Response(null, {
+        status: Number(workerRedirect[1]),
+        headers: { location: "/alice/worker-redirect-target" },
+      });
+    return undefined;
+  },
 });
 const appOrigin = app.url; // 127.0.0.1 is a potentially trustworthy origin, so service workers work over HTTP
 
@@ -212,6 +221,54 @@ try {
         b.interactions === 1,
       { a, b },
     );
+    for (const status of [303, 307]) {
+      for (const redirect of [undefined, "follow", "manual", "error"]) {
+        const url = `${rs.url}/alice/worker-redirect-${status}`;
+        const body = `once: ${status}, ${redirect ?? "default"}`;
+        const before = rs.writes.length;
+        const response = await tabs[0].evaluate(
+          async ({ url, body, redirect }) => {
+            try {
+              const response = await fetch(url, { method: "POST", body, redirect });
+              return {
+                type: response.type,
+                status: response.status,
+                ok: response.ok,
+                location: response.headers.get("location"),
+                cacheControl: response.headers.get("cache-control"),
+                body: await response.text(),
+              };
+            } catch (error) {
+              return { error: error.name };
+            }
+          },
+          { url, body, redirect },
+        );
+        const writes = rs.writes.slice(before);
+        const targetRequests = rs.server.requests.filter(
+          (request) => new URL(request.url).pathname === "/alice/worker-redirect-target",
+        ).length;
+        const expectedResponse =
+          redirect === "error"
+            ? response.error === "TypeError"
+            : redirect === "manual"
+              ? response.type === "opaqueredirect" && response.status === 0 && response.body === ""
+              : response.status === 300 &&
+                response.ok === false &&
+                response.location === null &&
+                response.cacheControl === "no-store" &&
+                /redirect.*hidden.*not repeated.*may have succeeded/s.test(response.body);
+        report(
+          `sw-opaque-redirect (${status}, ${redirect ?? "default"})`,
+          expectedResponse &&
+            writes.length === 1 &&
+            writes[0].url === url &&
+            writes[0].body === body &&
+            targetRequests === 0,
+          { response, writes: writes.map(({ url, body }) => ({ url, body })), targetRequests },
+        );
+      }
+    }
     for (const tab of tabs) await tab.close();
   }
 

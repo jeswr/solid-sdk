@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 import type { CodeProvider } from "../CodeProvider.js";
 import type { IssuerProvider } from "../IssuerProvider.js";
 import {
@@ -159,6 +160,9 @@ export interface ServiceWorkerOptions extends Omit<ReactiveAuthenticationOptions
  * Only requests whose URL is inside the credential boundary are intercepted; everything else (and, by
  * default, navigations) goes to the network untouched. The worker's own `fetch` is not intercepted by
  * itself, so it is the non-reactive transport. Call during the worker's initial script evaluation.
+ * With redirect mode `follow`, a browser-hidden redirect becomes a non-cacheable synthetic 300 response
+ * with no Location: its target and outcome are unknown, and the request is never repeated. Mode `manual`
+ * preserves the opaque response; mode `error` rejects as usual.
  */
 export function installReactiveAuthentication(
   scope: ServiceWorkerGlobalScope,
@@ -189,7 +193,28 @@ export function installReactiveAuthentication(
 
   scope.addEventListener("fetch", (event) => {
     if (!shouldIntercept(event.request, options)) return;
-    event.respondWith(clientFor(event.clientId).fetch(event.request));
+    event.respondWith(
+      clientFor(event.clientId)
+        .fetch(event.request)
+        .then((response) => {
+          // respondWith cannot return an opaqueredirect to a follow-mode request. The hidden target
+          // cannot be followed safely; report the redirect without guessing success or replaying it.
+          if (response.type === "opaqueredirect" && event.request.redirect === "follow") {
+            return new Response(
+              "The authenticated request returned a redirect whose target is hidden by the browser. " +
+                "The request was not repeated and may have succeeded; check its outcome before retrying.",
+              {
+                status: 300,
+                headers: {
+                  "Content-Type": "text/plain; charset=utf-8",
+                  "Cache-Control": "no-store",
+                },
+              },
+            );
+          }
+          return response;
+        }),
+    );
   });
 
   return clientFor;

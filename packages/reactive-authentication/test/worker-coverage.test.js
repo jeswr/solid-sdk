@@ -175,6 +175,74 @@ test("worker installer shares iterable providers and isolates factory providers 
   assert.ok(factory.mock.calls.length >= 4);
 });
 
+for (const redirect of [undefined, "follow", "manual", "error"]) {
+  test(`worker hidden redirects respect ${redirect ?? "default"} mode without replaying writes`, async () => {
+    const url = "https://pod.example/write";
+    const opaque = new Response(null);
+    Object.defineProperties(opaque, {
+      type: { value: "opaqueredirect" },
+      status: { value: 0 },
+      url: { value: url },
+    });
+    const sent = [];
+    let handle;
+    const scope = {
+      addEventListener: (_name, callback) => {
+        handle = callback;
+      },
+      fetch: async (request) => {
+        sent.push({
+          url: request.url,
+          authorization: request.headers.get("authorization"),
+          body: await request.text(),
+          redirect: request.redirect,
+        });
+        return request.headers.has("authorization") ? opaque : new Response(null, { status: 401 });
+      },
+    };
+    installReactiveAuthentication(scope, {
+      boundary: new CredentialBoundary(["https://pod.example/"]),
+      providers: [
+        {
+          matches: async () => true,
+          upgrade: async (request) => {
+            request.headers.set("authorization", "Bearer credential");
+            return request;
+          },
+        },
+      ],
+    });
+    const respondWith = vi.fn();
+    handle({
+      request: new Request(url, { method: "POST", body: "once", redirect }),
+      clientId: "a",
+      respondWith,
+    });
+    assert.equal(respondWith.mock.calls.length, 1);
+    const pending = respondWith.mock.calls[0][0];
+    if (redirect === "error") {
+      await assert.rejects(pending, /Redirect encountered with redirect mode 'error'/);
+    } else {
+      const response = await pending;
+      if (redirect === "manual") {
+        assert.equal(response, opaque);
+      } else {
+        assert.equal(response.type, "default");
+        assert.equal(response.status, 300);
+        assert.equal(response.ok, false);
+        assert.equal(response.headers.get("location"), null);
+        assert.equal(response.headers.get("cache-control"), "no-store");
+        assert.match(response.headers.get("content-type"), /text\/plain/);
+        assert.match(await response.text(), /redirect.*hidden.*not repeated.*may have succeeded/s);
+      }
+    }
+    assert.deepEqual(sent, [
+      { url, authorization: null, body: "once", redirect: redirect ?? "follow" },
+      { url, authorization: "Bearer credential", body: "once", redirect: "manual" },
+    ]);
+  });
+}
+
 test("issuer bridge returns URL responses, rejects malformed messages, and catches send failures", async () => {
   assert.equal(isInteractionReply(null), false);
   assert.equal(isInteractionReply("bad"), false);
