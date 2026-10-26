@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { readBoundAuthorization, verifyAgentAuthority } from "@jeswr/agent-authz-verifier";
 import {
   buildAgentAuthorizationCredential,
@@ -153,6 +154,10 @@ export function createVcMandateVerifier(options: VcMandateOptions): MandateVerif
   return {
     async load() {
       try {
+        const resolver = options.webIdKeyResolver;
+        const { resolveKey, isControlledBy } = resolver;
+        if (typeof resolveKey !== "function" || typeof isControlledBy !== "function")
+          return undefined;
         const vc = await options.read();
         if (!vc?.id || vc.issuer !== options.ownerWebId || !vc.validFrom || !vc.validUntil)
           return undefined;
@@ -188,7 +193,8 @@ export function createVcMandateVerifier(options: VcMandateOptions): MandateVerif
             request: { action: "use", agent: subject },
             rootPrincipal: issuer,
             now,
-            ...options.webIdKeyResolver,
+            resolveKey: resolveKey.bind(resolver),
+            isControlledBy: isControlledBy.bind(resolver),
             resolveStatus: async (credential) => {
               const result = await options.resolveStatus(credential);
               return result.status === "valid"

@@ -68,6 +68,57 @@ it("loads a signed embedded agreement and evaluates the default mandate", async 
     "prohibited",
   );
 });
+it.each([
+  "prototype",
+  "non-enumerable",
+] as const)("calls resolver callbacks with their receiver when key control is %s", async (placement) => {
+  class Resolver {
+    keyCalls = 0;
+    controlCalls = 0;
+    constructor(readonly allowed: boolean) {}
+    readonly resolveKey = async function (this: Resolver, method: string) {
+      expect(method).toBe(key.verificationMethod);
+      this.keyCalls++;
+      return key.publicKey;
+    };
+    async isControlledBy(method: string, issuer: string) {
+      expect(method).toBe(key.verificationMethod);
+      expect(issuer).toBe(OWNER);
+      this.controlCalls++;
+      return this.allowed;
+    }
+  }
+  for (const allowed of [false, true]) {
+    const resolver = new Resolver(allowed);
+    if (placement === "non-enumerable")
+      Object.defineProperty(resolver, "isControlledBy", { value: resolver.isControlledBy });
+    const loaded = await createVcMandateVerifier({ ...options, webIdKeyResolver: resolver }).load();
+    if (allowed) {
+      expect(loaded?.id).toBe(ID);
+      expect(resolver.keyCalls).toBeGreaterThan(0);
+    } else expect(loaded).toBeUndefined();
+    expect(resolver.controlCalls).toBeGreaterThan(0);
+  }
+});
+it("requires both resolver callbacks at runtime instead of falling back to prefix trust", async () => {
+  const resolveKey = async () => key.publicKey;
+  const isControlledBy = async () => true;
+  for (const resolver of [
+    undefined,
+    null,
+    {},
+    { resolveKey },
+    { isControlledBy },
+    { resolveKey: "invalid", isControlledBy },
+    { resolveKey, isControlledBy: "invalid" },
+  ])
+    expect(
+      await createVcMandateVerifier({
+        ...options,
+        webIdKeyResolver: resolver as unknown as VcMandateOptions["webIdKeyResolver"],
+      }).load(),
+    ).toBeUndefined();
+});
 it("rejects invalid hashes and invalid accounting limits", () => {
   for (const recipientHashes of [[], ["plaintext"], [`sha256:${"g".repeat(64)}`]])
     expect(() =>
