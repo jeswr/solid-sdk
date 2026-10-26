@@ -48,6 +48,7 @@ export default defineConfig({
         "src/apps/music/lib/library/**/*.ts",
         "src/apps/money/lib/forecast/**/*.ts",
         "src/apps/drive/lib/list/**/*.ts",
+        "src/apps/drive/lib/activity/**/*.ts",
         "src/apps/mail/lib/threading/**/*.ts",
       ],
       reporter: ["text", "json-summary"],
