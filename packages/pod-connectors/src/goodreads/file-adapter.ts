@@ -47,7 +47,7 @@ export const goodreadsFileAdapter: FileImportAdapter = {
     const doc = ctx.resolve("documents/goodreads-library.ttl");
     const store = new Store();
     let count = 0;
-    for await (const row of csvRows(file)) {
+    for await (const row of csvRows(file, ctx.skip)) {
       if (count >= ctx.maxRows) break;
       const title = row.Title?.trim();
       if (!title) continue;

@@ -2,6 +2,7 @@
 import { readFileSync } from "node:fs";
 import type { DatasetCore, Term } from "@rdfjs/types";
 import { DataFactory, Parser, Store, Writer } from "n3";
+import SHACLValidator from "rdf-validate-shacl";
 import { describe, expect, it, vi } from "vitest";
 import { amazonOrdersFileAdapter } from "../amazon-orders/file-adapter.js";
 import { appleHealthFileAdapter } from "../apple-health/file-adapter.js";
@@ -75,11 +76,9 @@ function loadImportClosure(): Store {
   return closure;
 }
 
-const profiles = new Store([
-  ...loadVocabulary("core", "shacl.ttl"),
-  ...sectorShapes,
-  ...loadImportClosure(),
-]);
+const shapes = new Store([...loadVocabulary("core", "shacl.ttl"), ...sectorShapes]);
+const ontology = loadImportClosure();
+const profiles = new Store([...shapes, ...ontology]);
 
 function inherits(type: Term, target: Term, predicate: string, seen = new Set<string>()): boolean {
   if (type.equals(target)) return true;
@@ -88,12 +87,6 @@ function inherits(type: Term, target: Term, predicate: string, seen = new Set<st
   return profiles
     .getObjects(type, predicate, null)
     .some((parent) => parent.termType === "NamedNode" && inherits(parent, target, predicate, seen));
-}
-
-function isInstanceOf(dataset: DatasetCore, subject: Term, target: Term): boolean {
-  return [...dataset.match(subject, RDF_TYPE)].some((quad) =>
-    inherits(quad.object, target, RDFS_SUBCLASS),
-  );
 }
 
 function disjointClassPairs(): { subject: Term; object: Term }[] {
@@ -163,44 +156,35 @@ function expectConsistentDomainsAndRanges(dataset: DatasetCore): void {
   }
 }
 
-/** No shared SHACL helper is exported by the suite. Assert required predicates,
- * cardinalities, datatypes and linked classes, including inherited core shapes.
- * Warning/Info constraints are advisory; this is not a general SHACL engine.
+/** Supply the pinned class hierarchy for SHACL target/class resolution, but
+ * never materialise property entailments in the emitted data. Required direct
+ * paths must exist in the import itself. Warning/Info results stay advisory.
  */
-function expectRequiredProfileProperties(dataset: DatasetCore): void {
-  const subjects = [
-    ...new Map([...dataset].map((quad) => [quad.subject.value, quad.subject])).values(),
-  ];
-  for (const target of profiles.getQuads(null, `${SH}targetClass`, null, null)) {
-    const nodes = subjects.filter((subject) => isInstanceOf(dataset, subject, target.object));
-    for (const property of profiles.getObjects(target.subject, `${SH}property`, null)) {
-      const severity = profiles.getObjects(property, `${SH}severity`, null)[0];
-      if (severity && severity.value !== `${SH}Violation`) continue;
-      const path = required(profiles.getObjects(property, `${SH}path`, null)[0]);
-      for (const subject of nodes) {
-        const values = [...dataset.match(subject)]
-          .filter((quad) => inherits(quad.predicate, path, RDFS_SUBPROPERTY))
-          .map((quad) => quad.object);
-        const context = `${subject.value}: ${path.value}`;
-        const min = profiles.getObjects(property, `${SH}minCount`, null)[0];
-        const max = profiles.getObjects(property, `${SH}maxCount`, null)[0];
-        if (min) expect(values.length, context).toBeGreaterThanOrEqual(Number(min.value));
-        if (max) expect(values.length, context).toBeLessThanOrEqual(Number(max.value));
-        for (const value of values) {
-          const datatype = profiles.getObjects(property, `${SH}datatype`, null)[0];
-          if (datatype) {
-            expect(value.termType, context).toBe("Literal");
-            if (value.termType === "Literal") expect(value.datatype.value).toBe(datatype.value);
-          }
-          const linkedClass = profiles.getObjects(property, `${SH}class`, null)[0];
-          if (linkedClass) {
-            expect(value.termType, context).toBe("NamedNode");
-            expect(isInstanceOf(dataset, value, linkedClass), context).toBe(true);
-          }
-        }
-      }
-    }
-  }
+async function validateProfile(dataset: DatasetCore) {
+  const data = new Store([...dataset, ...ontology.getQuads(null, RDFS_SUBCLASS, null, null)]);
+  return new SHACLValidator(shapes).validate(data);
+}
+
+async function expectRequiredProfileProperties(dataset: DatasetCore): Promise<void> {
+  const report = await validateProfile(dataset);
+  const violations = report.results
+    .filter((result) => result.severity.value === `${SH}Violation`)
+    .map((result) => ({
+      node: result.focusNode?.value,
+      path: result.path?.value,
+      messages: result.message.map((message) => message.value),
+    }));
+  expect(violations).toEqual([]);
+}
+
+async function expectProfileViolation(dataset: DatasetCore, predicate: string): Promise<void> {
+  const report = await validateProfile(dataset);
+  expect(report.conforms).toBe(false);
+  expect(
+    report.results.some(
+      (result) => result.severity.value === `${SH}Violation` && result.path?.value === predicate,
+    ),
+  ).toBe(true);
 }
 
 /** Synthetic exports only: no downloaded personal data or source transport. */
@@ -318,6 +302,33 @@ const fixtures: {
   },
 ];
 
+const financialFixtures = fixtures.filter((fixture) =>
+  fixture.types.includes(FEDERATION.TransactionRecord),
+);
+
+it.each(
+  financialFixtures,
+)("rejects missing direct financial core:about in $name with the pinned SHACL validator", async (fixture) => {
+  const { pod, report } = await fileImport(
+    fixture.adapter,
+    streamedFile(fixture.name, fixture.text),
+  );
+  const dataset = pod.dataset(
+    required(report.written.find((doc) => doc.category === "finance")).url,
+  );
+  await expectRequiredProfileProperties(dataset);
+  for (const quad of dataset.match(
+    null,
+    RDF_TYPE,
+    DataFactory.namedNode(FEDERATION.TransactionRecord),
+  )) {
+    const record = new SectorThing(quad.subject.value, dataset, DataFactory);
+    record.about = undefined;
+    expect(record.dataSubject).toBe(TEST_WEBID);
+  }
+  await expectProfileViolation(dataset, FEDERATION_PROPERTIES.about);
+});
+
 function streamedFile(name: string, text: string, chunkSize = 7): ImportFile {
   const bytes = new TextEncoder().encode(text);
   return {
@@ -361,16 +372,16 @@ for (const fixture of fixtures) {
       const mappings: string[] = [];
       for (const written of report.written) {
         const dataset = pod.dataset(written.url);
-        expectRequiredProfileProperties(dataset);
+        await expectRequiredProfileProperties(dataset);
         expectConsistentDomainsAndRanges(dataset);
         for (const quad of dataset.match(
           null,
           RDF_TYPE,
           DataFactory.namedNode(FEDERATION.TransactionRecord),
         )) {
-          expect(new SectorThing(quad.subject.value, dataset, DataFactory).dataSubject).toBe(
-            TEST_WEBID,
-          );
+          const item = new SectorThing(quad.subject.value, dataset, DataFactory);
+          expect(item.dataSubject).toBe(TEST_WEBID);
+          expect(item.about).toBe(TEST_WEBID);
         }
         if (chunkSize === 7) {
           const quads = [...dataset].filter((q) => !q.predicate.value.startsWith(PROV));
@@ -439,10 +450,6 @@ for (const fixture of fixtures) {
   });
 }
 
-const financialFixtures = fixtures.filter((fixture) =>
-  fixture.types.includes(FEDERATION.TransactionRecord),
-);
-
 it.each(
   financialFixtures,
 )("rejects disjoint domain/range types for $adapter.metadata.id ($name)", async (fixture) => {
@@ -459,7 +466,7 @@ it.each(
   const record = new SectorThing(subject, dataset, DataFactory);
   const activity = new SectorThing(`${subject}-activity`, dataset, DataFactory);
   expect(activity.types.has(FEDERATION.Activity)).toBe(true);
-  expect(record.about).toBeUndefined();
+  expect(record.about).toBe(TEST_WEBID);
   expectConsistentDomainsAndRanges(dataset);
 
   // The former mapping must fail through Activity -> Event and the imported
@@ -468,7 +475,7 @@ it.each(
   expect(() => expectConsistentDomainsAndRanges(dataset)).toThrow(
     `${FEDERATION_PROPERTIES.about} range`,
   );
-  record.about = undefined;
+  record.about = TEST_WEBID;
   activity.about = subject;
   expect(() => expectConsistentDomainsAndRanges(dataset)).toThrow(
     `${FEDERATION_PROPERTIES.about} domain`,
@@ -482,7 +489,7 @@ it.each(
   );
   record.dataSubject = TEST_WEBID;
   expectConsistentDomainsAndRanges(dataset);
-  expectRequiredProfileProperties(dataset);
+  await expectRequiredProfileProperties(dataset);
 });
 
 it("validates Steam's inherited account links and participant roles", async () => {
@@ -496,20 +503,20 @@ it("validates Steam's inherited account links and participant roles", async () =
   const account = new SectorThing(`${written.url}#account`, dataset, DataFactory);
   expect(account.accountHolder).toBe(TEST_WEBID);
   expect(account.accountProvider).toBe("https://store.steampowered.com/");
-  expectRequiredProfileProperties(dataset);
+  await expectRequiredProfileProperties(dataset);
   for (const [key, predicate, role] of [
     ["accountHolder", FEDERATION_PROPERTIES.hasAccountHolder, FEDERATION.AccountHolder],
     ["accountProvider", FEDERATION_PROPERTIES.hasAccountProvider, FEDERATION.AccountProvider],
   ] as const) {
     const participant = required(account[key]);
     account[key] = undefined;
-    expect(() => expectRequiredProfileProperties(dataset)).toThrow(predicate);
+    await expectProfileViolation(dataset, predicate);
     account[key] = participant;
     const agent = new PodThing(participant, dataset, DataFactory);
     agent.types.delete(role);
-    expect(() => expectRequiredProfileProperties(dataset)).toThrow(predicate);
+    await expectProfileViolation(dataset, predicate);
     agent.types.add(role);
-    expectRequiredProfileProperties(dataset);
+    await expectRequiredProfileProperties(dataset);
   }
 });
 
@@ -528,19 +535,19 @@ it.each(
     dataset,
     DataFactory,
   );
-  expectRequiredProfileProperties(dataset);
+  await expectRequiredProfileProperties(dataset);
 
   // A sector instance must satisfy core:RecordShape without an explicit core:Record type.
   record.dataSubject = undefined;
-  expect(() => expectRequiredProfileProperties(dataset)).toThrow(FEDERATION_PROPERTIES.subject);
+  await expectProfileViolation(dataset, FEDERATION_PROPERTIES.subject);
   record.dataSubject = TEST_WEBID;
 
   // Linked-class checks must also follow the core:Person -> core:Agent hierarchy.
   const agent = new PodThing(TEST_WEBID, dataset, DataFactory);
   agent.types.delete(FEDERATION.Agent);
-  expect(() => expectRequiredProfileProperties(dataset)).toThrow(FEDERATION_PROPERTIES.subject);
+  await expectProfileViolation(dataset, FEDERATION_PROPERTIES.subject);
   agent.types.add(FEDERATION.Person);
-  expectRequiredProfileProperties(dataset);
+  await expectRequiredProfileProperties(dataset);
 });
 
 it.each(
@@ -581,7 +588,7 @@ it.each(
     expect(provenance.derivedFrom.size).toBeGreaterThan(0);
     expect(provenance.generatedBy.size).toBe(1);
   }
-  expectRequiredProfileProperties(dataset);
+  await expectRequiredProfileProperties(dataset);
 });
 
 it.each([

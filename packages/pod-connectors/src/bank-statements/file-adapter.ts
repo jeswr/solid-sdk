@@ -103,7 +103,7 @@ async function* streamBankTransactions(
       /\.(ofx|qfx)$/i.test(file.name) || /^\s*(?:OFXHEADER|<OFX|<\?xml|<STMTTRN>)/i.test(prefix);
     if (!isOfx) {
       let parseRow: ReturnType<typeof bankRowParser> | undefined;
-      for await (const row of csvRowsFromChunks(chunks())) {
+      for await (const row of csvRowsFromChunks(chunks(), skip)) {
         parseRow ??= bankRowParser(Object.keys(row));
         const txn = parseRow(row);
         if (txn) yield txn;

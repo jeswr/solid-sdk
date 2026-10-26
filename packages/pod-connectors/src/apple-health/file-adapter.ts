@@ -54,7 +54,7 @@ export const appleHealthFileAdapter: FileImportAdapter = {
     const doc = ctx.resolve("health/workouts.ttl");
     const store = new Store();
     let count = 0;
-    for await (const token of xmlTags(fileText(file))) {
+    for await (const token of xmlTags(fileText(file), ctx.skip, "Workout")) {
       if (count >= ctx.maxRows) break;
       if (!/^<Workout(?:\s|\/?>)/.test(token)) continue;
       const w = parseAttrs(token.slice(8, -1));

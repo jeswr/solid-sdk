@@ -48,7 +48,7 @@ export const netflixFileAdapter: FileImportAdapter = {
     const doc = ctx.resolve("media/viewing-history.ttl");
     const store = new Store();
     let count = 0;
-    for await (const row of csvRows(file)) {
+    for await (const row of csvRows(file, ctx.skip)) {
       if (count >= ctx.maxRows) break;
       const title = row.Title ?? row.title;
       if (!title) continue;

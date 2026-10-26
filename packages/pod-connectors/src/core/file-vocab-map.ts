@@ -94,9 +94,12 @@ export function createFileVocabMap(types: Readonly<Record<string, string>>): Voc
             "Financial file imports require the importing user's WebID on PodWriter.",
           );
         item.dataSubject = webId;
+        // core:Agent -> gufo:Object -> gufo:Endurant satisfies core:about's
+        // range. Emit the superproperty explicitly: SHACL does not infer it.
+        item.about = webId;
         new PodThing(webId, dataset, DataFactory).types.add(FEDERATION.Agent);
-        // Keep the activity distinct, without a core:about link: its range is
-        // gufo:Endurant, disjoint with Activity's gufo:Event. The pinned core and
+        // Keep the activity distinct: core:about cannot point to an Event.
+        // Its range is gufo:Endurant, disjoint with Activity's gufo:Event. The pinned core and
         // finance vocabularies have no Record -> Activity relation. Source facts
         // may also be insufficient for the more specific fin:Transaction type.
         new PodThing(`${subject}-activity`, dataset, DataFactory).types.add(FEDERATION.Activity);

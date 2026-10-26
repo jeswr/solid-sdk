@@ -55,7 +55,7 @@ export const whatsappFileAdapter: FileImportAdapter = {
     const doc = ctx.resolve("social/whatsapp-chat.ttl");
     const store = new Store();
     let i = 0;
-    for await (const msg of streamWhatsappChat(file)) {
+    for await (const msg of streamWhatsappChat(file, ctx.skip)) {
       if (i >= ctx.maxRows) break;
       const key = `${i}|${msg.sender}|${msg.when?.toISOString() ?? ""}`;
       const frag = recordFragment(msg.sender, key);
@@ -116,9 +116,17 @@ export function parseWhatsappChat(text: string, limit = Number.POSITIVE_INFINITY
 }
 
 /** Keep a single multiline message until the next timestamped record. */
-async function* streamWhatsappChat(file: ImportFile): AsyncGenerator<ChatMessage> {
+async function* streamWhatsappChat(
+  file: ImportFile,
+  onSkip: () => void,
+): AsyncGenerator<ChatMessage> {
   let pending: string[] = [];
-  for await (const line of textLines(fileText(file))) {
+  for await (const line of textLines(fileText(file), () => {
+    // A missing line may contain a timestamp: discard the pending message and
+    // its continuations until a complete timestamp supplies a safe boundary.
+    pending = [];
+    onSkip();
+  })) {
     const clean = line.replace(/^[‎‏‪-‮]+/, "");
     if (IOS.test(clean) || ANDROID.test(clean)) {
       yield* parseWhatsappChat(pending.join("\n"));

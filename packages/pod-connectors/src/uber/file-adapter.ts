@@ -73,7 +73,7 @@ export const uberFileAdapter: FileImportAdapter = {
     const trips = new Store();
     const fares = new Store();
     let count = 0;
-    for await (const row of csvRows(file)) {
+    for await (const row of csvRows(file, ctx.skip)) {
       if (count >= ctx.maxRows) break;
       const begin = pick(row, FIELD.begin);
       const dropAddr = pick(row, FIELD.dropAddr);

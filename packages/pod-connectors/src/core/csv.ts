@@ -14,6 +14,8 @@
  * spreadsheet or a shell — they become inert RDF string literals.
  */
 
+import { ChunkSlices } from "./chunk-slices.js";
+
 /** A parsed CSV: the header row plus each data row keyed by column name. */
 export interface ParsedCsv {
   /** Column names from the first row, trimmed (BOM stripped). */
@@ -35,64 +37,55 @@ export function parseCsvRows(text: string, delimiter = ","): string[][] {
   const src = text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
   const rows: string[][] = [];
   let row: string[] = [];
-  let field = "";
+  const field = new ChunkSlices();
   let inQuotes = false;
+  let start = 0;
   let i = 0;
-  const n = src.length;
 
-  const endField = () => {
-    row.push(field);
-    field = "";
-  };
-  const endRow = () => {
-    endField();
-    rows.push(row);
-    row = [];
+  const endField = (end: number) => {
+    field.push(src.slice(start, end));
+    row.push(field.text());
+    field.clear();
   };
 
-  while (i < n) {
+  while (i < src.length) {
     const c = src[i];
     if (inQuotes) {
       if (c === '"') {
+        field.push(src.slice(start, i));
         if (src[i + 1] === '"') {
-          field += '"';
+          field.push('"');
           i += 2;
-          continue;
+        } else {
+          inQuotes = false;
+          i++;
         }
-        inQuotes = false;
-        i += 1;
-        continue;
-      }
-      field += c;
-      i += 1;
+        start = i;
+      } else i++;
       continue;
     }
     if (c === '"') {
+      field.push(src.slice(start, i));
       inQuotes = true;
-      i += 1;
-      continue;
-    }
-    if (c === delimiter) {
-      endField();
-      i += 1;
-      continue;
-    }
-    if (c === "\r") {
-      // Treat CRLF and bare CR as one line break.
-      endRow();
-      i += src[i + 1] === "\n" ? 2 : 1;
-      continue;
-    }
-    if (c === "\n") {
-      endRow();
-      i += 1;
-      continue;
-    }
-    field += c;
-    i += 1;
+      start = ++i;
+    } else if (c === delimiter) {
+      endField(i);
+      start = ++i;
+    } else if (c === "\r" || c === "\n") {
+      endField(i);
+      rows.push(row);
+      row = [];
+      i += c === "\r" && src[i + 1] === "\n" ? 2 : 1;
+      start = i;
+    } else i++;
   }
+  field.push(src.slice(start));
+  const lastField = field.text();
   // Flush the final field/row unless the input ended on a clean line break.
-  if (field.length > 0 || row.length > 0) endRow();
+  if (lastField.length > 0 || row.length > 0) {
+    row.push(lastField);
+    rows.push(row);
+  }
 
   // Drop a single empty trailing row produced by a final newline.
   return rows.filter((r) => !(r.length === 1 && r[0] === ""));

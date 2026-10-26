@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+import { ChunkSlices } from "./chunk-slices.js";
 import type { ImportFile } from "./file-import.js";
 import { fileText } from "./file-stream.js";
 
@@ -8,34 +9,6 @@ export const MAX_JSON_RECORD_BYTES = 4 * 1024 * 1024;
 interface Token {
   readonly kind: string;
   readonly raw?: string;
-}
-
-/** Coalesce tiny input chunks so byte caps also bound slice-array overhead. */
-class ChunkSlices {
-  private blocks: string[] = [];
-  private pending: string[] = [];
-  private chars = 0;
-
-  push(slice: string): void {
-    if (!slice) return;
-    this.pending.push(slice);
-    this.chars += slice.length;
-    if (this.chars >= 16 * 1024) {
-      this.blocks.push(this.pending.join(""));
-      this.pending = [];
-      this.chars = 0;
-    }
-  }
-
-  clear(): void {
-    this.blocks = [];
-    this.pending = [];
-    this.chars = 0;
-  }
-
-  text(): string {
-    return this.blocks.join("") + this.pending.join("");
-  }
 }
 
 /** Keep slices of input chunks, never one allocation per character. Selected
