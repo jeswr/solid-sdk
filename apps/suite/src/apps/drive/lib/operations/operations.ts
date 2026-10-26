@@ -44,6 +44,31 @@ function transferRecord(index: ReturnType<typeof emptyTrashIndex>, url: string):
 export interface BatchResult<T> {
   readonly done: T[];
   readonly failed: { url: string; error: unknown }[];
+  /** Side effects completed, but the index needs reconciliation on next load. */
+  readonly warnings?: TrashIndexWarning[];
+}
+
+export class TrashIndexWarning extends Error {
+  readonly kind = "trash-index-persistence";
+  constructor(
+    readonly url: string,
+    override readonly cause: unknown,
+  ) {
+    super(
+      "Trash changes completed, but the index could not be saved. It will be reconciled when Trash is next loaded.",
+    );
+    this.name = "TrashIndexWarning";
+  }
+}
+
+export class TrashMovingError extends Error {
+  readonly kind = "trash-moving";
+  constructor() {
+    super(
+      "This item is still moving to Trash. Wait until the move completes before restoring or deleting it.",
+    );
+    this.name = "TrashMovingError";
+  }
 }
 
 export type ConflictChoice = "keep-both" | "replace" | "skip";
@@ -229,6 +254,53 @@ async function updateIndex(
   }
 }
 
+async function exists(client: DriveClient, url: string): Promise<boolean> {
+  return client.stat(url).then(
+    () => true,
+    (error: unknown) => {
+      if (error instanceof DriveError && error.kind === "not-found") return false;
+      throw error;
+    },
+  );
+}
+
+/** Never trust a stale caller's copy of the index's transfer state. */
+async function requireTrashEntry(
+  client: DriveClient,
+  driveRoot: string,
+  entry: TrashEntry,
+  pending = false,
+): Promise<void> {
+  const current = await client.readRdf(indexUrlOf(driveRoot));
+  const index = current ? trashIndexFrom(current.dataset) : emptyTrashIndex();
+  const record = transferRecord(index, entry.url);
+  if (!pending && record.status === "pending") throw new TrashMovingError();
+  if (
+    record.originalLocation !== entry.original ||
+    record.trashedAt?.getTime() !== entry.trashedAt.getTime() ||
+    (pending && record.status !== "pending")
+  )
+    throw new DriveError("invalid-trash-record", 409, entry.url);
+}
+
+/** Preserve batch outcomes even when the bookkeeping write fails afterwards. */
+async function removeCompletedRecords<T>(
+  client: DriveClient,
+  driveRoot: string,
+  result: BatchResult<T>,
+  urls: readonly string[],
+): Promise<BatchResult<T>> {
+  if (urls.length === 0) return result;
+  try {
+    await updateIndex(client, driveRoot, (index) => {
+      for (const url of urls) removeTrashRecord(index, url);
+    });
+    return result;
+  } catch (error) {
+    return { ...result, warnings: [new TrashIndexWarning(indexUrlOf(driveRoot), error)] };
+  }
+}
+
 export async function listTrash(
   client: DriveClient,
   driveRoot: string,
@@ -238,28 +310,49 @@ export async function listTrash(
   if (!current) return [];
   const index = trashIndexFrom(current.dataset);
   const entries: TrashEntry[] = [];
+  const missing: string[] = [];
   for (const entry of trashEntries(index)) {
     try {
       slotOf(driveRoot, entry);
+      validateOriginal(driveRoot, entry);
     } catch (error) {
       if (options.onInvalid) options.onInvalid(error as DriveError);
       else console.warn(error);
       continue;
     }
-    // Pending records precede the move. Hide intents with no destination yet,
-    // but retain their durable record in case another tab is still moving.
     if (transferRecord(index, entry.url).status === "pending") {
-      const exists = await client.stat(entry.url).then(
-        () => true,
-        (error: unknown) => {
-          if (error instanceof DriveError && error.kind === "not-found") return false;
-          throw error;
-        },
-      );
-      if (!exists) continue;
+      // A destination PUT is only a copy. The source must be gone before a
+      // lost completion write can be reconciled, and promotion must persist.
+      if ((await exists(client, entry.original)) || !(await exists(client, entry.url))) continue;
+      let completed = false;
+      try {
+        await updateIndex(client, driveRoot, (latest) => {
+          completed = false;
+          const record = transferRecord(latest, entry.url);
+          if (record.status === "pending" && record.originalLocation === entry.original) {
+            record.status = "complete";
+            completed = true;
+          }
+        });
+      } catch (error) {
+        completed = false;
+        console.warn(new TrashIndexWarning(indexUrlOf(driveRoot), error));
+      }
+      if (!completed) continue;
+    } else if (!(await exists(client, entry.url))) {
+      // Restore/delete may have succeeded while their final index PUT failed.
+      missing.push(entry.url);
+      continue;
     }
     entries.push(entry);
   }
+  const reconciled = await removeCompletedRecords(
+    client,
+    driveRoot,
+    { done: [], failed: [] },
+    missing,
+  );
+  for (const warning of reconciled.warnings ?? []) console.warn(warning);
   return entries;
 }
 
@@ -298,7 +391,12 @@ export async function trashItems(
   });
   for (const entry of entries) {
     try {
-      await client.move(entry.original, entry.url);
+      await client.move(entry.original, entry.url, {
+        beforeDelete: async () => {
+          await requireTrashEntry(client, driveRoot, entry, true);
+          await client.stat(entry.url);
+        },
+      });
       result.done.push(entry);
     } catch (error) {
       result.failed.push({ url: entry.original, error });
@@ -311,7 +409,8 @@ export async function trashItems(
       });
     } catch (error) {
       // Keep successful items in done so callers can offer Undo. Pending
-      // records already point to them; listTrash reconciles their existence.
+      // records remain hidden until listTrash can confirm source removal and
+      // persist completion.
       result.failed.push({ url: indexUrlOf(driveRoot), error });
     }
   }
@@ -377,6 +476,7 @@ export async function restoreItems(
     try {
       const slot = slotOf(driveRoot, entry);
       validateOriginal(driveRoot, entry);
+      await requireTrashEntry(client, driveRoot, entry);
       const folder = entry.original.endsWith("/");
       const parent = parentOf(entry.original) as string;
       let target = entry.original;
@@ -401,12 +501,12 @@ export async function restoreItems(
       result.failed.push({ url: entry.url, error });
     }
   }
-  if (result.done.length > 0) {
-    await updateIndex(client, driveRoot, (index) => {
-      for (const { entry } of result.done) removeTrashRecord(index, entry.url);
-    });
-  }
-  return result;
+  return removeCompletedRecords(
+    client,
+    driveRoot,
+    result,
+    result.done.map(({ entry }) => entry.url),
+  );
 }
 
 export async function deleteForever(
@@ -418,6 +518,7 @@ export async function deleteForever(
   for (const entry of entries) {
     try {
       slotOf(driveRoot, entry);
+      await requireTrashEntry(client, driveRoot, entry);
       await client.remove(entry.url, { recursive: true });
       await client.remove(slotOf(driveRoot, entry)).catch(() => undefined);
       result.done.push(entry);
@@ -426,12 +527,12 @@ export async function deleteForever(
       else result.failed.push({ url: entry.url, error });
     }
   }
-  if (result.done.length > 0) {
-    await updateIndex(client, driveRoot, (index) => {
-      for (const entry of result.done) removeTrashRecord(index, entry.url);
-    });
-  }
-  return result;
+  return removeCompletedRecords(
+    client,
+    driveRoot,
+    result,
+    result.done.map((entry) => entry.url),
+  );
 }
 
 const DAY = 86_400_000;

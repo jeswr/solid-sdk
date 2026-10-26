@@ -109,13 +109,31 @@ it("Undo preserves its copy if the server omits the rollback validator", async (
     fetch.mock.calls.some(([url, init]) => String(url) === TARGET && init?.method === "DELETE"),
   ).toBe(false);
 });
-it("Undo of a folder goes through the client's recursive, conditional move", async () => {
-  const { fetch } = transport();
-  const folder = `${SOURCE}/`;
+it("Undo of a folder refuses an unrelated replacement after A to B then B elsewhere", async () => {
+  const { createDemoPod } = await import("../src/lib/demo-pod/pod");
+  const { createSolidDriveClient } = await import("../src/apps/drive/lib/client/client");
+  const pod = createDemoPod({
+    root: ROOT,
+    seed: [{ path: "drive/A/original", body: "original", contentType: "text/plain" }],
+  });
+  const options = { storageUrl: ROOT, fetch: pod.fetch };
+  const client = createSolidDriveClient(options);
+  const from = `${ROOT}drive/B/`,
+    to = `${ROOT}drive/A/`;
+  await client.move(to, from);
+  const moved = await client.stat(from);
+  const children = (await client.list(from)).map((item) => item.url);
+  await client.move(from, `${ROOT}drive/C/`);
+  await client.write(`${from}unrelated`, "unrelated", {
+    contentType: "text/plain",
+    ifNoneMatch: "*",
+  });
   await expect(
-    moveWithValidator({ storageUrl: ROOT, fetch }, folder, `${TARGET}/`, ""),
-  ).rejects.toThrow();
-  expect(fetch).toHaveBeenCalled();
+    moveWithValidator(options, from, to, moved.etag as string, children),
+  ).rejects.toThrow("cannot be safely undone");
+  expect(await (await client.read(`${from}unrelated`)).text()).toBe("unrelated");
+  expect(await (await client.read(`${ROOT}drive/C/original`)).text()).toBe("original");
+  expect(pod.has(to)).toBe(false);
 });
 it.each([
   ["", SOURCE],
@@ -158,4 +176,62 @@ it("reproduces A to B, B elsewhere, unrelated upload at B against the real demo 
   expect(await (await client.read(SOURCE)).text()).toBe("unrelated");
   expect(await (await client.read(`${ROOT}drive/C.txt`)).text()).toBe("original");
   expect(pod.has(TARGET)).toBe(false);
+});
+
+it("Undo restores an unchanged folder through the client's conditional recursive move", async () => {
+  const { createDemoPod } = await import("../src/lib/demo-pod/pod");
+  const { createSolidDriveClient } = await import("../src/apps/drive/lib/client/client");
+  const pod = createDemoPod({
+    root: ROOT,
+    seed: [{ path: "drive/B/child/note", body: "original", contentType: "text/plain" }],
+  });
+  const fetch = vi.fn<typeof globalThis.fetch>(pod.fetch);
+  const options = { storageUrl: ROOT, fetch };
+  const client = createSolidDriveClient(options);
+  const from = `${ROOT}drive/B/`,
+    to = `${ROOT}drive/A/`;
+  const moved = await client.stat(from);
+  const children = (await client.list(from)).map((item) => item.url);
+  await moveWithValidator(options, from, to, moved.etag as string, children);
+  expect(await (await client.read(`${to}child/note`)).text()).toBe("original");
+  expect(pod.has(from)).toBe(false);
+  const deletes = fetch.mock.calls.filter(([, init]) => init?.method === "DELETE");
+  expect(deletes).toHaveLength(3);
+  for (const [, init] of deletes) expect(new Headers(init?.headers).has("if-match")).toBe(true);
+});
+
+it("Undo refuses a changed folder child set even when the server reuses its ETag", async () => {
+  const { createDemoPod } = await import("../src/lib/demo-pod/pod");
+  const { createSolidDriveClient } = await import("../src/apps/drive/lib/client/client");
+  const pod = createDemoPod({
+    root: ROOT,
+    seed: [{ path: "drive/B/unrelated", body: "unrelated", contentType: "text/plain" }],
+  });
+  const from = `${ROOT}drive/B/`,
+    to = `${ROOT}drive/A/`;
+  const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
+    const response = await pod.fetch(input, { ...init, headers: {} });
+    response.headers.set("etag", '"reused"');
+    return response;
+  });
+  await expect(
+    moveWithValidator({ storageUrl: ROOT, fetch }, from, to, '"reused"', [`${from}original`]),
+  ).rejects.toThrow("cannot be safely undone");
+  expect(pod.has(to)).toBe(false);
+  expect(
+    await (
+      await createSolidDriveClient({ storageUrl: ROOT, fetch: pod.fetch }).read(`${from}unrelated`)
+    ).text(),
+  ).toBe("unrelated");
+  expect(
+    fetch.mock.calls.every(([, init]) => !["PUT", "DELETE"].includes(init?.method ?? "GET")),
+  ).toBe(true);
+});
+
+it("Undo fails closed for a folder whose child set was not captured", async () => {
+  const { fetch } = transport();
+  await expect(
+    moveWithValidator({ storageUrl: ROOT, fetch }, `${SOURCE}/`, `${TARGET}/`, '"moved"'),
+  ).rejects.toThrow("cannot be safely undone");
+  expect(fetch).not.toHaveBeenCalled();
 });

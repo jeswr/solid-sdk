@@ -85,3 +85,24 @@ it("moves open Details between the desktop pane and narrow Sheet on resize", asy
   expect(view.host.querySelector(".ish-details")?.textContent).toContain("Report.pdf details");
   await view.unmount();
 });
+
+it("returns navigation drawer focus to Open navigation on Close", async () => {
+  viewport(375);
+  const view = await mount(h(Frame));
+  const trigger = view.host.querySelector<HTMLElement>(
+    '[aria-label="Open navigation"]',
+  ) as HTMLElement;
+  trigger.focus();
+  await click(trigger);
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+  const dialog = document.querySelector('[role="dialog"]') as Element;
+  await click(dialog.querySelector('[aria-label="Close"]') as Element);
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+  expect(document.querySelector('[role="dialog"]')).toBeNull();
+  expect(document.activeElement === trigger).toBe(true);
+  await view.unmount();
+});

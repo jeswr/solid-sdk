@@ -493,6 +493,9 @@ describe("app-managed trash against the demo pod", () => {
       name: "notes.md",
       trashedAt: new Date(NOW),
     };
+    const index = emptyTrashIndex();
+    addTrashRecord(index, entry);
+    await client.write(INDEX, await serializeTrashIndex(index), { contentType: "text/turtle" });
     vi.spyOn(client, "stat").mockRejectedValue(error);
     expect(await restoreItems(client, DRIVE, [entry])).toEqual({
       done: [],
@@ -504,7 +507,7 @@ describe("app-managed trash against the demo pod", () => {
       done: [],
       failed: [{ url: entry.url, error }],
     });
-    expect(write).toHaveBeenCalledTimes(1);
+    expect(write).toHaveBeenCalledTimes(2);
   });
 
   it("continues after a missing trash source and ignores failure to remove an empty restored slot", async () => {
@@ -542,6 +545,7 @@ describe("app-managed trash against the demo pod", () => {
       name: "other",
       trashedAt: new Date(NOW - DAY),
     };
+    await pod.fetch(concurrent.url, { method: "PUT", body: "concurrent file" });
     let writes = 0;
     const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
       if (String(input) === INDEX && init?.method === "PUT") {

@@ -105,6 +105,7 @@ export function SuiteFrame({
   const pathname = usePathname();
   const [drawer, setDrawer] = useState(false);
   const [detailsSide, setDetailsSide] = useState<"bottom" | "right" | "pane">("pane");
+  const navigationTrigger = useRef<HTMLButtonElement>(null);
   const detailsTrigger = useRef<HTMLElement | null>(null);
   useEffect(() => {
     const narrow = window.matchMedia("(max-width: 1023px)");
@@ -147,7 +148,14 @@ export function SuiteFrame({
         {sidebar}
       </aside>
       <Sheet open={drawer} onOpenChange={setDrawer}>
-        <SheetContent side="left" className="ish-drawer">
+        <SheetContent
+          side="left"
+          className="ish-drawer"
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            navigationTrigger.current?.focus();
+          }}
+        >
           <SheetTitle className="sr-only">Navigation</SheetTitle>
           <SheetDescription className="sr-only">App navigation</SheetDescription>
           {sidebar}
@@ -157,6 +165,7 @@ export function SuiteFrame({
         <button
           type="button"
           className="ish-menu-button"
+          ref={navigationTrigger}
           aria-label="Open navigation"
           onClick={() => setDrawer(true)}
         >

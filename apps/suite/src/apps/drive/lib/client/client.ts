@@ -46,7 +46,7 @@ export interface DriveClient {
   /** Copy a file (folders: recursive). Fails with a conflict when `to` exists. */
   copy(from: string, to: string): Promise<void>;
   /** Move = copy + delete (no native move on Solid); returns the new URL. */
-  move(from: string, to: string): Promise<string>;
+  move(from: string, to: string, options?: { beforeDelete?: () => Promise<void> }): Promise<string>;
   remove(url: string, options?: { recursive?: boolean }): Promise<void>;
 }
 
@@ -380,7 +380,12 @@ export function createSolidDriveClient(options: {
     return retained;
   };
 
-  const transfer = async (from: string, to: string, moving: boolean) => {
+  const transfer = async (
+    from: string,
+    to: string,
+    moving: boolean,
+    beforeDelete?: () => Promise<void>,
+  ) => {
     if (from.endsWith("/") !== to.endsWith("/") || (from.endsWith("/") && to.startsWith(from))) {
       throw new DriveError("conflict", 409, to);
     }
@@ -391,6 +396,7 @@ export function createSolidDriveClient(options: {
     try {
       await copySnapshot(source, to, created);
       if (moving) {
+        await beforeDelete?.();
         deleting = true;
         await deleteSnapshot(source, deleted);
       }
@@ -410,8 +416,8 @@ export function createSolidDriveClient(options: {
 
   const copy: DriveClient["copy"] = (from, to) => transfer(from, to, false);
 
-  const move: DriveClient["move"] = async (from, to) => {
-    await transfer(from, to, true);
+  const move: DriveClient["move"] = async (from, to, opts) => {
+    await transfer(from, to, true, opts?.beforeDelete);
     return to;
   };
 

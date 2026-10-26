@@ -20,12 +20,20 @@ import {
 import type { Quad } from "@rdfjs/types";
 import { ArrowLeft, ChevronLeft, ChevronRight, Download, Info, Star, X } from "lucide-react";
 import Link from "next/link";
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import {
+  type MouseEventHandler,
+  type ReactNode,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { encodeRef } from "@/lib/refs";
 import type { DriveClient, DriveItem } from "../lib/client/client";
 import { parseCsv, previewKind } from "../lib/view/view";
 import { useDrive } from "../state/drive-context";
 import { useDriveActions, useDriveUi } from "../state/ui";
+import { DetailsPane } from "./details";
 import { ItemIcon } from "./item-icon";
 
 const TEXT_LIMIT = 1024 * 1024;
@@ -71,7 +79,13 @@ function filePreviewKind(item: DriveItem) {
 /** A readable value for an object IRI: contact schemes lose their prefix. */
 function valueLabel(iri: string): string {
   const contact = /^(?:mailto|tel):(.+)$/i.exec(iri);
-  if (contact?.[1]) return decodeURIComponent(contact[1]);
+  if (contact?.[1]) {
+    try {
+      return decodeURIComponent(contact[1]);
+    } catch {
+      return iri;
+    }
+  }
   return termLabel(iri);
 }
 
@@ -248,10 +262,14 @@ function PreviewHeader({
   item,
   leading,
   trailing,
+  onDetails,
+  detailsOpen,
 }: {
   item: DriveItem;
   leading?: ReactNode;
   trailing?: ReactNode;
+  onDetails?: MouseEventHandler<HTMLButtonElement>;
+  detailsOpen?: boolean;
 }) {
   const actions = useDriveActions();
   const ui = useDriveUi();
@@ -276,10 +294,14 @@ function PreviewHeader({
         <IconButton
           label="Details"
           variant="ghost"
-          onClick={() => {
-            ui.setDetailsItems([item]);
-            ui.setDetailsOpen((open) => !open);
-          }}
+          aria-expanded={detailsOpen}
+          onClick={
+            onDetails ??
+            (() => {
+              ui.setDetailsItems([item]);
+              ui.setDetailsOpen((open) => !open);
+            })
+          }
         >
           <Info aria-hidden="true" size={18} />
         </IconButton>
@@ -292,6 +314,8 @@ function PreviewHeader({
 /** The preview over a listing; ←/→ step through the listing's files. */
 export function PreviewDialog() {
   const { preview, setPreview } = useDriveUi();
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const detailsTrigger = useRef<HTMLElement | null>(null);
   const item = preview?.items[preview.index];
   useEffect(() => {
     if (!preview) return;
@@ -334,35 +358,53 @@ export function PreviewDialog() {
         </DialogDescription>
         <PreviewHeader
           item={item}
+          detailsOpen={detailsOpen}
+          onDetails={(event) => {
+            detailsTrigger.current = event.currentTarget;
+            setDetailsOpen((open) => !open);
+          }}
           trailing={
             <IconButton label="Close" variant="ghost" onClick={() => setPreview(undefined)}>
               <X aria-hidden="true" size={18} />
             </IconButton>
           }
         />
-        <div className="drv-preview-body">
-          {preview.index > 0 ? (
-            <IconButton
-              label="Previous file"
-              className="drv-preview-nav"
-              data-side="prev"
-              variant="secondary"
-              onClick={() => step(-1)}
-            >
-              <ChevronLeft aria-hidden="true" size={20} />
-            </IconButton>
-          ) : null}
-          <PreviewBody key={item.url} item={item} />
-          {preview.index < preview.items.length - 1 ? (
-            <IconButton
-              label="Next file"
-              className="drv-preview-nav"
-              data-side="next"
-              variant="secondary"
-              onClick={() => step(1)}
-            >
-              <ChevronRight aria-hidden="true" size={20} />
-            </IconButton>
+        <div className="drv-preview-content">
+          <div className="drv-preview-body">
+            {preview.index > 0 ? (
+              <IconButton
+                label="Previous file"
+                className="drv-preview-nav"
+                data-side="prev"
+                variant="secondary"
+                onClick={() => step(-1)}
+              >
+                <ChevronLeft aria-hidden="true" size={20} />
+              </IconButton>
+            ) : null}
+            <PreviewBody key={item.url} item={item} />
+            {preview.index < preview.items.length - 1 ? (
+              <IconButton
+                label="Next file"
+                className="drv-preview-nav"
+                data-side="next"
+                variant="secondary"
+                onClick={() => step(1)}
+              >
+                <ChevronRight aria-hidden="true" size={20} />
+              </IconButton>
+            ) : null}
+          </div>
+          {detailsOpen ? (
+            <aside className="drv-preview-details" aria-label="Details">
+              <DetailsPane
+                items={[item]}
+                onClose={() => {
+                  setDetailsOpen(false);
+                  detailsTrigger.current?.focus();
+                }}
+              />
+            </aside>
           ) : null}
         </div>
       </DialogContent>

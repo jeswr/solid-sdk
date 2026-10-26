@@ -28,6 +28,7 @@ import {
   moveItems,
   renameItem,
   restoreItems,
+  TrashMovingError,
   trashItems,
 } from "../lib/operations/operations";
 import type { TrashEntry } from "../lib/operations/trash-index";
@@ -152,6 +153,7 @@ export function useDriveUi(): DriveUiValue {
 
 /** User-facing message for a failed operation. */
 export function errorMessage(error: unknown, fallback = "Something went wrong"): string {
+  if (error instanceof TrashMovingError) return error.message;
   if (error instanceof DriveError) {
     switch (error.kind) {
       case "conflict":
@@ -261,7 +263,10 @@ export function useDriveActions() {
       );
       // Capture each validator before moving the next item in a potentially slow
       // batch. URL equality does not establish which resource now occupies it.
-      const validators = new Map<string, string | undefined>();
+      const validators = new Map<
+        string,
+        { etag: string | undefined; children?: readonly string[] } | undefined
+      >();
       const movingClient: DriveClient = undoable
         ? {
             ...client,
@@ -269,10 +274,15 @@ export function useDriveActions() {
               const url = await client.move(from, to);
               validators.set(
                 url,
-                await client.stat(url).then(
-                  (item) => item.etag,
-                  () => undefined,
-                ),
+                await (async () => {
+                  const item = await client.stat(url);
+                  return {
+                    etag: item.etag,
+                    ...(url.endsWith("/")
+                      ? { children: (await client.list(url)).map((child) => child.url) }
+                      : {}),
+                  };
+                })().catch(() => undefined),
               );
               return url;
             },
@@ -297,7 +307,7 @@ export function useDriveActions() {
       }
       if (result.done.length === 0) return result;
       // An unreadable/absent validator makes Undo fail closed for that item.
-      const undo = result.done.map((entry) => ({ ...entry, etag: validators.get(entry.to) }));
+      const undo = result.done.map((entry) => ({ ...entry, identity: validators.get(entry.to) }));
       const label = folderLabel(target, driveRoot);
       const first = result.done[0];
       const message =
@@ -311,14 +321,15 @@ export function useDriveActions() {
                 label: "Undo",
                 onClick: async () => {
                   const failed: string[] = [];
-                  for (const { from, to, etag } of undo) {
+                  for (const { from, to, identity } of undo) {
                     try {
-                      if (!etag) throw new Error("No validator for Undo");
+                      if (!identity?.etag) throw new Error("No validator for Undo");
                       await moveWithValidator(
                         { storageUrl: session.storageUrl, fetch: session.fetch },
                         to,
                         from,
-                        etag,
+                        identity.etag,
+                        ...(identity.children ? ([identity.children] as const) : ([] as const)),
                       );
                       invalidate(to);
                       invalidate(from);
@@ -326,7 +337,8 @@ export function useDriveActions() {
                       failed.push(nameOf(from));
                     }
                   }
-                  if (failed.length > 0) toast.error(`Couldn't restore: ${failed.join(", ")}`);
+                  if (failed.length > 0)
+                    toast.error(`This move cannot be safely undone: ${failed.join(", ")}`);
                 },
               },
             }
@@ -395,6 +407,7 @@ export function useDriveActions() {
     async (entries: readonly TrashEntry[]) => {
       if (!driveRoot) return;
       const result = await restoreItems(client, driveRoot, entries);
+      for (const warning of result.warnings ?? []) toast.error(warning.message);
       for (const { entry, url } of result.done) {
         invalidate(entry.url);
         invalidate(url);
@@ -441,6 +454,7 @@ export function useDriveActions() {
     async (entries: readonly TrashEntry[]) => {
       if (!driveRoot) return;
       const result = await deleteForever(client, driveRoot, entries);
+      for (const warning of result.warnings ?? []) toast.error(warning.message);
       for (const entry of result.done) invalidate(entry.url);
       if (result.failed.length > 0)
         toast.error(errorMessage(result.failed[0]?.error, "Couldn't delete"));

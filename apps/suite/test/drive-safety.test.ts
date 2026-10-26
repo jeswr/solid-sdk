@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createSolidDriveClient, DriveError } from "../src/apps/drive/lib/client/client";
 import {
+  type BatchResult,
   copyItem,
   deleteForever,
   listTrash,
@@ -13,6 +14,9 @@ import {
   addTrashRecord,
   emptyTrashIndex,
   serializeTrashIndex,
+  type TrashEntry,
+  trashEntries,
+  trashIndexFrom,
 } from "../src/apps/drive/lib/operations/trash-index";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
 
@@ -44,6 +48,156 @@ function setup(
 afterEach(() => vi.restoreAllMocks());
 
 describe("Drive data-safety regressions", () => {
+  it.each([
+    "restore",
+    "delete",
+    "purge",
+  ])("refuses pending trash %s between destination PUT and source deletion, preserving the moved copy", async (operation) => {
+    let observed: { visible: TrashEntry[]; result: BatchResult<unknown> } | undefined;
+    let attempted = false;
+    const { pod, client } = setup(async (url, init) => {
+      if (!attempted && url.includes(".trash/") && url !== INDEX && init?.method === "PUT") {
+        attempted = true;
+        const response = await pod.fetch(url, init);
+        const current = await client.readRdf(INDEX);
+        if (!current) throw new Error("Missing trash index");
+        const entry = trashEntries(trashIndexFrom(current.dataset))[0];
+        if (!entry) throw new Error("Missing pending entry");
+        const visible = await listTrash(client, DRIVE);
+        const result =
+          operation === "restore"
+            ? await restoreItems(client, DRIVE, [entry])
+            : operation === "delete"
+              ? await deleteForever(client, DRIVE, [entry])
+              : await purgeExpired(client, DRIVE, { now: NOW });
+        observed = { visible, result };
+        return response;
+      }
+      return undefined;
+    });
+    const result = await trashItems(client, DRIVE, [await client.stat(`${FROM}a`)], {
+      now: new Date(0),
+    });
+    expect(attempted).toBe(true);
+    expect(result.failed).toEqual([]);
+    expect(result.done).toHaveLength(1);
+    expect(pod.has(result.done[0]?.url as string)).toBe(true);
+    expect(pod.has(`${FROM}a`)).toBe(false);
+    expect(observed?.visible).toEqual([]);
+    expect(observed?.result.done).toEqual([]);
+    if (operation !== "purge")
+      expect(observed?.result.failed[0]?.error).toMatchObject({
+        kind: "trash-moving",
+        message: expect.stringContaining("moving"),
+      });
+  });
+
+  it("rechecks the pending intent before deleting the original source", async () => {
+    const { pod, client } = setup(async (url, init) => {
+      if (url.includes(".trash/") && url !== INDEX && init?.method === "PUT") {
+        const response = await pod.fetch(url, init);
+        await pod.fetch(INDEX, { method: "DELETE" });
+        return response;
+      }
+      return undefined;
+    });
+    const result = await trashItems(client, DRIVE, [await client.stat(`${FROM}a`)]);
+    expect(result.done).toEqual([]);
+    expect(result.failed).toHaveLength(1);
+    expect(pod.has(`${FROM}a`)).toBe(true);
+  });
+
+  it.each([
+    "restore",
+    "delete",
+  ])("returns completed %s results with a typed index warning and reconciles phantoms on load", async (operation) => {
+    let fail = false;
+    const { pod, client } = setup(async (url, init) =>
+      fail && url === INDEX && init?.method === "PUT"
+        ? new Response(null, { status: 500 })
+        : undefined,
+    );
+    const {
+      done: [entry],
+    } = await trashItems(client, DRIVE, [await client.stat(`${FROM}a`)]);
+    if (!entry) throw new Error("Missing trash entry");
+    fail = true;
+    const result =
+      operation === "restore"
+        ? await restoreItems(client, DRIVE, [entry])
+        : await deleteForever(client, DRIVE, [entry]);
+    expect(result.done).toHaveLength(1);
+    expect(result.failed).toEqual([]);
+    expect(result).toMatchObject({
+      warnings: [
+        {
+          kind: "trash-index-persistence",
+          url: INDEX,
+          cause: expect.objectContaining({ status: 500 }),
+        },
+      ],
+    });
+    expect(pod.has(entry.url)).toBe(false);
+    expect(pod.has(`${FROM}a`)).toBe(operation === "restore");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    expect(await listTrash(client, DRIVE)).toEqual([]);
+    expect(warn).toHaveBeenCalledWith(expect.objectContaining({ kind: "trash-index-persistence" }));
+    fail = false;
+    expect(await listTrash(client, DRIVE)).toEqual([]);
+    const current = await client.readRdf(INDEX);
+    if (!current) throw new Error("Missing reconciled index");
+    expect(trashEntries(trashIndexFrom(current.dataset))).toEqual([]);
+  });
+
+  it("promotes a pending intent only after source removal and a persisted completion on next load", async () => {
+    let writes = 0;
+    const { client } = setup(async (url, init) =>
+      url === INDEX && init?.method === "PUT" && ++writes === 2
+        ? new Response(null, { status: 500 })
+        : undefined,
+    );
+    const result = await trashItems(client, DRIVE, [await client.stat(`${FROM}a`)]);
+    const entry = result.done[0];
+    if (!entry) throw new Error("Missing moved entry");
+    expect((await restoreItems(client, DRIVE, [entry])).failed[0]?.error).toMatchObject({
+      kind: "trash-moving",
+    });
+    expect((await deleteForever(client, DRIVE, [entry])).failed[0]?.error).toMatchObject({
+      kind: "trash-moving",
+    });
+    expect(await listTrash(client, DRIVE)).toEqual([entry]);
+    expect((await restoreItems(client, DRIVE, [entry])).done).toHaveLength(1);
+  });
+
+  it.each([
+    "removed",
+    "changed",
+  ])("does not resurrect a pending intent %s by another tab during reconciliation", async (change) => {
+    let writes = 0;
+    const { client } = setup(async (url, init) =>
+      url === INDEX && init?.method === "PUT" && ++writes === 2
+        ? new Response(null, { status: 500 })
+        : undefined,
+    );
+    const {
+      done: [entry],
+    } = await trashItems(client, DRIVE, [await client.stat(`${FROM}a`)]);
+    if (!entry) throw new Error("Missing moved entry");
+    const read = client.readRdf.bind(client);
+    vi.spyOn(client, "readRdf")
+      .mockImplementationOnce(read)
+      .mockImplementationOnce(async (url) => {
+        const current = await read(url);
+        if (!current) throw new Error("Missing index");
+        const index = trashIndexFrom(current.dataset);
+        if (change === "removed") index.record(entry.url).clear();
+        else index.record(entry.url).originalLocation = `${FROM}b`;
+        await client.write(INDEX, await serializeTrashIndex(index), { contentType: "text/turtle" });
+        return read(url);
+      });
+    expect(await listTrash(client, DRIVE)).toEqual([]);
+  });
+
   it("copies a folder through the operation API with its trailing slash intact", async () => {
     const { pod, client } = setup();
     expect(await copyItem(client, FROM)).toBe(`${DRIVE}Copy%20of%20source/`);
@@ -172,7 +326,7 @@ describe("Drive data-safety regressions", () => {
       await expect(client.copy(from, to)).rejects.toMatchObject({ kind: "conflict" });
   });
 
-  it("keeps pending intents hidden until a destination exists and propagates inaccessible pending resources", async () => {
+  it("keeps pending intents hidden while the source exists and propagates inaccessible sources", async () => {
     const { client } = setup();
     expect(await trashItems(client, DRIVE, [])).toEqual({ done: [], failed: [] });
     vi.spyOn(client, "move").mockRejectedValue(new Error("offline"));
@@ -380,7 +534,9 @@ describe("Drive data-safety regressions", () => {
     const result = await trashItems(client, DRIVE, [await client.stat(`${FROM}a`)]);
     expect(result.done).toHaveLength(1);
     expect(result.failed).toEqual([{ url: INDEX, error: expect.objectContaining({ status }) }]);
-    expect(await listTrash(client, DRIVE)).toEqual(result.done);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    expect(await listTrash(client, DRIVE)).toEqual([]);
+    expect(warn).toHaveBeenCalledWith(expect.objectContaining({ kind: "trash-index-persistence" }));
     expect(pod.has(`${FROM}a`)).toBe(false);
   });
 

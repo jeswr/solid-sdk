@@ -7,7 +7,7 @@
  * toasts and Drive-scope keyboard shortcuts (04-drive §8).
  */
 
-import { Button, IconButton, Toaster } from "@jeswr/suite-ui";
+import { Button, IconButton, Toaster, toast } from "@jeswr/suite-ui";
 import { Info } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import { SuiteFrame } from "@/components/interim-shell/suite-frame";
@@ -41,8 +41,11 @@ function DriveChrome({ children }: { children: ReactNode }) {
     if (!driveRoot || sessionStorage.getItem("suite.drive.purged") === driveRoot) return;
     sessionStorage.setItem("suite.drive.purged", driveRoot);
     void purgeExpired(client, driveRoot).then(
-      (result) =>
-        result.done.length > 0 && console.debug(`Drive purged ${result.done.length} expired items`),
+      (result) => {
+        for (const warning of result.warnings ?? []) toast.error(warning.message);
+        if (result.done.length > 0)
+          console.debug(`Drive purged ${result.done.length} expired items`);
+      },
       () => undefined,
     );
   }, [client, driveRoot]);

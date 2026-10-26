@@ -36,6 +36,7 @@ import { FileBrowser } from "../src/apps/drive/components/file-browser";
 vi.mock("../src/apps/drive/state/undo", () => ({ moveWithValidator: mocks.undoMove }));
 
 import { DriveError } from "../src/apps/drive/lib/client/client";
+import * as operations from "../src/apps/drive/lib/operations/operations";
 import { DriveUiProvider, useDriveActions, useDriveUi } from "../src/apps/drive/state/ui";
 
 const ROOT = "https://pod.example/drive/";
@@ -311,4 +312,96 @@ it("captures each moved validator before waiting for later items in the batch", 
     '"first-version"',
   );
   await view.unmount();
+});
+
+it.each([
+  "restore",
+  "delete",
+])("toasts index persistence warnings while preserving successful %s feedback", async (operation) => {
+  const entry = {
+    url: `${ROOT}.trash/00000000-0000-0000-0000-000000000000/A.txt`,
+    original: items[0]?.url ?? "",
+    name: "A.txt",
+    trashedAt: new Date(),
+  };
+  const warning = new operations.TrashIndexWarning(
+    `${ROOT}.trash/index.ttl`,
+    new Error("HTTP 500"),
+  );
+  const restore = vi.spyOn(operations, "restoreItems").mockResolvedValue({
+    done: [{ entry, url: entry.original, renamed: false }],
+    failed: [],
+    warnings: [warning],
+  });
+  const remove = vi
+    .spyOn(operations, "deleteForever")
+    .mockResolvedValue({ done: [entry], failed: [], warnings: [warning] });
+  const view = await mount(tree(items));
+  await act(async () => {
+    if (operation === "restore") await actions.restore([entry]);
+    else await actions.removeForever([entry]);
+  });
+  expect(mocks.toast.error).toHaveBeenCalledWith(warning.message);
+  expect(mocks.toast.success).toHaveBeenCalledWith(
+    operation === "restore" ? "Restored A.txt" : "Deleted for ever",
+  );
+  expect(drive.invalidate).toHaveBeenCalledWith(entry.url);
+  await view.unmount();
+  restore.mockRestore();
+  remove.mockRestore();
+});
+
+it("captures a moved folder's child set immediately for Undo", async () => {
+  const folder: DriveItem = { url: `${ROOT}Folder/`, name: "Folder", kind: "folder" };
+  const destination = `${ROOT}Work/Folder/`;
+  const child = { url: `${destination}note`, name: "note", kind: "file" };
+  const view = await mount(tree([folder]));
+  mocks.client.move.mockResolvedValue(destination);
+  mocks.client.stat.mockResolvedValue({ etag: '"folder-version"' });
+  mocks.client.list.mockResolvedValue([child]);
+  await act(async () => {
+    await actions.move([folder], `${ROOT}Work/`);
+  });
+  const options = mocks.toast.success.mock.calls.at(-1)?.[1] as {
+    action: { onClick: () => Promise<void> };
+  };
+  mocks.client.list.mockResolvedValue([{ ...child, url: `${destination}replacement` }]);
+  await act(async () => options.action.onClick());
+  expect(mocks.undoMove).toHaveBeenCalledWith(
+    expect.any(Object),
+    destination,
+    folder.url,
+    '"folder-version"',
+    [child.url],
+  );
+  await view.unmount();
+});
+
+it.each([
+  "restore",
+  "delete",
+])("shows a clear moving message when pending trash %s is refused", async (operation) => {
+  const entry = {
+    url: `${ROOT}.trash/00000000-0000-0000-0000-000000000000/A.txt`,
+    original: items[0]?.url ?? "",
+    name: "A.txt",
+    trashedAt: new Date(),
+  };
+  const error = new operations.TrashMovingError();
+  const restore = vi
+    .spyOn(operations, "restoreItems")
+    .mockResolvedValue({ done: [], failed: [{ url: entry.url, error }] });
+  const remove = vi
+    .spyOn(operations, "deleteForever")
+    .mockResolvedValue({ done: [], failed: [{ url: entry.url, error }] });
+  const view = await mount(tree(items));
+  await act(async () => {
+    if (operation === "restore") await actions.restore([entry]);
+    else await actions.removeForever([entry]);
+  });
+  expect(mocks.toast.error).toHaveBeenCalledWith(error.message);
+  expect(mocks.toast.success).not.toHaveBeenCalled();
+  await view.unmount();
+  restore.mockRestore();
+  remove.mockRestore();
 });

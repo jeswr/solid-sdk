@@ -1,16 +1,17 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex
 "use client";
 /**
  * Details pane (04-drive §2.8): who has access, the item's facts and, under
  * "Show technical details", its content type and address.
  */
 
-import { Button, FileTypeIcon, IconButton } from "@jeswr/suite-ui";
+import { Button, IconButton } from "@jeswr/suite-ui";
 import { Copy, Lock, X } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useId, useState } from "react";
 import { encodeRef } from "@/lib/refs";
-import { parentOf } from "../lib/client/client";
+import { type DriveItem, parentOf } from "../lib/client/client";
 import { formatFileSize } from "../lib/files";
 import { breadcrumbs } from "../lib/files/breadcrumbs";
 import { formatModified, formatSize, friendlyType } from "../lib/view/view";
@@ -41,8 +42,17 @@ function Location({ url }: { url: string }) {
   );
 }
 
-export function DetailsPane({ onClose }: { onClose: () => void }) {
-  const { detailsItems } = useDriveUi();
+export function DetailsPane({
+  onClose,
+  items,
+}: {
+  onClose: () => void;
+  items?: readonly DriveItem[];
+}) {
+  const { detailsItems: selectedItems } = useDriveUi();
+  const detailsItems = items ?? selectedItems;
+  const accessId = useId();
+  const factsId = useId();
   const { session } = useDrive();
   const [technical, setTechnical] = useState(false);
   const [item] = detailsItems;
@@ -84,8 +94,8 @@ export function DetailsPane({ onClose }: { onClose: () => void }) {
           <X aria-hidden="true" size={18} />
         </IconButton>
       </div>
-      <section aria-labelledby="drv-access">
-        <h3 id="drv-access">Who has access</h3>
+      <section aria-labelledby={accessId}>
+        <h3 id={accessId}>Who has access</h3>
         <p className="drv-access-line">
           <Lock aria-hidden="true" size={16} /> Only you
         </p>
@@ -93,8 +103,8 @@ export function DetailsPane({ onClose }: { onClose: () => void }) {
           Manage access
         </Button>
       </section>
-      <section aria-labelledby="drv-facts">
-        <h3 id="drv-facts">Details</h3>
+      <section aria-labelledby={factsId}>
+        <h3 id={factsId}>Details</h3>
         <dl className="drv-facts">
           <div>
             <dt>Type</dt>

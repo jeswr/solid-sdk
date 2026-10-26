@@ -1,16 +1,36 @@
 // AUTHORED-BY Codex
 
 import { fetchRdf } from "@jeswr/fetch-rdf";
+import { useState } from "react";
 import { afterEach, expect, it, vi } from "vitest";
 import type { DriveItem } from "../src/apps/drive/lib/client/client";
-import { act, deferred, h, mount } from "./drive-ui-dom";
+import { act, click, deferred, h, mount } from "./drive-ui-dom";
 
-const { client } = vi.hoisted(() => ({ client: { read: vi.fn(), readRdf: vi.fn() } }));
-vi.mock("../src/apps/drive/state/drive-context", () => ({ useDrive: () => ({ client }) }));
-vi.mock("../src/apps/drive/state/ui", () => ({ useDriveActions: () => ({ download: vi.fn() }) }));
+const { client, ui } = vi.hoisted(() => ({
+  client: { read: vi.fn(), readRdf: vi.fn() },
+  ui: vi.fn(),
+}));
+vi.mock("../src/apps/drive/state/drive-context", () => ({
+  useDrive: () => ({
+    client,
+    driveRoot: "https://pod.example/drive/",
+    session: { webId: "https://pod.example/profile#me" },
+  }),
+}));
+vi.mock("../src/apps/drive/state/ui", () => ({
+  useDriveActions: () => ({ download: vi.fn(), starred: new Set() }),
+  useDriveUi: ui,
+}));
 vi.mock("@/lib/refs", async () => import("../src/lib/refs"));
 
-import { PreviewBody } from "../src/apps/drive/components/preview";
+vi.mock("next/navigation", () => ({
+  usePathname: () => "/drive/my",
+  useRouter: () => ({ push: vi.fn() }),
+}));
+
+import { DetailsPane } from "../src/apps/drive/components/details";
+import { PreviewBody, PreviewDialog } from "../src/apps/drive/components/preview";
+import { SuiteFrame } from "../src/components/interim-shell/suite-frame";
 
 const item: DriveItem = {
   url: "https://pod.example/drive/file.pdf",
@@ -24,7 +44,6 @@ afterEach(() => {
   vi.clearAllMocks();
   client.read.mockReset();
   client.readRdf.mockReset();
-  document.body.replaceChildren();
 });
 
 it("rejects HTML advertised as PDF before creating a blob URL", async () => {
@@ -82,4 +101,64 @@ it("releases a blob from a read that completes after closing preview", async () 
   await view.unmount();
   await act(async () => read.resolve(new Blob(["image"], { type: "image/png" })));
   expect(create.mock.calls.length).toBe(revoke.mock.calls.length);
+});
+
+it("renders malformed percent-encoded RDF contact IRIs without throwing", async () => {
+  const { dataset } = await fetchRdf(item.url, {
+    fetch: async () =>
+      new Response(
+        "<urn:item> <http://www.w3.org/2006/vcard/ns#hasEmail> <mailto:alice%FF@example.org>; <http://www.w3.org/2006/vcard/ns#hasTelephone> <tel:%FF>; <urn:valid> <mailto:alice%40example.org>.",
+        { headers: { "content-type": "text/turtle" } },
+      ),
+  });
+  client.readRdf.mockResolvedValue({ dataset });
+  const view = await mount(h(PreviewBody, { item: { ...item, contentType: "text/turtle" } }));
+  expect(view.host.textContent).toContain("mailto:alice%FF@example.org");
+  expect(view.host.textContent).toContain("tel:%FF");
+  expect(view.host.textContent).toContain("alice@example.org");
+  await view.unmount();
+});
+
+it("keeps desktop preview Details inside the modal and exposes its keyboard controls", async () => {
+  client.read.mockResolvedValue(new Blob(["plain text"], { type: "text/plain" }));
+  function Viewer() {
+    const [detailsOpen, setDetailsOpen] = useState(false);
+    const [detailsItems, setDetailsItems] = useState<DriveItem[]>([]);
+    ui.mockReturnValue({
+      preview: { items: [{ ...item, contentType: "text/plain" }], index: 0 },
+      setPreview: vi.fn(),
+      detailsOpen,
+      setDetailsOpen,
+      detailsItems,
+      setDetailsItems,
+    });
+    return h(SuiteFrame, {
+      app: "drive",
+      sidebar: "Files",
+      details: detailsOpen ? h(DetailsPane, { onClose: () => setDetailsOpen(false) }) : undefined,
+      children: h(PreviewDialog),
+    });
+  }
+  const view = await mount(h(Viewer));
+  const dialog = document.querySelector<HTMLElement>('[role="dialog"]') as HTMLElement;
+  const trigger = dialog.querySelector<HTMLElement>('[aria-label="Details"]') as HTMLElement;
+  await act(async () => trigger.focus());
+  await click(trigger);
+  const pane = dialog.querySelector<HTMLElement>('[aria-label="Details"]:not(button)');
+  expect(pane).not.toBeNull();
+  if (!pane) throw new Error("Missing preview Details");
+  expect(pane.closest('[aria-hidden="true"]')).toBeNull();
+  const technical = [...pane.querySelectorAll<HTMLButtonElement>("button")].find(
+    (e) => e.textContent === "Show technical details",
+  );
+  if (!technical) throw new Error("Missing technical details control");
+  await act(async () => technical.focus());
+  expect(document.activeElement === technical).toBe(true);
+  await click(technical);
+  expect(pane?.textContent).toContain(item.url);
+  await click(pane.querySelector('[aria-label="Close details"]') as Element);
+  expect(dialog.querySelector('[aria-label="Close details"]')).toBeNull();
+  expect(document.activeElement === trigger).toBe(true);
+  expect(view.host.querySelector(".ish-details")).toBeNull();
+  await view.unmount();
 });
