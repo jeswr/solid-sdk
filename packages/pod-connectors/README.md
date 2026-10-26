@@ -177,3 +177,40 @@ supply exception dates and keep their deterministic identities across later mast
 updates. RFC 5545 constructs outside VOC-01's shape fail before the document write
 or checkpoint advance (see root `QUESTIONS.md`). Fixtures and sorted Turtle mapping
 snapshots cover these paths without Google accounts or production traffic.
+
+## Google Drive
+
+`./adapters/google-drive` exports `googleDriveAdapter` and
+`createGoogleDriveAdapter({ maxBytes })` (default 25 MiB). Drive remains Tier B because
+`drive.readonly` is a restricted Google scope. OAuth uses `createGoogleOAuthConfig('drive')`.
+The catalog has 32 entries: eight Tier A, fourteen Tier B, and ten Tier C.
+
+A full import captures `changes/startPageToken` before paginating `files.list`; later
+imports replay `changes.list` and persist its final `newStartPageToken`. HTTP 404/410 from
+the changes feed triggers one full resync. Full snapshots reconcile missing local files
+only after a complete, valid listing. Failed imports preserve the host's previous checkpoint.
+Removed/trashed files lose their metadata and all content representations through `ctx.remove`.
+
+Files have stable paths inside the connector container:
+`drive/files/<pathId(fileId)>/meta.ttl`, with `content` beside binary metadata, or
+`content.pdf` and (for Google documents) `content.txt` beside exported metadata.
+Folder ids, rather than names, identify folders; `schema:isPartOf` links mirror the Drive
+tree without moving resources on rename. Metadata uses `https://schema.org/`:
+`DigitalDocument` for files, `Collection` for folders, source id/URL, name, media type,
+size and timestamps. `schema:DigitalDocument` is registered once for `drive/`.
+`poddrive:md5Checksum` and `poddrive:contentSkipped` use `https://jeswr.org/ns/pod-drive#`.
+`schema:encoding` links identify successfully copied content.
+
+Only explicitly owned files are copied. Non-owned files, unknown binary sizes, unsupported
+Google Workspace types and files over the cap retain explanatory metadata and do not count
+as malformed-item skips. Documents, spreadsheets, presentations and drawings export as PDF;
+documents also export as text. Export-limit responses (`403 exportSizeLimitExceeded`) retain
+metadata only. Each representation is capped at `maxBytes` (exports also at Google's 10 MiB
+limit). Changed content replaces the old bytes; matching checksum/modified-time metadata
+and encoding links avoid another download. Metadata-only transitions remove stale copies.
+Malformed and RDF content types are stored as `application/octet-stream`.
+
+Downloads accumulate at most the configured byte cap and cancel/abort oversized responses.
+`PodWriter.writeBinary` currently takes `Uint8Array`; true streaming request bodies require a
+future writer port. JSON-only demo fixtures show metadata; sync tests wrap `fixtureFetch`
+with synthetic byte responses for media/export routes, without changing its public behavior.

@@ -38,3 +38,20 @@ to create-only, and replace only under a strong ETag.
 Mail sources (Gmail, Takeout mbox) go through `src/mail/writer.ts` so the pod-mail layout and
 vocabulary (`http://schema.org/`, matching apps/suite's mail model) stay identical. Keep Message-ID
 document ids, write `.eml` create-only, and flush thread/folder membership once per run.
+
+CON-06 adds `googleDriveAdapter` and `createGoogleDriveAdapter({ maxBytes })` (25 MiB default),
+using the shared Drive OAuth configuration. Keep it Tier B. Files live at
+`drive/files/<pathId(id)>/meta.ttl`; tree membership uses `schema:isPartOf` links to parent
+metadata subjects. Files are `schema:DigitalDocument`, folders only `schema:Collection`;
+register DigitalDocument for `drive/` through `registrationContainer`. Typed Drive accessors
+keep checksum/copy-state glue in `https://jeswr.org/ns/pod-drive#`.
+
+Capture the start token before full listing, stage every changes page before applying it,
+and only fall back once on changes-feed HTTP 404/410. Reconcile absent files after a valid
+full listing; malformed listings must not prune. Owned binaries require a known size under
+the cap; supported Google Workspace exports have capped PDF/text responses. Read with a byte
+cap, cancel oversized responses, replace content through `ctx.writeBinary`, and remove stale
+representations through `ctx.remove`. A policy omission writes explanatory metadata without
+incrementing `skipped`. Persist version metadata only after all content writes succeed.
+Drive tests wrap JSON `fixtureFetch` with synthetic media/export responses; do not broaden
+fixtureFetch or call live Google APIs. True streaming bodies await a future PodWriter port.
