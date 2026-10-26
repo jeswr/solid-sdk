@@ -6,7 +6,7 @@ import type { DatasetCore } from "@rdfjs/types";
 import { Container } from "@solid/object";
 import { DataFactory } from "n3";
 import { type Album, buildAlbum, parseAlbum } from "./album.js";
-import { buildPhoto, type Photo, parsePhoto, parsePhotos } from "./photograph.js";
+import { buildPhoto, type Photo, parsePhoto, parsePhotos, RestoreReceipt } from "./photograph.js";
 import { type ImageEncoder, preparePhoto, type UploadInput } from "./upload.js";
 import { documentUrl, httpIri } from "./validation.js";
 import { PREFIXES } from "./vocab.js";
@@ -101,7 +101,20 @@ export function photoStorage(fetch: typeof globalThis.fetch, storage: string) {
       return { photos: parsePhotos(url, dataset), etag };
     },
     async savePhoto(url: string, photo: Photo, precondition: Precondition) {
-      return write(url, buildPhoto(url, photo), precondition);
+      const dataset = buildPhoto(url, photo);
+      if ("etag" in precondition) {
+        condition(precondition);
+        const existing = await read(url);
+        if (existing.etag !== precondition.etag) throw new PhotoIoError(url, 412);
+        // Supported photo fields are replaceable; completion evidence is durable.
+        new RestoreReceipt(`${documentUrl(url)}#it`, dataset, DataFactory).restoreActivity =
+          new RestoreReceipt(
+            `${documentUrl(url)}#it`,
+            existing.dataset,
+            DataFactory,
+          ).restoreActivity;
+      }
+      return write(url, dataset, precondition);
     },
     async loadAlbum(url: string) {
       const { dataset, etag } = await read(url);

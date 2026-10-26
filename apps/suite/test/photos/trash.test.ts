@@ -357,3 +357,23 @@ it("requires the tombstone ETag and refuses a different lifecycle's tombstone", 
   expect((await io.loadPhoto(originalUrl)).photo).toBeUndefined();
   expect(pod.files.has(url)).toBe(true);
 });
+
+it("recovers restore cleanup after ordinary photo edits preserve its receipt", async () => {
+  const pod = mockPod();
+  const io = photoStorage(pod.fetch, storage);
+  await io.write(url, buildTrash(url, photo, record), { create: true });
+  pod.failures.set(`DELETE ${url}`, 503);
+  await expect(restorePhoto(io, url)).rejects.toMatchObject({ status: 503 });
+  const { etag } = await io.loadPhoto(originalUrl);
+  const edited = { ...photo, name: "Edited after restore", keywords: ["new"] };
+  await io.savePhoto(originalUrl, edited, { etag: etag as string });
+  const saved = pod.files.get(originalUrl);
+  pod.failures.delete(`DELETE ${url}`);
+  const other = photoStorage(pod.fetch, storage);
+  expect(await restorePhoto(other, url)).toBe(originalUrl);
+  expect((await other.loadPhoto(originalUrl)).photo).toEqual(edited);
+  expect(pod.files.get(originalUrl)).toBe(saved);
+  expect(pod.files.has(url)).toBe(false);
+  await trashPhoto(other, originalUrl, "a", actor, now);
+  await purgePhoto(other, url);
+});
