@@ -94,3 +94,34 @@ unique item IDs, and synchronous callbacks; persistence and remote fetching stay
 Interactive fixtures live in `apps/suite` at `/dev/components/<component>` (kebab-case).
 The component tests use Vitest, jsdom, Testing Library and axe-core; Playwright runs real
 layout, contrast, keyboard, and screenshot checks across the six viewport/theme projects.
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+
+DS-11 exports `UploadDock`, `DropZoneOverlay`, `PreviewPane`, and the pure
+`uploadQueueReducer`. Import `@jeswr/suite-ui/styles/components.css` after the token,
+Tailwind theme and density styles. The modules preserve their React client boundaries.
+
+`UploadDock` takes controlled `items` and `onPause/onResume/onCancel/onRetry` callbacks.
+The reducer enforces valid transitions and at most three active uploads. Pass the item's
+`attempt` back in progress, complete and fail events to ignore stale transport callbacks.
+The caller must abort paused/cancelled requests, schedule queued work, persist the queue,
+and implement storage capabilities. Set `canPause={false}` when pausing is unavailable.
+
+`DropZoneOverlay` wraps a folder pane and returns `{ files: [{ file, path }], directories }`.
+Paths are relative, directory paths end in `/`, and empty dropped directories are retained.
+All directory reader batches are exhausted. File/folder buttons provide keyboard alternatives;
+the folder picker uses the browser's `webkitdirectory` API. Non-file drags pass through.
+The returned paths are display paths: the app's upload planner applies storage naming rules.
+
+`PreviewPane` takes `{ name, blob, contentType?, typedView?, details? }` as `source`.
+The owning app supplies parsed typed data through `typedView={<TypedView ... />}`; the
+preview never parses or displays raw data files. Unsupported types and failed media keep a
+local download action. Image zoom (100–400%) supports +/−, arrow-key panning and pointer drag.
+Text/Markdown offers rendered/raw views. Markdown HTML is ignored, unsafe link schemes are
+removed, and remote image requests are suppressed. Object URLs are revoked on replacement
+and unmount. Supply blobs already read through the SDK; this package makes no network reads.
+The host owns preview navigation, metadata retrieval, headings and the enclosing dialog.
+
+All three accept `state` (`ready`, `loading`, `empty`, `filtered-empty` with `query`,
+`error` with a classified `SurfaceError`) and an `onAction` recovery callback. They do not
+classify SDK errors themselves. Fixtures live at `/dev/components/upload-dock`,
+`/dev/components/drop-zone-overlay`, and `/dev/components/preview-pane` in `apps/suite`.

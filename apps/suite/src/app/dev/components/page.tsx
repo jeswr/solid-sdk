@@ -6,7 +6,7 @@ export default function ComponentsPage() {
       <p className="eyebrow">Solid Suite · Design system</p>
       <h1>Component fixtures</h1>
       <p>Tokens and foundations for the suite.</p>
-      <nav aria-label="Component fixtures">
+      <nav aria-label="Component fixtures" className="grid gap-3">
         <a href="/dev/components/tokens">Tokens, typography and density</a>
         {fixtureNames.map((name) => (
           <a key={name} href={`/dev/components/${name}`}>
@@ -20,6 +20,9 @@ export default function ComponentsPage() {
         <a href="/dev/components/breadcrumbs">Breadcrumbs</a>
         <a href="/dev/components/editable-text">Editable text</a>
         <a href="/dev/components/tag-input">Tag input</a>
+        <a href="/dev/components/upload-dock">UploadDock</a>
+        <a href="/dev/components/drop-zone-overlay">DropZoneOverlay</a>
+        <a href="/dev/components/preview-pane">PreviewPane</a>
       </nav>
     </main>
   );
