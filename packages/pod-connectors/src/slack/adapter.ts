@@ -1,3 +1,5 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /**
  * Slack → Work & education. Your workspace and its channels
  * (`auth.test` + `conversations.list`) as `foaf:Group` — the workspace as the
@@ -13,12 +15,14 @@ import { getJson } from "../core/fixture-fetch.js";
 import type { ImportContext, ImportOutcome, IntegrationAdapter } from "../core/types.js";
 import { CLASSES, Organisation } from "../core/vocab.js";
 import { SLACK_FIXTURES, type SlackAuthTest, type SlackConversationsList } from "./fixtures.js";
+import { vocabMap } from "./vocab-map.js";
 
 const ID = "slack";
 const API = "https://slack.com/api";
 const SCOPES = ["channels:read", "team:read"] as const;
 
 export const slackAdapter: IntegrationAdapter = {
+  vocabMap,
   metadata: {
     id: ID,
     name: "Slack",
