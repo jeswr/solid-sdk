@@ -2,9 +2,9 @@
   "@context": [
     "https://www.w3.org/ns/solid/oidc-context.jsonld",
     {
-      "fedapp": "https://w3id.org/jeswr/fed#",
+      "fedapp": "https://jeswr.org/ns/fed#",
       "acl": "http://www.w3.org/ns/auth/acl#",
-      "sectors": "https://w3id.org/jeswr/sectors/",
+      "sectors": "https://jeswr.org/ns/sectors/",
       "fedapp:sector": {
         "@type": "@id"
       },
@@ -37,20 +37,20 @@
   "@type": [
     "fedapp:App"
   ],
-  "fedapp:sector": "https://w3id.org/jeswr/sectors/finance#sector",
+  "fedapp:sector": "https://jeswr.org/ns/sectors/finance#sector",
   "fedapp:access": [
     "http://www.w3.org/ns/auth/acl#Read",
     "http://www.w3.org/ns/auth/acl#Write",
     "http://www.w3.org/ns/auth/acl#Append"
   ],
   "fedapp:consumes": [
-    "https://w3id.org/jeswr/sectors/finance#Transaction",
-    "https://w3id.org/jeswr/sectors/finance#FinancialAccount"
+    "https://jeswr.org/ns/sectors/finance#Transaction",
+    "https://jeswr.org/ns/sectors/finance#FinancialAccount"
   ],
   "fedapp:produces": [
-    "https://w3id.org/jeswr/sectors/finance#Transaction",
-    "https://w3id.org/jeswr/sectors/finance#FinancialAccount",
-    "https://w3id.org/jeswr/sectors/finance#Balance"
+    "https://jeswr.org/ns/sectors/finance#Transaction",
+    "https://jeswr.org/ns/sectors/finance#FinancialAccount",
+    "https://jeswr.org/ns/sectors/finance#Balance"
   ],
   "client_uri": "https://money.solid.example/",
   "logo_uri": "https://money.solid.example/logo.svg"

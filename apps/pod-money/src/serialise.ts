@@ -7,6 +7,7 @@
 
 import type { DatasetCore, Quad } from "@rdfjs/types";
 import { DataFactory, Writer } from "n3";
+import { canonicalizeMoneyDataset } from "./canonical-vocab.js";
 import { CORE, DCTERMS, FIN, PIM, PM, RDF, SKOS, SOLID, XSD } from "./vocab.js";
 
 /** Stable prefix map applied to every document Pod Money writes. */
@@ -31,7 +32,7 @@ export function serialiseTurtle(dataset: DatasetCore): Promise<string> {
   return new Promise<string>((resolve, reject) => {
     try {
       const writer = new Writer({ prefixes: { ...PREFIXES } });
-      for (const quad of dataset as Iterable<Quad>) {
+      for (const quad of canonicalizeMoneyDataset(dataset, DataFactory) as Iterable<Quad>) {
         writer.addQuad(quad);
       }
       writer.end((error: Error | null, result: string) => {
