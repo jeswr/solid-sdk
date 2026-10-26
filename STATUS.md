@@ -135,3 +135,50 @@ All six requested findings are addressed. No implementation work or open questio
 this fix round. Integration still requires the repository's review process; the unrelated
 full-workspace failure remains outside this brief. Only the credential package and this lane
 status changed. No generated build artifacts are included.
+
+## Fix round 2 — review of `0d45e1083ce2`
+
+This round addresses exactly the three supplied findings on `lane/sst-543`:
+
+- `902b9cd9` — `fix(credentials): replace provisioned tokens by account purpose`:
+  key token-file names by provider/account/purpose, so each successful reference atomically
+  replaces that tuple's previous token. Tests cover replacement, independent accounts and
+  purposes, invalid replacement preservation, and the shell's two-reference flow followed by
+  a successful StoreTokenProvider lookup. Failed fake-op reads preserve the last good value.
+- `8a4c3f2d` — `fix(credentials): require trusted identities and unique helpers`:
+  Microsoft profiles bind to operator-verified tenant/object GUIDs via `expectedIdentity`
+  (`--tenant-id` / `--object-id` in the CLI). Both signed claims must match before consent is
+  accepted. Token use also requires this binding, so legacy username-only grants cannot bypass
+  it. Tests reject missing bindings and signed wrong-object/wrong-tenant identities even when
+  the username matches. Helper configuration loading and generation reject duplicate
+  provider/connection mappings; lookup independently requires exactly one match before spawning
+  a helper. Tests prove ambiguity cannot invoke the helper or replace a valid configuration.
+- Final `docs: record second credential fix verification` commit — README instructions for
+  trusted Microsoft identity setup and token replacement, plus this verification record.
+
+The conservative review option is a trusted identity supplied independently by the operator;
+there is no automatic first-login identity approval or fallback to a matching username.
+No runtime dependency, manifest, lockfile, coverage threshold or timeout setting changed.
+Dependency policy checks were unnecessary because no dependencies were added.
+
+Verification for this round:
+
+| Command | Result |
+| --- | --- |
+| `pnpm exec turbo run lint build typecheck test --filter=@jeswr/agent-credentials --concurrency=4` | PASS; 5/5 tasks including root lint. 8 files, 126 tests; 100% statements (1364), branches (1031), functions (207), lines (1235), with per-file thresholds unchanged. |
+| `TURBO_SCM_BASE=6ad0939808c3c1c438415d45409a5a4c30e281bd pnpm run gate` | PASS; 6/6 tasks, including all package checks and 686 root tests, in 27.341s. Uses the original brief's base SHA because this checkout lacks the integration ref. |
+| `pnpm run gate:full` | FAIL in unchanged `@jeswr/federation-codegen#test`: the same two `test/generator.test.ts` namespace fixture failures recorded in prior rounds (`https://w3id.org/jeswr/...` versus `https://jeswr.org/ns/...`). 287 successful tasks out of 348; 3m2.385s. |
+| `git diff --exit-code 0d45e1083ce2a9396e1b42a9931ac6bb5002e382 -- tools/federation-codegen packages/solid-federation-vocab` | PASS; failing paths unchanged from this round's starting commit. |
+| `git diff --check` | PASS. |
+
+An initial package-gate attempt caught an unformatted test declaration; formatting was corrected
+before the passing package and affected gates. No test timeout flakes occurred. The shell tests
+used bash with a fake op, as zsh remains unavailable. All credential tests use temporary stores
+and injected fake transports. No live credential, provider, real op, tracker or network remote
+was accessed. Generated untracked application callback/client-id assets from the full build
+were removed; no dist or other build artifact is committed.
+
+All three requested fixes and their regression tests are complete. The full-workspace gate
+remains blocked solely by the unchanged federation-codegen failures. Roborev remains unavailable
+(`command -v roborev` found no executable); no tool was installed. Integration review and bead
+closure remain with the integration owner. Open questions: none.

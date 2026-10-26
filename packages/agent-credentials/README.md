@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # @jeswr/agent-credentials
 
@@ -22,6 +23,12 @@ Register client records with `putClient`, then a profile with `putProfile`. Prof
 for explicit consent. Supply `deps.transport`; without an injected transport, token refresh
 refuses. Login validates the signed ID token, state, nonce, PKCE, account, tenant, scopes and
 refresh token before persisting. Existing grants pin the account subject and client.
+Microsoft profiles additionally require `microsoft.expectedIdentity: { tenantId, objectId }`:
+trusted GUIDs the operator verifies independently, rather than values copied from the login
+response or inferred from an address. CLI profile creation takes `--tenant-id GUID --object-id GUID`.
+Both signed `tid` and `oid` must match this binding. A matching `preferred_username` alone never
+authorizes consent. Existing Microsoft profiles without this binding must be configured before
+login or token use.
 
 `new StoreTokenProvider(provider, { store, transport, resource: 'mail' })` supplies strings to
 channel bindings. `read('owner')` selects exactly one read profile for connection `owner`;
@@ -55,7 +62,10 @@ scripts/provision.zsh --dir /absolute/private/store --provider slack \
 Remove `--dry-run` only for explicit provisioning. Supply a single reference with
 `--provider google` for installed-app registration JSON, or `--provider microsoft` for its
 client id (account/purpose flags are unnecessary for registrations). Other providers require
-account and purpose. Each reference invokes `op read` once. Values flow through stdin directly
+account and purpose. Each reference invokes `op read` once. Token-file records are keyed by
+provider/account/purpose: provisioning another reference for that tuple atomically replaces the
+previous value, and the last successful reference wins. Invalid values or failed reads leave the
+previous value intact. Values flow through stdin directly
 to the private store writer, never argv, shell variables, stdout, stderr or external temporary
 files. An op failure, including partial output, refuses the write. JSON receipts contain only
 `credentialRef`, suitable for the account registry; runtime never invokes op. Dry-run prints
