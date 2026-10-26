@@ -1,3 +1,4 @@
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- AUTHORED-BY Codex GPT-5 -->
 
 # @jeswr/solid-odrl
@@ -6,6 +7,14 @@ Build, parse, and evaluate ODRL 2.2 policies for Solid resources and agent inter
 
 > Experimental. This is a client-side policy expression and evaluation library; it does not
 > enforce policies inside a Solid server.
+
+Delegation terms are written under `https://jeswr.org/ns/odrl-delegation#`.
+Policy readers accept the legacy `https://w3id.org/jeswr/odrl-delegation#` terms,
+including mixed graphs; contradictory parent edges are rejected. Parsing then
+writing a policy emits canonical delegation terms. The published
+`https://w3id.org/jeswr/odrl-delegation` profile identifier remains unchanged:
+it is the protocol opt-in, rather than the term namespace. The A2A adapter uses
+plain action verbs and has no dependency on A2A namespace constants.
 
 ## Install
 

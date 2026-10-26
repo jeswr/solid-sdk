@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
 // Term IRIs + constants for the ODRL usage-control surface (M3 of the
@@ -31,11 +32,15 @@ export const PROV = "http://www.w3.org/ns/prov#" as const;
  * (`odrl:grantUse`, `odrl:nextPolicy`, `odrl:transfer`, Offer/Agreement,
  * assigner/assignee) is used verbatim at its canonical IRI.
  */
-export const ODRLD = "https://w3id.org/jeswr/odrl-delegation#" as const;
+// Canonical source: @jeswr/suite-vocab NS.ODRL_DELEGATION
+export const ODRLD = "https://jeswr.org/ns/odrl-delegation#" as const;
+/** Read-only namespace alias for previously stored delegation terms. */
+export const LEGACY_ODRLD_NS = "https://w3id.org/jeswr/odrl-delegation#" as const;
 /**
  * The profile identifier a policy asserts via `odrl:profile` to opt in to the
  * agent-delegation profile semantics (`docs/delegation-profile.md`).
  */
+// Protocol opt-in identifier: preserve the published profile IRI.
 export const ODRLD_PROFILE_IRI = "https://w3id.org/jeswr/odrl-delegation" as const;
 /** RDF namespace. */
 export const RDF = "http://www.w3.org/1999/02/22-rdf-syntax-ns#" as const;
@@ -443,9 +448,10 @@ export const LEFT_OPERAND_IRI: Readonly<Record<LeftOperandName, string>> = {
   delegationDepth: ODRLD_DELEGATION_DEPTH,
 };
 /** Reverse: left-operand IRI → short name. */
-export const IRI_TO_LEFT_OPERAND: Readonly<Record<string, LeftOperandName>> = Object.fromEntries(
-  Object.entries(LEFT_OPERAND_IRI).map(([k, v]) => [v, k as LeftOperandName]),
-) as Readonly<Record<string, LeftOperandName>>;
+export const IRI_TO_LEFT_OPERAND: Readonly<Record<string, LeftOperandName>> = Object.fromEntries([
+  ...Object.entries(LEFT_OPERAND_IRI).map(([k, v]) => [v, k as LeftOperandName]),
+  [`${LEGACY_ODRLD_NS}delegationDepth`, "delegationDepth"],
+]) as Readonly<Record<string, LeftOperandName>>;
 
 // --- ODRL constraint operators (standard) ---------------------------------
 /** `odrl:eq` — equal to. */

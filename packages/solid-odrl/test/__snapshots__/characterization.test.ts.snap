@@ -294,10 +294,10 @@ exports[`characterization: delegation decision matrix > a delegated Agreement's 
   http://www.w3.org/1999/02/22-rdf-syntax-ns#type <http://www.w3.org/ns/odrl/2/Agreement>
   http://www.w3.org/ns/odrl/2/assignee <https://agent-b.example/id#it>
   http://www.w3.org/ns/odrl/2/assigner <https://agent-a.example/id#it>
-  http://www.w3.org/ns/odrl/2/permission [ http://www.w3.org/ns/odrl/2/action <http://www.w3.org/ns/odrl/2/grantUse> ; http://www.w3.org/ns/odrl/2/assignee <https://agent-b.example/id#it> ; http://www.w3.org/ns/odrl/2/assigner <https://agent-a.example/id#it> ; http://www.w3.org/ns/odrl/2/constraint [ http://www.w3.org/ns/odrl/2/leftOperand <https://w3id.org/jeswr/odrl-delegation#delegationDepth> ; http://www.w3.org/ns/odrl/2/operator <http://www.w3.org/ns/odrl/2/lteq> ; http://www.w3.org/ns/odrl/2/rightOperand "1"^^http://www.w3.org/2001/XMLSchema#integer ] ; http://www.w3.org/ns/odrl/2/duty [ http://www.w3.org/ns/odrl/2/action <http://www.w3.org/ns/odrl/2/nextPolicy> ; http://www.w3.org/ns/odrl/2/target <https://agent-b.example/policies/to-c> ] ; http://www.w3.org/ns/odrl/2/target <https://alice.example/notes/private.ttl> ]
+  http://www.w3.org/ns/odrl/2/permission [ http://www.w3.org/ns/odrl/2/action <http://www.w3.org/ns/odrl/2/grantUse> ; http://www.w3.org/ns/odrl/2/assignee <https://agent-b.example/id#it> ; http://www.w3.org/ns/odrl/2/assigner <https://agent-a.example/id#it> ; http://www.w3.org/ns/odrl/2/constraint [ http://www.w3.org/ns/odrl/2/leftOperand <https://jeswr.org/ns/odrl-delegation#delegationDepth> ; http://www.w3.org/ns/odrl/2/operator <http://www.w3.org/ns/odrl/2/lteq> ; http://www.w3.org/ns/odrl/2/rightOperand "1"^^http://www.w3.org/2001/XMLSchema#integer ] ; http://www.w3.org/ns/odrl/2/duty [ http://www.w3.org/ns/odrl/2/action <http://www.w3.org/ns/odrl/2/nextPolicy> ; http://www.w3.org/ns/odrl/2/target <https://agent-b.example/policies/to-c> ] ; http://www.w3.org/ns/odrl/2/target <https://alice.example/notes/private.ttl> ]
   http://www.w3.org/ns/odrl/2/permission [ http://www.w3.org/ns/odrl/2/action <http://www.w3.org/ns/odrl/2/read> ; http://www.w3.org/ns/odrl/2/assignee <https://agent-b.example/id#it> ; http://www.w3.org/ns/odrl/2/assigner <https://agent-a.example/id#it> ; http://www.w3.org/ns/odrl/2/target <https://alice.example/notes/private.ttl> ]
   http://www.w3.org/ns/odrl/2/uid <https://agent-a.example/policies/to-b>
-  https://w3id.org/jeswr/odrl-delegation#delegatedUnder <https://alice.example/policies/root>"
+  https://jeswr.org/ns/odrl-delegation#delegatedUnder <https://alice.example/policies/root>"
 `;
 
 exports[`characterization: delegation decision matrix > a delegated Agreement's express graph is stable (delegatedUnder + grantUse + nextPolicy) 2`] = `
@@ -325,7 +325,7 @@ exports[`characterization: delegation decision matrix > a delegated Agreement's 
       "@type": "@id",
     },
     "delegatedUnder": {
-      "@id": "https://w3id.org/jeswr/odrl-delegation#delegatedUnder",
+      "@id": "https://jeswr.org/ns/odrl-delegation#delegatedUnder",
       "@type": "@id",
     },
     "dpv": "https://w3id.org/dpv#",
@@ -342,7 +342,7 @@ exports[`characterization: delegation decision matrix > a delegated Agreement's 
       "@type": "@id",
     },
     "odrl": "http://www.w3.org/ns/odrl/2/",
-    "odrld": "https://w3id.org/jeswr/odrl-delegation#",
+    "odrld": "https://jeswr.org/ns/odrl-delegation#",
     "operator": {
       "@id": "http://www.w3.org/ns/odrl/2/operator",
       "@type": "@id",
@@ -408,7 +408,7 @@ exports[`characterization: delegation decision matrix > a delegated Agreement's 
       "constraint": [
         {
           "leftOperand": {
-            "@id": "https://w3id.org/jeswr/odrl-delegation#delegationDepth",
+            "@id": "https://jeswr.org/ns/odrl-delegation#delegationDepth",
           },
           "operator": {
             "@id": "http://www.w3.org/ns/odrl/2/lteq",
@@ -453,13 +453,13 @@ exports[`characterization: delegation decision matrix > delegationProvenance emi
 "<https://agent-a.example/policies/to-b>
   http://www.w3.org/ns/prov#wasAttributedTo <https://agent-a.example/id#it>
   http://www.w3.org/ns/prov#wasDerivedFrom <https://alice.example/policies/root>
-  https://w3id.org/jeswr/odrl-delegation#delegatedUnder <https://alice.example/policies/root>
+  https://jeswr.org/ns/odrl-delegation#delegatedUnder <https://alice.example/policies/root>
 <https://agent-b.example/id#it>
   http://www.w3.org/ns/prov#actedOnBehalfOf <https://agent-a.example/id#it>
 <https://agent-b.example/policies/to-c>
   http://www.w3.org/ns/prov#wasAttributedTo <https://agent-b.example/id#it>
   http://www.w3.org/ns/prov#wasDerivedFrom <https://agent-a.example/policies/to-b>
-  https://w3id.org/jeswr/odrl-delegation#delegatedUnder <https://agent-a.example/policies/to-b>
+  https://jeswr.org/ns/odrl-delegation#delegatedUnder <https://agent-a.example/policies/to-b>
 <https://agent-c.example/id#it>
   http://www.w3.org/ns/prov#actedOnBehalfOf <https://agent-b.example/id#it>
 <https://alice.example/policies/root>

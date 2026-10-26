@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
 // The ODRL policy ↔ RDF lowering + round-trip. `policyToRdf` lowers a structured
@@ -525,7 +526,12 @@ function projectPolicy(node: PolicyNode): OdrlPolicy | undefined {
 
   const conflictIri = firstIri(node.conflicts);
   const conflict = conflictIri !== undefined ? IRI_TO_CONFLICT[conflictIri] : undefined;
-  const delegatedUnder = firstIri(node.delegatedUnders);
+  // Conflicting alias edges must never select a convenient parent authority.
+  const parentTerms = [...node.delegatedUnders];
+  if (parentTerms.some((term) => term.termType !== "NamedNode")) return undefined;
+  const parents = new Set(parentTerms.map((term) => term.value));
+  if (parents.size > 1) return undefined;
+  const delegatedUnder = [...parents][0];
 
   const permissions = [...node.permissions]
     .map((r) => projectRule(r, "permission"))

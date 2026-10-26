@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
 // Typed @rdfjs/wrapper accessors over the ODRL policy graph. This is the ONLY
@@ -21,6 +22,7 @@ import {
 } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
 import {
+  LEGACY_ODRLD_NS,
   ODRL_ACTION,
   ODRL_AGREEMENT,
   ODRL_ASSIGNEE,
@@ -52,6 +54,64 @@ import {
  */
 function objectTerms(node: TermWrapper, predicate: string): Set<TermWrapperType> {
   return SetFrom.subjectPredicate(node, predicate, TermAs.instance(TermWrapper), TermFrom.instance);
+}
+
+/** A live alias view: writes use canonical predicates and remove legacy edges. */
+class AliasedTermSet extends Set<TermWrapperType> {
+  constructor(
+    private readonly canonical: Set<TermWrapperType>,
+    private readonly legacy: Set<TermWrapperType>,
+  ) {
+    super();
+  }
+  private snapshot(): Set<TermWrapperType> {
+    const values = [...this.canonical];
+    for (const term of this.legacy) {
+      if (!values.some((value) => value.equals(TermFrom.instance(term, term.factory))))
+        values.push(term);
+    }
+    return new Set(values);
+  }
+  override get size(): number {
+    return this.snapshot().size;
+  }
+  override has(value: TermWrapperType): boolean {
+    return this.canonical.has(value) || this.legacy.has(value);
+  }
+  override values() {
+    return this.snapshot().values();
+  }
+  override keys() {
+    return this.values();
+  }
+  override entries() {
+    return this.snapshot().entries();
+  }
+  override [Symbol.iterator]() {
+    return this.values();
+  }
+  override forEach(
+    callback: (value: TermWrapperType, key: TermWrapperType, set: Set<TermWrapperType>) => void,
+    thisArg?: unknown,
+  ): void {
+    for (const value of this) callback.call(thisArg, value, value, this);
+  }
+  override add(value: TermWrapperType): this {
+    this.canonical.add(value);
+    this.legacy.clear();
+    return this;
+  }
+  override delete(value: TermWrapperType): boolean {
+    const canonical = this.canonical.delete(value);
+    const legacy = this.legacy.has(value);
+    // Removing the canonical parent must not expose an older alias as authority.
+    if (canonical || legacy) this.legacy.clear();
+    return canonical || legacy;
+  }
+  override clear(): void {
+    this.canonical.clear();
+    this.legacy.clear();
+  }
 }
 
 /** A typed view of an `odrl:Constraint` node. */
@@ -134,7 +194,9 @@ export class PolicyNode extends TermWrapper {
   }
   /** Delegation profile: the `odrld:delegatedUnder` parent-policy edge(s). */
   get delegatedUnders(): Set<TermWrapperType> {
-    return objectTerms(this, ODRLD_DELEGATED_UNDER);
+    const canonical = objectTerms(this, ODRLD_DELEGATED_UNDER);
+    const legacy = objectTerms(this, `${LEGACY_ODRLD_NS}delegatedUnder`);
+    return new AliasedTermSet(canonical, legacy);
   }
   get permissions(): Set<RuleNode> {
     return SetFrom.subjectPredicate(
