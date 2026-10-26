@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { safeHttpIri } from "@jeswr/rdf-serialize";
 import { DataFactory as df, Store } from "n3";
-import { dateTime, iri, NS, RdfNode } from "./rdf.js";
+import { dateTime, iri, NS, RdfNode, validCalendarDate } from "./rdf.js";
 
 /** Temporal bound whose datatype records its precision (KG §2.3). */
 export interface TemporalValue {
@@ -60,10 +60,17 @@ function temporal(node: RdfNode, predicate: string, bound: TemporalValue): void 
     date: /^\d{4}-\d\d-\d\d$/,
     gYearMonth: /^\d{4}-\d\d$/,
     gYear: /^\d{4}$/,
-    dateTime: /./,
+    dateTime: /^[\s\S]+$/,
   };
-  if (!Object.hasOwn(patterns, bound.datatype) || !patterns[bound.datatype].test(bound.value))
+  if (
+    !Object.hasOwn(patterns, bound.datatype) ||
+    patterns[bound.datatype].exec(bound.value)?.[0] !== bound.value
+  )
     throw new Error("Invalid temporal bound");
+  if (bound.datatype !== "dateTime") {
+    const [year, month, day] = bound.value.split("-").map(Number);
+    if (!validCalendarDate(year as number, month, day)) throw new Error("Invalid temporal bound");
+  }
   node.text(
     predicate,
     bound.datatype === "dateTime" ? dateTime(bound.value, false) : bound.value,

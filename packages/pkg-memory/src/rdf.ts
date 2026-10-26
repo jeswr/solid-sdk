@@ -101,17 +101,29 @@ export function putGraph(dataset: Store, name: string, contents: DatasetCore): v
     dataset.addQuad(df.quad(q.subject, q.predicate, q.object, df.namedNode(name)));
 }
 
+/** Gregorian calendar check, independent of Date.parse's day rollover. */
+export function validCalendarDate(year: number, month = 1, day = 1): boolean {
+  const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+  const days = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  return month >= 1 && month <= 12 && day >= 1 && day <= (days[month - 1] as number);
+}
+
 export function dateTime(value: string, requireTimezone = true): string {
-  const hasTimezone = /(?:Z|[+-]\d\d:\d\d)$/.test(value);
+  // XSD permits 24:00:00 only with a zero fraction, and offsets up to ±14:00.
+  const match =
+    /^(\d{4})-(\d\d)-(\d\d)T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?|24:00:00(?:\.0+)?)(Z|[+-](?:(?:0\d|1[0-3]):[0-5]\d|14:00))?$/.exec(
+      value,
+    );
+  if (!match || match[0] !== value) throw new Error("Invalid dateTime");
+  const [, year, month, day, timezone] = match;
   if (
-    !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?(?:Z|[+-]\d\d:\d\d)?$/.test(value) ||
-    (requireTimezone && !hasTimezone) ||
-    Number.isNaN(Date.parse(value))
+    (requireTimezone && !timezone) ||
+    !validCalendarDate(Number(year), Number(month), Number(day))
   ) {
     throw new Error("Invalid dateTime");
   }
   // Assertion literals describe local calendar values, not necessarily instants.
-  if (!hasTimezone) return value;
+  if (!timezone) return value;
   // RDFlib normalizes UTC offsets and microsecond precision on parsing.
   return value.replace(/Z$/, "+00:00").replace(/\.(\d+)(?=[+-])/, (_, digits: string) => {
     const micros = digits.padEnd(6, "0").slice(0, 6);
