@@ -32,22 +32,81 @@ const secretPatterns = [
 ];
 
 function isPlaceholder(value) {
+  const parameter = /^\$\{[A-Z_][A-Z0-9_]*:?[-=+?]([\s\S]*)\}$/i.exec(value);
+  if (parameter) {
+    // Shell operators can supply a literal credential even when the variable is unset.
+    // Read the complete word, including spaces and nested expansions, before checking it.
+    const { value: word, end } = assignmentValue(parameter[1], 0, true);
+    return end === parameter[1].length && (word === "" || isPlaceholder(word));
+  }
   // Existing recipes use a public localStorage identifier and a generated test password.
   // Exempt these exact examples rather than all storage keys or arbitrary expressions.
   if (value === "solid:recent-accounts" || /^randomUUID\(\);?$/.test(value)) return true;
   // Delimited templates may end a prose sentence. Prefix-style examples retain
   // their descriptive suffixes, but variable references must occupy the whole value.
-  return /^(?:\$[A-Z_][A-Z0-9_]*|\$\{[^{}\r\n]+\}|(?:<[^<>]*>|\{[^{}]*\}|\[[^[\]]*\])[.,]?|\.\.\.|…|(?:your|example|placeholder|redacted|dummy|test)(?:[-_][\s\S]*)?|changeme|xxx)$/i.test(
+  return /^(?:\$[A-Z_][A-Z0-9_]*|\$\{[A-Z_][A-Z0-9_]*\}|(?:<[^<>]*>|\{[^{}]*\}|\[[^[\]]*\])[.,]?|\.\.\.|…|(?:your|example|placeholder|redacted|dummy|test)(?:[-_][\s\S]*)?|changeme|xxx)$/i.test(
     value,
   );
 }
 
-function assignmentValue(text, start) {
+function delimitedEnd(text, start) {
+  const closing = { "(": ")", "[": "]", "{": "}" };
+  const stack = [closing[text[start]]];
+  let quote;
+  for (let cursor = start + 1; cursor < text.length; cursor++) {
+    const character = text[cursor];
+    if (/[\r\n]/.test(character)) return undefined;
+    if (character === "\\") cursor++;
+    else if (quote) {
+      if (character === quote) quote = undefined;
+    } else if (/["'`]/.test(character)) quote = character;
+    else if (Object.hasOwn(closing, character)) stack.push(closing[character]);
+    else if (/[)\]}]/.test(character)) {
+      if (character !== stack.pop()) return undefined;
+      if (stack.length === 0) return cursor + 1;
+    }
+  }
+  return undefined;
+}
+
+function computedExpressionEnd(text, start) {
+  const source = text.slice(start);
+  const environment =
+    /^(?:(?:process|Bun)\.env|import\.meta\.env)(?:\.[A-Z_$][\w$]*|\[[\t ]*(?:"[^"\r\n]+"|'[^'\r\n]+')[\t ]*\])/i.exec(
+      source,
+    );
+  const call = /^(?:await[\t ]+)?[A-Z_$][\w$]*(?:\??\.[A-Z_$][\w$]*)*[\t ]*(?=\()/i.exec(source);
+  const end = call
+    ? delimitedEnd(text, start + call[0].length)
+    : environment
+      ? start + environment[0].length
+      : undefined;
+  if (end === undefined) return undefined;
+  // Accept complete expressions, never a prefix of a literal or a literal fallback.
+  if (end < text.length && !/[\s;,`)\]}]/.test(text[end])) return undefined;
+  if (/^[\t ]*(?:\?\?|\|\||&&|[+*/%?.-])/.test(text.slice(end))) return undefined;
+  return end;
+}
+
+function assignmentValue(text, start, parameterWord = false) {
+  if (!parameterWord) {
+    const end = computedExpressionEnd(text, start);
+    if (end !== undefined) return { value: "", end };
+  }
   let value = "";
   let cursor = start;
-  const terminator = /[\s;&|`)]/;
+  const terminator = parameterWord ? /[\r\n]/ : /[\s;&|`)]/;
+  function takeExpansion() {
+    if (text[cursor] !== "$" || !/[{(]/.test(text[cursor + 1] ?? "")) return false;
+    const end = delimitedEnd(text, cursor + 1);
+    if (end === undefined) return false;
+    value += text.slice(cursor, end);
+    cursor = end;
+    return true;
+  }
   // A hash is literal inside an assignment word, including immediately after =.
   while (cursor < text.length && !terminator.test(text[cursor])) {
+    if (takeExpansion()) continue;
     const quote = text[cursor];
     if (quote === '"' || quote === "'") {
       cursor++;
@@ -56,6 +115,7 @@ function assignmentValue(text, start) {
           cursor++;
           break;
         }
+        if (quote === '"' && takeExpansion()) continue;
         if (
           quote === '"' &&
           text[cursor] === "\\" &&
@@ -66,25 +126,12 @@ function assignmentValue(text, start) {
         }
         value += text[cursor++];
       }
-    } else {
-      while (
-        cursor < text.length &&
-        !terminator.test(text[cursor]) &&
-        text[cursor] !== '"' &&
-        text[cursor] !== "'"
-      ) {
-        value += text[cursor++];
-      }
-      // Preserve the existing exact generated-password recipe, including its
-      // closing parenthesis, without exempting randomUUID() followed by a suffix.
-      if (
-        value === "randomUUID(" &&
-        text[cursor] === ")" &&
-        (cursor + 1 === text.length || terminator.test(text[cursor + 1]))
-      ) {
-        value += text[cursor++];
-      }
-    }
+    } else value += text[cursor++];
+  }
+  const raw = text.slice(start, cursor);
+  const command = raw.startsWith('"') && raw.endsWith('"') ? raw.slice(1, -1).trim() : raw;
+  if (!parameterWord && command.startsWith("$(") && delimitedEnd(command, 1) === command.length) {
+    return { value: "", end: cursor };
   }
   return { value: value.trim(), end: cursor };
 }
@@ -158,6 +205,10 @@ function scanSecrets(text, report) {
   while (assignments.lastIndex < text.length) {
     const match = assignments.exec(text);
     if (!match) break;
+    // Only a standalone = starts an assignment, never an equality or arrow operator.
+    const equals = match.index + match[0].lastIndexOf("=");
+    if (/[!<>=+*/%&|^?-]/.test(text[equals - 1] ?? "") || /[=>]/.test(text[equals + 1] ?? ""))
+      continue;
     if (!isCredentialName(match[1])) continue;
     const { value, end } = assignmentValue(text, assignments.lastIndex);
     if (value !== "" && !isPlaceholder(value)) report("environment secret", match.index);

@@ -1052,7 +1052,116 @@ describe("skill validation", () => {
     expect(existsSync(join(root, "skills/INDEX.md"))).toBe(false);
   });
 
+  const shellParameterAssignments = [":-", "-", ":=", "=", ":+", "+", ":?", "?"].flatMap(
+    (operator) =>
+      [
+        ["", 0],
+        ["$OTHER_PASSWORD", 0],
+        // biome-ignore lint/suspicious/noTemplateCurlyInString: literal documentation template
+        ["${OTHER_PASSWORD}", 0],
+        ["<password>", 0],
+        ["[REDACTED]", 0],
+        ["changeme", 0],
+        ["your-password", 0],
+        ['"<password>"', 0],
+        ["'<password>'", 0],
+        ["''", 0],
+        ["fixture-credential-value", 1],
+        ['"fixture-credential-value"', 1],
+        ["'fixture credential value'", 1],
+        ["example fixture-credential-value", 1],
+        // biome-ignore lint/suspicious/noTemplateCurlyInString: literal documentation template
+        ["${OTHER_PASSWORD:-fixture-credential-value}", 1],
+      ].flatMap(([word, count]) => {
+        const assignment = `PASSWORD=\${PASSWORD${operator}${word}}`;
+        return [
+          [`shell parameter ${operator} with word ${word}`, assignment, count],
+          [
+            `quoted shell parameter ${operator} with word ${word}`,
+            `PASSWORD="${assignment.slice(9)}"`,
+            count,
+          ],
+        ];
+      }),
+  );
+
   const assignmentBoundaries = [
+    ...shellParameterAssignments,
+    ...[
+      "===",
+      "==",
+      "!==",
+      "!=",
+      "<=",
+      ">=",
+      "+=",
+      "-=",
+      "*=",
+      "/=",
+      "%=",
+      "**=",
+      "&&=",
+      "||=",
+      "??=",
+      "<<=",
+      ">>=",
+      ">>>=",
+      "&=",
+      "|=",
+      "^=",
+    ].map((operator) => [
+      `non-assignment operator ${operator}`,
+      `if (TOKEN ${operator} undefined) return;`,
+      0,
+    ]),
+    ["arrow parameter", "const identity = TOKEN => TOKEN;", 0],
+    ["compact equality", "if (TOKEN===undefined) return;", 0],
+    ["compact arrow parameter", "const identity=TOKEN=>TOKEN;", 0],
+    [
+      "assignment following equality",
+      "if (TOKEN === undefined) PASSWORD=fixture-credential-value;",
+      1,
+    ],
+    ["environment property", "const API_KEY = process.env.API_KEY;", 0],
+    ["environment property in an object", "API_KEY: process.env.API_KEY,", 0],
+    ["environment property before a comma", "const API_KEY = process.env.API_KEY, other = 1;", 0],
+    ["environment lookup", 'const API_KEY = process.env["API_KEY"];', 0],
+    ["Bun environment property", "const API_KEY = Bun.env.API_KEY;", 0],
+    ["Vite environment property", "const API_KEY = import.meta.env.VITE_API_KEY;", 0],
+    ["transformed environment property", "const API_KEY = process.env.API_KEY.trim();", 0],
+    ["awaited function call", "TOKEN = await getToken();", 0],
+    ["function call", "TOKEN=getToken();", 0],
+    ["function call with arguments", 'TOKEN = await auth.getToken("scope", { refresh: true });', 0],
+    ["function call with whitespace", "TOKEN = getToken ();", 0],
+    ["quoted environment property", 'API_KEY="process.env.API_KEY"', 1],
+    ["quoted function call", 'TOKEN="getToken()"', 1],
+    ["quoted awaited function call", "TOKEN='await getToken()'", 1],
+    ["function call suffix", "TOKEN=getToken()credential-value", 1],
+    ["environment property suffix", "API_KEY=process.env.API_KEY/credential-value", 1],
+    [
+      "literal environment fallback",
+      'API_KEY = process.env.API_KEY ?? "fixture-credential-value";',
+      1,
+    ],
+    ["shell command substitution", "export GITHUB_TOKEN=$(gh auth token)", 0],
+    ["quoted shell command substitution", 'PASSWORD="$(openssl rand -hex 16)"', 0],
+    ["shell command with nested quotes", 'PASSWORD="$(printf "%s" "$(openssl rand -hex 16)")"', 0],
+    ["single-quoted command is literal", "PASSWORD='$(openssl rand -hex 16)'", 1],
+    ["shell command substitution suffix", 'PASSWORD="$(openssl rand -hex 16)credential-value"', 1],
+    [
+      "shell command then a credential",
+      "TOKEN=$(gh auth token);PASSWORD=fixture-credential-value",
+      1,
+    ],
+    ["function call then a credential", "TOKEN=getToken();PASSWORD=fixture-credential-value", 1],
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: literal documentation template
+    ["parameter expansion suffix", "PASSWORD=${PASSWORD:-<token>}credential-value", 1],
+    [
+      "parameter substitution is not a plain reference",
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: literal documentation template
+      "PASSWORD=${PASSWORD/pattern/fixture-credential-value}",
+      1,
+    ],
     ["semicolon", "API_TOKEN=$API_TOKEN;PASSWORD=fixture-credential-value", 1],
     ["empty single-quoted prefix", "PASSWORD=''fixture-credential-value", 1],
     ["empty double-quoted prefix", 'PASSWORD=""fixture-credential-value', 1],
