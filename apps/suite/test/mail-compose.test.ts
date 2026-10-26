@@ -328,6 +328,7 @@ describe("RFC 5322 composition", () => {
     charset,
     encoding,
   }) => {
+    const metadata = charset === undefined ? { contentType } : { contentType, charset };
     it.each([
       "",
       "first",
@@ -336,7 +337,7 @@ describe("RFC 5322 composition", () => {
     ])("preserves canonical bytes without mutating input: %j", (text) => {
       const data = Buffer.from(text, encoding);
       const before = Buffer.from(data);
-      const result = build({ attachments: [{ filename: "note.txt", contentType, charset, data }] });
+      const result = build({ attachments: [{ filename: "note.txt", ...metadata, data }] });
       expect(mime(result.raw).parts?.[1]?.bytes).toEqual(before);
       expect(data).toEqual(before);
     });
@@ -352,8 +353,7 @@ describe("RFC 5322 composition", () => {
     ])("rejects noncanonical bytes before base64 encoding: %j", (text) => {
       const data = Buffer.from(text, encoding);
       const before = Buffer.from(data);
-      const compose = () =>
-        build({ attachments: [{ filename: "note.txt", contentType, charset, data }] });
+      const compose = () => build({ attachments: [{ filename: "note.txt", ...metadata, data }] });
       rejects(compose);
       expect(compose).toThrow(expect.objectContaining({ field: "attachment.data" }));
       expect(data).toEqual(before);
