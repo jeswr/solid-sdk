@@ -182,3 +182,49 @@ All three requested fixes and their regression tests are complete. The full-work
 remains blocked solely by the unchanged federation-codegen failures. Roborev remains unavailable
 (`command -v roborev` found no executable); no tool was installed. Integration review and bead
 closure remain with the integration owner. Open questions: none.
+
+## Fix round 3 — review of `681e43b76f82`
+
+This round addresses exactly the two supplied findings on `lane/sst-543`:
+
+- `a495b5d6` — `fix(credentials): validate helper config ownership by descriptor`:
+  open helper configuration once with `O_NOFOLLOW`, verify the regular-file type,
+  current-user ownership and existing group/world write restrictions with `fstat`, then
+  parse that descriptor and close it on success or failure. Tests reject foreign ownership,
+  unavailable ownership checks, symlinks, non-files and writable modes; a path-replacement
+  regression proves validation and parsing use the same opened file. Ownership trust is
+  conservatively limited to the current user.
+- `bcd8fd51` — `fix(credentials): remove unreadable grants on local logout`:
+  deserialize only for requested Google revocation. Local logout removes corrupt JSON and
+  legacy grants missing purpose/resource under the profile lock, retaining filesystem checks.
+  Tests cover both providers, lock ownership during deletion, refusal of insecure/symlinked/
+  non-file records, preservation of unreadable grants on Google remote revocation, and no
+  provider calls for local removal or missing refresh tokens. Microsoft logout also avoids
+  deserialization with `--revoke`, since it has no supported remote revocation endpoint.
+- Final `docs: record third credential fix verification` commit — this verification record,
+  committed last.
+
+Verification for this round:
+
+| Command | Result |
+| --- | --- |
+| `pnpm exec turbo run lint build typecheck test --filter=@jeswr/agent-credentials --concurrency=4` | PASS; 5/5 tasks including root lint. 9 files, 139 tests; 100% statements (1374), branches (1038), functions (207), lines (1244), with per-file thresholds unchanged. |
+| `pnpm run lint:root` (also invoked by the affected gate below) | PASS; all root guards passed. |
+| `TURBO_SCM_BASE=6ad0939808c3c1c438415d45409a5a4c30e281bd pnpm run gate` | PASS; 6/6 tasks, including 686 root tests, in 16.531s. Uses the original brief's base SHA because this checkout lacks the integration ref. |
+| `pnpm run gate:full` | FAIL in unchanged `@jeswr/federation-codegen#test`: the same two `test/generator.test.ts` namespace fixture failures recorded in earlier rounds (`https://w3id.org/jeswr/...` versus `https://jeswr.org/ns/...`). 209 successful tasks out of 291 scheduled before stopping; 1m24.34s. |
+| `git diff --exit-code 681e43b76f821121cf2a4f4a975d2b631a37ec5d -- tools/federation-codegen packages/solid-federation-vocab` | PASS; failing paths unchanged from this round's starting commit. |
+| `git diff --check` | PASS. |
+
+An initial direct typecheck ran before building the package exports and caught a numeric type
+in the new ownership fixture; build order and the fixture were corrected. A subsequent lint
+check caught formatting, which was corrected before the passing package and affected gates.
+No timeout flakes occurred. No dependencies were added, so no dependency policy check was
+needed; manifests, lockfile, coverage thresholds and timeout settings are unchanged. All
+credential tests use temporary stores, injected fake transports and fake op executables.
+
+Both requested fixes and their regressions are complete. The full-workspace gate remains
+blocked by the unchanged federation-codegen failures. Roborev is unavailable (`command -v
+roborev` found no executable); no review tool was installed. No live credential, provider,
+real op, tracker or network remote was accessed. Only the credential package and this lane
+status changed, with no generated build artifacts committed. Integration review and bead
+closure remain with the integration owner. Open questions: none.
