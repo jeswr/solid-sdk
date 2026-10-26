@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 import {
   existsSync,
   mkdirSync,
@@ -917,7 +918,7 @@ describe("operator CLI, MCP and runtime execution (temporary demo state)", () =>
     expect(none.json.status).toBe("needs-setup");
   });
 
-  it("prepares and then executes a runtime proposal to the pinned peer (separate CLI processes); nothing is sent", async () => {
+  it("prepares and executes a runtime proposal with a leading-hyphen token; nothing is sent", async () => {
     const input = writeInput("propose.json", {
       agent: "demo-owner",
       peerActor: "https://agents.peer.example/personal#agent",
@@ -931,12 +932,17 @@ describe("operator CLI, MCP and runtime execution (temporary demo state)", () =>
     const p = await cli("actions", "prepare", "--id", "agent.propose-meeting", "--input", input);
     expect(p.json.status).toBe("ok");
     expect(p.json.preparation.token).toBeTruthy();
-    const e = await cli("actions", "execute", "--token", p.json.preparation.token);
+    const preparations = new FilePreparationStore(join(state, "action-preparations"));
+    const preparation = preparations.take(p.json.preparation.token);
+    if (!preparation) throw new Error("expected a stored preparation");
+    const token = "-synthetic-preparation-token";
+    preparations.put({ ...preparation, token });
+    const e = await cli("actions", "execute", `--token=${token}`);
     expect(e.json.status).toBe("ok");
     expect(e.json.result.files.length).toBeGreaterThan(0);
     expect(readdirSync(join(state, "outbound", "demo-owner")).length).toBeGreaterThan(0);
     expect(e.json.result.notice).toMatch(/not sent|NOT sent|nothing/i);
-    const again = await cli("actions", "execute", "--token", p.json.preparation.token);
+    const again = await cli("actions", "execute", `--token=${token}`);
     expect(again.json.status).toBe("refused");
     const stranger = await cli(
       "actions",

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// AUTHORED-BY Codex GPT-6
 // Deterministic actions — real-process workflow (SYNTHETIC ONLY, temporary state, bounded, cleaned
 // up). Requires `npm run build` and a local SPARQ policy binary.
 //
@@ -283,14 +284,12 @@ try {
   const executed = await cli([
     "actions",
     "execute",
-    "--token",
-    prepared.json?.preparation?.token ?? "none",
+    `--token=${prepared.json?.preparation?.token ?? "none"}`,
   ]);
   const replay = await cli([
     "actions",
     "execute",
-    "--token",
-    prepared.json?.preparation?.token ?? "none",
+    `--token=${prepared.json?.preparation?.token ?? "none"}`,
   ]);
   const outbound = existsSync(join(state, "outbound", "demo-owner"))
     ? readdirSync(join(state, "outbound", "demo-owner"))
@@ -418,7 +417,7 @@ try {
   ]);
   const raceToken = racePrep.json?.preparation?.token ?? "none";
   const racers = await Promise.all(
-    Array.from({ length: 6 }, () => cli(["actions", "execute", "--token", raceToken])),
+    Array.from({ length: 6 }, () => cli(["actions", "execute", `--token=${raceToken}`])),
   );
   const statuses = racers.map((r) => r.json?.status);
   check(
