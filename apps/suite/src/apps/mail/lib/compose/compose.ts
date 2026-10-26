@@ -48,6 +48,15 @@ function attachmentPart(value: Attachment): string {
     contentType += `; charset=${value.charset}`;
   }
   requireInput(value.data instanceof Uint8Array, "attachment.data");
+  // Preserve caller-encoded bytes; MIME text must already have canonical CRLF octets.
+  if (/^text\//i.test(contentType))
+    requireInput(
+      value.data.every(
+        (byte, index, data) =>
+          (byte !== 13 || data[index + 1] === 10) && (byte !== 10 || data[index - 1] === 13),
+      ),
+      "attachment.data",
+    );
   return `Content-Type: ${contentType}\r\nContent-Disposition: attachment;\r\n ${filenameParameter(value.filename)}\r\nContent-Transfer-Encoding: base64\r\n\r\n${base64Lines(value.data)}`;
 }
 function multipart(parts: string[], subtype: string, boundary: string): string {

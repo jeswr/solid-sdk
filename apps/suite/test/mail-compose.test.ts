@@ -255,7 +255,7 @@ describe("RFC 5322 composition", () => {
     { attachments: [] },
     {
       attachments: [
-        { filename: "note.txt", contentType: "text/plain", data: new Uint8Array([10, 13, 255]) },
+        { filename: "note.txt", contentType: "text/plain", data: new Uint8Array([13, 10, 255]) },
       ],
     },
   ])("nests text + HTML alternatives correctly with attachments %j", ({ attachments }) => {
@@ -264,7 +264,7 @@ describe("RFC 5322 composition", () => {
     if (attachments.length > 0) {
       expect(parsed.contentType).toContain("multipart/mixed");
       expect(parsed.parts).toHaveLength(2);
-      expect(parsed.parts?.[1]?.bytes).toEqual(Buffer.from([10, 13, 255]));
+      expect(parsed.parts?.[1]?.bytes).toEqual(Buffer.from([13, 10, 255]));
       parsed = parsed.parts?.[0] as ReturnType<typeof mime>;
     }
     expect(parsed.contentType).toContain("multipart/alternative");
@@ -317,6 +317,47 @@ describe("RFC 5322 composition", () => {
     expect(part?.bytes).toEqual(data);
     const declared = /; charset=([^;\s]+)/i.exec(part?.contentType as string)?.[1] as string;
     expect(new TextDecoder(declared, { fatal: true }).decode(part?.bytes)).toBe("café");
+  });
+
+  describe.each([
+    { contentType: "text/plain", charset: "utf-8", encoding: "utf8" as const },
+    { contentType: "TEXT/HTML", charset: "ISO-8859-1", encoding: "latin1" as const },
+    { contentType: "text/plain", charset: undefined, encoding: "ascii" as const },
+  ])("text attachment line endings ($contentType, $charset)", ({
+    contentType,
+    charset,
+    encoding,
+  }) => {
+    it.each([
+      "",
+      "first",
+      "\r\n",
+      "first\r\n\r\nsecond\r\n",
+    ])("preserves canonical bytes without mutating input: %j", (text) => {
+      const data = Buffer.from(text, encoding);
+      const before = Buffer.from(data);
+      const result = build({ attachments: [{ filename: "note.txt", contentType, charset, data }] });
+      expect(mime(result.raw).parts?.[1]?.bytes).toEqual(before);
+      expect(data).toEqual(before);
+    });
+
+    it.each([
+      "first\nsecond",
+      "first\rsecond",
+      "\n",
+      "\r",
+      "\n\r",
+      "\r\r\n",
+      "\r\n\n",
+    ])("rejects noncanonical bytes before base64 encoding: %j", (text) => {
+      const data = Buffer.from(text, encoding);
+      const before = Buffer.from(data);
+      const compose = () =>
+        build({ attachments: [{ filename: "note.txt", contentType, charset, data }] });
+      rejects(compose);
+      expect(compose).toThrow(expect.objectContaining({ field: "attachment.data" }));
+      expect(data).toEqual(before);
+    });
   });
 
   it("folds long indivisible addresses and preserves local-part case in the envelope", () => {

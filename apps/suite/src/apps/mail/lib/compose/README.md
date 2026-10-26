@@ -67,7 +67,10 @@ Empty supplied Reply-To is rejected. Attachment media types must be bare leaf `t
 (no inline parameters, multipart or message types). Text attachments accept an optional `charset`
 containing a nonempty ASCII MIME token, serialized as a Content-Type parameter. Callers must
 encode `data` in that charset; attachment bytes are preserved without transcoding or newline
-conversion. No charset is inferred when omitted; set `charset: "utf-8"` for UTF-8 text bytes.
+conversion. Text attachment data must already use canonical CRLF octet pairs: bare CR or LF
+is rejected with `ComposeError` (`invalid-input`, field `attachment.data`), regardless of charset
+or text subtype. Binary attachments preserve arbitrary bytes. No charset is inferred when omitted;
+set `charset: "utf-8"` for UTF-8 text bytes.
 Charsets on non-text attachments are rejected. Filenames must be nonempty, ≤180 UTF-8 bytes, and
 contain neither control characters nor path separators. Dates and byte-source results outside
 the documented contract are rejected. Error fields never include user content.

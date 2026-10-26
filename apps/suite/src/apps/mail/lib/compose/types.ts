@@ -9,6 +9,7 @@ export interface Attachment {
   contentType: string;
   /** Optional MIME charset token for text/*; data must already use this encoding. */
   charset?: string;
+  /** Preserved bytes. For text/*, CR and LF octets must occur only as CRLF pairs. */
   data: Uint8Array;
 }
 export interface ComposeInput {
