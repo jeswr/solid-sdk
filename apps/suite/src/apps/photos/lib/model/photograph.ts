@@ -387,3 +387,22 @@ export function parsePhotos(
   }
   return photos;
 }
+
+/** Durable restore generation shared by live descriptions and their tombstones. */
+export class RestoreReceipt extends TermWrapper {
+  get restoreActivity(): string | undefined {
+    return OptionalFrom.subjectPredicate(
+      this,
+      "http://www.w3.org/ns/prov#wasGeneratedBy",
+      NamedNodeAs.string,
+    );
+  }
+  set restoreActivity(value: string | undefined) {
+    OptionalAs.object(
+      this,
+      "http://www.w3.org/ns/prov#wasGeneratedBy",
+      value === undefined ? undefined : httpIri(value),
+      NamedNodeFrom.string,
+    );
+  }
+}

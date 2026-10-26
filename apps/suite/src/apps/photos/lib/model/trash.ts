@@ -9,11 +9,10 @@ import {
   OptionalAs,
   OptionalFrom,
   SetFrom,
-  TermWrapper,
 } from "@rdfjs/wrapper";
-import { DataFactory } from "n3";
+import { DataFactory, Store } from "n3";
 import { PhotoIoError, type PhotoStorage } from "./io.js";
-import { buildPhoto, type Photo, parsePhoto } from "./photograph.js";
+import { buildPhoto, type Photo, parsePhoto, RestoreReceipt } from "./photograph.js";
 import { documentUrl, httpIri, identifier, isoDate } from "./validation.js";
 import { RDF_TYPE, SCHEMA } from "./vocab.js";
 
@@ -26,19 +25,6 @@ export interface TrashRecord {
   state?: "restoring" | "purging";
   /** Shared with the created live description to identify this restore across retries. */
   restoreActivity?: string;
-}
-class RestoreReceipt extends TermWrapper {
-  get restoreActivity(): string | undefined {
-    return OptionalFrom.subjectPredicate(this, `${PROV}wasGeneratedBy`, NamedNodeAs.string);
-  }
-  set restoreActivity(value: string | undefined) {
-    OptionalAs.object(
-      this,
-      `${PROV}wasGeneratedBy`,
-      value === undefined ? undefined : httpIri(value),
-      NamedNodeFrom.string,
-    );
-  }
 }
 export class TrashDoc extends RestoreReceipt {
   get state(): string | undefined {
@@ -121,7 +107,7 @@ function requireEtag(etag: string | null): string {
   return etag;
 }
 
-/** Copy metadata before conditional delete. Binaries remain available until purge. */
+/** Copy metadata before replacing it with a durable ETag fence. Binaries remain until purge. */
 export async function trashPhoto(
   io: PhotoStorage,
   originalUrl: string,
@@ -133,10 +119,20 @@ export async function trashPhoto(
   if (!photo) throw new TypeError("Not a photograph");
   const match = requireEtag(etag);
   const url = `${io.root}.trash/${identifier(id)}.ttl`;
-  const dataset = buildTrash(url, photo, { originalUrl, actor, trashedAt: now });
+  const activity = `${url}#restore-${crypto.randomUUID()}`;
+  const dataset = buildTrash(url, photo, {
+    originalUrl,
+    actor,
+    trashedAt: now,
+    restoreActivity: activity,
+  });
   await io.ensureContainers(["", ".trash/"]);
   await io.write(url, dataset, { create: true });
-  await io.remove(originalUrl, match);
+  // Keep the URL occupied across trash/purge cycles so a paused restore cannot
+  // recreate metadata after its generation has been superseded.
+  const tombstone = new Store();
+  new RestoreReceipt(`${originalUrl}#it`, tombstone, DataFactory).restoreActivity = activity;
+  await io.write(originalUrl, tombstone, { etag: match });
   return url;
 }
 export async function restorePhoto(io: PhotoStorage, url: string): Promise<string> {
@@ -157,6 +153,10 @@ export async function restorePhoto(io: PhotoStorage, url: string): Promise<strin
     const existing = await io.read(record.originalUrl);
     const receipt = new RestoreReceipt(`${record.originalUrl}#it`, existing.dataset, DataFactory);
     if (receipt.restoreActivity !== activity) throw error;
+    if (!parsePhoto(record.originalUrl, existing.dataset)) {
+      // Only this generation's tombstone may become live, using its current ETag.
+      await io.write(record.originalUrl, live, { etag: requireEtag(existing.etag) });
+    }
   }
   await io.remove(url, claimed);
   return record.originalUrl;
@@ -174,9 +174,16 @@ async function claim(
   return requireEtag((await io.write(url, dataset, { etag })).etag);
 }
 
-async function requireMissing(io: PhotoStorage, originalUrl: string): Promise<void> {
+async function requireMissing(io: PhotoStorage, record: TrashRecord): Promise<void> {
   try {
-    await io.read(originalUrl);
+    const { dataset } = await io.read(record.originalUrl);
+    const receipt = new RestoreReceipt(`${record.originalUrl}#it`, dataset, DataFactory);
+    if (
+      record.restoreActivity !== undefined &&
+      receipt.restoreActivity === record.restoreActivity &&
+      !parsePhoto(record.originalUrl, dataset)
+    )
+      return;
   } catch (error) {
     if (error instanceof RdfFetchError && (error.status === 404 || error.status === 410)) return;
     throw error;
@@ -202,7 +209,7 @@ export async function purgePhoto(io: PhotoStorage, url: string): Promise<void> {
     throw new TypeError("Cannot purge binaries outside the photo's managed paths");
   }
   if (record.state === "restoring") throw new TypeError("Cannot purge a restoring photo");
-  await requireMissing(io, record.originalUrl);
+  await requireMissing(io, record);
   const claimed = await claim(io, url, dataset, match, "purging");
   await io.removeBinary(photo.contentUrl);
   if (photo.thumbnailUrl) await io.removeBinary(photo.thumbnailUrl);

@@ -48,13 +48,13 @@ it("round-trips PROV trash records with the original photo identity", () => {
   missingDoc.trashedAt = new Date(now);
   expect(() => parseTrash(url, missingPhoto)).toThrow("Missing trashed photograph");
 });
-it("trashes, restores create-only, then purges owned binaries and metadata last", async () => {
+it("trashes to a tombstone, restores, then purges binaries and retains the fence", async () => {
   const pod = mockPod();
   const io = photoStorage(pod.fetch, storage);
   await io.savePhoto(originalUrl, photo, { create: true });
   const trash = await trashPhoto(io, originalUrl, "a", actor, now);
   expect(trash).toBe(url);
-  expect(pod.files.has(originalUrl)).toBe(false);
+  expect((await io.loadPhoto(originalUrl)).photo).toBeUndefined();
   expect(parseTrash(url, (await io.read(url)).dataset).photo).toEqual(photo);
   expect(await restorePhoto(io, url)).toBe(originalUrl);
   expect(pod.files.has(url)).toBe(false);
@@ -66,11 +66,11 @@ it("trashes, restores create-only, then purges owned binaries and metadata last"
   expect(pod.files.has(photo.contentUrl)).toBe(false);
   expect(pod.files.has(photo.thumbnailUrl)).toBe(false);
 });
-it("keeps a recoverable trash copy on delete failure and refuses restore collisions", async () => {
+it("keeps a recoverable trash copy on tombstone failure and refuses restore collisions", async () => {
   const pod = mockPod();
   const io = photoStorage(pod.fetch, storage);
   await io.savePhoto(originalUrl, photo, { create: true });
-  pod.failures.set(`DELETE ${originalUrl}`, 412);
+  pod.failures.set(`PUT ${originalUrl}`, 412);
   await expect(trashPhoto(io, originalUrl, "a", actor, now)).rejects.toMatchObject({ status: 412 });
   expect(pod.files.has(originalUrl)).toBe(true);
   expect(pod.files.has(url)).toBe(true);
@@ -297,4 +297,63 @@ it("round-trips claimed states and rejects unknown persisted states", () => {
     restoreActivity: `${url}#restore-test`,
   };
   expect(parseTrash(url, buildTrash(url, photo, receipt))).toEqual({ photo, record: receipt });
+});
+
+it.each([
+  "create",
+  "replace",
+] as const)("fences a paused restore %s after another client restores, trashes, and purges", async (phase) => {
+  const pod = mockPod();
+  const io = photoStorage(pod.fetch, storage);
+  await io.savePhoto(originalUrl, photo, { create: true });
+  await trashPhoto(io, originalUrl, "a", actor, now);
+  for (const binary of [photo.contentUrl, photo.thumbnailUrl])
+    pod.files.set(binary, { body: new Blob(), type: "image/jpeg", etag: '"binary"' });
+  let resume!: () => void;
+  let arrived!: () => void;
+  const paused = new Promise<void>((resolve) => {
+    resume = resolve;
+  });
+  const reached = new Promise<void>((resolve) => {
+    arrived = resolve;
+  });
+  const write = io.write;
+  vi.spyOn(io, "write").mockImplementation(async (...args) => {
+    if (args[0] === originalUrl && (phase === "create" || "etag" in args[2])) {
+      arrived();
+      await paused;
+    }
+    return write(...args);
+  });
+  const outcome = expect(restorePhoto(io, url)).rejects.toMatchObject({ status: 412 });
+  await reached;
+  const other = photoStorage(pod.fetch, storage);
+  await restorePhoto(other, url);
+  await trashPhoto(other, originalUrl, "a", actor, now);
+  await purgePhoto(other, url);
+  resume();
+  await outcome;
+  expect((await other.loadPhoto(originalUrl)).photo).toBeUndefined();
+  expect(pod.files.has(url)).toBe(false);
+  expect(pod.files.has(photo.contentUrl)).toBe(false);
+  expect(pod.files.has(photo.thumbnailUrl)).toBe(false);
+});
+
+it("requires the tombstone ETag and refuses a different lifecycle's tombstone", async () => {
+  const pod = mockPod();
+  const io = photoStorage(pod.fetch, storage);
+  await io.savePhoto(originalUrl, photo, { create: true });
+  await trashPhoto(io, originalUrl, "a", actor, now);
+  const tombstone = pod.files.get(originalUrl);
+  if (!tombstone) throw new Error("fixture");
+  const etag = tombstone.etag as string;
+  tombstone.etag = null;
+  await expect(restorePhoto(io, url)).rejects.toThrow("ETag");
+  tombstone.etag = etag;
+  const { dataset } = await io.read(originalUrl);
+  new TrashDoc(`${originalUrl}#it`, dataset, DataFactory).restoreActivity = `${url}#another-cycle`;
+  await io.write(originalUrl, dataset, { etag });
+  await expect(restorePhoto(io, url)).rejects.toMatchObject({ status: 412 });
+  expect((await io.loadPhoto(originalUrl)).photo).toBeUndefined();
+  expect(pod.files.has(url)).toBe(true);
 });
