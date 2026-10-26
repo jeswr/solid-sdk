@@ -11,6 +11,9 @@
  * Only the parser layer ever reads the file bytes — this hook just hands the
  * `File` through.
  */
+// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
+import { createFetchPodWriter } from "@jeswr/pod-connectors";
 import { useCallback, useState } from "react";
 import { NoStorageError } from "@/lib/errors";
 import type { FileImportAdapter } from "@/lib/integrations/core/file-import";
@@ -31,12 +34,12 @@ export interface FileImportState {
 }
 
 export function useFileImport(adapter: FileImportAdapter | undefined) {
-  const { webId, profile, activeStorage } = useSession();
+  const { webId, profile, activeStorage, podFetch } = useSession();
   const [state, setState] = useState<FileImportState>({ phase: "idle" });
 
   const importFile = useCallback(
     async (file: File) => {
-      if (!adapter || !webId) return;
+      if (!adapter || !webId || !profile) return;
       const podRoot = activeStorage ?? profile?.storages[0];
       if (!podRoot) {
         setState({ phase: "error", error: new NoStorageError(webId), fileName: file.name });
@@ -47,8 +50,13 @@ export function useFileImport(adapter: FileImportAdapter | undefined) {
         const report = await runFileImport({
           adapter,
           file,
-          webId,
-          podRoot,
+          podWriter: createFetchPodWriter({
+            adapterId: adapter.metadata.id,
+            webId,
+            profileDocumentUrl: profile.profileDocumentUrl,
+            podRoot,
+            fetch: podFetch,
+          }),
           onProgress: (progress) =>
             setState((s) => ({ ...s, phase: "importing", progress })),
         });
@@ -61,7 +69,7 @@ export function useFileImport(adapter: FileImportAdapter | undefined) {
         });
       }
     },
-    [adapter, webId, profile, activeStorage],
+    [adapter, webId, profile, activeStorage, podFetch],
   );
 
   const reset = useCallback(() => setState({ phase: "idle" }), []);

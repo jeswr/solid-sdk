@@ -11,20 +11,25 @@ import type { AsyncState } from "@/components/use-pod-data";
 /**
  * Bind a productivity store (Notes / Calendar / Contacts) to the active Solid
  * session. Returns `undefined` until the user is logged in with a chosen
- * storage. Production paths pass NO `fetch` to the store — the auth-patched
- * global runs (AGENTS.md §Reading data).
+ * storage and loaded profile. Production paths pass NO `fetch` to the store —
+ * the auth-patched global runs (AGENTS.md §Reading data).
  *
  * @param factory - the app's store constructor (`notesStore` / …). Memoised on
  *   identity; pass a module-level function reference.
  */
 export function useStore<T>(
-  factory: (opts: { podRoot: string; webId: string }) => ProductivityStore<T>,
+  factory: (opts: {
+    podRoot: string;
+    webId: string;
+    profileDocumentUrl: string;
+  }) => ProductivityStore<T>,
 ): ProductivityStore<T> | undefined {
-  const { webId, activeStorage, status } = useSession();
+  const { webId, activeStorage, status, profile } = useSession();
+  const profileDocumentUrl = profile?.profileDocumentUrl;
   return useMemo(() => {
-    if (status !== "logged-in" || !webId || !activeStorage) return undefined;
-    return factory({ podRoot: activeStorage, webId });
-  }, [factory, webId, activeStorage, status]);
+    if (status !== "logged-in" || !webId || !activeStorage || !profileDocumentUrl) return undefined;
+    return factory({ podRoot: activeStorage, webId, profileDocumentUrl });
+  }, [factory, webId, activeStorage, status, profileDocumentUrl]);
 }
 
 /**

@@ -177,6 +177,8 @@ export const CONTACTS_CONFIG: StoreConfig<Contact> = {
 export function contactsStore(opts: {
   podRoot: string;
   webId: string;
+  /** Final document URL from the session profile load. */
+  profileDocumentUrl?: string;
   fetchImpl?: typeof fetch;
 }): ProductivityStore<Contact> {
   return createStore(CONTACTS_CONFIG, opts);

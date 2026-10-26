@@ -23,11 +23,15 @@
             "strictCase": false,
             "conventions": [
               {
-                "selector": { "kind": "objectLiteralProperty" },
+                "selector": {
+                  "kind": "objectLiteralProperty"
+                },
                 "formats": ["camelCase", "CONSTANT_CASE", "snake_case", "PascalCase"]
               },
               {
-                "selector": { "kind": "typeProperty" },
+                "selector": {
+                  "kind": "typeProperty"
+                },
                 "formats": ["camelCase", "CONSTANT_CASE", "snake_case", "PascalCase"]
               }
             ]
@@ -83,6 +87,14 @@
           "style": {
             "useNamingConvention": "off"
           }
+        }
+      }
+    },
+    {
+      "includes": ["packages/suite-ui/**/*.css", "apps/suite/**/*.css"],
+      "css": {
+        "parser": {
+          "tailwindDirectives": true
         }
       }
     }
