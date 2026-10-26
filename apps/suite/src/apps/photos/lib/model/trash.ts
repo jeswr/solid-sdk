@@ -131,7 +131,8 @@ export async function trashPhoto(
   // Keep the URL occupied across trash/purge cycles so a paused restore cannot
   // recreate metadata after its generation has been superseded.
   const tombstone = new Store();
-  new RestoreReceipt(`${originalUrl}#it`, tombstone, DataFactory).restoreActivity = activity;
+  new RestoreReceipt(`${documentUrl(originalUrl)}#it`, tombstone, DataFactory).restoreActivity =
+    activity;
   await io.write(originalUrl, tombstone, { etag: match });
   return url;
 }

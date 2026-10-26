@@ -2,7 +2,11 @@
 import { DataFactory, Store } from "n3";
 import { expect, it, vi } from "vitest";
 import { photoStorage } from "../../src/apps/photos/lib/model/io.js";
-import { buildPhoto, PhotographDoc } from "../../src/apps/photos/lib/model/photograph.js";
+import {
+  buildPhoto,
+  PhotographDoc,
+  RestoreReceipt,
+} from "../../src/apps/photos/lib/model/photograph.js";
 import {
   buildTrash,
   parseTrash,
@@ -65,6 +69,29 @@ it("trashes to a tombstone, restores, then purges binaries and retains the fence
   expect(pod.files.has(url)).toBe(false);
   expect(pod.files.has(photo.contentUrl)).toBe(false);
   expect(pod.files.has(photo.thumbnailUrl)).toBe(false);
+});
+it.each([
+  ["a b.ttl", "a%20b.ttl"],
+  ["a<b>.ttl", "a%3Cb%3E.ttl"],
+  ['a"b.ttl', "a%22b.ttl"],
+  ["a\nb.ttl", "a%0Ab.ttl"],
+])("sanitizes the tombstone subject for %j and restores its receipt", async (name, escaped) => {
+  const pod = mockPod();
+  const io = photoStorage(pod.fetch, storage);
+  const rawUrl = `${storage}photos/items/${name}`;
+  const safeUrl = `${storage}photos/items/${escaped}`;
+  await io.savePhoto(rawUrl, photo, { create: true });
+  const trash = await trashPhoto(io, rawUrl, "a", actor, now);
+  const { dataset } = await io.read(safeUrl);
+  const { record } = parseTrash(trash, (await io.read(trash)).dataset);
+  expect([...dataset].map((quad) => quad.subject.value)).toEqual([`${safeUrl}#it`]);
+  expect(new RestoreReceipt(`${safeUrl}#it`, dataset, DataFactory).restoreActivity).toBe(
+    record.restoreActivity,
+  );
+  expect((await io.loadPhoto(safeUrl)).photo).toBeUndefined();
+  expect(await restorePhoto(photoStorage(pod.fetch, storage), trash)).toBe(safeUrl);
+  expect((await io.loadPhoto(safeUrl)).photo).toEqual(photo);
+  expect(pod.files.has(trash)).toBe(false);
 });
 it("keeps a recoverable trash copy on tombstone failure and refuses restore collisions", async () => {
   const pod = mockPod();
