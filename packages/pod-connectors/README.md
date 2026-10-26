@@ -188,12 +188,17 @@ The catalog has 32 entries: eight Tier A, fourteen Tier B, and ten Tier C.
 A full import captures `changes/startPageToken` before paginating `files.list`; later
 imports replay `changes.list` and persist its final `newStartPageToken`. HTTP 404/410 from
 the changes feed triggers one full resync. Full snapshots reconcile missing local files
-only after a complete, valid listing. Failed imports preserve the host's previous checkpoint.
+only after a complete, valid listing. List and changes pages require object envelopes with
+`files`/`changes` arrays and nonempty string pagination tokens when present; malformed pages
+fail before reconciliation or checkpoint advancement. One shared `RunBudget` caps source
+requests (including downloads) and listed items across pagination and any full-resync fallback.
+Failed imports preserve the host's previous checkpoint.
 Removed/trashed files lose their metadata and all content representations through `ctx.remove`.
 
 Files have stable paths inside the connector container:
-`drive/files/<pathId(fileId)>/meta.ttl`, with `content` beside binary metadata, or
-`content.pdf` and (for Google documents) `content.txt` beside exported metadata.
+`drive/files/<pathId(fileId)>/meta.ttl`, with `content-<v>` beside binary metadata, or
+`content-<v>.pdf` and (for Google documents) `content-<v>.txt` beside exported metadata.
+`<v>` is the first 24 SHA-256 hex characters of the checksum, else modified time, else file id.
 Folder ids, rather than names, identify folders; `schema:isPartOf` links mirror the Drive
 tree without moving resources on rename. Metadata uses `https://schema.org/`:
 `DigitalDocument` for files, `Collection` for folders, source id/URL, name, media type,
@@ -206,8 +211,15 @@ Google Workspace types and files over the cap retain explanatory metadata and do
 as malformed-item skips. Documents, spreadsheets, presentations and drawings export as PDF;
 documents also export as text. Export-limit responses (`403 exportSizeLimitExceeded`) retain
 metadata only. Each representation is capped at `maxBytes` (exports also at Google's 10 MiB
-limit). Changed content replaces the old bytes; matching checksum/modified-time metadata
-and encoding links avoid another download. Metadata-only transitions remove stale copies.
+limit). Representations use create-only writes; the conditional metadata write publishes their
+encoding links only after every download and content write succeeds. Previous versions are
+removed after the metadata commit. A failed commit attempts to remove staged representations
+while preserving anything linked by the current metadata. Matching checksum/modified-time
+metadata and encoding links avoid another download. Downloads may overlap; each file's Pod
+mutations and cleanup are serialized within the runtime. Every successful store lists that
+file's container and removes unlinked canonical representations, including abandoned exports
+and legacy `content`, `content.pdf`, and `content.txt` paths. This also runs for metadata-only
+transitions even when previous metadata has no encoding links.
 Malformed and RDF content types are stored as `application/octet-stream`.
 
 Downloads accumulate at most the configured byte cap and cancel/abort oversized responses.

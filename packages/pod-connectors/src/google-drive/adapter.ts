@@ -3,10 +3,11 @@
 import { Container } from "@solid/object";
 import { DataFactory, Store } from "n3";
 import { createGoogleOAuthConfig, GOOGLE_SCOPES } from "../adapters/google/oauth.js";
+import { RunBudget } from "../core/budget.js";
 import { IntegrationSyncError } from "../core/errors.js";
 import { getJson } from "../core/fixture-fetch.js";
 import { arr, optionalDate, optionalText } from "../core/safe.js";
-import type { ImportContext, IntegrationAdapter } from "../core/types.js";
+import type { BinaryDoc, ImportContext, IntegrationAdapter } from "../core/types.js";
 import { CLASSES, SCHEMA } from "../core/vocab.js";
 import { binaryType, download } from "./content.js";
 import {
@@ -15,7 +16,6 @@ import {
   type DriveChangeList,
   type DriveFile,
   type DriveFileList,
-  type DriveStartPageToken,
   GOOGLE_APPS,
 } from "./fixtures.js";
 import { DriveMetadata } from "./vocab.js";
@@ -24,7 +24,24 @@ import { vocabMap } from "./vocab-map.js";
 const ID = "google-drive";
 const FIELDS =
   "id,name,mimeType,parents,size,md5Checksum,modifiedTime,createdTime,ownedByMe,webViewLink,trashed";
-const CONTENTS = ["content", "content.pdf", "content.txt"] as const;
+const REPRESENTATION = /^content(?:-[a-f0-9]{24})?(?:\.(?:pdf|txt))?$/;
+// Downloads may overlap; mutations of one file must not race another run's cleanup.
+const mutations = new Map<string, Promise<void>>();
+async function mutate<T>(iri: string, action: () => Promise<T>): Promise<T> {
+  const previous = mutations.get(iri);
+  let release = () => {};
+  const pending = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  mutations.set(iri, pending);
+  await previous;
+  try {
+    return await action();
+  } finally {
+    release();
+    if (mutations.get(iri) === pending) mutations.delete(iri);
+  }
+}
 const EXPORTABLE = new Set(
   ["document", "spreadsheet", "presentation", "drawing"].map((type) => `${GOOGLE_APPS}${type}`),
 );
@@ -47,6 +64,30 @@ const validId = (id: unknown): id is string => {
 };
 const token = (value: unknown): string | undefined =>
   typeof value === "string" && value.length > 0 ? value : undefined;
+const record = (value: unknown): value is Record<string, unknown> =>
+  value !== null && typeof value === "object" && !Array.isArray(value);
+
+function page<T>(value: unknown, field: "files" | "changes"): T {
+  if (!record(value) || !Array.isArray(value[field]))
+    throw new IntegrationSyncError(ID, `Drive returned an invalid ${field} page.`);
+  for (const key of field === "changes"
+    ? ["nextPageToken", "newStartPageToken"]
+    : ["nextPageToken"])
+    if (value[key] !== undefined && !token(value[key]))
+      throw new IntegrationSyncError(ID, `Drive returned an invalid ${key}.`);
+  if (field === "changes" && value.nextPageToken && value.newStartPageToken)
+    throw new IntegrationSyncError(ID, "Drive returned conflicting page tokens.");
+  return value as T;
+}
+
+async function version(file: DriveFile): Promise<string> {
+  const value = optionalText(file.md5Checksum) ?? optionalText(file.modifiedTime) ?? file.id;
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+  return [...new Uint8Array(digest)]
+    .slice(0, 12)
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
 
 export function createGoogleDriveAdapter({
   maxBytes = DEFAULT_MAX_BYTES,
@@ -106,23 +147,25 @@ interface Snapshot {
 }
 class Sync {
   skipped = 0;
+  private readonly budget = new RunBudget(ID);
+  private readonly api: typeof fetch;
   constructor(
     private readonly ctx: ImportContext,
     private readonly maxBytes: number,
-  ) {}
+  ) {
+    this.api = (input, init) => {
+      this.budget.request();
+      return ctx.api(input, init);
+    };
+  }
 
   async full(): Promise<Snapshot> {
     // Capture before listing so mutations during pagination are replayed next time.
-    const start = await getJson<DriveStartPageToken>(
-      ID,
-      this.ctx.api,
-      `${DRIVE_API}/changes/startPageToken`,
-    );
-    const cursor = token(start?.startPageToken);
+    const start = await getJson<unknown>(ID, this.api, `${DRIVE_API}/changes/startPageToken`);
+    const cursor = record(start) ? token(start.startPageToken) : undefined;
     if (!cursor) throw new IntegrationSyncError(ID, "Drive omitted its start page token.");
     const files: Snapshot["files"] = new Map();
     let pageToken: string | undefined;
-    let complete = true;
     const seen = new Set<string>();
     do {
       const params = new URLSearchParams({
@@ -132,18 +175,21 @@ class Sync {
         spaces: "drive",
       });
       if (pageToken) params.set("pageToken", pageToken);
-      const page = await getJson<DriveFileList>(ID, this.ctx.api, `${DRIVE_API}/files?${params}`);
-      complete &&= !!page && (page.files === undefined || Array.isArray(page.files));
-      for (const file of arr(page?.files)) {
+      const listing = page<DriveFileList>(
+        await getJson<unknown>(ID, this.api, `${DRIVE_API}/files?${params}`),
+        "files",
+      );
+      this.budget.items(listing.files.length);
+      for (const file of listing.files) {
         if (!validId(file?.id)) {
           this.skipped++;
           continue;
         }
         files.set(file.id, file.trashed === true ? undefined : file);
       }
-      pageToken = this.next(page?.nextPageToken, seen);
+      pageToken = this.next(listing.nextPageToken, seen);
     } while (pageToken);
-    if (complete && this.skipped === 0) await this.reconcile(files);
+    if (this.skipped === 0) await this.reconcile(files);
     return { cursor, files };
   }
 
@@ -184,12 +230,12 @@ class Sync {
         pageSize: "1000",
         spaces: "drive",
       });
-      const page = await getJson<DriveChangeList>(
-        ID,
-        this.ctx.api,
-        `${DRIVE_API}/changes?${params}`,
+      const listing = page<DriveChangeList>(
+        await getJson<unknown>(ID, this.api, `${DRIVE_API}/changes?${params}`),
+        "changes",
       );
-      for (const change of arr(page?.changes)) {
+      this.budget.items(listing.changes.length);
+      for (const change of listing.changes) {
         if (!validId(change?.fileId)) {
           this.skipped++;
           continue;
@@ -199,12 +245,12 @@ class Sync {
         else if (change.file?.id === change.fileId) files.set(change.fileId, change.file);
         else this.skipped++;
       }
-      const next = this.next(page?.nextPageToken, seen);
+      const next = this.next(listing.nextPageToken, seen);
       if (next) {
         pageToken = next;
         continue;
       }
-      const cursor = token(page?.newStartPageToken);
+      const cursor = token(listing.newStartPageToken);
       if (!cursor) throw new IntegrationSyncError(ID, "Drive omitted its new start page token.");
       return { cursor, files };
     }
@@ -218,8 +264,13 @@ class Sync {
   }
 
   async remove(id: string): Promise<void> {
-    for (const content of CONTENTS) await this.ctx.remove(`${root(id)}${content}`);
-    await this.ctx.remove(`${root(id)}meta.ttl`);
+    const path = root(id);
+    const slug = `${path}meta.ttl`;
+    await mutate(this.ctx.resolve(slug), async () => {
+      await this.ctx.read(slug);
+      await this.ctx.remove(slug);
+      await this.clean(path, new Set());
+    });
   }
 
   async store(file: DriveFile): Promise<void> {
@@ -244,21 +295,56 @@ class Sync {
     item.dateModified = optionalDate(file.modifiedTime);
     for (const id of arr(file.parents))
       if (validId(id)) item.parents.add(`${this.ctx.resolve(`${root(id)}meta.ttl`)}#it`);
-    if (!folder) await this.content(file, item, old, path, mimeType);
-    else await this.clean(path, [], old.encodings.size > 0);
-    await this.ctx.write({
-      slug,
-      category: "documents",
-      forClass: CLASSES.DigitalDocument,
-      dataset,
-      registrationContainer: "drive/",
+    const content = folder ? [] : await this.content(file, item, old, path, mimeType);
+    await mutate(this.ctx.resolve(slug), async () => {
+      const staged: string[] = [];
+      try {
+        for (const doc of content) {
+          // Include an attempted PUT: the server may store it before the transport fails.
+          staged.push(doc.slug);
+          await this.ctx.writeBinary(doc);
+        }
+        await this.ctx.write({
+          slug,
+          category: "documents",
+          forClass: CLASSES.DigitalDocument,
+          dataset,
+          registrationContainer: "drive/",
+        });
+      } catch (error) {
+        // Never roll back a representation linked by the winning metadata, even if
+        // two imports selected the same source version or the PUT response was lost.
+        try {
+          const current = await this.ctx.read(slug);
+          const keep = new DriveMetadata(iri, current ?? new Store(), DataFactory).encodings;
+          for (const name of staged)
+            if (!keep.has(this.ctx.resolve(name))) {
+              try {
+                await this.ctx.remove(name);
+              } catch {
+                /* A later successful store reconciles abandoned representations. */
+              }
+            }
+        } catch {
+          /* Preserve the original failure if current metadata cannot be read. */
+        }
+        throw error;
+      }
+      await this.clean(path, item.encodings);
     });
   }
 
-  private async clean(path: string, keep: readonly string[], needed: boolean): Promise<void> {
-    if (needed)
-      for (const content of CONTENTS)
-        if (!keep.includes(content)) await this.ctx.remove(`${path}${content}`);
+  private async clean(path: string, keep: ReadonlySet<string>): Promise<void> {
+    const listing = await this.ctx.read(path);
+    if (!listing) return;
+    const base = this.ctx.resolve(path);
+    for (const child of new Container(base, listing, DataFactory).contains) {
+      if (!child.value.startsWith(base)) continue;
+      const name = child.value.slice(base.length);
+      // Only our direct, canonical representation names are eligible for deletion.
+      if (REPRESENTATION.exec(name)?.[0] === name && !keep.has(child.value))
+        await this.ctx.remove(`${path}${name}`);
+    }
   }
 
   private async content(
@@ -267,7 +353,7 @@ class Sync {
     old: DriveMetadata,
     path: string,
     mimeType: string | undefined,
-  ): Promise<void> {
+  ): Promise<BinaryDoc[]> {
     const exporting = EXPORTABLE.has(mimeType ?? "");
     const size =
       typeof file.size === "string" && /^\d+$/.test(file.size) ? Number(file.size) : undefined;
@@ -279,11 +365,12 @@ class Sync {
     else if (size !== undefined && (!Number.isSafeInteger(size) || size > this.maxBytes))
       reason = "size-cap-exceeded";
     else if (!exporting && size === undefined) reason = "unknown-size";
+    const basename = `content-${await version(file)}`;
     const names = exporting
       ? mimeType === `${GOOGLE_APPS}document`
-        ? ["content.pdf", "content.txt"]
-        : ["content.pdf"]
-      : ["content"];
+        ? [`${basename}.pdf`, `${basename}.txt`]
+        : [`${basename}.pdf`]
+      : [basename];
     const sameVersion =
       (item.checksum !== undefined || item.dateModified !== undefined) &&
       item.checksum === old.checksum &&
@@ -293,7 +380,7 @@ class Sync {
       old.encodingFormat === mimeType &&
       !old.contentSkipped &&
       names.every((name) => old.encodings.has(this.ctx.resolve(`${path}${name}`)));
-    let wrote = false;
+    const content: BinaryDoc[] = [];
     if (!reason && !unchanged) {
       for (const name of names) {
         const type = exporting
@@ -303,7 +390,7 @@ class Sync {
           : binaryType(mimeType as string);
         const url = `${DRIVE_API}/files/${encodeURIComponent(file.id)}${exporting ? `/export?${new URLSearchParams({ mimeType: type })}` : "?alt=media"}`;
         const result = await download(
-          this.ctx.api,
+          this.api,
           url,
           exporting ? Math.min(this.maxBytes, 10 * 1024 * 1024) : this.maxBytes,
           exporting,
@@ -312,17 +399,16 @@ class Sync {
           reason = result.reason;
           break;
         }
-        await this.ctx.writeBinary({
+        content.push({
           slug: `${path}${name}`,
           contentType: type,
           body: result.body,
-          mode: "replace",
+          mode: "create",
         });
-        wrote = true;
       }
     }
     item.contentSkipped = reason;
     if (!reason) for (const name of names) item.encodings.add(this.ctx.resolve(`${path}${name}`));
-    await this.clean(path, reason ? [] : names, wrote || old.encodings.size > 0);
+    return reason ? [] : content;
   }
 }

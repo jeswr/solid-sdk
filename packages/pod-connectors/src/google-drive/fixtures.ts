@@ -18,7 +18,7 @@ export interface DriveFile {
   trashed?: boolean;
 }
 export interface DriveFileList {
-  files?: DriveFile[];
+  files: DriveFile[];
   nextPageToken?: string;
 }
 export interface DriveStartPageToken {
@@ -30,7 +30,7 @@ export interface DriveChange {
   file?: DriveFile;
 }
 export interface DriveChangeList {
-  changes?: DriveChange[];
+  changes: DriveChange[];
   nextPageToken?: string;
   newStartPageToken?: string;
 }
@@ -65,5 +65,5 @@ export const DRIVE_FIXTURES: readonly FixtureRoute[] = [
     url: `${DRIVE_API}/files`,
     json: { files: FILES.map((file) => ({ ...file, ownedByMe: false })) },
   },
-  { url: `${DRIVE_API}/changes`, json: { newStartPageToken: "1001" } },
+  { url: `${DRIVE_API}/changes`, json: { changes: [], newStartPageToken: "1001" } },
 ];

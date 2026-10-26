@@ -1,7 +1,10 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+import { createHash } from "node:crypto";
+import { setImmediate } from "node:timers/promises";
 import { Container, Resource } from "@solid/object";
 import { DataFactory, Store, Writer } from "n3";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { RunBudget } from "../core/budget.js";
 import { runImport } from "../core/import-runner.js";
 import { createFetchPodWriter } from "../core/pod-writer.js";
 import {
@@ -17,10 +20,17 @@ import { createGoogleDriveAdapter, DEFAULT_MAX_BYTES, googleDriveAdapter } from 
 import { DRIVE_API, type DriveFile, FILES, GOOGLE_APPS } from "./fixtures.js";
 import { DriveMetadata } from "./vocab.js";
 
+afterEach(() => vi.restoreAllMocks());
+
 const ROOT = `${TEST_POD_ROOT}integrations/google-drive/`;
 const path = (id: string) =>
   `drive/files/${encodeURIComponent(id).replace(/~/g, "%7E").replace(/%/g, "~")}/`;
 const metaUrl = (id: string) => `${ROOT}${path(id)}meta.ttl`;
+const contentUrl = (file: DriveFile, extension = "") =>
+  `${ROOT}${path(file.id)}content-${createHash("sha256")
+    .update(file.md5Checksum ?? file.modifiedTime ?? file.id)
+    .digest("hex")
+    .slice(0, 24)}${extension}`;
 const mediaUrl = (id: string) => `${DRIVE_API}/files/${encodeURIComponent(id)}?alt=media`;
 const exportUrl = (id: string, mimeType: string) =>
   `${DRIVE_API}/files/${encodeURIComponent(id)}/export?${new URLSearchParams({ mimeType })}`;
@@ -39,7 +49,7 @@ const changes = (json: unknown, status = 200): FixtureRoute => ({
   json,
   status,
 });
-type Media = Record<string, () => Response>;
+type Media = Record<string, () => Response | Promise<Response>>;
 const CONTENT: Media = {
   [mediaUrl(BINARY.id)]: bytes(),
   [exportUrl(DOC.id, "application/pdf")]: bytes("%PDF-synthetic"),
@@ -127,15 +137,15 @@ describe("Drive full sync", () => {
     expect(item.dateCreated?.toISOString()).toBe("2026-06-11T09:00:00.000Z");
     expect(item.dateModified?.toISOString()).toBe("2026-06-12T09:00:00.000Z");
     expect([...item.parents]).toEqual([`${metaUrl("folder-1")}#it`]);
-    expect([...item.encodings]).toEqual([`${ROOT}${path(BINARY.id)}content`]);
-    expect(pod.contentType(`${ROOT}${path(BINARY.id)}content`)).toBe("image/png");
-    expect(new TextDecoder().decode(pod.bytes(`${ROOT}${path(BINARY.id)}content`))).toBe("data");
+    expect([...item.encodings]).toEqual([contentUrl(BINARY)]);
+    expect(pod.contentType(contentUrl(BINARY))).toBe("image/png");
+    expect(new TextDecoder().decode(pod.bytes(contentUrl(BINARY)))).toBe("data");
     expect([...metadata(DOC.id).encodings]).toEqual([
-      `${ROOT}${path(DOC.id)}content.pdf`,
-      `${ROOT}${path(DOC.id)}content.txt`,
+      contentUrl(DOC, ".pdf"),
+      contentUrl(DOC, ".txt"),
     ]);
-    expect(pod.contentType(`${ROOT}${path(DOC.id)}content.pdf`)).toBe("application/pdf");
-    expect(pod.contentType(`${ROOT}${path(DOC.id)}content.txt`)).toBe("text/plain");
+    expect(pod.contentType(contentUrl(DOC, ".pdf"))).toBe("application/pdf");
+    expect(pod.contentType(contentUrl(DOC, ".txt"))).toBe("text/plain");
     const index = pod.dataset(report.indexUrl);
     expect(
       index
@@ -215,14 +225,6 @@ describe("Drive full sync", () => {
     ]);
   });
 
-  it.each([null, {}, { files: "invalid" }])("accepts empty or sparse lists: %j", async (json) => {
-    const { run } = setup();
-    const report = await run([full()[0] as FixtureRoute, { url: `${DRIVE_API}/files`, json }])
-      .result;
-    expect(report.written).toEqual([]);
-    expect(report.cursor).toBe("1000");
-  });
-
   it("reuses unchanged content and replaces changed bytes or changed MIME types", async () => {
     const { pod, run, state, metadata } = await imported();
     const before = pod.urls();
@@ -239,10 +241,11 @@ describe("Drive full sync", () => {
     expect([...metadata(BINARY.id).parents]).toEqual([`${metaUrl("folder-2")}#it`]);
     const changed = { ...BINARY, md5Checksum: "new", modifiedTime: "2026-06-13T09:00:00Z" };
     await run(full([changed]), { media: { [mediaUrl(BINARY.id)]: bytes("next") } }).result;
-    expect(new TextDecoder().decode(pod.bytes(`${ROOT}${path(BINARY.id)}content`))).toBe("next");
-    const rdf = { ...changed, mimeType: "text/turtle; charset=utf-8" };
+    expect(new TextDecoder().decode(pod.bytes(contentUrl(changed)))).toBe("next");
+    expect(pod.bytes(contentUrl(BINARY))).toBeUndefined();
+    const rdf = { ...changed, mimeType: "text/turtle; charset=utf-8", md5Checksum: "rdf" };
     await run(full([rdf]), { media: { [mediaUrl(BINARY.id)]: bytes("<x> <y> <z>.") } }).result;
-    expect(pod.contentType(`${ROOT}${path(BINARY.id)}content`)).toBe("application/octet-stream");
+    expect(pod.contentType(contentUrl(rdf))).toBe("application/octet-stream");
   });
 
   it("downloads again without version fields or when one version field changes", async () => {
@@ -284,12 +287,12 @@ describe("Drive content policy", () => {
   it("accepts bytes exactly at the cap and zero-length files at zero", async () => {
     const { run, pod } = setup(4);
     await run(full([BINARY]), { media: CONTENT }).result;
-    expect(pod.bytes(`${ROOT}${path(BINARY.id)}content`)).toHaveLength(4);
+    expect(pod.bytes(contentUrl(BINARY))).toHaveLength(4);
     const empty = setup(0);
     await empty.run(full([{ ...BINARY, size: "0" }]), {
       media: { [mediaUrl(BINARY.id)]: bytes("") },
     }).result;
-    expect(empty.pod.bytes(`${ROOT}${path(BINARY.id)}content`)).toHaveLength(0);
+    expect(empty.pod.bytes(contentUrl(BINARY))).toHaveLength(0);
   });
 
   it("stops and cancels an unadvertised oversized stream without writing bytes", async () => {
@@ -314,7 +317,7 @@ describe("Drive content policy", () => {
     expect(signal.aborted).toBe(true);
     expect(cancel).toHaveBeenCalledOnce();
     expect(metadata(BINARY.id).contentSkipped).toBe("size-cap-exceeded");
-    expect(pod.bytes(`${ROOT}${path(BINARY.id)}content`)).toBeUndefined();
+    expect(pod.bytes(contentUrl(BINARY))).toBeUndefined();
   });
 
   it("rejects an oversized advertised body before reading it", async () => {
@@ -337,8 +340,8 @@ describe("Drive content policy", () => {
     });
     await result;
     expect(api.mock.calls).toHaveLength(3);
-    expect([...metadata(DOC.id).encodings]).toEqual([`${ROOT}${path(DOC.id)}content.pdf`]);
-    expect(pod.bytes(`${ROOT}${path(DOC.id)}content.txt`)).toBeUndefined();
+    expect([...metadata(DOC.id).encodings]).toEqual([contentUrl(DOC, ".pdf")]);
+    expect(pod.bytes(contentUrl(DOC, ".txt"))).toBeUndefined();
   });
 
   it("removes old copies when ownership, eligibility, or file kind changes", async () => {
@@ -349,21 +352,22 @@ describe("Drive content policy", () => {
         { ...DOC, mimeType: `${GOOGLE_APPS}folder` },
       ]),
     ).result;
-    expect(pod.bytes(`${ROOT}${path(BINARY.id)}content`)).toBeUndefined();
+    expect(pod.bytes(contentUrl(BINARY))).toBeUndefined();
     expect(metadata(BINARY.id).contentSkipped).toBe("not-owned");
-    expect(pod.bytes(`${ROOT}${path(DOC.id)}content.pdf`)).toBeUndefined();
-    expect(pod.bytes(`${ROOT}${path(DOC.id)}content.txt`)).toBeUndefined();
+    expect(pod.bytes(contentUrl(DOC, ".pdf"))).toBeUndefined();
+    expect(pod.bytes(contentUrl(DOC, ".txt"))).toBeUndefined();
     expect([...metadata(DOC.id).types]).toEqual(["https://schema.org/Collection"]);
   });
 
   it("switches representations and removes obsolete content files", async () => {
     const { run, pod } = await imported();
-    await run(full([{ ...DOC, mimeType: "text/plain", size: "4", md5Checksum: "changed" }]), {
+    const changed = { ...DOC, mimeType: "text/plain", size: "4", md5Checksum: "changed" };
+    await run(full([changed]), {
       media: { [mediaUrl(DOC.id)]: bytes() },
     }).result;
-    expect(pod.bytes(`${ROOT}${path(DOC.id)}content`)).toHaveLength(4);
-    expect(pod.bytes(`${ROOT}${path(DOC.id)}content.pdf`)).toBeUndefined();
-    expect(pod.bytes(`${ROOT}${path(DOC.id)}content.txt`)).toBeUndefined();
+    expect(pod.bytes(contentUrl(changed))).toHaveLength(4);
+    expect(pod.bytes(contentUrl(DOC, ".pdf"))).toBeUndefined();
+    expect(pod.bytes(contentUrl(DOC, ".txt"))).toBeUndefined();
   });
 
   it.each([
@@ -383,8 +387,8 @@ describe("Drive content policy", () => {
     expect(report.skipped).toBeUndefined();
     expect(metadata(DOC.id).contentSkipped).toBe("exportSizeLimitExceeded");
     expect([...metadata(DOC.id).encodings]).toEqual([]);
-    expect(pod.bytes(`${ROOT}${path(DOC.id)}content.pdf`)).toBeUndefined();
-    expect(pod.bytes(`${ROOT}${path(DOC.id)}content.txt`)).toBeUndefined();
+    expect(pod.bytes(contentUrl(DOC, ".pdf"))).toBeUndefined();
+    expect(pod.bytes(contentUrl(DOC, ".txt"))).toBeUndefined();
   });
 });
 
@@ -432,8 +436,7 @@ describe("Drive incremental sync", () => {
     await run(routes, { state }).result;
     for (const id of [BINARY.id, DOC.id]) {
       expect(pod.get(metaUrl(id))).toBeUndefined();
-      for (const name of ["content", "content.pdf", "content.txt"])
-        expect(pod.bytes(`${ROOT}${path(id)}${name}`)).toBeUndefined();
+      expect(pod.urls().filter((url) => url.startsWith(`${ROOT}${path(id)}content`))).toEqual([]);
     }
   });
 
@@ -451,7 +454,7 @@ describe("Drive incremental sync", () => {
           ],
           nextPageToken: "2",
         }),
-        changes({ newStartPageToken: "3" }),
+        changes({ changes: [], newStartPageToken: "3" }),
       ],
       { cursor: "1" },
     ).result;
@@ -516,13 +519,12 @@ describe("Drive incremental sync", () => {
     ).rejects.toThrow("start page token");
   });
   it.each([
-    null,
-    {},
-    { newStartPageToken: 7 },
+    { changes: [] },
+    { changes: [], newStartPageToken: 7 },
   ])("refuses a missing changes checkpoint: %j", async (json) => {
     const { run } = setup();
     await expect(run([changes(json)], { cursor: "1" }).result).rejects.toThrow(
-      "new start page token",
+      /new start page token|newStartPageToken/,
     );
   });
   it("rejects repeated list and changes page tokens", async () => {
@@ -530,11 +532,11 @@ describe("Drive incremental sync", () => {
     await expect(
       run([
         full()[0] as FixtureRoute,
-        { url: `${DRIVE_API}/files`, json: { nextPageToken: "same" } },
+        { url: `${DRIVE_API}/files`, json: { files: [], nextPageToken: "same" } },
       ]).result,
     ).rejects.toThrow("repeated a page token");
     await expect(
-      run([changes({ nextPageToken: "same" })], { cursor: "same" }).result,
+      run([changes({ changes: [], nextPageToken: "same" })], { cursor: "same" }).result,
     ).rejects.toThrow("repeated a page token");
   });
   it("surfaces full-resync failures without trying another resync", async () => {
@@ -561,7 +563,7 @@ describe("Drive full-snapshot reconciliation", () => {
     ).result;
     expect(report.skipped).toBeUndefined();
     expect(pod.get(metaUrl(BINARY.id))).toBeUndefined();
-    expect(pod.bytes(`${ROOT}${path(DOC.id)}content.pdf`)).toBeUndefined();
+    expect(pod.bytes(contentUrl(DOC, ".pdf"))).toBeUndefined();
     expect(pod.get(metaUrl("folder-1"))).toBeDefined();
   });
 
@@ -570,7 +572,7 @@ describe("Drive full-snapshot reconciliation", () => {
     const report = await run(full([null])).result;
     expect(report.skipped).toBe(1);
     expect(pod.get(metaUrl(BINARY.id))).toBeDefined();
-    await run(full("invalid")).result;
+    await expect(run(full("invalid")).result).rejects.toThrow("invalid files page");
     expect(pod.get(metaUrl(BINARY.id))).toBeDefined();
   });
 
@@ -626,5 +628,335 @@ describe("Drive full-snapshot reconciliation", () => {
       ]).result,
     ).rejects.toMatchObject({ status: 500 });
     expect(pod.get(metaUrl(BINARY.id))).toBeDefined();
+  });
+});
+
+describe("Drive malformed snapshots", () => {
+  const invalid = [null, [], "invalid", 7, false, {}, { error: "unexpected" }];
+  const invalidTokens = [null, 7, false, {}, [], ""];
+  const filePages = [
+    ...invalid,
+    ...[null, {}, "invalid", 7, false].map((files) => ({ files })),
+    ...invalidTokens.map((nextPageToken) => ({ files: [], nextPageToken })),
+  ];
+  const changePages = [
+    ...invalid,
+    ...[undefined, null, {}, "invalid", 7, false].map((changes) => ({
+      changes,
+      newStartPageToken: "2000",
+    })),
+    ...invalidTokens.map((nextPageToken) => ({
+      changes: [],
+      nextPageToken,
+      newStartPageToken: "2000",
+    })),
+    ...invalidTokens.map((newStartPageToken) => ({ changes: [], newStartPageToken })),
+    { changes: [], nextPageToken: "next", newStartPageToken: "2000" },
+  ];
+
+  it.each(filePages)("rejects a malformed full-list page without pruning: %j", async (json) => {
+    const { run, pod, state, podWriter } = await imported();
+    const before = pod.urls();
+    const remove = vi.spyOn(podWriter, "remove");
+    const read = vi.spyOn(podWriter, "read");
+    const onState = vi.fn();
+    await expect(
+      run(
+        [
+          changes({}, 410),
+          full()[0] as FixtureRoute,
+          { url: `${DRIVE_API}/files`, json: { files: [], nextPageToken: "next" } },
+          { url: `${DRIVE_API}/files`, json },
+        ],
+        { state, onState },
+      ).result,
+    ).rejects.toThrow(/invalid/);
+    expect(remove).not.toHaveBeenCalled();
+    expect(read.mock.calls.map(([slug]) => slug)).not.toContain("drive/files/");
+    expect(pod.urls()).toEqual(before);
+    expect(pod.bytes(contentUrl(BINARY))).toBeDefined();
+    expect(onState).toHaveBeenCalledWith(
+      expect.objectContaining({ cursor: state.cursor, counts: state.counts, lastOutcome: "error" }),
+    );
+  });
+
+  it.each(
+    changePages,
+  )("rejects a malformed changes page before applying mutations: %j", async (json) => {
+    const { run, pod, state, podWriter } = await imported();
+    const remove = vi.spyOn(podWriter, "remove");
+    const onState = vi.fn();
+    await expect(
+      run(
+        [
+          changes({ changes: [{ fileId: BINARY.id, removed: true }], nextPageToken: "next" }),
+          changes(json),
+        ],
+        { state, onState },
+      ).result,
+    ).rejects.toThrow(/invalid|conflicting/);
+    expect(remove).not.toHaveBeenCalled();
+    expect(pod.get(metaUrl(BINARY.id))).toBeDefined();
+    expect(pod.bytes(contentUrl(BINARY))).toBeDefined();
+    expect(onState).toHaveBeenCalledWith(
+      expect.objectContaining({ cursor: state.cursor, lastOutcome: "error" }),
+    );
+  });
+
+  it("counts every source request and page item on one budget, including a full fallback", async () => {
+    const requests = vi.spyOn(RunBudget.prototype, "request");
+    const items = vi.spyOn(RunBudget.prototype, "items");
+    const { run } = setup();
+    await run(
+      [changes({ changes: [null], nextPageToken: "expired" }), changes({}, 410), ...full()],
+      { cursor: "old", media: CONTENT },
+    ).result;
+    expect(requests).toHaveBeenCalledTimes(7);
+    expect(items.mock.calls).toEqual([[1], [FILES.length]]);
+    expect(new Set([...requests.mock.contexts, ...items.mock.contexts]).size).toBe(1);
+  });
+});
+
+describe("Drive staged representations", () => {
+  it("keeps mutations queued until a failed predecessor has finished rollback", async () => {
+    const { podWriter, pod, run, metadata } = await imported();
+    const first = { ...BINARY, md5Checksum: "first" };
+    const second = { ...BINARY, md5Checksum: "second" };
+    const committing = Promise.withResolvers<void>();
+    const resume = Promise.withResolvers<void>();
+    const write = podWriter.write;
+    let failFirst = true;
+    vi.spyOn(podWriter, "write").mockImplementation(async (doc, conditions) => {
+      if (doc.slug === `${path(BINARY.id)}meta.ttl` && failFirst) {
+        failFirst = false;
+        committing.resolve();
+        await resume.promise;
+        throw new Error("Interrupted metadata write");
+      }
+      return write(doc, conditions);
+    });
+    const firstResult = run(full([first]), { media: CONTENT }).result;
+    const failed = expect(firstResult).rejects.toThrow("Interrupted metadata write");
+    await committing.promise;
+    const downloaded = Promise.withResolvers<void>();
+    const secondResult = run(full([second]), {
+      media: {
+        [mediaUrl(BINARY.id)]: () => {
+          downloaded.resolve();
+          return new Response("next");
+        },
+      },
+    }).result;
+    await downloaded.promise;
+    // Drain the response reader and hash microtasks so the second mutation is queued.
+    await setImmediate();
+    expect(pod.bytes(contentUrl(second))).toBeUndefined();
+    resume.resolve();
+    await failed;
+    await secondResult;
+    expect(pod.bytes(contentUrl(first))).toBeUndefined();
+    expect(new TextDecoder().decode(pod.bytes(contentUrl(second)))).toBe("next");
+    expect([...metadata(BINARY.id).encodings]).toEqual([contentUrl(second)]);
+  });
+
+  it.each([
+    false,
+    true,
+  ])("preserves the winner when an older import commits last (same version: %s)", async (sameVersion) => {
+    const { pod, podWriter, run, metadata, state } = await imported();
+    const older = { ...BINARY, md5Checksum: "older", modifiedTime: "2026-07-01T00:00:00Z" };
+    const newer = {
+      ...older,
+      name: "Newer metadata",
+      md5Checksum: sameVersion ? older.md5Checksum : "newer",
+      modifiedTime: sameVersion ? older.modifiedTime : "2026-07-02T00:00:00Z",
+    };
+    const downloading = Promise.withResolvers<void>();
+    const resume = Promise.withResolvers<void>();
+    const oldRun = run(
+      [changes({ changes: [{ fileId: BINARY.id, file: older }], newStartPageToken: "old" })],
+      {
+        state,
+        media: {
+          [mediaUrl(BINARY.id)]: async () => {
+            downloading.resolve();
+            await resume.promise;
+            return new Response("old!");
+          },
+        },
+      },
+    );
+    const failed = expect(oldRun.result).rejects.toMatchObject({ status: 412 });
+    await downloading.promise;
+    const write = vi.spyOn(podWriter, "write");
+    const read = vi.spyOn(podWriter, "read");
+    const newRoutes = [
+      changes({ changes: [{ fileId: BINARY.id, file: newer }], newStartPageToken: "new" }),
+    ];
+    await run(newRoutes, { state, media: { [mediaUrl(BINARY.id)]: bytes("new!") } }).result;
+    const winningMetadata = pod.get(metaUrl(BINARY.id));
+    expect(read.mock.calls.map(([slug]) => slug)).toContain(`${path(BINARY.id)}meta.ttl`);
+    resume.resolve();
+    await failed;
+    expect(
+      write.mock.calls.filter(([doc]) => doc.slug === `${path(BINARY.id)}meta.ttl`),
+    ).toHaveLength(2);
+    expect(pod.get(metaUrl(BINARY.id))).toBe(winningMetadata);
+    expect(metadata(BINARY.id).name).toBe("Newer metadata");
+    expect([...metadata(BINARY.id).encodings]).toEqual([contentUrl(newer)]);
+    expect(new TextDecoder().decode(pod.bytes(contentUrl(newer)))).toBe("new!");
+    if (!sameVersion) expect(pod.bytes(contentUrl(older))).toBeUndefined();
+    // The unchanged retry must still find the winning bytes, without another media request.
+    expect((await run(newRoutes, { state }).result).cursor).toBe("new");
+    expect(new TextDecoder().decode(pod.bytes(contentUrl(newer)))).toBe("new!");
+  });
+
+  it("does not stage a PDF when the later text download fails", async () => {
+    const { pod, run } = setup();
+    await expect(
+      run(full([DOC]), {
+        media: {
+          ...CONTENT,
+          [exportUrl(DOC.id, "text/plain")]: () => new Response(null, { status: 500 }),
+        },
+      }).result,
+    ).rejects.toMatchObject({ status: 500 });
+    expect(pod.get(metaUrl(DOC.id))).toBeUndefined();
+    expect(pod.bytes(contentUrl(DOC, ".pdf"))).toBeUndefined();
+  });
+
+  it.each([
+    "ownership",
+    "eligibility",
+    "folder",
+  ])("cleans abandoned exports on a metadata-only %s retry", async (policy) => {
+    const { pod, podWriter, run, metadata } = setup();
+    const writeBinary = podWriter.writeBinary;
+    const remove = podWriter.remove;
+    if (!writeBinary || !remove) throw new Error("Expected memory Pod binary and delete ports");
+    const failedWrite = vi.spyOn(podWriter, "writeBinary").mockImplementation(async (doc) => {
+      if (doc.slug.endsWith(".txt")) throw new Error("Interrupted export");
+      return writeBinary(doc);
+    });
+    // Simulate a connection outage that also prevents best-effort rollback.
+    const failedCleanup = vi.spyOn(podWriter, "remove").mockRejectedValue(new Error("Offline"));
+    await expect(run(full([DOC]), { media: CONTENT }).result).rejects.toThrow("Interrupted export");
+    expect(pod.get(metaUrl(DOC.id))).toBeUndefined();
+    expect(pod.bytes(contentUrl(DOC, ".pdf"))).toBeDefined();
+    failedWrite.mockRestore();
+    failedCleanup.mockRestore();
+    // Include a legacy orphan from before versioned paths were introduced.
+    await writeBinary({
+      slug: `${path(DOC.id)}content.pdf`,
+      contentType: "application/pdf",
+      body: new Uint8Array([1]),
+    });
+    const retry = {
+      ...DOC,
+      ...(policy === "ownership"
+        ? { ownedByMe: false }
+        : {
+            mimeType: `${GOOGLE_APPS}${policy === "folder" ? "folder" : "form"}`,
+          }),
+    };
+    await run(full([retry])).result;
+    expect(metadata(DOC.id).identifier).toBe(DOC.id);
+    expect([...metadata(DOC.id).encodings]).toEqual([]);
+    expect(pod.urls().filter((url) => url.startsWith(`${ROOT}${path(DOC.id)}content`))).toEqual([]);
+  });
+
+  it("rolls back partial writes and preserves previously committed representations", async () => {
+    const { pod, podWriter, run, metadata } = await imported();
+    const newer = { ...DOC, modifiedTime: "2026-07-02T00:00:00Z" };
+    const writeBinary = podWriter.writeBinary;
+    if (!writeBinary) throw new Error("Expected memory Pod binary port");
+    vi.spyOn(podWriter, "writeBinary").mockImplementation(async (doc) => {
+      const result = await writeBinary(doc);
+      if (doc.slug.endsWith(".txt")) throw new Error("Lost PUT response");
+      return result;
+    });
+    await expect(run(full([newer]), { media: CONTENT }).result).rejects.toThrow(
+      "Lost PUT response",
+    );
+    expect([...metadata(DOC.id).encodings]).toEqual([
+      contentUrl(DOC, ".pdf"),
+      contentUrl(DOC, ".txt"),
+    ]);
+    expect(pod.bytes(contentUrl(DOC, ".pdf"))).toBeDefined();
+    expect(pod.bytes(contentUrl(DOC, ".txt"))).toBeDefined();
+    expect(pod.bytes(contentUrl(newer, ".pdf"))).toBeUndefined();
+    expect(pod.bytes(contentUrl(newer, ".txt"))).toBeUndefined();
+  });
+
+  it("keeps committed content when a metadata-only write fails", async () => {
+    const { pod, podWriter, run, metadata } = await imported();
+    const write = podWriter.write;
+    vi.spyOn(podWriter, "write").mockImplementation(async (doc, conditions) => {
+      if (doc.slug === `${path(BINARY.id)}meta.ttl`) throw new Error("Metadata failure");
+      return write(doc, conditions);
+    });
+    const remove = vi.spyOn(podWriter, "remove");
+    await expect(run(full([{ ...BINARY, ownedByMe: false }])).result).rejects.toThrow(
+      "Metadata failure",
+    );
+    expect(remove).not.toHaveBeenCalled();
+    expect(metadata(BINARY.id).contentSkipped).toBeUndefined();
+    expect(pod.bytes(contentUrl(BINARY))).toBeDefined();
+  });
+
+  it("retries orphan cleanup even if the previous metadata commit already succeeded", async () => {
+    const { pod, podWriter, run, metadata, state } = await imported();
+    const next = { ...BINARY, md5Checksum: "next" };
+    const remove = vi.spyOn(podWriter, "remove").mockRejectedValue(new Error("Cleanup failure"));
+    const onState = vi.fn();
+    const routes = [
+      changes({ changes: [{ fileId: BINARY.id, file: next }], newStartPageToken: "2000" }),
+    ];
+    await expect(run(routes, { state, media: CONTENT, onState }).result).rejects.toThrow(
+      "Cleanup failure",
+    );
+    expect(metadata(BINARY.id).checksum).toBe("next");
+    expect(pod.bytes(contentUrl(BINARY))).toBeDefined();
+    expect(pod.bytes(contentUrl(next))).toBeDefined();
+    expect(onState).toHaveBeenCalledWith(
+      expect.objectContaining({ cursor: state.cursor, lastOutcome: "error" }),
+    );
+    remove.mockRestore();
+    const retry = run(routes, { state });
+    expect((await retry.result).cursor).toBe("2000");
+    expect(retry.api).toHaveBeenCalledOnce();
+    expect(pod.bytes(contentUrl(BINARY))).toBeUndefined();
+    expect(pod.bytes(contentUrl(next))).toBeDefined();
+  });
+
+  it("only cleans canonical representation children of the file's own container", async () => {
+    const { podWriter, run } = setup();
+    const base = `${ROOT}${path(BINARY.id)}`;
+    const listing = new Store();
+    const container = new Container(base, listing, DataFactory);
+    const valid = ["content", "content.pdf", "content.txt", `content-${"a".repeat(24)}.pdf`];
+    const foreign = [
+      "https://outside.test/content.pdf",
+      `${base}../content.pdf`,
+      `${base}nested/content.pdf`,
+      `${base}content.pdf#fragment`,
+      `${base}content.pdf?query`,
+      `${base}content.pdf\n`,
+      `${base}content-%61.pdf`,
+      `${base}meta.ttl`,
+      `${base}notes.txt`,
+      `${base}content-invalid.pdf`,
+    ];
+    for (const url of [...valid.map((name) => `${base}${name}`), ...foreign])
+      container.contains.add(new Resource(url, listing, DataFactory));
+    const read = podWriter.read;
+    vi.spyOn(podWriter, "read").mockImplementation(async (slug) =>
+      slug === path(BINARY.id) ? { dataset: listing, etag: '"listing"' } : read(slug),
+    );
+    const remove = vi.spyOn(podWriter, "remove");
+    await run(full([{ ...BINARY, ownedByMe: false }])).result;
+    expect(remove.mock.calls.map(([slug]) => slug)).toEqual(
+      valid.map((name) => `${path(BINARY.id)}${name}`),
+    );
   });
 });
