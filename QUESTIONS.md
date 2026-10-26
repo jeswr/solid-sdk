@@ -9,7 +9,8 @@
    join blocks/rows with one newline and table cells with one tab, and represent hard breaks
    with newlines. Map generated separators explicitly to their container, without inventing
    a text-node position. Images and horizontal rules are empty blocks; image metadata and list
-   markers are not document text. Include empty-node ranges and no trailing generated newline.
+   markers are not document text. Include empty-node ranges and no extra newline after the final
+   block (empty blocks still contribute their inter-block separators).
 
 2. **Outline anchors and hierarchy** (05-docs §2.2/§4.10; DOC-L3): options include ASCII-only
    slugs or Unicode-preserving slugs, and invented intermediate headings or nearest preceding
