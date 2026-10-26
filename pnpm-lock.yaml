@@ -2013,8 +2013,8 @@ importers:
   apps/suite:
     dependencies:
       '@jeswr/fetch-rdf':
-        specifier: ^0.1.0
-        version: 0.1.0
+        specifier: workspace:*
+        version: link:../../packages/fetch-rdf
       '@jeswr/guarded-fetch':
         specifier: workspace:*
         version: link:../../packages/guarded-fetch

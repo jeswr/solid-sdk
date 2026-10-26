@@ -31,7 +31,7 @@
     "sanitize-html": "2.18.1",
     "music-metadata": "12.3.2",
     "chrono-node": "^2.10.3",
-    "@jeswr/fetch-rdf": "^0.1.0",
+    "@jeswr/fetch-rdf": "workspace:*",
     "@jeswr/guarded-fetch": "workspace:*",
     "@jeswr/rdf-serialize": "workspace:*",
     "jsonld-streaming-serializer": "^4.0.0"
