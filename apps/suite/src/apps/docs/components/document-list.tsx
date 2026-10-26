@@ -133,6 +133,7 @@ export function DocumentList({ session }: { session: PodSession }) {
             <FileTypeIcon
               contentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
               size={48}
+              decorative
             />
             <h2>
               {query || filter === "starred"
@@ -175,6 +176,7 @@ export function DocumentList({ session }: { session: PodSession }) {
                       <FileTypeIcon
                         contentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                         size={24}
+                        decorative
                       />
                       <span>{entry.title || "Untitled document"}</span>
                       {starred.includes(entry.url) && <Star size={14} aria-label="Starred" />}

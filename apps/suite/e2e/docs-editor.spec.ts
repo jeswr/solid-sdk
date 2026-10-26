@@ -74,8 +74,8 @@ test("creates, saves, reloads and formats a document accessibly", async ({ page 
   await body.press("Enter");
   await body.press("Enter");
   await body.pressSequentially("/");
-  await page.getByRole("combobox", { name: "Filter blocks" }).fill("tab");
-  await page.getByRole("combobox", { name: "Filter blocks" }).press("Enter");
+  await page.getByRole("combobox", { name: "Insert a block" }).fill("tab");
+  await page.getByRole("combobox", { name: "Insert a block" }).press("Enter");
   await expect(body.locator("table")).toBeVisible();
   await expect(body.locator("table tr")).toHaveCount(3);
   await expect(body.locator("table th")).toHaveCount(3);
