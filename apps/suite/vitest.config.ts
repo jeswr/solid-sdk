@@ -1,8 +1,11 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { defineConfig } from "vitest/config";
 export default defineConfig({
   test: {
     environment: "node",
+    // Coverage on shared CI workers can vary even for bounded tests.
+    testTimeout: 15_000,
     include: ["test/**/*.test.ts"],
     coverage: {
       enabled: true,
