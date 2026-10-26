@@ -8,7 +8,7 @@ import { TermAs } from "@rdfjs/wrapper";
 import { classificationForType, classifySubject, hasProfileContactDetails } from "./classify";
 import { DiscoveryBudget, type DiscoveryBudgetOptions } from "./discovery-budget";
 import { type Classification, type DataCategory, DOMAINS, UNCATEGORISED } from "./domains";
-import { inStorage, primarySubject, subjectOf } from "./rdf";
+import { httpUrl, inStorage, primarySubject, subjectOf } from "./rdf";
 import type { DiscoveryFailure, RegisteredLocation } from "./type-index";
 
 export interface DomainItem extends Classification {
@@ -66,6 +66,11 @@ interface Visit {
   parent: string;
 }
 
+/** Normalize HTTP resource identities without rewriting RDF subject identifiers. */
+function resourceUrl(value: string): string {
+  return (httpUrl(value)?.href ?? value).split("#")[0] as string;
+}
+
 /**
  * Merge Type Index hits and suite containers, classify actual primary subjects, dedupe URLs.
  * Known folders may not exist (404); permission, network and parse failures are retained.
@@ -94,7 +99,7 @@ export async function discoverDomainItems(
 
   const addDataset = (dataset: DatasetCore, url: string, parent: string, etag: string | null) => {
     const node =
-      webId && url === webId.split("#")[0]
+      webId && url === resourceUrl(webId)
         ? subjectOf(dataset, webId)
         : primarySubject(dataset, url);
     if (!node) return;
@@ -154,7 +159,7 @@ export async function discoverDomainItems(
     parent: storage,
   });
   if (category.id === "personal" && webId) {
-    const documentUrl = webId.split("#")[0] as string;
+    const documentUrl = resourceUrl(webId);
     if (options.profile) {
       addDataset(options.profile, documentUrl, storage, null);
       seen.add(documentUrl);
@@ -164,10 +169,10 @@ export async function discoverDomainItems(
   for (let index = 0; index < queue.length; index++) {
     if (budget.truncated) break;
     const visit = queue[index] as Visit;
-    const url = visit.url.split("#")[0] as string;
+    const url = resourceUrl(visit.url);
     if (seen.has(url)) continue;
     seen.add(url);
-    if (!inStorage(url, storage)) {
+    if (!inStorage(visit.url, storage)) {
       result.failures.push({
         url,
         error: new TypeError("Location is outside the selected storage"),
@@ -206,7 +211,7 @@ export async function discoverDomainItems(
             // Binary files use the listing's metadata and are never parsed as RDF.
             const item: DomainItem = {
               ...classificationForType("files"),
-              url: childUrl,
+              url: resourceUrl(childUrl),
               subject: TermAs.term(child),
               dataset,
               etag,
@@ -221,8 +226,7 @@ export async function discoverDomainItems(
                 error: new TypeError("File is outside the selected storage"),
               });
           } else {
-            if (child.modified)
-              listedModified.set(childUrl.split("#")[0] as string, child.modified);
+            if (child.modified) listedModified.set(resourceUrl(childUrl), child.modified);
             queue.push({
               url: childUrl,
               container: false,

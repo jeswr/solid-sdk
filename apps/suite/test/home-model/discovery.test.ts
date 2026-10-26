@@ -13,6 +13,70 @@ import { provenanceOf } from "../../src/apps/home/lib/model/provenance";
 import { fixtureFetch, rdf, STORAGE, WEB_ID } from "./fixtures";
 
 describe("domain discovery", () => {
+  it.each([
+    "http",
+    "https",
+  ])("deduplicates equivalent %s resource URLs while preserving RDF subjects", async (scheme) => {
+    const storage = `${scheme}://pod.example/alice/`;
+    const container = `${storage}integrations/netflix/`;
+    const url = `${container}one.ttl`;
+    const alias = `${scheme}://POD.example:${scheme === "https" ? 443 : 80}/alice/integrations/netflix/one.ttl`;
+    const fetch = fixtureFetch({
+      [url]: `<${alias}#it> a schema:Movie ; schema:name "A film" .`,
+      [alias]: `<${alias}#it> a schema:Movie ; schema:name "A film" .`,
+      [`${storage}integrations/`]: "<> ldp:contains <netflix/> .",
+      [container]: `<> ldp:contains <one.ttl>, <${alias}#it> .
+        <${alias}#it> dct:modified "2026-02-01" .`,
+    });
+    const result = await discoverDomainItems("media", {
+      storage,
+      fetch,
+      typeIndex: [{ forClass: `${NS.SCHEMA}Movie`, instance: `${alias}#it` }],
+    });
+    expect(result.failures).toEqual([]);
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]).toMatchObject({
+      url,
+      containerUrl: container,
+      title: "A film",
+      subject: { value: `${alias}#it` },
+      modified: "2026-02-01",
+    });
+    expect(result.etags.has(url)).toBe(true);
+    expect(fetch.mock.calls.filter(([input]) => String(input) === url)).toHaveLength(1);
+    expect(fetch.mock.calls.some(([input]) => String(input).includes("POD.example"))).toBe(false);
+  });
+
+  it("rejects malformed resources and encoded path ambiguities before fetching normalized URLs", async () => {
+    const fetch = fixtureFetch({});
+    const result = await discoverDomainItems("media", {
+      storage: STORAGE,
+      fetch,
+      typeIndex: ["not a URL", `${STORAGE}integrations/%2e%2e/one.ttl`].map((instance) => ({
+        forClass: `${NS.SCHEMA}Movie`,
+        instance,
+      })),
+    });
+    expect(result.failures).toHaveLength(2);
+    expect(result.items).toEqual([]);
+    expect(fetch.mock.calls.some(([input]) => String(input).endsWith("one.ttl"))).toBe(false);
+    expect(fetch.mock.calls.some(([input]) => String(input) === "not a URL")).toBe(false);
+  });
+
+  it("deduplicates equivalent binary file URLs without changing listing subjects", async () => {
+    const url = `${STORAGE}drive/file.pdf`;
+    const alias = "https://POD.example:443/alice/drive/file.pdf#file";
+    const fetch = fixtureFetch({
+      [`${STORAGE}drive/`]: `<> ldp:contains <file.pdf>, <${alias}> .
+        <${alias}> schema:name "File" .`,
+    });
+    const result = await discoverDomainItems("documents", { storage: STORAGE, fetch });
+    expect(result.failures).toEqual([]);
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]).toMatchObject({ url, title: "File", subject: { value: alias } });
+    expect(fetch.mock.calls.some(([input]) => String(input).endsWith("file.pdf"))).toBe(false);
+  });
+
   it("retains the containing folder of direct instances after integration URL deduplication", async () => {
     const url = `${STORAGE}integrations/netflix/watched.ttl`;
     const containerUrl = `${STORAGE}integrations/netflix/`;
