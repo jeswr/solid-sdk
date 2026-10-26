@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { describe, expect, it } from "vitest";
 import { NS, node, parse, SCHEMA, Store, serialize } from "../../src/apps/tasks/lib/model/rdf";
 import {
@@ -96,6 +97,33 @@ describe("recurrence expansion", () => {
       expect(next.getTimezoneOffset()).not.toBe(start.getTimezoneOffset());
       expect(next.getTime() - start.getTime()).not.toBe((frequency === "DAILY" ? 1 : 7) * 86400000);
     }
+  });
+  it("bounds generated weekly dates, including partially supported weeks", () => {
+    const last = new Date(9999, 11, 31, 9);
+    const rule: RecurrenceRule = { frequency: "WEEKLY", byDay: ["Friday", "Sunday"] };
+    expect(expandRecurrence(rule, last, 10)).toEqual([last]);
+    expect(nextOccurrence(rule, last)).toBeUndefined();
+    expect(expandRecurrence({ frequency: "WEEKLY" }, last, 10)).toEqual([last]);
+    expect(nextOccurrence({ frequency: "WEEKLY" }, last)).toBeUndefined();
+    const overflow: RecurrenceRule = { frequency: "WEEKLY", interval: Number.MAX_SAFE_INTEGER };
+    expect(expandRecurrence(overflow, due, 10)).toEqual([due]);
+    expect(nextOccurrence(overflow, due)).toBeUndefined();
+    expect(
+      expandRecurrence(
+        { frequency: "WEEKLY", byDay: ["Monday", "Friday"], until: "2026-10-29" },
+        due,
+        10,
+      ),
+    ).toEqual([due]);
+  });
+  it.each([
+    ["DAILY", new Date(2026, 2, 28, 1, 30), new Date(2026, 2, 30, 1, 30)],
+    ["WEEKLY", new Date(2026, 2, 22, 1, 30), new Date(2026, 3, 5, 1, 30)],
+    ["MONTHLY", new Date(2026, 0, 29, 1, 30), new Date(2026, 3, 29, 1, 30)],
+    ["YEARLY", new Date(2025, 2, 29, 1, 30), new Date(2027, 2, 29, 1, 30)],
+  ] as const)("skips nonexistent local times for %s without consuming count", (frequency, start, next) => {
+    expect(expandRecurrence({ frequency, count: 2 }, start, 10)).toEqual([start, next]);
+    expect(nextOccurrence({ frequency }, start)).toEqual(next);
   });
 });
 describe("recurrence RDF and validation", () => {

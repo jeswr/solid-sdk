@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { TermFrom } from "@rdfjs/wrapper";
 import { aliases, type Node, NS, requireDate, SCHED, SCHEMA } from "./rdf";
 
@@ -100,7 +101,7 @@ function untilTime(until: Date | string | undefined): number {
   const [year, month, day] = until.split("-").map(Number) as [number, number, number];
   return new Date(year, month - 1, day, 23, 59, 59, 999).getTime();
 }
-/** Calendar arithmetic retains local wall time through DST, and skips invalid month days. */
+/** Calendar arithmetic skips invalid month days and nonexistent local wall times. */
 function* occurrences(rule: RecurrenceRule, due: Date): Generator<Date> {
   validateRule(rule);
   requireDate(due);
@@ -136,14 +137,20 @@ function* occurrences(rule: RecurrenceRule, due: Date): Generator<Date> {
       candidates = candidate.getMonth() === due.getMonth() ? [candidate] : [];
     }
     if (
-      !Number.isFinite(candidate.getTime()) ||
-      candidate.getFullYear() > 9999 ||
-      candidate.getTime() > limit + 7 * 86400000
+      !candidates.length &&
+      (!Number.isFinite(candidate.getTime()) ||
+        candidate.getFullYear() > 9999 ||
+        candidate.getTime() > limit)
     )
       return;
     for (const date of candidates) {
+      if (!Number.isFinite(date.getTime()) || date.getFullYear() > 9999 || date.getTime() > limit)
+        return;
       if (date < due) continue;
-      if (date.getTime() > limit || emitted >= (rule.count ?? Infinity)) return;
+      // Date setters normalize DST gaps forward; do not let that change later anchors.
+      if (date.getHours() * 60 + date.getMinutes() !== due.getHours() * 60 + due.getMinutes())
+        continue;
+      if (emitted >= (rule.count ?? Infinity)) return;
       emitted++;
       yield date;
     }
