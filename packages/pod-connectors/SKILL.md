@@ -31,7 +31,7 @@ CON-02 adds the shared incremental write pipeline, host-owned ConnectorState, PR
 recording and per-adapter vocab-map.ts hooks. Preserve ETags on automatic merges and never
 advance checkpoints on failure. The fixture recorder exposes only allowlisted non-personal JSON
 fields under configured public route prefixes; it never saves headers or dynamic URLs. Detailed
-adapter mappings and Node CLI remain owned by their follow-on connector tasks.
+adapter mappings remain owned by their follow-on connector tasks.
 
 CON-14 adds the optional `PodWriter.writeBinary`/`remove` ports and `ctx.writeBinary`/`ctx.remove`
 for non-RDF resources and source deletions. Keep binaries inside the connector container, never send RDF through it, default
@@ -60,7 +60,6 @@ batch's dataset after a write has cleared the import session's retained precondi
 Keep each message document available for retries until its cleanup succeeds;
 a missing document is a no-op. Reconcile all stored folders, including vanished labels, so
 interrupted relabeling cannot strand memberships. Preserve one run per connector container.
-adapter mappings remain owned by their follow-on connector tasks.
 
 CON-03 implements `./node` and the `pod-connectors` bin. Keep its imports separate from
 browser entry points. Read `src/node/config.ts` and the README's Node CLI section before
@@ -87,8 +86,6 @@ before accessing JSON. Keep ETags and create-only writes; a failed import retain
 successful cursor/counts/time, and failed state persistence must produce a nonzero exit.
 CLI tests use fixture source transports and a memory Pod; only callback tests open loopback
 sockets. Never include arbitrary server/exception text in CLI diagnostics.
-vocabulary (`http://schema.org/`, matching apps/suite's mail model) stay identical. Keep Message-ID
-document ids, write `.eml` create-only, and flush thread/folder membership once per run.
 
 Google Contacts (CON-05) writes the SolidOS vCard address book under `contacts/`, with
 `index.ttl#this`, `people.ttl`, and `Person/<pathId>/index.ttl#this`. Use its typed wrappers;
