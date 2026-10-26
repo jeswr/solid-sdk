@@ -30,40 +30,56 @@ const PN_CHARS = `${PN_CHARS_BASE}_\\-0-9\\u00B7\\u0300-\\u036F\\u203F\\u2040`;
 /** Turtle PN_PREFIX, exactly (empty allowed): PN_CHARS_BASE ((PN_CHARS | '.')* PN_CHARS)? */
 const PREFIX = new RegExp(`^(?:[${PN_CHARS_BASE}](?:[${PN_CHARS}.]*[${PN_CHARS}])?)?$`, "u");
 
+function stringField(value: unknown, field: string): string {
+  if (typeof value !== "string") throw new TypeError(`RDF term ${field} must be a string`);
+  return value;
+}
+
 /**
  * n3.Writer emits IRIs, blank-node labels and language tags verbatim, so a crafted value could
  * break out of `<…>` and forge triples. Percent-encode IRIREF-forbidden characters in every IRI
  * (@jeswr/rdf-serialize `escapeIri`; legitimate IRIs are unchanged), relabel unsafe blank nodes
- * consistently, and refuse malformed language tags.
+ * consistently, and refuse malformed language tags. Every term is rebuilt with n3's DataFactory
+ * from its termType/value/language/direction/datatype only: n3.Writer prints a foreign term's
+ * own `id`, which must never reach the output.
  */
 function injectionSafe(quads: readonly Quad[]): Quad[] {
   const { namedNode, blankNode, literal, quad, defaultGraph } = DataFactory;
   const labels = new Map<string, string>();
   const term = (value: Term): Term => {
+    const lexical = stringField(value.value, "value");
     switch (value.termType) {
       case "NamedNode":
-        return namedNode(escapeIri(value.value));
+        return namedNode(escapeIri(lexical));
       case "BlankNode": {
-        if (BLANK_LABEL.test(value.value)) return value;
-        let label = labels.get(value.value);
+        if (BLANK_LABEL.test(lexical)) return blankNode(lexical);
+        let label = labels.get(lexical);
         if (label === undefined) {
           label = `x${labels.size}_${crypto.randomUUID().replaceAll("-", "")}`;
-          labels.set(value.value, label);
+          labels.set(lexical, label);
         }
         return blankNode(label);
       }
-      case "Literal":
-        if (value.language) {
-          const direction = (value as { direction?: string | null }).direction;
-          if (!LANGUAGE.test(value.language)) {
-            throw new TypeError(`Invalid language tag: ${JSON.stringify(value.language)}`);
+      case "Literal": {
+        const language = stringField(value.language, "language");
+        const baseDirection = (value as { direction?: unknown }).direction;
+        // RDF/JS 1.1 literals have no direction field; some factories use null for none.
+        const direction = stringField(
+          baseDirection === undefined || baseDirection === null ? "" : baseDirection,
+          "direction",
+        );
+        const datatype = stringField(value.datatype?.value, "datatype.value");
+        if (language) {
+          if (!LANGUAGE.test(language)) {
+            throw new TypeError(`Invalid language tag: ${JSON.stringify(language)}`);
           }
           if (direction && direction !== "ltr" && direction !== "rtl") {
             throw new TypeError(`Invalid base direction: ${JSON.stringify(direction)}`);
           }
-          return value;
+          return literal(lexical, direction ? `${language}--${direction}` : language);
         }
-        return literal(value.value, namedNode(escapeIri(value.datatype.value)));
+        return literal(lexical, namedNode(escapeIri(datatype)));
+      }
       case "DefaultGraph":
         return defaultGraph();
       default:
