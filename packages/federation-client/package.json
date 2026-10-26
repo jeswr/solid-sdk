@@ -63,7 +63,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.0.0",
-    "@jeswr/fetch-rdf": "github:jeswr/fetch-rdf#main",
+    "@jeswr/fetch-rdf": "workspace:*",
     "@jeswr/guarded-fetch": "workspace:*",
     "@jeswr/rdf-serialize": "workspace:*",
     "@microsoft/api-extractor": "^7.58.9",

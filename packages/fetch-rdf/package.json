@@ -1,0 +1,73 @@
+{
+  "name": "@jeswr/fetch-rdf",
+  "version": "0.1.0",
+  "description": "Canonical fetch + parse helpers for Solid RDF resources. Parses Turtle / N-Triples / N-Quads via n3 and JSON-LD via jsonld-streaming-parser; dispatches on Content-Type. Replaces rdf-parse for Solid use cases.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "SKILL.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json",
+    "lint": "biome check src test *.json vitest.config.ts",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage"
+  },
+  "keywords": [
+    "solid",
+    "rdf",
+    "turtle",
+    "json-ld",
+    "fetch",
+    "parse",
+    "n3",
+    "content-type"
+  ],
+  "author": "Jesse Wright <jwrightwho@gmail.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jeswr/fetch-rdf.git"
+  },
+  "bugs": {
+    "url": "https://github.com/jeswr/fetch-rdf/issues"
+  },
+  "homepage": "https://github.com/jeswr/fetch-rdf#readme",
+  "dependencies": {
+    "@types/n3": "^1.16.0",
+    "content-type": "^1.0.5",
+    "jsonld-streaming-parser": "^5.0.0",
+    "n3": "^2.0.3",
+    "@rdfjs/types": "^2.0.1"
+  },
+  "devDependencies": {
+    "@types/content-type": "^1.1.8",
+    "@types/node": "^25.9.2",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.9",
+    "@biomejs/biome": "^2.5.1",
+    "@vitest/coverage-v8": "^4.1.9"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "$comment": "AUTHORED-BY Codex GPT-6.1-Sol",
+  "sideEffects": false,
+  "securityCritical": false,
+  "mirrorPublish": {
+    "inlined": []
+  }
+}

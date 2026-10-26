@@ -17,7 +17,7 @@
   "dependencies": {
     "@hookform/resolvers": "^5.4.0",
     "@jeswr/app-shell": "workspace:*",
-    "@jeswr/fetch-rdf": "^0.1.0",
+    "@jeswr/fetch-rdf": "workspace:*",
     "@jeswr/guarded-fetch": "workspace:*",
     "@jeswr/solid-odrl": "workspace:*",
     "@jeswr/solid-task-model": "workspace:*",
