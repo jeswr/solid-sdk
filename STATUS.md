@@ -1,58 +1,94 @@
-<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # sst-8xm.59 / T-071 lane status
 
 Date: 2026-10-26. Branch: `lane/sst-8xm.59`.
-Base: `2083a623794c08a70ec4cbfadd55cc1357e7fb6d`.
+Original base: `2083a623794c08a70ec4cbfadd55cc1357e7fb6d`.
+Resumed from `870dd1ad` after reading the original lane brief, ADR-001,
+ADR-007 (including the 2026-10-26 amendment), ADR-009, planning STATUS,
+and the package and repository guidance.
 
-Implementation stopped at the lane's explicit ADR ambiguity rule. Package code,
-manifests, and the lockfile are unchanged. The checks below validate the inherited
-T-070 implementation; they do not establish T-071 acceptance.
+T-071 is implemented. The answered QUESTIONS.md was deleted. No dependencies,
+package manifests, lockfiles, other packages, or other checkouts were changed.
+No push, PR, branch switch, or remote fetch/merge was performed.
 
 ## Commits
 
-- `73ca1a97` — `docs: record LocalIndex design questions`: adds numbered design
-  questions, alternatives, and ADR references in [QUESTIONS.md](QUESTIONS.md).
-- Final commit — `docs: record T-071 lane status`: adds this report.
+- `15d217b3` — `feat: implement LocalIndex queries snapshots and LRU`:
+  SELECT/ASK/CONSTRUCT and disposable SELECT cursor streams; RDF/JS bindings;
+  single-member platform gzip N-Quads snapshots; sniffed gzip/zstd restore;
+  graph listing, configurable 2,000,000-quad cap and graph LRU; ordered async
+  operations and persistence load/save; fake query injection and typed unsupported
+  errors; real/fake acceptance tests, 1,000-graph correctness, and lifetime tests.
+- `937d5953` — `feat: persist browser RDF indexes in IndexedDB`:
+  exported IndexedDB persistence adapter with database/key isolation; browser
+  indexes use it by default; transaction/error tests; updated README and skill.
+- Final commit — `docs: record T-071 completion and validation`: this status report.
+
+The earlier design-question/status commits (`73ca1a97`, `870dd1ad`) remain in
+history. New commits name the actual authoring model, Codex GPT-6, in provenance
+markers and trailers.
 
 ## Gate results
 
-Executed before the final commit, all with exit status 0:
+All required checks passed before the final commit (exit status 0):
 
 ```sh
 pnpm --filter @jeswr/rdf-engine run lint && pnpm --filter @jeswr/rdf-engine run build && pnpm --filter @jeswr/rdf-engine run typecheck && pnpm --filter @jeswr/rdf-engine run test
+pnpm exec turbo run build typecheck test --filter=...@jeswr/rdf-engine
 pnpm run lint:root
 git diff --check
 ```
 
-- Package lint: 20 files checked, no fixes.
-- Build and typecheck: passed.
-- Tests: 6 files, 72 tests passed. Coverage: statements 99.54%, branches 98.01%,
-  functions 100%, lines 99.49%; all configured 90% thresholds passed.
-- Root lint and all its guards: passed; contrast check 74 pairs, zero failures.
-- Dependant build/typecheck/test: not applicable; no package changed.
-- Whole-workspace and `gate:full` commands were not run, as instructed.
-- Roborev: executable unavailable (`command -v roborev` found no executable);
-  no review verdict could be obtained. No review tooling was installed.
+- Package lint: 27 files, no fixes. Build and typecheck passed.
+- Tests: 9 files, 100 tests passed. Configured 90% thresholds passed:
+  statements 99.78%, branches 98.06%, functions 99.33%, lines 99.75%.
+- Tests include shared fake/real graph lifecycle, snapshot round-trip, LRU/cap,
+  persistence ordering/failures, disposal during loading, and invalid inputs.
+  Real-only tests cover 1,000-graph SELECT/ASK/CONSTRUCT/streams, zstd (including
+  skippable frames), SparqStore.fromCompressed compatibility, blank nodes,
+  actual WASM eviction/removal, cursor exits/errors and store release.
+- Dependant gate: 3 successful Turbo tasks. Only rdf-engine was in scope;
+  no current workspace manifest depends on it.
+- Root lint and every guard passed: 83 manifests scanned by the SDK layer guard;
+  contrast check 74 pairs, zero failures.
+- Whole-workspace gates and gate:full were not run, as the lane brief instructs.
 
-## Dependency policy
+Additional browser acceptance passed with the installed Chromium/Playwright and
+esbuild, using a temporary harness and bundle outside the checkout:
 
-`check:packages`: not run; no dependency was added or proposed for installation.
-Any newly authorized encoder/evaluator dependency must pass policy before use.
+```sh
+node /tmp/sst-8xm.59-browser-check.mjs
+```
 
-## Unfinished and open questions
+It bundles the browser entry, serves the installed WASM locally, and exercises
+real browser SELECT/streaming, single-member gzip N-Quads, default IndexedDB
+persistence across page reloads, independent database/key isolation, and
+persisted removal. No dependencies or browser tooling were installed.
 
-All T-071 implementation and acceptance work remains: SPARQL methods and streams,
-compressed snapshots and restore, browser IndexedDB persistence, the configurable
-2M-quad cap and LRU eviction, and their acceptance tests. T-070 already supplies
-the graph lifecycle and owned-store disposal foundation.
+## Conservative interpretations and operational limits
 
-[QUESTIONS.md](QUESTIONS.md) records the decisions needed to proceed:
+- LRU refreshes on put and successful has; queries/list leave recency unchanged.
+  A single graph exceeding maxQuads rejects before mutation. Restore applies
+  the cap in graph order.
+- SELECT streams are single-use async iterators with dispose(). Sparq 0.1.5
+  materializes results in WASM; JavaScript conversion pulls 256-row batches.
+- N-Quads cannot represent empty graphs, so snapshots omit them; other graph
+  contents and RDF term links survive. Separate recency metadata is not encoded.
+- A save failure rejects the mutation promise but retains updated in-memory
+  data, permitting a later save. Independent browser indexes should use separate
+  database/key settings; the default key represents one logical index.
+- The fake has no SPARQL evaluator or zstd decoder. It throws
+  FakeEngineUnsupportedError unless query handlers are supplied; gzip lifecycle
+  and persistence use the shared implementation.
 
-1. Choose the browser-compatible zstd encoding approach, or amend the codec
-   requirement. The pinned Sparq release exports decompression but no encoder.
-2. Define the WASM-free fake's SPARQL and snapshot contract while retaining the
-   ADR amendment's tiny, no-additional-dependency constraint.
+## Dependency policy, review, unfinished work and questions
 
-No pushes, PRs, branch switches, remote fetches/merges, or edits to other
-checkouts were performed.
+check:packages was not run: no dependency was added or proposed. The pinned
+Sparq version, lockfile, coverage thresholds and installed-WASM budget remain
+unchanged. No dist artifacts were committed.
+
+Roborev remains unavailable (`command -v roborev` found no executable), so no
+per-commit review verdict could be obtained. No review tooling was installed.
+This is the only external review limitation; no implementation or required
+validation is unfinished or blocked. Open design questions: none.
