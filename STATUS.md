@@ -148,3 +148,51 @@ builds. No dependency, UI, tracker, branch, push, PR, or strategy changes.
 Screenshots and dependency-policy checks: not applicable. The requested finding
 is fixed; the unrelated full-gate failures and unavailable review remain.
 No new open questions or conservative design interpretations were needed.
+
+## Fix round 2 — Interop mirror dependency
+
+- `12c39a35` — `fix(interop): inline vocabulary for mirror publishing`: bundle
+  the private `@jeswr/suite-vocab` dependency with esbuild and declare it in
+  `mirrorPublish.inlined`. Keep other published dependencies external and retain
+  module paths, browser-safe root imports, and the Node-only shape entry. Emit
+  declarations with tsc. Add three regressions for manifest rewriting without a
+  suite-vocab SHA, JavaScript/declarations without suite-vocab imports, and built
+  legacy vocabulary conversion plus shape-file access.
+- Final `docs:` commit — record this fix round's validation.
+
+Commands ran from this checkout:
+
+```sh
+pnpm run check:packages esbuild
+pnpm install --ignore-scripts --offline
+export PATH="$PWD/node_modules/.bin:$PATH"
+pnpm exec turbo run build --filter=@jeswr/solid-chat-interop^...
+pnpm --filter @jeswr/solid-chat-interop run lint && pnpm --filter @jeswr/solid-chat-interop run build && pnpm --filter @jeswr/solid-chat-interop run typecheck && pnpm --filter @jeswr/solid-chat-interop run test
+GIT_ALLOW_PROTOCOL=file TURBO_SCM_BASE=a691897ba23ace4297dfa7a85bf32dfdb338498c pnpm run gate --env-mode=loose
+GIT_ALLOW_PROTOCOL=file pnpm run gate:full --env-mode=loose
+```
+
+- Dependency policy: **PASS**, esbuild cleared. Add only its build-time dependency
+  at the existing workspace version, `0.28.1`. Offline install passed with
+  lifecycle scripts disabled; discard unrelated pnpm peer snapshot rewrites.
+- Dependency builds: **PASS**, 3/3 tasks.
+- Interop lint, build, typecheck, and tests: **PASS**, 92 tests in 8 files.
+  Initial lint found formatting in the new files; format them and rerun the full
+  package sequence successfully.
+- Affected gate, including root lint and dependent package checks: **PASS**,
+  23/23 tasks.
+- Full gate: **BLOCKED / exit 1**, 9 successful tasks of 63 scheduled before
+  failure in untouched `@jeswr/unstorage-solid#build`. Its installed fetch-rdf
+  dependency lacks dist, and its existing build fallback invokes a remote clone.
+  Git rejected that clone with `fatal: transport 'https' not allowed`, before
+  network access. `--env-mode=loose` ensures the protocol restriction reaches
+  Turbo subprocesses. No remote source was fetched, and no unrelated source or
+  prerequisite was changed to bypass this failure.
+- `roborev` is unavailable (`command -v roborev` finds no executable), so no
+  automated per-commit review is claimed.
+
+The requested publishing finding is fixed. Conservatively use the review's
+bundling option and leave suite-vocab private. No new open questions. No UI,
+screenshots, tracker changes, pushes, PRs, branch switches, merges, or dist
+commits. Remaining limitations are the unrelated full-gate prerequisite and
+unavailable automated review described above.
