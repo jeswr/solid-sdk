@@ -5,6 +5,9 @@
 Date: 2026-10-26. Branch: `lane/sst-8xm.60`.
 Original base: `302faf455f37e31ba6855975ad8dc34eb7ad06d0`.
 
+The latest fix-round-2 report is appended below. The original implementation
+report and its environment notes remain as historical context.
+
 Implemented T-072 using ADR-007's Amendment 2026-10-26 (2). Deleted the answered
 QUESTIONS.md. solid-odrl remains authoritative; no WASM policy adapter is enabled.
 No changes were made to fetch-rdf's default parser or to T-071's LocalIndex scope.
@@ -123,3 +126,70 @@ and its dataset projection/evaluator, not fetch-rdf parsing.
 All requested T-072 implementation is complete. No pushes, PRs, branch switches,
 network git fetches/merges, or writes to other checkouts were performed. Only this
 checkout and temporary command logs under /tmp were written.
+
+## Fix round 2 — review 8cc4d0b816bb
+
+Read the complete review in
+`solid-sdk-lane-sst-8xm.60-8cc4d0b816bb.md` and both preceding lane briefs.
+Only its two findings are changed in this round.
+
+### Commits
+
+- `b2095717 fix(rdf-engine): reject graph scopes and trace ID collisions`:
+  reject non-default-graph data or shapes before allocating a form store, using
+  exported `FormGraphUnsupportedError` with an `input` property. Reserve named
+  nodes throughout the supplied policy dataset, including graph names and literal
+  datatype IRIs; reject generated anonymous rule/duty IDs that collide, using
+  exported `PolicyIdentifierCollisionError` with an `identifier` property. Check
+  malformed-policy collisions before returning for an unknown request action.
+  Document both contracts and export the errors from all package entry points.
+  Add 46 regression cases across the real and fake policy delegates and real
+  form derivation. Existing default-graph form and collision-free trace tests pass.
+- `docs: record sst-8xm.60 round-two validation` (this final commit): update only
+  STATUS.md with this round's changes, validation and limitations.
+
+### Validation
+
+Node v24.22.1; pnpm 10.4.1; dependency lifecycle scripts remained disabled.
+
+| Exact command | Result |
+| --- | --- |
+| `pnpm exec turbo run lint build typecheck test --filter ...@jeswr/rdf-engine --concurrency=4` | PASS after restoring the prior ignored dependency-artifact workaround: 7 tasks successful, including dependency-first builds and root lint |
+| `pnpm run lint:root` | PASS: all guards, including 74 contrast pairs |
+| `git diff --check` | PASS |
+
+The package suite passed **169 tests in 8 files**. Coverage: statements **99.01%**,
+branches **97.45%**, functions **100%**, lines **99.62%**. The dependant selector
+currently includes only rdf-engine; its build also builds solid-odrl and
+rdf-serialize. No whole-workspace gate ran, per the lane brief.
+
+Form regressions cover data and shapes, IRI and blank-node graph names, wholly
+named and mixed scopes, rejection before native store allocation/derivation, and
+input preservation. Policy regressions cover permissions, prohibitions, rule
+duties and policy obligations, both reference orders, matching/nonmatching/unknown
+actions, every quad position and literal datatype IRIs, input preservation, and
+literal strings that resemble generated IDs without being named nodes.
+
+### Environment limitations and handoff
+
+Initial scoped gate attempts failed in solid-odrl's existing build-deps script:
+its missing git-pinned fetch-rdf dist triggered network git clones into temporary
+directories, followed by an npm install failure against the read-only npm cache.
+This script behavior was missed before invoking the gate; it violated the lane's
+network restriction. Its finally block removed the temporary source clones.
+Subsequent validation restored the prior round's ignored workaround: copy the
+already installed npm fetch-rdf 0.1.0 dist into the missing git-pinned dependency
+location and link the installed @rdfjs/dataset 2.0.3 into solid-odrl/node_modules.
+All workaround writes are inside this checkout's ignored node_modules; no tracked
+dependency or lockfile changed, no dependency was added, and check:packages was
+not needed. The final gate needed no network git operation. Reproducing the exact
+git-pinned fetch-rdf artifact remains the pre-existing environment limitation.
+
+`roborev` is still unavailable on PATH; no automated per-commit review could run.
+No tools or hooks were installed. The supplied review findings are addressed and
+the final diff was inspected. No pushes, PRs, branch switches or changes to other
+checkouts were made.
+
+No implementation work is unfinished or blocked. No open design questions remain.
+The conservative interpretation of "any named node" includes graph names and
+literal datatype IRIs; malformed-policy errors also apply to unmatched requests.
