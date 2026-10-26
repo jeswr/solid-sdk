@@ -229,6 +229,12 @@ export function bindingStateFromSetup(status: string): BindingState {
   if (["none", "not_applicable"].includes(status)) return "none";
   return "setup-required";
 }
+/** Keep complete handle/URI tokens; strip prose punctuation at the end of a mention. */
+function noteIdentifiers(note: string): string[] {
+  return (note.normalize("NFC").match(/[\p{L}\p{M}\p{N}._@%+:/#=~!$&'*?^`{|}-]+/gu) ?? []).map(
+    (handle) => handle.replace(/[.:]+$/u, "").replace(/^(['`])(.*)\1$/u, "$2"),
+  );
+}
 /** Build privacy-safe settings, applying only the documented ODI correction and Telegram addition. */
 export function inventorySettings(snapshot: RegistrySnapshot, salt: Uint8Array): Settings {
   const accounts = [...snapshot.accounts];
@@ -242,14 +248,16 @@ export function inventorySettings(snapshot: RegistrySnapshot, salt: Uint8Array):
       refs: [],
       setupStatus: "not_configured",
     });
+  const notes = snapshot.notes.map((note) => ({ note, identifiers: noteIdentifiers(note) }));
   const identities = [
     ...accounts.flatMap((a) => a.handles.map((handle) => ({ handle, channel: a.channel }))),
     ...snapshot.evidence.map((e) => ({ handle: e.identifier, channel: e.channel })),
-    ...snapshot.notes.flatMap((note) =>
-      (note.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g) ?? []).map((handle) => ({
-        handle,
-        channel: "email",
-      })),
+    ...notes.flatMap(({ identifiers }) =>
+      identifiers
+        .filter((handle) =>
+          /^[\p{L}\p{M}\p{N}.!#$%&'*+/=?^_`{|}~-]+@[\p{L}\p{N}.-]+\.[\p{L}]{2,}$/u.test(handle),
+        )
+        .map((handle) => ({ handle, channel: "email" })),
     ),
   ].map(({ handle, channel }) => ({ handle: normaliseHandle(handle, channel), channel }));
   // Redaction deliberately checks case-insensitively, independently of identity matching.
@@ -279,10 +287,10 @@ export function inventorySettings(snapshot: RegistrySnapshot, salt: Uint8Array):
         a.channel === "email" && /^(odi|open[ _-]data[ _-]institute)$/i.test(a.organisation)
           ? "google_workspace"
           : a.provider;
-      for (const note of snapshot.notes) {
+      for (const { note, identifiers } of notes) {
         if (!/versus|contradict|conflict/i.test(note)) continue;
         const mentioned = identities.filter(({ handle, channel }) =>
-          normaliseHandle(note, channel).includes(handle),
+          identifiers.some((identifier) => normaliseHandle(identifier, channel) === handle),
         );
         if (
           mentioned.some(

@@ -43,8 +43,10 @@ Keep the salt stable across imports. Raw handles stay in the daemon's private in
 
 The importer corrects ODI email accounts to `google_workspace` (Teams stays Microsoft),
 preserves explicit identity/provider conflicts, and adds a Telegram bot control account
-when no Telegram account exists. Personal Telegram/MTProto remains deferred. Registry
-`connected` claims map to `setup-required`; errors and disabled states remain visible.
+when no Telegram account exists. Personal Telegram/MTProto remains deferred. Conflict
+notes match complete identifiers with the channel's normalization rules; an
+identifier that only contains another account's handle does not mark that account conflicted.
+Registry `connected` claims map to `setup-required`; errors and disabled states remain visible.
 Read, triage, draft and send restrictions start false. A changed import resets restrictions
 to false; unchanged resources retain their existing representation. Removed registry rows
 are not deleted automatically.

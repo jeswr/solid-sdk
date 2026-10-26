@@ -152,6 +152,78 @@ describe("privacy and settings model", () => {
     expect(s.unmatchedEvidence).toMatchObject([{ handleHash: hashHandle(other, salt, channel) }]);
   });
   it.each([
+    ["email", "alice@example.com", "malice@example.com", "MALICE@example.com"],
+    ["email", "alice@example.com", "alice@example.com.example", "ALICE@example.com.example"],
+    ["email", "alice@example.com", "alice+tag@example.com", "ALICE+TAG@example.com"],
+    ["email", "alice@example.com", "o'alice@example.com", "O'ALICE@example.com"],
+    [
+      "matrix",
+      "@fixture:matrix.example",
+      "@fixture:matrix.example.org",
+      "@fixture:matrix.example.org",
+    ],
+    [
+      "matrix_bot",
+      "@fixture:matrix.example",
+      "@fixture:matrix.example.org",
+      "@fixture:matrix.example.org",
+    ],
+    ["github_notifications", "fixture", "prefixture", "PREFIXTURE"],
+  ])("matches complete %s identities rather than substrings of %s", (channel, own, other, mention) => {
+    const snap = parseSnapshot({
+      version: 1,
+      accounts: [own, other].map((handle, index) => ({
+        id: `account-${index}`,
+        channel,
+        provider: "fixture_provider",
+        organization: "personal",
+        identifiers: { primary: handle },
+        connector: { target: "fixture", setup_status: "planned" },
+      })),
+      notes: [`Identity conflict: <${mention}> versus alternate@example.org.`],
+    });
+    const s = inventorySettings(snap, salt);
+    expect(s.connections[0]).toMatchObject({
+      bindingState: "setup-required",
+      identityConflicts: [],
+    });
+    expect(s.connections[1]).toMatchObject({
+      bindingState: "error",
+      identityConflicts: [
+        {
+          kind: "identity-mismatch",
+          handleHashes: [
+            hashHandle(other, salt, channel),
+            hashHandle("alternate@example.org", salt, "email"),
+          ].sort(),
+        },
+      ],
+    });
+    expect(JSON.stringify(s)).not.toContain(mention);
+  });
+  it.each([
+    '"',
+    "'",
+    "`",
+  ])("normalises complete Unicode email identifiers quoted with %s", (quote) => {
+    const snap = parseRegistryYaml(fixture);
+    const first = snap.accounts[0];
+    if (!first) throw new Error("Fixture account absent");
+    first.handles = ["café@example.com"];
+    snap.notes = [
+      `Identity conflict: ${quote}CAFE\u0301@example.com${quote}, versus (alternate@example.org).`,
+    ];
+    expect(inventorySettings(snap, salt).connections[0]?.identityConflicts).toEqual([
+      {
+        kind: "identity-mismatch",
+        handleHashes: [
+          hashHandle("café@example.com", salt, "email"),
+          hashHandle("alternate@example.org", salt, "email"),
+        ].sort(),
+      },
+    ]);
+  });
+  it.each([
     "matrix",
     "matrix_bot",
   ])("rejects encoded %s references regardless of case", (channel) => {

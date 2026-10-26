@@ -124,6 +124,39 @@ describe("synthetic registry import", () => {
     expect(output).toContain("op://test-vault/account-01/credential");
     expect(output).not.toContain("test-token-0123456789");
   });
+  it("writes conflict RDF only for complete email identities", async () => {
+    const ports = harness(
+      stringify({
+        version: 1,
+        accounts: ["alice@example.com", "malice@example.com"].map((handle, index) => ({
+          id: `account-${index}`,
+          channel: "email",
+          provider: "google",
+          organization: "personal",
+          identifiers: { primary: handle },
+          connector: { target: "gmail", setup_status: "planned" },
+        })),
+        notes: ["Identity conflict: MALICE@example.com versus alternate@example.org."],
+      }),
+    );
+    const report = await importRegistry(config, ports);
+    const [alice, malice] = report.settings.connections;
+    if (!alice || !malice) throw new Error("Fixture account absent");
+    expect(alice.bindingState).toBe("setup-required");
+    expect(malice.bindingState).toBe("error");
+    for (const [account, expected] of [
+      [alice, []],
+      [malice, malice.identityConflicts],
+    ] as const) {
+      const url = `${config.storageRoot}agent/accounts/${account.id}.ttl`;
+      expect(
+        ports.storage.resources
+          .get(url)
+          ?.dataset.getObjects(term(url), term(`${AGENT}identityConflict`), null)
+          .map((v) => JSON.parse(v.value)),
+      ).toEqual(expected);
+    }
+  });
   it("re-imports without duplicate resources or redundant content writes", async () => {
     const ports = harness();
     await importRegistry(config, ports);
