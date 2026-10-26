@@ -166,11 +166,23 @@ export class ChatWriter {
     // Existing documents must be recognizable WAC, never ACP or another model.
     try {
       const existing = await this.dataset(acl);
-      if (
-        existing.size > 0 &&
-        [...new AclResource(existing, DataFactory).authorizations].length === 0
-      )
+      const authorizations = [...new AclResource(existing, DataFactory).authorizations];
+      if (existing.size > 0 && authorizations.length === 0)
         throw new Error("Unsupported chat access-control model");
+      // Replacing a shared ACL would remove grants for other resources. Inspect
+      // every scope value: Authorization's optional getters are single-valued.
+      for (const authorization of authorizations) {
+        for (const predicate of ["accessTo", "default"]) {
+          const targets = SetFrom.subjectPredicate(
+            authorization,
+            `http://www.w3.org/ns/auth/acl#${predicate}`,
+            NamedNodeAs.string,
+            NamedNodeFrom.string,
+          );
+          if ([...targets].some((target) => target !== url))
+            throw new Error("Shared chat ACL documents cannot be replaced");
+        }
+      }
     } catch (error) {
       if (chatPortStatus(error) !== 404) throw error;
     }

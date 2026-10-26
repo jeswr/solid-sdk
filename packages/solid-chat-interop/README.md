@@ -80,7 +80,9 @@ ACL-before-content sequence and advertise the ACL association even before resour
 creation. The port's `discoverAcl` must obtain a unique WAC `rel="acl"` Link from
 the exact target and reject unsupported models and unsafe targets. The association
 is checked again after each create attempt; existing non-WAC ACL documents abort the
-save. The caller's port must enforce pod scope, refuse write redirects, and reject
+save. Shared ACL documents with `acl:accessTo` or `acl:default` grants for other
+resources are rejected before replacing the ACL or writing the target resource.
+The caller's port must enforce pod scope, refuse write redirects, and reject
 HTTP failures with a numeric `status` property. There is no permissive ACL fallback.
 
 Messages are canonical AS2 `as:Note` resources (`m-<id>.ttl#it`) with Dublin Core

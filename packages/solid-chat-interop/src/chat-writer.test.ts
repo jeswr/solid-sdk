@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { parseRdf } from "@jeswr/fetch-rdf";
+import { NamedNodeAs, NamedNodeFrom, SetFrom } from "@rdfjs/wrapper";
 import { AclResource, Authorization } from "@solid/object";
 import { DataFactory, Store } from "n3";
 import { describe, expect, it } from "vitest";
@@ -161,6 +162,60 @@ describe("ChatWriter", () => {
   });
 
   describe.each([false, true])("content ACLs with existing resource = %s", (existing) => {
+    it.each(
+      ["", ...CONTENT_FILES].flatMap((file) =>
+        (["accessTo", "default"] as const).flatMap((predicate) =>
+          [false, true].map((sharedAuthorization) => ({ file, predicate, sharedAuthorization })),
+        ),
+      ),
+    )("rejects shared ACLs for '$file' ($predicate, shared authorization = $sharedAuthorization)", async ({
+      file,
+      predicate,
+      sharedAuthorization,
+    }) => {
+      const pod = new MemoryPod();
+      const writer = new ChatWriter(pod);
+      if (existing) await writer.save(conversation());
+      const resource = `${ROOT}private/chats/claude/thread-1/${file}`;
+      const original = pod.resources.get(resource);
+      const acl = `${ROOT}permissions/shared.ttl`;
+      pod.aclLinks.set(resource, acl);
+      const unrelated = `${ROOT}other/`;
+      pod.aclLinks.set(unrelated, acl);
+      const store = new Store();
+      const targetAuth = new Authorization(`${acl}#target`, store, DataFactory);
+      targetAuth.type.add("http://www.w3.org/ns/auth/acl#Authorization");
+      targetAuth.accessTo = resource;
+      targetAuth.agentClass.add("http://xmlns.com/foaf/0.1/Agent");
+      targetAuth.canRead = true;
+      const unrelatedAuth = sharedAuthorization
+        ? targetAuth
+        : new Authorization(`${acl}#unrelated`, store, DataFactory);
+      unrelatedAuth.type.add("http://www.w3.org/ns/auth/acl#Authorization");
+      unrelatedAuth.agent.add(OWNER);
+      unrelatedAuth.canRead = true;
+      const targets = SetFrom.subjectPredicate(
+        unrelatedAuth,
+        `http://www.w3.org/ns/auth/acl#${predicate}`,
+        NamedNodeAs.string,
+        NamedNodeFrom.string,
+      );
+      if (sharedAuthorization) targets.add(resource);
+      targets.add(unrelated);
+      const originalAcl = {
+        body: new TextEncoder().encode(await storeToTurtle(store)),
+        contentType: "text/turtle",
+      };
+      pod.resources.set(acl, originalAcl);
+      pod.writes = [];
+
+      await expect(writer.save(conversation())).rejects.toThrow(/shared chat ACL/i);
+      expect(pod.resources.get(acl)).toBe(originalAcl);
+      expect(pod.resources.get(resource)).toBe(original);
+      expect(pod.writes.some((write) => write.url === acl || write.url === resource)).toBe(false);
+      expect(pod.writes.some((write) => write.url.endsWith("m-msg-2.ttl"))).toBe(false);
+    });
+
     it.each(
       CONTENT_FILES,
     )("replaces public grants before creating or skipping %s", async (file) => {
