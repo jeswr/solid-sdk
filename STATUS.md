@@ -59,3 +59,41 @@ See `QUESTIONS.md` for the spec's undefined Markdown/mention syntax, ASCII URL d
 grouping policy. Conservative defaults: literal unsupported syntax, caller-supplied mention
 resolution, HTTP(S) only, five-minute inclusive consecutive-message gap with UTC day boundaries.
 These do not block the library; the consuming CHT-02 UI can confirm product defaults.
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+## Fix round 1 — review of `96b655287638`
+
+All three review findings are addressed by `035ae5c9`
+(`fix: bound chat parsing and close emphasis correctly`):
+
+- Share a scan budget of 32 times the inline source length across delimiter searches,
+  token scans and recursive parsing. Conservative fallback: preserve the entire inline
+  source as literal text when the budget is exhausted. URL suffix trimming counts each
+  bracket type once and walks the suffix once, avoiding repeated whole-candidate scans.
+- Resolve closing runs against active delimiters before searching for new nesting, so
+  triple-delimited content cannot consume later formatting spans.
+- Preserve intraword underscore runs when matching emphasis endings, including exact
+  caller-provided identity resolution for formatted `@mira_sage` handles.
+
+Regression tests cover both delimiter families, single/double emphasis, intraword runs,
+formatted handles, malformed mention scans, shared recursive-budget exhaustion, long
+ordinary formatted input and long unmatched URL bracket/punctuation suffixes.
+
+Validation before the final report commit:
+
+| Command | Result |
+| --- | --- |
+| `pnpm --filter @jeswr/suite-ui run build` | PASS; existing app dependency. |
+| `pnpm --filter @jeswr/app-suite run lint && pnpm --filter @jeswr/app-suite run build && pnpm --filter @jeswr/app-suite run typecheck && pnpm --filter @jeswr/app-suite run test` | PASS; 57 tests (56 chat + 1 existing). |
+| `pnpm run lint:root` | PASS; all root guards and 74 contrast pairs. |
+| `TURBO_SCM_BASE=96b6552876384abb5024422c5d83723f212548dc pnpm run gate` | PASS; 6/6 tasks. |
+| `pnpm run gate:full` | BLOCKED outside this lane: `@jeswr/unstorage-solid#build` bootstrap fails with npm `EROFS` writing `/home/runner/.npm/_cacache/tmp/`; 6 successful / 49 scheduled tasks before abort. |
+| `git diff --check` | PASS. |
+
+Text-library coverage remains 100% per file for statements, branches, functions and lines:
+206/206 statements, 153/153 branches, 9/9 functions and 193/193 lines.
+No dependencies were added; no UI or screenshots apply. `roborev` remains unavailable,
+so automated per-commit review could not run. No implementation work or new open
+questions remain for these findings. Full-workspace validation and dispatcher review
+remain subject to the environment/tool limitations above.
