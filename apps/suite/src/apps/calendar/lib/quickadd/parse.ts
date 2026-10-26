@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { instantToWallClock, wallClockToInstant } from "../tz/conversion";
 import { type CalendarTimeError, wallEpoch } from "../tz/validation";
 import { readClauses } from "./clauses";
@@ -26,6 +27,22 @@ function instant(date: string, time: string, tz: string, input: string): number 
   }
 }
 
+function occurrenceIsPast(
+  wallTime: string,
+  context: EventQuickAddContext,
+  nowWallTime: string,
+): boolean {
+  try {
+    // An overlap is wholly past only after its later instant has passed. The
+    // selected occurrence still goes through strict conversion below.
+    return wallClockToInstant(wallTime, context.tz, "later") < context.now.getTime();
+  } catch (error) {
+    // A gap has no instant; skip it only once its local wall time is past.
+    // Other errors are left for strict conversion to report.
+    return (error as CalendarTimeError).code === "nonexistent-time" && wallTime < nowWallTime;
+  }
+}
+
 /** Bounded English scheduling grammar; throws EventQuickAddError on any uncertainty. */
 export function parseEventQuickAdd(input: string, context: EventQuickAddContext): EventDraft {
   if (typeof input !== "string") reject("invalid-input", "");
@@ -33,13 +50,14 @@ export function parseEventQuickAdd(input: string, context: EventQuickAddContext)
   if (!context || !(context.now instanceof Date) || !Number.isFinite(context.now.getTime())) {
     reject("invalid-context", input);
   }
-  let today: string;
+  let nowWallTime: string;
   const now = Math.floor(context.now.getTime() / 1000) * 1000;
   try {
-    today = instantToWallClock(now, context.tz).wallTime.slice(0, 10);
+    nowWallTime = instantToWallClock(now, context.tz).wallTime;
   } catch {
     reject("invalid-context", input);
   }
+  const today = nowWallTime.slice(0, 10);
   const clauses = readClauses(input);
   const { time, endTime, duration, rrule } = clauses;
   if ((clauses.allDay && time) || (endTime && (!time || duration))) {
@@ -65,7 +83,7 @@ export function parseEventQuickAdd(input: string, context: EventQuickAddContext)
   if (!clauses.date) {
     // At most a week: supported rules are daily or weekly with one or more days.
     while (!matchesDay(date)) date = addDays(date, 1, input);
-    if (time && instant(date, time, context.tz, input) < context.now.getTime()) {
+    if (time && occurrenceIsPast(`${date}T${time}`, context, nowWallTime)) {
       date = addDays(date, 1, input);
       while (!matchesDay(date)) date = addDays(date, 1, input);
     }

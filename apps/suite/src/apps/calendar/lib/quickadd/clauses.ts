@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { normalise, reject } from "./types";
 
 export interface Token {
@@ -25,6 +26,26 @@ const cue =
   /^(?:today|tomorrow|yesterday|tonight|morning|afternoon|evening|about|around|roughly|approximately|on|at|from|to|until|for|all-day|all|every|daily|weekly|monthly|yearly|next|this|in|after|before|except|not|maybe|or|and|through|during|mon(?:day)?|tue(?:sday)?|wed(?:nesday)?|thu(?:rsday)?|fri(?:day)?|sat(?:urday)?|sun(?:day)?|[+-]?\d.*|noon|midnight)$/i;
 const weekdays = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
 
+function startsScheduling(tokens: Token[], index: number): boolean {
+  const token = tokens[index] as Token;
+  if (!cue.test(token.text)) return false;
+  // These words also occur in ordinary titles. Only treat them as scheduling
+  // prefixes when followed by a temporal construct (including unsupported ones).
+  if (
+    /^(?:about|around|roughly|approximately|on|from|to|until|for|all|every|next|this|in|after|before|except|not|maybe|or|and|through|during)$/i.test(
+      token.text,
+    )
+  ) {
+    const next = tokens[index + 1];
+    return (
+      next !== undefined &&
+      (/^(?:days?|weeks?|weekdays?|months?|years?)$/i.test(next.text) ||
+        startsScheduling(tokens, index + 1))
+    );
+  }
+  return true;
+}
+
 function clock(token: Token, input: string): string {
   const text = token.text.toLowerCase();
   if (text === "noon") return "12:00:00";
@@ -49,7 +70,7 @@ export function readClauses(input: string): Clauses {
     start: match.index,
     end: match.index + match[0].length,
   }));
-  const first = tokens.findIndex((token) => cue.test(token.text));
+  const first = tokens.findIndex((_, index) => startsScheduling(tokens, index));
   if (first < 0) reject("missing-date", input);
   const result: Clauses = { title: normalise(input.slice(0, (tokens[first] as Token).start)) };
   if (!result.title) reject("missing-title", input);
@@ -112,7 +133,12 @@ export function readClauses(input: string): Clauses {
           : /^(?:day|days)$/.test(unitText)
             ? 1440
             : 0;
-      const minutes = Number(amount.text) * multiplier;
+      const scale = BigInt(10) ** BigInt(amount.text.split(".")[1]?.length ?? 0);
+      const scaledMinutes = BigInt(amount.text.replace(".", "")) * BigInt(multiplier);
+      if (scaledMinutes % scale !== BigInt(0)) {
+        reject("invalid-duration", input, token.start, unit.end);
+      }
+      const minutes = Number(scaledMinutes / scale);
       const days = multiplier === 1440;
       if (!Number.isSafeInteger(minutes) || minutes <= 0 || (days && minutes % 1440 !== 0)) {
         reject("invalid-duration", input, token.start, unit.end);

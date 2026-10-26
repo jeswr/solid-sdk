@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { describe, expect, it } from "vitest";
 import {
   type EventQuickAddContext,
@@ -56,6 +57,25 @@ describe("calendar quick-add drafts", () => {
   });
 
   it.each([
+    "Lunch with Sam and Alex",
+    "Trip to Paris",
+    "Notes from Sam",
+    "Plan for launch",
+    "Work on the parser",
+    "Walk in the park",
+    "Talk about RDF",
+    "Read every chapter",
+    "All hands meeting",
+  ])("preserves ordinary title words in %s", (title) => {
+    expect(parseEventQuickAdd(`${title} tomorrow 1pm`, context)).toEqual({
+      title,
+      start: "2026-10-24T12:00:00.000Z",
+      allDay: false,
+      timeZone: "Europe/London",
+    });
+  });
+
+  it.each([
     ["today 12am", "2026-10-22T23:00:00.000Z"],
     ["today 12pm", "2026-10-23T11:00:00.000Z"],
     ["today noon", "2026-10-23T11:00:00.000Z"],
@@ -80,6 +100,16 @@ describe("calendar quick-add drafts", () => {
     ["tomorrow 10:00 until noon", "2026-10-24T09:00:00.000Z", "2026-10-24T11:00:00.000Z", 120],
     ["tomorrow 11pm for 2 hours", "2026-10-24T22:00:00.000Z", "2026-10-25T00:00:00.000Z", 120],
     ["tomorrow 1pm for 1.5 hours", "2026-10-24T12:00:00.000Z", "2026-10-24T13:30:00.000Z", 90],
+    ["tomorrow 1pm for 2.05 hours", "2026-10-24T12:00:00.000Z", "2026-10-24T14:03:00.000Z", 123],
+    ["tomorrow 1pm for 0.55 hours", "2026-10-24T12:00:00.000Z", "2026-10-24T12:33:00.000Z", 33],
+    ["tomorrow 1pm for 0.05 hours", "2026-10-24T12:00:00.000Z", "2026-10-24T12:03:00.000Z", 3],
+    ["tomorrow 1pm for 2.0500 hours", "2026-10-24T12:00:00.000Z", "2026-10-24T14:03:00.000Z", 123],
+    [
+      "tomorrow 1pm for 2.000000000000000000 minutes",
+      "2026-10-24T12:00:00.000Z",
+      "2026-10-24T12:02:00.000Z",
+      2,
+    ],
     ["tomorrow 1pm for 1 minute", "2026-10-24T12:00:00.000Z", "2026-10-24T12:01:00.000Z", 1],
     ["tomorrow 1pm for 1 hour", "2026-10-24T12:00:00.000Z", "2026-10-24T13:00:00.000Z", 60],
   ] as const)("resolves end/duration %s", (phrase, start, end, durationMinutes) => {
@@ -198,6 +228,18 @@ describe("recurrence", () => {
     ).toBe("2026-10-26T09:30:00.000Z");
   });
 
+  it.each([
+    ["Europe/London", "2026-03-29T12:00:00Z", "daily 01:30", "2026-03-30T00:30:00.000Z"],
+    ["Europe/London", "2026-10-25T12:00:00Z", "daily 01:30", "2026-10-26T01:30:00.000Z"],
+    ["Europe/London", "2026-10-25T01:30:00.001Z", "daily 01:30", "2026-10-26T01:30:00.000Z"],
+    ["Europe/London", "2026-03-29T12:00:00Z", "weekly 01:30", "2026-04-05T00:30:00.000Z"],
+    ["Europe/London", "2026-10-25T12:00:00Z", "every Sunday 01:30", "2026-11-01T01:30:00.000Z"],
+    ["Australia/Lord_Howe", "2026-10-03T16:00:00Z", "daily 02:15", "2026-10-04T15:15:00.000Z"],
+    ["Australia/Lord_Howe", "2026-04-04T16:00:00Z", "daily 01:45", "2026-04-05T15:15:00.000Z"],
+  ])("skips a past DST transition in %s / %s / %s", (tz, now, phrase, start) => {
+    expect(parseEventQuickAdd(`Standup ${phrase}`, { tz, now: new Date(now) }).start).toBe(start);
+  });
+
   it("supports all-day recurrence and explicit matching dates", () => {
     expect(parseEventQuickAdd("Holiday every Monday", context)).toMatchObject({
       start: "2026-10-26",
@@ -257,6 +299,11 @@ describe("supplied clock and zone", () => {
     ["Europe/London", "2026-03-28T12:00:00Z", "tomorrow 00:30 to 01:30", "nonexistent-time"],
     ["Europe/London", "2026-10-24T12:00:00Z", "tomorrow 00:30 to 01:30", "ambiguous-time"],
     ["Europe/London", "2026-03-29T00:00:00Z", "daily 01:30", "nonexistent-time"],
+    ["Europe/London", "2026-10-25T00:00:00Z", "daily 01:30", "ambiguous-time"],
+    ["Europe/London", "2026-10-25T00:45:00Z", "daily 01:30", "ambiguous-time"],
+    ["Europe/London", "2026-10-25T01:30:00Z", "daily 01:30", "ambiguous-time"],
+    ["Europe/London", "2026-03-29T12:00:00Z", "today 01:30", "nonexistent-time"],
+    ["Europe/London", "2026-10-25T12:00:00Z", "today 01:30", "ambiguous-time"],
   ] as const)("rejects %s / %s / %s", (tz, now, phrase, code) => {
     failure(`Meet Sam ${phrase}`, code, { tz, now: new Date(now) });
   });
@@ -277,6 +324,7 @@ describe("fail-closed errors preserve all input", () => {
     ["  \n ", "invalid-input"],
     ["x".repeat(4097), "invalid-input"],
     ["Meet Sam", "missing-date"],
+    ["Lunch with Sam and", "missing-date"],
     ["Meet Sam at Cafe Rio", "missing-date"],
     ["Meet Sam 1pm", "missing-date"],
     ["tomorrow 1pm", "missing-title"],
@@ -315,6 +363,9 @@ describe("fail-closed errors preserve all input", () => {
     ["Meet Sam tomorrow for 1.5 days", "invalid-duration"],
     ["Meet Sam tomorrow for 9007199254740992 minutes", "invalid-duration"],
     ["Meet Sam tomorrow 1pm for 0.5 minutes", "invalid-duration"],
+    ["Meet Sam tomorrow 1pm for 0.999999999999999999 minutes", "invalid-duration"],
+    ["Meet Sam tomorrow 1pm for 1.000000000000000001 hours", "invalid-duration"],
+    ["Meet Sam tomorrow for 1.000000000000000001 days", "invalid-duration"],
     ["Meet Sam tomorrow for 90 minutes", "invalid-duration"],
     ["Meet Sam tomorrow 1pm for 1 day", "invalid-duration"],
     ["Meet Sam tomorrow for 9007199254740000 days", "invalid-duration"],
@@ -333,6 +384,9 @@ describe("fail-closed errors preserve all input", () => {
     ["Meet Sam tomorrow 1pm then a surprise", "unsupported-phrase"],
     ["Meet Sam tomorrow or today", "unsupported-phrase"],
     ["Meet Sam not tomorrow", "unsupported-phrase"],
+    ["Meet Sam before tomorrow 1pm", "unsupported-phrase"],
+    ["Meet Sam and tomorrow 1pm", "unsupported-phrase"],
+    ["Meet Sam all week tomorrow", "unsupported-phrase"],
     ["Meet Sam tomorrow for 1 hour and 30 minutes", "unsupported-phrase"],
     ["Meet Sam every 2 weeks", "unsupported-phrase"],
     ["Meet Sam every month", "unsupported-phrase"],
@@ -398,5 +452,6 @@ describe("fail-closed errors preserve all input", () => {
     failure("Meet Sam every Saturday 09:30", "invalid-date", ctx);
     failure("Meet Sam daily 09:30", "invalid-date", ctx);
     failure("Meet Sam 2099-12-31 23:30", "invalid-date", { ...ctx, tz: "Pacific/Honolulu" });
+    failure("Meet Sam daily 23:30", "invalid-date", { ...ctx, tz: "Pacific/Honolulu" });
   });
 });
