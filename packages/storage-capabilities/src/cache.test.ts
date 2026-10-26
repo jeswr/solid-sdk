@@ -81,6 +81,38 @@ describe.each([
   });
 });
 
+describe.each([
+  ["memory", () => createMemoryCache()],
+  [
+    "IndexedDB",
+    () => {
+      vi.stubGlobal("indexedDB", new IDBFactory());
+      return createIndexedDbCache();
+    },
+  ],
+] as const)("%s attachProbe", (_name, makeCache) => {
+  const probe = record.probe;
+  test("attaches only to the same, probe-less generation", async () => {
+    const cache = makeCache();
+    // Deleted (or never stored): nothing is resurrected.
+    expect(await cache.attachProbe?.(description.id, description, probe)).toBe(false);
+    expect(await cache.get(description.id)).toBeUndefined();
+    // Same generation without a probe: attached.
+    await cache.set(description.id, { description });
+    expect(await cache.attachProbe?.(description.id, description, probe)).toBe(true);
+    expect(await cache.get(description.id)).toEqual(record);
+    // Already probed: left alone.
+    const second = { ...probe, observedAt: 99 };
+    expect(await cache.attachProbe?.(description.id, description, second)).toBe(false);
+    expect(await cache.get(description.id)).toEqual(record);
+    // Replaced by a newer generation: left alone.
+    const newer = { description: { ...description, fetchedAt: description.fetchedAt + 1 } };
+    await cache.set(description.id, newer);
+    expect(await cache.attachProbe?.(description.id, description, probe)).toBe(false);
+    expect(await cache.get(description.id)).toEqual(newer);
+  });
+});
+
 test("memory cache instances are isolated", async () => {
   const cache = createMemoryCache();
   await cache.set(description.id, record);
