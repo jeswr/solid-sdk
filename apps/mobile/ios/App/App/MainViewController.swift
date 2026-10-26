@@ -16,6 +16,7 @@ class MainViewController: CAPBridgeViewController {
         bridge.registerPluginInstance(SuiteNavigationPlugin())
         bridge.registerPluginInstance(SuiteAuthSessionPlugin())
         bridge.registerPluginInstance(SuiteShareIntakePlugin())
+        bridge.registerPluginInstance(SuiteShareStagingPlugin())
         guard let allowed = SuiteOrigin(url: bridge.config.serverURL) else {
             fatalError("server.url must be the https suite origin")
         }

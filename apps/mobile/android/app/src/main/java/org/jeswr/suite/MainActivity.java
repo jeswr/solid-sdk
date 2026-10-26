@@ -23,6 +23,7 @@ public class MainActivity extends BridgeActivity {
     protected void onCreate(Bundle savedInstanceState) {
         registerPlugin(SuiteAuthSessionPlugin.class);
         registerPlugin(SuiteShareIntakePlugin.class);
+        registerPlugin(SuiteShareStagingPlugin.class);
         super.onCreate(savedInstanceState);
     }
 

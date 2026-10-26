@@ -52,9 +52,43 @@ describe("iOS project", () => {
       "BridgeOriginGuard.swift",
       "SuiteOrigin.swift",
       "SuiteShareIntakePlugin.swift",
+      "SuiteShareStagingPlugin.swift",
+      "ShareOutStore.swift",
     ]) {
       expect(pbxproj).toContain(`${file} in Sources */,`);
     }
+  });
+
+  test("links the staging plugin and Foundation store into the App target", () => {
+    const appSources = pbxproj.match(
+      /504EC3001FED79650016851F \/\* Sources \*\/ = \{[\s\S]*?\n\t\t\};/,
+    )?.[0];
+    for (const file of ["SuiteShareStagingPlugin.swift", "ShareOutStore.swift"]) {
+      const ref = pbxproj.match(
+        new RegExp(
+          `([A-F0-9]{24}) /\\* ${file.replaceAll(".", "\\.")} \\*/ = \\{isa = PBXFileReference;`,
+        ),
+      )?.[1];
+      expect(ref).toBeDefined();
+      const build = pbxproj.match(
+        new RegExp(
+          `([A-F0-9]{24}) /\\* ${file.replaceAll(".", "\\.")} in Sources \\*/ = \\{isa = PBXBuildFile; fileRef = ${ref}`,
+        ),
+      )?.[1];
+      expect(build).toBeDefined();
+      expect(appSources).toContain(`${build} /* ${file} in Sources */,`);
+      expect(pbxproj).toContain(`${ref} /* ${file} */,`);
+    }
+    expect(read("ios/App/App/MainViewController.swift")).toContain(
+      "bridge.registerPluginInstance(SuiteShareStagingPlugin())",
+    );
+    const source = read("ios/App/App/SuiteShareStagingPlugin.swift");
+    expect(source).toContain('jsName = "SuiteShareStaging"');
+    for (const method of ["begin", "writeChunk", "commit", "abort"]) {
+      expect(source).toContain(`CAPPluginMethod(name: "${method}"`);
+    }
+    expect(source).toContain("self.store().commit(id: id).absoluteString");
+    expect(read("ios/App/Shared/ShareOutStore.swift")).not.toMatch(/import (Capacitor|UIKit)/);
   });
 
   test("embeds a Share Extension that shares the App Group with the app", () => {
@@ -97,6 +131,27 @@ describe("iOS project", () => {
 describe("Android project", () => {
   const manifest = read("android/app/src/main/AndroidManifest.xml");
   const debugManifest = read("android/app/src/debug/AndroidManifest.xml");
+
+  test("registers staging and exposes only the share-out cache through FileProvider", () => {
+    expect(read("android/app/src/main/java/org/jeswr/suite/MainActivity.java")).toContain(
+      "registerPlugin(SuiteShareStagingPlugin.class)",
+    );
+    const paths = read("android/app/src/main/res/xml/file_paths.xml");
+    const entries = [...paths.matchAll(/<([a-z-]+)\s+name="([^"]+)"\s+path="([^"]+)"\s*\/>/g)].map(
+      (match) => match.slice(1),
+    );
+    expect(entries).toEqual([["cache-path", "share_out", "share-out/"]]);
+    expect(paths).not.toMatch(/<(?:external|root|files)-path/);
+    expect(manifest).toContain('android:resource="@xml/file_paths"');
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: Android manifest placeholder is literal.
+    expect(manifest).toContain('android:authorities="${applicationId}.fileprovider"');
+    const source = read("android/app/src/main/java/org/jeswr/suite/SuiteShareStagingPlugin.java");
+    expect(source).toContain('@CapacitorPlugin(name = "SuiteShareStaging")');
+    for (const method of ["begin", "writeChunk", "commit", "abort"]) {
+      expect(source).toContain(`public void ${method}(PluginCall call)`);
+    }
+    expect(source).toContain('result.put("uri", Uri.fromFile(file).toString())');
+  });
 
   test("disables backup and cleartext in the main manifest", () => {
     expect(manifest).toContain('android:allowBackup="false"');

@@ -48,3 +48,11 @@ export {
   sanitiseFileName,
   validateShareBatch,
 } from "./share-intake.js";
+export {
+  DEFAULT_SHARE_STAGING_LIMITS,
+  type ShareFile,
+  type ShareStagingLimits,
+  type ShareStagingPlugin,
+  shareFiles,
+  stageFile,
+} from "./share-staging.js";
