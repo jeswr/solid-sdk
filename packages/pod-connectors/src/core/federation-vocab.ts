@@ -8,5 +8,24 @@ export const FEDERATION = {
   MusicRecording: "https://jeswr.org/ns/sectors/media#MusicRecording",
   Playlist: "https://jeswr.org/ns/sectors/media#Playlist",
   CalendarEvent: "https://jeswr.org/ns/sectors/scheduling#CalendarEvent",
+  CreativeWork: "https://jeswr.org/ns/sectors/media#CreativeWork",
+  ListeningActivity: "https://jeswr.org/ns/sectors/media#ListeningActivity",
+  MediaAccount: "https://jeswr.org/ns/sectors/media#MediaAccount",
+  HealthRecord: "https://jeswr.org/ns/sectors/health#HealthRecord",
+  TransactionRecord: "https://jeswr.org/ns/sectors/finance#TransactionRecord",
   Note: "https://jeswr.org/ns/sectors/social#Note",
+  Person: "https://jeswr.org/ns/core#Person",
+  Agent: "https://jeswr.org/ns/core#Agent",
+  AccountHolder: "https://jeswr.org/ns/core#AccountHolder",
+  AccountProvider: "https://jeswr.org/ns/core#AccountProvider",
+  Activity: "https://jeswr.org/ns/core#Activity",
+} as const;
+
+export const FEDERATION_PROPERTIES = {
+  title: "http://purl.org/dc/terms/title",
+  content: "https://jeswr.org/ns/sectors/social#content",
+  about: "https://jeswr.org/ns/core#about",
+  subject: "https://jeswr.org/ns/core#subject",
+  hasAccountHolder: "https://jeswr.org/ns/core#hasAccountHolder",
+  hasAccountProvider: "https://jeswr.org/ns/core#hasAccountProvider",
 } as const;

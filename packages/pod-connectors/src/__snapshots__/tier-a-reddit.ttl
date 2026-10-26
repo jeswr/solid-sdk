@@ -1,0 +1,29 @@
+# AUTHORED-BY Codex GPT-6.1-Sol
+<https://pod.test/alice/integrations/reddit/social/communities.ttl> <http://www.w3.org/ns/prov#wasDerivedFrom> <https://oauth.reddit.com/subreddits/mine/subscriber>, <https://www.reddit.com/r/Breadit/>, <https://www.reddit.com/r/solidproject/>.
+<https://pod.test/alice/integrations/reddit/social/communities.ttl#sub-Breadit> a <http://xmlns.com/foaf/0.1/Group>;
+    <http://www.w3.org/ns/prov#wasDerivedFrom> <https://www.reddit.com/r/Breadit/>;
+    <https://schema.org/description> "A community for bread bakers.";
+    <https://schema.org/identifier> "Breadit";
+    <https://schema.org/name> "Breadit";
+    <https://schema.org/url> <https://www.reddit.com/r/Breadit/>.
+<https://pod.test/alice/integrations/reddit/social/communities.ttl#sub-solidproject> a <http://xmlns.com/foaf/0.1/Group>;
+    <http://www.w3.org/ns/prov#wasDerivedFrom> <https://www.reddit.com/r/solidproject/>;
+    <https://schema.org/description> "Re-decentralizing the web.";
+    <https://schema.org/identifier> "solidproject";
+    <https://schema.org/name> "Solid Project";
+    <https://schema.org/url> <https://www.reddit.com/r/solidproject/>.
+<https://pod.test/alice/integrations/reddit/social/saved-posts.ttl> <http://www.w3.org/ns/prov#wasDerivedFrom> <https://oauth.reddit.com/user/alice_on_reddit/saved?limit=100&raw_json=1>, <https://www.reddit.com/r/Breadit/comments/1koa3f/sourdough_starter_routine/>, <https://www.reddit.com/r/solidproject/comments/1kx9wz/solid_pods_explained/>.
+<https://pod.test/alice/integrations/reddit/social/saved-posts.ttl#post-1koa3f> a <https://jeswr.org/ns/sectors/social#Note>, <https://schema.org/SocialMediaPosting>;
+    <http://www.w3.org/ns/prov#wasDerivedFrom> <https://www.reddit.com/r/Breadit/comments/1koa3f/sourdough_starter_routine/>;
+    <https://schema.org/datePublished> "2025-05-25T10:20:00.000Z"^^<http://www.w3.org/2001/XMLSchema#dateTime>;
+    <https://schema.org/headline> "What's the best sourdough starter routine?";
+    <https://schema.org/identifier> "t3_1koa3f";
+    <https://schema.org/isPartOf> "r/Breadit";
+    <https://schema.org/url> <https://www.reddit.com/r/Breadit/comments/1koa3f/sourdough_starter_routine/>.
+<https://pod.test/alice/integrations/reddit/social/saved-posts.ttl#post-1kx9wz> a <https://jeswr.org/ns/sectors/social#Note>, <https://schema.org/SocialMediaPosting>;
+    <http://www.w3.org/ns/prov#wasDerivedFrom> <https://www.reddit.com/r/solidproject/comments/1kx9wz/solid_pods_explained/>;
+    <https://schema.org/datePublished> "2025-06-02T09:00:00.000Z"^^<http://www.w3.org/2001/XMLSchema#dateTime>;
+    <https://schema.org/headline> "Solid pods explained for normal humans";
+    <https://schema.org/identifier> "t3_1kx9wz";
+    <https://schema.org/isPartOf> "r/solidproject";
+    <https://schema.org/url> <https://www.reddit.com/r/solidproject/comments/1kx9wz/solid_pods_explained/>.
