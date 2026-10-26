@@ -98,3 +98,42 @@ No implementation remains unfinished within the fix brief. Cryptographic key imp
 signature verification remain consumer responsibilities. Open questions: none.
 `roborev status` exited 127 (`roborev: command not found`); automated commit review remains
 unavailable. No pushes, PRs, branch switches, or remote fetches/merges were performed.
+
+## Fix round 2 — review of 796f6f5dc265
+
+Addressed exactly the two validation findings on `lane/sst-8xm.32`:
+
+- `163cd527` — `fix: reject private material in public JWKs`: reject symmetric `oct` keys
+  and every JOSE key parameter currently classified as private or secret (`d`, `p`, `q`,
+  `dp`, `dq`, `qi`, `oth`, `k`, `priv`), regardless of the declared key type or member value.
+  Replace tests that accepted secret material with rejection cases across EC, RSA, and OKP;
+  retain positive tests for public parameters, metadata, extensions, and input immutability.
+- `53ded004` — `fix: validate validity timestamp calendar bounds`: explicitly validate
+  Gregorian month lengths and leap years, clock components, and timezone bounds through
+  ±14:00 for both `revoked` and `expires`. Reject calendar rollover, invalid offsets,
+  nonzero fractions at 24:00:00, and trailing line endings. Preserve valid timestamps
+  verbatim through cache serialization and leave input untouched.
+- Final reporting commit — `docs: record second validation fix results`: append this report.
+
+Final scoped gate commands (all exited 0 before the final reporting commit):
+
+```sh
+pnpm --filter @jeswr/storage-capabilities run lint && pnpm --filter @jeswr/storage-capabilities run build && pnpm --filter @jeswr/storage-capabilities run typecheck && pnpm --filter @jeswr/storage-capabilities run test
+pnpm run lint:root
+pnpm exec turbo run build typecheck test --filter=...@jeswr/storage-capabilities
+git diff --check
+```
+
+Package lint, build, and typecheck passed. All 207 tests across 5 files passed, including
+103 CID parser cases. V8 coverage passed at 100% statements (297/297), branches (225/225),
+functions (31/31), and lines (251/251). Root guards passed, including all 74 contrast pairs.
+Turbo passed 3/3 tasks; its reverse-dependency filter selected only this package because
+this base has no declared package dependants. Whole-workspace gates remain reserved for
+the dispatcher under the original lane brief.
+
+Conservative scope: retain the existing four-digit-year timestamp syntax and valid XSD
+24:00:00 notation; do not expand the accepted timestamp formats or supported key types.
+No dependencies, manifests, or lockfiles changed; `check:packages` was not applicable.
+No implementation remains unfinished and there are no open questions.
+`roborev status` exited 127 (`roborev: command not found`); automated commit review remains
+unavailable. No pushes, PRs, branch switches, or Git remote fetches/merges were performed.
