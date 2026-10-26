@@ -234,3 +234,64 @@ were performed.
 No implementation work is unfinished or blocked. There are no open questions.
 `roborev` remains unavailable on PATH, so automated per-commit verdicts could not be obtained locally.
 Dispatcher/security review remains outstanding; this security-critical package has not been merged.
+
+## Fix round 3 — review `6da25ef2b778`
+
+Completed both findings in `solid-sdk-lane-sst-8xm.28-6da25ef2b778.md`.
+Only `packages/reactive-authentication` and this report changed. No dependencies were added.
+
+| Commit | Change |
+| --- | --- |
+| `25bb3490` | Order final generation validation, cancellation and boundary checks, and transport initiation under the fence's shared lock. Release the lock before awaiting the response. Recheck cancellation after asynchronous generation validation before provider work. Add five regressions covering initial, nonce and renewal sends against peer logout, plus cancellation during validation before upgrades and sends. |
+| `a4fbfead` | Pass the UMA operation's original ticket generation to `OidcSession.get`. Add a peer-logout regression with broadcasts disabled and delayed validation immediately before ID token acquisition; verify no login, token exchange, memory credential or durable refresh credential is committed by the superseded operation, while a fresh operation succeeds. |
+| Final documentation commit (this commit) | Record round-3 verification and the review-tool limitation. |
+
+The send regressions use real Web Locks and confirm that logout waits for transport initiation but
+completes while the response is still pending. The UMA regression checks both credential stores;
+rejecting the eventual RPT alone is insufficient to pass it.
+
+### Round-3 verification
+
+PASS required package gate and root checks, run before the final documentation commit:
+
+```sh
+pnpm --filter @jeswr/reactive-authentication run lint && pnpm --filter @jeswr/reactive-authentication run build && pnpm --filter @jeswr/reactive-authentication run typecheck && pnpm --filter @jeswr/reactive-authentication run test
+pnpm run lint:root
+git diff --check
+```
+
+- Package lint: zero errors; **63 warnings** and **21 informational diagnostics**.
+- Build and typecheck: pass, including the SDK type-contract checks.
+- Tests: **276/276** pass in **29/29** files, with no skips.
+- Enforced coverage: statements **2043/2043**, branches **1503/1503**, functions **466/466**,
+  lines **1842/1842** — **100% in every metric**. Coverage configuration and thresholds are unchanged.
+- Root lint: Biome, lockfile transport, app workspace and raw-fetch guards pass.
+- Whitespace validation: pass.
+
+Regression sensitivity was checked before each implementation fix:
+
+```sh
+pnpm --filter @jeswr/reactive-authentication exec vitest run test/logout-send.test.js --coverage.enabled=false
+pnpm --filter @jeswr/reactive-authentication exec vitest run test/uma.test.js --coverage.enabled=false '--testNamePattern=captured generation'
+```
+
+Expected baseline results: **5/5** send regressions and **1/1** UMA regression failed. The original
+UMA implementation started a login, acquired an ID token, disclosed it in an exchange and committed
+both memory and durable credentials under generation 1 after peer logout. The fix prevents all five
+effects. All six regressions pass in the final coverage-enforced package gate.
+
+Focused verification also passed all **34** core/fetch/send tests and all **10** UMA tests. The first
+core run lacked freshly built `dist/` files for its two subprocess import checks; rebuilding and
+rerunning passed both checks, as did the final gate. No implementation change was needed for them.
+
+No `check:packages` run was needed because no dependency was added. The authentication package still
+has no workspace dependants, so no dependant gate applies. Per the lane brief, no whole-workspace
+gate or `gate:full` ran. No push, PR, branch switch, network Git operation or edits to another checkout
+were performed. The working tree is clean after this final report commit.
+
+### Round-3 remaining work and questions
+
+Both requested findings are fixed and tested. No implementation work is unfinished or blocked;
+there are no open questions. `roborev` remains unavailable on PATH, so fresh automated per-commit
+verdicts could not be obtained locally. Dispatcher/security review remains outstanding; this
+security-critical package has not been merged.
