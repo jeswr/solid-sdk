@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { defineConfig } from "vitest/config";
 export default defineConfig({
   test: {
@@ -10,12 +11,14 @@ export default defineConfig({
       enabled: true,
       provider: "v8",
       include: [
+        "src/apps/home/lib/model/**/*.ts",
         "src/apps/docs/lib/model/**/*.ts",
         "src/apps/health/lib/model/**/*.ts",
         "src/apps/mail/lib/model/**/*.ts",
         "src/apps/sheets/lib/model/**/*.ts",
         "src/apps/photos/lib/library/**/*.ts",
         "src/apps/docs/lib/diff/**/*.ts",
+        "src/apps/docs/lib/find/**/*.ts",
         "src/apps/tasks/lib/quickadd/**/*.ts",
         "src/apps/music/lib/metadata/**/*.ts",
         "src/apps/contacts/lib/vcard/**/*.ts",
@@ -27,6 +30,7 @@ export default defineConfig({
         "src/apps/chat/lib/text/**/*.ts",
         "src/apps/photos/lib/exif/**/*.ts",
         "src/apps/music/lib/queue/**/*.ts",
+        "src/apps/music/lib/model/**/*.ts",
         "src/apps/photos/lib/albums/**/*.ts",
         "src/apps/notes/lib/**/*.ts",
         "src/apps/notes/lib/convert/**/*.ts",
@@ -37,6 +41,7 @@ export default defineConfig({
         "src/apps/docs/lib/outline/**/*.ts",
         "src/apps/drive/lib/files/**/*.ts",
         "src/apps/sheets/lib/refs/**/*.ts",
+        "src/apps/sheets/lib/csv/**/*.ts",
         "src/apps/sheets/lib/format/**/*.ts",
         "src/apps/calendar/lib/layout/**/*.ts",
         "src/apps/calendar/lib/invites/**/*.ts",
@@ -44,6 +49,7 @@ export default defineConfig({
         "src/apps/calendar/lib/reminders/**/*.ts",
         "src/apps/calendar/lib/tz/**/*.ts",
         "src/apps/chat/lib/timeline/**/*.ts",
+        "src/apps/chat/lib/unread/**/*.ts",
         "src/apps/health/lib/stats/**/*.ts",
         "src/apps/health/lib/units/**/*.ts",
         "src/apps/health/lib/trends/**/*.ts",
@@ -60,6 +66,7 @@ export default defineConfig({
         "src/apps/tasks/lib/board/**/*.ts",
         "src/apps/mail/lib/search/**/*.ts",
         "src/apps/music/lib/library/**/*.ts",
+        "src/apps/music/lib/smart/**/*.ts",
         "src/apps/money/lib/forecast/**/*.ts",
         "src/apps/drive/lib/list/**/*.ts",
         "src/apps/mail/lib/threading/**/*.ts",

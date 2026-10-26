@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 "use client";
 
-import * as Collapsible from "@radix-ui/react-collapsible";
+import { Collapsible } from "radix-ui";
 import { ChevronDown, type LucideIcon } from "lucide-react";
 import { type ReactNode, useId } from "react";
 

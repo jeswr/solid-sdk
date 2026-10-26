@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+import { fixtureNames } from "./fixture-names";
 export default function ComponentsPage() {
   return (
     <main id="main-content" tabIndex={-1} className="fixture-page">
@@ -6,23 +7,16 @@ export default function ComponentsPage() {
       <h1>Component fixtures</h1>
       <p>Tokens and foundations for the suite.</p>
       <nav aria-label="Component fixtures">
-        <ul>
-          <li>
-            <a href="/dev/components/tokens">Tokens, typography and density</a>
-          </li>
-          <li>
-            <a href="/dev/components/shell">Responsive shell layout</a>
-          </li>
-          <li>
-            <a href="/dev/components/top-bar">TopBar slots</a>
-          </li>
-          <li>
-            <a href="/dev/components/sidebar-nav">Sidebar navigation</a>
-          </li>
-          <li>
-            <a href="/dev/components/details-pane">Details pane and states</a>
-          </li>
-        </ul>
+        <a href="/dev/components/tokens">Tokens, typography and density</a>
+        {fixtureNames.map((name) => (
+          <a key={name} href={`/dev/components/${name}`}>
+            {name}
+          </a>
+        ))}
+        <a href="/dev/components/shell">Responsive shell layout</a>
+        <a href="/dev/components/top-bar">TopBar slots</a>
+        <a href="/dev/components/sidebar-nav">Sidebar navigation</a>
+        <a href="/dev/components/details-pane">Details pane and states</a>
       </nav>
     </main>
   );
