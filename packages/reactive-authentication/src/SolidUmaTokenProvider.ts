@@ -103,6 +103,7 @@ export class SolidUmaTokenProvider implements TokenProvider {
   readonly #rpts: FencedCache<UmaRpt>;
   readonly #metadata: KeyValueStore<oauth.AuthorizationServer>;
   readonly #context: ContextKey;
+  // Outstanding requests must outlive the bounded URL history used for request copies.
   #requests = new WeakMap<Request, string>();
   readonly #contexts = new Map<string, string>();
   readonly #callbackUri: string;
@@ -252,7 +253,9 @@ export class SolidUmaTokenProvider implements TokenProvider {
       );
     }
     await this.#rpts.assertCurrent(ticket);
+    this.#contexts.delete(request.url);
     this.#contexts.set(request.url, key);
+    if (this.#contexts.size > 100) this.#contexts.delete(this.#contexts.keys().next().value!);
     headers.set(
       "Authorization",
       `${rpt.tokenType === "dpop" ? "DPoP" : "Bearer"} ${rpt.accessToken}`,
@@ -264,7 +267,7 @@ export class SolidUmaTokenProvider implements TokenProvider {
 
   async invalidate(upgraded: Request): Promise<void> {
     const rejected = upgraded.headers.get("Authorization")?.replace(/^(DPoP|Bearer) /, "");
-    // Request copies retain their verified resource context; originals keep the precise issuing
+    // Recent request copies retain their verified resource context; originals keep the precise issuing
     // context even when another request to that URL used a different context in the meantime.
     const key = this.#requests.get(upgraded) ?? this.#contexts.get(upgraded.url);
     if (key !== undefined && rejected !== undefined)

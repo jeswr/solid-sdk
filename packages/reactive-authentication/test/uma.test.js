@@ -154,6 +154,88 @@ test("UMA renews a rejected RPT only in its issuing context when two contexts sh
   }
 });
 
+test("UMA RPTs retain outstanding invalidation contexts after URL history eviction", async () => {
+  const { provider, code } = umaClient(uma, { context: () => "shared-storage" });
+  const exchanges = uma.stats.exchanges.length;
+  const request = (i) => new Request(`${uma.url}/uma/eviction-${i}`);
+  const upgrade = async (i) => {
+    const original = request(i);
+    return await provider.upgrade(original, challengeContext(await transport(original)));
+  };
+  try {
+    const upgraded = [];
+    for (let i = 0; i < 101; i++) upgraded.push(await upgrade(i));
+    assert.equal(new Set(upgraded.map((r) => r.headers.get("authorization"))).size, 1);
+    assert.equal(uma.stats.exchanges.length, exchanges + 1, "all URLs share one cached RPT");
+
+    await provider.invalidate(upgraded[0].clone());
+    assert.equal(
+      (await upgrade(100)).headers.get("authorization"),
+      upgraded[100].headers.get("authorization"),
+      "copies for evicted URLs cannot remove the shared RPT",
+    );
+    assert.equal(uma.stats.exchanges.length, exchanges + 1);
+
+    await provider.invalidate(upgraded[0]);
+    const renewed = await upgrade(100);
+    assert.notEqual(renewed.headers.get("authorization"), upgraded[0].headers.get("authorization"));
+    assert.equal(
+      uma.stats.exchanges.length,
+      exchanges + 2,
+      "outstanding originals retain their context",
+    );
+    await provider.invalidate(upgraded[0]);
+    assert.equal(
+      (await upgrade(100)).headers.get("authorization"),
+      renewed.headers.get("authorization"),
+      "a late rejection preserves the replacement RPT",
+    );
+    assert.equal(uma.stats.exchanges.length, exchanges + 2);
+
+    await provider.invalidate(renewed.clone());
+    assert.notEqual(
+      (await upgrade(100)).headers.get("authorization"),
+      renewed.headers.get("authorization"),
+      "copies for recent URLs retain their invalidation context",
+    );
+    assert.equal(uma.stats.exchanges.length, exchanges + 3);
+    assert.equal(code.calls, 1, "RPT renewals reuse the ID-token session");
+  } finally {
+    await provider.forget();
+  }
+});
+
+test("UMA URL history refreshes recency when an existing URL is presented again", async () => {
+  const { provider } = umaClient(uma, { context: () => "shared-storage" });
+  const upgrade = async (i) => {
+    const request = new Request(`${uma.url}/uma/recency-${i}`);
+    return await provider.upgrade(request, challengeContext(await transport(request)));
+  };
+  const exchanges = uma.stats.exchanges.length;
+  try {
+    const upgraded = [];
+    for (let i = 0; i < 100; i++) upgraded.push(await upgrade(i));
+    const refreshed = await upgrade(0);
+    const recent = await upgrade(100);
+    await provider.invalidate(upgraded[1].clone());
+    assert.equal(
+      (await upgrade(100)).headers.get("authorization"),
+      recent.headers.get("authorization"),
+      "the next oldest URL was evicted instead of the refreshed URL",
+    );
+    assert.equal(uma.stats.exchanges.length, exchanges + 1);
+    await provider.invalidate(refreshed.clone());
+    assert.notEqual(
+      (await upgrade(100)).headers.get("authorization"),
+      recent.headers.get("authorization"),
+      "the refreshed URL remains available to request copies",
+    );
+    assert.equal(uma.stats.exchanges.length, exchanges + 2);
+  } finally {
+    await provider.forget();
+  }
+});
+
 test("concurrent UMA nonce retries retain their issuing context at the same URL", async () => {
   const nonced = await startUma(op, { resourceNonce: true });
   const started = Promise.withResolvers();
