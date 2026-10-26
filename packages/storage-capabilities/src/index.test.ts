@@ -4,8 +4,24 @@ import * as cache from "./cache.js";
 import * as api from "./index.js";
 import * as testing from "./testing.js";
 
-test("type-only public API and reserved runtime entry points load", () => {
-  expect(Object.keys(api)).toEqual([]);
+test("public parser, errors, fixture and reserved cache entry points load", () => {
+  expect(Object.keys(api).sort()).toEqual(["CapabilitiesError", "parseLwsDescription"]);
   expect(Object.keys(cache)).toEqual([]);
-  expect(Object.keys(testing)).toEqual([]);
+  expect(Object.keys(testing)).toEqual(["sparqLwsCid"]);
+  expect(testing.sparqLwsCid.type).toEqual(["Storage"]);
+});
+
+test("CapabilitiesError carries the discovery code, URL, message and optional HTTP status", () => {
+  const error = new api.CapabilitiesError("description-invalid", "https://pod.example/cid");
+  expect(error).toBeInstanceOf(Error);
+  expect(error).toMatchObject({
+    name: "CapabilitiesError",
+    message: "description-invalid",
+    code: "description-invalid",
+    url: "https://pod.example/cid",
+    status: undefined,
+  });
+  expect(
+    new api.CapabilitiesError("description-unreachable", error.url, "Missing CID", 404),
+  ).toMatchObject({ message: "Missing CID", status: 404 });
 });
