@@ -1,15 +1,17 @@
 // AUTHORED-BY GPT-5.6 Codex
-import { describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import {
   CAPABILITIES,
   checkFixture,
   checkNavigation,
   checkRejectedShare,
   checkTextShare,
+  checkTextShareDelivery,
   FRAME_PROBES,
   parseDevtoolsSockets,
   quoteAndroidShell,
 } from "../e2e/checks.ts";
+import { verifyRejectedShare, waitForTextShare } from "../e2e/share-probes.ts";
 
 const suite = "http://localhost:4173";
 const foreign = "http://localhost:4174";
@@ -89,7 +91,7 @@ describe("fixture result assertions fail closed", () => {
     );
   });
   test.each(FRAME_PROBES)("requires failure evidence for %s", (key) => {
-    for (const status of [undefined, "exposed", "posted", "success", true, "timeout"]) {
+    for (const status of [undefined, "exposed", "posted", "success", true, "timeout", "error"]) {
       const result = passing();
       Object.assign(result.hostile.attempts, { [key]: { status } });
       expect(checkFixture(result, suite, foreign)).toContain(
@@ -100,12 +102,40 @@ describe("fixture result assertions fail closed", () => {
     delete missing.hostile.attempts[key];
     expect(checkFixture(missing, suite, foreign).length).toBeGreaterThan(0);
   });
-  test("allows explicit rejection", () => {
+  test("does not accept arbitrary exceptions as isolation evidence", () => {
     const result = passing();
     result.hostile.attempts = Object.fromEntries(
       FRAME_PROBES.map((key) => [key, { status: "rejected" }]),
     );
+    for (const key of FRAME_PROBES) {
+      expect(checkFixture(result, suite, foreign)).toContain(
+        `Hostile frame native surface accessible or unproven: ${key}`,
+      );
+    }
+  });
+  test.each([
+    '"SuiteShareIntake" plugin is not implemented on web',
+    '"SuiteShareIntake.getPending()" is not implemented on android',
+  ])("accepts only the known missing-plugin rejection: %s", (message) => {
+    const result = passing();
+    Object.assign(result.hostile.attempts, {
+      capacitorPlugin: { status: "rejected", code: "UNIMPLEMENTED", message },
+    });
     expect(checkFixture(result, suite, foreign)).toEqual([]);
+    for (const patch of [
+      { code: undefined },
+      { code: "UNAVAILABLE" },
+      { message: "Blocked" },
+      { message: '"OtherPlugin" plugin is not implemented on web' },
+    ]) {
+      const invalid = structuredClone(result);
+      Object.assign(invalid.hostile.attempts, {
+        capacitorPlugin: { ...invalid.hostile.attempts.capacitorPlugin, ...patch },
+      });
+      expect(checkFixture(invalid, suite, foreign)).toContain(
+        "Hostile frame native surface accessible or unproven: capacitorPlugin",
+      );
+    }
   });
   test("allows a non-responding plugin wrapper only with every native surface absent", () => {
     const result = passing();
@@ -153,6 +183,155 @@ describe("share evidence", () => {
     ]) {
       expect(checkRejectedShare(pending, events).length).toBeGreaterThan(0);
     }
+  });
+  test("requires exactly one matching notification in the surviving document", () => {
+    expect(checkTextShareDelivery([batch()], [batch()], "shared text", "doc", "doc")).toEqual([]);
+    for (const events of [
+      [],
+      undefined,
+      [batch(), batch()],
+      [batch("different text")],
+      [{ ...batch(), id: "different-id" }],
+    ]) {
+      expect(
+        checkTextShareDelivery([batch()], events, "shared text", "doc", "doc").length,
+      ).toBeGreaterThan(0);
+    }
+  });
+  test("allows pending alone only when the document identity changed", () => {
+    expect(checkTextShareDelivery([batch()], [], "shared text", "old", "new")).toEqual([]);
+    expect(checkTextShareDelivery([batch()], [batch()], "shared text", "old", "new")).toEqual([]);
+    for (const [before, after] of [
+      [undefined, "new"],
+      ["old", undefined],
+      ["old", ""],
+    ]) {
+      expect(checkTextShareDelivery([batch()], [], "shared text", before, after)).toContain(
+        "Missing share document identity",
+      );
+    }
+    expect(
+      checkTextShareDelivery([batch()], [batch("wrong")], "shared text", "old", "new").length,
+    ).toBeGreaterThan(0);
+  });
+});
+
+describe("share receiver completion", () => {
+  afterEach(() => vi.useRealTimers());
+
+  // A bounded version of the driver's polling seam, with the same retry-on-error behavior.
+  const poll = async <T>(label: string, probe: () => Promise<T>): Promise<T> => {
+    let last: unknown;
+    for (let attempt = 0; attempt < 10; attempt++) {
+      try {
+        return await probe();
+      } catch (error) {
+        last = error;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    throw new Error(`Timed out waiting for ${label}: ${String(last)}`);
+  };
+
+  test.each([
+    false,
+    true,
+  ])("waits for a delayed file request before checking rejection (incorrectly accepted: %s)", async (acceptFile) => {
+    vi.useFakeTimers();
+    const shares = {
+      documentId: "doc",
+      pending: [] as ReturnType<typeof batch>[],
+      events: [] as ReturnType<typeof batch>[],
+    };
+    let queue = Promise.resolve();
+    const sendRejected = vi.fn(async () => {
+      queue = queue.then(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 40));
+        if (acceptFile) {
+          shares.pending.push(batch("rejected sentinel"));
+          shares.events.push(batch("rejected sentinel"));
+        }
+      });
+    });
+    const sendControl = vi.fn(async () => {
+      queue = queue.then(() => {
+        const control = { ...batch("fresh control"), id: "control" };
+        shares.pending.push(control);
+        shares.events.push(control);
+      });
+    });
+    const acknowledge = vi.fn(async () => {
+      shares.pending = [];
+      shares.events = [];
+      return shares;
+    });
+    const refresh = vi.fn(async () => structuredClone(shares));
+    let settled = false;
+    const outcome = verifyRejectedShare("fresh control", "doc", {
+      sendRejected,
+      sendControl,
+      refresh,
+      acknowledge,
+      poll,
+    }).then(
+      (result) => {
+        settled = true;
+        return { result, error: undefined };
+      },
+      (error: Error) => {
+        settled = true;
+        return { result: undefined, error };
+      },
+    );
+    await vi.advanceTimersByTimeAsync(30);
+    expect(sendRejected).toHaveBeenCalledBefore(sendControl);
+    expect(refresh).toHaveBeenCalled();
+    expect(shares.pending).toEqual([]);
+    expect(settled).toBe(false);
+    expect(acknowledge).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(100);
+    const result = await outcome;
+    if (acceptFile) {
+      expect(result.error?.message).toContain("Expected exactly one pending share batch");
+      expect(acknowledge).not.toHaveBeenCalled();
+    } else {
+      expect(result.error).toBeUndefined();
+      expect(result.result?.control.pending[0]?.id).toBe("control");
+      expect(acknowledge).toHaveBeenCalledWith("control");
+      expect(result.result?.cleared.pending).toEqual([]);
+    }
+  });
+
+  test("fails when notification delivery is disabled in the surviving document", async () => {
+    vi.useFakeTimers();
+    const refresh = vi.fn(async () => ({ documentId: "doc", pending: [batch()], events: [] }));
+    const failure = expect(
+      waitForTextShare("shared text", "doc", { refresh, poll }),
+    ).rejects.toThrow("Expected exactly one matching shareReceived event");
+    await vi.advanceTimersByTimeAsync(100);
+    await failure;
+  });
+
+  test("waits for a delayed notification after pending is already visible", async () => {
+    vi.useFakeTimers();
+    const shares = {
+      documentId: "doc",
+      pending: [batch()],
+      events: [] as ReturnType<typeof batch>[],
+    };
+    setTimeout(() => shares.events.push(batch()), 40);
+    let settled = false;
+    const delivery = waitForTextShare("shared text", "doc", {
+      refresh: async () => structuredClone(shares),
+      poll,
+    }).then((result) => {
+      settled = true;
+      return result;
+    });
+    await vi.advanceTimersByTimeAsync(30);
+    expect(settled).toBe(false);
+    await vi.advanceTimersByTimeAsync(20);
+    expect((await delivery).events).toEqual([batch()]);
   });
 });
 

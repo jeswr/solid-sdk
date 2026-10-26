@@ -46,17 +46,24 @@ export function checkFixture(value: unknown, suiteOrigin: string, foreignOrigin:
     failures.push("Missing cross-origin hostile frame evidence");
   }
   const attempts = record(hostile.attempts);
+  const noTransport = FRAME_PROBES.filter((probe) => probe !== "capacitorPlugin").every(
+    (probe) => record(attempts[probe]).status === "unavailable",
+  );
   for (const key of FRAME_PROBES) {
-    const status = record(attempts[key]).status;
+    const attempt = record(attempts[key]);
+    const status = attempt.status;
     // A generated plugin wrapper can exist in an isolated document but has no transport. A
-    // timeout alone proves nothing: permit it only when ALL native surfaces are unavailable.
-    const noTransport = FRAME_PROBES.filter((probe) => probe !== "capacitorPlugin").every(
-      (probe) => record(attempts[probe]).status === "unavailable",
-    );
+    // timeout or known missing-plugin rejection is evidence only with ALL native surfaces absent.
+    const knownRejection =
+      status === "rejected" &&
+      attempt.code === "UNIMPLEMENTED" &&
+      typeof attempt.message === "string" &&
+      /^"SuiteShareIntake(?:" plugin|\.getPending\(\)") is not implemented on (?:web|android)$/.test(
+        attempt.message,
+      );
     if (
       status !== "unavailable" &&
-      status !== "rejected" &&
-      !(key === "capacitorPlugin" && status === "no-response" && noTransport)
+      !(key === "capacitorPlugin" && noTransport && (status === "no-response" || knownRejection))
     ) {
       failures.push(`Hostile frame native surface accessible or unproven: ${key}`);
     }
@@ -80,6 +87,34 @@ export function checkTextShare(value: unknown, text: string): string[] {
     return ["Share did not contain exactly the sent text"];
   }
   return [];
+}
+
+export function checkTextShareDelivery(
+  pending: unknown,
+  events: unknown,
+  text: string,
+  beforeDocument: unknown,
+  afterDocument: unknown,
+): string[] {
+  const failures = checkTextShare(pending, text);
+  if (
+    typeof beforeDocument !== "string" ||
+    !beforeDocument ||
+    typeof afterDocument !== "string" ||
+    !afterDocument
+  ) {
+    failures.push("Missing share document identity");
+  }
+  if (!Array.isArray(events)) {
+    failures.push("Missing shareReceived evidence");
+  } else if (beforeDocument === afterDocument || events.length > 0) {
+    if (checkTextShare(events, text).length) {
+      failures.push("Expected exactly one matching shareReceived event");
+    } else if (record(events[0]).id !== record(Array.isArray(pending) ? pending[0] : null).id) {
+      failures.push("shareReceived did not match the pending batch id");
+    }
+  }
+  return failures;
 }
 
 export function checkRejectedShare(pending: unknown, events: unknown): string[] {

@@ -2,11 +2,27 @@
 import { readFileSync } from "node:fs";
 import { createContext, runInContext } from "node:vm";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { CAPABILITIES, checkFixture } from "../e2e/checks.ts";
 
 const script = (name: string) =>
   readFileSync(new URL(`../e2e/fixture/${name}.js`, import.meta.url), "utf8");
 const suiteOrigin = "http://localhost:4173";
 const foreignOrigin = "http://localhost:4174";
+const verdict = (attempts: unknown) =>
+  checkFixture(
+    {
+      page: "index",
+      done: true,
+      origin: suiteOrigin,
+      topBridge: true,
+      listenerReady: true,
+      errors: [],
+      capabilities: Object.fromEntries(CAPABILITIES.map((key) => [key, true])),
+      hostile: { origin: foreignOrigin, attempts },
+    },
+    suiteOrigin,
+    foreignOrigin,
+  );
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => vi.useRealTimers());
 
@@ -40,6 +56,7 @@ describe("hostile-frame JavaScript", () => {
     expect(Object.keys(attempts)).toHaveLength(5);
     for (const attempt of Object.values(attempts))
       expect(attempt).toEqual({ status: "unavailable" });
+    expect(verdict(attempts)).toEqual([]);
   });
   test("calls the real interface methods and fails even when isEnabled returns false", async () => {
     const postMessage = vi.fn();
@@ -64,7 +81,7 @@ describe("hostile-frame JavaScript", () => {
     expect(getPending).toHaveBeenCalledOnce();
     for (const attempt of Object.values(attempts)) expect(attempt).toEqual({ status: "exposed" });
   });
-  test("reports exceptions as rejection and tries the nativePromise fallback", async () => {
+  test("exposed interfaces fail even when every call throws", async () => {
     const reject = () => {
       throw new Error("Blocked");
     };
@@ -78,8 +95,80 @@ describe("hostile-frame JavaScript", () => {
       Capacitor: { nativePromise },
     });
     expect(nativePromise).toHaveBeenCalledWith("SuiteShareIntake", "getPending", {});
-    for (const attempt of Object.values(attempts))
-      expect(attempt).toMatchObject({ status: "rejected" });
+    for (const [key, attempt] of Object.entries(attempts)) {
+      expect(attempt).toMatchObject({ status: key === "capacitorPlugin" ? "error" : "exposed" });
+      expect(verdict(attempts)).toContain(
+        `Hostile frame native surface accessible or unproven: ${key}`,
+      );
+    }
+  });
+  test.each([
+    null,
+    {},
+    () => {},
+  ])("presence fails when the native surface has a different method shape: %j", async (surface) => {
+    const attempts = await hostile({
+      androidBridge: surface,
+      CapacitorCookiesAndroidInterface: surface,
+      CapacitorHttpAndroidInterface: surface,
+    });
+    for (const key of [
+      "androidBridge",
+      "webMessage",
+      "CapacitorCookiesAndroidInterface",
+      "CapacitorHttpAndroidInterface",
+    ]) {
+      expect(attempts[key]).toMatchObject({ status: "exposed" });
+      expect(attempts[key].detail).toContain("TypeError");
+      expect(verdict(attempts)).toContain(
+        `Hostile frame native surface accessible or unproven: ${key}`,
+      );
+    }
+  });
+  test.each([
+    { Plugins: { SuiteShareIntake: {} } },
+    { Plugins: { SuiteShareIntake: null } },
+    { nativePromise: false },
+    {
+      registerPlugin: () => {
+        throw new TypeError("bad registration");
+      },
+    },
+    {
+      nativePromise: async () => {
+        throw new Error("Blocked");
+      },
+    },
+    {
+      Plugins: {
+        SuiteShareIntake: {
+          getPending: () => {
+            throw new TypeError("bad proxy");
+          },
+        },
+      },
+    },
+  ])("plugin probe errors cannot establish isolation: %j", async (Capacitor) => {
+    const attempts = await hostile({ Capacitor });
+    expect(attempts.capacitorPlugin.status).toBe("error");
+    expect(verdict(attempts)).toContain(
+      "Hostile frame native surface accessible or unproven: capacitorPlugin",
+    );
+    expect(vi.getTimerCount()).toBe(0);
+  });
+  test("accepts the identified Capacitor missing-plugin rejection", async () => {
+    const attempts = await hostile({
+      Capacitor: {
+        nativePromise: async () => {
+          throw Object.assign(new Error('"SuiteShareIntake" plugin is not implemented on web'), {
+            code: "UNIMPLEMENTED",
+          });
+        },
+      },
+    });
+    expect(attempts.capacitorPlugin.status).toBe("rejected");
+    expect(verdict(attempts)).toEqual([]);
+    expect(vi.getTimerCount()).toBe(0);
   });
   test("bounds a non-responding generated plugin wrapper", async () => {
     const attempts = await hostile(
@@ -87,6 +176,11 @@ describe("hostile-frame JavaScript", () => {
       2000,
     );
     expect(attempts.capacitorPlugin.status).toBe("no-response");
+    expect(verdict(attempts)).toEqual([]);
+    attempts.androidBridge = { status: "exposed" };
+    expect(verdict(attempts)).toContain(
+      "Hostile frame native surface accessible or unproven: capacitorPlugin",
+    );
     expect(vi.getTimerCount()).toBe(0);
   });
 });
@@ -141,6 +235,7 @@ describe("top-frame fixture JavaScript", () => {
     const state = top.context.window.__e2e;
     expect(state.topBridge).toBe(true);
     expect(state.listenerReady).toBe(true);
+    expect(state.documentId).toBe("nonce");
     expect(state.done).toBe(false);
     expect(top.frame.src).toBe(
       `${foreignOrigin}/hostile.html?parent=${encodeURIComponent(suiteOrigin)}&nonce=nonce`,

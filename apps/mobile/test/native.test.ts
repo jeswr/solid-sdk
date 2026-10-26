@@ -309,4 +309,18 @@ describe("mobile CI emulator guardrails", () => {
     expect(job).toContain("name: android-e2e-diagnostics");
     expect(job).toContain("path: apps/mobile/e2e/artifacts/");
   });
+
+  test("bounds boot commands and failure diagnostics so artifacts can still upload", () => {
+    const boot = job.match(/ {6}- name: Create and boot the AVD\n[\s\S]*?(?= {6}- )/)?.[0] ?? "";
+    expect(boot).toContain("timeout-minutes: 10");
+    expect(boot).toContain("timeout 180 adb wait-for-device");
+    const shellCalls = boot.split("\n").filter((line) => line.includes("adb shell"));
+    expect(shellCalls).toHaveLength(5);
+    for (const line of shellCalls) expect(line).toContain("timeout 10 adb shell");
+    const diagnostics =
+      job.match(/ {6}- name: Collect emulator logcat\n[\s\S]*?(?= {6}- )/)?.[0] ?? "";
+    expect(diagnostics).toContain("timeout-minutes: 1");
+    expect(diagnostics).toContain("timeout 30 adb logcat -d -v threadtime");
+    expect(diagnostics).toContain("|| true");
+  });
 });

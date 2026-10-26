@@ -8,11 +8,11 @@ import {
   checkFixture,
   checkNavigation,
   checkRejectedShare,
-  checkTextShare,
   parseDevtoolsSockets,
   quoteAndroidShell,
 } from "./checks.ts";
 import { fixturePorts, startFixtureServer } from "./fixture-server.mjs";
+import { verifyRejectedShare, waitForTextShare } from "./share-probes.ts";
 
 const execute = promisify(execFile);
 const APP = "org.jeswr.suite";
@@ -50,6 +50,30 @@ async function adb(args, timeout = 30000) {
   return stdout.trim();
 }
 const shell = (...args) => adb(["shell", args.map(quoteAndroidShell).join(" ")]);
+const sendShare = (text, stream) =>
+  shell(
+    "am",
+    "start",
+    "-W",
+    "-a",
+    "android.intent.action.SEND",
+    "-t",
+    "text/plain",
+    ...(stream ? ["--eu", "android.intent.extra.STREAM", stream] : []),
+    "--es",
+    "android.intent.extra.TEXT",
+    text,
+    "-n",
+    RECEIVER,
+  );
+const refreshShares = () =>
+  cdp.evaluate(
+    "window.__e2eRefreshShares().then(shares => ({ ...shares, documentId: window.__e2e.documentId }))",
+  );
+const acknowledgeShare = (batchId) =>
+  cdp.evaluate(
+    `window.__e2eAcknowledge(${JSON.stringify(batchId)}).then(shares => ({ ...shares, documentId: window.__e2e.documentId }))`,
+  );
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 async function poll(label, probe, timeout = 30000) {
   const end = Date.now() + timeout;
@@ -256,32 +280,12 @@ async function run() {
   await step("ACTION_SEND delivers exactly the text through SuiteShareIntake", async () => {
     const text = `MOB-07 text ${randomUUID()} spaces 'quotes' "double" $dollar ; & literal`;
     report.text = text;
-    await shell(
-      "am",
-      "start",
-      "-W",
-      "-a",
-      "android.intent.action.SEND",
-      "-t",
-      "text/plain",
-      "--es",
-      "android.intent.extra.TEXT",
-      text,
-      "-n",
-      RECEIVER,
-    );
-    const shares = await poll("the exact shared text", async () => {
-      const result = await cdp.evaluate("window.__e2eRefreshShares()");
-      return result.pending?.length ? result : null;
-    });
+    const documentId = await cdp.evaluate("window.__e2e.documentId");
+    await sendShare(text);
+    const shares = await waitForTextShare(text, documentId, { refresh: refreshShares, poll });
     report.textShare = shares;
-    assertChecks(checkTextShare(shares.pending, text));
-    if (shares.events.length > 1) throw new Error("Duplicate shareReceived events");
-    if (shares.events.length) assertChecks(checkTextShare(shares.events, text));
-    // getPending is the durable fallback when Android resumes/reloads the WebView.
-    const cleared = await cdp.evaluate(
-      `window.__e2eAcknowledge(${JSON.stringify(shares.pending[0].id)})`,
-    );
+    // getPending alone suffices only when the document token proves a WebView reload.
+    const cleared = await acknowledgeShare(shares.pending[0].id);
     assertChecks(checkRejectedShare(cleared.pending, cleared.events));
   });
   await step("Reject a readable file:// EXTRA_STREAM and its text sentinel", async () => {
@@ -289,34 +293,18 @@ async function run() {
     await shell("run-as", APP, "cp", "/system/etc/hosts", "files/mob07-forbidden.txt");
     await shell("run-as", APP, "sh", "-c", "test -s files/mob07-forbidden.txt");
     const uri = `file:///data/data/${APP}/files/mob07-forbidden.txt`;
-    await shell(
-      "am",
-      "start",
-      "-W",
-      "-a",
-      "android.intent.action.SEND",
-      "-t",
-      "text/plain",
-      "--eu",
-      "android.intent.extra.STREAM",
-      uri,
-      "--es",
-      "android.intent.extra.TEXT",
-      `MOB07 rejected ${randomUUID()}`,
-      "-n",
-      RECEIVER,
-    );
-    // Completion of the activity follows either storage+notification or rejection; an arbitrary
-    // sleep could assert absence while the background copier was still working.
-    await poll(
-      "share receiver to finish processing",
-      async () =>
-        !/^\s*ACTIVITY org\.jeswr\.suite\/\.ShareReceiverActivity\b/m.test(
-          await shell("dumpsys", "activity", "top"),
-        ),
-    );
-    report.rejectedShare = await cdp.evaluate("window.__e2eRefreshShares()");
-    assertChecks(checkRejectedShare(report.rejectedShare.pending, report.rejectedShare.events));
+    const rejectedText = `MOB07 rejected ${randomUUID()}`;
+    const controlText = `MOB07 control ${randomUUID()}`;
+    const documentId = await cdp.evaluate("window.__e2e.documentId");
+    const result = await verifyRejectedShare(controlText, documentId, {
+      sendRejected: () => sendShare(rejectedText, uri),
+      sendControl: () => sendShare(controlText),
+      refresh: refreshShares,
+      acknowledge: acknowledgeShare,
+      poll,
+    });
+    report.rejectionControl = { rejectedText, controlText, shares: result.control };
+    report.rejectedShare = result.cleared;
   });
   await step("Foreign top-frame navigation stays on the suite origin", async () => {
     await cdp.evaluate("location.assign('/navigation.html'); true");

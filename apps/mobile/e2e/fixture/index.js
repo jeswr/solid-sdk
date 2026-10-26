@@ -2,6 +2,7 @@
 (() => {
   const state = {
     page: "index",
+    documentId: crypto.randomUUID(),
     origin: location.origin,
     done: false,
     errors: [],

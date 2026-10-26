@@ -47,15 +47,21 @@ Checks require explicit evidence and exit nonzero on failure:
 - An unsandboxed cross-origin iframe tries the legacy bridge, cookie/HTTP interfaces,
   Capacitor plugin proxy and the WebMessage listener. Capacitor 8.5.3 names both bridge
   transports `androidBridge`. Exposed native surfaces fail even without a response.
-  A plugin wrapper with no response is accepted only when all native transports are absent;
+  A plugin wrapper with no response or an identified Capacitor `UNIMPLEMENTED` rejection is
+  accepted only when all native transports are absent; unexpected probe exceptions fail;
   malformed, missing and timed-out iframe results fail. Parent messages check source,
   exact origin and a fresh nonce. There is no CSP masking native isolation failures.
 - A unique ACTION_SEND text (including quotes and shell metacharacters) must appear as exactly
-  one item in one pending batch. Listener events, when present, must match too. It is then
-  acknowledged so the rejection check starts with an empty inbox.
+  one item in one pending batch. A document identity token recorded before sending requires
+  exactly one matching listener event when the original document survives; pending alone
+  suffices only after a reload. It is then acknowledged so the rejection check starts empty.
 - A **readable existing** app-private file URI is sent with typed `--eu EXTRA_STREAM` and a
   unique text sentinel. The entire batch must be rejected: no pending batch or listener
-  event after the receiver finishes. This cannot pass simply because the file is missing.
+  event after the receiver finishes. A fresh control text share through the same receiver's
+  single-thread executor proves completion of the preceding file request. Exactly the control
+  batch and its matching event (if the document survives) may arrive; after acknowledging it,
+  the inbox and listener history must be empty. This cannot pass because the file is missing
+  or because an activity disappeared before processing.
 - `/navigation.html` tries `location.assign` to the foreign origin. After a bounded two-second
   observation window, the driver requires that same navigation document and suite origin to
   survive, including after foregrounding the app. An external browser may open as designed.

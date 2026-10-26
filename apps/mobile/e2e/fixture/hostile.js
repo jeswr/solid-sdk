@@ -9,16 +9,16 @@
     options: {},
   });
   function attempt(name, target, call) {
-    if (target == null) {
+    if (typeof target === "undefined") {
       attempts[name] = { status: "unavailable" };
       return;
     }
+    // Presence fails even when a method is missing, throws, or returns false.
+    attempts[name] = { status: "exposed" };
     try {
       call(target);
-      // A native surface exposed to this foreign origin fails even without a reply.
-      attempts[name] = { status: "exposed" };
     } catch (error) {
-      attempts[name] = { status: "rejected", detail: String(error) };
+      attempts[name].detail = String(error);
     }
   }
   attempt("androidBridge", window.androidBridge, (bridge) => bridge.postMessage(message));
@@ -30,27 +30,42 @@
   );
   // WebViewCompat.addWebMessageListener uses the SAME androidBridge name as the legacy interface.
   attempt("webMessage", window.androidBridge, (listener) => listener.postMessage(message));
-  const cap = window.Capacitor;
-  const plugin = cap?.Plugins?.SuiteShareIntake ?? cap?.registerPlugin?.("SuiteShareIntake");
-  if (!plugin && typeof cap?.nativePromise !== "function") {
-    attempts.capacitorPlugin = { status: "unavailable" };
-  } else {
-    let timer;
-    try {
-      const response = plugin
-        ? plugin.getPending()
-        : cap.nativePromise("SuiteShareIntake", "getPending", {});
+  let timer;
+  try {
+    const cap = window.Capacitor;
+    let plugin = cap?.Plugins?.SuiteShareIntake;
+    if (typeof plugin === "undefined" && typeof cap?.registerPlugin !== "undefined") {
+      plugin = cap.registerPlugin("SuiteShareIntake");
+    }
+    if (typeof plugin === "undefined" && typeof cap?.nativePromise === "undefined") {
+      attempts.capacitorPlugin = { status: "unavailable" };
+    } else {
+      const response =
+        typeof plugin === "undefined"
+          ? cap.nativePromise("SuiteShareIntake", "getPending", {})
+          : plugin.getPending();
       attempts.capacitorPlugin = await Promise.race([
         Promise.resolve(response).then(() => ({ status: "exposed" })),
         new Promise((resolve) => {
           timer = setTimeout(() => resolve({ status: "no-response" }), 2000);
         }),
       ]);
-    } catch (error) {
-      attempts.capacitorPlugin = { status: "rejected", detail: String(error) };
-    } finally {
-      clearTimeout(timer);
     }
+  } catch (error) {
+    const knownRejection =
+      error?.code === "UNIMPLEMENTED" &&
+      typeof error.message === "string" &&
+      /^"SuiteShareIntake(?:" plugin|\.getPending\(\)") is not implemented on (?:web|android)$/.test(
+        error.message,
+      );
+    attempts.capacitorPlugin = {
+      status: knownRejection ? "rejected" : "error",
+      code: error?.code,
+      message: error?.message,
+      detail: String(error),
+    };
+  } finally {
+    clearTimeout(timer);
   }
   parent.postMessage(
     {
