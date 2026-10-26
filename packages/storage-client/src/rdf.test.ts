@@ -175,3 +175,87 @@ describe.each(["solid", "lws"] as const)("memory %s RDF patch term identity", (p
     expect((await storage.head(url)).etag).toBe(etag);
   });
 });
+
+describe("terms n3 cannot encode faithfully", () => {
+  const quoted = 'urn:d"@en . <urn:forged> <urn:p> <urn:o> . #';
+  const quotedLiteral = () =>
+    ({
+      termType: "Literal",
+      value: "intended",
+      language: "",
+      datatype: { termType: "NamedNode", value: quoted },
+    }) as unknown as Quad["object"];
+
+  test("a quote in a datatype IRI is escaped, never read as a language tag", async () => {
+    const body = await serializeQuads([quad(s, p, quotedLiteral())], "text/turtle");
+    const parsed = new Parser({ format: "text/turtle" }).parse(body);
+    expect(parsed).toHaveLength(1);
+    expect(parsed[0]?.object.value).toBe("intended");
+    expect(body).not.toContain("<urn:forged>");
+  });
+
+  test.each([
+    "solid",
+    "lws",
+  ] as const)("%s patch inserts escape quoted datatypes", async (protocol) => {
+    const storage = createMemoryStorage({ protocol, root: ROOT });
+    const created =
+      protocol === "solid"
+        ? await storage.writeRdf(URL, [], { ifMatch: "*" })
+        : await storage.create(ROOT, "", { contentType: "text/turtle" });
+    await storage.patch(
+      created.url,
+      { kind: "rdf", inserts: [quad(s, p, quotedLiteral())], deletes: [] },
+      { ifMatch: created.etag as string },
+    );
+    const dataset = (await storage.readRdf(created.url)).dataset;
+    expect(dataset.size).toBe(1);
+    expect([...dataset][0]?.object.value).toBe("intended");
+  });
+
+  test.each([
+    "_:b0",
+    "?x",
+    '"lit"',
+    "relative/path",
+    "",
+  ])("a named node %j that is not an absolute IRI is refused", async (value) => {
+    const term = foreign(namedNode("urn:o"), { value });
+    expect(() => serializeQuads([quad(s, p, term)], "text/turtle")).toThrow(TypeError);
+    const storage = createMemoryStorage({ root: ROOT });
+    const created = await storage.writeRdf(URL, [], { ifMatch: "*" });
+    await expect(
+      storage.patch(
+        URL,
+        { kind: "rdf", inserts: [quad(s, p, term)], deletes: [] },
+        { ifMatch: created.etag as string },
+      ),
+    ).rejects.toMatchObject({ code: "bad-request" });
+    expect((await storage.head(URL)).etag).toBe(created.etag);
+  });
+
+  test("one empty blank-node label is one node, distinct from other labels", async () => {
+    const empty = { termType: "BlankNode", value: "" } as unknown as Quad["subject"];
+    const other = blankNode("empty0");
+    const input = [quad(empty, p, empty as Quad["object"]), quad(other, p, s)];
+    const body = await serializeQuads(input, "text/turtle");
+    const parsed = new Parser({ format: "text/turtle" }).parse(body);
+    expect(parsed).toHaveLength(2);
+    const loop = parsed.find((q) => q.object.termType === "BlankNode");
+    expect(loop?.subject.equals(loop.object)).toBe(true);
+    const edge = parsed.find((q) => q.object.termType === "NamedNode");
+    expect(edge?.subject.equals(loop?.subject as Term)).toBe(false);
+
+    const storage = createMemoryStorage({ root: ROOT });
+    const created = await storage.writeRdf(URL, [], { ifMatch: "*" });
+    await storage.patch(
+      URL,
+      { kind: "rdf", inserts: input, deletes: [] },
+      { ifMatch: created.etag as string },
+    );
+    const stored = [...(await storage.readRdf(URL)).dataset];
+    const storedLoop = stored.find((q) => q.object.termType === "BlankNode");
+    expect(storedLoop?.subject.equals(storedLoop.object)).toBe(true);
+    expect(stored).toHaveLength(2);
+  });
+});
