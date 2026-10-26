@@ -16,6 +16,8 @@ export const FEDERATION = {
   Note: "https://jeswr.org/ns/sectors/social#Note",
   Person: "https://jeswr.org/ns/core#Person",
   Agent: "https://jeswr.org/ns/core#Agent",
+  AccountHolder: "https://jeswr.org/ns/core#AccountHolder",
+  AccountProvider: "https://jeswr.org/ns/core#AccountProvider",
   Activity: "https://jeswr.org/ns/core#Activity",
 } as const;
 
@@ -24,4 +26,6 @@ export const FEDERATION_PROPERTIES = {
   content: "https://jeswr.org/ns/sectors/social#content",
   about: "https://jeswr.org/ns/core#about",
   subject: "https://jeswr.org/ns/core#subject",
+  hasAccountHolder: "https://jeswr.org/ns/core#hasAccountHolder",
+  hasAccountProvider: "https://jeswr.org/ns/core#hasAccountProvider",
 } as const;

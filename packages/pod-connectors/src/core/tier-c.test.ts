@@ -65,11 +65,11 @@ function isInstanceOf(dataset: DatasetCore, subject: Term, target: Term): boolea
  * cardinalities, datatypes and linked classes, including inherited core shapes.
  * Warning/Info constraints are advisory; this is not a general SHACL engine.
  */
-function expectRequiredProfileProperties(dataset: DatasetCore, shapes = profiles): void {
+function expectRequiredProfileProperties(dataset: DatasetCore): void {
   const subjects = [
     ...new Map([...dataset].map((quad) => [quad.subject.value, quad.subject])).values(),
   ];
-  for (const target of shapes.getQuads(null, `${SH}targetClass`, null, null)) {
+  for (const target of profiles.getQuads(null, `${SH}targetClass`, null, null)) {
     const nodes = subjects.filter((subject) => isInstanceOf(dataset, subject, target.object));
     for (const property of profiles.getObjects(target.subject, `${SH}property`, null)) {
       const severity = profiles.getObjects(property, `${SH}severity`, null)[0];
@@ -172,6 +172,9 @@ const fixtures: {
       FEDERATION.CreativeWork,
       CLASSES.OnlineAccount,
       FEDERATION.MediaAccount,
+      FEDERATION.Agent,
+      FEDERATION.AccountHolder,
+      FEDERATION.AccountProvider,
     ],
     value: "PT1H15M",
   },
@@ -254,12 +257,7 @@ for (const fixture of fixtures) {
       const mappings: string[] = [];
       for (const written of report.written) {
         const dataset = pod.dataset(written.url);
-        // Apply the combined core/sector profile to financial fixtures. Other
-        // importers retain sector coverage; core account modelling is separate.
-        expectRequiredProfileProperties(
-          dataset,
-          fixture.types.includes(FEDERATION.TransactionRecord) ? profiles : sectorShapes,
-        );
+        expectRequiredProfileProperties(dataset);
         for (const quad of dataset.match(
           null,
           RDF_TYPE,
@@ -286,6 +284,12 @@ for (const fixture of fixtures) {
         for (const subject of itemSubjects) {
           const item = new Provenance(subject, dataset, DataFactory);
           for (const type of item.types) types.add(type);
+          const root = `${TEST_POD_ROOT}integrations/${fixture.adapter.metadata.id}/`;
+          if (!subject.startsWith(root)) {
+            expect(item.derivedFrom.size).toBe(0);
+            expect(item.generatedBy.size).toBe(0);
+            continue;
+          }
           expect(item.derivedFrom.size).toBeGreaterThan(0);
           if (item.sourceUrl) expect(item.derivedFrom.has(item.sourceUrl)).toBe(true);
           expect(item.generatedBy.size).toBe(1);
@@ -333,6 +337,34 @@ for (const fixture of fixtures) {
 const financialFixtures = fixtures.filter((fixture) =>
   fixture.types.includes(FEDERATION.TransactionRecord),
 );
+
+it("validates Steam's inherited account links and participant roles", async () => {
+  const fixture = required(fixtures.find((entry) => entry.adapter === steamFileAdapter));
+  const { pod, report } = await fileImport(
+    steamFileAdapter,
+    streamedFile(fixture.name, fixture.text),
+  );
+  const written = required(report.written.find((doc) => doc.category === "social"));
+  const dataset = pod.dataset(written.url);
+  const account = new SectorThing(`${written.url}#account`, dataset, DataFactory);
+  expect(account.accountHolder).toBe(TEST_WEBID);
+  expect(account.accountProvider).toBe("https://store.steampowered.com/");
+  expectRequiredProfileProperties(dataset);
+  for (const [key, predicate, role] of [
+    ["accountHolder", FEDERATION_PROPERTIES.hasAccountHolder, FEDERATION.AccountHolder],
+    ["accountProvider", FEDERATION_PROPERTIES.hasAccountProvider, FEDERATION.AccountProvider],
+  ] as const) {
+    const participant = required(account[key]);
+    account[key] = undefined;
+    expect(() => expectRequiredProfileProperties(dataset)).toThrow(predicate);
+    account[key] = participant;
+    const agent = new PodThing(participant, dataset, DataFactory);
+    agent.types.delete(role);
+    expect(() => expectRequiredProfileProperties(dataset)).toThrow(predicate);
+    agent.types.add(role);
+    expectRequiredProfileProperties(dataset);
+  }
+});
 
 it.each(
   financialFixtures,
@@ -392,6 +424,16 @@ it.each(
   for (const record of records)
     expect(new SectorThing(record.subject.value, dataset, DataFactory).dataSubject).toBe(webId);
   expect(new PodThing(webId, dataset, DataFactory).types.has(FEDERATION.Agent)).toBe(true);
+  expect(
+    [...dataset.match(DataFactory.namedNode(webId))].some((quad) =>
+      quad.predicate.value.startsWith(PROV),
+    ),
+  ).toBe(false);
+  for (const record of records) {
+    const provenance = new Provenance(record.subject.value, dataset, DataFactory);
+    expect(provenance.derivedFrom.size).toBeGreaterThan(0);
+    expect(provenance.generatedBy.size).toBe(1);
+  }
   expectRequiredProfileProperties(dataset);
 });
 
@@ -414,6 +456,37 @@ it.each([
     runFileImport({ adapter: bankStatementsFileAdapter, file, podWriter: { ...writer, webId } }),
   ).rejects.toThrow("WebID");
   expect(pod.urls().some((url) => url.endsWith("bank-transactions.ttl"))).toBe(false);
+});
+
+it.each([
+  undefined,
+  "",
+  "relative/holder",
+  "https://identity.test/invalid holder",
+])("requires a usable host WebID only when importing Steam account metadata (%#)", async (webId) => {
+  const pod = createMemoryPod();
+  const writer = createFetchPodWriter({
+    adapterId: steamFileAdapter.metadata.id,
+    webId: TEST_WEBID,
+    profileDocumentUrl: TEST_PROFILE_DOC,
+    podRoot: TEST_POD_ROOT,
+    fetch: pod.fetch,
+  });
+  const podWriter = { ...writer, webId };
+  await expect(
+    runFileImport({
+      adapter: steamFileAdapter,
+      file: streamedFile("account.json", '{"steamid":"synthetic-1"}'),
+      podWriter,
+    }),
+  ).rejects.toThrow("WebID");
+  expect(pod.urls().some((url) => url.endsWith("steam-account.ttl"))).toBe(false);
+  const report = await runFileImport({
+    adapter: steamFileAdapter,
+    file: streamedFile("games.json", '[{"appid":100,"name":"Synthetic game"}]'),
+    podWriter,
+  });
+  expect(report.state?.lastOutcome).toBe("success");
 });
 
 it.each([
@@ -458,6 +531,11 @@ it.each([
     const dataset = pod.dataset(written.url);
     for (const subject of new Set([...dataset].map((quad) => quad.subject.value))) {
       const item = new Provenance(subject, dataset, DataFactory);
+      if (!subject.startsWith(`${TEST_POD_ROOT}integrations/${adapter.metadata.id}/`)) {
+        expect(item.derivedFrom.size).toBe(0);
+        expect(item.generatedBy.size).toBe(0);
+        continue;
+      }
       expect(
         item.derivedFrom.has(item.sourceUrl ?? `urn:solid:connector:${adapter.metadata.id}:export`),
       ).toBe(true);

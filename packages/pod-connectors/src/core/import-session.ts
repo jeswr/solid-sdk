@@ -29,6 +29,7 @@ export function createImportSession(
 ) {
   const started = new Date();
   const activityUrl = `${writer.resolve(RUNS)}#run-${crypto.randomUUID()}`;
+  const connectorRoot = new URL(".", writer.resolve(RUNS)).href;
   const connector = `urn:solid:connector:${encodeURIComponent(id)}`;
   const reads = new Map<string, Awaited<ReturnType<PodWriter["read"]>>>();
   const used = new Set<string>([source]);
@@ -70,6 +71,8 @@ export function createImportSession(
     document.generatedBy.clear();
     document.generatedBy.add(activityUrl);
     for (const subject of subjects) {
+      // Linked identities keep their typing, but were not created by this import.
+      if (!subject.startsWith(connectorRoot)) continue;
       const item = new Provenance(subject, dataset, DataFactory);
       const origin = item.sourceUrl ?? fallback;
       item.derivedFrom.add(origin);
@@ -78,7 +81,7 @@ export function createImportSession(
       item.generatedBy.add(activityUrl);
       used.add(origin);
       // Sector maps can add linked people/activities. Counts describe the
-      // adapter's source items; every mapped resource still gets provenance.
+      // adapter's local source items; local mapped resources also get provenance.
       if (subject !== url && sourceSubjects.has(subject))
         itemKeys.add(JSON.stringify([url, subject]));
     }

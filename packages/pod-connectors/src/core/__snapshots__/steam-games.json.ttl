@@ -9,6 +9,10 @@
 <https://pod.test/alice/integrations/steam/social/steam-account.ttl#account> a <http://xmlns.com/foaf/0.1/OnlineAccount>, <https://jeswr.org/ns/sectors/media#MediaAccount>;
     <http://xmlns.com/foaf/0.1/accountName> "Synthetic Player";
     <http://xmlns.com/foaf/0.1/accountServiceHomepage> <https://store.steampowered.com/>;
+    <https://jeswr.org/ns/core#hasAccountHolder> <https://pod.test/alice/profile/card#me>;
+    <https://jeswr.org/ns/core#hasAccountProvider> <https://store.steampowered.com/>;
     <https://schema.org/identifier> "12345";
     <https://schema.org/name> "Synthetic Player";
     <https://schema.org/url> <https://steamcommunity.com/profiles/12345>.
+<https://pod.test/alice/profile/card#me> a <https://jeswr.org/ns/core#AccountHolder>, <https://jeswr.org/ns/core#Agent>.
+<https://store.steampowered.com/> a <https://jeswr.org/ns/core#AccountProvider>.

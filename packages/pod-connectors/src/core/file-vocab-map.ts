@@ -39,6 +39,36 @@ export class SectorThing extends PodThing {
   set dataSubject(value: string | undefined) {
     OptionalAs.object(this, FEDERATION_PROPERTIES.subject, safeIri(value), NamedNodeFrom.string);
   }
+  get accountHolder(): string | undefined {
+    return OptionalFrom.subjectPredicate(
+      this,
+      FEDERATION_PROPERTIES.hasAccountHolder,
+      NamedNodeAs.string,
+    );
+  }
+  set accountHolder(value: string | undefined) {
+    OptionalAs.object(
+      this,
+      FEDERATION_PROPERTIES.hasAccountHolder,
+      safeIri(value),
+      NamedNodeFrom.string,
+    );
+  }
+  get accountProvider(): string | undefined {
+    return OptionalFrom.subjectPredicate(
+      this,
+      FEDERATION_PROPERTIES.hasAccountProvider,
+      NamedNodeAs.string,
+    );
+  }
+  set accountProvider(value: string | undefined) {
+    OptionalAs.object(
+      this,
+      FEDERATION_PROPERTIES.hasAccountProvider,
+      safeIri(value),
+      NamedNodeFrom.string,
+    );
+  }
 }
 
 /** Complete the sector types added by Tier C without changing source fields. */

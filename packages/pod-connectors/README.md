@@ -81,7 +81,9 @@ source-specific deletions with replacement writes. ETags and create-only conditi
 write modes; a 412 surfaces to the host without advancing its checkpoint. Repeated writes re-read
 the current ETag.
 
-Every collection and item carries `prov:wasDerivedFrom` and `prov:wasGeneratedBy`. Item
+Imported documents and resources inside the writer's resolved connector container carry
+`prov:wasDerivedFrom` and `prov:wasGeneratedBy`. Externally linked identities retain their
+required typing without import-generation provenance and are excluded from item counts. Item
 `schema:url` supplies its source; `NormalisedDoc.sourceUrl` can supply a document-specific
 fallback. Otherwise the source API origin or a connector export URN is used. Each run has one
 activity in the connector's reserved `_provenance.ttl`, with source IRIs, connector IRI and
@@ -126,7 +128,9 @@ Sector mappings also carry the required shape properties: creative works have
 local `core:Person` through `core:subject`. Financial records use the importing
 user's WebID as `core:subject`, typed `core:Agent`. The fetch-backed writer exposes
 its configured WebID; custom `PodWriter` implementations must supply `webId` for
-financial file imports. Imports fail before writing a financial document when
+financial file imports and Steam account metadata. Steam accounts link to that WebID
+as a `core:Agent` and `core:AccountHolder`, and to Steam's public site as a
+`core:AccountProvider`. Imports fail before writing the affected document when
 that identity is missing or invalid. Financial activities retain the broad
 `core:Activity` type because exports may omit the currency or posting time needed
 by the `fin:Transaction` shape; missing source facts are not inferred.
@@ -139,7 +143,7 @@ Synthetic fixture tests cover every importer with one-byte, seven-byte and
 single-chunk input, sorted Turtle mapping snapshots, provenance and stable
 re-import. They assert the required predicates, cardinalities, datatypes and
 linked classes from the checked-in sector shapes, following the class hierarchy
-in the core and sector ontologies. Financial fixtures also validate inherited
+in the core and sector ontologies. Every Tier C fixture snapshot also validates inherited
 core constraints. These checks add no SHACL dependency.
 The Apple Health streaming test lazily generates over 50 MiB of
 `export.xml` and retains only workouts. Tests make no production requests.

@@ -212,7 +212,7 @@ export interface TypeRegistrationRequest {
 
 /** Host-owned storage port, bound to one connector's document container. */
 export interface PodWriter {
-  /** Importing user's WebID; required by financial file mappings for core:subject. */
+  /** Importing user's WebID; required for financial subjects and Steam account holders. */
   readonly webId?: string;
   /** Resolve an adapter-relative slug within its container. */
   resolve(slug: string): string;
