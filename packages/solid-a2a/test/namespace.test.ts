@@ -137,6 +137,119 @@ describe("A2A namespace compatibility", () => {
     expect((await validateIntent(missing, buildShapeForIntent("grant"))).conforms).toBe(false);
   });
 
+  it.each([
+    [A2A, LEGACY],
+    [LEGACY, A2A],
+  ])("does not merge split grant fields on %s and %s action nodes", async (linkedNs, otherNs) => {
+    const dataset = await parseRdf(
+      `@prefix a2a: <${A2A}> . @prefix schema: <https://schema.org/> .
+      <urn:intent> a a2a:Intent ; a2a:action <${linkedNs}x> .
+      <${linkedNs}x> a a2a:GrantAction ; schema:object <https://pod.example/data> .
+      <${otherNs}x> schema:recipient <https://bob.example/#me> ;
+        <${LEGACY}mode> <http://www.w3.org/ns/auth/acl#Read> .`,
+      "text/turtle",
+      {},
+    );
+    const shape = buildShapeForIntent("grant");
+    const report = await validateIntent(dataset, shape);
+    expect(report.conforms).toBe(false);
+    expect(report.results.length).toBeGreaterThan(0);
+    const parsed = await parseIntentGraph(dataset);
+    expect(parsed).toEqual({
+      id: "urn:intent",
+      action: "grant",
+      target: "https://pod.example/data",
+    });
+    expect((await validateIntent(parsed as Intent, shape)).conforms).toBe(false);
+  });
+
+  it("preserves legacy instance identities and resource references during validation", async () => {
+    const dataset = await parseRdf(
+      `@prefix old: <${LEGACY}> . @prefix a2a: <${A2A}> .
+      @prefix schema: <https://schema.org/> .
+      old:request a old:Intent ; a2a:action old:x ; old:parameter old:p .
+      old:x a a2a:GrantAction ; schema:object old:resource ; schema:recipient old:recipient ;
+        old:mode <http://www.w3.org/ns/auth/acl#Read> .
+      old:p old:paramKey "reason" ; a2a:paramValue "review" .`,
+      "text/turtle",
+      {},
+    );
+    const parsed = await parseIntentGraph(dataset);
+    expect(parsed).toEqual({
+      ...expected,
+      id: `${LEGACY}request`,
+      target: `${LEGACY}resource`,
+      recipient: `${LEGACY}recipient`,
+    });
+    const shape = await parseRdf(
+      `${grantShape(LEGACY)}
+      <urn:shape> <http://www.w3.org/ns/shacl#property> [
+        <http://www.w3.org/ns/shacl#path> <${A2A}action> ;
+        <http://www.w3.org/ns/shacl#hasValue> <${LEGACY}x> ] .`,
+      "text/turtle",
+      {},
+    );
+    expect((await validateIntent(dataset, shape)).conforms).toBe(true);
+    expect((await validateIntent(parsed as Intent, buildShapeForIntent("grant"))).conforms).toBe(
+      true,
+    );
+  });
+
+  it("does not alias resource values required by a shape", async () => {
+    const dataset = await parseRdf(
+      `${grantGraph(A2A)}
+      <urn:action> <https://schema.org/agent> <${LEGACY}agent> .`,
+      "text/turtle",
+      {},
+    );
+    const shape = await parseRdf(
+      `${grantShape(A2A)}
+      <urn:agent-shape> a <http://www.w3.org/ns/shacl#NodeShape> ;
+        <http://www.w3.org/ns/shacl#targetNode> <urn:action> ;
+        <http://www.w3.org/ns/shacl#property> [
+          <http://www.w3.org/ns/shacl#path> <https://schema.org/agent> ;
+          <http://www.w3.org/ns/shacl#hasValue> <${A2A}agent> ] .`,
+      "text/turtle",
+      {},
+    );
+    expect((await validateIntent(dataset, shape)).conforms).toBe(false);
+    expect((await parseIntentGraph(dataset))?.agent).toBe(`${LEGACY}agent`);
+  });
+
+  it("counts distinct canonical and legacy action references separately", async () => {
+    const dataset = await parseRdf(
+      `@prefix a2a: <${A2A}> . @prefix old: <${LEGACY}> .
+      @prefix schema: <https://schema.org/> .
+      <urn:intent> a old:Intent ; a2a:action a2a:x ; old:action old:x .
+      a2a:x a a2a:GrantAction ; schema:object <https://pod.example/data> ;
+        schema:recipient <https://bob.example/#me> ; a2a:mode <http://www.w3.org/ns/auth/acl#Read> .
+      old:x a old:GrantAction ; schema:object <https://pod.example/data> ;
+        schema:recipient <https://bob.example/#me> ; old:mode <http://www.w3.org/ns/auth/acl#Read> .`,
+      "text/turtle",
+      {},
+    );
+    expect((await validateIntent(dataset, buildShapeForIntent("grant"))).conforms).toBe(false);
+  });
+
+  it("preserves exact targetNode identities and validation focus nodes", async () => {
+    const data = await parseRdf(
+      `<${LEGACY}x> <https://schema.org/name> "legacy" .
+      <${A2A}x> <https://schema.org/name> "canonical" .`,
+      "text/turtle",
+      {},
+    );
+    const shape = await parseRdf(
+      `@prefix sh: <http://www.w3.org/ns/shacl#> .
+      <urn:shape> a sh:NodeShape ; sh:targetNode <${LEGACY}x> ;
+        sh:property [ sh:path <https://schema.org/name> ; sh:hasValue "canonical" ] .`,
+      "text/turtle",
+      {},
+    );
+    const report = await validateIntent(data, shape);
+    expect(report.conforms).toBe(false);
+    expect(report.results.some((result) => result.focusNode === `${LEGACY}x`)).toBe(true);
+  });
+
   it("writes canonical shapes and protocol metadata, preserving supplied legacy shapes", async () => {
     const shape = buildShapeForIntent("grant");
     const response = buildResponseShape(`${LEGACY}Intent`);
