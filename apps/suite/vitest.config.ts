@@ -22,6 +22,7 @@ export default defineConfig({
         "src/apps/money/lib/budget/**/*.ts",
         "src/apps/sheets/lib/univer-spike/**/*.ts",
         "src/apps/contacts/lib/dedupe/**/*.ts",
+        "src/apps/contacts/lib/dates/**/*.ts",
         "src/apps/money/lib/rules/**/*.ts",
       ],
       reporter: ["text", "json-summary"],
