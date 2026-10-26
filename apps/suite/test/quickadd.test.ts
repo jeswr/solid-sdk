@@ -206,6 +206,17 @@ describe("ambiguity and literal text", () => {
     "Keep !9:30am",
     "Keep ! 1h before",
     "Keep !1h before",
+    "Call !14:00",
+    "Call ! 00:15",
+    "Call !23:59:30",
+    "Call !1 hour before",
+    "Call !30 minutes before",
+    "Call !2 days before",
+    "Call !one hour before",
+    "Call !two hours before",
+    "Call !a day before",
+    "Call !an hour before",
+    "Call !14:00 !two hours before",
     "Walk everyday",
     "Walk monthlyish",
     "Walk every 0 days",
@@ -310,6 +321,50 @@ describe("metadata and spans", () => {
 
 describe("time zones, DST and determinism", () => {
   it.each([
+    ["Europe/London", "2026-10-23T11:00:00Z", "in 2 hours", "2026-10-23T13:00:00.000Z"],
+    ["America/New_York", "2026-10-23T11:00:00Z", "in 30 minutes", "2026-10-23T11:30:00.000Z"],
+    ["Asia/Kolkata", "2026-10-23T11:00:00Z", "in two hours", "2026-10-23T13:00:00.000Z"],
+    ["Pacific/Kiritimati", "2026-10-23T11:00:00Z", "in 45 seconds", "2026-10-23T11:00:45.000Z"],
+    ["Europe/London", "2026-03-29T00:30:00Z", "in 2 hours", "2026-03-29T02:30:00.000Z"],
+    ["Europe/London", "2026-10-25T00:30:00Z", "in 2 hours", "2026-10-25T02:30:00.000Z"],
+    ["Europe/London", "2026-10-23T11:00:00Z", "now", "2026-10-23T11:00:00.000Z"],
+  ])("resolves elapsed time in %s / %s / %s", (tz, now, phrase, expected) => {
+    const result = parseQuickAdd(`Call ${phrase}`, { tz, now: new Date(now) });
+    expect(result.due).toEqual(timed(expected, tz));
+    expect(result.title).toBe("Call");
+    expect(result.spans).toEqual([{ kind: "due", start: 5, end: 5 + phrase.length, text: phrase }]);
+  });
+  it.each([
+    ["Europe/London", "2026-10-23T11:30:00Z", "12pm UTC", "2026-10-23T12:00:00.000Z"],
+    ["Europe/London", "2026-10-23T11:30:00Z", "11am UTC", "2026-10-24T11:00:00.000Z"],
+    ["Europe/London", "2026-10-23T11:30:00Z", "12pm +0000", "2026-10-23T12:00:00.000Z"],
+    ["Europe/London", "2026-10-23T11:30:00Z", "2pm +0200", "2026-10-23T12:00:00.000Z"],
+    ["America/New_York", "2026-10-23T11:30:00Z", "9am UTC", "2026-10-24T09:00:00.000Z"],
+    ["Pacific/Kiritimati", "2026-10-23T11:30:00Z", "12pm UTC", "2026-10-23T12:00:00.000Z"],
+    ["America/Los_Angeles", "2026-10-23T01:00:00Z", "2am UTC", "2026-10-23T02:00:00.000Z"],
+    ["Europe/London", "2026-10-23T23:30:00Z", "2am +0200", "2026-10-24T00:00:00.000Z"],
+  ])("infers upcoming explicit-zone times in %s / %s / %s", (tz, now, phrase, expected) => {
+    const input = `Call ${phrase} then tomorrow`;
+    const result = parseQuickAdd(input, { tz, now: new Date(now) });
+    expect(result.due).toEqual(timed(expected, tz));
+    expect(result.title).toBe("Call then tomorrow");
+    expect(result.spans).toEqual([{ kind: "due", start: 5, end: 5 + phrase.length, text: phrase }]);
+  });
+  it.each([
+    ["!14:00", "2026-10-24T16:00:00.000Z"],
+    ["!two hours before", "2026-10-24T16:00:00.000Z"],
+    ["!30 minutes before", "2026-10-24T16:00:00.000Z"],
+  ])("keeps reminder %s beside a deadline", (reminder, expected) => {
+    for (const input of [`Call ${reminder} tomorrow 5pm p1`, `Call tomorrow 5pm ${reminder} p1`]) {
+      const result = parseQuickAdd(input, ctx);
+      expect(result.due).toEqual(timed(expected));
+      expect(result.title).toBe(`Call ${reminder}`);
+      expect(result.priority).toBe(1);
+      for (const span of result.spans) expect(input.slice(span.start, span.end)).toBe(span.text);
+      expect(result.spans.map((span) => span.text)).toEqual(["tomorrow 5pm", "p1"]);
+    }
+  });
+  it.each([
     ["Europe/London", "2026-03-28T12:00:00Z", "tomorrow 9am", "2026-03-29T08:00:00.000Z"],
     ["Europe/London", "2026-10-24T12:00:00Z", "tomorrow 9am", "2026-10-25T09:00:00.000Z"],
     ["Europe/London", "2026-10-24T12:00:00Z", "tomorrow 1:30am", "2026-10-25T00:30:00.000Z"],
@@ -318,6 +373,8 @@ describe("time zones, DST and determinism", () => {
     ["Asia/Kolkata", "2026-10-23T12:00:00Z", "tomorrow 9am", "2026-10-24T03:30:00.000Z"],
     ["Australia/Lord_Howe", "2026-04-04T00:00:00Z", "tomorrow 1:45am", "2026-04-04T14:45:00.000Z"],
     ["UTC", "2026-12-31T23:30:00Z", "tomorrow 9am", "2027-01-01T09:00:00.000Z"],
+    ["Europe/London", "2026-10-23T11:00:00Z", "in 2 days at 5pm", "2026-10-25T17:00:00.000Z"],
+    ["Europe/London", "2026-03-27T12:00:00Z", "in 2 days at 5pm", "2026-03-29T16:00:00.000Z"],
   ])("converts %s / %s / %s", (tz, now, phrase, expected) => {
     expect(parseQuickAdd(`Call Robin ${phrase}`, { tz, now: new Date(now) }).due).toEqual(
       timed(expected, tz),

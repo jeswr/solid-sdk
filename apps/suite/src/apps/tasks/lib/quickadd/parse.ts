@@ -43,7 +43,7 @@ export function parseQuickAdd(text: string, ctx: QuickAddContext): QuickAddResul
   }
   // The L1 output excludes reminders and resource resolution. Preserve these in the title.
   for (const match of working.matchAll(
-    /\S*[@#]\S*|https?:\/\/\S+|!\s*(?:\d+\s*[mhd]\s+before|\d{1,2}(?::\d{2})?\s*[ap]m)\b/giu,
+    /\S*[@#]\S*|https?:\/\/\S+|!\s*(?:(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|an?)\s*(?:[mhd]|minutes?|hours?|days?)\s+before|\d{1,2}(?::\d{2})?\s*[ap]m|\d{1,2}:\d{2}(?::\d{2})?)\b/giu,
   )) {
     mask(match.index, match[0].length);
   }
@@ -59,7 +59,25 @@ export function parseQuickAdd(text: string, ctx: QuickAddContext): QuickAddResul
   if (recurrence) result.recurrence = recurrence;
   const parser = ctx.locale === "en-US" ? en.casual : en.GB;
   // A UTC surrogate supplies the injected zone's wall clock to chrono, independent of host TZ.
-  const matches = parser.parse(working, { instant: today, timezone: 0 }, { forwardDate: true });
+  const matches = parser
+    .parse(working, { instant: today, timezone: 0 }, { forwardDate: true })
+    .flatMap((candidate) => {
+      const tags = candidate.start.tags();
+      const elapsed = tags.has("result/relativeDateAndTime") || tags.has("casualReference/now");
+      if (!elapsed && !candidate.start.isCertain("timezoneOffset")) return [candidate];
+      // Durations inherit the reference offset; only other certain offsets are explicit tokens.
+      // Reparse against the real clock so elapsed time and explicit-zone date inference agree.
+      return parser
+        .parse(
+          candidate.text,
+          {
+            instant: ctx.now,
+            timezone: elapsed ? 0 : Number(candidate.start.get("timezoneOffset")),
+          },
+          { forwardDate: true },
+        )
+        .map((resolved) => ({ ...resolved, index: candidate.index + resolved.index }));
+    });
   const match = matches.find(
     (candidate) =>
       !candidate.end && !(candidate.start.isCertain("month") && !candidate.start.isCertain("day")),
@@ -81,7 +99,7 @@ export function parseQuickAdd(text: string, ctx: QuickAddContext): QuickAddResul
         Number(start.get("second")),
         0,
       );
-      const offset = start.get("timezoneOffset");
+      const offset = start.isCertain("timezoneOffset") ? start.get("timezoneOffset") : null;
       const instant =
         offset === null
           ? toInstant(calendar, ctx.tz)
