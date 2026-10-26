@@ -100,3 +100,27 @@ Validation used `export PATH="$PWD/node_modules/.bin:$PATH"`, as in the earlier 
 Model coverage remains **100% statements (181/181), branches (99/99), functions (44/44), lines (161/161)**, including 100% for `root.ts`.
 
 Conservative recovery choice: rollback requires a strong container ETag and a successful conditional DELETE. With no strong ETag, concurrent changes, a nonempty container, or rejected cleanup, preserve the container and the original error rather than risk data loss. No persistent ownership schema or shared account state was introduced. The full-workspace gate remains unrun for the previously documented unrelated `unstorage-solid` bootstrap: inspection reconfirmed its network clone, prohibited in this lane. No scoped work is unfinished and this round adds no open questions. No dependencies, UI, screenshots, tracker state, or unrelated code changed; nothing was pushed and no PR was opened.
+
+## Fix round 3 — safe rollback and initial discovery recovery
+
+Review baseline: `d53b4bfea56cd04c4658f2297b3d19f4a779bca9`.
+
+- `956b1e06` — `fix(drive): guard root bootstrap recovery`: address both medium findings. Require the rollback snapshot to contain only the root's basic LDP type statements, preserving all other metadata even when it arrived before the first GET. Prefer the container-creation ETag for conditional DELETE when supplied; otherwise use the inspected snapshot's strong ETag. Extend recovery to the initial GET and metadata-link discovery. If the initial read fails, make one bounded recovery read to inspect the newly created container before attempting safe cleanup, preserving the original error throughout.
+- Final documentation commit — `docs(drive): record discovery recovery validation` (this subsection, committed last).
+
+Regression tests cover concurrent metadata before the initial or recovery snapshot, changed creation validators, non-initial RDF and empty snapshots, recovery on a later call after one initial 503 with both 409/412 server variants, creation-validator cleanup, repeated read failures, and missing/foreign metadata-link recovery. Four targeted regressions failed against the reviewed implementation before restoring the fix: both initial-read variants, creation-validator protection, and preservation of metadata already in the first snapshot.
+
+Validation used `export PATH="$PWD/node_modules/.bin:$PATH"`, as in the earlier rounds:
+
+| Command | Result |
+| --- | --- |
+| `pnpm exec turbo run build --filter='@jeswr/app-suite^...'` | PASS; all 4 workspace dependency builds. |
+| `pnpm --filter @jeswr/app-suite run lint && pnpm --filter @jeswr/app-suite run build && pnpm --filter @jeswr/app-suite run typecheck && pnpm --filter @jeswr/app-suite run test` | PASS; production Next build, lint, strict typecheck, 9 test files / 187 tests. |
+| `pnpm run lint:root` | PASS; workspace, transport, fetch, token and contrast checks (74 pairs, 0 failures). |
+| `TURBO_SCM_BASE=55f55af19dadeb9f99388dc891b7aa6a8debed5b pnpm run gate` | PASS; 10/10 tasks, 4 cached. |
+| `git diff --check` | PASS. |
+| `command -v roborev` | Unavailable; automated per-commit review could not run. |
+
+Model coverage remains **100% statements (186/186), branches (102/102), functions (46/46), lines (167/167)**, including 100% for `root.ts`.
+
+Conservative recovery choice: only bare LDP typing demonstrates initial state; additional metadata, including server-generated properties, prevents deletion. Missing/weak validators, failed recovery reads and rejected cleanup also preserve the container and original error. No persistent ownership schema or shared account state was added. The full-workspace gate remains unrun: inspection reconfirmed that the unrelated `packages/unstorage-solid/scripts/build-deps.mjs` invokes a network clone, prohibited in this lane. Required app and affected repository gates passed before the final commit. No scoped work is unfinished and this round adds no open questions. No dependencies, UI, screenshots, tracker state, or unrelated code changed; nothing was pushed and no PR was opened.
