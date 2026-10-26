@@ -24,6 +24,7 @@ describe("formula reference tokenization and shifting", () => {
     ],
     ["=(A3+2)*5%+1<=2", "=(A5+2)*5%+1<=2"],
     ["=IF(A3>=2,A3>1,A3<3)", "=IF(A5>=2,A5>1,A5<3)"],
+    ["=DAYS360(A3,B3)", "=DAYS360(A5,B5)"],
     ["=NOW()+SUM(A1,A2)", "=NOW()+SUM(A1,A2)"],
     [
       "=#REF!+#DIV/0!+#VALUE!+#N/A+#NAME?+#NUM!+#NULL!",
@@ -71,7 +72,8 @@ describe("formula reference tokenization and shifting", () => {
     expect(shiftFormula("=R3C1+RC", { ...edit, kind: "delete", index: 3, count: 1 }, ctx)).toBe(
       "=#REF!+RC",
     );
-    expect(shiftFormula("=R1C1", { ...edit, index: 10 }, ctx)).toBe("=R1C1");
+    expect(shiftFormula("=r[0]c[0]", { ...edit, index: 10 }, ctx)).toBe("=r[0]c[0]");
+    expect(() => shiftFormula("=RC (R1C1)", edit, ctx)).toThrow(SheetReferenceError);
   });
   it("rejects a deleted R1C1 origin", () => {
     expect(() =>
@@ -114,6 +116,8 @@ describe("formula reference tokenization and shifting", () => {
     "=A0",
     "=A01",
     "=A1_name",
+    "=A1 (B1)",
+    "=A1(B1)",
     "=RC[1]",
     "=A1:A",
     "=Plan!A1:Other!A2",

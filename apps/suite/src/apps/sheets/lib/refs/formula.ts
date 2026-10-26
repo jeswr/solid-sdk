@@ -5,7 +5,6 @@ import {
   type Reference,
   SheetReferenceError,
   type StructuralEdit,
-  sameSheet,
   validatePosition,
   validateSheet,
 } from "./model";
@@ -52,6 +51,9 @@ function tokenize(formula: string, context: FormulaContext): Token[] {
     const reference = referencePatterns[context.notation ?? "A1"].exec(rest);
     let token: Token;
     if (fn) {
+      // A1 (B1) is a reference intersection, not a function invocation.
+      // These built-ins are the reference-shaped names in the supported dialect.
+      if (reference?.[0] === fn[0] && !/^(?:LOG10|ATAN2|DAYS360)$/i.test(fn[0])) fail();
       token = { kind: "function", text: fn[0], start };
     } else if (reference) {
       const text = reference[0];
@@ -148,7 +150,9 @@ export function shiftFormula(
     const shifted = shiftReference(token.ref, edit, context.sheet);
     let replacement = token.text;
     const targetChanged = shifted === null || JSON.stringify(shifted) !== JSON.stringify(token.ref);
-    const originChanged = context.notation === "R1C1" && sameSheet(context.sheet, edit.sheet);
+    const originChanged =
+      context.notation === "R1C1" &&
+      (nextOrigin?.row !== context.origin.row || nextOrigin.column !== context.origin.column);
     if (targetChanged || originChanged) {
       replacement =
         shifted === null
