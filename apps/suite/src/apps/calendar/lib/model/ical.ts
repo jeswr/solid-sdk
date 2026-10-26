@@ -265,6 +265,8 @@ function parseEventProperties(
   floatingTimeZone: string,
 ): { event: CalendarEvent; timeZone: string | undefined } {
   const get = (name: string) => properties.find((p) => p.name === name);
+  if (get("STATUS")?.value.toUpperCase() === "CANCELLED")
+    throw new TypeError("Cancelled ICS event skipped");
   if (properties.some((p) => ["RDATE", "EXRULE", "RECURRENCE-ID", "DURATION"].includes(p.name)))
     throw new TypeError("Unsupported ICS event property");
   const start = get("DTSTART");

@@ -35,6 +35,20 @@ describe("ICS fixture round-trips", () => {
   });
 });
 describe("ICS compatibility and validation", () => {
+  it.each(["", "RRULE:FREQ=DAILY;COUNT=3\n"])(
+    "skips cancelled events and series with an explicit warning (%s)",
+    (recurrence) => {
+      const source =
+        ics(`${recurrence}STATUS:CANCELLED`).replace("END:VCALENDAR", "") +
+        ics("STATUS:CONFIRMED").replace("BEGIN:VCALENDAR\n", "");
+      const imported = importICal(source);
+      expect(imported.skipped).toBe(1);
+      expect(imported.warnings).toEqual(["Cancelled ICS event skipped"]);
+      expect(imported.events).toHaveLength(1);
+      expect(imported.timeZones).toEqual([undefined]);
+      expect(imported.events[0]?.recurrence).toBeUndefined();
+    },
+  );
   it.each([
     "",
     ";TZID=Europe/London",
