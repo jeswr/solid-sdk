@@ -24,6 +24,45 @@ const CONTAINER = "https://alice.pod/pod-docs/";
 
 const REG: DesiredRegistration = { forClass: DOCUMENT_CLASS, container: CONTAINER };
 
+it.each([
+  false,
+  true,
+])("registers with weak profile/index ETags (already linked: %s)", async (linked) => {
+  const transport = mockFetch({
+    [`GET ${WEBID}`]: {
+      body: profileWith(linked ? { privateIndex: PRIVATE_INDEX } : {}),
+      etag: 'W/"profile"',
+    },
+    [`PUT ${PROFILE_DOC}`]: { etag: 'W/"profile-new"' },
+    [`GET ${PRIVATE_INDEX}`]: { body: "", etag: 'W/"index"' },
+    [`PUT ${PRIVATE_INDEX}`]: { etag: 'W/"index-new"' },
+    ...privateIndexPolicy(PRIVATE_INDEX, WEBID),
+  });
+  let conflicts = 0;
+  const fetchImpl: typeof fetch = async (url, init) => {
+    if (new Headers(init?.headers).get("if-match")?.startsWith("W/")) {
+      conflicts++;
+      return new Response(null, { status: 412 });
+    }
+    return transport.fetch(url, init);
+  };
+  await expect(
+    ensureTypeRegistrations({ webId: WEBID, podRoot: POD, registrations: [REG], fetchImpl }),
+  ).resolves.toMatchObject({ added: 1 });
+  expect(conflicts).toBe(0);
+  const replacements = transport.calls.filter(
+    (call) => call.method === "PUT" && !call.headers["if-none-match"],
+  );
+  expect(replacements.map((call) => [call.url, call.headers["if-match"]])).toEqual(
+    linked
+      ? [[PRIVATE_INDEX, "*"]]
+      : [
+          [PROFILE_DOC, "*"],
+          [PRIVATE_INDEX, "*"],
+        ],
+  );
+});
+
 function profileWith(links: { privateIndex?: string; publicIndex?: string }): string {
   const lines = [
     "@prefix solid: <http://www.w3.org/ns/solid/terms#> .",
@@ -241,9 +280,9 @@ describe("ensureTypeRegistrations", () => {
     expect(result.bootstrapped).toBe(true);
     expect(result.indexUrl).toBe(PRIVATE_INDEX);
     expect(result.added).toBe(1);
-    // The profile PUT carried the read ETag as If-Match.
+    // A weak profile ETag uses the existence precondition.
     const profilePut = calls.find((c) => c.method === "PUT" && c.url === PROFILE_DOC);
-    expect(profilePut?.headers["if-match"]).toBe('W/"p"');
+    expect(profilePut?.headers["if-match"]).toBe("*");
     // The bootstrap index PUT was create-only.
     const indexCreate = calls.find(
       (c) => c.method === "PUT" && c.url === PRIVATE_INDEX && c.headers["if-none-match"] === "*",
@@ -269,9 +308,9 @@ describe("ensureTypeRegistrations", () => {
     });
     expect(result.bootstrapped).toBe(false);
     expect(result.added).toBe(1);
-    // The index write carried the read ETag.
+    // A weak index ETag uses the existence precondition.
     const put = calls.find((c) => c.method === "PUT" && c.url === PRIVATE_INDEX);
-    expect(put?.headers["if-match"]).toBe('W/"i"');
+    expect(put?.headers["if-match"]).toBe("*");
     // No profile write happened.
     expect(calls.some((c) => c.method === "PUT" && c.url === PROFILE_DOC)).toBe(false);
   });

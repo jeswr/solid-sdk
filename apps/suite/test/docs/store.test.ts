@@ -408,6 +408,44 @@ describe("listing", () => {
 });
 
 describe("snapshot conflicts", () => {
+  it.each([
+    "save",
+    "copy",
+  ])("completes %s without conflict retries on weak ETags", async (operation) => {
+    const s = await server();
+    const fetchImpl = vi.fn<typeof fetch>(async (url, init) => {
+      // If-Match uses strong comparison, so a weak validator never matches.
+      if (new Headers(init?.headers).get("if-match")?.startsWith("W/"))
+        return new Response(null, { status: 412 });
+      const response = await s.fetchImpl(url, init);
+      const etag = response.headers.get("etag");
+      if (etag) response.headers.set("etag", `W/${etag}`);
+      return response;
+    });
+    const store = new DocsStore(POD, WEBID, fetchImpl);
+    const source = await store.read(DOC);
+    assert(source);
+    expect(source.etag).toBe('W/"v1"');
+    const regenerate = vi.fn(() => ({ body: "regenerated" }));
+    const wait = vi.fn(WAIT);
+    const result =
+      operation === "save"
+        ? await store.save(source, { body: "live" }, { regenerate, wait })
+        : await store.makeCopy(source, {
+            assets: [],
+            snapshot: () => ({ body: "live" }),
+            persistFullState: async () => {},
+          });
+    expect(result.data.body).toBe("live");
+    expect((await store.read(result.url))?.data.body).toBe("live");
+    expect(regenerate).not.toHaveBeenCalled();
+    expect(wait).not.toHaveBeenCalled();
+    expect(
+      s.calls.filter((call) => call.url === result.url && call.method === "PUT").at(-1)?.headers[
+        "if-match"
+      ],
+    ).toBe("*");
+  });
   it("regenerates every retry, uses the fresh ETag, and preserves remote metadata/history", async () => {
     const s = await server();
     const stored = await document();

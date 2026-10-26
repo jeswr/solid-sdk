@@ -48,7 +48,7 @@ export function serializeTurtle(
 
 /** Options for {@link writeRdf}. */
 export interface WriteOptions {
-  /** Send `If-Match` so a concurrent edit fails with 412 instead of clobbering. */
+  /** Strong ETag for conflict detection; weak ETags fall back to existence (`*`). */
   etag?: string | null | undefined;
   /** Send `If-None-Match: *` — create only, never overwrite (412 if it exists). */
   createOnly?: boolean | undefined;
@@ -73,7 +73,11 @@ export async function writeRdf(
 ): Promise<{ etag: string | null }> {
   const body = await serializeTurtle(dataset, opts.prefixes);
   const headers: Record<string, string> = { "content-type": "text/turtle" };
-  if (opts.etag) headers["if-match"] = opts.etag;
+  // If-Match requires strong comparison: a weak validator can never match.
+  // Match the store's no-validator policy: require existence, without claiming
+  // to detect concurrent edits. Create-only writes retain their own precondition.
+  if (opts.etag && !opts.createOnly)
+    headers["if-match"] = opts.etag.startsWith("W/") ? "*" : opts.etag;
   if (opts.createOnly) headers["if-none-match"] = "*";
   const init: RequestInit = { method: "PUT", headers, body };
   const res = await opts.fetchImpl(url, init);

@@ -100,8 +100,21 @@ describe("writeRdf", () => {
 
   it("sends If-Match when an etag is supplied", async () => {
     const { fetch, calls } = mockFetch({ [`PUT ${URL_X}`]: { status: 205 } });
+    await writeRdf(URL_X, new Store(), { etag: '"old"', fetchImpl: fetch });
+    expect(calls[0]?.headers["if-match"]).toBe('"old"');
+  });
+
+  it("uses the existence fallback for a weak validator", async () => {
+    const { fetch, calls } = mockFetch({ [`PUT ${URL_X}`]: { status: 205 } });
     await writeRdf(URL_X, new Store(), { etag: 'W/"old"', fetchImpl: fetch });
-    expect(calls[0]?.headers["if-match"]).toBe('W/"old"');
+    expect(calls[0]?.headers["if-match"]).toBe("*");
+  });
+
+  it("keeps weak validators out of create-only writes", async () => {
+    const { fetch, calls } = mockFetch({ [`PUT ${URL_X}`]: { status: 201 } });
+    await writeRdf(URL_X, new Store(), { etag: 'W/"old"', createOnly: true, fetchImpl: fetch });
+    expect(calls[0]?.headers["if-match"]).toBeUndefined();
+    expect(calls[0]?.headers["if-none-match"]).toBe("*");
   });
 
   it("sends If-None-Match:* under createOnly", async () => {
