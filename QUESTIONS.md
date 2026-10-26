@@ -1,6 +1,0 @@
-<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
-
-# CAL-L3 conventions for review
-
-1. **Date and time inputs** (07-parity-backlog, Calendar data mapping; 10-pure-libraries-2, CAL-L3): the layout signature and interval boundaries are unspecified. Options: convert timestamps/timezones here, or consume date-only ranges and already projected day/minute intervals. Conservative implementation: strict Gregorian `YYYY-MM-DD` dates (years 0001–9999), exclusive range ends, and timed intervals within a supplied day column, in minutes from 0 to 1440. Callers resolve timezones, DST, recurrence and overnight splitting before layout; malformed/out-of-range intervals are typed errors.
-2. **Lane and width policy** (10-pure-libraries-2, calendar layout geometry): options include cross-week lane reservation/rightward column expansion or independent first-fit row lanes/equal-width overlap clusters. Conservative implementation: independent lanes per week row, deterministic start/longest-first/id ordering, first available lane/column, equal widths within each connected overlap cluster, and no minimum visual duration. Touching exclusive endpoints do not overlap. Week starts use JavaScript weekday numbering (0 Sunday through 6 Saturday).
