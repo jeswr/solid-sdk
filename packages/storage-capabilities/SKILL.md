@@ -118,5 +118,8 @@ Solid notification services must share the storage root's origin (ADR-008 §8).
 writes only when the record still holds the same description and no probe (both shipped caches
 implement it atomically). Custom caches without it never store the probe, so it is repeated on
 the next call rather than written non-atomically. PatchSupport parsing is linear in its input and
-resolves the mapper's `{ "@id" }` references to a format node expanded elsewhere.
+resolves the mapper's `{ "@id" }` references to a format node expanded elsewhere; each format node
+is read once however often it is referenced. The Solid mapper expands named `ssd:format` nodes
+(other named objects stay IRI strings). An `application/rdf+xml` ContentNegotiation source counts
+as RDF.
 
