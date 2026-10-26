@@ -376,6 +376,39 @@ describe("recurrence arithmetic", () => {
       ),
     ).toBeUndefined();
   });
+  it.each<RepeatRule>([
+    rule("DAILY"),
+    rule("WEEKLY"),
+    rule("WEEKLY", { byDay: ["MO"] }),
+    rule("MONTHLY"),
+    rule("YEARLY"),
+    rule("DAILY", { interval: Number.MAX_SAFE_INTEGER }),
+    rule("MONTHLY", { interval: Number.MAX_SAFE_INTEGER }),
+  ])("exhausts %j before advancing beyond year 9999", (repeat) => {
+    const due = allDay("9999-12-31");
+    const recurrence = { ...repeat, until: due };
+    const original = task("final", { due, recurrence });
+    const before = structuredClone(original);
+    expect(nextOccurrence(due, recurrence, context())).toBeUndefined();
+    expect(completeTask(original, context())).toEqual({
+      task: {
+        ...original,
+        state: "completed",
+        completedAt: "2026-10-26T12:00:00.000Z",
+        modifiedAt: "2026-10-26T12:00:00.000Z",
+      },
+    });
+    expect(original).toEqual(before);
+  });
+  it("keeps the final supported all-day occurrence when it equals until", () => {
+    expect(
+      nextOccurrence(
+        allDay("9999-12-30"),
+        rule("DAILY", { until: allDay("9999-12-31") }),
+        context(),
+      ),
+    ).toEqual(allDay("9999-12-31"));
+  });
   it("fails closed on impossible calendar cycles and date overflow", () => {
     fails(
       () =>

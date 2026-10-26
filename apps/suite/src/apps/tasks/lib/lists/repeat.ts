@@ -57,17 +57,21 @@ function weekday(local: number): number {
   return (new Date(local).getUTCDay() + 6) % 7;
 }
 
-function nextLocal(base: number, rule: RepeatRule): number {
+function boundedLocal(local: number, until?: number): number | undefined {
+  return until !== undefined && local > until ? undefined : range(local);
+}
+
+function nextLocal(base: number, rule: RepeatRule, until?: number): number | undefined {
   const interval = rule.interval ?? 1;
-  if (rule.frequency === "DAILY") return range(base + interval * DAY);
+  if (rule.frequency === "DAILY") return boundedLocal(base + interval * DAY, until);
   if (rule.frequency === "WEEKLY") {
-    if (rule.byDay === undefined) return range(base + interval * 7 * DAY);
+    if (rule.byDay === undefined) return boundedLocal(base + interval * 7 * DAY, until);
     const current = weekday(base);
     const days = rule.byDay.map((day) => WEEKDAYS.indexOf(day)).sort((a, b) => a - b);
     const later = days.find((day) => day > current);
     const delta =
       later === undefined ? interval * 7 - current + (days[0] as number) : later - current;
-    return range(base + delta * DAY);
+    return boundedLocal(base + delta * DAY, until);
   }
   const date = new Date(base);
   const year = date.getUTCFullYear();
@@ -82,10 +86,15 @@ function nextLocal(base: number, rule: RepeatRule): number {
         ? year + interval * step
         : year + Math.floor((month + interval * step) / 12);
     const targetMonth = rule.frequency === "YEARLY" ? month : (month + interval * step) % 12;
-    if (targetYear > 9999)
+    if (targetYear > 9999) {
+      // Every supported all-day cutoff precedes this year, even when the
+      // interval is too large for Date.UTC to represent the candidate.
+      if (until !== undefined) return undefined;
       throw new TaskListError("date-out-of-range", "Next occurrence is after year 9999");
+    }
     const candidate = new Date(Date.UTC(targetYear, targetMonth, day)).getTime();
-    if (new Date(candidate).getUTCDate() === day) return range(candidate + base - dayOf(base));
+    if (new Date(candidate).getUTCDate() === day)
+      return boundedLocal(candidate + base - dayOf(base), until);
   }
   throw new TaskListError("unsupported-rule", "No valid calendar date in the recurrence cycle");
 }
@@ -122,9 +131,13 @@ export function nextOccurrence(
     due === undefined || rule.from === "completion"
       ? localTime(now, format)
       : dueLocal(due, format);
-  const local = nextLocal(allDay ? dayOf(range(base)) : range(base), rule);
+  const local = nextLocal(
+    allDay ? dayOf(range(base)) : range(base),
+    rule,
+    allDay && rule.until !== undefined ? dueLocal(rule.until, format) : undefined,
+  );
+  if (local === undefined) return undefined;
   if (allDay) {
-    if (rule.until !== undefined && local > dueLocal(rule.until, format)) return undefined;
     return { kind: "all-day", date: new Date(local).toISOString().slice(0, 10) };
   }
   const at = resolveLocal(
