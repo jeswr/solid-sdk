@@ -274,20 +274,27 @@ export function createPodSessionProvider(options: PodSessionProviderOptions): Po
     async fetchFor(id: string): Promise<typeof fetch> {
       if (!(await provider.isActive(id))) throw new Error("Pod session is inactive");
       return async (input, init) => {
+        const snapshot = { ...init };
+        const headers = new Headers(input instanceof Request ? input.headers : undefined);
+        new Headers(snapshot.headers).forEach((v, k) => {
+          headers.set(k, v);
+        });
+        // Own the effective request before any asynchronous liveness or refresh operations.
+        const request = new Request(input, {
+          ...snapshot,
+          headers,
+          redirect: "manual",
+          credentials: "omit",
+        });
         const stored = await readSession(id);
         if (!stored) throw new Error("Pod session is inactive");
         const { value, bytes } = stored;
-        const url = input instanceof Request ? input.url : input.toString();
-        if (!value.roots.some((root) => isWithinPodScope(root, url)))
+        if (!value.roots.some((root) => isWithinPodScope(root, request.url)))
           throw new Error("Outside pod session scope");
-        const requestHeaders = new Headers(input instanceof Request ? input.headers : undefined);
-        new Headers(init?.headers).forEach((v, k) => {
-          requestHeaders.set(k, v);
-        });
         if (
-          requestHeaders.has("authorization") ||
-          requestHeaders.has("dpop") ||
-          requestHeaders.has("cookie")
+          request.headers.has("authorization") ||
+          request.headers.has("dpop") ||
+          request.headers.has("cookie")
         )
           throw new Error("Caller credentials are forbidden");
         let cached: CachedClient | undefined = clients.get(id);
@@ -320,7 +327,7 @@ export function createPodSessionProvider(options: PodSessionProviderOptions): Po
           }
         }
         if (!(await provider.isActive(id))) throw new Error("Pod session is inactive");
-        return cached.client.fetch(input, { ...init, redirect: "manual", credentials: "omit" });
+        return cached.client.fetch(request);
       };
     },
     async revoke(id: string) {

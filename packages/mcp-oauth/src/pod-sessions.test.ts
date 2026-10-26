@@ -661,4 +661,71 @@ describe("MCP grant to pod session boundary", () => {
     expect(await f.provider.isActive(session.id)).toBe(false);
   });
 
+  it("snapshots caller inputs before the asynchronous liveness check", async () => {
+    const f = brokerFixture();
+    const { session } = await f.login();
+    const fetcher = await f.provider.fetchFor(session.id);
+    const get = f.vault.get.bind(f.vault);
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    vi.spyOn(f.vault, "get").mockImplementationOnce(async (key) => {
+      await gate;
+      return get(key);
+    });
+    const url = new URL(`${POD_ROOT}notes`);
+    const headers = new Headers({ "x-snapshot": "original" });
+    const running = fetcher(url, { headers });
+    url.href = "https://foreign.example/secret";
+    headers.set("cookie", "fixture-caller-cookie");
+    release();
+    expect((await running).status).toBe(200);
+    const resource = f.op.captured.at(-1);
+    expect(resource?.url).toBe(`${POD_ROOT}notes`);
+    expect(resource?.headers.has("cookie")).toBe(false);
+  });
+
+  it.each([
+    "url",
+    "headers",
+    "request",
+    "options",
+  ])("sends the validated request snapshot despite caller %s mutation during refresh", async (variant) => {
+    const f = brokerFixture();
+    const { session } = await f.login();
+    const fetcher = await createPodSessionProvider(f.options).fetchFor(session.id);
+    const url = new URL(`${POD_ROOT}notes`);
+    const headers = new Headers({ "x-snapshot": "original" });
+    const request = new Request(url, { headers });
+    const init: RequestInit = {
+      headers,
+      method: "PUT",
+      body: "original",
+      redirect: "follow",
+      credentials: "include",
+    };
+    f.op.controls.onToken = async () => {
+      if (variant === "url") url.href = "https://foreign.example/secret";
+      if (variant === "headers") headers.set("cookie", "fixture-caller-cookie");
+      if (variant === "request") request.headers.set("cookie", "fixture-caller-cookie");
+      if (variant === "options") {
+        init.headers = { cookie: "fixture-caller-cookie" };
+        init.method = "DELETE";
+        init.body = "changed";
+      }
+    };
+    f.op.controls.resourceNonce = true;
+    const result = await fetcher(variant === "request" ? request : url, init);
+    expect(result.status).toBe(200);
+    const resources = f.op.captured.filter((r) => r.url.startsWith(POD_ROOT));
+    expect(resources).toHaveLength(2);
+    for (const resource of resources) {
+      expect(resource.url).toBe(`${POD_ROOT}notes`);
+      expect(resource.method).toBe("PUT");
+      expect(resource.body).toBe("original");
+      expect(resource.headers.get("x-snapshot")).toBe("original");
+      expect(resource.headers.has("cookie")).toBe(false);
+    }
+  });
 });

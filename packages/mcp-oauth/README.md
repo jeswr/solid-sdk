@@ -108,8 +108,9 @@ in its own profile. Remote JSON-LD contexts are refused by the RDF parser.
 refresh token and private DPoP JWK stay in the vault; access/ID tokens stay in process memory.
 `fetchFor(id)` returns a fetch that checks durable session liveness on every call, permits only
 the WebID profile's `pim:storage` roots, refuses caller Authorization/DPoP/Cookie headers, omits
-browser credentials, and refuses redirects. It restores with the original DPoP key and refreshes
-on access expiry, persisting token rotation before sending a resource request. The existing
+browser credentials, and refuses redirects. It snapshots the effective request before asynchronous
+checks and sends that same request after validation. It restores with the original DPoP key and
+refreshes on access expiry, persisting token rotation before sending a resource request. The existing
 Solid client handles bounded nonce retries at both the token and resource endpoints.
 Private clients are capped at 256 cached entries and evicted after at most five minutes or
 at access/session expiry, whichever comes first. Failed liveness checks remove cached credentials.
