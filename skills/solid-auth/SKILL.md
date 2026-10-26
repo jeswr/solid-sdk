@@ -55,13 +55,27 @@ forgery) and `none` (no validation).** Pass the list as `signingAlgorithms`, and
 
 ## 🔒 DPoP `jti` replay cache — fail-closed, checked early
 
-Mark the proof's `jti` seen for `proofMaxAge (300s) + clockTolerance` via atomic `SET key 1 NX EX ttl`
-(Redis) or an in-process LRU. **Check replay BEFORE the expensive bidirectional WebID fetch.** Keep the
-replay TTL ≥ the proof freshness window, or a captured proof replays in the gap. Production
+Use the cryptographically verified **DPoP proof's** `jti` and `iat` (not the access token's claims
+or an unverified JWT decode). Reject `iat` more than `clockTolerance` in the future. Retain each
+`jti` until `iat + maxAge + clockTolerance`, the last instant that proof can be accepted. Compute
+the remaining TTL from that deadline; a fixed `maxAge + clockTolerance` from first receipt can
+expire too early for a future-dated proof within tolerance. Use atomic `SET key 1 NX EX ttl`
+(Redis) or an in-process LRU that retains entries through the same deadline.
+**Check replay BEFORE the expensive bidirectional WebID fetch.** Production
 **fail-closed**: Redis down → `503` + `WWW-Authenticate`. Dev escape valve (`PSS_REDIS_FAIL_OPEN_DEV=true`,
 refused in `NODE_ENV=production`) falls back to in-process with a rate-limited warn.
 
 ```ts
+// jti and iat come from the verified DPoP proof; keep these limits aligned with verification.
+const maxAge = 300; // seconds
+const clockTolerance = 5; // seconds
+const now = Date.now() / 1000;
+const acceptUntil = iat + maxAge + clockTolerance;
+if (iat > now + clockTolerance || now > acceptUntil) {
+  throw challenge("invalid_token", "DPoP proof outside acceptance window.");
+}
+// Use whole Redis EX seconds strictly past the inclusive acceptance boundary.
+const ttl = Math.floor(acceptUntil - now) + 1;
 if (await replay.mark(jti, ttl) === "replay") throw challenge("invalid_token", "DPoP proof replayed.");
 ```
 
@@ -123,7 +137,7 @@ See [solid-rdf](../solid-rdf/SKILL.md) for the RDF parsing and the bundled-conte
 
 - [ ] Trusted-issuer allowlist checked against the **unverified** `iss` *before* discovery (SSRF).
 - [ ] Asymmetric algs only; never `HS*`/`none`.
-- [ ] Replay TTL ≥ proof freshness; replay checked **before** the bidirectional fetch.
+- [ ] Reject future `iat` beyond tolerance; retain `jti` through `iat + maxAge + clockTolerance`; check replay **before** the bidirectional fetch.
 - [ ] SSRF guard refuses if **any** DNS record is non-public; fetch **pinned**; redirects re-guarded.
 - [ ] One AbortController for the whole resolution; byte cap enforced; remote `@context` refused.
 - [ ] WebID is `https:` with no userinfo; `aud` + `azp` enforced.

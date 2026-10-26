@@ -284,6 +284,43 @@ describe("reviewed recipe failure boundaries", () => {
     ).rejects.toThrow();
   });
 
+  it("retains DPoP replay entries through the proof's entire acceptance window", async () => {
+    const code = blocks("solid-auth", "ts", "## 🔒 DPoP `jti` replay cache")[0];
+    let now = 1000;
+    const entries = new Map();
+    const mark = vi.fn(async (jti, ttl) => {
+      if ((entries.get(jti) ?? 0) > now) return "replay";
+      entries.set(jti, now + ttl);
+      return "ok";
+    });
+    const verify = (jti, iat) =>
+      execute(code, {
+        jti,
+        iat,
+        Date: { now: () => now * 1000 },
+        replay: { mark },
+        challenge: (_error, message) => new Error(message),
+      });
+    await verify("future-within-tolerance", 1005);
+    expect(entries.get("future-within-tolerance")).toBe(1311);
+    await expect(verify("too-far-in-future", 1005.01)).rejects.toThrow("acceptance window");
+    expect(entries.has("too-far-in-future")).toBe(false);
+    now = 1306; // beyond a fixed 305-second TTL, but this proof is still acceptable
+    await expect(verify("future-within-tolerance", 1005)).rejects.toThrow("replayed");
+    now = 1309.9;
+    await expect(verify("future-within-tolerance", 1005)).rejects.toThrow("replayed");
+    await verify("fractional-ttl", 1005);
+    expect(entries.get("fractional-ttl")).toBe(1310.9); // round remaining EX seconds up
+    now = 1310;
+    await expect(verify("future-within-tolerance", 1005)).rejects.toThrow("replayed");
+    await verify("inclusive-boundary", 1005);
+    expect(entries.get("inclusive-boundary")).toBe(1311);
+    now = 1310.01;
+    mark.mockClear();
+    await expect(verify("expired", 1005)).rejects.toThrow("acceptance window");
+    expect(mark).not.toHaveBeenCalled();
+  });
+
   it("keeps newer field generations even when priority returns to the same value", async () => {
     const code = blocks("solid-app-shell", "ts", "### Trap 2")[0];
     const { claimMutation, revertIfCurrent, fieldOwners } = await execute(
