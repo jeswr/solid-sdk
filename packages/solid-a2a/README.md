@@ -60,9 +60,13 @@ const protocol = await buildProtocolDocument({
 
 New intents, shapes, protocol metadata and handshakes use `https://jeswr.org/ns/a2a#`.
 Readers and `validateIntent` also accept `https://w3id.org/jeswr/a2a#`, including mixed graphs.
-Validation resolves vocabulary aliases in a temporary view; it never rewrites the supplied
-graph. Instance subjects and resource references keep their exact IRIs, so validation and
-parsing follow the same action and parameter nodes.
+Validation resolves vocabulary aliases in a temporary view, including nested property paths,
+comparison operands and vocabulary-valued constraint lists; it never rewrites the supplied
+graph. Lists and named shapes shared between vocabulary and resource constraints are
+projected separately. Instance subjects and resource values keep their exact IRIs, and
+named shapes remain distinct, so validation and parsing follow the same action and
+parameter nodes. Class targets and inheritance also resolve vocabulary aliases without
+renaming class-axiom subjects.
 
 Existing protocol bodies and their hashes remain unchanged: `hashQuads` and
 `verifyProtocolDocument` hash the supplied IRIs exactly. Newly built canonical protocol

@@ -35,8 +35,9 @@ export async function validateIntent(
 ): Promise<ValidationReport> {
   // Alias matching is confined to disposable validation views. The original
   // graphs must retain their IRIs so existing protocol hashes still verify.
-  const dataGraph = validationDataset(toDataset(intentQuads(intent)));
-  const shapeGraph = validationDataset(toDataset(shapeQuads(shape)));
+  const data = toDataset(intentQuads(intent));
+  const dataGraph = validationDataset(data);
+  const shapeGraph = validationDataset(toDataset(shapeQuads(shape)), data);
 
   const validator = new SHACLValidator(shapeGraph);
   const report = await validator.validate(dataGraph);
