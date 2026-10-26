@@ -2,8 +2,10 @@
 // AUTHORED-BY Codex GPT-6
 import { safeHttpIri, serialize } from "@jeswr/rdf-serialize";
 import { type OdrlPolicy, policyToTurtle } from "@jeswr/solid-odrl";
+import type { Term } from "@rdfjs/types";
+import { DataFactory as df } from "n3";
 import { compareDateTimes } from "./chronology.js";
-import { canonicalizeAssertion, pkgId } from "./ids.js";
+import { canonicalizeAssertionWithLabels, pkgId } from "./ids.js";
 import {
   buildNanopublications,
   type Nanopublications,
@@ -105,7 +107,7 @@ export class NanopubStore {
     const dataset = new Store();
     const nanopubs: Nanopublications["nanopubs"] = [];
     const ids = new Set<string>();
-    const assertions = new Map<string, string>();
+    const assertions = new Map<string, { fingerprint: string; nodes: Map<string, string> }>();
     for (const entry of await this.pod.list(this.container)) {
       if (entry.isContainer || !entry.url.startsWith(this.container)) continue;
       const id = `urn:uuid:${entry.url.slice(this.container.length).replace(/\.trig$/, "")}`;
@@ -113,15 +115,30 @@ export class NanopubStore {
       ids.add(id);
       const result = await this.get(id);
       const assertionId = (result.nanopubs[0] as Nanopublications["nanopubs"][number]).assertionId;
-      const fingerprint = canonicalizeAssertion(graph(result.dataset, assertionId)).id;
+      const assertion = canonicalizeAssertionWithLabels(graph(result.dataset, assertionId));
       const previous = assertions.get(assertionId);
-      if (previous !== undefined && previous !== fingerprint)
+      if (previous !== undefined && previous.fingerprint !== assertion.id)
         throw new Error("Conflicting copies of a shared assertion graph");
       // Blank-node labels are document-local. Keep one validated graph instead
-      // of unioning independently parsed copies into duplicate structures.
+      // of unioning copies, and align references throughout the incoming dataset.
+      const replacements = new Map<string, string>();
+      if (previous !== undefined)
+        for (const [node, label] of assertion.labels)
+          replacements.set(node, previous.nodes.get(label) as string);
+      const remap = <T extends Term>(term: T) =>
+        term.termType === "BlankNode" && replacements.has(term.value)
+          ? df.blankNode(replacements.get(term.value) as string)
+          : term;
       for (const quad of result.dataset)
-        if (previous === undefined || quad.graph.value !== assertionId) dataset.add(quad);
-      assertions.set(assertionId, fingerprint);
+        if (previous === undefined || quad.graph.value !== assertionId)
+          dataset.add(
+            df.quad(remap(quad.subject), quad.predicate, remap(quad.object), remap(quad.graph)),
+          );
+      if (previous === undefined)
+        assertions.set(assertionId, {
+          fingerprint: assertion.id,
+          nodes: new Map([...assertion.labels].map(([node, label]) => [label, node])),
+        });
       nanopubs.push(...result.nanopubs);
     }
     return { dataset, nanopubs };

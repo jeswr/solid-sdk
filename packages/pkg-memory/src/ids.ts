@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { createHash } from "node:crypto";
 import type { DatasetCore, Term } from "@rdfjs/types";
 import { DataFactory as df } from "n3";
@@ -161,8 +162,17 @@ function labels(store: DatasetCore, maxWork: number): Map<string, string> {
 /** Canonical assertion IRI and skolemized graph, compatible with RDFlib 7. */
 export function canonicalizeAssertion(
   dataset: DatasetCore,
-  { maxWork = 10000 }: { maxWork?: number } = {},
+  options: { maxWork?: number } = {},
 ): { id: string; dataset: Store } {
+  const result = canonicalizeAssertionWithLabels(dataset, options);
+  return { id: result.id, dataset: result.dataset };
+}
+
+/** Internal canonical labels let the store align independently parsed blank nodes. */
+export function canonicalizeAssertionWithLabels(
+  dataset: DatasetCore,
+  { maxWork = 10000 }: { maxWork?: number } = {},
+): { id: string; dataset: Store; labels: Map<string, string> } {
   if (dataset.size === 0) throw new Error("Empty assertion");
   const normalized = new Store();
   for (const q of dataset) {
@@ -200,5 +210,5 @@ export function canonicalizeAssertion(
         skolem(q.object) as typeof q.object,
       ),
     );
-  return { id: pkgId("assertion", digest), dataset: out };
+  return { id: pkgId("assertion", digest), dataset: out, labels: names };
 }

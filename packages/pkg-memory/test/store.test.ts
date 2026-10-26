@@ -55,12 +55,12 @@ function setup(overrides: Partial<PodPort> = {}) {
   return { memory, pod, write, store: new NanopubStore(pod) };
 }
 
-async function sharedBlankAssertions() {
+async function sharedBlankAssertions(ids = ["one", "two"]) {
   const value = await buildNanopublications(
     {
       batch_id: "shared-blank",
       worker: { agent_id: "https://example.org/client", agent_label: "Test" },
-      claims: ["one", "two"].map((id) => ({
+      claims: ids.map((id) => ({
         id,
         epistemic: "SelfReportedExplicit",
         assertion: createFactAssertion(identity.webId, {
@@ -106,6 +106,79 @@ it("deduplicates independently parsed copies of shared blank-node assertions on 
   const list = pod.list;
   pod.list = async (url) => (await list(url)).reverse();
   expect(isomorphic([...(await store.list()).dataset], [...value.dataset])).toBe(true);
+});
+
+it.each([
+  false,
+  true,
+])("preserves references into shared assertion blank nodes across graphs (reverse listing: %s)", async (reverse) => {
+  const { store, pod } = setup();
+  const value = await sharedBlankAssertions(["one", "two", "three"]);
+  const assertionId = value.nanopubs[0]!.assertionId;
+  const assertion = graph(value.dataset, assertionId);
+  const preference = new RdfNode(identity.webId, assertion).one(`${NS.schema}hasPreference`);
+  const nested = new RdfNode(preference, assertion).one(`${NS.schema}additionalProperty`);
+  for (const np of value.nanopubs) {
+    const provenance = graph(value.dataset, np.provenanceId);
+    const local = DataFactory.blankNode();
+    new RdfNode(np.id, provenance)
+      .add(`${NS.prov}primarySource`, preference)
+      .add(`${NS.prov}qualifiedAssociation`, local);
+    new RdfNode(preference, provenance).link(`${NS.prov}wasDerivedFrom`, np.id);
+    new RdfNode(nested, provenance).text(`${NS.schema}description`, np.identifier);
+    new RdfNode(local, provenance)
+      .text(`${NS.schema}name`, np.identifier)
+      .add(`${NS.prov}entity`, nested);
+    putGraph(value.dataset as Store, np.provenanceId, provenance);
+    const pubinfo = graph(value.dataset, np.pubinfoId);
+    new RdfNode(np.id, pubinfo).add(`${NS.prov}primarySource`, nested);
+    putGraph(value.dataset as Store, np.pubinfoId, pubinfo);
+  }
+  await store.put(value);
+  for (const np of value.nanopubs) {
+    const copy = await store.get(np.id);
+    const ownPreference = new RdfNode(identity.webId, graph(copy.dataset, assertionId)).one(
+      `${NS.schema}hasPreference`,
+    );
+    expect(
+      new RdfNode(np.id, graph(copy.dataset, np.provenanceId))
+        .one(`${NS.prov}primarySource`)
+        .equals(ownPreference),
+    ).toBe(true);
+  }
+  const list = pod.list;
+  if (reverse) pod.list = async (url) => (await list(url)).reverse();
+  for (let i = 0; i < 2; i++) {
+    const loaded = await store.list();
+    expect(graph(loaded.dataset, assertionId).size).toBe(assertion.size);
+    expect(isomorphic([...loaded.dataset], [...value.dataset])).toBe(true);
+    const retained = graph(loaded.dataset, assertionId);
+    const retainedPreference = new RdfNode(identity.webId, retained).one(
+      `${NS.schema}hasPreference`,
+    );
+    const retainedNested = new RdfNode(retainedPreference, retained).one(
+      `${NS.schema}additionalProperty`,
+    );
+    for (const np of loaded.nanopubs) {
+      const provenance = graph(loaded.dataset, np.provenanceId);
+      const envelope = new RdfNode(np.id, provenance);
+      expect(envelope.one(`${NS.prov}primarySource`).equals(retainedPreference)).toBe(true);
+      expect(new RdfNode(retainedPreference, provenance).oneIri(`${NS.prov}wasDerivedFrom`)).toBe(
+        np.id,
+      );
+      expect(new RdfNode(retainedNested, provenance).oneText(`${NS.schema}description`)).toBe(
+        np.identifier,
+      );
+      const local = new RdfNode(envelope.one(`${NS.prov}qualifiedAssociation`), provenance);
+      expect(local.oneText(`${NS.schema}name`)).toBe(np.identifier);
+      expect(local.one(`${NS.prov}entity`).equals(retainedNested)).toBe(true);
+      expect(
+        new RdfNode(np.id, graph(loaded.dataset, np.pubinfoId))
+          .one(`${NS.prov}primarySource`)
+          .equals(retainedNested),
+      ).toBe(true);
+    }
+  }
 });
 
 it("rejects inconsistent stored copies of a shared assertion instead of unioning them", async () => {
