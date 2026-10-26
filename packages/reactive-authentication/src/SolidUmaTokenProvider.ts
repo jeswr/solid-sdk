@@ -166,13 +166,14 @@ export class SolidUmaTokenProvider implements TokenProvider {
         throw new ReactiveAuthenticationError("DPoP nonce came from a different resource origin");
       const ticket = await this.#rpts.ticket(request.signal);
       // A nonce challenge has no UMA ticket or AS binding. Reuse only the context already verified
-      // for this exact resource, and never acquire new credentials from this challenge alone.
+      // for this exact resource, and never acquire new credentials from this challenge alone. Use actual
+      // expiry here: the cache's renewal margin must not prevent replaying a short-lived, valid RPT.
       const key = this.#contexts.get(request.url);
       const rpt = key === undefined ? undefined : await this.#rpts.read(key, ticket);
       if (
         rpt === undefined ||
         rpt.tokenType !== "dpop" ||
-        (rpt.expiresAt !== undefined && Date.now() >= rpt.expiresAt - 10_000)
+        (rpt.expiresAt !== undefined && Date.now() >= rpt.expiresAt)
       )
         throw new ReactiveAuthenticationError("No usable verified UMA RPT context for nonce retry");
       return await this.#present(request, rpt, key!, ticket, nonce);

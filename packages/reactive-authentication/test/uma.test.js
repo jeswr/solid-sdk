@@ -88,64 +88,78 @@ test("a rejected RPT is exchanged again once with the new ticket; a DPoP nonce i
   }
 });
 
-test("UMA retains the verified RPT context for a standard resource-server DPoP nonce retry", async () => {
-  const nonced = await startUma(op, { nonce: true, resourceNonce: true });
-  const { manager, provider, code } = umaClient(nonced, {
-    context: (_request, challenge) => {
-      assert.equal(challenge.challenges[0].scheme, "uma", "nonce retries reuse verified context");
-      return "verified-storage";
-    },
-  });
-  try {
-    const url = `${nonced.url}/uma/nonce?query=1#fragment`;
-    const response = await manager.fetch(url, { method: "PUT", body: "replayed body" });
-    assert.equal(response.status, 200);
-    assert.equal(await response.text(), "hello https://id.example/alice#me");
-    assert.equal(code.calls, 1);
-    assert.equal(
-      nonced.stats.exchanges.length,
-      2,
-      "one exchange plus its token-endpoint nonce retry",
-    );
-    assert.equal(nonced.stats.nonceChallenges, 1);
-    assert.equal(nonced.stats.resourceNonceChallenges, 1);
-    const requests = nonced.server.requests.filter(
-      (request) => new URL(request.url).pathname === "/uma/nonce",
-    );
-    assert.equal(requests.length, 3, "anonymous, RPT, then nonce retry");
-    assert.equal(requests[0].headers.has("authorization"), false);
-    const [, initial, retried] = requests;
-    assert.equal(initial.headers.get("authorization"), retried.headers.get("authorization"));
-    const token = retried.headers.get("authorization").slice(5);
-    const seen = new Set();
-    const jkt = await verifyDPoP(initial.headers.get("dpop"), {
-      method: "PUT",
-      url,
-      accessToken: token,
-      seen,
+for (const expiresIn of [1, 10, 300]) {
+  test(`UMA retains the verified RPT context for a resource-server nonce retry (${expiresIn}s RPT)`, async () => {
+    await withMockedDate(async () => {
+      const nonced = await startUma(op, { nonce: true, resourceNonce: true, expiresIn });
+      const { manager, provider, code } = umaClient(nonced, {
+        context: (_request, challenge) => {
+          assert.equal(
+            challenge.challenges[0].scheme,
+            "uma",
+            "nonce retries reuse verified context",
+          );
+          return "verified-storage";
+        },
+      });
+      try {
+        const url = `${nonced.url}/uma/nonce?query=1#fragment`;
+        const response = await manager.fetch(url, { method: "PUT", body: "replayed body" });
+        assert.equal(response.status, 200);
+        assert.equal(await response.text(), "hello https://id.example/alice#me");
+        assert.equal(code.calls, 1);
+        assert.equal(
+          nonced.stats.exchanges.length,
+          2,
+          "one exchange plus its token-endpoint nonce retry",
+        );
+        assert.equal(nonced.stats.nonceChallenges, 1);
+        assert.equal(nonced.stats.resourceNonceChallenges, 1);
+        const requests = nonced.server.requests.filter(
+          (request) => new URL(request.url).pathname === "/uma/nonce",
+        );
+        assert.equal(requests.length, 3, "anonymous, RPT, then nonce retry");
+        assert.equal(requests[0].headers.has("authorization"), false);
+        const [, initial, retried] = requests;
+        assert.equal(initial.headers.get("authorization"), retried.headers.get("authorization"));
+        const token = retried.headers.get("authorization").slice(5);
+        const claims = decodeJwt(token);
+        assert.equal(
+          claims.exp - claims.iat,
+          expiresIn,
+          "the signed RPT has the advertised lifetime",
+        );
+        const seen = new Set();
+        const jkt = await verifyDPoP(initial.headers.get("dpop"), {
+          method: "PUT",
+          url,
+          accessToken: token,
+          seen,
+        });
+        assert.equal(
+          await verifyDPoP(retried.headers.get("dpop"), {
+            method: "PUT",
+            url,
+            accessToken: token,
+            nonce: "uma-resource-nonce",
+            seen,
+          }),
+          jkt,
+        );
+        assert.equal(decodeJwt(initial.headers.get("dpop")).nonce, undefined);
+        assert.equal(seen.size, 2, "fresh proof jti for the retry");
+        assert.deepEqual(await Promise.all(requests.map((request) => request.text())), [
+          "replayed body",
+          "replayed body",
+          "replayed body",
+        ]);
+      } finally {
+        await provider.forget();
+        await nonced.close();
+      }
     });
-    assert.equal(
-      await verifyDPoP(retried.headers.get("dpop"), {
-        method: "PUT",
-        url,
-        accessToken: token,
-        nonce: "uma-resource-nonce",
-        seen,
-      }),
-      jkt,
-    );
-    assert.equal(decodeJwt(initial.headers.get("dpop")).nonce, undefined);
-    assert.equal(seen.size, 2, "fresh proof jti for the retry");
-    assert.deepEqual(await Promise.all(requests.map((request) => request.text())), [
-      "replayed body",
-      "replayed body",
-      "replayed body",
-    ]);
-  } finally {
-    await provider.forget();
-    await nonced.close();
-  }
-});
+  });
+}
 
 test("UMA nonce retries stay on the verified resource and reject invalidated or forgotten RPTs", async () => {
   const { provider, code } = umaClient(uma);
@@ -192,20 +206,26 @@ test("UMA nonce retries stay on the verified resource and reject invalidated or 
   }
 });
 
-test("UMA nonce retries reject an expired RPT without acquiring new credentials", async () => {
+test("UMA nonce retries accept an RPT until actual expiry and reject it at or after expiry", async () => {
   await withMockedDate(async (advance) => {
     const { provider, code } = umaClient(uma);
     const request = new Request(`${uma.url}/uma/expired-nonce`);
     const exchanges = uma.stats.exchanges.length;
     try {
-      await provider.upgrade(request, challengeContext(await transport(request)));
-      advance(300_000);
+      const original = await provider.upgrade(request, challengeContext(await transport(request)));
       const nonce = challengeContext(
         new Response(null, {
           status: 401,
           headers: { "www-authenticate": 'DPoP error="use_dpop_nonce"', "dpop-nonce": "nonce" },
         }),
       );
+      advance(299_999);
+      const retried = await provider.upgrade(request, nonce);
+      assert.equal(retried.headers.get("authorization"), original.headers.get("authorization"));
+      assert.equal(decodeJwt(retried.headers.get("dpop")).nonce, "nonce");
+      advance(1);
+      await assert.rejects(provider.upgrade(request, nonce), /RPT context/);
+      advance(1);
       await assert.rejects(provider.upgrade(request, nonce), /RPT context/);
       assert.equal(code.calls, 1);
       assert.equal(uma.stats.exchanges.length, exchanges + 1);
