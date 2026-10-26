@@ -2030,6 +2030,9 @@ importers:
       '@jeswr/rdf-serialize':
         specifier: workspace:*
         version: link:../../packages/rdf-serialize
+      '@jeswr/solid-chat-interop':
+        specifier: workspace:*
+        version: link:../../packages/solid-chat-interop
       '@jeswr/suite-ui':
         specifier: workspace:*
         version: link:../../packages/suite-ui
