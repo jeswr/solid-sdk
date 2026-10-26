@@ -43,3 +43,12 @@ describe("namespace aliases", () => {
     expect(NS.FEDCON).toBe("https://jeswr.org/fedcon#");
   });
 });
+
+// DECISIONS V9 retires the money vocabulary base; class renaming belongs to the app.
+it("marks pod-money's old base as read-only legacy without renaming classes", () => {
+  const legacy = "https://w3id.org/jeswr/pod-money#";
+  expect(LEGACY_NAMESPACES[legacy]).toBe(NS.POD_MONEY);
+  expect(isLegacy(`${legacy}Category`)).toBe(true);
+  expect(canonicalize(`${legacy}Category`)).toBe(`${NS.POD_MONEY}Category`);
+  expect(isLegacy(`${NS.FINANCE}BudgetCategory`)).toBe(false);
+});
