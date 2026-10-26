@@ -33,6 +33,9 @@ References/In-Reply-To, handles Gmail labels/status, and yields one message plus
 bytes and attachment binaries. RFC 822 source is preserved after mboxrd unquoting. Each message
 retains decoded HTML as inert `bodyHtml` (`schema:articleBody`); `body` prefers plain text and
 otherwise contains a readable HTML-to-text fallback. HTML must be sanitised before rendering.
+HTML-derived bodies that exceed the shared scanner's visible-text or input-scan limit append
+`HTML_TEXT_TRUNCATION_NOTICE` on its own paragraph; `parseEmail` and `importMbox` expose
+`bodyTruncated: true` on those per-message results. Full HTML and raw source remain available.
 Generated identifiers use reversible tilde escaping, avoiding encoded path delimiters while
 retaining original Message-IDs and folder titles as metadata. System folders use reserved
 `folders/system:<id>.ttl` documents (for example `system:inbox`); custom label keys retain their
@@ -59,7 +62,11 @@ their existing stricter account/document checks. Generic folder documents retain
 case; only system folders use reserved lowercase keys. All mail uses `http://schema.org/`.
 MIME address groups share the existing whole-address `mailto:` encoding; Message-ID,
 References and invalid-date policies remain local because they differ from the connector.
-`htmlText.ts` re-exports the capped linear scanner (`MAX_HTML_CHARS = 1,048,576` in the
-shared entry). Compared with the old regex fallback, it drops unfinished markup and
+`htmlText.ts` re-exports the shared `htmlToText` compatibility API, `htmlToTextResult` and
+`HTML_TEXT_TRUNCATION_NOTICE`. The scanner folds only ASCII keywords, preserving Unicode
+offsets. It scans at most `MAX_HTML_INPUT_CHARS = 8,388,608` UTF-16 code units and caps
+normalized visible text at `MAX_HTML_CHARS = 1,048,576` UTF-16 code units, preserving surrogate
+pairs. Leading comments and skipped blocks do not consume the visible-text allowance;
+exceeding either bound sets `truncated`. Compared with the old regex fallback, it drops unfinished markup and
 unclosed script/style/head bodies and decodes uppercase named entities. Valid mail fixtures
 retain their output; the cap and malformed-input behavior prevent hostile rescans.

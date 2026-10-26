@@ -18,7 +18,7 @@
 import { Container } from "@solid/object";
 import { DataFactory, Store } from "n3";
 import type { ImportContext } from "../core/types.js";
-import { htmlToText } from "./html-text.js";
+import { mailBodyText } from "./html-text.js";
 import { parseMail } from "./parse.js";
 import {
   accountRoot,
@@ -179,7 +179,7 @@ export function createMailWriter(ctx: MailPorts, account: string): MailWriter {
     message.identifier = mail.messageId ?? id;
     message.subjectLine = mail.subject;
     message.bodyHtml = mail.html;
-    message.body = mail.text ?? (mail.html === undefined ? undefined : htmlToText(mail.html));
+    message.body = mailBodyText(mail.text, mail.html).body;
     message.sender = mail.from;
     for (const to of mail.to) message.to.add(to);
     for (const cc of mail.cc) message.cc.add(cc);

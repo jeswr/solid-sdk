@@ -183,6 +183,11 @@ describe("shared mail primitives", () => {
       assert.equal(mail.messageSlug("a", "id"), "mail/a/messages/id.ttl");
       assert.equal(mail.MAIL_SCHEMA, "http://schema.org/");
       assert.equal(mail.htmlToText("<p>Hello</p>"), "Hello");
+      assert.deepEqual(mail.htmlToTextResult("<P>İstanbul</P><P>Next</P>"), {
+        text: "İstanbul\\n\\nNext",
+        truncated: false,
+      });
+      assert.equal(typeof mail.HTML_TEXT_TRUNCATION_NOTICE, "string");
       assert.equal(typeof mail.createMailWriter, "function");
     `,
       ],

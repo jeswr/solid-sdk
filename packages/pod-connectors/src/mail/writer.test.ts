@@ -7,6 +7,7 @@ import { createFetchPodWriter } from "../core/pod-writer.js";
 import { createMemoryPod, TEST_POD_ROOT, TEST_PROFILE_DOC, TEST_WEBID } from "../core/testing.js";
 import type { ImportContext } from "../core/types.js";
 import { rawMessage } from "../gmail/fixtures.js";
+import { HTML_TEXT_TRUNCATION_NOTICE, MAX_HTML_CHARS, MAX_HTML_INPUT_CHARS } from "./html-text.js";
 import { attachmentSlug, emlSlug, folderSlug, messageSlug, pathId, threadSlug } from "./paths.js";
 import { MailCollection, MailMessage } from "./vocab.js";
 import { createMailWriter, type MailFolder, MailParseError, type MailWriter } from "./writer.js";
@@ -115,6 +116,45 @@ const membersOf = (pod: ReturnType<typeof createMemoryPod>, slug: string) =>
   [...new MailCollection(`${url(slug)}#it`, pod.dataset(url(slug)), DataFactory).members].sort();
 
 describe("MailWriter", () => {
+  it.each([
+    "visible",
+    "input",
+    "empty",
+    "unicode",
+    "plain",
+  ])("stores the shared fallback for %s HTML, keeping full HTML and original bytes", async (kind) => {
+    const unicode = "İẞe\u0301😀";
+    const html =
+      kind === "visible" || kind === "plain"
+        ? `<p>${"a".repeat(MAX_HTML_CHARS + 1)}</p>`
+        : kind === "unicode"
+          ? `<P>${unicode}</P><SCRIPT>${unicode.repeat(256)}</SCRIPT><STYLE>${unicode}</STYLE><P>Next</P>`
+          : `${kind === "input" ? "<p>Before</p>" : ""}<!--${"x".repeat(MAX_HTML_INPUT_CHARS)}--><p>Beyond</p>`;
+    const source = new TextEncoder().encode(
+      kind === "plain"
+        ? `Content-Type: multipart/alternative; boundary=x\n\n--x\nContent-Type: text/plain\n\nOriginal text\n--x\nContent-Type: text/html\n\n${html}\n--x--\n`
+        : `Content-Type: text/html; charset=utf-8\nContent-Transfer-Encoding: 8bit\n\n${html}`,
+    );
+    const pod = await withWriter(async (mail) => {
+      await mail.add({ raw: source, folders: [INBOX], read: false, fallbackId: kind });
+    });
+    const document = url(messageSlug(ME, kind));
+    const message = new MailMessage(`${document}#it`, pod.dataset(document), DataFactory);
+    const expected =
+      kind === "plain"
+        ? "Original text"
+        : kind === "unicode"
+          ? `${unicode}\n\nNext`
+          : kind === "empty"
+            ? HTML_TEXT_TRUNCATION_NOTICE
+            : `${kind === "visible" ? "a".repeat(MAX_HTML_CHARS) : "Before"}\n\n${HTML_TEXT_TRUNCATION_NOTICE}`;
+    expect(message.body).toBe(expected);
+    expect(message.bodyHtml).toContain(html);
+    const stored = pod.bytes(url(emlSlug(ME, kind)));
+    expect(stored).toBeDefined();
+    expect(Buffer.from(stored as Uint8Array).equals(source)).toBe(true);
+  });
+
   it("derives threads from References, then In-Reply-To, without a source thread key", async () => {
     const pod = await withWriter(async (mail) => {
       await mail.add({ raw: raw("a"), folders: [INBOX], read: true, fallbackId: "f1" });

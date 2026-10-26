@@ -79,8 +79,8 @@ whose `PodWriter` has no `writeBinary` make the call fail with `IntegrationSyncE
 
 `@jeswr/pod-connectors/mail` is the source of truth for the framework-free MAI-01
 layout (`pathId`, `SYSTEM_FOLDERS`, account/message/eml/thread/folder/attachment slugs),
-standard mail IRIs (`constants.ts`), the capped linear `htmlToText` scanner
-(`MAX_HTML_CHARS = 1,048,576`), and MIME address-group flattening (`mailtos`). The suite
+standard mail IRIs (`constants.ts`), the capped linear `htmlToText`/`htmlToTextResult` scanner,
+and MIME address-group flattening (`mailtos`). The suite
 Mail model consumes these primitives while retaining its URL validation, typed RDF
 wrappers, store, operations, importer and Type Index handling. The older standalone
 pod-mail app consumes only identical IRIs; its account-free, percent-encoded paths stay local.
@@ -101,10 +101,25 @@ Only address conversion is shared from MIME handling: the entire address is enco
 `mailto:` (including `@`), exactly as both existing mail importers did. The suite's permissive
 Message-ID/References handling and invalid-date errors stay local; connectors retain strict
 single-token IDs, a 64 KiB References limit and omission of invalid dates. The linear HTML
-scanner replaces the suite's regex fallback: it caps input, drops unfinished tags/comments
+scanner replaces the suite's regex fallback: it drops unfinished tags/comments
 and unclosed script/style/head bodies, and decodes uppercase named entities. These edge
 cases differ from the old regex fallback; normal mail output and all stored IRIs stay compatible.
 HTML is still inert data and must be sanitised before rendering.
+
+`htmlToTextResult(html)` returns `{ text, truncated }`; `htmlToText(html)` returns only
+the text for compatibility. Tag and keyword matching folds ASCII letters only, preserving
+Unicode offsets and contents. The scanner visits at most `MAX_HTML_INPUT_CHARS = 8,388,608`
+UTF-16 code units of input (an 8 Mi-code-unit window, not a byte limit), then normalizes
+whitespace and caps visible text at `MAX_HTML_CHARS = 1,048,576` UTF-16 code units without
+splitting surrogate pairs. Work and intermediate storage remain linear in the bounded
+input window. Comments, skipped blocks and collapsed whitespace do not consume the visible
+text allowance. Exceeding either bound sets `truncated`; an input exactly at a bound is
+complete if no text is omitted. Malformed markup keeps the omission behavior above.
+When storing an HTML-derived body, MailWriter and Suite append the exported
+`HTML_TEXT_TRUNCATION_NOTICE` on its own paragraph if truncated:
+`[Message text truncated. The full HTML and the original message are kept with this email.]`
+Full HTML and RFC 822 bytes are retained. Suite's `parseEmail`/`importMbox` per-message results
+also expose `bodyTruncated: true`. Plain MIME text still takes precedence and receives no notice.
 
 `./adapters/gmail` imports a mailbox through the Gmail API: a full sync lists every message
 (`format=raw`), later runs replay `users.history.list` from the persisted `historyId` (an expired
