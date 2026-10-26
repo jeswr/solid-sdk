@@ -11,6 +11,7 @@ import { MailCollection, MailMessage } from "./vocab.js";
 import { createMailWriter, type MailFolder, MailParseError, type MailWriter } from "./writer.js";
 
 const ROOT = `${TEST_POD_ROOT}integrations/takeout/`;
+const ME = "me@example.test";
 
 async function withWriter(
   run: (mail: MailWriter, ctx: ImportContext) => Promise<void>,
@@ -60,6 +61,37 @@ const raw = (id: string, extra: string[] = []) =>
     (c) => c.charCodeAt(0),
   );
 
+/** A MailWriter over the pod without this process's import session (another host). */
+function foreign(pod: ReturnType<typeof createMemoryPod>): MailWriter {
+  const writer = createFetchPodWriter({
+    adapterId: "takeout",
+    webId: TEST_WEBID,
+    profileDocumentUrl: TEST_PROFILE_DOC,
+    podRoot: TEST_POD_ROOT,
+    fetch: pod.fetch,
+  });
+  const etags = new Map<string, string | undefined>();
+  return createMailWriter(
+    {
+      resolve: writer.resolve,
+      async read(slug) {
+        const found = await writer.read(slug);
+        etags.set(slug, found?.etag);
+        return found?.dataset;
+      },
+      write: (doc) =>
+        writer.write(
+          doc,
+          etags.get(doc.slug) ? { ifMatch: etags.get(doc.slug) } : { ifNoneMatch: "*" },
+        ),
+      writeBinary: async (doc) =>
+        (writer.writeBinary as NonNullable<typeof writer.writeBinary>)(doc),
+      remove: async (slug) => (writer.remove as NonNullable<typeof writer.remove>)(slug),
+    },
+    ME,
+  );
+}
+
 describe("mail paths", () => {
   it("matches the MAI-01 layout and escaping", () => {
     expect(pathId("a~b%c/d:e")).toBe("a~7Eb~25c~2Fd~3Ae");
@@ -77,7 +109,6 @@ describe("mail paths", () => {
 
 const INBOX = { key: "Inbox", title: "Inbox" };
 const SENT = { key: "Sent", title: "Sent" };
-const ME = "me@example.test";
 const url = (slug: string) => `${ROOT}${slug}`;
 const membersOf = (pod: ReturnType<typeof createMemoryPod>, slug: string) =>
   [...new MailCollection(`${url(slug)}#it`, pod.dataset(url(slug)), DataFactory).members].sort();
@@ -310,17 +341,14 @@ describe("MailWriter", () => {
     const racing: typeof fetch = async (input, init) => {
       if (!raced && String(input) === doc && init?.method === "PUT") {
         raced = true;
-        await withWriter(
-          async (mail) =>
-            void (await mail.add({
-              raw: second,
-              folders: [INBOX],
-              read: true,
-              fallbackId: "b",
-              sourceUrl: "https://source.test/b",
-            })),
-          pod,
-        );
+        // Another process (a second host) imports the same Message-ID meanwhile.
+        await foreign(pod).add({
+          raw: second,
+          folders: [INBOX],
+          read: true,
+          fallbackId: "b",
+          sourceUrl: "https://source.test/b",
+        });
       }
       return pod.fetch(input, init);
     };
@@ -351,17 +379,13 @@ describe("MailWriter", () => {
     const racing: typeof fetch = async (input, init) => {
       if (!raced && String(input) === eml && init?.method === "PUT") {
         raced = true;
-        await withWriter(
-          async (mail) =>
-            void (await mail.add({
-              raw: raw("race2", ["Subject: second"]),
-              folders: [INBOX],
-              read: true,
-              fallbackId: "b2",
-              sourceUrl: "https://source.test/b2",
-            })),
-          pod,
-        );
+        await foreign(pod).add({
+          raw: raw("race2", ["Subject: second"]),
+          folders: [INBOX],
+          read: true,
+          fallbackId: "b2",
+          sourceUrl: "https://source.test/b2",
+        });
       }
       return pod.fetch(input, init);
     };
@@ -380,6 +404,50 @@ describe("MailWriter", () => {
     );
     expect(pod.bytes(eml)).toEqual(first);
     expect(pod.get(url(messageSlug(ME, "b2")))).toBeDefined();
+  });
+
+  it("retires dropped attachments before replacing the document that records them", async () => {
+    const pod = createMemoryPod();
+    const withFile = (files: number) =>
+      raw("att", [
+        'Content-Type: multipart/mixed; boundary="b"',
+        "",
+        "--b",
+        "Content-Type: text/plain",
+        "",
+        "body",
+        ...Array.from({ length: files }, (_, n) => [
+          "--b",
+          `Content-Type: application/pdf; name="f${n}.pdf"`,
+          "Content-Disposition: attachment",
+          "",
+          `file ${n}`,
+        ]).flat(),
+        "--b--",
+      ]);
+    const item = (files: number) => ({
+      raw: withFile(files),
+      folders: [INBOX],
+      read: true,
+      fallbackId: "t",
+    });
+    await withWriter(async (mail) => void (await mail.add(item(2))), pod);
+    const second = url(attachmentSlug(ME, "<att@x.test>", 1));
+    expect(pod.bytes(second)).toBeDefined();
+    // The DELETE fails: the message document still records the attachment for the replay.
+    const failing: typeof fetch = async (input, init) =>
+      init?.method === "DELETE" && String(input) === second
+        ? new Response(null, { status: 500 })
+        : pod.fetch(input, init);
+    await expect(
+      withWriter(async (mail) => void (await mail.add(item(1))), pod, undefined, failing),
+    ).rejects.toThrow();
+    const doc = url(messageSlug(ME, "<att@x.test>"));
+    expect(
+      new MailMessage(`${doc}#it`, pod.dataset(doc), DataFactory).attachments.has(second),
+    ).toBe(true);
+    await withWriter(async (mail) => void (await mail.add(item(1))), pod);
+    expect(pod.bytes(second)).toBeUndefined();
   });
 
   it("rejects unparseable MIME with MailParseError", async () => {

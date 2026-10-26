@@ -97,6 +97,13 @@ Pass host-owned `state: ConnectorState` into `runImport` (or `runFileImport`) an
 successful cursor, sync time and counts. State contains ISO date strings and never tokens or
 exception text. An explicit `cursor` overrides the state's cursor for API imports.
 
+**One run per connector at a time.** Imports reconcile against their own reads (source
+inventories, collection documents), so a second `runImport`/`runFileImport` for the same
+connector container while one is running in this process is refused ("already running").
+Hosts that share a pod across processes (for example the CLI and a browser app) must not run
+the same connector concurrently; the conditional writes then fail an overlapping run with 412
+rather than merging it.
+
 The shared write pipeline reads each deterministic slug before writing. Documents default to
 replacement (`writeMode: 'replace'`), preserving snapshot behavior for Spotify, GitHub and other
 existing adapters, including empty snapshots and deletions from a dataset returned by `ctx.read`.

@@ -156,6 +156,7 @@ describe("runner binary port", () => {
         fileHint: "",
         async importFile(_file, ctx) {
           await ctx.writeBinary({ ...eml, slug: "mail/b.eml" });
+          expect(await ctx.read("mail/b.ttl")).toBeUndefined();
           await ctx.write({
             slug: "mail/b.ttl",
             category: "mail",

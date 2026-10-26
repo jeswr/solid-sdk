@@ -127,3 +127,41 @@ describe("registration container", () => {
     ).rejects.toThrow("Registration container must contain the document.");
   });
 });
+
+describe("single-flight runs", () => {
+  it("refuses a second run of the same connector while one is in progress", async () => {
+    const pod = createMemoryPod();
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const first = runImport({
+      adapter: adapter(async (ctx) => {
+        await ctx.write(doc("a/one.ttl"));
+        await gate;
+      }),
+      podWriter: writer(pod.fetch),
+      mode: "demo",
+    });
+    await vi.waitFor(() => expect(pod.get(`${ROOT}a/one.ttl`)).toBeDefined());
+    await expect(
+      runImport({ adapter: adapter(async () => {}), podWriter: writer(pod.fetch), mode: "demo" }),
+    ).rejects.toThrow("already running");
+    release();
+    await first;
+    // The claim is released after success and after failure.
+    await runImport({
+      adapter: adapter(async () => {
+        throw new Error("boom");
+      }),
+      podWriter: writer(pod.fetch),
+      mode: "demo",
+    }).catch(() => undefined);
+    await runImport({
+      adapter: adapter(async (ctx) => void (await ctx.write(doc("a/two.ttl")))),
+      podWriter: writer(pod.fetch),
+      mode: "demo",
+    });
+    expect(pod.get(`${ROOT}a/two.ttl`)).toBeDefined();
+  });
+});

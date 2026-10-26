@@ -214,6 +214,10 @@ export function createMailWriter(ctx: MailPorts, account: string): MailWriter {
     entry.drop.delete(iri);
     entry.title ??= mail.subject;
 
+    // Retire attachments while the previous document still records them, so a failed delete
+    // is retried by the replay instead of being forgotten.
+    for (const old of previous?.attachments ?? [])
+      if (!message.attachments.has(old)) await ctx.remove(slugOf(old));
     // The message document is committed first with a conditional write (create-only when it
     // did not exist), so it claims the id before any bytes are stored: an overlapping import of
     // another item loses the race with a 412 instead of replacing this item's bytes.
@@ -238,9 +242,6 @@ export function createMailWriter(ctx: MailPorts, account: string): MailWriter {
         body: part.content,
         mode: "replace",
       });
-    // Attachments the previous version had beyond this one's are no longer linked.
-    for (const old of previous?.attachments ?? [])
-      if (!message.attachments.has(old)) await ctx.remove(slugOf(old));
     return { slug, iri, thread: iriOf(threadDoc), id };
   }
 

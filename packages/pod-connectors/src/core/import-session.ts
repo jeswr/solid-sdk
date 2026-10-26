@@ -22,6 +22,8 @@ import type {
 import { safeIri } from "./vocab.js";
 
 const RUNS = "_provenance.ttl";
+/** Connector containers with a run in progress in this process. */
+const active = new Set<string>();
 /** Shared write pipeline for API and file runners; host owns state persistence. */
 export function createImportSession(
   writer: PodWriter,
@@ -30,6 +32,12 @@ export function createImportSession(
   options: ConnectorStateOptions,
   vocabMap?: VocabMap,
 ) {
+  // One run per connector container at a time: imports reconcile against their own reads
+  // (source inventories, collection documents), which an overlapping run would invalidate.
+  const claim = writer.resolve(RUNS);
+  if (active.has(claim))
+    throw new IntegrationSyncError(id, "An import for this connector is already running.");
+  active.add(claim);
   const started = new Date();
   const activityUrl = `${writer.resolve(RUNS)}#run-${crypto.randomUUID()}`;
   const connector = `urn:solid:connector:${encodeURIComponent(id)}`;
@@ -116,6 +124,13 @@ export function createImportSession(
   async function finish() {
     if (finalized) return;
     finalized = true;
+    try {
+      await recordRun();
+    } finally {
+      active.delete(claim);
+    }
+  }
+  async function recordRun() {
     const previous = await writer.read(RUNS);
     const dataset = copyDataset(previous?.dataset);
     const activity = new Provenance(activityUrl, dataset, DataFactory);
