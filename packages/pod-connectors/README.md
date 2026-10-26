@@ -1,0 +1,64 @@
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
+# @jeswr/pod-connectors
+
+> Experimental — AI-agent-generated. Security-critical; private until conformance is gate-green.
+
+Source API and export-file adapters extracted with history from Pod Manager. The default
+catalog is unconfigured and uses recorded fixtures for demos. No environment variables are
+read by this package: the host injects public OAuth client ids and token proxy URLs.
+
+```ts
+import { createRegistry, createFetchPodWriter, runImport } from '@jeswr/pod-connectors';
+
+const registry = createRegistry({ spotify: { clientId: 'public-client-id' } });
+const adapter = registry.adapterById('spotify')!;
+const report = await runImport({
+  adapter,
+  mode: 'demo',
+  podWriter: createFetchPodWriter({
+    adapterId: adapter.metadata.id,
+    webId,
+    profileDocumentUrl, // final profile document URL from the host's existing profile load
+    podRoot,
+    fetch: authenticatedPodFetch,
+  }),
+});
+```
+
+Live imports take `sourceAuth: { fetch: authenticatedSourceFetch }`. The optional
+`createSourceAuth(id, adapter, token, sourceFetch)` helper adds bearer and adapter headers.
+The helper binds credentials to an HTTPS-only origin allowlist (default: static fixture route origins)
+and refuses redirects; pass a fifth argument to supply additional API origins explicitly.
+Hosts must capture a pristine `sourceFetch` before initializing Solid authentication and
+pass it to `authorize(id, config, sourceFetch)` as well as `createSourceAuth`. Pass the
+auth manager's separate `podFetch` to `createFetchPodWriter`; never use the patched global
+fetch for source API requests or token exchange. Tokens stay in memory. A `PodWriter` binds a
+connector container, resolves and reads slugs, writes RDF with `{ ifMatch }` or
+`{ ifNoneMatch: '*' }`, and registers Type Index entries. The fetch-backed implementation
+confines document reads, writes and every redirect hop to the connector container. Type
+Index operations separately validate the profile-selected index against the WebID's advertised
+`pim:storage` and `solid:storage` roots, independently of the import destination,
+allow only that document (or the bootstrap target), and refuse redirects. The profile
+read/update is pinned to the host-supplied canonical `profileDocumentUrl`, resolved after
+redirects during the host's existing profile load. The WebID remains the RDF subject.
+Registration never dereferences the redirecting WebID or makes an unauthenticated profile
+request, and all authenticated profile and Type Index operations refuse redirects.
+Every connector RDF read, including registration, rejects JSON-LD context URLs with
+`RemoteContextRefusedError` and never fetches a context. Inline context objects remain supported.
+Deterministic document paths and Type Index bootstrap
+behavior are preserved. The runner
+retains read preconditions for subsequent writes; explicit write conditions override them.
+
+Entry points:
+
+- `.`: contracts, runners, catalog, config factory, fetch-backed writer, errors.
+- `./oauth`: browser PKCE helpers and popup flow (only `authorize` touches `window`).
+- `./node`: host-neutral runtime primitives; CLI implementation belongs to CON-03.
+- `./testing`: recorded fixture fetch, memory Pod and import helpers; recorder belongs to CON-02.
+- `./adapters/<id>`: each source's existing adapter (OAuth or export-file).
+- `./core/*`, `./pod/*`, `./<id>/*`, `./registry`, `./types`, `./file-adapters`:
+  compatibility modules used by Pod Manager's thin re-export shims.
+
+`pnpm --filter @jeswr/pod-connectors build` builds ESM and declarations. `test` runs all
+moved fixture tests and the environment-read regression test without production traffic.

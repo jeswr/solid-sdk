@@ -61,6 +61,7 @@ export default defineConfig({
       { find: "@jeswr/pod-drive/ui", replacement: podDriveSrc("ui/index.ts") },
       { find: "@jeswr/pod-drive", replacement: podDriveSrc("index.ts") },
       { find: "@jeswr/fetch-rdf", replacement: hostModule("@jeswr/fetch-rdf") },
+      { find: "@jeswr/suite-vocab", replacement: hostModule("@jeswr/suite-vocab") },
       { find: "@solid/object", replacement: hostModule("@solid/object") },
       { find: "@rdfjs/wrapper", replacement: hostModule("@rdfjs/wrapper") },
       { find: "n3", replacement: hostModule("n3") },
