@@ -17,14 +17,16 @@ import { EditorContent, useEditor } from "@tiptap/react";
 import { BubbleMenu } from "@tiptap/react/menus";
 import { ArrowLeft, ImagePlus, Share2, Star } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { SuiteFrame } from "@/components/interim-shell/suite-frame";
 import { encodeRef } from "@/lib/refs";
 import type { PodSession } from "@/lib/session/pod-session";
 import { editorActions } from "../editor/actions";
 import { copyDocument } from "../editor/copy";
+import { downloadDocument } from "../editor/export-document";
 import { editorExtensions } from "../editor/extensions";
+import { convertImport, uploadImportImage } from "../editor/import-document";
 import { deleteDocument } from "../editor/operations";
 import type { DocumentPersistence } from "../editor/persistence";
 import { podScopedFetch } from "../editor/private-image";
@@ -46,6 +48,7 @@ import { BlockSelect, EditorToolbar, ToolButton } from "./editor-toolbar";
 import { FileMenu } from "./file-menu";
 import { FindBar } from "./find-bar";
 import { ImageUpload } from "./image-upload";
+import { ImportDialog } from "./import-dialog";
 import { OutlinePane } from "./outline-pane";
 import { SaveIndicator } from "./save-indicator";
 import { SlashMenu, type SlashPosition } from "./slash-menu";
@@ -92,6 +95,9 @@ export function DocumentEditor({
 }
 function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
   const router = useRouter();
+  const params = useSearchParams();
+  const printed = useRef(false);
+  const [importing, setImporting] = useState(false);
   const titleRef = useRef<HTMLInputElement>(null);
   const topRef = useRef<HTMLAnchorElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -236,6 +242,15 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
     addEventListener("keydown", outsideKeys);
     return () => removeEventListener("keydown", outsideKeys);
   }, []);
+  useEffect(() => {
+    if (!editor || params.get("print") !== "1" || printed.current) return;
+    printed.current = true;
+    const frame = requestAnimationFrame(() => window.print());
+    return () => {
+      cancelAnimationFrame(frame);
+      printed.current = false;
+    };
+  }, [editor, params]);
   handlers.current.image = (file) => {
     if (!runtime.online) {
       toast.error("Reconnect to add images");
@@ -377,6 +392,20 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
               </Button>
             </Hint>
             <FileMenu
+              download={(format) =>
+                void act(async () => {
+                  if (!editor) return;
+                  const name = await downloadDocument(
+                    editor.getJSON(),
+                    title,
+                    format,
+                    runtime.session,
+                  );
+                  toast.success(`Downloaded ${name}`);
+                })
+              }
+              print={() => window.print()}
+              importFile={() => setImporting(true)}
               draft={!runtime.stored}
               readOnly={runtime.readOnly}
               copy={() =>
@@ -402,6 +431,32 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
           </>
         }
       >
+        {importing && editor && (
+          <ImportDialog
+            replace
+            close={() => setImporting(false)}
+            run={async (file, progress) => {
+              const imported = await convertImport(
+                file,
+                runtime.session,
+                async (data, type) => {
+                  if (!runtime.online) throw new Error("Reconnect to import images");
+                  if (!runtime.stored) {
+                    runtime.change(editor.getHTML(), editor.getJSON());
+                    await runtime.flush();
+                  }
+                  if (!runtime.stored)
+                    throw new Error("Save this document before importing images");
+                  return uploadImportImage(runtime.session, runtime.stored.url, data, type);
+                },
+                progress,
+              );
+              // setContent is one Yjs transaction and remains undoable through Collaboration.
+              editor.commands.setContent(imported.json);
+              return { skipped: imported.skipped, done: () => editor.commands.focus() };
+            }}
+          />
+        )}
         {runtime.readOnly && (
           <p className="docs-view-only">View only — ask the owner for edit access</p>
         )}

@@ -76,6 +76,19 @@
   font-size: 18px;
   font-weight: 600;
 }
+.docs-list-create {
+  display: flex;
+  gap: 8px;
+}
+.docs-download-menu {
+  max-width: min(320px, calc(100vw - 24px));
+}
+.docs-menu-help {
+  padding: 4px 8px 8px;
+  color: var(--foreground-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
 .docs-empty {
   display: flex;
   flex-direction: column;
@@ -744,6 +757,22 @@
     display: block;
     height: auto;
   }
+  .docs-editor-shell .ish-rail,
+  .docs-editor-shell .ish-sidebar,
+  .docs-editor-shell .ish-topbar,
+  .docs-editor-shell .ish-tabbar,
+  .docs-editor-shell .ish-details,
+  [data-radix-popper-content-wrapper],
+  [data-slot="dialog-overlay"],
+  [data-slot="dialog-content"],
+  [data-sonner-toaster] {
+    display: none;
+  }
+  .docs-editor-shell .ish-main {
+    overflow: visible;
+    height: auto;
+    padding: 0;
+  }
   .docs-toolbar,
   .docs-outline,
   .docs-find-bar,
@@ -767,6 +796,17 @@
   .docs-page .tiptap:focus-visible {
     min-height: 0;
     outline: none;
+  }
+  .docs-page,
+  .docs-page-wrap {
+    background: white;
+    color: black;
+  }
+  .docs-page a::after {
+    content: none;
+  }
+  .docs-page .tableWrapper {
+    overflow: visible;
   }
   .docs-page h1,
   .docs-page h2,

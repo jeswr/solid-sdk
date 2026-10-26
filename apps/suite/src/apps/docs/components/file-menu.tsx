@@ -5,14 +5,13 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
   IconButton,
 } from "@jeswr/suite-ui";
 import { MoreHorizontal } from "lucide-react";
 import Link from "next/link";
+import type { DownloadFormat } from "../editor/export-document";
+import { DownloadMenu } from "./download-menu";
 export function FileMenu({
   copy,
   rename,
@@ -20,6 +19,9 @@ export function FileMenu({
   shortcuts,
   draft,
   readOnly,
+  download,
+  print,
+  importFile,
 }: {
   copy: () => void;
   rename: () => void;
@@ -27,6 +29,9 @@ export function FileMenu({
   shortcuts: () => void;
   draft: boolean;
   readOnly: boolean;
+  download: (format: DownloadFormat) => void;
+  print: () => void;
+  importFile: () => void;
 }) {
   return (
     <DropdownMenu>
@@ -45,14 +50,10 @@ export function FileMenu({
         <DropdownMenuItem onSelect={rename} disabled={readOnly}>
           Rename
         </DropdownMenuItem>
-        <DropdownMenuSub>
-          <DropdownMenuSubTrigger>Download</DropdownMenuSubTrigger>
-          <DropdownMenuSubContent>
-            <DropdownMenuItem disabled>Markdown — Coming soon</DropdownMenuItem>
-            <DropdownMenuItem disabled>Microsoft Word — Coming soon</DropdownMenuItem>
-          </DropdownMenuSubContent>
-        </DropdownMenuSub>
-        <DropdownMenuItem onSelect={() => window.print()}>Print / Save as PDF</DropdownMenuItem>
+        <DownloadMenu download={download} print={print} />
+        <DropdownMenuItem disabled={readOnly} onSelect={importFile}>
+          Import to replace…
+        </DropdownMenuItem>
         <DropdownMenuItem disabled>Details — Coming soon</DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem onSelect={remove} disabled={draft || readOnly} variant="destructive">

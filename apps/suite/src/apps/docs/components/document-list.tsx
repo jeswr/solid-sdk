@@ -30,6 +30,8 @@ import { SuiteFrame } from "@/components/interim-shell/suite-frame";
 import { encodeRef } from "@/lib/refs";
 import type { PodSession } from "@/lib/session/pod-session";
 import { copyDocument } from "../editor/copy";
+import { downloadDocument, rowExportJson } from "../editor/export-document";
+import { importDocument } from "../editor/import-document";
 import { deleteDocument } from "../editor/operations";
 import { useDocsStore } from "../hooks/use-docs-store";
 import { useStarred } from "../hooks/use-starred";
@@ -37,6 +39,8 @@ import { relativeTime } from "../lib/editor/logic";
 import type { DocumentEntry } from "../lib/model";
 import { DocsError, DocsSidebar } from "./common";
 import { DeleteDialog } from "./delete-dialog";
+import { DownloadMenu } from "./download-menu";
+import { ImportDialog } from "./import-dialog";
 export function DocumentList({ session }: { session: PodSession }) {
   const store = useDocsStore(session);
   useEffect(() => {
@@ -52,6 +56,7 @@ export function DocumentList({ session }: { session: PodSession }) {
   const [renaming, setRenaming] = useState<DocumentEntry | null>(null);
   const [title, setTitle] = useState("");
   const [deleting, setDeleting] = useState<DocumentEntry | null>(null);
+  const [importing, setImporting] = useState(false);
   const [busy, setBusy] = useState(false);
   const reload = useCallback(async () => {
     setError(false);
@@ -106,13 +111,30 @@ export function DocumentList({ session }: { session: PodSession }) {
                   : "All documents"}
             </h2>
           </div>
-          <Button asChild className="docs-desktop-new">
-            <Link href="/docs/new">
-              <Plus aria-hidden="true" />
-              New document
-            </Link>
-          </Button>
+          <div className="docs-list-create">
+            <Button variant="outline" onClick={() => setImporting(true)}>
+              Upload
+            </Button>
+            <Button asChild className="docs-desktop-new">
+              <Link href="/docs/new">
+                <Plus aria-hidden="true" />
+                New document
+              </Link>
+            </Button>
+          </div>
         </div>
+        {importing && (
+          <ImportDialog
+            close={() => setImporting(false)}
+            run={async (file, progress) => {
+              const result = await importDocument(file, session, progress);
+              return {
+                skipped: result.skipped,
+                done: () => router.push(`/docs/d/${encodeRef(result.url)}`),
+              };
+            }}
+          />
+        )}
         {error ? (
           <DocsError title="We couldn't load your documents">
             <Button onClick={() => void reload()}>Retry</Button>
@@ -231,6 +253,21 @@ export function DocumentList({ session }: { session: PodSession }) {
                         >
                           Make a copy
                         </DropdownMenuItem>
+                        <DownloadMenu
+                          download={(format) =>
+                            void act(async () => {
+                              const json = await rowExportJson(entry.url, session);
+                              const name = await downloadDocument(
+                                json,
+                                entry.title,
+                                format,
+                                session,
+                              );
+                              toast.success(`Downloaded ${name}`);
+                            })
+                          }
+                          print={() => router.push(`/docs/d/${encodeRef(entry.url)}?print=1`)}
+                        />
                         <DropdownMenuSeparator />
                         <DropdownMenuItem
                           disabled={entry.readOnly}
