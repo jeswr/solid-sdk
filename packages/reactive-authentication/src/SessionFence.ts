@@ -83,15 +83,19 @@ export class SessionFence {
       throw new SessionSupersededError();
   }
 
-  /** Runs a credential write only if no supersession happened since `expected` was read. */
-  async commit<T>(expected: number, write: () => Promise<T>): Promise<T> {
+  /**
+   * Runs a credential write only if no supersession happened since `expected` was read.
+   * The optional `signal` cancels waiting for the shared lock, including during logout cleanup.
+   */
+  async commit<T>(expected: number, write: () => Promise<T>, signal?: AbortSignal): Promise<T> {
+    signal?.throwIfAborted();
     return await withLock(
       this.#lockName,
       async () => {
         await this.assertCurrent(expected);
         return await write();
       },
-      { mode: "shared" },
+      { mode: "shared", ...(signal === undefined ? {} : { signal }) },
     );
   }
 

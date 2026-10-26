@@ -349,3 +349,25 @@ test("Bearer rejections follow token values across replacements and clear on log
   await provider.forget();
   assert.equal((await provider.upgrade(request)).headers.get("authorization"), "Bearer rejected");
 });
+
+test("Bearer rejection history retains the 100 most recently rejected token values", async () => {
+  let token;
+  const source = { id: "api", getAccessToken: async () => ({ token }) };
+  const provider = new OAuthBearerTokenProvider(source, { resources: ["https://api.example/"] });
+  const request = new Request("https://api.example/resource");
+  const reject = (value) =>
+    provider.invalidate(new Request(request, { headers: { authorization: `Bearer ${value}` } }));
+
+  for (let i = 0; i < 100; i++) await reject(`token-${i}`);
+  await reject("token-0"); // A repeated 401 refreshes this value's place in the history.
+  for (let i = 100; i < 150; i++) await reject(`token-${i}`);
+
+  for (let i = 1; i <= 50; i++) {
+    token = `token-${i}`;
+    assert.equal((await provider.upgrade(request)).headers.get("authorization"), `Bearer ${token}`);
+  }
+  for (const value of ["token-0", ...Array.from({ length: 99 }, (_, i) => `token-${i + 51}`)]) {
+    token = value;
+    await assert.rejects(provider.upgrade(request), /expired or rejected/);
+  }
+});

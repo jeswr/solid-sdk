@@ -89,12 +89,16 @@ export class FencedCache<T extends {}> {
   }
 
   async write(key: string, value: T, ticket: FenceTicket): Promise<T> {
-    return await this.#fence.commit(ticket.generation, async () => {
-      ticket.signal.throwIfAborted();
-      this.#keys.add(key);
-      await this.#store.setItem(key, { generation: ticket.generation, value });
-      return value;
-    });
+    return await this.#fence.commit(
+      ticket.generation,
+      async () => {
+        ticket.signal.throwIfAborted();
+        this.#keys.add(key);
+        await this.#store.setItem(key, { generation: ticket.generation, value });
+        return value;
+      },
+      ticket.signal,
+    );
   }
 
   async remove(key: string): Promise<void> {

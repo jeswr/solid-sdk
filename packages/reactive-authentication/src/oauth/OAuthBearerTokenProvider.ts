@@ -22,7 +22,9 @@ export interface OAuthBearerTokenProviderOptions {
  * API): on a 401 from one of its configured resources, attaches `Authorization: Bearer` from its
  * {@link AccessTokenSource}. Only unauthenticated or `Bearer` challenges are answered (never DPoP or UMA),
  * and nothing is taken from the challenge: the issuer, audience and scopes are the source's fixed
- * configuration. Rejected tokens are renewed once via `rejectedToken`; logout ignores late results.
+ * configuration. Rejected tokens are renewed once via `rejectedToken`; the 100 most recently rejected
+ * values remain refused (repeated rejections refresh recency; older values are evicted). Logout ignores
+ * late results.
  */
 export class OAuthBearerTokenProvider implements TokenProvider {
   readonly #source: AccessTokenSource;
@@ -81,7 +83,9 @@ export class OAuthBearerTokenProvider implements TokenProvider {
   async invalidate(upgraded: Request): Promise<void> {
     const token = upgraded.headers.get("Authorization")?.replace(/^Bearer /, "");
     if (token !== undefined) {
+      this.#rejected.delete(token);
       this.#rejected.add(token);
+      if (this.#rejected.size > 100) this.#rejected.delete(this.#rejected.values().next().value!);
       this.#renewalHint = token;
     }
   }
@@ -98,7 +102,7 @@ export class OAuthBearerTokenProvider implements TokenProvider {
   }
 
   async #token(signal: AbortSignal): Promise<AccessToken> {
-    // Preserve eager renewal; acceptance is governed by all rejected values, not this single hint.
+    // Preserve eager renewal; acceptance is governed by tracked rejected values, not this single hint.
     const rejected = this.#renewalHint;
     let token = await this.#source.getAccessToken({
       signal,

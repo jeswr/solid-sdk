@@ -232,6 +232,7 @@ export class ReactiveAuthenticationClient {
     provider?: TokenProvider,
     providerGeneration?: number,
   ): Promise<Response> {
+    this.#assertNotAborted(session);
     const send = async () => {
       if (provider?.fence !== undefined) await provider.fence.assertCurrent(providerGeneration!);
       this.#assertNotAborted(session);
@@ -246,10 +247,17 @@ export class ReactiveAuthenticationClient {
       // releases the lock before the response arrives, so logout never waits for the network.
       return { response: this.#fetch(request) };
     };
-    const { response } =
-      this.#fence === undefined
-        ? await send()
-        : await this.#fence.commit(session.generation!, send);
+    const { response } = await (this.#fence === undefined
+      ? send()
+      : this.#fence.commit(
+          session.generation!,
+          send,
+          AbortSignal.any([request.signal, session.signal]),
+        )
+    ).catch((error: unknown) => {
+      this.#assertNotAborted(session);
+      throw error;
+    });
     return await response;
   }
 

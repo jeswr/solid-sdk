@@ -461,17 +461,21 @@ export class OidcSession {
     signal: AbortSignal,
   ): Promise<DPoPTokenCacheEntry> {
     const entry: DPoPTokenCacheEntry = { ...fresh, generation };
-    return await this.#fence.commit(generation, async () => {
-      signal.throwIfAborted();
-      this.#keys.add(key);
-      const record = refreshRecordOf(entry, generation);
-      if (this.#options.sessionStore !== undefined) {
-        if (record === null) await this.#options.sessionStore.removeItem(key);
-        else await this.#options.sessionStore.setItem(key, record);
-      }
-      await this.#cache.setItem(key, entry);
-      return entry;
-    });
+    return await this.#fence.commit(
+      generation,
+      async () => {
+        signal.throwIfAborted();
+        this.#keys.add(key);
+        const record = refreshRecordOf(entry, generation);
+        if (this.#options.sessionStore !== undefined) {
+          if (record === null) await this.#options.sessionStore.removeItem(key);
+          else await this.#options.sessionStore.setItem(key, record);
+        }
+        await this.#cache.setItem(key, entry);
+        return entry;
+      },
+      signal,
+    );
   }
 
   async #records(): Promise<RefreshSessionRecord[]> {
