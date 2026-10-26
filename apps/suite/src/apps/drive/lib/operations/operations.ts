@@ -296,17 +296,18 @@ async function sameRecoveryFile(
   from: string,
   to: string,
   versions: ReadonlySet<string> = new Set(),
-): Promise<boolean> {
+): Promise<{ same: boolean; etag: string | undefined }> {
   const target = await client.stat(to);
   if (target.etag && !target.etag.startsWith("W/")) {
-    if (versions.has(JSON.stringify([to, target.etag]))) return true;
-    if ((await client.stat(from)).etag === target.etag) return true;
+    // Validators only identify versions at the URL that issued them.
+    if (versions.has(JSON.stringify([to, target.etag]))) return { same: true, etag: undefined };
   }
-  const [recovery, survivor] = await Promise.all([client.read(from), client.read(to)]);
-  if (recovery.size !== survivor.size) return false;
-  const [a, b] = await Promise.all([recovery.arrayBuffer(), survivor.arrayBuffer()]);
+  const [recovery, survivor] = await Promise.all([client.readVersion(from), client.read(to)]);
+  const etag = recovery.etag;
+  if (recovery.body.size !== survivor.size) return { same: false, etag };
+  const [a, b] = await Promise.all([recovery.body.arrayBuffer(), survivor.arrayBuffer()]);
   const bytes = new Uint8Array(b);
-  return new Uint8Array(a).every((value, index) => value === bytes[index]);
+  return { same: new Uint8Array(a).every((value, index) => value === bytes[index]), etag };
 }
 
 /** Every recovery child must still have the same original, including nested files. */
@@ -317,7 +318,7 @@ async function holdsRecovery(
   versions: ReadonlySet<string>,
 ): Promise<boolean> {
   if (!(await exists(client, original))) return false;
-  if (!from.endsWith("/")) return sameRecoveryFile(client, from, original, versions);
+  if (!from.endsWith("/")) return (await sameRecoveryFile(client, from, original, versions)).same;
   const source = new Set((await client.list(original)).map(({ url }) => url));
   for (const child of await client.list(from)) {
     const target = `${original}${child.url.slice(from.length)}`;
@@ -661,8 +662,11 @@ async function restoreMissing(
       return remaining;
     }
     if (await exists(client, to)) {
-      if (!(await sameRecoveryFile(client, from, to))) throw new DriveError("conflict", 412, to);
-      await client.remove(from);
+      const compared = await sameRecoveryFile(client, from, to);
+      if (!compared.same) throw new DriveError("conflict", 412, to);
+      if (!compared.etag || compared.etag.startsWith("W/"))
+        throw new DriveError("missing-validator", 409, from);
+      await client.remove(from, { ifMatch: compared.etag });
       return [];
     }
     await client.move(from, to);
@@ -739,14 +743,13 @@ export async function deleteForever(
     try {
       slotOf(driveRoot, entry);
       await requireTrashEntry(client, driveRoot, entry);
-      await client.remove(entry.url, { recursive: true });
+      await removeTrashItem(client, entry.url);
       if (await recoveryStatus(client, driveRoot, entry))
         await client.remove(recoveryMarker(driveRoot, entry));
       await client.remove(slotOf(driveRoot, entry)).catch(() => undefined);
       result.done.push(entry);
     } catch (error) {
-      if (error instanceof DriveError && error.kind === "not-found") result.done.push(entry);
-      else result.failed.push({ url: entry.url, error });
+      result.failed.push({ url: entry.url, error });
     }
   }
   return removeCompletedRecords(
@@ -755,6 +758,24 @@ export async function deleteForever(
     result,
     result.done.map((entry) => entry.url),
   );
+}
+
+/** A missing descendant is a stale traversal, not proof the entry itself is gone. */
+async function removeTrashItem(client: DriveClient, url: string): Promise<void> {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      await client.remove(url, { recursive: true });
+    } catch (error) {
+      const cause = error instanceof DrivePartialFailureError ? error.cause : error;
+      if (!(cause instanceof DriveError && cause.kind === "not-found")) throw error;
+      if (!(await exists(client, url))) return;
+      if (attempt > 0) throw error;
+      // Recursive removal takes a new listing on the one retry.
+      continue;
+    }
+    if (await exists(client, url)) throw new DriveError("conflict", 409, url);
+    return;
+  }
 }
 
 const DAY = 86_400_000;

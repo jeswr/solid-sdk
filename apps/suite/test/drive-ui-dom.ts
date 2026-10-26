@@ -29,6 +29,7 @@ for (const key of [
   "MouseEvent",
   "KeyboardEvent",
   "FocusEvent",
+  "DOMRect",
   "getComputedStyle",
   "localStorage",
   "sessionStorage",
