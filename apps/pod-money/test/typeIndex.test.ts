@@ -140,7 +140,7 @@ describe("TypeIndexDataset", () => {
     expect(index.locate(FinClass.Holding)).toEqual([]);
   });
 
-  it("reads a hand-written index parsed from Turtle", () => {
+  it("reads a legacy namespace index parsed from Turtle", () => {
     const turtle = `
       @prefix solid: <http://www.w3.org/ns/solid/terms#> .
       @prefix fin: <https://w3id.org/jeswr/sectors/finance#> .

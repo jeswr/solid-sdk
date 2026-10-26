@@ -86,7 +86,8 @@
     "@jeswr/agent-memory",
     "@jeswr/agent-registry",
     "@jeswr/fetch-rdf",
-    "@jeswr/reactive-authentication"
+    "@jeswr/reactive-authentication",
+    "@jeswr/suite-native"
   ],
   "applications": [
     {
@@ -162,6 +163,11 @@
     {
       "slug": "agent-daemon",
       "name": "@jeswr/app-agent-daemon",
+      "kind": "application"
+    },
+    {
+      "slug": "mobile",
+      "name": "@jeswr/app-mobile",
       "kind": "application"
     }
   ],
