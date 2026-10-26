@@ -554,7 +554,23 @@ describe("deriveFeatures trust and robustness", () => {
       ),
       endpoint: fc.oneof(fc.webUrl(), fc.string()),
       conformsTo: fc.option(fc.array(fc.string()), { nil: undefined }),
-      extra: fc.oneof(fc.dictionary(fc.string(), fc.anything()), fc.constant(undefined)),
+      extra: fc.oneof(
+        fc.dictionary(fc.string(), fc.anything()),
+        fc.constant(undefined),
+        fc.record({
+          format: fc.oneof(
+            fc.record({
+              source: fc.constantFrom("constructor", "__proto__", "toString", "text/turtle"),
+              patchType: fc.oneof(fc.string(), fc.array(fc.string())),
+            }),
+            fc.dictionary(
+              fc.constantFrom("constructor", "__proto__", "hasOwnProperty", "text/turtle", "a/b"),
+              fc.anything(),
+            ),
+          ),
+          model: fc.oneof(fc.string(), fc.constantFrom(`${SSD_NS}ACP`, `${SSD_NS}WAC`)),
+        }),
+      ),
     });
     fc.assert(
       fc.property(
@@ -601,6 +617,71 @@ describe("deriveFeatures trust and robustness", () => {
     const features = deriveFeatures(d);
     expect(features.move.state).toBe("unknown");
     expect(features.rdfConneg.state).toBe("unavailable");
+  });
+
+  test("prototype-named and malformed PatchSupport keys never throw or pollute", () => {
+    for (const format of [
+      { source: "constructor", patchType: "text/n3" },
+      { source: "__proto__", patchType: "text/n3" },
+      JSON.parse(
+        '{"__proto__": ["text/n3"], "constructor": "text/n3", "text/turtle": ["bad type", "text/n3"]}',
+      ),
+    ]) {
+      const d = solid([], [{ type: [SSD.PatchSupport], extra: { format } }]);
+      const features = deriveFeatures(d);
+      expect(Object.getPrototypeOf(features.patch.detail.formats)).toBe(Object.prototype);
+      expect(Object.keys(features.patch.detail.formats).every((key) => key.includes("/"))).toBe(
+        true,
+      );
+    }
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+  });
+
+  test("unknown IRIs never acquire known semantics by local name", () => {
+    const acpLookalike = solid(
+      [],
+      [{ type: [SSD.AccessControl], extra: { [`${SSD_NS}model`]: "https://x.example/ACP" } }],
+    );
+    expect(deriveFeatures(acpLookalike).accessControl.state).toBe("unknown");
+    const moveLookalike = lws([], [{ type: ["https://x.example/MoveResource"], extra: {} }]);
+    expect(deriveFeatures(moveLookalike).move.state).toBe("unavailable");
+  });
+
+  test("a described storage cannot forge legacy-ws through rdf:type", () => {
+    const d = solid([
+      {
+        type: [SSD.SolidNotificationService, SSD.LegacyUpdatesVia],
+        endpoint: "wss://evil.example/",
+        extra: {},
+      },
+    ]);
+    expect(deriveFeatures(d).liveUpdates).toMatchObject({
+      state: "unavailable",
+      detail: { channels: [] },
+    });
+  });
+
+  test("a service typed for both Solid and LWS notifications keeps every channel", () => {
+    const d = lws([
+      {
+        type: [SSD.SolidNotificationService, LWS.NotificationService],
+        endpoint: `${LWS_ROOT}n/`,
+        extra: { subscriptionType: LWS.WebhookSubscription },
+      },
+    ]);
+    expect(deriveFeatures(d).liveUpdates).toMatchObject({
+      state: "available",
+      detail: { channels: ["webhook"] },
+    });
+  });
+
+  test("results never share mutable state between calls", () => {
+    const first = deriveFeatures(solid());
+    first.rdfConneg.detail.formats.push("text/plain");
+    (first.patch.detail.formats as Record<string, string[]>)["text/turtle"]?.push("x/y");
+    const second = deriveFeatures(solid());
+    expect(second.rdfConneg.detail.formats).toEqual(["text/turtle", "application/ld+json"]);
+    expect(second.patch.detail.formats).toEqual({ "text/turtle": ["text/n3"] });
   });
 
   test("tolerates malformed descriptions without arrays", () => {

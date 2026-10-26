@@ -35,6 +35,18 @@ export async function capabilities(url: string, options: ResolveOptions): Promis
     if (options.signal?.aborted || !(error instanceof CapabilitiesError)) throw error;
     return features;
   }
-  await cache.set(description.id, { description, probe: result });
+  // Only attach the probe to the same cache generation: if the record was deleted (logout,
+  // invalidation) or replaced while the probe was in flight, do not resurrect or overwrite it.
+  const current = await cache.get(description.id);
+  if (
+    current !== undefined &&
+    current.probe === undefined &&
+    current.description.fetchedAt === description.fetchedAt &&
+    current.description.etag === description.etag &&
+    current.description.root === description.root &&
+    current.description.descriptionUrl === description.descriptionUrl
+  ) {
+    await cache.set(description.id, { description: current.description, probe: result });
+  }
   return deriveFeatures(description, result);
 }

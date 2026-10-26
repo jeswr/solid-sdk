@@ -21,8 +21,14 @@ const RDF_MEDIA_TYPES: ReadonlySet<string> = new Set([
   "application/trig",
   "text/n3",
 ]);
-const SOLID_RDF_FORMATS = ["text/turtle", "application/ld+json"];
-const N3_PATCH_DEFAULT = { "text/turtle": ["text/n3"] } as const;
+const SOLID_RDF_FORMATS = ["text/turtle", "application/ld+json"] as const;
+/** RFC 6838 type/subtype (no parameters); also rules out "__proto__"-style keys. */
+const MEDIA_TYPE = /^[a-z0-9][a-z0-9!#$&^_.+-]{0,126}\/[a-z0-9][a-z0-9!#$&^_.+-]{0,126}$/i;
+const ACCESS_MODELS: Readonly<Record<string, "acp" | "wac" | "odrl-grants">> = {
+  [`${SSD_NS}ACP`]: "acp",
+  [`${SSD_NS}WAC`]: "wac",
+  [`${SSD_NS}ODRLGrants`]: "odrl-grants",
+};
 const JSON_PATCH = "application/json-patch+json";
 const CHANNEL_ORDER = ["websocket", "sse", "webhook", "legacy-ws"] as const;
 type Channel = (typeof CHANNEL_ORDER)[number];
@@ -102,7 +108,7 @@ export function deriveFeatures(d: StorageDescription, probe?: ProbeResult): Feat
       // ADR-008 did:service entries carry the channel as ssd:channelType; legacy-ws is only ever
       // set by the resolver's own Updates-Via mapping, never read from description content.
       const kinds = [...entry.type, ...strings(entry.extra ?? {}, "channelType")];
-      if (entry.type.includes(SSD.LegacyUpdatesVia)) {
+      if (!described && entry.type.includes(SSD.LegacyUpdatesVia)) {
         offer("legacy-ws", entry, SSD.LegacyUpdatesVia);
       }
       if (kinds.includes(NOTIFY.WebSocketChannel2023)) {
@@ -112,7 +118,9 @@ export function deriveFeatures(d: StorageDescription, probe?: ProbeResult): Feat
         offer("sse", entry, NOTIFY.StreamingHTTPChannel2023);
       }
       if (kinds.includes(SSD.StreamingHttpChannel)) offer("sse", entry, SSD.StreamingHttpChannel);
-    } else if (authoritative && typed(entry, LWS.NotificationService)) {
+    }
+    // Evaluated independently: a service may carry both notification types.
+    if (authoritative && typed(entry, LWS.NotificationService)) {
       notificationServices++;
       const kinds = strings(entry.extra ?? {}, "subscriptionType");
       if (kinds.includes(SSD.WebSocketSubscription)) {
@@ -210,14 +218,14 @@ export function deriveFeatures(d: StorageDescription, probe?: ProbeResult): Feat
     const declared = authoritative
       ? capabilities.find((entry) => typed(entry, SSD.AccessControl))
       : undefined;
-    const models = declared
-      ? strings(declared.extra ?? {}, "model").map((model) => localName(model).toLowerCase())
-      : [];
-    const model = models.includes("acp")
+    const models = new Set(
+      declared ? strings(declared.extra ?? {}, "model").map((iri) => ACCESS_MODELS[iri]) : [],
+    );
+    const model = models.has("acp")
       ? "acp"
-      : models.includes("wac")
+      : models.has("wac")
         ? "wac"
-        : models.includes("odrlgrants")
+        : models.has("odrl-grants")
           ? "odrl-grants"
           : undefined;
     if (model) {
@@ -246,7 +254,9 @@ export function deriveFeatures(d: StorageDescription, probe?: ProbeResult): Feat
   // move
   let move: Features["move"];
   if (lws) {
-    const declared = authoritative ? capability("MoveResource") : undefined;
+    const declared = authoritative
+      ? capabilities.find((entry) => typed(entry, LWS.MoveResource))
+      : undefined;
     if (declared) {
       const extra = declared.extra ?? {};
       const preserves = values(extra, "preservesIdentifier")[0];
@@ -277,26 +287,29 @@ export function deriveFeatures(d: StorageDescription, probe?: ProbeResult): Feat
 
   // patch
   const declaredPatch = authoritative ? capability("PatchSupport") : undefined;
-  const declaredFormats = declaredPatch ? patchFormats(declaredPatch.extra ?? {}) : {};
+  const declaredFormats = patchFormats(declaredPatch?.extra ?? {});
   let patch: Features["patch"];
   if (lws) {
     patch = feature(
       "available",
       declaredPatch ? cite(SSD.PatchSupport) : `${source}:baseline`,
-      merge(declaredFormats, {
-        "application/linkset+json": [JSON_PATCH],
-        "application/json": [JSON_PATCH],
-      }),
+      merge(
+        declaredFormats,
+        new Map([
+          ["application/linkset+json", [JSON_PATCH]],
+          ["application/json", [JSON_PATCH]],
+        ]),
+      ),
     );
-  } else if (declaredPatch && Object.keys(declaredFormats).length > 0) {
-    patch = feature("available", cite(SSD.PatchSupport), { formats: declaredFormats });
+  } else if (declaredFormats.size > 0) {
+    patch = feature("available", cite(SSD.PatchSupport), merge(declaredFormats));
   } else if (probe?.acceptPatch?.length) {
     patch = feature("available", "header:Accept-Patch", {
       formats: { "text/turtle": [...new Set(probe.acceptPatch)] },
     });
   } else {
     patch = feature(probe ? "available" : "unknown", probe ? "default:n3-patch" : "none", {
-      formats: N3_PATCH_DEFAULT,
+      formats: { "text/turtle": ["text/n3"] },
     });
   }
 
@@ -334,7 +347,7 @@ export function deriveFeatures(d: StorageDescription, probe?: ProbeResult): Feat
       ? feature("available", `${source}:ContentNegotiation`, { formats: [...formats] })
       : feature("unavailable", `${source}:opaque-bodies`, { formats: [] });
   } else {
-    rdfConneg = feature("available", `${source}:solid-conneg`, { formats: SOLID_RDF_FORMATS });
+    rdfConneg = feature("available", `${source}:solid-conneg`, { formats: [...SOLID_RDF_FORMATS] });
   }
 
   return {
@@ -361,14 +374,16 @@ export function deriveFeatures(d: StorageDescription, probe?: ProbeResult): Feat
  * Read a PatchSupport `format` member: either a JSON map `{ "<source type>": "<patch type>" | [...] }`
  * (LWS example) or RDF-derived `{ source, patchType }` nodes (ADR-008), single or repeated.
  */
-function patchFormats(extra: Readonly<Record<string, unknown>>): Record<string, string[]> {
-  const formats: Record<string, string[]> = {};
+function patchFormats(extra: Readonly<Record<string, unknown>>): Map<string, string[]> {
+  const formats = new Map<string, string[]>();
   const add = (sourceType: unknown, patchTypes: unknown[]) => {
-    if (typeof sourceType !== "string") return;
-    const types = patchTypes.filter((type): type is string => typeof type === "string");
+    if (typeof sourceType !== "string" || !MEDIA_TYPE.test(sourceType)) return;
+    const types = patchTypes
+      .filter((type): type is string => typeof type === "string" && MEDIA_TYPE.test(type))
+      .map((type) => type.toLowerCase());
     if (types.length === 0) return;
     const key = sourceType.toLowerCase();
-    formats[key] = [...new Set([...(formats[key] ?? []), ...types.map((t) => t.toLowerCase())])];
+    formats.set(key, [...new Set([...(formats.get(key) ?? []), ...types])]);
   };
   for (const format of values(extra, "format")) {
     if (!record(format)) continue;
@@ -378,23 +393,21 @@ function patchFormats(extra: Readonly<Record<string, unknown>>): Record<string, 
       continue;
     }
     for (const [sourceType, patchTypes] of Object.entries(format)) {
-      if (sourceType.includes("/")) {
-        add(sourceType, Array.isArray(patchTypes) ? patchTypes : [patchTypes]);
-      }
+      add(sourceType, Array.isArray(patchTypes) ? patchTypes : [patchTypes]);
     }
   }
   return formats;
 }
 
-function merge(
-  first: Readonly<Record<string, readonly string[]>>,
-  second: Readonly<Record<string, readonly string[]>>,
-): { formats: Record<string, string[]> } {
-  const formats: Record<string, string[]> = {};
-  for (const map of [first, second]) {
-    for (const [key, types] of Object.entries(map)) {
-      formats[key] = [...new Set([...(formats[key] ?? []), ...types])];
+/** Union format maps into a fresh plain object (keys are validated media types). */
+function merge(...maps: ReadonlyMap<string, readonly string[]>[]): {
+  formats: Record<string, string[]>;
+} {
+  const merged = new Map<string, string[]>();
+  for (const map of maps) {
+    for (const [key, types] of map) {
+      merged.set(key, [...new Set([...(merged.get(key) ?? []), ...types])]);
     }
   }
-  return { formats };
+  return { formats: Object.fromEntries(merged) };
 }

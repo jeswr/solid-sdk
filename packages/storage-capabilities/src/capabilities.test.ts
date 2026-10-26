@@ -169,6 +169,53 @@ describe("capabilities() probing policy", () => {
     expect(fetch.calls.some((call) => call.startsWith("OPTIONS"))).toBe(false);
   });
 
+  test("a probe finishing after invalidation does not resurrect the record", async () => {
+    const replay = fixtureFetch(cssStorage);
+    const cache = createMemoryCache();
+    let release: () => void = () => undefined;
+    const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
+      if (init?.method === "OPTIONS") {
+        await new Promise<void>((resolve) => {
+          release = resolve;
+        });
+      }
+      return replay(input, init);
+    });
+    const pending = capabilities(cssStorage.resource, { fetch, cache, now: () => 1000 });
+    await vi.waitFor(() =>
+      expect(fetch.mock.calls.some(([, init]) => init?.method === "OPTIONS")).toBe(true),
+    );
+    await cache.delete(cssStorage.root);
+    release();
+    expect((await pending).accessControl.detail.model).toBe("wac");
+    expect(await cache.get(cssStorage.root)).toBeUndefined();
+  });
+
+  test("a probe finishing after the record was replaced does not overwrite it", async () => {
+    const replay = fixtureFetch(cssStorage);
+    const cache = createMemoryCache();
+    let release: () => void = () => undefined;
+    const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
+      if (init?.method === "OPTIONS") {
+        await new Promise<void>((resolve) => {
+          release = resolve;
+        });
+      }
+      return replay(input, init);
+    });
+    const pending = capabilities(cssStorage.resource, { fetch, cache, now: () => 1000 });
+    await vi.waitFor(() =>
+      expect(fetch.mock.calls.some(([, init]) => init?.method === "OPTIONS")).toBe(true),
+    );
+    const record = await cache.get(cssStorage.root);
+    if (!record) throw new Error("missing record");
+    const replaced = { description: { ...record.description, fetchedAt: 2000 } };
+    await cache.set(cssStorage.root, replaced);
+    release();
+    await pending;
+    expect(await cache.get(cssStorage.root)).toEqual(replaced);
+  });
+
   test("uses the shared default cache when none is given", async () => {
     const fetch = fixtureFetch(essStorage);
     await capabilities(essStorage.resource, { fetch, now: () => 1000 });
