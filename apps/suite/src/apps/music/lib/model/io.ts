@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { fetchRdf, RdfFetchError } from "@jeswr/fetch-rdf";
 import {
   assertWithinPodScope,
@@ -6,6 +7,7 @@ import {
   normalizePodBase,
   podScopedUrl,
 } from "@jeswr/guarded-fetch";
+import type { BlankNode, Term } from "@rdfjs/types";
 import { Container } from "@solid/object";
 import { historyShard, type Playback, PlaybackEvent, readHistory } from "./history";
 import { type MusicLibrary, readLibrary } from "./library";
@@ -24,7 +26,24 @@ export async function loadMusic(
   url: string,
 ): Promise<MusicDocument> {
   const result = await fetchRdf(httpIri(url), { fetch });
-  return { dataset: new Store([...result.dataset]), etag: result.etag, url: result.url };
+  // Blank-node labels are local to a document, including JSON-LD labels that a
+  // parser may retain verbatim. Allocate fresh terms before datasets are merged.
+  const blanks = new Map<string, BlankNode>();
+  const scope = <T extends Term>(term: T): T | BlankNode => {
+    if (term.termType !== "BlankNode") return term;
+    let scoped = blanks.get(term.value);
+    if (!scoped) {
+      scoped = DataFactory.blankNode();
+      blanks.set(term.value, scoped);
+    }
+    return scoped;
+  };
+  const dataset = new Store(
+    [...result.dataset].map((quad) =>
+      DataFactory.quad(scope(quad.subject), quad.predicate, scope(quad.object), scope(quad.graph)),
+    ),
+  );
+  return { dataset, etag: result.etag, url: result.url };
 }
 
 /** One listing level, as in pod-music; multi-subject Spotify documents are supported. */

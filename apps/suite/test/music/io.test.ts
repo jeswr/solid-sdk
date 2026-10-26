@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { RdfFetchError } from "@jeswr/fetch-rdf";
 import { PodScopeError } from "@jeswr/guarded-fetch";
 import { describe, expect, it, vi } from "vitest";
@@ -17,7 +18,7 @@ import {
   Track,
   type WriteCondition,
 } from "../../src/apps/music/lib/model";
-import { NS, S } from "../../src/apps/music/lib/model/vocab";
+import { M, NS, S } from "../../src/apps/music/lib/model/vocab";
 
 const base = "https://pod.test/music/";
 const shard = `${base}history/2026-10.ttl`;
@@ -69,6 +70,71 @@ describe("injected RDF reads", () => {
     const library = await loadLibrary(fetch, root);
     expect(library.tracks.map((track) => track.title)).toEqual(["Another", "Song", "Third"]);
     expect(fetch.mock.calls.map(([url]) => url)).toEqual([root, `${root}a.ttl`, `${root}b.ttl`]);
+  });
+
+  it("scopes JSON-LD blank artists and albums to each document, including the listing", async () => {
+    const documents = [base, `${base}a.jsonld`, `${base}b.jsonld`];
+    const fetch = transport((url) => {
+      const index = documents.indexOf(url);
+      expect(index).toBeGreaterThanOrEqual(0);
+      return new Response(
+        JSON.stringify([
+          {
+            "@id": base,
+            [`${NS.LDP}contains`]: documents.slice(1).map((child) => ({ "@id": child })),
+          },
+          ...["one", "two"].map((id) => ({
+            "@id": `${url}#${id}`,
+            "@type": `${S}MusicRecording`,
+            [`${S}name`]: `${index}-${id}`,
+            [`${S}byArtist`]: { "@id": "_:artist" },
+            [`${S}inAlbum`]: { "@id": "_:album" },
+          })),
+          { "@id": "_:artist", [`${S}name`]: `Artist ${index}` },
+          { "@id": "_:album", [`${S}name`]: `Album ${index}` },
+        ]),
+        { headers: { "content-type": "application/ld+json" } },
+      );
+    });
+    const library = await loadLibrary(fetch, base);
+    expect(library.tracks.map((track) => [track.title, track.artists, track.album])).toEqual(
+      documents.flatMap((_url, index) =>
+        ["one", "two"].map((id) => [
+          `${index}-${id}`,
+          [{ iri: undefined, name: `Artist ${index}` }],
+          { iri: undefined, name: `Album ${index}` },
+        ]),
+      ),
+    );
+    expect(fetch).toHaveBeenCalledTimes(3);
+  });
+
+  it("renames blank graph names consistently with their subject and object uses", async () => {
+    const fetch = transport(
+      () =>
+        new Response(
+          JSON.stringify([
+            { "@id": "_:node", [`${S}name`]: "Graph and artist" },
+            {
+              "@id": "_:node",
+              "@graph": [{ "@id": trackIri, [`${S}byArtist`]: { "@id": "_:node" } }],
+            },
+          ]),
+          { headers: { "content-type": "application/ld+json" } },
+        ),
+    );
+    const first = await loadMusic(fetch, base);
+    const second = await loadMusic(fetch, base);
+    const artist = first.dataset.getQuads(trackIri, `${S}byArtist`, null, null)[0]?.object;
+    if (!artist) throw new Error("Missing blank artist");
+    expect(artist.termType).toBe("BlankNode");
+    expect(first.dataset.getQuads(null, `${S}name`, null, null)[0]?.subject.equals(artist)).toBe(
+      true,
+    );
+    expect(first.dataset.getQuads(trackIri, null, null, null)[0]?.graph.equals(artist)).toBe(true);
+    expect(new Track(trackIri, second.dataset).objects(`${S}byArtist`)[0]?.equals(artist)).toBe(
+      false,
+    );
   });
 
   it("distinguishes empty listings, HTTP errors, parse failures and network failures", async () => {
@@ -200,6 +266,37 @@ describe("conditional RDF writes", () => {
 });
 
 describe("monthly history I/O", () => {
+  it("keeps same-labelled JSON-LD instants separate across monthly documents", async () => {
+    const months = [new Date("2026-09-25T12:00:00Z"), play.startTime];
+    const fetch = transport((url) => {
+      const date = months.find((month) => url.includes(month.toISOString().slice(0, 7)));
+      return new Response(
+        JSON.stringify([
+          ...["one", "two"].map((id) => ({
+            "@id": `${url}#${id}`,
+            "@type": `${M}PlaybackEvent`,
+            [`${M}playedWork`]: { "@id": trackIri },
+            [`${NS.CORE}atTime`]: { "@id": "_:instant" },
+          })),
+          { "@id": "_:instant", [`${NS.TIME}inXSDDateTime`]: date?.toISOString() },
+        ]),
+        { headers: { "content-type": "application/ld+json" } },
+      );
+    });
+    const history = await loadHistory(fetch, base, months);
+    expect(history.map((event) => [event.iri, event.startTime])).toEqual(
+      [...months]
+        .reverse()
+        .flatMap((month) =>
+          ["one", "two"].map((id) => [
+            `${base}history/${month.toISOString().slice(0, 7)}.ttl#${id}`,
+            month,
+          ]),
+        ),
+    );
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
   it("reads selected months once each, tolerating only missing shards", async () => {
     const previous = `${base}history/2026-09.ttl`;
     const fetch = transport((url) => {
