@@ -15,7 +15,6 @@ import { refuseRedirects } from "@jeswr/guarded-fetch";
 import { IntegrationSyncError } from "./errors.js";
 import { fixtureFetch } from "./fixture-fetch.js";
 import { createImportSession } from "./import-session.js";
-import { registrationsFor } from "./pod-writer.js";
 import type {
   ConnectorState,
   ConnectorStateOptions,
@@ -87,7 +86,7 @@ export async function runImport(opts: RunImportOptions): Promise<ImportReport> {
       progress: (p) => opts.onProgress?.(p),
       write: session.write,
     });
-    const { indexUrl } = await opts.podWriter.registerType(registrationsFor(session.written));
+    const { indexUrl } = await opts.podWriter.registerType(session.registrations());
     await session.finish();
     const state = session.state(outcome);
     opts.onState?.(state);

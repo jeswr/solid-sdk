@@ -3,6 +3,7 @@
 import type { DatasetCore } from "@rdfjs/types";
 import { DataFactory } from "n3";
 import { copyDataset, mergeItems } from "./incremental.js";
+import { registrationsFor } from "./pod-writer.js";
 import { PROV, Provenance } from "./provenance.js";
 import type {
   ConnectorState,
@@ -10,6 +11,7 @@ import type {
   ImportOutcome,
   NormalisedDoc,
   PodWriter,
+  TypeRegistrationRequest,
   VocabMap,
   WriteConditions,
   WrittenDoc,
@@ -31,6 +33,7 @@ export function createImportSession(
   const reads = new Map<string, Awaited<ReturnType<PodWriter["read"]>>>();
   const used = new Set<string>([source]);
   const written: WrittenDoc[] = [];
+  const registrations = new Map<string, TypeRegistrationRequest>();
   const itemKeys = new Set<string>();
   const conditionFor = (
     existing: Awaited<ReturnType<PodWriter["read"]>>,
@@ -69,6 +72,9 @@ export function createImportSession(
     }
     const dataset = doc.writeMode === "merge" ? mergeItems(previous?.dataset, incoming) : incoming;
     const result = await writer.write({ ...doc, dataset }, conditions ?? conditionFor(previous));
+    for (const request of registrationsFor([result])) {
+      registrations.set(JSON.stringify([request.forClass, request.container]), request);
+    }
     reads.delete(url);
     const index = written.findIndex((w) => w.url === result.url);
     if (index === -1) written.push(result);
@@ -110,5 +116,5 @@ export function createImportSession(
         : (options.state?.counts ?? { documents: 0, items: 0, skipped: 0 }),
     };
   }
-  return { read, write, written, finish, state };
+  return { read, write, written, registrations: () => [...registrations.values()], finish, state };
 }

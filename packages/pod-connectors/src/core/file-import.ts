@@ -25,7 +25,6 @@
 import { IntegrationSyncError } from "./errors.js";
 import type { ImportReport } from "./import-runner.js";
 import { createImportSession } from "./import-session.js";
-import { registrationsFor } from "./pod-writer.js";
 import type {
   ConnectorStateOptions,
   ImportProgress,
@@ -139,7 +138,7 @@ export async function runFileImport(opts: RunFileImportOptions): Promise<ImportR
         "No importable records were found in that file. Double-check you selected the right export file.",
       );
     }
-    const { indexUrl } = await opts.podWriter.registerType(registrationsFor(session.written));
+    const { indexUrl } = await opts.podWriter.registerType(session.registrations());
     await session.finish();
     const state = session.state({});
     opts.onState?.(state);

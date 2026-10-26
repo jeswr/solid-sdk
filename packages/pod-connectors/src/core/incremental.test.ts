@@ -18,8 +18,8 @@ import {
   TEST_PROFILE_DOC,
   TEST_WEBID,
 } from "./testing.js";
-import type { ConnectorState, IntegrationAdapter, PodWriter } from "./types.js";
-import { CLASSES, MusicRecording } from "./vocab.js";
+import type { ConnectorState, ImportContext, IntegrationAdapter, PodWriter } from "./types.js";
+import { CLASSES, MusicPlaylist, MusicRecording } from "./vocab.js";
 
 const RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
 function song(dataset: Store, subject: string, id: string, name: string) {
@@ -378,6 +378,80 @@ describe("CON-02 incremental writes", () => {
         "Reserved connector provenance slug",
       );
     }
+  });
+
+  it.each([
+    "api",
+    "file",
+  ])("retains every class registration across repeated %s writes to one document", async (kind) => {
+    const pod = createMemoryPod();
+    const port = writer(pod);
+    const importWrites = async (ctx: Pick<ImportContext, "resolve" | "write">) => {
+      const url = ctx.resolve("music/items.ttl");
+      const recording = new Store();
+      song(recording, `${url}#song`, "song", "Song");
+      const playlist = new Store();
+      new MusicPlaylist(`${url}#playlist`, playlist, DataFactory).mark();
+      for (const [forClass, dataset, skipRegistration] of [
+        [CLASSES.MusicRecording, recording, false],
+        [CLASSES.MusicPlaylist, playlist, false],
+        [CLASSES.MusicRecording, recording, false],
+        [CLASSES.Person, new Store(), true],
+      ] as const) {
+        await ctx.write({
+          slug: "music/items.ttl",
+          category: "media",
+          forClass,
+          dataset,
+          skipRegistration,
+          writeMode: "merge",
+        });
+      }
+      return {};
+    };
+    const source = adapter(importWrites);
+    const report =
+      kind === "api"
+        ? await runImport({ adapter: source, podWriter: port, mode: "demo" })
+        : await runFileImport({
+            adapter: {
+              metadata: source.metadata,
+              accept: ".txt",
+              fileHint: "Synthetic file",
+              async importFile(_file, ctx) {
+                await importWrites(ctx);
+              },
+            },
+            podWriter: port,
+            file: memoryFile("synthetic.txt", "fixture"),
+          });
+    expect(report.written).toHaveLength(1);
+    expect(report.state?.counts.documents).toBe(1);
+    const dataset = pod.dataset(port.resolve("music/items.ttl"));
+    expect(
+      new MusicRecording(`${port.resolve("music/items.ttl")}#song`, dataset, DataFactory).types.has(
+        CLASSES.MusicRecording,
+      ),
+    ).toBe(true);
+    expect(
+      new MusicPlaylist(
+        `${port.resolve("music/items.ttl")}#playlist`,
+        dataset,
+        DataFactory,
+      ).types.has(CLASSES.MusicPlaylist),
+    ).toBe(true);
+    const index = pod.dataset(report.indexUrl);
+    expect(
+      [...index]
+        .filter((q) => q.predicate.value === "http://www.w3.org/ns/solid/terms#forClass")
+        .map((q) => q.object.value)
+        .sort(),
+    ).toEqual([CLASSES.MusicRecording, CLASSES.MusicPlaylist].sort());
+    expect(
+      [...index]
+        .filter((q) => q.predicate.value === "http://www.w3.org/ns/solid/terms#instanceContainer")
+        .map((q) => q.object.value),
+    ).toEqual([port.resolve("music/"), port.resolve("music/")]);
   });
 
   it("re-reads between writes of the same slug and uses the newest ETag", async () => {
