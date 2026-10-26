@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 /**
  * Google and Microsoft specifics for the credential helper: FIXED official endpoints, the scopes
  * requested and why, OIDC ID-token verification, token exchange/refresh and the explicit
@@ -53,14 +54,27 @@ export async function call(
     throw new HelperError("unavailable", `${what}: the provider could not be reached`);
   }
   let text: string;
+  let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
   try {
-    const buf = await res.arrayBuffer();
-    if (buf.byteLength > MAX_BODY)
-      throw new HelperError("unavailable", `${what}: answer too large`);
-    text = new TextDecoder().decode(buf);
+    reader = res.body?.getReader();
+    const chunks: Uint8Array[] = [];
+    let size = 0;
+    while (reader) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > MAX_BODY) {
+        await reader.cancel().catch(() => {});
+        throw new HelperError("unavailable", `${what}: answer too large`);
+      }
+      chunks.push(value);
+    }
+    text = new TextDecoder().decode(Buffer.concat(chunks, size));
   } catch (error) {
     if (error instanceof HelperError) throw error;
     throw new HelperError("unavailable", `${what}: the answer could not be read`);
+  } finally {
+    reader?.releaseLock();
   }
   let body: unknown;
   try {
