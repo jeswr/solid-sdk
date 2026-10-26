@@ -1,0 +1,153 @@
+// AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
+import { describe, expect, it } from "vitest";
+import {
+  asUrn,
+  base64Url,
+  base64UrlDecode,
+  canonicalContainer,
+  isValidEmailAddress,
+  isWithinBase,
+  mintUrn,
+  normalizeEmailAddress,
+  safeHttpIri,
+  safeMailtoIri,
+  sanitizeText,
+} from "./safe-iri.js";
+
+describe("safeHttpIri", () => {
+  it("accepts + canonicalises an http(s) IRI", () => {
+    expect(safeHttpIri("https://pod.example/a")).toBe("https://pod.example/a");
+  });
+  it("rejects non-http(s) schemes", () => {
+    expect(safeHttpIri("mailto:a@b.com")).toBeUndefined();
+    expect(safeHttpIri("javascript:alert(1)")).toBeUndefined();
+    expect(safeHttpIri("file:///etc/passwd")).toBeUndefined();
+    expect(safeHttpIri("urn:agentic:person:x")).toBeUndefined();
+  });
+  it("neutralises IRIREF-breakout characters", () => {
+    const out = safeHttpIri("https://x/a>y");
+    expect(out).toBeDefined();
+    expect(out).not.toMatch(/[<>"{}|\\^`]/);
+  });
+  it("rejects empty / non-string", () => {
+    expect(safeHttpIri("")).toBeUndefined();
+    expect(safeHttpIri(42)).toBeUndefined();
+    expect(safeHttpIri(undefined)).toBeUndefined();
+  });
+});
+
+describe("canonicalContainer", () => {
+  it("accepts a well-formed container", () => {
+    expect(canonicalContainer("https://pod.example/inbox/")).toBe("https://pod.example/inbox/");
+  });
+  it("rejects a non-slash-terminated path", () => {
+    expect(canonicalContainer("https://pod.example/inbox")).toBeUndefined();
+  });
+  it("rejects a query/fragment (ACL-decoy guard)", () => {
+    expect(canonicalContainer("https://pod.example/inbox/?x=/")).toBeUndefined();
+    expect(canonicalContainer("https://pod.example/inbox/#y")).toBeUndefined();
+  });
+  it("rejects an encoded path delimiter", () => {
+    expect(canonicalContainer("https://pod.example/a%2Fb/")).toBeUndefined();
+  });
+});
+
+describe("isWithinBase", () => {
+  const base = "https://pod.example/inbox/";
+  it("accepts a strict descendant", () => {
+    expect(isWithinBase("https://pod.example/inbox/m.ttl", base)).toBe(true);
+  });
+  it("rejects the container itself + siblings + cross-origin", () => {
+    expect(isWithinBase(base, base)).toBe(false);
+    expect(isWithinBase("https://pod.example/other/x", base)).toBe(false);
+    expect(isWithinBase("https://evil.example/inbox/x", base)).toBe(false);
+  });
+  it("rejects traversal escapes", () => {
+    expect(isWithinBase("https://pod.example/inbox/../secret", base)).toBe(false);
+  });
+});
+
+describe("email address helpers", () => {
+  it("validates addr-spec", () => {
+    expect(isValidEmailAddress("a.b+c@sub.example.com")).toBe(true);
+    expect(isValidEmailAddress("no-at-symbol")).toBe(false);
+    expect(isValidEmailAddress("a@b")).toBe(false); // no dot in domain
+    expect(isValidEmailAddress("a b@c.com")).toBe(false);
+  });
+  it("normalises the domain case, keeps local case", () => {
+    expect(normalizeEmailAddress("Jane.Doe@Ex.COM")).toBe("Jane.Doe@ex.com");
+    expect(normalizeEmailAddress("not valid")).toBeUndefined();
+  });
+  it("builds an injection-safe mailto IRI", () => {
+    expect(safeMailtoIri("a@b.com")).toBe("mailto:a@b.com");
+    const withSpecials = safeMailtoIri("a`b|c@ex.com");
+    expect(withSpecials).toBeDefined();
+    expect(withSpecials).not.toMatch(/[<>"{}|\\^`]/);
+    expect(safeMailtoIri("bogus")).toBeUndefined();
+  });
+});
+
+describe("urn minting", () => {
+  it("mints a stable, injection-free urn", () => {
+    const a = mintUrn("person", "a@b.com");
+    const b = mintUrn("person", "a@b.com");
+    expect(a).toBe(b);
+    expect(a.startsWith("urn:agentic:person:")).toBe(true);
+    expect(a).toMatch(/^urn:agentic:person:[A-Za-z0-9_-]+$/);
+  });
+  it("base64Url uses only the url-safe alphabet", () => {
+    expect(base64Url("a>b<c|d")).toMatch(/^[A-Za-z0-9_-]+$/);
+  });
+});
+
+describe("asUrn", () => {
+  it("passes through a well-formed internal urn unchanged", () => {
+    expect(asUrn(mintUrn("raw", "abc"))).toBe(mintUrn("raw", "abc"));
+    expect(asUrn("urn:agentic:person:AbC-_")).toBe("urn:agentic:person:AbC-_");
+  });
+  it("rejects a urn carrying an IRIREF-breakout char (fail-closed)", () => {
+    expect(asUrn("urn:agentic:raw:x> <urn:evil:s> .")).toBeUndefined();
+    expect(asUrn("urn:agentic:raw:x\ny")).toBeUndefined();
+  });
+  it("rejects non-urn / non-string input", () => {
+    expect(asUrn("https://pod.example/a")).toBeUndefined();
+    expect(asUrn(undefined)).toBeUndefined();
+    expect(asUrn(123)).toBeUndefined();
+  });
+});
+
+describe("base64UrlDecode (the exact inverse of base64Url)", () => {
+  it("round-trips every string exactly", () => {
+    for (const s of [
+      "a",
+      "hello world",
+      "1234567890.timestamp",
+      "team:U123/C456",
+      "wamid.HBgLABC",
+      "unicode: café — 日本語 🎉",
+      "  control",
+    ]) {
+      expect(base64UrlDecode(base64Url(s))).toBe(s);
+    }
+  });
+
+  it("rejects non-canonical / aliased / padded / hostile segments (fail-closed)", () => {
+    expect(base64UrlDecode("aGVsbG8=")).toBeUndefined(); // padded
+    expect(base64UrlDecode("a+b")).toBeUndefined(); // `+` (not the url alphabet)
+    expect(base64UrlDecode("a/b")).toBeUndefined(); // `/`
+    expect(base64UrlDecode("has space")).toBeUndefined();
+    // A trailing-bits non-canonical encoding: "aa" decodes to a byte whose re-encoding is
+    // a DIFFERENT segment, so it must be rejected (the canonicality gate).
+    expect(base64UrlDecode("aa")).toBeUndefined();
+    // Non-string / empty.
+    expect(base64UrlDecode(undefined)).toBeUndefined();
+    expect(base64UrlDecode(42)).toBeUndefined();
+    expect(base64UrlDecode("")).toBeUndefined();
+  });
+});
+
+describe("sanitizeText", () => {
+  it("keeps tab/newline but strips other controls", () => {
+    expect(sanitizeText("a\tb\nc\u0000\u0007d")).toBe("a\tb\ncd");
+  });
+});

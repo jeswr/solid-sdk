@@ -10,6 +10,10 @@ membership. Use a trusted signature layer for that decision.
 > Experimental. Treat registry data as untrusted until authority and signature checks pass. The
 > fetch-backed APIs do not add an SSRF guard, so inject a guarded fetch for untrusted URLs.
 
+Readers accept canonical `https://jeswr.org/ns/` and legacy `https://w3id.org/jeswr/`
+vocabulary terms. Canonical properties take precedence per field; builders write canonical
+terms. Resource identifiers and caller-supplied spec-version IRIs retain their identity.
+
 ## Install
 
 ```sh
@@ -49,7 +53,7 @@ const activeApps = members
 
 - [Source](https://github.com/jeswr/federation-registry)
 - [Issues](https://github.com/jeswr/federation-registry/issues)
-- [`fedreg:` vocabulary](https://w3id.org/jeswr/fedreg)
+- [`fedreg:` vocabulary](https://jeswr.org/ns/fedreg)
 - [Signed membership layer](https://github.com/jeswr/federation-trust)
 
 ## License
