@@ -54,7 +54,9 @@ Rules the memory backend enforces, and the real backends must match:
   accepted (`bad-request` otherwise).
 - Every serialisation escapes IRIREF-forbidden characters in IRIs and prefix namespaces
   (`escapeIri`), relabels unsafe blank-node labels and refuses malformed language tags and prefix
-  names, so crafted terms can never forge triples. `listAll` stops between entries once aborted.
+  names (exact Turtle `PN_PREFIX`), so crafted terms can never forge triples. Prefixes are only
+  cosmetic: a dotted prefix name, or one that some IRI starts with (`name:`), is silently dropped.
+  Moving a resource rewrites metadata anchors on that resource and its fragments only. `listAll` stops between entries once aborted.
 - A stale ETag gives `precondition-failed` (412) with the current `etag`. ETags change on every write,
   and a container's ETag changes only on membership changes.
 - LWS lists in pages (`next` cursors are opaque), Solid lists in one page. `listAll` refuses a

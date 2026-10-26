@@ -1300,7 +1300,7 @@ describe("review round 2 regressions", () => {
     expect((await storage.readRdf(rtl.url)).dataset.size).toBe(1);
   });
 
-  test("non-UTF-8 percent-encodings move unchanged; Unicode and dotted prefixes are allowed", async () => {
+  test("non-UTF-8 percent-encodings move unchanged; Unicode and dotted prefixes are accepted", async () => {
     for (const storage of [solid(), lws({ moveResource: true })]) {
       const dst = await storage.create(ROOT, null, { kind: "container", name: "dst" });
       const source =
@@ -1321,6 +1321,67 @@ describe("review round 2 regressions", () => {
     await expect(
       storage.writeRdf(`${ROOT}t.ttl`, [], { ifMatch: "*", prefixes: { "ex.": EX } }),
     ).rejects.toThrow(/prefix name/);
+    // Characters outside Turtle's PN_PREFIX ranges are refused before anything is written.
+    for (const name of ["\u00B5", "a\u00B2", "_a", "-a", "1a"]) {
+      await expect(
+        storage.writeRdf(`${ROOT}w.ttl`, [], { ifMatch: "*", prefixes: { [name]: EX } }),
+      ).rejects.toThrow(/prefix name/);
+    }
+    const astral = await storage.writeRdf(
+      `${ROOT}w.ttl`,
+      [quad(namedNode(`${EX}s`), namedNode(`${EX}p`), literal("v"))],
+      { ifMatch: "*", prefixes: { "\u{10000}a\u0301": EX } },
+    );
+    expect((await storage.readRdf(astral.url)).dataset.size).toBe(1);
+  });
+
+  test("a dotted prefix cannot act as a regex wildcard in the writer", async () => {
+    const storage = solid();
+    // `a-b:` is a valid scheme, and matches the unescaped pattern `a.b:` n3 would build.
+    const forged = namedNode("a-b:o;b:forged");
+    const written = await storage.writeRdf(
+      `${ROOT}dot.ttl`,
+      [quad(namedNode("urn:s"), forged, literal("v"))],
+      { ifMatch: "*", prefixes: { "a.b": "urn:unused:", b: "urn:b:" } },
+    );
+    const { dataset } = await storage.readRdf(written.url);
+    expect([...dataset].map((q) => q.predicate.value)).toEqual(["a-b:o;b:forged"]);
+    expect(await (await storage.read(written.url)).text()).not.toContain("@prefix a.b");
+  });
+
+  test("moving a resource rewrites only its own anchors, not lookalike siblings", async () => {
+    for (const storage of [solid(), lws({ moveResource: true })]) {
+      const dst = await storage.create(ROOT, null, { kind: "container", name: "dst" });
+      const source =
+        storage.protocol === "solid"
+          ? (await storage.write(`${ROOT}a`, "x", { contentType: "text/plain", ifMatch: "*" })).url
+          : (await storage.create(ROOT, "x", { contentType: "text/plain", name: "a" })).url;
+      await storage.setMetadata(
+        source,
+        [
+          { op: "add", anchor: `${ROOT}another`, rel: `${EX}rel`, href: `${EX}x` },
+          { op: "add", anchor: `${source}#frag`, rel: `${EX}rel`, href: `${EX}y` },
+        ],
+        await currentMeta(storage, source),
+      );
+      const moved = await storage.move(source, dst.url, await current(storage, source));
+      const { links } = await storage.metadata(moved.url);
+      expect(links.get(`${ROOT}another`)?.get(`${EX}rel`)).toHaveLength(1);
+      expect(links.get(`${dst.url}another`)).toBeUndefined();
+      expect(links.get(`${moved.url}#frag`)?.get(`${EX}rel`)).toHaveLength(1);
+    }
+    // A container move still carries anchors on its descendants along.
+    const storage = solid();
+    const box = await storage.create(ROOT, null, { kind: "container", name: "box" });
+    const into = await storage.create(ROOT, null, { kind: "container", name: "into" });
+    await storage.setMetadata(
+      box.url,
+      [{ op: "add", anchor: `${box.url}child`, rel: `${EX}rel`, href: `${EX}x` }],
+      await currentMeta(storage, box.url),
+    );
+    const movedBox = await storage.move(box.url, into.url, await current(storage, box.url));
+    const { links } = await storage.metadata(movedBox.url);
+    expect(links.get(`${movedBox.url}child`)?.get(`${EX}rel`)).toHaveLength(1);
   });
 
   test("a queued mutation rejects promptly when its signal aborts", async () => {
