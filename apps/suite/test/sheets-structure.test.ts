@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { describe, expect, it } from "vitest";
 import {
   type MoveRange,
@@ -346,6 +347,30 @@ describe("formula dialect", () => {
     ["=a1  +  a2\n", "=a1  +  a2\n"],
   ])("preserves syntax and shifts only references in %s", (before, after) =>
     expect(rewrite(before)).toBe(after));
+  it.each([
+    ["A1", "=A9", "=A11", insert],
+    ["A1", "=Z1", "=AB1", { ...insert, axis: "column" }],
+    ["A1", "=A3", "=#REF!", deletion],
+    ["A1", "=B2", "='Other'!E5", { ...move, destination: { sheet: "Other", row: 5, column: 5 } }],
+    ["R1C1", "=R[8]C", "=R[10]C", insert],
+  ] as const)("enforces the rewritten length limit for %s %s", (notation, before, after, edit) => {
+    const suffix = `&"${"x".repeat(8192 - after.length - 3)}"`;
+    const rewritten = rewrite(before + suffix, edit, notation, 1, 1);
+    expect(rewritten).toBe(after + suffix);
+    expect(rewritten).toHaveLength(8192);
+    expect(
+      planStructureEdit(workbook([formula(1, 1, rewritten, notation)]), { ...insert, index: 100 })
+        .changes,
+    ).toEqual([]);
+
+    const input = workbook([
+      value(9, 8, "preserve on failure"),
+      formula(1, 1, `${before}${suffix} `, notation),
+    ]);
+    const saved = structuredClone(input);
+    fail(input, edit, "unsupported");
+    expect(input).toEqual(saved);
+  });
   it.each([
     "",
     "A1",

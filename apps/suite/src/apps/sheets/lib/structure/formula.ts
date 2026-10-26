@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 // Uses the same deliberately restricted formula dialect as ../refs/formula.ts.
 import {
   type CellPosition,
@@ -143,5 +144,7 @@ export function rewriteFormula(
     output += formula.slice(end, token.start) + replacement;
     end = token.start + token.text.length;
   }
-  return output + formula.slice(end);
+  output += formula.slice(end);
+  if (output.length > 8192) fail();
+  return output;
 }
