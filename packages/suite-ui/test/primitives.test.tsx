@@ -84,6 +84,51 @@ it.each([
   }
 });
 
+it.each([1, 2])("names all %s Slider thumbs from external visible labels", (thumbCount) => {
+  render(
+    <>
+      <span id="volume-label">Volume</span>
+      <span id="volume-unit">in decibels</span>
+      <Slider
+        aria-labelledby="volume-label volume-unit"
+        aria-label="Ignored label"
+        defaultValue={thumbCount === 1 ? [30] : [20, 80]}
+      />
+    </>,
+  );
+  const thumbs = screen.getAllByRole("slider", { name: "Volume in decibels" });
+  expect(thumbs).toHaveLength(thumbCount);
+  for (const thumb of thumbs) {
+    expect(thumb.getAttribute("aria-labelledby")).toBe("volume-label volume-unit");
+    expect(thumb.getAttribute("aria-label")).toBeNull();
+  }
+});
+
+it("uses an external Slider label without a direct aria-label", () => {
+  render(
+    <>
+      <span id="brightness-label">Brightness</span>
+      <Slider aria-labelledby="brightness-label" />
+    </>,
+  );
+  const thumb = screen.getByRole("slider", { name: "Brightness" });
+  expect(thumb.getAttribute("aria-label")).toBeNull();
+});
+
+it.each([
+  { label: undefined, values: [30], names: ["Value"] },
+  { label: undefined, values: [20, 80], names: ["Value 1", "Value 2"] },
+  { label: "Volume", values: [30], names: ["Volume"] },
+  { label: "Volume", values: [20, 80], names: ["Volume 1", "Volume 2"] },
+])("names Slider thumbs with $names when no external label is supplied", ({
+  label,
+  values,
+  names,
+}) => {
+  render(<Slider {...(label ? { "aria-label": label } : {})} defaultValue={values} />);
+  for (const name of names) expect(screen.getByRole("slider", { name })).toBeDefined();
+});
+
 it.each([
   { props: {}, expected: ["0"] },
   { props: { min: 10, max: 50 }, expected: ["10"] },

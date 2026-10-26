@@ -9,6 +9,7 @@ import { cn } from "../../lib/utils.js";
 function Slider({
   className,
   "aria-label": ariaLabel = "Value",
+  "aria-labelledby": ariaLabelledBy,
   defaultValue,
   value,
   min = 0,
@@ -23,6 +24,7 @@ function Slider({
   return (
     <SliderPrimitive.Root
       data-slot="slider"
+      aria-labelledby={ariaLabelledBy}
       defaultValue={defaultValue ?? _values}
       {...(value === undefined ? {} : { value })}
       min={min}
@@ -50,7 +52,14 @@ function Slider({
       {Array.from({ length: _values.length }, (_, index) => (
         <SliderPrimitive.Thumb
           data-slot="slider-thumb"
-          aria-label={_values.length === 1 ? ariaLabel : `${ariaLabel} ${index + 1}`}
+          aria-labelledby={ariaLabelledBy}
+          aria-label={
+            ariaLabelledBy
+              ? undefined
+              : _values.length === 1
+                ? ariaLabel
+                : `${ariaLabel} ${index + 1}`
+          }
           // biome-ignore lint/suspicious/noArrayIndexKey: A handle must retain focus when its value changes.
           key={index}
           className="block size-6 shrink-0 rounded-full border border-primary bg-surface   transition-[color,box-shadow] hover:ring-4   disabled:pointer-events-none disabled:opacity-50"
