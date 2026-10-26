@@ -15,6 +15,7 @@ import {
   readHistory,
   Store,
   saveMusic,
+  serializeMusic,
   Track,
   type WriteCondition,
 } from "../../src/apps/music/lib/model";
@@ -186,6 +187,43 @@ describe("injected RDF reads", () => {
 });
 
 describe("conditional RDF writes", () => {
+  it.each([
+    "#graph",
+    "_:graph",
+  ])("rejects JSON-LD graph %s before sending Turtle", async (graph) => {
+    const document = await loadMusic(
+      transport(
+        () =>
+          new Response(
+            JSON.stringify([
+              { "@id": trackIri, [`${S}name`]: "Default graph metadata" },
+              {
+                "@id": graph,
+                "@graph": [
+                  {
+                    "@id": trackIri,
+                    "@type": `${S}MusicRecording`,
+                    [`${S}name`]: "Named graph title",
+                  },
+                ],
+              },
+            ]),
+            { headers: { "content-type": "application/ld+json" } },
+          ),
+      ),
+      `${base}tracks/a.ttl`,
+    );
+    expect([...document.dataset].some((quad) => quad.graph.termType !== "DefaultGraph")).toBe(true);
+    const before = [...document.dataset];
+    await expect(serializeMusic(document.dataset)).rejects.toThrow(InvalidMusicError);
+    const fetch = transport(() => new Response(null, { status: 204 }));
+    await expect(
+      saveMusic(fetch, base, document.url, document.dataset, { ifMatch: "*" }),
+    ).rejects.toThrow("Named graphs cannot be serialized as Turtle");
+    expect(fetch).not.toHaveBeenCalled();
+    expect([...document.dataset]).toEqual(before);
+  });
+
   it("creates and updates with explicit preconditions and content type", async () => {
     const dataset = new Store();
     const track = new Track(trackIri, dataset).stampType();

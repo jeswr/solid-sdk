@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { serialize } from "@jeswr/rdf-serialize";
 import type { Term } from "@rdfjs/types";
@@ -26,8 +27,12 @@ export async function parseMusic(
   return new Store([...(await parseRdf(body, contentType, { baseIRI: url }))]);
 }
 
-export function serializeMusic(dataset: Store): Promise<string> {
-  return serialize([...dataset], { prefixes: { schema: S, media: NS.MEDIA } });
+export async function serializeMusic(dataset: Store): Promise<string> {
+  const quads = [...dataset];
+  if (quads.some((quad) => quad.graph.termType !== "DefaultGraph")) {
+    throw new InvalidMusicError("Named graphs cannot be serialized as Turtle");
+  }
+  return serialize(quads, { prefixes: { schema: S, media: NS.MEDIA } });
 }
 
 /** Typed, alias-aware accessors shared by the ported Pod Music entities. */
