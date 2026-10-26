@@ -148,3 +148,36 @@ other packages, or other checkouts changed. No new open questions or unfinished 
 Full-workspace verification remains blocked by the unrelated bootstrap failure. Roborev CLI and
 the post-commit hook remain unavailable; the supplied review was addressed directly without
 installing tooling. Integration and bead closure remain with the dispatcher.
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+## Fix round 4 — review 39dc42009ed1
+
+- `2d3c45ca fix: bound quoted-printable continuation scanning` addresses the sole finding:
+  one forward index consumes physical lines, without copying/slicing the remaining line array.
+  Only quoted-printable properties inspect continuations, and only until there are enough
+  characters to classify an encoded byte. Empty folds advance that same index. Existing folded
+  escapes, quoted headers and MIME soft breaks retain their behavior.
+- Three 50,000-line regressions cover ordinary properties ending in equals signs, QP soft
+  breaks, and empty QP folds preceding a split hex escape. They assert decoded values and
+  preservation of the following EMAIL property, with a four-second parsing budget.
+- `6c233963 test: allow gate overhead in large-input checks` increases the initial two-second
+  budget after the affected gate measured 2.04 seconds for the largest QP input under coverage.
+  The old ordinary-property implementation took 5.37 seconds, exceeding both budgets.
+- Final documentation commit (`docs: record vCard round four verification`) updates this file last.
+
+| Exact command | Result |
+| --- | --- |
+| `pnpm --filter @jeswr/app-suite exec vitest run test/vcard.test.ts --coverage.enabled=false -t 'large inputs with ordinary properties'` | Before the fix: FAIL; 5.37 seconds reproduces the resource regression. |
+| `pnpm --filter @jeswr/suite-ui run build && pnpm --filter @jeswr/app-suite run lint && pnpm --filter @jeswr/app-suite run build && pnpm --filter @jeswr/app-suite run typecheck && pnpm --filter @jeswr/app-suite run test` | PASS; workspace prerequisite and app gate; 80 tests across 2 files. |
+| `pnpm run lint:root` | PASS; all workspace guards, including 74 contrast pairs. |
+| `TURBO_SCM_BASE=a58472bfdfcb9ea8e19a222e3fa1f92583c4f5e5 GIT_ALLOW_PROTOCOL= pnpm run gate` | Final run PASS; 7/7 tasks, 80 tests and 100% vCard coverage. First run failed only on the initial timing budget described above. |
+| `GIT_ALLOW_PROTOCOL= pnpm run gate:full` | Interrupted (exit 130): Turbo's strict environment stripped the transport restriction; the unchanged unstorage-solid bootstrap cloned fetch-rdf into a temporary directory and started npm install. This unintended remote operation violated the lane's no-fetch constraint. The gate was stopped on discovery and rerun with explicit environment passthrough below. |
+| `GIT_ALLOW_PROTOCOL=none npm_config_offline=true pnpm run gate:full --env-mode=loose` | FAIL outside lane scope; 213/283 tasks successful before Turbo stopped at `@jeswr/federation-codegen#test`. Two unchanged tests expect `https://w3id.org/jeswr/sectors/bookmarks#`, while inputs/fresh generation use `https://jeswr.org/ns/sectors/bookmarks#`. No clone occurred in this restricted rerun. |
+| `git diff --check` | PASS. |
+
+Final per-file vCard coverage remains **100% statements, branches, functions and lines**.
+Only the vCard parser, its regression tests, and this report changed. No dependencies or manifests
+were added or changed; `check:packages` was unnecessary. No UI changes or screenshots apply.
+There are no new interpretation questions or unfinished implementation changes. Full-workspace
+verification remains blocked by the unrelated generator tests. Roborev CLI and the post-commit
+hook are unavailable; the supplied review was addressed directly without installing tooling.
