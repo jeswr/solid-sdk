@@ -37,10 +37,10 @@ export const DCAT: "http://www.w3.org/ns/dcat#";
 export function describeStorage(input: StorageInput): BuiltStorage;
 
 // @public
-export const FEDAPP: "https://w3id.org/jeswr/fed#";
+export const FEDAPP: "https://jeswr.org/ns/fed#";
 
 // @public
-export const FEDREG: "https://w3id.org/jeswr/fedreg#";
+export const FEDREG: "https://jeswr.org/ns/fedreg#";
 
 // @public
 export interface FetchOptions {
@@ -65,10 +65,10 @@ export interface Membership {
 
 // @public
 export const MEMBERSHIP_STATUS: {
-    readonly Proposed: "https://w3id.org/jeswr/fedreg#Proposed";
-    readonly Active: "https://w3id.org/jeswr/fedreg#Active";
-    readonly Suspended: "https://w3id.org/jeswr/fedreg#Suspended";
-    readonly Revoked: "https://w3id.org/jeswr/fedreg#Revoked";
+    readonly Proposed: "https://jeswr.org/ns/fedreg#Proposed";
+    readonly Active: "https://jeswr.org/ns/fedreg#Active";
+    readonly Suspended: "https://jeswr.org/ns/fedreg#Suspended";
+    readonly Revoked: "https://jeswr.org/ns/fedreg#Revoked";
 };
 
 // @public
@@ -134,7 +134,7 @@ export interface RegistryIssue {
 export type RegistryIssueCode = "no-registry" | "multiple-registries" | "no-membership" | "membership-missing-app" | "membership-multiple-apps" | "membership-missing-status" | "membership-multiple-statuses" | "unknown-status" | "membership-missing-asserted-by" | "invalid-term-type" | "no-storage-description" | "storage-missing-accepts-spec" | "fetch-failed" | "parse-failed";
 
 // @public
-export const SECTOR_BASE: "https://w3id.org/jeswr/sectors/";
+export const SECTOR_BASE: "https://jeswr.org/ns/sectors/";
 
 // @public
 export function serialize(quads: readonly Quad[], format?: string): Promise<string>;

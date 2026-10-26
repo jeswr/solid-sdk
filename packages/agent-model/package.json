@@ -1,0 +1,35 @@
+{
+  "name": "@jeswr/agent-model",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Channel-neutral logical model (experimental scaffold).",
+  "type": "module",
+  "license": "MIT",
+  "x-authored-by": "Codex GPT-6.1-Sol",
+  "sideEffects": false,
+  "securityCritical": false,
+  "engines": {
+    "node": ">=24"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./testing": {
+      "types": "./dist/testing.d.ts",
+      "default": "./dist/testing.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "SKILL.md"
+  ],
+  "scripts": {
+    "build": "pnpm -w exec tsc -p packages/agent-model/tsconfig.json",
+    "typecheck": "pnpm -w exec tsc -p packages/agent-model/tsconfig.json --noEmit && pnpm -w exec tsc -p packages/agent-model/tsconfig.test.json",
+    "lint": "pnpm -w exec biome check packages/agent-model",
+    "test": "pnpm -w exec vitest run --root packages/agent-model"
+  }
+}
