@@ -77,6 +77,48 @@ describe("CSV and typed grids", () => {
       { name: "empty", type: "text", format: "text" },
     ]);
   });
+  it.each([
+    "1e-400",
+    "-1e-400",
+    "1.0000000000000001",
+    "0.1234567890123456789",
+    "9007199254740990.1",
+    "1.2345678901234568e-200",
+  ])("preserves rounded or underflowing numeric lexeme %s as text", (value) => {
+    const grid = csvToGrid(`v\n${value}\n`);
+    expect(grid.rows).toEqual([[value]]);
+    expect(inferColumns(grid)).toEqual([{ name: "v", type: "text", format: "text" }]);
+    expect(csvToGrid(gridToCsv(grid))).toEqual(grid);
+  });
+  it.each([
+    "1.2300",
+    "-1.2300E+2",
+    "0.00100",
+    "100e-2",
+    "0e-9999",
+    "0.000",
+    "-0.00100",
+    "5e-324",
+  ])("infers equivalent decimal forms %s without changing their value", (value) => {
+    const grid = csvToGrid(`v\n${value}\n`);
+    expect(grid.rows).toEqual([[Number(value)]]);
+    expect(csvToGrid(gridToCsv(grid), inferColumns(grid))).toEqual(grid);
+  });
+  it("preserves the whole column as text if one decimal would lose precision", () => {
+    expect(csvToGrid("v\n2\n1.0000000000000001\n").rows).toEqual([["2"], ["1.0000000000000001"]]);
+  });
+  it("rejects expanded date years before export and round-trips supported year boundaries", () => {
+    for (const value of ["-000001-01-01T00:00:00Z", "+010000-01-01T00:00:00Z"]) {
+      const grid: Grid = { columns: ["date"], rows: [[new Date(value)]] };
+      expect(() => gridToCsv(grid)).toThrow("Invalid grid cell");
+      expect(() => inferColumns(grid)).toThrow("Invalid grid cell");
+    }
+    const grid: Grid = {
+      columns: ["date"],
+      rows: [[new Date("0000-01-01T00:00:00Z")], [new Date("9999-12-31T23:59:59.999Z")]],
+    };
+    expect(csvToGrid(gridToCsv(grid), inferColumns(grid))).toEqual(grid);
+  });
   it("preserves numeric/date-like text using descriptor hints and normalises empty text", () => {
     const columns: Column[] = [{ name: "Label", type: "text", format: "text" }];
     expect(csvToGrid('Label\n42\n2026-10-25\n""\n', columns).rows).toEqual([

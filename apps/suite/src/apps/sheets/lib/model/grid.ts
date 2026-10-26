@@ -23,7 +23,12 @@ export function validateGrid(grid: Grid): void {
         cell !== null &&
         typeof cell !== "string" &&
         !(typeof cell === "number" && Number.isFinite(cell)) &&
-        !(cell instanceof Date && Number.isFinite(cell.getTime()))
+        !(
+          cell instanceof Date &&
+          Number.isFinite(cell.getTime()) &&
+          cell.getUTCFullYear() >= 0 &&
+          cell.getUTCFullYear() <= 9999
+        )
       ) {
         throw new TypeError("Invalid grid cell");
       }
@@ -32,6 +37,18 @@ export function validateGrid(grid: Grid): void {
 }
 
 const NUMERIC = /^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$/;
+
+/** Compare decimal values without first rounding their coefficients or exponents. */
+function normalizedDecimal(value: string): string {
+  const [mantissa, exponent = "0"] = value.toLowerCase().split("e") as [string, string?];
+  const [integer, fraction = ""] = mantissa.replace(/^-/, "").split(".") as [string, string?];
+  const digits = `${integer}${fraction}`.replace(/^0+/, "");
+  if (digits === "") return "0";
+  const coefficient = digits.replace(/0+$/, "");
+  const power =
+    BigInt(exponent) - BigInt(fraction.length) + BigInt(digits.length - coefficient.length);
+  return `${value.startsWith("-") ? "-" : ""}${coefficient}e${power}`;
+}
 
 export function validateColumns(columns: Column[]): void {
   if (
@@ -50,7 +67,11 @@ export function validateColumns(columns: Column[]): void {
 function lexicalType(value: string): ColumnType {
   if (NUMERIC.test(value)) {
     const number = Number(value);
-    if (Number.isFinite(number) && (!Number.isInteger(number) || Number.isSafeInteger(number))) {
+    if (
+      Number.isFinite(number) &&
+      (!Number.isInteger(number) || Number.isSafeInteger(number)) &&
+      normalizedDecimal(value) === normalizedDecimal(String(number))
+    ) {
       return "number";
     }
   }
