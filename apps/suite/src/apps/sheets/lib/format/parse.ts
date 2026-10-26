@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { parseDate } from "./dates";
 import { type CellValue, parseFormatCode, SheetFormatError, validateLocale } from "./model";
 
@@ -59,7 +60,7 @@ function parseNumber(text: string, locale: string, options: Intl.NumberFormatOpt
   const formatter = new Intl.NumberFormat(locale, options);
   const unwrapped = unwrap(text, formatter);
   if (!unwrapped) invalid("Input does not match the locale's signs or format affixes");
-  const decimalParts = new Intl.NumberFormat(locale).formatToParts(12345.6);
+  const decimalParts = new Intl.NumberFormat(locale, { useGrouping: true }).formatToParts(12345.6);
   const decimal = decimalParts
     .filter((part) => part.type === "decimal")
     .map((part) => part.value)
@@ -74,12 +75,12 @@ function parseNumber(text: string, locale: string, options: Intl.NumberFormatOpt
   const integer = String(pieces[0]);
   const fraction = pieces[1] ?? "";
   if (pieces.length === 2 && !/^\d+$/.test(fraction)) invalid("Invalid decimal fraction");
-  const ungrouped = integer.split(group).join("");
+  const ungrouped = group ? integer.split(group).join("") : integer;
   if (!/^(0|[1-9]\d*)$/.test(ungrouped) && !(ungrouped === "" && fraction !== "")) {
     invalid("Unsupported numeric syntax");
   }
   const whole = ungrouped || "0";
-  if (integer.includes(group)) {
+  if (group && integer.includes(group)) {
     const grouped = new Intl.NumberFormat(locale, { useGrouping: true })
       .formatToParts(BigInt(whole))
       .filter((part) => part.type === "integer" || part.type === "group")
@@ -115,7 +116,7 @@ export function parseCellInput(input: string, locale: string, code = "General"):
   if (/^(true|false)$/i.test(text))
     return { type: "boolean", value: text.toLowerCase() === "true" };
   const normalized = normalizeDigits(text, language);
-  const date = parseDate(normalized, language);
+  const date = parseDate(normalized, language, format.kind === "date");
   if (date !== null) return { type: "date", value: date };
   if (format.kind === "date") invalid("Input does not match a supported date or time");
   if (format.kind === "number" && format.options.style === "currency") {

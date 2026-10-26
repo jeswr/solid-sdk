@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { SheetFormatError } from "./model";
 
 export function dateValue(value: string): Date {
@@ -40,14 +41,15 @@ export function displayDate(value: string, locale: string, date: boolean, time: 
   return [date ? day : "", time ? clock : ""].filter(Boolean).join(" ");
 }
 
-/** Match only complete fixed patterns; Date's permissive parser never sees user text. */
-export function parseDate(text: string, locale: string): string | null {
-  let canonical: string;
+/** A date hint selects fixed patterns; otherwise all valid interpretations must agree. */
+export function parseDate(text: string, locale: string, fixedPattern: boolean): string | null {
+  const candidates: string[] = [];
   if (/^\d{4}-\d{2}-\d{2}( \d{2}:\d{2})?$/.test(text)) {
-    canonical = `${text.slice(0, 10)}T${text.slice(11) || "00:00"}:00.000Z`;
+    candidates.push(`${text.slice(0, 10)}T${text.slice(11) || "00:00"}:00.000Z`);
   } else if (/^\d{2}:\d{2}$/.test(text)) {
-    canonical = `1970-01-01T${text}:00.000Z`;
-  } else {
+    candidates.push(`1970-01-01T${text}:00.000Z`);
+  }
+  if (!fixedPattern || candidates.length === 0) {
     const formatter = new Intl.DateTimeFormat(locale, {
       calendar: "gregory",
       timeZone: "UTC",
@@ -64,17 +66,30 @@ export function parseDate(text: string, locale: string): string | null {
         keys.push(part.type);
         pattern += part.type === "year" ? "(\\d{4})" : "(\\d{2})";
       } else {
-        pattern += part.value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        pattern += part.value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\p{Zs}/gu, "\\p{Zs}");
       }
     }
-    const match = new RegExp(`${pattern}$`).exec(text);
-    if (!match) return null;
-    const values = new Map(keys.map((key, i) => [key, match[i + 1]]));
-    canonical = `${values.get("year")}-${values.get("month")}-${values.get("day")}T00:00:00.000Z`;
+    const match = new RegExp(`${pattern}$`, "u").exec(text);
+    if (match) {
+      const values = new Map(keys.map((key, i) => [key, match[i + 1]]));
+      candidates.push(
+        `${values.get("year")}-${values.get("month")}-${values.get("day")}T00:00:00.000Z`,
+      );
+    }
   }
-  try {
-    dateValue(canonical);
-  } catch {
+  let canonical: string | null = null;
+  for (const candidate of candidates) {
+    try {
+      dateValue(candidate);
+    } catch {
+      continue;
+    }
+    if (canonical !== null && canonical !== candidate) {
+      throw new SheetFormatError("invalid-input", "Ambiguous date; supply a date format hint");
+    }
+    canonical = candidate;
+  }
+  if (canonical === null && candidates.length > 0) {
     throw new SheetFormatError("invalid-input", "Invalid calendar date or time");
   }
   return canonical;

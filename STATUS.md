@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # sst-xenc — SHT-L3 cell formats
 
@@ -50,3 +51,31 @@ Gate logs from this run are `/tmp/sst-xenc-gate.log`,
 Per-commit roborev could not run: `roborev` is absent from PATH and this checkout has
 no post-commit hook. Existing `.roborev.toml` was retained; dispatcher review remains
 outstanding. The managed cloud environment status tool is not exposed in this session.
+
+## Review fix round 1
+
+Commit subject: `fix(suite): correct locale input parsing`.
+
+Fixed only the three reported locale parsing defects. Date format hints select
+fixed date/time patterns; without a date hint, parsing accepts a unique valid
+interpretation and rejects conflicting fixed/locale calendar dates. Group discovery
+explicitly enables grouping and handles an absent separator. Locale date literals
+accept equivalent Unicode space separators while retaining exact field widths,
+punctuation and calendar validation. Added five regression cases (132 focused
+tests total), including Intl output and absent-grouping fallback coverage.
+
+| Exact command | Result |
+| --- | --- |
+| `pnpm exec biome check --write apps/suite/src/apps/sheets/lib/format apps/suite/test/sheets-format.test.ts` | Pass. |
+| `pnpm --filter @jeswr/app-suite exec vitest run test/sheets-format.test.ts --coverage.include='src/apps/sheets/lib/format/**/*.ts'` | Pass: 132 tests; 100% statements, branches, functions and lines. |
+| `pnpm --filter @jeswr/suite-ui run build` | Pass; prepared existing workspace dependency. |
+| `pnpm --filter @jeswr/app-suite run lint && pnpm --filter @jeswr/app-suite run build && pnpm --filter @jeswr/app-suite run typecheck && pnpm --filter @jeswr/app-suite run test` | Pass: 1,309 tests across 28 files; 100% configured coverage. Lint retains 21 pre-existing warnings outside the fix. |
+| `pnpm run lint:root` | Pass. |
+| `TURBO_SCM_BASE=effb18e1488a5775efd8a13dc13edb9f7be0b306 pnpm run gate` | Pass: 6/6 tasks. |
+| `pnpm run gate:full` | Failed at the same two pre-existing `@jeswr/federation-codegen#test` namespace tests documented above (23 passed); 286/347 tasks succeeded before Turbo stopped. |
+
+No dependencies added or remote operations performed. All three review findings
+are addressed; no new open questions. Per-commit roborev remains unavailable
+because its executable is absent. Review-fix logs use the prefix
+`/tmp/sst-xenc-fix-` (`lint`, `build`, `typecheck`, `test`, `lint-root`, `gate`,
+and `gate-full`, all with `.log` extension).

@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import fc from "fast-check";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   type CellValue,
   formatCellValue,
@@ -134,6 +135,34 @@ describe("cell display", () => {
 });
 
 describe("cell input", () => {
+  it("parses ee-GH numbers with explicit grouping discovery", () => {
+    for (const value of [1234.5, -1234.5, 0.5]) {
+      expect(parseCellInput(String(value), "ee-GH")).toEqual(number(value));
+      expect(parseCellInput(formatCellValue(number(value), "General", "ee-GH"), "ee-GH")).toEqual(
+        number(value),
+      );
+    }
+    expect(parseCellInput("1,234.5", "ee-GH")).toEqual(number(1234.5));
+    expect(parseCellInput(formatCellValue(number(1234), "#,##0", "ee-GH"), "ee-GH")).toEqual(
+      number(1234),
+    );
+    rejects(() => parseCellInput("12,34.5", "ee-GH"), "invalid-input");
+  });
+  it("handles a formatter that supplies no grouping separator", () => {
+    const original = Intl.NumberFormat.prototype.formatToParts;
+    const spy = vi.spyOn(Intl.NumberFormat.prototype, "formatToParts").mockImplementation(function (
+      this: Intl.NumberFormat,
+      value,
+    ) {
+      return original.call(this, value).filter((part) => part.type !== "group");
+    });
+    try {
+      expect(parseCellInput("1234.5", "ee-GH")).toEqual(number(1234.5));
+      rejects(() => parseCellInput("1,234.5", "ee-GH"), "invalid-input");
+    } finally {
+      spy.mockRestore();
+    }
+  });
   it.each([
     ["1,234.50", "en-US", 1234.5],
     ["-1.234,5", "de-DE", -1234.5],
@@ -188,6 +217,48 @@ describe("cell input", () => {
     expect(parseCellInput("2026-01-02", "en-US", "yyyy-mm-dd").type).toBe("date");
     rejects(() => parseCellInput("42", "en-US", "yyyy-mm-dd"), "invalid-input");
     rejects(() => parseCellInput("tomorrow", "en-US", "hh:mm"), "invalid-input");
+  });
+  it("rejects conflicting fixed and locale dates unless a date hint selects fixed order", () => {
+    rejects(() => parseCellInput("2026-02-01", "ky-KG"), "invalid-input");
+    expect(parseCellInput("2026-02-01", "ky-KG", "yyyy-mm-dd")).toEqual(
+      date("2026-02-01T00:00:00.000Z"),
+    );
+    expect(parseCellInput("2026-01-01", "ky-KG")).toEqual(date("2026-01-01T00:00:00.000Z"));
+    expect(parseCellInput("2026-22-01", "ky-KG")).toEqual(date("2026-01-22T00:00:00.000Z"));
+    expect(parseCellInput("2026-01-22", "ky-KG")).toEqual(date("2026-01-22T00:00:00.000Z"));
+    rejects(() => parseCellInput("2026-22-01", "ky-KG", "yyyy-mm-dd"), "invalid-input");
+    rejects(() => parseCellInput("2026-32-01", "ky-KG"), "invalid-input");
+    for (const code of ["yyyy-mm-dd", "yyyy-mm-dd hh:mm", "hh:mm"]) {
+      const cell = date(code === "hh:mm" ? "1970-01-01T00:00:00.000Z" : "2026-02-01T00:00:00.000Z");
+      expect(parseCellInput(formatCellValue(cell, code, "ky-KG"), "ky-KG", code)).toEqual(cell);
+    }
+    expect(parseCellInput("01/02/2026", "en-US", "yyyy-mm-dd")).toEqual(
+      date("2026-01-02T00:00:00.000Z"),
+    );
+  });
+  it.each(["bg-BG", "mk-MK"])("accepts Intl date literal spacing in %s", (locale) => {
+    const formatter = new Intl.DateTimeFormat(locale, {
+      calendar: "gregory",
+      timeZone: "UTC",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    });
+    const value = "2026-01-02T00:00:00.000Z";
+    expect(parseCellInput(formatter.format(new Date(value)), locale)).toEqual(date(value));
+    for (const space of [" ", "\u00a0", "\u202f"]) {
+      expect(parseCellInput(`02.01.2026${space}г.`, locale)).toEqual(date(value));
+    }
+    for (const input of [
+      "2.01.2026 г.",
+      "02.1.2026 г.",
+      "02.01.26 г.",
+      "30.02.2026 г.",
+      "02.01.2026г.",
+      "02.01.2026 x.",
+    ]) {
+      rejects(() => parseCellInput(input, locale), "invalid-input");
+    }
   });
   it.each([
     "2025-02-29",
