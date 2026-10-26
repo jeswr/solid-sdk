@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { describe, expect, it } from "vitest";
 import {
   getMoveValidity,
@@ -53,6 +54,21 @@ describe("Drive move topology", () => {
     expect(getMoveValidity([work], file("/drive/other.txt"))).toEqual({
       valid: false,
       reason: "not-folder",
+    });
+  });
+
+  it.each([
+    [file("/drive/name"), folder("/drive/name/")],
+    [folder("/drive/name/"), file("/drive/name")],
+  ])("distinguishes file and folder sources with the same path (%j, %j)", (...sources) => {
+    expect(getMoveValidity(sources, folder("/archive/"))).toEqual({ valid: true });
+    expect(getMoveValidity(sources, folder("/drive/name/"))).toEqual({
+      valid: false,
+      reason: "self",
+    });
+    expect(getMoveValidity(sources, folder("/drive/name/child/"))).toEqual({
+      valid: false,
+      reason: "descendant",
     });
   });
 
@@ -138,6 +154,8 @@ describe("Drive move topology", () => {
     [{ url: "https://example.org/drive/", kind: "unknown" }],
     [work, work],
     [work, { url: "https://EXAMPLE.ORG:443/drive/%57ork/", kind: "container" }],
+    [file("/drive/name"), file("/drive/name")],
+    [file("/drive/name"), { url: "https://EXAMPLE.ORG:443/drive/%6Eame", kind: "resource" }],
   ])("rejects malformed/empty/duplicate sources (%j)", (sources) => {
     fails(() => getMoveValidity(sources as MoveEntry[], archive), "invalid-move");
   });

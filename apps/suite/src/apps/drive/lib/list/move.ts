@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { isRecord, isText, ListError, requireValid } from "./validation";
 
 export interface MoveEntry {
@@ -12,6 +13,7 @@ export type MoveValidity =
 interface Address {
   origin: string;
   segments: string[];
+  kind: MoveEntry["kind"];
 }
 
 /** Only unambiguous hierarchical HTTP(S) resource identifiers are supported. */
@@ -47,7 +49,7 @@ function address(entry: MoveEntry): Address {
   }
   requireValid(url.username === "" && url.password === "", "unsupported-url");
   requireValid((entry.kind === "container") === raw.endsWith("/"), "unsupported-url");
-  return { origin: url.origin, segments };
+  return { origin: url.origin, segments, kind: entry.kind };
 }
 
 /** A topology check only: permissions, conflicts and actual writes belong to the caller. */
