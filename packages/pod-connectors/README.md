@@ -216,6 +216,12 @@ left by a failed run. Unchanged people survive
 increments, and `people.ttl` is replaced once per successful run. A missing local membership
 index forces a full sync. Synthetic fixtures, memory Pods and the sorted Turtle mapping
 snapshot exercise these paths without contacting Google.
+bytes and collections; thread moves remove the old membership conditionally before replacing RDF.
+`removeMessage()` queues deletions in batches of 100, with the remainder processed by `flush()`
+before reconciliation. Each batch reads and conditionally updates each affected collection once,
+then deletes attachments and `.eml`, and deletes each message's RDF last. An interrupted deletion
+retains its cleanup inventory in that RDF for replay; a missing document is a no-op. Attachment
+media types from mail are untrusted: RDF and malformed types are stored as `application/octet-stream`.
 
 ## Incremental imports and provenance
 

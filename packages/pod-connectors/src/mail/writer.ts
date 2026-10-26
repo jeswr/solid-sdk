@@ -11,8 +11,9 @@
  * source cursor, so the next run replays the same changes. Membership is therefore
  * reconciled from each touched message's desired state against every known folder
  * (never from the message's previous document), and thread members whose message
- * documents no longer exist are dropped. Deletions commit collection cleanup before bytes
- * and finally RDF, keeping their cleanup inventory available across every interruption.
+ * documents no longer exist are dropped. Deletions run in batches of 100 and at flush,
+ * committing collection cleanup before bytes and finally RDF, keeping their cleanup
+ * inventory available across every interruption.
  */
 import { Container } from "@solid/object";
 import { DataFactory, Store } from "n3";
@@ -77,11 +78,12 @@ export interface MailWriter {
   /** Store one message. Throws `MailParseError` for unparseable input (skip it). */
   add(item: MailItem): Promise<StoredMail>;
   /**
-   * Drop memberships immediately, then delete attachments, the source and finally RDF.
-   * The RDF retains cleanup inventory until deletion completes; a missing document is a no-op.
+   * Queue deletion, processed at 100 messages or in flush(). Each batch drops memberships,
+   * then deletes attachments, the source and finally RDF. The RDF retains cleanup inventory
+   * until deletion completes; a missing document is a no-op.
    */
   removeMessage(slug: string): Promise<void>;
-  /** Reconcile touched messages against `folders` (all folders the source knows) and write. */
+  /** Process queued deletions, then reconcile touched messages against all known folders. */
   flush(folders?: readonly MailFolder[]): Promise<void>;
 }
 
@@ -113,6 +115,12 @@ export function createMailWriter(ctx: MailPorts, account: string): MailWriter {
   };
   /** Thread document slug → members to add / drop, plus the first subject seen. */
   const threads = new Map<string, { add: Set<string>; drop: Set<string>; title?: string }>();
+  const deletions = new Set<string>();
+  // Reuse the last batch's collection reads in flush, including an exact multiple of 100.
+  // Additions invalidate this snapshot before they can change a collection.
+  let deletionSnapshot:
+    | { folders: Set<string>; collections: Map<string, Store | undefined> }
+    | undefined;
   const thread = (slug: string) => {
     let entry = threads.get(slug);
     if (!entry) {
@@ -161,6 +169,8 @@ export function createMailWriter(ctx: MailPorts, account: string): MailWriter {
     }
     const slug = messageSlug(account, id);
     const iri = iriOf(slug);
+    deletions.delete(slug);
+    deletionSnapshot = undefined;
 
     const dataset = new Store();
     const message = new MailMessage(iri, dataset, DataFactory);
@@ -213,7 +223,11 @@ export function createMailWriter(ctx: MailPorts, account: string): MailWriter {
     for (const old of previous?.folderIris ?? []) remember(slugOf(docOf(old)));
     const oldThread = previous?.partOfThread;
     if (oldThread && docOf(oldThread) !== ctx.resolve(threadDoc)) {
-      const entry = thread(slugOf(docOf(oldThread)));
+      const oldSlug = slugOf(docOf(oldThread));
+      // Flush scans every stored folder, but only visits known threads. Remove the old
+      // membership before replacing its only durable record in the message document.
+      await dropMember(oldSlug, iri, MAIL_CLASSES.Conversation);
+      const entry = thread(oldSlug);
       entry.drop.add(iri);
       entry.add.delete(iri);
     }
@@ -269,52 +283,90 @@ export function createMailWriter(ctx: MailPorts, account: string): MailWriter {
 
   /** Persist just this removal without flushing pending additions for other messages. */
   async function dropMember(slug: string, iri: string, forClass: string): Promise<void> {
+    await dropMembers(slug, new Set([iri]), forClass);
+  }
+
+  /** Read and conditionally update a collection just once for the whole deletion batch. */
+  async function dropMembers(
+    slug: string,
+    iris: ReadonlySet<string>,
+    forClass: string,
+  ): Promise<Store | undefined> {
     const current = await ctx.read(slug);
-    if (!current) return;
+    if (!current) return undefined;
     const dataset = new Store([...current]);
     const collection = new MailCollection(iriOf(slug), dataset, DataFactory);
-    if (!collection.members.delete(iri)) return;
+    let changed = false;
+    for (const iri of iris) if (collection.members.delete(iri)) changed = true;
+    if (!changed) return dataset;
     if (collection.members.size === 0 && !slug.includes("/folders/system:")) {
       await ctx.remove(slug);
-      return;
+      return undefined;
     }
     await ctx.write({ slug, category: "mail", forClass, dataset, skipRegistration: true });
+    return dataset;
   }
 
   async function removeMessage(slug: string): Promise<void> {
-    const iri = iriOf(slug);
-    const previous = await existing(slug);
-    if (!previous) return;
-    desired.set(iri, new Set());
-    const memberOf = previous.partOfThread;
-    if (memberOf) {
-      const slug = slugOf(docOf(memberOf));
-      const entry = thread(slug);
-      entry.drop.add(iri);
-      entry.add.delete(iri);
-      await dropMember(slug, iri, MAIL_CLASSES.Conversation);
+    deletions.add(slug);
+    if (deletions.size >= 100) await deleteBatch();
+  }
+
+  async function deleteBatch(): Promise<void> {
+    if (deletions.size === 0) return;
+    const messages = new Map<string, MailMessage>();
+    for (const slug of deletions) {
+      const previous = await existing(slug);
+      if (previous) messages.set(slug, previous);
     }
-    const folders = await storedFolders();
-    for (const folder of previous.folderIris) folders.add(slugOf(docOf(folder)));
-    for (const folder of [...folders].sort()) {
-      remember(folder);
-      await dropMember(folder, iri, MAIL_CLASSES.Folder);
+    if (messages.size > 0) {
+      const iris = new Set([...messages.keys()].map(iriOf));
+      const folders = await storedFolders();
+      const affectedThreads = new Set<string>();
+      for (const previous of messages.values()) {
+        if (previous.partOfThread) affectedThreads.add(slugOf(docOf(previous.partOfThread)));
+        for (const folder of previous.folderIris) folders.add(slugOf(docOf(folder)));
+      }
+      const collections = new Map<string, Store | undefined>();
+      // Keep every message's inventory until ALL collection writes have succeeded.
+      for (const slug of [...affectedThreads].sort())
+        collections.set(slug, await dropMembers(slug, iris, MAIL_CLASSES.Conversation));
+      for (const folder of [...folders].sort())
+        collections.set(folder, await dropMembers(folder, iris, MAIL_CLASSES.Folder));
+      for (const [slug, previous] of messages) {
+        for (const attachment of previous.attachments) await ctx.remove(slugOf(attachment));
+        if (previous.encoding) await ctx.remove(slugOf(previous.encoding));
+        await ctx.remove(slug);
+      }
+      // Deleted additions must not be reintroduced by the subsequent reconciliation.
+      for (const iri of iris) desired.delete(iri);
+      for (const [slug, entry] of threads) {
+        for (const iri of iris) {
+          entry.add.delete(iri);
+          entry.drop.delete(iri);
+        }
+        if (entry.add.size === 0 && entry.drop.size === 0) threads.delete(slug);
+      }
+      deletionSnapshot = { folders, collections };
     }
-    for (const attachment of previous.attachments) await ctx.remove(slugOf(attachment));
-    if (previous.encoding) await ctx.remove(slugOf(previous.encoding));
-    await ctx.remove(slug);
+    deletions.clear();
   }
 
   async function flush(known: readonly MailFolder[] = []): Promise<void> {
+    await deleteBatch();
+    const snapshot = deletionSnapshot;
+    deletionSnapshot = undefined;
+    const readCollection = (slug: string) =>
+      snapshot?.collections.has(slug) ? snapshot.collections.get(slug) : ctx.read(slug);
     // Every stored folder is reconciled too: a label deleted at the source may still list a
     // message whose previous version (the only other record of it) was already replaced.
-    for (const slug of await storedFolders()) remember(slug);
+    for (const slug of snapshot?.folders ?? (await storedFolders())) remember(slug);
     for (const { key, title } of known) {
       const slug = folderSlug(account, key);
       if (title || !titles.has(slug)) titles.set(slug, title);
     }
     for (const [slug, title] of [...titles.entries()].sort(([a], [b]) => a.localeCompare(b))) {
-      const current = await ctx.read(slug);
+      const current = await readCollection(slug);
       const dataset = new Store([...(current ?? [])]);
       const folder = new MailCollection(iriOf(slug), dataset, DataFactory);
       let changed = !current;
@@ -347,7 +399,7 @@ export function createMailWriter(ctx: MailPorts, account: string): MailWriter {
     }
     titles.clear();
     for (const [slug, entry] of [...threads.entries()].sort(([a], [b]) => a.localeCompare(b))) {
-      const current = await ctx.read(slug);
+      const current = await readCollection(slug);
       const dataset = new Store([...(current ?? [])]);
       const collection = new MailCollection(iriOf(slug), dataset, DataFactory);
       for (const iri of entry.drop) collection.members.delete(iri);

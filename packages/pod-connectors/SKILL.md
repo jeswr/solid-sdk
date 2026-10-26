@@ -46,9 +46,12 @@ directly; full syncs list the account's `messages/` container and sweep unseen G
 documents. There is no Gmail source index. Keep Spam/Trash in the full source listing.
 
 Additions commit RDF, then `.eml`/attachment bytes, then thread/folder memberships in `flush()`.
-Retire dropped attachments before replacing the RDF that records them. Deletions reverse the
-order: read the message, persist membership removals conditionally, delete attachments and `.eml`,
-and delete message RDF last. Keep that document available for retries until cleanup succeeds;
+Retire dropped attachments and remove a changed thread's old membership conditionally before
+replacing the RDF that records them; flush only visits known threads. Deletions queue until 100
+messages or `flush()`, which processes the remainder before reconciliation. Read each queued
+message and each affected collection once per batch, listing stored folders once. Persist all
+membership removals conditionally before deleting any message's attachments, `.eml`, then RDF.
+Keep each message document available for retries until its cleanup succeeds;
 a missing document is a no-op. Reconcile all stored folders, including vanished labels, so
 interrupted relabeling cannot strand memberships. Preserve one run per connector container.
 adapter mappings remain owned by their follow-on connector tasks.
