@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 
 import { spawnSync } from "node:child_process";
 import {
@@ -129,6 +130,9 @@ describe("skill validation", () => {
     "[unused]: missing.md",
     '<a href="missing.md">HTML link</a>',
     '<img src="missing.png">',
+    "[encoded](references/miss&#105;ng.md)",
+    "[reference][doc]\n\n[doc]: references/miss&#x69;ng.md",
+    '<a href="missing&copy;.md">encoded HTML link</a>',
     "[nested](references/missing(file).md)",
     "[invalid](bad%ZZ.md)",
   ])("rejects unresolved relative links: %s", (body) => {
@@ -158,6 +162,78 @@ describe("skill validation", () => {
       }),
     );
     expect(checkSkills(root, { write: true }).errors).toEqual([]);
+  });
+
+  it.each([
+    ["[decimal](references/gu&#105;de.md)", "guide.md"],
+    ["[hexadecimal](references/gu&#x69;de.md)", "guide.md"],
+    ["[uppercase hexadecimal](references/gu&#X69;de.md)", "guide.md"],
+    ["![image](references/gu&#105;de.md)", "guide.md"],
+    ["[reference][doc]\n\n[doc]: references/gu&#105;de.md", "guide.md"],
+    ['<a href="references/gu&#105;de.md">guide</a>', "guide.md"],
+    ["<img src='references/gu&#x69;de.md'>", "guide.md"],
+    ["[named](references/a&amp;b.md)", "a&b.md"],
+    ["[named Unicode](references/&copy;.md)", "©.md"],
+    ["[multiple code points](references/&NotEqualTilde;.md)", "≂̸.md"],
+    ["[query](references/guide.md&#63;raw=1&#35;section)", "guide.md"],
+    ["[named query](references/guide.md&quest;raw=1&num;section)", "guide.md"],
+    ["[URI encoding](references/space&#37;20name.md)", "space name.md"],
+    ["[literal hash](references/hash%23name.md)", "hash#name.md"],
+    ["[single pass](references/&amp;copy;.md)", "&copy;.md"],
+    ["[unknown reference](references/&unknown;.md)", "&unknown;.md"],
+    ["[unknown prototype name](references/&toString;.md)", "&toString;.md"],
+    ["[invalid code point](references/&#x110000;.md)", "�.md"],
+    ["[surrogate](references/&#xD800;.md)", "�.md"],
+    ["[null](references/&#0;.md)", "�.md"],
+    ["[C1 decimal](references/&#128;.md)", "€.md"],
+    ["[C1 hexadecimal](references/&#x80;.md)", "€.md"],
+  ])("resolves character references in link destinations: %s", (body, filename) => {
+    const root = fixture();
+    put(root, `skills/alpha/references/${filename}`, "# Guide\n");
+    put(root, "skills/alpha/SKILL.md", skill({ body }));
+    expect(checkSkills(root, { write: true }).errors).toEqual([]);
+  });
+
+  it("decodes character references before classifying external and fragment links", () => {
+    const root = fixture();
+    put(
+      root,
+      "skills/alpha/SKILL.md",
+      skill({
+        body: [
+          "[external](https&colon;//example.invalid/missing.md)",
+          "[anchor](&num;section) [query](&quest;view=1) [root](&sol;docs)",
+          '<a href="https&#58;//example.invalid/missing.md">external</a>',
+        ].join("\n\n"),
+      }),
+    );
+    expect(checkSkills(root, { write: true }).errors).toEqual([]);
+  });
+
+  it.each([
+    '<!-- <a href="old-guide.md">old guide</a> -->',
+    '<!--\n<a href="old-guide.md">old guide</a>\n<img src="old-image.png">\n-->',
+    'See <!-- <img src="old-image.png"> --> the [guide](references/guide.md).',
+    '<div>\n<!-- <a href="old-guide.md">old guide</a> -->\n<a href="references/guide.md">guide</a>\n</div>',
+    '<!-- <a href="old-guide.md">unclosed comment',
+  ])("ignores HTML links in comments: %s", (body) => {
+    const root = fixture();
+    put(root, "skills/alpha/SKILL.md", skill({ body }));
+    expect(checkSkills(root, { write: true }).errors).toEqual([]);
+  });
+
+  it("still checks active HTML links beside comments", () => {
+    const root = fixture();
+    put(
+      root,
+      "skills/alpha/SKILL.md",
+      skill({
+        body: '<div>\n<!-- <a href="old-guide.md">old guide</a> -->\n<a href="missing.md">active link</a>\n<!-- <img src="old-image.png"> -->\n</div>',
+      }),
+    );
+    expect(checkSkills(root).errors).toEqual([
+      "skills/alpha/SKILL.md: relative link does not resolve (target omitted)",
+    ]);
   });
 
   it.each([

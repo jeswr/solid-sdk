@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 
 import {
   existsSync,
@@ -14,6 +15,7 @@ import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { JSON_SCHEMA, load } from "js-yaml";
 import { marked } from "marked";
+import characterReferences from "./html-character-references.json" with { type: "json" };
 
 // W9 DESIGN §6 categories. Scan examples too, but allow explicit template values.
 const secretPatterns = [
@@ -42,20 +44,42 @@ function lineNumber(text, offset) {
   return text.slice(0, offset).split("\n").length;
 }
 
+function decodeCharacterReferences(text) {
+  // Decode once: &amp;copy; denotes the literal filename &copy;, not ©.
+  return text.replace(
+    /&(#(?:[xX][\da-fA-F]{1,6}|\d{1,7})|[a-zA-Z][a-zA-Z\d]*);/g,
+    (match, name) => {
+      if (!name.startsWith("#"))
+        return Object.hasOwn(characterReferences, name) ? characterReferences[name] : match;
+      const hex = name[1].toLowerCase() === "x";
+      const codePoint = Number.parseInt(name.slice(hex ? 2 : 1), hex ? 16 : 10);
+      return (
+        characterReferences[`#${codePoint}`] ??
+        String.fromCodePoint(
+          codePoint === 0 || codePoint > 0x10ffff || (codePoint >= 0xd800 && codePoint <= 0xdfff)
+            ? 0xfffd
+            : codePoint,
+        )
+      );
+    },
+  );
+}
+
 function linksIn(text) {
   const tokens = marked.lexer(text);
   const links = Object.values(tokens.links).map((link) => link.href);
   marked.walkTokens(tokens, (token) => {
     if (token.type === "link" || token.type === "image") links.push(token.href);
     if (token.type === "html") {
-      for (const match of token.text.matchAll(
+      const html = token.text.replace(/<!--(?:-?>|[\s\S]*?(?:-->|$))/g, " ");
+      for (const match of html.matchAll(
         /\b(?:href|src)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/gi,
       )) {
         links.push(match[1] ?? match[2] ?? match[3]);
       }
     }
   });
-  return [...new Set(links)];
+  return [...new Set(links.map(decodeCharacterReferences))];
 }
 
 function escapeCell(text) {
