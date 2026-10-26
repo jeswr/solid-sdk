@@ -1,12 +1,19 @@
 // AUTHORED-BY Codex GPT-6
-import { readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { parseRdf } from "@jeswr/fetch-rdf";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { federationDocumentLoader } from "../src/context-loader.js";
 import { list, verify } from "../src/index.js";
 
 const OIDC = "https://www.w3.org/ns/solid/oidc-context.jsonld";
+const FEDERATION = "https://w3id.org/jeswr/fed";
 const UNKNOWN = "https://untrusted.example/context";
 const APP = "https://app.example/clientid.jsonld";
 const CONTAINER = "https://registry.example/apps/";
+const appsDirectory = new URL("../../../apps/", import.meta.url);
+const shippedApps = readdirSync(appsDirectory).filter((app) =>
+  existsSync(new URL(`${app}/clientid.jsonld`, appsDirectory)),
+);
 // Keep the reader's existing vocabulary: namespace migration is a separate issue.
 const terms = {
   fedapp: "https://w3id.org/jeswr/fed#",
@@ -65,17 +72,56 @@ describe("offline federation client contexts", () => {
     expect(fetch).toHaveBeenCalledTimes(mode === "body" ? 0 : 1);
   });
 
-  it("parses the shipped Pod Docs client identifier without fetching its context", async () => {
-    const body = readFileSync(
-      new URL("../../../apps/pod-docs/clientid.jsonld", import.meta.url),
-      "utf8",
-    );
-    const result = await verify("https://pod-docs.jeswr.org/clientid.jsonld", {
-      body,
-      bodyContentType: "application/ld+json",
+  it("verifies and lists a registration using the bundled federation context", async () => {
+    const body = registration([OIDC, FEDERATION]);
+    const result = await verify(APP, { body, bodyContentType: "application/ld+json" });
+    expect(result.valid).toBe(true);
+    expect(result.registration).toMatchObject({
+      id: APP,
+      sectors: ["https://example.org/sector"],
+      access: ["Read", "Write"],
     });
-    // Its canonical fedapp namespace awaits VOC-05; loading must still succeed.
-    expect(result.issues.map((issue) => issue.code)).toEqual(["no-app"]);
+    const fetch = documentFetch(body);
+    expect(await list(APP, { fetch })).toMatchObject([{ id: APP, valid: true }]);
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(shippedApps)("parses the shipped %s client identifier offline", async (app) => {
+    const body = readFileSync(new URL(`${app}/clientid.jsonld`, appsDirectory), "utf8");
+    const { client_id: id } = JSON.parse(body);
+    const dataset = await parseRdf(body, "application/ld+json", {
+      baseIRI: id,
+      documentLoader: federationDocumentLoader,
+    });
+    expect(dataset.size).toBeGreaterThan(0);
+    for (const mode of ["body", "fetch"]) {
+      const fetch = documentFetch(body);
+      const result = await verify(
+        id,
+        mode === "body" ? { body, bodyContentType: "application/ld+json", fetch } : { fetch },
+      );
+      expect(result.issues.map((issue) => issue.code)).not.toContain("parse-failed");
+      expect(fetch).toHaveBeenCalledTimes(mode === "body" ? 0 : 1);
+      // Canonical namespace recognition is tracked separately as VOC-06.
+      if (app === "pod-chat") {
+        // Check extraction independently of existing access-mode validation issues.
+        expect(result.registration).toMatchObject({
+          id,
+          sectors: ["https://w3id.org/jeswr/sectors/social#sector"],
+          produces: [
+            "https://w3id.org/jeswr/pod-chat#ChatRoom",
+            "https://www.w3.org/ns/activitystreams#Note",
+          ],
+        });
+      }
+    }
+  });
+
+  it.each([OIDC, FEDERATION])("isolates the bundled context from mutations: %s", async (url) => {
+    const first = await federationDocumentLoader.load(url);
+    const original = structuredClone(first);
+    Object.assign(first as object, { "@context": UNKNOWN });
+    expect(await federationDocumentLoader.load(url)).toEqual(original);
   });
 
   it("lists a JSON-LD source using the bundled context", async () => {
@@ -110,6 +156,14 @@ describe("offline federation client contexts", () => {
     [OIDC, terms, UNKNOWN],
     [OIDC, terms, { extension: { "@id": "https://example.org/extension", "@context": UNKNOWN } }],
     [`${OIDC}?untrusted`],
+    [`${FEDERATION}?untrusted`],
+    [`${FEDERATION}/`],
+    [OIDC, FEDERATION, UNKNOWN],
+    [
+      OIDC,
+      FEDERATION,
+      { extension: { "@id": "https://example.org/extension", "@context": UNKNOWN } },
+    ],
   ];
   it.each(
     refusedContexts,
