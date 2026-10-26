@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import {
   createGuardedFetch,
   type GuardOptions,
@@ -30,7 +31,8 @@ export function createOriginScopedFetch(
       throw new TypeError("invalid binding origin");
   }
   const transport =
-    options.transport ?? createNodeGuardedFetch({ allowLoopback: options.allowLoopback });
+    options.transport ??
+    createNodeGuardedFetch({ allowLoopback: options.allowLoopback, maxRedirects: 0 });
   const guarded = createGuardedFetch({
     pinningFetch: refuseRedirects(transport),
     allowLoopback: options.allowLoopback,

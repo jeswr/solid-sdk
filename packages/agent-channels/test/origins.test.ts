@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer uses bare builtins
 import { createServer } from "http";
 import { expect, it, vi } from "vitest";
@@ -55,6 +56,63 @@ it("checks string, URL and Request inputs and refuses redirects before forwardin
     }),
   ).rejects.toThrow();
   expect(redirect).toHaveBeenCalledTimes(1);
+});
+
+it("refuses same-origin and unlisted-origin redirects through the default transport", async () => {
+  const requests: string[] = [];
+  let targetRequests = 0;
+  let status = 301;
+  let location = "";
+  const target = createServer((_req, res) => {
+    targetRequests++;
+    res.end("unlisted redirect target");
+  });
+  const source = createServer((req, res) => {
+    requests.push(req.url ?? "");
+    if (req.url === "/target") res.end("same-origin redirect target");
+    else res.writeHead(status, { location }).end();
+  });
+  await new Promise<void>((resolve) => target.listen(0, "127.0.0.1", resolve));
+  await new Promise<void>((resolve) => source.listen(0, "127.0.0.1", resolve));
+  try {
+    const sourceAddress = source.address();
+    const targetAddress = target.address();
+    if (
+      !sourceAddress ||
+      typeof sourceAddress === "string" ||
+      !targetAddress ||
+      typeof targetAddress === "string"
+    )
+      throw new Error("no local fixture address");
+    const origin = `http://127.0.0.1:${sourceAddress.port}`;
+    const scoped = createOriginScopedFetch(new Set([origin]), { allowLoopback: true });
+    const expectedRequests: string[] = [];
+    for (status of [301, 302, 303, 307, 308]) {
+      for (const destination of ["same", "unlisted"]) {
+        location =
+          destination === "same" ? "/target" : `http://127.0.0.1:${targetAddress.port}/target`;
+        const path = `/redirect-${status}-${destination}`;
+        expectedRequests.push(path);
+        await expect(
+          scoped(`${origin}${path}`, {
+            redirect: "follow",
+            headers: { authorization: "Bearer test-token" },
+          }),
+        ).rejects.toThrow(/redirect/i);
+        expect(requests).toEqual(expectedRequests);
+        expect(targetRequests).toBe(0);
+      }
+    }
+  } finally {
+    await Promise.all(
+      [source, target].map(
+        (server) =>
+          new Promise<void>((resolve, reject) =>
+            server.close((error) => (error ? reject(error) : resolve())),
+          ),
+      ),
+    );
+  }
 });
 
 it("refuses malformed origins, userinfo, unsupported schemes and unsafe destinations", async () => {
