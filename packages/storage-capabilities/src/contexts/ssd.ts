@@ -1,6 +1,6 @@
-// AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.1-Sol
 // Trusted draft context snapshot for https://jeswr.org/ns/solid-sd/context/v1.
-// Source: /home/user/solid-specs/specs/service-description/context/v1.jsonld
+// Source: jeswr/solid-specs@e1e1210 specs/service-description/context/v1.jsonld
 export default {
   "@context": {
     "@version": 1.1,

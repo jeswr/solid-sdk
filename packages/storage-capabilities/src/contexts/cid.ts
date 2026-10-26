@@ -1,6 +1,6 @@
-// AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.1-Sol
 // Trusted draft context snapshot for https://www.w3.org/ns/cid/v1.
-// Source: /home/user/solid-specs/tools/spec-check/contexts/cid-v1.jsonld
+// Source: jeswr/solid-specs@e1e1210 tools/spec-check/contexts/cid-v1.jsonld
 export default {
   "@context": {
     "@protected": true,
