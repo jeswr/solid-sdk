@@ -141,15 +141,69 @@ function notificationKey(endpoint: string, extra: ServiceEntry["extra"]): string
   return typeof channel === "string" ? JSON.stringify([endpoint, channel]) : undefined;
 }
 
-function mergeService(left: ServiceEntry, right: ServiceEntry): ServiceEntry {
-  const profiles = [...new Set([...(left.conformsTo ?? []), ...(right.conformsTo ?? [])])];
-  return {
-    ...left,
-    ...right,
-    type: [...new Set([...left.type, ...right.type])],
-    ...(profiles.length > 0 ? { conformsTo: profiles } : {}),
-    extra: { ...left.extra, ...right.extra },
-  };
+/** Accumulate only incoming metadata; materialize each merged service once. */
+class ServiceBuilder {
+  type = new Set<string>();
+  private profiles = new Set<string>();
+  private readonly features = new Set<string>();
+  private readonly extras = new Map<string, unknown>();
+  private readonly nodes = new Map<string, Record<string, unknown>>();
+  private id: string | undefined;
+  readonly endpoint: string;
+
+  constructor(
+    entry: ServiceEntry,
+    private readonly notification = false,
+  ) {
+    this.endpoint = entry.endpoint;
+    this.add(entry);
+  }
+
+  add(entry: ServiceEntry): void {
+    if (entry.id !== undefined) this.id = entry.id;
+    for (const type of entry.type) this.type.add(type);
+    for (const profile of entry.conformsTo ?? []) this.profiles.add(profile);
+    for (const [predicate, value] of Object.entries(entry.extra)) {
+      if (this.notification && predicate === NOTIFY.feature) {
+        for (const feature of value as string[]) this.features.add(feature);
+      } else {
+        this.extras.set(
+          predicate,
+          Array.isArray(value)
+            ? value.map((item) => this.retainDefinition(item))
+            : this.retainDefinition(value),
+        );
+      }
+    }
+  }
+
+  private retainDefinition(value: unknown): unknown {
+    // Mapper values are strings or node objects (arrays are handled by add).
+    if (typeof value === "string") return value;
+    const node = value as Record<string, unknown>;
+    const id = node["@id"] as string;
+    if (Object.keys(node).length > 1) this.nodes.set(id, node);
+    // A later reference must not erase the sole expansion, including in repeated extras.
+    return this.nodes.get(id) ?? node;
+  }
+
+  addAcq(): void {
+    // ACQ metadata precedes listed metadata; this runs once per distinct endpoint.
+    this.type = new Set([SSD.SparqlQueryService, ...this.type]);
+    this.profiles = new Set([ACQ.profile, ...this.profiles]);
+  }
+
+  build(): ServiceEntry {
+    const extra = Object.fromEntries(this.extras);
+    if (this.notification) extra[NOTIFY.feature] = [...this.features];
+    return {
+      type: [...this.type],
+      endpoint: this.endpoint,
+      ...(this.id !== undefined ? { id: this.id } : {}),
+      ...(this.profiles.size > 0 ? { conformsTo: [...this.profiles] } : {}),
+      extra,
+    };
+  }
 }
 
 /**
@@ -166,8 +220,8 @@ export function parseSolidDescription(
   const root = new DescriptionNode(rootUrl, dataset, DataFactory);
   // One expansion per node across the whole mapping; deriveFeatures resolves `{ "@id" }` refs.
   const visited = new Set<string>();
-  const services: ServiceEntry[] = [];
-  const notificationIndices = new Map<string, number>();
+  const services: ServiceBuilder[] = [];
+  const notificationServices = new Map<string, ServiceBuilder>();
   const subscriptions = new DescriptionDataset(dataset, DataFactory).subscriptions;
   const subscriptionExtras = new Map<string, Record<string, unknown>>();
   const seen = new Set<string>();
@@ -177,26 +231,32 @@ export function parseSolidDescription(
     const extra = notificationExtra(subscription, visited);
     subscriptionExtras.set(subscription.value, extra);
     const key = notificationKey(subscription.value, extra);
-    if (key !== undefined) notificationIndices.set(key, services.length);
-    services.push({
-      // Only recognised channel types become service types; others stay in `extra` so a
-      // description cannot pose as another service class through notify:channelType.
-      type: [SSD.SolidNotificationService, ...channelTypes(extra)],
-      endpoint: subscription.value,
-      extra,
-    });
+    const builder = new ServiceBuilder(
+      {
+        // Only recognised channel types become service types; others stay in `extra` so a
+        // description cannot pose as another service class through notify:channelType.
+        type: [SSD.SolidNotificationService, ...channelTypes(extra)],
+        endpoint: subscription.value,
+        extra,
+      },
+      true,
+    );
+    if (key !== undefined) notificationServices.set(key, builder);
+    services.push(builder);
   }
-  if (notificationsOnly) return { services, capabilities: [] };
+  if (notificationsOnly)
+    return { services: services.map((service) => service.build()), capabilities: [] };
   for (const service of root.nodes(DID.service)) {
     const endpoint = service.iris(DID.serviceEndpoint)[0];
     if (endpoint === undefined) continue;
     const conformsTo = service.iris(DCT.conformsTo);
-    const notification = service.types.includes(SSD.SolidNotificationService);
+    const types = service.types;
+    const notification = types.includes(SSD.SolidNotificationService);
     const extra = notification
       ? (subscriptionExtras.get(service.value) ?? notificationExtra(service, visited))
       : service.extra([RDF_TYPE, DID.serviceEndpoint, DCT.conformsTo], visited);
     const entry: ServiceEntry = {
-      type: [...new Set([...service.types, ...(notification ? channelTypes(extra) : [])])],
+      type: [...types, ...(notification ? channelTypes(extra) : [])],
       endpoint,
       ...service.identity,
       ...(conformsTo.length > 0 ? { conformsTo } : {}),
@@ -204,32 +264,20 @@ export function parseSolidDescription(
     };
     // SSD-CLI-6: match both endpoint and channel, including unknown channel IRIs.
     const key = notification ? notificationKey(endpoint, extra) : undefined;
-    const duplicate = key === undefined ? undefined : notificationIndices.get(key);
+    const duplicate = key === undefined ? undefined : notificationServices.get(key);
     if (duplicate === undefined) {
-      if (key !== undefined) notificationIndices.set(key, services.length);
-      services.push(entry);
+      const builder = new ServiceBuilder(entry, notification);
+      if (key !== undefined) notificationServices.set(key, builder);
+      services.push(builder);
     } else {
-      const previous = services[duplicate] as ServiceEntry;
-      services[duplicate] = {
-        ...mergeService(previous, entry),
-        extra: {
-          ...previous.extra,
-          ...extra,
-          [NOTIFY.feature]: [
-            ...new Set([
-              ...(previous.extra[NOTIFY.feature] as string[]),
-              ...(extra[NOTIFY.feature] as string[]),
-            ]),
-          ],
-        },
-      };
+      duplicate.add(entry);
     }
   }
   // Preserve first-listed query-service precedence without scanning per ACQ endpoint.
-  const queryIndices = new Map<string, number>();
-  for (const [index, service] of services.entries()) {
-    if (service.type.includes(SSD.SparqlQueryService) && !queryIndices.has(service.endpoint)) {
-      queryIndices.set(service.endpoint, index);
+  const queryServices = new Map<string, ServiceBuilder>();
+  for (const service of services) {
+    if (service.type.has(SSD.SparqlQueryService) && !queryServices.has(service.endpoint)) {
+      queryServices.set(service.endpoint, service);
     }
   }
   for (const endpoint of root.iris(ACQ.endpoint)) {
@@ -240,14 +288,14 @@ export function parseSolidDescription(
       conformsTo: [ACQ.profile],
       extra: {},
     };
-    const duplicate = queryIndices.get(endpoint);
-    if (duplicate === undefined) services.push(acq);
-    else services[duplicate] = mergeService(acq, services[duplicate] as ServiceEntry);
+    const duplicate = queryServices.get(endpoint);
+    if (duplicate === undefined) services.push(new ServiceBuilder(acq));
+    else duplicate.addAcq();
   }
   const capabilities: CapabilityEntry[] = root.nodes(LWS.capability).map((capability) => ({
     type: capability.types,
     ...capability.identity,
     extra: capability.extra([RDF_TYPE], visited),
   }));
-  return { services, capabilities };
+  return { services: services.map((service) => service.build()), capabilities };
 }

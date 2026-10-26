@@ -281,6 +281,102 @@ describe("entry merging and compatibility", () => {
     expect(deriveFeatures(d).liveUpdates.detail.channels).toEqual(["websocket", "sse"]);
   });
 
+  test.each([
+    false,
+    true,
+  ])("notification merging retains shared format definitions (repeated extra: %s)", async (repeated) => {
+    const shared = repeated ? "_:fmt, _:other" : "_:fmt";
+    const d = await solid(`
+        <> notify:subscription <notifications> ; did:service <#listed> ;
+          lws:capability [ a ssd:PatchSupport ; ssd:format _:fmt ] .
+        <notifications> notify:channelType notify:WebSocketChannel2023 ; <urn:shared> ${shared} .
+        <#listed> a ssd:SolidNotificationService ; did:serviceEndpoint <notifications> ;
+          notify:channelType notify:WebSocketChannel2023 ; <urn:shared> ${shared} .
+        _:fmt ssd:source "text/turtle" ; ssd:patchType "application/sparql-update" .
+        _:other <urn:label> "also kept" .
+      `);
+    expect(d.services).toHaveLength(1);
+    const value = d.services[0]?.extra["urn:shared"];
+    const format = Array.isArray(value) ? value[0] : value;
+    expect(format).toMatchObject({
+      [SSD.source]: "text/turtle",
+      [SSD.patchType]: "application/sparql-update",
+    });
+    expect(d.capabilities[0]?.extra[`${SSD_NS}format`]).toEqual({
+      "@id": (format as Record<string, unknown>)["@id"],
+    });
+    expect(deriveFeatures(d).patch).toEqual({
+      state: "available",
+      evidence: "solid-description:PatchSupport",
+      detail: { formats: { "text/turtle": ["application/sparql-update"] } },
+    });
+  });
+
+  test("retains references to format definitions expanded by another service", async () => {
+    const d = await solid(`
+      <> notify:subscription <first>, <second> ;
+        lws:capability [ a ssd:PatchSupport ; ssd:format _:fmt ] .
+      <first> notify:channelType notify:WebSocketChannel2023 ; <urn:shared> _:fmt .
+      <second> notify:channelType notify:WebSocketChannel2023 ; <urn:shared> _:fmt .
+      _:fmt ssd:source "text/turtle" ; ssd:patchType "application/sparql-update" .
+    `);
+    expect(d.services).toHaveLength(2);
+    expect(d.services[1]?.extra["urn:shared"]).toEqual(d.capabilities[0]?.extra[`${SSD_NS}format`]);
+    expect(deriveFeatures(d).patch).toMatchObject({
+      state: "available",
+      detail: { formats: { "text/turtle": ["application/sparql-update"] } },
+    });
+  });
+
+  test("merges 6k duplicate notifications with linear metadata work", async () => {
+    const size = 6_000;
+    const entries = Array.from({ length: size }, (_, index) => `<#service${index}>`);
+    const body = `<> did:service ${entries.join(",")} .
+      ${entries
+        .map(
+          (entry, index) => `${entry} a ssd:SolidNotificationService, <urn:type:${index}> ;
+            did:serviceEndpoint <notifications> ; notify:channelType notify:WebSocketChannel2023 ;
+            notify:feature <urn:feature:${index}> ; dct:conformsTo <urn:profile:${index}> ;
+            <urn:extra:${index}> "kept" ; <urn:last> "${index}" .`,
+        )
+        .join("\n")}`;
+    const dataset = await parseRdf(PREFIXES + body, "text/turtle", { baseIRI: ROOT });
+    // Count additions, including Set construction, so rebuilding growing metadata fails
+    // independently of machine speed. Restore before assertions and stop early on failure.
+    const add = Set.prototype.add;
+    let additions = 0;
+    let mapped: ReturnType<typeof parseSolidDescription>;
+    try {
+      Set.prototype.add = function (value) {
+        if (++additions > size * 100)
+          throw new Error("Duplicate notification merging exceeded linear work budget");
+        return add.call(this, value);
+      };
+      mapped = parseSolidDescription(dataset, ROOT);
+    } finally {
+      Set.prototype.add = add;
+    }
+    expect(additions).toBeLessThanOrEqual(size * 100);
+    expect(mapped.services).toHaveLength(1);
+    const service = mapped.services[0];
+    expect(service?.id).toBe(`${ROOT}#service${size - 1}`);
+    expect(service?.type).toEqual([
+      SSD.SolidNotificationService,
+      "urn:type:0",
+      NOTIFY.WebSocketChannel2023,
+      ...Array.from({ length: size - 1 }, (_, index) => `urn:type:${index + 1}`),
+    ]);
+    expect(service?.conformsTo).toEqual(
+      Array.from({ length: size }, (_, index) => `urn:profile:${index}`),
+    );
+    expect(service?.extra[NOTIFY.feature]).toEqual(
+      Array.from({ length: size }, (_, index) => `urn:feature:${index}`),
+    );
+    for (let index = 0; index < size; index++)
+      expect(service?.extra[`urn:extra:${index}`]).toBe("kept");
+    expect(service?.extra["urn:last"]).toBe(String(size - 1));
+  }, 30_000);
+
   test("notify:channelType wins over sparq's legacy ssd:channelType", async () => {
     const d = await solid(
       `<> did:service [ a ssd:SolidNotificationService ; did:serviceEndpoint <notifications> ; notify:channelType notify:WebSocketChannel2023 ; ssd:channelType notify:WebhookChannel2023 ] .`,
