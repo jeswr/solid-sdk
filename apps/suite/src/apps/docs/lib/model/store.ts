@@ -252,6 +252,7 @@ export class DocsStore {
       {
         title: `Copy of ${source.data.title}`.slice(0, 200),
         body: "",
+        format: source.data.format,
         wasDerivedFrom: `${source.url}#it`,
       },
       `${toSlug(nameFromUrl(source.url).slice(0, -4)) || "document"}-copy`,

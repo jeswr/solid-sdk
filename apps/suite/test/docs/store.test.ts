@@ -15,7 +15,7 @@ import {
   DocsStore,
   type StoredDocument,
 } from "../../src/apps/docs/lib/model/store.js";
-import { mockFetch, type RecordedCall } from "./helpers.js";
+import { mockFetch, type RecordedCall, turtleToStore } from "./helpers.js";
 
 const POD = "https://pod.example/";
 const WEBID = `${POD}profile/card#me`;
@@ -415,6 +415,30 @@ describe("snapshot conflicts", () => {
 });
 
 describe("makeCopy", () => {
+  it.each([
+    "text/html",
+    "text/markdown",
+  ])("preserves %s in copied snapshots and revisions", async (format) => {
+    const s = await server();
+    const source = await document();
+    source.data.format = format;
+    const copy = await s.store.makeCopy(source, {
+      assets: [],
+      snapshot: () => ({ body: "# Live snapshot", wordCount: 2 }),
+      persistFullState: async () => {},
+    });
+    expect(copy.data.format).toBe(format);
+    expect(copy.data.revisions[0]?.format).toBe(format);
+    expect((await s.store.read(copy.url))?.data).toMatchObject({
+      body: "# Live snapshot",
+      format,
+      wordCount: 2,
+    });
+    const reservation = s.calls.find((call) => call.url === copy.url && call.method === "PUT");
+    expect(parseDocument(copy.url, turtleToStore(reservation?.body ?? "", copy.url))?.format).toBe(
+      format,
+    );
+  });
   it("skips an orphaned companion when reserving a copy", async () => {
     const s = await server();
     const oldContainer = `${POD}docs/plan-copy/`;
