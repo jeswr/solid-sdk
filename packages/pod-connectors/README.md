@@ -97,12 +97,16 @@ import. Each `connectors[id]` may also supply `tokenProxyUrl` or an installed-ap
 `clientSecret`. A local source secret selects direct exchange with the adapter's HTTPS token
 endpoint, taking precedence over a token proxy. Without a local secret, the adapter's configured
 proxy mode is preserved. These secrets and all session/source tokens remain in memory.
+Direct exchanges request JSON token responses, including GitHub. Notion's adapter selects
+HTTP Basic client authentication and a JSON request body for a local secret; its proxy flow
+keeps the shared form contract.
 
 Pod login uses CSS client credentials and DPoP, including bounded nonce retries and an
 in-memory token cache. Source login displays a browser URL, binds only `127.0.0.1` on an
 OS-assigned port, and uses state plus S256 PKCE. The callback path is `/oauth-callback`;
 the flow times out after two minutes. Pod and source transports never share credentials;
 all authenticated transports refuse redirects. SIGINT/SIGTERM cancel the CLI.
+Profile-selected Type Index documents must also use HTTPS, even in another advertised storage.
 
 The CLI stores `<podRoot>integrations/<id>/state.json`, including failed outcomes while
 retaining the last successful checkpoint. Before accessing JSON, it discovers the resource's

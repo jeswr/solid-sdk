@@ -305,6 +305,23 @@ describe("Pod client credentials", () => {
     expect(requests).toHaveLength(count + 1);
   });
   it.each([
+    "http://pod.test/alice/",
+    "http://127.0.0.1:3000/alice/",
+    "http://localhost:3000/alice/",
+  ])("never grants an HTTP index in advertised storage: %s", async (storageRoot) => {
+    const { pod, transport, requests } = fixturePod();
+    const indexUrl = `${storageRoot}settings/index.ttl`;
+    const profile = pod.dataset(TEST_PROFILE_DOC);
+    new Agent(TEST_WEBID, profile, DataFactory).pimStorage.add(storageRoot);
+    new ProfileTypeIndexAnchor(TEST_WEBID, profile, DataFactory).privateIndex = indexUrl;
+    await writeResource(TEST_PROFILE_DOC, profile, { fetchImpl: pod.fetch });
+    const authenticated = await createClientCredentialsFetch(config, transport);
+    await expect(authenticated(TEST_PROFILE_DOC)).rejects.toThrow();
+    for (const method of ["GET", "PUT"])
+      await expect(authenticated(indexUrl, { method })).rejects.toThrow();
+    expect(requests.map((request) => request.url)).toEqual([TEST_PROFILE_DOC]);
+  });
+  it.each([
     "https://outside.test/index.ttl",
     "https://pod.test/alice-sibling/index.ttl",
   ])("never grants a profile-linked index outside advertised storage: %s", async (indexUrl) => {

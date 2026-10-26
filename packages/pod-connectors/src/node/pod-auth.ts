@@ -89,7 +89,10 @@ export async function createClientCredentialsFetch(
         // Parse the authenticated response without another network request. Share the
         // writer's selection and storage validation, granting only this one document.
         const { dataset } = await freshRdf(request.url, async () => response.clone());
-        selectedIndex = validatedTypeIndexTarget(config.webId, dataset, config.podRoot).indexUrl;
+        // Node configuration requires HTTPS, including for cross-storage exceptions.
+        selectedIndex = httpsUrl(
+          validatedTypeIndexTarget(config.webId, dataset, config.podRoot).indexUrl,
+        );
       }
       return response;
     };

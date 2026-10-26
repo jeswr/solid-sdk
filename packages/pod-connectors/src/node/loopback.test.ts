@@ -31,6 +31,34 @@ function answer(url: string) {
   return { auth, redirect };
 }
 
+/** Exercise provider exchanges without opening a socket; callback socket coverage stays separate. */
+function mockLoopbackCallback() {
+  let listener: Server | undefined;
+  vi.spyOn(Server.prototype, "listen").mockImplementation(function (
+    this: Server,
+    ...args: unknown[]
+  ) {
+    listener = this;
+    const listening = args.at(-1);
+    if (typeof listening === "function") listening();
+    return this;
+  });
+  vi.spyOn(Server.prototype, "address").mockReturnValue({
+    address: "127.0.0.1",
+    family: "IPv4",
+    port: 49152,
+  });
+  return (url: string) => {
+    if (!listener) throw new Error("Missing fixture listener");
+    const { redirect } = answer(url);
+    listener.emit(
+      "request",
+      { method: "GET", headers: { host: redirect.host }, url: redirect.pathname + redirect.search },
+      { setHeader: vi.fn(), writeHead: vi.fn().mockReturnThis(), end: vi.fn() },
+    );
+  };
+}
+
 describe("source loopback login", () => {
   afterEach(() => vi.restoreAllMocks());
   it.each([
@@ -114,12 +142,14 @@ describe("source loopback login", () => {
     "strava",
     "twitch",
   ])("exchanges %s directly with a local secret, even when a proxy is configured", async (id) => {
+    const completeCallback = mockLoopbackCallback();
     const oauth = createRegistry().adapterById(id)?.oauth;
     if (!oauth) throw new Error("Missing fixture OAuth configuration");
     for (const tokenProxyUrl of [undefined, "https://proxy.test/token"]) {
       const transport = vi.fn(async (url, init) => {
         expect(url).toBe(oauth.tokenEndpoint);
         expect(init.redirect).toBe("manual");
+        expect(new Headers(init.headers).get("accept")).toBe("application/json");
         expect(new URLSearchParams(init.body).get("client_secret")).toBe("synthetic-secret");
         return Response.json({ access_token: "synthetic-token" });
       });
@@ -128,9 +158,9 @@ describe("source loopback login", () => {
         { ...oauth, clientId: "synthetic-client", clientSecret: "synthetic-secret", tokenProxyUrl },
         transport,
         {
-          async openAuthorizationUrl(url) {
+          openAuthorizationUrl(url) {
             expect(url).not.toContain("synthetic-secret");
-            await callback(answer(url).redirect.href);
+            completeCallback(url);
           },
         },
       );
@@ -138,6 +168,79 @@ describe("source loopback login", () => {
       expect(transport).toHaveBeenCalledTimes(1);
       expect(oauth.tokenExchange).toBe("proxy");
     }
+  });
+  it.each([
+    undefined,
+    "https://proxy.test/token",
+  ])("exchanges Notion directly with Basic authentication and JSON (proxy: %s)", async (tokenProxyUrl) => {
+    const completeCallback = mockLoopbackCallback();
+    const oauth = createRegistry().adapterById("notion")?.oauth;
+    if (!oauth) throw new Error("Missing fixture OAuth configuration");
+    let authorization: URL;
+    const transport = vi.fn(async (url, init) => {
+      expect(url).toBe(oauth.tokenEndpoint);
+      expect(init.redirect).toBe("manual");
+      const headers = new Headers(init.headers);
+      expect(headers.get("accept")).toBe("application/json");
+      expect(headers.get("content-type")).toBe("application/json");
+      expect(headers.get("authorization")).toBe(
+        `Basic ${Buffer.from("synthetic-client:synthetic-secret").toString("base64")}`,
+      );
+      const body = JSON.parse(init.body);
+      expect(body).toEqual({
+        grant_type: "authorization_code",
+        code: "synthetic-code",
+        redirect_uri: authorization.searchParams.get("redirect_uri"),
+        code_verifier: expect.any(String),
+      });
+      expect(createHash("sha256").update(body.code_verifier).digest("base64url")).toBe(
+        authorization.searchParams.get("code_challenge"),
+      );
+      return Response.json({ access_token: "synthetic-token" });
+    });
+    const token = await authorizeLoopback(
+      "notion",
+      { ...oauth, clientId: "synthetic-client", clientSecret: "synthetic-secret", tokenProxyUrl },
+      transport,
+      {
+        openAuthorizationUrl(url) {
+          authorization = answer(url).auth;
+          expect(url).not.toContain("synthetic-secret");
+          completeCallback(url);
+        },
+      },
+    );
+    expect(token.accessToken).toBe("synthetic-token");
+    expect(transport).toHaveBeenCalledTimes(1);
+    expect(oauth.tokenExchange).toBe("proxy");
+  });
+  it("keeps Notion's form proxy contract without a local secret", async () => {
+    const completeCallback = mockLoopbackCallback();
+    const oauth = createRegistry().adapterById("notion")?.oauth;
+    if (!oauth) throw new Error("Missing fixture OAuth configuration");
+    const transport = vi.fn(async (url, init) => {
+      expect(url).toBe("https://proxy.test/token");
+      expect(init.redirect).toBe("manual");
+      const headers = new Headers(init.headers);
+      expect(headers.get("content-type")).toBe("application/x-www-form-urlencoded");
+      expect(headers.has("authorization")).toBe(false);
+      const body = new URLSearchParams(init.body);
+      expect(body.get("client_id")).toBe("synthetic-client");
+      expect(body.has("client_secret")).toBe(false);
+      expect(body.get("code")).toBe("synthetic-code");
+      return Response.json({ access_token: "synthetic-token" });
+    });
+    await expect(
+      authorizeLoopback(
+        "notion",
+        { ...oauth, clientId: "synthetic-client", tokenProxyUrl: "https://proxy.test/token" },
+        transport,
+        {
+          openAuthorizationUrl: completeCallback,
+        },
+      ),
+    ).resolves.toMatchObject({ accessToken: "synthetic-token" });
+    expect(transport).toHaveBeenCalledTimes(1);
   });
   it.each([
     "mismatch",

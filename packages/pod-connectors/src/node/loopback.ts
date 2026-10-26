@@ -131,8 +131,26 @@ export async function authorizeLoopback(
     const safeFetch = refuseRedirects(sourceFetch);
     const exchange: typeof fetch = async (input, init) => {
       const body = new URLSearchParams(init?.body as string);
-      if (config.clientSecret) body.set("client_secret", config.clientSecret);
-      const response = await safeFetch(input, { ...init, body, signal: controller.signal });
+      const headers = new Headers(init?.headers);
+      if (exchangeConfig.tokenExchange === "public") headers.set("accept", "application/json");
+      let requestBody: BodyInit = body;
+      if (config.clientSecret) {
+        if (config.tokenRequest === "basic-json") {
+          headers.set(
+            "authorization",
+            `Basic ${Buffer.from(`${config.clientId}:${config.clientSecret}`).toString("base64")}`,
+          );
+          headers.set("content-type", "application/json");
+          body.delete("client_id");
+          requestBody = JSON.stringify(Object.fromEntries(body));
+        } else body.set("client_secret", config.clientSecret);
+      }
+      const response = await safeFetch(input, {
+        ...init,
+        headers,
+        body: requestBody,
+        signal: controller.signal,
+      });
       if (response.ok) {
         const token = object(await response.clone().json());
         textValue(token.access_token);

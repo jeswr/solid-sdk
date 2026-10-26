@@ -53,6 +53,11 @@ export interface OAuthAppConfig {
    */
   readonly tokenExchange: "public" | "proxy";
   readonly tokenProxyUrl?: string;
+  /**
+   * Direct Node exchange with a local client secret: form fields by default,
+   * or HTTP Basic client authentication and a JSON body. Proxies keep their form contract.
+   */
+  readonly tokenRequest?: "form" | "basic-json";
   /** Extra query params some platforms require on the authorize URL. */
   readonly extraAuthParams?: Readonly<Record<string, string>>;
   /**
