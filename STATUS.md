@@ -147,3 +147,65 @@ merge was performed.
 All three requested findings are fixed. No open questions for this fix round;
 full-workspace validation and automated review retain the environmental
 limitations above.
+
+## Fix round 2 — review of `1743fe2d9e03`
+
+- `7b8f7bd3 fix: bound RDF expansion and search direct instances` fixes both
+  requested findings. A package-local parser adapter enforces budgets before
+  constructing/storing quads: 16,384 input quads (including duplicates), 1 MiB
+  of created term values, and 1 MiB of expanded term bytes across quads. The
+  adapter uses the already installed N3/JSON-LD libraries because the pinned
+  `parseRdf` API exposes no factory or quad-budget hook. A bounded N3 Writer
+  sink stops serialization on overflow without retaining oversized output.
+  Fetch preserves empty text plus `truncated: true` on budget exhaustion.
+  Search applies parsing budgets to profiles, indexes, listings, and literal
+  reads, skipping exhausted documents. Direct Type Index instances negotiate
+  RDF regardless of filename, including extensionless note URLs.
+- `docs: record second review fix validation` records this round's results.
+
+The conservative internal limits above bound both RDF expansion and object
+overhead without changing public configuration or adding dependencies. Existing
+lower-level read/list helpers retain their existing shared RDF reader.
+
+Thirteen new fixture tests cover expansion in Turtle/JSON-LD, expanded prefix
+declarations without quads, duplicate-quad limits at and above the boundary,
+serialization stopping before later quads, every search parsing stage, and
+extensionless instances with negotiated RDF and non-RDF responses. Six focused
+integration regressions fail against the original implementation and pass with
+the fix. The complete package suite has **171 passing tests across 6 files**.
+
+Successful package gate commands (exit 0 each), run with
+`NODE_OPTIONS=--require=/tmp/sst-9s2-network-guard.cjs` and
+`GIT_ALLOW_PROTOCOL=file` exported:
+
+```sh
+pnpm --filter @jeswr/solid-mcp run lint
+pnpm --filter @jeswr/solid-mcp run build
+pnpm --filter @jeswr/solid-mcp run typecheck
+pnpm --filter @jeswr/solid-mcp run test
+pnpm run lint:root
+```
+
+Affected repository gate (exit 0; **7/7 Turbo tasks successful**):
+
+```sh
+NODE_OPTIONS=--require=/tmp/sst-9s2-network-guard.cjs GIT_ALLOW_PROTOCOL=file TURBO_SCM_BASE=1743fe2d9e035a62944fc4fe27896982fa8f00e8 pnpm run gate
+```
+
+Full-workspace gate (exit 1; 34 successful tasks out of 159 planned):
+
+```sh
+NODE_OPTIONS=--require=/tmp/sst-9s2-network-guard.cjs GIT_ALLOW_PROTOCOL=file pnpm run gate:full
+```
+
+The unchanged `@jeswr/app-pod-manager#build` fails because `next/font` attempts
+to fetch Inter from Google Fonts, blocked by the fixture-only network guard.
+`roborev status` exits 127 because roborev is unavailable. `git diff --check`
+passes. The existing local prebuilt fetch-rdf output was restored into this
+checkout's ignored dependency directory as in prior rounds; no remote Git
+fetch/merge or dependency lifecycle scripts were used. No dependencies or
+manifests changed; `check:packages` is not applicable.
+
+Both requested findings are fixed. No open questions or unfinished implementation
+work remain for this round; full-workspace validation and automated review have
+the environmental limitations above.
