@@ -43,5 +43,175 @@
       "id": "urn:uuid:f8561f90-9f46-5d7c-82b0-8eeb0c6acd14",
       "graph": "<urn:uuid:034313e4-2817-537c-a6e9-6dc75831e5d7> <https://schema.org/name> \"Hello\"@EN-US .\n"
     }
+  ],
+  "sourceDates": [
+    {
+      "kind": "document",
+      "value": "2026-01-01",
+      "normalized": "2026-01-01",
+      "datatype": "http://www.w3.org/2001/XMLSchema#date"
+    },
+    {
+      "kind": "document",
+      "value": "2026-01-01Z",
+      "normalized": "2026-01-01",
+      "datatype": "http://www.w3.org/2001/XMLSchema#date"
+    },
+    {
+      "kind": "document",
+      "value": "2026-01-01z",
+      "normalized": "2026-01-01",
+      "datatype": "http://www.w3.org/2001/XMLSchema#date"
+    },
+    {
+      "kind": "document",
+      "value": "2026-01-01+00:00",
+      "normalized": "2026-01-01",
+      "datatype": "http://www.w3.org/2001/XMLSchema#date"
+    },
+    {
+      "kind": "document",
+      "value": "2026-01-01-00:00",
+      "normalized": "2026-01-01",
+      "datatype": "http://www.w3.org/2001/XMLSchema#date"
+    },
+    {
+      "kind": "document",
+      "value": "2026-01-01+05:30",
+      "normalized": "2026-01-01",
+      "datatype": "http://www.w3.org/2001/XMLSchema#date"
+    },
+    {
+      "kind": "document",
+      "value": "2026-01-01-03:30",
+      "normalized": "2026-01-01",
+      "datatype": "http://www.w3.org/2001/XMLSchema#date"
+    },
+    {
+      "kind": "document",
+      "value": "2026-01-01+14:00",
+      "normalized": "2026-01-01",
+      "datatype": "http://www.w3.org/2001/XMLSchema#date"
+    },
+    {
+      "kind": "document",
+      "value": "2026-01-01-14:00",
+      "normalized": "2026-01-01",
+      "datatype": "http://www.w3.org/2001/XMLSchema#date"
+    },
+    {
+      "kind": "document",
+      "value": "2000-02-29Z",
+      "normalized": "2000-02-29",
+      "datatype": "http://www.w3.org/2001/XMLSchema#date"
+    },
+    {
+      "kind": "document",
+      "value": "0001-01-01Z",
+      "normalized": "0001-01-01",
+      "datatype": "http://www.w3.org/2001/XMLSchema#date"
+    },
+    {
+      "kind": "document",
+      "value": "0000-02-29Z",
+      "normalized": "0000-02-29Z",
+      "datatype": "http://www.w3.org/2001/XMLSchema#date"
+    },
+    {
+      "kind": "document",
+      "value": "2026-02-30Z",
+      "normalized": "2026-02-30Z",
+      "datatype": "http://www.w3.org/2001/XMLSchema#date"
+    },
+    {
+      "kind": "document",
+      "value": "-2026-01-01Z",
+      "normalized": "-2026-01-01Z",
+      "datatype": "http://www.w3.org/2001/XMLSchema#date"
+    },
+    {
+      "kind": "email",
+      "value": "2026-01-01",
+      "normalized": "2026-01-01",
+      "datatype": "http://www.w3.org/2001/XMLSchema#date"
+    },
+    {
+      "kind": "email",
+      "value": "2026-01-01Z",
+      "normalized": "2026-01-01",
+      "datatype": "http://www.w3.org/2001/XMLSchema#date"
+    },
+    {
+      "kind": "email",
+      "value": "2026-01-01z",
+      "normalized": "2026-01-01",
+      "datatype": "http://www.w3.org/2001/XMLSchema#date"
+    },
+    {
+      "kind": "email",
+      "value": "2026-01-01+00:00",
+      "normalized": "2026-01-01",
+      "datatype": "http://www.w3.org/2001/XMLSchema#date"
+    },
+    {
+      "kind": "email",
+      "value": "2026-01-01-00:00",
+      "normalized": "2026-01-01",
+      "datatype": "http://www.w3.org/2001/XMLSchema#date"
+    },
+    {
+      "kind": "email",
+      "value": "2026-01-01+05:30",
+      "normalized": "2026-01-01",
+      "datatype": "http://www.w3.org/2001/XMLSchema#date"
+    },
+    {
+      "kind": "email",
+      "value": "2026-01-01-03:30",
+      "normalized": "2026-01-01",
+      "datatype": "http://www.w3.org/2001/XMLSchema#date"
+    },
+    {
+      "kind": "email",
+      "value": "2026-01-01+14:00",
+      "normalized": "2026-01-01",
+      "datatype": "http://www.w3.org/2001/XMLSchema#date"
+    },
+    {
+      "kind": "email",
+      "value": "2026-01-01-14:00",
+      "normalized": "2026-01-01",
+      "datatype": "http://www.w3.org/2001/XMLSchema#date"
+    },
+    {
+      "kind": "email",
+      "value": "2000-02-29Z",
+      "normalized": "2000-02-29",
+      "datatype": "http://www.w3.org/2001/XMLSchema#date"
+    },
+    {
+      "kind": "email",
+      "value": "0001-01-01Z",
+      "normalized": "0001-01-01",
+      "datatype": "http://www.w3.org/2001/XMLSchema#date"
+    },
+    {
+      "kind": "email",
+      "value": "0000-02-29Z",
+      "normalized": "0000-02-29Z",
+      "datatype": "http://www.w3.org/2001/XMLSchema#date"
+    },
+    {
+      "kind": "email",
+      "value": "2026-02-30Z",
+      "normalized": "2026-02-30Z",
+      "datatype": "http://www.w3.org/2001/XMLSchema#date"
+    },
+    {
+      "kind": "email",
+      "value": "-2026-01-01Z",
+      "normalized": "-2026-01-01Z",
+      "datatype": "http://www.w3.org/2001/XMLSchema#date"
+    }
   ]
 }

@@ -42,6 +42,8 @@ supply a default-graph RDF/JS dataset or a Turtle assertion body using the refer
 prefixes (`me:` resolves to the required owner WebID). Turtle bodies are RDF syntax;
 use typed templates for untrusted structured tool values. Source hashes are supplied
 by the caller; the model performs no filesystem reads or network requests.
+Document and email source dates use the same RDFlib date-literal normalization
+as assertions, including dropping timezone suffixes without shifting the date.
 
 `claims: []` is valid: the builder returns an empty `nanopubs` list alongside the
 batch's worker, activity, source, entity and `skipped_sensitive` audit graphs.

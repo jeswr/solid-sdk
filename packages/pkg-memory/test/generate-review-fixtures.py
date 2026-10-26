@@ -28,6 +28,27 @@ for tags in [["en-US", "en-us", "EN-US"], ["en-us", "EN-US", "en-US"],
         languages.append({"tags": tags, "single": single, "assertion": assertion,
                           "id": str(identifier), "graph": graph.serialize(format="nt")})
 
+source_dates = []
+for kind in ["document", "email"]:
+    for value in ["2026-01-01", "2026-01-01Z", "2026-01-01z", "2026-01-01+00:00",
+                  "2026-01-01-00:00", "2026-01-01+05:30", "2026-01-01-03:30",
+                  "2026-01-01+14:00", "2026-01-01-14:00", "2000-02-29Z",
+                  "0001-01-01Z", "0000-02-29Z", "2026-02-30Z", "-2026-01-01Z"]:
+        builder = reference.Builder({
+            "batch_id": "source-dates",
+            "worker": {"agent_id": "https://example.org/agent", "agent_label": "Synthetic"},
+            "sources": [{"id": "source", "kind": kind,
+                         "url": "https://example.org/source", "date": value}],
+            "claims": [],
+        })
+        builder.build_sources()
+        dates = list(builder.sources_g.objects(rdflib.URIRef("https://example.org/source"),
+                                               reference.SCHEMA.dateCreated))
+        assert len(dates) == 1
+        literal = dates[0]
+        source_dates.append({"kind": kind, "value": value, "normalized": str(literal),
+                             "datatype": str(literal.datatype)})
+
 output = Path(__file__).parent / "fixtures" / "review-parity.json"
 output.write_text(json.dumps({"$comment": "AUTHORED-BY Codex GPT-6; generated using RDFlib 7.1.4",
-                              "languages": languages}, indent=2) + "\n")
+                              "languages": languages, "sourceDates": source_dates}, indent=2) + "\n")

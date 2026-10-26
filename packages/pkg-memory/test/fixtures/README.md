@@ -62,7 +62,10 @@ python3 ../generate-literal-fixtures.py /path/to/knowledge-graph/pipeline/np_bui
 `review-parity.json` covers MCP-04H's language-tag deduplication finding.
 RDFlib 7.1.4 retains the first spelling of otherwise identical statements,
 comparing language tags without case. Both named and blank subjects pin the
-reference IDs and skolemized graphs for each first spelling. Regenerate with:
+reference IDs and skolemized graphs for each first spelling. Source-date cases
+come from the unmodified reference builder's `build_sources`, for documents and
+emails. They pin dropped timezones, leap/early dates and the unchanged lexical
+forms that Python cannot represent. Regenerate with:
 
 ```sh
 python3 ../generate-review-fixtures.py /path/to/knowledge-graph/pipeline/np_builder.py
