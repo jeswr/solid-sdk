@@ -122,3 +122,46 @@ unavailable because its CLI is not installed; no automated verdict is claimed.
 Remaining acceptance work: the two listed authorization-audit residuals, the unrelated
 repository snapshot blocker, and automated review. There are no open design questions
 for this lane. STATUS.md is the last changed file and its report is the final lane commit.
+
+## Fix round 1 — review of `dfb43effb461`
+
+Both findings in the supplied review are fixed on `lane/sst-b8c.1`:
+
+| Commit | Change |
+| --- | --- |
+| `fbe505f5` | Reuse proposal persistence's UTC timestamp normalization before matching duplicate Reader assessments. Regressions cover equivalent positive/negative offsets, fractional seconds, distinct instants and invalid timestamps. |
+| `b7494d28` | Derive direct agreement delivery direction from the local operation handler's declared `agreementDelivery` obligation. Cover offeror/acceptor suppliers, inbound/outbound offers, invalid correlations, duplicate results and signed runtime dispatch. |
+
+The conservative choice for operations without a declared direct-result supplier is to
+require an explicit invocation. Existing mortgage handlers explicitly declare their
+acceptor delivery obligations. Operation ID/version, reference, basis, direction and
+duplicate-delivery checks remain enforced before committing delivery state or dispatching
+a handler. The supplier declaration comes from local handlers, never peer message fields.
+
+Regressions reproduced both review findings before the fixes. Final validation used
+Node `v24.22.1`, pnpm `10.4.1` and Vitest `4.1.10`:
+
+| Check | Result |
+| --- | --- |
+| Dependency-first build | PASS: eight tasks. Reused ignored fetch-rdf output matching the exact installed lockfile source pin. |
+| `pnpm --filter @jeswr/personal-agent run gate --maxWorkers=1` | PASS: lint, build, typecheck and **531 tests in 56 files**; test duration 59.69s. |
+| `pnpm --filter @jeswr/personal-agent run test:coverage --maxWorkers=1` | PASS: **531 tests in 56 files**; duration 100.48s. |
+| `pnpm run lint:root` | PASS, including lockfile, workspace and fetch guards. |
+| `pnpm run gate --env-mode=loose` | FAIL: unchanged `@jeswr/federation-trust#test`; 156 successful / 213 scheduled tasks, 45.042s. |
+| `pnpm run gate:full --env-mode=loose` | FAIL: same unchanged test; 134 successful / 198 scheduled tasks, 1m47.318s. |
+
+Coverage: **87.04% statements, 75.01% branches, 90.48% functions, 89.56% lines**.
+Both repository gates stopped at the previously recorded
+`packages/federation-trust/test/characterization.test.ts:196` delegation snapshot: the
+Ed25519 `delegateKey` JSON expects `crv,x,kty`, while this host emits `kty,crv,x`.
+That package reports 53 passing / one failing test. Its source and `solid-vc` remain
+unchanged from the supplied review head. Neither repository gate completed every task.
+
+Only the two requested findings and their regressions were implemented. The earlier
+authorization-audit residuals remain outside this fix round. No dependencies, manifests,
+lockfile or tracked build output changed. Gate-generated callback/client-ID files were
+removed. Both repository gates ran before this final status commit.
+
+Automated roborev review remains unavailable because its CLI is not installed; the diff
+and authorization paths were manually reviewed. No push, PR, branch switch or tracker
+mutation occurred. Open questions for this fix round: none.
