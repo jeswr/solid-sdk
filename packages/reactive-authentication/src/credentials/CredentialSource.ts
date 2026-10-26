@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 /** An authentication credential to present to an authorization server as an RFC 8693 subject token. */
 export interface SubjectCredential {
   /** The serialized credential (a JWT, or a base64url-encoded SAML assertion). */
@@ -22,6 +23,9 @@ export interface CredentialRequest {
   readonly resource: URL;
 
   readonly signal: AbortSignal;
+
+  /** Generation captured by the enclosing operation; credential sessions must use the same fence. */
+  readonly expectedGeneration?: number;
 }
 
 /**
