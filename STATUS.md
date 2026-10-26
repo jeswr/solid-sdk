@@ -79,3 +79,32 @@ are addressed; no new open questions. Per-commit roborev remains unavailable
 because its executable is absent. Review-fix logs use the prefix
 `/tmp/sst-xenc-fix-` (`lint`, `build`, `typecheck`, `test`, `lint-root`, `gate`,
 and `gate-full`, all with `.log` extension).
+
+## Review fix round 2
+
+Implementation commit: `81d2c5ec` — `fix(suite): preserve numeric markers in text labels`.
+
+Addressed the single text-parsing finding. Numeric candidate detection now precedes
+strict percent/currency validation, and nonfinite keywords match complete inputs.
+Ordinary labels such as `Growth %`, `Budget $`, and `Infinity pool` retain their
+original text and whitespace, including under numeric format hints. Numeric-leading
+inputs and numeric prefixes still undergo strict validation; malformed percent,
+currency, grouping, precision and nonfinite inputs remain typed errors. Added 20
+regression cases across four locales; no dependencies or unrelated code changed.
+
+| Exact command | Result |
+| --- | --- |
+| `pnpm exec biome check apps/suite/src/apps/sheets/lib/format/parse.ts apps/suite/test/sheets-format.test.ts` | Pass. |
+| `pnpm --filter @jeswr/app-suite exec vitest run test/sheets-format.test.ts --coverage.include='src/apps/sheets/lib/format/**/*.ts'` | Pass: 152 tests; 100% statements, branches, functions and lines. |
+| `pnpm --filter @jeswr/suite-ui run build` | Pass; prepared the existing workspace dependency. |
+| `pnpm --filter @jeswr/app-suite run lint && pnpm --filter @jeswr/app-suite run build && pnpm --filter @jeswr/app-suite run typecheck && pnpm --filter @jeswr/app-suite run test` | Pass: 1,329 tests across 28 files; 100% configured coverage. Lint retains 21 pre-existing warnings outside the fix. |
+| `pnpm run lint:root` | Pass. |
+| `TURBO_SCM_BASE=0e5ca1e02e768c7a5a7f78c96324d1784001b21d pnpm run gate` | Pass: 6/6 tasks. |
+| `pnpm run gate:full` | Failed at the same two pre-existing `@jeswr/federation-codegen#test` namespace tests documented above (23 passed); 214/290 tasks succeeded before Turbo stopped. The generator test and committed ontology remain unchanged from this round's base. |
+
+No remote operations performed. No UI changes or dependency checks required. The
+finding is addressed with no new open questions. Per-commit roborev remains
+unavailable because its executable is absent; the supplied review was read and
+addressed. Validation logs use `/tmp/sst-xenc-fix2-` with the suffixes
+`dependency-build`, `lint`, `build`, `typecheck`, `test`, `lint-root`, `gate` and
+`gate-full` (each ending in `.log`).
