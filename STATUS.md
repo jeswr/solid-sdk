@@ -88,3 +88,86 @@ review verdicts could be read. The existing review configuration was left intact
   link when receiving a typed error. See the preview README for the exact supported subset.
 - Implementation and acceptance checks are complete. Remaining validation gaps are the unrelated
   full-workspace snapshot failure and unavailable roborev CLI.
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+## Fix round 2 — review of f503fd43a9ab
+
+- `781a0f0d` (`fix: preserve literal ampersands and HTML link relations`) fixes both review findings.
+  Literal ampersands survive title/text and URL extraction. Semicolonless reference detection
+  distinguishes title text from attributes; unsupported and malformed references still reject.
+  Link relations decode independently and split only on HTML ASCII whitespace, preserving
+  nonbreaking and other Unicode whitespace inside tokens.
+- Added 38 regression cases covering literal text/query separators, reference rejection,
+  ASCII relation separators and Unicode whitespace in canonical/icon relations. Before the fix,
+  15 regression cases failed. After the fix, all 154 preview tests pass with 100% statements,
+  branches, functions and lines across the preview directory.
+- Changes are confined to the two reviewed parser files, their existing tests and this report.
+  No dependency, UI or design changes; no network remote operations or other checkouts used.
+
+Commands use Node 24 (`PATH=/opt/node24/bin:$PATH`), with `XDG_DATA_HOME=/tmp/sst-lurx-data`
+and `XDG_CACHE_HOME=/tmp/sst-lurx-cache` to keep package-manager writes inside the sandbox.
+
+```sh
+pnpm --filter @jeswr/app-suite exec vitest run test/chat-preview.test.ts --coverage.include='src/apps/chat/lib/preview/**/*.ts'
+pnpm exec turbo run build --filter='@jeswr/app-suite^...'
+pnpm --filter @jeswr/app-suite run lint
+pnpm --filter @jeswr/app-suite run build
+pnpm --filter @jeswr/app-suite run typecheck
+pnpm run lint:root
+```
+
+PASS: focused coverage, all four dependency builds, app lint/build/typecheck and root guards.
+App lint reports 40 existing warnings outside preview; the changed files have no diagnostics.
+
+```sh
+pnpm --filter @jeswr/app-suite run test
+```
+
+Initial run: 4,552 tests pass, one unrelated vCard performance assertion fails at
+`apps/suite/test/vcard.test.ts:185` (5,599 ms against a 4,000 ms bound).
+
+```sh
+VITEST_MAX_WORKERS=2 pnpm --filter @jeswr/app-suite run test
+```
+
+PASS on rerun with fewer workers: all 73 test files and 4,553 tests pass, with 100% statements,
+branches, functions and lines across all configured coverage files. No test thresholds or
+repository configuration were changed.
+
+```sh
+TURBO_SCM_BASE=f503fd43a9ab0731073fe96371dc08d1279bd016 pnpm run gate
+```
+
+Initial affected gate fails outside preview: `test/check-sdk-layers.test.mjs:328`,
+"validates pathological specs in under 50 ms each", measured 93 ms. Root tests otherwise
+pass (744 tests). Turbo's default strict environment filters out `VITEST_MAX_WORKERS`, so
+the retry also sets `TURBO_ENV_MODE=loose` to pass the worker limit through to test tasks.
+
+```sh
+VITEST_MAX_WORKERS=2 TURBO_ENV_MODE=loose TURBO_SCM_BASE=f503fd43a9ab0731073fe96371dc08d1279bd016 pnpm run gate
+```
+
+PASS: all 10 Turbo tasks, including 745 root tests and all 4,553 app tests with 100% coverage.
+
+```sh
+VITEST_MAX_WORKERS=2 TURBO_ENV_MODE=loose pnpm run gate:full
+```
+
+FAIL outside this fix round: `@jeswr/federation-trust#test`,
+`test/characterization.test.ts:196`, "delegation credential structure is stable". This is the
+same previously recorded snapshot mismatch: expected delegateKey JSON order `crv,x,kty`,
+received `kty,crv,x`. That package has no diff from `f503fd43a9ab`; its other 53 tests pass.
+Turbo reports 307 successful tasks out of 360 scheduled (9 cached) before stopping.
+The generated callback/client-ID files from the eight pod web builds were removed.
+
+```sh
+git diff --check
+roborev status
+```
+
+PASS: diff whitespace check. Roborev remains unavailable (`command not found`, exit 127),
+so no additional automated review verdict could be read. Both supplied findings are fixed;
+there is no unfinished implementation or open question. The existing conservative rejection
+of unsupported references is retained. No dependencies were added, so `check:packages` was
+not required; no UI or screenshots apply. The final report commit records this validation.
