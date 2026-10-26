@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
-import { canonicalJson, digestBytes } from "@jeswr/agent-model";
+import { canonicalJson, DEFAULT_LIMITS, digestBytes } from "@jeswr/agent-model";
 import { describe, expect, it, vi } from "vitest";
 import { createDirectSend } from "../src/direct/send.js";
 import { type DirectMailbox, envelope } from "../src/direct/shared.js";
@@ -9,6 +9,7 @@ import {
   ChannelParseError,
   DIRECT,
   ProviderRejectedError,
+  type ReadGrant,
   type SendGrant,
   type TokenProvider,
 } from "../src/index.js";
@@ -132,6 +133,234 @@ describe("direct loopback", () => {
       { id: message.id, raw: wire.bytes },
     ]);
     expect((await binding.ingest.list(other, undefined, limits)).items).toEqual([]);
+  });
+
+  it.each([
+    "read",
+    "send",
+  ] as const)("captures account getters once for %s grants and inboxes", async (access) => {
+    const config = options();
+    const read = vi.fn(config.tokens.read.bind(config.tokens));
+    const send = vi.fn(config.tokens.send.bind(config.tokens));
+    const tokens = { read, send };
+    const binding = createInMemoryDirectBinding({ ...config, tokens });
+    const wire = await binding.send.render(signed(), DIRECT);
+    const getId = vi.fn(() => account.id).mockReturnValueOnce("selected-account");
+    const ref = {
+      get id() {
+        return getId();
+      },
+    };
+    if (access === "send")
+      await binding.send.transmit(wire, { account: ref, tokens, dryRun: false });
+    else {
+      await binding.send.transmit(wire, {
+        account: { id: "selected-account" },
+        tokens,
+        dryRun: false,
+      });
+      expect((await binding.ingest.list(ref, undefined, limits)).items).toEqual([
+        { id: message.id, raw: wire.bytes },
+      ]);
+    }
+    expect(getId).toHaveBeenCalledTimes(1);
+    const grantRef = tokens[access].mock.calls[0]?.[0];
+    expect(grantRef).toEqual({ id: "selected-account" });
+    expect(grantRef).not.toBe(ref);
+    expect(Object.isFrozen(grantRef)).toBe(true);
+    expect(
+      (await binding.ingest.list({ id: "selected-account" }, undefined, limits)).items,
+    ).toEqual([{ id: message.id, raw: wire.bytes }]);
+    expect((await binding.ingest.list(account, undefined, limits)).items).toEqual([]);
+  });
+
+  it.each([
+    "maxItems",
+    "maxBytes",
+  ] as const)("snapshots the read account and %s while credentials are pending", async (bound) => {
+    const config = options();
+    const grant = deferred<ReadGrant>();
+    const read = vi.fn(() => grant.promise);
+    const tokens = { read, send: config.tokens.send.bind(config.tokens) };
+    const binding = createInMemoryDirectBinding({ ...config, tokens });
+    const first = await binding.send.render(signed(), DIRECT);
+    const second = await binding.send.render(
+      signed({ ...message, id: "urn:example:message:2" }),
+      DIRECT,
+    );
+    for (const wire of [first, second])
+      await binding.send.transmit(wire, { account, tokens, dryRun: false });
+    const ref = { ...account };
+    const bounds = {
+      ...limits,
+      [bound]: bound === "maxItems" ? 1 : Buffer.byteLength(first.bytes),
+    };
+    const pending = binding.ingest.list(ref, undefined, bounds);
+    ref.id = "other-account";
+    bounds[bound] = Number.MAX_SAFE_INTEGER;
+    grant.resolve(await config.tokens.read(account));
+    expect(await pending).toEqual({
+      items: [{ id: message.id, raw: first.bytes }],
+      next: JSON.stringify({ account: account.id, offset: 1 }),
+    });
+    expect(read.mock.calls[0]).toEqual([account]);
+  });
+
+  it("checks the read grant before parsing cursors or inspecting any inbox", async () => {
+    const config = options();
+    const mailbox: DirectMailbox = { inboxes: new Map(), accepted: new Map() };
+    const getInbox = vi.spyOn(mailbox.inboxes, "get");
+    const read = vi.fn(async () => ({ access: "send", accessToken: "wrong-scope" }));
+    const binding = createDirectReader(mailbox, {
+      read,
+      send: config.tokens.send.bind(config.tokens),
+    } as unknown as TokenProvider);
+    for (const cursor of [
+      undefined,
+      "!",
+      "null",
+      JSON.stringify({ account: account.id, offset: 10 }),
+    ])
+      await expect(binding.ingest.list(account, cursor, limits)).rejects.toThrow(
+        new TypeError("missing or wrong-scope channel grant"),
+      );
+    expect(read).toHaveBeenCalledTimes(4);
+    expect(getInbox).not.toHaveBeenCalled();
+    read.mockRejectedValueOnce(new Error("read access denied"));
+    await expect(binding.ingest.list(account, "!", limits)).rejects.toThrow("read access denied");
+    expect(getInbox).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    "!",
+    "null",
+    "{}",
+    '"text"',
+    "[]",
+    JSON.stringify({ account: account.id, offset: -1 }),
+  ])("normalizes an authorized malformed cursor %s to the package TypeError", async (cursor) => {
+    const config = options();
+    const binding = createInMemoryDirectBinding(config);
+    await expect(binding.ingest.list(account, cursor, limits)).rejects.toThrow(
+      new TypeError("invalid account cursor"),
+    );
+    expect(config.tokens.calls).toEqual([{ access: "read", account }]);
+  });
+
+  it("round-trips a signed carrier larger than the decoded payload string limit", async () => {
+    const config = options();
+    const binding = createInMemoryDirectBinding(config);
+    const proposal = signed({
+      ...message,
+      kind: "description",
+      body: { description: { content: "x".repeat(DEFAULT_LIMITS.maxStringLength) } },
+    });
+    expect(proposal.compactJws.length).toBeGreaterThan(DEFAULT_LIMITS.maxStringLength);
+    expect(Buffer.byteLength(envelope(proposal.compactJws))).toBeLessThan(DIRECT.maxBytes);
+    const wire = await binding.send.render(proposal, DIRECT);
+    expect(await binding.send.validate(wire, proposal)).toEqual({ ok: true });
+    expect(
+      await binding.send.transmit(wire, { account, tokens: config.tokens, dryRun: false }),
+    ).toMatchObject({ outcome: "accepted" });
+    const page = await binding.ingest.list(account, undefined, limits);
+    expect(page.items).toEqual([{ id: message.id, raw: wire.bytes }]);
+    for (const item of page.items)
+      expect(binding.ingest.parse(item).jsonLdBlocks).toEqual([wire.bytes]);
+    expect(await verifyMessage(proposal.compactJws)).toEqual(proposal.message);
+  });
+
+  it("enforces carrier byte bounds on strings and raw UTF-8 before decoding", async () => {
+    const binding = createInMemoryDirectBinding(options());
+    const small = envelope("a.b.c");
+    const boundary = envelope(`${"a".repeat(DIRECT.maxBytes - Buffer.byteLength(small) + 1)}.b.c`);
+    expect(Buffer.byteLength(boundary)).toBe(DIRECT.maxBytes);
+    for (const raw of [boundary, Buffer.from(boundary)])
+      expect(binding.ingest.parse({ id: "boundary", raw }).jsonLdBlocks).toEqual([boundary]);
+    for (const raw of [
+      `${boundary} `,
+      Buffer.from(`${boundary} `),
+      Buffer.from(`\uFEFF${boundary}`),
+    ])
+      expect(() => binding.ingest.parse({ id: "oversized", raw })).toThrow(ChannelParseError);
+  });
+
+  it("uses the same captured raw bytes and id for parser validation and provenance", () => {
+    const binding = createInMemoryDirectBinding(options());
+    const bytes = envelope("a.b.c");
+    const getRaw = vi.fn(() => "x".repeat(DIRECT.maxBytes + 1)).mockReturnValueOnce(bytes);
+    const getId = vi.fn(() => "changed").mockReturnValueOnce("original");
+    const parsed = binding.ingest.parse({
+      get raw() {
+        return getRaw();
+      },
+      get id() {
+        return getId();
+      },
+    });
+    expect(getRaw).toHaveBeenCalledTimes(1);
+    expect(getId).toHaveBeenCalledTimes(1);
+    expect(parsed).toMatchObject({
+      messageId: "original",
+      rawSha256: digestBytes(bytes).slice("sha-256:".length),
+      rawByteLength: Buffer.byteLength(bytes),
+      jsonLdBlocks: [bytes],
+    });
+  });
+
+  it.each([
+    { content: "x".repeat(DEFAULT_LIMITS.maxStringLength + 1) },
+    { values: Array.from({ length: DEFAULT_LIMITS.maxArrayLength + 1 }, () => 0) },
+    Object.fromEntries(
+      Array.from({ length: DEFAULT_LIMITS.maxJsonNodes }, (_, i) => [i.toString(36), 0]),
+    ),
+    Array.from({ length: DEFAULT_LIMITS.maxJsonDepth }, () => 0).reduce<object>(
+      (nested) => ({ nested }),
+      {},
+    ),
+  ])("bounds decoded payloads independently of carrier limits (%#)", async (description) => {
+    const config = options();
+    const proposal = signed({ ...message, kind: "description", body: { description } });
+    expect(Buffer.byteLength(envelope(proposal.compactJws))).toBeLessThan(DIRECT.maxBytes);
+    // Even a verifier that returns unchecked JSON cannot bypass payload bounds.
+    const binding = createInMemoryDirectBinding({
+      ...config,
+      verify: async () => proposal.message,
+    });
+    const bytes = envelope(proposal.compactJws);
+    const wire = { bytes, digest: digestBytes(bytes), mediaType: "application/ld+json" };
+    await expect(binding.send.render(proposal, DIRECT)).rejects.toThrow();
+    expect(await binding.send.validate(wire, proposal)).toEqual({ ok: false, reason: "malformed" });
+    await expect(
+      binding.send.transmit(wire, { account, tokens: config.tokens, dryRun: false }),
+    ).rejects.toThrow();
+    await expect(binding.send.lookup?.(wire)).rejects.toThrow();
+    expect(config.tokens.calls).toEqual([]);
+  });
+
+  it("refuses a signed carrier exceeding the direct byte limit before verification or grants", async () => {
+    const config = options();
+    const verify = vi.fn(verifyMessage);
+    const binding = createInMemoryDirectBinding({ ...config, verify });
+    const proposal = signed({
+      ...message,
+      kind: "description",
+      body: {
+        description: {
+          values: Array.from({ length: 3 }, () => "x".repeat(DEFAULT_LIMITS.maxStringLength)),
+        },
+      },
+    });
+    const bytes = envelope(proposal.compactJws);
+    expect(Buffer.byteLength(bytes)).toBeGreaterThan(DIRECT.maxBytes);
+    const wire = { bytes, digest: digestBytes(bytes), mediaType: "application/ld+json" };
+    await expect(binding.send.render(proposal, DIRECT)).rejects.toThrow(ChannelParseError);
+    await expect(
+      binding.send.transmit(wire, { account, tokens: config.tokens, dryRun: false }),
+    ).rejects.toThrow(ChannelParseError);
+    for (const raw of [bytes, Buffer.from(bytes)])
+      expect(() => binding.ingest.parse({ id: message.id, raw })).toThrow(ChannelParseError);
+    expect(verify).not.toHaveBeenCalled();
+    expect(config.tokens.calls).toEqual([]);
   });
 
   it.each([

@@ -1,5 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { type AnyMessage, canonicalJson } from "@jeswr/agent-model";
+import { type AnyMessage, canonicalJson, parseBoundedJson } from "@jeswr/agent-model";
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer uses bare builtins
 import { generateKeyPairSync, sign, verify } from "crypto";
 import { RecordingTokenProvider } from "../../src/testing.js";
@@ -39,7 +39,7 @@ export async function verifyMessage(jws: string): Promise<unknown> {
     )
   )
     throw new Error("invalid test signature");
-  return JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
+  return parseBoundedJson(Buffer.from(payload, "base64url").toString("utf8"));
 }
 export function options() {
   return { tokens: new RecordingTokenProvider(), verify: verifyMessage, now: () => at };

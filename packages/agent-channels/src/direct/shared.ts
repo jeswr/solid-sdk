@@ -1,9 +1,25 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { AGENT, canonicalJson, digestBytes, parseBoundedJson } from "@jeswr/agent-model";
+import {
+  AGENT,
+  canonicalJson,
+  digestBytes,
+  parseBoundedJson,
+  resolveLimits,
+} from "@jeswr/agent-model";
 import type { InboundRawMessage } from "../channel.js";
 import { ChannelParseError } from "../errors.js";
 import { DIRECT } from "../profiles.js";
 import type { AccountRef, ReadGrant, SendGrant, Wire } from "../types.js";
+
+// The compact JWS is a carrier string, not a decoded payload string. The fixed
+// carrier shape needs only six JSON values and three levels including scalars.
+const CARRIER_LIMITS = resolveLimits({
+  maxEnvelopeBytes: DIRECT.maxBytes,
+  maxStringLength: DIRECT.maxBytes,
+  maxJsonDepth: 3,
+  maxJsonNodes: 6,
+  maxArrayLength: 1,
+});
 
 /** Internal loopback storage; exact bytes are retained for positive-evidence lookup. */
 export interface DirectMailbox {
@@ -22,9 +38,10 @@ export function envelope(compactJws: string): string {
 /** Check a bounded carrier without claiming anything about its signature. */
 export function readEnvelope(raw: string | Uint8Array): { text: string; compactJws: string } {
   try {
+    if (Buffer.byteLength(raw) > DIRECT.maxBytes) throw new TypeError("carrier exceeds byte bound");
     const text =
       typeof raw === "string" ? raw : new TextDecoder("utf-8", { fatal: true }).decode(raw);
-    const parsed = parseBoundedJson(text) as Record<string, unknown>;
+    const parsed = parseBoundedJson(text, CARRIER_LIMITS) as Record<string, unknown>;
     const compactJws = parsed["agent:compactJws"];
     if (
       typeof compactJws !== "string" ||
@@ -39,9 +56,10 @@ export function readEnvelope(raw: string | Uint8Array): { text: string; compactJ
 }
 /** Refuse absent account references before requesting credentials. */
 export function accountId(account: AccountRef): string {
-  if (typeof account?.id !== "string" || !account.id || account.id.length > 2048)
+  const id = account?.id;
+  if (typeof id !== "string" || !id || id.length > 2048)
     throw new TypeError("invalid account reference");
-  return account.id;
+  return id;
 }
 /** Runtime scope separation, even for structurally mistyped provider implementations. */
 export function assertGrant(grant: ReadGrant | SendGrant, access: "read" | "send"): void {
