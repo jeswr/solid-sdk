@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # Lane sst-8xm.33 — T-012
 
@@ -91,3 +92,53 @@ Automated per-commit review could not run: `roborev status` exited 127
 (`roborev: command not found`), and no roborev tool or post-commit hook is available in
 this environment. The dispatcher must run the charter's review before integration.
 No other checkout was modified, and no fetch, push, PR, or branch switch was performed.
+
+## Fix round 1 — shared blank-node definitions
+
+Addressed the sole finding from the review of `9cde00e79766`.
+Expanded nested blank-node definitions now retain an `@id` matching subsequent references.
+Callers can resolve a shared PatchSupport format to its source and patch types regardless
+of whether the extension predicate or `ssd:format` occurs first. The conservative choice
+is to keep the existing bounded, once-per-node expansion and identify its definitions,
+as permitted by the review. Package documentation describes the reference representation.
+
+Commits:
+
+- `64fe4893` — `fix: preserve shared blank-node definitions`: mapper fix, two regression
+  cases covering both predicate orders after JSON serialization, adjusted nested-object
+  expectations, and package README/skill guidance.
+- `docs: record shared blank-node fix validation` (this final commit): this report.
+
+Validation commands run in this checkout:
+
+```sh
+pnpm --filter @jeswr/fetch-rdf run build
+pnpm --filter @jeswr/storage-capabilities run lint && pnpm --filter @jeswr/storage-capabilities run build && pnpm --filter @jeswr/storage-capabilities run typecheck && pnpm --filter @jeswr/storage-capabilities run test
+pnpm run lint:root
+pnpm exec turbo run build typecheck test --filter=...@jeswr/storage-capabilities
+git diff --check
+```
+
+All commands above PASS before the final commit. Package tests: five files, 115 tests;
+coverage: 100% statements (238/238), branches (158/158), functions (28/28), and lines
+(198/198). Root lint passes all guards. Scoped Turbo gate passes all four tasks, including
+the fetch-rdf prerequisite build; no dependent workspace packages are selected.
+Whole-workspace gates and `gate:full` were not run, per the lane brief.
+
+The regression command below was run from `packages/storage-capabilities` before the fix:
+
+```sh
+pnpm exec vitest run src/solid-description.test.ts --coverage.enabled=false -t 'resolves shared PatchSupport'
+```
+
+Both cases failed on the original mapper because the expanded definition lacked `@id`;
+both pass in the final package gate. An earlier test attempt could not load fetch-rdf's
+missing `dist/`; the prerequisite build resolved that environment issue. Initial package
+lint requested formatting of the changed expression; formatting was applied before the
+passing gates.
+
+No dependencies or manifests changed; `check:packages` was not required. No unfinished
+implementation work or open questions. Automated commit review remains unavailable:
+`roborev status` exits 127 (`roborev: command not found`), so the dispatcher must perform
+the charter's review before integration. No fetch, push, PR, branch switch, or modification
+of another checkout was performed.
