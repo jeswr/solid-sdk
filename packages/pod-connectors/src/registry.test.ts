@@ -13,11 +13,11 @@ import {
 } from "./registry.js";
 
 describe("integrations registry", () => {
-  it("exposes exactly 32 catalog entries with unique, URL-safe ids", () => {
+  it("exposes exactly 33 catalog entries with unique, URL-safe ids", () => {
     const entries = allCatalogEntries();
-    expect(entries).toHaveLength(32);
+    expect(entries).toHaveLength(33);
     const ids = entries.map((e) => e.id);
-    expect(new Set(ids).size).toBe(32);
+    expect(new Set(ids).size).toBe(33);
     for (const id of ids) expect(id).toMatch(/^[a-z0-9-]+$/);
   });
 
@@ -204,6 +204,6 @@ describe("injected public configuration", () => {
     expect(first.statusOf(TIER_C[0]!)).toBe("export-file");
     expect(first.statusOf({ ...ADAPTERS[0]!.metadata, id: "unknown" })).toBe("demo");
     expect(first.adapterById("unknown")).toBeUndefined();
-    expect(first.allCatalogEntries()).toHaveLength(32);
+    expect(first.allCatalogEntries()).toHaveLength(33);
   });
 });

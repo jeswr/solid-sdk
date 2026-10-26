@@ -3038,6 +3038,9 @@ importers:
       n3:
         specifier: ^2.0.3
         version: 2.1.1
+      postal-mime:
+        specifier: 4.1.4
+        version: 4.1.4
     devDependencies:
       '@biomejs/biome':
         specifier: ^2.5.1

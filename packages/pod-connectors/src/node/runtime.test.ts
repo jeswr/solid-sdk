@@ -1092,7 +1092,7 @@ describe("CLI import", () => {
       ...spotifyAdapter,
       async import(ctx: Parameters<typeof spotifyAdapter.import>[0]) {
         seen.push(ctx.cursor);
-        return { ...(await spotifyAdapter.import(ctx)), cursor: "synthetic-checkpoint" };
+        return { ...(await spotifyAdapter.import(ctx)), cursor: "after:1700000000000" };
       },
     };
     vi.spyOn(registryModule, "createRegistry").mockReturnValue({
@@ -1111,7 +1111,7 @@ describe("CLI import", () => {
     const first = JSON.parse(pod.get(url)!);
     expect(await runCli(["import", "spotify", "--since"], options)).toBe(0);
     expect(await runCli(["import", "spotify"], options)).toBe(0);
-    expect(seen).toEqual([undefined, "synthetic-checkpoint", undefined]);
+    expect(seen).toEqual([undefined, "after:1700000000000", undefined]);
     expect(JSON.parse(pod.get(url)!).connectedAt).toBe(first.connectedAt);
     const last = JSON.parse(pod.get(url)!);
     expect(

@@ -145,6 +145,8 @@ export async function authorizeLoopback(
       let requestBody: BodyInit = body;
       if (config.clientSecret) {
         if (config.tokenRequest === "basic-form" || config.tokenRequest === "basic-json") {
+          // The shared exchange adds a public client's secret to the form; Basic replaces it.
+          body.delete("client_secret");
           headers.set(
             "authorization",
             `Basic ${Buffer.from(`${config.clientId}:${config.clientSecret}`).toString("base64")}`,
