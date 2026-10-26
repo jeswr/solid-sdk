@@ -92,3 +92,43 @@ test("all document stores return owned heapBytes to baseline on success and fail
     for (const store of live) store.free();
   }
 });
+
+test("failed index initialization and pending loads release the owned WASM store", async () => {
+  const runtime = await import("@sparq-org/sparq/wasm-node");
+  const free = vi.spyOn(runtime.Store.prototype, "free");
+  const engine = createEngine(async () => runtime);
+  try {
+    await expect(engine.createIndex({ maxQuads: -1 })).rejects.toThrow("maxQuads");
+    expect(free).toHaveBeenCalledTimes(1);
+    await expect(
+      engine.createIndex({
+        persist: {
+          async load() {
+            throw new Error("disk failed");
+          },
+          async save() {},
+        },
+      }),
+    ).rejects.toThrow("disk failed");
+    expect(free).toHaveBeenCalledTimes(2);
+    let finish: (() => void) | undefined;
+    const pending = engine.createIndex({
+      persist: {
+        load: () =>
+          new Promise((resolve) => {
+            finish = () => resolve(null);
+          }),
+        async save() {},
+      },
+    });
+    await vi.waitFor(() => expect(finish).toBeTypeOf("function"));
+    engine.dispose();
+    expect(free).toHaveBeenCalledTimes(3);
+    finish?.();
+    await expect(pending).rejects.toThrow("disposed");
+    expect(free).toHaveBeenCalledTimes(3);
+  } finally {
+    engine.dispose();
+    vi.restoreAllMocks();
+  }
+});
