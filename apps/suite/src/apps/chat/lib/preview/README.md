@@ -8,7 +8,8 @@ neither reads a DOM nor makes network requests. All output strings are untrusted
 never safe HTML. The caller decides whether to load the returned image/icon URLs.
 
 The page URL must be absolute HTTP(S). Relative, root-relative, query, fragment and protocol-relative
-metadata URLs resolve against that page URL. Recognized URL values must also be HTTP(S), without
+metadata URLs resolve against that page URL. After trimming surrounding whitespace, recognized
+URL values must also be HTTP(S), without
 credentials, controls or backslashes. Invalid candidates throw even if another candidate wins.
 No base URL, favicon path or image URL is guessed.
 
