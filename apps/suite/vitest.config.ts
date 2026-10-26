@@ -23,6 +23,7 @@ export default defineConfig({
         "src/apps/music/lib/queue/**/*.ts",
         "src/apps/photos/lib/albums/**/*.ts",
         "src/apps/notes/lib/**/*.ts",
+        "src/apps/notes/lib/organise/**/*.ts",
         "src/lib/order/**/*.ts",
         "src/apps/tasks/lib/lists/**/*.ts",
         "src/lib/search/**/*.ts",
