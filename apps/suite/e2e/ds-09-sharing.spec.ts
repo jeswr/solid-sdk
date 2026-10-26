@@ -3,7 +3,9 @@ import { mkdir } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, type Locator, type Page, test } from "@playwright/test";
-import buttonStyleSnapshot from "./snapshots/ds-09-consent-button-styles.json";
+import buttonStyleSnapshot from "./snapshots/ds-09-consent-button-styles.json" with {
+  type: "json",
+};
 
 const directory = fileURLToPath(new URL("../../../artifacts/screens/DS-09/", import.meta.url));
 async function accessible(page: Page) {
