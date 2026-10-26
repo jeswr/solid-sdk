@@ -1,43 +1,11 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 "use client";
 
-import {
-  Calendar,
-  ContactRound,
-  FileText,
-  HardDrive,
-  HeartPulse,
-  House,
-  Image,
-  Mail,
-  MessageCircle,
-  Music2,
-  ShieldCheck,
-  SquareCheck,
-  StickyNote,
-  Table2,
-  Wallet,
-} from "lucide-react";
-import type { CSSProperties } from "react";
+import { APP_ICONS, type AppId } from "../components/atoms/app-icon.js";
 
-export const appGlyphs = {
-  home: House,
-  drive: HardDrive,
-  docs: FileText,
-  tasks: SquareCheck,
-  calendar: Calendar,
-  contacts: ContactRound,
-  notes: StickyNote,
-  photos: Image,
-  chat: MessageCircle,
-  sheets: Table2,
-  mail: Mail,
-  music: Music2,
-  money: Wallet,
-  health: HeartPulse,
-  permissions: ShieldCheck,
-};
-export type AppSlug = keyof typeof appGlyphs;
+/** Navigation slugs are the DS-02 AppIcon ids, so every app has one glyph and hue. */
+export type AppSlug = AppId;
 export interface CreateAction {
   id: string;
   label: string;
@@ -86,22 +54,6 @@ export const defaultRailPins: readonly AppSlug[] = [
 export const mobileApps: readonly AppSlug[] = ["home", "drive", "docs", "tasks"];
 
 export function AppGlyph({ app, size = 20 }: { app: AppSlug; size?: 20 | 24 }) {
-  const Icon = appGlyphs[app];
+  const Icon = APP_ICONS[app].icon;
   return <Icon size={size} strokeWidth={size === 24 ? 1.5 : 1.75} aria-hidden="true" />;
-}
-export function AppIcon({ app, size = 40 }: { app: AppSlug; size?: 32 | 40 | 48 }) {
-  return (
-    <span
-      className="suite-app-icon"
-      aria-hidden="true"
-      style={
-        { width: size, height: size, "--app-icon-color": `var(--app-${app})` } as CSSProperties
-      }
-    >
-      <svg viewBox="0 0 40 40" focusable="false" aria-hidden="true">
-        <polygon points="20,4 34,12 34,28 20,36 6,28 6,12" />
-      </svg>
-      <AppGlyph app={app} />
-    </span>
-  );
 }

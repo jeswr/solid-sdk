@@ -2,7 +2,8 @@
 "use client";
 
 import { useState } from "react";
-import { AppIcon, type AppSlug, type NavigationApp } from "./apps.js";
+import { AppIcon } from "../components/atoms/app-icon.js";
+import type { AppSlug, NavigationApp } from "./apps.js";
 
 export function AppGrid({
   apps,
@@ -89,7 +90,7 @@ export function AppGrid({
                 onFocus={() => setActive(app.slug)}
                 onClick={close}
               >
-                <AppIcon app={app.slug} />
+                <AppIcon app={app.slug} decorative />
                 <span>{app.name}</span>
               </a>
             </div>

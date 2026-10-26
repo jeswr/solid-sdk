@@ -77,10 +77,15 @@ export function AppLauncher({
         >
           {trigger === "brand" ? (
             <span className="suite-app-icon suite-brand-mark">
-              <svg viewBox="0 0 40 40" focusable="false" aria-hidden="true">
+              <svg viewBox="0 0 40 40" className="suite-app-hex" aria-hidden="true">
                 <polygon points="20,4 34,12 34,28 20,36 6,28 6,12" />
               </svg>
-              <Grid2X2 size={16} strokeWidth={1.75} aria-hidden="true" />
+              <Grid2X2
+                size={16}
+                strokeWidth={1.75}
+                className="suite-app-glyph"
+                aria-hidden="true"
+              />
             </span>
           ) : trigger === "more" || trigger === "tab" ? (
             <MoreHorizontal size={20} strokeWidth={1.75} aria-hidden="true" />

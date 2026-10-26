@@ -74,11 +74,14 @@
 .suite-brand {
   margin-bottom: 8px;
 }
+/* The brand mark reuses the DS-02 AppIcon hexagon anatomy from components.css. */
 .suite-brand-mark {
-  --app-icon-color: var(--primary);
-  --app-icon-foreground: var(--primary-foreground);
+  --tile-fill: var(--primary);
   width: 32px;
   height: 32px;
+}
+.suite-brand-mark .suite-app-glyph {
+  color: var(--primary-foreground);
 }
 .suite-rail-bottom {
   margin-top: auto;
@@ -87,25 +90,6 @@
   align-items: center;
   gap: 4px;
   padding-top: 16px;
-}
-.suite-app-icon {
-  position: relative;
-  display: inline-grid;
-  place-items: center;
-  flex: none;
-}
-.suite-app-icon > svg:first-child {
-  position: absolute;
-  width: 100%;
-  height: 100%;
-  fill: var(--app-icon-color);
-  stroke: var(--app-icon-color);
-  stroke-width: 5;
-  stroke-linejoin: round;
-}
-.suite-app-icon > svg:last-child {
-  position: relative;
-  color: var(--app-icon-foreground, var(--glyph));
 }
 .suite-launcher {
   z-index: 50;
