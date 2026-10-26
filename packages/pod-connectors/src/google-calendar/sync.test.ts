@@ -1,8 +1,9 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { DataFactory } from "n3";
+import { DataFactory, Writer } from "n3";
 import { describe, expect, it, vi } from "vitest";
 import { runImport } from "../core/import-runner.js";
 import { createFetchPodWriter } from "../core/pod-writer.js";
+import { PROV } from "../core/provenance.js";
 import {
   createMemoryPod,
   fixtureFetch,
@@ -14,11 +15,20 @@ import type { ConnectorState, FixtureRoute } from "../core/types.js";
 import { CalendarEvent } from "../core/vocab.js";
 import { googleCalendarAdapter } from "./adapter.js";
 import { EVENTS } from "./fixtures.js";
-import { GoogleCalendarEvent, RecurrenceRule, SCHED } from "./vocab-map.js";
+import { GoogleCalendarEvent, InstanceExclusions, RecurrenceRule, SCHED } from "./vocab-map.js";
 
 const API = "https://www.googleapis.com/calendar/v3/calendars/primary/events";
 const DOC = `${TEST_POD_ROOT}integrations/google-calendar/calendar/events.ttl`;
 const route = (json: unknown, status = 200): FixtureRoute => ({ url: API, json, status });
+
+// Compare calendar RDF across runs, whose provenance activity IRIs differ.
+function calendarData(pod: ReturnType<typeof createMemoryPod>): string[] {
+  return new Writer({ format: "N-Triples" })
+    .quadsToString([...pod.dataset(DOC)].filter((q) => !q.predicate.value.startsWith(PROV)))
+    .trim()
+    .split("\n")
+    .sort();
+}
 
 function setup() {
   const pod = createMemoryPod();
@@ -225,7 +235,31 @@ describe("Google Calendar synchronization", () => {
     }
   });
 
-  it("persists cancelled and moved recurrence exceptions across master updates", async () => {
+  it.each([
+    EVENTS.items[0],
+    EVENTS.items[2],
+  ])("restores removed source EXDATEs on incremental master updates ($id)", async (master) => {
+    const { pod, run } = setup();
+    const initial = await run([route({ items: [master], nextSyncToken: "initial" })]).result;
+    const ruleIri = `${DOC}#event-${master.id}/recurrence-0`;
+    expect(new RecurrenceRule(ruleIri, pod.dataset(DOC), DataFactory).exceptions.size).toBe(1);
+    const updatedMaster = {
+      ...master,
+      recurrence: master.recurrence?.filter((line) => !line.startsWith("EXDATE")),
+    };
+    const updated = await run(
+      [route({ items: [updatedMaster], nextSyncToken: "restored" })],
+      initial.state,
+    ).result;
+    expect(updated.cursor).toBe("restored");
+    expect([...new RecurrenceRule(ruleIri, pod.dataset(DOC), DataFactory).exceptions]).toEqual([]);
+
+    const fresh = setup();
+    await fresh.run([route({ items: [updatedMaster], nextSyncToken: "fresh" })]).result;
+    expect(calendarData(pod)).toEqual(calendarData(fresh.pod));
+  });
+
+  it("replaces source EXDATEs while preserving cancelled and moved instance exclusions", async () => {
     const { pod, run } = setup();
     const master = EVENTS.items[0];
     const cancelled = {
@@ -253,6 +287,7 @@ describe("Google Calendar synchronization", () => {
     expect(exceptions()).toEqual(
       expect.arrayContaining(["2026-06-15T09:00:00+01:00", "2026-06-16T09:00:00+01:00"]),
     );
+    expect(exceptions()).toContain("2026-06-12T08:00:00Z");
     expect(initial.state.counts.skipped).toBe(0);
     expect(
       [...pod.dataset(DOC)].some((q) =>
@@ -266,13 +301,34 @@ describe("Google Calendar synchronization", () => {
         DataFactory,
       ).startDate?.toISOString(),
     ).toBe("2026-06-16T09:00:00.000Z");
+    const updatedMaster = {
+      ...master,
+      summary: "New master",
+      recurrence: ["RRULE:FREQ=DAILY;COUNT=30", "EXDATE:20260617T080000Z"],
+    };
     const updated = await run(
-      [route({ items: [{ ...master, summary: "New master" }], nextSyncToken: "updated" })],
+      [route({ items: [updatedMaster], nextSyncToken: "updated" })],
       initial.state,
     ).result;
-    expect(exceptions()).toEqual(
-      expect.arrayContaining(["2026-06-15T09:00:00+01:00", "2026-06-16T09:00:00+01:00"]),
+    expect(exceptions().sort()).toEqual([
+      "2026-06-15T09:00:00+01:00",
+      "2026-06-16T09:00:00+01:00",
+      "2026-06-17T08:00:00Z",
+    ]);
+    const storedInstances = new InstanceExclusions(
+      `${DOC}#event-${master.id}/instance-exclusions`,
+      pod.dataset(DOC),
+      DataFactory,
     );
+    expect([...storedInstances.dates].sort()).toEqual([
+      "2026-06-15T09:00:00+01:00",
+      "2026-06-16T09:00:00+01:00",
+    ]);
+    expect([...storedInstances.types]).toEqual([]);
+    const fresh = setup();
+    await fresh.run([route({ items: [updatedMaster, moved, cancelled], nextSyncToken: "fresh" })])
+      .result;
+    expect(calendarData(pod)).toEqual(calendarData(fresh.pod));
     await run(
       [route({ items: [{ id: master.id, status: "cancelled" }], nextSyncToken: "deleted" })],
       updated.state,
@@ -280,6 +336,31 @@ describe("Google Calendar synchronization", () => {
     expect([...pod.dataset(DOC)].filter((q) => q.subject.value.includes("#event-"))).toHaveLength(
       0,
     );
+  });
+
+  it("retains an instance exclusion when the same source EXDATE is removed", async () => {
+    const { pod, run } = setup();
+    const master = EVENTS.items[0];
+    const cancelled = {
+      id: "overlapping-instance",
+      status: "cancelled",
+      recurringEventId: master.id,
+      originalStartTime: { dateTime: "2026-06-12T08:00:00Z" },
+    };
+    const initial = await run([route({ items: [master, cancelled], nextSyncToken: "initial" })])
+      .result;
+    const updatedMaster = {
+      ...master,
+      recurrence: master.recurrence?.filter((line) => !line.startsWith("EXDATE")),
+    };
+    await run([route({ items: [updatedMaster], nextSyncToken: "updated" })], initial.state).result;
+    expect([
+      ...new RecurrenceRule(`${DOC}#event-${master.id}/recurrence-0`, pod.dataset(DOC), DataFactory)
+        .exceptions,
+    ]).toEqual(["2026-06-12T08:00:00Z"]);
+    const fresh = setup();
+    await fresh.run([route({ items: [updatedMaster, cancelled], nextSyncToken: "fresh" })]).result;
+    expect(calendarData(pod)).toEqual(calendarData(fresh.pod));
   });
 
   it("removes a cancelled instance and its recurrence while retaining the master's exception", async () => {

@@ -14,7 +14,7 @@ import {
   GOOGLE_CALENDAR_FIXTURES,
 } from "./fixtures.js";
 import { calendarDate, parseRecurrence } from "./recurrence.js";
-import { GoogleCalendarEvent, RecurrenceRule, vocabMap } from "./vocab-map.js";
+import { GoogleCalendarEvent, InstanceExclusions, RecurrenceRule, vocabMap } from "./vocab-map.js";
 
 const ID = "google-calendar";
 const API = "https://www.googleapis.com/calendar/v3/calendars/primary/events";
@@ -92,10 +92,8 @@ export const googleCalendarAdapter: IntegrationAdapter = {
       // Validate recurrence before touching the previous item in the working copy.
       const timeZone = item.start.timeZone ?? batch.timeZone;
       const rules = parseRecurrence(item.recurrence ?? [], timeZone);
-      // Cancellation identities live only as recurrence exception dates. Keep them on master updates.
-      const previousExceptions = [
-        ...new GoogleCalendarEvent(iri, events, DataFactory).recurrence,
-      ].map((ruleIri) => [...new RecurrenceRule(ruleIri, events, DataFactory).exceptions]);
+      // Only instance exclusions survive a master replacement; its EXDATEs are authoritative.
+      const previousInstanceExclusions = [...instanceExclusions(events, iri).dates];
       removeEvent(events, iri);
       const event = new GoogleCalendarEvent(iri, events, DataFactory).mark();
       event.identifier = item.id;
@@ -119,9 +117,9 @@ export const googleCalendarAdapter: IntegrationAdapter = {
         event.schedules.add(ruleIri);
         const recurrence = new RecurrenceRule(ruleIri, events, DataFactory);
         recurrence.setRule(rule);
-        for (const date of previousExceptions[index] ?? []) recurrence.exceptions.add(date);
         recurrence.timezone = timeZone;
       }
+      for (const date of previousInstanceExclusions) addInstanceException(events, iri, date);
     }
     // Google does not guarantee parent/child ordering, even across pages.
     for (const iri of deletedMasters) {
@@ -135,7 +133,7 @@ export const googleCalendarAdapter: IntegrationAdapter = {
         removeEvent(events, q.subject.value);
       removeEvent(events, iri);
     }
-    for (const { parent, date } of cancelledInstances) addException(events, parent, date);
+    for (const { parent, date } of cancelledInstances) addInstanceException(events, parent, date);
     addInstanceExceptions(events);
     await ctx.write({
       slug: SLUG,
@@ -212,8 +210,14 @@ function removeEvent(dataset: Store, iri: string): void {
   }
 }
 
-function addException(dataset: DatasetCore, parentIri: string, date: string): void {
+function instanceExclusions(dataset: DatasetCore, parentIri: string): InstanceExclusions {
+  return new InstanceExclusions(`${parentIri}/instance-exclusions`, dataset, DataFactory);
+}
+
+function addInstanceException(dataset: DatasetCore, parentIri: string, date: string): void {
   const parent = new GoogleCalendarEvent(parentIri, dataset, DataFactory);
+  if (!parent.recurrence.size) return;
+  instanceExclusions(dataset, parentIri).dates.add(date);
   for (const iri of parent.recurrence)
     new RecurrenceRule(iri, dataset, DataFactory).exceptions.add(date);
 }
@@ -226,6 +230,6 @@ function addInstanceExceptions(dataset: DatasetCore): void {
       ...dataset.match(q.subject, DataFactory.namedNode(`${SCHEMA}previousStartDate`), null),
     ][0]?.object;
     if (original?.termType !== "Literal") continue;
-    addException(dataset, q.object.value, original.value);
+    addInstanceException(dataset, q.object.value, original.value);
   }
 }

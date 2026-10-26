@@ -85,6 +85,13 @@ export class GoogleCalendarEvent extends CalendarEvent {
   }
 }
 
+/** Adapter state for instance exclusions, separate from source EXDATEs and event types. */
+export class InstanceExclusions extends PodThing {
+  get dates(): Set<string> {
+    return SetFrom.subjectPredicate(this, `${SCHEMA}exceptDate`, LiteralAs.string, temporal);
+  }
+}
+
 /** One deterministic rule node, with the exact VOC-01 properties and datatypes. */
 export class RecurrenceRule extends PodThing {
   get exceptions(): Set<string> {

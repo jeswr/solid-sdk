@@ -153,7 +153,10 @@ and deterministic linked nodes, with `schema:Schedule` as an additional type and
 `xsd:positiveInteger`; month-day selectors support `1`–`31` and `-1` (last day).
 Cancelled items remove their event descriptions and recurrence nodes. Cancelled
 instances add `schema:exceptDate` to the master's recurrence without creating an event
-record. Recurrence exception dates survive later master updates; moved instances keep
+record. Cancelled and moved instance exclusions are stored separately from source EXDATEs
+in a typed-accessor record under the master, without an event type. Master updates replace
+the source EXDATEs and rebuild each rule's exceptions as source dates plus instance exclusions,
+so removing a source EXDATE restores that occurrence. Moved instances keep
 their deterministic event identities. Deleted-series cleanup runs after every page has
 been processed. RFC 5545 constructs outside VOC-01's shape fail before the document write
 or checkpoint advance (see root `QUESTIONS.md`). Fixtures and sorted Turtle mapping
