@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6 — include format changes in automatic revisions
 // Ported from apps/pod-docs/src/document.ts.
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 // AUTHORED-BY Codex GPT-6 — shared alias-aware property replacement
@@ -456,7 +457,7 @@ export function applyRevisionPolicy(
     !last ||
     snapshot.label !== undefined ||
     (snapshot.now.getTime() - new Date(last.generatedAt).getTime() >= 600_000 &&
-      snapshot.body !== last.body)
+      (snapshot.body !== last.body || snapshot.format !== last.format))
   ) {
     revisions.unshift({
       id: revisionSubject(resourceUrl, highestRevisionIndex(resourceUrl, prior) + BigInt(1)),

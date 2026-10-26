@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6 — format-only revision regression tests
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { NS as SUITE_NS } from "@jeswr/suite-vocab";
 import { DataFactory, Store } from "n3";
@@ -90,6 +91,33 @@ describe("extended RDF model", () => {
 });
 
 describe("revision retention", () => {
+  it.each([
+    9.999, 10, 20,
+  ])("records format-only changes after the interval (%s minutes)", (minutes) => {
+    const initial = revision(0, minutes);
+    const doc = parseDocument(
+      URL_DOC,
+      buildDocument(URL_DOC, {
+        title: "Plan",
+        body: initial.body,
+        format: "text/markdown",
+        priorRevisions: [initial],
+        now: NOW,
+      }),
+    );
+    assert(doc);
+    expect(doc.body).toBe(initial.body);
+    expect(doc.format).toBe("text/markdown");
+    expect(doc.revisions).toHaveLength(minutes >= 10 ? 2 : 1);
+    if (minutes >= 10) {
+      expect(doc.revisions[0]).toMatchObject({
+        body: initial.body,
+        format: "text/markdown",
+        wasRevisionOf: initial.id,
+      });
+    }
+    expect(doc.revisions.at(-1)?.format).toBe("text/html");
+  });
   it("keeps snapshots current without adding auto revisions before 10 minutes", () => {
     const initial = revision(0, 9.999);
     const prior = [initial];
