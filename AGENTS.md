@@ -16,11 +16,12 @@ design + inventory + phasing lives in:
 [`decisions/0001-monorepo-architecture.md`](decisions/0001-monorepo-architecture.md)
 (imported from `prod-solid-server/decisions/0022`, the ADR of record).
 
-**Current state:** 42 SDK packages and 13 applications are present. Forty packages and all
-applications were imported with full history; `@jeswr/synthetic-rdf` and `@jeswr/solid-seed` are
-the maintainer-directed new packages tracked by solid-mortgage beads sm-63 and sm-64. The
-applications comprise the eight `pod-*` apps plus Access Manager, Pod Manager, Issues, App Store,
-and Coeliac. Mirror publishing has NOT run yet. Do not import further packages outside the phased
+**Current state:** 72 workspace packages and 17 applications are present. The original
+forty packages and thirteen applications were imported with full history; later workspace
+additions are inventoried in `suite.json`. Maintainer-directed packages include
+`@jeswr/synthetic-rdf`, `@jeswr/solid-seed`, and the shared security-critical LDP listing
+helper `@jeswr/ldp-container` (bead sst-8xm.7). The latter has no mirror repository configured.
+Mirror publishing has NOT run yet. Do not import further packages outside the phased
 package plan or explicit maintainer direction.
 
 ## The model in four rules

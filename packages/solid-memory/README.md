@@ -58,6 +58,10 @@ The library does not manage credentials or access control. Scope checks delegate
 `assertWithinBase` is deprecated; it retains absolute-target and strict-resource defaults
 for compatibility. New callers may use `assertWithinPodScope` with `{ allowRoot: false }`.
 
+Container listing reads and safe membership parsing use `@jeswr/ldp-container`.
+The store retains its stricter compatibility scope checks and redirect refusal; `list()`
+still returns an empty array for missing containers.
+
 ## Links
 
 - [Source](https://github.com/jeswr/solid-memory)

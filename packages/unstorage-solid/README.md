@@ -38,7 +38,9 @@ const keys = await storage.getKeys("settings");
 Keys are colon-delimited: `settings:theme` maps to `<base>settings/theme`. Traversal, cross-origin
 targets, hostile listing members, and redirects are rejected. Encoded path delimiters
 (`%2F` / `%5C`, case-insensitive) are refused, including pre-encoded key segments, because
-server-side decoding can turn them into traversal.
+Solid servers disagree about decoding them, which can change path boundaries. The key mapper
+throws for these segments, and listings skip these member URLs. Encoded colons (`%3A`) and
+percent signs (`%25`) remain supported.
 
 ## Key API
 
@@ -47,6 +49,11 @@ server-side decoding can turn them into traversal.
 - Concurrency: `getMeta` returns an ETag; pass it to a write to use `If-Match`.
 - Errors: `SolidHttpError`, `SolidPreconditionFailedError`, and the deprecated
   `SolidRedirectError` alias of `@jeswr/guarded-fetch`’s `RedirectRefusedError`.
+
+Container listings use `@jeswr/ldp-container` for RDF parsing and per-entry scope filtering.
+The local `listContainer(containerUrl, base, fetchImpl)` wrapper keeps its signature and
+returns `null` for 404/410. Invalid or unsafe member URLs are skipped individually; request
+headers, recursion, key mapping, and the existing stricter scope/redirect checks stay local.
 
 ## Links
 

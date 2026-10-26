@@ -124,9 +124,11 @@ function keyToEncodedSegments(key: string): string[] {
         `[unstorage-solid] key segment decodes to \`${decoded}\` (path traversal): ${seg}`,
       );
     }
+    if (decoded.includes("/") || decoded.includes("\\")) {
+      throw new Error("[unstorage-solid] key segment contains an encoded path delimiter (%2F/%5C)");
+    }
     // Re-encode the DECODED form so a key passed in either raw or pre-encoded
-    // shape maps to the same URL (idempotent encoding), and so any `/` that a
-    // caller URI-encoded into a segment stays encoded (cannot become a separator).
+    // shape maps to the same URL (idempotent encoding).
     encoded.push(encodeURIComponent(decoded));
   }
   return encoded;
@@ -209,6 +211,7 @@ export function urlToKey(base: string, memberUrl: string): string | undefined {
   } catch {
     return undefined;
   }
+  if (/%2f|%5c/i.test(u.pathname)) return undefined;
   if (u.origin !== b.origin) {
     return undefined;
   }

@@ -50,6 +50,7 @@ const outdir = join(root, "dist");
  * `unstorage` stays external because it is a PEER dependency.
  */
 const EXTERNAL = [
+  "@jeswr/ldp-container",
   // Keep the public error alias identical to the shared guard constructor.
   "@jeswr/guarded-fetch",
   "n3",
