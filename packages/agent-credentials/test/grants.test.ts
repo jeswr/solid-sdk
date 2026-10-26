@@ -258,6 +258,67 @@ it.each([
   });
   expect(transport).not.toHaveBeenCalled();
 });
+it.each([
+  { provider: "microsoft" as const },
+  { connectionId: "other" },
+  { purpose: "send" as const },
+  { resource: "calendar" as const },
+])("binds helper issuance to the validated profile when it changes: %j", async (change) => {
+  const selected = profile();
+  store.putProfile(selected);
+  const microsoftClientId = "11111111-1111-4111-8111-111111111111";
+  const tenantId = "22222222-2222-4222-8222-222222222222";
+  const objectId = "33333333-3333-4333-8333-333333333333";
+  store.putClient({
+    version: 1,
+    provider: "microsoft",
+    clientId: microsoftClientId,
+    addedAt: now.toISOString(),
+  });
+  const replacement = profile({
+    ...change,
+    microsoft: {
+      accountType: "work-or-school",
+      tenant: tenantId,
+      expectedIdentity: { tenantId, objectId },
+    },
+  });
+  const replacementGrant = grant(replacement, {
+    clientId: replacement.provider === "microsoft" ? microsoftClientId : clientId,
+    account:
+      replacement.provider === "microsoft"
+        ? { username: replacement.account, tenant: tenantId, subject: objectId }
+        : { username: replacement.account, subject: "fixture-sub" },
+    // Overlapping scopes must not allow the replacement to satisfy the original request.
+    grantedScopes: [...new Set([...requiredScopes(selected), ...requiredScopes(replacement)])],
+  });
+  const read = store.profile.bind(store);
+  vi.spyOn(store, "profile").mockImplementationOnce((name) => {
+    const result = read(name);
+    store.putProfile(replacement);
+    store.putGrant(replacementGrant);
+    return result;
+  });
+  const grantRead = vi.spyOn(store, "grant");
+  const transport = vi.fn(noTransport);
+  const answer = await helperExchange(
+    { store, transport, now: () => now },
+    selected.name,
+    JSON.stringify({
+      provider: selected.provider,
+      connectionId: selected.connectionId,
+      purpose: selected.purpose,
+      scopes: requiredScopes(selected),
+    }),
+  );
+  expect(answer).toEqual({
+    exit: 2,
+    problem: "the requested credential binding does not match this profile",
+  });
+  expect(answer.stdout).toBeUndefined();
+  expect(grantRead).not.toHaveBeenCalled();
+  expect(transport).not.toHaveBeenCalled();
+});
 it("refuses missing cached scopes, duplicates and a send-only account on the read path", async () => {
   const p = profile();
   store.putProfile(p);

@@ -493,7 +493,12 @@ export async function helperExchange(
       p.connectionId !== req.connectionId
     )
       return { exit: EXIT.refused, problem: "the request is not for this profile's account" };
-    const t = await accessToken(deps, name);
+    const t = await accessToken(deps, name, {
+      provider: req.provider,
+      connectionId: req.connectionId,
+      purpose: req.purpose,
+      resource: p.resource,
+    });
     const lacking = missing(t.scopes, req.scopes);
     if (lacking.length > 0) return { exit: EXIT.revoked, problem: "scope not granted" };
     return {
