@@ -37,6 +37,9 @@
       "default": "./dist/providers/setup.js"
     }
   },
+  "bin": {
+    "awp-credentials": "./dist/bin.js"
+  },
   "files": [
     "dist",
     "README.md",
@@ -52,6 +55,8 @@
     "@vitest/coverage-v8": "^4.1.10"
   },
   "dependencies": {
+    "@jeswr/agent-channels": "workspace:*",
+    "@jeswr/guarded-fetch": "workspace:*",
     "jose": "^6.2.3",
     "zod": "^4.4.3"
   }

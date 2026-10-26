@@ -30,10 +30,11 @@ Both signed `tid` and `oid` must match this binding. A matching `preferred_usern
 authorizes consent. Existing Microsoft profiles without this binding must be configured before
 login or token use.
 
-`new StoreTokenProvider(provider, { store, transport, resource: 'mail' })` supplies strings to
-channel bindings. `read('owner')` selects exactly one read profile for connection `owner`;
-`send('owner')` selects a separate send profile. Missing/ambiguous credentials refuse. Grants
-also bind purpose and resource, so copying a file or adding overlapping scopes cannot bypass
+`new StoreTokenProvider(provider, { store, transport, resource: 'mail' })` implements agent-channels'
+`TokenProvider`. `read({ id: 'owner' })` selects exactly one read profile for connection
+`owner` and returns `{ access: 'read', accessToken }`; `send({ id: 'owner' })` selects a
+separate send profile and returns `{ access: 'send', accessToken }`. Missing/ambiguous
+credentials refuse. Grants also bind purpose and resource, so copying a file or adding overlapping scopes cannot bypass
 separation. Unmarked legacy grants require consent again.
 
 Per-profile locks recover only confirmed dead local owners. A short exclusive `.lock.guard`
@@ -49,7 +50,11 @@ OIDC identity scopes are included for account verification. Pilot calendar profi
 `Calendars.ReadBasic`. Calendar sends are unsupported. Calendar adapters are available through
 `./providers/google` and `./providers/microsoft`; `./providers/setup` defaults to no access.
 The library CLI `main(argv, io)` is exposed at `./cli`; it defaults to calendar/read profiles
-and takes explicit `--purpose` and `--resource` flags for other grants.
+and takes explicit `--purpose` and `--resource` flags for other grants. It refuses network
+without `io.transport`. The `awp-credentials` executable (`dist/bin.js`) explicitly injects
+DNS-pinning guarded fetch restricted to the official provider origins, refusing redirects
+and loopback. `provider-config` generates helpers invoking that entry, so spawned helpers
+can refresh tokens within the same 15-second / 256-KiB provider call limits.
 
 Token files support anthropic, openai, slack, matrix, discord, telegram, bluesky and mastodon.
 Provision each purpose separately. The same token value is never automatically reused for

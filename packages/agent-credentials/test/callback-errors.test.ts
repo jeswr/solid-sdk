@@ -66,6 +66,58 @@ it("refuses malformed callback requests and closes the listener when the operato
   expect(store.grant(p.name)).toBeUndefined();
 });
 it.each([
+  ["SecretRefreshTokenWithLetters", "provider refused"],
+  ["access_denied", "access_denied"],
+  [undefined, "no code"],
+])("never reflects callback errors or descriptions: %s", async (error, diagnostic) => {
+  const actual = await vi.importActual<typeof import("http")>("http");
+  const listener = actual.createServer();
+  // Deliver a synthetic callback through the real handler without opening a socket.
+  vi.spyOn(listener, "listen").mockImplementation((_options, callback) => {
+    (callback as () => void)();
+    return listener;
+  });
+  vi.spyOn(listener, "address").mockReturnValue({
+    address: "127.0.0.1",
+    family: "IPv4",
+    port: 12345,
+  });
+  vi.spyOn(listener, "close").mockImplementation((callback) => {
+    callback?.();
+    return listener;
+  });
+  vi.mocked(createServer).mockReturnValueOnce(listener);
+  const transport = vi.fn(noTransport);
+  const failure = await login({ store, now, transport }, p.name, {
+    onUrl: (url) => {
+      const params = new URLSearchParams({
+        state: fixtureValue(new URL(url).searchParams.get("state")),
+        error_description: "SecretRefreshTokenWithLetters",
+      });
+      if (error) params.set("error", error);
+      const callback = new URL(fixtureValue(new URL(url).searchParams.get("redirect_uri")));
+      const server = fixtureValue(vi.mocked(createServer).mock.results.at(-1)).value as Server;
+      const response = { writeHead: vi.fn(), end: vi.fn() };
+      server.emit(
+        "request",
+        { url: `/?${params}`, headers: { host: callback.host }, method: "GET" },
+        response,
+      );
+      expect(response.end).toHaveBeenCalledWith(
+        "Sign-in was not completed. You can close this tab.",
+      );
+    },
+  }).catch((error: unknown) => error);
+  expect(failure).toMatchObject({
+    code: "refused",
+    message: `sign-in was not completed (${diagnostic})`,
+  });
+  expect(String(failure)).not.toContain("SecretRefreshToken");
+  expect((failure as Error).cause).toBeUndefined();
+  expect(store.grant(p.name)).toBeUndefined();
+  expect(transport).not.toHaveBeenCalled();
+});
+it.each([
   true,
   false,
 ])("closes callbacks when the optional listener succeeds: %s", async (available) => {

@@ -16,6 +16,7 @@ import {
   exchangeCode,
   listCalendars,
   normaliseScopes,
+  oauthErrorDiagnostic,
   pkce,
   randomToken,
   refresh,
@@ -136,7 +137,7 @@ function awaitCallback(
       const code = url.searchParams.get("code");
       if (error || !code) {
         page(res, 400, "Sign-in was not completed. You can close this tab.");
-        const reason = (error ?? "no code").replace(/[^a-z_ ]/gi, "").slice(0, 40);
+        const reason = error ? (oauthErrorDiagnostic(error) ?? "provider refused") : "no code";
         finish(() => reject(new HelperError("refused", `sign-in was not completed (${reason})`)));
         return;
       }

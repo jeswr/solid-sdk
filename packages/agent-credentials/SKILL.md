@@ -3,6 +3,7 @@ name: agent-credentials
 description: Use when working on the private credential store, PKCE login, provisioning, or purpose-separated token supply in @jeswr/agent-credentials.
 ---
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # @jeswr/agent-credentials
 
@@ -18,6 +19,10 @@ its OAuth scopes include send. Missing or ambiguous profiles fail closed.
 
 Tests always supply a temporary store directory, fake transport and reserved example accounts.
 Never open the real default store, run a real op executable or contact a live provider. Network
-is injected explicitly; absent transport refuses. Keep ./testing synthetic and deterministic.
+is injected explicitly; absent transport refuses. Only the executable `bin` entry injects
+the production DNS-pinning, official-origin-only transport (no redirects or loopback).
+`StoreTokenProvider` implements agent-channels' `TokenProvider`: take `AccountRef`, snapshot
+and validate `.id` once, and return distinct `{ access: "read" | "send", accessToken }` grants.
+Keep ./testing synthetic and deterministic.
 The provisioning shell test prepends a fake op to PATH. Its POSIX-compatible zsh script can
 also be tested with bash when zsh is unavailable. No runtime use of 1Password.

@@ -24,12 +24,10 @@ import { spawn } from "child_process";
 import {
   closeSync,
   constants,
-  existsSync,
   fsyncSync,
   lstatSync,
   openSync,
   readFileSync,
-  realpathSync,
   renameSync,
   unlinkSync,
 } from "fs";
@@ -544,7 +542,9 @@ async function run(
       case "provider-config": {
         const out = values.out;
         if (!out) throw new HelperError("invalid", "--out FILE is required");
-        const cli = fileURLToPath(import.meta.url);
+        // Use the built executable from both source and dist callers. Node cannot resolve
+        // the source tree's emitted-.js import specifiers when executing bin.ts directly.
+        const entry = fileURLToPath(new URL("../dist/bin.js", import.meta.url));
         const accounts = store
           .profiles()
           .filter((name) => {
@@ -553,7 +553,7 @@ async function run(
           })
           .map((name) => {
             const p = store.profile(name) as Profile;
-            const args = [cli, "--dir", store.dir, "token", "--profile", name];
+            const args = [entry, "--dir", store.dir, "token", "--profile", name];
             if (args.some((a) => a.length > 200))
               throw new HelperError(
                 "invalid",
@@ -595,23 +595,4 @@ async function run(
         );
     }
   }
-}
-
-const isMain =
-  process.argv[1] !== undefined &&
-  existsSync(process.argv[1]) &&
-  realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url));
-if (isMain) {
-  main(process.argv.slice(2), {
-    stdout: (s) => process.stdout.write(s),
-    stderr: (s) => process.stderr.write(s),
-    stdoutIsTTY: process.stdout.isTTY === true,
-  }).then(
-    (code) => {
-      process.exitCode = code;
-    },
-    () => {
-      process.exitCode = 1;
-    },
-  );
 }

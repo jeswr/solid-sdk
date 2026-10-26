@@ -278,6 +278,52 @@ it("protects config output and cleans failed atomic writes", async () => {
   });
   expect((await run(["provider-config", "--out", out, "--force"])).code).toBe(1);
 });
+it("generates helpers using the transport-injecting bin entry", async () => {
+  store.putProfile(p);
+  const out = join(base, "providers.json");
+  expect((await run(["provider-config", "--out", out])).code).toBe(0);
+  const config = JSON.parse(fs.readFileSync(out, "utf8"));
+  expect(config.accounts[0].credential.command).toBe(process.execPath);
+  expect(config.accounts[0].credential.args[0]).toBe(
+    new URL("../dist/bin.js", import.meta.url).pathname,
+  );
+  expect(
+    JSON.parse(fs.readFileSync(new URL("../package.json", import.meta.url), "utf8")).bin,
+  ).toEqual({ "awp-credentials": "./dist/bin.js" });
+});
+it("refuses refresh from the library CLI without an injected transport", async () => {
+  store.putProfile(p);
+  store.putClient(client);
+  store.putGrant({ ...makeGrant(), access: undefined });
+  const result = await run(["token", "--profile", p.name], {
+    readStdin: async () =>
+      JSON.stringify({ provider: "google", connectionId: "owner", scopes: [GOOGLE.CALENDAR_READ] }),
+  });
+  expect(result.code).toBe(1);
+  expect(result.out).toEqual([]);
+  expect(result.err.join("")).toContain("the provider could not be reached");
+});
+it("keeps reflected OAuth secrets out of CLI stderr and the helper response", async () => {
+  store.putProfile(p);
+  store.putClient(client);
+  store.putGrant({ ...makeGrant(), access: undefined });
+  const result = await run(["token", "--profile", p.name], {
+    readStdin: async () =>
+      JSON.stringify({ provider: "google", connectionId: "owner", scopes: [GOOGLE.CALENDAR_READ] }),
+    transport: async () =>
+      new Response(
+        JSON.stringify({
+          error: "SecretRefreshTokenWithLetters",
+          error_description: "SecretRefreshTokenWithLetters",
+        }),
+        { status: 400 },
+      ),
+  });
+  expect(result.code).toBe(2);
+  expect(result.out).toEqual([]);
+  expect(result.err.join("")).toContain("HTTP 400");
+  expect(result.err.join("")).not.toContain("SecretRefreshToken");
+});
 it("uses injected or platform browser launchers and safe summaries for login", async () => {
   store.putProfile(p);
   store.putClient(client);
@@ -415,7 +461,7 @@ it("supports manual browser navigation and JSON calendar output", async () => {
 });
 it("runs the executable helper only as its main entry and keeps import inert otherwise", async () => {
   const { fileURLToPath } = await import("url");
-  const path = fileURLToPath(new URL("../src/cli.ts", import.meta.url));
+  const path = fileURLToPath(new URL("../src/bin.ts", import.meta.url));
   const argv = process.argv;
   const exit = process.exitCode;
   const tty = Object.getOwnPropertyDescriptor(process.stdout, "isTTY");
@@ -424,29 +470,45 @@ it("runs the executable helper only as its main entry and keeps import inert oth
     const stderr = vi.spyOn(process.stderr, "write").mockReturnValue(true);
     vi.resetModules();
     process.argv = [process.execPath, path, "help"];
-    await import("../src/cli.js");
+    await import("../src/bin.js");
     await Promise.resolve();
     expect(stdout).toHaveBeenCalledWith(expect.stringContaining("credential helper"));
     expect(process.exitCode).toBe(0);
     vi.resetModules();
     process.argv = [process.execPath, path, "--dir", dir, "token", "--profile", "fixture"];
     Object.defineProperty(process.stdout, "isTTY", { value: true, configurable: true });
-    await import("../src/cli.js");
+    await import("../src/bin.js");
     await Promise.resolve();
     expect(stderr).toHaveBeenCalledWith(expect.stringContaining("not in a terminal"));
     expect(process.exitCode).toBe(2);
+    vi.resetModules();
+    const freshOperations = await import("../src/operations.js");
+    vi.mocked(freshOperations.helperExchange).mockImplementationOnce(async (deps) => {
+      await expect(deps.transport("https://outside.example/token", {})).rejects.toMatchObject({
+        code: "refused",
+      });
+      return { exit: 0, stdout: "fixture-result" };
+    });
+    process.argv = [process.execPath, path, "--dir", dir, "token", "--profile", "fixture"];
+    Object.defineProperty(process.stdout, "isTTY", { value: false, configurable: true });
+    const input = new PassThrough();
+    vi.spyOn(process, "stdin", "get").mockReturnValue(input as unknown as typeof process.stdin);
+    await import("../src/bin.js");
+    input.end("{}");
+    await vi.waitFor(() => expect(stdout).toHaveBeenCalledWith("fixture-result"));
+    expect(process.exitCode).toBe(0);
     vi.resetModules();
     process.argv = [process.execPath, path, "help"];
     stdout.mockImplementationOnce(() => {
       throw new Error("closed stdout");
     });
-    await import("../src/cli.js");
+    await import("../src/bin.js");
     await Promise.resolve();
     expect(process.exitCode).toBe(1);
     for (const args of [[process.execPath], [process.execPath, join(base, "absent")]]) {
       vi.resetModules();
       process.argv = args;
-      expect((await import("../src/cli.js")).main).toBeTypeOf("function");
+      await import("../src/bin.js");
     }
   } finally {
     process.argv = argv;

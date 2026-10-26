@@ -5,6 +5,32 @@ import { createServer } from "http";
 import { expect, it, vi } from "vitest";
 import { createOriginScopedFetch } from "../src/origins.js";
 
+it("never exposes URL credentials or malformed inputs through construction errors", async () => {
+  const origin = "https://allowed.example";
+  const transport = vi.fn(async () => new Response("unexpected"));
+  const dnsLookup = vi.fn(async () => [{ address: "1.1.1.1", family: 4 }]);
+  const scoped = createOriginScopedFetch(new Set([origin]), { transport, dnsLookup });
+  for (const input of [
+    `${origin}/path`,
+    "https://private-user:private-password@allowed.example/path",
+    new URL("https://private-user@allowed.example/path"),
+    new URL("https://:private-password@allowed.example/path"),
+    "https://private-user:private-password@malformed host/path",
+    "malformed-private-password",
+  ]) {
+    const error = await scoped(input, { method: "invalid method" }).catch(
+      (error: unknown) => error,
+    );
+    expect(error).toBeInstanceOf(TypeError);
+    expect(error).toMatchObject({ message: "invalid binding request" });
+    expect((error as Error).cause).toBeUndefined();
+    expect(String(error)).not.toContain(String(input));
+    expect(String(error)).not.toMatch(/private-user|private-password|allowed\.example/);
+  }
+  expect(transport).not.toHaveBeenCalled();
+  expect(dnsLookup).not.toHaveBeenCalled();
+});
+
 it("refuses an undeclared local origin before connecting, and permits listed loopback only in tests", async () => {
   let requests = 0;
   const server = createServer((_req, res) => {

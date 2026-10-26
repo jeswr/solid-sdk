@@ -2277,6 +2277,12 @@ importers:
 
   packages/agent-credentials:
     dependencies:
+      '@jeswr/agent-channels':
+        specifier: workspace:*
+        version: link:../agent-channels
+      '@jeswr/guarded-fetch':
+        specifier: workspace:*
+        version: link:../guarded-fetch
       jose:
         specifier: ^6.2.3
         version: 6.2.3

@@ -120,6 +120,64 @@ it("refuses malformed OAuth profiles and token endpoint failures", async () => {
       refresh(async () => json(answer, status), p, client, "test-refresh-0123456789"),
     ).rejects.toThrow(problem);
 });
+it.each([
+  400, 429, 503,
+])("never reflects unknown OAuth errors or descriptions (HTTP %i)", async (status) => {
+  for (const error of [
+    "SecretRefreshTokenWithLetters",
+    "invalid_grantSecretToken",
+    "invalid-grant",
+    "constructor",
+    "x".repeat(101),
+  ]) {
+    const failure = await refresh(
+      async () => json({ error, error_description: "SecretRefreshTokenWithLetters" }, status),
+      p,
+      client,
+      "test-refresh-0123456789",
+    ).catch((error: unknown) => error);
+    expect((failure as Error).message).toContain(`HTTP ${status}`);
+    expect(String(failure)).not.toContain(error);
+    expect(String(failure)).not.toContain("SecretRefreshToken");
+    expect((failure as Error).cause).toBeUndefined();
+  }
+});
+it.each([
+  "invalid_request",
+  "invalid_client",
+  "invalid_grant",
+  "unauthorized_client",
+  "unsupported_grant_type",
+  "invalid_scope",
+  "access_denied",
+  "unsupported_response_type",
+  "temporarily_unavailable",
+  "server_error",
+  "interaction_required",
+  "consent_required",
+  "login_required",
+])("uses only the fixed diagnostic for recognised OAuth code %s", async (error) => {
+  const failure = await refresh(
+    async () => json({ error, error_description: "SecretRefreshToken" }, 400),
+    p,
+    client,
+    "test-refresh-0123456789",
+  ).catch((error: unknown) => error);
+  expect((failure as Error).message).toContain(`(${error})`);
+  expect(String(failure)).not.toContain("SecretRefreshToken");
+});
+it("does not expose a provider-controlled paging URL or unexpected origin", async () => {
+  const failure = await listCalendars(
+    async () => json({ value: [], "@odata.nextLink": "SecretRefreshToken" }),
+    { ...p, provider: "microsoft" },
+    "test-token-0123456789",
+  ).catch((error: unknown) => error);
+  expect(failure).toMatchObject({ message: "calendar list: unexpected paging link (refused)" });
+  expect((failure as Error).cause).toBeUndefined();
+  await expect(
+    call(async () => json({}), "https://secret-refresh-token.example/path", {}, "test"),
+  ).rejects.toMatchObject({ message: "test: not an allowed provider origin" });
+});
 it("rejects every invalid mandatory ID-token claim before it can become an account binding", () => {
   const t = instant.getTime() / 1000;
   const good = { exp: t + 3600, iat: t, sub: "fixture-sub", aud: client.clientId };

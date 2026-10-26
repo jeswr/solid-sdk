@@ -192,20 +192,20 @@ it("never supplies read grants to send or send grants to read, even with overlap
   store.putProfile(p);
   store.putGrant(grant(p, { grantedScopes: [GOOGLE.MAIL_READ, GOOGLE.MAIL_SEND] }));
   const tokens = new StoreTokenProvider("google", { store, now: () => now });
-  expect(await tokens.read("owner")).toBe("test-token-0123456789");
-  await expect(tokens.send("owner")).rejects.toThrow(/exactly one/);
-  await expect(tokens.read("unknown")).rejects.toThrow(/exactly one/);
+  expect(await tokens.read({ id: "owner" })).toHaveProperty("accessToken", "test-token-0123456789");
+  await expect(tokens.send({ id: "owner" })).rejects.toThrow(/exactly one/);
+  await expect(tokens.read({ id: "unknown" })).rejects.toThrow(/exactly one/);
   const send = profile({ name: "send", purpose: "send" });
   store.putProfile(send);
   store.putGrant(grant(send));
-  expect(await tokens.send("owner")).toBe("test-token-0123456789");
+  expect(await tokens.send({ id: "owner" })).toHaveProperty("accessToken", "test-token-0123456789");
   // A copied grant cannot be relabelled just by changing its filename/profile.
   store.putGrant({
     ...grant(p),
     profile: "send",
     grantedScopes: [GOOGLE.MAIL_READ, GOOGLE.MAIL_SEND],
   });
-  await expect(tokens.send("owner")).rejects.toThrow(/purpose/);
+  await expect(tokens.send({ id: "owner" })).rejects.toThrow(/purpose/);
   expect(grantBindingProblem({ ...grant(p), resource: "calendar" }, p, clientId)).toMatch(
     /purpose/,
   );
@@ -234,7 +234,7 @@ it("rejects a profile whose embedded name redirects selection to another binding
   );
   const transport = vi.fn(noTransport);
   await expect(
-    new StoreTokenProvider("google", { store, transport, now: () => now }).read("owner"),
+    new StoreTokenProvider("google", { store, transport, now: () => now }).read({ id: "owner" }),
   ).rejects.toMatchObject({ code: "invalid", message: expect.stringMatching(/another name/) });
   expect(transport).not.toHaveBeenCalled();
 });
@@ -257,7 +257,7 @@ it.each([
   });
   const transport = vi.fn(noTransport);
   await expect(
-    new StoreTokenProvider("google", { store, transport, now: () => now }).read("owner"),
+    new StoreTokenProvider("google", { store, transport, now: () => now }).read({ id: "owner" }),
   ).rejects.toMatchObject({
     code: "refused",
     message: expect.stringMatching(/requested credential binding/),
@@ -385,12 +385,12 @@ it("refuses missing cached scopes, duplicates and a send-only account on the rea
     accessToken({ store, now: () => now, transport: noTransport }, p.name),
   ).rejects.toThrow(/scopes missing/);
   store.putProfile(profile({ name: "duplicate" }));
-  await expect(new StoreTokenProvider("google", { store }).read("owner")).rejects.toThrow(
+  await expect(new StoreTokenProvider("google", { store }).read({ id: "owner" })).rejects.toThrow(
     /exactly one/,
   );
   store.putProfile(profile({ name: "send-only", connectionId: "sender", purpose: "send" }));
   const tokens = new StoreTokenProvider("google", { store });
-  await expect(tokens.read("sender")).rejects.toThrow(/exactly one/);
+  await expect(tokens.read({ id: "sender" })).rejects.toThrow(/exactly one/);
 });
 it("separates Gmail read/send, calendar and Microsoft mail/Teams grants", () => {
   expect(requiredScopes(profile())).toEqual([GOOGLE.MAIL_READ]);
@@ -429,8 +429,8 @@ it.each(
   };
   expect(provisionValue(record)).toEqual({ credentialRef: record.reference });
   const tokens = new StoreTokenProvider(provider, { store, now: () => now });
-  expect(await tokens.read("owner")).toBe("test-token-0123456789");
-  await expect(tokens.send("owner")).rejects.toThrow(/exactly one/);
+  expect(await tokens.read({ id: "owner" })).toHaveProperty("accessToken", "test-token-0123456789");
+  await expect(tokens.send({ id: "owner" })).rejects.toThrow(/exactly one/);
   const originalNames = store.tokenFiles();
   const replacement = {
     ...record,
@@ -439,13 +439,19 @@ it.each(
   };
   expect(provisionValue(replacement)).toEqual({ credentialRef: replacement.reference });
   expect(store.tokenFiles()).toEqual(originalNames);
-  expect(await tokens.read("owner")).toBe(replacement.value);
+  expect(await tokens.read({ id: "owner" })).toHaveProperty("accessToken", replacement.value);
   expect(() => provisionValue({ ...replacement, value: "invalid" })).toThrow(/invalid record/);
-  expect(await tokens.read("owner")).toBe(replacement.value);
+  expect(await tokens.read({ id: "owner" })).toHaveProperty("accessToken", replacement.value);
   provisionValue({ ...record, account: "other", value: "test-other-token-0123456789" });
-  expect(await tokens.read("other")).toBe("test-other-token-0123456789");
+  expect(await tokens.read({ id: "other" })).toHaveProperty(
+    "accessToken",
+    "test-other-token-0123456789",
+  );
   provisionValue({ ...record, purpose: "send", value: "test-send-token-0123456789" });
-  expect(await tokens.send("owner")).toBe("test-send-token-0123456789");
+  expect(await tokens.send({ id: "owner" })).toHaveProperty(
+    "accessToken",
+    "test-send-token-0123456789",
+  );
   const t = fixtureValue(
     store
       .tokenFiles()
@@ -453,15 +459,17 @@ it.each(
       .find((t) => t?.account === "owner" && t.purpose === "read"),
   );
   store.putTokenFile({ ...t, expiresAt: "2020-01-01T00:00:00Z" });
-  await expect(t.purpose === "read" ? tokens.read("owner") : tokens.send("owner")).rejects.toThrow(
-    /expired/,
-  );
+  await expect(
+    t.purpose === "read" ? tokens.read({ id: "owner" }) : tokens.send({ id: "owner" }),
+  ).rejects.toThrow(/expired/);
   store.putTokenFile({ ...t, expiresAt: "2099-01-01T00:00:00Z" });
-  expect(await (t.purpose === "read" ? tokens.read("owner") : tokens.send("owner"))).toBe(t.token);
+  expect(
+    await (t.purpose === "read" ? tokens.read({ id: "owner" }) : tokens.send({ id: "owner" })),
+  ).toHaveProperty("accessToken", t.token);
   store.putTokenFile({ ...t, name: "duplicate" });
-  await expect(t.purpose === "read" ? tokens.read("owner") : tokens.send("owner")).rejects.toThrow(
-    /exactly one/,
-  );
+  await expect(
+    t.purpose === "read" ? tokens.read({ id: "owner" }) : tokens.send({ id: "owner" }),
+  ).rejects.toThrow(/exactly one/);
 });
 it.each([
   "same",
@@ -495,7 +503,7 @@ it.each([
   ];
   for (const record of unrelated) store.putTokenFile(record);
   const tokens = new StoreTokenProvider("slack", { store, now: () => now });
-  expect(await tokens.read("owner")).toBe(original.token);
+  expect(await tokens.read({ id: "owner" })).toHaveProperty("accessToken", original.token);
   const options = {
     store,
     provider: original.provider,
@@ -508,10 +516,10 @@ it.each([
   };
   expect(() => provisionValue({ ...options, value: "invalid" })).toThrow(/invalid record/);
   expect(store.tokenFile(original.name)).toEqual(original);
-  expect(await tokens.read("owner")).toBe(original.token);
+  expect(await tokens.read({ id: "owner" })).toHaveProperty("accessToken", original.token);
   expect(provisionValue(options)).toEqual({ credentialRef: options.reference });
   expect(store.tokenFile(original.name)).toBeUndefined();
-  expect(await tokens.read("owner")).toBe(options.value);
+  expect(await tokens.read({ id: "owner" })).toHaveProperty("accessToken", options.value);
   const canonical = fixtureValue(
     store.tokenFiles().find((name) => !unrelated.some((record) => record.name === name)),
   );
@@ -525,9 +533,12 @@ it.each([
   const secondLegacy = legacy({ credentialRef: "op://fixture/another/token" });
   store.putTokenFile(original);
   store.putTokenFile(secondLegacy);
-  await expect(tokens.read("owner")).rejects.toThrow(/exactly one/);
+  await expect(tokens.read({ id: "owner" })).rejects.toThrow(/exactly one/);
   provisionValue({ ...options, value: "test-final-token-0123456789" });
-  expect(await tokens.read("owner")).toBe("test-final-token-0123456789");
+  expect(await tokens.read({ id: "owner" })).toHaveProperty(
+    "accessToken",
+    "test-final-token-0123456789",
+  );
   expect(store.tokenFile(original.name)).toBeUndefined();
   expect(store.tokenFile(secondLegacy.name)).toBeUndefined();
   expect(store.tokenFiles()).toHaveLength(unrelated.length + 1);
@@ -610,8 +621,10 @@ it("dry-run and real provisioning use only the fake op and never echo its values
   expect(readFileSync(log, "utf8")).toBe(`${refs.join("\n")}\n`);
   expect(new CredentialStore(dir).tokenFiles()).toHaveLength(1);
   expect(
-    await new StoreTokenProvider("slack", { store: new CredentialStore(dir) }).read("owner"),
-  ).toBe(`test-token-${refs[1]}-0123456789`);
+    await new StoreTokenProvider("slack", { store: new CredentialStore(dir) }).read({
+      id: "owner",
+    }),
+  ).toHaveProperty("accessToken", `test-token-${refs[1]}-0123456789`);
   // A failing op may write arbitrary partial output: only exit status can signal success.
   writeFileSync(
     fakeOp,
@@ -633,8 +646,10 @@ it("dry-run and real provisioning use only the fake op and never echo its values
   expect(binaryFailure.stdout).toBe("");
   expect(new CredentialStore(dir).tokenFiles()).toHaveLength(1);
   expect(
-    await new StoreTokenProvider("slack", { store: new CredentialStore(dir) }).read("owner"),
-  ).toBe(`test-token-${refs[1]}-0123456789`);
+    await new StoreTokenProvider("slack", { store: new CredentialStore(dir) }).read({
+      id: "owner",
+    }),
+  ).toHaveProperty("accessToken", `test-token-${refs[1]}-0123456789`);
 
   expect(
     spawnSync("bash", [script, "--dir", dir, "--provider", "unknown", ...refs], { env }).status,
@@ -649,8 +664,8 @@ it("uses an injected calendar resource and a default clock without widening cred
       store,
       resource: "calendar",
       transport: noTransport,
-    }).read("owner"),
-  ).toBe("test-token-0123456789");
+    }).read({ id: "owner" }),
+  ).toHaveProperty("accessToken", "test-token-0123456789");
   provisionValue({
     store,
     provider: "slack",
@@ -660,16 +675,20 @@ it("uses an injected calendar resource and a default clock without widening cred
     value: "test-token-0123456789",
     now,
   });
-  expect(await new StoreTokenProvider("slack", { store }).read("owner")).toBe(
+  expect(await new StoreTokenProvider("slack", { store }).read({ id: "owner" })).toHaveProperty(
+    "accessToken",
     "test-token-0123456789",
   );
   const record = fixtureValue(store.tokenFile(fixtureValue(store.tokenFiles()[0])));
   store.putTokenFile({ ...record, expiresAt: "2099-01-01T00:00:00Z" });
-  expect(await new StoreTokenProvider("slack", { store }).read("owner")).toBe(
+  expect(await new StoreTokenProvider("slack", { store }).read({ id: "owner" })).toHaveProperty(
+    "accessToken",
     "test-token-0123456789",
   );
   await expect(
-    new StoreTokenProvider("slack", { store, now: () => new Date(Number.NaN) }).read("owner"),
+    new StoreTokenProvider("slack", { store, now: () => new Date(Number.NaN) }).read({
+      id: "owner",
+    }),
   ).rejects.toThrow(/expired/);
 });
 

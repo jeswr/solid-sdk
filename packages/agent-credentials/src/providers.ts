@@ -32,8 +32,8 @@ export const ALLOWED_ORIGINS: ReadonlySet<string> = new Set([
   "https://login.microsoftonline.com",
   "https://graph.microsoft.com",
 ]);
-const CALL_TIMEOUT_MS = 15_000;
-const MAX_BODY = 256 * 1024;
+export const CALL_TIMEOUT_MS = 15_000;
+export const MAX_BODY = 256 * 1024;
 
 /** One bounded call to an allow-listed origin; JSON answer (or a typed error, never the body). */
 export async function call(
@@ -51,7 +51,7 @@ export async function call(
     throw new HelperError("invalid", `${what}: not a URL`);
   }
   if (!ALLOWED_ORIGINS.has(origin))
-    throw new HelperError("refused", `${what}: ${origin} is not an allowed provider origin`);
+    throw new HelperError("refused", `${what}: not an allowed provider origin`);
   let res: Response;
   try {
     res = await transport(url, {
@@ -260,6 +260,34 @@ const tokenAnswer = z.object({
 export type TokenAnswer = z.infer<typeof tokenAnswer>;
 const errorAnswer = z.object({ error: z.string().max(100) });
 
+// Only exact protocol codes can enter diagnostics; never sanitize or truncate arbitrary text.
+const oauthErrors = new Map(
+  [
+    "invalid_request",
+    "invalid_client",
+    "invalid_grant",
+    "unauthorized_client",
+    "unsupported_grant_type",
+    "invalid_scope",
+    "access_denied",
+    "unsupported_response_type",
+    "temporarily_unavailable",
+    "server_error",
+    "interaction_required",
+    "consent_required",
+    "login_required",
+    "account_selection_required",
+    "invalid_request_uri",
+    "invalid_request_object",
+    "request_not_supported",
+    "request_uri_not_supported",
+    "registration_not_supported",
+  ].map((code) => [code, code]),
+);
+export function oauthErrorDiagnostic(error: string): string | undefined {
+  return oauthErrors.get(error);
+}
+
 function tokenEndpoint(p: Profile): string {
   return p.provider === "google"
     ? GOOGLE.token
@@ -284,7 +312,9 @@ async function tokenCall(
   );
   if (status !== 200) {
     const e = errorAnswer.safeParse(body);
-    const code = e.success ? e.data.error.replace(/[^a-z_]/gi, "").slice(0, 40) : `HTTP ${status}`;
+    const code = e.success
+      ? (oauthErrorDiagnostic(e.data.error) ?? `HTTP ${status}`)
+      : `HTTP ${status}`;
     if (code === "invalid_grant")
       throw new HelperError("revoked", `${what}: the grant is no longer valid (invalid_grant)`);
     if (status >= 500 || status === 429)
@@ -594,9 +624,13 @@ export async function listCalendars(
       });
     const next: string | undefined = r.data["@odata.nextLink"];
     if (next !== undefined) {
-      const u = new URL(next);
-      if (u.origin !== MICROSOFT.graph || u.pathname !== "/v1.0/me/calendars")
+      try {
+        const u = new URL(next);
+        if (u.origin !== MICROSOFT.graph || u.pathname !== "/v1.0/me/calendars")
+          throw new Error("unexpected paging link");
+      } catch {
         throw new HelperError("unavailable", "calendar list: unexpected paging link (refused)");
+      }
     }
     url = next;
   }

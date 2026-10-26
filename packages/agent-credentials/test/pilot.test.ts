@@ -930,7 +930,7 @@ describe("private store and human-facing commands", () => {
           type: "helper",
           command: process.execPath,
           args: [
-            expect.stringMatching(/cli\.(ts|js)$/),
+            expect.stringMatching(/bin\.(ts|js)$/),
             "--dir",
             dir,
             "token",
