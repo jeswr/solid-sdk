@@ -1,8 +1,9 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
-import env from "@zazuko/env-node";
+import { parseRdf } from "@jeswr/fetch-rdf";
+import { createRdfEngine } from "@jeswr/rdf-engine/node";
 import { Parser } from "n3";
-import SHACLValidator from "rdf-validate-shacl";
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 import { buildAs2Message } from "./as2.js";
 import type { CanonicalMessage } from "./canonical.js";
 import { messageShapeTtl } from "./shape.js";
@@ -13,25 +14,19 @@ const URL_ = "http://localhost:3000/alice/chat/msg-1.ttl#it";
 const ME = "http://localhost:3000/alice/profile/card#me";
 const BOB = "http://localhost:3000/bob/profile/card#me";
 
-// rdf-validate-shacl needs a clownface-capable factory (@zazuko/env). Quads are
-// fed straight from an n3 Parser/Store into an env dataset — the exact pattern
-// solid-task-model's shape test uses, so verdicts match across the suite.
-function toDataset(quads: Iterable<Parameters<ReturnType<typeof env.dataset>["add"]>[0]>) {
-  const ds = env.dataset();
-  for (const q of quads) ds.add(q);
-  return ds;
-}
+const engine = createRdfEngine();
+afterAll(() => engine.dispose());
 
-const shapes = toDataset(new Parser().parse(messageShapeTtl()));
+const shapes = messageShapeTtl();
 
 async function validateTtl(ttl: string) {
-  const data = toDataset(new Parser({ baseIRI: URL_ }).parse(ttl));
-  return await new SHACLValidator(shapes, { factory: env }).validate(data);
+  const data = await parseRdf(ttl, "text/turtle", { baseIRI: URL_ });
+  return engine.validate(data, shapes);
 }
 
 async function validateStore(msg: CanonicalMessage) {
   const store = buildAs2Message(URL_, msg);
-  return await new SHACLValidator(shapes, { factory: env }).validate(toDataset(store));
+  return await engine.validate(store, shapes);
 }
 
 describe("SHACL shape (shapes/message.shacl.ttl)", () => {
@@ -140,7 +135,7 @@ describe("SHACL shape (shapes/message.shacl.ttl)", () => {
     `;
     const report = await validateTtl(ttl);
     expect(report.conforms).toBe(false);
-    expect(report.results.some((r) => String(r.path?.value).endsWith("content"))).toBe(true);
+    expect(report.results.some((r) => String(r.path).endsWith("content>"))).toBe(true);
   });
 
   it("a message with NO published timestamp is non-conforming (published is required)", async () => {
@@ -151,7 +146,7 @@ describe("SHACL shape (shapes/message.shacl.ttl)", () => {
     `;
     const report = await validateTtl(ttl);
     expect(report.conforms).toBe(false);
-    expect(report.results.some((r) => String(r.path?.value).endsWith("published"))).toBe(true);
+    expect(report.results.some((r) => String(r.path).endsWith("published>"))).toBe(true);
   });
 
   it("a non-http(s) author is rejected by the sh:pattern", async () => {
@@ -165,7 +160,7 @@ describe("SHACL shape (shapes/message.shacl.ttl)", () => {
     `;
     const report = await validateTtl(ttl);
     expect(report.conforms).toBe(false);
-    expect(report.results.some((r) => String(r.path?.value).endsWith("attributedTo"))).toBe(true);
+    expect(report.results.some((r) => String(r.path).endsWith("attributedTo>"))).toBe(true);
   });
 
   it("a non-http(s) dct:isReplacedBy is rejected by the sh:pattern", async () => {
@@ -182,7 +177,7 @@ describe("SHACL shape (shapes/message.shacl.ttl)", () => {
     `;
     const report = await validateTtl(ttl);
     expect(report.conforms).toBe(false);
-    expect(report.results.some((r) => String(r.path?.value).endsWith("isReplacedBy"))).toBe(true);
+    expect(report.results.some((r) => String(r.path).endsWith("isReplacedBy>"))).toBe(true);
   });
 
   it("an http(s) dct:isReplacedBy conforms", async () => {
@@ -209,7 +204,7 @@ describe("SHACL shape (shapes/message.shacl.ttl)", () => {
     `;
     const report = await validateTtl(ttl);
     expect(report.conforms).toBe(false);
-    expect(report.results.some((r) => String(r.path?.value).endsWith("content"))).toBe(true);
+    expect(report.results.some((r) => String(r.path).endsWith("content>"))).toBe(true);
   });
 
   it("an actionable message typed BOTH wf:Open and wf:Closed warns (advisory state rule)", async () => {
@@ -224,7 +219,7 @@ describe("SHACL shape (shapes/message.shacl.ttl)", () => {
     const report = await validateTtl(ttl);
     // The state shape is sh:Warning severity → a result, but advisory (not fatal).
     expect(report.results.length).toBeGreaterThan(0);
-    expect(report.results.some((r) => String(r.severity?.value).endsWith("Warning"))).toBe(true);
+    expect(report.results.some((r) => String(r.severity).endsWith("Warning"))).toBe(true);
   });
 
   it("a plain message (no wf:Task, no state class) conforms — the overlay is optional", async () => {

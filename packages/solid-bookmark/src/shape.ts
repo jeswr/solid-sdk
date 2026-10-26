@@ -1,13 +1,14 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 /**
  * Access to the canonical ontology + SHACL artifacts (`bookmark.ttl`,
  * `bookmark.shacl.ttl`).
  *
  * Both `.ttl` files live at the package root (the human- and tool-readable
- * artifacts a triplestore / `rdf-validate-shacl` consume directly). This module
+ * artifacts a triplestore / `rdf-engine.validate` consume directly). This module
  * reads them as strings so consumers can feed them into whatever RDF/SHACL engine
- * they already depend on (the suite uses `rdf-validate-shacl` over a
- * `@zazuko/env` dataset). Reading the file rather than embedding a copy means the
+ * they already depend on (the suite uses `@jeswr/rdf-engine` with real Node WASM).
+ * Reading the file rather than embedding a copy means the
  * string can never drift from the canonical `.ttl`.
  *
  * The relative path `../bookmark.shacl.ttl` resolves identically from the source
@@ -46,7 +47,7 @@ export function bookmarkOntologyTtl(): string {
 /**
  * The canonical `book:Bookmark` SHACL shape, as a Turtle string. Cached after the
  * first read. Pass it (with the data graph) to a SHACL validator — see the
- * round-trip + shape fixture tests for the `rdf-validate-shacl` pattern.
+ * round-trip + shape fixture tests for the `rdf-engine.validate` pattern.
  */
 export function bookmarkShapeTtl(): string {
   if (cachedShape === undefined) cachedShape = readFileSync(BOOKMARK_SHAPE_PATH, "utf8");

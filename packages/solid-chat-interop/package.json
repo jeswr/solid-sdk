@@ -1,7 +1,7 @@
 {
   "name": "@jeswr/solid-chat-interop",
   "version": "0.0.1",
-  "description": "Chat/conversation interop reconciler — maps between ActivityStreams 2.0 (the suite's canonical chat write model), SolidOS meeting:LongChat (the installed-base read), and an external-schema adapter seam (LibreChat as proof). Pure-RDF, non-server-touching, typed accessors only.",
+  "description": "Chat/conversation interop reconciler \u2014 maps between ActivityStreams 2.0 (the suite's canonical chat write model), SolidOS meeting:LongChat (the installed-base read), and an external-schema adapter seam (LibreChat as proof). Pure-RDF, non-server-touching, typed accessors only.",
   "type": "module",
   "license": "MIT",
   "author": "Jesse Wright",
@@ -70,10 +70,9 @@
     "@rdfjs/types": "^2.0.1",
     "@types/n3": "^1.26.1",
     "@types/node": "^20",
-    "@zazuko/env-node": "^3.0.0",
-    "rdf-validate-shacl": "^0.6.5",
     "typescript": "^5",
-    "vitest": "^4.1.8"
+    "vitest": "^4.1.8",
+    "@jeswr/rdf-engine": "workspace:*"
   },
   "engines": {
     "node": ">=24"

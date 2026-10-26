@@ -1,8 +1,9 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
-import env from "@zazuko/env-node";
+import { parseRdf } from "@jeswr/fetch-rdf";
+import { createRdfEngine } from "@jeswr/rdf-engine/node";
 import { Parser } from "n3";
-import SHACLValidator from "rdf-validate-shacl";
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 import { type SceneData, serializeScene } from "./scene.js";
 import { drawingOntologyTtl, drawingShapeTtl } from "./shape.js";
 import { DRAW_SCENE_IRI } from "./vocab.js";
@@ -10,20 +11,14 @@ import { DRAW_SCENE_IRI } from "./vocab.js";
 const URL_ = "http://localhost:3000/alice/drawings/diagram.ttl";
 const CANVAS = "http://localhost:3000/alice/drawings/diagram.excalidraw";
 
-// rdf-validate-shacl needs a clownface-capable factory (@zazuko/env). Quads are
-// fed straight from an n3 Parser into an env dataset — the exact pattern the
-// suite's solid-task-model shape test uses, so verdicts match across the suite.
-function toDataset(quads: Iterable<Parameters<ReturnType<typeof env.dataset>["add"]>[0]>) {
-  const ds = env.dataset();
-  for (const q of quads) ds.add(q);
-  return ds;
-}
+const engine = createRdfEngine();
+afterAll(() => engine.dispose());
 
-const shapes = toDataset(new Parser().parse(drawingShapeTtl()));
+const shapes = drawingShapeTtl();
 
-function validateTtl(ttl: string) {
-  const data = toDataset(new Parser({ baseIRI: URL_ }).parse(ttl));
-  return new SHACLValidator(shapes, { factory: env }).validate(data);
+async function validateTtl(ttl: string) {
+  const data = await parseRdf(ttl, "text/turtle", { baseIRI: URL_ });
+  return engine.validate(data, shapes);
 }
 
 describe("the SHACL shape + ontology TTLs are themselves valid Turtle", () => {
@@ -80,7 +75,7 @@ describe("SHACL shape (drawing.shacl.ttl)", () => {
     `;
     const report = await validateTtl(ttl);
     expect(report.conforms).toBe(false);
-    expect(report.results.some((r) => String(r.path?.value).endsWith("sceneDocument"))).toBe(true);
+    expect(report.results.some((r) => String(r.path).endsWith("sceneDocument>"))).toBe(true);
   });
 
   it("a draw:sceneDocument that is a literal (not an IRI) is rejected", async () => {
@@ -90,7 +85,7 @@ describe("SHACL shape (drawing.shacl.ttl)", () => {
     `;
     const report = await validateTtl(ttl);
     expect(report.conforms).toBe(false);
-    expect(report.results.some((r) => String(r.path?.value).endsWith("sceneDocument"))).toBe(true);
+    expect(report.results.some((r) => String(r.path).endsWith("sceneDocument>"))).toBe(true);
   });
 
   it("two draw:sceneDocument links are rejected (maxCount 1)", async () => {
@@ -102,7 +97,7 @@ describe("SHACL shape (drawing.shacl.ttl)", () => {
     `;
     const report = await validateTtl(ttl);
     expect(report.conforms).toBe(false);
-    expect(report.results.some((r) => String(r.path?.value).endsWith("sceneDocument"))).toBe(true);
+    expect(report.results.some((r) => String(r.path).endsWith("sceneDocument>"))).toBe(true);
   });
 
   it("a non-dateTime dct:created is rejected", async () => {
@@ -115,7 +110,7 @@ describe("SHACL shape (drawing.shacl.ttl)", () => {
     `;
     const report = await validateTtl(ttl);
     expect(report.conforms).toBe(false);
-    expect(report.results.some((r) => String(r.path?.value).endsWith("created"))).toBe(true);
+    expect(report.results.some((r) => String(r.path).endsWith("created>"))).toBe(true);
   });
 
   it("a thumbnail that is a literal (not an IRI) is rejected", async () => {
@@ -127,6 +122,6 @@ describe("SHACL shape (drawing.shacl.ttl)", () => {
     `;
     const report = await validateTtl(ttl);
     expect(report.conforms).toBe(false);
-    expect(report.results.some((r) => String(r.path?.value).endsWith("thumbnail"))).toBe(true);
+    expect(report.results.some((r) => String(r.path).endsWith("thumbnail>"))).toBe(true);
   });
 });
