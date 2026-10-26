@@ -31,7 +31,7 @@ it("hydrates a workspace whose code loads after the session settles against the 
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const host = document.createElement("div");
   mocks.Workspace = Status;
-  host.innerHTML = renderToString(createElement(DocsShell, { children: null }));
+  host.innerHTML = renderToString(createElement(DocsShell, null, null));
   document.body.append(host);
   expect(host.textContent).toBe("loading");
   // The workspace's code arrives only after the demo pod has opened, like a slow route chunk.
@@ -40,7 +40,7 @@ it("hydrates a workspace whose code loads after the session settles against the 
     () => new Promise<{ default: typeof Status }>((resolve) => (load = resolve)),
   );
   const recoverable = vi.fn();
-  const root = hydrateRoot(host, createElement(DocsShell, { children: null }), {
+  const root = hydrateRoot(host, createElement(DocsShell, null, null), {
     onRecoverableError: recoverable,
   });
   try {
