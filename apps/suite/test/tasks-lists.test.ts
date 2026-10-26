@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { describe, expect, it } from "vitest";
 import {
   compareDue,
@@ -333,6 +334,24 @@ describe("recurrence arithmetic", () => {
     for (const completedOccurrences of [-1, 1.5, NaN])
       fails(() => nextOccurrence(undefined, rule("DAILY"), { ...context(), completedOccurrences }));
   });
+  it.each([
+    ["2026-03-28T01:30:00Z", "2026-03-28T01:30:00Z"],
+    ["2026-03-28T01:30:00Z", "2026-03-29T00:59:59Z"],
+    ["2026-10-24T00:30:00Z", "2026-10-24T00:30:00Z"],
+  ])("exhausts the rule from %s before resolving a gap/fold beyond %s", (at, until) => {
+    expect(
+      nextOccurrence(timed(at), rule("DAILY", { until: timed(until) }), context()),
+    ).toBeUndefined();
+  });
+  it.each([
+    ["2026-03-28T01:30:00Z", "2026-03-29T02:00:00Z"],
+    ["2026-10-24T00:30:00Z", "2026-10-25T02:00:00Z"],
+  ])("still rejects an in-range gap/fold after %s", (at, until) => {
+    fails(
+      () => nextOccurrence(timed(at), rule("DAILY", { until: timed(until) }), context()),
+      "unresolvable-local-time",
+    );
+  });
   it("fails closed on impossible calendar cycles and date overflow", () => {
     fails(
       () =>
@@ -444,6 +463,20 @@ describe("completion plans and subtask roll-up", () => {
     );
     expect(plan.task.due).toEqual(timed("2026-10-27T12:00:00.000Z"));
     expect(plan.completedOccurrence).not.toHaveProperty("due");
+  });
+  it("closes an until-exhausted original before the next occurrence's DST gap", () => {
+    const due = timed("2026-03-28T01:30:00Z");
+    const original = task("repeat", { due, recurrence: rule("DAILY", { until: due }) });
+    const before = structuredClone(original);
+    expect(completeTask(original, context("2026-03-28T02:00:00Z"))).toEqual({
+      task: {
+        ...original,
+        state: "completed",
+        completedAt: "2026-03-28T02:00:00.000Z",
+        modifiedAt: "2026-03-28T02:00:00.000Z",
+      },
+    });
+    expect(original).toEqual(before);
   });
   it("rejects closed, inconsistently timestamped or unidentifiable completions", () => {
     fails(() => completeTask(task("closed", { state: "completed" }), context()));

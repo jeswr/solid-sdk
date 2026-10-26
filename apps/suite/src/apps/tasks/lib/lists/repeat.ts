@@ -1,10 +1,9 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import {
   DAY,
-  dateTime,
   dayOf,
   dueLocal,
-  instant,
   localTime,
   range,
   readContext,
@@ -123,14 +122,10 @@ export function nextOccurrence(
       ? localTime(now, format)
       : dueLocal(due, format);
   const local = nextLocal(allDay ? dayOf(range(base)) : range(base), rule);
-  const next: DueDate = allDay
+  // Bound calendar occurrences before resolving wall times: an exhausted rule
+  // must not fail because an out-of-range occurrence falls in a DST gap/fold.
+  if (rule.until !== undefined && local > dueLocal(rule.until, format)) return undefined;
+  return allDay
     ? { kind: "all-day", date: new Date(local).toISOString().slice(0, 10) }
     : { kind: "timed", at: new Date(resolveLocal(local, format)).toISOString() };
-  if (rule.until !== undefined) {
-    const limit =
-      rule.until.kind === "all-day" ? dateTime(rule.until.date) : instant(rule.until.at);
-    const value = next.kind === "all-day" ? dateTime(next.date) : instant(next.at);
-    if (value > limit) return undefined;
-  }
-  return next;
 }
