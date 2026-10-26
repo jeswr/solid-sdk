@@ -1,3 +1,5 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /**
  * Twitch → Media. `/helix/channels/followed` as `schema:WatchAction` (the
  * channels you follow, with when you followed them). Helix requires a
@@ -15,12 +17,14 @@ import { arr, optionalDate, optionalText, SkipCounter } from "../core/safe.js";
 import type { ImportContext, ImportOutcome, IntegrationAdapter } from "../core/types.js";
 import { CLASSES, WatchAction } from "../core/vocab.js";
 import { TWITCH_FIXTURES, type TwitchFollowsAnswer, type TwitchUsersAnswer } from "./fixtures.js";
+import { vocabMap } from "./vocab-map.js";
 
 const ID = "twitch";
 const API = "https://api.twitch.tv/helix";
 const SCOPES = ["user:read:follows"] as const;
 
 export const twitchAdapter: IntegrationAdapter = {
+  vocabMap,
   metadata: {
     id: ID,
     name: "Twitch",

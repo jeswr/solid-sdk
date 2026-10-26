@@ -1,3 +1,5 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /**
  * Facebook → Social & interests. Your own posts (`/me/posts`) as
  * `schema:SocialMediaPosting` and the groups you belong to (`/me/groups`) as
@@ -14,12 +16,14 @@ import { getJson } from "../core/fixture-fetch.js";
 import type { ImportContext, ImportOutcome, IntegrationAdapter } from "../core/types.js";
 import { CLASSES, Group, SocialMediaPosting } from "../core/vocab.js";
 import { FACEBOOK_FIXTURES, type FbGroupsAnswer, type FbPostsAnswer } from "./fixtures.js";
+import { vocabMap } from "./vocab-map.js";
 
 const ID = "facebook";
 const API = "https://graph.facebook.com/v20.0";
 const SCOPES = ["public_profile", "user_posts", "groups_access_member_info"] as const;
 
 export const facebookAdapter: IntegrationAdapter = {
+  vocabMap,
   metadata: {
     id: ID,
     name: "Facebook",

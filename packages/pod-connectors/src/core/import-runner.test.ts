@@ -201,7 +201,8 @@ it("runs over explicit storage and source ports without using global fetch", asy
       },
     };
     const report = await runImport({ adapter, mode: "live", podWriter, sourceAuth });
-    expect(report.written).toEqual(written);
+    expect(report.written).toEqual(written.filter((w) => w.category !== "provenance"));
+    expect(written.filter((w) => w.category === "provenance")).toHaveLength(1);
     expect(report.indexUrl).toBe("https://memory.test/index");
     expect(resolved).toContain("music/songs.ttl");
     expect(sourceAuth.fetch).toHaveBeenCalledOnce();

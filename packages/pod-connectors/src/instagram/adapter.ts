@@ -1,3 +1,5 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /**
  * Instagram → Media + Social. Your own posts (`/me/media`) saved two ways:
  * the visual asset as `schema:ImageObject` / `schema:VideoObject` (Media), and
@@ -13,12 +15,14 @@ import { getJson } from "../core/fixture-fetch.js";
 import type { ImportContext, ImportOutcome, IntegrationAdapter } from "../core/types.js";
 import { CLASSES, MediaItem, SocialMediaPosting } from "../core/vocab.js";
 import { type IgMediaAnswer, INSTAGRAM_FIXTURES } from "./fixtures.js";
+import { vocabMap } from "./vocab-map.js";
 
 const ID = "instagram";
 const API = "https://graph.instagram.com";
 const SCOPES = ["instagram_graph_user_profile", "instagram_graph_user_media"] as const;
 
 export const instagramAdapter: IntegrationAdapter = {
+  vocabMap,
   metadata: {
     id: ID,
     name: "Instagram",
