@@ -1,5 +1,4 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
-// AUTHORED-BY Codex GPT-6
 /**
  * The Actor's DETERMINISTIC proposal derivation (§5.1 hot path). Given the reified
  * interpretations the Reader landed and the inbound context, it produces

@@ -1,4 +1,3 @@
-// AUTHORED-BY Codex GPT-6
 import type { ResultStream } from "./types.js";
 
 /** Keep even unstarted streams disposable; async-generator finally alone cannot do that. */

@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 /**
  * Twitch → Media. `/helix/channels/followed` as `schema:WatchAction` (the
  * channels you follow, with when you followed them). Helix requires a

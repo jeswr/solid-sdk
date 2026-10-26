@@ -1,4 +1,3 @@
-// AUTHORED-BY Codex GPT-6
 /**
  * Durable handler state for roles. Several existing domain handlers keep working state in
  * memory (the comparator's collected plans, the patient agent's grant and validated resources,

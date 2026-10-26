@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 /**
  * Fitbit → Health. Your logged activities (`/1/user/-/activities/list.json`)
  * as `schema:ExerciseAction` (type, start time, duration, distance).

@@ -1,4 +1,3 @@
-// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
 import type { DocumentLoader } from "@jeswr/fetch-rdf";
 import federation from "./contexts/federation-context.json" with { type: "json" };

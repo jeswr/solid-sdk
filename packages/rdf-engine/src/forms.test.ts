@@ -1,4 +1,3 @@
-// AUTHORED-BY Codex GPT-6
 import { DataFactory, Parser, Store } from "n3";
 import { afterEach, expect, test, vi } from "vitest";
 import { createEngine } from "./engine.js";

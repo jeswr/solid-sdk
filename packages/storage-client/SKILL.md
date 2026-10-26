@@ -4,6 +4,7 @@ description: Work on @jeswr/storage-client, the protocol-neutral storage clients
 ---
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- AUTHORED-BY Claude Opus 5.5 -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # @jeswr/storage-client
 
@@ -18,8 +19,13 @@ T-021 adds the Solid backend's read side: `./solid` exports
 Solid mutations reject with `unsupported` until T-022, LWS mutations until T-024.
 
 Solid read side (ADR-003 §6):
-- Every URL must be absolute and pass guarded-fetch `assertWithinPodScope(root, url)`; otherwise
-  `scope`, before any request. The canonical URL is the one fetched. Redirects are never followed
+- Every URL must be absolute: its standalone parse (`new URL(url)`, without a base) must pass
+  guarded-fetch `assertWithinPodScope(root, …)` and equal the root-based resolution of the input;
+  otherwise `scope`, before any request, on both backends. This rejects ambiguous same-scheme
+  references (`https:host/path`, `https:/path` and their backslash variants), redacting credentials
+  from errors and causes. The canonical scoped URL is always fetched, including cursor pages;
+  opaque query spelling/order survives canonicalisation. Solid scopes supplied cursors before
+  rejecting them with `bad-request` (one page). Redirects are never followed
   (`redirect: 'manual'`; a 3xx is `invalid-response`). Transport failures are retryable `network`
   errors; aborts are non-retryable `network` errors.
 - `list` GETs Turtle and reads `ldp:contains` through `@solid/object`'s `Container`, with a local
@@ -42,7 +48,10 @@ Solid read side (ADR-003 §6):
   reports a non-RDF or unparsable body as `not-rdf`. `metadata` reads the `describedby` document as
   RDF (`unsupported` when none is advertised).
 - `Link` and WAC-Allow parsing reuse `@jeswr/storage-capabilities` (`parseLinkHeaders`,
-  `parseWacAllow`).
+  `parseWacAllow`). Both backends parse authoritative Link headers with explicit overflow rejection:
+  at most **64 KiB UTF-8 per combined field value** and **1,024 nonempty members** (including malformed
+  members). Overflow gives `invalid-response` and discards the body before storage validation or
+  type, next, describedby, up or linkset discovery can use partial results. Exact limits are accepted.
 
 ## LWS read side
 
@@ -50,7 +59,9 @@ Solid read side (ADR-003 §6):
   (including empty delimiters); malformed container roots throw TypeError, unsafe roots `scope`,
   like Solid. `storage` is StorageDescription.id; default `root`: sparq's `LwsConfig::storage()`
   returns the root and its lws#storage link names that URL (`src/lws/mod.rs:421-425`,
-  `src/lws/resources.rs:684-704`). `features` defaults to `deriveFeatures` for an undescribed LWS
+  `src/lws/resources.rs:684-704`). Normalise `storage` once with `new URL(storage).href`; non-absolute
+  or non-HTTP(S) ids throw TypeError. Link comparisons use that normalised id, so equivalent URL
+  spellings match. `features` defaults to `deriveFeatures` for an undescribed LWS
   storage (empty services/capabilities, probe source), or retains the supplied Features object.
 - Design call: `isWithinStorage` is the synchronous guarded-fetch root-prefix check, like Solid.
   Every request must pass `scoped(root, …)` before fetch; storage-id equality never authorises an
@@ -60,7 +71,7 @@ Solid read side (ADR-003 §6):
   are accepted; links with a different anchor context are ignored. Errors never echo the foreign id.
 - `list` takes a scoped container ending `/`, without query/fragment (even empty `?`/`#`), else
   `bad-request`. GET Accept: `application/lws+json, application/ld+json;q=0.5`. Cursors are scoped
-  first, then fetched verbatim, including opaque queries. Only 200 succeeds; other 2xx/3xx are
+  first, then fetched as canonical URLs with opaque queries preserved. Only 200 succeeds; other 2xx/3xx are
   `invalid-response`, HTTP errors use the shared mapping, redirects are never followed.
 - Listing media type must be lws+json or ld+json. JSON is capped at **16 MiB of streamed bytes**
   for listings and linksets, independently of Content-Length; overflow/bad JSON → `invalid-response`.

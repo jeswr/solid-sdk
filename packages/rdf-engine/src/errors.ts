@@ -1,4 +1,3 @@
-// AUTHORED-BY Codex GPT-6
 
 /** Form derivation cannot preserve named-graph data or shape semantics. */
 export class FormGraphUnsupportedError extends TypeError {

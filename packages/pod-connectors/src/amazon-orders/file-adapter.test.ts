@@ -1,4 +1,3 @@
-// AUTHORED-BY Codex GPT-6
 import { DataFactory } from "n3";
 import { describe, expect, it } from "vitest";
 import { fileImport, memoryFile, TEST_POD_ROOT } from "../core/testing.js";

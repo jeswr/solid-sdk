@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 /**
  * TikTok → Media + Social. Your own videos (`POST /v2/video/list/`) saved two
  * ways: the clip as `schema:VideoObject` (Media), and the post itself as

@@ -1,4 +1,3 @@
-// AUTHORED-BY Codex GPT-6
 
 import type { OdrlPolicy, RequestContext } from "@jeswr/solid-odrl";
 import { ACTION_IRI, evaluate, policyToRdf } from "@jeswr/solid-odrl";

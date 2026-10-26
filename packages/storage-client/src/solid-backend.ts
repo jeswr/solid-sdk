@@ -115,7 +115,7 @@ export function createSolidBackend(options: SolidBackendOptions): StorageClient 
     expect: ReadExpectation,
   ): Promise<ReadShape> {
     await acceptReadStatus(method, url, response, expect);
-    const links = linksOf(response, url);
+    const links = linksOf(response, url, method);
     const types = (links.get("type") ?? []).map((link) => link.target);
     const describedBy = links.get("describedby")?.[0]?.target ?? null;
     const status = response.status as 200 | 206 | 304;
@@ -180,7 +180,7 @@ export function createSolidBackend(options: SolidBackendOptions): StorageClient 
       if (opts.cursor !== undefined) {
         throw new StorageError("bad-request", {
           method: "GET",
-          url: opts.cursor.url,
+          url: scoped(root, "GET", opts.cursor.url),
           message: "Solid listings have one page",
         });
       }

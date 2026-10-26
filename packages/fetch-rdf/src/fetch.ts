@@ -1,4 +1,3 @@
-// AUTHORED-BY Codex GPT-6
 /**
  * fetchRdf — GET an RDF resource and parse the body in one call.
  *

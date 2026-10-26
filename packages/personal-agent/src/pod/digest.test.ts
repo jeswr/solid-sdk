@@ -1,5 +1,4 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
-// AUTHORED-BY Codex GPT-6
 import { describe, expect, it } from "vitest";
 import { proposalContentDigest } from "./digest.js";
 import type { ActionProposal } from "./proposals.js";

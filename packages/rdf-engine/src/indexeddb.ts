@@ -1,4 +1,3 @@
-// AUTHORED-BY Codex GPT-6
 import type { IndexPersistence } from "./types.js";
 
 /** Isolate snapshots by database and key; factory injection supports embedded browser contexts. */

@@ -1,4 +1,3 @@
-// AUTHORED-BY Codex GPT-6
 /**
  * RDF parsing dispatch — body in, dataset out.
  *

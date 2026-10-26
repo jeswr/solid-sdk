@@ -1,6 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-5
-// AUTHORED-BY Codex GPT-6
 /**
  * The public RECONCILER — read either chat shape into the canonical model, write
  * the canonical model into either shape.

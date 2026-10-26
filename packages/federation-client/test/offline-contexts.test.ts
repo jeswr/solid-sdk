@@ -1,4 +1,3 @@
-// AUTHORED-BY Codex GPT-6
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";

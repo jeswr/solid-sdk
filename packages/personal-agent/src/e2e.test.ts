@@ -1,5 +1,4 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
-// AUTHORED-BY Codex GPT-6
 /**
  * The GOLDEN-MASTER end-to-end flow over doubled I/O (an in-memory pod + a mock Gmail):
  * untrusted email → Reader → owner-private pod → deterministic Actor proposal → ODRL-mandate-

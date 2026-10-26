@@ -116,17 +116,18 @@ describe("sparq fixtures and pagination", () => {
     expect(JSON.parse(await raw.text()).items).toHaveLength(500);
   });
 
-  test("cursor URLs are scoped and opaque, including their query spelling", async () => {
+  test("cursor URLs are canonicalised while preserving opaque query spelling", async () => {
     const cursor = `${ROOT.toUpperCase()}other?token=a%2fb&x=1&x=2`;
+    const canonical = new URL(cursor).href;
     const { storage, calls } = backend({
-      [`GET ${cursor}`]: {
+      [`GET ${canonical}`]: {
         status: 200,
         headers: { "content-type": 'application/ld+json; profile="https://www.w3.org/ns/lws/v1"' },
         body: JSON.stringify(pageBody([{ id: "child" }], { type: "ContainerPage" })),
       },
     });
     const page = await storage.list(CONTAINER, { cursor: { url: cursor } });
-    expect(calls[0]?.url).toBe(cursor);
+    expect(calls[0]?.url).toBe(canonical);
     expect(page.items[0]?.url).toBe(`${ROOT}child`);
     for (const url of [FOREIGN, "../outside", `${ROOT}..%2fprivate`, "file:///tmp/x"])
       await rejects(storage.list(CONTAINER, { cursor: { url } }), "scope");
@@ -151,6 +152,59 @@ describe("sparq fixtures and pagination", () => {
     const { storage, calls } = backend(exchanges);
     await rejects(collect(storage.listAll(CONTAINER)));
     expect(calls).toHaveLength(3);
+  });
+
+  test("sparq headers with 60 extra types before paging links retain every page", async () => {
+    const types = Array.from({ length: 60 }, (_, i) => `<urn:extra:${i}>; rel=type`);
+    const next = `${CONTAINER}?token=a%2fb&x=1&x=2`;
+    const links = [
+      storageLink(),
+      `<${ROOT}>; rel=up`,
+      `<${CONTAINER}.meta>; rel=linkset`,
+      `<${LWS}Container>; rel=type`,
+      ...types,
+      `<${CONTAINER}>; rel=first`,
+      `<${next}>; rel=next`,
+      `<${next}>; rel=last`,
+    ];
+    expect(links).toHaveLength(67);
+    const { storage, calls } = backend({
+      [`GET ${CONTAINER}`]: {
+        status: 200,
+        headers: { "content-type": "application/lws+json", link: links.join(", ") },
+        body: JSON.stringify(pageBody([{ id: "a" }], { totalItems: 2 })),
+      },
+      [`GET ${next}`]: {
+        status: 200,
+        headers: { "content-type": "application/lws+json" },
+        body: JSON.stringify(pageBody([{ id: "b" }], { totalItems: 2 })),
+      },
+    });
+    expect((await collect(storage.listAll(CONTAINER))).map(({ url }) => url)).toEqual([
+      `${CONTAINER}a`,
+      `${CONTAINER}b`,
+    ]);
+    expect(calls.map(({ url }) => url)).toEqual([CONTAINER, next]);
+  });
+
+  test("cursor fetch uses the canonical scoped destination under Fetch's Request parser", async () => {
+    const cursor = "HTTPS://LWS.EXAMPLE:443/a/../notes/?token=a%2fb&x=1&x=2";
+    const canonical = new URL(cursor).href;
+    const requests: Request[] = [];
+    const fetch = vi.fn<AuthFetch>(async (input, init) => {
+      const headers = new Headers(init?.headers);
+      headers.set("Authorization", "Bearer probe");
+      requests.push(new Request(input, { ...init, headers }));
+      return new Response(JSON.stringify(pageBody([{ id: "child" }])), {
+        headers: { "content-type": "application/lws+json" },
+      });
+    });
+    const storage = createLwsBackend({ root: ROOT, fetch });
+    const page = await storage.list(CONTAINER, { cursor: { url: cursor } });
+    expect(fetch.mock.calls[0]?.[0]).toBe(canonical);
+    expect(requests.map(({ url }) => url)).toEqual([canonical]);
+    expect(requests[0]?.headers.get("Authorization")).toBe("Bearer probe");
+    expect(page.items[0]?.url).toBe(`${ROOT}notes/child`);
   });
 
   test("relative next links resolve in response context; anchored next links are ignored", async () => {
@@ -336,7 +390,7 @@ describe("listing validation and advisory fields", () => {
     const url = `${ROOT.toUpperCase()}notes/?opaque=a%2fb`;
     for (const link of [storageLink(FOREIGN), '<>; rel="next"']) {
       const { storage } = backend({
-        [`GET ${url}`]: {
+        [`GET ${new URL(url).href}`]: {
           status: 200,
           headers: { "content-type": "application/lws+json", link },
           body: JSON.stringify(pageBody()),
@@ -585,6 +639,29 @@ describe("scope and foreign storage responses", () => {
     await rejects(storage.metadata(NOTE), "scope");
   });
 
+  test("foreign storage links past the old member/byte bounds are still checked", async () => {
+    for (const link of [
+      `${Array.from({ length: 64 }, (_, i) => `<urn:type:${i}>; rel=type`).join(",")}, ${storageLink(FOREIGN)}`,
+      `<urn:type>; rel=type; title="${"x".repeat(8192)}", ${storageLink(FOREIGN)}`,
+    ]) {
+      let cancelled = false;
+      const storage = createLwsBackend({
+        root: ROOT,
+        fetch: async () =>
+          new Response(
+            new ReadableStream({
+              cancel() {
+                cancelled = true;
+              },
+            }),
+            { headers: { link } },
+          ),
+      });
+      await rejects(storage.read(NOTE), "scope");
+      expect(cancelled).toBe(true);
+    }
+  });
+
   test("matching and absent storage links accepted; other-context links ignored; explicit id checked", async () => {
     for (const link of [
       storageLink(),
@@ -595,7 +672,7 @@ describe("scope and foreign storage responses", () => {
       const { storage } = listing(pageBody(), { link });
       expect((await storage.list(CONTAINER)).items).toEqual([]);
     }
-    const id = "urn:storage:alice";
+    const id = "https://lws.example/storage/alice";
     const fetch = vi.fn<AuthFetch>(
       async () => new Response(null, { headers: { link: storageLink(id) } }),
     );
@@ -932,6 +1009,34 @@ describe("construction, parentOf and pending mutations", () => {
       StorageError,
     );
     expect(fetch).not.toHaveBeenCalled();
+  });
+
+  test("storage ids are normalised once and must be absolute HTTP(S) URLs", async () => {
+    const id = "https://lws.example/storage/alice";
+    const fetch = vi.fn<AuthFetch>(
+      async () =>
+        new Response(null, {
+          headers: { link: storageLink(id) },
+        }),
+    );
+    for (const storage of [id, "HTTPS://LWS.EXAMPLE:443/storage/../storage/alice"]) {
+      const client = createLwsBackend({ root: ROOT, storage, fetch });
+      expect((await client.head(NOTE)).status).toBe(200);
+    }
+    const before = fetch.mock.calls.length;
+    for (const storage of [
+      "",
+      "relative",
+      "/storage",
+      "//lws.example/storage",
+      "https://[",
+      "urn:storage:alice",
+      "file:///tmp/id",
+      "ftp://lws.example/id",
+    ]) {
+      expect(() => createLwsBackend({ root: ROOT, storage, fetch })).toThrow(TypeError);
+    }
+    expect(fetch).toHaveBeenCalledTimes(before);
   });
 
   test("parentOf uses one HEAD except at root (including root aliases)", async () => {

@@ -1,5 +1,4 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
-// AUTHORED-BY Codex GPT-6
 /**
  * The Actor's programmatic permission gate — the `canUseTool` callback (§3.3), a SECOND
  * fence on top of `permissionMode: "dontAsk"` + the tool allowlist. Its job is the one

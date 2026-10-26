@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 import { expect, test } from "vitest";
 import { parseProbeHeaders } from "./probe-headers.js";
 import { ACP } from "./vocab.js";

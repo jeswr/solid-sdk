@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 /**
  * Discord → Social & interests. `/users/@me` as `foaf:OnlineAccount` and
  * `/users/@me/guilds` as `foaf:Group`. Discord supports secretless PKCE for

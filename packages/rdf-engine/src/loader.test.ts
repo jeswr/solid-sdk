@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 import { readFile } from "node:fs/promises";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { createEngine, type Runtime } from "./engine.js";

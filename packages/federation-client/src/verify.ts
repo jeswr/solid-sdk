@@ -1,5 +1,4 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
-// AUTHORED-BY Codex GPT-6
 //
 // verify(...) — fetch (or accept) an app's federation registration document and
 // validate it against the fedapp vocabulary: exactly one fedapp:App, every

@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 import type { DatasetCore } from "@rdfjs/types";
 import { DataFactory } from "n3";
 import { copyDataset, mergeItems } from "./incremental.js";

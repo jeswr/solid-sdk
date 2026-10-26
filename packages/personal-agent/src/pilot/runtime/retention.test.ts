@@ -1,4 +1,3 @@
-// AUTHORED-BY Codex GPT-6
 import { describe, expect, it } from "vitest";
 import { openConversation } from "../core/conversation.js";
 import { domainValue, emptyState, MemoryStateStore } from "../store/state.js";

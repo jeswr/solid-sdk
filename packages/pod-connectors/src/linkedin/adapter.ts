@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 /**
  * LinkedIn → Work & education. Your work history (`/v2/positions`) as
  * `schema:Organization` nodes (the employer) carrying the role you held

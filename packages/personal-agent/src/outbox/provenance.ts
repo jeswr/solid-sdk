@@ -1,4 +1,3 @@
-// AUTHORED-BY Codex GPT-6
 import { classifyReliability, isWithinBase, vocab } from "@jeswr/agentic-legacy-bridge";
 import { parseRdf } from "@jeswr/fetch-rdf";
 import type { DatasetCore } from "@rdfjs/types";

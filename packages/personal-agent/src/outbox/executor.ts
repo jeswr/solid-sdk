@@ -1,5 +1,4 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
-// AUTHORED-BY Codex GPT-6
 /**
  * The OUTBOX EXECUTOR — the deterministic, NO-LLM enforcement point (§2/§5/§7 + the ODRL
  * mandate directive). It is the security boundary: it holds the per-channel send tokens, it

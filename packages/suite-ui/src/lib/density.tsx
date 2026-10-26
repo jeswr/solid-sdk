@@ -1,4 +1,3 @@
-// AUTHORED-BY Codex GPT-6
 "use client";
 
 import {

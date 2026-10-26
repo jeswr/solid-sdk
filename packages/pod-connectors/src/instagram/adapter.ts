@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 /**
  * Instagram → Media + Social. Your own posts (`/me/media`) saved two ways:
  * the visual asset as `schema:ImageObject` / `schema:VideoObject` (Media), and

@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 /**
  * The Tier-C **file-import** runner — the second place integration data enters
  * the pod, beside the OAuth `import-runner`. It deliberately reuses the same

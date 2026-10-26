@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { safeIri } from "@jeswr/rdf-serialize";
 import type { DatasetCore, Literal, NamedNode, Quad, Term } from "@rdfjs/types";

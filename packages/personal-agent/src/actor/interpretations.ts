@@ -1,5 +1,4 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
-// AUTHORED-BY Codex GPT-6
 /**
  * Read the DETERMINISTIC structured metadata the Reader already landed (§5.1) — the Actor's
  * zero-LLM-tokens hot path. This walks the bridge's reified `agentic:Interpretation` graph

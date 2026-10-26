@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 import { DataFactory } from "n3";
 import { copyDataset } from "./incremental.js";
 import type { VocabMap } from "./types.js";

@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 import { expect, test, vi } from "vitest";
 import { createEngine } from "./engine.js";
 

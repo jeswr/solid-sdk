@@ -1,4 +1,3 @@
-// AUTHORED-BY Codex GPT-6
 import { describe, expect, it } from "vitest";
 import { IntegrationSyncError, RateLimitedError } from "./errors.js";
 import { fixtureFetch, getJson, postJson } from "./fixture-fetch.js";

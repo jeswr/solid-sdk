@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 /**
  * Strava → Health + Mobility. `/athlete/activities`: runs/swims/workouts as
  * `schema:ExerciseAction` (Health), rides/commutes as `schema:TravelAction`

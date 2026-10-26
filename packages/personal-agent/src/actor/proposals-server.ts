@@ -1,4 +1,3 @@
-// AUTHORED-BY Codex GPT-6
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { PodFetch } from "../config.js";

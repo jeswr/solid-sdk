@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 import type { Quad } from "@rdfjs/types";
 import { DataFactory, Store } from "n3";
 import { codec, gunzip, gzip } from "./compression.js";

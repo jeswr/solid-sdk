@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 import { CapabilitiesError } from "./errors.js";
 import type { CapabilityEntry, ServiceEntry, StorageDescription } from "./types.js";
 import { LWS } from "./vocab.js";

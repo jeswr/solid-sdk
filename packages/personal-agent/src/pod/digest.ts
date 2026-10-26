@@ -1,5 +1,4 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
-// AUTHORED-BY Codex GPT-6
 /**
  * The content digest that CONTENT-LOCKS an owner confirmation to a specific proposal body.
  * The human-confirm gate approves the fully-rendered outbound content (§7); the confirmation

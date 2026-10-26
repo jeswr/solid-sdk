@@ -89,10 +89,8 @@ export function createReadOperations(fetch: AuthFetch, root: string, shapeOf: Sh
     headers: Record<string, string>,
     signal: AbortSignal | undefined,
     range = false,
-    opaque = false,
   ): Promise<ReadResult> {
-    const canonical = scoped(root, "GET", url);
-    const target = opaque ? url : canonical;
+    const target = scoped(root, "GET", url);
     const response = await send(fetch, "GET", target, headers, signal);
     const shape = await shapeOf("GET", target, response, {
       range,

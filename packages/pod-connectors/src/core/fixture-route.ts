@@ -1,4 +1,3 @@
-// AUTHORED-BY Codex GPT-6
 /** Shared route selection for recording and replay: longest prefix wins.
  * Match the same origin and complete path segments; preserve explicit query prefixes.
  * Equal prefixes retain array order so repeated responses keep their sequence.

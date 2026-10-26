@@ -1,4 +1,3 @@
-// AUTHORED-BY Codex GPT-6
 import { expect, test, vi } from "vitest";
 import { createRdfEngine } from "./browser.js";
 import type { IndexOptions } from "./types.js";

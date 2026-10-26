@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 /**
  * Type-Index write path — make sure a set of `(forClass, container)` pairs is
  * registered, bootstrapping a private index when the profile has none (CSS

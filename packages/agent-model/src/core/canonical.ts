@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 /**
  * Content identity for terms, actions and records: RFC 8785 JSON Canonicalization
  * Scheme + SHA-256.

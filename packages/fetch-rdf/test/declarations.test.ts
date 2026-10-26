@@ -1,4 +1,3 @@
-// AUTHORED-BY Codex GPT-6
 import { spawnSync } from "node:child_process";
 import {
   cpSync,

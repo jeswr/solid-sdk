@@ -23,7 +23,7 @@ export interface LwsBackendOptions {
   fetch: AuthFetch;
   /** StorageRoot container URL; every request must stay within it. */
   root: string;
-  /** StorageDescription.id, named by the lws#storage link. Default: root (as sparq emits). */
+  /** Absolute HTTP(S) StorageDescription.id; normalised once. Default: root (as sparq emits). */
   storage?: string;
   /** Resolved features; default: an undescribed LWS storage. */
   features?: Features;
@@ -149,7 +149,8 @@ export function createLwsBackend(options: LwsBackendOptions): StorageClient {
   const root = scoped(options.root, "GET", options.root);
   if (!root.endsWith("/") || /[?#]/.test(root))
     throw new TypeError("root must be a container URL ending with '/'");
-  const storage = options.storage ?? root;
+  const storage = new URL(options.storage ?? root).href;
+  if (!/^https?:/.test(storage)) throw new TypeError("storage must be an absolute http(s) URL");
   const features =
     options.features ??
     deriveFeatures({
@@ -181,8 +182,7 @@ export function createLwsBackend(options: LwsBackendOptions): StorageClient {
     response: Response,
     expect: ReadExpectation,
   ): Promise<ReadShape> {
-    // Opaque cursors keep their spelling at fetch; Link contexts use URL equivalence.
-    const links = linksOf(response, new URL(url).href);
+    const links = linksOf(response, url, method);
     if ((links.get(`${LWS}storage`) ?? []).some(({ target }) => target !== storage)) {
       discard(response.body);
       throw new StorageError("scope", {
@@ -228,8 +228,6 @@ export function createLwsBackend(options: LwsBackendOptions): StorageClient {
         opts.cursor === undefined ? container : opts.cursor.url,
         { Accept: LIST_ACCEPT },
         opts.signal,
-        false,
-        opts.cursor !== undefined,
       );
       const raw = await jsonBody(
         result,

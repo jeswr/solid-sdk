@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 import { createRdfEngine as createBaseEngine } from "./index.js";
 import { createIndexedDbPersistence } from "./indexeddb.js";
 import type { RdfEngine, RdfEngineOptions } from "./types.js";

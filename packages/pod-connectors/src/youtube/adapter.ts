@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 /**
  * YouTube → Media. Your liked videos (`/youtube/v3/videos?myRating=like`) as
  * `schema:VideoObject`, and your playlists (`/youtube/v3/playlists?mine=true`)

@@ -1,4 +1,3 @@
-// AUTHORED-BY Codex GPT-6
 // Run after building: pnpm --filter @jeswr/rdf-engine run bench:parse
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";

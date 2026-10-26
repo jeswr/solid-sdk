@@ -1,5 +1,4 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
-// AUTHORED-BY Codex GPT-6
 //
 // Shared "load an RDF dataset from a URL or an in-hand body" seam for the registry
 // and storage fetch paths. Both paths face the SAME decision — a body in hand is a

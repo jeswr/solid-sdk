@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 /** Constants from @jeswr/solid-federation-vocab sectors and their alignments.
  * That package currently exports ontology files only; see QUESTIONS.md Q1.
  * Keep this bridge isolated for CON-13's constants-only switch.

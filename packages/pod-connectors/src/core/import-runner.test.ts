@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 
 import { DataFactory, Store } from "n3";
 import { describe, expect, it } from "vitest";

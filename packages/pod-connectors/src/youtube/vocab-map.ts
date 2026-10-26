@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 
 import { FEDERATION } from "../core/federation-vocab.js";
 import { CLASSES } from "../core/vocab.js";

@@ -1,4 +1,3 @@
-# AUTHORED-BY Codex GPT-6
 """Generate MCP-04H review oracles using RDFlib 7.1.4 and np_builder.py."""
 import importlib.util
 import json

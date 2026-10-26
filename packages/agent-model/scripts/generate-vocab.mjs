@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 
 import { serialize } from "@jeswr/rdf-serialize";
 // biome-ignore lint/style/useNodejsImportProtocol: agent imports allow only bare package names or relative paths

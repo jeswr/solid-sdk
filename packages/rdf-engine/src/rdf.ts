@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 import type { Quad, Term } from "@rdfjs/types";
 import { DataFactory, Parser, Store, Writer } from "n3";
 import type { ParseOptions, QuadSource, RdfMediaType, SerializeOptions } from "./types.js";
