@@ -104,7 +104,7 @@ final class ShareStoreTests: XCTestCase {
         XCTAssertFalse(empty.eof)
 
         store.acknowledge(batch.id)
-        XCTAssertTrue(store.pending().isEmpty())
+        XCTAssertTrue(store.pending().isEmpty)
         XCTAssertEqual(try entries(), [])
     }
 
@@ -271,14 +271,14 @@ final class ShareStoreTests: XCTestCase {
             var json = batch.json
             json[key] = value
             try JSONSerialization.data(withJSONObject: json).write(to: directory(batch.id).appendingPathComponent("batch.json"))
-            XCTAssertTrue(store.pending().isEmpty(), key)
+            XCTAssertTrue(store.pending().isEmpty, key)
             XCTAssertFalse(FileManager.default.fileExists(atPath: directory(batch.id).path), key)
             XCTAssertThrowsError(try store.readChunk(batchId: batch.id, index: 0, offset: 0, length: 1))
         }
         for raw in ["{", "[]", "null"] {
             let batch = try storeOne(5)
             try Data(raw.utf8).write(to: directory(batch.id).appendingPathComponent("batch.json"))
-            XCTAssertTrue(store.pending().isEmpty(), raw)
+            XCTAssertTrue(store.pending().isEmpty, raw)
             XCTAssertFalse(FileManager.default.fileExists(atPath: directory(batch.id).path), raw)
         }
     }
