@@ -13,6 +13,8 @@ export default function ComponentsPage() {
             {name}
           </a>
         ))}
+        <a href="/dev/components/data-table">DataTable</a>
+        <a href="/dev/components/file-grid">FileGrid</a>
       </nav>
     </main>
   );

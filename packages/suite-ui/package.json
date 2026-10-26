@@ -21,6 +21,7 @@
     "./styles/theme.css": "./dist/styles/theme.css",
     "./styles/density.css": "./dist/styles/density.css",
     "./styles/components.css": "./dist/styles/components.css"
+    "./styles/collections.css": "./dist/styles/collections.css"
   },
   "files": [
     "dist",
@@ -39,6 +40,7 @@
     "next": "^16.2.7",
     "react": "^19.2.7",
     "react-dom": "^19.2.7"
+    "react": "^19.2.7"
   },
   "devDependencies": {
     "next": "16.2.7",
@@ -69,5 +71,8 @@
     "react-hook-form": "7.81.0",
     "zod": "4.4.3",
     "@hookform/resolvers": "5.4.0"
+    "@tanstack/react-table": "^8.21.3",
+    "@tanstack/react-virtual": "^3.13.12",
+    "lucide-react": "1.24.0"
   }
 }
