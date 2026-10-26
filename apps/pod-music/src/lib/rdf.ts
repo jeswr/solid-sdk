@@ -57,7 +57,5 @@ export function serializeTurtle(dataset: IterableDataset): Promise<string> {
  */
 export async function parseTurtle(body: string, baseIRI: string): Promise<Store> {
   const parsed = await parseRdf(body, "text/turtle", { baseIRI });
-  canonicalizeFederationDataset(parsed, factory);
-  // parseRdf returns an n3.Store at runtime.
-  return parsed as unknown as Store;
+  return canonicalizeFederationDataset(parsed, factory);
 }

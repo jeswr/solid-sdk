@@ -32,3 +32,30 @@ it("reads legacy federation metadata and serializes canonical federation and sec
   const raw = await parseRdf(legacy, "text/turtle");
   expect(await serializeTurtle(new Store([...raw]))).not.toContain("w3id.org/jeswr");
 });
+
+it("serializes legacy federation metadata without changing the caller's dataset", async () => {
+  const { parseRdf } = await import("@jeswr/fetch-rdf");
+  const legacy = await parseRdf(
+    `<urn:app> a <https://w3id.org/jeswr/fed#App> ;
+       <https://w3id.org/jeswr/fed#sector> <https://w3id.org/jeswr/sectors/media> .`,
+    "text/turtle",
+  );
+  const store = new Store([...legacy]);
+  const before = [...store];
+  expect(await serializeTurtle(store)).not.toContain("w3id.org/jeswr");
+  expect(store.size).toBe(before.length);
+  expect(before.every((quad) => store.has(quad))).toBe(true);
+  const readOnly = {
+    size: store.size,
+    has: (quad: Parameters<Store["has"]>[0]) => store.has(quad),
+    match: (...args: Parameters<Store["match"]>) => store.match(...args),
+    add(): never {
+      throw new Error("read-only dataset");
+    },
+    delete(): never {
+      throw new Error("read-only dataset");
+    },
+    [Symbol.iterator]: () => store[Symbol.iterator](),
+  };
+  expect(await serializeTurtle(readOnly as unknown as Store)).not.toContain("w3id.org/jeswr");
+});

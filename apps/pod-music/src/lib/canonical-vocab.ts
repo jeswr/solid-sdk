@@ -2,6 +2,7 @@
 import { canonicalize, NS } from "@jeswr/suite-vocab";
 import type { DataFactory, DatasetCore } from "@rdfjs/types";
 import { NamedGraphDataset, SetFrom, TermAs, TermFrom, TermWrapper } from "@rdfjs/wrapper";
+import { Store } from "n3";
 
 function federationTerm(iri: string): string {
   const resolved = canonicalize(iri);
@@ -10,12 +11,13 @@ function federationTerm(iri: string): string {
     : iri;
 }
 
-/** Accept legacy federation metadata while preserving music and resource IRIs. */
-export function canonicalizeFederationDataset(
-  dataset: DatasetCore,
-  factory: DataFactory,
-): DatasetCore {
-  for (const quad of [...dataset]) {
+/**
+ * A canonical copy of `dataset`: legacy federation metadata is rewritten, music and resource IRIs
+ * are kept, and the caller's dataset is never changed.
+ */
+export function canonicalizeFederationDataset(dataset: DatasetCore, factory: DataFactory): Store {
+  const copy = new Store([...dataset]);
+  for (const quad of dataset) {
     const predicate = federationTerm(quad.predicate.value);
     const vocabularyObject =
       predicate === `${NS.RDF}type` ||
@@ -30,11 +32,11 @@ export function canonicalizeFederationDataset(
     if (predicate === quad.predicate.value && object.equals(quad.object)) continue;
     const graph =
       quad.graph.termType === "DefaultGraph"
-        ? dataset
-        : new NamedGraphDataset(quad.graph, dataset, factory);
+        ? copy
+        : new NamedGraphDataset(quad.graph, copy, factory);
     const anchor = new TermWrapper(quad.subject, graph, factory);
     SetFrom.subjectPredicate(anchor, predicate, TermAs.term, TermFrom.itself).add(object);
-    dataset.delete(quad);
+    copy.delete(quad);
   }
-  return dataset;
+  return copy;
 }
