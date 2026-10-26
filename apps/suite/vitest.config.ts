@@ -14,6 +14,7 @@ export default defineConfig({
         "src/lib/order/**/*.ts",
         "src/apps/docs/lib/anchoring/**/*.ts",
         "src/apps/sheets/lib/refs/**/*.ts",
+        "src/apps/sheets/lib/format/**/*.ts",
         "src/apps/calendar/lib/layout/**/*.ts",
         "src/apps/chat/lib/timeline/**/*.ts",
         "src/apps/health/lib/stats/**/*.ts",
