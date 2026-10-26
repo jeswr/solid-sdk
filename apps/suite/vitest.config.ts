@@ -36,6 +36,7 @@ export default defineConfig({
         "src/apps/calendar/lib/tz/**/*.ts",
         "src/apps/chat/lib/timeline/**/*.ts",
         "src/apps/health/lib/stats/**/*.ts",
+        "src/apps/health/lib/units/**/*.ts",
         "src/apps/health/lib/trends/**/*.ts",
         "src/apps/money/lib/budget/**/*.ts",
         "src/apps/sheets/lib/univer-spike/**/*.ts",
