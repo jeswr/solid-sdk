@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # sst-31t / A-005 lane report
 
@@ -99,3 +100,42 @@ review tooling or tracker was installed, and no other checkout was accessed.
 
 No design questions remain for this lane. No provider implementation from later
 tasks, deployment, publishing or live transmission was attempted.
+
+## Fix round 1 — review of `e24ef0eb2c2e`
+
+Both findings are fixed on `lane/sst-31t`, without dependencies or changes to
+other packages.
+
+| Commit | Change |
+| --- | --- |
+| `1ffb6e88` | `fix: refuse redirects in the inner channel transport` — set the default Node transport's `maxRedirects` to zero. Loopback tests cover 301, 302, 303, 307 and 308 for same-origin and undeclared-origin destinations, including a caller-supplied `redirect: follow`; no redirect target receives a request. |
+| `f0b090f6` | `fix: defer direct absence until pending sends settle` — register each matching-wire attempt before asynchronous verification or credential lookup, return `unknown` while pending, and clear it on success or failure. Tests cover both suspension points, rejection, overlapping attempts, unrelated wires and positive evidence during retries. |
+| This final commit | `docs: record sst-31t fix verification` — this fix-round report. |
+
+Verification uses Node 24.22.1 (`PATH=/opt/node24/bin:$PATH`). Both new regressions
+were checked against the original implementations: the default transport followed
+a redirect, and all three pending-send cases incorrectly returned `absent`.
+Restoring the fixes makes those tests pass.
+
+| Command | Result |
+| --- | --- |
+| `pnpm exec turbo run build --filter=@jeswr/agent-channels` | PASS; built workspace prerequisites, which were initially absent in this fresh checkout. |
+| `pnpm --filter @jeswr/agent-channels run lint && pnpm --filter @jeswr/agent-channels run build && pnpm --filter @jeswr/agent-channels run typecheck && pnpm --filter @jeswr/agent-channels run test` | PASS; 4 test files, 55 tests. Enforced per-file coverage remains 100%: statements 165/165, branches 114/114, functions 35/35, lines 157/157. |
+| `pnpm run lint:root` | PASS; all root lint and guard checks. |
+| `TURBO_SCM_BASE=agent/integration pnpm run gate` | Root lint PASS; Turbo cannot resolve the absent `agent/integration` ref. No ref was created or fetched. |
+| `pnpm run gate:full` | FAIL outside this fix: 278/346 tasks completed successfully before the existing `@jeswr/federation-trust#test` delegation-credential snapshot failed at `test/characterization.test.ts:196`. Expected JWK key order is `crv,x,kty`; received order is `kty,crv,x`, matching the original lane's recorded failure. All 747 root tests passed in this run. |
+| `TURBO_SCM_BASE=e24ef0eb2c2eae50a0095aa6f0fc1089911336e2 pnpm run gate` (first attempt) | FAIL in an unrelated root timing assertion at `test/check-sdk-layers.test.mjs:328`: 56.66 ms exceeded its 50 ms limit. Turbo had included generated app files in its scope (51 tasks; 36 completed). The same test passed during the full gate; the generated files were removed before retrying. |
+| `TURBO_SCM_BASE=e24ef0eb2c2eae50a0095aa6f0fc1089911336e2 pnpm run gate` (after cleanup) | PASS; 26/26 tasks, including 747 root tests, 55 channel tests, 650 bridge tests, 121 model tests and 531 pilot tests. |
+| `git diff --check` | PASS. |
+
+No dependencies were added, so no new `check:packages` run was required. All new
+test traffic stays on loopback; signing keys and grants are local test fixtures.
+No timeout configuration, coverage threshold or unrelated source was changed.
+
+Both review findings are complete, with no open design questions. The unrelated
+federation-trust snapshot still blocks the full-workspace gate. The root timing
+failure passed on retry without changes to its test or limit. Generated app
+callback/client-ID files were removed, and no `dist/` is committed.
+
+The `roborev` executable remains unavailable in this sandbox, so automated
+per-commit verdicts could not be collected. No review tooling was installed.
