@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { describe, expect, test, vi } from "vitest";
 import { parseSolidDescription } from "./solid-description.js";
@@ -136,6 +137,7 @@ describe("parseSolidDescription", () => {
           type: [SSD.PatchSupport],
           extra: {
             [`${SSD_NS}format`]: {
+              "@id": expect.stringMatching(/^_:/),
               [`${SSD_NS}source`]: "text/turtle",
               [`${SSD_NS}patchType`]: ["text/n3", "application/sparql-update"],
             },
@@ -260,6 +262,7 @@ describe("parseSolidDescription", () => {
     const result = parseSolidDescription(dataset, ROOT);
     expect(result.capabilities[0]?.extra).toEqual({
       [`${SSD_NS}format`]: {
+        "@id": expect.stringMatching(/^_:/),
         [`${SSD_NS}source`]: "text/turtle",
         [`${SSD_NS}back`]: { "@id": expect.stringMatching(/^_:/) },
       },
@@ -281,6 +284,36 @@ describe("parseSolidDescription", () => {
     expect(value).toEqual({ "@id": expect.stringMatching(/^_:/) });
   });
 
+  test.each([
+    ["<urn:extension>", "ssd:format"],
+    ["ssd:format", "<urn:extension>"],
+  ])("resolves shared PatchSupport formats with %s before %s", async (first, second) => {
+    const dataset = await turtle(`
+      <> lws:capability [ a ssd:PatchSupport ; ${first} _:format ; ${second} _:format ] .
+      _:format ssd:source "text/turtle" ; ssd:patchType "text/n3", "application/sparql-update" .
+    `);
+    // Resolve from plain serialized data, without relying on object identity or the dataset.
+    const result = JSON.parse(JSON.stringify(parseSolidDescription(dataset, ROOT)));
+    const extra = result.capabilities[0].extra;
+    const format = extra[`${SSD_NS}format`];
+    const extension = extra["urn:extension"];
+    expect(format["@id"]).toMatch(/^_:/);
+    expect(extension["@id"]).toBe(format["@id"]);
+    const definition = Object.values(extra).find(
+      (value) =>
+        typeof value === "object" &&
+        value !== null &&
+        "@id" in value &&
+        value["@id"] === format["@id"] &&
+        `${SSD_NS}source` in value,
+    );
+    expect(definition).toEqual({
+      "@id": format["@id"],
+      [`${SSD_NS}source`]: "text/turtle",
+      [`${SSD_NS}patchType`]: ["text/n3", "application/sparql-update"],
+    });
+  });
+
   test("expands shared blank-node extensions once rather than multiplying their contents", async () => {
     const dataset = await turtle(`
       <> lws:capability _:cap .
@@ -291,7 +324,10 @@ describe("parseSolidDescription", () => {
       {
         type: [],
         extra: {
-          "urn:first": { "urn:value": "shared value" },
+          "urn:first": {
+            "@id": expect.stringMatching(/^_:/),
+            "urn:value": "shared value",
+          },
           "urn:second": { "@id": expect.stringMatching(/^_:/) },
         },
       },

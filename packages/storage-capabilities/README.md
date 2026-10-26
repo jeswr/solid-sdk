@@ -45,7 +45,8 @@ Internal helpers for the later discovery implementation:
   types, named-node identifiers, profiles, and expanded extra predicates. Missing or non-IRI
   service endpoints are skipped; blank-node services with an IRI endpoint are supported.
   Extras retain IRI/literal lexical strings, use scalar singleton values and arrays for repeated
-  values, and expand nested blank nodes into property objects. Repeated/cyclic blank nodes and
+  values, and expand nested blank nodes into property objects with an `@id` so shared-node
+  references can be resolved to their mapped properties. Repeated/cyclic blank nodes and
   nesting beyond 32 nodes are retained as `{ "@id": "_:<label>" }` references.
   Parse bytes first with `@jeswr/fetch-rdf`'s `parseRdf` and the description URL as `baseIRI`.
   The mapper does no fetching, origin validation, HTTP metadata handling, or dataset mutation.

@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import type { DatasetCore, Term } from "@rdfjs/types";
 import { DatasetWrapper, SetFrom, TermAs, TermFrom, TermWrapper } from "@rdfjs/wrapper";
 import { DataFactory } from "n3";
@@ -54,11 +55,11 @@ class DescriptionNode extends TermWrapper {
           if (term.termType !== "BlankNode") return term.value;
           // Expand each blank node once, bounding both depth and shared-subgraph growth.
           if (visited.has(term.value) || depth >= 31) return { "@id": `_:${term.value}` };
-          return new DescriptionNode(term, this.dataset, this.factory).extra(
-            [],
-            visited,
-            depth + 1,
-          );
+          // Keep the definition identifiable so later references can resolve to it.
+          return {
+            "@id": `_:${term.value}`,
+            ...new DescriptionNode(term, this.dataset, this.factory).extra([], visited, depth + 1),
+          };
         });
         return [predicate, values.length === 1 ? values[0] : values];
       }),

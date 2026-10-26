@@ -3,6 +3,7 @@ name: storage-capabilities
 description: Work on @jeswr/storage-capabilities, the storage description discovery and feature flags package in the Solid SDK workspace.
 ---
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # @jeswr/storage-capabilities
 
@@ -29,8 +30,10 @@ HTTP metadata and origin validation remain the resolver's responsibility.
 
 Extras use expanded predicate keys. IRIs and literal lexical values are strings; singleton
 values are scalars and repeated values are arrays. Notification features are always arrays.
-Nested blank nodes become property objects; repeated/cyclic references and nesting beyond
-32 nodes become `{ "@id": "_:<label>" }` references. Named service/capability nodes retain
+Nested blank nodes become property objects with an `@id` matching later references;
+callers can find a shared node's mapped properties by matching that identifier.
+Repeated/cyclic references and nesting beyond 32 nodes become `{ "@id": "_:<label>" }`
+references. Named service/capability nodes retain
 their IRI as `id`; blank-node entries omit `id`. Unknown types survive the mapping.
 
 Keep development tool versions aligned with the root manifest. The pinned pnpm 10.4.1 with
