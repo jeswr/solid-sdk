@@ -3072,6 +3072,9 @@ importers:
       '@jeswr/guarded-fetch':
         specifier: workspace:*
         version: link:../guarded-fetch
+      '@jeswr/solid-dpop':
+        specifier: workspace:*
+        version: link:../solid-dpop
       '@rdfjs/wrapper':
         specifier: ^0.34.0
         version: 0.34.0
@@ -3084,6 +3087,9 @@ importers:
       n3:
         specifier: ^2.0.3
         version: 2.1.1
+      postal-mime:
+        specifier: 4.1.4
+        version: 4.1.4
     devDependencies:
       '@biomejs/biome':
         specifier: ^2.5.1
@@ -3094,6 +3100,9 @@ importers:
       '@types/n3':
         specifier: ^1.26.1
         version: 1.26.1
+      rdf-validate-shacl:
+        specifier: ^0.6.5
+        version: 0.6.5
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
