@@ -204,11 +204,11 @@ export class ReactiveAuthenticationClient {
     }
     if (attempt.redirect === "manual" || response.type === "opaqueredirect") return response;
 
+    const location = response.headers.get("Location");
+    if (location === null) return response;
+
     await discard(response);
     if (++hops > this.#maxRedirects) throw new TypeError("Too many redirects");
-
-    const location = response.headers.get("Location");
-    if (location === null) throw new TypeError("Redirect without Location");
 
     return await this.#run(
       attempt.redirected(new URL(location, attempt.url), response.status),
