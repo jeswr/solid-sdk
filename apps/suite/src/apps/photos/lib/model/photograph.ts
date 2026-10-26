@@ -23,7 +23,7 @@
  * the standard schema.org ⇄ Basic-Geo pattern. EXIF is split out into queryable
  * `exif:` triples (`exif.ts` did the validation/normalisation).
  */
-import type { DatasetCore } from "@rdfjs/types";
+import type { DatasetCore, Term } from "@rdfjs/types";
 import {
   LiteralAs,
   LiteralFrom,
@@ -32,6 +32,8 @@ import {
   OptionalAs,
   OptionalFrom,
   SetFrom,
+  TermAs,
+  TermFrom,
   TermWrapper,
 } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
@@ -219,15 +221,15 @@ export class PhotographDoc extends TermWrapper {
   }
 
   /** The nested `schema:geo` capture point as an IRI/blank-node ref. */
-  get geoRef(): string | undefined {
-    return OptionalFrom.subjectPredicate(this, `${SCHEMA}geo`, NamedNodeAs.string);
+  get geoRef(): Term | undefined {
+    return OptionalFrom.subjectPredicate(this, `${SCHEMA}geo`, TermAs.term);
   }
-  set geoRef(v: string | undefined) {
+  set geoRef(v: string | Term | undefined) {
     OptionalAs.object(
       this,
       `${SCHEMA}geo`,
-      v === undefined ? undefined : httpIri(v),
-      NamedNodeFrom.string,
+      typeof v === "string" ? DataFactory.namedNode(httpIri(v)) : v,
+      TermFrom.itself,
     );
   }
 }
@@ -259,27 +261,45 @@ export function parseKeywordsInput(input: string): string[] {
  */
 function readExif(doc: PhotographDoc, dataset: DatasetCore): ExifMetadata {
   const raw: Partial<ExifMetadata> = {};
-  if (doc.exifMake !== undefined) raw.make = doc.exifMake;
-  if (doc.exifModel !== undefined) raw.model = doc.exifModel;
-  if (doc.exifLensModel !== undefined) raw.lensModel = doc.exifLensModel;
-  if (doc.exifFocalLength !== undefined) raw.focalLengthMm = doc.exifFocalLength;
-  if (doc.exifFNumber !== undefined) raw.fNumber = doc.exifFNumber;
-  if (doc.exifExposureTime !== undefined) raw.exposureTimeSec = doc.exifExposureTime;
-  if (doc.exifIso !== undefined) raw.iso = doc.exifIso;
-  if (doc.exifOrientation !== undefined) raw.orientation = doc.exifOrientation;
-  if (doc.width !== undefined) raw.pixelWidth = doc.width;
-  if (doc.height !== undefined) raw.pixelHeight = doc.height;
-  const created = doc.dateCreated;
-  if (created) raw.dateTimeOriginal = created.toISOString();
+  function readField<K extends keyof ExifMetadata>(key: K, read: () => ExifMetadata[K]): void {
+    const value = optionalValue(read);
+    if (value !== undefined) raw[key] = value;
+  }
+  readField("make", () => doc.exifMake);
+  readField("model", () => doc.exifModel);
+  readField("lensModel", () => doc.exifLensModel);
+  readField("focalLengthMm", () => doc.exifFocalLength);
+  readField("fNumber", () => doc.exifFNumber);
+  readField("exposureTimeSec", () => doc.exifExposureTime);
+  readField("iso", () => doc.exifIso);
+  readField("orientation", () => doc.exifOrientation);
+  readField("pixelWidth", () => doc.width);
+  readField("pixelHeight", () => doc.height);
+  readField("dateTimeOriginal", () => optionalIso(() => doc.dateCreated));
 
   const geoRef = doc.geoRef;
   if (geoRef) {
     const point = new GeoPointDoc(geoRef, dataset, DataFactory);
-    const lat = point.lat;
-    const long = point.long;
+    const lat = optionalValue(() => point.lat);
+    const long = optionalValue(() => point.long);
     if (lat !== undefined && long !== undefined) raw.location = { lat, long };
   }
   return normaliseExif(raw);
+}
+
+/** Optional RDF values may have the wrong term type or lexical form. */
+function optionalValue<T>(read: () => T): T | undefined {
+  try {
+    return read();
+  } catch {
+    return undefined;
+  }
+}
+function optionalIso(read: () => Date | undefined): string | undefined {
+  return optionalValue(() => {
+    const date = read();
+    return date && Number.isFinite(date.getTime()) ? date.toISOString() : undefined;
+  });
 }
 
 /** Parse a photo document into a {@link Photo}, or `undefined` if not one. */
@@ -290,13 +310,16 @@ export function parsePhoto(
 ): Photo | undefined {
   const doc = new PhotographDoc(httpIri(subject), dataset, DataFactory);
   if (!doc.types.has(PHOTOGRAPH_CLASS) && !doc.types.has(`${SCHEMA}ImageObject`)) return undefined;
+  const thumbnailUrl = optionalValue(() => doc.thumbnailUrl);
+  const created = optionalIso(() => doc.created);
+  const modified = optionalIso(() => doc.modified);
   return {
     name: doc.name ?? "",
     ...(doc.description !== undefined ? { description: doc.description } : {}),
     contentUrl: doc.contentUrl ?? "",
-    ...(doc.thumbnailUrl !== undefined ? { thumbnailUrl: doc.thumbnailUrl } : {}),
-    ...(doc.created ? { created: doc.created.toISOString() } : {}),
-    ...(doc.modified ? { modified: doc.modified.toISOString() } : {}),
+    ...(thumbnailUrl !== undefined ? { thumbnailUrl } : {}),
+    ...(created ? { created } : {}),
+    ...(modified ? { modified } : {}),
     keywords: normaliseKeywords([...doc.keywords].sort((a, b) => a.localeCompare(b))),
     exif: readExif(doc, dataset),
   };

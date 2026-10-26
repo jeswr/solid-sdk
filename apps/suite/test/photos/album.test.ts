@@ -69,7 +69,7 @@ it("reads legacy pod-photos hasPart membership and rejects malformed ListItems",
   doc.legacyMembers.add(a);
   expect(parseAlbum(url, dataset)?.members).toEqual([a, c]);
   const ref = `${url}#entry`;
-  doc.elements.add(ref);
+  doc.elements.add(DataFactory.namedNode(ref));
   const entry = new ListItemDoc(ref, dataset, DataFactory);
   expect(() => parseAlbum(url, dataset)).toThrow();
   entry.item = a;
@@ -89,4 +89,21 @@ it("sorts equal positions deterministically", async () => {
     { baseIRI: url },
   );
   expect(parseAlbum(url, dataset)?.members).toEqual([a, b]);
+});
+it("follows blank and named ListItems without changing their RDF identity", async () => {
+  const dataset = await parseRdf(
+    `@prefix s: <https://schema.org/>.
+     <#it> a s:ImageGallery; s:itemListElement _:first, <#named>, [ s:item <${c}>; s:position 3 ].
+     _:first a s:ListItem; s:item <${a}>; s:position 1.
+     <#named> a s:ListItem; s:item <${b}>; s:position 2.`,
+    "text/turtle",
+    { baseIRI: url },
+  );
+  const doc = new ImageGalleryDoc(`${url}#it`, dataset, DataFactory);
+  expect([...doc.elements].map((term) => term.termType).sort()).toEqual([
+    "BlankNode",
+    "BlankNode",
+    "NamedNode",
+  ]);
+  expect(parseAlbum(url, dataset)?.members).toEqual([a, b, c]);
 });

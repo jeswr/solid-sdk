@@ -16,6 +16,7 @@ import {
   PhotographDoc,
   parseKeywordsInput,
   parsePhoto,
+  parsePhotos,
 } from "../../src/apps/photos/lib/model/photograph.js";
 import { EXIF, GEO, PHOTOGRAPH_CLASS, SCHEMA } from "../../src/apps/photos/lib/model/vocab.js";
 
@@ -173,4 +174,64 @@ it("keeps camera-only EXIF without inventing a date or location", () => {
     exif: { make: "Canon" },
   };
   expect(parsePhoto(ITEM, buildPhoto(ITEM, photo))).toEqual(photo);
+});
+
+it("reads blank-node capture points and preserves terms through typed accessors", async () => {
+  const dataset = await parseRdf(
+    `@prefix s: <https://schema.org/>. @prefix geo: <http://www.w3.org/2003/01/geo/wgs84_pos#>.
+     <#it> a s:Photograph; s:geo [ a geo:Point; geo:lat 51.5; geo:long -0.12 ].`,
+    "text/turtle",
+    { baseIRI: ITEM },
+  );
+  const doc = new PhotographDoc(`${ITEM}#it`, dataset, DataFactory);
+  const point = doc.geoRef;
+  expect(point?.termType).toBe("BlankNode");
+  doc.geoRef = undefined;
+  expect(parsePhoto(ITEM, dataset)?.exif.location).toBeUndefined();
+  doc.geoRef = point;
+  expect(parsePhoto(ITEM, dataset)?.exif.location).toEqual({ lat: 51.5, long: -0.12 });
+});
+
+it.each([
+  's:width "unknown"',
+  's:height "unknown"',
+  'e:focalLength "unknown"',
+  'e:fNumber "unknown"',
+  'e:exposureTime "unknown"',
+  'e:isoSpeedRatings "unknown"',
+  'e:orientation "unknown"',
+  's:dateCreated "invalid"^^xsd:dateTime',
+  "s:dateCreated <#wrong>",
+  'dct:created "invalid"^^xsd:dateTime',
+  'dct:modified "invalid"^^xsd:dateTime',
+  "dct:created <#wrong>",
+  "dct:modified <#wrong>",
+  's:thumbnailUrl "wrong"',
+  's:geo [ geo:lat "unknown"; geo:long 1 ]',
+  's:geo [ geo:lat 1; geo:long "unknown" ]',
+])("drops malformed optional metadata independently: %s", async (badField) => {
+  const dataset = await parseRdf(
+    `@prefix s: <https://schema.org/>. @prefix e: <${EXIF}>.
+     @prefix dct: <http://purl.org/dc/terms/>. @prefix xsd: <http://www.w3.org/2001/XMLSchema#>.
+     @prefix geo: <${GEO}>.
+     <#it> a s:Photograph; s:name "Damaged"; s:contentUrl <${FULL.contentUrl}>;
+       ${badField.startsWith("e:isoSpeedRatings") ? "" : "e:isoSpeedRatings 200;"} ${badField}.
+     <#other> a s:Photograph; s:name "Intact"; s:contentUrl <${FULL.contentUrl}>; s:width 640.`,
+    "text/turtle",
+    { baseIRI: ITEM },
+  );
+  const photos = parsePhotos(ITEM, dataset);
+  expect(photos).toHaveLength(2);
+  expect(photos[0]?.photo).toEqual({
+    name: "Damaged",
+    contentUrl: FULL.contentUrl,
+    keywords: [],
+    exif: badField.startsWith("e:isoSpeedRatings") ? {} : { iso: 200 },
+  });
+  expect(photos[1]?.photo).toEqual({
+    name: "Intact",
+    contentUrl: FULL.contentUrl,
+    keywords: [],
+    exif: { pixelWidth: 640 },
+  });
 });

@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // Ported from pod-photos ImageGalleryDoc, with ordered schema:ListItem membership.
-import type { DatasetCore } from "@rdfjs/types";
+import type { DatasetCore, Term } from "@rdfjs/types";
 import {
   LiteralAs,
   LiteralFrom,
@@ -9,6 +9,8 @@ import {
   OptionalAs,
   OptionalFrom,
   SetFrom,
+  TermAs,
+  TermFrom,
   TermWrapper,
 } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
@@ -57,13 +59,8 @@ export class ImageGalleryDoc extends TermWrapper {
       NamedNodeFrom.string,
     );
   }
-  get elements(): Set<string> {
-    return SetFrom.subjectPredicate(
-      this,
-      `${SCHEMA}itemListElement`,
-      NamedNodeAs.string,
-      NamedNodeFrom.string,
-    );
+  get elements(): Set<Term> {
+    return SetFrom.subjectPredicate(this, `${SCHEMA}itemListElement`, TermAs.term, TermFrom.itself);
   }
   /** Existing pod-photos albums used unordered schema:hasPart. Read for interop. */
   get legacyMembers(): Set<string> {
@@ -120,7 +117,7 @@ export function buildAlbum(url: string, album: Album): Store {
     element.types.add(`${SCHEMA}ListItem`);
     element.item = member;
     element.position = index + 1;
-    doc.elements.add(ref);
+    doc.elements.add(DataFactory.namedNode(ref));
   });
   return dataset;
 }
