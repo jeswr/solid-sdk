@@ -113,6 +113,16 @@ exception. A subsequent `pnpm --filter @jeswr/app-mobile run www` with the defau
 environment removes that generated exception and restores the production domain.
 **Never commit a localhost plist.** The committed production plist has no ATS exception.
 
+The App target's `Guard non-Debug ATS` build phase runs on every build after resources and
+extension copying. Its declared input is the processed **built product** Info.plist; every
+configuration other than `Debug` fails if that plist contains any `NSAppTransportSecurity`
+entry, including `NSAllowsLocalNetworking`, or cannot be validated. This also protects Release
+builds and archives after fixture sync, regardless of the build's `MOBILE_DEBUG` environment.
+The input plist and output stamp are declared for Xcode's user script sandbox.
+The `ios` CI job prepares the loopback exception after the Debug compile, requires an unsigned
+Release simulator build with script sandboxing enabled and `MOBILE_DEBUG` unset to fail with
+the guard's message, and restores default preparation before running Debug/Release policy tests.
+
 The shared App scheme includes AppTests and the new AppUITests target; this driver runs
 `xcodebuild test -configuration Debug -only-testing:AppUITests`. The fixture publishes
 `window.__e2e` as JSON in a read-only textarea labelled `e2e-result`, whose native accessibility
@@ -123,8 +133,12 @@ the attempt, after the two-second observation window, and after backgrounding/fo
 `e2e-navigation.json` preserves all three snapshots, including their document identity and URL.
 There are no test-only hooks in the application target.
 
-The iOS checks require all four secure-context APIs and the top-frame plugin/listener checks
-used on Android. iOS hostile-frame probes differ because WebKit exposes registered handler
+The iOS checks require all four secure-context APIs and a successful top-frame
+`SuiteShareIntake.getPending`. On iOS, `addListener` returns a JS removal handle synchronously,
+so the fixture reports only `listenerSubscriptionRequested`; this field is excluded from pass
+criteria. Native listener verification needs a real `shareReceived` event and is deferred with
+share-sheet intake. Android still requires listener registration and a matching real event
+when the document survives. iOS hostile-frame probes differ because WebKit exposes registered handler
 names in every frame: visibility alone cannot establish a native effect. The hostile frame
 sends a typed `SuiteShareIntake.getPending` message with a fresh callback ID through
 `window.webkit.messageHandlers.bridge`, and observes for at least two seconds. An identical
@@ -151,14 +165,16 @@ invocation); both fixture servers close in `finally`, including when XCTest/expo
 The `ios-e2e` job runs on `macos-15` with a 45-minute job timeout, mirrors the policy job's
 Xcode 26+ and iPhone selection, and waits for `simctl bootstatus <udid> -b` with a four-minute
 subprocess timeout before syncing the fixture build. It uploads the xcresult bundle and all
-artifacts on failure. The existing `ios` policy job keeps its production configuration.
+artifacts on failure. The `ios` policy job restores production preparation after its expected
+Release guard failure.
 Swift compilation, WKWebView accessibility behavior, actual simulator bridge isolation, and
 xcresulttool execution require that macOS CI run; Linux host tests cannot verify them.
 
 **iOS share-in via another app's share sheet is deferred:** XCUITest cannot reliably drive
 another application's share sheet into this Share Extension. This lane does not simulate
-share-in through a debug bridge. `report-ios.json` records that deferral separately from the
-MOB-06-dependent real-suite scenario below.
+share-in through a debug bridge. `report-ios.json` records `shareIn` and `shareListener` as
+`deferred`, separately from the MOB-06-dependent real-suite scenario below. A subscription
+request alone never establishes native listener registration or delivery.
 
 ## Real-suite follow-up
 

@@ -253,8 +253,11 @@ function topFrame(hasPlugin = true, ios = false) {
   const result = { value: "" };
   const getPending = vi.fn(async () => ({ batches: [] as object[] }));
   let received: ((batch: object) => void) | undefined;
-  const addListener = vi.fn(async (_name: string, callback: (batch: object) => void) => {
+  const addListener = vi.fn((_name: string, callback: (batch: object) => void) => {
     received = callback;
+    const handle = { remove: async () => {} };
+    // Capacitor iOS returns the JS removal handle synchronously, without a native response.
+    return ios ? handle : Promise.resolve(handle);
   });
   const acknowledge = vi.fn(async () => {});
   const window = {
@@ -386,6 +389,8 @@ describe("top-frame fixture JavaScript", () => {
     const state = top.context.window.__e2e;
     expect(state.ios.top.webkitBridge).toMatchObject({ status: "resolved", data: { batches: [] } });
     expect(state.ios.top.prompt).toMatchObject({ status: "response", value: "false" });
+    expect(state.listenerSubscriptionRequested).toBe(true);
+    expect(state).not.toHaveProperty("listenerReady");
     expect(top.frame.src).toContain("&platform=ios");
     top.context.window.Capacitor.fromNative({
       callbackId: "mob07-hostile-nonce-webkit",

@@ -249,6 +249,7 @@
 				504EC3011FED79650016851F /* Frameworks */,
 				504EC3021FED79650016851F /* Resources */,
 				330E4838CF478171F65B6361 /* Embed Foundation Extensions */,
+				90B0ADCB4C7D463281326AD6 /* Guard non-Debug ATS */,
 			);
 			buildRules = (
 			);
@@ -401,6 +402,26 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		90B0ADCB4C7D463281326AD6 /* Guard non-Debug ATS */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+				"$(TARGET_BUILD_DIR)/$(INFOPLIST_PATH)",
+			);
+			name = "Guard non-Debug ATS";
+			outputPaths = (
+				"$(DERIVED_FILE_DIR)/non-debug-ats-guard.stamp",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# AUTHORED-BY GPT-5.6 Codex\nset -eu\nif [ \"$CONFIGURATION\" != \"Debug\" ]; then\n  plist=\"$TARGET_BUILD_DIR/$INFOPLIST_PATH\"\n  if ! /usr/bin/plutil -lint \"$plist\" >/dev/null; then\n    echo \"error: Cannot validate built Info.plist for the non-Debug ATS guard: $plist\" >&2\n    exit 1\n  fi\n  if /usr/libexec/PlistBuddy -c \"Print :NSAppTransportSecurity\" \"$plist\" >/dev/null 2>&1; then\n    echo \"error: NSAppTransportSecurity is forbidden in non-Debug builds. Restore the production plist with pnpm --filter @jeswr/app-mobile run www.\" >&2\n    exit 1\n  fi\nfi\ntouch \"$SCRIPT_OUTPUT_FILE_0\"\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		504EC3001FED79650016851F /* Sources */ = {

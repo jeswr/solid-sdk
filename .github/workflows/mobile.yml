@@ -173,6 +173,24 @@ jobs:
           xcodebuild -project App.xcodeproj -scheme App -configuration Debug
           -sdk iphonesimulator -destination "generic/platform=iOS Simulator"
           CODE_SIGNING_ALLOWED=NO build
+      - name: Reject fixture ATS in Release builds
+        run: |
+          restore_production() {
+            env -u SUITE_URL -u MOBILE_DEBUG pnpm --filter @jeswr/app-mobile run www
+          }
+          trap restore_production EXIT
+          SUITE_URL=http://localhost:4173 MOBILE_DEBUG=1 pnpm --filter @jeswr/app-mobile run www
+          if env -u SUITE_URL -u MOBILE_DEBUG xcodebuild \
+            -project apps/mobile/ios/App/App.xcodeproj -scheme App -configuration Release \
+            -sdk iphonesimulator -destination "generic/platform=iOS Simulator" \
+            ENABLE_USER_SCRIPT_SANDBOXING=YES CODE_SIGNING_ALLOWED=NO build \
+            > "$RUNNER_TEMP/release-ats-guard.log" 2>&1; then
+            cat "$RUNNER_TEMP/release-ats-guard.log"
+            echo "Release build unexpectedly accepted fixture ATS" >&2
+            exit 1
+          fi
+          cat "$RUNNER_TEMP/release-ats-guard.log"
+          grep -F "error: NSAppTransportSecurity is forbidden in non-Debug builds" "$RUNNER_TEMP/release-ats-guard.log"
       - name: Select an available iPhone simulator
         id: simulator
         run: |

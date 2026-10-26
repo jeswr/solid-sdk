@@ -35,6 +35,7 @@ const batch = (text = "shared text") => ({ id: "batch-1", items: [{ kind: "text"
 const passingIOS = () => ({
   ...passing(),
   platform: "ios",
+  listenerSubscriptionRequested: true,
   ios: {
     top: {
       webkitBridge: { status: "resolved", callbackId: "mob07-top-unique", data: { batches: [] } },
@@ -57,6 +58,33 @@ describe("iOS native-effect assertions", () => {
     expect(verdict(passingIOS())).toEqual([]);
     expect(checkFixture(passingIOS(), suite, foreign).length).toBeGreaterThan(0);
     expect(verdict(passing()).length).toBeGreaterThan(0);
+  });
+  test.each([
+    true,
+    false,
+    undefined,
+  ])("iOS verdicts ignore listener subscription fields (%j)", (value) => {
+    expect(
+      verdict({ ...passingIOS(), listenerReady: value, listenerSubscriptionRequested: value }),
+    ).toEqual([]);
+    const broken = { ...passingIOS(), topBridge: false };
+    expect(
+      verdict({ ...broken, listenerReady: value, listenerSubscriptionRequested: value }),
+    ).toEqual(verdict(broken));
+  });
+  test("a listenerReady claim alone supplies no iOS evidence", () => {
+    const claimed = { platform: "ios", listenerReady: true };
+    expect(verdict(claimed)).toEqual(verdict({ platform: "ios" }));
+    expect(verdict(claimed)).toContain("Top-frame SuiteShareIntake.getPending failed");
+    for (const key of CAPABILITIES)
+      expect(verdict(claimed)).toContain(`Missing capability: ${key}`);
+    for (const key of IOS_FRAME_PROBES) {
+      expect(verdict(claimed)).toContain(
+        `iOS iframe isolation is vacuous: ${key} top-frame control failed`,
+      );
+    }
+    expect(checkIOSNavigation(claimed, suite, `${foreign}/foreign.html`).length).toBeGreaterThan(0);
+    expect(checkRejectedShare(claimed, claimed).length).toBeGreaterThan(0);
   });
   test.each(
     IOS_FRAME_PROBES,
