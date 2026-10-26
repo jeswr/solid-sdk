@@ -1,24 +1,30 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 
 import {
   buildBitstringStatusListCredential,
   createBitstringStatusResolver,
   createStatusBitstring,
+  credentialToRdf,
+  digestQuads,
   issue,
+  type JsonValue,
   type KeyPair,
   setStatusBit,
   type VerifiableCredential,
 } from "@jeswr/solid-vc";
 import { beforeAll, expect, it } from "vitest";
+import { mandateToTurtle, parseMandateCredential } from "../src/document.js";
 import {
   createVcMandateVerifier,
   defaultMandate,
   issueMandate,
   limitConstraint,
+  mandateCredential,
   type VcMandateOptions,
 } from "../src/mandate.js";
 import { evaluateIntent } from "../src/policy.js";
-import { AGENT, LIMIT_OPERANDS } from "../src/types.js";
+import { AGENT, LIMIT_OPERANDS, ODRL } from "../src/types.js";
 import {
   ACTOR,
   clock,
@@ -86,6 +92,64 @@ it("round-trips hard and soft ODRL limit vocabulary", async () => {
   expect(
     (await createVcMandateVerifier({ ...options, read: async () => vc }).load())?.limits,
   ).toEqual(m.limits);
+});
+it("refuses to issue ambiguous scalar constraints throughout a mandate", async () => {
+  const constraint = { leftOperand: "count", operator: "eq", rightOperand: [1, 2] } as const;
+  const rule = { type: "permission" as const, action: "read", constraints: [constraint] };
+  const duty = { action: "inform" as const, constraints: [constraint] };
+  for (const changes of [
+    { autonomous: { ...mandate().autonomous, permissions: [rule] } },
+    { withApproval: { ...mandate().withApproval, permissions: [rule] } },
+    { prohibitions: [{ ...rule, type: "prohibition" as const }] },
+    {
+      autonomous: {
+        ...mandate().autonomous,
+        permissions: [{ ...rule, constraints: [], duties: [duty] }],
+      },
+    },
+    { withApproval: { ...mandate().withApproval, obligations: [duty] } },
+  ]) {
+    await expect(
+      issueMandate({ ...mandate(), ...changes }, key, {
+        statusListCredential: STATUS,
+        statusListIndex: "1",
+      }),
+    ).rejects.toThrow("right operand");
+  }
+});
+it("rejects signed scalar operands in either RDF order during verification and Turtle parsing", async () => {
+  const digests: string[] = [];
+  for (const rightOperand of [
+    [1, 2],
+    [2, 1],
+  ]) {
+    const claims = mandateCredential(mandate(), {
+      statusListCredential: STATUS,
+      statusListIndex: "1",
+    });
+    const agreement = (claims.credentialSubject as Record<string, JsonValue>)[
+      `${AGENT}agreement`
+    ] as Record<string, JsonValue>;
+    agreement[`${ODRL}prohibition`] = [
+      {
+        [`${ODRL}action`]: `${AGENT}SendMessage`,
+        [`${ODRL}constraint`]: [
+          {
+            [`${ODRL}leftOperand`]: `${ODRL}count`,
+            [`${ODRL}operator`]: `${ODRL}eq`,
+            [`${ODRL}rightOperand`]: rightOperand,
+          },
+        ],
+      },
+    ];
+    const signed = await issue({ credential: claims, key, options: { created: NOW } });
+    digests.push(await digestQuads(credentialToRdf(signed)));
+    expect(
+      await createVcMandateVerifier({ ...options, read: async () => signed }).load(),
+    ).toBeUndefined();
+    expect(await parseMandateCredential(await mandateToTurtle(signed))).toBeUndefined();
+  }
+  expect(digests[0]).toBe(digests[1]);
 });
 it("rejects unavailable credentials, status and invalid proofs", async () => {
   for (const changes of [

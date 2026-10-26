@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 
 import type { JsonValue } from "@jeswr/solid-vc";
 import { credentialToRdf } from "@jeswr/solid-vc";
@@ -42,7 +43,7 @@ it("preserves RDF policy parties, constraints and duty actions", () => {
             rightOperand: "2026-10-26",
             datatype: "http://www.w3.org/2001/XMLSchema#dateTime",
           },
-          { leftOperand: "count", operator: "lteq", rightOperand: [1, 2] },
+          { leftOperand: "count", operator: "isAnyOf", rightOperand: [1, 2] },
         ],
         duties: [{ action: "inform" }],
       },
@@ -54,6 +55,59 @@ it("preserves RDF policy parties, constraints and duty actions", () => {
   expect(parsed).toMatchObject(p);
   expect(parsed.obligations).toMatchObject(p.obligations as object);
   expect(parsed.permissions?.[0]?.duties).toMatchObject(p.permissions?.[0]?.duties as object);
+});
+it.each([
+  "eq",
+  "neq",
+  "gt",
+  "gteq",
+  "lt",
+  "lteq",
+] as const)("requires exactly one right operand when encoding and decoding %s", (operator) => {
+  const p = (rightOperand: readonly number[]): Policy => ({
+    id: "urn:policy",
+    permissions: [
+      {
+        type: "permission",
+        action: "read",
+        constraints: [{ leftOperand: "count", operator, rightOperand }],
+      },
+    ],
+  });
+  for (const rightOperand of [[], [1, 2], [2, 1]]) {
+    expect(() => encodePolicy(p(rightOperand))).toThrow("right operand");
+    const raw = encodePolicy(p([1])) as Record<string, JsonValue>;
+    const rule = (raw[`${ODRL}permission`] as Record<string, JsonValue>[])[0] as Record<
+      string,
+      JsonValue
+    >;
+    const constraint = (rule[`${ODRL}constraint`] as Record<string, JsonValue>[])[0];
+    (constraint as Record<string, JsonValue>)[`${ODRL}rightOperand`] = rightOperand;
+    expect(() => decodePolicy(view(raw))).toThrow("right operand");
+  }
+  expect(decodePolicy(view(encodePolicy(p([1])))).permissions?.[0]?.constraints?.[0]).toEqual({
+    leftOperand: "count",
+    operator,
+    rightOperand: 1,
+    datatype: undefined,
+  });
+});
+it.each([
+  "isAnyOf",
+  "isAllOf",
+  "isNoneOf",
+] as const)("preserves multiple right operands for %s", (operator) => {
+  const p: Policy = {
+    id: "urn:policy",
+    permissions: [
+      {
+        type: "permission",
+        action: "read",
+        constraints: [{ leftOperand: "purpose", operator, rightOperand: ["x", "y"] }],
+      },
+    ],
+  };
+  expect(decodePolicy(view(encodePolicy(p)))).toMatchObject(p);
 });
 it("rejects ambiguous cardinalities and the wrong RDF term kinds", () => {
   const store = new Store();

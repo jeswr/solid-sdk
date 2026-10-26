@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import type { OdrlDuty, OdrlPolicy } from "@jeswr/solid-odrl";
 import type { JsonValue } from "@jeswr/solid-vc";
 import { type Node, RDF_TYPE } from "./rdf.js";
@@ -10,7 +11,13 @@ const local = (value: string): string =>
 const opt = (key: string, value: JsonValue | undefined): Record<string, JsonValue> =>
   value === undefined ? {} : { [key]: value };
 
+function validateScalarCardinality(operator: string, count: number): void {
+  if (["eq", "neq", "gt", "gteq", "lt", "lteq"].includes(local(operator)) && count !== 1)
+    throw new Error("Expected exactly one right operand for a scalar operator");
+}
+
 function encodeConstraint(c: Constraint): JsonValue {
+  validateScalarCardinality(c.operator, Array.isArray(c.rightOperand) ? c.rightOperand.length : 1);
   return {
     [`${ODRL}leftOperand`]: uri(c.leftOperand),
     [`${ODRL}operator`]: uri(c.operator),
@@ -73,9 +80,11 @@ function decodeConstraint(n: Node): Constraint {
       : v.value;
   });
   if (rights.length === 0) throw new Error("Missing right operand");
+  const operator = local(n.iri(`${ODRL}operator`)) as Constraint["operator"];
+  validateScalarCardinality(operator, rights.length);
   return {
     leftOperand: local(n.iri(`${ODRL}leftOperand`)),
-    operator: local(n.iri(`${ODRL}operator`)) as Constraint["operator"],
+    operator,
     rightOperand: rights.length === 1 ? (rights[0] as string | number) : rights,
     datatype: optional(n, `${AGENT}datatype`),
   };
