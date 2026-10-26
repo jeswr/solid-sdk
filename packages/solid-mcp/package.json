@@ -1,6 +1,6 @@
 {
   "name": "@jeswr/solid-mcp",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A Model Context Protocol (MCP) server that exposes a Solid pod to MCP clients (Claude Desktop, etc.) as Resources + Tools (list / read / search / write) over an injectable authenticated Solid fetch. Read-only by default; pod-scope-guarded. Experimental, AI-agent-generated.",
   "type": "module",
   "main": "./dist/index.js",
@@ -9,6 +9,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./http": {
+      "types": "./dist/http.d.ts",
+      "import": "./dist/http.js"
     }
   },
   "bin": {
@@ -17,7 +21,8 @@
   "files": [
     "dist",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "SKILL.md"
   ],
   "scripts": {
     "build:deps": "node scripts/build-deps.mjs",
@@ -67,7 +72,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.3",
-    "@jeswr/fetch-rdf": "github:jeswr/fetch-rdf#a8359a3764cb6b3c763e09ea211542a5dc7edc33",
+    "@jeswr/fetch-rdf": "workspace:*",
     "@microsoft/api-extractor": "7.58.9",
     "@types/n3": "^1.16.0",
     "@types/node": "^26.1.1",
@@ -77,9 +82,11 @@
     "vitest": "^4.1.10"
   },
   "engines": {
-    "node": ">=22.19.0"
+    "node": ">=24"
   },
   "publishConfig": {
     "access": "public"
-  }
+  },
+  "securityCritical": true,
+  "sideEffects": false
 }

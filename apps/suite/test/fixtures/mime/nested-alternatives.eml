@@ -1,0 +1,33 @@
+X-Fixture-Author: AUTHORED-BY Codex GPT-6
+From: Riley Example <riley@example.org>
+To: Morgan Example <morgan@example.org>
+Subject: Synthetic nested alternatives
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary=outer
+
+--outer
+Content-Type: text/plain
+
+Outer fallback
+--outer
+Content-Type: multipart/alternative; boundary=inner
+
+--inner
+Content-Type: text/plain
+
+Earlier plain
+--inner
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+Preferred plain caf=C3=A9
+--inner
+Content-Type: text/html
+
+<p>Earlier HTML</p>
+--inner
+Content-Type: text/html
+
+<p>Preferred HTML</p><script>bad()</script>
+--inner--
+--outer--

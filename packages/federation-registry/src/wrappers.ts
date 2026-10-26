@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+// AUTHORED-BY Codex GPT-6.1-Sol
 //
 // Typed @rdfjs/wrapper accessors over a fedreg: registry / membership / storage
 // graph. This is the ONLY place RDF terms are read/written for the federation
@@ -33,10 +34,29 @@ import {
   FEDREG_STORAGE,
   FEDREG_STORAGE_DESCRIPTION,
   FEDREG_SUPPORTS_SECTOR,
+  legacyIri,
   RDF_TYPE,
 } from "./vocab.js";
 
 const XSD_DATETIME = "http://www.w3.org/2001/XMLSchema#dateTime";
+
+/** Prefer canonical properties, falling back to the legacy predicate per field. */
+function readObjects<T>(predicate: string, read: (iri: string) => Set<T>): Set<T> {
+  const canonical = read(predicate);
+  return canonical.size > 0 ? canonical : read(legacyIri(predicate));
+}
+
+/** Keep canonical subjects first and count a dual-typed RDF node only once. */
+function uniqueNodes<T extends TermWrapper>(...groups: Iterable<T>[]): T[] {
+  const nodes = new Map<string, T>();
+  for (const group of groups) {
+    for (const node of group) {
+      const key = `${node.termType}:${node.value}`;
+      if (!nodes.has(key)) nodes.set(key, node);
+    }
+  }
+  return [...nodes.values()];
+}
 
 /**
  * Read a property's objects as a Set of the OBJECT TERMS themselves (not their
@@ -47,7 +67,9 @@ const XSD_DATETIME = "http://www.w3.org/2001/XMLSchema#dateTime";
  * literal term. Mirrors the term-type-preserving pattern in @jeswr/federation-client.
  */
 function objectTerms(node: TermWrapper, predicate: string): Set<TermWrapperType> {
-  return SetFrom.subjectPredicate(node, predicate, TermAs.instance(TermWrapper), TermFrom.instance);
+  return readObjects(predicate, (iri) =>
+    SetFrom.subjectPredicate(node, iri, TermAs.instance(TermWrapper), TermFrom.instance),
+  );
 }
 
 /**
@@ -96,11 +118,8 @@ export class StorageNode extends TermWrapper {
 export class RegistryNode extends TermWrapper {
   /** The `fedreg:Membership` nodes linked via `fedreg:member`. */
   get members(): Set<MembershipNode> {
-    return SetFrom.subjectPredicate(
-      this,
-      FEDREG_MEMBER,
-      TermAs.instance(MembershipNode),
-      TermFrom.instance,
+    return readObjects(FEDREG_MEMBER, (iri) =>
+      SetFrom.subjectPredicate(this, iri, TermAs.instance(MembershipNode), TermFrom.instance),
     );
   }
 }
@@ -112,17 +131,26 @@ export class RegistryNode extends TermWrapper {
 export class RegistryDataset extends DatasetWrapper {
   /** Every `fedreg:Registry` subject. */
   registries(): RegistryNode[] {
-    return [...this.instancesOf(FEDREG_REGISTRY, RegistryNode)];
+    return uniqueNodes(
+      this.instancesOf(FEDREG_REGISTRY, RegistryNode),
+      this.instancesOf(legacyIri(FEDREG_REGISTRY), RegistryNode),
+    );
   }
 
   /** Every `fedreg:Membership` subject (whether or not linked into a Registry). */
   memberships(): MembershipNode[] {
-    return [...this.instancesOf(FEDREG_MEMBERSHIP, MembershipNode)];
+    return uniqueNodes(
+      this.instancesOf(FEDREG_MEMBERSHIP, MembershipNode),
+      this.instancesOf(legacyIri(FEDREG_MEMBERSHIP), MembershipNode),
+    );
   }
 
   /** Every `fedreg:StorageDescription` subject. */
   storageDescriptions(): StorageNode[] {
-    return [...this.instancesOf(FEDREG_STORAGE_DESCRIPTION, StorageNode)];
+    return uniqueNodes(
+      this.instancesOf(FEDREG_STORAGE_DESCRIPTION, StorageNode),
+      this.instancesOf(legacyIri(FEDREG_STORAGE_DESCRIPTION), StorageNode),
+    );
   }
 
   /** A typed view of a single membership subject. */

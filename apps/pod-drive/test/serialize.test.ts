@@ -25,7 +25,7 @@ describe("quadsToTurtle", () => {
       quad(
         namedNode("https://pod.example/drive/"),
         namedNode("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
-        namedNode("https://w3id.org/jeswr/pod-drive#DriveRoot"),
+        namedNode("https://jeswr.org/ns/pod-drive#DriveRoot"),
       ),
     ];
     const ttl = await quadsToTurtle(quads);
@@ -37,7 +37,7 @@ describe("quadsToTurtle", () => {
     const back = store.getQuads(
       namedNode("https://pod.example/drive/"),
       namedNode("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
-      namedNode("https://w3id.org/jeswr/pod-drive#DriveRoot"),
+      namedNode("https://jeswr.org/ns/pod-drive#DriveRoot"),
       null,
     );
     expect(back).toHaveLength(1);

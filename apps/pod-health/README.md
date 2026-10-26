@@ -30,17 +30,19 @@ other apps can discover it.
 | The vocabulary (single home for every IRI) | `src/vocab.ts` | never hand-concatenate IRIs at a call site |
 
 A federation-registry-ready Client Identifier Document lives at `public/clientid.jsonld`: it
-publishes the `fedapp:` block from [`https://w3id.org/jeswr/fed`](https://github.com/jeswr/solid-federation-vocab)
+publishes the `fedapp:` block from [`https://jeswr.org/ns/fed`](https://github.com/jeswr/solid-federation-vocab)
 (sector = health, the consumed/produced classes) alongside the Solid-OIDC client metadata.
 
-## Namespace note (interim vocabulary)
+## Namespace note
 
-The fse health sector ontology currently uses the **placeholder** base
-`https://TBD.example/solid/health#`, pending fse "namespace decision #2". This data layer builds
-against that interim IRI verbatim, isolated in `src/vocab.ts`, so a single edit re-points the whole
-layer once the namespace is frozen. The `fedapp:` clientid block uses the already-frozen
-`https://w3id.org/jeswr/fed#` vocabulary and the `https://w3id.org/jeswr/sectors/health#sector`
-slug. See the tracked sector-vocab ADR follow-up.
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+Suite vocabulary writes use `https://jeswr.org/ns/` only, via `@jeswr/suite-vocab`.
+Readers accept legacy namespace aliases; Type Index discovery matches both canonical and
+legacy class IRIs. Standard vocabularies keep their published namespaces.
+
+Health uses `https://jeswr.org/ns/sectors/health#`, Core uses `https://jeswr.org/ns/core#`,
+and the workout glue uses `https://jeswr.org/ns/pod-health#`. Loaded legacy vocabulary is
+normalized in memory; it is persisted only on an explicit save.
 
 ## Usage
 

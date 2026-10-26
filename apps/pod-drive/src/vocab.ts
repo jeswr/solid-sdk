@@ -9,53 +9,55 @@
 // the predicate IRIs those accessors reference, so a vocabulary change touches
 // exactly one place.
 
+import { NS } from "@jeswr/suite-vocab";
+
 /** RDF / RDFS core. */
 export const RDF = {
-  type: "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+  type: `${NS.RDF}type`,
 } as const;
 
 /** W3C LDP — container membership + resource typing. */
 export const LDP = {
-  ns: "http://www.w3.org/ns/ldp#",
-  contains: "http://www.w3.org/ns/ldp#contains",
-  Container: "http://www.w3.org/ns/ldp#Container",
-  BasicContainer: "http://www.w3.org/ns/ldp#BasicContainer",
-  Resource: "http://www.w3.org/ns/ldp#Resource",
-  RDFSource: "http://www.w3.org/ns/ldp#RDFSource",
-  NonRDFSource: "http://www.w3.org/ns/ldp#NonRDFSource",
+  ns: NS.LDP,
+  contains: `${NS.LDP}contains`,
+  Container: `${NS.LDP}Container`,
+  BasicContainer: `${NS.LDP}BasicContainer`,
+  Resource: `${NS.LDP}Resource`,
+  RDFSource: `${NS.LDP}RDFSource`,
+  NonRDFSource: `${NS.LDP}NonRDFSource`,
 } as const;
 
 /** POSIX stat vocabulary — the byte size + mtime servers expose on resources. */
 export const POSIX = {
-  ns: "http://www.w3.org/ns/posix/stat#",
-  size: "http://www.w3.org/ns/posix/stat#size",
-  mtime: "http://www.w3.org/ns/posix/stat#mtime",
+  ns: NS.POSIX,
+  size: `${NS.POSIX}size`,
+  mtime: `${NS.POSIX}mtime`,
 } as const;
 
 /** Dublin Core terms — modified timestamp + content type. */
 export const DCTERMS = {
-  ns: "http://purl.org/dc/terms/",
-  modified: "http://purl.org/dc/terms/modified",
-  format: "http://purl.org/dc/terms/format",
+  ns: NS.DCT,
+  modified: `${NS.DCT}modified`,
+  format: `${NS.DCT}format`,
 } as const;
 
 /** Solid type-index vocabulary. */
 export const SOLID = {
-  ns: "http://www.w3.org/ns/solid/terms#",
-  TypeIndex: "http://www.w3.org/ns/solid/terms#TypeIndex",
-  ListedDocument: "http://www.w3.org/ns/solid/terms#ListedDocument",
-  UnlistedDocument: "http://www.w3.org/ns/solid/terms#UnlistedDocument",
-  TypeRegistration: "http://www.w3.org/ns/solid/terms#TypeRegistration",
-  forClass: "http://www.w3.org/ns/solid/terms#forClass",
-  instance: "http://www.w3.org/ns/solid/terms#instance",
-  instanceContainer: "http://www.w3.org/ns/solid/terms#instanceContainer",
-  publicTypeIndex: "http://www.w3.org/ns/solid/terms#publicTypeIndex",
-  privateTypeIndex: "http://www.w3.org/ns/solid/terms#privateTypeIndex",
+  ns: NS.SOLID,
+  TypeIndex: `${NS.SOLID}TypeIndex`,
+  ListedDocument: `${NS.SOLID}ListedDocument`,
+  UnlistedDocument: `${NS.SOLID}UnlistedDocument`,
+  TypeRegistration: `${NS.SOLID}TypeRegistration`,
+  forClass: `${NS.SOLID}forClass`,
+  instance: `${NS.SOLID}instance`,
+  instanceContainer: `${NS.SOLID}instanceContainer`,
+  publicTypeIndex: `${NS.SOLID}publicTypeIndex`,
+  privateTypeIndex: `${NS.SOLID}privateTypeIndex`,
 } as const;
 
 /** PIM space — storage discovery from a WebID profile. */
 export const PIM = {
-  storage: "http://www.w3.org/ns/pim/space#storage",
+  storage: `${NS.PIM}storage`,
 } as const;
 
 /**
@@ -64,12 +66,12 @@ export const PIM = {
  * an LDP container; this is the marker class the app vouches for.
  */
 export const PODDRIVE = {
-  ns: "https://w3id.org/jeswr/pod-drive#",
-  DriveRoot: "https://w3id.org/jeswr/pod-drive#DriveRoot",
+  ns: NS.POD_DRIVE,
+  DriveRoot: `${NS.POD_DRIVE}DriveRoot`,
 } as const;
 
 /** XSD datatypes referenced when serialising literals. */
 export const XSD = {
-  dateTime: "http://www.w3.org/2001/XMLSchema#dateTime",
-  integer: "http://www.w3.org/2001/XMLSchema#integer",
+  dateTime: `${NS.XSD}dateTime`,
+  integer: `${NS.XSD}integer`,
 } as const;

@@ -53,7 +53,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@jeswr/fetch-rdf": "^0.1.0",
+    "@jeswr/fetch-rdf": "workspace:*",
     "@solid/object": "^0.6.0",
     "dpop": "^2.1.1",
     "n3": "^2.0.3",

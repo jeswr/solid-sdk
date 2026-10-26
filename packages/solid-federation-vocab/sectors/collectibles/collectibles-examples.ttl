@@ -16,8 +16,8 @@
 # policy. Attribution is prov:wasAssociatedWith → an Agent NODE; timing is
 # prov:startedAtTime, never prov:atTime.
 #
-@prefix col:     <https://w3id.org/jeswr/sectors/collectibles#> .
-@prefix core:    <https://w3id.org/jeswr/core#> .
+@prefix col:     <https://jeswr.org/ns/sectors/collectibles#> .
+@prefix core:    <https://jeswr.org/ns/core#> .
 @prefix schema:  <http://schema.org/> .
 @prefix prov:    <http://www.w3.org/ns/prov#> .
 @prefix dcterms: <http://purl.org/dc/terms/> .

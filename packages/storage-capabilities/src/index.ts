@@ -1,3 +1,17 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-/** Reserved public entry point for @jeswr/storage-capabilities; implementation follows T-001. */
-export {};
+/** Storage capability contracts from ADR-002. Runtime discovery follows in later tasks. */
+export type {
+  CapabilityEntry,
+  DescriptionCache,
+  DescriptionSource,
+  Feature,
+  FeatureState,
+  Features,
+  ProbeEvidence,
+  ProbeResult,
+  Protocol,
+  ResolveOptions,
+  ServiceEntry,
+  StorageDescription,
+  WacMode,
+} from "./types.js";
