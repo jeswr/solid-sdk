@@ -317,6 +317,7 @@ test("session inspection handles unstamped legacy records, missing records, and 
 });
 
 test("ID-token sources reauthorize when refresh returns no ID token, and reject a missing azp", async () => {
+  const fence = new SessionFence("id-token-sources", { broadcast: false });
   const uriOp = await startOpenIdProvider({ subject: "https://alice.example/#me" });
   const withoutAzp = await startOpenIdProvider({
     subject: "https://alice.example/#me",
@@ -333,7 +334,7 @@ test("ID-token sources reauthorize when refresh returns no ID token, and reject 
         callback,
         code,
         new DynamicRegistrationClientProvider(insecure),
-        { http: insecure },
+        { http: insecure, fence },
       );
       const request = {
         authorizationServer: new URL("https://as.example/"),
@@ -355,12 +356,13 @@ test("ID-token sources reauthorize when refresh returns no ID token, and reject 
         callback,
         automaticCodeProvider(),
         new DynamicRegistrationClientProvider(insecure),
-        { http: insecure },
+        { http: insecure, fence },
       );
       await assert.rejects(invalid.getCredential(request), /lacks the azp/);
       await invalid.forget();
     });
   } finally {
+    fence.close();
     await uriOp.close();
     await withoutAzp.close();
   }

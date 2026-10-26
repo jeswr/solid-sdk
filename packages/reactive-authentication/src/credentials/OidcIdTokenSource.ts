@@ -6,6 +6,7 @@ import type { Identity } from "../Identity.js";
 import { TokenType } from "../lws/constants.js";
 import { idTokenUsable, OidcSession, type OidcSessionOptions } from "../OidcSession.js";
 import { ReactiveAuthenticationError } from "../ReactiveAuthenticationError.js";
+import type { SessionFence } from "../SessionFence.js";
 import type { CredentialRequest, CredentialSource, SubjectCredential } from "./CredentialSource.js";
 
 /**
@@ -34,8 +35,16 @@ export class OidcIdTokenSource implements CredentialSource {
     callbackUri: string,
     codeProvider: CodeProvider,
     clientProvider: ClientProvider,
-    options: OidcSessionOptions & { requireAudience?: boolean } = {},
+    options: OidcSessionOptions & {
+      /** The fence shared by the session manager and its LWS token provider. */
+      fence: SessionFence;
+      requireAudience?: boolean;
+    },
   ) {
+    if (!options?.fence)
+      throw new TypeError(
+        "OidcIdTokenSource requires an explicit SessionFence shared with its LWS provider",
+      );
     this.#issuer = openIdProvider;
     this.#requireAudience = options.requireAudience ?? false;
     // Every non-secret dimension that selects a different credential, so access-token caches keyed by
@@ -56,6 +65,10 @@ export class OidcIdTokenSource implements CredentialSource {
 
   get id(): string {
     return this.#id;
+  }
+
+  get fence(): SessionFence {
+    return this.#session.fence;
   }
 
   async getCredential(request: CredentialRequest): Promise<SubjectCredential> {
