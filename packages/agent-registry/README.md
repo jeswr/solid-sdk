@@ -25,12 +25,16 @@ YAML aliases/tags, invalid dates and oversized inputs fail before storage writes
 Credential references may be supplied as `credential_ref` on the account or connector
 (string or array). `op://vault/item/field` strings are kept verbatim; explicit daemon
 profile references use `profile:name`. Opaque credential strings are refused. References
-containing a known raw identifier are refused rather than rewritten. References are
+containing a known identifier, including in decoded URI components, are refused rather
+than rewritten. Malformed escapes and decoded control characters are refused. References are
 never resolved. Labels, source paths and free-text notes are never copied into settings
 or RDF; conflict notes become structured hash-only `agent:identityConflict` values.
 
 `SaltProvider.getSalt()` supplies a stable, private salt of at least 32 bytes from the
-daemon store. Handles use HMAC-SHA-256(salt, NFC/trim/lowercase(handle)), hexadecimal.
+daemon store. Handles use HMAC-SHA-256(salt, normaliseHandle(handle, channel)), hexadecimal.
+Normalization applies NFC and trim, preserves Matrix case, and lowercases other channels.
+The exported `normaliseHandle(handle, channel?)` and `hashHandle(handle, salt, channel?)`
+helpers accept `"matrix"` to preserve case; omitting the channel retains lowercase normalization.
 No provider-specific alias folding is applied. Resource ids hash the registry id with
 an `account-id\0` domain prefix, preserving resources across handle/provider corrections.
 Keep the salt stable across imports. Raw handles stay in the daemon's private input.

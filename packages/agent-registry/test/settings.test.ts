@@ -18,6 +18,7 @@ import {
   isPlaceholder,
   normaliseHandle,
   parseRegistryYaml,
+  parseSnapshot,
 } from "../src/index.js";
 
 const fixture = await readFile(
@@ -32,6 +33,29 @@ function connection() {
   const first = settings().connections[1];
   if (!first) throw new Error("Fixture account absent");
   return first;
+}
+function matrixSnapshot() {
+  return parseSnapshot({
+    version: 1,
+    accounts: ["matrix.example", "MATRIX.example"].map((server, index) => ({
+      id: `matrix-${index}`,
+      channel: "matrix",
+      provider: "matrix",
+      organization: "personal",
+      identifiers: { primary: `@fixture:${server}` },
+      connector: { target: "matrix", setup_status: "planned" },
+    })),
+    evidence: [
+      {
+        channel: "matrix",
+        provider: "matrix",
+        identifier: "  @fixture:matrix.example  ",
+        method: "historic_connector",
+        source: "synthetic",
+        observedOn: "2026-10-20",
+      },
+    ],
+  });
 }
 
 describe("privacy and settings model", () => {
@@ -52,6 +76,85 @@ describe("privacy and settings model", () => {
     expect(isPlaceholder("to_confirm")).toBe(true);
     expect(isPlaceholder(" ")).toBe(true);
     expect(isPlaceholder("fixture@example.com")).toBe(false);
+  });
+  it("preserves Matrix case in normalisation and HMAC while keeping email case folding", () => {
+    expect(normaliseHandle("  @fixture:MATRIX.example  ", "matrix")).toBe(
+      "@fixture:MATRIX.example",
+    );
+    expect(hashHandle("  @fixture:MATRIX.example  ", salt, "matrix")).toBe(
+      createHmac("sha256", salt).update("@fixture:MATRIX.example").digest("hex"),
+    );
+    expect(hashHandle("@fixture:MATRIX.example", salt, "matrix")).not.toBe(
+      hashHandle("@fixture:matrix.example", salt, "matrix"),
+    );
+    expect(hashHandle("FIXTURE@example.com", salt, "email")).toBe(
+      hashHandle("fixture@example.com", salt, "email"),
+    );
+  });
+  it("keeps Matrix evidence and provider conflicts on the matching case-sensitive identity", () => {
+    const snap = matrixSnapshot();
+    const evidence = snap.evidence[0];
+    if (!evidence) throw new Error("Fixture evidence absent");
+    evidence.provider = "other_matrix";
+    const s = inventorySettings(snap, salt);
+    const lowerHash = hashHandle("@fixture:matrix.example", salt, "matrix");
+    const upperHash = hashHandle("@fixture:MATRIX.example", salt, "matrix");
+    expect(s.connections[0]).toMatchObject({
+      channelHandles: [lowerHash],
+      bindingState: "error",
+      evidence: [{ handleHash: lowerHash }],
+      identityConflicts: [{ kind: "provider-mismatch", handleHashes: [lowerHash] }],
+    });
+    expect(s.connections[1]).toMatchObject({
+      channelHandles: [upperHash],
+      bindingState: "setup-required",
+      evidence: [],
+      identityConflicts: [],
+    });
+    expect(s.unmatchedEvidence).toEqual([]);
+  });
+  it("keeps evidence with a different Matrix server-name case unmatched", () => {
+    const snap = matrixSnapshot();
+    snap.accounts.splice(0, 1);
+    const s = inventorySettings(snap, salt);
+    expect(s.connections[0]?.evidence).toEqual([]);
+    expect(s.connections[0]?.identityConflicts).toEqual([]);
+    expect(s.unmatchedEvidence).toMatchObject([
+      { handleHash: hashHandle("@fixture:matrix.example", salt, "matrix") },
+    ]);
+  });
+  it("matches conflict-note identities with Matrix case and hashes each mentioned identity", () => {
+    const snap = matrixSnapshot();
+    const other = "@other:Elsewhere.example";
+    snap.evidence.push({
+      channel: "matrix",
+      provider: "matrix",
+      identifier: other,
+      method: "historic_connector",
+      observedOn: "2026-10-20",
+    });
+    snap.notes = [`Identity conflict: @fixture:matrix.example versus ${other}`];
+    const s = inventorySettings(snap, salt);
+    expect(s.connections[0]?.identityConflicts).toEqual([
+      {
+        kind: "identity-mismatch",
+        handleHashes: [
+          hashHandle("@fixture:matrix.example", salt, "matrix"),
+          hashHandle(other, salt, "matrix"),
+        ].sort(),
+      },
+    ]);
+    expect(s.connections[1]?.identityConflicts).toEqual([]);
+    expect(s.unmatchedEvidence).toMatchObject([{ handleHash: hashHandle(other, salt, "matrix") }]);
+  });
+  it("still rejects encoded Matrix identifiers in references regardless of case", () => {
+    const snap = matrixSnapshot();
+    const upper = snap.accounts[1];
+    if (!upper) throw new Error("Fixture account absent");
+    snap.accounts = [upper];
+    snap.evidence = [];
+    upper.refs = ["op://test-vault/%40fixture%3Amatrix.example/credential"];
+    expect(() => inventorySettings(snap, salt)).toThrow("private identifier");
   });
   it("defaults to empty settings and immutable denied restrictions", () => {
     expect(emptySettings()).toEqual({

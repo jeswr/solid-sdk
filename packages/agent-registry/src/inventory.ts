@@ -242,17 +242,18 @@ export function inventorySettings(snapshot: RegistrySnapshot, salt: Uint8Array):
       refs: [],
       setupStatus: "not_configured",
     });
-  const rawHandles = [
-    ...new Set(
-      [
-        ...accounts.flatMap((a) => a.handles),
-        ...snapshot.evidence.map((e) => e.identifier),
-        ...snapshot.notes.flatMap(
-          (note) => note.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g) ?? [],
-        ),
-      ].map(normaliseHandle),
+  const identities = [
+    ...accounts.flatMap((a) => a.handles.map((handle) => ({ handle, channel: a.channel }))),
+    ...snapshot.evidence.map((e) => ({ handle: e.identifier, channel: e.channel })),
+    ...snapshot.notes.flatMap((note) =>
+      (note.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g) ?? []).map((handle) => ({
+        handle,
+        channel: "email",
+      })),
     ),
-  ];
+  ].map(({ handle, channel }) => ({ handle: normaliseHandle(handle, channel), channel }));
+  // Redaction deliberately checks case-insensitively, independently of identity matching.
+  const rawHandles = [...new Set(identities.map(({ handle }) => normaliseHandle(handle)))];
   const safe = (value: string) =>
     rawHandles.some((h) => normaliseHandle(value).includes(h)) || /@|op:\/\//i.test(value)
       ? "redacted"
@@ -260,17 +261,19 @@ export function inventorySettings(snapshot: RegistrySnapshot, salt: Uint8Array):
   const evidenceFor = (e: RegistrySnapshot["evidence"][number]) => ({
     channel: safe(e.channel),
     provider: safe(e.provider),
-    handleHash: hashHandle(e.identifier, salt),
+    handleHash: hashHandle(e.identifier, salt, e.channel),
     method: safe(e.method),
     observedOn: e.observedOn,
   });
   const matches = (a: RegistryAccount, e: RegistrySnapshot["evidence"][number]) =>
     a.channel === e.channel &&
-    a.handles.some((h) => normaliseHandle(h) === normaliseHandle(e.identifier));
+    a.handles.some(
+      (h) => normaliseHandle(h, a.channel) === normaliseHandle(e.identifier, e.channel),
+    );
   const settings: Settings = {
     version: 1,
     connections: accounts.map((a): Account => {
-      const hashes = [...new Set(a.handles.map((h) => hashHandle(h, salt)))].sort();
+      const hashes = [...new Set(a.handles.map((h) => hashHandle(h, salt, a.channel)))].sort();
       const conflicts: Account["identityConflicts"] = [];
       const provider =
         a.channel === "email" && /^(odi|open[ _-]data[ _-]institute)$/i.test(a.organisation)
@@ -278,22 +281,28 @@ export function inventorySettings(snapshot: RegistrySnapshot, salt: Uint8Array):
           : a.provider;
       for (const note of snapshot.notes) {
         if (!/versus|contradict|conflict/i.test(note)) continue;
-        const mentioned = rawHandles.filter((h) => normaliseHandle(note).includes(h));
-        if (mentioned.some((h) => a.handles.some((own) => normaliseHandle(own) === h)))
+        const mentioned = identities.filter(({ handle, channel }) =>
+          normaliseHandle(note, channel).includes(handle),
+        );
+        if (
+          mentioned.some(
+            ({ handle, channel }) =>
+              a.channel === channel &&
+              a.handles.some((own) => normaliseHandle(own, channel) === handle),
+          )
+        )
           conflicts.push({
             kind: "identity-mismatch",
-            handleHashes: mentioned.map((h) => hashHandle(h, salt)).sort(),
+            handleHashes: [
+              ...new Set(mentioned.map(({ handle, channel }) => hashHandle(handle, salt, channel))),
+            ].sort(),
           });
       }
       for (const e of snapshot.evidence) {
-        if (
-          e.channel === a.channel &&
-          a.handles.some((h) => normaliseHandle(h) === normaliseHandle(e.identifier)) &&
-          e.provider !== provider
-        )
+        if (matches(a, e) && e.provider !== provider)
           conflicts.push({
             kind: "provider-mismatch",
-            handleHashes: [hashHandle(e.identifier, salt)],
+            handleHashes: [hashHandle(e.identifier, salt, e.channel)],
           });
       }
       for (const ref of a.refs) {
