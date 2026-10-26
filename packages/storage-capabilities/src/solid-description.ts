@@ -63,15 +63,14 @@ class DescriptionNode extends TermWrapper {
         const values = this.objects(predicate).map((term): unknown => {
           // ADR-008 format nodes may be named (`ssd:format <#turtle>`): expand those too, so
           // their ssd:source/ssd:patchType survive. Other named objects stay IRI strings.
-          const expand =
-            term.termType === "BlankNode" ||
-            (predicate === SSD_FORMAT &&
-              term.termType === "NamedNode" &&
-              this.dataset.match(term as Term).size > 0);
-          if (!expand) return term.value;
-          // Expand each blank node once, bounding both depth and shared-subgraph growth.
-          const id = term.termType === "BlankNode" ? `_:${term.value}` : term.value;
+          // Nodes already expanded anywhere in this mapping become references (checked first,
+          // so a shared node costs one expansion and no repeated dataset lookups).
+          const blank = term.termType === "BlankNode";
+          const named = predicate === SSD_FORMAT && term.termType === "NamedNode";
+          if (!blank && !named) return term.value;
+          const id = blank ? `_:${term.value}` : term.value;
           if (visited.has(term.value) || depth >= 31) return { "@id": id };
+          if (named && this.dataset.match(term as Term).size === 0) return term.value;
           // Keep the definition identifiable so later references can resolve to it.
           return {
             "@id": id,
@@ -106,6 +105,8 @@ export function parseSolidDescription(
   notificationsOnly = false,
 ): Pick<StorageDescription, "services" | "capabilities"> {
   const root = new DescriptionNode(rootUrl, dataset, DataFactory);
+  // One expansion per node across the whole mapping; deriveFeatures resolves `{ "@id" }` refs.
+  const visited = new Set<string>();
   const services: ServiceEntry[] = [];
   const subscriptions = new DescriptionDataset(dataset, DataFactory).subscriptions;
   const seen = new Set<string>();
@@ -119,7 +120,7 @@ export function parseSolidDescription(
       type: [SSD.SolidNotificationService, ...channels.filter((type) => CHANNEL_TYPES.has(type))],
       endpoint: subscription.value,
       extra: {
-        ...subscription.extra([RDF_TYPE, NOTIFY.channelType, NOTIFY.feature]),
+        ...subscription.extra([RDF_TYPE, NOTIFY.channelType, NOTIFY.feature], visited),
         ...(channels.length > 0
           ? { [NOTIFY.channelType]: channels.length === 1 ? channels[0] : channels }
           : {}),
@@ -137,7 +138,7 @@ export function parseSolidDescription(
       endpoint,
       ...service.identity,
       ...(conformsTo.length > 0 ? { conformsTo } : {}),
-      extra: service.extra([RDF_TYPE, DID.serviceEndpoint, DCT.conformsTo]),
+      extra: service.extra([RDF_TYPE, DID.serviceEndpoint, DCT.conformsTo], visited),
     });
   }
   for (const endpoint of root.iris(ACQ.endpoint)) {
@@ -146,7 +147,7 @@ export function parseSolidDescription(
   const capabilities: CapabilityEntry[] = root.nodes(LWS.capability).map((capability) => ({
     type: capability.types,
     ...capability.identity,
-    extra: capability.extra([RDF_TYPE]),
+    extra: capability.extra([RDF_TYPE], visited),
   }));
   return { services, capabilities };
 }

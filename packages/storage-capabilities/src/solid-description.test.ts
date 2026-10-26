@@ -363,6 +363,35 @@ describe("parseSolidDescription", () => {
     expect(features.patch.detail.formats).toEqual({ "text/turtle": ["application/sparql-update"] });
   });
 
+  test("a format node shared by many capabilities is expanded once (linear output)", async () => {
+    const n = 400;
+    const types = Array.from({ length: n }, (_, i) => `"application/x-p${i}"`).join(", ");
+    const caps = Array.from(
+      { length: n },
+      (_, i) =>
+        `<> lws:capability <#cap${i}> . <#cap${i}> a ssd:PatchSupport ; ssd:format <#shared> .`,
+    ).join("\n");
+    const dataset = await turtle(`${caps}
+      <#shared> ssd:source "text/turtle" ; ssd:patchType ${types} .`);
+    const started = performance.now();
+    const result = parseSolidDescription(dataset, ROOT);
+    expect(JSON.stringify(result).length).toBeLessThan(200_000);
+    const features = deriveFeatures({
+      protocol: "solid",
+      id: ROOT,
+      root: ROOT,
+      descriptionUrl: `${ROOT}.well-known/solid`,
+      sources: ["solid-description"],
+      fetchedAt: 0,
+      etag: null,
+      maxAgeMs: 0,
+      verificationMethods: [],
+      ...result,
+    });
+    expect(features.patch.detail.formats["text/turtle"]).toHaveLength(n);
+    expect(performance.now() - started).toBeLessThan(3000);
+  });
+
   test("expands shared blank-node extensions once rather than multiplying their contents", async () => {
     const dataset = await turtle(`
       <> lws:capability _:cap .
