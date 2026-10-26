@@ -1,5 +1,6 @@
 // AUTHORED-BY Claude Opus 5.5
-import PostalMime, { type Address } from "postal-mime";
+import PostalMime from "postal-mime";
+import { mailtos } from "./addresses.js";
 
 export interface ParsedMail {
   readonly messageId?: string;
@@ -19,17 +20,6 @@ export interface ParsedMail {
     readonly contentType: string;
     readonly content: Uint8Array;
   }[];
-}
-
-/** mailto IRIs for every address, flattening groups (MAI-01 `addresses`). */
-function mailtos(values: readonly Address[] | undefined): string[] {
-  return (values ?? []).flatMap((value) =>
-    value.group
-      ? mailtos(value.group)
-      : value.address
-        ? [`mailto:${encodeURIComponent(value.address)}`]
-        : [],
-  );
 }
 
 /** Message-ID values are only usable as keys when they are a single `<…>` token. */

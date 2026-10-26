@@ -1,7 +1,13 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 # Mail model (MAI-00)
 
-Pure RDF models ported from `apps/pod-mail/src/model`; no React or SDK facade imports.
+Typed RDF models ported from `apps/pod-mail/src/model`; no React or SDK facade imports.
+`@jeswr/pod-connectors/mail` owns the shared framework-free MAI-01 path slugs, reserved
+system-folder titles, standard mail IRIs, linear HTML-to-text scanner and MIME address
+conversion. `paths.ts` resolves those relative slugs with `new URL` while preserving its
+existing URL/identifier validation; `vocab.ts` preserves the app's names as re-exports.
+Typed wrappers, MailStore I/O, operations, importer orchestration and Type Index handling
+remain local. The standalone app still uses its older layout without an account segment.
 `Message`, `Thread`, `Folder`, `Attachment` and `TypeIndexDataset` are live typed wrappers.
 Use `parseMailbox` and `serialiseToTurtle` for complete-document round trips.
 
@@ -46,3 +52,14 @@ roll back or automatically retry. The caller reports the failure and can reload/
 `register` updates a caller-supplied existing Type Index; SDK-APP-10 owns bootstrap/discovery.
 
 Gmail export label headers follow [Google's Takeout documentation](https://support.google.com/accounts/answer/3024190?hl=en).
+
+Compatibility boundaries: this app still permits dot message/thread IDs, arbitrary explicit
+system keys and unvalidated attachment account/ID/index values; connector entry points keep
+their existing stricter account/document checks. Generic folder documents retain their exact
+case; only system folders use reserved lowercase keys. All mail uses `http://schema.org/`.
+MIME address groups share the existing whole-address `mailto:` encoding; Message-ID,
+References and invalid-date policies remain local because they differ from the connector.
+`htmlText.ts` re-exports the capped linear scanner (`MAX_HTML_CHARS = 1,048,576` in the
+shared entry). Compared with the old regex fallback, it drops unfinished markup and
+unclosed script/style/head bodies and decodes uppercase named entities. Valid mail fixtures
+retain their output; the cap and malformed-input behavior prevent hostile rescans.

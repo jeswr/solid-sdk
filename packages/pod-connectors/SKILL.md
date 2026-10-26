@@ -69,6 +69,19 @@ CON-14 adds the optional `PodWriter.writeBinary`/`remove` ports and `ctx.writeBi
 for non-RDF resources and source deletions. Keep binaries inside the connector container, never send RDF through it, default
 to create-only, and replace only under a strong ETag.
 
+CON-15 makes `@jeswr/pod-connectors/mail` the shared source for framework-free MAI-01
+paths, vocabulary IRIs (`src/mail/constants.ts`), `htmlToText`/`MAX_HTML_CHARS`, and MIME
+address conversion (`mailtos`). Keep constants separate from typed wrappers and keep
+`./mail` imports free of `core/` and `node/` at module load; the writer defers its existing
+provenance import to collision checks. Preserve `./mail` writer exports and `./mail/*`.
+The suite adapts relative slugs with its existing validation, including dot document IDs
+and loose attachment validation. The standalone pod-mail app shares only identical IRIs:
+never migrate its account-free percent-encoded layout here. Keep app wrappers, store,
+operations, importer orchestration and Type Index code local. MIME ID/date/References
+policies diverge and must not be merged. Contract tests cover layout, escaping, exact
+IRIs, address groups, hostile HTML search bounds and a fresh public-entry import that
+refuses framework/Node-only modules. Build before testing that published entry.
+
 Mail sources (Gmail, Takeout mbox) go through `src/mail/writer.ts` so the pod-mail layout and
 vocabulary (`http://schema.org/`, matching apps/suite's mail model) stay identical. Gmail supplies
 `documentId: "gmail-" + id` and a source-native thread key; validate opaque ids against

@@ -17,7 +17,6 @@
  */
 import { Container } from "@solid/object";
 import { DataFactory, Store } from "n3";
-import { Provenance } from "../core/provenance.js";
 import type { ImportContext } from "../core/types.js";
 import { htmlToText } from "./html-text.js";
 import { parseMail } from "./parse.js";
@@ -161,7 +160,11 @@ export function createMailWriter(ctx: MailPorts, account: string): MailWriter {
       item.documentId === undefined &&
       previous &&
       item.sourceUrl !== undefined &&
-      !new Provenance(previous.value, previous.dataset, DataFactory).derivedFrom.has(item.sourceUrl)
+      !new (await import("../core/provenance.js")).Provenance(
+        previous.value,
+        previous.dataset,
+        DataFactory,
+      ).derivedFrom.has(item.sourceUrl)
     ) {
       id = item.fallbackId;
       previous = await existing(messageSlug(account, id));
