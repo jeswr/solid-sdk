@@ -236,6 +236,33 @@ describe("fail-closed boundaries", () => {
     expect(ports.storage.events).toEqual([]);
     expect(ports.storage.resources.size).toBe(0);
   });
+  it.each([
+    "op://test-vault/unlisted@example.org/credential",
+    "op://unlisted%40example.org/item/credential",
+    "op://test-vault/item/%40unlisted%3AMatrix.example",
+  ])("rejects unlisted identifying references with placeholder-only inventory", async (ref) => {
+    const ports = harness(
+      stringify({
+        version: 1,
+        accounts: [
+          {
+            id: "placeholder-account",
+            channel: "email",
+            provider: "google",
+            organization: "personal",
+            identifiers: { primary: "to_confirm" },
+            credential_ref: ref,
+            connector: { target: "gmail", setup_status: "planned" },
+          },
+        ],
+      }),
+    );
+    await expect(importRegistry(config, ports)).rejects.toThrow(
+      /Invalid registry|private identifier/,
+    );
+    expect(ports.storage.events).toEqual([]);
+    expect(ports.storage.resources.size).toBe(0);
+  });
   it("rejects malformed account fields, unsafe ids, excessive lists and timestamps", () => {
     const baseline = {
       version: 1,

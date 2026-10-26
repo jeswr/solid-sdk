@@ -307,7 +307,12 @@ export function inventorySettings(snapshot: RegistrySnapshot, salt: Uint8Array):
       }
       for (const ref of a.refs) {
         const decoded = credentialReference(ref);
-        if (rawHandles.some((h) => normaliseHandle(decoded).includes(h)))
+        // Email, MXID/social handles, identity URIs and international phone numbers
+        // are private even when no account, evidence or note has supplied that identity.
+        if (
+          /@|(?:https?|mailto|tel|did):|\+\d[\d ().-]{5,}\d/i.test(decoded) ||
+          rawHandles.some((h) => normaliseHandle(decoded).includes(h))
+        )
           throw new Error("Credential reference contains a private identifier");
       }
       return {

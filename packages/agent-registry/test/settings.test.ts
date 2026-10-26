@@ -248,6 +248,33 @@ describe("privacy and settings model", () => {
     first.refs = ["test-token-0123456789"];
     expect(() => inventorySettings(snap, salt)).toThrow("Invalid registry schema");
   });
+  it.each([
+    "unlisted@example.org",
+    "@unlisted:Matrix.example",
+    "@unlisted@social.example",
+    "+12025550100",
+    "https://unlisted.example/profile#me",
+  ])("rejects unlisted identifier %s in decoded reference components", (handle) => {
+    const snap = parseRegistryYaml(fixture);
+    const first = snap.accounts[0];
+    if (!first) throw new Error("Fixture account absent");
+    snap.accounts = [first];
+    first.handles = [];
+    snap.evidence = [];
+    snap.notes = [];
+    for (const component of [handle, encodeURIComponent(handle)]) {
+      // Raw URI syntax is already invalid as an op reference; exercise its encoded form.
+      if (component.includes("https://")) continue;
+      for (const ref of [
+        `op://${component}/item/credential`,
+        `op://test-vault/${component}/credential`,
+        `op://test-vault/item/${component}`,
+      ]) {
+        first.refs = [ref];
+        expect(() => inventorySettings(snap, salt)).toThrow("private identifier");
+      }
+    }
+  });
   it("rejects private identifiers in credential references even across Unicode normalisation", () => {
     const snap = parseRegistryYaml(fixture);
     const first = snap.accounts[0];
