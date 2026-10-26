@@ -126,9 +126,11 @@ const legacyHttpCases = [
 const compatibilityRejections: readonly string[] = [];
 
 describe("IRI guard differential against rdf-serialize", () => {
-  it("records old vs shared behavior across the adversarial corpus", () => {
+  it("adopts shared behavior without accepting any legacy rejection", () => {
     for (const [value, legacy] of legacyHttpCases) {
-      expect(safeHttpIri(value), JSON.stringify(value)).toBe(legacy);
+      expect(safeHttpIri(value), JSON.stringify(value)).toBe(
+        legacy === undefined ? undefined : sharedSafeHttpIri(value),
+      );
       const shared = sharedSafeHttpIri(value);
       if (shared !== undefined && legacy === undefined) {
         expect(compatibilityRejections).toContain(value);

@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Fable 5
 /**
  * The channel-upgrade ORCHESTRATION (M2-DESIGN.md §4) — ties the pure state machine
@@ -72,14 +73,12 @@ export class RelationshipConflictError extends Error {
 }
 
 /**
- * The CANONICAL storage key for a counterparty — the SAME canonicalisation the state
- * machine applies to `personIri` ({@link initialRelationship} uses `asUrn ?? safeHttpIri`).
- * A store MUST key `load` AND `save` on this, not the raw argument: otherwise a caller
- * that loads with a non-canonical HTTP IRI (e.g. a default-port / uppercase-host form)
- * misses the state saved under the canonical `state.personIri`, and the ratchet is stuck
- * re-creating the initial state (a roborev M2.4 finding). Idempotent (canonical → itself);
- * falls back to the raw string only for a value neither canonicaliser accepts (which the
- * state machine would reject upstream anyway).
+ * The shared storage key for a counterparty — the SAME escaping the state machine
+ * applies to `personIri` ({@link initialRelationship} uses `asUrn ?? safeHttpIri`).
+ * A store must use this for both load and save so escaped input resolves to its
+ * persisted state. HTTP IRI identity stays lexical: default ports, host case, and
+ * dot segments survive. Falls back to the raw string only for a value neither
+ * guard accepts (which the state machine rejects upstream).
  */
 export function canonicalPersonKey(personIri: string): string {
   return asUrn(personIri) ?? safeHttpIri(personIri) ?? personIri;

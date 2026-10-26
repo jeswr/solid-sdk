@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Fable 5
 import { describe, expect, it, vi } from "vitest";
 import type { UpgradeOffer } from "./negotiate.js";
@@ -147,11 +148,11 @@ describe("orchestration — SSRF gating (verified endpoints only)", () => {
   });
 });
 
-describe("orchestration — persistence keys on the CANONICAL personIri", () => {
+describe("orchestration — persistence keys on the escaped lexical personIri", () => {
   it("progresses the ratchet when the caller uses a non-canonical HTTP personIri", async () => {
     const store = new InMemoryRelationshipStore();
-    // A default-port HTTP IRI canonicalises (safeHttpIri drops :443) — load + save MUST
-    // still resolve to the same key, or the state machine gets stuck re-creating initial.
+    // The shared guard preserves the default port as part of RDF identity. Load + save
+    // must resolve to the same lexical key so the state machine can advance.
     const nonCanonical = "https://carol.example:443/card#me";
     const b = await recordBridgeDetected(store, nonCanonical, AT);
     expect(b.ok).toBe(true);
@@ -161,8 +162,8 @@ describe("orchestration — persistence keys on the CANONICAL personIri", () => 
     expect(v.ok).toBe(true);
     const loaded = await store.load(nonCanonical);
     expect(loaded?.state.state).toBe("identity-verified");
-    // The persisted personIri is the canonical form.
-    expect(loaded?.state.personIri).toBe("https://carol.example/card#me");
+    // Persistence preserves the escaped lexical IRI, including its default port.
+    expect(loaded?.state.personIri).toBe(nonCanonical);
   });
 });
 

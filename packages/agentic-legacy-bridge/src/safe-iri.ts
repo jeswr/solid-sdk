@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * Untrusted-IRI hardening for the n3.Writer / RDF write path — the single home for
  * "an untrusted string is about to become a `namedNode()`".
@@ -16,6 +17,7 @@
  */
 
 import { isWithinPodScope } from "@jeswr/guarded-fetch";
+import { safeHttpIri as sharedSafeHttpIri } from "@jeswr/rdf-serialize";
 
 /**
  * IRIREF-forbidden characters per the Turtle grammar: the `#x00-#x20` control +
@@ -29,27 +31,23 @@ const IRIREF_FORBIDDEN = /[\u0000-\u0020<>"{}|\\^`]/;
 const ENCODED_PATH_DELIMITER = /%2f|%5c/i;
 
 /**
- * Return an injection-safe, canonical absolute http(s) IRI for an UNTRUSTED value,
- * or `undefined` if the value is not a usable http(s) IRI. NEVER returns the raw
- * input — always the canonicalised, fully-escaped form. Use this (not a boolean
- * `isHttpIri`) at every site where an untrusted string becomes a `namedNode()`.
+ * Escape an untrusted HTTP(S) IRI without changing its lexical RDF identity.
+ * Retain the old rejection of quotes/braces in hostnames and braces/backslashes
+ * in queries or fragments, which URL.href leaves raw but the shared guard escapes.
+ *
+ * @deprecated Retained for compatibility with the bridge's stricter rejection policy.
  */
 export function safeHttpIri(value: unknown): string | undefined {
-  if (typeof value !== "string" || value.length === 0) return undefined;
-  let href: string;
-  try {
-    const u = new URL(value);
-    if (u.protocol !== "http:" && u.protocol !== "https:") return undefined;
-    href = u.href;
-  } catch {
-    return undefined;
+  if (typeof value === "string") {
+    try {
+      // Only these characters survived the old URL + pipe/caret/backtick encoding
+      // and failed its final IRIREF check. See QUESTIONS.md, question 1.
+      if (/["{}\\]/.test(new URL(value).href)) return undefined;
+    } catch {
+      return undefined;
+    }
   }
-  // The WHATWG URL parser percent-encodes the breakout chars (`<` `>` `"` space,
-  // C0 controls) but leaves `|`, `^` and backtick un-encoded — all three are
-  // IRIREF-forbidden, so encode them explicitly.
-  const encoded = href.replace(/\|/g, "%7C").replace(/\^/g, "%5E").replace(/`/g, "%60");
-  if (IRIREF_FORBIDDEN.test(encoded)) return undefined;
-  return encoded;
+  return sharedSafeHttpIri(value);
 }
 
 /**
@@ -74,7 +72,7 @@ export function canonicalContainer(container: unknown): string | undefined {
 /**
  * True when `resourceUrl` is an http(s) IRI STRICTLY within the `base` container —
  * same origin AND a path strictly under the container's path. Both inputs are
- * canonicalised through {@link safeHttpIri} FIRST (RDF-injection-safety), then the
+ * escaped through {@link safeHttpIri} FIRST (RDF-injection-safety), then the
  * origin/segment-boundary/traversal/encoded-delimiter checks are DELEGATED to
  * `@jeswr/guarded-fetch`'s consolidated pod-scope primitive. Fail-closed.
  *
