@@ -181,7 +181,7 @@ export function readMetadataTags(html: string): MetadataTag[] {
       (!HEAD.has(tag.name) ||
         parent === "html" ||
         seen.has("body") ||
-        (parent === undefined && seen.has("head")))
+        (parent === undefined && (seen.has("head") || seen.has("html"))))
     ) {
       throw new PreviewError("invalid-html");
     }

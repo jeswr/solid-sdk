@@ -273,6 +273,7 @@ describe("chat link preview metadata", () => {
     "<head></head><meta name=description>",
     "<title>Fragment</title><html></html>",
     "<html></html><body></body>",
+    "<html></html><meta property=og:title content=outside>",
     "<head></head></head>",
     "<body><div></body></div>",
     "<head>unexpected text</head>",
