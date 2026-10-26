@@ -18,11 +18,12 @@
 // TermAs.instance) — never hand-parsed quads. Reads never throw on absent /
 // wrong-typed data: a missing posix:size reports `undefined`.
 
+import { canonicalize } from "@jeswr/suite-vocab";
 import type { DatasetCore, Term } from "@rdfjs/types";
 import { LiteralAs, OptionalFrom, SetFrom, TermAs, TermFrom } from "@rdfjs/wrapper";
 import { Container, ContainerDataset, Resource } from "@solid/object";
 import { DataFactory } from "n3";
-import { DCTERMS, LDP, PODDRIVE, POSIX } from "./vocab.js";
+import { DCTERMS, LDP, PODDRIVE, POSIX, RDF } from "./vocab.js";
 
 /**
  * Run a read that may throw on absent / wrong-typed data and degrade to
@@ -102,7 +103,10 @@ export class DriveResource extends Resource {
 
   /** True when this resource is registered as a Pod Drive root container. */
   get isDriveRoot(): boolean {
-    return this.type.has(PODDRIVE.DriveRoot);
+    const types = SetFrom.subjectPredicate(this, RDF.type, TermAs.term, TermFrom.itself);
+    return [...types].some(
+      (type) => type.termType === "NamedNode" && canonicalize(type.value) === PODDRIVE.DriveRoot,
+    );
   }
 }
 

@@ -1,12 +1,12 @@
 # AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 #
 # Federation Catalogue / Registry Vocabulary (fedreg:)
-# Namespace: https://w3id.org/jeswr/fedreg#   (ADR-0013, prod-solid-server)
+# Namespace: https://jeswr.org/ns/fedreg#   (ADR-0013, prod-solid-server)
 #
 # The "Catalogue / Registry" federation service — one of the five services a
 # Solid federation node provides (R9 §2.2 / research brief 09 §2 + §6 rec #6 in
 # jeswr/full-solid-ecosystem). It is the DISCOVERY axis, distinct from:
-#   - fedapp: (https://w3id.org/jeswr/fed#) — an app's SELF-ASSERTED registration
+#   - fedapp: (https://jeswr.org/ns/fed#) — an app's SELF-ASSERTED registration
 #     in its Client Identifier Document; and
 #   - the Vocabulary/Spec Hub — the canonical, versioned client-client specs.
 #
@@ -42,8 +42,8 @@
 # @jeswr/federation-registry goes through n3.Writer / @rdfjs/wrapper typed
 # accessors — never hand-built quads.
 
-@prefix fedreg:  <https://w3id.org/jeswr/fedreg#> .
-@prefix fedapp:  <https://w3id.org/jeswr/fed#> .
+@prefix fedreg:  <https://jeswr.org/ns/fedreg#> .
+@prefix fedapp:  <https://jeswr.org/ns/fed#> .
 @prefix fedcon:  <https://jeswr.org/fedcon#> .
 @prefix rdf:     <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
 @prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
@@ -57,20 +57,21 @@
 #    Ontology
 #################################################################
 
-<https://w3id.org/jeswr/fedreg>
-    a owl:Ontology ;
+<https://jeswr.org/ns/fedreg> a owl:Ontology ;
+    owl:versionIRI <https://jeswr.org/ns/fedreg/2.0.0> ;
+    owl:versionInfo "2.0.0" ;
     dcterms:title "Federation Catalogue / Registry Vocabulary"@en ;
     dcterms:description """The Catalogue / Registry federation service: a
         registry document listing member apps with a registry-asserted membership
         status, and a resource-server catalogue entry advertising which
         client-client spec-versions and data sectors it accepts. The discovery
         axis of a Solid data federation, distinct from an app's self-asserted
-        fedapp: registration."""@en ;
+        fedapp: registration. Version 2.0.0 rebases this ontology from its legacy w3id namespace to https://jeswr.org/ns/ (DECISIONS V1)."""@en ;
     dcterms:creator "Claude Opus 4.8 (@jeswr PSS agent)" ;
     dcterms:issued "2026-06-16"^^xsd:date ;
-    vann:preferredNamespaceUri "https://w3id.org/jeswr/fedreg#" ;
+    vann:preferredNamespaceUri "https://jeswr.org/ns/fedreg#" ;
     vann:preferredNamespacePrefix "fedreg" ;
-    rdfs:seeAlso <https://w3id.org/jeswr/fed> ;
+    rdfs:seeAlso <https://jeswr.org/ns/fed> ;
     rdfs:comment "Experimental — AI-agent-generated; under active development, not production-hardened."@en .
 
 #################################################################
@@ -88,7 +89,7 @@ fedreg:Registry
         documents, a Registry's entries carry the registry's OWN membership
         assertion — so a consumer can trust the listing as a membership claim, not
         merely an app's self-description."""@en ;
-    rdfs:isDefinedBy <https://w3id.org/jeswr/fedreg> .
+    rdfs:isDefinedBy <https://jeswr.org/ns/fedreg> .
 
 fedreg:RegistryAssertion
     a rdfs:Class, owl:Class ;
@@ -106,7 +107,7 @@ fedreg:RegistryAssertion
         fedreg:assertedBy authority a verifier checks against its trust set. (The
         cryptographic signature binding the assertion to that authority is layered
         above this vocabulary.)"""@en ;
-    rdfs:isDefinedBy <https://w3id.org/jeswr/fedreg> .
+    rdfs:isDefinedBy <https://jeswr.org/ns/fedreg> .
 
 fedreg:Membership
     a rdfs:Class, owl:Class ;
@@ -125,7 +126,7 @@ fedreg:Membership
         REGISTRY-ASSERTED counterpart to the app's self-asserted fedapp:App: a
         verifier treats a Membership as a membership claim only when it is asserted
         by a recognised authority — never the app's own fedapp: document."""@en ;
-    rdfs:isDefinedBy <https://w3id.org/jeswr/fedreg> .
+    rdfs:isDefinedBy <https://jeswr.org/ns/fedreg> .
 
 fedreg:MembershipStatus
     a rdfs:Class, owl:Class ;
@@ -136,7 +137,7 @@ fedreg:MembershipStatus
         recovery lever (brief 07 'recovery'): a misbehaving app is suspended or
         revoked at the registry without touching the app's own self-asserted
         document."""@en ;
-    rdfs:isDefinedBy <https://w3id.org/jeswr/fedreg> .
+    rdfs:isDefinedBy <https://jeswr.org/ns/fedreg> .
 
 fedreg:StorageDescription
     a rdfs:Class, owl:Class ;
@@ -149,7 +150,7 @@ fedreg:StorageDescription
         substrate for asynchronous schema migration: during a dual-read window the
         storage advertises both versions, so participants upgrade on their own
         clock. The subject is typically the storage root IRI."""@en ;
-    rdfs:isDefinedBy <https://w3id.org/jeswr/fedreg> .
+    rdfs:isDefinedBy <https://jeswr.org/ns/fedreg> .
 
 #################################################################
 #    Membership-status coded values (instances of MembershipStatus)
@@ -160,7 +161,7 @@ fedreg:Proposed
     rdfs:label "Proposed"@en ;
     rdfs:comment """A membership proposed but not yet ratified by the federation's
         Scheme Authority — the app appears in the registry pending review."""@en ;
-    rdfs:isDefinedBy <https://w3id.org/jeswr/fedreg> .
+    rdfs:isDefinedBy <https://jeswr.org/ns/fedreg> .
 
 fedreg:Active
     a fedreg:MembershipStatus ;
@@ -168,7 +169,7 @@ fedreg:Active
     rdfs:comment """A current, ratified membership — the app is a recognised
         member of the federation and its self-asserted fedapp: footprint has been
         accepted."""@en ;
-    rdfs:isDefinedBy <https://w3id.org/jeswr/fedreg> .
+    rdfs:isDefinedBy <https://jeswr.org/ns/fedreg> .
 
 fedreg:Suspended
     a fedreg:MembershipStatus ;
@@ -176,7 +177,7 @@ fedreg:Suspended
     rdfs:comment """A membership temporarily withdrawn (e.g. pending investigation
         of a data-integrity issue). Reversible — distinct from fedreg:Revoked. The
         recovery lever for a misbehaving member."""@en ;
-    rdfs:isDefinedBy <https://w3id.org/jeswr/fedreg> .
+    rdfs:isDefinedBy <https://jeswr.org/ns/fedreg> .
 
 fedreg:Revoked
     a fedreg:MembershipStatus ;
@@ -184,7 +185,7 @@ fedreg:Revoked
     rdfs:comment """A membership permanently withdrawn — the app is no longer a
         member. A consumer MUST treat a revoked member as untrusted regardless of
         the app's own self-asserted fedapp: claims."""@en ;
-    rdfs:isDefinedBy <https://w3id.org/jeswr/fedreg> .
+    rdfs:isDefinedBy <https://jeswr.org/ns/fedreg> .
 
 #################################################################
 #    Properties — Registry / Membership
@@ -199,7 +200,7 @@ fedreg:member
     rdfs:domain fedreg:Registry ;
     rdfs:range fedreg:Membership ;
     rdfs:subPropertyOf <http://www.w3.org/ns/dcat#record> ;
-    rdfs:isDefinedBy <https://w3id.org/jeswr/fedreg> .
+    rdfs:isDefinedBy <https://jeswr.org/ns/fedreg> .
 
 fedreg:app
     a rdf:Property, owl:ObjectProperty ;
@@ -209,7 +210,7 @@ fedreg:app
         self-description)."""@en ;
     rdfs:domain fedreg:Membership ;
     rdfs:range fedapp:App ;
-    rdfs:isDefinedBy <https://w3id.org/jeswr/fedreg> .
+    rdfs:isDefinedBy <https://jeswr.org/ns/fedreg> .
 
 # -----------------------------------------------------------------------------
 # G1 domain-widening — a DELIBERATE, backward-compatible generalisation.
@@ -248,7 +249,7 @@ fedreg:status
         this membership-shaped status.)"""@en ;
     rdfs:domain fedreg:RegistryAssertion ;
     rdfs:range fedreg:MembershipStatus ;
-    rdfs:isDefinedBy <https://w3id.org/jeswr/fedreg> .
+    rdfs:isDefinedBy <https://jeswr.org/ns/fedreg> .
 
 fedreg:assertedBy
     a rdf:Property, owl:ObjectProperty ;
@@ -261,7 +262,7 @@ fedreg:assertedBy
         cryptographic signature binding the assertion to that authority is layered
         above this vocabulary.)"""@en ;
     rdfs:domain fedreg:RegistryAssertion ;
-    rdfs:isDefinedBy <https://w3id.org/jeswr/fedreg> .
+    rdfs:isDefinedBy <https://jeswr.org/ns/fedreg> .
 
 fedreg:asserted
     a rdf:Property, owl:DatatypeProperty ;
@@ -271,7 +272,7 @@ fedreg:asserted
         fedreg:RegistryAssertion (a fedreg:Membership or a fedcon:Admission)."""@en ;
     rdfs:domain fedreg:RegistryAssertion ;
     rdfs:range xsd:dateTime ;
-    rdfs:isDefinedBy <https://w3id.org/jeswr/fedreg> .
+    rdfs:isDefinedBy <https://jeswr.org/ns/fedreg> .
 
 #################################################################
 #    Properties — StorageDescription (spec-version acceptance + sectors)
@@ -300,17 +301,17 @@ fedreg:acceptsSpec
         distinguished by IRI scheme; the existing spec-version usage is unchanged."""@en ;
     rdfs:domain fedreg:StorageDescription ;
     rdfs:seeAlso <https://jeswr.org/fedcon#Snapshot> ;
-    rdfs:isDefinedBy <https://w3id.org/jeswr/fedreg> .
+    rdfs:isDefinedBy <https://jeswr.org/ns/fedreg> .
 
 fedreg:supportsSector
     a rdf:Property, owl:ObjectProperty ;
     rdfs:label "supports sector"@en ;
-    rdfs:comment """A data sector IRI (a https://w3id.org/jeswr/sectors/<sector>
+    rdfs:comment """A data sector IRI (a https://jeswr.org/ns/sectors/<sector>
         marker) that this fedreg:StorageDescription's storage supports. Lets an app
         discover which storages can hold its sector's data before attempting a
         write."""@en ;
     rdfs:domain fedreg:StorageDescription ;
-    rdfs:isDefinedBy <https://w3id.org/jeswr/fedreg> .
+    rdfs:isDefinedBy <https://jeswr.org/ns/fedreg> .
 
 fedreg:storage
     a rdf:Property, owl:ObjectProperty ;
@@ -320,4 +321,4 @@ fedreg:storage
         description's subject, but explicit when a registry collates many storage
         descriptions in one document."""@en ;
     rdfs:domain fedreg:StorageDescription ;
-    rdfs:isDefinedBy <https://w3id.org/jeswr/fedreg> .
+    rdfs:isDefinedBy <https://jeswr.org/ns/fedreg> .

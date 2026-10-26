@@ -85,7 +85,7 @@ describe("scope guard", () => {
 describe("read", () => {
   it("parses a document and returns its etag", async () => {
     const body = `
-      @prefix pd: <https://w3id.org/jeswr/pod-docs#> .
+      @prefix pd: <https://jeswr.org/ns/pod-docs#> .
       @prefix dct: <http://purl.org/dc/terms/> .
       <#it> a pd:Document ; dct:title "Read me" ; pd:body "hi" .
     `;
@@ -254,7 +254,7 @@ describe("remove", () => {
 
 describe("list", () => {
   const docTtl = (title: string) => `
-    @prefix pd: <https://w3id.org/jeswr/pod-docs#> .
+    @prefix pd: <https://jeswr.org/ns/pod-docs#> .
     @prefix dct: <http://purl.org/dc/terms/> .
     <#it> a pd:Document ; dct:title "${title}" ; pd:body "b" .
   `;

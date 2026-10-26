@@ -6,44 +6,37 @@
 // triples. Every term used by the typed accessors comes from here, so a
 // namespace change (see HEALTH below) is a one-line edit, not a sweep.
 
-/**
- * Health sector ontology namespace.
- *
- * INTERIM: the fse health sector ontology
- * (full-solid-ecosystem/federation/ontologies/sectors/health/health.ttl)
- * currently uses the PLACEHOLDER base `https://TBD.example/solid/health#`,
- * pending fse "namespace decision #2". Pod Health builds against this interim
- * IRI verbatim so a single edit here re-points the whole data layer once the
- * namespace is frozen. See README + the tracked sector-vocab ADR follow-up.
- */
-export const HEALTH = "https://TBD.example/solid/health#" as const;
+import { NS } from "@jeswr/suite-vocab";
+
+/** Canonical health sector ontology namespace (DECISIONS V6). */
+export const HEALTH = NS.HEALTH;
 
 /** Solid Core ontology namespace (the gUFO Core the health sector re-bases onto). */
-export const CORE = "https://TBD.example/solid/core#" as const;
+export const CORE = NS.CORE;
 
 /** RDF, RDFS. */
-export const RDF = "http://www.w3.org/1999/02/22-rdf-syntax-ns#" as const;
+export const RDF = NS.RDF;
 
 /** W3C OWL-Time (effective times — instants and intervals). */
-export const TIME = "http://www.w3.org/2006/time#" as const;
+export const TIME = NS.TIME;
 
 /** QUDT unit vocabulary (the `unit:` namespace of individual units). */
-export const UNIT = "http://qudt.org/vocab/unit/" as const;
+export const UNIT = NS.UNIT;
 
 /** Solid terms (type index, storage discovery). */
-export const SOLID = "http://www.w3.org/ns/solid/terms#" as const;
+export const SOLID = NS.SOLID;
 
 /** PIM space (pod storage discovery). */
-export const PIM = "http://www.w3.org/ns/pim/space#" as const;
+export const PIM = NS.PIM;
 
 /** XSD datatypes. */
-export const XSD = "http://www.w3.org/2001/XMLSchema#" as const;
+export const XSD = NS.XSD;
 
 /** Dublin Core terms. */
-export const DCTERMS = "http://purl.org/dc/terms/" as const;
+export const DCTERMS = NS.DCT;
 
 /** GeoSPARQL / WGS84 geo positioning (workout route points). */
-export const GEO = "http://www.w3.org/2003/01/geo/wgs84_pos#" as const;
+export const GEO = NS.GEO;
 
 /** `rdf:type`. */
 export const RDF_TYPE = `${RDF}type` as const;
@@ -125,7 +118,7 @@ export const Unit = {
  * latitude / longitude / elevation reuse the standard W3C WGS84 geo vocabulary
  * rather than minting app-local geometry predicates.
  */
-export const PH = "https://w3id.org/jeswr/pod-health#" as const;
+export const PH = NS.POD_HEALTH;
 
 export const PhClass = {
   /** A recorded physical-activity workout (a run, a ride, a walk) with a GPX route. */
