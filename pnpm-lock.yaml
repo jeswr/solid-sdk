@@ -2014,12 +2014,21 @@ importers:
       '@jeswr/suite-ui':
         specifier: workspace:*
         version: link:../../packages/suite-ui
+      '@rdfjs/wrapper':
+        specifier: 0.34.0
+        version: 0.34.0
+      '@solid/object':
+        specifier: 0.6.0
+        version: 0.6.0
       '@univerjs/core':
         specifier: 1.2.0
         version: 1.2.0(react@19.2.7)(rxjs@7.8.2)
       '@univerjs/sheets':
         specifier: 1.2.0
         version: 1.2.0(react@19.2.7)(rxjs@7.8.2)
+      n3:
+        specifier: 2.0.3
+        version: 2.0.3
       next:
         specifier: 16.2.7
         version: 16.2.7(@babel/core@7.29.7)(@playwright/test@1.61.1)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
@@ -2045,9 +2054,15 @@ importers:
       '@playwright/test':
         specifier: 1.61.1
         version: 1.61.1
+      '@rdfjs/types':
+        specifier: 2.0.1
+        version: 2.0.1
       '@tailwindcss/postcss':
         specifier: ^4
         version: 4.3.2
+      '@types/n3':
+        specifier: 1.26.1
+        version: 1.26.1
       '@types/node':
         specifier: ^25.9.2
         version: 25.9.5
