@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { Writer } from "n3";
 import { describe, expect, it } from "vitest";
 import {
@@ -231,9 +232,14 @@ describe("validation and pure helpers", () => {
       { ...details, priority: "urgent" },
       { ...details, allDay: "2026-02-30" },
       { ...details, allDay: "bad" },
+      { ...details, allDay: "2026-11-03" },
+      { ...details, allDay: "2026-10-30" },
       { title: "All day", state: "open", allDay: "2026-11-01" },
     ])
       expect(() => validateTask(data as TaskDetails)).toThrow();
+    const inconsistent = createTask(taskUrl, { ...details, allDay: "2026-11-01" });
+    node(`${taskUrl}#it`, inconsistent).setDate(`${NS.WF}dateDue`, new Date(2026, 10, 3));
+    expect(() => taskDetails(taskUrl, inconsistent)).toThrow("disagree");
     validateTask({
       ...details,
       creator: webId,
@@ -317,6 +323,7 @@ describe("reminder library", () => {
 describe("completion roll-forward", () => {
   const recurring = {
     ...details,
+    dueDate: new Date(2026, 10, 1),
     allDay: "2026-11-01",
     recurrence: { frequency: "DAILY" as const, interval: 2 },
     categoryTypes: [`${project}#section-doing`],
@@ -329,15 +336,15 @@ describe("completion roll-forward", () => {
       state: "closed",
       endedAt: now,
       clonedFrom: `${taskUrl}#it`,
-      dueDate: details.dueDate,
+      dueDate: recurring.dueDate,
       categoryTypes: recurring.categoryTypes,
     });
     expect(result.copy?.recurrence).toBeUndefined();
     expect(result.copy?.reminders).toEqual([]);
-    expect(result.original.dueDate?.toISOString()).toBe("2026-11-03T09:00:00.000Z");
+    expect(result.original.dueDate?.toISOString()).toBe("2026-11-03T00:00:00.000Z");
     expect(result.original.allDay).toBe("2026-11-03");
     expect(result.original.reminders?.[0]?.time).toEqual(new Date(now.getTime() + 2 * 86400000));
-    expect(recurring.dueDate).toEqual(details.dueDate);
+    expect(recurring.dueDate).toEqual(new Date(2026, 10, 1));
     const noDue = planCompletion(
       { title: "Repeat", state: "open", recurrence: { frequency: "DAILY" } },
       taskUrl,
@@ -345,6 +352,65 @@ describe("completion roll-forward", () => {
     );
     expect(noDue.original.dueDate?.getTime()).toBe(now.getTime() + 86400000);
     expect(noDue.original.allDay).toBeUndefined();
+  });
+  it("keeps the intended time after completing across a DST gap", () => {
+    const data: TaskDetails = {
+      ...details,
+      dueDate: new Date(2026, 2, 28, 1, 30),
+      recurrence: { frequency: "DAILY" },
+      reminders: [{ time: new Date(2026, 2, 28, 0, 30) }, { offset: "-PT1H" }],
+    };
+    const first = planCompletion(data, taskUrl, now).original;
+    expect(first.dueDate).toEqual(new Date(2026, 2, 30, 1, 30));
+    const second = planCompletion(first, taskUrl, now).original;
+    expect(second.dueDate).toEqual(new Date(2026, 2, 31, 1, 30));
+    const times = computeFireTimes(taskUrl, second.dueDate, second.reminders ?? []);
+    expect(times.map((time) => time.at)).toEqual([
+      new Date(2026, 2, 31, 0, 30),
+      new Date(2026, 2, 31, 0, 30),
+    ]);
+  });
+  it.each([
+    "2026-11-01",
+    "2026-07-01",
+  ])("advances an all-day date created in London and completed in New York: %s", (allDay) => {
+    const dataset = createTask(taskUrl, {
+      ...details,
+      allDay,
+      dueDate: new Date(`${allDay}T00:00:00Z`),
+      recurrence: { frequency: "DAILY" },
+    });
+    const london = taskDetails(taskUrl, dataset) as TaskDetails;
+    const oldDue = london.dueDate as Date;
+    const absolute = new Date(oldDue.getTime() - 3600000);
+    const previousZone = process.env.TZ;
+    try {
+      process.env.TZ = "America/New_York";
+      const data = taskDetails(taskUrl, dataset) as TaskDetails;
+      validateTask(data);
+      const result = planCompletion(
+        { ...data, reminders: [{ time: absolute }, { offset: "-PT1H" }] },
+        taskUrl,
+        now,
+      );
+      const expectedDay = allDay.replace(/01$/, "02");
+      expect(result.original.allDay).toBe(expectedDay);
+      const expected = new Date(`${expectedDay}T00:00:00`);
+      expect(result.original.dueDate).toEqual(expected);
+      validateTask(result.original);
+      const times = computeFireTimes(taskUrl, expected, result.original.reminders ?? []);
+      expect(times.map((time) => time.at.getTime())).toEqual([
+        expected.getTime() - 3600000,
+        expected.getTime() - 3600000,
+      ]);
+      const reread = taskDetails(taskUrl, createTask(taskUrl, result.original));
+      expect(reread?.allDay).toBe(expectedDay);
+      expect(reread?.dueDate).toEqual(expected);
+      expect(result.copy?.allDay).toBe(allDay);
+      expect(result.copy?.dueDate).toEqual(oldDue);
+    } finally {
+      process.env.TZ = previousZone;
+    }
   });
   it("closes normal, exhausted and complete-forever tasks", () => {
     for (const result of [

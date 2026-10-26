@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import {
   buildTask,
   parseTask,
@@ -49,14 +50,23 @@ export class TaskItem extends Task {
   get allDay(): string | undefined {
     for (const predicate of aliases(`${SCHED}dueTime`))
       for (const value of this.extra.nodes(predicate)) {
-        if (value.termType === "Literal" && value.datatype.value === `${NS.XSD}date`)
+        if (value.termType === "Literal" && value.datatype.value === `${NS.XSD}date`) {
+          validateAllDay(value.value, this.dueDate);
           return value.value;
+        }
       }
     return undefined;
   }
   set allDay(value: string | undefined) {
     if (value !== undefined) this.dueDate = allDayDate(value);
     this.extra.setTyped(`${SCHED}dueTime`, value, `${NS.XSD}date`);
+  }
+  override get dueDate(): Date | undefined {
+    return super.dueDate;
+  }
+  override set dueDate(value: Date | undefined) {
+    super.dueDate = value;
+    this.extra.clear(`${SCHED}dueTime`);
   }
   override get rank() {
     return this.extra.number(`${SCHEMA}position`);
@@ -94,6 +104,15 @@ function allDayDate(value: string): Date {
   const [year, month, day] = value.split("-").map(Number) as [number, number, number];
   return new Date(year, month - 1, day);
 }
+function validateAllDay(value: string, due: Date | undefined): void {
+  allDayDate(value);
+  if (!due) throw new TypeError("An all-day task requires a due date.");
+  // The persisted instant has no originating time zone. Allow midnight in UTC-12…UTC+14
+  // so reading in another zone cannot invalidate a legitimate date-only marker.
+  const midnight = new Date(`${value}T00:00:00Z`).getTime();
+  if (due.getTime() < midnight - 14 * 3600000 || due.getTime() > midnight + 12 * 3600000)
+    throw new TypeError("All-day marker and due date disagree.");
+}
 export function validateTask(data: TaskDetails): void {
   requireTitle(data.title);
   for (const field of [data.created, data.modified, data.endedAt, data.dueDate])
@@ -115,8 +134,7 @@ export function validateTask(data: TaskDetails): void {
   if (data.priority !== undefined && !["high", "medium", "low"].includes(data.priority))
     throw new TypeError("Invalid priority.");
   if (data.allDay !== undefined) {
-    if (!data.dueDate) throw new TypeError("An all-day task requires a due date.");
-    allDayDate(data.allDay);
+    validateAllDay(data.allDay, data.dueDate);
   }
   if (data.recurrence) validateRule(data.recurrence);
   validateReminders(data.reminders ?? [], data.dueDate);
@@ -168,7 +186,8 @@ export function planCompletion(
     throw new TypeError("Invalid completed-copy count.");
   const rule = data.recurrence;
   if (rule.count !== undefined && completedCopies + 1 >= rule.count) return close();
-  const due = data.dueDate ?? now;
+  const storedDue = data.dueDate ?? now;
+  const due = data.allDay === undefined ? storedDue : allDayDate(data.allDay);
   // Count is measured through closed copies, rather than restarting count at each advanced due date.
   const next = nextOccurrence({ ...rule, count: undefined }, due, due);
   if (!next) return close();
@@ -190,7 +209,7 @@ export function planCompletion(
     dueDate: next,
     allDay,
     modified: now,
-    reminders: shiftReminders(data.reminders ?? [], next.getTime() - due.getTime()),
+    reminders: shiftReminders(data.reminders ?? [], next.getTime() - storedDue.getTime()),
   };
   return { original, copy };
 }

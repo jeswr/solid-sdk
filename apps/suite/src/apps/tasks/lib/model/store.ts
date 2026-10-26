@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 
 import { ModelError } from "./errors";
 import { RdfIO, type Resource } from "./io";
@@ -62,7 +63,7 @@ export class TaskStore {
     if (this.options.typeIndex === false) return;
     await this.index.register([
       { forClass: `${NS.WF}Tracker`, location: this.projects, kind: "instanceContainer" },
-      { forClass: `${NS.WF}Task`, location: stateStore, kind: "instance" },
+      { forClass: `${NS.WF}Task`, location: stateStore, kind: "instanceContainer" },
     ]);
   }
   async bootstrapInbox(): Promise<StoredProject> {

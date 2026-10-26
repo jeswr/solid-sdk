@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { Writer } from "n3";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { classifyError, ModelError } from "../../src/apps/tasks/lib/model/errors";
@@ -41,10 +42,15 @@ describe("project discovery and first use", () => {
     expect(
       registrations.match(
         null,
-        DataFactory.namedNode(`${NS.SOLID}instance`),
+        DataFactory.namedNode(`${NS.SOLID}instanceContainer`),
         DataFactory.namedNode(`${projects}inbox/`),
       ).size,
     ).toBe(1);
+    const index = new TypeIndex(new RdfIO(pod.fetch), storage, webId);
+    expect(await index.locations(`${NS.WF}Task`)).toEqual([
+      { forClass: `${NS.WF}Task`, location: `${projects}inbox/`, kind: "instanceContainer" },
+    ]);
+    expect(registrations.match(null, DataFactory.namedNode(`${NS.SOLID}instance`)).size).toBe(0);
     expect(
       registrations.match(
         null,
@@ -199,6 +205,40 @@ describe("project discovery and first use", () => {
   });
 });
 describe("task conditional CRUD", () => {
+  it("clears all-day markers on due-date edits and rejects conflicting persisted dates", async () => {
+    const pod = new Pod();
+    const tasks = store(pod);
+    const home = await tasks.createProject("Home");
+    let task = await tasks.createTask(home, {
+      title: "All day",
+      state: "open",
+      dueDate: new Date(2026, 10, 1),
+      allDay: "2026-11-01",
+    });
+    task = await tasks.updateTask(task, (item) => {
+      item.dueDate = new Date(2026, 10, 3, 9);
+    });
+    expect(task.task.allDay).toBeUndefined();
+    expect((await tasks.readTask(task.url)).task.dueDate).toEqual(new Date(2026, 10, 3, 9));
+    expect((await tasks.readTask(task.url)).task.allDay).toBeUndefined();
+    task = await tasks.updateTask(task, (item) => {
+      item.allDay = "2026-11-04";
+    });
+    expect(task.task.dueDate).toEqual(new Date(2026, 10, 4));
+    task = await tasks.updateTask(task, (item) => {
+      item.dueDate = undefined;
+    });
+    expect(task.task.dueDate).toBeUndefined();
+    expect(task.task.allDay).toBeUndefined();
+    const before = pod.mutations().length;
+    await expect(
+      tasks.updateTask(task, (item) => {
+        item.allDay = "2026-11-01";
+        node(item.id, item.dataset).setDate(`${NS.WF}dateDue`, new Date(2026, 10, 3));
+      }),
+    ).rejects.toThrow("disagree");
+    expect(pod.mutations()).toHaveLength(before);
+  });
   it("writes, reads, edits and deletes tasks using retained validators", async () => {
     const pod = new Pod();
     const tasks = store(pod);
