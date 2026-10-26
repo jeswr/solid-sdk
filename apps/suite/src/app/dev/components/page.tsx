@@ -23,6 +23,9 @@ export default function ComponentsPage() {
         <a href="/dev/components/upload-dock">UploadDock</a>
         <a href="/dev/components/drop-zone-overlay">DropZoneOverlay</a>
         <a href="/dev/components/preview-pane">PreviewPane</a>
+        <a href="/dev/components/typed-view">Typed views</a>
+        <a href="/dev/components/details-pane">Details pane</a>
+        <a href="/dev/components/pod-meter">Pod meter</a>
       </nav>
     </main>
   );

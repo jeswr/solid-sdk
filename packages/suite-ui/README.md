@@ -125,3 +125,16 @@ All three accept `state` (`ready`, `loading`, `empty`, `filtered-empty` with `qu
 `error` with a classified `SurfaceError`) and an `onAction` recovery callback. They do not
 classify SDK errors themselves. Fixtures live at `/dev/components/upload-dock`,
 `/dev/components/drop-zone-overlay`, and `/dev/components/preview-pane` in `apps/suite`.
+DS-12 adds `TypedView`, `DetailsPane`, and `PodMeter`. Import `styles/components.css`
+after the token styles. `TypedView` accepts a `TypedViewData` projection from typed RDF
+accessors; its registry maps RDF class IRIs to renderers and can be extended with a
+caller-owned map. The suite app's `src/components/typed-view-data.ts` supplies the adapter.
+Technical serialization is rendered only when `showTechnicalDetails` is true, inside a
+native disclosure. Bind that prop to Settings › Advanced, never to the resource itself.
+
+`DetailsPane` accepts metadata, an actions slot, and the structural result of
+`share.get`. Pass `ownerId` to exclude the owner from the people count, resolved names
+in `people`, and `onManageAccess` to open the consuming screen's share dialog. The
+consumer hosts the pane in its responsive sheet and owns loading, refresh and errors.
+`PodMeter` takes usage in bytes and an optional quota; absent quota never implies a
+percentage. All three accept `SurfaceState` for loading, empty and classified errors.

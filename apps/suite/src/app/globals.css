@@ -384,4 +384,33 @@ nav[aria-label="Component fixtures"] {
   width: 100%;
   max-width: 320px;
   min-width: 0;
+.ds12-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
+  align-items: start;
+  gap: var(--space-6);
+}
+.ds12-example {
+  min-width: 0;
+}
+.ds12-example h2 {
+  margin-bottom: var(--space-3);
+}
+.ds12-setting {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.ds12-setting input {
+  width: 24px;
+  height: 24px;
+  accent-color: var(--primary);
+}
+.ds12-setting {
+  min-height: 44px;
+}
+nav[aria-label="Component fixtures"] {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-2);
 }
