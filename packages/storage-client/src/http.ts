@@ -1,7 +1,7 @@
 // AUTHORED-BY Claude Opus 5.5
 // HTTP plumbing shared by the network backends: scope-checked requests, network-error mapping,
 // Link / WAC-Allow parsing and ReadResult construction (ADR-003 §2, §6, §7). Not exported.
-import { assertWithinPodScope } from "@jeswr/guarded-fetch";
+import { assertWithinPodScope, redactUserinfo } from "@jeswr/guarded-fetch";
 import { parseLinkHeaders, parseWacAllow } from "@jeswr/storage-capabilities";
 import { StorageError, storageErrorFrom } from "./errors.js";
 import { throwIfAborted } from "./internal.js";
@@ -16,13 +16,17 @@ export function scoped(root: string, method: string, url: string): string {
   try {
     // Absolute URLs only: guarded-fetch would resolve a relative reference against the root.
     if (typeof url !== "string" || !URL.canParse(url)) throw new TypeError("not an absolute URL");
-    return assertWithinPodScope(root, url);
+    const canonical = assertWithinPodScope(root, url);
+    // The slashless alias of the root is the root (guarded-fetch accepts both spellings).
+    return `${canonical}/` === root ? root : canonical;
   } catch (cause) {
+    // Never echo embedded credentials (guarded-fetch redacts its own messages too).
+    const shown = redactUserinfo(String(url));
     throw new StorageError("scope", {
       method,
-      url: String(url),
+      url: shown,
       cause,
-      message: `${method} ${String(url)} is outside the storage ${root}`,
+      message: `${method} ${shown} is outside the storage ${redactUserinfo(root)}`,
     });
   }
 }
@@ -120,12 +124,29 @@ export interface ReadShape {
  * Build a ReadResult over a response. `body` is the live stream; `bytes()/text()/blob()` buffer
  * it once and return copies, so use either the stream or the buffered accessors, not both.
  */
-export function readResultFrom(response: Response, url: string, shape: ReadShape): ReadResult {
+export function readResultFrom(
+  response: Response,
+  url: string,
+  shape: ReadShape,
+  signal?: AbortSignal,
+): ReadResult {
   const contentType = response.headers.get("content-type");
   let buffered: Promise<Uint8Array> | undefined;
   const bytes = async () => {
     buffered ??= shape.withBody
-      ? response.arrayBuffer().then((buffer) => new Uint8Array(buffer))
+      ? response.arrayBuffer().then(
+          (buffer) => new Uint8Array(buffer),
+          (cause: unknown) => {
+            // A body that fails mid-transfer is a network error; an abort is not retryable.
+            throwIfAborted("GET", url, signal);
+            throw new StorageError("network", {
+              method: "GET",
+              url,
+              cause,
+              message: `GET ${url}: the response body failed`,
+            });
+          },
+        )
       : Promise.resolve(new Uint8Array());
     return (await buffered).slice();
   };

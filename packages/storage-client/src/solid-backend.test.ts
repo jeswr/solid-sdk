@@ -443,3 +443,66 @@ describe("metadata, construction and pending writes", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 });
+
+describe("review round 1 regressions", () => {
+  test("body failures are network errors; aborted ones are not retryable", async () => {
+    const failing = () =>
+      new ReadableStream<Uint8Array>({
+        pull(controller) {
+          controller.error(new TypeError("terminated"));
+        },
+      });
+    const storage = createSolidBackend({
+      root: CSS_ROOT,
+      fetch: async () =>
+        new Response(failing(), { status: 200, headers: { "content-type": "text/turtle" } }),
+    });
+    const text = await rejects((await storage.read(`${NOTES}a`)).text(), "network");
+    expect(text.retryable).toBe(true);
+    await rejects(storage.readRdf(`${NOTES}a`), "network");
+    await rejects(storage.list(NOTES), "network");
+    const controller = new AbortController();
+    const result = await storage.read(`${NOTES}a`, { signal: controller.signal });
+    controller.abort();
+    expect((await rejects(result.text(), "network")).retryable).toBe(false);
+  });
+
+  test("odd rdf:type objects and numeric posix:mtime never drop a member", async () => {
+    const odd = backend({
+      [`GET ${NOTES}`]: {
+        status: 200,
+        headers: { "content-type": "text/turtle" },
+        body: `@prefix posix: <http://www.w3.org/ns/posix/stat#>.
+          <> <http://www.w3.org/ns/ldp#contains> <a>, <b>, <c>.
+          <a> a "bad", <https://schema.example/Note>; posix:mtime 1790937000.
+          <b> posix:mtime "soon".
+          <c> posix:mtime 1e300.`,
+      },
+    });
+    const { items } = await odd.storage.list(NOTES);
+    expect(items.map(({ url, types, modified }) => ({ url, types, modified }))).toEqual([
+      {
+        url: `${NOTES}a`,
+        types: ["https://schema.example/Note"],
+        modified: new Date(1790937000_000),
+      },
+      { url: `${NOTES}b`, types: [], modified: null },
+      { url: `${NOTES}c`, types: [], modified: null },
+    ]);
+  });
+
+  test("scope errors never echo credentials; the slashless root is the root", async () => {
+    const { storage } = backend();
+    const error = await rejects(storage.read("https://user:secret@evil.example/x"), "scope");
+    expect(error.message).not.toContain("secret");
+    expect(error.url).not.toContain("secret");
+    expect(await storage.parentOf("https://css.example/alice")).toBeNull();
+  });
+
+  test("unexpected successes are invalid-response", async () => {
+    const { storage } = backend({
+      [`GET ${NOTES}`]: { status: 204, headers: { "content-type": "text/turtle" } },
+    });
+    await rejects(storage.list(NOTES), "invalid-response");
+  });
+});

@@ -35,6 +35,8 @@ const LDP_CONTAINERS = new Set([`${LDP}Container`, `${LDP}BasicContainer`]);
 /** Server-side bookkeeping types that are not "extra" member types. */
 const LDP_TYPES = new Set([...LDP_CONTAINERS, `${LDP}Resource`, `${LDP}RDFSource`]);
 const DCT_FORMAT = "http://purl.org/dc/terms/format";
+const RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
+const POSIX_MTIME = "http://www.w3.org/ns/posix/stat#mtime";
 const IANA_MEDIA_TYPE = /^http:\/\/www\.w3\.org\/ns\/iana\/media-types\/([^#]+)#Resource$/;
 /** RFC 6838 type/subtype without parameters. */
 const MEDIA_TYPE = /^[a-z0-9][a-z0-9!#$&^_.+-]{0,126}\/[a-z0-9][a-z0-9!#$&^_.+-]{0,126}$/i;
@@ -54,6 +56,30 @@ export interface SolidBackendOptions {
 class Member extends Resource {
   get format(): string | undefined {
     return OptionalFrom.subjectPredicate(this, DCT_FORMAT, LiteralAs.string);
+  }
+
+  /** rdf:type IRIs; non-IRI objects are skipped instead of failing the whole member. */
+  get typeIris(): string[] {
+    const types: string[] = [];
+    for (const q of this.dataset.match(
+      DataFactory.namedNode(this.id),
+      DataFactory.namedNode(RDF_TYPE),
+    )) {
+      if (q.object.termType === "NamedNode") types.push(q.object.value);
+    }
+    return types;
+  }
+
+  /** dc:modified, else posix:mtime (seconds since the epoch), each read independently. */
+  get modifiedAt(): Date | undefined {
+    const modified = tolerant(() => this.modified);
+    if (modified && !Number.isNaN(modified.getTime())) return modified;
+    const seconds = tolerant(() =>
+      OptionalFrom.subjectPredicate(this, POSIX_MTIME, LiteralAs.number),
+    );
+    if (typeof seconds !== "number" || !Number.isFinite(seconds)) return undefined;
+    const date = new Date(seconds * 1000);
+    return Number.isNaN(date.getTime()) ? undefined : date;
   }
 }
 
@@ -105,22 +131,25 @@ export function createSolidBackend(options: SolidBackendOptions): StorageClient 
     response: Response,
     expect: { range: boolean; conditional: boolean },
   ): Promise<ReadShape> {
-    if (response.status === 304 && expect.conditional) {
-      // fall through: a 304 is a successful conditional read.
-    } else if (response.status === 206 && !expect.range) {
+    const expected =
+      response.status === 200 ||
+      (response.status === 206 && expect.range) ||
+      (response.status === 304 && expect.conditional);
+    if (!expected) {
+      if (response.status < 200 || response.status >= 400) await failed(method, url, response);
+      // Any other success or redirect (204, unsolicited 206/304, 3xx) is not a read result.
+      discard(response.body);
       throw new StorageError("invalid-response", {
         method,
         url,
-        status: 206,
-        message: `${method} ${url} answered 206 without a Range request`,
+        status: response.status,
+        message: `${method} ${url} answered an unexpected ${response.status}`,
       });
-    } else if (!response.ok) {
-      await failed(method, url, response);
     }
     const links = linksOf(response, url);
     const types = (links.get("type") ?? []).map((link) => link.target);
     const describedBy = links.get("describedby")?.[0]?.target ?? null;
-    const status = response.status === 304 ? 304 : response.status === 206 ? 206 : 200;
+    const status = response.status as 200 | 206 | 304;
     return {
       status,
       kind:
@@ -147,7 +176,7 @@ export function createSolidBackend(options: SolidBackendOptions): StorageClient 
       range,
       conditional: "If-None-Match" in headers,
     });
-    return readResultFrom(response, target, shape);
+    return readResultFrom(response, target, shape, signal);
   }
 
   /** Parse an RDF body, mapping a non-RDF or unparsable body to `code`. */
@@ -164,11 +193,10 @@ export function createSolidBackend(options: SolidBackendOptions): StorageClient 
         message: `${result.url} is ${result.contentType ?? "untyped"}, not RDF`,
       });
     }
+    // Body transport failures surface as `network` (from bytes()), not as a parse error.
+    const text = await result.text();
     try {
-      return {
-        type,
-        dataset: await parseRdf(await result.text(), result.contentType, { baseIRI: result.url }),
-      };
+      return { type, dataset: await parseRdf(text, result.contentType, { baseIRI: result.url }) };
     } catch (cause) {
       throw new StorageError(code, {
         method: "GET",
@@ -184,7 +212,7 @@ export function createSolidBackend(options: SolidBackendOptions): StorageClient 
     if (!client.isWithinStorage(member.id) || pathParent(member.id, root) !== container) {
       return null;
     }
-    const types = [...member.type];
+    const types = member.typeIris;
     const kind =
       member.id.endsWith("/") || types.some((type) => LDP_CONTAINERS.has(type))
         ? "container"
@@ -194,13 +222,13 @@ export function createSolidBackend(options: SolidBackendOptions): StorageClient 
     const declared = tolerant(() => member.format);
     const format = declared !== undefined && MEDIA_TYPE.test(declared) ? declared : undefined;
     const size = tolerant(() => member.size);
-    const modified = tolerant(() => member.lastModified);
+    const modified = member.modifiedAt;
     return {
       url: member.id,
       kind,
       contentType: kind === "container" ? null : (format ?? iana ?? null),
       size: typeof size === "number" && Number.isSafeInteger(size) && size >= 0 ? size : null,
-      modified: modified && !Number.isNaN(modified.getTime()) ? modified : null,
+      modified: modified ?? null,
       types: types.filter((type) => !LDP_TYPES.has(type) && !IANA_MEDIA_TYPE.test(type)),
     };
   }
@@ -252,7 +280,7 @@ export function createSolidBackend(options: SolidBackendOptions): StorageClient 
       const target = scoped(root, "HEAD", url);
       const response = await send(fetch, "HEAD", target, { Accept: "*/*" }, opts.signal);
       const shape = await shapeOf("HEAD", target, response, { range: false, conditional: false });
-      return readResultFrom(response, target, shape);
+      return readResultFrom(response, target, shape, opts.signal);
     },
 
     async read(url, opts = {}) {

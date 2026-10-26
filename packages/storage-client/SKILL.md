@@ -25,12 +25,16 @@ Solid read side (ADR-003 §6):
   `Resource` subclass for `dct:format`. Members outside the storage or not directly contained are
   dropped (fail closed). Kind comes from `ldp:(Basic)Container` or a trailing slash, contentType
   from a valid `dct:format` literal or the IANA media-type class, size from `posix:size`, modified
-  from `dc:modified`/`posix:mtime`. A malformed field is dropped, never the member. Items are
+  from `dc:modified`, else `posix:mtime` (epoch seconds). Non-IRI `rdf:type` objects and malformed
+  fields are dropped, never the member. Items are
   sorted by URL. A non-container is `method-not-allowed`.
 - `head`/`read` use `Link` (context = the response URL; anchored links ignored) for `type`,
   `describedby` → `metadataUrl`, WAC-Allow `user` → `allow`, and path arithmetic for `parent`.
-  `read` sends Accept, If-None-Match and `Range: bytes=…` (206). An unsolicited 206 or 304 is
-  `invalid-response`. `body` is the live stream; `bytes()/text()/blob()` buffer it once.
+  `read` sends Accept, If-None-Match and `Range: bytes=…` (206). Only 200, a requested 206 and a
+  conditional 304 succeed; any other 2xx/3xx is `invalid-response`. `body` is the live stream;
+  `bytes()/text()/blob()` buffer it once, and a body failing mid-transfer is a `network` error.
+- Scope errors redact embedded credentials, and the slashless root alias is the root
+  (`parentOf` → null).
 - `readRdf` accepts `text/turtle, application/ld+json;q=0.9`, maps 304 to `notModified`, and
   reports a non-RDF or unparsable body as `not-rdf`. `metadata` reads the `describedby` document as
   RDF (`unsupported` when none is advertised).
