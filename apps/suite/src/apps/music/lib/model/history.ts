@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { normalizePodBase } from "@jeswr/guarded-fetch";
-import { LiteralFrom, OptionalAs } from "@rdfjs/wrapper";
+import { LiteralFrom, OptionalAs, SetFrom, TermAs, TermFrom } from "@rdfjs/wrapper";
 import type { Store } from "n3";
 import type { Track } from "./entities";
 import { MusicNode } from "./rdf";
@@ -32,17 +32,38 @@ export class PlaybackEvent extends MusicNode {
     this.writeIri(`${M}playedWork`, value);
   }
   get startTime(): Date | undefined {
-    return this.date(`${S}startTime`, `${NS.CORE}atTime`);
+    const direct = this.date(this, `${S}startTime`, `${NS.CORE}atTime`);
+    if (direct) return direct;
+    for (const term of this.objects(`${NS.CORE}atTime`)) {
+      if (term.termType !== "NamedNode" && term.termType !== "BlankNode") continue;
+      const instant = new MusicNode(term, this.dataset as Store);
+      const date = this.date(instant, `${NS.TIME}inXSDDateTime`);
+      if (date) return date;
+    }
+    return undefined;
   }
   set startTime(value: Date | undefined) {
     if (value !== undefined) validDate(value);
+    this.assertWritableSubject();
+    // Reuse imported instant IRIs; new events get a stable, event-specific IRI.
+    const instant = new MusicNode(
+      this.iris(`${NS.CORE}atTime`)[0] ?? `${this.value}-instant`,
+      this.dataset as Store,
+    );
+    if (value !== undefined) {
+      instant.stamp(`${NS.TIME}Instant`);
+      instant.clear(`${NS.TIME}inXSDDateTime`);
+      OptionalAs.object(instant, `${NS.TIME}inXSDDateTime`, value, LiteralFrom.dateTime);
+    }
     this.clear(`${S}startTime`);
     this.clear(`${NS.CORE}atTime`);
     OptionalAs.object(this, `${S}startTime`, value, LiteralFrom.dateTime);
-    OptionalAs.object(this, `${NS.CORE}atTime`, value, LiteralFrom.dateTime);
+    if (value !== undefined) {
+      SetFrom.subjectPredicate(this, `${NS.CORE}atTime`, TermAs.is, TermFrom.instance).add(instant);
+    }
   }
   get endTime(): Date | undefined {
-    return this.date(`${S}endTime`);
+    return this.date(this, `${S}endTime`);
   }
   set endTime(value: Date | undefined) {
     if (value !== undefined) validDate(value);
@@ -71,8 +92,8 @@ export class PlaybackEvent extends MusicNode {
     this.clear(`${M}msPlayed`);
     OptionalAs.object(this, `${M}msPlayed`, checked, LiteralFrom.double);
   }
-  private date(...predicates: string[]): Date | undefined {
-    for (const text of this.strings(...predicates)) {
+  private date(node: MusicNode, ...predicates: string[]): Date | undefined {
+    for (const text of node.strings(...predicates)) {
       const date = new Date(text);
       if (Number.isFinite(date.getTime())) return date;
     }

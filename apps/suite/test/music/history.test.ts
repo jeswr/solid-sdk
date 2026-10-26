@@ -5,6 +5,7 @@ import {
   computeTopArtists,
   historyShard,
   InvalidMusicError,
+  MusicNode,
   monthKey,
   type Playback,
   PlaybackEvent,
@@ -41,6 +42,13 @@ describe("playback model", () => {
     const second = new PlaybackEvent(`${base}history/2026-10.ttl#two`, dataset).stampType();
     second.trackIri = trackIri;
     second.startTime = now;
+    const instantIri = event.iris(`${NS.CORE}atTime`)[0] as string;
+    const instant = new MusicNode(instantIri, dataset);
+    expect(instantIri).not.toBe(second.iris(`${NS.CORE}atTime`)[0]);
+    expect(event.objects(`${NS.CORE}atTime`)).toHaveLength(1);
+    expect(instant.types).toEqual(new Set([`${NS.TIME}Instant`]));
+    expect(instant.strings(`${NS.TIME}inXSDDateTime`)).toEqual([now.toISOString()]);
+    expect(instant.objects(`${NS.TIME}inXSDDateTime`)[0]?.datatype.value).toBe(`${NS.XSD}dateTime`);
     expect(readHistory(dataset)).toHaveLength(2);
     const roundTrip = await parseMusic(await serializeMusic(dataset), base);
     expect(readHistory(roundTrip)).toEqual(readHistory(dataset));
@@ -50,6 +58,56 @@ describe("playback model", () => {
     });
     expect(new PlaybackEvent(event.value, roundTrip).msPlayed).toBe(213_000);
     expect(readHistory(dataset).map((item) => item.iri)).toEqual([event.value, second.value]);
+  });
+
+  it("reads and updates linked media instants without replacing their IRI or metadata", async () => {
+    const dataset = await parseMusic(
+      `
+      @prefix media: <${M}>. @prefix core: <${NS.CORE}>.
+      @prefix time: <${NS.TIME}>. @prefix xsd: <${NS.XSD}>. @prefix s: <${S}>.
+      <#play> a media:PlaybackEvent; media:playedWork <${trackIri}>; core:atTime <#instant>.
+      <#instant> a time:Instant; time:inXSDDateTime "2026-10-25T12:00:00Z"^^xsd:dateTime;
+        s:description "Imported metadata".
+    `,
+      base,
+    );
+    const event = new PlaybackEvent(`${base}#play`, dataset);
+    expect(readHistory(dataset)[0]?.startTime).toEqual(now);
+    expect(event.strings(`${S}startTime`)).toEqual([]);
+    const next = new Date("2026-10-25T13:00:00Z");
+    event.startTime = next;
+    event.startTime = now;
+    event.startTime = next;
+    expect(event.iris(`${NS.CORE}atTime`)).toEqual([`${base}#instant`]);
+    expect(event.strings(`${NS.CORE}atTime`)).toEqual([]);
+    expect(event.strings(`${S}startTime`)).toEqual([next.toISOString()]);
+    const instant = new MusicNode(`${base}#instant`, dataset);
+    expect(instant.strings(`${NS.TIME}inXSDDateTime`)).toEqual([next.toISOString()]);
+    expect(instant.strings(`${S}description`)).toEqual(["Imported metadata"]);
+    const parsed = await parseMusic(await serializeMusic(dataset), base);
+    expect(readHistory(parsed)[0]?.startTime).toEqual(next);
+    event.startTime = undefined;
+    expect(event.objects(`${NS.CORE}atTime`, `${S}startTime`)).toEqual([]);
+    expect(readHistory(dataset)).toEqual([]);
+    expect(instant.strings(`${S}description`)).toEqual(["Imported metadata"]);
+  });
+
+  it("skips malformed instant values and reads blank-linked instants", async () => {
+    const dataset = await parseMusic(
+      `
+      @prefix media: <${M}>. @prefix core: <${NS.CORE}>. @prefix time: <${NS.TIME}>.
+      <#play> a media:PlaybackEvent; media:playedWork <${trackIri}>;
+        core:atTime "not-a-date", <#missing>, [ time:inXSDDateTime "bad" ],
+          [ a time:Instant; time:inXSDDateTime "2026-10-25T12:00:00Z" ].
+    `,
+      base,
+    );
+    expect(readHistory(dataset)[0]?.startTime).toEqual(now);
+    const event = new PlaybackEvent(`${base}#play`, dataset);
+    event.startTime = now;
+    expect(event.objects(`${NS.CORE}atTime`)).toHaveLength(1);
+    expect(event.iris(`${NS.CORE}atTime`)).toEqual([`${base}#missing`]);
+    expect(new MusicNode(`${base}#missing`, dataset).types).toEqual(new Set([`${NS.TIME}Instant`]));
   });
 
   it("falls back independently across malformed predicates and skips incomplete events", async () => {
