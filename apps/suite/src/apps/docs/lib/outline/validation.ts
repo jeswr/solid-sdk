@@ -98,24 +98,34 @@ function validateJson(input: unknown): void {
     }
     if (ancestors.has(value)) invalid("Cyclic documents are unsupported", []);
     ancestors.add(value);
-    const descriptors = Object.getOwnPropertyDescriptors(value);
-    if (Array.isArray(value)) {
-      if (Object.keys(descriptors).length !== value.length + 1) {
+    const array = Array.isArray(value);
+    const remaining = DOCUMENT_LIMITS.values - values;
+    // Array length is available without allocating keys or inspecting any elements.
+    if (array && value.length > remaining) {
+      throw new DocumentOutlineError("limit-exceeded", "Document exceeds traversal limits");
+    }
+    const keys = Reflect.ownKeys(value);
+    if (array) {
+      if (keys.length !== value.length + 1) {
         invalid("Expected dense JSON arrays without extra fields", []);
       }
-      for (let index = 0; index < value.length; index++) {
-        if (!Object.hasOwn(descriptors, index)) invalid("Expected dense JSON arrays", []);
-      }
-      delete descriptors.length;
+    } else if (keys.length > remaining) {
+      throw new DocumentOutlineError("limit-exceeded", "Document exceeds traversal limits");
     }
-    for (const key of Reflect.ownKeys(descriptors)) {
+    function visitProperty(key: string | symbol): void {
       if (typeof key !== "string") invalid("Expected string JSON property keys", []);
       countCharacters(key);
-      const descriptor = descriptors[key] as PropertyDescriptor;
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      if (!descriptor) invalid("Expected dense JSON arrays", []);
       if (!descriptor.enumerable || !("value" in descriptor)) {
         invalid("Expected enumerable JSON data properties", []);
       }
       visit(descriptor.value, depth + 1);
+    }
+    if (array) {
+      for (let index = 0; index < value.length; index++) visitProperty(String(index));
+    } else {
+      for (const key of keys) visitProperty(key);
     }
     ancestors.delete(value);
   }

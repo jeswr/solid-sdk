@@ -555,6 +555,55 @@ describe("fail-closed document validation", () => {
     ).toBe("");
   });
 
+  it("rejects oversized sparse arrays before enumerating their keys", () => {
+    const ownKeys = vi.fn(Reflect.ownKeys);
+    const getOwnPropertyDescriptor = vi.fn(Reflect.getOwnPropertyDescriptor);
+    const many = new Proxy(Array(2 ** 32 - 1), { ownKeys, getOwnPropertyDescriptor });
+    expectError({ type: "doc", attrs: { many } }, "limit-exceeded");
+    expect(ownKeys).not.toHaveBeenCalled();
+    expect(getOwnPropertyDescriptor).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    "array",
+    "object",
+  ])("checks %s cardinality against the remaining budget before reading descriptors", (kind) => {
+    // Root, type, attrs, earlier, its four entries and many consume nine values.
+    const entries = Array(DOCUMENT_LIMITS.values - 8).fill(null);
+    const target = kind === "array" ? entries : Object.fromEntries(entries.map((v, i) => [i, v]));
+    const getOwnPropertyDescriptor = vi.fn(Reflect.getOwnPropertyDescriptor);
+    const many = new Proxy(target, { getOwnPropertyDescriptor });
+    expectError(
+      { type: "doc", attrs: { earlier: [null, null, null, null], many } },
+      "limit-exceeded",
+    );
+    expect(getOwnPropertyDescriptor).not.toHaveBeenCalled();
+  });
+
+  it.each(["array", "object"])("accepts a %s at the exact value limit", (kind) => {
+    const entries = Array(DOCUMENT_LIMITS.values - (kind === "array" ? 4 : 3)).fill(null);
+    const attrs =
+      kind === "array" ? { many: entries } : Object.fromEntries(entries.map((v, i) => [i, v]));
+    expect(projectPlainText({ type: "doc", attrs }).text).toBe("");
+  });
+
+  it.each([
+    "array",
+    "object",
+  ])("inspects %s descriptors incrementally while traversing nested values", (kind) => {
+    const first = { nested: "a".repeat(DOCUMENT_LIMITS.characters) };
+    const target = kind === "array" ? [first, null] : { first, later: null };
+    const inspected: (string | symbol)[] = [];
+    const many = new Proxy(target, {
+      getOwnPropertyDescriptor(object, key) {
+        inspected.push(key);
+        return Reflect.getOwnPropertyDescriptor(object, key);
+      },
+    });
+    expectError({ type: "doc", attrs: { many } }, "limit-exceeded");
+    expect(inspected).toEqual(Array(4).fill(kind === "array" ? "0" : "first"));
+  });
+
   it("counts metadata property names as UTF-16 code units at the character limit", () => {
     const overhead = "type".length + "doc".length + "attrs".length;
     const key = "😀".repeat((DOCUMENT_LIMITS.characters - overhead) / 2);
