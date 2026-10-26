@@ -1,0 +1,7 @@
+# AUTHORED-BY Codex GPT-6.1-Sol
+<https://pod.test/alice/integrations/amazon-orders/finance/amazon-orders.ttl#order-synthetic-lamp-eea5e04b> a <https://jeswr.org/ns/sectors/finance#TransactionRecord>, <https://schema.org/Invoice>;
+    <https://schema.org/identifier> "synthetic-1";
+    <https://schema.org/name> "Synthetic lamp";
+    <https://schema.org/priceCurrency> "GBP";
+    <https://schema.org/provider> "Amazon";
+    <https://schema.org/totalPaymentDue> "12.50".

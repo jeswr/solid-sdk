@@ -15,7 +15,7 @@
 import { DataFactory, Store } from "n3";
 import type { FileImportAdapter, FileImportContext, ImportFile } from "../core/file-import.js";
 import { csvRows } from "../core/file-stream.js";
-import { recordFragment } from "../core/slug.js";
+import { recordFragment, sourceItemUrl } from "../core/slug.js";
 import type { IntegrationMetadata } from "../core/types.js";
 import { Book, CLASSES } from "../core/vocab.js";
 import { vocabMap } from "./vocab-map.js";
@@ -57,7 +57,7 @@ export const goodreadsFileAdapter: FileImportAdapter = {
       book.name = title;
       if (bookId) {
         book.identifier = bookId;
-        book.sourceUrl = `https://www.goodreads.com/book/show/${encodeURIComponent(bookId)}`;
+        book.sourceUrl = sourceItemUrl("https://www.goodreads.com/book/show/", bookId);
       }
       const author = row.Author?.trim();
       if (author) book.author = author;

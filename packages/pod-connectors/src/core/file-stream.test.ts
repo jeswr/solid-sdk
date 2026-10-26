@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { type ImportFile, MAX_FILE_BYTES } from "./file-import.js";
 import { jsonEntries } from "./file-json.js";
 import { csvRows, fileText, textLines, xmlTags } from "./file-stream.js";
+import { sourceItemUrl } from "./slug.js";
 import { memoryFile } from "./testing.js";
 
 async function collect<T>(source: AsyncIterable<T>): Promise<T[]> {
@@ -141,4 +142,12 @@ describe("streaming JSON selectors", () => {
     await expect(collect(jsonEntries(chunksFile(deep), [""]))).rejects.toThrow("deeply");
     await expect(collect(jsonEntries(chunksFile(deep), []))).rejects.toThrow("deeply");
   });
+});
+
+it("keeps untrusted source ids inside one URL segment and drops invalid Unicode", () => {
+  expect(sourceItemUrl("https://source.test/item/", "a/?#<b>")).toBe(
+    "https://source.test/item/a%2F%3F%23%3Cb%3E",
+  );
+  expect(sourceItemUrl("https://source.test/item/", "\ud800")).toBeUndefined();
+  expect(sourceItemUrl("https://source.test/item/", undefined)).toBeUndefined();
 });

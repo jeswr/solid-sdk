@@ -21,7 +21,7 @@ import { DataFactory, Store } from "n3";
 import { isoDurationFromMinutes } from "../core/duration.js";
 import type { FileImportAdapter, FileImportContext, ImportFile } from "../core/file-import.js";
 import { jsonEntries } from "../core/file-json.js";
-import { recordFragment } from "../core/slug.js";
+import { recordFragment, sourceItemUrl } from "../core/slug.js";
 import type { IntegrationMetadata } from "../core/types.js";
 import { CLASSES, OnlineAccount, VideoGame } from "../core/vocab.js";
 import { vocabMap } from "./vocab-map.js";
@@ -79,7 +79,7 @@ export const steamFileAdapter: FileImportAdapter = {
       game.name = g.name;
       if (g.appid != null) {
         game.identifier = String(g.appid);
-        game.sourceUrl = `https://store.steampowered.com/app/${g.appid}`;
+        game.sourceUrl = sourceItemUrl("https://store.steampowered.com/app/", String(g.appid));
       }
       if (g.minutes != null && g.minutes > 0) {
         game.timeRequired = isoDurationFromMinutes(g.minutes);
@@ -105,7 +105,7 @@ export const steamFileAdapter: FileImportAdapter = {
       acct.accountServiceHomepage = "https://store.steampowered.com/";
       if (account.steamid) {
         acct.identifier = account.steamid;
-        acct.sourceUrl = `https://steamcommunity.com/profiles/${account.steamid}`;
+        acct.sourceUrl = sourceItemUrl("https://steamcommunity.com/profiles/", account.steamid);
       }
       await ctx.write({
         slug: "social/steam-account.ttl",

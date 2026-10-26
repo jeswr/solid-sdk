@@ -200,7 +200,11 @@ for (const fixture of fixtures) {
       }
       expect([...types].sort()).toEqual([...fixture.types].sort());
       expect(values).toContain(fixture.value);
-      if (chunkSize === 7) expect(mappings.join("\n")).toMatchSnapshot();
+      if (chunkSize === 7) {
+        await expect(`# AUTHORED-BY Codex GPT-6.1-Sol\n${mappings.join("\n")}`).toMatchFileSnapshot(
+          `./__snapshots__/${fixture.adapter.metadata.id}-${fixture.name}.ttl`,
+        );
+      }
       expect(report.state?.lastOutcome).toBe("success");
       const again = await fileImport(fixture.adapter, file, { pod });
       expect(again.report.state?.counts).toEqual(report.state?.counts);
@@ -216,6 +220,55 @@ for (const fixture of fixtures) {
     });
   });
 }
+
+it.each([
+  {
+    adapter: goodreadsFileAdapter,
+    file: "library.csv",
+    text: "Book Id,Title\na/?#<b>,Synthetic book",
+    expected: ["https://www.goodreads.com/book/show/a%2F%3F%23%3Cb%3E"],
+  },
+  {
+    adapter: steamFileAdapter,
+    file: "games.json",
+    text: JSON.stringify({
+      games: [{ appid: "a/?#<b>", name: "Synthetic game" }],
+      steamid: "a/?#<b>",
+    }),
+    expected: [
+      "https://store.steampowered.com/app/a%2F%3F%23%3Cb%3E",
+      "https://steamcommunity.com/profiles/a%2F%3F%23%3Cb%3E",
+    ],
+  },
+  {
+    adapter: chatgptFileAdapter,
+    file: "conversations.json",
+    text: JSON.stringify([{ id: "\ud800", title: "Synthetic chat" }]),
+    expected: [],
+  },
+])("keeps $adapter.metadata.id source identifiers inert", async ({
+  adapter,
+  file,
+  text,
+  expected,
+}) => {
+  const { pod, report } = await fileImport(adapter, streamedFile(file, text));
+  const urls = report.written.flatMap((written) =>
+    [...pod.dataset(written.url)]
+      .filter((quad) => quad.predicate.value === `${SCHEMA}url`)
+      .map((quad) => quad.object.value),
+  );
+  expect(urls).toEqual(expected);
+  for (const written of report.written) {
+    const dataset = pod.dataset(written.url);
+    for (const subject of new Set([...dataset].map((quad) => quad.subject.value))) {
+      const item = new Provenance(subject, dataset, DataFactory);
+      expect(
+        item.derivedFrom.has(item.sourceUrl ?? `urn:solid:connector:${adapter.metadata.id}:export`),
+      ).toBe(true);
+    }
+  }
+});
 
 it("streams a >50 MiB Apple Health export.xml while retaining only workouts", async () => {
   const encoder = new TextEncoder();

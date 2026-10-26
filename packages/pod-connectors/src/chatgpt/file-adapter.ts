@@ -17,7 +17,7 @@
 import { DataFactory, Store } from "n3";
 import type { FileImportAdapter, FileImportContext, ImportFile } from "../core/file-import.js";
 import { jsonEntries } from "../core/file-json.js";
-import { recordFragment } from "../core/slug.js";
+import { recordFragment, sourceItemUrl } from "../core/slug.js";
 import type { IntegrationMetadata } from "../core/types.js";
 import { CLASSES, TextDocument } from "../core/vocab.js";
 import { vocabMap } from "./vocab-map.js";
@@ -126,7 +126,7 @@ function flattenConversation(raw: unknown, idx: number): FlatConversation | unde
   const id = asString(raw.id) ?? asString(raw.conversation_id);
   return {
     title,
-    sourceUrl: id ? `https://chatgpt.com/c/${encodeURIComponent(id)}` : undefined,
+    sourceUrl: sourceItemUrl("https://chatgpt.com/c/", id),
     created: numberToDate(raw.create_time),
     transcript: flattenMapping(raw.mapping),
     key: id ?? `${title}|${idx}`,
