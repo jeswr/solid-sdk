@@ -16,7 +16,7 @@
  * **Actionable messages.** When `task` is supplied, the SAME subject is *also*
  * typed `wf:Task`, with a lifecycle-state class (`wf:Open`/`wf:Closed`), a
  * `dct:title` summary and a `wf:assignee` WebID — the shared task model from
- * `https://w3id.org/jeswr/task#`. solid-issues / Pod Manager then pick the note
+ * `https://jeswr.org/ns/task#`. solid-issues / Pod Manager then pick the note
  * up as a task with no Pod-Chat-specific code.
  *
  * Everything goes through typed `@rdfjs/wrapper` accessors — never hand-built

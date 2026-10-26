@@ -76,6 +76,7 @@ export const ACP = {
 /** SSD vocabulary IRIs recognised by ADR-002. */
 export const SSD = {
   SolidNotificationService: "https://jeswr.org/ns/solid-sd#SolidNotificationService",
+  LegacyUpdatesVia: "https://jeswr.org/ns/solid-sd#LegacyUpdatesVia",
   SparqlQueryService: "https://jeswr.org/ns/solid-sd#SparqlQueryService",
   CrdtSyncService: "https://jeswr.org/ns/solid-sd#CrdtSyncService",
   VersioningService: "https://jeswr.org/ns/solid-sd#VersioningService",
