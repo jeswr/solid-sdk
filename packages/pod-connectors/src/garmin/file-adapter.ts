@@ -1,3 +1,5 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /**
  * Garmin Connect → Health + Mobility (file import).
  *
@@ -37,6 +39,7 @@ import { extractBlocks, firstTagText } from "../core/mini-xml.js";
 import { recordFragment } from "../core/slug.js";
 import type { IntegrationMetadata } from "../core/types.js";
 import { type ActionThing, CLASSES, ExerciseAction, TravelAction } from "../core/vocab.js";
+import { vocabMap } from "./vocab-map.js";
 
 const ID = "garmin";
 
@@ -52,6 +55,7 @@ const metadata: IntegrationMetadata = {
 };
 
 export const garminFileAdapter: FileImportAdapter = {
+  vocabMap,
   metadata,
   accept: ".csv,.gpx,.tcx,text/csv,application/gpx+xml,application/vnd.garmin.tcx+xml",
   fileHint:
