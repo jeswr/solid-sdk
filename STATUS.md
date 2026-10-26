@@ -3,6 +3,9 @@
 
 # sst-j2y — A-036 lane report
 
+Current validation and fixes are recorded in [Fix round 2](#fix-round-2).
+The original implementation report below is historical.
+
 Implemented `@jeswr/agent-registry` on `lane/sst-j2y`. Only the package, the workspace
 lockfile, and this report changed. No remotes, providers, real registry, credentials,
 1Password items, daemon stores, or real pods were accessed. Nothing was pushed.
@@ -130,3 +133,71 @@ no review tooling or model endpoint was installed or invoked.
 No implementation questions remain. The dispatcher should resolve workspace baseline
 validation/review tooling outside this implementation lane. No PR or merge was attempted,
 and the bead is left for the dispatcher to close on merge.
+
+## Fix round 2
+
+Addressed the three findings against `08b592db2f67` on `lane/sst-j2y`:
+
+- `fc67af5f` — `fix(agent-registry): reject unlisted private references`: reject
+  recognizable email, Matrix/social handle, identity URI and international phone
+  syntax in literal or decoded references independently of account/evidence/note
+  completeness. Tests cover every reference component with no known handles and
+  placeholder-only imports, asserting rejection before any storage operation.
+- `0f95b82f` — `fix(agent-registry): preserve Matrix bot identity case`: use the
+  existing Matrix case-preserving normalization for `matrix_bot`; exercise distinct
+  hashes, evidence matching, provider conflicts, unmatched evidence and note matching
+  for both Matrix channels.
+- `51e332e2` — `fix(agent-registry): match complete conflict identities`: extract
+  whole identifiers from conflict notes and compare with each channel's normalization.
+  Tests cover email prefixes/suffixes/aliases/apostrophes, Matrix domain suffixes,
+  bare handles, Unicode and quoted mentions, exact conflict hash sets, and RDF output
+  that leaves Alice unaffected by a conflict mentioning only Malice.
+- Report commit — `docs(agent-registry): record fix round 2 validation` (this file).
+
+Conservative choice: retain the existing reference format and fail closed on
+recognizable identifying syntax even when the inventory contains only placeholders.
+Valid references remain verbatim. No dependencies, manifests or lockfiles changed;
+`check:packages` was not needed. All fixtures and transports remain synthetic/offline.
+
+All checks below used Node `v24.22.1` via `export PATH=/opt/node24/bin:$PATH`;
+the default shell Node 22 was refused by pnpm's engine guard before any test ran.
+
+The final package gate passed, with **109 tests in 3 files**:
+
+```sh
+pnpm --filter @jeswr/agent-registry run lint
+pnpm --filter @jeswr/agent-registry run build
+pnpm --filter @jeswr/agent-registry run typecheck
+pnpm --filter @jeswr/agent-registry run test
+```
+
+`pnpm run lint:root` passed. The affected gate also passed (5/5 tasks), using
+the supplied review head as its local baseline:
+
+```sh
+TURBO_SCM_BASE=08b592db2f67c3e38c1675cd35af5f9ff46aba0a pnpm run gate
+```
+
+`pnpm run gate:full` failed in unchanged root test
+`test/check-sdk-layers.test.mjs:328`: the pathological-spec timing assertion took
+57.6024 ms against its 50 ms ceiling. Turbo completed 44 tasks before stopping.
+No registry failure was reported. The first standalone `pnpm run test:root`
+rerun passed that assertion but failed a different unchanged test in
+`test/agent-layers.test.mjs:509` at the default 5-second timeout (685/686 tests
+passed). No test configuration or unrelated source was changed.
+
+The CLI-timeout retry permitted by the brief passed **686 tests in 7 files**:
+
+```sh
+pnpm run test:root --testTimeout=30000 --hookTimeout=30000
+```
+
+The full-workspace gate remains recorded as failed; the successful standalone run
+does not replace it. Its timing failure and the standalone default-timeout failure
+are outside this fix's package scope. The package gate required no timeout changes.
+
+`roborev` remains unavailable in this checkout, so automated per-commit review could
+not run. No tooling or model endpoint was installed or invoked. No in-scope fixes
+remain unfinished and there are no implementation questions. No branch switch,
+fetch, merge, push, PR or changes to another checkout were performed. The final
+report is committed after validation, and the checkout is left clean.
