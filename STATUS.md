@@ -65,3 +65,36 @@ library; no components or rendered states were added, and no browser was launche
 No DOC-L2 implementation work remains. Full-workspace validation and automated
 roborev review remain unverified for the environmental/tooling reasons above.
 No pushes, PRs, branch switches, merges, or edits to other checkouts were performed.
+
+## Fix round 2 — root attributes (2026-10-26)
+
+Review base: `f9e16416749db720e71978b8951989001c2f867e`.
+
+- `a8c36f35` — `fix(docs): reject unsupported document root attributes`:
+  conservatively use the review's explicit-rejection option. Nonempty root
+  attributes on either input throw `TypeError("Document root attributes are
+  unsupported")`, including identical attributes, so no accepted root edit can
+  disappear. Absent and empty root attributes remain equivalent. The public API
+  documents this restriction; the block-change representation is unchanged.
+- Final `docs: record root attribute fix validation` commit — this report update.
+
+Regression coverage exercises portrait/landscape changes, identical unsupported
+attributes, addition/removal on either input, absent/empty defaults, and both empty
+and populated documents. The new rejection test failed before the implementation
+with "expected function to throw an error, but it didn't".
+
+| Exact command | Result |
+| --- | --- |
+| `pnpm --filter @jeswr/app-suite exec vitest run test/docs-diff.test.ts` (before fix) | Expected regression failure: 62 passed, 1 failed. |
+| `pnpm --filter @jeswr/app-suite run lint && pnpm --filter @jeswr/suite-ui run build && pnpm --filter @jeswr/app-suite run build && pnpm --filter @jeswr/app-suite run typecheck && pnpm --filter @jeswr/app-suite run test` | PASS; six test files, 160 tests (63 diff tests); 100% statements/branches/functions/lines in every diff file. |
+| `pnpm run lint:root` | PASS; all root guards and 74 contrast pairs. |
+| `TURBO_SCM_BASE=f9e16416749db720e71978b8951989001c2f867e pnpm run gate` | PASS; 6/6 Turbo tasks. |
+| `GIT_ALLOW_PROTOCOL= pnpm run gate:full` | INTERRUPTED (exit 130): `@jeswr/unstorage-solid#build` started its fetch-rdf remote-clone bootstrap despite the attempted transport restriction. Stopped the gate; full-workspace validation remains incomplete. |
+| `git diff --check` | PASS. |
+| `roborev status` | UNAVAILABLE: command not found. |
+
+No dependencies or rendered UI changed; package policy checks and screenshots are
+not applicable. The transport environment restriction did not reach the bootstrap
+task, so this attempt did not honor the lane's remote restriction. No further full
+gate attempt was made. No open implementation questions remain; full-workspace
+validation and automated roborev review are the only outstanding validation limits.
