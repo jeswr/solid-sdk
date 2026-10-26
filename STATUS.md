@@ -52,3 +52,27 @@ Implementation is confined to the Drive model, its tests, app dependency/test co
 The model-first amendment takes precedence over the later DRV-01 SDK/hook wiring. The RDF bootstrap takes an injected fetch and an explicitly supplied existing private Type Index URL. Missing-index creation/linking, LWS adaptation and metadata writes belong to SDK-APP-10 / SDK-APP-03 and DRV-01. Display helpers already prefer `Entry.displayName` over the decoded segment. No React, hooks, shell or suite-sdk import was added to the model.
 
 Open questions and the applied conservative choices are in `QUESTIONS.md`: bootstrap adapter/index ownership, invalid naming boundaries, Unicode length counting and preference defaults. No model test or affected-gate failure remains. Full-workspace validation and roborev review remain limited as described above. Nothing was pushed, no PR was opened, and no branch was switched.
+
+## Fix round 1 — CSS root bootstrap interoperability
+
+Review baseline: `e282229e2793ef79bfac694bc3e0766df2789c1f`.
+
+- `87c4f9cf` — `fix(drive): reconcile CSS root bootstrap`: address both medium findings. Create the container conditionally, discover its description via the `describedby` Link relation, scope-check that URL, append the canonical DriveRoot marker using a SPARQL metadata PATCH, and verify the container's marker before registering it. Treat both 409 and 412 as potential existing-container responses; re-read and validate the marker before registration, allowing five reads with 50/100/200/400 ms backoff for another initializer. Preserve the original conflict when the root is missing or remains unmarked, and propagate other read/write failures. Do not modify an occupied unmarked path.
+- Final documentation commit — `docs(drive): record bootstrap fix validation` (this subsection).
+
+The mock now discards container creation bodies and requires PATCH to an advertised metadata URL distinct from the container. Tests cover marker persistence and verification order, rejected/ineffective PATCHes, metadata discovery and pod-scope checks, concurrent callers with both 409 and 412, a deliberately delayed winning PATCH, unrelated conflicts, and recovery after registration failure with both existing-container statuses.
+
+Validation used `export PATH="$PWD/node_modules/.bin:$PATH"`, as in the original lane:
+
+| Command | Result |
+| --- | --- |
+| `pnpm exec turbo run build --filter='@jeswr/app-suite^...'` | PASS; all 4 workspace dependency builds. An earlier test invocation lacked these uncommitted build outputs. |
+| `pnpm --filter @jeswr/app-suite run lint && pnpm --filter @jeswr/app-suite run build && pnpm --filter @jeswr/app-suite run typecheck && pnpm --filter @jeswr/app-suite run test` | PASS after correcting strict TypeScript typing of mandatory regex captures; production Next build, lint, typecheck, 9 test files / 161 tests. |
+| `pnpm run lint:root` | PASS; includes workspace, transport, fetch, token and contrast checks (74 contrast pairs, 0 failures). |
+| `TURBO_SCM_BASE=e282229e2793ef79bfac694bc3e0766df2789c1f pnpm run gate` | PASS; 9/9 tasks, 4 cached. |
+| `git diff --check` | PASS. |
+| `command -v roborev` | Unavailable; automated per-commit review could not run. |
+
+Model coverage remains **100% statements (176/176), branches (93/93), functions (44/44), lines (156/156)**, including 100% for `root.ts`.
+
+The full-workspace gate was not rerun in this fix round: the original lane already identified the unrelated `unstorage-solid` dependency bootstrap failure, and its build script clones a network remote, which this lane expressly prohibits. The required package gate and affected repository gate pass. No scoped implementation work is unfinished, and this fix round adds no open questions. Conservative choices: require an advertised metadata URL, bound concurrent marker waits, and never adopt or mark an unmarked occupied path. No dependencies, UI, screenshots, tracker state, or unrelated code changed; nothing was pushed and no PR was opened.
