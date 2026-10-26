@@ -247,6 +247,34 @@ describe("AppLauncher", () => {
       true,
     );
   });
+  // AUTHORED-BY Claude Opus 5.5
+  it.each([
+    ["loading", undefined],
+    ["ready", "unreachable"],
+  ] as const)("makes an open customise panel read-only while preferences are %s %s", async (status, error) => {
+    const { rerender } = render(<Harness />);
+    const user = await open();
+    await user.click(screen.getByRole("button", { name: "Customise rail" }));
+    expect(screen.getByRole("checkbox", { name: "Docs" })).toBeTruthy();
+    rerender(<Harness status={status} {...(error ? { error } : {})} />);
+    const panel = screen.getByRole("region", { name: "Customise rail" });
+    expect(panel.getAttribute("aria-disabled")).toBe("true");
+    expect(within(panel).getByRole("group").hasAttribute("disabled")).toBe(true);
+    expect(
+      within(panel).getByText("Rail settings are unavailable until your app preferences load"),
+    ).toBeTruthy();
+    const docs = within(panel).getByRole("checkbox", { name: "Docs" });
+    await user.click(docs);
+    fireEvent.click(docs);
+    fireEvent.click(within(panel).getByRole("button", { name: "Move Docs up" }));
+    fireEvent.drop(docs.closest("li") as HTMLElement, {
+      dataTransfer: { getData: () => "permissions" },
+    });
+    expect(update).not.toHaveBeenCalled();
+    expect(
+      (screen.getByRole("button", { name: "Customise rail" }) as HTMLButtonElement).disabled,
+    ).toBe(true);
+  });
   it.each([
     "loading",
     "refreshing",
