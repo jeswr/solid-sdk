@@ -57,3 +57,36 @@ Fixtures contain only synthetic people, reserved fictional phone numbers and exa
   Neither question blocks the requested library. No UI/data-model strategy was changed.
 - Bead closure and integration remain with the dispatcher; this dedicated worktree did not alter
   the tracker or other checkouts.
+
+## Fix round 1 — review e9a84cbacef2
+
+- `4092556b fix: preserve vCard value types and escaping` addresses all five findings:
+  TEL defaults to text in both versions and requires explicit VALUE=uri for URI handling;
+  quoted-printable soft-break detection reads quote-aware parsed parameters; v4 PHOTO/TEL URI
+  commas encode/decode without applying other TEXT escapes; optional `bdayValueType` preserves
+  explicit birthday types while keeping `bday` a string; caret decoding recognizes lowercase
+  `^n` and leaves uppercase/unknown sequences intact. Updated the API documentation accordingly.
+- Final report commit (`docs: record vCard fix round verification`) records this verification.
+
+| Exact command | Result |
+| --- | --- |
+| `pnpm --filter @jeswr/app-suite exec vitest run test/vcard.test.ts --coverage.enabled=false` | Regression check before fixes: 11 failed, 51 passed, reproducing all five findings. |
+| `pnpm --filter @jeswr/suite-ui run build` | PASS; workspace prerequisite. |
+| `pnpm --filter @jeswr/app-suite run lint && pnpm --filter @jeswr/app-suite run build && pnpm --filter @jeswr/app-suite run typecheck && pnpm --filter @jeswr/app-suite run test` | PASS; 63 tests across 2 files. |
+| `TURBO_SCM_BASE=e9a84cbacef29715aa68486a8d6bc4ba806ae8aa GIT_ALLOW_PROTOCOL=file pnpm run gate` | PASS; 6/6 tasks, including root lint and guards. |
+| `GIT_ALLOW_PROTOCOL=file pnpm run gate:full` | BLOCKED; unchanged `@jeswr/unstorage-solid#build` dependency bootstrap fails during npm install with EROFS writing `/home/runner/.npm/_cacache`; 3/35 tasks successful before Turbo stopped. Remote Git transports were disabled. |
+| `git diff --check` | PASS. |
+
+Final per-file vCard coverage remains **100% statements (230/230), branches (164/164),
+functions (30/30), lines (199/199)**. Tests cover default/explicit TEL text, v3/v4 URI comma
+rules and other URI escapes, quoted encoding lookalikes followed by EMAIL, birthday value
+kinds and replacement, and lowercase/uppercase/unknown caret sequences. Birthday type header
+injection is rejected. An initial concurrent affected-gate attempt hit Next.js's build lock;
+the sequential rerun above passed.
+
+No dependencies, manifests, UI, tracker state, other packages, or other checkouts changed.
+No implementation work remains and there are no new open questions. The conservative birthday
+API addition retains existing string values and adds only optional type metadata.
+Full-workspace verification remains blocked by the unrelated bootstrap failure. Roborev is
+still unavailable (`command -v roborev` finds no CLI; no post-commit hook exists); the supplied
+review was addressed directly. Integration and bead closure remain with the dispatcher.
