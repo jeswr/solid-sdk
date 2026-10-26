@@ -1,6 +1,6 @@
 ---
 name: agentic-legacy-bridge
-description: Maintain imported channel parsing, BridgeMessage and ChannelAdapter contracts, metadata interpretation, approval-gated replies, webhook verification, and email/Slack/WhatsApp transforms.
+description: Use when maintaining imported channel parsing, BridgeMessage and ChannelAdapter contracts, metadata interpretation, approval-gated replies, webhook verification, and email/Slack/WhatsApp transforms.
 ---
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 

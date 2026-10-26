@@ -1,6 +1,6 @@
 ---
 name: storage-capabilities
-description: Work on @jeswr/storage-capabilities, the storage description discovery and feature flags package in the Solid SDK workspace.
+description: Use when working on @jeswr/storage-capabilities, the storage description discovery and feature flags package in the Solid SDK workspace.
 ---
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 

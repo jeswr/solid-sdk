@@ -1,6 +1,6 @@
 ---
 name: pod-access
-description: Work on @jeswr/pod-access, the pod sharing and permissions across access-control models package in the Solid SDK workspace.
+description: Use when working on @jeswr/pod-access, the pod sharing and permissions across access-control models package in the Solid SDK workspace.
 ---
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 
