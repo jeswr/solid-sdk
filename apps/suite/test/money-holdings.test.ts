@@ -681,6 +681,7 @@ describe("fail-closed validation and limits", () => {
       Array(1),
       [undefined],
       Object.assign([], { extra: true }),
+      Object.assign([], { "4294967295": true }),
       Object.defineProperty([entry()], "0", {
         get() {
           throw new Error("must not read accessor");

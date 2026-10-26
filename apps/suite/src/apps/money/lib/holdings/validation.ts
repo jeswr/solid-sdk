@@ -119,6 +119,7 @@ export function transactionCount(value: readonly InvestmentTransaction[]): void 
     requireValue(
       typeof key === "string" &&
         /^(0|[1-9]\d*)$/.test(key) &&
+        Number(key) < value.length &&
         descriptor.enumerable &&
         "value" in descriptor,
     );
