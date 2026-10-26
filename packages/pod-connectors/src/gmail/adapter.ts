@@ -14,7 +14,7 @@ import { getJson } from "../core/fixture-fetch.js";
 import { Provenance } from "../core/provenance.js";
 import type { ImportContext, ImportOutcome, IntegrationAdapter } from "../core/types.js";
 import { PodThing } from "../core/vocab.js";
-import { accountRoot, SYSTEM_FOLDERS } from "../mail/paths.js";
+import { accountRoot, messageIdOf, SYSTEM_FOLDERS } from "../mail/paths.js";
 import { MAIL_CLASSES, MailMessage, MailSourceIndex } from "../mail/vocab.js";
 import {
   createMailWriter,
@@ -74,7 +74,7 @@ export const gmailAdapter: IntegrationAdapter = {
     const labels = await labelFolders(ctx);
     const mail = createMailWriter(ctx, account);
     const index = await SourceIndex.load(ctx, account);
-    const sync = new Sync(ctx, mail, labels, index);
+    const sync = new Sync(ctx, mail, labels, index, account);
 
     let cursor: string | undefined;
     if (ctx.cursor) {
@@ -187,8 +187,10 @@ class SourceIndex {
       if (!dataset) continue;
       const iri = `${this.ctx.resolve(slug)}#it`;
       const thread = new MailMessage(iri, dataset, DataFactory).partOfThread;
+      // A source keeps the document it was indexed with; documents are never re-keyed.
       for (const source of new Provenance(iri, dataset, DataFactory).derivedFrom)
-        if (source.startsWith(WEB_URL)) this.set(source, { slug, thread });
+        if (source.startsWith(WEB_URL) && !this.entries.has(source))
+          this.set(source, { slug, thread });
     }
     this.marked = true;
   }
@@ -248,6 +250,7 @@ class Sync {
     private readonly mail: MailWriter,
     private readonly labels: ReadonlyMap<string, MailFolder>,
     private readonly index: SourceIndex,
+    private readonly account: string,
   ) {}
 
   /** Lists every message (Spam and Trash included) and removes stored ones no longer listed. */
@@ -338,6 +341,7 @@ class Sync {
       folders.push({ key: "Archive", title: "Archive" });
     const received = Number(message.internalDate);
     let stored: StoredMail;
+    const previous = this.index.entries.get(source);
     await this.index.begin();
     try {
       stored = await this.mail.add({
@@ -346,6 +350,7 @@ class Sync {
         read: !labelIds.includes("UNREAD"),
         threadKey: validId(message.threadId) ? `gmail-${message.threadId}` : undefined,
         fallbackId: `gmail-${id}`,
+        documentId: previous && messageIdOf(this.account, previous.slug),
         sourceUrl: source,
         receivedAt: Number.isFinite(received) && received > 0 ? new Date(received) : undefined,
       });
@@ -355,10 +360,6 @@ class Sync {
       this.skipped++;
       return;
     }
-    const previous = this.index.entries.get(source);
-    // The same Gmail message re-keyed (e.g. its Message-ID now collides) leaves no orphan.
-    if (previous && previous.slug !== stored.slug)
-      await this.mail.removeMessage(previous.slug, previous.thread);
     this.index.set(source, { slug: stored.slug, thread: stored.thread });
     this.done++;
     if (this.done % 25 === 0)

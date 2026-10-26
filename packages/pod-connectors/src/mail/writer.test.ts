@@ -16,6 +16,7 @@ async function withWriter(
   run: (mail: MailWriter, ctx: ImportContext) => Promise<void>,
   pod = createMemoryPod(),
   known?: readonly MailFolder[],
+  fetch: typeof globalThis.fetch = pod.fetch,
 ) {
   await runImport({
     adapter: {
@@ -42,7 +43,7 @@ async function withWriter(
       webId: TEST_WEBID,
       profileDocumentUrl: TEST_PROFILE_DOC,
       podRoot: TEST_POD_ROOT,
-      fetch: pod.fetch,
+      fetch,
     }),
     mode: "demo",
   });
@@ -279,6 +280,106 @@ describe("MailWriter", () => {
     }, pod).catch(() => undefined);
     await withWriter(async (mail) => void (await mail.add(item([]))), pod, []);
     expect(pod.get(url(folderSlug(ME, "Label_9")))).toBeUndefined();
+  });
+
+  it("follows the stored thread of a partial References root", async () => {
+    const pod = await withWriter(async (mail) => {
+      await mail.add({ raw: raw("q1"), folders: [INBOX], read: true, fallbackId: "1" });
+      await mail.add({
+        raw: raw("q2", ["In-Reply-To: <q1@x.test>"]),
+        folders: [INBOX],
+        read: true,
+        fallbackId: "2",
+      });
+      await mail.add({
+        raw: raw("q3", ["References: <q2@x.test>", "In-Reply-To: <q2@x.test>"]),
+        folders: [INBOX],
+        read: true,
+        fallbackId: "3",
+      });
+    });
+    expect(membersOf(pod, threadSlug(ME, "<q1@x.test>"))).toHaveLength(3);
+  });
+
+  it("lets the first committed message document own the bytes of a shared Message-ID", async () => {
+    const pod = createMemoryPod();
+    const doc = url(messageSlug(ME, "<race@x.test>"));
+    const second = raw("race", ["Subject: second"]);
+    let raced = false;
+    // Import A reads first; import B commits the same Message-ID before A's document write.
+    const racing: typeof fetch = async (input, init) => {
+      if (!raced && String(input) === doc && init?.method === "PUT") {
+        raced = true;
+        await withWriter(
+          async (mail) =>
+            void (await mail.add({
+              raw: second,
+              folders: [INBOX],
+              read: true,
+              fallbackId: "b",
+              sourceUrl: "https://source.test/b",
+            })),
+          pod,
+        );
+      }
+      return pod.fetch(input, init);
+    };
+    await expect(
+      withWriter(
+        async (mail) =>
+          void (await mail.add({
+            raw: raw("race", ["Subject: first"]),
+            folders: [INBOX],
+            read: true,
+            fallbackId: "a",
+            sourceUrl: "https://source.test/a",
+          })),
+        pod,
+        undefined,
+        racing,
+      ),
+    ).rejects.toThrow();
+    expect(pod.bytes(url(emlSlug(ME, "<race@x.test>")))).toEqual(second);
+    expect(new MailMessage(`${doc}#it`, pod.dataset(doc), DataFactory).subjectLine).toBe("second");
+  });
+
+  it("sends an overlapping import of another item to its fallback once a document is committed", async () => {
+    const pod = createMemoryPod();
+    const eml = url(emlSlug(ME, "<race2@x.test>"));
+    const first = raw("race2", ["Subject: first"]);
+    let raced = false;
+    const racing: typeof fetch = async (input, init) => {
+      if (!raced && String(input) === eml && init?.method === "PUT") {
+        raced = true;
+        await withWriter(
+          async (mail) =>
+            void (await mail.add({
+              raw: raw("race2", ["Subject: second"]),
+              folders: [INBOX],
+              read: true,
+              fallbackId: "b2",
+              sourceUrl: "https://source.test/b2",
+            })),
+          pod,
+        );
+      }
+      return pod.fetch(input, init);
+    };
+    await withWriter(
+      async (mail) =>
+        void (await mail.add({
+          raw: first,
+          folders: [INBOX],
+          read: true,
+          fallbackId: "a2",
+          sourceUrl: "https://source.test/a2",
+        })),
+      pod,
+      undefined,
+      racing,
+    );
+    expect(pod.bytes(eml)).toEqual(first);
+    expect(pod.get(url(messageSlug(ME, "b2")))).toBeDefined();
   });
 
   it("rejects unparseable MIME with MailParseError", async () => {

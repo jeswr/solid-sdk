@@ -25,6 +25,20 @@ export function messageSlug(account: string, id: string): string {
   return `${accountRoot(account)}messages/${pathId(nonEmpty(id, "message id"))}.ttl`;
 }
 
+/** The document id of a `messageSlug`, or undefined for any other slug. */
+export function messageIdOf(account: string, slug: string): string | undefined {
+  const prefix = `${accountRoot(account)}messages/`;
+  const name = slug.slice(prefix.length, -".ttl".length);
+  if (!slug.startsWith(prefix) || !slug.endsWith(".ttl") || !name || name.includes("/"))
+    return undefined;
+  try {
+    const id = decodeURIComponent(name.replace(/~/g, "%"));
+    return messageSlug(account, id) === slug ? id : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export function emlSlug(account: string, id: string): string {
   return messageSlug(account, id).replace(/\.ttl$/, ".eml");
 }

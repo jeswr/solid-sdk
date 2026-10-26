@@ -245,6 +245,14 @@ describe("Gmail full resync", () => {
     ]).result;
     expect(pod.get(LUNCH_1)).toBeDefined();
     expect(pod.get(msg("gmail-m7"))).toBeDefined();
+    // Once the owner is gone, the copy keeps its document instead of moving to the Message-ID.
+    await run([
+      ...base,
+      { url: `${GMAIL_API}/messages`, json: { messages: [copy] } },
+      fetched(copy),
+    ]).result;
+    expect(pod.get(LUNCH_1)).toBeUndefined();
+    expect(pod.get(msg("gmail-m7"))).toBeDefined();
   });
 });
 
