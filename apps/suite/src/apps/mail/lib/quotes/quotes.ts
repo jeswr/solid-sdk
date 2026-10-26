@@ -25,9 +25,9 @@ export interface QuotedText {
 
 // Intentionally fixed language table: no locale inference or translated header guessing.
 const ATTRIBUTIONS = [
-  /^On .+ wrote:[ \t]*$/u,
-  /^Am .+ schrieb .+:[ \t]*$/u,
-  /^Le .+ a écrit[ \t]*:[ \t]*$/u,
+  { pattern: /^On .+ wrote:[ \t]*$/u },
+  { pattern: /^Am .+:[ \t]*$/u, separator: " schrieb " },
+  { pattern: /^Le .+ a écrit[ \t]*:[ \t]*$/u },
 ] as const;
 // Offset backwards from the last nonblank line.
 const OUTLOOK_HEADERS = [
@@ -113,10 +113,18 @@ function attributionLines(lines: Line[]): Set<number> {
     if (line.depth > 0 && previousDepth === 0) {
       const previous = lines[lastNonblank];
       if (previous !== undefined && previous.depth === 0) {
-        // Checking the terminal colon first bounds scans of repeated German "schrieb" text.
+        // One wildcard per pattern avoids backtracking over repeated German separators.
         if (
-          previous.value.trimEnd().endsWith(":") &&
-          ATTRIBUTIONS.some((pattern) => pattern.test(previous.value))
+          ATTRIBUTIONS.some((entry) => {
+            if (!entry.pattern.test(previous.value)) return false;
+            if (!("separator" in entry)) return true;
+            // Require a nonempty date and sender on either side of " schrieb ".
+            const separator = previous.value.indexOf(entry.separator, "Am ".length + 1);
+            return (
+              separator >= 0 &&
+              separator + entry.separator.length < previous.value.trimEnd().length - 1
+            );
+          })
         ) {
           marked.add(lastNonblank);
         } else {

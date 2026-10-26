@@ -87,6 +87,8 @@ describe("mail quoted history", () => {
     "on Monday, Mira wrote:",
     "El lunes, Mira escribió:",
     "Am Montag, Mira:",
+    "Am Montag schrieb :",
+    "Am  schrieb Mira:",
     "Le lundi, Mira écrit :",
     " On Monday, Mira wrote:",
     "On Monday, Mira wrote:\n-- ",
@@ -120,6 +122,10 @@ describe("mail quoted history", () => {
     ]);
     const prose = `Am ${"Mira schrieb ".repeat(10_000)}no terminal colon`;
     expect(splitQuotedText(`${prose}\n> history`).visibleText).toBe(`${prose}\n`);
+    for (const separator of ["\r", "\u2028", "\u2029"]) {
+      const source = `Am ${"Mira schrieb ".repeat(10_000)}${separator}:`;
+      expect(splitQuotedText(`${source}\n> history`).visibleText).toBe(`${source}\n`);
+    }
     const manyLines = `${"a\n".repeat(MAX_BODY_LINES - 1)}a`;
     expect(reconstructed(manyLines)).toBe(manyLines);
   });
