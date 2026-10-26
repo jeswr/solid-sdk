@@ -10,7 +10,11 @@ import {
   type CollectionSurfaceProps,
   hasCollectionContent,
 } from "./collection-state.js";
-import { useCollectionMetrics, useCollectionNavigation } from "./use-collection.js";
+import {
+  isInteractiveDescendant,
+  useCollectionMetrics,
+  useCollectionNavigation,
+} from "./use-collection.js";
 import { type SelectionModel, useSelection } from "./use-selection.js";
 
 export interface FileGridProps<T> extends CollectionSurfaceProps {
@@ -132,13 +136,14 @@ export function FileGrid<T>({
                       aria-selected={selection.selectedKeys.has(key)}
                       className="suite-file-card"
                       style={{ height: metrics.height }}
-                      onClick={(event) =>
+                      onClick={(event) => {
+                        if (event.defaultPrevented || isInteractiveDescendant(event)) return;
                         selection.select(key, keys, {
                           range: event.shiftKey,
                           toggle: event.ctrlKey || event.metaKey,
                           additive: event.ctrlKey || event.metaKey,
-                        })
-                      }
+                        });
+                      }}
                     >
                       <div className="suite-card-preview" aria-hidden="true">
                         {renderPreview?.(item) ?? <File size={24} strokeWidth={1.5} />}

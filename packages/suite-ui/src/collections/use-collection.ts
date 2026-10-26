@@ -5,6 +5,20 @@ import { defaultRangeExtractor } from "@tanstack/react-virtual";
 import { type KeyboardEvent, useLayoutEffect, useRef, useState } from "react";
 import type { SelectionModel } from "./use-selection.js";
 
+/** Descendant controls own their activation; clicks on the row itself still select it. */
+export function isInteractiveDescendant(event: {
+  target: EventTarget;
+  currentTarget: HTMLElement;
+}) {
+  const control =
+    event.target instanceof Element
+      ? event.target.closest(
+          'button, a, input, select, textarea, [role="menuitem"], [contenteditable], [data-row-interactive], [role="button"], [role="link"], [role="combobox"], [tabindex]',
+        )
+      : null;
+  return control !== null && control !== event.currentTarget;
+}
+
 /** Read actual inherited density tokens; observe ancestor overrides, resizing and touch changes. */
 export function useCollectionMetrics(kind: "table" | "grid") {
   const viewport = useRef<HTMLDivElement>(null);
@@ -103,11 +117,7 @@ export function useCollectionNavigation({
   function onKeyDown(event: KeyboardEvent<HTMLElement>, key: string) {
     if (event.defaultPrevented) return;
     const target = event.target as HTMLElement;
-    const control = target.closest(
-      'button, a[href], input:not(.suite-selection-checkbox), textarea, select, [contenteditable]:not([contenteditable="false"]), [role="button"], [role="link"], [role="combobox"], [tabindex]',
-    );
-    if (control && control !== event.currentTarget && !control.matches(".suite-selection-checkbox"))
-      return;
+    if (isInteractiveDescendant(event) && !target.matches(".suite-selection-checkbox")) return;
     const index = keys.indexOf(key);
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "a") {
       event.preventDefault();

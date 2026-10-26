@@ -1,12 +1,14 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import axe from "axe-core";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { CollectionErrorKind, CollectionState } from "../src/collections/collection-state.js";
 import { type DataColumn, DataTable } from "../src/collections/data-table.js";
 import { FileGrid } from "../src/collections/file-grid.js";
 import { useSelection } from "../src/collections/use-selection.js";
+import { DropZoneOverlay } from "../src/components/drop-zone-overlay.js";
 
 type Item = { id: string; name: string; size: number };
 const items: Item[] = [
@@ -320,7 +322,196 @@ it("uses the rendered first-column width as the pointer resize origin", () => {
   );
 });
 
+it.each([
+  "drop",
+  "file picker",
+  "folder picker",
+])("keeps table contents and local state mounted throughout ingestion from %s", async (source) => {
+  let finish = () => {};
+  const pending = new Promise<void>((resolve) => {
+    finish = resolve;
+  });
+  const onFiles = vi.fn(() => pending);
+  render(
+    <DropZoneOverlay folderName="Projects" onFiles={onFiles}>
+      <DataTable
+        items={items}
+        columns={columns}
+        getKey={getKey}
+        getLabel={getLabel}
+        label="Files"
+        onOpen={onOpen}
+      />
+    </DropZoneOverlay>,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Name" }));
+  fireEvent.keyDown(screen.getByRole("button", { name: "Resize Name column" }), {
+    key: "ArrowLeft",
+  });
+  fireEvent.click(screen.getByText("Columns", { selector: "summary" }));
+  fireEvent.click(screen.getByRole("checkbox", { name: "Size" }));
+  fireEvent.click(screen.getByRole("checkbox", { name: "Select Alpha" }));
+  fireEvent.click(screen.getByRole("checkbox", { name: "Select Beta" }));
+  const grid = screen.getByRole("grid");
+  const alpha = screen.getByRole("row", { name: "Alpha" });
+  const widths = alpha.style.gridTemplateColumns;
+  const zone = screen.getByRole("region", { name: "Upload to Projects" });
+  const file = new File(["a"], "one.txt");
+  if (source === "drop") {
+    fireEvent.drop(zone, {
+      dataTransfer: {
+        types: ["Files"],
+        items: [{ kind: "file", getAsFile: () => file }],
+        files: [file],
+      },
+    });
+  } else {
+    fireEvent.change(
+      screen.getByLabelText(source === "file picker" ? "Choose files" : "Choose folder"),
+      {
+        target: { files: [file] },
+      },
+    );
+  }
+  await waitFor(() => expect(onFiles).toHaveBeenCalledOnce());
+  const expectState = () => {
+    expect(screen.getByRole("grid")).toBe(grid);
+    expect(screen.getByRole("row", { name: "Alpha" })).toBe(alpha);
+    expect(alpha.style.gridTemplateColumns).toBe(widths);
+    expect(
+      screen.getByRole("button", { name: "Name" }).closest("th")?.getAttribute("aria-sort"),
+    ).toBe("ascending");
+    expect(screen.queryByRole("button", { name: "Size" })).toBeNull();
+    for (const name of ["Alpha", "Beta"])
+      expect(screen.getByRole("row", { name }).getAttribute("aria-selected")).toBe("true");
+  };
+  try {
+    expect(zone.getAttribute("aria-busy")).toBe("true");
+    expect(screen.getByRole("status", { name: "Loading" })).toBeTruthy();
+    expectState();
+  } finally {
+    await act(async () => finish());
+  }
+  expect(zone.getAttribute("aria-busy")).toBe("false");
+  expect(screen.queryByRole("status", { name: "Loading" })).toBeNull();
+  expectState();
+});
+
 for (const kind of ["table", "grid"] as const) {
+  it(`${kind} preserves selection for clicks inside every interactive descendant`, async () => {
+    const user = userEvent.setup();
+    const controls = (item: Item) =>
+      item.id === "a" && (
+        <>
+          <a href="#custom">
+            <span>Custom link</span>
+          </a>
+          <input aria-label="Custom input" />
+          <select aria-label="Custom select">
+            <option>First choice</option>
+          </select>
+          <textarea aria-label="Custom textarea" />
+          <span role="menuitem" tabIndex={0}>
+            Custom menu item
+          </span>
+          <div contentEditable suppressContentEditableWarning>
+            <span>Custom editor</span>
+          </div>
+          <div data-row-interactive>
+            <span>Custom interactive area</span>
+          </div>
+        </>
+      );
+    const props = { items, getKey, getLabel, label: "Files", onOpen };
+    render(
+      kind === "table" ? (
+        <DataTable
+          {...props}
+          columns={[
+            columns[0] as DataColumn<Item>,
+            { ...(columns[1] as DataColumn<Item>), render: controls },
+          ]}
+        />
+      ) : (
+        <FileGrid {...props} renderMetadata={controls} />
+      ),
+    );
+    for (const name of ["Alpha", "Beta"])
+      await user.click(screen.getByRole("checkbox", { name: `Select ${name}` }));
+    for (const control of [
+      screen.getByText("Custom link"),
+      screen.getByRole("textbox", { name: "Custom input" }),
+      screen.getByRole("combobox", { name: "Custom select" }),
+      screen.getByRole("textbox", { name: "Custom textarea" }),
+      screen.getByRole("menuitem", { name: "Custom menu item" }),
+      screen.getByText("Custom editor"),
+      screen.getByText("Custom interactive area"),
+    ]) {
+      await user.click(control);
+      for (const name of ["Alpha", "Beta"])
+        expect(
+          screen
+            .getByRole(kind === "table" ? "row" : "gridcell", { name })
+            .getAttribute("aria-selected"),
+        ).toBe("true");
+    }
+    await user.click(screen.getByRole(kind === "table" ? "row" : "gridcell", { name: "Alpha" }));
+    expect(
+      screen
+        .getByRole(kind === "table" ? "row" : "gridcell", { name: "Beta" })
+        .getAttribute("aria-selected"),
+    ).toBe("false");
+    expect(onOpen).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    "{Enter}",
+    " ",
+  ])(`${kind} preserves multi-selection when a custom button activates with %s`, async (key) => {
+    const user = userEvent.setup();
+    const onActivate = vi.fn();
+    const controls = (item: Item) => (
+      <button type="button" onClick={onActivate}>
+        <span>Star {item.name}</span>
+      </button>
+    );
+    const props = { items, getKey, getLabel, label: "Files", onOpen, onDetails };
+    render(
+      kind === "table" ? (
+        <DataTable
+          {...props}
+          columns={[
+            columns[0] as DataColumn<Item>,
+            { ...(columns[1] as DataColumn<Item>), render: controls },
+          ]}
+        />
+      ) : (
+        <FileGrid {...props} renderMetadata={controls} />
+      ),
+    );
+    for (const name of ["Alpha", "Beta"])
+      await user.click(screen.getByRole("checkbox", { name: `Select ${name}` }));
+    const button = screen.getByRole("button", { name: "Star Alpha" });
+    act(() => button.focus());
+    await user.keyboard(key);
+    expect(onActivate).toHaveBeenCalledOnce();
+    expect(onOpen).not.toHaveBeenCalled();
+    expect(onDetails).not.toHaveBeenCalled();
+    for (const name of ["Alpha", "Beta"])
+      expect(
+        screen
+          .getByRole(kind === "table" ? "row" : "gridcell", { name })
+          .getAttribute("aria-selected"),
+      ).toBe("true");
+    await user.click(within(button).getByText("Star Alpha"));
+    expect(onActivate).toHaveBeenCalledTimes(2);
+    expect(
+      screen
+        .getByRole(kind === "table" ? "row" : "gridcell", { name: "Beta" })
+        .getAttribute("aria-selected"),
+    ).toBe("true");
+  });
+
   it(`${kind} leaves custom buttons and links in control of Enter and Space`, () => {
     const onActivate = vi.fn();
     const controls = () => (

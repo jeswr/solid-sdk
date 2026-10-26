@@ -2,12 +2,21 @@
 "use client";
 
 import { DropdownMenu } from "radix-ui";
-import type { ReactNode } from "react";
+import type { ReactNode, Ref } from "react";
 
-export function MenuContent({ children, label }: { children: ReactNode; label: string }) {
+export function MenuContent({
+  children,
+  label,
+  ref,
+}: {
+  children: ReactNode;
+  label: string;
+  ref?: Ref<HTMLDivElement>;
+}) {
   return (
     <DropdownMenu.Portal>
       <DropdownMenu.Content
+        ref={ref}
         className="suite-menu"
         aria-label={label}
         sideOffset={4}

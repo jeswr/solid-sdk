@@ -162,3 +162,33 @@ test("date-time instants still format in the requested time zone", async () => {
     "Oct 27, 2026",
   );
 });
+
+test.each([
+  false,
+  true,
+])("task xsd:date companions take precedence over timestamps regardless of predicate order (date first: %s)", async (dateFirst) => {
+  const url = "https://pod.example/task";
+  const timestampPredicates = [
+    'wf:dateDue "2026-10-28T00:00:00Z"',
+    'wf:due "2026-10-28T00:00:00Z"^^xsd:dateTime',
+  ];
+  const date = 'sched:dueTime "2026-10-28"^^xsd:date';
+  const predicates = dateFirst ? [date, ...timestampPredicates] : [...timestampPredicates, date];
+  const dataset = await parseResource(
+    `@prefix wf: <http://www.w3.org/2005/01/wf/flow#> .
+       @prefix sched: <https://jeswr.org/ns/sectors/scheduling#> .
+       @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+       <#it> a wf:Task; ${predicates.join("; ")} .`,
+    "text/turtle",
+    url,
+  );
+  for (const timeZone of ["America/Los_Angeles", "Pacific/Kiritimati", "UTC"]) {
+    const data = await typedViewData(dataset, `${url}#it`, { locale: "en-US", timeZone });
+    expect(data.properties.find((property) => property.key === "due")?.values).toEqual([
+      "Oct 28, 2026",
+    ]);
+    const text = visibleText(renderToStaticMarkup(createElement(TypedView, { data })));
+    expect(text).toContain("Oct 28, 2026");
+    expect(text).not.toMatch(/Oct 27|AM|PM/);
+  }
+});

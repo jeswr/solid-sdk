@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // @vitest-environment jsdom
 
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import axe from "axe-core";
 import { useState } from "react";
@@ -155,6 +155,35 @@ describe("Toolbar", () => {
 });
 
 describe("Breadcrumbs", () => {
+  it("restores the focused portalled menu crumb when widening with the menu open", async () => {
+    const user = userEvent.setup();
+    render(
+      <>
+        <Breadcrumbs label="First path" items={crumbs} />
+        <Breadcrumbs label="Second path" items={crumbs} />
+        <button type="button">After paths</button>
+      </>,
+    );
+    const nav = screen.getByRole("navigation", { name: "First path" });
+    act(() => within(nav).getByRole("button", { name: "Show parent folders" }).focus());
+    await user.keyboard("{ArrowDown}{ArrowDown}");
+    const parent = screen.getByRole("menuitem", { name: "Projects" });
+    expect(document.activeElement).toBe(parent);
+    expect(nav.contains(parent)).toBe(false);
+    resize(300);
+    expect(document.activeElement).toBe(parent);
+    resize(900);
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Show parent folders" })).toBeNull();
+    await waitFor(() =>
+      expect(document.activeElement).toBe(within(nav).getByRole("link", { name: "Projects" })),
+    );
+    const outside = screen.getByRole("button", { name: "After paths" });
+    act(() => outside.focus());
+    resize(200);
+    expect(document.activeElement).toBe(outside);
+  });
+
   it("collapses middle segments, opens with keyboard, and restores focus on Escape", async () => {
     const user = userEvent.setup();
     render(<Breadcrumbs items={crumbs} />);

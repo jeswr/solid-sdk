@@ -21,6 +21,7 @@ export function Breadcrumbs({ items, label = "Breadcrumb" }: BreadcrumbsProps) {
   const root = useRef<HTMLElement>(null);
   const measure = useRef<HTMLOListElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
+  const menu = useRef<HTMLDivElement>(null);
   const restoreFocus = useRef(false);
   const expandFocus = useRef<string | undefined>(undefined);
   const [collapsed, setCollapsed] = useState(false);
@@ -39,12 +40,14 @@ export function Breadcrumbs({ items, label = "Breadcrumb" }: BreadcrumbsProps) {
         (Number.parseFloat(styles?.paddingRight ?? "0") || 0);
       const next =
         items.length > 2 && measurements.getBoundingClientRect().width + padding > available;
-      const hasFocus = container.contains(document.activeElement);
+      const hasFocus =
+        container.contains(document.activeElement) ||
+        menu.current?.contains(document.activeElement);
       const activeId = hasFocus
         ? (document.activeElement as HTMLElement | null)?.dataset.crumbId
         : undefined;
-      if (next && activeId && items.slice(1, -1).some((item) => item.id === activeId))
-        restoreFocus.current = true;
+      restoreFocus.current =
+        next && activeId !== undefined && items.slice(1, -1).some((item) => item.id === activeId);
       if (!next) {
         if (
           hasFocus &&
@@ -117,7 +120,7 @@ export function Breadcrumbs({ items, label = "Breadcrumb" }: BreadcrumbsProps) {
                   >
                     <Ellipsis size={16} strokeWidth={1.75} aria-hidden="true" />
                   </DropdownMenu.Trigger>
-                  <MenuContent label="Parent folders">
+                  <MenuContent ref={menu} label="Parent folders">
                     {items.slice(1, -1).map((parent) => (
                       <DropdownMenu.Item key={parent.id} asChild className="suite-menu-item">
                         {link(parent, false)}

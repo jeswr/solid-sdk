@@ -63,6 +63,10 @@ function attempt<T>(read: () => T): T | undefined {
   }
 }
 
+const dateFields = new Set(["start", "end", "due", "created", "modified"]);
+const isCalendarDate = (term: Term) =>
+  term.termType === "Literal" && term.datatype.value === `${NS.XSD}date`;
+
 export async function typedViewData(
   dataset: DatasetCore,
   subject: string | Term,
@@ -75,6 +79,15 @@ export async function typedViewData(
     ),
   ];
   const properties: TypedProperty[] = [];
+  // A calendar-date marker describes the whole field, including companion timestamp predicates.
+  const allDayFields = new Set(
+    predicates.flatMap((predicate) => {
+      const key = propertyLabels.get(predicate)?.key;
+      return key && dateFields.has(key) && node.objects(predicate).some(isCalendarDate)
+        ? [key]
+        : [];
+    }),
+  );
   for (const predicate of predicates) {
     if (
       [
@@ -87,12 +100,13 @@ export async function typedViewData(
     )
       continue;
     const descriptor = propertyLabels.get(predicate) ?? { key: predicate, label: "Other detail" };
-    const values = node.objects(predicate).map((term): string => {
+    const terms = node
+      .objects(predicate)
+      .filter((term) => !allDayFields.has(descriptor.key) || isCalendarDate(term));
+    const values = terms.map((term): string => {
       if (term.termType === "Literal") {
-        if (["start", "end", "due", "created", "modified"].includes(descriptor.key)) {
-          const dateOnly =
-            term.datatype.value === "http://www.w3.org/2001/XMLSchema#date" ||
-            /^\d{4}-\d{2}-\d{2}$/.test(term.value);
+        if (dateFields.has(descriptor.key)) {
+          const dateOnly = isCalendarDate(term) || /^\d{4}-\d{2}-\d{2}$/.test(term.value);
           // Calendar dates retain their lexical day; only instants use the display time zone.
           const date = new Date(dateOnly ? `${term.value.slice(0, 10)}T00:00:00Z` : term.value);
           return Number.isFinite(date.getTime())

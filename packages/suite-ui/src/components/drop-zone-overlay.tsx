@@ -148,19 +148,28 @@ export function DropZoneOverlay({
           }}
         />
       </div>
-      {reading ? (
-        <SurfaceFeedback state={{ status: "loading" }} />
-      ) : failed ? (
-        <div className="su-feedback" role="alert">
-          <p>Can't read these files</p>
-          <button className="su-button" type="button" onClick={() => filesInput.current?.click()}>
-            Choose files again
-          </button>
-        </div>
-      ) : state && state.status !== "ready" ? (
+      {state && state.status !== "ready" ? (
         <SurfaceFeedback state={state} onAction={onAction ?? (() => filesInput.current?.click())} />
       ) : (
         children
+      )}
+      {(reading || failed) && (
+        <div className="su-drop-feedback">
+          {reading ? (
+            <SurfaceFeedback state={{ status: "loading" }} />
+          ) : (
+            <div className="su-feedback" role="alert">
+              <p>Can't read these files</p>
+              <button
+                className="su-button"
+                type="button"
+                onClick={() => filesInput.current?.click()}
+              >
+                Choose files again
+              </button>
+            </div>
+          )}
+        </div>
       )}
       <div className="su-drop-overlay" hidden={!(dragging || showOverlay) || disabled}>
         <Upload size={24} strokeWidth={1.5} aria-hidden="true" />

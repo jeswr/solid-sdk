@@ -168,6 +168,41 @@ describe("async feedback", () => {
     }
 });
 describe("DropZoneOverlay", () => {
+  it("keeps children mounted after failed ingestion and while retrying", async () => {
+    function Contents() {
+      const [count, increment] = useReducer((value: number) => value + 1, 0);
+      return (
+        <button type="button" onClick={increment}>
+          Selected {count}
+        </button>
+      );
+    }
+    const onFiles = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("read denied"))
+      .mockResolvedValue(undefined);
+    const { container } = render(
+      <DropZoneOverlay folderName="Projects" onFiles={onFiles}>
+        <Contents />
+      </DropZoneOverlay>,
+    );
+    const selected = screen.getByRole("button", { name: "Selected 0" });
+    fireEvent.click(selected);
+    const choose = () =>
+      fireEvent.change(screen.getByLabelText("Choose files"), {
+        target: { files: [new File(["a"], "one.txt")] },
+      });
+    choose();
+    await screen.findByRole("alert");
+    expect(screen.getByRole("button", { name: "Selected 1" })).toBe(selected);
+    await accessible(container);
+    choose();
+    expect(screen.getByRole("button", { name: "Selected 1" })).toBe(selected);
+    await waitFor(() => expect(screen.getByRole("region").getAttribute("aria-busy")).toBe("false"));
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.getByRole("button", { name: "Selected 1" })).toBe(selected);
+  });
+
   it("clears nested drag state on leaving and handles escape outside the pane", () => {
     const { container } = render(
       <DropZoneOverlay folderName="Projects" onFiles={noop}>

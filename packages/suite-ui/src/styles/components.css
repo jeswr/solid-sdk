@@ -873,6 +873,15 @@
 .su-drop-actions {
   padding: var(--space-4);
 }
+.su-drop-feedback {
+  position: absolute;
+  inset: var(--space-2);
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
 .su-drop-overlay {
   position: absolute;
   inset: var(--space-2);

@@ -19,7 +19,11 @@ import {
   type CollectionSurfaceProps,
   hasCollectionContent,
 } from "./collection-state.js";
-import { useCollectionMetrics, useCollectionNavigation } from "./use-collection.js";
+import {
+  isInteractiveDescendant,
+  useCollectionMetrics,
+  useCollectionNavigation,
+} from "./use-collection.js";
 import { type SelectionModel, useSelection } from "./use-selection.js";
 
 export interface DataColumn<T> {
@@ -305,13 +309,14 @@ export function DataTable<T>({
                     transform: `translateY(${virtualRow.start - metrics.headerHeight}px)`,
                     gridTemplateColumns,
                   }}
-                  onClick={(event) =>
+                  onClick={(event) => {
+                    if (event.defaultPrevented || isInteractiveDescendant(event)) return;
                     selection.select(row.id, keys, {
                       range: event.shiftKey,
                       toggle: event.ctrlKey || event.metaKey,
                       additive: event.ctrlKey || event.metaKey,
-                    })
-                  }
+                    });
+                  }}
                 >
                   <td>
                     <SelectionCheckbox
