@@ -249,6 +249,18 @@ final class ShareStoreTests: XCTestCase {
         for dir in [active, unrelated] { XCTAssertTrue(FileManager.default.fileExists(atPath: dir.path)) }
     }
 
+    func testNeverMutatesWithoutTheCrossProcessLock() throws {
+        let kept = try storeOne(0).id
+        // A directory cannot be opened read-write, so taking the lock fails.
+        let lock = root.appendingPathComponent(".lock")
+        try FileManager.default.removeItem(at: lock)
+        try FileManager.default.createDirectory(at: lock, withIntermediateDirectories: false)
+        XCTAssertThrowsError(try store.store([.text("hi")], now: instant))
+        store.acknowledge(kept)
+        store.evict(now: Date(timeIntervalSince1970: ShareStore.maxAge + 1))
+        XCTAssertEqual(try entries(), [kept])
+    }
+
     func testDropsCorruptManifestsAndRefusesReads() throws {
         let variants: [(String, Any)] = [
             ("id", "00000000-0000-0000-0000-000000000000"), ("id", NSNull()),

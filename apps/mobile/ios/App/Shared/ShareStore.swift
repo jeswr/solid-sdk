@@ -103,14 +103,19 @@ struct ShareStore {
     // MARK: Locking
 
     /// Runs `body` holding an exclusive flock on share/.lock, which the app and the extension share,
-    /// so publishing, quota eviction and acknowledgement never interleave across processes.
+    /// so publishing, quota eviction and acknowledgement never interleave across processes. Throws,
+    /// without running `body`, when the lock cannot be taken.
     @discardableResult
-    private func locked<T>(_ body: () throws -> T) rethrows -> T {
+    private func locked<T>(_ body: () throws -> T) throws -> T {
         try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        let fd = open(root.appendingPathComponent(".lock").path, O_CREAT | O_RDWR, 0o600)
-        guard fd >= 0 else { return try body() }
+        var fd: Int32
+        let path = root.appendingPathComponent(".lock").path
+        repeat { fd = open(path, O_CREAT | O_RDWR | O_CLOEXEC, 0o600) } while fd < 0 && errno == EINTR
+        guard fd >= 0 else { throw Failure.rejected("cannot open the share lock") }
         defer { close(fd) }
-        flock(fd, LOCK_EX)
+        var status: Int32
+        repeat { status = flock(fd, LOCK_EX) } while status != 0 && errno == EINTR
+        guard status == 0 else { throw Failure.rejected("cannot take the share lock") }
         defer { flock(fd, LOCK_UN) }
         return try body()
     }
@@ -169,7 +174,8 @@ struct ShareStore {
             }
             return Batch(id: id, receivedAt: now, json: manifest)
         } catch {
-            locked { try? fm.removeItem(at: dir) }
+            // Without the lock the copy is left unpublished; once `writer` closes it is abandoned and reclaimed.
+            try? locked { try? fm.removeItem(at: dir) }
             throw error
         }
     }
@@ -215,7 +221,7 @@ struct ShareStore {
 
     func acknowledge(_ batchId: String?) {
         guard Self.isBatchId(batchId), let batchId = batchId else { return }
-        locked { remove(batchId) }
+        try? locked { remove(batchId) }
     }
 
     private func remove(_ batchId: String) {
@@ -226,7 +232,7 @@ struct ShareStore {
 
     /// Drops batches older than seven days and copies a killed extension left without a manifest.
     func evict(now: Date = Date()) {
-        locked { evictExpired(now: now) }
+        try? locked { evictExpired(now: now) }
     }
 
     private func evictExpired(now: Date) {
