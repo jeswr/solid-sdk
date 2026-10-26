@@ -1,8 +1,8 @@
 # AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 #
-@prefix health:  <https://w3id.org/jeswr/sectors/health#> .
-@prefix hsh:     <https://w3id.org/jeswr/sectors/health/shapes#> .
-@prefix core:    <https://w3id.org/jeswr/core#> .
+@prefix health:  <https://jeswr.org/ns/sectors/health#> .
+@prefix hsh:     <https://jeswr.org/ns/sectors/health/shapes#> .
+@prefix core:    <https://jeswr.org/ns/core#> .
 @prefix sh:      <http://www.w3.org/ns/shacl#> .
 @prefix owl:     <http://www.w3.org/2002/07/owl#> .
 @prefix rdf:     <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
@@ -32,26 +32,26 @@
 # v1.0.0 tracks the gUFO re-base of health.ttl.
 # =============================================================================
 
-<https://w3id.org/jeswr/sectors/health/profile>
+<https://jeswr.org/ns/sectors/health/profile>
     a prof:Profile ;
     dcterms:title "Solid Health data-model profile (version-independent)"@en ;
     dcterms:description "Resolves to the current Health profile version."@en .
 
-<https://w3id.org/jeswr/sectors/health/profile/1.0.0>
+<https://jeswr.org/ns/sectors/health/profile/1.0.0>
     a prof:Profile ;
     dcterms:title "Solid Health data-model profile (gUFO re-base)"@en ;
-    dcterms:isVersionOf <https://w3id.org/jeswr/sectors/health/profile> ;
+    dcterms:isVersionOf <https://jeswr.org/ns/sectors/health/profile> ;
     owl:versionInfo "1.0.0" ;
-    owl:versionIRI <https://w3id.org/jeswr/sectors/health/profile/1.0.0> ;
-    prof:isProfileOf <https://w3id.org/jeswr/sectors/health> ;
+    owl:versionIRI <https://jeswr.org/ns/sectors/health/profile/1.0.0> ;
+    prof:isProfileOf <https://jeswr.org/ns/sectors/health> ;
     prof:hasToken "solid-health-1.0.0" ;
     prof:hasResource [
         prof:hasRole <http://www.w3.org/ns/dx/prof/role/constraints> ;
-        prof:hasArtifact <https://w3id.org/jeswr/sectors/health/profile/1.0.0/health.shacl.ttl>
+        prof:hasArtifact <https://jeswr.org/ns/sectors/health/profile/1.0.0/health.shacl.ttl>
     ] ;
     prof:hasResource [
         prof:hasRole <http://www.w3.org/ns/dx/prof/role/vocabulary> ;
-        prof:hasArtifact <https://w3id.org/jeswr/sectors/health>
+        prof:hasArtifact <https://jeswr.org/ns/sectors/health>
     ] ;
     rdfs:comment "Open-by-default SHACL profile, MUST/SHOULD grades derived from FHIR R4/R5 StructureDefinitions. "@en .
 

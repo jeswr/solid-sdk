@@ -1,0 +1,14 @@
+# AUTHORED-BY Codex GPT-6.1-Sol
+@prefix ex: <https://example.org/scheduling/> .
+@prefix sched: <https://jeswr.org/ns/sectors/scheduling#> .
+@prefix core: <https://jeswr.org/ns/core#> .
+@prefix schema: <https://schema.org/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+ex:rule a sched:RecurrenceRule ;
+    sched:frequency "MONTHLY" ;
+    sched:until "2027-01-01"^^xsd:date ;
+    schema:byDay schema:Monday, "-1FR" ;
+    schema:byMonthDay 1, 31, -1 ;
+    schema:byMonth 1, 12 ;
+    schema:exceptDate "2026-11-01"^^xsd:date, "2026-12-01T09:00:00Z"^^xsd:dateTime .

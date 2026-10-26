@@ -1,0 +1,68 @@
+{
+  "$comment": "AUTHORED-BY Codex GPT-6.1-Sol",
+  "name": "@jeswr/pod-notifications",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Pod change subscriptions across notification transports. Experimental, AI-agent-generated scaffold.",
+  "type": "module",
+  "sideEffects": false,
+  "securityCritical": true,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./channels/websocket2023": {
+      "types": "./dist/channels/websocket2023.d.ts",
+      "default": "./dist/channels/websocket2023.js"
+    },
+    "./channels/streaming-http": {
+      "types": "./dist/channels/streaming-http.d.ts",
+      "default": "./dist/channels/streaming-http.js"
+    },
+    "./channels/lws-sse": {
+      "types": "./dist/channels/lws-sse.d.ts",
+      "default": "./dist/channels/lws-sse.js"
+    },
+    "./channels/lws-websocket": {
+      "types": "./dist/channels/lws-websocket.d.ts",
+      "default": "./dist/channels/lws-websocket.js"
+    },
+    "./channels/webhook-relay": {
+      "types": "./dist/channels/webhook-relay.d.ts",
+      "default": "./dist/channels/webhook-relay.js"
+    },
+    "./channels/poll": {
+      "types": "./dist/channels/poll.d.ts",
+      "default": "./dist/channels/poll.js"
+    },
+    "./channels/legacy-ws": {
+      "types": "./dist/channels/legacy-ws.d.ts",
+      "default": "./dist/channels/legacy-ws.js"
+    },
+    "./testing": {
+      "types": "./dist/testing.d.ts",
+      "default": "./dist/testing.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "SKILL.md"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "biome check .",
+    "test": "vitest run"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.1",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.9"
+  }
+}

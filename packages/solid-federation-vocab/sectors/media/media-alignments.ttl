@@ -1,7 +1,7 @@
 # AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 #
-@prefix media:   <https://w3id.org/jeswr/sectors/media#> .
-@prefix core:    <https://w3id.org/jeswr/core#> .
+@prefix media:   <https://jeswr.org/ns/sectors/media#> .
+@prefix core:    <https://jeswr.org/ns/core#> .
 @prefix owl:     <http://www.w3.org/2002/07/owl#> .
 @prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
 @prefix skos:    <http://www.w3.org/2004/02/skos/core#> .
@@ -30,11 +30,12 @@
 # media: never silently inherits schema.org's commitments.
 # =============================================================================
 
-<https://w3id.org/jeswr/sectors/media/alignments> a owl:Ontology ;
+<https://jeswr.org/ns/sectors/media/alignments> a owl:Ontology ;
+    dcterms:description "Version 2.0.0 rebases this ontology from its legacy w3id namespace to https://jeswr.org/ns/ (DECISIONS V1)."@en ;
     dcterms:title "Solid Media & Activity — external alignments (gUFO re-base)"@en ;
-    owl:imports <https://w3id.org/jeswr/sectors/media> ;
-    owl:versionInfo "1.0.0" ;
-    owl:versionIRI <https://w3id.org/jeswr/sectors/media/alignments/1.0.0> ;
+    owl:imports <https://jeswr.org/ns/sectors/media> ;
+    owl:versionInfo "2.0.0" ;
+    owl:versionIRI <https://jeswr.org/ns/sectors/media/alignments/2.0.0> ;
     rdfs:comment "Mode-A thin alignments (separate file, not in the reasoned closure) to schema.org + a conceptual ODRL tie. Reuse-before-mint. "@en .
 
 dcterms:title a owl:AnnotationProperty .

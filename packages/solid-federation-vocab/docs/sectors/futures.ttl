@@ -1,7 +1,7 @@
 # AUTHORED-BY Claude Fable 5 (PSS agent)
 #
-@prefix fut:     <https://w3id.org/jeswr/sectors/futures#> .
-@prefix core:    <https://w3id.org/jeswr/core#> .
+@prefix fut:     <https://jeswr.org/ns/sectors/futures#> .
+@prefix core:    <https://jeswr.org/ns/core#> .
 @prefix owl:     <http://www.w3.org/2002/07/owl#> .
 @prefix rdf:     <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
 @prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
@@ -67,7 +67,7 @@
 # them without a coordinated unite migration (fedreg:acceptsSpec is the
 # migration substrate).
 #
-# NAMESPACE GOVERNANCE (design/01 note): seeding under w3id.org/jeswr mirrors
+# NAMESPACE GOVERNANCE (design/01 note): seeding under jeswr.org/ns mirrors
 # how every sector bootstrapped, but unite's design/04 specifies a migration
 # path to a steward-circle-governed namespace once adoption warrants it —
 # hence the 0.x version line (now 0.2.0), not 1.0.0.
@@ -81,14 +81,14 @@
 # in axioms are declared as punned owl terms.
 # =============================================================================
 
-<https://w3id.org/jeswr/sectors/futures> a owl:Ontology ;
+<https://jeswr.org/ns/sectors/futures> a owl:Ontology ;
     dcterms:title "Solid Futures Sector Ontology"@en ;
     rdfs:label "Solid Futures Sector Ontology"@en ;
     vann:preferredNamespacePrefix "fut" ;
-    vann:preferredNamespaceUri "https://w3id.org/jeswr/sectors/futures#" ;
-    owl:imports <https://w3id.org/jeswr/core> ;
-    owl:versionInfo "0.2.0" ;
-    owl:versionIRI <https://w3id.org/jeswr/sectors/futures/0.2.0> ;
+    vann:preferredNamespaceUri "https://jeswr.org/ns/sectors/futures#" ;
+    owl:imports <https://jeswr.org/ns/core> ;
+    owl:versionInfo "2.0.0" ;
+    owl:versionIRI <https://jeswr.org/ns/sectors/futures/2.0.0> ;
     dcterms:description """The participatory-democracy / shared-futures
         deliberation data sector for the unite platform (jeswr/unite):
         expression-layer statements (life context, vision, claim, need,
@@ -111,8 +111,8 @@
         critique unit (fut:Critique) + the VSD prompt
         (fut:indirectStakeholders). No 0.1.0 term changed; fut:onStatement's
         rdfs:domain was WIDENED (removed) because Critique reuses it — the
-        section-6 multi-class-property rule."""@en ;
-    dcterms:modified "2026-07-04"^^xsd:date ;
+        section-6 multi-class-property rule. Version 2.0.0 rebases this ontology from its legacy w3id namespace to https://jeswr.org/ns/ (DECISIONS V1)."""@en ;
+    dcterms:modified "2026-10-25"^^xsd:date ;
     rdfs:comment "Sector ontology for unite Stage-1 (design/01-data-model.md). Version 0.2.0 is the ADDITIVE delta unite's S1 build drafted (its ratification is the first scope-B deliberation — unite SCOPE-DIFFERENTIATION §3.1 B4); the namespace-governance migration to a steward-circle namespace remains a documented follow-on (unite design/04), carried by fedreg:acceptsSpec dual-advertisement."@en .
 
 # -----------------------------------------------------------------------------
@@ -964,9 +964,9 @@ fut:kThreshold a odrl:LeftOperand, skos:Concept ;
 # skos:Concept in the federation sector register; dereferences to this ontology.
 # =============================================================================
 
-<https://w3id.org/jeswr/sectors/futures#sector>
+<https://jeswr.org/ns/sectors/futures#sector>
     a skos:Concept ;
     rdfs:label "Futures sector"@en ;
     rdfs:comment "The Futures (participatory-democracy / shared-futures deliberation) data sector. The value an app's fedapp:sector names in its Client Identifier Document to declare it operates over deliberation data — the sector the unite platform declares. Backed by this sector ontology."@en ;
-    rdfs:isDefinedBy <https://w3id.org/jeswr/sectors/futures> ;
+    rdfs:isDefinedBy <https://jeswr.org/ns/sectors/futures> ;
     skos:prefLabel "Futures"@en .
