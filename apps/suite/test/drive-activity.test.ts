@@ -1,9 +1,11 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { describe, expect, it } from "vitest";
 import {
   ActivityError,
   type ActivityErrorCode,
   type ChangeEvent,
+  type FileActivity,
   foldActivity,
   groupActivityByDay,
   moveStar,
@@ -99,6 +101,53 @@ describe("Drive activity folding", () => {
     expect(first.get("file-1")?.events[0]?.actor).toBe(actor);
     const second = foldActivity([original]);
     expect(second.get("file-1")?.events[0]?.actor).toBe(otherActor);
+  });
+
+  it.each([
+    "foldActivity",
+    "recentFiles",
+  ] as const)("%s accumulates long interleaved histories without repeatedly traversing them", (operation) => {
+    const histories = [a, c].map((url, file) =>
+      Array.from({ length: 512 }, (_, i) =>
+        Object.freeze(
+          event({
+            id: `${file}-${i}`,
+            fileId: `file-${file}`,
+            url,
+            type: i === 0 ? "created" : "updated",
+            actor: i % 2 === 0 ? actor : otherActor,
+            at: day + i * 2 + file,
+          }),
+        ),
+      ),
+    );
+    const input = Object.freeze(histories.flat().reverse());
+    // Count event visits instead of wall time so the regression is deterministic under coverage.
+    let visits = 0;
+    const iterator = Array.prototype[Symbol.iterator];
+    Object.defineProperty(Array.prototype, Symbol.iterator, {
+      value: function* (this: unknown[]) {
+        for (const item of iterator.call(this)) {
+          if (typeof item === "object" && item !== null && "fileId" in item) visits++;
+          yield item;
+        }
+      },
+    });
+    let result: FileActivity[];
+    try {
+      result =
+        operation === "foldActivity" ? [...foldActivity(input).values()] : recentFiles(input, 1);
+    } finally {
+      Object.defineProperty(Array.prototype, Symbol.iterator, { value: iterator });
+    }
+    expect(visits).toBeLessThanOrEqual(input.length * 3);
+    const expected = operation === "foldActivity" ? histories : histories.slice(-1);
+    expect(result.map(({ events }) => events)).toEqual(expected);
+    for (const file of result) {
+      expect(file.events).toHaveLength(512);
+      expect(file.events[0]).not.toBe(input.find((item) => item.id === file.events[0]?.id));
+      expect(file.lastActivityAt).toBe(file.events.at(-1)?.at);
+    }
   });
 
   it("rejects conflicting replay IDs", () => {

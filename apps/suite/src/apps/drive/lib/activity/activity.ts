@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import type { ChangeEvent, FileActivity } from "./types";
 import { isText, requireValid, validateTime, validateUrl } from "./validation";
 
@@ -50,7 +51,7 @@ export function orderedEvents(events: readonly ChangeEvent[]): ChangeEvent[] {
 
 /** Fold a complete supplied stream. Partial histories are supported, but never guessed. */
 export function foldActivity(events: readonly ChangeEvent[]): Map<string, FileActivity> {
-  const files = new Map<string, FileActivity>();
+  const files = new Map<string, FileActivity & { events: ChangeEvent[] }>();
   const occupants = new Map<string, string>();
   for (const event of orderedEvents(events)) {
     const previous = files.get(event.fileId);
@@ -73,13 +74,16 @@ export function foldActivity(events: readonly ChangeEvent[]): Map<string, FileAc
     );
     occupants.delete(source);
     if (event.type !== "deleted") occupants.set(event.url, event.fileId);
+    // Histories stay private until the fold returns, so append without copying earlier events.
+    const history = previous?.events ?? [];
+    history.push(event);
     files.set(event.fileId, {
       fileId: event.fileId,
       url: event.url,
       kind: event.kind,
       deleted: event.type === "deleted",
       lastActivityAt: event.at,
-      events: [...(previous?.events ?? []), event],
+      events: history,
     });
   }
   return files;
