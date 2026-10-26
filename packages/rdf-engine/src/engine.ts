@@ -5,6 +5,7 @@ import type * as Wasm from "@sparq-org/sparq/wasm-node";
 import { DataFactory, Store } from "n3";
 import { createLocalIndex } from "./local-index.js";
 import { decode, formatName, graphDocument, parseN3, writeN3 } from "./rdf.js";
+import { sparqIndexBackend } from "./sparq-index.js";
 import type { LocalIndex, RdfEngine, ValidationReport } from "./types.js";
 
 /** Internal common surface of the shipped browser and Node WASM modules. */
@@ -104,7 +105,7 @@ export function createEngine(load: () => Promise<Runtime>): RdfEngine {
     await pending;
     check();
   }
-  async function use<T>(operation: (module: Runtime) => T): Promise<T> {
+  async function use<T>(operation: (module: Runtime) => T | Promise<T>): Promise<T> {
     await ready();
     check();
     return operation(runtime as Runtime);
@@ -195,22 +196,17 @@ export function createEngine(load: () => Promise<Runtime>): RdfEngine {
     canonicalize(data) {
       return use((module) => module.canonicalizeNQuads(writeN3(data, "application/n-quads")));
     },
-    createIndex() {
-      return use(({ Store: WasmStore }) => {
+    createIndex(opts) {
+      return use(async ({ Store: WasmStore }) => {
+        const helpers = await import("@sparq-org/sparq");
+        check();
         const store = WasmStore.loadDataset("", "nquads");
-        const index = createLocalIndex(
-          (inserts, deletes) =>
-            store.applyDelta(
-              writeN3(inserts, "application/n-quads"),
-              writeN3(deletes, "application/n-quads"),
-            ),
-          () => {
-            store.free();
-            indexes.delete(index);
-          },
-        );
-        indexes.add(index);
-        return index;
+        let index: LocalIndex;
+        const backend = sparqIndexBackend(store, () => indexes.delete(index), helpers);
+        return createLocalIndex(backend, opts, (owned) => {
+          index = owned;
+          indexes.add(owned);
+        });
       });
     },
     dispose() {

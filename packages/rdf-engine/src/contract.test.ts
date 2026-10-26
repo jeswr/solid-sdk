@@ -201,5 +201,191 @@ for (const [name, factory] of [
       engine.dispose();
       await expect(parsing).rejects.toThrow("disposed");
     });
+
+    test("indexes and removes 1000 independent resource graphs", async () => {
+      const index = await engine.createIndex();
+      const data = await engine.parse(triple, "text/turtle");
+      await Promise.all(
+        Array.from({ length: 1000 }, (_, i) => index.put(`https://example/${i}`, data)),
+      );
+      expect(index.size()).toBe(1000);
+      expect(index.list()).toHaveLength(1000);
+      for (let i = 0; i < 1000; i += 2) await index.remove(`https://example/${i}`);
+      expect(index.size()).toBe(500);
+      expect(index.list()).toEqual(
+        Array.from({ length: 500 }, (_, i) => `https://example/${i * 2 + 1}`),
+      );
+    });
+
+    test("round-trips single-member gzip N-Quads and replaces previous contents", async () => {
+      const index = await engine.createIndex();
+      const target = await engine.createIndex();
+      const data = await engine.parse(triple + named, "application/n-quads");
+      await index.put("https://example/first", data);
+      await index.put("https://example/second", data);
+      await target.put("https://example/stale", data);
+      const bytes = await index.snapshot();
+      expect([...bytes.slice(0, 2)]).toEqual([0x1f, 0x8b]);
+      await target.restore(bytes);
+      expect(target.list()).toEqual(index.list());
+      expect(target.size()).toBe(4);
+      const unpack = async (input: Uint8Array) =>
+        new Response(
+          new Blob([input]).stream().pipeThrough(new DecompressionStream("gzip")),
+        ).text();
+      const expected = await engine.parse(await unpack(bytes), "application/n-quads");
+      const actual = await engine.parse(
+        await unpack(await target.snapshot()),
+        "application/n-quads",
+      );
+      expect(await engine.canonicalize(actual)).toBe(await engine.canonicalize(expected));
+      const empty = await engine.createIndex();
+      await target.restore(await empty.snapshot());
+      expect(target.size()).toBe(0);
+      expect(target.list()).toEqual([]);
+    });
+
+    test("evicts least recently used graphs, refreshes has hits and accounts for replacements", async () => {
+      const index = await engine.createIndex({ maxQuads: 2 });
+      const data = await engine.parse(triple, "text/turtle");
+      await index.put("https://example/a", data);
+      await index.put("https://example/b", data);
+      expect(index.has("https://example/a")).toBe(true);
+      expect(index.has("https://example/missing")).toBe(false);
+      await index.put("https://example/c", data);
+      expect(index.list()).toEqual(["https://example/a", "https://example/c"]);
+      expect(index.has("https://example/b")).toBe(false);
+      await index.put("https://example/a", data);
+      expect(index.list()).toEqual(["https://example/c", "https://example/a"]);
+      await index.put("https://example/d", [
+        ...data,
+        ...(await engine.parse(named, "application/n-quads")),
+      ]);
+      expect(index.list()).toEqual(["https://example/d"]);
+      expect(index.size()).toBe(2);
+      await index.put("https://example/d", []);
+      expect(index.size()).toBe(0);
+      const zero = await engine.createIndex({ maxQuads: 0 });
+      await expect(zero.put("https://example/a", data)).rejects.toThrow("maxQuads");
+      await zero.put("https://example/empty", []);
+      expect(zero.list()).toEqual(["https://example/empty"]);
+      for (const maxQuads of [-1, 1.5, Number.NaN, Number.POSITIVE_INFINITY]) {
+        await expect(engine.createIndex({ maxQuads })).rejects.toThrow("maxQuads");
+      }
+      expect(index.list()).toEqual(["https://example/d"]);
+    });
+
+    test("restore enforces the cap and rejects invalid snapshots without replacing data", async () => {
+      const index = await engine.createIndex();
+      const target = await engine.createIndex({ maxQuads: 1 });
+      const data = await engine.parse(triple, "text/turtle");
+      await index.put("https://example/a", data);
+      await index.put("https://example/b", data);
+      await target.restore(await index.snapshot());
+      expect(target.list()).toEqual(["https://example/b"]);
+      for (const bytes of [
+        new Uint8Array(),
+        new Uint8Array([1, 2, 3, 4]),
+        new Uint8Array([0x1f, 0x8b]),
+      ]) {
+        await expect(target.restore(bytes)).rejects.toThrow();
+        expect(target.size()).toBe(1);
+      }
+      for (const text of [
+        "broken RDF",
+        triple,
+        '<https://example/s> <https://example/p> "x" _:graph .',
+      ]) {
+        const bytes = new Uint8Array(
+          await new Response(
+            new Blob([text]).stream().pipeThrough(new CompressionStream("gzip")),
+          ).arrayBuffer(),
+        );
+        await expect(target.restore(bytes)).rejects.toThrow();
+        expect(target.list()).toEqual(["https://example/b"]);
+      }
+    });
+
+    test("loads persistence before returning and awaits ordered saves; failed saves can retry", async () => {
+      let saved: Uint8Array | null = null;
+      let fail = false;
+      const persist = {
+        async load() {
+          return saved;
+        },
+        async save(bytes: Uint8Array) {
+          if (fail) throw new Error("disk full");
+          saved = bytes;
+        },
+      };
+      const index = await engine.createIndex({ persist });
+      const data = await engine.parse(triple, "text/turtle");
+      await Promise.all([
+        index.put("https://example/a", data),
+        index.put("https://example/b", data),
+      ]);
+      const loaded = await engine.createIndex({ persist });
+      expect(loaded.list()).toEqual(index.list());
+      expect(loaded.size()).toBe(2);
+      await index.remove("https://example/a");
+      const removed = await engine.createIndex({ persist });
+      expect(removed.list()).toEqual(["https://example/b"]);
+      fail = true;
+      await expect(index.put("https://example/c", data)).rejects.toThrow("disk full");
+      expect(index.has("https://example/c")).toBe(true);
+      fail = false;
+      await index.restore(await loaded.snapshot());
+      expect((await engine.createIndex({ persist })).list()).toEqual(loaded.list());
+      await expect(
+        engine.createIndex({
+          persist: {
+            ...persist,
+            async load() {
+              throw new Error("load failed");
+            },
+          },
+        }),
+      ).rejects.toThrow("load failed");
+      await expect(
+        engine.createIndex({
+          persist: {
+            ...persist,
+            async load() {
+              return new Uint8Array([0]);
+            },
+          },
+        }),
+      ).rejects.toThrow("magic");
+    });
+
+    test("disposal terminates queued work, streams and pending persistence initialization", async () => {
+      const data = await engine.parse(triple, "text/turtle");
+      const index = await engine.createIndex();
+      const pending = index.put("https://example/a", data);
+      index.dispose();
+      await expect(pending).rejects.toThrow("disposed");
+      expect(() => index.list()).toThrow("disposed");
+      await expect(index.snapshot()).rejects.toThrow("disposed");
+      await expect(index.restore(new Uint8Array())).rejects.toThrow("disposed");
+      await expect(index.select("SELECT * {}")).rejects.toThrow("disposed");
+      await expect(index.selectStream("SELECT * {}")).rejects.toThrow("disposed");
+      await expect(index.ask("ASK {}")).rejects.toThrow("disposed");
+      await expect(index.construct("CONSTRUCT {} {}")).rejects.toThrow("disposed");
+      let finish: ((bytes: null) => void) | undefined;
+      const loading = engine.createIndex({
+        persist: {
+          load: () =>
+            new Promise((resolve) => {
+              finish = resolve;
+            }),
+          async save() {},
+        },
+      });
+      // Wait until the persistence load has actually started, including the real engine's imports.
+      while (!finish) await new Promise((resolve) => setTimeout(resolve, 0));
+      engine.dispose();
+      finish(null);
+      await expect(loading).rejects.toThrow("disposed");
+    });
   });
 }
