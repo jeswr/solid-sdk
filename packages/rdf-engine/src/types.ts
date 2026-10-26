@@ -45,7 +45,7 @@ export interface FormOptions {
   shape?: string;
 }
 
-/** Lazy, disposable single-document RDF engine (ADR-007 / T-070). */
+/** Lazy, disposable RDF engine and local named-graph indexes (ADR-007). */
 export interface RdfEngine {
   ready(): Promise<void>;
   readonly loaded: boolean;
@@ -80,12 +80,35 @@ export interface RdfEngine {
     focus: string,
     opts: FormOptions,
   ): Promise<unknown>;
-  /** Create the named-graph lifecycle foundation; query/persistence arrive in T-071. */
-  createIndex(): Promise<LocalIndex>;
+  /** Create an owned local named-graph SPARQL index. */
+  createIndex(opts?: IndexOptions): Promise<LocalIndex>;
   dispose(): void;
 }
 
-/** LocalIndex graph lifecycle. T-071 adds SPARQL, snapshots, persistence and LRU. */
+/** RDF/JS solution rows, with string or Variable lookup. */
+export type { Bindings } from "@rdfjs/types";
+
+import type { Bindings } from "@rdfjs/types";
+
+/** Single-use pull stream. Exhaustion, return(), or dispose() releases its cursor. */
+export interface ResultStream<T> extends AsyncIterableIterator<T> {
+  dispose(): void;
+}
+
+/** Optional compressed-snapshot storage. Mutations await save; initialization awaits load. */
+export interface IndexPersistence {
+  load(): Promise<Uint8Array | null>;
+  save(bytes: Uint8Array): Promise<void>;
+}
+
+/** Local index memory and persistence settings. */
+export interface IndexOptions {
+  /** Maximum deduplicated quads, default 2,000,000. Oversized single graphs are rejected. */
+  maxQuads?: number;
+  persist?: IndexPersistence;
+}
+
+/** One resource per named graph, with graph-level LRU eviction. */
 export interface LocalIndex {
   /** Replace all quads in a graph, assigning the resource IRI as their graph name. */
   put(graphIri: string, data: QuadSource): Promise<void>;
@@ -93,6 +116,16 @@ export interface LocalIndex {
   has(graphIri: string): boolean;
   /** Number of deduplicated quads across indexed graphs. */
   size(): number;
+  /** Resource IRIs, ordered least to most recently put or successfully checked with has(). */
+  list(): string[];
+  select(sparql: string): Promise<Bindings[]>;
+  selectStream(sparql: string): Promise<ResultStream<Bindings>>;
+  ask(sparql: string): Promise<boolean>;
+  construct(sparql: string): Promise<Quad[]>;
+  /** N-Quads compressed as a single gzip member. Empty graphs have no N-Quads representation. */
+  snapshot(): Promise<Uint8Array>;
+  /** Replace the index from gzip or zstd N-Quads; apply the configured cap in graph order. */
+  restore(bytes: Uint8Array): Promise<void>;
   dispose(): void;
 }
 

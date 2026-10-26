@@ -54,15 +54,56 @@ Writer. `validate` accepts data quads and either shapes quads or Turtle text;
 SHACL evaluates a graph, folding named graphs into it. `canonicalize` delegates
 to Sparq's RDFC-1.0 canonicalizer, including for blank nodes.
 
-`createIndex()` currently provides the LocalIndex graph lifecycle: `put` replaces
-a resource graph, `remove` deletes it, `has` tests graph membership, and `size`
-counts deduplicated quads. `put` assigns the supplied absolute resource IRI to
-every quad and copies its input. An explicitly stored empty graph remains present.
-Dispose indexes explicitly, or dispose the owning engine to release all of them.
-The real engine mirrors graph changes into its owned WASM store; the fake keeps
-them in JavaScript memory. The shared contract tests replacement, isolation,
-deduplication, empty graphs and disposal. Full SPARQL queries, snapshot/restore,
-persistence and LRU eviction remain T-071, as assigned in the original task split.
+`createIndex({ maxQuads?, persist? })` creates an owned local SPARQL index.
+`put(resourceIri, data)` replaces the resource's named graph and copies and
+deduplicates its quads. `remove` deletes a graph, `has` checks membership,
+`list` returns resource IRIs in LRU order, and `size` counts quads. Graph IRIs
+must be absolute. Explicitly stored empty graphs remain present in memory.
+
+```ts
+const index = await engine.createIndex({ maxQuads: 2_000_000 });
+await index.put(documentUrl, data);
+const rows = await index.select("SELECT ?g ?s ?p ?o { GRAPH ?g { ?s ?p ?o } }");
+const label = rows[0]?.get("o"); // RDF/JS Bindings: string or Variable lookup
+for await (const row of await index.selectStream("SELECT ?g { GRAPH ?g { ?s ?p ?o } }")) {
+  console.log(row.get("g")?.value);
+}
+const exists = await index.ask("ASK { GRAPH ?g { ?s ?p ?o } }");
+const quads = await index.construct("CONSTRUCT { ?s ?p ?o } { GRAPH ?g { ?s ?p ?o } }");
+const bytes = await index.snapshot();
+await index.restore(bytes);
+index.dispose();
+```
+
+SELECT results are RDF/JS bindings, including RDF term types, language tags,
+datatypes and unbound variables. `selectStream` returns a single-use async
+iterator with `dispose()`. Exhaustion, `for await` early exit, iterator `return()`,
+explicit disposal, index disposal and engine disposal all release its cursor.
+Dispose an unconsumed stream explicitly. Sparq 0.1.5 materializes the solution
+set in WASM; the JavaScript conversion pulls batches of at most 256 rows.
+
+The default cap is **2,000,000 quads** for every entry point. Set `maxQuads` to a
+nonnegative safe integer. Graphs are evicted whole, least recently used first;
+`put` and successful `has` calls refresh recency. Queries and `list` leave that
+order unchanged. A single `put` larger than the cap rejects with `RangeError`
+before changing data. Restores apply the cap in snapshot graph order.
+
+`snapshot()` writes N-Quads through n3.Writer and compresses it as a **single gzip
+member** using platform `CompressionStream("gzip")`. `restore()` replaces the
+index, sniffs magic bytes, and accepts gzip or zstd (the latter through Sparq's
+`decompress`). The bytes are accepted by
+`SparqStore.fromCompressed(bytes, "nquads", { dataset: true })`. Invalid compression
+or RDF rejects before changing indexed data. N-Quads cannot represent empty
+graphs, so snapshots omit them. Recency metadata is not persisted separately;
+restored graph order becomes its initial LRU order.
+
+An optional `IndexPersistence` supplies `load(): Promise<Uint8Array | null>` and
+`save(bytes): Promise<void>`. Index creation awaits loading; graph mutations and
+restores await saving a fresh snapshot. Async operations run in invocation order,
+so a slow save cannot overwrite a newer mutation's snapshot. A failed save
+rejects the mutation promise, leaving its updated in-memory data available;
+a later mutation can save again. Dispose the index or engine to release every
+owned store and stream, including while persistence is loading or saving.
 
 After `ready()`, `features` reports the detected `serialize` and
 `parseShaclCompact` methods, plus a versioned `policyEvaluate` capability in the installed bundle. A missing serializer throws
@@ -140,6 +181,23 @@ The browser entry initializes Sparq's shipped web binding with the configured UR
 because 0.1.5's high-level `init()` does not accept a URL. The Node entry lazily
 imports the shipped synchronous `wasm-node` binding and needs no hosted asset.
 
+Browser `createIndex()` uses IndexedDB by default (`jeswr-rdf-engine`, key
+`index`), loads it before returning, and persists each mutation. It opens and
+closes a connection per operation and waits for transaction commit. An unavailable,
+blocked or failed database rejects the operation. Use one logical index per
+storage key; multiple writers to the same key use the last committed snapshot.
+Select a separate database/key, or pass a custom persistence adapter:
+
+```ts
+import { createIndexedDbPersistence } from "@jeswr/rdf-engine/browser";
+
+const index = await engine.createIndex({
+  persist: createIndexedDbPersistence({ databaseName: "my-app", key: "search" }),
+});
+```
+
+The default and Node entries persist only when given an explicit adapter.
+
 The testing entry never imports Sparq or loads WASM:
 
 ```ts
@@ -162,6 +220,25 @@ uses the same solid-odrl delegate in the fake, without importing Sparq. Form
 derivation throws `FakeEngineUnsupportedError`; test form semantics with the
 real engine.
 
+The fake shares LocalIndex graph lifecycle, cap/LRU, gzip snapshots, persistence
+and disposal with the real engine. Zstd restore and all SPARQL methods throw
+`FakeEngineUnsupportedError` by default. Inject query handlers to return fixture
+results without writing a SPARQL evaluator or loading WASM:
+
+```ts
+const fake = createFakeRdfEngine({
+  query: {
+    select: async (sparql) => [],
+    ask: () => true,
+    construct: () => [],
+  },
+});
+```
+
+Handlers may return values or promises. An injected `select` also supplies
+`selectStream` by iterating its rows, unless `query.selectStream` is supplied.
+Missing handlers remain unsupported. Returned streams are owned by the index.
+
 From the workspace root:
 
 ```sh
@@ -173,7 +250,8 @@ pnpm --filter @jeswr/rdf-engine run bench:bundle
 ```
 
 The shared `contract.test.ts` runs on fake and real Node WASM engines.
-`contract.real.test.ts` tests JSON-LD, SHACL and blank-node canonicalization.
+`contract.real.test.ts` also covers real SPARQL over 1,000 graphs and zstd restore;
+`index-stream.real.test.ts` checks cursor cleanup on completion, early exit and errors.
 The store lifetime test measures live owned stores with their actual `heapBytes()`
 before and after repeated success/failure operations; linear WASM memory capacity
 is not a leak counter because its allocator retains freed pages.
