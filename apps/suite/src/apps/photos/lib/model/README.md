@@ -36,8 +36,12 @@ No metadata is published for a photo whose thumbnail upload failed.
 deleting the original description. Original subject identity is retained. Restore and purge claim
 the trash record with an ETag-conditional state write before changing photo resources, and delete
 the trash copy using the claim's ETag. State is stored as `schema:creativeWorkStatus` on the PROV
-record; legacy records without it remain readable. Restore is create-only; a collision preserves
-the copy in `restoring` state, which forbids purge. Restore can retry from that state. Purge removes
+record; legacy records without it remain readable. Restore persists a unique `prov:wasGeneratedBy`
+activity in the trash claim and the create-only live description. A retry recognizes that receipt
+and retries conditional trash cleanup, including after a lost creation response. An unrelated live
+description (even an identical photo without the receipt) preserves the copy in `restoring` state,
+which forbids purge. Legacy restoring records without a receipt retain create-only collision
+protection. Purge removes
 matching app-owned original/thumbnail binaries, then the metadata copy; imported binary paths and
 existing original descriptions are refused. A `purging` record can only retry purge, including
 after partial binary deletion; it permanently forbids restore. Failed moves may leave both metadata

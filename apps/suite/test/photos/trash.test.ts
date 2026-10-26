@@ -2,7 +2,7 @@
 import { DataFactory, Store } from "n3";
 import { expect, it, vi } from "vitest";
 import { photoStorage } from "../../src/apps/photos/lib/model/io.js";
-import { PhotographDoc } from "../../src/apps/photos/lib/model/photograph.js";
+import { buildPhoto, PhotographDoc } from "../../src/apps/photos/lib/model/photograph.js";
 import {
   buildTrash,
   parseTrash,
@@ -192,6 +192,67 @@ it("blocks purge while restore owns the record and permits a create-only restore
   expect((await io.loadPhoto(originalUrl)).photo).toEqual(photo);
 });
 
+it.each([
+  503, 412,
+])("retries trash cleanup after a %s without rewriting the live photo", async (status) => {
+  const pod = mockPod();
+  const io = photoStorage(pod.fetch, storage);
+  await io.write(url, buildTrash(url, photo, record), { create: true });
+  pod.failures.set(`DELETE ${url}`, status);
+  await expect(restorePhoto(io, url)).rejects.toMatchObject({ status });
+  const restored = pod.files.get(originalUrl);
+  const activity = parseTrash(url, (await io.read(url)).dataset).record.restoreActivity;
+  expect(activity).toMatch(/^https:\/\/pod\.example\/photos\/\.trash\/a\.ttl#restore-/);
+  expect((await io.loadPhoto(originalUrl)).photo).toEqual(photo);
+  await expect(purgePhoto(io, url)).rejects.toThrow("restoring");
+  pod.failures.delete(`DELETE ${url}`);
+  // A new adapter must recover using persisted data alone.
+  expect(await restorePhoto(photoStorage(pod.fetch, storage), url)).toBe(originalUrl);
+  expect(pod.files.get(originalUrl)).toBe(restored);
+  expect(pod.files.has(url)).toBe(false);
+  expect(await trashPhoto(io, originalUrl, "a", actor, now)).toBe(url);
+});
+
+it("recovers after a lost creation response using the persisted restore receipt", async () => {
+  const pod = mockPod();
+  const io = photoStorage(pod.fetch, storage);
+  await io.write(url, buildTrash(url, photo, record), { create: true });
+  const write = io.write;
+  vi.spyOn(io, "write").mockImplementation(async (...args) => {
+    const result = await write(...args);
+    if (args[0] === originalUrl) throw new Error("Lost response");
+    return result;
+  });
+  await expect(restorePhoto(io, url)).rejects.toThrow("Lost response");
+  const restored = pod.files.get(originalUrl);
+  const activity = parseTrash(url, (await io.read(url)).dataset).record.restoreActivity;
+  const freshIo = photoStorage(pod.fetch, storage);
+  pod.failures.set(`GET ${originalUrl}`, 403);
+  await expect(restorePhoto(freshIo, url)).rejects.toMatchObject({ status: 403 });
+  expect(pod.files.has(url)).toBe(true);
+  expect(parseTrash(url, (await io.read(url)).dataset).record.restoreActivity).toBe(activity);
+  pod.failures.delete(`GET ${originalUrl}`);
+  expect(await restorePhoto(freshIo, url)).toBe(originalUrl);
+  expect(pod.files.get(originalUrl)).toBe(restored);
+  expect(pod.files.has(url)).toBe(false);
+});
+
+it.each([
+  undefined,
+  `${url}#another-restore`,
+])("refuses an identical live photo with an unrelated restore receipt (%s)", async (restoreActivity) => {
+  const pod = mockPod();
+  const io = photoStorage(pod.fetch, storage);
+  await io.write(url, buildTrash(url, photo, { ...record, state: "restoring" }), { create: true });
+  const live = buildPhoto(originalUrl, photo);
+  new TrashDoc(`${originalUrl}#it`, live, DataFactory).restoreActivity = restoreActivity;
+  await io.write(originalUrl, live, { create: true });
+  const existing = pod.files.get(originalUrl);
+  await expect(restorePhoto(io, url)).rejects.toMatchObject({ status: 412 });
+  expect(pod.files.get(originalUrl)).toBe(existing);
+  expect(pod.files.has(url)).toBe(true);
+});
+
 it("persists purging after partial deletion, forbids restore, and permits purge retry", async () => {
   const pod = mockPod();
   const io = photoStorage(pod.fetch, storage);
@@ -230,4 +291,10 @@ it("round-trips claimed states and rejects unknown persisted states", () => {
   const doc = new TrashDoc(`${url}#trash`, dataset, DataFactory);
   doc.state = "invalid";
   expect(() => parseTrash(url, dataset)).toThrow("Invalid trash state");
+  const receipt = {
+    ...record,
+    state: "restoring" as const,
+    restoreActivity: `${url}#restore-test`,
+  };
+  expect(parseTrash(url, buildTrash(url, photo, receipt))).toEqual({ photo, record: receipt });
 });

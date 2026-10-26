@@ -12,7 +12,7 @@ import {
   TermWrapper,
 } from "@rdfjs/wrapper";
 import { DataFactory } from "n3";
-import type { PhotoStorage } from "./io.js";
+import { PhotoIoError, type PhotoStorage } from "./io.js";
 import { buildPhoto, type Photo, parsePhoto } from "./photograph.js";
 import { documentUrl, httpIri, identifier, isoDate } from "./validation.js";
 import { RDF_TYPE, SCHEMA } from "./vocab.js";
@@ -24,8 +24,23 @@ export interface TrashRecord {
   actor: string;
   /** Absent on ordinary/legacy trash records. Purging permanently forbids restore. */
   state?: "restoring" | "purging";
+  /** Shared with the created live description to identify this restore across retries. */
+  restoreActivity?: string;
 }
-export class TrashDoc extends TermWrapper {
+class RestoreReceipt extends TermWrapper {
+  get restoreActivity(): string | undefined {
+    return OptionalFrom.subjectPredicate(this, `${PROV}wasGeneratedBy`, NamedNodeAs.string);
+  }
+  set restoreActivity(value: string | undefined) {
+    OptionalAs.object(
+      this,
+      `${PROV}wasGeneratedBy`,
+      value === undefined ? undefined : httpIri(value),
+      NamedNodeFrom.string,
+    );
+  }
+}
+export class TrashDoc extends RestoreReceipt {
   get state(): string | undefined {
     return OptionalFrom.subjectPredicate(this, `${SCHEMA}creativeWorkStatus`, LiteralAs.string);
   }
@@ -72,6 +87,7 @@ export function buildTrash(url: string, photo: Photo, record: TrashRecord) {
   doc.originalUrl = record.originalUrl;
   doc.actor = record.actor;
   doc.state = record.state;
+  doc.restoreActivity = record.restoreActivity;
   doc.trashedAt = new Date(isoDate(record.trashedAt));
   return dataset;
 }
@@ -94,6 +110,9 @@ export function parseTrash(
       actor: httpIri(doc.actor),
       trashedAt: doc.trashedAt.toISOString(),
       ...(state !== undefined ? { state } : {}),
+      ...(doc.restoreActivity !== undefined
+        ? { restoreActivity: httpIri(doc.restoreActivity) }
+        : {}),
     },
   };
 }
@@ -125,8 +144,20 @@ export async function restorePhoto(io: PhotoStorage, url: string): Promise<strin
   const { photo, record } = parseTrash(url, dataset);
   const match = requireEtag(etag);
   if (record.state === "purging") throw new TypeError("Cannot restore a purging photo");
+  const activity = record.restoreActivity ?? `${documentUrl(url)}#restore-${crypto.randomUUID()}`;
+  new TrashDoc(`${documentUrl(url)}#trash`, dataset, DataFactory).restoreActivity = activity;
   const claimed = await claim(io, url, dataset, match, "restoring");
-  await io.savePhoto(record.originalUrl, photo, { create: true });
+  // Persist the same receipt atomically with creation, including when the response is lost.
+  const live = buildPhoto(record.originalUrl, photo);
+  new RestoreReceipt(`${record.originalUrl}#it`, live, DataFactory).restoreActivity = activity;
+  try {
+    await io.write(record.originalUrl, live, { create: true });
+  } catch (error) {
+    if (!(error instanceof PhotoIoError) || error.status !== 412) throw error;
+    const existing = await io.read(record.originalUrl);
+    const receipt = new RestoreReceipt(`${record.originalUrl}#it`, existing.dataset, DataFactory);
+    if (receipt.restoreActivity !== activity) throw error;
+  }
   await io.remove(url, claimed);
   return record.originalUrl;
 }
