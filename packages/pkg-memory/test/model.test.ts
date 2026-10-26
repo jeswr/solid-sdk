@@ -362,12 +362,12 @@ it("expands the owner shorthand without embedding a personal default", async () 
 });
 
 it.each([
-  "2026-01-01T12:00:00",
-  "2026-01-01T12:00:00.1",
-  "2026-01-01T12:00:00.000000",
-  "2026-01-01T12:00:00.123456789",
-  "2024-02-29T23:59:59",
-])("preserves timezone-less assertion dateTime %s through raw/Turtle builds and TriG", async (value) => {
+  ["2026-01-01T12:00:00", "2026-01-01T12:00:00"],
+  ["2026-01-01T12:00:00.1", "2026-01-01T12:00:00.100000"],
+  ["2026-01-01T12:00:00.000000", "2026-01-01T12:00:00"],
+  ["2026-01-01T12:00:00.123456789", "2026-01-01T12:00:00.123456"],
+  ["2024-02-29T23:59:59", "2024-02-29T23:59:59"],
+])("normalizes local assertion dateTime %s through raw/Turtle builds and TriG", async (value, expected) => {
   const raw = new Store([
     df.quad(
       df.namedNode(owner),
@@ -384,13 +384,13 @@ it.each([
     for (const result of [built, parsed]) {
       const values = graph(result.dataset, result.nanopubs[0]!.assertionId);
       expect([...values].map((q) => q.object)).toEqual([
-        df.literal(value, df.namedNode(`${NS.xsd}dateTime`)),
+        df.literal(expected, df.namedNode(`${NS.xsd}dateTime`)),
       ]);
     }
   }
 });
 
-it("preserves timezone-less dateTime template bounds", async () => {
+it("normalizes timezone-less dateTime template bounds", async () => {
   const value = "2026-01-01T12:00:00.1";
   const input = batch();
   input.claims[0]!.assertion = createFactAssertion(owner, {
@@ -408,5 +408,5 @@ it("preserves timezone-less dateTime template bounds", async () => {
     [...graph(parsed.dataset, parsed.nanopubs[0]!.assertionId)].find(
       (q) => q.predicate.value === `${NS.schema}startDate`,
     )!.object.value,
-  ).toBe(value);
+  ).toBe("2026-01-01T12:00:00.100000");
 });

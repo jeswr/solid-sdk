@@ -25,3 +25,16 @@ blank nodes, cycles, language and typed literals, multiline strings and Unicode
 ordering. Numeric cases cover exact decimal scale, signed zero, all derived
 integer datatypes, floating-point notation and non-finite values, and unchanged
 invalid numeric literals. These do not contain person records.
+
+`temporal.json` pins RDFlib 7.1.4 lexical values, assertion IDs, and graphs for
+`dateTime`, `date`, `gYear`, and `gYearMonth`. Equivalent inputs cover missing
+timezones, UTC spellings, nonzero offsets, fractional microsecond padding and
+truncation, zero fractions, and leading year zeroes. Unrepresentable Python
+calendar values retain their original spelling. Generate this oracle separately
+without regenerating the other fixtures:
+
+```sh
+python3 ../generate-temporal-fixtures.py /path/to/knowledge-graph/pipeline/np_builder.py
+```
+
+Format the generated JSON with the workspace's Biome formatter before committing.

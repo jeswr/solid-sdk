@@ -1,6 +1,9 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 /** biome-ignore-all lint/style/noNonNullAssertion: fixtures guarantee the referenced entries. */
+import { readFile } from "node:fs/promises";
+import { parseRdf } from "@jeswr/fetch-rdf";
 import { DataFactory as df, Store } from "n3";
+import { isomorphic } from "rdf-isomorphic";
 import { expect, it } from "vitest";
 import {
   type Batch,
@@ -17,12 +20,12 @@ import { exampleBuildOptions } from "../src/testing.js";
 const options = exampleBuildOptions();
 const entity = "https://example.org/residence";
 const predicate = `${NS.schema}validFrom`;
-function assertion(value: string): Store {
+function assertion(value: string, datatype = "dateTime"): Store {
   return new Store([
     df.quad(
       df.namedNode(entity),
       df.namedNode(predicate),
-      df.literal(value, df.namedNode(`${NS.xsd}dateTime`)),
+      df.literal(value, df.namedNode(NS.xsd + datatype)),
     ),
   ]);
 }
@@ -39,6 +42,55 @@ function template(bound: TemporalValue): Store {
     value: { id: entity, locality: "Storyville", country: "Exampleland", validFrom: bound },
   });
 }
+
+const fixtures: {
+  cases: {
+    name: string;
+    datatype: TemporalValue["datatype"];
+    values: string[];
+    normalized: string;
+    id: string;
+    graph: string;
+  }[];
+} = JSON.parse(await readFile(new URL("./fixtures/temporal.json", import.meta.url), "utf8"));
+
+it.each(fixtures.cases)("matches the RDFlib 7.1.4 temporal oracle: $name", async (fixture) => {
+  const expected = [...(await parseRdf(fixture.graph, "application/n-triples"))];
+  const input = batch(assertion(fixture.values[0]!, fixture.datatype));
+  input.claims = fixture.values.flatMap((value, index) => {
+    const raw = assertion(value, fixture.datatype);
+    const canonical = canonicalizeAssertion(raw);
+    expect(canonical.id, value).toBe(fixture.id);
+    expect(isomorphic([...canonical.dataset], expected), value).toBe(true);
+    expect([...canonical.dataset].map((q) => q.object)).toEqual([
+      df.literal(fixture.normalized, df.namedNode(NS.xsd + fixture.datatype)),
+    ]);
+    return [raw, `<${entity}> <${predicate}> "${value}"^^xsd:${fixture.datatype} .`].map(
+      (claim, form) => ({
+        id: `${index}-${form}`,
+        assertion: claim,
+        epistemic: "Mentioned" as const,
+      }),
+    );
+  });
+  const built = await buildNanopublications(input, options);
+  const parsed = await parseNanopublications(await serializeNanopublications(built));
+  for (const result of [built, parsed]) {
+    expect(result.nanopubs).toHaveLength(fixture.values.length * 2);
+    expect(new Set(result.nanopubs.map((n) => n.assertionId))).toEqual(new Set([fixture.id]));
+    expect(isomorphic([...graph(result.dataset, fixture.id)], expected)).toBe(true);
+    expect([...graph(result.dataset, fixture.id)].map((q) => q.object)).toEqual([
+      df.literal(fixture.normalized, df.namedNode(NS.xsd + fixture.datatype)),
+    ]);
+  }
+});
+
+it("keeps local dateTimes distinct from timezone-bearing instants", () => {
+  const ids = ["", "Z", "+05:30", "-03:30"].map(
+    (zone) => canonicalizeAssertion(assertion(`2026-01-01T12:00:00.1${zone}`)).id,
+  );
+  expect(new Set(ids).size).toBe(4);
+});
 
 const invalidDateTimes = [
   "2026-02-30T12:00:00Z",
@@ -140,12 +192,15 @@ it.each([
   ["dateTime", "2024-02-29T23:59:59Z", "2024-02-29T23:59:59+00:00"],
   ["dateTime", "2026-01-01T12:00:00-00:00", "2026-01-01T12:00:00+00:00"],
   ["dateTime", "2026-01-01T12:00:00.1-00:00", "2026-01-01T12:00:00.100000+00:00"],
+  ["dateTime", "2026-01-01T12:00:00.1", "2026-01-01T12:00:00.100000"],
+  ["dateTime", "2026-01-01T12:00:00.000000", "2026-01-01T12:00:00"],
+  ["dateTime", "2026-01-01T12:00:00.123456789", "2026-01-01T12:00:00.123456"],
   ["dateTime", "2000-02-29T12:00:00+14:00", "2000-02-29T12:00:00+14:00"],
   ["dateTime", "2026-01-01T12:00:00-14:00", "2026-01-01T12:00:00-14:00"],
   ["dateTime", "2026-01-01T12:00:00+13:59", "2026-01-01T12:00:00+13:59"],
   ["dateTime", "2026-01-01T12:00:00-13:59", "2026-01-01T12:00:00-13:59"],
-  ["dateTime", "2026-01-31T24:00:00Z", "2026-01-31T24:00:00+00:00"],
-  ["dateTime", "2026-01-31T24:00:00.000Z", "2026-01-31T24:00:00+00:00"],
+  ["dateTime", "2026-01-31T24:00:00Z", "2026-01-31T24:00:00Z"],
+  ["dateTime", "2026-01-31T24:00:00.000Z", "2026-01-31T24:00:00.000Z"],
   ["dateTime", "2026-01-31T24:00:00", "2026-01-31T24:00:00"],
 ] as const)("round-trips valid %s bound %j with its declared precision", async (datatype, value, expected) => {
   const built = await buildNanopublications(batch(template({ value, datatype })), options);

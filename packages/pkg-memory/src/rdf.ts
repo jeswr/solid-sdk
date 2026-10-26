@@ -122,21 +122,48 @@ export function dateTime(value: string, requireTimezone = true): string {
   ) {
     throw new Error("Invalid dateTime");
   }
-  // Assertion literals describe local calendar values, not necessarily instants.
-  if (!timezone) return value;
-  // RDFlib normalizes UTC offsets and microsecond precision on parsing.
+  // RDFlib keeps the lexical form when Python cannot represent the XSD value.
+  if (Number(year) === 0 || value.slice(11, 13) === "24") return value;
+  // Normalize Python microseconds even for local assertion values; do not add a zone.
   return value
     .replace(/(?:Z|-00:00)$/, "+00:00")
-    .replace(/\.(\d+)(?=[+-])/, (_, digits: string) => {
+    .replace(/\.(\d+)(?=[+-]|$)/, (_, digits: string) => {
       const micros = digits.padEnd(6, "0").slice(0, 6);
       return Number(micros) === 0 ? "" : `.${micros}`;
     });
+}
+
+/** RDFlib's date-backed XSD types drop zones without shifting the calendar value. */
+function calendarLiteral(value: string, datatype: "date" | "gYear" | "gYearMonth"): string {
+  const patterns = {
+    date: /^(\d{4})-(\d\d)-(\d\d)(?:[Zz]|[+-]\d\d:\d\d)?$/,
+    gYear: /^(\+?\d{4,})(?:[Zz]|[+-]\d\d:\d\d)?$/,
+    gYearMonth: /^(\+?\d{4,})-(\d{2,})(?:[Zz]|[+-]\d\d:\d\d)?$/,
+  };
+  const match = patterns[datatype].exec(value);
+  if (!match || match[0] !== value) return value;
+  const year = Number(match[1]);
+  const month = match[2] === undefined ? 1 : Number(match[2]);
+  const day = match[3] === undefined ? 1 : Number(match[3]);
+  // Python dates only represent years 1–9999; failed conversions stay lexical.
+  if (year < 1 || year > 9999 || !validCalendarDate(year, month, day)) return value;
+  const normalizedYear = String(year).padStart(4, "0");
+  if (datatype === "gYear") return normalizedYear;
+  const normalizedMonth = `${normalizedYear}-${String(month).padStart(2, "0")}`;
+  return datatype === "gYearMonth"
+    ? normalizedMonth
+    : `${normalizedMonth}-${String(day).padStart(2, "0")}`;
 }
 
 export function normalizeLiteral(term: Literal): Literal {
   if (term.datatype.value === `${NS.xsd}dateTime`)
     return df.literal(dateTime(term.value, false), term.datatype);
   const datatype = term.datatype.value.replace(NS.xsd, "");
+  if (
+    term.datatype.value.startsWith(NS.xsd) &&
+    (datatype === "date" || datatype === "gYear" || datatype === "gYearMonth")
+  )
+    return df.literal(calendarLiteral(term.value, datatype), term.datatype);
   const value = term.value.trim();
   if (
     term.datatype.value.startsWith(NS.xsd) &&
