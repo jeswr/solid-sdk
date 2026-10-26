@@ -33,6 +33,7 @@ export default defineConfig({
         "src/apps/drive/lib/sharing/**/*.ts",
         "src/apps/drive/lib/upload/**/*.ts",
         "src/apps/chat/lib/text/**/*.ts",
+        "src/apps/chat/lib/search/**/*.ts",
         "src/apps/photos/lib/exif/**/*.ts",
         "src/apps/photos/lib/transform/**/*.ts",
         "src/apps/photos/lib/timeline/**/*.ts",
