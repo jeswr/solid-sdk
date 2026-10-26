@@ -102,8 +102,6 @@ export interface FileBrowserProps {
 
 const DRAG_TYPE = "application/x-solid-drive-items";
 const PLACEHOLDERS = Array.from({ length: 10 }, (_, n) => `placeholder-${n}`);
-const SHORTCUT_CONTROLS =
-  "button[aria-haspopup], button[aria-expanded], [data-slot='dropdown-menu-trigger'], [data-slot='menu-trigger'], [data-slot$='menu-sub-trigger'], menu, [role='menu'], [role^='menuitem'], input, select, textarea, [contenteditable]:not([contenteditable='false'])";
 
 function locationLabel(folder: string | undefined, driveRoot: string | undefined): string {
   if (!folder) return "—";
@@ -275,8 +273,9 @@ export function FileBrowser(props: FileBrowserProps) {
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     const target = event.target as HTMLElement;
-    if (event.defaultPrevented || target.closest(SHORTCUT_CONTROLS)) return;
-    const focusUrl = target.closest<HTMLElement>("[data-url]")?.dataset.url;
+    // Only the roving item owns listing shortcuts; descendants keep their native keys.
+    if (event.defaultPrevented || !target.matches("[data-url]")) return;
+    const focusUrl = target.dataset.url;
     const focused = visible.find((item) => item.url === focusUrl);
     const index = focused ? visible.indexOf(focused) : -1;
     const mod = event.metaKey || event.ctrlKey;

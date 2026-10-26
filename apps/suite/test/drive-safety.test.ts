@@ -48,6 +48,120 @@ function setup(
 afterEach(() => vi.restoreAllMocks());
 
 describe("Drive data-safety regressions", () => {
+  it.each([
+    "deleted",
+    "changed",
+    "ignored-precondition",
+    "missing-etag",
+    "weak-etag",
+    "missing-recheck-etag",
+  ])("partial restore retains recovery when the compared survivor is no longer verifiable (%s)", async (mode) => {
+    let restoring = false;
+    let comparedEtag: string | null = null;
+    const { pod, client, fetch } = setup(async (url, init) => {
+      if (url === `${FROM}b` && init?.method === "DELETE")
+        return new Response(null, { status: 403 });
+      if (!restoring || url !== `${FROM}b`) return undefined;
+      if (!init?.method || init.method === "GET") {
+        // Capture the response before the other client removes or changes it.
+        const response = await pod.fetch(url, init);
+        comparedEtag = response.headers.get("etag");
+        if (mode === "deleted") await pod.fetch(url, { method: "DELETE" });
+        else if (mode === "changed" || mode === "ignored-precondition")
+          await pod.fetch(url, { method: "PUT", body: "unique new survivor contents" });
+        else if (mode === "missing-etag") response.headers.delete("etag");
+        else if (mode === "weak-etag") response.headers.set("etag", 'W/"weak"');
+        return response;
+      }
+      if (init.method === "HEAD" && new Headers(init.headers).has("if-match")) {
+        if (mode === "changed") return new Response(null, { status: 412 });
+        // The demo pod ignores HEAD preconditions: verify its returned ETag too.
+        const response = await pod.fetch(url, init);
+        if (mode === "missing-recheck-etag") response.headers.delete("etag");
+        return response;
+      }
+      return undefined;
+    });
+    await trashItems(client, DRIVE, [await client.stat(FROM)]);
+    const entries = await listTrash(client, DRIVE);
+    const entry = entries[0];
+    if (!entry) throw new Error("Missing partial entry");
+    restoring = true;
+    fetch.mockClear();
+    const result = await restoreItems(client, DRIVE, entries);
+    restoring = false;
+    expect(result.done).toEqual([]);
+    expect(result.failed[0]?.error).toMatchObject({
+      kind: "trash-restore-partial",
+      remaining: [{ url: `${entry.url}b` }],
+    });
+    expect(
+      fetch.mock.calls.filter(
+        ([url, init]) => url === `${entry.url}b` && init?.method === "DELETE",
+      ),
+    ).toEqual([]);
+    const checks = fetch.mock.calls.filter(
+      ([url, init]) =>
+        url === `${FROM}b` && init?.method === "HEAD" && new Headers(init.headers).has("if-match"),
+    );
+    if (mode === "missing-etag" || mode === "weak-etag") expect(checks).toEqual([]);
+    else {
+      expect(checks).toHaveLength(1);
+      expect(new Headers(checks[0]?.[1]?.headers).get("if-match")).toBe(comparedEtag);
+    }
+    expect(await (await client.read(`${entry.url}b`)).text()).toBe("B");
+    if (mode === "deleted") expect(pod.has(`${FROM}b`)).toBe(false);
+    expect(await listTrash(client, DRIVE)).toMatchObject([
+      { url: entry.url, status: "partial", remaining: [`${entry.url}b`] },
+    ]);
+  });
+
+  it("partial restore rechecks the comparison GET's survivor version immediately before recovery deletion", async () => {
+    let restoring = false;
+    let comparedEtag: string | null = null;
+    const { pod, client, fetch } = setup(async (url, init) => {
+      if (url === `${FROM}b` && init?.method === "DELETE")
+        return new Response(null, { status: 403 });
+      if (!restoring || url !== `${FROM}b`) return undefined;
+      if (!init?.method || init.method === "GET") {
+        // A new identical version after the earlier stat must use this GET's ETag.
+        await pod.fetch(url, { method: "PUT", body: "B" });
+        const response = await pod.fetch(url, init);
+        comparedEtag = response.headers.get("etag");
+        return response;
+      }
+      if (init.method === "HEAD" && new Headers(init.headers).has("if-match")) {
+        const response = await pod.fetch(url, init);
+        return new Headers(init.headers).get("if-match") === response.headers.get("etag")
+          ? response
+          : new Response(null, { status: 412 });
+      }
+      return undefined;
+    });
+    await trashItems(client, DRIVE, [await client.stat(FROM)]);
+    const entries = await listTrash(client, DRIVE);
+    const entry = entries[0];
+    if (!entry) throw new Error("Missing partial entry");
+    const before = await client.stat(`${FROM}b`);
+    restoring = true;
+    fetch.mockClear();
+    const result = await restoreItems(client, DRIVE, entries);
+    restoring = false;
+    expect(result.failed).toEqual([]);
+    expect(result.done).toHaveLength(1);
+    expect(comparedEtag).not.toBe(before.etag);
+    const deletion = fetch.mock.calls.findIndex(
+      ([url, init]) => url === `${entry.url}b` && init?.method === "DELETE",
+    );
+    const preceding = fetch.mock.calls[deletion - 1];
+    expect(preceding?.[0]).toBe(`${FROM}b`);
+    expect(preceding?.[1]?.method).toBe("HEAD");
+    expect(new Headers(preceding?.[1]?.headers).get("if-match")).toBe(comparedEtag);
+    expect(await (await client.read(`${FROM}b`)).text()).toBe("B");
+    expect(await listTrash(client, DRIVE)).toEqual([]);
+    expect(pod.has(entry.url)).toBe(false);
+  });
+
   it("partial restore compares bytes when different URLs issue equal ETags", async () => {
     let collide = false;
     const { pod, client } = setup(async (url, init) => {

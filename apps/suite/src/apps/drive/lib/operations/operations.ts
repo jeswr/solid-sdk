@@ -296,18 +296,27 @@ async function sameRecoveryFile(
   from: string,
   to: string,
   versions: ReadonlySet<string> = new Set(),
-): Promise<{ same: boolean; etag: string | undefined }> {
+): Promise<{ same: boolean; etag: string | undefined; survivorEtag: string | undefined }> {
   const target = await client.stat(to);
   if (target.etag && !target.etag.startsWith("W/")) {
     // Validators only identify versions at the URL that issued them.
-    if (versions.has(JSON.stringify([to, target.etag]))) return { same: true, etag: undefined };
+    if (versions.has(JSON.stringify([to, target.etag])))
+      return { same: true, etag: undefined, survivorEtag: target.etag };
   }
-  const [recovery, survivor] = await Promise.all([client.readVersion(from), client.read(to)]);
+  const [recovery, survivor] = await Promise.all([
+    client.readVersion(from),
+    client.readVersion(to),
+  ]);
   const etag = recovery.etag;
-  if (recovery.body.size !== survivor.size) return { same: false, etag };
-  const [a, b] = await Promise.all([recovery.body.arrayBuffer(), survivor.arrayBuffer()]);
+  const survivorEtag = survivor.etag;
+  if (recovery.body.size !== survivor.body.size) return { same: false, etag, survivorEtag };
+  const [a, b] = await Promise.all([recovery.body.arrayBuffer(), survivor.body.arrayBuffer()]);
   const bytes = new Uint8Array(b);
-  return { same: new Uint8Array(a).every((value, index) => value === bytes[index]), etag };
+  return {
+    same: new Uint8Array(a).every((value, index) => value === bytes[index]),
+    etag,
+    survivorEtag,
+  };
 }
 
 /** Every recovery child must still have the same original, including nested files. */
@@ -666,6 +675,13 @@ async function restoreMissing(
       if (!compared.same) throw new DriveError("conflict", 412, to);
       if (!compared.etag || compared.etag.startsWith("W/"))
         throw new DriveError("missing-validator", 409, from);
+      if (!compared.survivorEtag || compared.survivorEtag.startsWith("W/"))
+        throw new DriveError("missing-validator", 409, to);
+      const survivor = await client.stat(to, { ifMatch: compared.survivorEtag });
+      // Also check servers that ignore HEAD preconditions, as the move client does.
+      if (survivor.etag !== compared.survivorEtag) throw new DriveError("conflict", 412, to);
+      // Without an atomic server operation, the survivor can still disappear between
+      // this verification and the recovery DELETE. Keep that cross-resource window small.
       await client.remove(from, { ifMatch: compared.etag });
       return [];
     }
