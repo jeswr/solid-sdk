@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { describe, expect, it } from "vitest";
+// AUTHORED-BY Codex GPT-6
+import { describe, expect, it, vi } from "vitest";
 import {
   type DateRange,
   detectRecurring,
@@ -13,6 +14,7 @@ import {
   type RecurringTemplate,
   upcomingBills,
 } from "../src/apps/money/lib/forecast";
+import * as recurrence from "../src/apps/money/lib/forecast/recurrence";
 
 const checking = "https://example.org/money/checking";
 const savings = "https://example.org/money/savings";
@@ -266,6 +268,27 @@ describe("daily account forecasts", () => {
 });
 
 describe("likely recurring history", () => {
+  it.each([
+    ["0001-01-01", "0001-01-08", "9999-12-31"],
+    ["0001-01-01", "0001-01-02", "9999-12-31"],
+    ["0001-01-01", "0001-01-01", "9999-12-31"],
+  ])("stops failed candidates early across a long span: %j, %j, %j", (...dates) => {
+    const matches = recurrence.matches;
+    let checks = 0;
+    const spy = vi.spyOn(recurrence, "matches").mockImplementation((date, start, rule) => {
+      // Bound work deterministically; a regression must fail before scanning millennia.
+      expect(++checks).toBeLessThanOrEqual(2000);
+      expect(date <= "0002-01-01").toBe(true);
+      return matches(date, start, rule);
+    });
+    try {
+      expect(detectRecurring(history(dates), exact)).toEqual([]);
+      expect(checks).toBeGreaterThan(0);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
   it.each<[Recurrence, string[]]>([
     [{ frequency: "weekly" }, ["2026-01-01", "2026-01-08", "2026-01-15"]],
     [{ frequency: "biweekly" }, ["2025-12-25", "2026-01-08", "2026-01-22"]],

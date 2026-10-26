@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { compare, matches } from "./recurrence";
 import type {
   DetectionOptions,
@@ -59,12 +60,15 @@ export function detectRecurring(
       { frequency: "yearly" },
     ];
     const rule = rules.find((candidate) => {
-      const dates: string[] = [];
-      for (let day = dateDay(first.date); day <= dateDay(last.date); day++) {
+      let observed = 0;
+      const end = dateDay(last.date);
+      for (let day = dateDay(first.date); day <= end; day++) {
         const date = dateString(day);
-        if (matches(date, first.date, candidate)) dates.push(date);
+        if (!matches(date, first.date, candidate)) continue;
+        if (date !== group[observed]!.date) return false;
+        observed++;
       }
-      return dates.length === group.length && dates.every((date, i) => date === group[i]!.date);
+      return observed === group.length;
     });
     if (!rule) continue;
     output.push({
