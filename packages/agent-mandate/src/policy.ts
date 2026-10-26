@@ -1,5 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import {
+  constraintSatisfied,
   evaluate,
   LEFT_OPERANDS,
   ODRL_ACTIONS,
@@ -107,11 +109,25 @@ export const solidOdrlEngine: PolicyEngine = {
       conflict: "prohibit",
       permissions: lower(p.permissions),
       prohibitions: lower(p.prohibitions),
+      obligations: [], // Checked independently below, including when no rule matches.
     };
-    const result = evaluate(lowered, { ...q, action: "use", attributes }, { now: new Date(q.at) });
+    const request = { ...q, action: "use" as const, attributes };
+    const now = new Date(q.at);
+    const result = evaluate(lowered, request, { now });
     // A definite prohibition takes precedence even when another rule lacks context.
     if (result.matchedProhibitions.length > 0) return { effect: "prohibited" };
-    if (!supported || missing || result.duties.some((d) => !d.fulfilled))
+    // Policy obligations remain active even when the evaluator returns no matching rules/duties.
+    const unmetObligation = (p.obligations ?? []).some((d) => {
+      const fulfilled = attributes[`fulfilled:${d.action}`];
+      return (
+        (fulfilled !== true && fulfilled !== "true" && fulfilled !== 1) ||
+        (d.constraints ?? []).some(
+          (c) =>
+            !knownOperand(c, attributes[c.leftOperand]) || !constraintSatisfied(c, request, now),
+        )
+      );
+    });
+    if (!supported || missing || unmetObligation || result.duties.some((d) => !d.fulfilled))
       return { effect: "indeterminate" };
     return { effect: result.decision === "permit" ? "permit" : "not-applicable" };
   },

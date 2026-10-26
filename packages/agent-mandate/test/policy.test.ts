@@ -1,8 +1,16 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { describe, expect, it } from "vitest";
 import { evaluateIntent, solidOdrlEngine } from "../src/policy.js";
 import { memoryMandateVerifier, scriptedPolicyEngine } from "../src/testing.js";
-import { AGENT, type Decision, type Effect, type Policy, type Rule } from "../src/types.js";
+import {
+  AGENT,
+  type Decision,
+  type Effect,
+  type Intent,
+  type Policy,
+  type Rule,
+} from "../src/types.js";
 import { ACTOR, clock, intent, mandate } from "./helpers.js";
 
 const effects: Effect[] = ["permit", "prohibited", "not-applicable", "indeterminate"];
@@ -155,6 +163,95 @@ it("requires missing context and outstanding duties to be confirmed", async () =
       { ...q, attributes: { "fulfilled:inform": true } },
     ),
   ).toEqual({ effect: "permit" });
+});
+it.each([
+  { name: "empty rules", permissions: [] },
+  { name: "different action", permissions: [{ ...permit, action: "write" }] },
+  { name: "different target", permissions: [{ ...permit, target: "urn:other" }] },
+  { name: "different assignee", permissions: [{ ...permit, assignee: "urn:other" }] },
+  {
+    name: "unsatisfied constraint",
+    permissions: [
+      {
+        ...permit,
+        constraints: [{ leftOperand: "count", operator: "eq" as const, rightOperand: 2 }],
+      },
+    ],
+  },
+])("retains policy obligations with $name until discharged", async ({ permissions }) => {
+  const m = {
+    ...mandate(),
+    autonomous: policy(),
+    withApproval: policy({ permissions, obligations: [{ action: "inform" }] }),
+  };
+  const q = intent({ action: "read", attributes: { count: 1 } });
+  expect(await solidOdrlEngine.evaluate(m.withApproval, q)).toEqual({ effect: "indeterminate" });
+  expect(await evaluateIntent(m, q)).toEqual({
+    decision: "confirm-required",
+    reason: "indeterminate",
+  });
+  for (const discharged of [true, "true", 1]) {
+    const fulfilled = { ...q, attributes: { ...q.attributes, "fulfilled:inform": discharged } };
+    expect(await solidOdrlEngine.evaluate(m.withApproval, fulfilled)).toEqual({
+      effect: "not-applicable",
+    });
+    expect(await evaluateIntent(m, fulfilled)).toEqual({
+      decision: "permit",
+      reason: "autonomous",
+    });
+  }
+});
+it("requires obligation constraints as well as discharge evidence even without a matching rule", async () => {
+  const p = policy({
+    permissions: [],
+    obligations: [
+      {
+        action: "inform",
+        constraints: [{ leftOperand: "count", operator: "gteq", rightOperand: 1 }],
+      },
+    ],
+  });
+  const contexts: NonNullable<Intent["attributes"]>[] = [
+    { "fulfilled:inform": false, count: 1 },
+    { "fulfilled:inform": "false", count: 1 },
+    { "fulfilled:inform": 0, count: 1 },
+    { "fulfilled:inform": true },
+    ...[true, [], Number.NaN, "invalid-number", 0].map((count) => ({
+      "fulfilled:inform": true,
+      count,
+    })),
+  ];
+  for (const attributes of contexts) {
+    const q = intent({ action: "read", attributes });
+    expect(await solidOdrlEngine.evaluate(p, q)).toEqual({ effect: "indeterminate" });
+    expect(
+      await evaluateIntent({ ...mandate(), autonomous: policy(), withApproval: p }, q),
+    ).toEqual({
+      decision: "confirm-required",
+      reason: "indeterminate",
+    });
+  }
+  const fulfilled = intent({ action: "read", attributes: { "fulfilled:inform": true, count: 1 } });
+  expect(await solidOdrlEngine.evaluate(p, fulfilled)).toEqual({ effect: "not-applicable" });
+  expect(await solidOdrlEngine.evaluate(policy({ obligations: p.obligations }), fulfilled)).toEqual(
+    { effect: "permit" },
+  );
+  const m = {
+    ...mandate(),
+    autonomous: policy(),
+    withApproval: p,
+    prohibitions: [{ type: "prohibition" as const, action: "read" }],
+  };
+  expect(await evaluateIntent(m, intent({ action: "read" }))).toEqual({
+    decision: "prohibited",
+    reason: "prohibition",
+  });
+  expect(
+    await solidOdrlEngine.evaluate(
+      { ...p, prohibitions: m.prohibitions },
+      intent({ action: "read" }),
+    ),
+  ).toEqual({ effect: "prohibited" });
 });
 it("turns unsupported vocabulary into confirmation and preserves prohibition precedence", async () => {
   for (const p of [
