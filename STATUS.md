@@ -790,3 +790,67 @@ The requested finding is fixed and tested. No implementation work is unfinished 
 there are no open questions. `roborev status` failed with exit 127 (`roborev: command not found`), so
 fresh automated per-commit verdicts could not be obtained locally. Dispatcher/security review remains
 outstanding; this security-critical package has not been merged.
+
+## Fix round 11 — review `96df02d4a877`
+
+Completed the single finding in `solid-sdk-lane-sst-8xm.28-96df02d4a877.md`.
+Only `packages/reactive-authentication` and this report changed. No dependencies were added.
+
+| Commit | Change |
+| --- | --- |
+| `e09a7ae5` | Track Bearer rejection records by token value until logout and check every returned token against them. Preserve eager renewal hints. Add a concurrent-401 regression through `ReactiveAuthenticationClient` with the real OAuth source, plus regressions for rejection during initial/renewal reads and rejection retention/reset across replacements/logout. |
+| Final documentation commit (this commit) | Record round-11 verification and the review-tool limitation. |
+
+A superseded token's invalidation cannot overwrite another token's rejection. The source still owns
+renewal and receives the rejected token as a hint; the complete set of rejected values determines
+whether a returned token is usable. Successful renewal preserves the other rejection records, and
+`forget()` clears them for the next session. No public API or retry budget changed.
+
+### Round-11 verification
+
+PASS required package gate and root checks, run before the final documentation commit:
+
+```sh
+pnpm --filter @jeswr/reactive-authentication run lint && pnpm --filter @jeswr/reactive-authentication run build && pnpm --filter @jeswr/reactive-authentication run typecheck && pnpm --filter @jeswr/reactive-authentication run test
+pnpm run lint:root
+git diff --check
+```
+
+- Package lint: zero errors; **63 warnings** and **22 informational diagnostics**, unchanged from round 10.
+- Build and typecheck: pass, including the SDK type-contract checks and existing MSAL eager-refresh test.
+- Tests: **316/316** pass in **29/29** files, with no skips.
+- Enforced coverage: statements **2082/2082**, branches **1538/1538**, functions **468/468**,
+  lines **1878/1878** — **100% in every metric**. Coverage configuration and thresholds are unchanged.
+- Root lint: Biome, lockfile transport, app workspace and raw-fetch guards pass.
+- Whitespace validation: pass.
+
+The client regression was run before the implementation fix:
+
+```sh
+pnpm --filter @jeswr/reactive-authentication exec vitest run test/oauth.test.js --coverage.enabled=false '--testNamePattern=concurrent 401s for successive Bearer tokens'
+```
+
+Expected baseline failure: the late request returned **401** instead of **200**, despite an available
+refresh. The final coverage-enforced gate passes this case. The test holds the current token's renewal,
+then delivers an older token's 401. Both requests recover within their single renewal, using the same
+fresh token. Local OAuth fixtures verify two refresh grants (one initial rotation and one shared
+renewal), zero refresh-token reuse, and no additional authorization flow. The three additional provider
+cases cover invalidation during either token read and value-based rejection retention until logout.
+
+Validation used Node `24.22.1` and pnpm `10.4.1`. No `check:packages` run was needed because no dependency
+was added. The dependant dry run selected only this package, so no dependant gate applies:
+
+```sh
+pnpm exec turbo run build typecheck test --filter=...@jeswr/reactive-authentication --dry=json
+```
+
+Per the lane brief, no whole-workspace gate or `gate:full` ran. No push, PR, branch switch, network Git
+operation or edits to another checkout were performed. The working tree is clean after this final
+report commit.
+
+### Round-11 remaining work and questions
+
+The requested finding is fixed and tested. No implementation work is unfinished or blocked;
+there are no open questions. `roborev status` failed with exit 127 (`roborev: command not found`), so
+fresh automated per-commit verdicts could not be obtained locally. Dispatcher/security review remains
+outstanding; this security-critical package has not been merged.
