@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6
 /**
  * An in-browser demo pod: a `fetch` implementation that behaves like a small
  * Solid (LDP) server over an in-memory resource map, so the suite's real data
@@ -213,12 +214,13 @@ export function createDemoPod(options: DemoPodOptions): DemoPod {
     const describe = (url: string, modified: number, resource: DemoResource | undefined) => {
       const subject = namedNode(url);
       const size = resource?.body.byteLength;
-      if (isContainerUrl(url)) {
+      if (resource === undefined) {
         writer.addQuad(quad(subject, type, namedNode(`${LDP}Container`)));
         writer.addQuad(quad(subject, type, namedNode(`${LDP}BasicContainer`)));
-      } else if (resource) {
+      } else {
         // CSS advertises the stored media type as an IANA media-type class.
-        const essence = resource.contentType.split(";")[0]?.trim().toLowerCase() ?? "";
+        // Splitting a string always yields at least one segment, including for "".
+        const essence = (resource.contentType.split(";")[0] as string).trim().toLowerCase();
         if (/^[\w.+-]+\/[\w.+-]+$/.test(essence)) {
           writer.addQuad(quad(subject, type, namedNode(`${IANA}${essence}#Resource`)));
         }
@@ -326,6 +328,10 @@ export function createDemoPod(options: DemoPodOptions): DemoPod {
 
   const write = async (url: string, init: RequestInit, headers: Headers): Promise<Response> => {
     if (preconditionFails(url, headers)) return respond(412);
+    // A path through an existing file cannot become a container.
+    for (let parent = parentOf(url); parent; parent = parentOf(parent)) {
+      if (resources.has(parent.slice(0, -1))) return respond(409);
+    }
     const at = now();
     if (isContainerUrl(url)) {
       if (containers.has(url)) return respond(205);
@@ -335,10 +341,6 @@ export function createDemoPod(options: DemoPodOptions): DemoPod {
       return respond(201, { location: url, etag: containerEtag(url) });
     }
     if (containers.has(`${url}/`)) return respond(409);
-    // A path through an existing file cannot become a container.
-    for (let parent = parentOf(url); parent; parent = parentOf(parent)) {
-      if (resources.has(parent.slice(0, -1))) return respond(409);
-    }
     const existed = resources.has(url);
     const contentType = headers.get("content-type") ?? "application/octet-stream";
     putResource(url, await bodyBytes(init.body), contentType, at);
