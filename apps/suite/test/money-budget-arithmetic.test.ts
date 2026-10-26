@@ -141,9 +141,12 @@ describe("integer minor-unit money", () => {
     rejects(() => groupMoney(null as unknown as Money[]), "invalid-input");
     rejects(() => groupMoney(new Array<Money>(1)), "invalid-input");
     for (const value of [null, undefined, [], 3, "USD"]) {
-      rejects(() => formatMoney(value as Money), "invalid-input");
+      rejects(() => formatMoney(value as unknown as Money), "invalid-input");
     }
-    rejects(() => formatMoney({ currency: "XXX", minor: 1 } as Money), "unsupported-currency");
+    rejects(
+      () => formatMoney({ currency: "XXX", minor: 1 } as unknown as Money),
+      "unsupported-currency",
+    );
   });
 
   it("round trips arbitrary safe minor units and agrees with integer arithmetic", () => {
