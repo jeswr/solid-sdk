@@ -130,3 +130,53 @@ remain. Full-workspace validation is limited by the unrelated dependency bootstr
 above. `roborev` is still unavailable in this checkout, so no automated commit
 review ran. Tracker lifecycle remains with the dispatcher. No push, PR, branch
 switch, merge or other checkout change was performed.
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+## Fix round 2 — attachment disposition and byte preservation
+
+Review baseline: `4cf4b27fa3aced37aa3c8b9af1474d26340124a4`.
+
+- `afe85bdb` — `fix: preserve MIME attachment groups and bytes`: retain attached
+  multipart groups as single downloads with their filename, metadata and original
+  body bytes, including nested delimiters, preamble and epilogue. Record body spans
+  through the pinned parser's existing header/boundary callbacks before selection;
+  do not reconstruct the wire body. Select supported related roots independently
+  of attachment disposition. Reuse attachment metadata collection while restoring
+  transfer-decoded content, preserving calendar CRLF and legacy charset octets.
+  Add 16 regression/guard cases and document these behaviors.
+- This report commit — `docs: record MIME attachment fix validation`.
+
+All three review findings are addressed. No dependencies, public API, UI or
+unrelated implementation changed. No ambiguity required a new interpretation.
+
+Validation after the fix and before this final report commit:
+
+| Exact command | Result |
+| --- | --- |
+| `CI=true GIT_ALLOW_PROTOCOL=file pnpm install --frozen-lockfile --offline --ignore-scripts --store-dir /tmp/sst-ljwe-pnpm-store` | PASS; existing offline cache, unchanged manifests and lockfile, lifecycle scripts disabled |
+| `pnpm --filter @jeswr/suite-ui run build` | PASS; build the app's existing workspace dependency |
+| `pnpm --filter @jeswr/app-suite run test:mime` | PASS; 55 MIME tests, 100% statements/branches/functions/lines across the directory |
+| `pnpm --filter @jeswr/app-suite run lint && pnpm --filter @jeswr/app-suite run build && pnpm --filter @jeswr/app-suite run typecheck && pnpm --filter @jeswr/app-suite run test` | PASS; lint, production build, typecheck, 56 tests in 2 files; MIME coverage 100% (87 statements, 99 branches, 22 functions, 78 lines) |
+| `pnpm run lint:root` | PASS; workspace/transport/fetch/token guards and 74 contrast pairs |
+| `TURBO_SCM_BASE=4cf4b27fa3aced37aa3c8b9af1474d26340124a4 pnpm run gate` | PASS; 6/6 Turbo tasks |
+| `GIT_ALLOW_PROTOCOL=file pnpm run gate:full --env-mode=loose` | FAIL (exit 1); 16 successful tasks, 62 scheduled before fail-fast. Unchanged `@jeswr/unstorage-solid#build` requires a clone of `https://github.com/jeswr/fetch-rdf.git`; the no-remote-fetch guard rejects HTTPS transport. No remote clone/fetch occurred. |
+| `git diff --check` | PASS |
+
+Regression verification temporarily restored only `parse.ts` and `select.ts` to
+the review baseline and ran `pnpm --filter @jeswr/app-suite exec vitest run
+test/mime.test.ts --coverage.enabled=false`: 15 new cases failed, while all 39
+previous tests and the new related multipart/unsupported-root guard passed.
+The fixed sources were restored immediately, before the passing affected gate.
+
+The added cases cover LF/CRLF multipart downloads, sliced input, nested parts,
+group metadata, preamble/epilogue, EOF and missing header separators; implicit and
+explicit related roots with HTML/plain bodies; and both calendar media types with
+UTF-8/Windows-1252 and base64/quoted-printable bytes. Coverage remains enforced at
+100% per file with no exclusions or parser mocks.
+
+The only validation limits are the unrelated full-workspace build failure above
+and the existing absence of `roborev`. No review tooling, dependencies, tracker
+database or hooks were installed. No screenshots were needed for this pure-library
+fix. No implementation work or open questions remain. Tracker lifecycle remains
+with the dispatcher. No push, PR, branch switch, merge or other-checkout edit occurred.
