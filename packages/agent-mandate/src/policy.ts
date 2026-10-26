@@ -60,16 +60,63 @@ export function supportedPolicy(p: Policy): boolean {
   );
 }
 
+const XSD = "http://www.w3.org/2001/XMLSchema#";
+const numericPattern = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/;
+const numericOperands = new Set([
+  "count",
+  "delegationDepth",
+  ...LIMIT_OPERANDS,
+  `${AGENT}costExceeds`,
+]);
+
+function numeric(value: unknown, datatype: string): boolean {
+  if (typeof value !== "string" && typeof value !== "number") return false;
+  if (!numericPattern.test(String(value)) || !Number.isFinite(Number(value))) return false;
+  if (datatype === `${XSD}integer`)
+    return /^[+-]?\d+$/.test(String(value)) && Number.isSafeInteger(Number(value));
+  if (datatype === `${XSD}decimal`) return !/[eE]/.test(String(value));
+  return true;
+}
+
+function temporal(value: unknown, datatype: string): boolean {
+  if (typeof value !== "string") return false;
+  const pattern =
+    datatype === `${XSD}date`
+      ? /^\d{4}-\d{2}-\d{2}$/
+      : /^\d{4}-\d{2}-\d{2}T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
+  return (
+    pattern.test(value) &&
+    Number.isFinite(Date.parse(value)) &&
+    new Date(value.slice(0, 10)).toISOString().slice(0, 10) === value.slice(0, 10)
+  );
+}
+
+/** Both sides must be comparable without the upstream lexical fallback for malformed values. */
 function knownOperand(c: Constraint, value: unknown): boolean {
-  if (Array.isArray(c.rightOperand) && c.rightOperand.length === 0) return false;
-  const values = Array.isArray(value) ? value : [value];
-  if (values.length === 0) return false;
-  return values.every((v) => {
-    if (typeof v !== "string" && typeof v !== "number") return false;
-    if (typeof v === "number" && !Number.isFinite(v)) return false;
-    if (c.leftOperand === "dateTime") return Number.isFinite(Date.parse(String(v)));
-    const right = Array.isArray(c.rightOperand) ? c.rightOperand[0] : c.rightOperand;
-    return typeof right !== "number" || typeof v === "number";
+  const rights: unknown[] = Array.isArray(c.rightOperand) ? c.rightOperand : [c.rightOperand];
+  const lefts: unknown[] = Array.isArray(value) ? value : [value];
+  if (rights.length === 0 || lefts.length === 0) return false;
+  if (["eq", "neq", "gt", "gteq", "lt", "lteq"].includes(c.operator) && rights.length !== 1)
+    return false;
+  const datatype =
+    c.datatype ??
+    (c.leftOperand === "dateTime"
+      ? `${XSD}dateTime`
+      : numericOperands.has(c.leftOperand) || numeric(rights[0], `${XSD}double`)
+        ? `${XSD}double`
+        : `${XSD}string`);
+  if (c.leftOperand === "dateTime" && ![`${XSD}dateTime`, `${XSD}date`].includes(datatype))
+    return false;
+  return [...lefts, ...rights].every((v) => {
+    if ([`${XSD}integer`, `${XSD}decimal`, `${XSD}double`, `${XSD}float`].includes(datatype))
+      return numeric(v, datatype);
+    if (datatype === `${XSD}dateTime` || datatype === `${XSD}date`) return temporal(v, datatype);
+    if (datatype === `${XSD}anyURI`)
+      return typeof v === "string" && /^[A-Za-z][A-Za-z0-9+.-]*:[^\s<>"{}|\\^`]+$/.test(v);
+    // Numeric-looking strings would be coerced by the upstream evaluator even with xsd:string.
+    if (datatype === `${XSD}string`)
+      return typeof v === "string" && (v.trim() === "" || !Number.isFinite(Number(v)));
+    return false;
   });
 }
 

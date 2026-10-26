@@ -1,10 +1,12 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+import type { OdrlConstraint } from "@jeswr/solid-odrl";
 import { describe, expect, it } from "vitest";
 import { evaluateIntent, solidOdrlEngine } from "../src/policy.js";
 import { memoryMandateVerifier, scriptedPolicyEngine } from "../src/testing.js";
 import {
   AGENT,
+  type Constraint,
   type Decision,
   type Effect,
   type Intent,
@@ -469,4 +471,137 @@ it("requires confirmation for an empty constraint right operand", async () => {
       intent({ action: "read", attributes: { purpose: "x" } }),
     ),
   ).toEqual({ effect: "indeterminate" });
+});
+
+const XSD = "http://www.w3.org/2001/XMLSchema#";
+it.each([
+  { datatype: "integer", left: "2", right: "1" },
+  { datatype: "decimal", left: "2.5", right: "1.5" },
+  { datatype: "double", left: "2e1", right: "1e1" },
+  { datatype: "float", left: 2, right: 1 },
+  { datatype: "dateTime", left: "2026-10-27T12:00:00+00:00", right: "2026-10-26T12:00:00Z" },
+  { datatype: "date", left: "2026-10-27", right: "2026-10-26" },
+  { datatype: "string", left: "b", right: "a" },
+  { datatype: "string", left: "b", right: "" },
+  { datatype: "anyURI", left: "urn:b", right: "urn:a" },
+  { left: 2, right: "1" },
+  { left: "b", right: "a" },
+  { left: "2026-10-27T12:00:00Z", right: "2026-10-26T12:00:00Z", leftOperand: "dateTime" },
+])("compares valid declared and inferred datatypes: %j", async ({
+  datatype,
+  left,
+  right,
+  leftOperand,
+}) => {
+  const c: Constraint = {
+    leftOperand: leftOperand ?? "purpose",
+    operator: "gt",
+    rightOperand: right,
+    ...(datatype === undefined ? {} : { datatype: `${XSD}${datatype}` }),
+  };
+  const q = intent({
+    action: "read",
+    ...(c.leftOperand === "dateTime" ? { at: left as string } : {}),
+    attributes: { [c.leftOperand]: left, "fulfilled:inform": true },
+  });
+  expect(
+    await solidOdrlEngine.evaluate(policy({ permissions: [{ ...permit, constraints: [c] }] }), q),
+  ).toEqual({ effect: "permit" });
+  expect(
+    await solidOdrlEngine.evaluate(
+      policy({ prohibitions: [{ ...permit, type: "prohibition", constraints: [c] }] }),
+      q,
+    ),
+  ).toEqual({ effect: "prohibited" });
+  expect(
+    await solidOdrlEngine.evaluate(
+      policy({
+        permissions: [
+          { ...permit, duties: [{ action: "inform", constraints: [c as OdrlConstraint] }] },
+        ],
+      }),
+      q,
+    ),
+  ).toEqual({ effect: "permit" });
+  expect(
+    await solidOdrlEngine.evaluate(
+      policy({ obligations: [{ action: "inform", constraints: [c as OdrlConstraint] }] }),
+      q,
+    ),
+  ).toEqual({ effect: "permit" });
+});
+it.each([
+  { datatype: "integer", left: "z", right: "1" },
+  { datatype: "integer", left: 1.5, right: 1 },
+  { datatype: "integer", left: 1, right: "1.5" },
+  { datatype: "integer", left: 1, right: Number.MAX_SAFE_INTEGER + 1 },
+  { datatype: "decimal", left: "z", right: "1.0" },
+  { datatype: "decimal", left: 1, right: "1e2" },
+  { datatype: "double", left: 1, right: "0x10" },
+  { datatype: "float", left: "", right: 1 },
+  { datatype: "double", left: 1, right: Infinity },
+  { datatype: "double", left: 1, right: Number.NaN },
+  { datatype: "double", left: 1, right: [1, "z"], operator: "isAnyOf" },
+  { datatype: "dateTime", left: "z", right: "2026-10-26T12:00:00Z" },
+  { datatype: "dateTime", left: "2026-10-26T12:00:00Z", right: "invalid" },
+  { datatype: "dateTime", left: "2026-10-26T12:00:00Z", right: "2026-02-30T12:00:00Z" },
+  { datatype: "dateTime", left: "2026-10-26T12:00:00Z", right: "2026-99-99T12:00:00Z" },
+  { datatype: "dateTime", left: "2026-10-26", right: "2026-10-26T12:00:00Z" },
+  { datatype: "dateTime", left: 1, right: "2026-10-26T12:00:00Z" },
+  { datatype: "date", left: "z", right: "2026-10-26" },
+  { datatype: "date", left: "2026-10-26", right: "2026-02-30" },
+  { datatype: "string", left: 1, right: "x" },
+  { datatype: "string", left: "01", right: "1" },
+  { datatype: "string", left: "0x10", right: "16" },
+  { left: "0x10", right: "16" },
+  { left: "16", right: "0x10" },
+  { datatype: "string", left: " 1 ", right: "1" },
+  { datatype: "anyURI", left: "relative", right: "urn:valid" },
+  { datatype: "anyURI", left: 1, right: "urn:valid" },
+  { datatype: "unknown", left: "x", right: "x" },
+  { left: 1, right: "invalid", leftOperand: "count" },
+  { left: 1, right: [1, Infinity], operator: "isAnyOf" },
+  { left: "x", right: ["x", 1], operator: "isAnyOf" },
+  { left: "x", right: true },
+  { left: "x", right: null },
+  { left: "x", right: {} },
+  { left: "x", right: ["x", "y"] },
+  { left: "x", right: [] },
+  { left: [], right: "x" },
+  { left: "x", right: undefined },
+  { left: "2026-10-26T12:00:00Z", right: "z", leftOperand: "dateTime" },
+  { datatype: "string", left: "2026-10-26T12:00:00Z", right: "z", leftOperand: "dateTime" },
+])("treats non-comparable operands as indeterminate: %j", async ({
+  datatype,
+  left,
+  right,
+  operator,
+  leftOperand,
+}) => {
+  const c = {
+    leftOperand: leftOperand ?? "purpose",
+    operator: operator ?? "eq",
+    rightOperand: right,
+    ...(datatype === undefined ? {} : { datatype: `${XSD}${datatype}` }),
+  } as Constraint;
+  const q = intent({
+    action: "read",
+    attributes: { [c.leftOperand]: left, "fulfilled:inform": true },
+  });
+  for (const p of [
+    policy({ permissions: [{ ...permit, constraints: [c] }] }),
+    policy({ prohibitions: [{ ...permit, type: "prohibition", constraints: [c] }] }),
+    policy({
+      permissions: [
+        { ...permit, duties: [{ action: "inform", constraints: [c as OdrlConstraint] }] },
+      ],
+    }),
+    policy({ obligations: [{ action: "inform", constraints: [c as OdrlConstraint] }] }),
+  ]) {
+    expect(await solidOdrlEngine.evaluate(p, q)).toEqual({ effect: "indeterminate" });
+    expect(await evaluateIntent({ ...mandate(), autonomous: p }, q)).toEqual({
+      decision: "confirm-required",
+      reason: "indeterminate",
+    });
+  }
 });
