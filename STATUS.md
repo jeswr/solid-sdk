@@ -351,3 +351,63 @@ remains unavailable (`command -v roborev` found no executable), so automated per
 could not run; no tool was installed. Integration review, any follow-up bead for that unrelated
 failure, and tracker updates remain with the integration owner: this lane does not modify the
 external tracker or initialize a tracker in this worktree. Open questions: none.
+
+
+## Review fixes — `c4d58c39cb23` (sst-543)
+
+This round addresses exactly the two supplied findings on `lane/sst-543`:
+
+- `ee786e4b` — `fix(credentials): bind token issuance to profile selection`:
+  reject a profile whose embedded name differs from its filename. Pass the requested
+  provider/connection/purpose/resource tuple to token issuance and check it against the
+  profile actually loaded, before reading or refreshing a grant. Regressions cover an
+  embedded-name redirect and a profile replaced between selection and issuance with each
+  tuple field changed independently.
+- `0c2327a0` — `fix(credentials): serialize dead-owner lock recovery`:
+  use an exclusive per-profile `.lock.guard` around every lock acquisition, dead-owner
+  recovery and release. The ownership check and deletion now share the guard with all
+  acquisitions. Guarded work is synchronous; provider calls run after the guard is removed.
+  Tests launch a second real process in the final dead-owner check/delete gap and cover
+  contention, disappearing guards, insecure guards, failed acquisition and independent
+  profiles. Existing refresh, rotation and ownership tests remain green.
+- Final `docs: record credential review verification` commit — this verification record,
+  committed last.
+
+The conservative locking choice is to leave an abandoned guard in place and return the
+existing typed timeout. Automatically deleting it would recreate the same recovery race.
+README.md documents that an operator must stop all helpers using the store before removing
+such a guard. Normal dead profile-lock owners still recover automatically.
+
+Verification used Node 24.22.1 (`PATH=/opt/node24/bin:$PATH` for every pnpm command):
+
+| Command | Result |
+| --- | --- |
+| `pnpm exec turbo run lint build typecheck test --filter=@jeswr/agent-credentials --concurrency=4` | PASS; 5/5 tasks including root lint. 9 files, 161 tests; 100% statements (1428), branches (1074), functions (215), lines (1293), with per-file thresholds unchanged. |
+| `pnpm run lint:root` (invoked by package, affected and full gates) | PASS; all root guards passed. |
+| `TURBO_SCM_BASE=c4d58c39cb23d42737a10b54dc86a1689cf8c4ba pnpm run gate` | PASS; 5/5 tasks, 4 cached, in 21.191s. Uses this fix round's starting SHA to select the changed package and dependents. |
+| `pnpm run gate:full` | FAIL in unchanged root tests: `test/agent-layers.test.mjs:509` exceeded 5000 ms for the createRequire path-character fixture; `test/check-sdk-layers.test.mjs:328` measured 59.4 ms against its 50 ms limit. Root tests: 743 passed, 2 failed. Credential tests: 161 passed with 100% coverage. Turbo: 64 successful tasks out of 233 scheduled before stopping; 3m23.165s. |
+| `pnpm run test:root --testTimeout=20000 --hookTimeout=20000` | PASS in isolation; all 745 tests across 9 files, 113.58s. Only command-line timeouts were raised; the 50 ms performance assertion and repository configuration are unchanged. |
+| `git diff --exit-code c4d58c39cb23d42737a10b54dc86a1689cf8c4ba -- test/agent-layers.test.mjs test/check-sdk-layers.test.mjs scripts/check-agent-layers.mjs scripts/check-sdk-layers.mjs` | PASS; both failing test files and the tested guards are unchanged. |
+| `git diff --check` and `git show --check --oneline` for both fix commits | PASS. |
+
+All five profile regressions failed against the original source. The real-process lock
+regression also failed against the previous lock implementation: the contender acquired
+in the ownership-check/delete gap. Fixed source and built output were restored before
+committing and running the passing affected gate.
+
+The initial package gate passed all 157 then-present tests but missed an existing IPv6
+listener-success statement because this sandbox returns EAFNOSUPPORT for IPv6. The existing
+optional-listener fixture now deterministically exercises successful cleanup through a
+local IPv4 listener as well as the failure case. This is test-only; runtime listener behavior
+and coverage thresholds are unchanged. No timeout configuration was changed.
+
+No dependencies were added, so no dependency policy check was needed. Manifests and the
+lockfile are unchanged. Tests use temporary stores, injected fake providers and fake op
+executables. No live provider, real credential store, real op, tracker, network remote or
+other checkout was modified. No generated build artifacts are committed.
+
+Both requested fixes and their regression tests are complete. The full gate remains
+unsuccessful on the two load-sensitive timing checks, although all isolated root tests pass.
+The full-workspace timing failures remain outside this brief. Roborev is unavailable (`command -v roborev` found no
+executable), so automated per-commit review could not run; no tool was installed. Integration
+review and any follow-up tracker work remain with the integration owner. Open questions: none.
