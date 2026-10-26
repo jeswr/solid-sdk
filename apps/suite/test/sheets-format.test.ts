@@ -293,6 +293,27 @@ describe("cell input", () => {
     }
   });
   it.each([
+    ["Growth %", "en-US"],
+    ["  Growth 25%  ", "en-US"],
+    ["% growth", "en-US"],
+    ["Budget $", "en-US"],
+    ["Budget $12", "en-US"],
+    ["$ budget", "en-US"],
+    ["Budget €", "de-DE"],
+    ["USD budget", "en-US"],
+    ["Infinity pool", "en-US"],
+    ["NaN label", "en-US"],
+    ["Pool ∞", "en-US"],
+    ["∞ pool", "en-US"],
+    ["Growth ٪", "ar-EG"],
+    ["٪ growth", "ar-EG"],
+    ["Growth %", "tr-TR"],
+  ])("preserves numeric markers in text %j in %s", (value, locale) => {
+    for (const code of ["General", "%", "USD"]) {
+      expect(parseCellInput(value, locale, code)).toEqual({ type: "text", value });
+    }
+  });
+  it.each([
     "1,23",
     "12,34,567",
     "1,234,",
@@ -312,13 +333,18 @@ describe("cell input", () => {
     "12:00:30",
     "NaN",
     "Infinity",
+    "+Infinity",
     "-Infinity",
     "∞",
     "$12",
+    "$ 12",
+    "$12oops",
     "USD 12",
+    "USD 12oops",
     "12%oops",
     "12 %",
     "%12",
+    "%12oops",
     "9007199254740992",
     "0.10000000000000001",
     `0.${"0".repeat(400)}1`,

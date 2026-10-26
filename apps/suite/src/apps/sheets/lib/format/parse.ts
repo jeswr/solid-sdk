@@ -119,6 +119,13 @@ export function parseCellInput(input: string, locale: string, code = "General"):
   const date = parseDate(normalized, language, format.kind === "date");
   if (date !== null) return { type: "date", value: date };
   if (format.kind === "date") invalid("Input does not match a supported date or time");
+  // Markers in labels do not imply numbers. Prefix affixes must lead into numeric syntax.
+  const numericStart = /^[\p{N}+\-−.,\u061c\u200e\u200f]/u;
+  const numericCandidate =
+    numericStart.test(normalized) ||
+    /^(?:[%٪\p{Sc}]\s*[\p{N}+\-−.,\u061c\u200e\u200f]|[A-Z]{3}\s*\d)/u.test(normalized) ||
+    /^(?:NaN|[+-]?Infinity|∞)$/.test(text);
+  if (!numericCandidate) return { type: "text", value: input };
   if (format.kind === "number" && format.options.style === "currency") {
     return { type: "number", value: parseNumber(text, language, format.options) };
   }
@@ -126,11 +133,8 @@ export function parseCellInput(input: string, locale: string, code = "General"):
   if (/[%٪]/.test(text)) {
     return { type: "percent", value: parseNumber(text, language, { style: "percent" }) };
   }
-  if (/^[\p{N}+\-−.,\u061c\u200e\u200f]/u.test(normalized)) {
+  if (numericStart.test(normalized)) {
     return { type: "number", value: parseNumber(text, language, { style: "decimal" }) };
   }
-  if (/(?:\p{Sc}|∞)/u.test(text) || /^(?:NaN|[+-]?Infinity|[A-Z]{3}\s*\d)/.test(text)) {
-    invalid("Unsupported numeric or currency input");
-  }
-  return { type: "text", value: input };
+  invalid("Unsupported numeric or currency input");
 }
