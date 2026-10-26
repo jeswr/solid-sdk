@@ -76,13 +76,20 @@ export function createImportSession(
       if (subject !== url) itemKeys.add(JSON.stringify([url, subject]));
     }
     const result = await writer.write({ ...doc, dataset }, conditions ?? conditionFor(previous));
-    for (const request of registrationsFor([result])) {
+    let registered = result;
+    if (doc.registrationContainer !== undefined) {
+      const container = writer.resolve(doc.registrationContainer);
+      if (!container.endsWith("/") || !result.url.startsWith(container))
+        throw new IntegrationSyncError(id, "Registration container must contain the document.");
+      registered = { ...result, registrationContainer: container };
+    }
+    for (const request of registrationsFor([registered])) {
       registrations.set(JSON.stringify([request.forClass, request.container]), request);
     }
     reads.delete(url);
     const index = written.findIndex((w) => w.url === result.url);
-    if (index === -1) written.push(result);
-    else written[index] = result;
+    if (index === -1) written.push(registered);
+    else written[index] = registered;
     return result;
   }
   /** Binary resources carry no RDF; their metadata documents link to them. */
@@ -93,6 +100,17 @@ export function createImportSession(
     if (url.split(/[?#]/, 1)[0] === writer.resolve(RUNS))
       throw new Error("Reserved connector provenance slug.");
     return writer.writeBinary(doc);
+  }
+  async function remove(slug: string): Promise<void> {
+    if (!writer.remove) throw new IntegrationSyncError(id, "This host cannot delete resources.");
+    const url = writer.resolve(slug);
+    if (url.split(/[?#]/, 1)[0] === writer.resolve(RUNS))
+      throw new Error("Reserved connector provenance slug.");
+    const previous = reads.get(url);
+    reads.delete(url);
+    await writer.remove(slug, previous?.etag ? { ifMatch: previous.etag } : undefined);
+    const index = written.findIndex((w) => w.url === url);
+    if (index !== -1) written.splice(index, 1);
   }
   let finalized = false;
   async function finish() {
@@ -133,6 +151,7 @@ export function createImportSession(
     read,
     write,
     writeBinary,
+    remove,
     written,
     registrations: () => [...registrations.values()],
     finish,

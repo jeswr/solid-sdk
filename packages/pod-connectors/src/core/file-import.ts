@@ -63,6 +63,8 @@ export interface FileImportContext {
   write(doc: NormalisedDoc, conditions?: WriteConditions): Promise<WrittenDoc>;
   /** Store a non-RDF resource (see `ImportContext.writeBinary`). */
   writeBinary(doc: BinaryDoc): Promise<WrittenBinary>;
+  /** Delete a resource (see `ImportContext.remove`). */
+  remove(slug: string): Promise<void>;
   /** Report progress to the UI. */
   progress(p: ImportProgress): void;
   /** Shared row cap so adapters bound their own loops consistently. */
@@ -136,6 +138,7 @@ export async function runFileImport(opts: RunFileImportOptions): Promise<ImportR
       progress: (p) => opts.onProgress?.(p),
       write: session.write,
       writeBinary: session.writeBinary,
+      remove: session.remove,
     });
     if (session.written.length === 0) {
       throw new IntegrationSyncError(

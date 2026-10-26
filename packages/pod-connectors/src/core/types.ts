@@ -94,6 +94,11 @@ export interface NormalisedDoc {
   /** Source document for items without their own schema:url (e.g. file exports). */
   readonly sourceUrl?: string;
   /**
+   * Register `forClass` for this ancestor container slug (ending in `/`) instead of the
+   * document's own container, e.g. a mail account root holding `messages/` and `threads/`.
+   */
+  readonly registrationContainer?: string;
+  /**
    * Skip Type-Index registration for this doc's class (default false). Used
    * for companion documents that ride along in an already-registered
    * container (e.g. a profile doc beside the repositories collection).
@@ -127,6 +132,8 @@ export interface WrittenDoc {
   readonly category: string;
   readonly forClass: string;
   readonly skipRegistration?: boolean;
+  /** Absolute container registered instead of the document's own container. */
+  readonly registrationContainer?: string;
 }
 
 export interface ImportProgress {
@@ -160,6 +167,11 @@ export interface ImportContext {
    * adapter container. Throws `IntegrationSyncError` when the host writer has no binary port.
    */
   writeBinary(doc: BinaryDoc): Promise<WrittenBinary>;
+  /**
+   * Delete a resource the source deleted (RDF or binary). Missing resources are not an
+   * error. Throws `IntegrationSyncError` when the host writer has no delete port.
+   */
+  remove(slug: string): Promise<void>;
   /** Report progress to the UI. */
   progress(p: ImportProgress): void;
   /** Incremental cursor from the previous import of this adapter, if any. */
@@ -251,6 +263,8 @@ export interface PodWriter {
    * current ETag first and sends `If-Match` (or `If-None-Match: *` when absent).
    */
   writeBinary?(doc: BinaryDoc): Promise<WrittenBinary>;
+  /** Optional delete port with the same confinement; 404 counts as already deleted. */
+  remove?(slug: string, conditions?: { readonly ifMatch?: string }): Promise<void>;
   /** Ensure the distinct class/container registrations and report the index used. */
   registerType(registrations: readonly TypeRegistrationRequest[]): Promise<{ indexUrl: string }>;
 }

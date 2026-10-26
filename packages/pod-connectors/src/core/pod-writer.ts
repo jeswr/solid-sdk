@@ -64,6 +64,14 @@ export function createFetchPodWriter(options: FetchPodWriterOptions): PodWriter 
       };
     },
     writeBinary: async (doc) => writeBinaryResource(adapterId, resolve(doc.slug), doc, podFetch),
+    async remove(slug, conditions = {}) {
+      const url = resolve(slug);
+      const headers = new Headers();
+      if (conditions.ifMatch) headers.set("if-match", conditions.ifMatch);
+      const response = await podFetch(url, { method: "DELETE", headers });
+      if (!response.ok && response.status !== 404)
+        throw new ResourceWriteError(url, response.status);
+    },
     registerType: (registrations) =>
       ensureTypeRegistrations({
         webId,
@@ -127,7 +135,7 @@ export function registrationsFor(written: readonly import("./types.js").WrittenD
   const out = new Map<string, import("./types.js").TypeRegistrationRequest>();
   for (const doc of written) {
     if (doc.skipRegistration) continue;
-    const container = doc.url.slice(0, doc.url.lastIndexOf("/") + 1);
+    const container = doc.registrationContainer ?? doc.url.slice(0, doc.url.lastIndexOf("/") + 1);
     out.set(`${doc.forClass}|${container}`, { forClass: doc.forClass, container });
   }
   return [...out.values()];
