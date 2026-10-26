@@ -2043,6 +2043,9 @@ importers:
       '@types/react-dom':
         specifier: 19.2.3
         version: 19.2.3(@types/react@19.2.17)
+      '@vitest/coverage-v8':
+        specifier: 4.1.10
+        version: 4.1.10(vitest@4.1.10)
       tailwindcss:
         specifier: ^4
         version: 4.3.1
@@ -2649,10 +2652,23 @@ importers:
         version: 4.1.10(@types/node@26.1.1)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1)(vite@8.1.4(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0))
 
   packages/rdf-engine:
+    dependencies:
+      '@rdfjs/types':
+        specifier: 2.0.1
+        version: 2.0.1
+      '@sparq-org/sparq':
+        specifier: 0.1.5
+        version: 0.1.5
+      n3:
+        specifier: 2.0.3
+        version: 2.0.3
     devDependencies:
       '@biomejs/biome':
         specifier: ^2.5.1
         version: 2.5.3
+      '@types/n3':
+        specifier: 1.26.1
+        version: 1.26.1
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
@@ -8035,6 +8051,10 @@ packages:
   '@solidlab/policy-engine@0.0.2':
     resolution: {integrity: sha512-kWWNMXwxIVOTkgCOa5EEiO5um98cJZ0hREu6LKe3O/7O0BZ5XkeYfsZWuHbtgwXR+vblkRkQ7EBQffkNAjT/JA==}
 
+  '@sparq-org/sparq@0.1.5':
+    resolution: {integrity: sha512-YJ3awKa3OuNHJ7p5SpKoDch9uVyKP64YHEP8Bq6mt712rpjV2Xq6SlK2smOyzw9HA+bVOOl/InxYy48x6JWu5w==}
+    engines: {node: '>=18'}
+
   '@standard-schema/spec@1.1.0':
     resolution: {integrity: sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w==}
 
@@ -10551,6 +10571,9 @@ packages:
 
   fuzzysort@3.1.0:
     resolution: {integrity: sha512-sR9BNCjBg6LNgwvxlBd0sBABvQitkLzoVY9MYYROQVX/FvfJ4Mai9LsGhDgd8qYdds0bY77VzYd5iuB+v5rwQQ==}
+
+  fzstd@0.1.1:
+    resolution: {integrity: sha512-dkuVSOKKwh3eas5VkJy1AW1vFpet8TA/fGmVA5krThl8YcOVE/8ZIoEA1+U1vEn5ckxxhLirSdY837azmbaNHA==}
 
   generate-function@2.3.1:
     resolution: {integrity: sha512-eeB5GfMNeevm/GRYq20ShmsaGcmI81kIX2K9XQx5miC8KdHaC6Jm0qQ8ZNeGOi7wYB8OsdxKs+Y2oVuTFuVwKQ==}
@@ -20426,6 +20449,10 @@ snapshots:
     transitivePeerDependencies:
       - encoding
 
+  '@sparq-org/sparq@0.1.5':
+    dependencies:
+      fzstd: 0.1.1
+
   '@standard-schema/spec@1.1.0': {}
 
   '@standard-schema/utils@0.3.0': {}
@@ -23474,6 +23501,8 @@ snapshots:
   functions-have-names@1.2.3: {}
 
   fuzzysort@3.1.0: {}
+
+  fzstd@0.1.1: {}
 
   generate-function@2.3.1:
     dependencies:

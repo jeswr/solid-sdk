@@ -7,8 +7,15 @@ export default defineConfig({
     coverage: {
       enabled: true,
       provider: "v8",
-      include: ["src/apps/health/lib/stats/**/*.ts"],
-      thresholds: { perFile: true, lines: 100, statements: 100, functions: 100, branches: 100 },
+      include: ["src/apps/photos/lib/library/**/*.ts"],
+      reporter: ["text", "json-summary"],
+      thresholds: {
+        perFile: true,
+        statements: 100,
+        branches: 100,
+        functions: 100,
+        lines: 100,
+      },
     },
   },
 });
