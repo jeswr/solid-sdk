@@ -25,6 +25,7 @@ export function CustomiseRail({ apps }: { apps: readonly NavigationApp[] }) {
     });
   }
   function move(slug: AppSlug, target: number) {
+    if (pinned.indexOf(slug) === target) return;
     const next = pinned.filter((item) => item !== slug);
     if (!pinned.includes(slug) && pinned.length >= 6) return;
     next.splice(target, 0, slug);

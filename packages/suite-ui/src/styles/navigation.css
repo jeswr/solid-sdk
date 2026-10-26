@@ -372,8 +372,11 @@
     transform: none !important;
     /* biome-ignore lint/complexity/noImportantStyles: Override Radix inline max-content wrapper on mobile. */
     width: 100% !important;
+    /* biome-ignore lint/complexity/noImportantStyles: Radix inline max-content minimum must not prevent 320px reflow. */
+    min-width: 0 !important;
   }
   .suite-launcher {
+    overflow-wrap: anywhere;
     width: 100%;
     max-width: none;
     height: 100dvh;

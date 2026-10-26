@@ -170,13 +170,20 @@ export function NavigationFixture({
           <label className="fixture-state">
             Fixture state
             <select value={state} onChange={(event) => setState(event.target.value)}>
-              {["ready", "loading", "refreshing", "saving", "empty", "cached", ...errors].map(
-                (option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ),
-              )}
+              {[
+                "ready",
+                "loading",
+                "refreshing",
+                "saving",
+                "empty",
+                "cached",
+                "unavailable",
+                ...errors,
+              ].map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
             </select>
           </label>
           {state === "cached" && <p role="status">Offline — showing saved copies</p>}

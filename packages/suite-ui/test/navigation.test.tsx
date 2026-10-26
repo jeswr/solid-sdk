@@ -90,7 +90,9 @@ describe("AppLauncher", () => {
     await user.keyboard("{ArrowRight}");
     expect(document.activeElement).toBe(within(grid).getByRole("link", { name: "Drive" }));
     expect(document.activeElement?.getAttribute("aria-current")).toBe("page");
-    await user.keyboard("{ArrowDown}");
+    await user.keyboard("{ArrowUp}");
+    expect(document.activeElement).toBe(within(grid).getByRole("link", { name: "Drive" }));
+    await user.keyboard("{ArrowDown}{ArrowDown}");
     expect(document.activeElement).toBe(within(grid).getByRole("link", { name: "Permissions" }));
     await user.keyboard("{ArrowUp}{ArrowLeft}");
     expect(document.activeElement).toBe(within(grid).getByRole("link", { name: "Home" }));
@@ -172,6 +174,8 @@ describe("AppLauncher", () => {
       pinned: ["drive", "docs", "tasks", "calendar", "permissions"],
     });
     const docs = screen.getByRole("checkbox", { name: "Docs" }).closest("li");
+    fireEvent.drop(docs as HTMLElement, { dataTransfer: { getData: () => "docs" } });
+    expect(update).toHaveBeenCalledTimes(3);
     fireEvent.drop(docs as HTMLElement, { dataTransfer: { getData: () => "contacts" } });
     expect(update).toHaveBeenLastCalledWith({
       pinned: ["drive", "contacts", "docs", "tasks", "calendar", "permissions"],

@@ -35,16 +35,19 @@ export function AppGrid({
         let next = index;
         switch (event.key) {
           case "ArrowRight":
-            next = Math.min(index + 1, apps.length - 1);
+            next = index % 3 < 2 ? Math.min(index + 1, apps.length - 1) : index;
             break;
           case "ArrowLeft":
-            next = Math.max(index - 1, 0);
+            next = index % 3 > 0 ? index - 1 : index;
             break;
           case "ArrowDown":
-            next = Math.min(index + 3, apps.length - 1);
+            next =
+              Math.floor(index / 3) < rows.length - 1
+                ? Math.min(index + 3, apps.length - 1)
+                : index;
             break;
           case "ArrowUp":
-            next = Math.max(index - 3, 0);
+            next = index >= 3 ? index - 3 : index;
             break;
           case "Home":
             next = event.ctrlKey ? 0 : Math.floor(index / 3) * 3;
