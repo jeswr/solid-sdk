@@ -116,3 +116,31 @@ Package and app lint/build/typecheck/test pass. The final affected gate rebuilds
 The full-workspace gate exits 1 at the pre-existing `@jeswr/unstorage-solid#build` bootstrap, which attempts `git clone https://github.com/jeswr/fetch-rdf.git`. The temporary PATH guard rejects it before any network Git operation (29 tasks succeeded before the gate stopped). This is the same unrelated blocker documented above; its build scripts were left unchanged.
 
 Playwright discovery passes with **606 cases** across two files and six projects. No browser was launched or screenshots taken, as required by the original brief. Browser execution, actual layout/colour assertions and screenshots remain for the dispatcher. `git diff --check` passes; generated build output is uncommitted. `roborev` remains unavailable on PATH, so per-commit automated verdicts could not be read. All requested fixes are implemented; this fix round adds no open questions.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+## Fix round 2 — review of a0bd08653bf5
+
+Only the three requested findings were changed, each with regression tests:
+
+- `9012bada fix: preserve slots in form controls`: mark FormControl with `data-form-control` so child slots retain their CSS adapters. Test input and checkbox borders, checkbox minimum dimensions, labels, descriptions and valid state through react-hook-form.
+- `fb2befd7 fix: suppress disabled icon button activation`: guard click, double-click, keyboard, pointer and mouse activation while keeping Tab navigation and focus/hover tooltip discovery available. Test disabled and enabled callbacks, real dropdown composition with Enter/Space/ArrowDown/pointer activation, focus tooltips and re-enabling.
+- `7a6f0e94 fix: align slider defaults with rendered thumbs`: share the native one-value `[min]` fallback between Radix state and thumb creation. Test actual FormData for default/custom minima, single/range defaults and controlled values, plus keyboard adjustment and focus retention.
+- Final documentation commit: this validation report.
+
+Conservative choice: preserve Radix's native single-thumb default. No dependencies, fixture designs or unrelated packages changed. No network Git operation, push, PR, branch switch or other-checkout edit was performed.
+
+Validation commands:
+
+```sh
+pnpm --filter @jeswr/suite-ui run lint && pnpm --filter @jeswr/suite-ui run build && pnpm --filter @jeswr/suite-ui run typecheck && pnpm --filter @jeswr/suite-ui run test
+pnpm run lint:root
+PATH="/tmp/ds02-git-guard:$PATH" TURBO_SCM_BASE=a0bd08653bf5283b8b184ef864680213f0bcae19 pnpm run gate
+PATH="/tmp/ds02-git-guard:$PATH" pnpm run gate:full
+git diff --check
+```
+
+Suite-ui lint/build/typecheck/test pass: **125 tests across six files**. The new regressions reproduced the overwritten slot, disabled dropdown opening and extra empty Slider submission before their fixes. Root lint and guards pass, including all 74 contrast pairs. The affected workspace gate passes **9/9 tasks**, including the dependent suite app's lint/build/typecheck/test. The existing harmless jsdom canvas warning remains.
+
+The full-workspace gate exits 1 at the pre-existing `@jeswr/unstorage-solid#build` dependency bootstrap: it attempts `git clone https://github.com/jeswr/fetch-rdf.git`, which the temporary PATH guard rejects before any network Git operation. **10 tasks succeeded** before the gate stopped. This is the same unrelated blocker documented in earlier rounds; bootstrap scripts were left unchanged. `git diff --check` passes.
+
+No browser was launched or screenshots taken, per the original brief. `roborev` remains unavailable on PATH, so automated per-commit verdicts could not be read. All three requested fixes are complete; no new open questions.
