@@ -61,7 +61,7 @@ npm run test:e2e      # Build + run Playwright e2e tests
 
 ### E2E Testing
 
-- Requires headed Chrome (extensions don't work in headless)
+- Runs in headless Chromium (`channel: 'chromium'`, the new headless mode, loads extensions); no display server needed
 - Uses Community Solid Server on localhost:3000 with in-memory storage
 - Test site served on a separate port
 - Extension loaded from `dist/` via `--load-extension`

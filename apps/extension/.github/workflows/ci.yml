@@ -28,7 +28,7 @@ jobs:
         run: npx playwright install chromium
 
       - name: Run E2E tests
-        run: xvfb-run npm run test:e2e
+        run: npm run test:e2e
 
       - name: Upload extension artifact
         uses: actions/upload-artifact@v4

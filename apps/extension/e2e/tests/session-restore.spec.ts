@@ -1,5 +1,5 @@
 import { expect, test } from '../fixtures';
-import { performLogin } from './helpers';
+import { grantTestSite, performLogin } from './helpers';
 
 const TEST_SITE = 'http://localhost:8080';
 
@@ -11,6 +11,7 @@ test('session persists across navigation (the worker holds the session)', async 
 
   const page = await context.newPage();
   await page.goto(TEST_SITE);
+  await grantTestSite(context, page);
   await expect(page.locator('#webid')).toContainText('test-pod', { timeout: 15_000 });
 
   await page.goto('about:blank');

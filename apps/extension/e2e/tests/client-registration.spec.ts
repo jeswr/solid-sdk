@@ -1,5 +1,5 @@
 import { expect, test } from '../fixtures';
-import { completeOidcLogin, TEST_WEBID } from './helpers';
+import { completeOidcLogin, grantTestSite, TEST_WEBID } from './helpers';
 
 const TEST_SITE = 'http://localhost:8080';
 const APP_SITE = 'http://localhost:8081';
@@ -11,10 +11,10 @@ test('default popup login (dynamic registration) authenticates a private fetch',
   const popupPage = await context.newPage();
   await popupPage.goto(`chrome-extension://${extensionId}/popup/popup.html`);
   // The signed-out surface is <jeswr-login-panel>; target its shadow parts.
-  await popupPage.fill('#login-panel >>> [part="webid-input"]', TEST_WEBID);
+  await popupPage.fill('#login-panel [part="webid-input"]', TEST_WEBID);
 
   const loginPagePromise = context.waitForEvent('page');
-  await popupPage.click('#login-panel >>> [part="login-button"]');
+  await popupPage.click('#login-panel [part="login-button"]');
   await completeOidcLogin(await loginPagePromise);
 
   await popupPage.goto(`chrome-extension://${extensionId}/popup/popup.html`);
@@ -23,6 +23,7 @@ test('default popup login (dynamic registration) authenticates a private fetch',
 
   const page = await context.newPage();
   await page.goto(TEST_SITE);
+  await grantTestSite(context, page);
   await expect(page.locator('#fetch-result')).toContainText('Private Note', { timeout: 15_000 });
 });
 

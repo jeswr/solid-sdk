@@ -15,8 +15,10 @@ export const test = base.extend<{
     const pathToExtension = path.resolve(__dirname, '../dist');
     const context = await chromium.launchPersistentContext('', {
       channel: 'chromium',
-      headless: false,
+      headless: true,
       args: [
+        '--disable-crash-reporter',
+        '--disable-breakpad',
         `--disable-extensions-except=${pathToExtension}`,
         `--load-extension=${pathToExtension}`,
       ],

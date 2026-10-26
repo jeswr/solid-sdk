@@ -15,8 +15,13 @@ async function discoverExtensionId(): Promise<string> {
   const extPath = path.resolve(__dirname, '../../dist');
   const ctx = await chromium.launchPersistentContext('', {
     channel: 'chromium',
-    headless: false,
-    args: [`--disable-extensions-except=${extPath}`, `--load-extension=${extPath}`],
+    headless: true,
+    args: [
+      '--disable-crash-reporter',
+      '--disable-breakpad',
+      `--disable-extensions-except=${extPath}`,
+      `--load-extension=${extPath}`,
+    ],
   });
   let sw = ctx.serviceWorkers()[0];
   if (!sw) sw = await ctx.waitForEvent('serviceworker');

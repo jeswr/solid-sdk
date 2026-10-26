@@ -6,7 +6,7 @@ export default defineConfig({
   fullyParallel: true,
   retries: 0,
   use: {
-    headless: false,
+    headless: true,
   },
   // Paths are resolved relative to this config file's directory. This package is
   // `"type": "module"`, so Playwright loads these `.ts` files as ESM — `require` is not

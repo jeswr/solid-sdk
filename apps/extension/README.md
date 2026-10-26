@@ -278,8 +278,9 @@ npm run test:e2e       # build + Playwright against a LOCAL Community Solid Serv
 
 The unit suite stubs `fetch` / `chrome.*` and needs no server. The Playwright e2e suite
 boots a **local** Community Solid Server (`e2e/setup`) and a local test site — **never** the
-live deploy — and drives the real extension in headed Chromium. CI uses Node.js 24 and
-runs the gate before the local-server e2e suite.
+live deploy — and drives the real extension in headless Chromium. CI uses Node.js 24 and
+runs the gate before the local-server e2e suite. See [e2e/README.md](e2e/README.md) for
+setup and runner troubleshooting.
 
 ## License
 
