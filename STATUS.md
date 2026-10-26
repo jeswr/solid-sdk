@@ -19,15 +19,18 @@ Branch: `lane/sst-93m.4`. Base: `3696bed75683e5c7aa253ba8a7cc163f5b8a1e07`.
 - `951e0a47 docs(suite): record DS-03 lane results` — initial lane validation report.
 - `8c24acea fix(suite-ui): match rounded launcher hexagons` — align app tiles and
   the brand mark with the references' rounded, stroked SVG hexagons and 16px brand glyph.
-- Final `docs(suite): refresh DS-03 validation results` commit — this updated report.
+- `ffdfbcc6 docs(suite): refresh DS-03 validation results` — previous validation report.
+- Final `docs(suite): record DS-03 revalidation` commit — audit and fresh gate results below.
 
 ## Validation
 
 Commands ran in this checkout. The sandbox supplies a relative toolchain PATH; for
 Turbo and dependency builds it was normalised within the command shell with
 `export PATH="$PWD/node_modules/.bin:$PATH"` (no repository config change).
-The per-project checks, root lint and affected gate below were rerun successfully
-after `8c24acea`; the affected gate completed 14/14 tasks (4 cached) in 37.762s.
+The existing implementation was audited again against the brief on 2026-10-26;
+no new code defect or required implementation change was found. The per-project
+checks, root lint and affected gate below were rerun successfully on `ffdfbcc6`;
+the affected gate completed 14/14 tasks (10 cached) in 11.046s.
 
 - `pnpm --filter @jeswr/suite-ui run lint && pnpm --filter @jeswr/suite-ui run build && pnpm --filter @jeswr/suite-ui run typecheck && pnpm --filter @jeswr/suite-ui run test`
   — PASS on final component code; 2 test files, 26 tests. jsdom/Testing Library covers
@@ -48,14 +51,14 @@ after `8c24acea`; the affected gate completed 14/14 tasks (4 cached) in 37.762s.
   `test/characterization.test.ts:196`, “delegation credential structure is stable”.
   The inline snapshot expects the serialized JWK property order `crv,x,kty`, while
   this runtime emits `kty,crv,x`; the values match. 53/54 tests in that package pass.
-  The latest run after `8c24acea` reports 216 successful / 254 total tasks, 207 cached,
-  then stops (exit 1, 6.799s). The initial run reached 304 / 358 tasks, 13 cached.
+  The latest revalidation run reports 233 successful / 367 total tasks, 218 cached,
+  then stops (exit 1, 15.565s). The initial run reached 304 / 358 tasks, 13 cached.
   No files or
   dependency versions in federation-trust were changed by this lane. Its snapshot
   was left untouched. The initial full gate's explicit app build steps generated public
   callback/client-id files in eight pod app directories; only those newly generated
   files were removed to restore the clean tree. The latest run left no generated
-  untracked files.
+  untracked files. The revalidation run also left the tree clean.
 - `pnpm install --ignore-scripts` and then `pnpm install --frozen-lockfile --ignore-scripts`
   — PASS. Lifecycle scripts stayed disabled. Unrelated ESLint snapshot reordering
   from pnpm was removed; frozen install verified the scoped lockfile. Existing
@@ -77,6 +80,8 @@ Radix/Lucide UI and jsdom/Testing Library/axe unit tests:
   — PASS: all 6 cleared (full mode, npm).
 - `pnpm run check:packages react react-dom @types/react @types/react-dom`
   — PASS: all 4 cleared (full mode, npm).
+
+The revalidation added no dependencies and made no manifest or lockfile changes.
 
 ## Browser delivery and remaining integration
 
