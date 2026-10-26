@@ -69,6 +69,41 @@ it("exposes determinate and unknown progress correctly", () => {
     screen.getByRole("progressbar", { name: "Preparing" }).getAttribute("aria-valuenow"),
   ).toBeNull();
 });
+it.each([
+  [0, 10, "translateX(-100%)", "0"],
+  [5, 10, "translateX(-50%)", "5"],
+  [10, 10, "translateX(-0%)", "10"],
+  [40, undefined, "translateX(-60%)", "40"],
+  [null, 10, "translateX(-100%)", null],
+  [undefined, 10, "translateX(-100%)", null],
+] as const)("normalizes progress %s against max %s", (value, max, transform, accessibleValue) => {
+  render(
+    <Progress
+      {...(value === undefined ? {} : { value })}
+      {...(max === undefined ? {} : { max })}
+      aria-label="Upload"
+    />,
+  );
+  const progress = screen.getByRole("progressbar", { name: "Upload" });
+  expect(progress.getAttribute("aria-valuemax")).toBe(String(max ?? 100));
+  expect(progress.getAttribute("aria-valuenow")).toBe(accessibleValue);
+  expect(
+    progress.querySelector<HTMLElement>('[data-slot="progress-indicator"]')?.style.transform,
+  ).toBe(transform);
+});
+it.each([0, -1, Number.NaN])("uses Radix's fallback for an invalid maximum %s", (max) => {
+  const error = vi.spyOn(console, "error").mockImplementation(() => {});
+  try {
+    render(<Progress value={50} max={max} aria-label="Upload" />);
+    const progress = screen.getByRole("progressbar", { name: "Upload" });
+    expect(progress.getAttribute("aria-valuemax")).toBe("100");
+    expect(
+      progress.querySelector<HTMLElement>('[data-slot="progress-indicator"]')?.style.transform,
+    ).toBe("translateX(-50%)");
+  } finally {
+    error.mockRestore();
+  }
+});
 it("opens an accessible dialog and restores focus on close", async () => {
   render(
     <TooltipProvider>
