@@ -68,6 +68,15 @@ missing session, or `expectedWebId` mismatch returns `false` and leaves the boun
 Successful calls return `true` and add all origins. Omitting `expectedWebId` targets the session
 live at call time; the next login/restore resets additions.
 
+`rememberAccount(webId, displayName?, avatarUrl?)` merges credential-free display metadata into
+the recent-accounts list. An invalid WebID makes the call a no-op: WebIDs must be absolute HTTPS
+URLs, or HTTP loopback URLs with `allowInsecureLoopback`. The exported
+`MAX_DISPLAY_NAME_LENGTH` is 256 Unicode code points; newly stored display labels, including
+WebID fallback labels, are truncated without splitting surrogate pairs. The full WebID stays
+intact. Avatars must be absolute HTTP(S) URLs; other schemes and relative URLs are dropped.
+Omitted names/avatars preserve existing metadata, and an unsafe avatar does not replace a
+previously stored safe one. Storage failures are non-fatal.
+
 ## Links
 
 - [Source](https://github.com/jeswr/solid-auth-core)

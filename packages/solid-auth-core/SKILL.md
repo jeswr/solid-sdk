@@ -44,6 +44,7 @@ React consumers use `SessionProvider` and `useSolidSession()` from `@jeswr/solid
 - Use `logout()` for intentional sign-out or a definitive invalid grant; await durable cleanup before publishing logged-out state.
 - Persist/rotate credentials before publishing authenticated state.
 - Use `rememberAccount()` for display metadata instead of an app-local overlay.
+- `rememberAccount()` is a no-op for WebIDs outside HTTPS (HTTP loopback requires `allowInsecureLoopback`). Newly stored labels, including WebID fallbacks, are truncated to the exported `MAX_DISPLAY_NAME_LENGTH` (256 Unicode code points); the full account WebID is preserved. Admit only absolute HTTP(S) avatars. Omitted metadata and rejected avatars preserve existing safe values.
 - Prefer a stable Client Identifier Document and WebID-first login. If a profile advertises multiple issuers or storage roots, require an explicit choice.
 
 This package is security-critical. Keep tests adversarial and non-vacuous, including cross-account switching, delayed stale operations, login-stall regression, pristine-fetch routing, foreign-origin refusal, DPoP nonce handling, and restore/logout races. Run the full gate.

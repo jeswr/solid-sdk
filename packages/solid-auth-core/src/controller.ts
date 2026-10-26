@@ -729,6 +729,9 @@ class MemorySessionStore implements SessionStore {
  */
 const MAX_RECENT_ACCOUNTS = 8;
 
+/** Maximum stored recent-account display-name length, measured in Unicode code points. */
+export const MAX_DISPLAY_NAME_LENGTH = 256;
+
 /**
  * The credential-free display name / avatar an app may attach to a recent account.
  * `displayName` OMITTED (or equal to the WebID) means "no explicit human name" —
@@ -831,7 +834,7 @@ class RecentAccountsList {
       const avatarUrl = admissibleAvatarUrl(account.avatarUrl) ?? existing?.avatarUrl;
       const entry: RecentLoginAccount = {
         webId: account.webId,
-        displayName,
+        displayName: Array.from(displayName).slice(0, MAX_DISPLAY_NAME_LENGTH).join(""),
         ...(avatarUrl !== undefined ? { avatarUrl } : {}),
       };
       globalThis.localStorage?.setItem(
@@ -1129,7 +1132,20 @@ class SolidAuthEngine implements SolidAuth {
     return this.#recentAccounts.list();
   }
 
+  /**
+   * Record credential-free display metadata, merging any existing name/avatar.
+   * No-op unless `webId` is an absolute HTTPS URL, or HTTP loopback with
+   * `allowInsecureLoopback`. Stored display names (including WebID fallback labels)
+   * are truncated to {@link MAX_DISPLAY_NAME_LENGTH} Unicode code points. Only
+   * absolute HTTP(S) avatars are admitted; an inadmissible avatar preserves any
+   * existing safe avatar. Storage failures are swallowed.
+   */
   rememberAccount(webId: string, displayName?: string, avatarUrl?: string): void {
+    try {
+      validateWebId(webId, this.#opts.allowInsecureLoopback ?? false);
+    } catch {
+      return;
+    }
     // The first-class friendly-name/avatar writer (so a consumer needn't hand-roll a
     // display-name overlay). Delegates to the MERGE-PRESERVING recent-accounts list:
     // the engine already records this account with the WebID as its displayName on

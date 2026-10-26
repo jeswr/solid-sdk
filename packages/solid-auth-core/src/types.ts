@@ -20,7 +20,7 @@
 export interface RecentLoginAccount {
   /** The account's WebID (the canonical id, and the dedup key). */
   webId: string;
-  /** A human display name (foaf:name), or the WebID if none. */
+  /** A human display name (foaf:name), or the WebID if none; new writes cap it at 256 code points. */
   displayName: string;
   /** An avatar URL (foaf:img / vcard:hasPhoto), if the profile has one. */
   avatarUrl?: string;
@@ -159,12 +159,19 @@ export interface SolidAuthController {
    * (`foaf:name`) + avatar so the "Welcome back, …" affordance shows the name,
    * not the raw WebID.
    *
+   * No-op unless `webId` parses as an absolute HTTPS URL, or HTTP on loopback
+   * (`localhost`, `127.0.0.1`, `[::1]`) with `allowInsecureLoopback` enabled.
+   * The full WebID is preserved as the account identifier.
+   *
    * Semantics (a MERGE, most-recent-first, deduped by WebID, capped):
    *  - `displayName` — when a non-empty name OTHER than the WebID is given it is
    *    stored; when omitted (or equal to the WebID) a previously-recorded human
    *    name for this WebID is PRESERVED, else it defaults to the WebID. So the
    *    engine's own internal re-record on a later login never clobbers a name you
-   *    set here, and you never have to pass the WebID as a manual default.
+   *    set here, and you never have to pass the WebID as a manual default. The
+   *    resulting stored label (including a WebID fallback) is truncated to
+   *    `MAX_DISPLAY_NAME_LENGTH` (256 Unicode code points, preserving surrogate
+   *    pairs).
    *  - `avatarUrl` — stored only when it is an `http(s)` URL (an untrusted-profile
    *    guard — a `javascript:`/`data:`/`file:` avatar is dropped, never persisted);
    *    omitting it PRESERVES any previously-recorded avatar.

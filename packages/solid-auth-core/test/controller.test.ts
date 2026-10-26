@@ -277,9 +277,8 @@ vi.mock("oauth4webapi", () => {
 });
 
 // Import AFTER the mocks are registered.
-const { createSolidAuth, MissingAuthFlowError, isUseDpopNonceChallenge } = await import(
-  "../src/index.js"
-);
+const { createSolidAuth, MAX_DISPLAY_NAME_LENGTH, MissingAuthFlowError, isUseDpopNonceChallenge } =
+  await import("../src/index.js");
 
 /** A simple in-memory SessionStore that records puts. */
 class RecordingStore implements SessionStore {
@@ -4608,6 +4607,10 @@ describe("createSolidAuth — rememberAccount (first-class friendly-name writer)
   const Alice = "https://alice.pod.example/profile/card#me";
   const RecentKey = "remember-account.recent-accounts";
 
+  it("exports the 256-code-point display-name limit from the package entrypoint", () => {
+    expect(MAX_DISPLAY_NAME_LENGTH).toBe(256);
+  });
+
   function installLocalStorage(): { map: Map<string, string>; restore: () => void } {
     const map = new Map<string, string>();
     const ls = {
@@ -4628,15 +4631,161 @@ describe("createSolidAuth — rememberAccount (first-class friendly-name writer)
     };
   }
 
-  function build(recentKey = RecentKey): ReturnType<typeof createSolidAuth> {
+  function build(
+    recentKey = RecentKey,
+    allowInsecureLoopback = false,
+  ): ReturnType<typeof createSolidAuth> {
     return createSolidAuth({
       authFlow,
       callbackUri: "https://app.example/callback",
       clientId: "https://app.example/clientid.jsonld",
       store: new RecordingStore(),
       recentAccountsKey: recentKey,
+      allowInsecureLoopback,
     });
   }
+
+  it.each([
+    "javascript:alert(1)",
+    "data:text/html,<script>1</script>",
+    "file:///profile/card#me",
+    "ftp://pod.example/profile/card#me",
+    "blob:https://alice.pod.example/id",
+    "/profile/card#me",
+    "//alice.pod.example/profile/card#me",
+    "not a url",
+    "https://[invalid",
+    "",
+    "http://pod.example/profile/card#me",
+    "http://localhost:3000/profile/card#me",
+    "http://127.0.0.1:3000/profile/card#me",
+    "http://[::1]:3000/profile/card#me",
+  ])("does not write or reorder accounts for inadmissible WebID %j", (webId) => {
+    const ls = installLocalStorage();
+    try {
+      const controller = build();
+      controller.rememberAccount(Alice, "Alice");
+      const before = ls.map.get(RecentKey);
+      expect(() =>
+        controller.rememberAccount(webId, "Untrusted", "https://example/avatar.png"),
+      ).not.toThrow();
+      expect(ls.map.get(RecentKey)).toBe(before);
+      expect(controller.recentAccounts()).toEqual([{ webId: Alice, displayName: "Alice" }]);
+    } finally {
+      ls.restore();
+    }
+  });
+
+  it.each([
+    "localhost",
+    "127.0.0.1",
+    "[::1]",
+  ])("admits an HTTP WebID on %s only with the loopback opt-in", (host) => {
+    const ls = installLocalStorage();
+    try {
+      const controller = build(RecentKey, true);
+      const webId = `http://${host}:3000/profile/card#me`;
+      controller.rememberAccount(webId, "Local account");
+      expect(controller.recentAccounts()).toEqual([{ webId, displayName: "Local account" }]);
+    } finally {
+      ls.restore();
+    }
+  });
+
+  it.each([
+    "pod.example",
+    "localhost.evil.example",
+    "127.0.0.1.evil.example",
+  ])("rejects an HTTP WebID on %s even with the loopback opt-in", (host) => {
+    const ls = installLocalStorage();
+    try {
+      const controller = build(RecentKey, true);
+      controller.rememberAccount(`http://${host}/profile/card#me`, "Untrusted");
+      expect(ls.map.has(RecentKey)).toBe(false);
+      expect(controller.recentAccounts()).toEqual([]);
+    } finally {
+      ls.restore();
+    }
+  });
+
+  it.each([
+    255, 256, 257, 1024,
+  ])("caps a %i-code-point name at 256 without splitting Unicode", (length) => {
+    const ls = installLocalStorage();
+    try {
+      const controller = build();
+      const displayName = "A".repeat(255) + "😀".repeat(length - 255);
+      controller.rememberAccount(Alice, displayName);
+      const expected = Array.from(displayName).slice(0, 256).join("");
+      expect(controller.recentAccounts()[0]?.displayName).toBe(expected);
+      expect(JSON.parse(ls.map.get(RecentKey) as string)[0].displayName).toBe(expected);
+      controller.rememberAccount(Alice);
+      expect(controller.recentAccounts()[0]?.displayName).toBe(expected);
+    } finally {
+      ls.restore();
+    }
+  });
+
+  it("caps the WebID-derived fallback label while preserving the full account identifier", () => {
+    const ls = installLocalStorage();
+    try {
+      const controller = build();
+      const webId = `https://alice.pod.example/${"a".repeat(256)}#me`;
+      controller.rememberAccount(webId);
+      expect(controller.recentAccounts()).toEqual([{ webId, displayName: webId.slice(0, 256) }]);
+    } finally {
+      ls.restore();
+    }
+  });
+
+  it("caps a preserved older name when rewriting the account without a new name", () => {
+    const ls = installLocalStorage();
+    try {
+      const controller = build();
+      ls.map.set(RecentKey, JSON.stringify([{ webId: Alice, displayName: "😀".repeat(257) }]));
+      controller.rememberAccount(Alice);
+      expect(controller.recentAccounts()[0]?.displayName).toBe("😀".repeat(256));
+    } finally {
+      ls.restore();
+    }
+  });
+
+  it.each([
+    "javascript:alert(1)",
+    "data:image/png;base64,AAAA",
+    "file:///avatar.png",
+    "ftp://example/avatar.png",
+    "blob:https://example/id",
+    "/avatar.png",
+    "not a url",
+  ])("drops inadmissible avatar %j from persisted and returned accounts", (avatarUrl) => {
+    const ls = installLocalStorage();
+    try {
+      const controller = build();
+      controller.rememberAccount(Alice, "Alice", avatarUrl);
+      expect(controller.recentAccounts()).toEqual([{ webId: Alice, displayName: "Alice" }]);
+      expect(JSON.parse(ls.map.get(RecentKey) as string)).toEqual([
+        { webId: Alice, displayName: "Alice" },
+      ]);
+    } finally {
+      ls.restore();
+    }
+  });
+
+  it("admits HTTP avatars and preserves an existing avatar when an unsafe replacement is dropped", () => {
+    const ls = installLocalStorage();
+    try {
+      const controller = build();
+      const avatarUrl = "http://images.example/avatar.png";
+      controller.rememberAccount(Alice, "Alice", avatarUrl);
+      controller.rememberAccount(Alice, "Alice", "javascript:alert(1)");
+      expect(controller.recentAccounts()).toEqual([
+        { webId: Alice, displayName: "Alice", avatarUrl },
+      ]);
+    } finally {
+      ls.restore();
+    }
+  });
 
   it("records displayName = WebID by DEFAULT when no name is given", async () => {
     const ls = installLocalStorage();
