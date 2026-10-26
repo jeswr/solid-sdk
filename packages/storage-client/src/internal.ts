@@ -22,8 +22,15 @@ export function throwIfAborted(method: string, url: string, signal: AbortSignal 
 /**
  * Collect any supported body into bytes. Strings are UTF-8 encoded. Aborting `signal` cancels a
  * pending stream and stops collection early; callers must re-check the signal before committing.
+ * A failing stream becomes a non-retryable `network` StorageError for `method url` (the body is
+ * spent), or the abort error when the signal fired.
  */
-export async function toBytes(body: Body, signal?: AbortSignal): Promise<Uint8Array> {
+export async function toBytes(
+  body: Body,
+  signal?: AbortSignal,
+  method = "PUT",
+  url = "",
+): Promise<Uint8Array> {
   if (typeof body === "string") return new TextEncoder().encode(body);
   if (body instanceof Uint8Array) return new Uint8Array(body);
   const reader = (body instanceof Blob ? body.stream() : body).getReader();
@@ -39,6 +46,15 @@ export async function toBytes(body: Body, signal?: AbortSignal): Promise<Uint8Ar
       chunks.push(value);
       size += value.byteLength;
     }
+  } catch (cause) {
+    throwIfAborted(method, url, signal);
+    throw new StorageError("network", {
+      method,
+      url,
+      cause,
+      retryable: false,
+      message: `${method} ${url}: the request body failed`,
+    });
   } finally {
     signal?.removeEventListener("abort", cancel);
   }
@@ -69,7 +85,12 @@ export async function* paginate(
       });
     }
     const page = await list(cursor);
-    yield* page.items;
+    // ADR-003 §4: an abort stops iteration between entries and before completion too.
+    for (const item of page.items) {
+      throwIfAborted("GET", cursor?.url ?? container, signal);
+      yield item;
+    }
+    throwIfAborted("GET", cursor?.url ?? container, signal);
     if (page.next === null) return;
     if (seen.has(page.next.url) || page.next.url === container) {
       throw new StorageError("invalid-response", {

@@ -4,8 +4,8 @@
 
 import type { DatasetCore, Quad, Term } from "@jeswr/fetch-rdf";
 import { extractMediaType } from "@jeswr/fetch-rdf";
-import { serialize } from "@jeswr/rdf-serialize";
-import type { Store } from "n3";
+import { escapeIri, serialize } from "@jeswr/rdf-serialize";
+import { DataFactory, type Store } from "n3";
 
 /** Media types the n3 writer can produce, so stored RDF can be patched in place. */
 export const WRITABLE_RDF = new Set([
@@ -19,6 +19,56 @@ export const WRITABLE_RDF = new Set([
 export const TRIPLE_FORMATS = new Set(["text/turtle", "application/n-triples"]);
 
 const inNamedGraph = (quad: Quad) => quad.graph.termType !== "DefaultGraph";
+
+const BLANK_LABEL = /^[A-Za-z0-9_][A-Za-z0-9_-]*$/;
+const LANGUAGE = /^[A-Za-z]{1,8}(-[A-Za-z0-9]{1,8})*$/;
+const PREFIX = /^([A-Za-z][A-Za-z0-9_-]*)?$/;
+
+/**
+ * n3.Writer emits IRIs, blank-node labels and language tags verbatim, so a crafted value could
+ * break out of `<…>` and forge triples. Percent-encode IRIREF-forbidden characters in every IRI
+ * (@jeswr/rdf-serialize `escapeIri`; legitimate IRIs are unchanged), relabel unsafe blank nodes
+ * consistently, and refuse malformed language tags.
+ */
+function injectionSafe(quads: readonly Quad[]): Quad[] {
+  const { namedNode, blankNode, literal, quad, defaultGraph } = DataFactory;
+  const labels = new Map<string, string>();
+  const term = (value: Term): Term => {
+    switch (value.termType) {
+      case "NamedNode":
+        return namedNode(escapeIri(value.value));
+      case "BlankNode": {
+        if (BLANK_LABEL.test(value.value)) return value;
+        let label = labels.get(value.value);
+        if (label === undefined) {
+          label = `x${labels.size}_${crypto.randomUUID().replaceAll("-", "")}`;
+          labels.set(value.value, label);
+        }
+        return blankNode(label);
+      }
+      case "Literal":
+        if (value.language) {
+          if (!LANGUAGE.test(value.language)) {
+            throw new TypeError(`Invalid language tag: ${JSON.stringify(value.language)}`);
+          }
+          return value;
+        }
+        return literal(value.value, namedNode(escapeIri(value.datatype.value)));
+      case "DefaultGraph":
+        return defaultGraph();
+      default:
+        throw new TypeError(`${value.termType} terms cannot be serialised`);
+    }
+  };
+  return quads.map((q) =>
+    quad(
+      term(q.subject) as Quad["subject"],
+      term(q.predicate) as Quad["predicate"],
+      term(q.object) as Quad["object"],
+      term(q.graph) as Quad["graph"],
+    ),
+  );
+}
 
 /** Lower-cased media type without parameters, or null when absent/invalid. */
 export function mediaType(contentType: string): string | null {
@@ -38,9 +88,14 @@ export function serializeQuads(
       `${format} cannot carry named graphs; use application/n-quads or application/trig`,
     );
   }
-  return serialize(quads, {
+  const safePrefixes: Record<string, string> = {};
+  for (const [name, namespace] of Object.entries(prefixes)) {
+    if (!PREFIX.test(name)) throw new TypeError(`Invalid prefix name: ${JSON.stringify(name)}`);
+    safePrefixes[name] = escapeIri(namespace);
+  }
+  return serialize(injectionSafe(quads), {
     format,
-    prefixes,
+    prefixes: safePrefixes,
     emptyAsEmptyString: false,
   });
 }

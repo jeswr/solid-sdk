@@ -130,6 +130,62 @@ describe("toBytes cancellation", () => {
   });
 });
 
+describe("round-2 regressions", () => {
+  test("a failing stream becomes a non-retryable network StorageError", async () => {
+    const failing = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        controller.error(new Error("reset"));
+      },
+    });
+    await expect(
+      toBytes(failing, undefined, "POST", "https://pod.example/x"),
+    ).rejects.toMatchObject({
+      name: "StorageError",
+      code: "network",
+      retryable: false,
+      method: "POST",
+    });
+    const controller = new AbortController();
+    const aborting = new ReadableStream<Uint8Array>({
+      pull(stream) {
+        stream.error(new DOMException("aborted", "AbortError"));
+        controller.abort();
+      },
+    });
+    await expect(toBytes(aborting, controller.signal)).rejects.toMatchObject({
+      code: "network",
+      message: "PUT  aborted",
+    });
+  });
+
+  test("listAll stops between entries of a page once aborted", async () => {
+    const controller = new AbortController();
+    const entry = (url: string) => ({
+      url,
+      kind: "resource" as const,
+      contentType: null,
+      size: null,
+      modified: null,
+      types: [],
+    });
+    const pages = paginate(
+      "https://pod.example/",
+      async () => ({ items: [entry("a"), entry("b")], next: null, total: 2, etag: null }),
+      controller.signal,
+    );
+    const seen: string[] = [];
+    await expect(
+      (async () => {
+        for await (const item of pages) {
+          seen.push(item.url);
+          controller.abort();
+        }
+      })(),
+    ).rejects.toMatchObject({ code: "network" });
+    expect(seen).toEqual(["a"]);
+  });
+});
+
 describe("toBytes", () => {
   test("accepts every Body type", async () => {
     const expected = new TextEncoder().encode("héllo");
