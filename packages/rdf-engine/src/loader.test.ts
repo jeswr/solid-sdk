@@ -53,7 +53,11 @@ test("shares initialization across engines and paths while preserving the first 
     expect(loader).toHaveBeenCalledTimes(1);
     expect(fetch).toHaveBeenCalledTimes(1);
     expect(fetch).toHaveBeenCalledWith(new URL("https://app.example/wasm/test.wasm"));
-    expect(first.features).toEqual({ serialize: true, parseShaclCompact: true });
+    expect(first.features).toEqual({
+      serialize: true,
+      parseShaclCompact: true,
+      policyEvaluate: false,
+    });
     await defaultEngine.ready();
     expect(defaultLoader).not.toHaveBeenCalled();
     const query =
@@ -168,12 +172,40 @@ test("feature detection describes a missing optional serializer and always frees
   const engine = createEngine(async () => runtime);
   try {
     await engine.ready();
-    expect(engine.features).toEqual({ serialize: false, parseShaclCompact: false });
+    expect(engine.features).toEqual({
+      serialize: false,
+      parseShaclCompact: false,
+      policyEvaluate: false,
+    });
     await expect(engine.serialize([], "text/turtle")).rejects.toThrow("lacks serialize");
     expect(free).toHaveBeenCalledTimes(1);
   } finally {
     if (descriptor) Object.defineProperty(runtime.Store.prototype, "serialize", descriptor);
     if (compact) Object.defineProperty(runtime.Store.prototype, "parseShaclCompact", compact);
+    engine.dispose();
+  }
+});
+
+test("detects policy metadata exported by the injected high-level module", async () => {
+  const { createRdfEngine } = await import("./index.js");
+  const sparq = await import("@sparq-org/sparq");
+  const policyEvaluate = vi.fn(() => {
+    throw new Error("experimental probe");
+  });
+  const engine = createRdfEngine({
+    loader: async () => ({ ...sparq, policyEvaluate, policyContractVersion: 1 }),
+  });
+  try {
+    await engine.ready();
+    expect(engine.features?.policyEvaluate).toBe(true);
+    expect(
+      await engine.evaluatePolicy(new (await import("n3")).Store(), {
+        action: "read",
+        target: "https://example/resource",
+      }),
+    ).toEqual({ allow: false, matched: [], unmet: [] });
+    expect(policyEvaluate).not.toHaveBeenCalled();
+  } finally {
     engine.dispose();
   }
 });
