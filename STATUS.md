@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # sst-543 / A-007 lane status
 
@@ -87,3 +88,50 @@ before integration. Bead closure/sync remains with the integration owner; no tra
 inside this worktree.
 
 Open design questions: none. No live consent, provisioning, provider request or send was performed.
+
+## Fix round 1 — review of `d0971191b7eb`
+
+Commit `7a7394e0` (`fix(credentials): address provider review findings`) fixes exactly the
+six supplied findings, with regression tests:
+
+- Filter Microsoft signing keys by issuer before jose key selection, substituting the token's
+  validated tenant ID into `{tenantid}` templates. Missing, malformed and foreign key issuers
+  refuse; unrelated permitted keys cannot authorize a restricted signing key.
+- Read OAuth response chunks incrementally, enforce the 256 KiB cap before retaining excess
+  data, cancel oversized streams, release reader locks and sanitize read/cancellation errors.
+  Tests include an unfinished stream, exact-limit JSON and split UTF-8 characters.
+- Catch malformed request-target URLs inside the loopback callback handler; return HTTP 400,
+  retain no grant and continue accepting a legitimate callback.
+- Request `calendar.readonly` from the Google helper to match normal calendar login grants.
+  The regression drives signed fake login through helperExchange into googleFreeBusy.
+- Generate calendar provider configuration from calendar/read profiles only. Mail and Teams
+  profiles sorted before the calendar profile, and send profiles, are excluded. This is the
+  conservative review option and preserves the existing configuration/lookup contract.
+- Resolve ambiguous times from actual offsets sampled on either side of the timezone
+  transition. Lord Howe's thirty-minute overlap returns both instants and widens Microsoft
+  busy intervals; skipped and unambiguous times remain checked.
+
+The final `docs: record credential fix verification` commit records this round's results.
+
+Verification for this round:
+
+| Command | Result |
+| --- | --- |
+| `pnpm exec turbo run lint build typecheck test --filter=@jeswr/agent-credentials --concurrency=4` | PASS; 5/5 tasks including root lint. 8 test files, 124 tests; 100% statements (1342), branches (1003), functions (205), lines (1214), with per-file thresholds unchanged. |
+| `TURBO_SCM_BASE=6ad0939808c3c1c438415d45409a5a4c30e281bd pnpm run gate` | PASS; 6/6 tasks, including 686 root tests. Uses the original brief's exact base SHA, as this checkout lacks the integration ref. |
+| `pnpm run gate:full` | FAIL in unchanged `@jeswr/federation-codegen#test`: the same two `test/generator.test.ts` namespace fixture failures recorded above (`https://w3id.org/jeswr/...` versus `https://jeswr.org/ns/...`). 224 successful tasks out of 293; 1m41s. |
+| `git diff --exit-code d0971191b7eb05dfdad0c194da589120c1902496 -- tools/federation-codegen packages/solid-federation-vocab` | PASS; failing paths unchanged from this fix round's starting commit. |
+| `git diff --check` | PASS. |
+
+Initial verification rejected a test-local identifier named `window` under the agent layer
+rule, then caught a fake calendar response missing its JSON content type. Both test fixtures
+were corrected before the passing package gate. No runtime dependency, manifest, lockfile,
+coverage threshold or timeout configuration changed. No dependency policy check was needed.
+All credential tests use injected fake providers, temporary stores and fake op executables.
+Roborev remains unavailable (`command -v roborev` found no executable); no review tool was
+installed, no tracker was changed and no network remote was fetched or modified.
+
+All six requested findings are addressed. No implementation work or open questions remain for
+this fix round. Integration still requires the repository's review process; the unrelated
+full-workspace failure remains outside this brief. Only the credential package and this lane
+status changed. No generated build artifacts are included.
