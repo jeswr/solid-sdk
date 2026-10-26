@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 
 // biome-ignore lint/style/useNodejsImportProtocol: the agent import guard requires bare module names
 import { readFileSync } from "fs";
@@ -112,6 +113,18 @@ it("fails closed for absent, malformed, unverifiable and revoked legacy mandates
     },
   ])
     expect(await createLegacyMandateVerifier({ ...base(), ...change }).load()).toBeUndefined();
+});
+it("requires an explicit false revocation result", async () => {
+  for (const result of [undefined, null, 0, "", "false", {}, [], Number.NaN, true])
+    expect(
+      await createLegacyMandateVerifier({
+        ...base(),
+        isRevoked: async () => result as boolean,
+      }).load(),
+    ).toBeUndefined();
+  expect(
+    await createLegacyMandateVerifier({ ...base(), isRevoked: async () => false }).load(),
+  ).toMatchObject({ id: fixture.payload.id });
 });
 it("rejects document-supplied keys, unexpected headers and algorithms", async () => {
   for (const header of [

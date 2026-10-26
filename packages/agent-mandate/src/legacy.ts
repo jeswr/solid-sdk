@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { compactVerify, decodeProtectedHeader } from "jose";
 import { supportedPolicy } from "./policy.js";
 import type { Mandate, MandateVerifier, Policy } from "./types.js";
@@ -91,7 +92,7 @@ export function createLegacyMandateVerifier(options: {
           !(Date.parse(m.validUntil) > now) ||
           !validPolicy(m.autonomous) ||
           !validPolicy(m.withApproval) ||
-          (await options.isRevoked(m.id))
+          (await options.isRevoked(m.id)) !== false
         )
           return undefined;
         return {
