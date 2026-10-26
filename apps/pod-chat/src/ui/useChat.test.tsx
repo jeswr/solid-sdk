@@ -47,7 +47,7 @@ function roomTtl(url: string, name: string, refs: string[]): string {
   const items = refs.map((r) => `<${r}>`).join(", ");
   return `
 @prefix as: <https://www.w3.org/ns/activitystreams#> .
-@prefix pc: <https://w3id.org/jeswr/pod-chat#> .
+@prefix pc: <https://jeswr.org/ns/pod-chat#> .
 @prefix dct: <http://purl.org/dc/terms/> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 <${url}#it> a as:Collection, pc:ChatRoom ;
@@ -164,7 +164,7 @@ describe("useChat", () => {
     const RoomNameless = `${ROOMS}aaa-first.ttl`;
     const namelessTtl = `
 @prefix as: <https://www.w3.org/ns/activitystreams#> .
-@prefix pc: <https://w3id.org/jeswr/pod-chat#> .
+@prefix pc: <https://jeswr.org/ns/pod-chat#> .
 <${RoomNameless}#it> a as:Collection, pc:ChatRoom .
 `;
     const fetch = (async (input: string | URL | Request) => {

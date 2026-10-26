@@ -1,3 +1,4 @@
+# AUTHORED-BY Codex GPT-6.1-Sol
 # AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 #
 # SHACL shape for a drawing scene descriptor (@jeswr/solid-drawing).
@@ -16,7 +17,7 @@
 # not a scene. Everything else is optional metadata, each at most one value.
 
 @prefix sh:     <http://www.w3.org/ns/shacl#> .
-@prefix draw:   <https://w3id.org/jeswr/drawing#> .
+@prefix draw:   <https://jeswr.org/ns/drawing#> .
 @prefix dct:    <http://purl.org/dc/terms/> .
 @prefix schema: <http://schema.org/> .
 @prefix prov:   <http://www.w3.org/ns/prov#> .

@@ -110,7 +110,7 @@ describe("scope guard (messages)", () => {
 describe("readRoom", () => {
   it("parses a room and returns its etag", async () => {
     const body = `
-      @prefix pc: <https://w3id.org/jeswr/pod-chat#> .
+      @prefix pc: <https://jeswr.org/ns/pod-chat#> .
       @prefix as: <https://www.w3.org/ns/activitystreams#> .
       <#it> a as:Collection, pc:ChatRoom ; as:name "General" .
     `;
@@ -246,7 +246,7 @@ describe("saveRoom", () => {
     const calls: { url: string; method: string; headers: Record<string, string>; body?: string }[] =
       [];
     const existing = `
-      @prefix pc: <https://w3id.org/jeswr/pod-chat#> .
+      @prefix pc: <https://jeswr.org/ns/pod-chat#> .
       @prefix as: <https://www.w3.org/ns/activitystreams#> .
       @prefix dct: <http://purl.org/dc/terms/> .
       @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
