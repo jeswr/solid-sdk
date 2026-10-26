@@ -252,6 +252,24 @@ export function FileBrowser(props: FileBrowserProps) {
     row?.focus();
   }, []);
 
+  // Switching view with `v` replaces every row element, so focus moves to the same item
+  // in the new view (or the listing) instead of falling back to the document body.
+  const refocusAfterView = useRef<string | null>(null);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: runs once the new view's rows render
+  useEffect(() => {
+    const url = refocusAfterView.current;
+    if (url === null) return;
+    refocusAfterView.current = null;
+    const find = () =>
+      url
+        ? container.current?.querySelector<HTMLElement>(`[data-url="${CSS.escape(url)}"]`)
+        : undefined;
+    const row = find();
+    // A virtualised grid may only render the item after it has measured itself.
+    if (row) row.focus();
+    else requestAnimationFrame(() => (find() ?? container.current)?.focus());
+  }, [view]);
+
   const targetsFor = useCallback(
     (item: BrowserItem) => (selection.selected.includes(item.url) ? selected : [item]),
     [selection.selected, selected],
@@ -307,6 +325,7 @@ export function FileBrowser(props: FileBrowserProps) {
         return step(visible.length);
       case event.key === "v" && !mod && !event.altKey:
         event.preventDefault();
+        refocusAfterView.current = focusUrl ?? "";
         return updatePrefs((current) => ({
           ...current,
           view: current.view === "list" ? "grid" : "list",
