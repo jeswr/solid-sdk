@@ -1,4 +1,3 @@
-// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 /**
  * `@jeswr/solid-bookmark` — the RDF vocabulary + typed model for bookmarks /
@@ -50,8 +49,6 @@ export {
   DCT_MODIFIED,
   DCT_TITLE,
   dct,
-  LEGACY_BOOK_NS,
-  LEGACY_CORE_NS,
   PREFIXES,
   RDF,
   RDF_TYPE,

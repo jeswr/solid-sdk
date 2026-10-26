@@ -1,4 +1,3 @@
-// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 import { describe, expect, it } from "vitest";
 import {
@@ -20,9 +19,9 @@ import {
 } from "./vocab.js";
 
 describe("vocab IRIs", () => {
-  it("the namespace is the canonical bookmark home", () => {
-    expect(BOOK).toBe("https://jeswr.org/ns/bookmark#");
-    expect(CORE).toBe("https://jeswr.org/ns/core#");
+  it("the namespace is the w3id bookmark home", () => {
+    expect(BOOK).toBe("https://w3id.org/jeswr/bookmark#");
+    expect(CORE).toBe("https://w3id.org/jeswr/core#");
   });
 
   it("schema.org uses the canonical http scheme (matching the suite producers)", () => {
@@ -32,9 +31,9 @@ describe("vocab IRIs", () => {
   });
 
   it("mints EXACTLY the three book: terms (Bookmark, archived, notes)", () => {
-    expect(BOOKMARK_CLASS).toBe("https://jeswr.org/ns/bookmark#Bookmark");
-    expect(BOOK_ARCHIVED).toBe("https://jeswr.org/ns/bookmark#archived");
-    expect(BOOK_NOTES).toBe("https://jeswr.org/ns/bookmark#notes");
+    expect(BOOKMARK_CLASS).toBe("https://w3id.org/jeswr/bookmark#Bookmark");
+    expect(BOOK_ARCHIVED).toBe("https://w3id.org/jeswr/bookmark#archived");
+    expect(BOOK_NOTES).toBe("https://w3id.org/jeswr/bookmark#notes");
   });
 
   it("reuses schema.org / Dublin Core for the rest (nothing minted)", () => {

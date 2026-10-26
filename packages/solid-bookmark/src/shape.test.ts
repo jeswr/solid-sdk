@@ -1,4 +1,3 @@
-// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 import env from "@zazuko/env-node";
 import { Parser } from "n3";
@@ -6,7 +5,6 @@ import SHACLValidator from "rdf-validate-shacl";
 import { describe, expect, it } from "vitest";
 import { bookmarkSubject, serializeBookmark } from "./bookmark.js";
 import { bookmarkOntologyTtl, bookmarkShapeTtl } from "./shape.js";
-import { LEGACY_BOOK_NS, LEGACY_CORE_NS } from "./vocab.js";
 
 const RES = "http://localhost:3000/alice/bookmarks/x";
 const SUBJ = bookmarkSubject(RES);
@@ -28,22 +26,6 @@ function validateTtl(ttl: string) {
 }
 
 describe("the shipped .ttl artifacts parse", () => {
-  it("ships canonical suite namespaces and the canonical ontology IRI", () => {
-    for (const ttl of [bookmarkOntologyTtl(), bookmarkShapeTtl()]) {
-      expect(ttl).not.toContain(LEGACY_BOOK_NS);
-      expect(ttl).not.toContain(LEGACY_CORE_NS);
-    }
-    const ontology = new Parser().parse(bookmarkOntologyTtl());
-    expect(
-      ontology.some(
-        (q) =>
-          q.subject.value === "https://jeswr.org/ns/bookmark" &&
-          q.predicate.value === "http://www.w3.org/1999/02/22-rdf-syntax-ns#type" &&
-          q.object.value === "http://www.w3.org/2002/07/owl#Ontology",
-      ),
-    ).toBe(true);
-  });
-
   it("bookmark.shacl.ttl is well-formed Turtle", () => {
     expect(new Parser().parse(bookmarkShapeTtl()).length).toBeGreaterThan(0);
   });
@@ -54,9 +36,9 @@ describe("the shipped .ttl artifacts parse", () => {
     expect(
       quads.some(
         (q) =>
-          q.subject.value === "https://jeswr.org/ns/bookmark#Bookmark" &&
+          q.subject.value === "https://w3id.org/jeswr/bookmark#Bookmark" &&
           q.predicate.value === "http://www.w3.org/2000/01/rdf-schema#subClassOf" &&
-          q.object.value === "https://jeswr.org/ns/core#InformationResource",
+          q.object.value === "https://w3id.org/jeswr/core#InformationResource",
       ),
     ).toBe(true);
   });
@@ -86,7 +68,7 @@ describe("SHACL shape (bookmark.shacl.ttl)", () => {
     // Hand-craft a typed bookmark with no schema:url — the writer would drop a
     // bad url, so validate raw Turtle to exercise minCount directly.
     const ttl = `
-      @prefix book: <https://jeswr.org/ns/bookmark#> .
+      @prefix book: <https://w3id.org/jeswr/bookmark#> .
       @prefix dct:  <http://purl.org/dc/terms/> .
       <${SUBJ}> a book:Bookmark ; dct:title "No url" .
     `;
@@ -97,7 +79,7 @@ describe("SHACL shape (bookmark.shacl.ttl)", () => {
 
   it("a non-http(s) url is rejected by sh:pattern (e.g. a hostile javascript: scheme)", async () => {
     const ttl = `
-      @prefix book:   <https://jeswr.org/ns/bookmark#> .
+      @prefix book:   <https://w3id.org/jeswr/bookmark#> .
       @prefix schema: <http://schema.org/> .
       <${SUBJ}> a book:Bookmark ; schema:url <javascript:alert(1)> .
     `;
@@ -108,7 +90,7 @@ describe("SHACL shape (bookmark.shacl.ttl)", () => {
 
   it("a url written as a literal (not an IRI) is rejected by sh:nodeKind", async () => {
     const ttl = `
-      @prefix book:   <https://jeswr.org/ns/bookmark#> .
+      @prefix book:   <https://w3id.org/jeswr/bookmark#> .
       @prefix schema: <http://schema.org/> .
       <${SUBJ}> a book:Bookmark ; schema:url "https://example.org/x" .
     `;
@@ -119,7 +101,7 @@ describe("SHACL shape (bookmark.shacl.ttl)", () => {
 
   it("two schema:url values are non-conforming (maxCount 1)", async () => {
     const ttl = `
-      @prefix book:   <https://jeswr.org/ns/bookmark#> .
+      @prefix book:   <https://w3id.org/jeswr/bookmark#> .
       @prefix schema: <http://schema.org/> .
       <${SUBJ}> a book:Bookmark ;
         schema:url <https://example.org/a> , <https://example.org/b> .
@@ -131,7 +113,7 @@ describe("SHACL shape (bookmark.shacl.ttl)", () => {
 
   it("a non-boolean book:archived is rejected by sh:datatype", async () => {
     const ttl = `
-      @prefix book:   <https://jeswr.org/ns/bookmark#> .
+      @prefix book:   <https://w3id.org/jeswr/bookmark#> .
       @prefix schema: <http://schema.org/> .
       <${SUBJ}> a book:Bookmark ;
         schema:url <https://example.org/x> ;
@@ -144,7 +126,7 @@ describe("SHACL shape (bookmark.shacl.ttl)", () => {
 
   it("an IRI-valued tag is rejected (schema:keywords must be a string literal)", async () => {
     const ttl = `
-      @prefix book:   <https://jeswr.org/ns/bookmark#> .
+      @prefix book:   <https://w3id.org/jeswr/bookmark#> .
       @prefix schema: <http://schema.org/> .
       <${SUBJ}> a book:Bookmark ;
         schema:url <https://example.org/x> ;

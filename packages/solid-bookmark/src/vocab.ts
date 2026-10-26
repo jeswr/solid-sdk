@@ -1,4 +1,3 @@
-// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 /**
  * Vocabulary IRIs for the bookmark / read-it-later model (the data model for a
@@ -8,7 +7,7 @@
  * Per the suite federation policy (reuse established vocabularies rather than
  * minting new ones), this package mints exactly the **two** terms no widely-
  * deployed vocabulary already provides, both under the package namespace
- * `https://jeswr.org/ns/bookmark#` (prefix `book:`):
+ * `https://w3id.org/jeswr/bookmark#` (prefix `book:`):
  *
  * - **`book:Bookmark`** — the bookmark resource. Rooted into the gUFO-rebased
  *   suite core (`@jeswr/solid-federation-vocab`) via
@@ -53,20 +52,15 @@
  * reference, so this package is their canonical home, not a second dialect.
  */
 
-/** Canonical writing namespace; source: `@jeswr/suite-vocab` NS.BOOKMARK. */
-export const BOOK = "https://jeswr.org/ns/bookmark#";
-/** Read-only legacy bookmark namespace. */
-export const LEGACY_BOOK_NS = "https://w3id.org/jeswr/bookmark#";
+/** This package's namespace — the bookmark / read-it-later vocabulary home. */
+export const BOOK = "https://w3id.org/jeswr/bookmark#";
 /**
  * The gUFO-rebased Solid Core ontology namespace
  * (`@jeswr/solid-federation-vocab`). `book:Bookmark` roots in
  * `core:InformationResource`; referenced here so the rooting predicate is
  * authored against the real IRI, not a string typo.
  */
-// Canonical source: `@jeswr/suite-vocab` NS.CORE.
-export const CORE = "https://jeswr.org/ns/core#";
-/** Read-only legacy core namespace. */
-export const LEGACY_CORE_NS = "https://w3id.org/jeswr/core#";
+export const CORE = "https://w3id.org/jeswr/core#";
 /** schema.org (canonical http scheme, matching the suite producers) — `schema:url`, `schema:keywords`. */
 export const SCHEMA = "http://schema.org/";
 /** Dublin Core Terms — `dct:title`, `dct:description`, `dct:created`, `dct:modified`. */
