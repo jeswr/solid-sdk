@@ -557,6 +557,11 @@ describe("skill validation", () => {
     "/Users/someone/private",
     "/home/someone/private",
     "C:\\Users\\someone\\private",
+    "file:///home/alice/x",
+    '"/Users/alice/x"',
+    "(/home/bob/y)",
+    "C:\\Users\\carol",
+    "C:/Users/carol",
   ];
   it.each(
     [
@@ -570,6 +575,52 @@ describe("skill validation", () => {
     const errors = checkSkills(root).errors.join("\n");
     expect(errors).toContain("absolute user path is forbidden");
     expect(errors).not.toContain(value);
+  });
+
+  it.each([
+    "https://example.org/home/start",
+    "src/home/index.ts",
+    "src/Users/index.ts",
+    "./home/alice/x",
+    "~/home/alice/x",
+    "~",
+    "~/private",
+    "https://example.org/Users/alice/x",
+    "ftp://example.org/home/alice/x",
+    "custom+scheme://example.org/path:/home/alice/x",
+    "https://example.org/?path=/home/alice/x",
+    "https://example.org/(/home/alice/x)",
+    "https://example.org/C:/Users/carol",
+    "prefixC:\\Users\\carol",
+    "/home/",
+    "/Users/",
+  ])("allows public URLs, relative paths, and home-directory shorthand: %s", (value) => {
+    const root = fixture();
+    put(
+      root,
+      "skills/alpha/SKILL.md",
+      skill({ description: JSON.stringify(`Use when reading ${value}`), body: value }),
+    );
+    put(root, "skills/alpha/references/guide.md", value);
+    expect(checkSkills(root, { write: true }).errors).toEqual([]);
+  });
+
+  it.each([
+    " ",
+    '"',
+    "'",
+    "(",
+    "[",
+    "=",
+    ":",
+    "`",
+    "<",
+  ])("rejects home paths following a path-token delimiter %j", (delimiter) => {
+    const root = fixture();
+    put(root, "skills/alpha/references/guide.md", `${delimiter}/home/alice/x`);
+    expect(checkSkills(root, { write: true }).errors).toEqual([
+      "skills/alpha/references/guide.md: line 1: absolute user path is forbidden",
+    ]);
   });
 
   it.each(
@@ -669,6 +720,123 @@ describe("skill validation", () => {
   });
 
   it.each(
+    ["\n", "\r\n"].flatMap((newline) =>
+      ["standalone", "inline"].flatMap((kind) =>
+        [
+          ["API_TOKEN=fixture-credential-value", "possible environment secret (value omitted)"],
+          ...localPaths.map((value) => [value, "absolute user path is forbidden"]),
+        ].map(([value, rule]) => [newline, kind, value, rule]),
+      ),
+    ),
+  )("scans frontmatter comments (%j, %s, %s) with file line numbers", (newline, kind, value, rule) => {
+    const root = fixture();
+    const extra = kind === "standalone" ? `# ${value}\n` : `metadata: public-example # ${value}\n`;
+    const text = skill({
+      description: ">-\n  Use when checking\n  comment line numbers.",
+      extra,
+    });
+    put(root, "skills/alpha/SKILL.md", `\uFEFF${text.replaceAll("\n", newline)}`);
+    const result = cli(root, "--write");
+    expect(result.status).toBe(1);
+    expect(result.stderr).toBe(`skills/alpha/SKILL.md: line 6: ${rule}\n`);
+    expect(result.stderr).not.toContain(value);
+    expect(result.stdout).toBe("");
+    expect(existsSync(join(root, "skills/INDEX.md"))).toBe(false);
+  });
+
+  const credentialNames = [
+    "TOKEN",
+    "SECRET",
+    "PASSWORD",
+    "PASSWD",
+    "PASS",
+    "PWD",
+    "KEY",
+    "APIKEY",
+    "CREDENTIAL",
+    "CREDENTIALS",
+    "AWS_SECRET_ACCESS_KEY",
+    "OPENAI_API_KEY",
+    "GH_TOKEN",
+    "GITHUB_TOKEN",
+    "CLIENT_SECRET",
+    "API_KEY",
+    "DB_PASSWORD",
+    "PRIVATE_KEY",
+    "TOKEN_VALUE",
+  ];
+  it.each(credentialNames)("rejects credential assignments named %s", (name) => {
+    const root = fixture();
+    const assignment = `${name}=fixture-credential-value`;
+    put(
+      root,
+      "skills/alpha/SKILL.md",
+      skill({ description: JSON.stringify(`Use when setting ${assignment}`), body: assignment }),
+    );
+    put(root, "skills/alpha/references/guide.md", assignment);
+    const { errors } = checkSkills(root, { write: true });
+    for (const location of ["decoded metadata", "line 3", "line 5", "line 1"]) {
+      expect(
+        errors.some((error) => error.includes(`${location}: possible environment secret`)),
+      ).toBe(true);
+    }
+    expect(errors.join("\n")).not.toContain(assignment);
+    expect(existsSync(join(root, "skills/INDEX.md"))).toBe(false);
+  });
+
+  const nonSecretQualifiers = [
+    "TTL",
+    "EXPIRY",
+    "EXPIRES",
+    "LIFETIME",
+    "LENGTH",
+    "LEN",
+    "SIZE",
+    "LIMIT",
+    "COUNT",
+    "MAX",
+    "MIN",
+    "TIMEOUT",
+    "URL",
+    "URI",
+    "ENDPOINT",
+    "PATH",
+    "FILE",
+    "DIR",
+    "NAME",
+    "ID",
+    "TYPE",
+    "HEADER",
+    "PREFIX",
+    "FORMAT",
+    "ALG",
+    "ALGORITHM",
+  ];
+  it.each([
+    "MAX_TOKENS=4096",
+    "TOKEN_TTL=3600",
+    "TOKENS=4096",
+    "MAX_KEYS=4096",
+    "KEYS=4096",
+    "KEYBOARD=public-value",
+    "SECRETARIAT=public-value",
+    "MYTOKEN=public-value",
+    ...nonSecretQualifiers.flatMap((qualifier) => [
+      `TOKEN_${qualifier}=public-value`,
+      `AWS_SECRET_ACCESS_KEY_${qualifier}=public-value`,
+    ]),
+  ])("allows non-secret configuration assignments: %s", (assignment) => {
+    const root = fixture();
+    put(
+      root,
+      "skills/alpha/SKILL.md",
+      skill({ description: JSON.stringify(`Use when setting ${assignment}`), body: assignment }),
+    );
+    put(root, "skills/alpha/references/guide.md", assignment);
+    expect(checkSkills(root, { write: true }).errors).toEqual([]);
+  });
+
+  it.each(
     [
       ...secrets.map(([category, value]) => [value, `possible ${category} (value omitted)`]),
       ...localPaths.map((value) => [value, "absolute user path is forbidden (value omitted)"]),
@@ -706,6 +874,7 @@ describe("skill validation", () => {
       }),
     );
     expect(checkSkills(root, { write: true }).errors).toEqual([
+      "skills/alpha/SKILL.md: line 7: possible environment secret (value omitted)",
       "skills/alpha/SKILL.md: decoded metadata: possible environment secret (value omitted)",
     ]);
   });
@@ -752,6 +921,33 @@ describe("skill validation", () => {
       skill({ description: '"Use when Authorization: Bearer <token>\\nTOKEN=your-token"' }),
     );
     expect(checkSkills(root, { write: true }).errors).toEqual([]);
+  });
+
+  it.each([
+    '"Use when setting TOKEN=<token>\\nTOKEN=your-token"',
+    '"Use when setting TOKEN=<token>\\tTOKEN=your-token"',
+    '>-\n  Use when setting API_TOKEN="your-token\\" PASSWORD=fixture-credential-value"',
+    '\'Use when setting API_TOKEN="your-token\\" PASSWORD=fixture-credential-value"\'',
+  ])("preserves YAML placeholder syntax without decoding other raw escapes: %s", (description) => {
+    const root = fixture();
+    put(root, "skills/alpha/SKILL.md", skill({ description }));
+    expect(checkSkills(root, { write: true }).errors).toEqual([]);
+  });
+
+  it.each([
+    '"Use when setting API_TOKEN=\\"<token>\\"."',
+    '&description "Use when setting API_TOKEN=\\"<token>\\"."',
+    '!!str "Use when setting API_TOKEN=\\"<token>\\"."',
+  ])("checks comments following double-quoted scalar syntax: %s", (description) => {
+    const root = fixture();
+    put(
+      root,
+      "skills/alpha/SKILL.md",
+      skill({ description: `${description} # API_TOKEN=fixture-credential-value` }),
+    );
+    expect(checkSkills(root, { write: true }).errors).toEqual([
+      "skills/alpha/SKILL.md: line 3: possible environment secret (value omitted)",
+    ]);
   });
 
   const quotedAssignments = [
@@ -872,7 +1068,7 @@ describe("skill validation", () => {
           : text,
     );
     const { errors } = checkSkills(root, { write: true });
-    expect(errors).toHaveLength(count);
+    expect(errors).toHaveLength(surface === "description" ? count * 2 : count);
     for (const error of errors) {
       expect(error).toMatch(
         new RegExp(

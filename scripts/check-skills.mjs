@@ -92,6 +92,18 @@ function lineNumber(text, offset) {
   return text.slice(0, offset).split("\n").length;
 }
 
+function isCredentialName(name) {
+  const segments = name.split("_");
+  return (
+    !/^(?:TTL|EXPIRY|EXPIRES|LIFETIME|LENGTH|LEN|SIZE|LIMIT|COUNT|MAX|MIN|TIMEOUT|URL|URI|ENDPOINT|PATH|FILE|DIR|NAME|ID|TYPE|HEADER|PREFIX|FORMAT|ALG|ALGORITHM)$/.test(
+      segments.at(-1),
+    ) &&
+    segments.some((segment) =>
+      /^(?:TOKEN|SECRET|PASSWORD|PASSWD|PASS|PWD|KEY|APIKEY|CREDENTIALS?)$/.test(segment),
+    )
+  );
+}
+
 function scanSecrets(text, report) {
   for (const [category, pattern] of secretPatterns) {
     for (const match of text.matchAll(pattern)) {
@@ -103,10 +115,11 @@ function scanSecrets(text, report) {
       report(category, match.index);
     }
   }
-  const assignments = /\b(?=[A-Z0-9_]*(?:TOKEN|SECRET|PASSWORD|KEY))[A-Z_][A-Z0-9_]*[\t ]*=[\t ]*/g;
+  const assignments = /\b([A-Z_][A-Z0-9_]*)[\t ]*=[\t ]*/g;
   while (assignments.lastIndex < text.length) {
     const match = assignments.exec(text);
     if (!match) break;
+    if (!isCredentialName(match[1])) continue;
     const { value, end } = assignmentValue(text, assignments.lastIndex);
     if (value !== "" && !isPlaceholder(value)) report("environment secret", match.index);
     assignments.lastIndex = end;
@@ -126,8 +139,44 @@ function* metadataScalars(value, seen = new Set()) {
   }
 }
 
+function* rawMetadataSegments(text, quotedScalars) {
+  let cursor = 0;
+  for (const [start, end] of [...quotedScalars].sort(([a], [b]) => a - b)) {
+    yield { text: text.slice(cursor, start), lineOffset: lineNumber(text, cursor) };
+    let segmentStart = start + 1;
+    // Other YAML escapes are syntax boundaries, not literal assignment suffixes.
+    // The decoded scan handles their contents; retain actual source newlines here.
+    const escapes = /\\(["\\]|x[\da-fA-F]{2}|u[\da-fA-F]{4}|U[\da-fA-F]{8}|[\s\S])/g;
+    const scalar = text.slice(start + 1, end - 1);
+    for (const escaped of scalar.matchAll(escapes)) {
+      if (escaped[1] === '"' || escaped[1] === "\\") continue;
+      const escapeStart = start + 1 + escaped.index;
+      yield {
+        text: text.slice(segmentStart, escapeStart).replace(/\\(["\\])/g, "$1"),
+        lineOffset: lineNumber(text, segmentStart),
+      };
+      segmentStart = escapeStart + escaped[0].length;
+    }
+    yield {
+      text: text.slice(segmentStart, end - 1).replace(/\\(["\\])/g, "$1"),
+      lineOffset: lineNumber(text, segmentStart),
+    };
+    cursor = end;
+  }
+  yield { text: text.slice(cursor), lineOffset: lineNumber(text, cursor) };
+}
+
 function scanLocalPaths(text, report) {
-  for (const match of text.matchAll(/\/(?:Users|home)\/|[a-zA-Z]:[\\/]Users[\\/]/g)) {
+  const urls = [...text.matchAll(/\b([a-z][a-z\d+.-]*):\/\/[^\s"'`<>]*/gi)];
+  const paths = /(?:\/(?:Users|home)\/|[a-zA-Z]:[\\/]Users[\\/])(?=[^\s/\\"'`<>()[\]])/g;
+  for (const match of text.matchAll(paths)) {
+    const url = urls.find(
+      (url) => match.index >= url.index && match.index < url.index + url[0].length,
+    );
+    if (url) {
+      // file:// URLs expose filesystem paths; other URL schemes are public identifiers.
+      if (!/^file:\/\/[^/]*$/i.test(text.slice(url.index, match.index))) continue;
+    } else if (match.index > 0 && !/[\s"'([=:`<]/.test(text[match.index - 1])) continue;
     report(match.index);
   }
 }
@@ -345,19 +394,54 @@ export function checkSkills(root, { write = false } = {}) {
     if (lines > 500) report(path, `body exceeds 500 lines (${lines})`);
 
     let data;
+    const quotedScalars = new Map();
+    const nodeStarts = [];
     try {
-      data = load(frontmatter[1], { schema: JSON_SCHEMA });
+      data = load(frontmatter[1], {
+        schema: JSON_SCHEMA,
+        listener(event, state) {
+          if (event === "open") nodeStarts.push(state.position);
+          else {
+            const start = nodeStarts.pop();
+            if (state.kind !== "scalar") return;
+            // A node may start before whitespace, comments, tags, or an anchor.
+            const prefix = /^(?:\s|#[^\n]*(?:\n|$)|[!&][^\s]+)*/.exec(
+              frontmatter[1].slice(start, state.position),
+            )[0];
+            const scalarStart = start + prefix.length;
+            if (frontmatter[1][scalarStart] === '"') quotedScalars.set(scalarStart, state.position);
+          }
+        },
+      });
     } catch {
       // YAML errors include source excerpts, which may contain credentials.
       report(path, "invalid YAML frontmatter");
       continue;
+    }
+    // Scan raw syntax too: decoded YAML discards standalone and inline comments.
+    for (const { text: rawMetadata, lineOffset } of rawMetadataSegments(
+      frontmatter[1],
+      quotedScalars,
+    )) {
+      scanSecrets(rawMetadata, (category, offset) => {
+        report(
+          path,
+          `line ${lineOffset + lineNumber(rawMetadata, offset)}: possible ${category} (value omitted)`,
+        );
+      });
+      scanLocalPaths(rawMetadata, (offset) => {
+        report(
+          path,
+          `line ${lineOffset + lineNumber(rawMetadata, offset)}: absolute user path is forbidden`,
+        );
+      });
     }
     if (!data || typeof data !== "object" || Array.isArray(data)) {
       report(path, "frontmatter must be a mapping");
       continue;
     }
     const { name, description } = data;
-    // Scan only decoded frontmatter: YAML quoting/escapes are not shell syntax.
+    // Decoding also exposes escaped and folded secrets hidden from the raw scan.
     for (const value of metadataScalars(data)) {
       scanSecrets(value, (category) => {
         report(path, `decoded metadata: possible ${category} (value omitted)`);
