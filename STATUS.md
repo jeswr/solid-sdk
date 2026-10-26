@@ -566,3 +566,77 @@ The requested finding is fixed and tested. No implementation work is unfinished 
 there are no open questions. `roborev status` failed with exit 127 (`roborev: command not found`), so
 fresh automated per-commit verdicts could not be obtained locally. Dispatcher/security review remains
 outstanding; this security-critical package has not been merged.
+
+## Fix round 8 — review `b86d58a61f4e`
+
+Completed both findings in `solid-sdk-lane-sst-8xm.28-b86d58a61f4e.md`.
+Only `packages/reactive-authentication` and this report changed. No dependencies were added.
+
+| Commit | Change |
+| --- | --- |
+| `abe9df91` | Give each issuer-picker operation a cancellable request, capture that request throughout WebID lookup, and cancel it before releasing the picker lock. Ignore superseded results, errors and control cleanup. Reset the next dialog's controls independently. Add regressions using real Web Locks for delayed WebID selection, profile success and profile failure after cancellation, abort and confirmation, plus inactive-action checks. |
+| `7eb7c62d` | Return authenticated redirects without `Location` before discarding their response bodies or incrementing the hop count. Replace the old rejection expectation with regressions covering 301, 302, 303, 307 and 308, unchanged response identity and headers, readable bodies, and zero/default redirect budgets. Retain the existing hop-limit rejection check for redirects with a target. |
+| Final documentation commit (this commit) | Record round-8 verification and the review-tool limitation. |
+
+The picker keeps active lookup failures visible while ignoring completions from ended operations, even
+when a supplied picker or transport ignores cancellation. Its derived request clones the caller's
+request so the caller's body remains usable. Redirect handling follows the missing-location return in
+[Fetch's HTTP-redirect algorithm](https://fetch.spec.whatwg.org/#http-redirect-fetch); explicit redirect
+modes retain their existing behavior. No broader design or policy change was needed.
+
+### Round-8 verification
+
+PASS required package gate and root checks, run before the final documentation commit:
+
+```sh
+pnpm --filter @jeswr/reactive-authentication run lint && pnpm --filter @jeswr/reactive-authentication run build && pnpm --filter @jeswr/reactive-authentication run typecheck && pnpm --filter @jeswr/reactive-authentication run test
+pnpm run lint:root
+git diff --check
+```
+
+- Package lint: zero errors; **63 warnings** and **22 informational diagnostics**.
+- Build and typecheck: pass, including the SDK type-contract checks.
+- Tests: **300/300** pass in **29/29** files, with no skips.
+- Enforced coverage: statements **2075/2075**, branches **1537/1537**, functions **466/466**,
+  lines **1870/1870** — **100% in every metric**. Coverage configuration and thresholds are unchanged.
+- Root lint: Biome, lockfile transport, app workspace and raw-fetch guards pass.
+- Whitespace validation: pass.
+
+Regression sensitivity was checked before each implementation fix:
+
+```sh
+pnpm --filter @jeswr/reactive-authentication exec vitest run test/browser-elements.test.js --coverage.enabled=false '--testNamePattern=stale profile completion after cancel'
+pnpm --filter @jeswr/reactive-authentication exec vitest run test/fetch-coverage.test.js --coverage.enabled=false '--testNamePattern=without Location preserve'
+```
+
+Both selected regressions failed as expected: the old picker left the completed operation's lookup
+signal live, and the old redirect path threw `Too many redirects` at a zero hop budget before checking
+for `Location`. All regression cases pass in the final coverage-enforced gate. Focused element
+verification also passed **22/22** tests:
+
+```sh
+pnpm --filter @jeswr/reactive-authentication exec vitest run test/browser-elements.test.js --coverage.enabled=false
+```
+
+An initial combined focused run of `test/fetch-coverage.test.js test/core.test.js` before building
+passed 28 tests and failed two existing subprocess checks because `dist/` was absent. The final
+build-first gate passes both checks. The first gate build also caught the strict optional-field
+declaration when clearing the active request; the corrected declaration is included in `abe9df91`.
+
+Validation used Node `24.22.1` and pnpm `10.4.1`. No `check:packages` run was needed because no dependency
+was added. The dependant dry run selected only this package, so no dependant gate applies:
+
+```sh
+pnpm exec turbo run build typecheck test --filter=...@jeswr/reactive-authentication --dry=json
+```
+
+Per the lane brief, no whole-workspace gate or `gate:full` ran. No push, PR, branch switch, network Git
+operation or edits to another checkout were performed. The working tree is clean after this final
+report commit.
+
+### Round-8 remaining work and questions
+
+Both requested findings are fixed and tested. No implementation work is unfinished or blocked;
+there are no open questions. `roborev status` failed with exit 127 (`roborev: command not found`), so
+fresh automated per-commit verdicts could not be obtained locally. Dispatcher/security review remains
+outstanding; this security-critical package has not been merged.
