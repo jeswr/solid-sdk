@@ -248,3 +248,53 @@ automated per-commit review remains outstanding. No pushes, PRs, branch switches
 remote fetches/merges, tracker changes, or edits to other checkouts were performed.
 There are no new open questions; earlier pilot/live-server verification limits
 remain as documented above.
+
+## Fix round 4 — shared assertion references
+
+Review/fix base: `b53cf05192b29684907005c4786185f903d777ad`; branch remains
+`lane/sst-vcij`. The required affected-gate comparison remains
+`60da98b9c11fa742e16b3b4d6f66ad53993e8914`.
+
+- `c8cb72eb` — `fix(pkg-memory): preserve shared assertion references`: reuse
+  canonical blank-node labels to map incoming duplicate assertions to the first
+  retained graph. Apply the mapping to subjects, objects, and graph names across
+  the incoming dataset before dropping its duplicate assertion graph. Keep
+  unrelated blank nodes intact and preserve the public canonicalization result.
+  Regressions cover three resources, nested assertion nodes, provenance subjects
+  and objects, publication metadata, individual reads, repeated listings, and
+  reversed listing order, including whole-dataset isomorphism.
+- Final documentation commit — `docs: record sst-vcij round four validation`:
+  this report, committed last after all required gate runs.
+
+### Round four validation
+
+All commands ran in this checkout with Node v24.22.1 and pnpm 10.4.1.
+
+| Exact command | Result |
+| --- | --- |
+| `pnpm exec turbo run build --filter=@jeswr/pkg-memory...` | PASS; four dependency-first builds. |
+| `pnpm --filter @jeswr/pkg-memory exec vitest run test/store.test.ts -t 'preserves references into shared' --coverage.enabled=false` | Both regression cases FAIL on the unfixed implementation after dependency builds, exposing disconnected provenance. |
+| `pnpm --filter @jeswr/pkg-memory exec vitest run test/store.test.ts -t 'shared' --coverage.enabled=false` | PASS after the fix; seven selected tests. |
+| `pnpm --filter @jeswr/pkg-memory run lint` | PASS. |
+| `pnpm --filter @jeswr/pkg-memory run build` | PASS. |
+| `pnpm --filter @jeswr/pkg-memory run typecheck` | PASS, including tests. |
+| `pnpm --filter @jeswr/pkg-memory run test` | PASS; 11 files, 512 tests; 100% statements, branches, functions, and lines. |
+| `pnpm run lint:root` | PASS. |
+| `TURBO_SCM_BASE=60da98b9c11fa742e16b3b4d6f66ad53993e8914 pnpm run gate` | PASS; 9 successful tasks, including 686 root tests. |
+| `pnpm run gate:full` | FAIL outside this lane; 287 successful tasks before `@jeswr/federation-codegen#test` stopped the run (2 failed, 23 passed tests). Root tests: 686 passed. |
+| `git diff --check b53cf05192b29684907005c4786185f903d777ad` | PASS. |
+
+The full gate reproduced the two previously documented namespace mismatches in
+`tools/federation-codegen/test/generator.test.ts`: the Bookmark target class and
+generated ontology bytes. `git diff 60da98b9c11fa742e16b3b4d6f66ad53993e8914 --exit-code --
+tools/federation-codegen packages/solid-federation-vocab` passed, confirming the
+tool and vocabulary inputs are unchanged from the required lane base. No
+unrelated fix was made. Generated web-public build artifacts were removed.
+
+The sole round-four finding is implemented with fixture-only regressions. No
+dependency, manifest, or lockfile changed; no dependency policy check was needed.
+`roborev` remains unavailable (`command -v roborev` found no executable), so
+independent automated per-commit review remains outstanding. No pushes, PRs,
+branch switches, remote fetches/merges, tracker changes, or edits to other
+checkouts were performed. There are no new open questions or design choices;
+earlier pilot/live-server verification limits remain as documented above.
