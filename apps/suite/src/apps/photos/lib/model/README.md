@@ -5,6 +5,9 @@ Hook-free model for PHO-01. The EXIF and photograph accessors were ported from
 `apps/pod-photos/src/photos`; albums retain legacy `schema:hasPart` reads and write ordered
 `schema:ListItem` membership. `parsePhotos` also reads the Pod Manager Google Photos connector's
 multi-subject `schema:ImageObject` documents. All new photos use `schema:Photograph`.
+Album ListItems and capture points may be named or blank RDF nodes; reads preserve their terms.
+Optional technical metadata is converted field by field, dropping invalid values/dates while
+retaining valid fields and other photos in the same document.
 
 `index.ts` exports the model, EXIF, album, timeline, upload, I/O, and trash functions.
 `photoStorage(authenticatedFetch, storageRoot)` scopes all requests and redirects to `photos/`.
@@ -19,7 +22,10 @@ including mirrored orientations, and emit metadata-free WebP at the requested di
 No browser APIs or real image encoding belong here. When `stripLocation` is enabled,
 `stripLocation` must remove location metadata from the original binary while preserving its type,
 pixels and orientation; the model removes location from RDF too. The Node tests use real minimal
-TIFF/EXIF bytes with an encoder double. No EXIF reader is mocked.
+TIFF/EXIF bytes with an encoder double. No EXIF reader is mocked. WebP containers skip EXIF
+extraction because the pinned reader does not support them; the encoder still decodes/validates
+pixels and supplies dimensions. WebP EXIF fields are omitted, and thumbnail orientation defaults
+to 1.
 
 `uploadPhotos` writes each original, thumbnail, then metadata with create-only preconditions.
 An error stops the batch; earlier writes remain, and errors propagate with their HTTP status.
@@ -27,9 +33,14 @@ Callers must retain the input identifiers and reconcile partially uploaded binar
 No metadata is published for a photo whose thumbnail upload failed.
 
 `trashPhoto` copies the supported metadata and a PROV record into `.trash/` before conditionally
-deleting the original description. Original subject identity is retained. Restore is create-only;
-a collision preserves the trash copy. Purge removes matching app-owned original/thumbnail binaries,
-then the metadata copy; imported binary paths and existing original descriptions are refused. Failed moves may leave both metadata
+deleting the original description. Original subject identity is retained. Restore and purge claim
+the trash record with an ETag-conditional state write before changing photo resources, and delete
+the trash copy using the claim's ETag. State is stored as `schema:creativeWorkStatus` on the PROV
+record; legacy records without it remain readable. Restore is create-only; a collision preserves
+the copy in `restoring` state, which forbids purge. Restore can retry from that state. Purge removes
+matching app-owned original/thumbnail binaries, then the metadata copy; imported binary paths and
+existing original descriptions are refused. A `purging` record can only retry purge, including
+after partial binary deletion; it permanently forbids restore. Failed moves may leave both metadata
 copies, so callers can reconcile without losing the recovery copy. Existing album memberships and
 favourite values are not rewritten by trash; they reference the stable original subject.
 
