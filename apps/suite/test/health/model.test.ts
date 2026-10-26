@@ -185,6 +185,20 @@ describe("Observation — kind transitions and round-trip", () => {
 });
 
 describe("Instant", () => {
+  it.each([
+    ["dateTimeStamp", "2026-01-02T05:04:05+02:00", "2026-01-02T03:04:05.000Z"],
+    ["dateTime", "2026-01-02T03:04:05Z", "2026-01-02T03:04:05.000Z"],
+    ["date", "2026-01-02", "2026-01-02T00:00:00.000Z"],
+  ])("reads an xsd:%s timestamp", (datatype, lexical, expected) => {
+    const doc = load(
+      `<urn:t> <${TimeTerm.inXSDDateTimeStamp}> "${lexical}"^^<${NS.XSD}${datatype}>.`,
+    );
+    expect(doc.instant("urn:t").dateTime?.toISOString()).toBe(expected);
+  });
+  it.each(['"not a timestamp"', "<urn:not-a-literal>"])("rejects a non-date term %s", (object) => {
+    const doc = load(`<urn:t> <${TimeTerm.inXSDDateTimeStamp}> ${object}.`);
+    expect(() => doc.instant("urn:t").dateTime).toThrow();
+  });
   it("round-trips a dateTime and clears it", () => {
     const doc = empty();
     const inst = doc.mintInstant("urn:t");

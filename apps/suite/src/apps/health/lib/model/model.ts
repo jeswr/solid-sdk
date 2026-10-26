@@ -9,6 +9,7 @@
 // @rdfjs/wrapper mapping helpers. No `dataset.add(factory.quad(...))` and no
 // string-concatenated Turtle anywhere in this file.
 
+import { NS } from "@jeswr/suite-vocab";
 import type { DataFactory, DatasetCore } from "@rdfjs/types";
 import {
   DatasetWrapper,
@@ -180,7 +181,7 @@ export class Observation extends HealthTerm {
 }
 
 /**
- * A `time:Instant` — a point in time carrying an `xsd:dateTime` stamp. Used as
+ * A `time:Instant` — a point in time carrying an `xsd:dateTimeStamp` or legacy timestamp. Used as
  * the effective time of a spot observation and the start/end of a workout.
  */
 export class Instant extends HealthTerm {
@@ -191,7 +192,11 @@ export class Instant extends HealthTerm {
 
   /** The instant's timestamp (`time:inXSDDateTimeStamp`). */
   get dateTime(): Date | undefined {
-    return OptionalFrom.subjectPredicate(this, TimeTerm.inXSDDateTimeStamp, LiteralAs.date);
+    return OptionalFrom.subjectPredicate(this, TimeTerm.inXSDDateTimeStamp, (term) =>
+      term.termType === "Literal" && term.datatype.value === `${NS.XSD}dateTimeStamp`
+        ? new Date(term.value)
+        : LiteralAs.date(term),
+    );
   }
   set dateTime(value: Date | undefined) {
     OptionalAs.object(this, TimeTerm.inXSDDateTimeStamp, value, LiteralFrom.dateTime);
