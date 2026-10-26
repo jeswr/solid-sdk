@@ -25,6 +25,7 @@
     "@jeswr/fetch-rdf": "workspace:*",
     "@jeswr/solid-elements": "workspace:*",
     "@jeswr/solid-session-restore": "workspace:*",
+    "@jeswr/suite-vocab": "workspace:*",
     "@lit/react": "^1.0.8",
     "@radix-ui/react-avatar": "^1.2.0",
     "@radix-ui/react-dropdown-menu": "^2.1.18",
