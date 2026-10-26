@@ -218,21 +218,37 @@ export class ReactiveAuthenticationClient {
   }
 
   async #send(request: Request, session: Session, credentialed = false): Promise<Response> {
-    await this.#assertCurrent(session);
-    if (credentialed && !this.#boundary.allows(request.url)) {
-      throw new ReactiveAuthenticationError(`Credential boundary no longer allows ${request.url}`);
-    }
-    return await this.#fetch(request);
+    const send = async () => {
+      this.#assertNotAborted(session);
+      if (credentialed && !this.#boundary.allows(request.url)) {
+        throw new ReactiveAuthenticationError(
+          `Credential boundary no longer allows ${request.url}`,
+        );
+      }
+      // Keep validation and transport initiation under the shared fence lock. Wrapping the promise
+      // releases the lock before the response arrives, so logout never waits for the network.
+      return { response: this.#fetch(request) };
+    };
+    const { response } =
+      this.#fence === undefined
+        ? await send()
+        : await this.#fence.commit(session.generation!, send);
+    return await response;
   }
 
   async #assertCurrent(session: Session): Promise<void> {
+    this.#assertNotAborted(session);
+    if (session.generation !== undefined) await this.#fence!.assertCurrent(session.generation);
+    this.#assertNotAborted(session);
+  }
+
+  #assertNotAborted(session: Session): void {
     if (session.signal.aborted) {
       const reason = session.signal.reason;
       throw reason instanceof SessionSupersededError
         ? reason
         : (reason ?? new DOMException("Aborted", "AbortError"));
     }
-    if (session.generation !== undefined) await this.#fence!.assertCurrent(session.generation);
   }
 
   async #findProvider(
