@@ -854,3 +854,84 @@ The requested finding is fixed and tested. No implementation work is unfinished 
 there are no open questions. `roborev status` failed with exit 127 (`roborev: command not found`), so
 fresh automated per-commit verdicts could not be obtained locally. Dispatcher/security review remains
 outstanding; this security-critical package has not been merged.
+
+## Fix round 12 — review `b293cd1733d4`
+
+Completed both findings in `solid-sdk-lane-sst-8xm.28-b293cd1733d4.md`.
+Only `packages/reactive-authentication` and this report changed. No dependencies were added.
+
+| Commit | Change |
+| --- | --- |
+| `e192645b` | Retain each upgraded UMA request's issuing context and compare the rejected token within that context. Preserve verified resource context for request copies. Add a concurrent-client regression for an RPT reused across resources, plus DPoP/Bearer cases for changing contexts, copied requests and late rejection after replacement. |
+| `41dbfc46` | Associate cancellation with the captured session generation. Observe durable logout before capturing the signal; ignore duplicate and older broadcasts. Keep pending older generation reads cancelled. Add delayed-broadcast regressions for login, restoration and client fetch, plus cache-ticket and memory-only peer cases. |
+| Final documentation commit (this commit) | Record round-12 verification and the review-tool limitation. |
+
+UMA invalidation no longer uses a token-only context lookup: the upgraded request retains its verified
+cache key, and compare-and-remove checks the rejected token under that key. Reusing the same RPT in
+another context cannot redirect a pending rejection to that other context's entry.
+
+The fence advances its observed generation on durable reads and newer notifications, aborting the
+previous generation's controller once. `signalFor(generation)` returns an already-aborted signal for
+superseded operations, including a generation read that finishes late. Provider, cache, session and
+client callers capture that generation's signal. A delayed logout for the generation already observed
+leaves new work running; a newer logout still aborts it. Memory-only peers retain notified generations,
+and local logout advances beyond the latest observed generation.
+
+### Round-12 verification
+
+PASS required package gate and root checks, run before the final documentation commit:
+
+```sh
+pnpm --filter @jeswr/reactive-authentication run lint && pnpm --filter @jeswr/reactive-authentication run build && pnpm --filter @jeswr/reactive-authentication run typecheck && pnpm --filter @jeswr/reactive-authentication run test
+pnpm run lint:root
+git diff --check
+```
+
+- Package lint: zero errors; **63 warnings** and **22 informational diagnostics**, unchanged from round 11.
+- Build and typecheck: pass, including the SDK type-contract checks.
+- Tests: **325/325** pass in **29/29** files, with no skips.
+- Enforced coverage: statements **2091/2091**, branches **1545/1545**, functions **469/469**,
+  lines **1888/1888** — **100% in every metric**. Coverage configuration and thresholds are unchanged.
+- Root lint: Biome, lockfile transport, app workspace and raw-fetch guards pass.
+- Whitespace validation: pass.
+
+The new UMA regressions were run against the original UMA provider before applying its fix:
+
+```sh
+pnpm --filter @jeswr/reactive-authentication exec vitest run test/uma.test.js test/uma-coverage.test.js --coverage.enabled=false '--testNamePattern=two contexts share|retains each request'
+```
+
+Expected baseline failures: the concurrent first request returned **401** instead of **200**, and both
+DPoP/Bearer provider cases reused the rejected RPT instead of renewing its original context. With the
+fix, the concurrent request renews once, the other context's cached record is unchanged, and the
+ID-token session is reused. Late invalidation does not delete a replacement.
+
+The original fence also failed the new delayed-broadcast login/restoration and cache-ticket cases:
+
+```sh
+pnpm --filter @jeswr/reactive-authentication exec vitest run test/uma.test.js test/core-coverage.test.js test/session-coverage.test.js --coverage.enabled=false '--testNamePattern=two contexts share|follow observed generations|survives a delayed logout'
+```
+
+Login and restoration rejected with `SessionSupersededError`; observing the durable generation did
+not cancel the older cache ticket. Additional checks verified that a pending old generation read
+stays cancelled when either a broadcast or another durable read observes logout. These checks caught
+the need to pair signals with the exact captured generation rather than merely reading the current
+controller after an await. All cases pass in the final coverage-enforced gate.
+
+Validation used Node `24.22.1` and pnpm `10.4.1`. No `check:packages` run was needed because no dependency
+was added. The dependant dry run selected only this package, so no dependant gate applies:
+
+```sh
+pnpm exec turbo run build typecheck test --filter=...@jeswr/reactive-authentication --dry=json
+```
+
+Per the lane brief, no whole-workspace gate or `gate:full` ran. No push, PR, branch switch, network Git
+operation or edits to another checkout were performed. The working tree is clean after this final
+report commit.
+
+### Round-12 remaining work and questions
+
+Both requested findings are fixed and tested. No implementation work is unfinished or blocked;
+there are no open questions. `roborev status` failed with exit 127 (`roborev: command not found`), so
+fresh automated per-commit verdicts could not be obtained locally. Dispatcher/security review remains
+outstanding; this security-critical package has not been merged.
