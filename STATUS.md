@@ -97,3 +97,39 @@ No dependencies were added; no UI or screenshots apply. `roborev` remains unavai
 so automated per-commit review could not run. No implementation work or new open
 questions remain for these findings. Full-workspace validation and dispatcher review
 remain subject to the environment/tool limitations above.
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+## Fix round 2 — review of `b875edd55174`
+
+Both requested findings are addressed by `3cd62aed`
+(`fix: bound block scans and preserve formatted mentions`):
+
+- Replace the overlapping list regex with a bounded marker match followed by separate
+  whitespace and body scans. Failed bodies cannot backtrack over whitespace splits.
+  Preserve existing indentation, nine-digit ordered markers, empty items, and Unicode
+  line-separator behavior. Regressions exercise 100,000-character whitespace prefixes
+  for every marker form, both at block start and during paragraph lookahead.
+- Share mention recognition between inline parsing and emphasis delimiter searches.
+  Keep leading/internal handle underscores and explicit mention labels opaque, while
+  reserving terminal underscore runs for enclosing emphasis, including nested spans.
+  Regressions cover `_@_mira_`, single/double markers in both delimiter families,
+  exact mapped handles, literal explicit labels, rejected destinations and nesting.
+
+Validation before the final report commit:
+
+| Command | Result |
+| --- | --- |
+| `pnpm --filter @jeswr/suite-ui run build` | PASS; existing app dependency. |
+| `pnpm --filter @jeswr/app-suite run lint && pnpm --filter @jeswr/app-suite run build && pnpm --filter @jeswr/app-suite run typecheck && pnpm --filter @jeswr/app-suite run test` | PASS; 64 tests (63 chat + 1 existing). |
+| `pnpm run lint:root` | PASS; all root guards and 74 contrast pairs. |
+| `TURBO_SCM_BASE=b875edd55174679032dfaeed51d0634f95ec5f8c pnpm run gate` | PASS; 6/6 tasks, 1 cached. |
+| `GIT_ALLOW_PROTOCOL=file pnpm run gate:full` | BLOCKED outside this lane: existing `@jeswr/unstorage-solid#build` bootstrap invokes npm and fails with `EROFS` writing `/home/runner/.npm/_cacache/tmp/`; 20 successful / 149 scheduled tasks before abort. Remote Git protocols were disabled for this check to honor the lane restriction. |
+| `git diff --check` | PASS. |
+
+Coverage remains 100% per file for statements, branches, functions and lines:
+230/230 statements, 178/178 branches, 11/11 functions and 213/213 lines.
+No dependencies, UI, screenshots or new product decisions apply to this fix round.
+`roborev` remains unavailable, so automated per-commit reviews could not run here.
+No implementation work or open questions remain for these two findings; the unrelated
+full-workspace gate blocker and dispatcher review remain outstanding.
