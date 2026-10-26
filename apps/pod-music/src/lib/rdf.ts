@@ -7,6 +7,7 @@
 import { parseRdf } from "@jeswr/fetch-rdf";
 import type { DatasetCore, Quad } from "@rdfjs/types";
 import { DataFactory, Store, Writer } from "n3";
+import { canonicalizeFederationDataset } from "./canonical-vocab.js";
 
 /**
  * The single DataFactory used everywhere in this package. Mixing factories
@@ -36,7 +37,7 @@ export type IterableDataset = DatasetCore & Iterable<Quad>;
  */
 export function serializeTurtle(dataset: IterableDataset): Promise<string> {
   const writer = new Writer({ format: "text/turtle" });
-  for (const quad of dataset) {
+  for (const quad of canonicalizeFederationDataset(dataset, factory)) {
     writer.addQuad(quad);
   }
   return new Promise<string>((resolve, reject) => {
@@ -56,6 +57,5 @@ export function serializeTurtle(dataset: IterableDataset): Promise<string> {
  */
 export async function parseTurtle(body: string, baseIRI: string): Promise<Store> {
   const parsed = await parseRdf(body, "text/turtle", { baseIRI });
-  // parseRdf returns an n3.Store at runtime.
-  return parsed as unknown as Store;
+  return canonicalizeFederationDataset(parsed, factory);
 }
