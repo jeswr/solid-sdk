@@ -1,3 +1,5 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /**
  * The import runner — the one place integration data enters the pod.
  *
@@ -12,20 +14,21 @@
 import { refuseRedirects } from "@jeswr/guarded-fetch";
 import { IntegrationSyncError } from "./errors.js";
 import { fixtureFetch } from "./fixture-fetch.js";
-import { registrationsFor } from "./pod-writer.js";
+import { createImportSession } from "./import-session.js";
 import type {
+  ConnectorState,
+  ConnectorStateOptions,
   ImportProgress,
   IntegrationAdapter,
   PodWriter,
   SourceAuth,
   TokenSet,
-  WriteConditions,
   WrittenDoc,
 } from "./types.js";
 
 export type ImportMode = "live" | "demo";
 
-export interface RunImportOptions {
+export interface RunImportOptions extends ConnectorStateOptions {
   adapter: IntegrationAdapter;
   /** Explicit, host-owned storage port for this adapter. */
   podWriter: PodWriter;
@@ -39,6 +42,8 @@ export interface RunImportOptions {
 
 export interface ImportReport {
   adapterId: string;
+  /** Updated host-owned checkpoint; persist only in the host. */
+  state?: ConnectorState;
   mode: ImportMode;
   written: WrittenDoc[];
   /** Distinct category ids that received data (for the success screen). */
@@ -64,42 +69,48 @@ export async function runImport(opts: RunImportOptions): Promise<ImportReport> {
   if (!api)
     throw new IntegrationSyncError(id, "Live import requires SourceAuth — authorize first.");
 
-  const written: WrittenDoc[] = [];
-  const readConditions = new Map<string, WriteConditions>();
-
-  const outcome = await adapter.import({
-    api,
-    cursor: opts.cursor,
-    resolve: (slug) => opts.podWriter.resolve(slug),
-    read: async (slug) => {
-      const existing = await opts.podWriter.read(slug);
-      const url = opts.podWriter.resolve(slug);
-      if (!existing) readConditions.set(url, { ifNoneMatch: "*" });
-      else if (existing.etag) readConditions.set(url, { ifMatch: existing.etag });
-      else readConditions.delete(url);
-      return existing?.dataset;
-    },
-    progress: (p) => opts.onProgress?.(p),
-    write: async (doc, conditions) => {
-      const url = opts.podWriter.resolve(doc.slug);
-      const w = await opts.podWriter.write(doc, conditions ?? readConditions.get(url));
-      readConditions.delete(url);
-      written.push(w);
-      return w;
-    },
-  });
-
-  const { indexUrl } = await opts.podWriter.registerType(registrationsFor(written));
-
-  return {
-    adapterId: id,
-    mode,
-    written,
-    categories: [...new Set(written.map((w) => w.category))],
-    cursor: outcome.cursor,
-    skipped: outcome.skipped,
-    indexUrl,
-  };
+  const source = adapter.fixtures()[0]?.url;
+  const session = createImportSession(
+    opts.podWriter,
+    id,
+    source ? `${new URL(source).origin}/` : `urn:solid:connector:${encodeURIComponent(id)}:source`,
+    opts,
+    adapter.vocabMap,
+  );
+  try {
+    const outcome = await adapter.import({
+      api,
+      cursor: opts.cursor ?? opts.state?.cursor,
+      resolve: (slug) => opts.podWriter.resolve(slug),
+      read: session.read,
+      progress: (p) => opts.onProgress?.(p),
+      write: session.write,
+    });
+    const { indexUrl } = await opts.podWriter.registerType(session.registrations());
+    await session.finish();
+    const state = session.state(outcome);
+    opts.onState?.(state);
+    return {
+      adapterId: id,
+      mode,
+      written: session.written,
+      categories: [...new Set(session.written.map((w) => w.category))],
+      cursor: state.cursor,
+      skipped: outcome.skipped,
+      indexUrl,
+      state,
+    };
+  } catch (error) {
+    // Partial writes already link to this run. Record it when storage is available,
+    // preserving the original failure if the provenance write also fails.
+    try {
+      await session.finish();
+    } catch {
+      /* Original failure takes priority. */
+    }
+    opts.onState?.(session.state());
+    throw error;
+  }
 }
 
 /**

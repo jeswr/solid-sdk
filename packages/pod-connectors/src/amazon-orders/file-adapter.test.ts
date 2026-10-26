@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 import { DataFactory } from "n3";
 import { describe, expect, it } from "vitest";
 import { fileImport, memoryFile, TEST_POD_ROOT } from "../core/testing.js";
@@ -25,6 +26,29 @@ describe("amazon-orders file adapter", () => {
       (q) => q.predicate.value.endsWith("type") && q.object.value === CLASSES.Invoice,
     );
     expect(types).toHaveLength(2);
+  });
+
+  it("preserves distinct lines sharing an order ID on initial import and re-import", async () => {
+    const csv = `Order ID,Order Date,Product Name,Total Owed
+shared-order,2023-02-14,Cable,12.99
+shared-order,2023-02-14,Keyboard,89.00`;
+    const file = memoryFile("orders.csv", csv, "text/csv");
+    const { pod, report } = await fileImport(amazonOrdersFileAdapter, file);
+    const lines = (dataset: ReturnType<typeof pod.dataset>) =>
+      [...dataset]
+        .filter((q) => q.predicate.value === "https://schema.org/identifier")
+        .map((q) => new Invoice(q.subject.value, dataset, DataFactory));
+    const first = lines(pod.dataset(DOC));
+    expect(first.map((line) => line.name).sort()).toEqual(["Cable", "Keyboard"]);
+    expect(first.map((line) => line.identifier)).toEqual(["shared-order", "shared-order"]);
+    expect(report.state?.counts.items).toBe(2);
+    const second = await fileImport(amazonOrdersFileAdapter, file, { pod });
+    expect(
+      lines(pod.dataset(DOC))
+        .map((line) => line.name)
+        .sort(),
+    ).toEqual(["Cable", "Keyboard"]);
+    expect(second.report.state?.counts.items).toBe(2);
   });
 
   it("captures product, total, currency, status and date", async () => {
