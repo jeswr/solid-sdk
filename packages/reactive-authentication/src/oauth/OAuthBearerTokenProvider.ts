@@ -28,7 +28,8 @@ export class OAuthBearerTokenProvider implements TokenProvider {
   readonly #source: AccessTokenSource;
   readonly #resources: CredentialBoundary;
   readonly #fence: SessionFence;
-  #rejected: string | undefined;
+  readonly #rejected = new Set<string>();
+  #renewalHint: string | undefined;
 
   constructor(source: AccessTokenSource, options: OAuthBearerTokenProviderOptions) {
     this.#source = source;
@@ -74,7 +75,10 @@ export class OAuthBearerTokenProvider implements TokenProvider {
 
   async invalidate(upgraded: Request): Promise<void> {
     const token = upgraded.headers.get("Authorization")?.replace(/^Bearer /, "");
-    if (token !== undefined) this.#rejected = token;
+    if (token !== undefined) {
+      this.#rejected.add(token);
+      this.#renewalHint = token;
+    }
   }
 
   /**
@@ -82,26 +86,29 @@ export class OAuthBearerTokenProvider implements TokenProvider {
    * source clean up. The source runs outside the fence's lock: it may share the same fence (and take it).
    */
   async forget(): Promise<void> {
-    this.#rejected = undefined;
+    this.#rejected.clear();
+    this.#renewalHint = undefined;
     await this.#fence.supersede();
     await this.#source.forget?.();
   }
 
   async #token(signal: AbortSignal): Promise<AccessToken> {
-    const rejected = this.#rejected;
+    // Preserve eager renewal; acceptance is governed by all rejected values, not this single hint.
+    const rejected = this.#renewalHint;
     let token = await this.#source.getAccessToken({
       signal,
       ...(rejected === undefined ? {} : { rejectedToken: rejected }),
     });
-    if (token.token === rejected || expired(token)) {
+    // Check by value after each await: a late 401 for an older token must never hide a newer rejection.
+    if (this.#rejected.has(token.token) || expired(token)) {
       token = await this.#source.getAccessToken({ signal, rejectedToken: token.token });
     }
-    if (token.token === rejected || expired(token)) {
+    if (this.#rejected.has(token.token) || expired(token)) {
       throw new ReactiveAuthenticationError(
         `${this.#source.id} returned an expired or rejected token`,
       );
     }
-    if (this.#rejected === rejected) this.#rejected = undefined;
+    if (this.#renewalHint === rejected) this.#renewalHint = undefined;
     return token;
   }
 }

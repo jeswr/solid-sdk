@@ -300,3 +300,52 @@ test("Bearer providers renew expired credentials, reject repeated failures, and 
     "Bearer replacement",
   );
 });
+
+for (const stage of ["initial token", "renewal token"]) {
+  test(`Bearer providers refuse tokens rejected during the ${stage} read`, async () => {
+    const started = Promise.withResolvers();
+    const gate = Promise.withResolvers();
+    const hints = [];
+    const source = {
+      id: "api",
+      getAccessToken: async ({ rejectedToken }) => {
+        hints.push(rejectedToken);
+        if (stage === "renewal token" && hints.length === 1)
+          return { token: "expired", expiresAt: 0 };
+        started.resolve();
+        await gate.promise;
+        return { token: "rejected" };
+      },
+    };
+    const provider = new OAuthBearerTokenProvider(source, { resources: ["https://api.example/"] });
+    const request = new Request("https://api.example/resource");
+    const rejected = assert.rejects(provider.upgrade(request), /expired or rejected/);
+    await started.promise;
+    await provider.invalidate(
+      new Request(request, { headers: { authorization: "Bearer rejected" } }),
+    );
+    gate.resolve();
+    await rejected;
+    assert.deepEqual(hints, [undefined, stage === "initial token" ? "rejected" : "expired"]);
+  });
+}
+
+test("Bearer rejections follow token values across replacements and clear on logout", async () => {
+  let token = "rejected";
+  const source = { id: "api", getAccessToken: async () => ({ token }) };
+  const provider = new OAuthBearerTokenProvider(source, { resources: ["https://api.example/"] });
+  const request = new Request("https://api.example/resource");
+  await provider.invalidate(
+    new Request(request, { headers: { authorization: "Bearer rejected" } }),
+  );
+  await assert.rejects(provider.upgrade(request), /expired or rejected/);
+  token = "replacement";
+  assert.equal(
+    (await provider.upgrade(request)).headers.get("authorization"),
+    "Bearer replacement",
+  );
+  token = "rejected";
+  await assert.rejects(provider.upgrade(request), /expired or rejected/);
+  await provider.forget();
+  assert.equal((await provider.upgrade(request)).headers.get("authorization"), "Bearer rejected");
+});
