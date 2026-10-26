@@ -326,6 +326,42 @@ describe("shell layout", () => {
       ),
     );
   });
+  // AUTHORED-BY Claude Opus 5.5
+  it("keeps one effective sheet when saved preferences open both regions on a narrow viewport", async () => {
+    desktop = false;
+    render(<Frame initial={{ sidebarOpen: true, detailsOpen: true }} />);
+    // The open modal sheet hides the page from the accessibility tree.
+    const sidebarToggle = screen.getByRole("button", { name: "Toggle sidebar", hidden: true });
+    const detailsToggle = screen.getByRole("button", { name: "Toggle details pane", hidden: true });
+    expect(screen.getAllByRole("dialog")).toHaveLength(1);
+    expect(screen.getByRole("dialog", { name: "Drive sections" })).toBeTruthy();
+    expect(sidebarToggle.getAttribute("aria-expanded")).toBe("true");
+    expect(detailsToggle.getAttribute("aria-expanded")).toBe("false");
+    // `]` switches to details instead of closing a hidden details sheet.
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: "]" });
+    expect(update).toHaveBeenLastCalledWith({ sidebarOpen: false, detailsOpen: true });
+    expect(screen.getAllByRole("dialog")).toHaveLength(1);
+    expect(screen.getByRole("dialog", { name: "Details" })).toBeTruthy();
+    expect(sidebarToggle.getAttribute("aria-expanded")).toBe("false");
+    expect(detailsToggle.getAttribute("aria-expanded")).toBe("true");
+    await accessible();
+  });
+  it("closes both saved regions with Escape on a narrow viewport instead of revealing the other sheet", async () => {
+    desktop = false;
+    render(<Frame initial={{ sidebarOpen: true, detailsOpen: true }} />);
+    fireEvent.keyDown(screen.getByRole("dialog", { name: "Drive sections" }), { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(update).toHaveBeenLastCalledWith({ sidebarOpen: false, detailsOpen: false });
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Toggle details pane" }).getAttribute("aria-expanded"),
+      ).toBe("false"),
+    );
+    // `[` reopens only the sidebar.
+    fireEvent.keyDown(document.body, { key: "[" });
+    expect(update).toHaveBeenLastCalledWith({ sidebarOpen: true, detailsOpen: false });
+    expect(screen.getAllByRole("dialog")).toHaveLength(1);
+  });
   it("closes a drawer after native link activation and follows breakpoints", async () => {
     desktop = false;
     render(<Frame />);

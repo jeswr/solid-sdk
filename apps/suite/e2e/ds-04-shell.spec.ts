@@ -153,6 +153,42 @@ test("keyboard skip link, persistent preferences and editable shortcut guards", 
   await reflow(page);
 });
 
+// AUTHORED-BY Claude Opus 5.5
+test("saved preferences with both regions open give one sheet below 1024px", async ({
+  page,
+}, info) => {
+  await ready(page);
+  await page.evaluate(() =>
+    localStorage.setItem(
+      "solid-suite:dev-fixtures:shell",
+      JSON.stringify({ sidebarOpen: true, detailsOpen: true }),
+    ),
+  );
+  await page.reload();
+  await expect(page).toHaveTitle("My Drive · Drive · Solid Suite");
+  const sidebar = page.locator('button[aria-label="Toggle sidebar"]');
+  const details = page.locator('button[aria-label="Toggle details pane"]');
+  if ((page.viewportSize()?.width ?? 1280) >= 1024) {
+    await expect(sidebar).toHaveAttribute("aria-expanded", "true");
+    await expect(details).toHaveAttribute("aria-expanded", "true");
+    return;
+  }
+  await expect(page.getByRole("dialog")).toHaveCount(1);
+  await expect(page.getByRole("dialog", { name: "Drive sections" })).toBeVisible();
+  await expect(sidebar).toHaveAttribute("aria-expanded", "true");
+  await expect(details).toHaveAttribute("aria-expanded", "false");
+  await capture(page, info, "shell-saved-both-open");
+  await page.keyboard.press("]");
+  await expect(page.getByRole("dialog")).toHaveCount(1);
+  await expect(page.getByRole("dialog", { name: "Details" })).toBeVisible();
+  await expect(sidebar).toHaveAttribute("aria-expanded", "false");
+  await expect(details).toHaveAttribute("aria-expanded", "true");
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(details).toHaveAttribute("aria-expanded", "false");
+  await expect(details).toBeFocused();
+});
+
 test("main scrolls independently and focus stays clear of both bars", async ({ page }) => {
   await ready(page);
   const bar = await page.getByRole("banner").boundingBox();
