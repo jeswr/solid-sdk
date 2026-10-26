@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 "use client";
-import type { ComponentProps } from "react";
+import type { ComponentProps, KeyboardEvent, SyntheticEvent } from "react";
 import { Button } from "./button.js";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./tooltip.js";
 
@@ -11,6 +11,16 @@ export type IconButtonProps = Omit<
   label: string;
   size?: "icon" | "icon-sm";
 };
+
+function preventActivation(event: SyntheticEvent) {
+  event.preventDefault();
+  event.stopPropagation();
+}
+
+function preventKeyboardActivation(event: KeyboardEvent) {
+  // Keep Tab navigation and Escape tooltip dismissal available.
+  if (["Enter", " ", "ArrowDown", "ArrowUp"].includes(event.key)) preventActivation(event);
+}
 
 /** The label is shared by the accessible name and the hover/focus tooltip. */
 export function IconButton({ label, size = "icon", disabled, ...props }: IconButtonProps) {
@@ -24,7 +34,14 @@ export function IconButton({ label, size = "icon", disabled, ...props }: IconBut
             size={size}
             aria-label={label}
             aria-disabled={disabled || undefined}
-            onClick={disabled ? (event) => event.preventDefault() : props.onClick}
+            onClick={disabled ? preventActivation : props.onClick}
+            onDoubleClick={disabled ? preventActivation : props.onDoubleClick}
+            onKeyDown={disabled ? preventKeyboardActivation : props.onKeyDown}
+            onKeyUp={disabled ? preventKeyboardActivation : props.onKeyUp}
+            onPointerDown={disabled ? preventActivation : props.onPointerDown}
+            onPointerUp={disabled ? preventActivation : props.onPointerUp}
+            onMouseDown={disabled ? preventActivation : props.onMouseDown}
+            onMouseUp={disabled ? preventActivation : props.onMouseUp}
           />
         </TooltipTrigger>
         <TooltipContent>{label}</TooltipContent>

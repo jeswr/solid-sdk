@@ -15,6 +15,10 @@ import {
   DialogDescription,
   DialogTitle,
   DialogTrigger,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
   IconButton,
   Progress,
   TooltipProvider,
@@ -55,6 +59,83 @@ it("IconButton pairs its name with a keyboard tooltip and prevents disabled acti
 });
 it("requires a nonempty IconButton label", () =>
   expect(() => render(<IconButton label=" ">+</IconButton>)).toThrow("non-empty label"));
+
+it.each([true, false])("guards IconButton activation handlers when disabled=%s", (disabled) => {
+  const activate = vi.fn();
+  render(
+    <IconButton
+      label="Actions"
+      disabled={disabled}
+      onClick={activate}
+      onDoubleClick={activate}
+      onKeyDown={activate}
+      onKeyUp={activate}
+      onPointerDown={activate}
+      onPointerUp={activate}
+      onMouseDown={activate}
+      onMouseUp={activate}
+    >
+      +
+    </IconButton>,
+  );
+  const button = screen.getByRole("button", { name: "Actions" });
+  fireEvent.click(button);
+  fireEvent.doubleClick(button);
+  fireEvent.keyDown(button, { key: "Enter" });
+  fireEvent.keyUp(button, { key: "Enter" });
+  fireEvent.pointerDown(button, { button: 0 });
+  fireEvent.pointerUp(button, { button: 0 });
+  fireEvent.mouseDown(button, { button: 0 });
+  fireEvent.mouseUp(button, { button: 0 });
+  expect(activate).toHaveBeenCalledTimes(disabled ? 0 : 8);
+  // Disabled controls remain in the tab order, and Tab must keep its native action.
+  expect(button.tabIndex).toBe(0);
+  expect(fireEvent.keyDown(button, { key: "Tab" })).toBe(true);
+});
+
+it.each([
+  "Enter",
+  " ",
+  "ArrowDown",
+  "pointer",
+])("prevents disabled IconButton dropdown activation via %s and re-enables it", async (activation) => {
+  function Actions({ disabled }: { disabled: boolean }) {
+    return (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <IconButton label="File actions" disabled={disabled}>
+            +
+          </IconButton>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent>
+          <DropdownMenuItem>Rename file</DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    );
+  }
+  const { rerender } = render(<Actions disabled />);
+  const button = screen.getByRole("button", { name: "File actions" });
+  const activate = () => {
+    if (activation === "pointer") {
+      fireEvent(
+        button,
+        new MouseEvent("pointerdown", { button: 0, bubbles: true, cancelable: true }),
+      );
+    } else {
+      fireEvent.keyDown(button, { key: activation });
+    }
+  };
+  activate();
+  expect(button.getAttribute("aria-expanded")).toBe("false");
+  expect(screen.queryByRole("menu")).toBeNull();
+  button.focus();
+  await waitFor(() => expect(screen.getByRole("tooltip").textContent).toBe("File actions"));
+  expect(document.activeElement).toBe(button);
+  rerender(<Actions disabled={false} />);
+  activate();
+  expect(await screen.findByRole("menu")).toBeDefined();
+  expect(button.getAttribute("aria-expanded")).toBe("true");
+});
 it("exposes determinate and unknown progress correctly", () => {
   render(
     <>
