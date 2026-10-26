@@ -1693,6 +1693,9 @@ importers:
       '@jeswr/fetch-rdf':
         specifier: workspace:*
         version: link:../../packages/fetch-rdf
+      '@jeswr/suite-vocab':
+        specifier: workspace:*
+        version: link:../../packages/suite-vocab
       '@rdfjs/wrapper':
         specifier: ^0.34.0
         version: 0.34.0
