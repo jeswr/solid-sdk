@@ -451,6 +451,65 @@ describe("recurrence and reminders", () => {
       ).map((e) => asDate(e.start).toISOString()),
     ).toEqual(["2026-10-25T00:30:00.000Z", "2026-10-26T01:30:00.000Z"]);
   });
+  it.each([
+    "2026-10-25T01:15Z",
+    "2026-10-25T00:30Z",
+    "2026-10-25T00:29Z",
+  ])("compares inclusive instant cutoffs after resolving rollback candidates (%s)", (until) => {
+    const event: CalendarEvent = {
+      name: "Cutoff",
+      start: date("2026-10-24T00:30Z"),
+      recurrence: { frequency: "DAILY", until: date(until) },
+    };
+    const starts = expandEvent(
+      event,
+      date("2026-10-24Z"),
+      date("2026-10-28Z"),
+      "Europe/London",
+    ).map((e) => e.start);
+    expect(starts).toEqual(
+      until.endsWith("00:29Z") ? [event.start] : [event.start, date("2026-10-25T00:30Z")],
+    );
+  });
+  it.each([
+    ["Europe/London", "2026-10-25T01:30Z", "2026-10-26T01:30Z"],
+    ["America/New_York", "2026-11-01T06:30Z", "2026-11-02T06:30Z"],
+    ["Australia/Lord_Howe", "2026-04-04T15:15Z", "2026-04-05T15:15Z"],
+  ])("preserves the explicit later DTSTART instant in %s", (zone, start, next) => {
+    const event: CalendarEvent = {
+      name: "Later overlap",
+      start: date(start),
+      end: new Date(+date(start) + 1800000),
+      recurrence: { frequency: "DAILY", count: 2 },
+    };
+    const expanded = expandEvent(
+      event,
+      new Date(+date(start) - 3600000),
+      new Date(+date(next) + 3600000),
+      zone,
+    );
+    expect(expanded.map((e) => e.start)).toEqual([date(start), date(next)]);
+    expect(expanded[0]?.end).toEqual(event.end);
+    expect(
+      expandEvent(event, date(start), new Date(+date(start) + 1), zone).map((e) => e.start),
+    ).toEqual([date(start)]);
+    expect(
+      expandEvent(
+        { ...event, recurrence: { frequency: "DAILY", count: 2, exceptDate: [date(start)] } },
+        date(start),
+        new Date(+date(next) + 3600000),
+        zone,
+      ).map((e) => e.start),
+    ).toEqual([date(next)]);
+    expect(
+      expandEvent(
+        { ...event, recurrence: { frequency: "DAILY", until: date(start) } },
+        date(start),
+        new Date(+date(next) + 3600000),
+        zone,
+      ).map((e) => e.start),
+    ).toEqual([date(start)]);
+  });
   it("computes sorted absolute and offset fire times without mutating reminders", () => {
     expect(computeFireTimes(event).map((d) => d.toISOString())).toEqual([
       "2026-03-02T07:00:00.000Z",

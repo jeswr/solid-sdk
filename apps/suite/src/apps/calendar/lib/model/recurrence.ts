@@ -56,7 +56,9 @@ export function toRRule(rule: RecurrenceRule, start: CalendarDate, timeZone = "U
         ? null
         : typeof rule.until === "string"
           ? new Date(+asDate(rule.until) + 86399999)
-          : wallClock(asDate(rule.until), timeZone),
+          : // Floating cutoffs can run backward during an overlap. Generate a
+            // conservative superset; expandEvent enforces the exact instant below.
+            new Date(+wallClock(asDate(rule.until), timeZone) + 86400000),
     byweekday: rule.byDay?.length ? rule.byDay.map((day) => RRule[day]) : null,
     bymonthday: rule.byMonthDay?.length ? rule.byMonthDay : null,
     bymonth: rule.byMonth?.length ? rule.byMonth : null,
@@ -85,6 +87,7 @@ export function expandEvent(
   if (!event.recurrence) return overlaps(start) ? [event] : [];
   const zone = typeof event.start === "string" ? "UTC" : timeZone;
   const rule = event.recurrence;
+  const floatingStart = wallClock(start, zone);
   const floatingFrom = wallClock(new Date(+from - duration), zone);
   const floatingTo = wallClock(to, zone);
   // Pad for offset changes at range boundaries; exact filtering follows conversion.
@@ -92,13 +95,14 @@ export function expandEvent(
   // COUNT applies to valid local times from DTSTART, before EXDATE/range filtering.
   // Let rrule bound the search by the range, and stop once that valid count is met.
   toRRule({ ...rule, count: undefined }, event.start, zone).between(
-    rule.count === undefined ? new Date(+floatingFrom - 86400000) : wallClock(start, zone),
+    rule.count === undefined ? new Date(+floatingFrom - 86400000) : floatingStart,
     new Date(+floatingTo + 86400000),
     true,
     (wall) => {
       let date: Date;
       try {
-        date = fromWallClock(wall, zone);
+        // DTSTART identifies an explicit instant, including the later overlap.
+        date = +wall === +floatingStart ? start : fromWallClock(wall, zone);
       } catch {
         return true;
       }
