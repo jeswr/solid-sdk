@@ -85,3 +85,42 @@ Workspace dependencies use `workspace:*`: suite-vocab, rdf-serialize and guarded
   authoritative and cross-document playlist persistence/recovery is left to MUS-01.
 - Hook integration, preferences persistence, Type Index discovery, caching/outbox,
   live subscriptions and UI remain in the later MUS-01/UI lanes as specified.
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+## Fix round 1
+
+Addressed exactly the three review findings against `a025663eb656`:
+
+- `33835b72 fix: reject unsafe music subject IRIs`: reject named subjects requiring
+  escaping before mutation, including direct field writes and album membership.
+  Preserve imported RDF identities. Test string and NamedNode inputs with all
+  forbidden IRIREF symbols, controls and an injection payload; verify a safe,
+  lexically non-normalized IRI survives serialization unchanged.
+- `830d322e fix: preserve linked playback instants`: follow `core:atTime` references
+  to `time:inXSDDateTime`; create stable instant IRIs and reuse imported instant
+  IRIs on edits. Write `time:Instant` and typed `xsd:dateTime` values, retaining
+  instant metadata. Replace the media fixture's literal timestamp with the sector
+  structure. Test new events, imported events, repeated edits, malformed values,
+  clearing and round trips. Keep literal timestamp reads for compatibility.
+- `43b0e146 fix: synchronize music track titles`: write `schema:name` and
+  `dcterms:title` together for tracks, clearing previous values on explicit edits.
+  Test creation and repeated renames across mo, schema and media imports.
+- Final documentation commit (`docs: record music review fixes`): this report.
+
+Validation used `export PATH="$PWD/node_modules/.bin:$PATH"`:
+
+| Exact command | Result |
+| --- | --- |
+| `pnpm --filter '@jeswr/app-suite^...' run build` | PASS; build the four workspace dependencies before model tests. The first focused test attempt before this build could not resolve the unbuilt `@jeswr/rdf-serialize` entry; rerunning after the build passed. |
+| `pnpm --filter @jeswr/app-suite run lint && pnpm --filter @jeswr/app-suite run build && pnpm --filter @jeswr/app-suite run typecheck && pnpm --filter @jeswr/app-suite run test` | PASS; 4 test files, 44 tests. |
+| `pnpm --filter @jeswr/app-suite run coverage:music` | PASS; 100% statements (369/369), branches (224/224), functions (108/108), lines (319/319), with per-file thresholds. |
+| `pnpm run lint:root` | PASS; all root guards, including 74 contrast checks. |
+| `TURBO_SCM_BASE=a025663eb6563a26fff917edbd01dd288c804696 pnpm run gate` | PASS; 9/9 tasks, including final app lint/build/typecheck/test. Log: `/tmp/sst-uxd8-fix-round-1-gate.log`. |
+| `git diff --check` | PASS. |
+
+No dependencies, configuration, UI or unrelated implementation changed. No remote
+git operations ran. The full workspace gate was not rerun: the unchanged
+`packages/unstorage-solid/scripts/build-deps.mjs` invokes a remote `git clone`,
+which this lane explicitly forbids. `roborev` remains unavailable, so per-commit
+automated reviews could not run. No fixes remain unfinished; no open questions.
