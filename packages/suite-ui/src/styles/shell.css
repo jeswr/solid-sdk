@@ -305,7 +305,7 @@
   inset-block: 0;
   z-index: 50;
   max-width: calc(100vw - var(--space-8));
-  background: var(--surface);
+  background: var(--elevation-3-fill);
   color: var(--foreground);
   box-shadow: var(--shadow-3);
   overflow-y: auto;
