@@ -4305,10 +4305,26 @@ importers:
         version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@24.13.3)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1)(vite@8.1.4(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0))
 
   packages/storage-capabilities:
+    dependencies:
+      '@rdfjs/types':
+        specifier: ^2.0.1
+        version: 2.0.1
+      '@rdfjs/wrapper':
+        specifier: ^0.34.0
+        version: 0.34.0
+      n3:
+        specifier: ^2.0.3
+        version: 2.1.1
     devDependencies:
       '@biomejs/biome':
         specifier: ^2.5.1
         version: 2.5.3
+      '@jeswr/fetch-rdf':
+        specifier: workspace:*
+        version: link:../fetch-rdf
+      '@types/n3':
+        specifier: ^1.16.0
+        version: 1.26.1
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
