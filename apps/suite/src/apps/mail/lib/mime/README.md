@@ -15,12 +15,21 @@ String input represents UTF-8, not a binary string. The library performs no I/O,
 creates no object URLs, and imports no React or hooks.
 
 `postal-mime` handles RFC 5322 headers (including address groups, duplicate fields,
-folding and RFC 2047 encoded words), multipart alternative/mixed/related bodies,
+folding and RFC 2047 encoded words), the decoded multipart tree,
 7bit/8bit/binary/base64/quoted-printable transfers, charset conversion and RFC 2231
 attachment filenames. Headers expose both unfolded wire values and decoded text.
 Absent text is `""`; absent HTML is `null`. HTML-only mail does not invent a plain
 body. Encapsulated `message/rfc822` parts remain attachments. Parser errors,
 including its default nesting/header/part-count limits, reject the parse promise.
+
+The adapter selects the last available plain and HTML representations separately
+inside each `multipart/alternative`, including nested alternatives. Related bodies
+use the immediate child named by `start` (case-sensitive Content-ID), or the first
+child when `start` is absent or unresolved, as their root. Non-root related leaves
+remain attachment resources, including text/HTML, with transfer-decoded bytes and
+CID metadata. Mixed parts retain document order in each actual representation.
+Selection uses a small internal-tree adapter specific to pinned `postal-mime`
+4.1.4; run the regression tests when upgrading it.
 
 `sanitizeMessageHtml` retains basic reading structure and http(s)/mailto links.
 Scripts, event handlers, CSS, forms, embedded documents, SVG/MathML, automatic

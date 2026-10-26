@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import PostalMime, { type Address, decodeWords } from "postal-mime";
 import { sanitizeMessageHtml } from "./html";
+import { selectMimeContent } from "./select";
 
 export type MimeAddress = Address;
 /** Pass original bytes for messages containing unencoded non-UTF-8 octets. */
@@ -51,15 +52,17 @@ export interface MimeMessage {
 }
 
 /**
- * Parse RFC 5322 / MIME bytes without I/O. Postal-mime handles multipart selection,
+ * Parse RFC 5322 / MIME bytes without I/O. Postal-mime handles the MIME tree,
  * transfer encodings, charsets and encoded parameters. Its bounded parser errors
  * propagate as rejected promises. Encapsulated messages remain downloadable parts.
  */
 export async function parseMimeMessage(input: MimeInput): Promise<MimeMessage> {
-  const message = await PostalMime.parse(input, {
+  const parser = new PostalMime({
     attachmentEncoding: "arraybuffer",
     forceRfc822Attachments: true,
   });
+  const message = await parser.parse(input);
+  const selected = selectMimeContent(parser);
   return {
     headers: message.headers.map(({ key, value }) => ({
       name: key,
@@ -77,9 +80,9 @@ export async function parseMimeMessage(input: MimeInput): Promise<MimeMessage> {
     messageId: message.messageId ?? null,
     inReplyTo: message.inReplyTo ?? null,
     references: message.references ?? null,
-    text: message.text ?? "",
-    html: message.html === undefined ? null : sanitizeMessageHtml(message.html),
-    attachments: message.attachments.map((part) => {
+    text: selected.plain ?? "",
+    html: selected.html === undefined ? null : sanitizeMessageHtml(selected.html),
+    attachments: selected.attachments.map((part) => {
       // arraybuffer is fixed above; postal-mime cannot return string content here.
       const content = new Uint8Array(part.content as ArrayBuffer);
       return {

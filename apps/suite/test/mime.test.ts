@@ -95,6 +95,103 @@ describe("RFC 5322 and MIME parsing", () => {
     );
   });
 
+  it("honors related start IDs case-sensitively and preserves supporting text as resource bytes", async () => {
+    const message = await parseMimeMessage(await fixture("related-html"));
+    expect(message.text).toBe("");
+    expect(message.html).toBe('<p>Root body</p><img alt="" data-inline-cid="root@example.org" />');
+    expect(message.attachments).toEqual([
+      {
+        filename: "support.html",
+        contentType: "text/html",
+        disposition: "inline",
+        description: "Auxiliary café",
+        contentId: "root@example.org",
+        inline: true,
+        size: 21,
+        content: new Uint8Array([
+          ...new TextEncoder().encode("<p>Auxiliary caf"),
+          233,
+          ...new TextEncoder().encode("</p>"),
+        ]),
+      },
+      {
+        filename: null,
+        contentType: "text/plain",
+        disposition: null,
+        description: null,
+        contentId: "notes@example.org",
+        inline: true,
+        size: 14,
+        content: new TextEncoder().encode("Resource notes"),
+      },
+    ]);
+  });
+
+  it.each([
+    "",
+    '; start="<missing@example.org>"',
+  ])("uses the first related child when start is absent or unresolved: %s", async (start) => {
+    const message = await parseMimeMessage(
+      `Content-Type: multipart/related; boundary=x${start}\n\n--x\nContent-Type: text/html\n\n<p>Root</p>\n--x\nContent-Type: text/html\nContent-ID: <support@example.org>\n\n<p>Support</p>\n--x--`,
+    );
+    expect(message.html).toBe("<p>Root</p>");
+    expect(message.attachments).toHaveLength(1);
+    expect(message.attachments[0]).toMatchObject({
+      contentType: "text/html",
+      contentId: "support@example.org",
+      inline: true,
+      content: new TextEncoder().encode("<p>Support</p>"),
+    });
+  });
+
+  it("selects the last repeated media types and replaces outer fallbacks with nested alternatives", async () => {
+    const message = await parseMimeMessage(await fixture("nested-alternatives"));
+    expect(message.text).toBe("Preferred plain café");
+    expect(message.html).toBe("<p>Preferred HTML</p>");
+    expect(message.attachments).toEqual([]);
+  });
+
+  it.each(["plain", "html"])("selects the last of two text/%s alternatives", async (type) => {
+    const message = await parseMimeMessage(
+      `Content-Type: multipart/alternative; boundary=x\n\n--x\nContent-Type: text/${type}\n\nEarlier\n--x\nContent-Type: text/${type}\n\nPreferred\n--x--`,
+    );
+    expect(message.text).toBe(type === "plain" ? "Preferred" : "");
+    expect(message.html).toBe(type === "html" ? "Preferred" : null);
+    expect(message.attachments).toEqual([]);
+  });
+
+  it.each(["plain", "html"])("allows an empty preferred text/%s alternative", async (type) => {
+    const message = await parseMimeMessage(
+      `Content-Type: multipart/alternative; boundary=x\n\n--x\nContent-Type: text/${type}\n\nEarlier\n--x\nContent-Type: text/${type}\n\n--x--`,
+    );
+    expect(message.text).toBe("");
+    expect(message.html).toBe(type === "html" ? "" : null);
+  });
+
+  it("keeps resources of selected related alternatives without duplicating them across body types", async () => {
+    const message = await parseMimeMessage(
+      'Content-Type: multipart/alternative; boundary=a\n\n--a\nContent-Type: multipart/related; boundary=r\n\n--r\nContent-Type: text/html\n\n<p>Old</p>\n--r\nContent-Type: image/png\nContent-ID: <old@example.org>\n\nold\n--r--\n--a\nContent-Type: multipart/related; boundary=s; start="<body@example.org>"\n\n--s\nContent-Type: multipart/alternative; boundary=b\nContent-ID: <body@example.org>\n\n--b\nContent-Type: text/plain\n\nCurrent\n--b\nContent-Type: text/html\n\n<p>Current</p>\n--b--\n--s\nContent-Type: text/html\nContent-ID: <current@example.org>\n\n<p>Resource</p>\n--s--\n--a\nContent-Type: application/octet-stream\n\nUnsupported alternative\n--a--',
+    );
+    expect(message.text).toBe("Current");
+    expect(message.html).toBe("<p>Current</p>");
+    expect(message.attachments.map((part) => part.contentId)).toEqual([
+      "current@example.org",
+      null,
+    ]);
+  });
+
+  it("keeps a non-root multipart subtree entirely out of the related reading body", async () => {
+    const message = await parseMimeMessage(
+      "Content-Type: multipart/related; boundary=r\n\n--r\nContent-Type: text/html\n\n<p>Root</p>\n--r\nContent-Type: multipart/alternative; boundary=a\n\n--a\nContent-Type: text/plain\n\nSupport plain\n--a\nContent-Type: text/html\n\n<p>Support HTML</p>\n--a--\n--r--",
+    );
+    expect(message.text).toBe("");
+    expect(message.html).toBe("<p>Root</p>");
+    expect(message.attachments.map((part) => part.contentType)).toEqual([
+      "text/plain",
+      "text/html",
+    ]);
+  });
+
   it("returns predictable empty values for an empty message", async () => {
     expect(await parseMimeMessage("")).toEqual({
       headers: [],
