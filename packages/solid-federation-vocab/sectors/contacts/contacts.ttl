@@ -1,7 +1,7 @@
 # AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 #
-@prefix contact: <https://w3id.org/jeswr/sectors/contacts#> .
-@prefix core:    <https://w3id.org/jeswr/core#> .
+@prefix contact: <https://jeswr.org/ns/sectors/contacts#> .
+@prefix core:    <https://jeswr.org/ns/core#> .
 @prefix owl:     <http://www.w3.org/2002/07/owl#> .
 @prefix rdf:     <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
 @prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
@@ -46,14 +46,14 @@
 # default; the SHACL profile carries the closed-world MUST/SHOULD.
 # =============================================================================
 
-<https://w3id.org/jeswr/sectors/contacts> a owl:Ontology ;
+<https://jeswr.org/ns/sectors/contacts> a owl:Ontology ;
     dcterms:title "Solid Contacts Sector Ontology (gUFO re-base)"@en ;
     rdfs:label "Solid Contacts Sector Ontology"@en ;
     vann:preferredNamespacePrefix "contact" ;
-    vann:preferredNamespaceUri "https://w3id.org/jeswr/sectors/contacts#" ;
-    owl:imports <https://w3id.org/jeswr/core> ;
-    owl:versionInfo "1.0.0" ;
-    owl:versionIRI <https://w3id.org/jeswr/sectors/contacts/1.0.0> ;
+    vann:preferredNamespaceUri "https://jeswr.org/ns/sectors/contacts#" ;
+    owl:imports <https://jeswr.org/ns/core> ;
+    owl:versionInfo "2.0.0" ;
+    owl:versionIRI <https://jeswr.org/ns/sectors/contacts/2.0.0> ;
     dcterms:description """The address-book / contacts sector model for the Solid
         federation, re-based onto the gUFO Core. A Contact is a core:Record ABOUT
         a Person or Organization (the card distinct from the agent it names);
@@ -63,8 +63,8 @@
         roles; lists are core:Group. v1.0.0 is a BREAKING re-base of v0 (the
         meta-types and the role model change meaning), so a new MAJOR version.
         Aligns thoroughly to vcard and to schema:ContactPoint/PostalAddress in
-        the companion alignments file."""@en ;
-    dcterms:modified "2026-06-13"^^xsd:date ;
+        the companion alignments file. Version 2.0.0 rebases this ontology from its legacy w3id namespace to https://jeswr.org/ns/ (DECISIONS V1)."""@en ;
+    dcterms:modified "2026-10-25"^^xsd:date ;
     rdfs:comment "Re-based per R11 §4.2."@en .
 
 # -----------------------------------------------------------------------------
@@ -276,13 +276,13 @@ contact:hasMemberContact a owl:ObjectProperty ;
 
 # =============================================================================
 # SECTOR MARKER — the IRI an app's fedapp:sector points at to declare it operates
-# in this sector (https://w3id.org/jeswr/fed#sector). A skos:Concept in the
+# in this sector (https://jeswr.org/ns/fed#sector). A skos:Concept in the
 # federation sector register; dereferences to this ontology.
 # =============================================================================
 
-<https://w3id.org/jeswr/sectors/contacts#sector>
+<https://jeswr.org/ns/sectors/contacts#sector>
     a <http://www.w3.org/2004/02/skos/core#Concept> ;
     rdfs:label "Contacts sector"@en ;
     rdfs:comment "The Contacts data sector. The value an app's fedapp:sector names in its Client Identifier Document to declare it operates over contacts data. Backed by this sector ontology."@en ;
-    rdfs:isDefinedBy <https://w3id.org/jeswr/sectors/contacts> ;
+    rdfs:isDefinedBy <https://jeswr.org/ns/sectors/contacts> ;
     skos:prefLabel "Contacts"@en .

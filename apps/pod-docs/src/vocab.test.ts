@@ -3,7 +3,7 @@ import { DCT, DEFAULT_FORMAT, DOCUMENT_CLASS, NS, PD, PREFIXES, PROV, RDF_TYPE }
 
 describe("vocab", () => {
   it("composes predicate IRIs from their namespace bases", () => {
-    expect(DOCUMENT_CLASS).toBe("https://w3id.org/jeswr/pod-docs#Document");
+    expect(DOCUMENT_CLASS).toBe("https://jeswr.org/ns/pod-docs#Document");
     expect(RDF_TYPE).toBe("http://www.w3.org/1999/02/22-rdf-syntax-ns#type");
     expect(PD.body).toBe(`${NS.PD}body`);
     expect(PD.format).toBe(`${NS.PD}format`);

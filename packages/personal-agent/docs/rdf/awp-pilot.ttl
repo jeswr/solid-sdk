@@ -1,0 +1,330 @@
+# Agentic Web pilot 0.1 — RDF instantiation of the pilot term register (PROVISIONAL).
+#
+# Status: every `awp:` term below is PROVISIONAL (vs:term_status "unstable"). The namespace
+# https://w3id.org/jeswr/awp# is NOT registered with w3id.org and does not dereference;
+# registration is out of scope for this pilot. Do not cite these IRIs as a published
+# vocabulary.
+#
+# Design rules applied here:
+#  - Reused terms keep their published meaning (PROV-O, ODRL 2.2, PROF, DCTERMS, schema.org,
+#    DPV 2.1). No owl:equivalentClass / owl:sameAs axioms are asserted anywhere.
+#  - Minted classes are only declared rdfs:subClassOf prov:Entity where they are records an
+#    agent produced. No rdfs:domain / rdfs:range axioms are asserted on minted properties,
+#    so using a property entails nothing about its subject or object.
+#  - RDF is ONE serialisation of the abstract model; the runtime does not require it. The
+#    wire format (awp-json) is not JSON-LD.
+#  - Record content is expressed as triples; no record is wrapped as an opaque JSON literal.
+#    Fields with no reviewed RDF mapping are omitted (see the converter's `unmapped` report).
+#
+# Relative IRIs (the profile artefacts) resolve against this file's location.
+
+@prefix awp:   <https://w3id.org/jeswr/awp#> .
+@prefix prov:  <http://www.w3.org/ns/prov#> .
+@prefix odrl:  <http://www.w3.org/ns/odrl/2/> .
+@prefix prof:  <http://www.w3.org/ns/dx/prof/> .
+@prefix role:  <http://www.w3.org/ns/dx/prof/role/> .
+@prefix dct:   <http://purl.org/dc/terms/> .
+@prefix dpv:   <https://w3id.org/dpv#> .
+@prefix schema: <https://schema.org/> .
+@prefix rdf:   <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl:   <http://www.w3.org/2002/07/owl#> .
+@prefix skos:  <http://www.w3.org/2004/02/skos/core#> .
+@prefix vs:    <http://www.w3.org/2003/06/sw-vocab-status/ns#> .
+@prefix xsd:   <http://www.w3.org/2001/XMLSchema#> .
+
+# --------------------------------------------------------------------------------------
+# The vocabulary resource and the profile (PROF)
+# --------------------------------------------------------------------------------------
+
+<https://w3id.org/jeswr/awp> a owl:Ontology ;
+  dct:title "Agentic Web pilot terms (provisional)"@en ;
+  dct:description "Minted terms for the Agentic Web personal-agent pilot 0.1. Provisional; unregistered namespace."@en ;
+  owl:versionInfo "0.1.0-provisional" ;
+  vs:term_status "unstable" .
+
+<https://w3id.org/jeswr/awp/profile/pilot/0.1> a prof:Profile ;
+  dct:title "Agentic Web personal-agent pilot profile 0.1"@en ;
+  dct:description "Pilot profile: transport-neutral interaction model, JWS configurations, owner mandates (ODRL subset), direct and email bindings. Self-tested only."@en ;
+  owl:versionInfo "0.1.0" ;
+  vs:term_status "unstable" ;
+  prof:hasToken "awp-pilot-0.1" ;
+  prof:hasResource
+    <#resource-specification> ,
+    <#resource-vocabulary> ,
+    <#resource-matrix> ,
+    <#resource-example> .
+
+<#resource-specification> a prof:ResourceDescriptor ;
+  dct:title "Pilot profile specification"@en ;
+  dct:format <https://www.iana.org/assignments/media-types/text/markdown> ;
+  prof:hasRole role:specification ;
+  prof:hasArtifact <../PILOT-PROFILE.md> .
+
+<#resource-vocabulary> a prof:ResourceDescriptor ;
+  dct:title "Provisional pilot vocabulary (this file)"@en ;
+  dct:format <https://www.iana.org/assignments/media-types/text/turtle> ;
+  prof:hasRole role:vocabulary ;
+  prof:hasArtifact <awp-pilot.ttl> .
+
+<#resource-matrix> a prof:ResourceDescriptor ;
+  dct:title "Requirements matrix (requirement → mechanism → evidence level)"@en ;
+  dct:format <https://www.iana.org/assignments/media-types/text/markdown> ;
+  prof:hasRole role:guidance ;
+  prof:hasArtifact <../PILOT-MATRIX.md> .
+
+<#resource-example> a prof:ResourceDescriptor ;
+  dct:title "Example evidence graph generated from a synthetic runtime ledger"@en ;
+  dct:format <https://www.iana.org/assignments/media-types/text/turtle> ;
+  prof:hasRole role:example ;
+  prof:hasArtifact <../../reports/pilot-rdf-evidence.ttl> .
+
+# --------------------------------------------------------------------------------------
+# Classes (provisional)
+# --------------------------------------------------------------------------------------
+
+awp:EvidenceLedger a rdfs:Class ; vs:term_status "unstable" ;
+  rdfs:subClassOf prov:Entity ;
+  rdfs:label "Evidence ledger"@en ;
+  skos:definition "An append-only hash-chained log kept by one agent. Integrity of the retained entries does not establish completeness (CT-10)."@en .
+
+awp:LedgerEntry a rdfs:Class ; vs:term_status "unstable" ;
+  rdfs:subClassOf prov:Entity ;
+  rdfs:label "Ledger entry"@en ;
+  skos:definition "One sealed entry of an evidence ledger: sequence number, previous hash, entry hash, and the record it carries."@en .
+
+awp:VerificationResult a rdfs:Class ; vs:term_status "unstable" ;
+  rdfs:subClassOf prov:Entity ;
+  rdfs:label "Verification result"@en ;
+  skos:definition "Outcome of an integrity and key-attribution check over exact protected bytes. Establishes neither truth, source authority, representation nor permission."@en .
+
+awp:RepresentationAssessment a rdfs:Class ; vs:term_status "unstable" ;
+  rdfs:subClassOf prov:Entity ;
+  rdfs:label "Representation assessment"@en ;
+  skos:definition "An evaluator's conclusion whether a software actor speaks for a party for an operation. Not an authorisation."@en .
+
+awp:SourceAuthorityAssessment a rdfs:Class ; vs:term_status "unstable" ;
+  rdfs:subClassOf prov:Entity ;
+  rdfs:label "Source-authority assessment"@en ;
+  skos:definition "An evaluator's conclusion whether it recognises a source for a claim type about a subject, under an identified local rule version (CT-03)."@en .
+
+awp:AuthorisationDecision a rdfs:Class ; vs:term_status "unstable" ;
+  rdfs:subClassOf prov:Entity ;
+  rdfs:label "Authorisation decision"@en ;
+  skos:definition "A decision evaluated under an identified grant (e.g. an owner mandate) for one concrete action. The grant is not the decision (CT-05)."@en .
+
+awp:ActionIntent a rdfs:Class ; vs:term_status "unstable" ;
+  rdfs:label "Action intent"@en ;
+  skos:definition "The concrete action an executor is about to perform, as presented for evaluation. It is not an odrl:Rule; its requested action is an odrl:Action instance."@en .
+
+awp:Grant a rdfs:Class ; vs:term_status "unstable" ;
+  rdfs:subClassOf prov:Entity ;
+  rdfs:label "Grant record"@en ;
+  skos:definition "A record that a grant artefact (mandate, data-use, access, onward-use or delegation grant) was loaded, identified by digest."@en .
+
+awp:OwnerMandate a rdfs:Class ; vs:term_status "unstable" ;
+  rdfs:subClassOf awp:Grant ;
+  rdfs:label "Owner mandate"@en ;
+  skos:definition "Owner-signed bound on what a software actor may do: autonomous and with-approval ODRL policies plus validity. Not a representation statement."@en .
+
+awp:RepresentationStatement a rdfs:Class ; vs:term_status "unstable" ;
+  rdfs:subClassOf prov:Entity ;
+  rdfs:label "Representation statement"@en ;
+  skos:definition "Party-signed statement that an actor key speaks for the party for listed operations. Authorises nothing at the receiver."@en .
+
+awp:AgreementRecord a rdfs:Class ; vs:term_status "unstable" ;
+  rdfs:subClassOf prov:Entity ;
+  rdfs:label "Agreement record"@en ;
+  skos:definition "Documentary record relating an identified offer, the accepting message and the exact terms digest (A8)."@en ;
+  skos:scopeNote "Deliberately not odrl:Agreement: the record documents formation; any ODRL policy is part of the terms. Not a legal contract."@en .
+
+awp:OutcomeRecord a rdfs:Class ; vs:term_status "unstable" ;
+  rdfs:subClassOf prov:Entity ;
+  rdfs:label "Outcome record"@en ;
+  skos:definition "The recording agent's own conclusion about one activity it attempted: completed, not-executed or uncertain, with the method of observation."@en .
+
+awp:PeerOutcomeReport a rdfs:Class ; vs:term_status "unstable" ;
+  rdfs:subClassOf prov:Entity ;
+  rdfs:label "Peer outcome report"@en ;
+  skos:definition "A peer's reported conclusion about the peer's own activity. Attributed to the peer; not independently observed."@en .
+
+awp:MessageRecord a rdfs:Class ; vs:term_status "unstable" ;
+  rdfs:subClassOf prov:Entity ;
+  rdfs:label "Message record"@en ;
+  skos:definition "Record that a protected message with a given digest was received or emitted. Sender fields of inbound records are claims."@en .
+
+awp:ImplementationDescription a rdfs:Class ; vs:term_status "unstable" ;
+  rdfs:subClassOf prov:Entity ;
+  rdfs:label "Implementation description"@en ;
+  skos:definition "What one agent implements versus accepts: configurations, operations, bindings. Grants no authority."@en .
+
+awp:Configuration a rdfs:Class ; vs:term_status "unstable" ;
+  rdfs:label "Configuration"@en ;
+  skos:definition "One coherent mechanism combination (integrity, authentication, representation, authorisation, binding)."@en .
+
+awp:Operation a rdfs:Class ; vs:term_status "unstable" ;
+  rdfs:label "Operation"@en ;
+  skos:definition "A versioned interaction operation an agent supports (e.g. schedule-meeting)."@en .
+
+awp:PolicyProfile a rdfs:Class ; vs:term_status "unstable" ;
+  rdfs:label "Policy profile"@en ;
+  skos:definition "Shared policy semantics a configuration accepts (e.g. the ODRL pilot subset, three-valued). Independent of which evaluator implements it."@en .
+
+awp:PolicyModule a rdfs:Class ; vs:term_status "unstable" ;
+  rdfs:label "Policy module"@en ;
+  skos:definition "The evaluator an agent actually uses for a policy profile (name, version, interface, current status). Informative; carries no local paths or digests and grants no authority."@en .
+
+# --------------------------------------------------------------------------------------
+# Concept schemes for recorded outcomes (provisional)
+# --------------------------------------------------------------------------------------
+
+@prefix awpc: <https://w3id.org/jeswr/awp#conclusion/> .
+@prefix awpa: <https://w3id.org/jeswr/awp#authorisation/> .
+@prefix awpv: <https://w3id.org/jeswr/awp#verification/> .
+@prefix awps: <https://w3id.org/jeswr/awp#assessment/> .
+@prefix awpm: <https://w3id.org/jeswr/awp#method/> .
+@prefix awpb: <https://w3id.org/jeswr/awp#basis/> .
+@prefix awpk: <https://w3id.org/jeswr/awp#kind/> .
+@prefix awpg: <https://w3id.org/jeswr/awp#grant/> .
+
+awp:OutcomeConclusions a skos:ConceptScheme ; vs:term_status "unstable" ;
+  skos:prefLabel "Outcome conclusions"@en ;
+  skos:definition "An evaluator's conclusion about an attempted effect. Never upgraded from uncertain to completed without a later observation."@en .
+awpc:completed a skos:Concept ; skos:inScheme awp:OutcomeConclusions ; skos:prefLabel "completed"@en .
+awpc:not-executed a skos:Concept ; skos:inScheme awp:OutcomeConclusions ; skos:prefLabel "not executed"@en .
+awpc:uncertain a skos:Concept ; skos:inScheme awp:OutcomeConclusions ; skos:prefLabel "uncertain"@en ;
+  skos:definition "The effect may or may not have happened; must be reconciled before any retry."@en .
+
+awp:ObservationMethods a skos:ConceptScheme ; vs:term_status "unstable" ; skos:prefLabel "Outcome observation methods"@en .
+awpm:direct-response a skos:Concept ; skos:inScheme awp:ObservationMethods ; skos:prefLabel "direct response"@en .
+awpm:reconciliation a skos:Concept ; skos:inScheme awp:ObservationMethods ; skos:prefLabel "reconciliation"@en .
+awpm:recovery a skos:Concept ; skos:inScheme awp:ObservationMethods ; skos:prefLabel "recovery after restart"@en .
+awpm:timeout a skos:Concept ; skos:inScheme awp:ObservationMethods ; skos:prefLabel "timeout"@en ;
+  skos:scopeNote "In the abstract model; the pilot runtime records a timed-out adapter call as an uncertain direct-response."@en .
+
+awp:AuthorisationOutcomes a skos:ConceptScheme ; vs:term_status "unstable" ; skos:prefLabel "Authorisation outcomes"@en .
+awpa:permit a skos:Concept ; skos:inScheme awp:AuthorisationOutcomes ; skos:prefLabel "permit"@en .
+awpa:deny a skos:Concept ; skos:inScheme awp:AuthorisationOutcomes ; skos:prefLabel "deny"@en .
+awpa:approval-required a skos:Concept ; skos:inScheme awp:AuthorisationOutcomes ; skos:prefLabel "approval required"@en .
+awpa:indeterminate a skos:Concept ; skos:inScheme awp:AuthorisationOutcomes ; skos:prefLabel "indeterminate"@en ;
+  skos:definition "Unsupported term or missing context; treated as not permitted."@en .
+
+awp:DecisionBases a skos:ConceptScheme ; vs:term_status "unstable" ; skos:prefLabel "Decision bases"@en .
+awpb:autonomous a skos:Concept ; skos:inScheme awp:DecisionBases ; skos:prefLabel "autonomous (within mandate)"@en .
+awpb:owner-approval a skos:Concept ; skos:inScheme awp:DecisionBases ; skos:prefLabel "owner approval of the exact action digest"@en .
+
+awp:VerificationOutcomes a skos:ConceptScheme ; vs:term_status "unstable" ; skos:prefLabel "Verification outcomes"@en .
+awpv:valid a skos:Concept ; skos:inScheme awp:VerificationOutcomes ; skos:prefLabel "valid"@en .
+awpv:invalid a skos:Concept ; skos:inScheme awp:VerificationOutcomes ; skos:prefLabel "invalid"@en .
+awpv:unsupported a skos:Concept ; skos:inScheme awp:VerificationOutcomes ; skos:prefLabel "unsupported"@en .
+awpv:unknown-key a skos:Concept ; skos:inScheme awp:VerificationOutcomes ; skos:prefLabel "unknown key"@en .
+awpv:not-applicable a skos:Concept ; skos:inScheme awp:VerificationOutcomes ; skos:prefLabel "not applicable"@en .
+
+awp:AssessmentOutcomes a skos:ConceptScheme ; vs:term_status "unstable" ; skos:prefLabel "Assessment outcomes"@en .
+awps:accepted a skos:Concept ; skos:inScheme awp:AssessmentOutcomes ; skos:prefLabel "accepted"@en .
+awps:not-accepted a skos:Concept ; skos:inScheme awp:AssessmentOutcomes ; skos:prefLabel "not accepted"@en .
+awps:unresolved a skos:Concept ; skos:inScheme awp:AssessmentOutcomes ; skos:prefLabel "unresolved"@en .
+
+awp:GrantKinds a skos:ConceptScheme ; vs:term_status "unstable" ; skos:prefLabel "Grant kinds"@en .
+awpg:owner-mandate a skos:Concept ; skos:inScheme awp:GrantKinds ; skos:prefLabel "owner mandate"@en .
+awpg:data-use a skos:Concept ; skos:inScheme awp:GrantKinds ; skos:prefLabel "data-use grant"@en .
+awpg:access a skos:Concept ; skos:inScheme awp:GrantKinds ; skos:prefLabel "access grant"@en .
+awpg:onward-use a skos:Concept ; skos:inScheme awp:GrantKinds ; skos:prefLabel "onward-use grant"@en .
+awpg:delegation a skos:Concept ; skos:inScheme awp:GrantKinds ; skos:prefLabel "delegation"@en .
+
+awp:MessageKinds a skos:ConceptScheme ; vs:term_status "unstable" ; skos:prefLabel "Message kinds"@en .
+awpk:describe a skos:Concept ; skos:inScheme awp:MessageKinds ; skos:prefLabel "describe"@en .
+awpk:description a skos:Concept ; skos:inScheme awp:MessageKinds ; skos:prefLabel "description"@en .
+awpk:propose a skos:Concept ; skos:inScheme awp:MessageKinds ; skos:prefLabel "propose"@en .
+awpk:accept a skos:Concept ; skos:inScheme awp:MessageKinds ; skos:prefLabel "accept"@en .
+awpk:refuse a skos:Concept ; skos:inScheme awp:MessageKinds ; skos:prefLabel "refuse"@en .
+awpk:invoke a skos:Concept ; skos:inScheme awp:MessageKinds ; skos:prefLabel "invoke"@en .
+awpk:deliver a skos:Concept ; skos:inScheme awp:MessageKinds ; skos:prefLabel "deliver"@en .
+awpk:receipt a skos:Concept ; skos:inScheme awp:MessageKinds ; skos:prefLabel "receipt"@en .
+awpk:unsupported a skos:Concept ; skos:inScheme awp:MessageKinds ; skos:prefLabel "unsupported"@en .
+awpk:indeterminate a skos:Concept ; skos:inScheme awp:MessageKinds ; skos:prefLabel "indeterminate"@en .
+
+# --------------------------------------------------------------------------------------
+# Properties (provisional). No rdfs:domain / rdfs:range axioms, by design.
+# --------------------------------------------------------------------------------------
+
+awp:inLedger a rdf:Property ; vs:term_status "unstable" ; skos:definition "The ledger an entry belongs to."@en .
+awp:sequence a rdf:Property ; vs:term_status "unstable" ; skos:definition "Position of an entry in its ledger (xsd:integer)."@en .
+awp:entryHash a rdf:Property ; vs:term_status "unstable" ; skos:definition "SHA-256 digest sealing the entry (over seq, time, previous hash and record)."@en .
+awp:previousHash a rdf:Property ; vs:term_status "unstable" ; skos:definition "Entry hash of the preceding entry, or sha-256:genesis."@en .
+awp:recordsStatement a rdf:Property ; vs:term_status "unstable" ; skos:definition "The record (or identified thing) an entry carries."@en .
+awp:recordType a rdf:Property ; vs:term_status "unstable" ; skos:definition "The runtime record type name (for records without a detailed mapping)."@en .
+awp:protectedObjectDigest a rdf:Property ; vs:term_status "unstable" ; skos:definition "Digest of the exact protected bytes examined."@en .
+awp:mechanism a rdf:Property ; vs:term_status "unstable" ; skos:definition "The integrity mechanism profile applied."@en .
+awp:verificationMaterial a rdf:Property ; vs:term_status "unstable" ; skos:definition "Pinned key thumbprint (RFC 7638) used."@en .
+awp:attributedKeyHolder a rdf:Property ; vs:term_status "unstable" ; skos:definition "Identifier the pinned key is bound to in the verifier's local trust store. Attribution of bytes to a key, not of authority."@en .
+awp:verificationOutcome a rdf:Property ; vs:term_status "unstable" ; skos:definition "A concept from awp:VerificationOutcomes."@en .
+awp:limitation a rdf:Property ; vs:term_status "unstable" ; skos:definition "A stated limit of what a record establishes."@en .
+awp:evaluatedActor a rdf:Property ; vs:term_status "unstable" ; skos:definition "The software actor whose representation was assessed."@en .
+awp:representedParty a rdf:Property ; vs:term_status "unstable" ; skos:definition "The party the actor claims to speak for."@en .
+awp:operation a rdf:Property ; vs:term_status "unstable" ; skos:definition "The operation concerned."@en .
+awp:operationVersion a rdf:Property ; vs:term_status "unstable" ; skos:definition "Version of the operation concerned."@en .
+awp:statement a rdf:Property ; vs:term_status "unstable" ; skos:definition "The representation statement relied on."@en .
+awp:assessmentOutcome a rdf:Property ; vs:term_status "unstable" ; skos:definition "A concept from awp:AssessmentOutcomes."@en .
+awp:reasonCode a rdf:Property ; vs:term_status "unstable" ; skos:definition "Stable reason code; explains an outcome, grants nothing."@en .
+awp:source a rdf:Property ; vs:term_status "unstable" ; skos:definition "The source whose authority was assessed."@en .
+awp:claimType a rdf:Property ; vs:term_status "unstable" ; skos:definition "The claim type the source was assessed for."@en .
+awp:claimSubject a rdf:Property ; vs:term_status "unstable" ; skos:definition "The subject the claim is about."@en .
+awp:sourceRule a rdf:Property ; vs:term_status "unstable" ; skos:definition "The local source-authority rule applied."@en .
+awp:sourceRuleVersion a rdf:Property ; vs:term_status "unstable" ; skos:definition "Version of that rule."@en .
+awp:action a rdf:Property ; vs:term_status "unstable" ; skos:definition "The awp:ActionIntent evaluated."@en .
+awp:actionDigest a rdf:Property ; vs:term_status "unstable" ; skos:definition "Digest identifying the exact action (all consequential parameters)."@en .
+awp:requestedAction a rdf:Property ; vs:term_status "unstable" ; skos:definition "An odrl:Action instance (e.g. odrl:use) naming the action class requested."@en .
+awp:target a rdf:Property ; vs:term_status "unstable" ; skos:definition "Target operation or resource of the action."@en .
+awp:recipient a rdf:Property ; vs:term_status "unstable" ; skos:definition "The party receiving the effect or data."@en .
+awp:conversation a rdf:Property ; vs:term_status "unstable" ; skos:definition "The conversation a record belongs to."@en .
+awp:termsDigest a rdf:Property ; vs:term_status "unstable" ; skos:definition "JCS/SHA-256 digest of the exact terms."@en .
+awp:evaluatedPolicy a rdf:Property ; vs:term_status "unstable" ; skos:definition "The grant or policy the decision was evaluated under."@en .
+awp:policyDigest a rdf:Property ; vs:term_status "unstable" ; skos:definition "Digest of the grant or policy as evaluated."@en .
+awp:evaluatorImplementation a rdf:Property ; vs:term_status "unstable" ; skos:definition "The policy evaluator implementation and version used."@en .
+awp:authorisationOutcome a rdf:Property ; vs:term_status "unstable" ; skos:definition "A concept from awp:AuthorisationOutcomes."@en .
+awp:decisionBasis a rdf:Property ; vs:term_status "unstable" ; skos:definition "A concept from awp:DecisionBases."@en .
+awp:approval a rdf:Property ; vs:term_status "unstable" ; skos:definition "The owner approval relied on."@en .
+awp:matchedRule a rdf:Property ; vs:term_status "unstable" ; skos:definition "Identifier of the policy rule that determined the outcome."@en .
+awp:offer a rdf:Property ; vs:term_status "unstable" ; skos:definition "The identified offer message."@en .
+awp:acceptance a rdf:Property ; vs:term_status "unstable" ; skos:definition "The accepting message."@en .
+awp:offeror a rdf:Property ; vs:term_status "unstable" ; skos:definition "Software actor that made the offer."@en .
+awp:acceptor a rdf:Property ; vs:term_status "unstable" ; skos:definition "Software actor that accepted."@en .
+awp:agreedEvent a rdf:Property ; vs:term_status "unstable" ; skos:definition "The schema:Event (meeting slot) fixed by the agreement."@en .
+awp:grantKind a rdf:Property ; vs:term_status "unstable" ; skos:definition "A concept from awp:GrantKinds."@en .
+awp:grantee a rdf:Property ; vs:term_status "unstable" ; skos:definition "The agent a grant is issued to."@en .
+awp:digest a rdf:Property ; vs:term_status "unstable" ; skos:definition "Content digest of an artefact."@en .
+awp:validUntil a rdf:Property ; vs:term_status "unstable" ; skos:definition "End of validity (exclusive), xsd:dateTime."@en .
+awp:activityType a rdf:Property ; vs:term_status "unstable" ; skos:definition "Informative classification of an activity (e.g. schema:ScheduleAction). Not asserted as rdf:type."@en .
+awp:basis a rdf:Property ; vs:term_status "unstable" ; skos:definition "The agreement or invocation an activity was performed under."@en .
+awp:effectKey a rdf:Property ; vs:term_status "unstable" ; skos:definition "Idempotency key of the effect."@en .
+awp:concerns a rdf:Property ; vs:term_status "unstable" ; skos:definition "The activity an outcome record or report is about."@en .
+awp:conclusion a rdf:Property ; vs:term_status "unstable" ; skos:definition "A concept from awp:OutcomeConclusions."@en .
+awp:method a rdf:Property ; vs:term_status "unstable" ; skos:definition "A concept from awp:ObservationMethods."@en .
+awp:finalReport a rdf:Property ; vs:term_status "unstable" ; skos:definition "True if the reporter marked the report final (xsd:boolean)."@en .
+awp:message a rdf:Property ; vs:term_status "unstable" ; skos:definition "The message a record is about."@en .
+awp:messageKind a rdf:Property ; vs:term_status "unstable" ; skos:definition "A concept from awp:MessageKinds."@en .
+awp:direction a rdf:Property ; vs:term_status "unstable" ; skos:definition "\"in\" or \"out\"."@en .
+awp:claimedSender a rdf:Property ; vs:term_status "unstable" ; skos:definition "Sender actor as CLAIMED in an inbound message (not an assessment)."@en .
+awp:claimedOnBehalfOf a rdf:Property ; vs:term_status "unstable" ; skos:definition "Represented party as CLAIMED in an inbound message. Deliberately not prov:actedOnBehalfOf."@en .
+awp:binding a rdf:Property ; vs:term_status "unstable" ; skos:definition "Transport binding identifier."@en .
+awp:describes a rdf:Property ; vs:term_status "unstable" ; skos:definition "The agent an implementation description is about."@en .
+awp:claimedParty a rdf:Property ; vs:term_status "unstable" ; skos:definition "Party the described agent claims to act for (a claim until assessed)."@en .
+awp:operator a rdf:Property ; vs:term_status "unstable" ; skos:definition "Who runs the software."@en .
+awp:implementsConfiguration a rdf:Property ; vs:term_status "unstable" ; skos:definition "A configuration the agent implements."@en .
+awp:acceptsConfiguration a rdf:Property ; vs:term_status "unstable" ; skos:definition "A configuration the agent accepts for interaction (subset of implemented)."@en .
+awp:supportsOperation a rdf:Property ; vs:term_status "unstable" ; skos:definition "An operation the agent supports."@en .
+awp:interactionPattern a rdf:Property ; vs:term_status "unstable" ; skos:definition "negotiate, invoke, public-read, ..."@en .
+awp:accessMode a rdf:Property ; vs:term_status "unstable" ; skos:definition "public, represented, agreement, ..."@en .
+awp:bindingEndpoint a rdf:Property ; vs:term_status "unstable" ; skos:definition "Endpoint advertised for a binding."@en .
+awp:policyModule a rdf:Property ; vs:term_status "unstable" ; skos:definition "The policy module an implementation description declares as selected."@en .
+awp:policyProfile a rdf:Property ; vs:term_status "unstable" ; skos:definition "The policy profile a policy module evaluates."@en .
+awp:moduleInterface a rdf:Property ; vs:term_status "unstable" ; skos:definition "How the evaluator is invoked (e.g. in-process adapter, local process protocol)."@en .
+awp:moduleStatus a rdf:Property ; vs:term_status "unstable" ; skos:definition "Availability of the policy module when the description was produced (ready or unavailable)."@en .
+
+# Purposes: fixture identifiers are NOT proposed public terms. DPV terms were checked against
+# DPV 2.1 (Final CG Report 2025-03-16); dpv:CreditChecking does not exist there.
+<https://example.org/awp-fixture#CreditChecking> a skos:Concept ;
+  skos:prefLabel "Credit checking (fixture)"@en ;
+  skos:related dpv:CustomerSolvencyMonitoring ;
+  skos:scopeNote "Fixture identifier. DPV 2.1 has no CreditChecking; dpv:CustomerSolvencyMonitoring concerns existing customers and is only related."@en .

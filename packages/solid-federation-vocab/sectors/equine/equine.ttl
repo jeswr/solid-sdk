@@ -1,7 +1,7 @@
 # AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 #
-@prefix eq:      <https://w3id.org/jeswr/sectors/equine#> .
-@prefix core:    <https://w3id.org/jeswr/core#> .
+@prefix eq:      <https://jeswr.org/ns/sectors/equine#> .
+@prefix core:    <https://jeswr.org/ns/core#> .
 @prefix owl:     <http://www.w3.org/2002/07/owl#> .
 @prefix rdf:     <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
 @prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
@@ -23,7 +23,7 @@
 # resource — coins a different IRI for the same concept: no cross-pod query, no
 # SHACL shape, no federation membership. This sector REPLACES that whole
 # `flgPred`/`flgClass` map 1:1 with shared `eq:` terms at a domain the suite owns
-# (w3id.org/jeswr), and REPLACES the NON-EXISTENT schema.org terms Furlong wrote:
+# (jeswr.org/ns), and REPLACES the NON-EXISTENT schema.org terms Furlong wrote:
 #   - schema:Animal (HTTP 404 — schema.org has no animal class)  → eq:Horse;
 #   - schema:prize  (HTTP 404 — schema:award (Text) exists)      → eq:PrizeDistribution;
 #   - schema:season (media-series only, superseded)              → eq:season;
@@ -58,14 +58,14 @@
 # referenced in axioms are declared as punned owl terms.
 # =============================================================================
 
-<https://w3id.org/jeswr/sectors/equine> a owl:Ontology ;
+<https://jeswr.org/ns/sectors/equine> a owl:Ontology ;
     dcterms:title "Solid Equine Sector Ontology"@en ;
     rdfs:label "Solid Equine Sector Ontology"@en ;
     vann:preferredNamespacePrefix "eq" ;
-    vann:preferredNamespaceUri "https://w3id.org/jeswr/sectors/equine#" ;
-    owl:imports <https://w3id.org/jeswr/core> ;
-    owl:versionInfo "0.1.0" ;
-    owl:versionIRI <https://w3id.org/jeswr/sectors/equine/0.1.0> ;
+    vann:preferredNamespaceUri "https://jeswr.org/ns/sectors/equine#" ;
+    owl:imports <https://jeswr.org/ns/core> ;
+    owl:versionInfo "2.0.0" ;
+    owl:versionIRI <https://jeswr.org/ns/sectors/equine/2.0.0> ;
     dcterms:description """The racehorse ownership / breeding / prize data sector
         for the Furlong revenue product: horses, ownership + stud shares held via
         syndicates, stud nominations, race results and prize distributions, plus
@@ -74,8 +74,8 @@
         schema:Animal/schema:prize/schema:season terms with correct ones. Keeps the
         real schema.org dual-types (Reservation/SportsEvent/MoneyTransfer). Aligns
         Mode-A to schema.org, org: and external animal ontologies in
-        equine-alignments.ttl."""@en ;
-    dcterms:modified "2026-07-03"^^xsd:date ;
+        equine-alignments.ttl. Version 2.0.0 rebases this ontology from its legacy w3id namespace to https://jeswr.org/ns/ (DECISIONS V1)."""@en ;
+    dcterms:modified "2026-10-25"^^xsd:date ;
     rdfs:comment "Sector ontology for the Furlong product (revenue-products ontology review §2). Fixes non-existent schema terms + the per-resource-IRI anti-pattern."@en .
 
 # -----------------------------------------------------------------------------
@@ -519,9 +519,9 @@ eq:expense-other a eq:ExpenseCategory, skos:Concept ;
 # federation sector register; dereferences to this ontology.
 # =============================================================================
 
-<https://w3id.org/jeswr/sectors/equine#sector>
+<https://jeswr.org/ns/sectors/equine#sector>
     a skos:Concept ;
     rdfs:label "Equine sector"@en ;
     rdfs:comment "The Equine (racehorse ownership, breeding, prize distribution) data sector. The value an app's fedapp:sector names in its Client Identifier Document to declare it operates over equine-ownership data — the sector the Furlong product declares. Backed by this sector ontology."@en ;
-    rdfs:isDefinedBy <https://w3id.org/jeswr/sectors/equine> ;
+    rdfs:isDefinedBy <https://jeswr.org/ns/sectors/equine> ;
     skos:prefLabel "Equine"@en .
