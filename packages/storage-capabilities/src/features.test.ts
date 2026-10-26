@@ -768,6 +768,59 @@ describe("deriveFeatures trust and robustness", () => {
     expect(deriveFeatures(huge).liveUpdates.detail.channels).toEqual(["webhook"]);
   });
 
+  test("round-3 regressions: linear PatchSupport parsing and shared format nodes", () => {
+    const n = 20_000;
+    const flood = solid(
+      [],
+      [
+        {
+          type: [SSD.PatchSupport],
+          extra: {
+            [`${SSD_NS}format`]: {
+              [`${SSD_NS}source`]: Array.from({ length: n }, () => "text/turtle"),
+              [`${SSD_NS}patchType`]: Array.from({ length: n }, () => "text/n3"),
+            },
+          },
+        },
+      ],
+    );
+    const started = performance.now();
+    expect(deriveFeatures(flood).patch.detail.formats).toEqual({ "text/turtle": ["text/n3"] });
+    expect(performance.now() - started).toBeLessThan(2000);
+
+    // The mapper expanded the format node under another predicate first; ssd:format is a reference.
+    const shared = {
+      "@id": "_:f",
+      [`${SSD_NS}source`]: "text/turtle",
+      [`${SSD_NS}patchType`]: "application/sparql-update",
+    };
+    const reordered = solid(
+      [],
+      [
+        { type: ["urn:other"], extra: { "urn:p": [{ nested: shared }] } },
+        { type: [SSD.PatchSupport], extra: { [`${SSD_NS}format`]: { "@id": "_:f" } } },
+      ],
+    );
+    expect(deriveFeatures(reordered).patch).toMatchObject({
+      state: "available",
+      detail: { formats: { "text/turtle": ["application/sparql-update"] } },
+    });
+    // An unresolvable reference contributes nothing; the first expansion of an id wins.
+    const dangling = solid(
+      [],
+      [
+        { type: ["urn:other"], extra: { a: shared, b: { ...shared, [`${SSD_NS}source`]: "x/y" } } },
+        {
+          type: [SSD.PatchSupport],
+          extra: { [`${SSD_NS}format`]: [{ "@id": "_:missing" }, { "@id": "_:f" }] },
+        },
+      ],
+    );
+    expect(deriveFeatures(dangling).patch.detail.formats).toEqual({
+      "text/turtle": ["application/sparql-update"],
+    });
+  });
+
   test("tolerates malformed descriptions without arrays", () => {
     const conneg = lws(
       [],

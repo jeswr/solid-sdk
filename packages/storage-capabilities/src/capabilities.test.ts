@@ -216,57 +216,25 @@ describe("capabilities() probing policy", () => {
     expect(await cache.get(cssStorage.root)).toEqual(replaced);
   });
 
-  test("custom caches without attachProbe get a best-effort generation check", async () => {
+  test("custom caches without attachProbe never persist the probe (no non-atomic write)", async () => {
     const inner = createMemoryCache();
+    const set = vi.fn(inner.set);
     const cache: DescriptionCache = {
       get: (id) => inner.get(id),
-      set: (id, value) => inner.set(id, value),
+      set,
       delete: (id) => inner.delete(id),
       lookupPrefix: (url) => inner.lookupPrefix(url),
       rememberPrefix: (root, id) => inner.rememberPrefix(root, id),
     };
     const fetch = fixtureFetch(cssStorage);
+    const features = await capabilities(cssStorage.resource, { fetch, cache, now: () => 1000 });
+    expect(features.accessControl.detail.model).toBe("wac");
+    expect((await cache.get(cssStorage.root))?.probe).toBeUndefined();
+    // Only the resolver's description write happened.
+    expect(set).toHaveBeenCalledTimes(1);
+    fetch.calls.length = 0;
     await capabilities(cssStorage.resource, { fetch, cache, now: () => 1000 });
-    expect((await cache.get(cssStorage.root))?.probe).toBeDefined();
-
-    // Replaced while probing: the custom path does not overwrite either.
-    const replay = fixtureFetch(cssStorage);
-    const other: DescriptionCache = { ...cache };
-    await inner.delete(cssStorage.root);
-    let release: () => void = () => undefined;
-    const slow = vi.fn<typeof globalThis.fetch>(async (input, init) => {
-      if (init?.method === "OPTIONS") {
-        await new Promise<void>((resolve) => {
-          release = resolve;
-        });
-      }
-      return replay(input, init);
-    });
-    const pending = capabilities(cssStorage.resource, {
-      fetch: slow,
-      cache: other,
-      now: () => 1000,
-    });
-    await vi.waitFor(() =>
-      expect(slow.mock.calls.some(([, init]) => init?.method === "OPTIONS")).toBe(true),
-    );
-    const record = await inner.get(cssStorage.root);
-    if (!record) throw new Error("missing record");
-    const replaced = { description: { ...record.description, fetchedAt: 2000 } };
-    await inner.set(cssStorage.root, replaced);
-    release();
-    await pending;
-    expect(await inner.get(cssStorage.root)).toEqual(replaced);
-    // Deleted while probing: not resurrected.
-    await inner.delete(cssStorage.root);
-    const again = capabilities(cssStorage.resource, { fetch: slow, cache: other, now: () => 1000 });
-    await vi.waitFor(() =>
-      expect(slow.mock.calls.filter(([, init]) => init?.method === "OPTIONS").length).toBe(2),
-    );
-    await inner.delete(cssStorage.root);
-    release();
-    await again;
-    expect(await inner.get(cssStorage.root)).toBeUndefined();
+    expect(fetch.calls.filter((call) => call.startsWith("OPTIONS"))).toHaveLength(1);
   });
 
   test("uses the shared default cache when none is given", async () => {

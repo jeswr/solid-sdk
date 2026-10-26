@@ -318,8 +318,10 @@ export function deriveFeatures(d: StorageDescription, probe?: ProbeResult): Feat
   // Union over every PatchSupport capability.
   const patchCapabilities = authoritative ? capabilitiesNamed("PatchSupport") : [];
   const declaredPatch = patchCapabilities[0];
+  const nodes =
+    patchCapabilities.length > 0 ? indexNodes([...services, ...capabilities]) : new Map();
   const declaredFormats = merge(
-    ...patchCapabilities.map((entry) => patchFormats(entry.extra ?? {})),
+    ...patchCapabilities.map((entry) => patchFormats(entry.extra ?? {}, nodes)),
   ).formats;
   let patch: Features["patch"];
   if (lws) {
@@ -404,43 +406,87 @@ export function deriveFeatures(d: StorageDescription, probe?: ProbeResult): Feat
 }
 
 /**
- * Read a PatchSupport `format` member: either a JSON map `{ "<source type>": "<patch type>" | [...] }`
- * (LWS example) or RDF-derived `{ source, patchType }` nodes (ADR-008), single or repeated.
+ * Index the expanded blank-node objects of a description by `@id`. The Solid mapper expands a
+ * shared node once and emits `{ "@id" }` references elsewhere, so a reader must resolve them.
  */
-function patchFormats(extra: Readonly<Record<string, unknown>>): Map<string, string[]> {
-  const formats = new Map<string, string[]>();
-  const add = (sourceType: unknown, patchTypes: unknown[]) => {
-    if (typeof sourceType !== "string" || !MEDIA_TYPE.test(sourceType)) return;
-    const types = patchTypes
-      .filter((type): type is string => typeof type === "string" && MEDIA_TYPE.test(type))
-      .map((type) => type.toLowerCase());
-    if (types.length === 0) return;
-    const key = sourceType.toLowerCase();
-    formats.set(key, [...new Set([...(formats.get(key) ?? []), ...types])]);
+function indexNodes(
+  entries: readonly { extra?: unknown }[],
+): Map<string, Readonly<Record<string, unknown>>> {
+  const index = new Map<string, Readonly<Record<string, unknown>>>();
+  const seen = new Set<object>();
+  // Entries of a malformed description may be non-objects; optional chaining tolerates them.
+  const pending: unknown[] = entries.map((entry) => (entry as { extra?: unknown } | null)?.extra);
+  // Breadth-first in document order, so the first expansion of an id wins deterministically.
+  for (let next = 0; next < pending.length; next++) {
+    const value = pending[next];
+    if (typeof value !== "object" || value === null || seen.has(value)) continue;
+    seen.add(value);
+    if (Array.isArray(value)) {
+      for (const item of value) pending.push(item);
+      continue;
+    }
+    const node = value as Readonly<Record<string, unknown>>;
+    const id = node["@id"];
+    if (typeof id === "string" && Object.keys(node).length > 1 && !index.has(id)) {
+      index.set(id, node);
+    }
+    for (const key of Object.keys(node)) pending.push(node[key]);
+  }
+  return index;
+}
+
+/**
+ * Read a PatchSupport `format` member: either a JSON map `{ "<source type>": "<patch type>" | [...] }`
+ * (LWS example) or RDF-derived `{ source, patchType }` nodes (ADR-008), single or repeated, possibly
+ * as `{ "@id" }` references into `nodes`. Linear in the input: each node's types are normalised once.
+ */
+function patchFormats(
+  extra: Readonly<Record<string, unknown>>,
+  nodes: ReadonlyMap<string, Readonly<Record<string, unknown>>> = new Map(),
+): Map<string, Set<string>> {
+  const formats = new Map<string, Set<string>>();
+  const normalise = (patchTypes: unknown[]) => {
+    const types = new Set<string>();
+    for (const type of patchTypes) {
+      if (typeof type === "string" && MEDIA_TYPE.test(type)) types.add(type.toLowerCase());
+    }
+    return types;
   };
-  for (const format of values(extra, "format")) {
-    if (!record(format)) continue;
+  const add = (sourceType: unknown, types: ReadonlySet<string>) => {
+    if (types.size === 0 || typeof sourceType !== "string" || !MEDIA_TYPE.test(sourceType)) return;
+    const key = sourceType.toLowerCase();
+    const known = formats.get(key) ?? new Set<string>();
+    for (const type of types) known.add(type);
+    formats.set(key, known);
+  };
+  for (const value of values(extra, "format")) {
+    if (!record(value)) continue;
+    const id = value["@id"];
+    const format = (typeof id === "string" && nodes.get(id)) || value;
     const sourceTypes = values(format, "source");
     if (sourceTypes.length > 0) {
-      for (const sourceType of sourceTypes) add(sourceType, values(format, "patchType"));
+      const types = normalise(values(format, "patchType"));
+      for (const sourceType of new Set(sourceTypes)) add(sourceType, types);
       continue;
     }
     for (const [sourceType, patchTypes] of Object.entries(format)) {
-      add(sourceType, Array.isArray(patchTypes) ? patchTypes : [patchTypes]);
+      add(sourceType, normalise(Array.isArray(patchTypes) ? patchTypes : [patchTypes]));
     }
   }
   return formats;
 }
 
 /** Union format maps into a fresh plain object (keys are validated media types). */
-function merge(...maps: ReadonlyMap<string, readonly string[]>[]): {
+function merge(...maps: ReadonlyMap<string, Iterable<string>>[]): {
   formats: Record<string, string[]>;
 } {
-  const merged = new Map<string, string[]>();
+  const merged = new Map<string, Set<string>>();
   for (const map of maps) {
     for (const [key, types] of map) {
-      merged.set(key, [...new Set([...(merged.get(key) ?? []), ...types])]);
+      const known = merged.get(key) ?? new Set<string>();
+      for (const type of types) known.add(type);
+      merged.set(key, known);
     }
   }
-  return { formats: Object.fromEntries(merged) };
+  return { formats: Object.fromEntries([...merged].map(([key, types]) => [key, [...types]])) };
 }

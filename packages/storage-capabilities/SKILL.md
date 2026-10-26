@@ -116,5 +116,7 @@ Solid notification services must share the storage root's origin (ADR-008 §8).
 
 `capabilities()` attaches its probe through the optional `DescriptionCache.attachProbe`, which
 writes only when the record still holds the same description and no probe (both shipped caches
-implement it atomically). Custom caches without it get a best-effort get/compare/set.
+implement it atomically). Custom caches without it never store the probe, so it is repeated on
+the next call rather than written non-atomically. PatchSupport parsing is linear in its input and
+resolves the mapper's `{ "@id" }` references to a format node expanded elsewhere.
 
