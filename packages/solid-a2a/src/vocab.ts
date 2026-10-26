@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
 // Term IRIs + protocol constants for the NL→RDF intent / SHACL-PD / upgrade-
@@ -14,7 +15,7 @@
 //   - LDP (ldp:Container / ldp:Resource) — the resource/container target types.
 //   - ACL/WAC modes (acl:Read / Write / Append / Control) — the grant modes.
 //   - SHACL (sh:…) — the shapes that bind the request/response RDF.
-// The minted `a2a:` extension (https://w3id.org/jeswr/a2a#) carries ONLY the few
+// The minted `a2a:` extension (https://jeswr.org/ns/a2a#) carries ONLY the few
 // intent-glue terms standards do not provide (the Intent class, a parameter
 // reification, and the action subtypes — Append/List/Grant/Subscribe/Query — that
 // schema.org has no Action subclass for). Each minted term is documented below.
@@ -38,7 +39,7 @@ export const DCTERMS = "http://purl.org/dc/terms/" as const;
 
 /**
  * The minimal minted `@jeswr/` extension vocabulary for the agent-to-agent (A2A)
- * intent surface. Hosted under the user's `w3id.org/jeswr` home (NEVER `@solid/`,
+ * intent surface. Hosted under the user's `jeswr.org/ns` home (NEVER `@solid/`,
  * which is the W3C Solid org's scope). Kept deliberately small — only terms with
  * no standard equivalent live here:
  *   - `a2a:Intent`            — the intent node class (the request envelope; there
@@ -56,7 +57,20 @@ export const DCTERMS = "http://purl.org/dc/terms/" as const;
  *                               lacks a direct subclass for (schema covers
  *                               Read/Create/Update/Delete only).
  */
-export const A2A = "https://w3id.org/jeswr/a2a#" as const;
+// Canonical source: @jeswr/suite-vocab LEGACY_NAMESPACES catch-all (no NS.A2A entry).
+export const A2A = "https://jeswr.org/ns/a2a#" as const;
+/** Read-only namespace alias; never rewrite an existing content-addressed graph. */
+export const LEGACY_A2A_NS = "https://w3id.org/jeswr/a2a#" as const;
+
+/** Resolve an A2A vocabulary alias for matching, never for hash verification. */
+export function canonicalA2aIri(iri: string): string {
+  return iri.startsWith(LEGACY_A2A_NS) ? A2A + iri.slice(LEGACY_A2A_NS.length) : iri;
+}
+
+/** The read-only alias of a canonical A2A predicate or class. */
+export function legacyA2aIri(iri: string): string {
+  return iri.startsWith(A2A) ? LEGACY_A2A_NS + iri.slice(A2A.length) : iri;
+}
 
 /** `rdf:type`. */
 export const RDF_TYPE = `${RDF}type` as const;
@@ -175,7 +189,10 @@ export const ACTION_TYPE_IRI: Readonly<Record<IntentAction, string>> = {
 
 /** The reverse map: action-type IRI → intent action kind (for round-trip read). */
 export const IRI_TO_ACTION: Readonly<Record<string, IntentAction>> = Object.fromEntries(
-  Object.entries(ACTION_TYPE_IRI).map(([k, v]) => [v, k as IntentAction]),
+  Object.entries(ACTION_TYPE_IRI).flatMap(([k, v]) => [
+    [v, k as IntentAction],
+    [legacyA2aIri(v), k as IntentAction],
+  ]),
 ) as Readonly<Record<string, IntentAction>>;
 
 /**

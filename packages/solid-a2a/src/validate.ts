@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
 // SHACL validation of an intent graph against a request shape (or a Protocol
@@ -10,6 +11,7 @@ import { Store } from "n3";
 import SHACLValidator from "rdf-validate-shacl";
 import { intentToRdf } from "./intent.js";
 import type { Intent, ProtocolDocument, ValidationReport, ValidationResultEntry } from "./types.js";
+import { validationDataset } from "./validationDataset.js";
 
 /** A SHACL shape supplied as quads, a dataset, or a built {@link ProtocolDocument}. */
 export type ShapeInput = readonly Quad[] | DatasetCore | ProtocolDocument;
@@ -31,8 +33,10 @@ export async function validateIntent(
   intent: IntentInput,
   shape: ShapeInput,
 ): Promise<ValidationReport> {
-  const dataGraph = toDataset(intentQuads(intent));
-  const shapeGraph = toDataset(shapeQuads(shape));
+  // Alias matching is confined to disposable validation views. The original
+  // graphs must retain their IRIs so existing protocol hashes still verify.
+  const dataGraph = validationDataset(toDataset(intentQuads(intent)));
+  const shapeGraph = validationDataset(toDataset(shapeQuads(shape)));
 
   const validator = new SHACLValidator(shapeGraph);
   const report = await validator.validate(dataGraph);

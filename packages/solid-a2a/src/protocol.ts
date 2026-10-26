@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
 // The SHACL-bodied Protocol Document (PD) — AGORA's hash-pinned protocol document
@@ -13,6 +14,8 @@
 import { createHash } from "node:crypto";
 import { parseRdf } from "@jeswr/fetch-rdf";
 import type { DatasetCore, Quad } from "@rdfjs/types";
+import { TermWrapper } from "@rdfjs/wrapper";
+import { DataFactory, Store } from "n3";
 import { canonicalNQuads } from "./canonical.js";
 import { serialize } from "./serialize.js";
 import type { ProtocolDocument, ProtocolDocumentInput, ProtocolMeta } from "./types.js";
@@ -25,7 +28,7 @@ import {
   RDF_TYPE,
   SH,
 } from "./vocab.js";
-import { GraphBuilder } from "./wrappers.js";
+import { GraphBuilder, objectTerms } from "./wrappers.js";
 
 /** The minted PD class + the predicates linking a PD to its shapes. */
 const A2A_PROTOCOL_DOCUMENT = `${A2A}ProtocolDocument` as const;
@@ -222,17 +225,10 @@ function buildPdJsonLd(quads: readonly Quad[], meta: ProtocolMeta): Record<strin
 
 /** The IRI objects of `(subject, predicate, ?)` in the quads. */
 function linkedShapeIds(quads: readonly Quad[], subject: string, predicate: string): string[] {
-  const out = new Set<string>();
-  for (const q of quads) {
-    if (
-      q.subject.value === subject &&
-      q.predicate.value === predicate &&
-      q.object.termType === "NamedNode"
-    ) {
-      out.add(q.object.value);
-    }
-  }
-  return [...out];
+  const node = new TermWrapper(subject, new Store(quads as Quad[]), DataFactory);
+  return [...objectTerms(node, predicate)]
+    .filter((term) => term.termType === "NamedNode")
+    .map((term) => term.value);
 }
 
 /**

@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
 // Vocab / serialize / canonical / shape edge cases + the public API surface.
@@ -33,8 +34,8 @@ describe("serialize", () => {
 });
 
 describe("vocab constants", () => {
-  it("mints the a2a extension under w3id.org/jeswr (never @solid/)", () => {
-    expect(A2A).toBe("https://w3id.org/jeswr/a2a#");
+  it("mints the a2a extension under jeswr.org/ns (never @solid/)", () => {
+    expect(A2A).toBe("https://jeswr.org/ns/a2a#");
     expect(A2A.includes("solid")).toBe(false);
   });
 

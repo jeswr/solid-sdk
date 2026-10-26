@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
 // SHACL shape construction for the intent graph. `buildShapeForIntent` builds a
@@ -16,6 +17,7 @@ import {
   A2A_INTENT,
   A2A_MODE,
   ACTION_TYPE_IRI,
+  canonicalA2aIri,
   type IntentAction,
   RDF_TYPE,
   SCHEMA_OBJECT,
@@ -154,7 +156,7 @@ export function buildResponseShape(responseClassIri: string, shapeId?: string): 
   // THROW if malformed (never emit an unconstrained response shape, never an injectable
   // object). The single validated+escaped value is reused for both class-bearing triples.
   const id = shapeId ?? `${A2A}ResponseShape`;
-  const responseClass = requireIri(responseClassIri, "responseClassIri");
+  const responseClass = canonicalA2aIri(requireIri(responseClassIri, "responseClassIri"));
   b.addIri(id, RDF_TYPE, SH_NODE_SHAPE);
   b.addIri(id, SH_TARGET_CLASS, responseClass);
   // A single placeholder property: rdf:type must be present (minCount 1) and equal the

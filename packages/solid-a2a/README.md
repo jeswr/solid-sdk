@@ -1,3 +1,4 @@
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- AUTHORED-BY Codex GPT-5 -->
 
 # @jeswr/solid-a2a
@@ -54,6 +55,18 @@ const protocol = await buildProtocolDocument({
 - Protocol documents: `buildProtocolDocument`, `verifyProtocolDocument`, `hashQuads`.
 - Handshake: `encodeUpgradeOffer`, `decodeUpgradeOffer`, `encodeUpgradeResponse`,
   `decodeUpgradeResponse`, `mayDowngradeToNl`, and RDF codecs.
+
+## Vocabulary compatibility
+
+New intents, shapes, protocol metadata and handshakes use `https://jeswr.org/ns/a2a#`.
+Readers and `validateIntent` also accept `https://w3id.org/jeswr/a2a#`, including mixed graphs.
+Validation resolves aliases in a temporary view; it never rewrites the supplied graph.
+
+Existing protocol bodies and their hashes remain unchanged: `hashQuads` and
+`verifyProtocolDocument` hash the supplied IRIs exactly. Newly built canonical protocol
+bodies have new hashes. Caller-supplied shape bodies and protocol/shape identifiers are
+preserved, including legacy shapes already pinned by a hash. The published
+`https://w3id.org/jeswr/a2a-rdf/v1` specification URLs remain unchanged.
 
 ## Links
 

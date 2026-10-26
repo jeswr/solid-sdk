@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
 // GOLDEN-MASTER / CHARACTERIZATION suite — pins the OBSERVABLE OUTPUT of the public
@@ -21,6 +22,10 @@
 // changelog + DECISIONS. The RDFC-1.0 hashes are the ones an independent conformant
 // implementation reproduces (see protocol.test.ts for the spec worked-example
 // vector).
+//
+// VOC-07: new graphs now use https://jeswr.org/ns/a2a# and therefore receive
+// new content hashes. These snapshots pin the new writer output; the published
+// legacy graph/hash conformance vector in protocol.test.ts remains unchanged.
 //
 // NON-DETERMINISM is normalised: intent node IRIs are supplied explicitly (never
 // the FNV digest of the NL), and RDFC-1.0 relabels blank nodes to stable c14n
@@ -136,7 +141,7 @@ describe("characterization — Protocol Document hash + JSON-LD (byte-exact)", (
     });
   }
 
-  it("PD content hash is byte-stable (the published pin value must not move)", async () => {
+  it("new canonical PD content hash is byte-stable", async () => {
     expect((await makePd()).hash).toMatchSnapshot();
   });
 
