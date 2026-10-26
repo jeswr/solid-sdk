@@ -54,9 +54,13 @@ export class RdfIO {
     // different data: that could authorize overwriting or deleting another writer.
     const current = await this.read(url);
     const isContainer = node(url, resource.dataset).types.has(`${NS.LDP}BasicContainer`);
+    const expected = new Store([...resource.dataset]);
+    // CSS ignores container PUT bodies and supplies its own generation metadata.
+    // The token distinguishes generations on servers that preserve client metadata.
+    if (isContainer) node(url, expected).clear(`${NS.SCHEDULING}initializationOwner`);
     if (
       isContainer
-        ? !current.dataset.contains(resource.dataset) ||
+        ? !current.dataset.contains(expected) ||
           node(current.url, current.dataset).iris(`${NS.LDP}contains`).size > 0
         : !isomorphic([...current.dataset], [...resource.dataset])
     )
@@ -77,14 +81,13 @@ export class RdfIO {
     if (!response.ok) throw new ModelError(response.status, url, response.headers.get("ETag"));
     return response;
   }
-  async container(url: string): Promise<Resource | undefined> {
+  async container(url: string, dataset = new Store()): Promise<Resource | undefined> {
     // CSS can reject PUT to an existing container before checking If-None-Match.
     const existing = await this.optional(url);
     if (existing) {
       this.requireContainer(existing);
       return;
     }
-    const dataset = new Store();
     node(url, dataset).types.add(`${NS.LDP}BasicContainer`);
     try {
       return await this.write(url, dataset, { create: true });

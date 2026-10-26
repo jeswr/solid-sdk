@@ -13,16 +13,19 @@ it.each([
   true,
 ])("creates, adopts and compensates on CSS (omit PUT ETags: %s)", async (omitEtags) => {
   const storage = new URL(`regression-${crypto.randomUUID()}/`, endpoint).href;
-  let failFinalization = false;
+  let failFinalization: string | undefined;
+  let failDeletion: string | undefined;
   const transport: typeof fetch = async (input, init) => {
     const headers = new Headers(init?.headers);
     if (init?.method === "PUT" && headers.has("If-Match")) {
       expect(String(input).endsWith("/")).toBe(false);
-      if (failFinalization && String(input).endsWith("failed.ttl")) {
-        failFinalization = false;
+      if (String(input) === failFinalization) {
+        failFinalization = undefined;
         return new Response(null, { status: 503 });
       }
     }
+    if (init?.method === "DELETE" && String(input) === failDeletion)
+      return new Response(null, { status: 503 });
     const response = await fetch(input, init);
     if (omitEtags && init?.method === "PUT" && response.ok) {
       const withoutValidator = new Headers(response.headers);
@@ -38,13 +41,42 @@ it.each([
   const inbox = await creator.bootstrapInbox();
   const adopted = await new TaskStore(options).bootstrapInbox();
   expect(adopted.tracker.id).toBe(inbox.tracker.id);
-  const task = await creator.createTask(adopted, { title: "CSS task", state: "open" });
+  const task = await creator.createTask(adopted, {
+    title: "CSS task",
+    state: "open",
+    dueDate: new Date("2026-10-25T12:00:00Z"),
+    recurrence: { frequency: "DAILY" },
+    reminders: [{ offset: "-PT15M" }],
+  });
   expect((await creator.readTask(task.url)).task.title).toBe("CSS task");
   expect(task.etag).toBeTruthy();
-  failFinalization = true;
+  const updated = await creator.updateTask(task, (item) => {
+    item.recurrence = { frequency: "WEEKLY" };
+    item.reminders = [{ offset: "-PT30M" }];
+  });
+  const read = await creator.readTask(updated.url);
+  expect(read.task.recurrence?.frequency).toBe("WEEKLY");
+  expect(read.task.reminders).toMatchObject([{ offset: "-PT30M" }]);
+  failFinalization = `${creator.projects}failed.ttl`;
   await expect(creator.createProject("Failed")).rejects.toMatchObject({ status: 503 });
   expect(await io.optional(`${creator.projects}failed.ttl`)).toBeUndefined();
   expect(await io.optional(`${creator.projects}failed/`)).toBeUndefined();
   expect((await creator.createProject("Failed")).url).toBe(`${creator.projects}failed.ttl`);
   expect((await creator.createProject("Unrelated")).tracker.title).toBe("Unrelated");
+
+  const recoveryStorage = new URL("recovery/", storage).href;
+  await io.container(recoveryStorage);
+  const recoveryOptions = { ...options, storage: recoveryStorage };
+  const interrupted = new TaskStore(recoveryOptions);
+  failFinalization = `${interrupted.projects}inbox.ttl`;
+  failDeletion = `${interrupted.projects}inbox/`;
+  await expect(interrupted.bootstrapInbox()).rejects.toThrow(AggregateError);
+  expect(await io.optional(`${interrupted.projects}inbox.ttl`)).toBeDefined();
+  failDeletion = undefined;
+  const restarted = new TaskStore(recoveryOptions);
+  const recovered = await restarted.bootstrapInbox();
+  expect(recovered.url).toBe(`${interrupted.projects}inbox.ttl`);
+  expect(
+    (await restarted.createTask(recovered, { title: "Recovered", state: "open" })).task.title,
+  ).toBe("Recovered");
 });

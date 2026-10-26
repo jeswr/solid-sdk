@@ -12,6 +12,10 @@ import { now, Pod, storage, webId } from "./pod";
 
 const projects = `${storage}tasks/projects/`;
 const indexUrl = `${storage}settings/privateTypeIndex.ttl`;
+const initializationState = `${NS.SCHEDULING}initializationState`;
+const initializationOwner = `${NS.SCHEDULING}initializationOwner`;
+const cleanupResources = `${NS.SCHEDULING}cleanupResources`;
+const cleanupEtag = `${NS.SCHEDULING}cleanupEtag`;
 function store(pod: Pod, extra = {}) {
   return new TaskStore({
     storage,
@@ -196,8 +200,9 @@ describe("project discovery and first use", () => {
     );
     expect(pod.mutations().some((request) => request.method === "DELETE")).toBe(false);
   });
-  it("fences Inbox adoption while delayed container cleanup is in progress", async () => {
+  it("resumes active cleanup and fences delayed deletes from the previous owner", async () => {
     const pod = new Pod();
+    pod.contentEtags = true;
     const url = `${projects}inbox.ttl`;
     const container = `${projects}inbox/`;
     const entered = Promise.withResolvers<void>();
@@ -215,20 +220,152 @@ describe("project discovery and first use", () => {
     });
     const failed = expect(creator.bootstrapInbox()).rejects.toMatchObject({ status: 503 });
     await entered.promise;
+    const previousContainer = pod.files.get(container)?.body;
     const adopter = store(pod);
     try {
-      await expect(adopter.bootstrapInbox()).rejects.toMatchObject({ status: 412 });
+      const adopted = await adopter.bootstrapInbox();
       expect(pod.files.has(url)).toBe(true);
+      expect(pod.files.get(container)?.body).not.toBe(previousContainer);
+      expect((await adopter.createTask(adopted, { title: "Safe", state: "open" })).task.title).toBe(
+        "Safe",
+      );
     } finally {
       released.resolve();
     }
     await failed;
-    expect(pod.files.has(url)).toBe(false);
-    expect(pod.files.has(container)).toBe(false);
+    expect(pod.files.has(url)).toBe(true);
+    expect(pod.files.has(container)).toBe(true);
     const adopted = await adopter.bootstrapInbox();
-    expect((await adopter.createTask(adopted, { title: "Safe", state: "open" })).task.title).toBe(
+    expect((await adopter.listTasks(adopted.tracker.stateStore as string))[0]?.task.title).toBe(
       "Safe",
     );
+  });
+  it.each([
+    "container",
+    "tracker",
+  ])("resumes interrupted %s deletion after discarding the original store", async (phase) => {
+    const pod = new Pod();
+    pod.omitPutEtags = true;
+    const url = `${projects}inbox.ttl`;
+    const container = `${projects}inbox/`;
+    pod.intercept = (request) =>
+      (request.method === "PUT" && request.url === indexUrl) ||
+      (request.method === "DELETE" && request.url === (phase === "container" ? container : url))
+        ? new Response(null, { status: 503 })
+        : undefined;
+    await expect(store(pod).bootstrapInbox()).rejects.toThrow(AggregateError);
+    const dataset = await pod.dataset(url);
+    const marker = node(`${url}#this`, dataset);
+    expect(marker.text(initializationState)).toBe("cleanup");
+    expect(marker.text(initializationOwner)).toBeTruthy();
+    expect([...marker.iris(cleanupResources)]).toEqual([container]);
+    expect(node(container, dataset).text(cleanupEtag)).toBe('"1"');
+    const markerEtag = `"${pod.files.get(url)?.version}"`;
+    const start = pod.requests.length;
+    pod.intercept = undefined;
+    const restarted = store(pod);
+    const inbox = await restarted.bootstrapInbox();
+    const recovery = pod.requests.slice(start);
+    const claim = recovery.find((request) => request.url === url && request.method === "PUT");
+    expect(claim?.headers.get("If-Match")).toBe(markerEtag);
+    const claimed = await parse(url, claim?.body as string);
+    expect(node(`${url}#this`, claimed).text(initializationOwner)).not.toBe(
+      marker.text(initializationOwner),
+    );
+    expect(recovery.findIndex((request) => request.method === "DELETE")).toBeGreaterThan(
+      recovery.indexOf(claim as (typeof recovery)[number]),
+    );
+    expect(
+      recovery
+        .filter((request) => request.method === "DELETE")
+        .map((request) => [request.url, request.headers.get("If-Match")]),
+    ).toEqual([
+      [container, '"1"'],
+      [url, '"3"'],
+    ]);
+    expect(inbox.url).toBe(url);
+    expect(node(inbox.tracker.id, inbox.dataset).text(initializationState)).toBeUndefined();
+    expect(
+      (await restarted.createTask(inbox, { title: "Recovered", state: "open" })).task.title,
+    ).toBe("Recovered");
+  });
+  it("preserves adoption that wins the restarted cleanup's conditional marker claim", async () => {
+    const pod = new Pod();
+    const url = `${projects}inbox.ttl`;
+    const container = `${projects}inbox/`;
+    pod.intercept = (request) =>
+      (request.method === "PUT" && request.url === indexUrl) || request.method === "DELETE"
+        ? new Response(null, { status: 503 })
+        : undefined;
+    await expect(store(pod).bootstrapInbox()).rejects.toThrow(AggregateError);
+    let adopted = false;
+    const start = pod.requests.length;
+    pod.intercept = async (request) => {
+      if (!adopted && request.method === "PUT" && request.url === url) {
+        adopted = true;
+        const dataset = await pod.dataset(url);
+        const marker = node(`${url}#this`, dataset);
+        marker.clear(initializationState);
+        marker.setText(initializationOwner, "another-owner");
+        marker.setText(`${NS.DCT}title`, "Adopted");
+        pod.seed(url, await serialize(dataset));
+      }
+      return undefined;
+    };
+    const inbox = await store(pod).bootstrapInbox();
+    expect(inbox.tracker.title).toBe("Adopted");
+    expect(pod.files.has(container)).toBe(true);
+    expect(pod.requests.slice(start).filter((request) => request.method === "DELETE")).toEqual([]);
+  });
+  it.each([
+    "owner",
+    "resource",
+    "validator",
+  ])("rejects a persisted cleanup marker with invalid %s before deleting resources", async (field) => {
+    const pod = new Pod();
+    const url = `${projects}inbox.ttl`;
+    const container = `${projects}inbox/`;
+    const tasks = store(pod, { typeIndex: false });
+    const inbox = await tasks.bootstrapInbox();
+    const dataset = new Store([...inbox.dataset]);
+    const marker = node(inbox.tracker.id, dataset);
+    marker.setText(initializationState, "cleanup");
+    if (field !== "owner") marker.setText(initializationOwner, "cleanup-owner");
+    const target = field === "resource" ? `${storage}unrelated/` : container;
+    marker.iris(cleanupResources).add(target);
+    if (field !== "validator") node(target, dataset).setText(cleanupEtag, '"1"');
+    pod.seed(url, await serialize(dataset));
+    const start = pod.requests.length;
+    const bootstrap = store(pod, { typeIndex: false }).bootstrapInbox();
+    if (field === "validator") await expect(bootstrap).rejects.toThrow("ETag");
+    else await expect(bootstrap).rejects.toMatchObject({ status: 412 });
+    expect(pod.requests.slice(start).filter((request) => request.method !== "GET")).toEqual([]);
+    expect(pod.files.has(container)).toBe(true);
+  });
+  it("resumes cleanup that starts between the Inbox lookup and the adoption read", async () => {
+    const pod = new Pod();
+    const tasks = store(pod, { typeIndex: false });
+    const inbox = await tasks.bootstrapInbox();
+    const container = inbox.tracker.stateStore as string;
+    let reads = 0;
+    pod.intercept = async (request) => {
+      if (request.method === "GET" && request.url === inbox.url && ++reads === 2) {
+        const dataset = await pod.dataset(inbox.url);
+        const marker = node(inbox.tracker.id, dataset);
+        marker.setText(initializationState, "cleanup");
+        marker.setText(initializationOwner, "another-cleaner");
+        marker.iris(cleanupResources).add(container);
+        node(container, dataset).setText(cleanupEtag, '"1"');
+        pod.seed(inbox.url, await serialize(dataset));
+      }
+      return undefined;
+    };
+    const recovered = await tasks.bootstrapInbox();
+    expect(recovered.tracker.title).toBe("Inbox");
+    expect(node(recovered.tracker.id, recovered.dataset).text(initializationState)).toBeUndefined();
+    expect(
+      pod.requests.some((request) => request.method === "DELETE" && request.url === container),
+    ).toBe(true);
   });
   it("adopts an existing Inbox without a modification timestamp", async () => {
     const pod = new Pod();

@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+import { createHash } from "node:crypto";
 import { NS, node, parse, Store, serialize } from "../../src/apps/tasks/lib/model/rdf";
 export const storage = "https://pod.test/alice/";
 export const webId = `${storage}profile/card#me`;
@@ -16,6 +17,7 @@ export class Pod {
   readonly requests: RequestRecord[] = [];
   readonly privatePolicies = new Set<string>();
   omitPutEtags = false;
+  contentEtags = false;
   readonly ensurePrivateIndexAccess = async (url: string, owner: string) => {
     if (owner !== webId) throw new Error("Unexpected owner");
     this.privatePolicies.add(url);
@@ -35,6 +37,12 @@ export class Pod {
   mutations() {
     return this.requests.filter((request) => request.method !== "GET");
   }
+  private etag(url: string): string | null {
+    const file = this.files.get(url);
+    if (!file) return null;
+    if (file.etag !== undefined) return file.etag;
+    return `"${this.contentEtags ? createHash("sha256").update(file.body).digest("hex") : file.version}"`;
+  }
   readonly fetch: typeof fetch = async (input, init) => {
     const url = String(input);
     const method = init?.method ?? "GET";
@@ -48,7 +56,7 @@ export class Pod {
     const injected = await this.intercept?.(request);
     if (injected) return injected;
     const file = this.files.get(url);
-    const etag = file?.etag === undefined ? (file ? `"${file.version}"` : null) : file.etag;
+    const etag = this.etag(url);
     if (method === "GET") {
       if (!file) return new Response(null, { status: 404 });
       let body = file.body;
@@ -89,7 +97,7 @@ export class Pod {
     this.seed(url, request.body);
     return new Response(null, {
       status: 201,
-      headers: this.omitPutEtags ? {} : { ETag: `"${this.files.get(url)?.version}"` },
+      headers: this.omitPutEtags ? {} : { ETag: this.etag(url) as string },
     });
   };
   async dataset(url: string) {
