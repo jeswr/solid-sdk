@@ -14,11 +14,19 @@
 //   - login from an app origin GRANTS that origin (the opt-in), unlocking subsequent fetches
 //   - SOLID_GET_STATE withholds the WebID (PII) from a non-granted page, exposes to granted
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import * as jose from 'jose';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { generateDpopKeyPair } from '../src/background/core/dpop';
 import type { StoredDpopKeyRecord } from '../src/background/core/dpop-key-db';
+import { ProfileStore } from '../src/background/core/profile-store';
 import type { ReplicaMetadata } from '../src/background/core/replica-db';
 import type { StoredSession } from '../src/background/session-store';
+import { fixtureGrant, MemoryProfileDb, profileCredentials } from './profile-fixtures';
+
+let profileDb: MemoryProfileDb;
+vi.mock('../src/background/profile-db', () => ({
+  ProfileDb: { open: async () => profileDb },
+}));
 
 // --- An in-memory DpopKeyDb double (Phase-2 security hardening) -----------------------
 // The DPoP private key is no longer carried inline on `StoredSession` — it lives as a
@@ -278,6 +286,8 @@ async function loadWorker(): Promise<void> {
 }
 
 beforeEach(() => {
+  vi.doUnmock('../src/background/auth-flow');
+  profileDb = new MemoryProfileDb();
   installChrome();
   installCaches();
   cacheStore.clear();
@@ -286,6 +296,42 @@ beforeEach(() => {
   idbDpopKey = undefined;
   idbDpopKeyGetError = null;
 });
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+/** Exercise the real asynchronous icon renderer without a browser canvas. */
+function installIconCanvas(): void {
+  vi.stubGlobal(
+    'OffscreenCanvas',
+    class {
+      constructor(
+        private readonly width: number,
+        private readonly height: number,
+      ) {}
+      getContext() {
+        return {
+          beginPath() {},
+          roundRect() {},
+          fill() {},
+          fillText() {},
+          save() {},
+          arc() {},
+          clip() {},
+          drawImage() {},
+          restore() {},
+          getImageData: () => ({
+            width: this.width,
+            height: this.height,
+            data: new Uint8ClampedArray(4),
+          }),
+        };
+      }
+    },
+  );
+  vi.stubGlobal('createImageBitmap', async () => ({ width: 1, height: 1, close() {} }));
+}
 
 describe('service-worker per-requesting-origin gate (wired)', () => {
   it('the legitimate owner path: a GRANTED app reads its pod → SUCCEEDS with egress', async () => {
@@ -318,7 +364,7 @@ describe('service-worker per-requesting-origin gate (wired)', () => {
     // A fresh SW "restart" (new module instance, empty in-memory caches) that happens to hit
     // a transient DB-open failure on its cold-wake key load — set BEFORE the restart so it
     // also covers the import-time `ensureSession()` call `loadWorker()` triggers.
-    idbDpopKeyGetError = new Error('simulated IndexedDB open failure');
+    profileDb.error = new Error('simulated IndexedDB open failure');
     await loadWorker();
     const failed = await sendFetch(
       { url: 'https://alice.pod.example/private/notes.ttl', stampedOrigin: 'https://pm.example' },
@@ -328,11 +374,11 @@ describe('service-worker per-requesting-origin gate (wired)', () => {
     // No pod egress happened for the failed attempt.
     expect(fetchCalls.some((c) => c.url.startsWith('https://alice.pod.example'))).toBe(false);
     // Crucially: the session was NOT torn down — it is still in storage, untouched.
-    expect(storage.get('solid:session')).toBeDefined();
+    expect(profileDb.state.records[0].session).not.toBeNull();
 
     // The transient condition clears (no restart needed — `cachedKeyPair` was never
     // populated by the failed attempts, so the very next call retries the DB read).
-    idbDpopKeyGetError = null;
+    profileDb.error = null;
     const ok = await sendFetch(
       { url: 'https://alice.pod.example/private/notes.ttl', stampedOrigin: 'https://pm.example' },
       { origin: 'https://pm.example', url: 'https://pm.example/app.html' },
@@ -511,7 +557,7 @@ describe('login GRANTS the requesting origin ONLY on success (privilege-escalati
     // The login failed (no IdP) ...
     expect(res.error).toBeDefined();
     // ... so NO grant was persisted (the privilege-escalation fix).
-    const grants = (storage.get('solid:granted-origins') as string[]) ?? [];
+    const grants = (profileDb.state.records[0]?.grantedOrigins as string[]) ?? [];
     expect(grants).not.toContain('https://newapp.example');
   });
 
@@ -533,7 +579,7 @@ describe('login GRANTS the requesting origin ONLY on success (privilege-escalati
       { origin: 'https://hostile.example', url: 'https://hostile.example/x' },
     );
     expect(loginRes.error).toBeDefined();
-    const grants = (storage.get('solid:granted-origins') as string[]) ?? [];
+    const grants = (profileDb.state.records[0]?.grantedOrigins as string[]) ?? [];
     expect(grants).not.toContain('https://hostile.example');
 
     // The failing OIDC flow itself may make network calls (discovery/profile) on the raw fetch;
@@ -571,7 +617,7 @@ describe('login GRANTS the requesting origin ONLY on success (privilege-escalati
       expiresAt: Date.now() + 60 * 60 * 1000,
     };
     vi.doMock('../src/background/auth-flow', () => ({
-      initiateLogin: vi.fn(async () => ({ session, name: 'Alice', photoUrl: null })),
+      initiateLogin: vi.fn(async () => ({ session, keyPair, name: 'Alice', photoUrl: null })),
       refreshSession: vi.fn(async (s: StoredSession) => s),
     }));
     await loadWorker();
@@ -585,7 +631,7 @@ describe('login GRANTS the requesting origin ONLY on success (privilege-escalati
       { origin: 'https://newapp.example', url: 'https://newapp.example/x' },
     );
     expect(loginRes.ok).toBe(true);
-    const grants = (storage.get('solid:granted-origins') as string[]) ?? [];
+    const grants = (profileDb.state.records[0]?.grantedOrigins as string[]) ?? [];
     expect(grants).toContain('https://newapp.example');
 
     // The now-granted origin can read its pod.
@@ -614,7 +660,7 @@ describe('login GRANTS the requesting origin ONLY on success (privilege-escalati
       expiresAt: Date.now() + 60 * 60 * 1000,
     };
     vi.doMock('../src/background/auth-flow', () => ({
-      initiateLogin: vi.fn(async () => ({ session, name: 'Alice', photoUrl: null })),
+      initiateLogin: vi.fn(async () => ({ session, keyPair, name: 'Alice', photoUrl: null })),
       refreshSession: vi.fn(async (s: StoredSession) => s),
     }));
     await loadWorker();
@@ -627,7 +673,7 @@ describe('login GRANTS the requesting origin ONLY on success (privilege-escalati
       },
       { origin: 'https://attacker.example', url: 'https://attacker.example/x' }, // real sender
     );
-    const grants = (storage.get('solid:granted-origins') as string[]) ?? [];
+    const grants = (profileDb.state.records[0]?.grantedOrigins as string[]) ?? [];
     // The forged origin resolves to null → no grant for victim OR attacker, even on success.
     expect(grants).not.toContain('https://victim.example');
     expect(grants).not.toContain('https://attacker.example');
@@ -860,5 +906,1249 @@ describe('Round-2 HIGH #1: autoDivert returns a PASSTHROUGH SENTINEL — the SW 
     expect(res.status).toBeUndefined();
     expect(res.error).toBeUndefined();
     expect(fetchCalls.some((c) => c.url.startsWith('https://api.thirdparty.example'))).toBe(false);
+  });
+});
+
+const PROFILE_OWNER = {
+  origin: `chrome-extension://${EXTENSION_ID}`,
+  url: `chrome-extension://${EXTENSION_ID}/popup/popup.html`,
+};
+const PROFILE_APP_A = { origin: 'https://appa.example', url: 'https://appa.example/app' };
+const PROFILE_APP_B = { origin: 'https://appb.example', url: 'https://appb.example/app' };
+
+async function twoProfiles() {
+  profileDb.state.migrated = true;
+  const store = new ProfileStore(profileDb, async () => {});
+  const a = await profileCredentials();
+  const b = await profileCredentials('bob');
+  await store.login(a.session, a.keyPair, { ...a.display, photoUrl: null });
+  await store.login(b.session, b.keyPair, { ...b.display, photoUrl: null });
+  await store.capabilities('1', (r) => {
+    r.grantedOrigins = [PROFILE_APP_A.origin];
+    r.podOrigins = ['https://alice-only.example'];
+    r.classGrants = [fixtureGrant(a.session.webId)];
+  });
+  await store.capabilities('2', (r) => {
+    r.grantedOrigins = [PROFILE_APP_B.origin];
+    r.classGrants = [fixtureGrant(b.session.webId)];
+  });
+  return { store, a, b };
+}
+
+function profileFetch(sender = PROFILE_APP_A, extra: Record<string, unknown> = {}) {
+  return sendFetch(
+    { url: 'https://pod.example/private/notes', stampedOrigin: sender.origin, ...extra },
+    sender,
+  );
+}
+
+function profileMessage(type: string, extra: Record<string, unknown> = {}) {
+  return sendMessage({ type, ...extra }, PROFILE_OWNER);
+}
+
+describe('ProfileStore runtime API and adversarial isolation', () => {
+  const actions = [
+    { type: 'SOLID_PROFILES_LIST' },
+    { type: 'SOLID_PROFILE_ADD', webId: 'https://hostile.example/#me' },
+    { type: 'SOLID_PROFILE_RENAME', profileId: '1', label: 'Hijacked' },
+    { type: 'SOLID_PROFILE_REMOVE', profileId: '1' },
+    { type: 'SOLID_PROFILE_SET_DEFAULT', profileId: '2' },
+  ];
+
+  it.each(
+    actions,
+  )('rejects untrusted $type messages before any state or network change', async (action) => {
+    await twoProfiles();
+    await loadWorker();
+    const before = structuredClone(profileDb.state);
+    const callsBefore = fetchCalls.length;
+    for (const sender of [
+      PROFILE_APP_A,
+      {},
+      { origin: 'null' },
+      { origin: PROFILE_APP_A.origin, url: PROFILE_OWNER.url },
+      { origin: PROFILE_OWNER.origin, url: PROFILE_APP_A.url },
+      { url: `${PROFILE_OWNER.origin}.evil/popup.html` },
+    ]) {
+      const result = await sendMessage(action, sender);
+      expect(result.error).toMatch(/extension context/);
+      expect(result.profiles).toBeUndefined();
+    }
+    expect(profileDb.state).toEqual(before);
+    expect(fetchCalls).toHaveLength(callsBefore);
+  });
+
+  it('lists, renames and switches with token-free metadata, persisting the default across wake', async () => {
+    await twoProfiles();
+    await loadWorker();
+    const list = await profileMessage('SOLID_PROFILES_LIST');
+    expect(list.defaultProfileId).toBe('1');
+    expect(list.profiles).toHaveLength(2);
+    const serialized = JSON.stringify(list);
+    for (const forbidden of [
+      'accessToken',
+      'refreshToken',
+      'privateKey',
+      'fixture-access',
+      'fixture-refresh',
+    ]) {
+      expect(serialized).not.toContain(forbidden);
+    }
+    expect(
+      (await profileMessage('SOLID_PROFILE_RENAME', { profileId: '2', label: 'Work' })).ok,
+    ).toBe(true);
+    const switched = await profileMessage('SOLID_PROFILE_SET_DEFAULT', { profileId: '2' });
+    expect(switched.defaultProfileId).toBe('2');
+    await loadWorker();
+    const view = await sendMessage({ type: 'SOLID_GET_STATE' }, PROFILE_OWNER);
+    expect(view).toMatchObject({
+      webId: 'https://pod.example/bob/profile#me',
+      name: 'Work',
+      isActive: true,
+    });
+    expect(
+      (await profileMessage('SOLID_PROFILE_RENAME', { profileId: '2', label: '' })).error,
+    ).toMatch(/label/);
+    for (const type of [
+      'SOLID_PROFILE_RENAME',
+      'SOLID_PROFILE_REMOVE',
+      'SOLID_PROFILE_SET_DEFAULT',
+    ]) {
+      expect((await profileMessage(type, { profileId: 'absent', label: 'X' })).error).toMatch(
+        /Unknown profile/,
+      );
+    }
+    // Chrome also supplies a URL-only sender on some extension surfaces.
+    expect(
+      (await sendMessage({ type: 'SOLID_PROFILES_LIST' }, { url: PROFILE_OWNER.url })).ok,
+    ).toBe(true);
+  });
+
+  it('adds profiles through login, retaining the old default and refusing a ninth before opening auth', async () => {
+    const credentials = await profileCredentials('first');
+    let next = credentials;
+    const initiateLogin = vi.fn(async () => ({
+      ...next,
+      name: next.display.name,
+      photoUrl: next.display.photoUrl,
+    }));
+    vi.doMock('../src/background/auth-flow', () => ({ initiateLogin, refreshSession: vi.fn() }));
+    await loadWorker();
+    expect(
+      (await profileMessage('SOLID_PROFILE_ADD', { webId: credentials.session.webId }))
+        .defaultProfileId,
+    ).toBe('1');
+    for (let i = 2; i <= 8; i++) {
+      next = await profileCredentials(String(i));
+      const result = await profileMessage('SOLID_PROFILE_ADD', { webId: next.session.webId });
+      expect(result.ok).toBe(true);
+      expect(result.defaultProfileId).toBe('1');
+    }
+    expect(profileDb.state.records).toHaveLength(8);
+    expect(profileDb.state.records[1].grantedOrigins).toEqual([]);
+    const rejected = await profileMessage('SOLID_PROFILE_ADD', {
+      webId: 'https://ninth.example/#me',
+    });
+    expect(rejected.error).toMatch(/8 profiles/);
+    expect(initiateLogin).toHaveBeenCalledTimes(8);
+    next = credentials;
+    expect((await profileMessage('SOLID_PROFILE_ADD', { webId: next.session.webId })).ok).toBe(
+      true,
+    );
+    expect(profileDb.state.records).toHaveLength(8);
+    initiateLogin.mockRejectedValueOnce(new Error('fixture cancelled'));
+    expect((await profileMessage('SOLID_PROFILE_ADD', { webId: next.session.webId })).error).toBe(
+      'fixture cancelled',
+    );
+    expect(storage.has('solid:session')).toBe(false);
+    expect(idbDpopKey).toBeUndefined();
+  });
+
+  it('broadcasts each identity only to its own granted tabs', async () => {
+    const { a, b } = await twoProfiles();
+    const tabs = [
+      { id: 1, url: PROFILE_APP_A.url },
+      { id: 2, url: PROFILE_APP_B.url },
+      { id: 3, url: 'https://ungranted.example/' },
+    ];
+    chrome.tabs.query = vi.fn().mockResolvedValue(tabs);
+    const send = vi.spyOn(chrome.tabs, 'sendMessage');
+    await loadWorker();
+    expect(send.mock.calls).toEqual([
+      [1, { type: 'SOLID_STATE_CHANGED', webId: a.session.webId }],
+      [2, { type: 'SOLID_STATE_CHANGED', webId: null }],
+      [3, { type: 'SOLID_STATE_CHANGED', webId: null }],
+    ]);
+    send.mockClear();
+    await profileMessage('SOLID_PROFILE_SET_DEFAULT', { profileId: '2' });
+    expect(send.mock.calls).toEqual([
+      [1, { type: 'SOLID_STATE_CHANGED', webId: null }],
+      [2, { type: 'SOLID_STATE_CHANGED', webId: b.session.webId }],
+      [3, { type: 'SOLID_STATE_CHANGED', webId: null }],
+    ]);
+  });
+
+  it('never authorizes an earlier identity with a newly selected profile grant', async () => {
+    const { b } = await twoProfiles();
+    await loadWorker();
+    chrome.tabs.query = vi.fn().mockResolvedValue([{ id: 2, url: PROFILE_APP_B.url }]);
+    const send = vi.spyOn(chrome.tabs, 'sendMessage');
+    const { ProfileStore: WorkerStore } = await import('../src/background/core/profile-store');
+    const selected = structuredClone(profileDb.state.records[0]);
+    let release!: () => void;
+    let entered!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    vi.spyOn(WorkerStore.prototype, 'getDefault').mockImplementationOnce(async () => {
+      entered();
+      await held;
+      return selected;
+    });
+    const old = profileMessage('SOLID_PROFILE_RENAME', { profileId: '1', label: 'Personal' });
+    await started;
+    await profileMessage('SOLID_PROFILE_SET_DEFAULT', { profileId: '2' });
+    release();
+    await old;
+    expect(send.mock.calls).toEqual([[2, { type: 'SOLID_STATE_CHANGED', webId: b.session.webId }]]);
+  });
+
+  it('discards a broadcast held across a default change, including the runtime copy', async () => {
+    const { b } = await twoProfiles();
+    await loadWorker();
+    let release!: (tabs: Array<{ id: number; url: string }>) => void;
+    let entered!: () => void;
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const held = new Promise<Array<{ id: number; url: string }>>((resolve) => {
+      release = resolve;
+    });
+    const tabs = [{ id: 2, url: PROFILE_APP_B.url }];
+    chrome.tabs.query = vi
+      .fn()
+      .mockImplementationOnce(() => {
+        entered();
+        return held;
+      })
+      .mockResolvedValue(tabs);
+    const send = vi.spyOn(chrome.tabs, 'sendMessage');
+    const runtime = vi.spyOn(chrome.runtime, 'sendMessage');
+    const old = profileMessage('SOLID_PROFILE_RENAME', { profileId: '1', label: 'Personal' });
+    await started;
+    await profileMessage('SOLID_PROFILE_SET_DEFAULT', { profileId: '2' });
+    release(tabs);
+    await old;
+    expect(send.mock.calls).toEqual([[2, { type: 'SOLID_STATE_CHANGED', webId: b.session.webId }]]);
+    expect(runtime.mock.calls).toEqual([[{ type: 'SOLID_STATE_CHANGED', webId: b.session.webId }]]);
+  });
+
+  it.each([
+    { next: 'profile', photoOk: true },
+    { next: 'profile', photoOk: false },
+    { next: 'logout', photoOk: true },
+  ])('discards delayed avatar mutations after $next (photo success: $photoOk)', async ({
+    next,
+    photoOk,
+  }) => {
+    await twoProfiles();
+    await loadWorker();
+    installIconCanvas();
+    const avatar = 'https://pod.example/alice.png';
+    profileDb.state.records[0].profile = { ...profileDb.state.records[0].profile, avatar };
+    let entered!: () => void;
+    let release!: () => void;
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    fetchImpl = async (url) => {
+      expect(url).toBe(avatar);
+      entered();
+      await held;
+      return new Response('fixture photo', { status: photoOk ? 200 : 404 });
+    };
+    const icon = vi.spyOn(chrome.action, 'setIcon');
+    const badge = vi.spyOn(chrome.action, 'setBadgeText');
+    const background = vi.spyOn(chrome.action, 'setBadgeBackgroundColor');
+    const title = vi.spyOn(chrome.action, 'setTitle');
+    const old = profileMessage('SOLID_PROFILE_RENAME', { profileId: '1', label: 'Personal' });
+    await started;
+    if (next === 'profile') await profileMessage('SOLID_PROFILE_SET_DEFAULT', { profileId: '2' });
+    else await profileMessage('SOLID_LOGOUT');
+    const latest = {
+      icon: [...icon.mock.calls],
+      badge: [...badge.mock.calls],
+      background: [...background.mock.calls],
+      title: [...title.mock.calls],
+    };
+    expect(title).toHaveBeenLastCalledWith({
+      title: next === 'profile' ? 'Signed in as bob' : 'Sign in to Solid',
+    });
+    expect(badge).toHaveBeenLastCalledWith({ text: next === 'profile' ? ' ' : '' });
+    release();
+    expect((await old).ok).toBe(true);
+    expect(icon.mock.calls).toEqual(latest.icon);
+    expect(badge.mock.calls).toEqual(latest.badge);
+    expect(background.mock.calls).toEqual(latest.background);
+    expect(title.mock.calls).toEqual(latest.title);
+  });
+
+  it.each([
+    'active',
+    'signed-out',
+  ])('stops an obsolete %s toolbar update after an awaited mutation', async (state) => {
+    await twoProfiles();
+    await loadWorker();
+    installIconCanvas();
+    let entered!: () => void;
+    let release!: () => void;
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    vi.spyOn(chrome.action, 'setIcon').mockImplementationOnce(async () => {
+      entered();
+      await held;
+    });
+    const badge = vi.spyOn(chrome.action, 'setBadgeText');
+    const title = vi.spyOn(chrome.action, 'setTitle');
+    const old =
+      state === 'active'
+        ? profileMessage('SOLID_PROFILE_RENAME', { profileId: '1', label: 'Personal' })
+        : profileMessage('SOLID_LOGOUT');
+    await started;
+    await profileMessage('SOLID_PROFILE_SET_DEFAULT', { profileId: '2' });
+    const latestBadge = [...badge.mock.calls];
+    const latestTitle = [...title.mock.calls];
+    release();
+    expect((await old).ok).toBe(true);
+    expect(badge.mock.calls).toEqual(latestBadge);
+    expect(title.mock.calls).toEqual(latestTitle);
+    expect(title).toHaveBeenLastCalledWith({ title: 'Signed in as bob' });
+  });
+
+  it('never uses P1 grants, tokens, keys or pod settings for P2, even on a shared pod origin', async () => {
+    const { a, b } = await twoProfiles();
+    await loadWorker();
+    expect((await profileFetch()).status).toBe(200);
+    await profileMessage('SOLID_PROFILE_SET_DEFAULT', { profileId: '2' });
+    const before = fetchCalls.length;
+    expect((await profileFetch(PROFILE_APP_A, { profileId: '1' })).status).toBe(403);
+    expect(fetchCalls).toHaveLength(before);
+    const hidden = await sendMessage(
+      { type: 'SOLID_GET_STATE', stampedOrigin: PROFILE_APP_A.origin },
+      PROFILE_APP_A,
+    );
+    expect(hidden.webId).toBeNull();
+    expect((await profileFetch(PROFILE_APP_B, { profileId: '1' })).status).toBe(200);
+    const podCalls = fetchCalls.filter((c) => c.url === 'https://pod.example/private/notes');
+    expect(podCalls).toHaveLength(2);
+    for (const [call, credentials] of [
+      [podCalls[0], a],
+      [podCalls[1], b],
+    ] as const) {
+      const headers = new Headers(call.init?.headers);
+      expect(headers.get('authorization')).toBe(`DPoP ${credentials.session.accessToken}`);
+      const proof = headers.get('dpop')!;
+      const publicJwk = await crypto.subtle.exportKey('jwk', credentials.keyPair.publicKey);
+      expect(jose.decodeProtectedHeader(proof).jwk).toMatchObject({
+        x: publicJwk.x,
+        y: publicJwk.y,
+      });
+      await expect(jose.jwtVerify(proof, credentials.keyPair.publicKey)).resolves.toBeDefined();
+    }
+    expect(
+      (await profileFetch(PROFILE_APP_B, { url: 'https://alice-only.example/private' })).status,
+    ).toBe(403);
+  });
+
+  it('keeps an in-flight P1 request bound to P1 when the default changes to P2', async () => {
+    const { a } = await twoProfiles();
+    await loadWorker();
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let entered!: () => void;
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    fetchImpl = async () => {
+      entered();
+      await held;
+      return new Response('P1-only');
+    };
+    const pending = profileFetch();
+    await started;
+    await profileMessage('SOLID_PROFILE_SET_DEFAULT', { profileId: '2' });
+    release();
+    expect((await pending).body).toBe('P1-only');
+    expect(new Headers(fetchCalls.at(-1)?.init?.headers).get('authorization')).toBe(
+      `DPoP ${a.session.accessToken}`,
+    );
+    expect(profileDb.state.defaultProfileId).toBe('2');
+  });
+
+  it('cancels in-flight reads and purges only the removed profile', async () => {
+    const { a, b } = await twoProfiles();
+    await loadWorker();
+    fetchImpl = async () => new Response('fixture bytes', { headers: { etag: 'fixture-etag' } });
+    await profileFetch();
+    await profileMessage('SOLID_PROFILE_SET_DEFAULT', { profileId: '2' });
+    await profileFetch(PROFILE_APP_B);
+    expect(idbMeta.size).toBe(2);
+    await profileMessage('SOLID_PROFILE_SET_DEFAULT', { profileId: '1' });
+    let release!: () => void;
+    let entered!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    fetchImpl = async () => {
+      entered();
+      await held;
+      return new Response('late P1 bytes');
+    };
+    const read = profileFetch();
+    await started;
+    const signal = fetchCalls.at(-1)?.init?.signal;
+    const removal = await profileMessage('SOLID_PROFILE_REMOVE', { profileId: '1' });
+    expect(removal.defaultProfileId).toBe('2');
+    expect(await read).toEqual({ requestId: 'r1', error: 'Fetch cancelled' });
+    expect(signal?.aborted).toBe(true);
+    release();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(profileDb.state.records.map((r) => r.profile.id)).toEqual(['2']);
+    expect([...idbMeta.values()].every((m) => m.webId === b.session.webId)).toBe(true);
+    expect([...idbMeta.values()].some((m) => m.webId === a.session.webId)).toBe(false);
+    expect(cacheStore.size).toBe(1);
+    expect(profileDb.state.records[0].session).toEqual(b.session);
+    expect(profileDb.state.records[0].classGrants).toHaveLength(1);
+    await loadWorker();
+    expect((await profileFetch(PROFILE_APP_B)).status).toBe(200);
+    expect(
+      (await profileMessage('SOLID_PROFILE_REMOVE', { profileId: '2' })).defaultProfileId,
+    ).toBeNull();
+    expect(cacheStore.size).toBe(0);
+  });
+
+  it('serves concurrent reads and passthrough decisions while another request is stalled', async () => {
+    await twoProfiles();
+    await loadWorker();
+    let release!: () => void;
+    let entered!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    fetchImpl = async (url) => {
+      if (url.endsWith('/slow')) {
+        entered();
+        await held;
+      }
+      return new Response('fixture bytes');
+    };
+    const slow = profileFetch(PROFILE_APP_A, { url: 'https://pod.example/slow' });
+    await started;
+    const openCache = vi.spyOn(caches, 'open');
+    expect(
+      await profileFetch(PROFILE_APP_A, {
+        url: 'https://thirdparty.example/api',
+        autoDivert: true,
+        requestId: 'passthrough',
+      }),
+    ).toEqual({ requestId: 'passthrough', passthrough: true });
+    expect(openCache).not.toHaveBeenCalled();
+    expect((await profileFetch(PROFILE_APP_A, { url: 'https://pod.example/fast' })).status).toBe(
+      200,
+    );
+    expect(fetchCalls).toHaveLength(2);
+    release();
+    expect((await slow).status).toBe(200);
+  });
+
+  it.each([
+    { lifecycle: 'SOLID_LOGOUT', method: 'GET' },
+    { lifecycle: 'SOLID_PROFILE_REMOVE', method: 'GET' },
+    { lifecycle: 'SOLID_LOGOUT', method: 'PUT' },
+    { lifecycle: 'SOLID_PROFILE_REMOVE', method: 'PUT' },
+  ])('cancels a stalled $method response body during $lifecycle without late persistence', async ({
+    lifecycle,
+    method,
+  }) => {
+    const { a, b } = await twoProfiles();
+    await loadWorker();
+    let stream!: ReadableStreamDefaultController<Uint8Array>;
+    let entered!: () => void;
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    fetchImpl = async () => {
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          stream = controller;
+        },
+        pull() {
+          entered();
+        },
+      });
+      return new Response(body, { headers: { etag: 'fixture-etag', 'dpop-nonce': 'late-nonce' } });
+    };
+    const pending = profileFetch(PROFILE_APP_A, {
+      method,
+      body: method === 'PUT' ? 'fixture write' : null,
+    });
+    await started;
+    expect((await profileMessage(lifecycle, { profileId: '1' })).ok).toBe(true);
+    expect(await pending).toEqual({ requestId: 'r1', error: 'Fetch cancelled' });
+    expect(fetchCalls[0].init?.signal?.aborted).toBe(true);
+    stream.enqueue(new TextEncoder().encode('late private bytes'));
+    stream.close();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(cacheStore.size).toBe(0);
+    expect([...idbMeta.values()].some((record) => record.webId === a.session.webId)).toBe(false);
+    expect(idbNonces.size).toBe(0);
+    expect(profileDb.state.records.find((record) => record.profile.id === '2')?.session).toEqual(
+      b.session,
+    );
+  });
+
+  it.each([
+    'SOLID_LOGOUT',
+    'SOLID_PROFILE_REMOVE',
+  ])('does not wait for a refresh flight during %s or restore its late tokens', async (lifecycle) => {
+    const { a, b } = await twoProfiles();
+    await loadWorker();
+    profileDb.state.records[0].session = { ...a.session, expiresAt: 0 };
+    let entered!: () => void;
+    let release!: () => void;
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    fetchImpl = async (url) => {
+      expect(url).toBe(a.session.tokenEndpoint);
+      entered();
+      await held;
+      return Response.json({
+        access_token: 'late-access',
+        refresh_token: 'late-refresh',
+        expires_in: 3600,
+      });
+    };
+    const pending = profileFetch();
+    await started;
+    expect((await profileMessage(lifecycle, { profileId: '1' })).ok).toBe(true);
+    expect(await pending).toEqual({ requestId: 'r1', error: 'Not authenticated' });
+    release();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(
+      profileDb.state.records.find((record) => record.profile.id === '1')?.session ?? null,
+    ).toBeNull();
+    expect(profileDb.state.records.find((record) => record.profile.id === '2')?.session).toEqual(
+      b.session,
+    );
+    expect(fetchCalls).toHaveLength(1);
+    expect(cacheStore.size).toBe(0);
+    expect(idbMeta.size).toBe(0);
+  });
+
+  it.each([
+    { lifecycle: 'SOLID_LOGOUT', phase: 'headers' },
+    { lifecycle: 'SOLID_PROFILE_REMOVE', phase: 'headers' },
+    { lifecycle: 'SOLID_LOGIN', phase: 'headers' },
+    { lifecycle: 'SOLID_LOGOUT', phase: 'body' },
+    { lifecycle: 'SOLID_PROFILE_REMOVE', phase: 'body' },
+    { lifecycle: 'SOLID_LOGIN', phase: 'body' },
+  ])('never replays an automatic POST cancelled during $phase by $lifecycle', async ({
+    lifecycle,
+    phase,
+  }) => {
+    const { a } = await twoProfiles();
+    const replacement = await profileCredentials();
+    vi.doMock('../src/background/auth-flow', () => ({
+      initiateLogin: vi.fn(async () => ({ ...replacement, name: 'alice', photoUrl: null })),
+      refreshSession: vi.fn(),
+    }));
+    await loadWorker();
+    let entered!: () => void;
+    let release!: () => void;
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    fetchImpl = async (url) => {
+      if (url !== 'https://pod.example/private/notes') return new Response('');
+      if (phase === 'headers') {
+        entered();
+        await held;
+        return new Response('created', { status: 201 });
+      }
+      return new Response(
+        new ReadableStream<Uint8Array>({
+          async start(controller) {
+            entered();
+            await held;
+            controller.enqueue(new TextEncoder().encode('created'));
+            controller.close();
+          },
+        }),
+        { status: 201 },
+      );
+    };
+    const pending = profileFetch(PROFILE_APP_A, {
+      method: 'POST',
+      body: 'fixture mutation',
+      autoDivert: true,
+      requestId: 'cancelled-diversion',
+    });
+    await started;
+    const signal = fetchCalls[0].init?.signal;
+    expect((await profileMessage(lifecycle, { profileId: '1', webId: a.session.webId })).ok).toBe(
+      true,
+    );
+    expect(await pending).toEqual({ requestId: 'cancelled-diversion', error: 'Fetch cancelled' });
+    expect(signal?.aborted).toBe(true);
+    release();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(
+      fetchCalls.filter((call) => call.url === 'https://pod.example/private/notes'),
+    ).toHaveLength(1);
+    expect(cacheStore.size).toBe(0);
+    expect(idbMeta.size).toBe(0);
+  });
+
+  it('returns passthrough when logout cancels an automatic POST before egress', async () => {
+    await twoProfiles();
+    await loadWorker();
+    let entered!: () => void;
+    let release!: () => void;
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    vi.spyOn(FakeReplicaDb.prototype, 'getNonce').mockImplementationOnce(async () => {
+      entered();
+      await held;
+      return undefined;
+    });
+    const pending = profileFetch(PROFILE_APP_A, {
+      method: 'POST',
+      body: 'fixture mutation',
+      autoDivert: true,
+      requestId: 'unsent-diversion',
+    });
+    await started;
+    expect((await profileMessage('SOLID_LOGOUT')).ok).toBe(true);
+    expect(await pending).toEqual({ requestId: 'unsent-diversion', passthrough: true });
+    release();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(fetchCalls).toHaveLength(0);
+    expect(cacheStore.size).toBe(0);
+    expect(idbMeta.size).toBe(0);
+  });
+
+  it('finishes an atomic local replica commit before purging its bytes and metadata', async () => {
+    await twoProfiles();
+    await loadWorker();
+    const cache = await caches.open('solid-ext-replica-bytes');
+    const put = cache.put.bind(cache);
+    let release!: () => void;
+    let entered!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    vi.spyOn(cache, 'put').mockImplementation(async (request, response) => {
+      await put(request, response);
+      entered();
+      await held;
+    });
+    vi.spyOn(caches, 'open').mockResolvedValue(cache);
+    const pending = profileFetch();
+    await started;
+    expect(cacheStore.size).toBe(1);
+    expect(idbMeta.size).toBe(0);
+    const removal = profileMessage('SOLID_PROFILE_REMOVE', { profileId: '1' });
+    release();
+    expect((await removal).ok).toBe(true);
+    expect(await pending).toEqual({ requestId: 'r1', error: 'Fetch cancelled' });
+    expect(cacheStore.size).toBe(0);
+    expect(idbMeta.size).toBe(0);
+  });
+
+  it('keeps failed removal retryable until replica bytes are deleted on wake', async () => {
+    const { a, b } = await twoProfiles();
+    await loadWorker();
+    expect((await profileFetch()).status).toBe(200);
+    expect(
+      (await profileFetch(PROFILE_APP_A, { url: 'https://pod.example/private/second' })).status,
+    ).toBe(200);
+    const failedKey = [...cacheStore.keys()][1];
+    await profileMessage('SOLID_PROFILE_SET_DEFAULT', { profileId: '2' });
+    expect((await profileFetch(PROFILE_APP_B)).status).toBe(200);
+    await profileMessage('SOLID_PROFILE_SET_DEFAULT', { profileId: '1' });
+    const cache = await caches.open('solid-ext-replica-bytes');
+    const remove = cache.delete.bind(cache);
+    let fail = true;
+    vi.spyOn(cache, 'delete').mockImplementation(async (request, options) => {
+      if ((request as Request).url === failedKey && fail)
+        throw new Error('fixture cache deletion failed');
+      return remove(request, options);
+    });
+    vi.spyOn(caches, 'open').mockResolvedValue(cache);
+
+    const result = await profileMessage('SOLID_PROFILE_REMOVE', { profileId: '1' });
+    expect(result.error).toBe('fixture cache deletion failed');
+    expect(profileDb.state.defaultProfileId).toBe('1');
+    expect(profileDb.state.records[0]).toMatchObject({
+      profile: { sessionState: 'removing' },
+      session: null,
+      keyPair: null,
+      grantedOrigins: [],
+      classGrants: [],
+    });
+    expect(profileDb.state.records[1].session).toEqual(b.session);
+    expect([...idbMeta.values()].filter((row) => row.webId === a.session.webId)).toHaveLength(2);
+    expect(cacheStore.has(failedKey)).toBe(true);
+    expect(cacheStore.size).toBe(2);
+    expect((await profileFetch()).error).toBe('Not authenticated');
+
+    await loadWorker();
+    expect((await profileMessage('SOLID_PROFILES_LIST')).error).toBe(
+      'fixture cache deletion failed',
+    );
+    expect(profileDb.state.records[0].profile.sessionState).toBe('removing');
+    expect(cacheStore.has(failedKey)).toBe(true);
+
+    fail = false;
+    await loadWorker();
+    expect(await profileMessage('SOLID_PROFILES_LIST')).toMatchObject({
+      ok: true,
+      defaultProfileId: '2',
+      profiles: [{ id: '2', webId: b.session.webId, sessionState: 'active' }],
+    });
+    expect([...idbMeta.values()].every((row) => row.webId === b.session.webId)).toBe(true);
+    expect(cacheStore.has(failedKey)).toBe(false);
+    expect(cacheStore.size).toBe(1);
+    expect((await profileFetch(PROFILE_APP_B)).status).toBe(200);
+  });
+
+  it('signs out only the default profile and never substitutes an active survivor', async () => {
+    const { a, b } = await twoProfiles();
+    await loadWorker();
+    expect((await profileMessage('SOLID_LOGOUT')).ok).toBe(true);
+    expect(profileDb.state.records[0]).toMatchObject({
+      session: null,
+      keyPair: null,
+      grantedOrigins: [],
+      classGrants: [],
+    });
+    expect(profileDb.state.records[0].profile.sessionState).toBe('signed-out');
+    expect(profileDb.state.records[1].session).toEqual(b.session);
+    expect((await profileFetch()).error).toBe('Not authenticated');
+    expect(fetchCalls).toHaveLength(0);
+    expect(profileDb.state.records[0].profile.webId).toBe(a.session.webId);
+    await profileMessage('SOLID_PROFILE_SET_DEFAULT', { profileId: '2' });
+    expect((await profileFetch(PROFILE_APP_B)).status).toBe(200);
+  });
+
+  it('refreshes each profile with its own key and atomically retains rotated tokens across wake', async () => {
+    const { a, b } = await twoProfiles();
+    for (const record of profileDb.state.records)
+      record.session = { ...record.session!, expiresAt: 0 };
+    let failA = false;
+    fetchImpl = async (url, init) => {
+      if (url === a.session.tokenEndpoint) {
+        const body = init?.body as URLSearchParams;
+        const isA = body.get('refresh_token') === a.session.refreshToken;
+        const credentials = isA ? a : b;
+        const proof = new Headers(init?.headers).get('dpop')!;
+        await expect(jose.jwtVerify(proof, credentials.keyPair.publicKey)).resolves.toBeDefined();
+        if (isA && failA) return new Response('fixture refresh denied', { status: 401 });
+        return Response.json({
+          access_token: `rotated-${isA ? 'alice' : 'bob'}`,
+          refresh_token: `refresh-${isA ? 'alice' : 'bob'}`,
+          expires_in: 3600,
+        });
+      }
+      return new Response('pod fixture');
+    };
+    await loadWorker();
+    await Promise.all([profileFetch(), sendMessage({ type: 'SOLID_GET_STATE' }, PROFILE_OWNER)]);
+    expect(fetchCalls.filter((c) => c.url === a.session.tokenEndpoint)).toHaveLength(1);
+    await profileMessage('SOLID_PROFILE_SET_DEFAULT', { profileId: '2' });
+    await profileFetch(PROFILE_APP_B);
+    expect(profileDb.state.records[0].session?.accessToken).toBe('rotated-alice');
+    expect(profileDb.state.records[1].session?.accessToken).toBe('rotated-bob');
+    await loadWorker();
+    expect(profileDb.state.records[0].session?.refreshToken).toBe('refresh-alice');
+    // A genuine failure tears down only its own profile.
+    profileDb.state.records[0].session = { ...a.session, expiresAt: 0 };
+    failA = true;
+    await profileMessage('SOLID_PROFILE_SET_DEFAULT', { profileId: '1' });
+    expect(profileDb.state.records[0].session).toBeNull();
+    expect(profileDb.state.records[1].session?.accessToken).toBe('rotated-bob');
+  });
+
+  it.each([
+    'state',
+    'fetch',
+  ])('resets the signed-in toolbar after a %s refresh failure', async (request) => {
+    const { a, b } = await twoProfiles();
+    installIconCanvas();
+    const icon = vi.spyOn(chrome.action, 'setIcon');
+    const badge = vi.spyOn(chrome.action, 'setBadgeText');
+    const background = vi.spyOn(chrome.action, 'setBadgeBackgroundColor');
+    const title = vi.spyOn(chrome.action, 'setTitle');
+    await loadWorker();
+    expect(icon.mock.lastCall?.[0]).toHaveProperty('imageData');
+    expect(background).toHaveBeenLastCalledWith({ color: '#2e9e57' });
+    expect(badge).toHaveBeenLastCalledWith({ text: ' ' });
+    expect(title).toHaveBeenLastCalledWith({ title: 'Signed in as alice' });
+    icon.mockClear();
+    badge.mockClear();
+    title.mockClear();
+    const broadcast = vi.spyOn(chrome.runtime, 'sendMessage');
+    profileDb.state.records[0].session = { ...a.session, expiresAt: 0 };
+    fetchImpl = async () => new Response('fixture refresh denied', { status: 401 });
+
+    if (request === 'state') {
+      expect(await profileMessage('SOLID_GET_STATE')).toMatchObject({
+        webId: null,
+        isActive: false,
+      });
+    } else {
+      expect(await profileFetch()).toMatchObject({ requestId: 'r1', error: 'Not authenticated' });
+    }
+    await vi.waitFor(() => {
+      expect(icon).toHaveBeenLastCalledWith({
+        path: {
+          16: 'icons/icon16.png',
+          32: 'icons/icon32.png',
+          48: 'icons/icon48.png',
+          128: 'icons/icon128.png',
+        },
+      });
+      expect(badge).toHaveBeenLastCalledWith({ text: '' });
+      expect(title).toHaveBeenLastCalledWith({ title: 'Sign in to Solid' });
+      expect(broadcast).toHaveBeenLastCalledWith({ type: 'SOLID_STATE_CHANGED', webId: null });
+    });
+    expect(profileDb.state.records[0]).toMatchObject({
+      profile: { sessionState: 'signed-out' },
+      session: null,
+      keyPair: null,
+    });
+    expect(profileDb.state.records[1].session).toEqual(b.session);
+    expect(fetchCalls.map((call) => call.url)).toEqual([a.session.tokenEndpoint]);
+  });
+
+  it.each([
+    'state',
+    'fetch',
+  ])('publishes a %s refresh sign-out when replica cleanup fails and retries on wake', async (request) => {
+    const { a, b } = await twoProfiles();
+    installIconCanvas();
+    const icon = vi.spyOn(chrome.action, 'setIcon');
+    const badge = vi.spyOn(chrome.action, 'setBadgeText');
+    const title = vi.spyOn(chrome.action, 'setTitle');
+    await loadWorker();
+    expect((await profileFetch()).status).toBe(200);
+    await profileMessage('SOLID_PROFILE_SET_DEFAULT', { profileId: '2' });
+    expect((await profileFetch(PROFILE_APP_B)).status).toBe(200);
+    await profileMessage('SOLID_PROFILE_SET_DEFAULT', { profileId: '1' });
+    expect(icon.mock.lastCall?.[0]).toHaveProperty('imageData');
+    expect(badge).toHaveBeenLastCalledWith({ text: ' ' });
+    expect(title).toHaveBeenLastCalledWith({ title: 'Signed in as alice' });
+    const metadata = [...idbMeta.values()];
+    const bytes = [...cacheStore.keys()];
+    const survivor = structuredClone(profileDb.state.records[1]);
+    const cache = await caches.open('solid-ext-replica-bytes');
+    const remove = cache.delete.bind(cache);
+    let fail = true;
+    vi.spyOn(cache, 'delete').mockImplementation(async (entry, options) => {
+      if (fail) throw new Error('fixture cache deletion failed');
+      return remove(entry, options);
+    });
+    vi.spyOn(caches, 'open').mockResolvedValue(cache);
+    chrome.tabs.query = vi.fn().mockResolvedValue([
+      { id: 1, url: PROFILE_APP_A.url },
+      { id: 2, url: PROFILE_APP_B.url },
+    ]);
+    const tabBroadcast = vi.spyOn(chrome.tabs, 'sendMessage');
+    const broadcast = vi.spyOn(chrome.runtime, 'sendMessage');
+    profileDb.state.records[0].session = { ...a.session, expiresAt: 0 };
+    fetchImpl = async () => new Response('fixture refresh denied', { status: 401 });
+
+    const result =
+      request === 'state' ? await profileMessage('SOLID_GET_STATE') : await profileFetch();
+    expect(result).toEqual(
+      request === 'state'
+        ? { error: 'Profile storage unavailable.' }
+        : { requestId: 'r1', error: 'Not authenticated' },
+    );
+    await vi.waitFor(() => {
+      expect(icon).toHaveBeenLastCalledWith({
+        path: {
+          16: 'icons/icon16.png',
+          32: 'icons/icon32.png',
+          48: 'icons/icon48.png',
+          128: 'icons/icon128.png',
+        },
+      });
+      expect(badge).toHaveBeenLastCalledWith({ text: '' });
+      expect(title).toHaveBeenLastCalledWith({ title: 'Sign in to Solid' });
+      expect(broadcast).toHaveBeenLastCalledWith({ type: 'SOLID_STATE_CHANGED', webId: null });
+      for (const tabId of [1, 2])
+        expect(tabBroadcast).toHaveBeenCalledWith(tabId, {
+          type: 'SOLID_STATE_CHANGED',
+          webId: null,
+        });
+    });
+    expect(profileDb.state.records[0]).toMatchObject({
+      profile: { sessionState: 'signed-out' },
+      session: null,
+      keyPair: null,
+      grantedOrigins: [],
+      classGrants: [],
+    });
+    expect(profileDb.state.records[1]).toEqual(survivor);
+    expect([...idbMeta.values()]).toEqual(metadata);
+    expect([...cacheStore.keys()]).toEqual(bytes);
+    expect((await profileFetch()).error).toBe('Not authenticated');
+
+    fail = false;
+    await loadWorker();
+    expect(await profileMessage('SOLID_GET_STATE')).toMatchObject({
+      webId: null,
+      isActive: false,
+    });
+    expect([...idbMeta.values()]).toEqual(metadata.filter((row) => row.webId === b.session.webId));
+    expect(cacheStore.size).toBe(1);
+    expect(profileDb.state.records[1]).toEqual(survivor);
+    await profileMessage('SOLID_PROFILE_SET_DEFAULT', { profileId: '2' });
+    expect((await profileMessage('SOLID_GET_STATE')).webId).toBe(b.session.webId);
+  });
+
+  it.each([
+    'profile',
+    'login',
+  ])('discards a refresh-failure toolbar reset superseded by %s', async (next) => {
+    const { a } = await twoProfiles();
+    vi.doMock('../src/background/auth-flow', () => ({
+      initiateLogin: vi.fn(async () => ({ ...a, name: 'alice', photoUrl: null })),
+      refreshSession: vi.fn().mockRejectedValue(new Error('fixture refresh denied')),
+    }));
+    installIconCanvas();
+    await loadWorker();
+    let entered!: () => void;
+    let release!: () => void;
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const icon = vi.spyOn(chrome.action, 'setIcon').mockImplementationOnce(async () => {
+      expect(profileDb.state.records[0].profile.sessionState).toBe('signed-out');
+      entered();
+      await held;
+    });
+    const badge = vi.spyOn(chrome.action, 'setBadgeText');
+    const background = vi.spyOn(chrome.action, 'setBadgeBackgroundColor');
+    const title = vi.spyOn(chrome.action, 'setTitle');
+    const broadcast = vi.spyOn(chrome.runtime, 'sendMessage');
+    profileDb.state.records[0].session = { ...a.session, expiresAt: 0 };
+    const pending = profileMessage('SOLID_GET_STATE');
+    await started;
+    // Scheduling the repaint must not block the state request on toolbar I/O.
+    expect((await pending).isActive).toBe(false);
+    expect(
+      next === 'profile'
+        ? (await profileMessage('SOLID_PROFILE_SET_DEFAULT', { profileId: '2' })).ok
+        : (await profileMessage('SOLID_LOGIN', { webId: a.session.webId })).ok,
+    ).toBe(true);
+    const latest = {
+      icon: [...icon.mock.calls],
+      badge: [...badge.mock.calls],
+      background: [...background.mock.calls],
+      title: [...title.mock.calls],
+      broadcast: [...broadcast.mock.calls],
+    };
+    release();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(icon.mock.calls).toEqual(latest.icon);
+    expect(badge.mock.calls).toEqual(latest.badge);
+    expect(background.mock.calls).toEqual(latest.background);
+    expect(title.mock.calls).toEqual(latest.title);
+    expect(broadcast.mock.calls).toEqual(latest.broadcast);
+    expect(title).toHaveBeenLastCalledWith({
+      title: `Signed in as ${next === 'profile' ? 'bob' : 'alice'}`,
+    });
+    expect(badge).toHaveBeenLastCalledWith({ text: ' ' });
+  });
+
+  it('checks refresh failure credentials after a queued re-login commits', async () => {
+    const { a, b } = await twoProfiles();
+    const replacement = await profileCredentials();
+    const grants = structuredClone(profileDb.state.records[0].classGrants);
+    let refreshEntered!: () => void;
+    let rejectRefresh!: (error: Error) => void;
+    const refreshing = new Promise<void>((resolve) => {
+      refreshEntered = resolve;
+    });
+    const refresh = new Promise<StoredSession>((_resolve, reject) => {
+      rejectRefresh = reject;
+    });
+    vi.doMock('../src/background/auth-flow', () => ({
+      initiateLogin: vi.fn(async () => ({ ...replacement, name: 'alice', photoUrl: null })),
+      refreshSession: vi.fn(() => {
+        refreshEntered();
+        return refresh;
+      }),
+    }));
+    await loadWorker();
+    profileDb.state.records[0].session = { ...a.session, expiresAt: 0 };
+    const pending = sendMessage({ type: 'SOLID_GET_STATE' }, PROFILE_OWNER);
+    await refreshing;
+
+    const { ProfileStore: WorkerStore } = await import('../src/background/core/profile-store');
+    const login = WorkerStore.prototype.login;
+    let loginEntered!: () => void;
+    let releaseLogin!: () => void;
+    const committing = new Promise<void>((resolve) => {
+      loginEntered = resolve;
+    });
+    const held = new Promise<void>((resolve) => {
+      releaseLogin = resolve;
+    });
+    vi.spyOn(WorkerStore.prototype, 'login').mockImplementationOnce(async function (
+      this: ProfileStore,
+      ...args
+    ) {
+      loginEntered();
+      await held;
+      return login.apply(this, args);
+    });
+    const relogin = sendMessage(
+      { type: 'SOLID_LOGIN', webId: a.session.webId, origin: 'https://relogin.example' },
+      { origin: 'https://relogin.example', url: 'https://relogin.example/app' },
+    );
+    await committing;
+    // The lifecycle queue is held, but its login has not replaced the old tokens yet.
+    // A refresh failure must queue its credential read behind this login too.
+    rejectRefresh(new Error('fixture old refresh denied'));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    releaseLogin();
+    expect((await relogin).ok).toBe(true);
+    expect((await pending).isActive).toBe(true);
+    expect(profileDb.state.records[0].session).toEqual(replacement.session);
+    expect(profileDb.state.records[0].profile.sessionState).toBe('active');
+    expect(profileDb.state.records[0].grantedOrigins).toContain('https://relogin.example');
+    expect(profileDb.state.records[0].classGrants).toEqual(grants);
+    expect(profileDb.state.records[1].session).toEqual(b.session);
+  });
+
+  it.each([
+    'key',
+    'refresh token',
+  ])('ignores an old refresh failure after re-login changes the %s', async (generation) => {
+    const { a } = await twoProfiles();
+    const replacement =
+      generation === 'key'
+        ? await profileCredentials()
+        : {
+            ...a,
+            session: { ...a.session, refreshToken: 'fixture-relogin-refresh' },
+          };
+    let entered!: () => void;
+    let rejectRefresh!: (error: Error) => void;
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const refresh = new Promise<StoredSession>((_resolve, reject) => {
+      rejectRefresh = reject;
+    });
+    vi.doMock('../src/background/auth-flow', () => ({
+      initiateLogin: vi.fn(async () => ({ ...replacement, name: 'alice', photoUrl: null })),
+      refreshSession: vi.fn(() => {
+        entered();
+        return refresh;
+      }),
+    }));
+    await loadWorker();
+    profileDb.state.records[0].session = { ...a.session, expiresAt: 0 };
+    const pending = sendMessage({ type: 'SOLID_GET_STATE' }, PROFILE_OWNER);
+    await started;
+    expect((await profileMessage('SOLID_LOGIN', { webId: a.session.webId })).ok).toBe(true);
+    const committed = structuredClone(profileDb.state.records[0]);
+    rejectRefresh(new Error('fixture old refresh denied'));
+    expect((await pending).isActive).toBe(true);
+    expect(profileDb.state.records[0]).toEqual(committed);
+    expect((await profileFetch()).status).toBe(200);
+  });
+
+  it('rechecks credentials when an expired snapshot outlives a completed refresh flight', async () => {
+    const { a } = await twoProfiles();
+    await loadWorker();
+    profileDb.state.records[0].session = { ...a.session, expiresAt: 0 };
+    const { ProfileStore: WorkerStore } = await import('../src/background/core/profile-store');
+    const session = WorkerStore.prototype.session;
+    let release!: () => void;
+    let entered!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    vi.spyOn(WorkerStore.prototype, 'session').mockImplementationOnce(async function (
+      this: ProfileStore,
+      id,
+    ) {
+      const stale = await session.call(this, id);
+      entered();
+      await held;
+      return stale;
+    });
+    fetchImpl = async (url, init) => {
+      if (url === a.session.tokenEndpoint) {
+        expect((init?.body as URLSearchParams).get('refresh_token')).toBe(a.session.refreshToken);
+        return Response.json({
+          access_token: 'fixture-rotated',
+          refresh_token: 'fixture-rotated-refresh',
+          expires_in: 3600,
+        });
+      }
+      return new Response('pod fixture');
+    };
+    const delayed = sendMessage({ type: 'SOLID_GET_STATE' }, PROFILE_OWNER);
+    await started;
+    expect((await sendMessage({ type: 'SOLID_GET_STATE' }, PROFILE_OWNER)).isActive).toBe(true);
+    release();
+    expect((await delayed).isActive).toBe(true);
+    expect(fetchCalls.filter((call) => call.url === a.session.tokenEndpoint)).toHaveLength(1);
+    expect(profileDb.state.records[0].session?.refreshToken).toBe('fixture-rotated-refresh');
+    expect((await profileFetch()).status).toBe(200);
+    expect(new Headers(fetchCalls.at(-1)?.init?.headers).get('authorization')).toBe(
+      'DPoP fixture-rotated',
+    );
+  });
+
+  it('returns a correlated unauthenticated response when the captured profile is deleted', async () => {
+    await twoProfiles();
+    await loadWorker();
+    const { ProfileStore: WorkerStore } = await import('../src/background/core/profile-store');
+    const selected = structuredClone(profileDb.state.records[0]);
+    let release!: () => void;
+    let entered!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    vi.spyOn(WorkerStore.prototype, 'getDefault').mockImplementationOnce(async () => {
+      entered();
+      await held;
+      return selected;
+    });
+    const delayed = profileFetch(PROFILE_APP_A, { requestId: 'deleted-profile-fetch' });
+    await started;
+    expect((await profileMessage('SOLID_PROFILE_REMOVE', { profileId: '1' })).ok).toBe(true);
+    release();
+    expect(await delayed).toEqual({
+      requestId: 'deleted-profile-fetch',
+      error: 'Not authenticated',
+    });
+    expect(fetchCalls).toHaveLength(0);
+  });
+
+  it('preserves the fetch request ID on asynchronous storage failures', async () => {
+    await twoProfiles();
+    await loadWorker();
+    profileDb.error = new Error('fixture storage unavailable');
+    expect(await profileFetch(PROFILE_APP_A, { requestId: 'storage-error-fetch' })).toEqual({
+      requestId: 'storage-error-fetch',
+      error: 'Profile storage unavailable.',
+    });
+    expect(fetchCalls).toHaveLength(0);
+  });
+
+  it('migrates legacy session 1 once and clears legacy credentials only after commit', async () => {
+    await seedSession();
+    storage.set('solid:profile', {
+      webId: 'https://alice.pod.example/profile/card#me',
+      name: 'Alice',
+      photoUrl: null,
+    });
+    storage.set('solid:granted-origins', [PROFILE_APP_A.origin]);
+    storage.set('solid:pod-origins', ['https://extra.example']);
+    await loadWorker();
+    const migrated = profileDb.state.records[0];
+    expect(migrated.profile).toMatchObject({
+      id: '1',
+      label: 'Alice',
+      sessionState: 'active',
+      dpopKeyRef: '1',
+    });
+    expect(migrated.keyPair?.privateKey.extractable).toBe(false);
+    expect(migrated.session?.dpopJkt).toBeTruthy();
+    expect(migrated.grantedOrigins).toEqual([PROFILE_APP_A.origin]);
+    expect(migrated.podOrigins).toEqual(['https://extra.example']);
+    expect(idbDpopKey).toBeUndefined();
+    for (const key of ['session', 'profile', 'pod-origins', 'granted-origins', 'class-grants'])
+      expect(storage.has(`solid:${key}`)).toBe(false);
+    await loadWorker();
+    expect(profileDb.state.records).toEqual([migrated]);
+    expect((await profileMessage('SOLID_PROFILES_LIST')).defaultProfileId).toBe('1');
+  });
+
+  it('preserves a missing-key legacy profile for re-login without serving or refreshing its tokens', async () => {
+    await seedSession();
+    idbDpopKey = undefined;
+    await loadWorker();
+    expect(profileDb.state.records[0].profile.sessionState).toBe('signed-out');
+    expect(profileDb.state.records[0].session).toBeNull();
+    expect((await profileFetch()).error).toBe('Not authenticated');
+    expect(fetchCalls).toHaveLength(0);
+  });
+
+  it('retries interrupted legacy cleanup without importing a second copy', async () => {
+    await seedSession();
+    const remove = chrome.storage.local.remove;
+    let fail = true;
+    chrome.storage.local.remove = vi.fn(async (key: string | string[]) => {
+      if (fail) throw new Error('fixture interrupted cleanup');
+      await remove(key);
+    });
+    await loadWorker();
+    expect(profileDb.state.migrated).toBe(true);
+    expect(profileDb.state.records).toHaveLength(1);
+    expect((await profileFetch()).error).toBeDefined();
+    fail = false;
+    await loadWorker();
+    expect(profileDb.state.records).toHaveLength(1);
+    expect(storage.has('solid:session')).toBe(false);
   });
 });

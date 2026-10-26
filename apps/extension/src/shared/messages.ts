@@ -77,6 +77,32 @@ export interface SetClientIdRequest {
   readonly clientId: string;
 }
 
+/** Display-only profile metadata. Tokens and CryptoKeys have no message representation. */
+export interface Profile {
+  readonly id: string;
+  readonly webId: string;
+  readonly issuer: string;
+  readonly label: string;
+  readonly avatar?: string;
+  readonly sessionState: 'active' | 'signed-out' | 'removing';
+  readonly dpopKeyRef: string;
+}
+
+/** Accepted only from browser-attested popup/side-panel contexts. */
+export type ProfileRequest =
+  | { readonly type: 'SOLID_PROFILES_LIST' }
+  | { readonly type: 'SOLID_PROFILE_ADD'; readonly webId: string }
+  | { readonly type: 'SOLID_PROFILE_RENAME'; readonly profileId: string; readonly label: string }
+  | { readonly type: 'SOLID_PROFILE_REMOVE'; readonly profileId: string }
+  | { readonly type: 'SOLID_PROFILE_SET_DEFAULT'; readonly profileId: string };
+
+export interface ProfilesResponse {
+  readonly ok?: boolean;
+  readonly profiles?: readonly Profile[];
+  readonly defaultProfileId?: string | null;
+  readonly error?: string;
+}
+
 // --- Per-data-class access management (Phase 2, design §4.2) ---------------------------
 
 /**
@@ -173,6 +199,7 @@ export interface PendingConsentView {
 }
 
 export type WorkerRequest =
+  | ProfileRequest
   | FetchRequest
   | LoginRequest
   | LogoutRequest

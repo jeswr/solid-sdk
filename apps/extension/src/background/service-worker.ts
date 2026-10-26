@@ -14,7 +14,7 @@
  * token-attaching path, and the access token is only ever sent to a vetted resource
  * origin.
  *
- * The MV3 worker is killed aggressively; all durable state lives in chrome.storage and is
+ * The MV3 worker is killed aggressively; profile credentials live in IndexedDB and settings in chrome.storage,
  * re-hydrated on wake (the in-memory caches below are best-effort accelerators only).
  */
 
@@ -30,6 +30,8 @@ import type {
   ListGrantsRequest,
   LoginRequest,
   PendingConsentView,
+  ProfileRequest,
+  ProfilesResponse,
   RequestAccessRequest,
   ResolveClassRequest,
   RevokeGrantRequest,
@@ -48,12 +50,11 @@ import {
   modeSatisfies,
   type PinnedTarget,
   pruneExpiredGrants,
+  sanitiseGrants,
 } from './core/class-grant';
 import { normaliseAccessRequest } from './core/class-request';
 import { resolveClassTargets } from './core/class-resolve';
 import { buildPendingConsent, consentDecisionToGrants, type PendingConsent } from './core/consent';
-import { DpopKeyDb } from './core/dpop-key-db';
-import { DpopKeyUnavailableError, loadSessionDpopKeyPair } from './core/dpop-key-store';
 import { computeAllowedOrigins, isValidClientIdUrl } from './core/origin-policy';
 import {
   type EgressPort,
@@ -79,24 +80,13 @@ import { filterResponseHeaders } from './core/response-headers';
 import { SingleFlight } from './core/single-flight';
 import { parseWebIdProfile } from './core/webid';
 import { registerGlobalFetchInjection } from './global-fetch-register';
+import { profileAuthority } from './profile-authority';
 import {
-  clearClassGrants,
-  clearProfile,
-  clearSession,
-  grantOrigin,
-  loadClassGrants,
   loadClientIds,
-  loadGrantedOrigins,
-  loadPodOrigins,
-  loadProfile,
   loadRecentAccounts,
-  loadSession,
-  pruneExpiredClassGrants,
-  revokeClassGrant,
+  rememberAccount,
   type StoredSession,
-  saveClassGrant,
   saveClientId,
-  saveProfile,
 } from './session-store';
 import { registerSidePanel } from './side-panel';
 
@@ -105,10 +95,6 @@ const EXPIRY_BUFFER_MS = 30_000;
 
 /** The Cache API bucket holding the shared replica's bytes (one physical store, see replica.ts). */
 const REPLICA_CACHE_NAME = 'solid-ext-replica-bytes';
-
-/** Best-effort in-memory caches (re-hydrated from storage on SW wake). */
-let cachedSession: StoredSession | null = null;
-let cachedKeyPair: CryptoKeyPair | null = null;
 
 /**
  * The replica IndexedDB handle (metadata + the DPoP nonce cache). Re-derivable on every SW
@@ -122,18 +108,6 @@ let replicaDbHandle: ReplicaDb | null = null;
 async function getReplicaDb(): Promise<ReplicaDb> {
   if (!replicaDbHandle) replicaDbHandle = await ReplicaDb.open();
   return replicaDbHandle;
-}
-
-/**
- * The DPoP keypair IndexedDB handle — the non-extractable `CryptoKeyPair`'s durable home
- * (see `core/dpop-key-db.ts`). Re-derivable on every SW wake, same as the replica DB above.
- */
-let dpopKeyDbHandle: DpopKeyDb | null = null;
-
-/** Lazily open (once per wake) the DPoP key DB. */
-async function getDpopKeyDb(): Promise<DpopKeyDb> {
-  if (!dpopKeyDbHandle) dpopKeyDbHandle = await DpopKeyDb.open();
-  return dpopKeyDbHandle;
 }
 
 /** The named Cache bucket for replica bytes (re-opened lazily; available in the SW context). */
@@ -183,117 +157,163 @@ async function purgeGrantSlices(gone: readonly ClassGrant[], retainPool: readonl
  * best-effort. The surviving `live` grants are the retain-pool so an expiring grant that overlaps a
  * still-live one does not evict the survivor's data.
  */
-async function pruneAndPurgeExpiredGrants(now: number): Promise<ClassGrant[]> {
-  const { live, expired } = await pruneExpiredClassGrants(now);
+async function pruneAndPurgeExpiredGrants(profileId: string, now: number): Promise<ClassGrant[]> {
+  const store = await getProfiles();
+  let live: ClassGrant[] = [];
+  let expired: ClassGrant[] = [];
+  await store.capabilities(profileId, (record) => {
+    const all = sanitiseGrants(record.classGrants);
+    live = pruneExpiredGrants(all, now);
+    expired = all.filter((g) => !live.includes(g));
+    record.classGrants = live;
+  });
   await purgeGrantSlices(expired, live);
   return live;
 }
-/**
- * Single-flight refresh: concurrent near-expiry requests must NOT each start a refresh
- * with the same (rotation-bound) refresh token — that races, so one grant succeeds and the
- * others fail with invalid_grant and would wrongly tear down the freshly-refreshed session.
- * All callers await the one in-flight refresh instead.
- */
-const refreshGate = new SingleFlight<StoredSession>();
 
-/** Refresh `session` exactly once even under concurrency; rejects on a genuine failure. */
-function refreshOnce(session: StoredSession): Promise<StoredSession> {
-  return refreshGate.run(async () => {
-    const updated = await refreshSession(session);
-    cachedSession = updated;
-    cachedKeyPair = null;
-    return updated;
+const getProfiles = profileAuthority(async (webId) => {
+  const [cache, db] = await Promise.all([getReplicaCache(), getReplicaDb()]);
+  await purgeReplica(cache, db, webId);
+});
+
+/** Serialize only lifecycle changes and short replica commits, never network/body reads. */
+const profileTasks = new Map<string, Promise<unknown>>();
+function withProfileTask<T>(id: string, task: () => Promise<T>): Promise<T> {
+  const run = (profileTasks.get(id) ?? Promise.resolve()).then(task);
+  const tail = run.catch(() => {});
+  profileTasks.set(id, tail);
+  void tail.then(() => {
+    if (profileTasks.get(id) === tail) profileTasks.delete(id);
+  });
+  return run;
+}
+
+/** Concurrent requests retain their own cancellation scope; lifecycle changes cancel all of them. */
+const profileOperations = new Map<string, Set<AbortController>>();
+
+async function cancellable<T>(signal: AbortSignal, task: () => Promise<T>): Promise<T> {
+  signal.throwIfAborted();
+  let onAbort = () => {};
+  const aborted = new Promise<never>((_resolve, reject) => {
+    onAbort = () => reject(signal.reason);
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
+  try {
+    return await Promise.race([aborted, task()]);
+  } finally {
+    signal.removeEventListener('abort', onAbort);
+  }
+}
+
+async function withProfileOperation<T>(
+  id: string,
+  task: (signal: AbortSignal) => Promise<T>,
+): Promise<T | null> {
+  const controller = new AbortController();
+  const operations = profileOperations.get(id) ?? new Set<AbortController>();
+  operations.add(controller);
+  profileOperations.set(id, operations);
+  try {
+    await profileTasks.get(id);
+    return await cancellable(controller.signal, () => task(controller.signal));
+  } catch (error) {
+    if (controller.signal.aborted) return null;
+    throw error;
+  } finally {
+    operations.delete(controller);
+    if (operations.size === 0) profileOperations.delete(id);
+  }
+}
+
+function cancelProfileOperations(id: string): void {
+  for (const operation of profileOperations.get(id) ?? []) operation.abort();
+}
+
+function withProfileLifecycle<T>(id: string, task: () => Promise<T>): Promise<T> {
+  return withProfileTask(id, async () => {
+    cancelProfileOperations(id);
+    return task();
   });
 }
 
-/** Load + refresh-if-needed the active session and its (imported) keypair. */
-async function ensureSession(): Promise<{ session: StoredSession; keyPair: CryptoKeyPair } | null> {
-  if (!cachedSession) cachedSession = await loadSession();
-  if (!cachedSession) return null;
-
-  if (cachedSession.expiresAt < Date.now() + EXPIRY_BUFFER_MS) {
-    const toRefresh = cachedSession;
+const refreshes = new Map<string, SingleFlight<StoredSession | null>>();
+function refreshOnce(id: string): Promise<StoredSession | null> {
+  let flight = refreshes.get(id);
+  if (!flight) {
+    flight = new SingleFlight<StoredSession | null>();
+    refreshes.set(id, flight);
+  }
+  return flight.run(async () => {
+    const store = await getProfiles();
+    // A delayed reader can enter after the previous flight committed rotated tokens.
+    // Only the credentials read INSIDE this flight may be redeemed or signed out.
+    const ctx = await store.session(id);
+    if (!ctx) return null;
+    if (ctx.session.expiresAt >= Date.now() + EXPIRY_BUFFER_MS) return ctx.session;
     try {
-      await refreshOnce(toRefresh);
+      const updated = await refreshSession(ctx.session, ctx.keyPair);
+      await store.updateSession(id, updated);
+      return updated;
     } catch {
-      // Only tear down if nothing newer has landed: a concurrent single-flight refresh (or
-      // a fresh login) may already have replaced the session this caller tried to refresh.
-      if (cachedSession === toRefresh) {
-        await teardownSession();
+      return withProfileTask(id, async () => {
+        // Read and compare under the same lifecycle lock as re-login. A stale failure
+        // must neither sign out replacement credentials nor cancel their requests.
+        const current = await store.session(id);
+        if (
+          current?.session.accessToken === ctx.session.accessToken &&
+          current.session.refreshToken === ctx.session.refreshToken &&
+          current.session.dpopJkt === ctx.session.dpopJkt
+        ) {
+          cancelProfileOperations(id);
+          try {
+            await store.signOut(id);
+          } finally {
+            // Revocation commits before replica cleanup, which may fail and need a retry.
+            // A toolbar update may await this refresh; schedule its guarded repaint.
+            void updateDefaultIconAndBroadcast().catch(() => {});
+          }
+        } else if (current && current.session.expiresAt >= Date.now() + EXPIRY_BUFFER_MS) {
+          return current.session;
+        }
         return null;
-      }
+      });
     }
-  }
-
-  if (!cachedSession) return null;
-  if (!cachedKeyPair) {
-    try {
-      cachedKeyPair = await loadSessionDpopKeyPair(await getDpopKeyDb(), cachedSession);
-    } catch (err) {
-      if (err instanceof DpopKeyUnavailableError) {
-        // The persisted DPoP key is missing or doesn't match THIS session specifically
-        // (IndexedDB eviction, a browser bug, or a stale in-memory session object) —
-        // unrecoverable in place. Tear down for a clean re-login rather than silently
-        // signing with the wrong (or a freshly-minted, orphaned) key, which would just
-        // produce confusing 401s.
-        await teardownSession();
-      }
-      // Either the confirmed-broken-session teardown above, or a TRANSIENT/unexpected
-      // failure (IndexedDB open error, a bug) — in the transient case we deliberately do
-      // NOT tear down (the stored session/tokens are left intact), we just fail THIS one
-      // call soft, matching every caller's existing "no ctx ⇒ not authenticated" handling.
-      // `cachedKeyPair` stays null either way, so the very next call retries cleanly.
-      return null;
-    }
-  }
-  return { session: cachedSession, keyPair: cachedKeyPair };
+  });
 }
 
-/**
- * Tear down the session AND SYNCHRONOUSLY purge the shared replica BEFORE returning, so no
- * subsequent (returning / different-user) read can be served a single departed-identity byte
- * (design §4.3 "Cross-USER stale bytes", §5.4 point 5). The logout handler AWAITS this; the
- * purge (replica bytes + metadata + cached DPoP nonces) completes before any further serve.
- * `priorWebId` scopes the purge to exactly that identity's rows; a missing prior WebID purges
- * everything (fail-closed). The WebID-in-key already makes a cross-user collision impossible;
- * this removes the prior rows entirely so even a same-key re-provision cannot collide.
- */
-async function teardownSession(): Promise<void> {
-  const priorWebId = (cachedSession ?? (await loadSession()))?.webId ?? null;
-  cachedSession = null;
-  cachedKeyPair = null;
+type SessionContext = { profileId: string; session: StoredSession; keyPair: CryptoKeyPair };
 
-  // SYNCHRONOUS-BEFORE-SERVE replica purge. Best-effort on the stores (a missing DB must not
-  // block sign-out), but AWAITED so it precedes any new serve.
-  try {
-    const [cache, db] = await Promise.all([getReplicaCache(), getReplicaDb()]);
-    await purgeReplica(cache, db, priorWebId);
-  } catch {
-    // If the replica stores are unavailable, sign-out still proceeds (no bytes to leak when
-    // the store never opened). The WebID-scoped key means a future session cannot read them.
+/** Resolve the default once per request. Never re-select it after an await. */
+async function ensureSession(profileId?: string): Promise<SessionContext | null> {
+  const store = await getProfiles();
+  const id = profileId ?? (await store.getDefault())?.profile.id;
+  if (!id) return null;
+  let ctx = await store.session(id);
+  if (!ctx) return null;
+  if (ctx.session.expiresAt < Date.now() + EXPIRY_BUFFER_MS) {
+    if (!(await refreshOnce(id))) return null;
+    ctx = await store.session(id);
   }
+  return ctx ? { ...ctx, profileId: id } : null;
+}
 
-  // Class grants are bound to the departing session's WebID (ClassGrant.webId) and its resolved,
-  // pinned pod targets — they MUST NOT survive into a different identity's session. Clear them on
-  // logout (fail-closed; the WebID binding already prevents cross-identity use, this removes them
-  // entirely). The coarse per-origin grant store (login opt-ins) intentionally survives logout.
-  // The persisted DPoP keypair is likewise session-bound (a fresh one is minted per login /
-  // legacy-migration rotation) — drop it too so no departed session's key lingers in IndexedDB.
-  await Promise.all([
-    clearSession(),
-    clearProfile(),
-    clearClassGrants(),
-    getDpopKeyDb().then((db) => db.clear()),
-  ]);
-  await setSignedOutIcon();
+async function teardownSession(): Promise<void> {
+  const store = await getProfiles();
+  const record = await store.getDefault();
+  if (record) await withProfileLifecycle(record.profile.id, () => store.signOut(record.profile.id));
+  else if ((await store.list()).profiles.length === 0) {
+    const [cache, db] = await Promise.all([getReplicaCache(), getReplicaDb()]);
+    await purgeReplica(cache, db, null);
+  }
 }
 
 /** Build the per-request fetch session (the credential boundary) from the stored session. */
 async function buildFetchSession(
   session: StoredSession,
   keyPair: CryptoKeyPair,
+  profileId: string,
 ): Promise<FetchSession> {
-  const podOrigins = await loadPodOrigins();
+  const { podOrigins } = await (await getProfiles()).get(profileId);
   const allowedOrigins = computeAllowedOrigins({
     webId: session.webId,
     issuer: session.issuer,
@@ -365,12 +385,13 @@ async function gateAccess(
   sender: MessageSender | undefined,
   allowedTargetOrigins: ReadonlySet<string>,
   webId: string,
+  profileId: string,
 ): Promise<{ grantScope: string } | { deny: Response }> {
   const now = Date.now();
-  const explicitGrants = await loadGrantedOrigins();
+  const { grantedOrigins: explicitGrants } = await (await getProfiles()).get(profileId);
   // Opportunistically prune expired grants on the fetch path (design item 3: expired → pruned) AND
   // purge each expired grant's replica slice (residual b — no bytes linger past expiry).
-  const liveGrants = await pruneAndPurgeExpiredGrants(now);
+  const liveGrants = await pruneAndPurgeExpiredGrants(profileId, now);
   const classOrigins = [...liveGrantOrigins(liveGrants, now, webId)];
 
   const decision = decideRequestingOrigin(sender, message.stampedOrigin, message.url, {
@@ -435,7 +456,31 @@ async function handleFetch(
     };
   }
 
-  const ctx = await ensureSession();
+  const selected = await (await getProfiles()).getDefault();
+  if (selected) {
+    let egressStarted = false;
+    const result = await withProfileOperation(selected.profile.id, async (signal) => {
+      const ctx = await ensureSession(selected.profile.id);
+      signal.throwIfAborted();
+      return handleProfileFetch(message, sender, requestingOrigin, ctx, signal, () => {
+        egressStarted = true;
+      });
+    });
+    if (result) return result;
+    // Native fallback would replay a request the pod may already have processed.
+    if (egressStarted) return { requestId: message.requestId, error: 'Fetch cancelled' };
+  }
+  return handleProfileFetch(message, sender, requestingOrigin, null);
+}
+
+async function handleProfileFetch(
+  message: FetchRequest,
+  sender: MessageSender | undefined,
+  requestingOrigin: string,
+  ctx: SessionContext | null,
+  signal = new AbortController().signal,
+  onEgress = () => {},
+): Promise<FetchResponse> {
   if (!ctx) {
     // No session: the explicit path reports "Not authenticated"; an autoDivert request gets the
     // passthrough sentinel so the page does the plain native fetch it would have done itself (no
@@ -445,15 +490,37 @@ async function handleFetch(
   }
 
   try {
-    const fetchSession = await buildFetchSession(ctx.session, ctx.keyPair);
+    const fetchSession = await buildFetchSession(ctx.session, ctx.keyPair, ctx.profileId);
 
     // The INJECTED gate the replica runs as the FIRST step on EVERY read AND write — including
     // on a CACHE HIT (design §5.4 point 3). It re-runs the SAME audited `gateRequestingOrigin`
     // decision (idempotent) and returns the verified grant-scope on ALLOW; the replica never
     // touches the cache or the pod before this resolves to ALLOW, so a warm cache can never
     // bypass the per-origin gate.
-    const gate = (): Promise<{ grantScope: string } | { deny: Response }> =>
-      gateAccess(message, requestingOrigin, sender, fetchSession.allowedOrigins, ctx.session.webId);
+    const gate = async (): Promise<{ grantScope: string } | { deny: Response }> => {
+      signal.throwIfAborted();
+      const decision = await gateAccess(
+        message,
+        requestingOrigin,
+        sender,
+        fetchSession.allowedOrigins,
+        ctx.session.webId,
+        ctx.profileId,
+      );
+      signal.throwIfAborted();
+      return decision;
+    };
+
+    // Decide passthrough before opening replica stores, independently of other requests.
+    const decision = await gate();
+    if ('deny' in decision) {
+      if (message.autoDivert) return passthroughSentinel(message);
+      return {
+        requestId: message.requestId,
+        status: decision.deny.status,
+        error: await decision.deny.text(),
+      };
+    }
 
     const origin = originOf(message.url);
     const db = await getReplicaDb();
@@ -472,16 +539,38 @@ async function handleFetch(
           headers,
           body,
           nonce: n,
+          fetchImpl: (input, init) =>
+            cancellable(signal, () => {
+              onEgress();
+              return fetch(input, { ...init, signal });
+            }),
         });
-        return { response: result.response, nonce: result.nonce };
+        // Consume network bodies outside the lifecycle queue, including cache.put's body.
+        const responseBody = result.response.body
+          ? await cancellable(signal, () => result.response.arrayBuffer())
+          : null;
+        const response = new Response(responseBody, {
+          status: result.response.status,
+          statusText: result.response.statusText,
+          headers: result.response.headers,
+        });
+        return { response, nonce: result.nonce };
       },
     };
 
+    // Commit bytes and metadata together before a lifecycle purge can enter the queue.
+    // Aborted work cannot persist anything after that purge.
+    const persist = <T>(task: () => Promise<T>): Promise<T> =>
+      withProfileTask(ctx.profileId, async () => {
+        signal.throwIfAborted();
+        return task();
+      });
     const replica = new SharedReplica({
       gate,
       egress,
       cache,
       db,
+      commit: persist,
       webId: ctx.session.webId,
     });
 
@@ -518,7 +607,8 @@ async function handleFetch(
     }
 
     // Persist the freshest server nonce to IndexedDB so it survives an SW restart.
-    if (origin && result.nonce) await db.setNonce(origin, result.nonce);
+    const serverNonce = result.nonce;
+    if (origin && serverNonce) await persist(() => db.setNonce(origin, serverNonce));
 
     // Defense-in-depth: relay only the allowlisted, app-relevant response headers back to
     // the page rather than every header the server emitted (see response-headers.ts).
@@ -530,7 +620,7 @@ async function handleFetch(
       status: result.response.status,
       statusText: result.response.statusText,
       headers,
-      body: isHead ? undefined : await result.response.text(),
+      body: isHead ? undefined : await cancellable(signal, () => result.response.text()),
     };
   } catch (err) {
     return {
@@ -565,16 +655,17 @@ function passthroughSentinel(message: FetchRequest): FetchResponse {
   return { requestId: message.requestId, passthrough: true };
 }
 
-/** Best-effort: fetch + parse the WebID profile (name/photo) and persist it. */
-async function refreshProfile(webId: string): Promise<void> {
+/** Best-effort display refresh; it never changes a user-assigned label or another profile. */
+async function refreshProfile(profileId: string, webId: string): Promise<void> {
   try {
     const response = await fetch(webId, { headers: { Accept: 'text/turtle' } });
     if (!response.ok) return;
-    const { name, photoUrl } = parseWebIdProfile(webId, await response.text());
-    await saveProfile({ webId, name, photoUrl });
-    await setSignedInIcon({ webId, name, photoUrl });
+    const { photoUrl } = parseWebIdProfile(webId, await response.text());
+    await (await getProfiles()).capabilities(profileId, (record) => {
+      record.profile = { ...record.profile, avatar: photoUrl ?? undefined };
+    });
   } catch {
-    // cosmetic — leave whatever profile/icon we have.
+    // Cosmetic.
   }
 }
 
@@ -585,20 +676,32 @@ async function refreshProfile(webId: string): Promise<void> {
  * (`webId === null`) is sent to every tab so granted apps clear their state. The popup/side
  * panel (extension contexts) always get the real value via the runtime broadcast.
  */
-async function broadcastStateChange(webId: string | null): Promise<void> {
+let stateChangeVersion = 0;
+
+async function broadcastStateChange(ctx: SessionContext | null, version: number): Promise<void> {
+  const webId = ctx?.session.webId ?? null;
   let granted: ReadonlySet<string> = new Set();
-  if (webId !== null) {
-    const ctx = await ensureSession();
-    if (ctx) {
-      const explicitGrants = await loadGrantedOrigins();
-      granted = computeGrantedOrigins({
-        explicitGrants,
-        credentialOrigins: await sessionCredentialOrigins(ctx.session, ctx.keyPair),
-      });
-    }
+  if (ctx) {
+    const { grantedOrigins: explicitGrants } = await (await getProfiles()).get(ctx.profileId);
+    granted = computeGrantedOrigins({
+      explicitGrants,
+      credentialOrigins: await sessionCredentialOrigins(ctx.session, ctx.keyPair, ctx.profileId),
+    });
   }
 
   const tabs = await chrome.tabs.query({});
+  // Tab discovery and grant reads can overlap a default switch. Discard the whole stale
+  // notification, including its trusted-context copy, before sending any captured identity.
+  const current = await (await getProfiles()).getDefault();
+  if (version !== stateChangeVersion) return;
+  if (ctx) {
+    if (
+      current?.profile.id !== ctx.profileId ||
+      current.profile.sessionState !== 'active' ||
+      current.profile.webId !== webId
+    )
+      return;
+  } else if (current?.profile.sessionState === 'active') return;
   for (const tab of tabs) {
     if (tab.id === undefined) continue;
     const tabOrigin = tab.url ? originOf(tab.url) : null;
@@ -613,49 +716,111 @@ async function broadcastStateChange(webId: string | null): Promise<void> {
   chrome.runtime.sendMessage({ type: 'SOLID_STATE_CHANGED', webId }).catch(() => {});
 }
 
-async function handleLogin(
+// The legacy PKCE params slot admits one interactive auth flow at a time.
+let loginTail: Promise<unknown> = Promise.resolve();
+function handleLogin(
   message: LoginRequest,
   sender: MessageSender | undefined,
+  makeDefault = true,
 ): Promise<ActionResult> {
+  const run = loginTail.then(async () => {
+    try {
+      const store = await getProfiles();
+      const { profiles } = await store.list();
+      if (profiles.length >= 8 && !profiles.some((p) => p.webId === message.webId)) {
+        throw new Error('At most 8 profiles.');
+      }
+      const requestingOrigin = resolveRequestingOrigin(sender, message.origin);
+      const clientIds = await loadClientIds();
+      const candidate =
+        message.clientId || (requestingOrigin ? clientIds[requestingOrigin] : undefined);
+      const clientId = candidate && isValidClientIdUrl(candidate) ? candidate : undefined;
+      const { session, keyPair, name, photoUrl } = await initiateLogin({
+        webId: message.webId,
+        clientId,
+      });
+      const existing = profiles.find((p) => p.webId === session.webId);
+      const commit = async () => {
+        const profile = await store.login(session, keyPair, {
+          webId: session.webId,
+          name,
+          photoUrl,
+        });
+        if (requestingOrigin !== null)
+          await store.capabilities(profile.id, (record) => {
+            if (!record.grantedOrigins.includes(requestingOrigin))
+              record.grantedOrigins.push(requestingOrigin);
+          });
+        if (makeDefault) await store.setDefault(profile.id);
+        await rememberAccount({ webId: session.webId, name, photoUrl });
+        void refreshProfile(profile.id, session.webId);
+      };
+      if (existing) await withProfileLifecycle(existing.id, commit);
+      else await commit();
+      await updateDefaultIconAndBroadcast();
+      return { ok: true, webId: session.webId };
+    } catch (err) {
+      return { error: err instanceof Error ? err.message : 'Login failed' };
+    }
+  });
+  loginTail = run.catch(() => {});
+  return run;
+}
+
+async function updateDefaultIconAndBroadcast(): Promise<void> {
+  const version = ++stateChangeVersion;
+  const isCurrent = () => version === stateChangeVersion;
+  const ctx = await ensureSession();
+  const record = ctx ? await (await getProfiles()).get(ctx.profileId) : null;
+  const webId = ctx?.session.webId ?? null;
+  if (!isCurrent()) return;
+  if (webId && record)
+    await setSignedInIcon(
+      {
+        webId,
+        name: record.profile.label,
+        photoUrl: record.profile.avatar ?? null,
+      },
+      isCurrent,
+    );
+  else await setSignedOutIcon(isCurrent);
+  await broadcastStateChange(ctx, version);
+}
+
+async function handleProfiles(
+  message: ProfileRequest,
+  sender: MessageSender | undefined,
+): Promise<ProfilesResponse> {
+  if (!isExtensionContext(sender))
+    return { error: 'Profile management requires extension context.' };
   try {
-    // A login driven FROM a web page is a deliberate owner opt-in. Resolve + REMEMBER the
-    // verified requesting origin now (to bind the flow), but do NOT grant it yet — verify the
-    // origin via the same dual-origin agreement (browser-attested ∧ page stamp) and never trust
-    // the page-supplied field alone. A popup/side-panel login has no web sender → nothing to grant.
-    //
-    // SECURITY (privilege-escalation guard): the grant is persisted ONLY AFTER initiateLogin
-    // succeeds (the success path below). Granting BEFORE login would let any page send
-    // SOLID_LOGIN, have its origin persisted as granted even if the auth flow is cancelled or
-    // fails, and then — if a session already existed — read the existing credentials via
-    // SOLID_FETCH_REQUEST. A failed/cancelled login must leave the grant store UNCHANGED.
-    const requestingOrigin = resolveRequestingOrigin(sender, message.origin);
-
-    const clientIds = await loadClientIds();
-    const candidate =
-      message.clientId || (message.origin ? clientIds[message.origin] : undefined) || undefined;
-    // A page-declared client-id is only honoured if it is a valid (https / loopback) URL;
-    // an invalid one is ignored (fall back to the extension's own client / dynamic reg)
-    // rather than passing a tamperable plaintext client-id into the auth flow.
-    const clientId = candidate && isValidClientIdUrl(candidate) ? candidate : undefined;
-
-    const { session, name, photoUrl } = await initiateLogin({
-      webId: message.webId,
-      clientId,
-    });
-    // Login succeeded (owner-approved): NOW grant the verified requesting origin so its
-    // subsequent window.solid.fetch calls pass the per-origin gate.
-    if (requestingOrigin !== null) await grantOrigin(requestingOrigin);
-    cachedSession = session;
-    cachedKeyPair = null;
-    await saveProfile({ webId: session.webId, name, photoUrl });
-    await setSignedInIcon({ webId: session.webId, name, photoUrl });
-    // best-effort fresher profile from the post-auth WebID (handles webid != input).
-    void refreshProfile(session.webId);
-    await broadcastStateChange(session.webId);
-    return { ok: true, webId: session.webId };
+    const store = await getProfiles();
+    switch (message.type) {
+      case 'SOLID_PROFILE_ADD': {
+        const result = await handleLogin(
+          { type: 'SOLID_LOGIN', webId: message.webId },
+          sender,
+          false,
+        );
+        if (result.error) return { error: result.error };
+        break;
+      }
+      case 'SOLID_PROFILE_RENAME':
+        await store.rename(message.profileId, message.label);
+        break;
+      case 'SOLID_PROFILE_REMOVE':
+        await withProfileLifecycle(message.profileId, () => store.remove(message.profileId));
+        break;
+      case 'SOLID_PROFILE_SET_DEFAULT':
+        await store.setDefault(message.profileId);
+        break;
+      case 'SOLID_PROFILES_LIST':
+        return { ok: true, ...(await store.list()) };
+    }
+    await updateDefaultIconAndBroadcast();
+    return { ok: true, ...(await store.list()) };
   } catch (err) {
-    // A cancelled / failed login persists NO grant — the grant store is untouched above.
-    return { error: err instanceof Error ? err.message : 'Login failed' };
+    return { error: err instanceof Error ? err.message : 'Profile operation failed' };
   }
 }
 
@@ -668,7 +833,11 @@ async function handleLogin(
  */
 function isExtensionContext(sender: MessageSender | undefined): boolean {
   const extensionOrigin = `chrome-extension://${chrome.runtime.id}`;
-  if (sender?.origin && sender.origin === extensionOrigin) return true;
+  if (sender?.origin)
+    return (
+      sender.origin === extensionOrigin &&
+      (!sender.url || sender.url.startsWith(`${extensionOrigin}/`))
+    );
   if (sender?.url?.startsWith(`${extensionOrigin}/`)) return true;
   return false;
 }
@@ -684,15 +853,15 @@ async function handleGetState(
   sender: MessageSender | undefined,
 ): Promise<SessionState> {
   const ctx = await ensureSession();
-  const profile = await loadProfile();
+  const profile = ctx ? (await (await getProfiles()).get(ctx.profileId)).profile : null;
 
   if (isExtensionContext(sender)) {
     const recentAccounts = await loadRecentAccounts();
     return {
       webId: ctx?.session.webId ?? null,
       isActive: ctx !== null,
-      name: profile?.name ?? null,
-      photoUrl: profile?.photoUrl ?? null,
+      name: profile?.label ?? null,
+      photoUrl: profile?.avatar ?? null,
       recentAccounts,
     };
   }
@@ -701,10 +870,10 @@ async function handleGetState(
   const requestingOrigin = resolveRequestingOrigin(sender, message.stampedOrigin);
   let mayExpose = false;
   if (requestingOrigin !== null && ctx) {
-    const explicitGrants = await loadGrantedOrigins();
+    const { grantedOrigins: explicitGrants } = await (await getProfiles()).get(ctx.profileId);
     const granted = computeGrantedOrigins({
       explicitGrants,
-      credentialOrigins: await sessionCredentialOrigins(ctx.session, ctx.keyPair),
+      credentialOrigins: await sessionCredentialOrigins(ctx.session, ctx.keyPair, ctx.profileId),
     });
     mayExpose = isRequestingOriginGranted(granted, requestingOrigin);
   }
@@ -712,8 +881,8 @@ async function handleGetState(
   return {
     webId: mayExpose ? (ctx?.session.webId ?? null) : null,
     isActive: mayExpose && ctx !== null,
-    name: mayExpose ? (profile?.name ?? null) : null,
-    photoUrl: mayExpose ? (profile?.photoUrl ?? null) : null,
+    name: mayExpose ? (profile?.label ?? null) : null,
+    photoUrl: mayExpose ? (profile?.avatar ?? null) : null,
     // Never leak the cross-pod recent-accounts list to a web page.
     recentAccounts: [],
   };
@@ -723,8 +892,9 @@ async function handleGetState(
 async function sessionCredentialOrigins(
   session: StoredSession,
   keyPair: CryptoKeyPair,
+  profileId: string,
 ): Promise<ReadonlySet<string>> {
-  const fetchSession = await buildFetchSession(session, keyPair);
+  const fetchSession = await buildFetchSession(session, keyPair, profileId);
   return fetchSession.allowedOrigins;
 }
 
@@ -748,7 +918,12 @@ async function handleSetClientId(
     }
     await saveClientId(requestingOrigin, message.clientId);
     // Declaring a client-id is a deliberate owner opt-in from this app → grant it access.
-    await grantOrigin(requestingOrigin);
+    const store = await getProfiles();
+    const record = await store.getDefault();
+    if (record?.profile.sessionState === 'active')
+      await store.capabilities(record.profile.id, (r) => {
+        if (!r.grantedOrigins.includes(requestingOrigin)) r.grantedOrigins.push(requestingOrigin);
+      });
     return { ok: true };
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Invalid client identifier' };
@@ -824,8 +999,11 @@ function isHttpIri(value: unknown): value is string {
  * authenticated-fetch). A issuer origin DISTINCT from every pod origin is excluded, which is the
  * profile-controlled attack this guards. (Verified by the CSS-single-origin + distinct-issuer tests.)
  */
-async function podOriginsFor(session: StoredSession): Promise<ReadonlySet<string>> {
-  const podOrigins = await loadPodOrigins();
+async function podOriginsFor(
+  session: StoredSession,
+  profileId: string,
+): Promise<ReadonlySet<string>> {
+  const { podOrigins } = await (await getProfiles()).get(profileId);
   return computeAllowedOrigins({
     webId: session.webId,
     podOrigins,
@@ -923,9 +1101,9 @@ async function handleRequestAccess(
 
   // Resolve each requested class to its concrete, pinned targets (confined to POD origins —
   // excludes the issuer, so a hostile profile can't steer resolution at the issuer).
-  const fetchSession = await buildFetchSession(ctx.session, ctx.keyPair);
+  const fetchSession = await buildFetchSession(ctx.session, ctx.keyPair, ctx.profileId);
   const resolveFetch = makeResolveFetch(fetchSession);
-  const podOrigins = await podOriginsFor(ctx.session);
+  const podOrigins = await podOriginsFor(ctx.session, ctx.profileId);
   const resolved = new Map<string, { targets: readonly PinnedTarget[]; shape: string | null }>();
   for (const cls of spec.classes) {
     const targets = await resolveClassTargets(cls, {
@@ -956,7 +1134,15 @@ async function handleRequestAccess(
   }
 
   const grants = consentDecisionToGrants(pending, approvedClasses, () => crypto.randomUUID());
-  for (const g of grants) await saveClassGrant(g);
+  try {
+    await (await getProfiles()).capabilities(ctx.profileId, (record) => {
+      if (record.session?.dpopJkt !== ctx.session.dpopJkt)
+        throw new Error('Profile session changed.');
+      record.classGrants.push(...grants);
+    });
+  } catch {
+    return { requestId, error: 'Profile session changed.' };
+  }
   return { requestId, ok: grants.length > 0, grants: grants.map(grantSummary) };
 }
 
@@ -1009,7 +1195,7 @@ async function handleListGrants(
   const ctx = await ensureSession();
   if (!ctx) return { requestId, grants: [] };
   const now = Date.now();
-  const live = await pruneAndPurgeExpiredGrants(now);
+  const live = await pruneAndPurgeExpiredGrants(ctx.profileId, now);
   const mine = grantsForSession(live, requestingOrigin, ctx.session.webId);
   return { requestId, grants: mine.map(grantSummary) };
 }
@@ -1023,20 +1209,20 @@ async function handleRevokeGrant(
   if (requestingOrigin === null) {
     return { requestId, ok: false, error: 'Could not verify the requesting origin.' };
   }
-  // A page may revoke only its OWN origin's grant (revokeClassGrant enforces the origin match).
-  // The REMOVAL is the authoritative deny (fail-closed) and happens FIRST; the replica-slice purge
-  // below is best-effort AFTER it — so a purge failure can never leave access live (residual b).
-  const removed = await revokeClassGrant(message.grantId, requestingOrigin);
-  if (removed.length > 0) {
-    // Synchronously purge exactly the revoked class's replicated bytes + metadata (the resources it
-    // resolved to), leaving every other class/origin intact — and RETAINING any resource still
-    // covered by another live grant of the same origin (the surviving grants are the retain-pool).
-    // Access is already revoked above, so a failure here only leaves now-grant-less bytes for the
-    // logout purge — never live access.
-    const now = Date.now();
-    const survivors = pruneExpiredGrants(await loadClassGrants(), now);
-    await purgeGrantSlices(removed, survivors);
-  }
+  const ctx = await ensureSession();
+  if (!ctx) return { requestId, ok: false };
+  const removed: ClassGrant[] = [];
+  let survivors: ClassGrant[] = [];
+  await (await getProfiles()).capabilities(ctx.profileId, (record) => {
+    removed.push(
+      ...record.classGrants.filter(
+        (g) => g.grantId === message.grantId && g.origin === requestingOrigin,
+      ),
+    );
+    record.classGrants = record.classGrants.filter((g) => !removed.includes(g));
+    survivors = pruneExpiredGrants(record.classGrants, Date.now());
+  });
+  await purgeGrantSlices(removed, survivors);
   return { requestId, ok: removed.length > 0 };
 }
 
@@ -1055,12 +1241,12 @@ async function handleResolveClass(
   const ctx = await ensureSession();
   if (!ctx) return { requestId, error: 'Not authenticated' };
 
-  const fetchSession = await buildFetchSession(ctx.session, ctx.keyPair);
+  const fetchSession = await buildFetchSession(ctx.session, ctx.keyPair, ctx.profileId);
   // Only a GRANTED origin (full OR class) may introspect — never leak the pod's type-index
   // layout to an arbitrary, un-opted-in page.
   const now = Date.now();
-  const explicitGrants = await loadGrantedOrigins();
-  const live = await pruneAndPurgeExpiredGrants(now);
+  const { grantedOrigins: explicitGrants } = await (await getProfiles()).get(ctx.profileId);
+  const live = await pruneAndPurgeExpiredGrants(ctx.profileId, now);
   const classOrigins = [...liveGrantOrigins(live, now, ctx.session.webId)];
   const granted = computeGrantedOrigins({
     explicitGrants: [...explicitGrants, ...classOrigins],
@@ -1087,45 +1273,60 @@ async function handleResolveClass(
   const targets = await resolveClassTargets(message.classIRI, {
     webId: ctx.session.webId,
     fetch: makeResolveFetch(fetchSession),
-    allowedOrigins: await podOriginsFor(ctx.session),
+    allowedOrigins: await podOriginsFor(ctx.session, ctx.profileId),
   });
   return { requestId, shape: null, targets: targets.map((t) => ({ url: t.url, kind: t.kind })) };
 }
 
 chrome.runtime.onMessage.addListener(
   (message: WorkerRequest, sender, sendResponse: (r: unknown) => void) => {
+    const respond = (task: Promise<unknown>) => {
+      task.then(sendResponse).catch(() =>
+        sendResponse({
+          ...('requestId' in message ? { requestId: message.requestId } : {}),
+          error: 'Profile storage unavailable.',
+        }),
+      );
+    };
     switch (message.type) {
+      case 'SOLID_PROFILES_LIST':
+      case 'SOLID_PROFILE_ADD':
+      case 'SOLID_PROFILE_RENAME':
+      case 'SOLID_PROFILE_REMOVE':
+      case 'SOLID_PROFILE_SET_DEFAULT':
+        respond(handleProfiles(message, sender));
+        return true;
       case 'SOLID_FETCH_REQUEST':
         // Pass the browser-ATTESTED sender (origin/url set by Chrome, not the page) so the
         // per-requesting-origin gate can cross-check it against the page-supplied stamp.
-        handleFetch(message, sender).then(sendResponse);
+        respond(handleFetch(message, sender));
         return true;
       case 'SOLID_LOGIN':
-        handleLogin(message, sender).then(sendResponse);
+        respond(handleLogin(message, sender));
         return true;
       case 'SOLID_LOGOUT':
         teardownSession()
-          .then(() => broadcastStateChange(null))
+          .then(() => updateDefaultIconAndBroadcast())
           .then(() => sendResponse({ ok: true }))
           .catch((err) => sendResponse({ error: String(err) }));
         return true;
       case 'SOLID_GET_STATE':
-        handleGetState(message, sender).then(sendResponse);
+        respond(handleGetState(message, sender));
         return true;
       case 'SOLID_SET_CLIENT_ID':
-        handleSetClientId(message, sender).then(sendResponse);
+        respond(handleSetClientId(message, sender));
         return true;
       case 'SOLID_REQUEST_ACCESS':
-        handleRequestAccess(message, sender).then(sendResponse);
+        respond(handleRequestAccess(message, sender));
         return true;
       case 'SOLID_LIST_GRANTS':
-        handleListGrants(message, sender).then(sendResponse);
+        respond(handleListGrants(message, sender));
         return true;
       case 'SOLID_REVOKE_GRANT':
-        handleRevokeGrant(message, sender).then(sendResponse);
+        respond(handleRevokeGrant(message, sender));
         return true;
       case 'SOLID_RESOLVE_CLASS':
-        handleResolveClass(message, sender).then(sendResponse);
+        respond(handleResolveClass(message, sender));
         return true;
       case 'SOLID_GET_PENDING_CONSENT':
         sendResponse(handleGetPendingConsent(message, sender));
@@ -1156,16 +1357,4 @@ chrome.runtime.onInstalled.addListener((details) => {
 registerSidePanel();
 
 // Re-hydrate the session + icon on every SW wake.
-ensureSession().then(async (ctx) => {
-  if (ctx) {
-    const profile = await loadProfile();
-    await setSignedInIcon({
-      webId: ctx.session.webId,
-      name: profile?.name ?? null,
-      photoUrl: profile?.photoUrl ?? null,
-    });
-    await broadcastStateChange(ctx.session.webId);
-  } else {
-    await setSignedOutIcon();
-  }
-});
+void updateDefaultIconAndBroadcast().catch(() => {});

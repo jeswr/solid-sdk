@@ -17,6 +17,12 @@ import { generateDpopKeyPair } from '../src/background/core/dpop';
 import type { StoredDpopKeyRecord } from '../src/background/core/dpop-key-db';
 import type { ReplicaMetadata } from '../src/background/core/replica-db';
 import type { StoredSession } from '../src/background/session-store';
+import { MemoryProfileDb } from './profile-fixtures';
+
+let profileDb: MemoryProfileDb;
+vi.mock('../src/background/profile-db', () => ({
+  ProfileDb: { open: async () => profileDb },
+}));
 
 // --- An in-memory DpopKeyDb double (see service-worker-gate.test.ts for the rationale) --
 let idbDpopKey: StoredDpopKeyRecord | undefined;
@@ -267,6 +273,7 @@ async function loadWorker(): Promise<void> {
 }
 
 beforeEach(() => {
+  profileDb = new MemoryProfileDb();
   installChrome();
   installCaches();
   cacheStore.clear();
@@ -457,8 +464,11 @@ describe('Phase-1 shared replica (wired into the service worker)', () => {
     expect(aBytes).toBe('ALICE-BYTES');
 
     // Now user B is the active session (same device, same granted origin, same URL + ETag).
+    profileDb = new MemoryProfileDb();
     storage.delete('solid:session');
     await seedSession({ webId: 'https://bob.pod.example/profile/card#me' });
+    storage.set('solid:pod-origins', ['https://shared.pod.example']);
+    storage.set('solid:granted-origins', ['https://pm.example']);
     // The pod returns B's OWN bytes (even at the same ETag) — B's read must MISS A's cache.
     fetchImpl = async () =>
       new Response('BOB-BYTES', { status: 200, headers: { etag: 'W/"shared"' } });
@@ -511,6 +521,7 @@ describe('Phase-1 shared replica (wired into the service worker)', () => {
     // (fresh module → in-memory cachedSession is null). On the cold worker, teardown's
     // loadSession() returns null ⇒ priorWebId null ⇒ the null-WebID purge runs. That branch must
     // still enumerate + delete the CacheStorage bytes (the Medium #4 leak), not just metadata.
+    profileDb = new MemoryProfileDb();
     storage.delete('solid:session');
     await loadWorker();
     const out = await sendMessage(

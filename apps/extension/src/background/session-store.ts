@@ -1,6 +1,8 @@
 // AUTHORED-BY Claude Opus 4.8
 /**
- * The extension's durable auth state, backed by `chrome.storage.local`.
+ * Legacy session migration plus extension settings in `chrome.storage.local`.
+ * New sessions, keys, grants and pod settings belong to ProfileStore in IndexedDB;
+ * the singleton session/grant helpers below remain for migration and compatibility tests.
  *
  * What lives here, and why this store and not the page:
  *   - The active session (access + refresh token, the DPoP keypair as JWK, issuer/token
@@ -138,7 +140,7 @@ export async function loadRecentAccounts(): Promise<RecentAccount[]> {
 }
 
 /** Promote/insert an account at the front of the recent list (logout-surviving memory). */
-async function rememberAccount(profile: StoredProfile): Promise<void> {
+export async function rememberAccount(profile: StoredProfile): Promise<void> {
   const list = await loadRecentAccounts();
   const next: RecentAccount[] = [
     { webId: profile.webId, name: profile.name, photoUrl: profile.photoUrl },

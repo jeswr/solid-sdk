@@ -21,8 +21,6 @@ import {
   PUBLISHED_CLIENT_ID_URL,
 } from './client-id';
 import { createDpopProof, dpopThumbprint, generateDpopKeyPair } from './core/dpop';
-import { DpopKeyDb } from './core/dpop-key-db';
-import { loadSessionDpopKeyPair, persistDpopKeyPair } from './core/dpop-key-store';
 import { isLoopbackHost } from './core/origin-policy';
 import { parseWebIdProfile, selectIssuer } from './core/webid';
 import {
@@ -32,7 +30,6 @@ import {
   loadClientIdMode,
   type StoredSession,
   saveAuthParams,
-  saveSession,
 } from './session-store';
 
 const SCOPE = CLIENT_ID_SCOPE;
@@ -124,12 +121,15 @@ export interface InitiateLoginOptions {
 }
 
 /**
- * Run the interactive authorization-code (DPoP) login for a WebID and persist the
- * resulting session. Returns the WebID + display profile parsed from the same fetch.
+ * Run the interactive authorization-code (DPoP) login for a WebID. The worker commits the
+ * returned token set and key together in its ProfileStore, alongside display metadata.
  */
-export async function initiateLogin(
-  options: InitiateLoginOptions,
-): Promise<{ session: StoredSession; name: string | null; photoUrl: string | null }> {
+export async function initiateLogin(options: InitiateLoginOptions): Promise<{
+  session: StoredSession;
+  keyPair: CryptoKeyPair;
+  name: string | null;
+  photoUrl: string | null;
+}> {
   const { webId } = options;
   const clientIdMode = await loadClientIdMode();
   const turtle = await fetchProfile(webId);
@@ -194,12 +194,14 @@ export async function initiateLogin(
     });
   });
 
-  const session = await completeLogin(callbackUrl);
-  return { session, name: profile.name, photoUrl: profile.photoUrl };
+  const credentials = await completeLogin(callbackUrl);
+  return { ...credentials, name: profile.name, photoUrl: profile.photoUrl };
 }
 
 /** Exchange the authorization code (from the callback URL) for a DPoP-bound token set. */
-async function completeLogin(callbackUrl: string): Promise<StoredSession> {
+async function completeLogin(
+  callbackUrl: string,
+): Promise<{ session: StoredSession; keyPair: CryptoKeyPair }> {
   const callback = new URL(callbackUrl).searchParams;
   const code = callback.get('code');
   const returnedState = callback.get('state');
@@ -222,9 +224,8 @@ async function completeLogin(callbackUrl: string): Promise<StoredSession> {
   }
 
   // Generate the keypair EARLY (needed to sign the token-exchange DPoP proof itself), but do
-  // NOT persist it until the exchange actually succeeds — see below. A failed/retried login
-  // must never clobber an existing, still-valid session's key in this single-record store
-  // (roborev round-1 Medium).
+  // return it only after the exchange succeeds. The worker commits it with its token set;
+  // a failed login never overwrites any existing profile's key.
   const keyPair = await generateDpopKeyPair();
   const dpopProof = await createDpopProof({
     keyPair,
@@ -258,12 +259,7 @@ async function completeLogin(callbackUrl: string): Promise<StoredSession> {
   const webId = (idToken.webid as string) || (idToken.sub as string);
   if (!webId) throw new Error('No WebID in the ID token.');
 
-  // The exchange succeeded — `keyPair` is now genuinely bound to a real token set. ONLY now
-  // persist it (overwriting whatever was there) and record its thumbprint on the session.
-  const keyDb = await DpopKeyDb.open();
-  await persistDpopKeyPair(keyDb, keyPair);
-  keyDb.close();
-
+  // The worker persists this key and its token set atomically under the owning profile id.
   const session: StoredSession = {
     webId,
     accessToken: tokens.access_token,
@@ -275,28 +271,19 @@ async function completeLogin(callbackUrl: string): Promise<StoredSession> {
     expiresAt: Date.now() + (tokens.expires_in ?? 600) * 1000,
   };
 
-  await saveSession(session);
   await clearAuthParams();
-  return session;
+  return { session, keyPair };
 }
 
-/**
- * Refresh an expiring session via the DPoP-bound refresh-token grant, reusing the SAME
- * persisted keypair (CSS binds the refresh token to the original `jkt`, so a regenerated
- * key fails) — `loadSessionDpopKeyPair` verifies the persisted key's thumbprint against
- * `session.dpopJkt` and returns it unchanged in the normal case. It throws
- * `DpopKeyUnavailableError` (propagated to the caller, handled like any other refresh
- * failure — see `service-worker.ts` `ensureSession`) if the persisted key is missing or
- * doesn't match a CURRENT-shape session; it mints a NEW key ONLY for the one-time legacy
- * migration (a pre-hardening session with no recorded `dpopJkt`), which deliberately
- * invalidates this grant — see `dpop-key-store.ts`. One retry on a server DPoP-nonce
- * challenge.
- */
-export async function refreshSession(session: StoredSession): Promise<StoredSession> {
+/** Refresh only the supplied profile's token set using its own persisted DPoP key. */
+export async function refreshSession(
+  session: StoredSession,
+  keyPair: CryptoKeyPair,
+): Promise<StoredSession> {
   if (!session.refreshToken) throw new Error('No refresh token; re-login required.');
-  const keyDb = await DpopKeyDb.open();
-  const keyPair = await loadSessionDpopKeyPair(keyDb, session);
-  keyDb.close();
+  if (!session.dpopJkt || session.dpopJkt !== (await dpopThumbprint(keyPair.publicKey))) {
+    throw new Error('Session does not match the profile DPoP key.');
+  }
 
   const grant = async (nonce?: string): Promise<Response> => {
     const proof = await createDpopProof({
@@ -338,6 +325,5 @@ export async function refreshSession(session: StoredSession): Promise<StoredSess
     refreshToken: tokens.refresh_token ?? session.refreshToken,
     expiresAt: Date.now() + (tokens.expires_in ?? 600) * 1000,
   };
-  await saveSession(updated);
   return updated;
 }

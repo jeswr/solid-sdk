@@ -10,7 +10,15 @@
  * broken. The badge is a tiny dot indicating signed-in (green) / signed-out (cleared).
  */
 
-import { initials } from '@jeswr/solid-elements';
+// Keep the worker free of the UI entry point: importing Lit components requires
+// HTMLElement and aborts worker startup before the profile message handlers register.
+// Match solid-elements' initials fallback without importing its component registry.
+function initials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '?';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
 
 const SIZES = [16, 32, 48, 128] as const;
 
@@ -69,11 +77,14 @@ async function drawPhoto(size: number, photoUrl: string): Promise<ImageData> {
  * Set the toolbar action icon to the signed-in user's avatar (photo → initials fallback)
  * and a green status dot. Best-effort: failures leave the previous/default icon intact.
  */
-export async function setSignedInIcon(profile: {
-  webId: string;
-  name: string | null;
-  photoUrl: string | null;
-}): Promise<void> {
+export async function setSignedInIcon(
+  profile: {
+    webId: string;
+    name: string | null;
+    photoUrl: string | null;
+  },
+  isCurrent: () => boolean,
+): Promise<void> {
   const label = profile.name ?? profile.webId;
   const imageData: Record<number, ImageData> = {};
 
@@ -94,9 +105,15 @@ export async function setSignedInIcon(profile: {
   }
 
   try {
+    // Image preparation can outlive a default change. Recheck after every await
+    // before mutating any part of the toolbar's captured identity.
+    if (!isCurrent()) return;
     await chrome.action.setIcon({ imageData });
+    if (!isCurrent()) return;
     await chrome.action.setBadgeBackgroundColor({ color: '#2e9e57' });
+    if (!isCurrent()) return;
     await chrome.action.setBadgeText({ text: ' ' });
+    if (!isCurrent()) return;
     await chrome.action.setTitle({ title: `Signed in as ${label}` });
   } catch {
     // ignore — icon update is cosmetic.
@@ -104,8 +121,9 @@ export async function setSignedInIcon(profile: {
 }
 
 /** Reset the action icon + badge to the signed-out (default) state. */
-export async function setSignedOutIcon(): Promise<void> {
+export async function setSignedOutIcon(isCurrent: () => boolean): Promise<void> {
   try {
+    if (!isCurrent()) return;
     await chrome.action.setIcon({
       path: {
         16: 'icons/icon16.png',
@@ -114,7 +132,9 @@ export async function setSignedOutIcon(): Promise<void> {
         128: 'icons/icon128.png',
       },
     });
+    if (!isCurrent()) return;
     await chrome.action.setBadgeText({ text: '' });
+    if (!isCurrent()) return;
     await chrome.action.setTitle({ title: 'Sign in to Solid' });
   } catch {
     // ignore.

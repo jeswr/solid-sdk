@@ -24,16 +24,16 @@ Four contexts, with the access token held in exactly one of them (the service wo
    (no credential)    (trust boundary:            (sole token       ├─ core/authenticated-fetch.ts (the boundary)
                        stamps real origin)          holder)         ├─ core/dpop.ts (RFC 9449 proofs, Web Crypto)
                                                                      ├─ core/origin-policy.ts (fail-closed gate)
-   Popup = the account UI (@jeswr/solid-elements) ⇄ chrome.runtime  ├─ session-store.ts (chrome.storage)
+   Popup = the account UI (@jeswr/solid-elements) ⇄ chrome.runtime  ├─ core/profile-store.ts + profile-db.ts (IndexedDB)
                                                                      └─ action-icon.ts (avatar toolbar icon)
 ```
 
 - **The page never sees a credential.** `window.solid` (MAIN world) can only `postMessage`
   to the content script, which relays to the worker. The page gets back the WebID and
   proxied `Response`s — never the access or refresh token.
-- **The service worker is the sole token holder.** Tokens live in `chrome.storage.local`
-  and the DPoP private key lives as a **non-extractable** `CryptoKey` in the worker's own
-  IndexedDB (`core/dpop-key-db.ts`) — neither is reachable from any web page, satisfying
+- **The service worker is the sole token holder.** Each profile's tokens and DPoP keypair
+  live together in the worker's IndexedDB (`core/profile-store.ts`, `profile-db.ts`), with
+  the private key held as a **non-extractable** `CryptoKey` — neither is reachable from any web page, satisfying
   the suite's "DPoP refresh token in non-page-reachable secure storage" invariant, and the
   private key additionally cannot be exported to JWK by ANY code (not even a compromised
   extension context — `crypto.subtle.exportKey` on it always rejects).
@@ -118,16 +118,37 @@ Explicit `solid.fetch` calls retain the worker's denial response.
   imported with `EXT_PUBKEY=/path/to/extension-pubkey.b64 npm run generate:client-id`.
   The public key belongs in `manifest.key`; the extension signing private key stays with Jesse.
   A page may still declare its own Client ID Document via `solid.setClientId(...)`.
-- **Session:** the access + refresh token are persisted in `chrome.storage.local`; the
-  DPoP keypair is persisted separately as a **non-extractable** `CryptoKey` object directly
-  in IndexedDB (`core/dpop-key-db.ts`) — non-extractable `CryptoKey`s are structured-clone
-  serialisable, so the object survives the MV3 worker's aggressive kill/restart cycle
-  without ever being exported to JWK. The worker proactively refreshes ~30 s before expiry
-  via the DPoP refresh grant, reusing the **same** persisted keypair (`jkt`-bound refresh).
-- **Silent restore:** reopening the browser re-hydrates the session from the persisted
-  refresh token (no popup). The restore decision logic is the suite's audited
-  [`@jeswr/solid-session-restore`](https://github.com/jeswr/solid-session-restore) (fail-closed,
-  WebID-scoped).
+- **Profiles:** `ProfileStore` supports up to eight distinct WebIDs. Each profile has its own
+  access/refresh token set, non-extractable DPoP keypair, pod settings and grants, persisted
+  atomically in IndexedDB under the profile id. The current single session migrates to profile
+  `1`, keeping its matching key. A missing/mismatched key retains the display entry and requires
+  re-login. Legacy token/key storage is cleared only after migration commits.
+- **Default and restore:** the default profile supplies the existing account surface and page
+  APIs. Requests capture that profile's id; a default switch cannot substitute another
+  profile's credentials mid-request. Refresh is single-flight per profile, reuses its persisted
+  key, and commits rotated tokens before use. Reopening the worker restores from IndexedDB.
+- **Removal and logout:** removing a profile revokes its grants, cancels pending replica fetches,
+  finishes local replica commits, purges its WebID's replica slices and deletes its credentials.
+  Interrupted removal resumes on worker wake. Logout signs out only the default profile, retaining its display entry; other
+  profiles keep their own sessions. One default exists whenever the store is nonempty.
+
+The popup/side-panel profile switcher is a separate UI task. Its worker API accepts the
+following messages **only from browser-attested extension contexts**, returning display-only
+`{ ok, profiles, defaultProfileId }` or `{ error }` (never tokens or key objects):
+
+| Message | Fields |
+|---|---|
+| `SOLID_PROFILES_LIST` | none |
+| `SOLID_PROFILE_ADD` | `webId` (interactive login; keeps the existing default) |
+| `SOLID_PROFILE_RENAME` | `profileId`, `label` |
+| `SOLID_PROFILE_REMOVE` | `profileId` |
+| `SOLID_PROFILE_SET_DEFAULT` | `profileId` |
+
+A successful legacy `SOLID_LOGIN` selects the logged-in profile as default. Re-login updates
+only the same WebID. Removing the default selects the oldest survivor; an empty store has no
+default. Per-origin
+profile bindings and the consent profile picker belong to EXT-05; this lane scopes the existing
+grants to each profile without adding that origin-grant model.
 
 The trusted `clientIdMode` setting is stored as `solid:client-id-mode` in
 `chrome.storage.local`. It accepts `document` or `dcr`, defaulting to `dcr` while Pages

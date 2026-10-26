@@ -11,7 +11,7 @@ Reviewed against the shared-replica design `docs/design/shared-replica-architect
 
 | Permission | Why it is required | Could it be narrowed? |
 |---|---|---|
-| `storage` | The home of the session tokens, profile, recent accounts, per-origin client-ids, and the **granted-origins grant store** (`chrome.storage.local`, page-unreachable). The DPoP **private key** itself no longer lives here — it is a non-extractable `CryptoKey` in the worker's own IndexedDB (`core/dpop-key-db.ts`, an unpermissioned Web Platform API always available to extension contexts); only the public JWK ever touches storage, and only inside the (page-unreachable) IndexedDB record. | No — load-bearing for the credential boundary. |
+| `storage` | Stores recent-account display metadata, per-origin client ids, transient PKCE parameters and onboarding settings in `chrome.storage.local`. Legacy session/grant/pod settings are read once for migration. Per-profile tokens, grants, pod settings and non-extractable DPoP `CryptoKey`s now live atomically in worker-owned IndexedDB (`profile-db.ts`, an unpermissioned Web Platform API); legacy credentials and the singleton key record are cleared after that transaction commits. | No — still needed for settings and the auth redirect. |
 | `identity` | `chrome.identity.launchWebAuthFlow` drives the Solid-OIDC auth-code + PKCE redirect (a service worker has no `window`). | No. |
 | `sidePanel` | The persistent side-panel account surface. | No. |
 | `contextMenus` | The right-click "Open Solid side panel" entry. | No. |

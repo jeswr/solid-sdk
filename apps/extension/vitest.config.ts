@@ -13,5 +13,12 @@ export default defineConfig({
     include: ['test/**/*.test.ts'],
     exclude: ['node_modules/**', 'dist/**', 'e2e/**'],
     globals: false,
+    coverage: {
+      enabled: true,
+      provider: 'v8',
+      include: ['src/background/core/profile-store.ts'],
+      reporter: ['text', 'json'],
+      thresholds: { branches: 100, functions: 100, lines: 100, statements: 100 },
+    },
   },
 });

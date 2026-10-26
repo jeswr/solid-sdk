@@ -7,7 +7,7 @@
 //   - the gate is the FIRST step on EVERY read AND write, INCLUDING a cache hit;
 //   - the security-scoped key blocks a cross-user / cross-grant serve off a warm cache.
 
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   type EgressPort,
   purgeReplica,
@@ -419,6 +419,33 @@ describe('SharedReplica.write — synchronous write-through with If-Match', () =
 });
 
 describe('purgeReplica — synchronous-before-serve logout purge', () => {
+  it.each([0, 1])('retains retry metadata when byte deletion %i fails', async (failureIndex) => {
+    const cache = new FakeCache();
+    const db = new FakeMetaStore();
+    await seedResource(cache, db, WEBID_A, SCOPE_PM, URL);
+    await seedResource(cache, db, WEBID_A, SCOPE_B, URL);
+    await seedResource(cache, db, WEBID_B, SCOPE_PM, URL);
+    const rows = [...db.rows.values()];
+    const remove = cache.delete.bind(cache);
+    const failedKey = [...cache.bytes.keys()][failureIndex];
+    const deletion = vi.spyOn(cache, 'delete').mockImplementation(async (request) => {
+      if (request.url === failedKey) throw new Error('fixture cache deletion failed');
+      return remove(request);
+    });
+
+    await expect(purgeReplica(cache, db, WEBID_A)).rejects.toThrow('cache deletion failed');
+    expect([...db.rows.values()]).toEqual(rows);
+    expect(cache.bytes.has(failedKey)).toBe(true);
+    expect(db.noncesCleared).toBe(0);
+
+    deletion.mockRestore();
+    // Already-deleted bytes return false on retry; absence still permits completion.
+    await purgeReplica(cache, db, WEBID_A);
+    expect([...db.rows.values()]).toEqual(rows.filter((row) => row.webId === WEBID_B));
+    expect(cache.bytes.size).toBe(1);
+    expect(db.noncesCleared).toBe(1);
+  });
+
   it('drops exactly the prior identity rows + clears nonces (scoped purge)', async () => {
     const cache = new FakeCache();
     const db = new FakeMetaStore();

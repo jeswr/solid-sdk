@@ -153,6 +153,8 @@ export interface ReplicaConfig {
   readonly db: ReplicaMetaStore;
   /** The active session's WebID (the security key dimension). */
   readonly webId: string | null;
+  /** Guard/serialize local mutations against lifecycle purges. Egress must return buffered bodies. */
+  readonly commit?: (task: () => Promise<void>) => Promise<void>;
 }
 
 /**
@@ -161,6 +163,10 @@ export interface ReplicaConfig {
  */
 export class SharedReplica {
   constructor(private readonly cfg: ReplicaConfig) {}
+
+  private commit(task: () => Promise<void>): Promise<void> {
+    return this.cfg.commit ? this.cfg.commit(task) : task();
+  }
 
   /**
    * Read a resource through the replica (GET/HEAD): gate FIRST (incl. on a cache hit), then
@@ -216,7 +222,7 @@ export class SharedReplica {
     // 304 Not Modified: the provisional cached body is confirmed fresh — serve it, touch it.
     // For a HEAD, serve the headers/status only (no cached body — Low #5).
     if (response.status === 304 && cachedBytes && meta) {
-      await this.cfg.db.putMetadata({ ...meta, fetchedAt: Date.now() });
+      await this.commit(() => this.cfg.db.putMetadata({ ...meta, fetchedAt: Date.now() }));
       return {
         response: responseFromCache(cachedBytes.clone(), meta, isHead),
         fromCache: true,
@@ -314,35 +320,39 @@ export class SharedReplica {
   ): Promise<Response> {
     // Clone BEFORE any await so the caller's live body is preserved even if the persist throws.
     const toStore = response.clone();
-    try {
-      // Store the clone UN-mutated under the key.
-      await this.cfg.cache.put(keyReq, toStore);
-      const record: ReplicaMetadata = {
-        key: metaKey,
-        webId: scope.webId as string,
-        grantScope: scope.grantScope as string,
-        resourceUrl: url,
-        varyKey,
-        etag: response.headers.get('etag') ?? undefined,
-        contentType: response.headers.get('content-type') ?? undefined,
-        status: response.status,
-        fetchedAt: Date.now(),
-      };
-      await this.cfg.db.putMetadata(record);
-    } catch {
-      // Non-cacheable 2xx (206 / Vary:* / quota) — skip persistence, serve the live response.
-      // Best-effort defence: if the bytes landed but the metadata write failed, the orphaned
-      // byte entry would be un-keyable on a later read (no metadata ⇒ no conditional ⇒ treated
-      // as a cold miss + overwritten), so leaving it is harmless; we still try to drop it.
-      await this.cfg.cache.delete(keyReq, IGNORE_VARY).catch(() => false);
-    }
+    await this.commit(async () => {
+      try {
+        // Store the clone UN-mutated under the key.
+        await this.cfg.cache.put(keyReq, toStore);
+        const record: ReplicaMetadata = {
+          key: metaKey,
+          webId: scope.webId as string,
+          grantScope: scope.grantScope as string,
+          resourceUrl: url,
+          varyKey,
+          etag: response.headers.get('etag') ?? undefined,
+          contentType: response.headers.get('content-type') ?? undefined,
+          status: response.status,
+          fetchedAt: Date.now(),
+        };
+        await this.cfg.db.putMetadata(record);
+      } catch {
+        // Non-cacheable 2xx (206 / Vary:* / quota) — skip persistence, serve the live response.
+        // Best-effort defence: if the bytes landed but the metadata write failed, the orphaned
+        // byte entry would be un-keyable on a later read (no metadata ⇒ no conditional ⇒ treated
+        // as a cold miss + overwritten), so leaving it is harmless; we still try to drop it.
+        await this.cfg.cache.delete(keyReq, IGNORE_VARY).catch(() => false);
+      }
+    });
     return response;
   }
 
   /** Drop one entry's bytes + metadata (a no-leak partial-write sweep). */
   private async invalidate(metaKey: string, keyReq: Request): Promise<void> {
-    await this.cfg.cache.delete(keyReq, IGNORE_VARY).catch(() => false);
-    await this.cfg.db.deleteMetadata(metaKey).catch(() => {});
+    await this.commit(async () => {
+      await this.cfg.cache.delete(keyReq, IGNORE_VARY).catch(() => false);
+      await this.cfg.db.deleteMetadata(metaKey).catch(() => {});
+    });
   }
 }
 
@@ -381,14 +391,15 @@ export async function purgeReplica(
   let bytesDropped = 0;
 
   if (webId !== null) {
-    // Drop exactly this identity's rows + their byte entries.
+    // Drop exactly this identity's bytes before deleting any retry metadata. Propagate
+    // deletion failures so ProfileStore keeps its removal marker for the next wake.
     const rows = await db.getMetadataByWebId(webId);
     for (const row of rows) {
       const keyReq = new Request(
         // Reconstruct the exact synthetic key from the stored scope (injective — see replica-key.ts).
         replicaKeyUrlFor(row),
       );
-      if (await cache.delete(keyReq, IGNORE_VARY).catch(() => false)) bytesDropped++;
+      if (await cache.delete(keyReq, IGNORE_VARY)) bytesDropped++;
     }
     await db.deleteMetadataByWebId(webId);
     metaDropped = rows.length;

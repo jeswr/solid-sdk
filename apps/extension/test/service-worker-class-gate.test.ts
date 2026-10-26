@@ -17,8 +17,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ClassGrant } from '../src/background/core/class-grant';
 import { generateDpopKeyPair } from '../src/background/core/dpop';
 import type { StoredDpopKeyRecord } from '../src/background/core/dpop-key-db';
+import { ProfileStore } from '../src/background/core/profile-store';
 import type { ReplicaMetadata } from '../src/background/core/replica-db';
 import type { StoredSession } from '../src/background/session-store';
+import { MemoryProfileDb, profileCredentials } from './profile-fixtures';
+
+let profileDb: MemoryProfileDb;
+vi.mock('../src/background/profile-db', () => ({
+  ProfileDb: { open: async () => profileDb },
+}));
 
 // --- An in-memory DpopKeyDb double (see service-worker-gate.test.ts for the rationale) --
 let idbDpopKey: StoredDpopKeyRecord | undefined;
@@ -277,6 +284,7 @@ const APPX = {
 } satisfies CapturedSender;
 
 beforeEach(() => {
+  profileDb = new MemoryProfileDb();
   installChrome();
   installCaches();
   cacheStore.clear();
@@ -365,7 +373,7 @@ describe('Phase-2 per-data-class gate (wired into the SW)', () => {
     // An expired grant no longer makes the origin a granted requester → forbidden-origin.
     expect(res.status).toBe(403);
     // The expired grant was pruned on the fetch path.
-    expect(storage.get('solid:class-grants')).toEqual([]);
+    expect(profileDb.state.records[0]?.classGrants).toEqual([]);
   });
 
   it('an UNKNOWN / unresolved class (empty targets) is fail-closed DENY even if unexpired', async () => {
@@ -637,7 +645,7 @@ describe('Phase-2 per-data-class gate (wired into the SW)', () => {
       evil,
     );
     expect(rev.ok).toBe(false);
-    expect((storage.get('solid:class-grants') as unknown[]).length).toBe(1);
+    expect((profileDb.state.records[0]?.classGrants as unknown[]).length).toBe(1);
   });
 
   it('CONCURRENT save + revoke do not resurrect the revoked grant (serialised store)', async () => {
@@ -904,6 +912,63 @@ describe('Phase-2 requestAccess → consent → grant (wired)', () => {
     expect(denied.status).toBe(403);
   });
 
+  it.each([
+    'switch',
+    'remove',
+    'signout',
+    'relogin',
+  ] as const)('binds delayed consent to its original profile through %s', async (action) => {
+    await seedSession();
+    await loadWorker();
+    const store = new ProfileStore(profileDb, async () => {});
+    const b = await profileCredentials('bob');
+    await store.login(b.session, b.keyPair, { ...b.display, photoUrl: null });
+    fetchImpl = (url) => routeFetch(url);
+    const request = send(
+      {
+        type: 'SOLID_REQUEST_ACCESS',
+        requestId: 'delayed',
+        classes: ['https://w3id.org/jeswr/sectors/finance#Transaction'],
+        modes: ['read'],
+        duration: 'P30D',
+        stampedOrigin: APPX.origin,
+        userActivated: true,
+      },
+      APPX,
+    );
+    for (let i = 0; i < 50 && createdWindows.length === 0; i++)
+      await new Promise((r) => setTimeout(r, 5));
+    expect(createdWindows).toHaveLength(1);
+    const consentId = new URL(createdWindows[0]).searchParams.get('consentId');
+    if (action === 'switch')
+      await send({ type: 'SOLID_PROFILE_SET_DEFAULT', profileId: '2' }, EXT_SENDER);
+    if (action === 'remove')
+      await send({ type: 'SOLID_PROFILE_REMOVE', profileId: '1' }, EXT_SENDER);
+    if (action === 'signout') await send({ type: 'SOLID_LOGOUT' }, EXT_SENDER);
+    if (action === 'relogin') {
+      const a = await profileCredentials('alice');
+      const session = { ...a.session, webId: profileDb.state.records[0].profile.webId };
+      await store.login(session, a.keyPair, { ...a.display, webId: session.webId, photoUrl: null });
+    }
+    await send(
+      {
+        type: 'SOLID_CONSENT_DECISION',
+        consentId,
+        approvedClasses: ['https://w3id.org/jeswr/sectors/finance#Transaction'],
+      },
+      EXT_SENDER,
+    );
+    const result = await request;
+    expect((await store.get('2')).classGrants).toEqual([]);
+    if (action === 'switch') {
+      expect(result.ok).toBe(true);
+      expect((await store.get('1')).classGrants).toHaveLength(1);
+    } else {
+      expect(result.error).toMatch(/session changed/);
+      expect(profileDb.state.records.every((r) => r.classGrants.length === 0)).toBe(true);
+    }
+  });
+
   it('a DENY-all consent decision mints NO grant', async () => {
     await seedSession();
     await loadWorker();
@@ -930,7 +995,7 @@ describe('Phase-2 requestAccess → consent → grant (wired)', () => {
     const res = await reqPromise;
     expect(res.ok).toBe(false);
     expect(res.grants).toEqual([]);
-    expect(storage.get('solid:class-grants') ?? []).toEqual([]);
+    expect(profileDb.state.records[0]?.classGrants ?? []).toEqual([]);
   });
 
   it('a NON-extension sender cannot post a consent decision (fail-closed)', async () => {
@@ -966,7 +1031,7 @@ describe('Phase-2 requestAccess → consent → grant (wired)', () => {
     );
     // The forged decision did not resolve the request; the grant store stays empty.
     await new Promise((r) => setTimeout(r, 20));
-    expect(storage.get('solid:class-grants') ?? []).toEqual([]);
+    expect(profileDb.state.records[0]?.classGrants ?? []).toEqual([]);
     void reqPromise;
   });
 
