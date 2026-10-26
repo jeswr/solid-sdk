@@ -61,3 +61,20 @@ No dependencies added, so no `check:packages` commands were needed. No UI change
 | `git diff --check` | PASS. |
 
 No dependencies added, so no `check:packages` commands were needed. No UI changes or screenshots. The `roborev-review` skill was read; `roborev` remains unavailable on PATH, so dispatcher review is still required. All three requested fixes are implemented; no open questions. TZID values remain opaque wall clocks for callers to resolve, as requested; no timezone engine was added.
+
+## Fix round 3 — review of `4f36872be0e5`
+
+- `ba6135e8` — `fix: enforce calendar alarm value grammar`: addresses both findings. The shared alarm duration validator rejects hours followed by seconds without an intervening minutes component, including signed and day-prefixed forms, for both TRIGGER and repeat DURATION. REPEAT is capped at 2147483647 on import and export while preserving zero and explicit-plus input support. Regression tests cover both boundaries, signed forms, explicit zero minutes, and rejection of larger JavaScript safe integers. Invalid values use the existing `Invalid iCalendar` error path; no normalization or heuristics were added.
+- Final documentation commit — `docs: record ICS round three verification`: this verification record, committed last.
+
+| Exact command | Result |
+| --- | --- |
+| `pnpm --filter @jeswr/app-suite run test` | Before the fix: 14 new regression cases failed, reproducing both findings; 250 tests passed. After the fix: all 264 tests passed. |
+| `pnpm --filter @jeswr/suite-ui run build` | PASS; existing workspace prerequisite built. |
+| `pnpm --filter @jeswr/app-suite run lint && pnpm --filter @jeswr/app-suite run build && pnpm --filter @jeswr/app-suite run typecheck && pnpm --filter @jeswr/app-suite run test` | PASS; production build, lint, strict TypeScript and 264 tests in 2 files. ICS coverage: 100% statements (324/324), branches (263/263), functions (48/48), lines (286/286). |
+| `pnpm run lint:root` | PASS; all root checks, including 74 contrast pairs with zero failures. |
+| `TURBO_SCM_BASE=a881975b7d00cfb011fa38e1911974e0dde5f395 pnpm run gate` | PASS; 7/7 Turbo tasks successful. |
+| `pnpm run gate:full` | FAIL outside the changed app: existing `@jeswr/unstorage-solid#build` dependency bootstrap invokes npm install and receives EROFS writing `/home/runner/.npm/_cacache/tmp/`. 26 tasks succeeded before the failure. Same environment blocker as prior rounds; no unrelated changes made. |
+| `git diff --check` | PASS. |
+
+No dependencies added, so no `check:packages` commands were needed. No UI changes or screenshots. The `roborev-review` and `solid-test-infrastructure` skills were read; `roborev` remains unavailable on PATH, so automated per-commit review could not run. Both requested findings are fixed; no implementation work remains and there are no open questions. Conservative choice: reject malformed duration inputs through the existing library error path rather than normalize them.
