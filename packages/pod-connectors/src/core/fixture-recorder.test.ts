@@ -132,6 +132,29 @@ describe("fixture recorder redaction", () => {
     expect(recorder.fixtures()).toHaveLength(1);
   });
 
+  it("leaves a Request body readable by the source transport and respects init overrides", async () => {
+    const seen: string[] = [];
+    const transport: typeof fetch = async (input, init) => {
+      const sourceRequest = new Request(input, init);
+      seen.push(await sourceRequest.text());
+      return Response.json({ total: 1 });
+    };
+    const recorder = createFixtureRecorder({
+      fetch: transport,
+      routes: [{ url: "https://source.test/items", safeFields: ["total"] }],
+    });
+    await recorder.fetch(
+      new Request("https://source.test/items", { method: "POST", body: "synthetic-first-body" }),
+    );
+    await recorder.fetch(
+      new Request("https://source.test/items", { method: "POST", body: "synthetic-ignored-body" }),
+      { method: "PUT", body: "synthetic-override-body" },
+    );
+    expect(seen).toEqual(["synthetic-first-body", "synthetic-override-body"]);
+    expect(recorder.fixtures().map((route) => route.method)).toEqual(["POST", "PUT"]);
+    expect(JSON.stringify(recorder.fixtures())).not.toContain("body");
+  });
+
   it("defaults to redaction for URL inputs and explicit init, including error responses", async () => {
     const recorder = createFixtureRecorder({
       fetch: async () =>

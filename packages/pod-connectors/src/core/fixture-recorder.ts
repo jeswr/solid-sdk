@@ -59,8 +59,14 @@ export function createFixtureRecorder(options: {
   });
   const recorded: FixtureRoute[] = [];
   const fetchImpl: typeof fetch = async (input, init) => {
-    const request = new Request(input, init);
-    const url = new URL(request.url);
+    // Constructing a new Request from a POST Request transfers its body stream.
+    // Read only URL/method metadata so the source transport receives the original body.
+    const url = new URL(
+      typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+    );
+    const method = (
+      init?.method ?? (input instanceof Request ? input.method : "GET")
+    ).toUpperCase();
     const route = routes.find((r) => {
       const prefix = new URL(r.url);
       return (
@@ -81,7 +87,7 @@ export function createFixtureRecorder(options: {
     }
     recorded.push({
       url: route.url,
-      method: request.method,
+      method,
       status: response.status,
       json: redactFixture(body, route.safeFields),
     });
