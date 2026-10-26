@@ -151,7 +151,8 @@ has not been run in this fixture-only lane.
 immediate UUID resources and ignores nested or off-container listing entries.
 `retract(id, { batchId, clientId, generatedAt? })` appends a new Retracted nanopub
 with `prov:wasRevisionOf` and `prov:invalidatedAtTime`; original bytes remain
-unchanged. Later classification recognizes the withdrawal across resources.
+unchanged, and the withdrawal reuses the original assertion graph and IRI,
+including skolemized nodes. Later classification recognizes the withdrawal across resources.
 `writeDefaultPolicy()` writes `/private/pkg/mcp-policy.ttl` only if absent and
 preserves owner edits, including concurrent first-run creation. Consumers apply
 the purpose predicate to their reads and own the special-category read audit.

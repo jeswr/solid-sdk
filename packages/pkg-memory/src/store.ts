@@ -143,12 +143,38 @@ export class NanopubStore {
       { owner: this.owner, generatedAt: now },
     );
     const np = value.nanopubs[0] as Nanopublications["nanopubs"][number];
-    const provenance = graph(value.dataset, np.provenanceId);
-    new RdfNode(np.assertionId, provenance)
+    // The builder hashes its input. Already-skolemized assertions must instead
+    // retain their original graph and identity in the new withdrawal envelope.
+    const head = graph(value.dataset, np.id);
+    const assertionLink = new RdfNode(np.id, head);
+    assertionLink.terms(`${NS.np}hasAssertion`).clear();
+    assertionLink.link(`${NS.np}hasAssertion`, previous.assertionId);
+    const provenance = new Store();
+    for (const q of graph(value.dataset, np.provenanceId)) {
+      const subject =
+        q.subject.termType === "NamedNode" && q.subject.value === np.assertionId
+          ? previous.assertionId
+          : q.subject;
+      const node = new RdfNode(subject, provenance);
+      if (q.object.termType === "NamedNode" && q.object.value === np.assertionId)
+        node.link(q.predicate.value, previous.assertionId);
+      else node.add(q.predicate.value, q.object);
+    }
+    new RdfNode(previous.assertionId, provenance)
       .link(`${NS.prov}wasRevisionOf`, previous.assertionId)
       .text(`${NS.prov}invalidatedAtTime`, now, `${NS.xsd}dateTime`);
-    putGraph(value.dataset, np.provenanceId, provenance);
-    const revision = await parseNanopublications(await serializeNanopublications(value));
+    const dataset = new Store(
+      [...value.dataset].filter(
+        (q) => ![np.id, np.assertionId, np.provenanceId].includes(q.graph.value),
+      ),
+    );
+    putGraph(dataset, np.id, head);
+    putGraph(dataset, previous.assertionId, graph(original.dataset, previous.assertionId));
+    putGraph(dataset, np.provenanceId, provenance);
+    np.assertionId = previous.assertionId;
+    const revision = await parseNanopublications(
+      await serializeNanopublications({ dataset, nanopubs: [np] }),
+    );
     await this.put(revision);
     return revision;
   }

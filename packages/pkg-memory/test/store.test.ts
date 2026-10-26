@@ -10,9 +10,11 @@ import {
   buildNanopublications,
   classifyNanopublications,
   createFactAssertion,
+  type Fact,
   NanopubStore,
   type PodPort,
   parseNanopublications,
+  pkgId,
   purposeFilter,
   serializeNanopublications,
 } from "../src/index.js";
@@ -25,7 +27,7 @@ const identity = { root: "https://example.org/pod/", webId: options.owner };
 const encode = (value: string) => new TextEncoder().encode(value);
 const decode = (value: Uint8Array) => new TextDecoder().decode(value);
 const statusError = (status: number) => Object.assign(new Error(`HTTP ${status}`), { status });
-const build = (batch = "store") =>
+const build = (batch = "store", fact: Fact = { template: "email", value: "avery@example.org" }) =>
   buildNanopublications(
     {
       batch_id: batch,
@@ -35,10 +37,7 @@ const build = (batch = "store") =>
           id: "one",
           epistemic: "SelfReportedExplicit",
           categories: ["pd:EmailAddress"],
-          assertion: createFactAssertion(identity.webId, {
-            template: "email",
-            value: "avery@example.org",
-          }),
+          assertion: createFactAssertion(identity.webId, fact),
         },
       ],
     },
@@ -328,9 +327,20 @@ it("validates UUID inputs, RDF and stored identity before using data", async () 
   await expect(store.get(id)).rejects.toThrow();
 });
 
-it("retracts by appending a revising nanopub with invalidation, preserving original bytes", async () => {
+it.each([
+  { template: "email", value: "avery@example.org" },
+  { template: "preference", value: { propertyID: "drink", value: "tea" } },
+  {
+    template: "medication",
+    value: {
+      id: "https://example.org/intake",
+      medication: { id: "https://example.org/medicine", name: "Example medicine" },
+      dose: { value: "1", unit: "tablet", frequency: "daily" },
+    },
+  },
+] satisfies Fact[])("retracts $template without changing its assertion identity or original bytes", async (fact) => {
   const { store, pod } = setup();
-  const value = await build();
+  const value = await build("store", fact);
   await store.put(value);
   const previous = value.nanopubs[0]!;
   const before = await pod.read(store.url(previous.id));
@@ -342,6 +352,21 @@ it("retracts by appending a revising nanopub with invalidation, preserving origi
   });
   const np = revision.nanopubs[0]!;
   expect(np.id).not.toBe(previous.id);
+  expect(np.assertionId).toBe(previous.assertionId);
+  const originalAssertion = graph(value.dataset, previous.assertionId);
+  const withdrawnAssertion = graph(revision.dataset, np.assertionId);
+  expect([...withdrawnAssertion].every((q) => originalAssertion.has(q))).toBe(true);
+  expect(withdrawnAssertion.size).toBe(originalAssertion.size);
+  expect(isomorphic([...revision.dataset], [...(await store.get(np.id)).dataset])).toBe(true);
+  expect(new Set([...revision.dataset].map((q) => q.graph.value))).toEqual(
+    new Set([
+      np.id,
+      previous.assertionId,
+      np.provenanceId,
+      np.pubinfoId,
+      pkgId("batch", "retraction", "sources"),
+    ]),
+  );
   expect(np.supersedes).toEqual([previous.assertionId]);
   expect(np.validity).toBe("Retracted");
   expect(np.attributedTo).toEqual([identity.webId]);
@@ -354,6 +379,7 @@ it("retracts by appending a revising nanopub with invalidation, preserving origi
   expect(await pod.read(store.url(previous.id))).toEqual(before);
   const classified = classifyNanopublications(await store.list());
   expect(classified.map((item) => item.belief)).toEqual(["past", "past"]);
+  expect(classified.map((item) => item.corroboration)).toEqual([2, 2]);
   expect(classified.find((item) => item.id === previous.id)!.replacedBy).toEqual([np.id]);
   const simultaneous = await store.retract(previous.id, {
     batchId: "same-clock",
