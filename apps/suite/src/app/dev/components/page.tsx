@@ -13,6 +13,9 @@ export default function ComponentsPage() {
             {name}
           </a>
         ))}
+        <a href="/dev/components/app-rail">AppRail</a>
+        <a href="/dev/components/app-launcher">AppLauncher</a>
+        <a href="/dev/components/bottom-tab-bar">BottomTabBar</a>
       </nav>
     </main>
   );
