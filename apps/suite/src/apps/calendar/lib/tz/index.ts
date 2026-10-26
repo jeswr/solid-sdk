@@ -7,4 +7,10 @@ export {
   wallClockToInstant,
   type ZonedTime,
 } from "./conversion";
+export {
+  planSeriesEdit,
+  type SeriesEditPlan,
+  type SeriesEditScope,
+  type SeriesTiming,
+} from "./recurrence";
 export { CalendarTimeError, type CalendarTimeErrorCode } from "./validation";
