@@ -13,3 +13,6 @@ declare module "mammoth/lib/zipfile" {
   }
   export function openArrayBuffer(data: ArrayBuffer): Promise<Archive>;
 }
+declare module "mammoth/lib/zipfile.js" {
+  export * from "mammoth/lib/zipfile";
+}

@@ -2,7 +2,7 @@
 import { fileURLToPath } from "node:url";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, test } from "@playwright/test";
-import { openArrayBuffer } from "mammoth/lib/zipfile";
+import { openArrayBuffer } from "mammoth/lib/zipfile.js";
 
 async function audit(page: Page) {
   const results = await new AxeBuilder({ page }).analyze();
