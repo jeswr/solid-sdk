@@ -141,7 +141,7 @@ describe("Spotify PKCE SourceAuth", () => {
       name: "IntegrationAuthError",
       adapterId: "spotify",
       reason: "exchange-failed",
-      cause: { name: "IntegrationSyncError", message: expect.stringContaining("too large") },
+      cause: { name: "ResponseTooLargeError", message: expect.stringContaining("too large") },
     });
     expect(cancel).toHaveBeenCalledOnce();
     expect(pull).toHaveBeenCalledTimes(declared ? 0 : cap / 1024 + 1);
