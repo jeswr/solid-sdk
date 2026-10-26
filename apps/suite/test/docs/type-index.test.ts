@@ -111,7 +111,7 @@ describe("ensureTypeRegistrations", () => {
     });
     let reads = 0;
     const fetchImpl: typeof fetch = async (url, init) => {
-      if (String(url) === linkedIndex && !init?.method && reads++ === 0)
+      if (String(url) === linkedIndex && (!init?.method || init.method === "GET") && reads++ === 0)
         return new Response(null, { status: 404 });
       const response = await transport(url, init);
       if (init?.method === "PUT" && new Headers(init.headers).has("if-none-match"))
@@ -360,7 +360,7 @@ describe("discoverRegistrations", () => {
         body: "@prefix solid: <http://www.w3.org/ns/solid/terms#> . <#r> a solid:TypeRegistration ; solid:forClass <https://other/Class> ; solid:instance <https://alice.pod/x.ttl> .",
       },
     });
-    const locs = await discoverRegistrations(WEBID, profile, fetch);
+    const locs = await discoverRegistrations(WEBID, profile, fetch, POD);
     expect(locs).toHaveLength(2);
     expect(locs.map((l) => l.forClass).sort()).toEqual(
       [DOCUMENT_CLASS, "https://other/Class"].sort(),
@@ -370,13 +370,13 @@ describe("discoverRegistrations", () => {
   it("treats a 404/403 index as contributing nothing", async () => {
     const profile = turtleToStore(profileWith({ privateIndex: PRIVATE_INDEX }), PROFILE_DOC);
     const { fetch } = mockFetch({}); // private index → 404
-    await expect(discoverRegistrations(WEBID, profile, fetch)).resolves.toEqual([]);
+    await expect(discoverRegistrations(WEBID, profile, fetch, POD)).resolves.toEqual([]);
   });
 
   it("propagates a non-404/403 index read failure", async () => {
     const profile = turtleToStore(profileWith({ privateIndex: PRIVATE_INDEX }), PROFILE_DOC);
     const { fetch } = mockFetch({ [`GET ${PRIVATE_INDEX}`]: { status: 500, body: "err" } });
-    await expect(discoverRegistrations(WEBID, profile, fetch)).rejects.toMatchObject({
+    await expect(discoverRegistrations(WEBID, profile, fetch, POD)).rejects.toMatchObject({
       status: 500,
     });
   });
@@ -384,7 +384,7 @@ describe("discoverRegistrations", () => {
   it("returns nothing when the profile advertises no indexes", async () => {
     const profile = turtleToStore(profileWith({}), PROFILE_DOC);
     const { fetch } = mockFetch({});
-    await expect(discoverRegistrations(WEBID, profile, fetch)).resolves.toEqual([]);
+    await expect(discoverRegistrations(WEBID, profile, fetch, POD)).resolves.toEqual([]);
   });
 });
 

@@ -13,6 +13,13 @@
  * bootstraps a private index when missing.
  */
 import { type FetchedRdf, RdfFetchError } from "@jeswr/fetch-rdf";
+import {
+  assertWithinPodScope,
+  createPodScopedFetch,
+  normalizePodBase,
+  podScopedUrl,
+  refuseRedirects,
+} from "@jeswr/guarded-fetch";
 import { canonicalize, termsEqual } from "@jeswr/suite-vocab";
 import type { DatasetCore } from "@rdfjs/types";
 import {
@@ -191,19 +198,26 @@ export async function ensureTypeRegistrations(opts: {
   registrations: DesiredRegistration[];
   fetchImpl: typeof fetch;
 }): Promise<EnsureRegistrationsResult> {
-  const { webId, podRoot, registrations, fetchImpl } = opts;
+  const { webId, registrations } = opts;
+  const podRoot = normalizePodBase(opts.podRoot);
+  const fetchImpl = createPodScopedFetch(podRoot, { fetch: opts.fetchImpl });
+  const profileFetch = refuseRedirects(opts.fetchImpl);
+  assertWithinPodScope(new URL(".", webId).href, webId);
+  for (const registration of registrations) assertWithinPodScope(podRoot, registration.container);
 
-  const { dataset: profileDs, etag: profileEtag } = await readRdf(webId, fetchImpl);
+  const { dataset: profileDs, etag: profileEtag } = await readRdf(webId, profileFetch);
   const links = typeIndexLinks(webId, profileDs);
   let indexUrl = links.privateIndex;
   let bootstrapped = false;
+
+  if (indexUrl) indexUrl = assertWithinPodScope(podRoot, indexUrl);
 
   if (!indexUrl) {
     indexUrl = new URL("settings/privateTypeIndex.ttl", podRoot).toString();
     await createIndexDocument(indexUrl, fetchImpl);
     const anchor = new ProfileTypeIndexAnchor(webId, profileDs, DataFactory);
     anchor.privateIndex = indexUrl;
-    await writeRdf(documentUrl(webId), profileDs, { etag: profileEtag, fetchImpl });
+    await writeRdf(documentUrl(webId), profileDs, { etag: profileEtag, fetchImpl: profileFetch });
     bootstrapped = true;
   }
 
@@ -260,14 +274,21 @@ export async function discoverRegistrations(
   webId: string,
   profile: DatasetCore,
   fetchImpl: typeof fetch,
+  podRoot: string,
 ): Promise<RegisteredLocation[]> {
   const links = typeIndexLinks(webId, profile);
   const urls = [links.publicIndex, links.privateIndex].filter((u): u is string => Boolean(u));
+  const checked = urls.map((url) => assertWithinPodScope(podRoot, url));
+  const scopedFetch = createPodScopedFetch(podRoot, { fetch: fetchImpl });
   const out: RegisteredLocation[] = [];
-  for (const url of urls) {
+  for (const url of checked) {
     try {
-      const { dataset } = await readRdf(url, fetchImpl);
-      out.push(...new TypeIndexDataset(dataset, DataFactory).all());
+      const { dataset } = await readRdf(url, scopedFetch);
+      for (const location of new TypeIndexDataset(dataset, DataFactory).all()) {
+        if (location.instance && !podScopedUrl(podRoot, location.instance)) continue;
+        if (location.container && !podScopedUrl(podRoot, location.container)) continue;
+        out.push(location);
+      }
     } catch (e) {
       if (e instanceof RdfFetchError && (e.status === 404 || e.status === 403)) continue;
       throw e;

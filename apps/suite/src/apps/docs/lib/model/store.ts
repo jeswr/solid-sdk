@@ -95,7 +95,12 @@ export class DocsStore {
   /** Default location plus registered legacy location; legacy rows are read-only. */
   async list(): Promise<DocumentEntry[]> {
     const { dataset: profile } = await readRdf(this.webId, this.fetchImpl);
-    const registrations = await discoverRegistrations(this.webId, profile, this.fetchImpl);
+    const registrations = await discoverRegistrations(
+      this.webId,
+      profile,
+      this.fetchImpl,
+      this.podRoot,
+    );
     const containers = [this.container];
     if (
       registrations.some(

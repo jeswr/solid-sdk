@@ -2009,6 +2009,9 @@ importers:
       '@jeswr/fetch-rdf':
         specifier: ^0.1.0
         version: 0.1.0
+      '@jeswr/guarded-fetch':
+        specifier: workspace:*
+        version: link:../../packages/guarded-fetch
       '@jeswr/suite-ui':
         specifier: workspace:*
         version: link:../../packages/suite-ui
