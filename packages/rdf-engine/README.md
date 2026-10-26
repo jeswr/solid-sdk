@@ -171,3 +171,41 @@ is not a leak counter because its allocator retains freed pages.
 and **1,444,432 bytes gzip (level 9)**. The test checks both the record and ADR-007's
 amended ceilings: **4,194,304 bytes raw**, **1,572,864 bytes gzip**. No lifecycle
 scripts or local WASM builds are required. Coverage thresholds remain 90%.
+
+## Parse benchmark (T-072)
+
+Reproduce from the workspace root (build workspace dependencies first):
+
+```sh
+pnpm exec turbo run build --filter @jeswr/rdf-engine...
+pnpm --filter @jeswr/rdf-engine run bench:parse
+```
+
+`bench/parse.bench.ts` writes `bench/parse.json`, including all timing samples,
+fixture byte counts, quad counts and SHA-256 hashes, dependency versions, and
+machine information. It generates exactly 1 KiB, 100 KiB and 10 MiB of ASCII
+Turtle with two triples per subject. Both paths return a materialized RDF/JS
+dataset: n3 `Parser.parse` + `Store`, versus `rdf-engine/node.parse`, including
+WASM parsing, SPARQL/JSON extraction, RDF/JS conversion and store cleanup. This
+measures the usable facade path; raw WASM parse-only timings are not comparable
+to the facade's result. Fixture construction, result-size assertions, and disk
+I/O are outside the timed sections. Three warmups precede 21 alternating-order
+samples per small size and seven per 10 MiB; normal GC remains enabled.
+
+Measured on 2026-10-26 with Node v24.22.1, Linux
+x64 (Intel(R) Xeon(R) Platinum 8488C), n3 2.0.3 and Sparq 0.1.5:
+
+| Turtle size | Quads | n3 median | Sparq facade median |
+| --- | ---: | ---: | ---: |
+| 1 KiB | 42 | 0.192 ms | 0.348 ms |
+| 100 KiB | 3,988 | 14.859 ms | 16.475 ms |
+| 10 MiB | 366,746 | 1337.110 ms | 1449.040 ms |
+
+**No crossover was observed at the three measured sizes (through 10 MiB).**
+Sparq did not win at 100 KiB or below, so ADR-007 D1's condition for changing the
+parse default is not met: n3 remains the default. No fetch-rdf default is changed
+by this task. These are local, synthetic, warm-parser measurements rather than
+a universal crossover threshold; results depend on the document and machine.
+Lazy Node WASM module import/initialization took 10.299 ms in this fresh process,
+reported separately from the warm parse medians. Application module imports and
+browser download time are excluded, so cold browser use would add further cost.

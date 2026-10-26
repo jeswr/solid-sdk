@@ -40,6 +40,7 @@
     "lint": "biome check .",
     "test": "vitest run",
     "copy:wasm": "node scripts/copy-wasm.mjs",
+    "bench:parse": "node bench/parse.bench.ts && biome format --write bench/parse.json",
     "bench:bundle": "node scripts/measure-bundle.mjs"
   },
   "license": "MIT",
