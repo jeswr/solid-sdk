@@ -6,6 +6,8 @@ import { DataFactory } from "n3";
 import type { CapabilityEntry, ServiceEntry, StorageDescription } from "./types.js";
 import { ACQ, DCT, DID, LWS, NOTIFY, SSD } from "./vocab.js";
 
+const SSD_FORMAT = "https://jeswr.org/ns/solid-sd#format";
+
 const RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
 const CHANNEL_TYPES: ReadonlySet<string> = new Set([
   NOTIFY.WebSocketChannel2023,
@@ -59,12 +61,20 @@ class DescriptionNode extends TermWrapper {
     return Object.fromEntries(
       [...predicates].map((predicate) => {
         const values = this.objects(predicate).map((term): unknown => {
-          if (term.termType !== "BlankNode") return term.value;
+          // ADR-008 format nodes may be named (`ssd:format <#turtle>`): expand those too, so
+          // their ssd:source/ssd:patchType survive. Other named objects stay IRI strings.
+          const expand =
+            term.termType === "BlankNode" ||
+            (predicate === SSD_FORMAT &&
+              term.termType === "NamedNode" &&
+              this.dataset.match(term as Term).size > 0);
+          if (!expand) return term.value;
           // Expand each blank node once, bounding both depth and shared-subgraph growth.
-          if (visited.has(term.value) || depth >= 31) return { "@id": `_:${term.value}` };
+          const id = term.termType === "BlankNode" ? `_:${term.value}` : term.value;
+          if (visited.has(term.value) || depth >= 31) return { "@id": id };
           // Keep the definition identifiable so later references can resolve to it.
           return {
-            "@id": `_:${term.value}`,
+            "@id": id,
             ...new DescriptionNode(term, this.dataset, this.factory).extra([], visited, depth + 1),
           };
         });
