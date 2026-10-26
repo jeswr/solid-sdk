@@ -148,6 +148,10 @@ export class SolidUmaTokenProvider implements TokenProvider {
       });
   }
 
+  get fence(): SessionFence {
+    return this.#rpts.fence;
+  }
+
   /** Only UMA challenges with `as_uri` and `ticket`. */
   async matches(_: Request, challenge?: ChallengeContext): Promise<boolean> {
     return findChallenge(challenge, ["as_uri", "ticket"], "uma") !== undefined;
@@ -253,7 +257,7 @@ export class SolidUmaTokenProvider implements TokenProvider {
       "Authorization",
       `${rpt.tokenType === "dpop" ? "DPoP" : "Bearer"} ${rpt.accessToken}`,
     );
-    const upgraded = new Request(request, { headers });
+    const upgraded = new Request(request, { headers, signal: ticket.signal });
     this.#requests.set(upgraded, key);
     return upgraded;
   }

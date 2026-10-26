@@ -119,6 +119,10 @@ export class LwsTokenProvider implements TokenProvider {
     this.#metadata = options.metadataStore ?? createMemoryStore();
   }
 
+  get fence(): SessionFence {
+    return this.#tokens.fence;
+  }
+
   async matches(_: Request, challenge?: ChallengeContext): Promise<boolean> {
     return findChallenge(challenge, ["as_uri", "realm"], "bearer") !== undefined;
   }
@@ -139,7 +143,7 @@ export class LwsTokenProvider implements TokenProvider {
     this.#remember(token.accessToken, key);
     const headers = new Headers(request.headers);
     headers.set("Authorization", `Bearer ${token.accessToken}`);
-    const upgraded = new Request(request, { headers });
+    const upgraded = new Request(request, { headers, signal: ticket.signal });
     this.#requests.set(upgraded, key);
     return upgraded;
   }

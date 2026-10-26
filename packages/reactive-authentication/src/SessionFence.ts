@@ -78,7 +78,9 @@ export class SessionFence {
 
   /** Throws {@link SessionSupersededError} if the generation moved on since `expected` was read. */
   async assertCurrent(expected: number): Promise<void> {
-    if ((await this.generation()) !== expected) throw new SessionSupersededError();
+    // A notification may advance the local generation while the durable read is pending.
+    if (Math.max(await this.generation(), this.#generation) !== expected)
+      throw new SessionSupersededError();
   }
 
   /** Runs a credential write only if no supersession happened since `expected` was read. */

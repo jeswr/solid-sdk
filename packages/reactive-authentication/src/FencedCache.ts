@@ -53,6 +53,11 @@ export class FencedCache<T extends {}> {
       options.fence ?? new SessionFence(`local-${crypto.randomUUID()}`, { broadcast: false });
   }
 
+  /** The fence shared by credential acquisition and the client's pre-send validation. */
+  get fence(): SessionFence {
+    return this.#fence;
+  }
+
   /** Captures the generation and a signal that aborts on supersession. */
   async ticket(signal: AbortSignal): Promise<FenceTicket> {
     const generation = await this.#fence.generation();
@@ -113,6 +118,7 @@ export class FencedCache<T extends {}> {
   async assertCurrent(ticket: FenceTicket): Promise<void> {
     ticket.signal.throwIfAborted();
     await this.#fence.assertCurrent(ticket.generation);
+    ticket.signal.throwIfAborted();
   }
 
   /** Supersedes the fence (aborting in-flight work), then clears the store (or the keys written here). */

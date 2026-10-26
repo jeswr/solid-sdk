@@ -47,6 +47,11 @@ are in `@jeswr/reactive-authentication/elements`.
 - **Logout wins.** Values are stamped with the fence generation and only used for the same generation;
   commits hold the fence's shared lock and re-check; `supersede` takes it exclusively, aborts in-flight work and
   broadcasts. Cross-tab fencing requires a fence with a persistent store (`createBrowserCaches().fence`).
+  Upgraded requests retain the provider's cancellation signal through transport. Providers expose their
+  credential fence through the optional `TokenProvider.fence`; the client captures its generation before
+  upgrading and validates it after challenge cleanup, immediately before sending, then rechecks cancellation.
+  Provider and client must share the same fence to order this validation and transport initiation against
+  cross-realm logout under one shared lock. Third-party providers without a fence remain supported.
 - **Per-request proofs.** DPoP proofs are generated for every request (never cached); keys are non-extractable.
 - **Key isolation.** Session keys include namespace, account, issuer, redirect URI, scopes and storage context;
   LWS keys include AS, realm and credential identity; supplied stores require an explicit namespace.

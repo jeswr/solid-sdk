@@ -72,6 +72,10 @@ export class DPoPTokenProvider implements TokenProvider {
     this.#fence = this.#session.fence;
   }
 
+  get fence(): SessionFence {
+    return this.#fence;
+  }
+
   /**
    * Answers challenges without a scheme preference or with DPoP or Bearer schemes. UMA challenges need an
    * RPT from the named authorization server ({@link SolidUmaTokenProvider}), not the OP's access token.
@@ -155,6 +159,7 @@ export class DPoPTokenProvider implements TokenProvider {
     );
     signal.throwIfAborted();
     await this.#fence.assertCurrent(generation);
+    signal.throwIfAborted();
     return entry?.identity;
   }
 

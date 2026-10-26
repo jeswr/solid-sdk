@@ -165,6 +165,7 @@ export class ReactiveAuthenticationClient {
     const provider = await this.#findProvider(attempt.request(session.signal), challenge);
     if (provider === undefined) return response;
 
+    const providerGeneration = await provider.fence?.generation();
     let nonceRetries = 0;
     let renewals = 0;
     while (true) {
@@ -172,7 +173,12 @@ export class ReactiveAuthenticationClient {
       const upgraded = await provider.upgrade(attempt.request(session.signal), challenge);
       await discard(challenge.response);
 
-      const result = await this.#send(withRedirect(upgraded, "manual"), session, provider);
+      const result = await this.#send(
+        withRedirect(upgraded, "manual"),
+        session,
+        provider,
+        providerGeneration,
+      );
       if (redirectStatuses.has(result.status) || result.type === "opaqueredirect") {
         return await this.#followRedirect(attempt, result, session, hops);
       }
@@ -220,8 +226,14 @@ export class ReactiveAuthenticationClient {
     );
   }
 
-  async #send(request: Request, session: Session, provider?: TokenProvider): Promise<Response> {
+  async #send(
+    request: Request,
+    session: Session,
+    provider?: TokenProvider,
+    providerGeneration?: number,
+  ): Promise<Response> {
     const send = async () => {
+      if (provider?.fence !== undefined) await provider.fence.assertCurrent(providerGeneration!);
       this.#assertNotAborted(session);
       if (provider !== undefined && !this.#boundary.allows(request.url)) {
         throw new ReactiveAuthenticationError(
@@ -229,6 +241,7 @@ export class ReactiveAuthenticationClient {
         );
       }
       provider?.assertAllowed?.(request);
+      request.signal.throwIfAborted();
       // Keep validation and transport initiation under the shared fence lock. Wrapping the promise
       // releases the lock before the response arrives, so logout never waits for the network.
       return { response: this.#fetch(request) };

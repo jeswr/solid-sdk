@@ -43,6 +43,10 @@ export class OAuthBearerTokenProvider implements TokenProvider {
       options.fence ?? new SessionFence(`local-${crypto.randomUUID()}`, { broadcast: false });
   }
 
+  get fence(): SessionFence {
+    return this.#fence;
+  }
+
   async matches(request: Request, challenge?: ChallengeContext): Promise<boolean> {
     if (!this.#resources.allows(request.url)) return false;
     const challenges = challenge?.challenges ?? [];
@@ -58,12 +62,13 @@ export class OAuthBearerTokenProvider implements TokenProvider {
     const token = await this.#token(signal);
     signal.throwIfAborted();
     await this.#fence.assertCurrent(generation);
+    signal.throwIfAborted();
     this.assertAllowed(request);
 
     const headers = new Headers(request.headers);
     headers.delete("DPoP"); // a stale proof bound to another token must not accompany a Bearer token
     headers.set("Authorization", `Bearer ${token.token}`);
-    return new Request(request, { headers });
+    return new Request(request, { headers, signal });
   }
 
   assertAllowed(request: Request): void {

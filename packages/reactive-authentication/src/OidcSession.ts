@@ -210,6 +210,7 @@ export class OidcSession {
       async () => {
         combined.throwIfAborted();
         await fence.assertCurrent(generation);
+        combined.throwIfAborted();
 
         const cached = await this.#cache.getItem(key);
         if (cached !== null && cached.generation === generation && usable(cached, false))
@@ -250,6 +251,7 @@ export class OidcSession {
     signal.throwIfAborted();
     this.#fence.signal.throwIfAborted();
     await this.#fence.assertCurrent(entry.generation ?? -1);
+    signal.throwIfAborted();
   }
 
   /** Marks the access token as rejected if it is still the cached one; the next {@link get} renews it. */

@@ -7,10 +7,12 @@ import { FencedCache } from "../src/FencedCache.js";
 import { contextKey, withLock } from "../src/locks.js";
 import {
   CredentialBoundary,
+  OAuthBearerTokenProvider,
   PatternIssuerProvider,
   ReactiveFetchManager,
   SessionFence,
 } from "../src/mod.js";
+import { OidcSession } from "../src/OidcSession.js";
 import { SimpleDataset } from "../src/SimpleDataset.js";
 import {
   clientAuthFor,
@@ -110,6 +112,33 @@ test("global manager registration is idempotent and preserves a later wrapper", 
     (e) => e instanceof AggregateError && e.errors[0] === error,
   );
   assert.equal(logouts, 1);
+});
+
+test("third-party providers retain cancellation at send without exposing a fence", async () => {
+  const controller = new AbortController();
+  const reason = new Error("provider cancelled");
+  const sent = [];
+  const provider = {
+    matches: async () => true,
+    upgrade: async (request) =>
+      new Request(request, {
+        headers: { authorization: "Bearer third-party" },
+        signal: AbortSignal.any([request.signal, controller.signal]),
+      }),
+  };
+  const manager = new ReactiveFetchManager({
+    providers: [provider],
+    boundary: new CredentialBoundary(["https://api.example/"]),
+    fetch: async (request) => {
+      sent.push(request);
+      if (request.headers.has("authorization")) return new Response("sent");
+      return new Response(new ReadableStream({ cancel: () => controller.abort(reason) }), {
+        status: 401,
+      });
+    },
+  });
+  await assert.rejects(manager.fetch("https://api.example/private"), (error) => error === reason);
+  assert.equal(sent.length, 1);
 });
 
 test("fenced caches clear non-clearable stores and reject stale values", async () => {
@@ -216,6 +245,52 @@ test("fence signals follow observed generations and ignore delayed, duplicate an
 });
 
 for (const notification of ["broadcast", "durable read"]) {
+  test(`assertCurrent rejects a generation superseded by ${notification} during its store read`, async () => {
+    let channel;
+    vi.stubGlobal(
+      "BroadcastChannel",
+      class {
+        constructor() {
+          channel = this;
+        }
+        close() {}
+      },
+    );
+    const values = createMemoryStore();
+    const started = Promise.withResolvers();
+    const gate = Promise.withResolvers();
+    let paused = true;
+    const fence = new SessionFence(crypto.randomUUID(), {
+      store: {
+        ...values,
+        getItem: async (key) => {
+          const value = await values.getItem(key);
+          if (paused) {
+            started.resolve();
+            await gate.promise;
+          }
+          return value;
+        },
+      },
+    });
+    try {
+      const rejected = assert.rejects(fence.assertCurrent(0), { name: "SessionSupersededError" });
+      await started.promise;
+      paused = false;
+      if (notification === "broadcast") {
+        channel.onmessage({ data: { type: "superseded", generation: 1 } });
+      } else {
+        await values.setItem("generation", 1);
+        assert.equal(await fence.generation(), 1);
+      }
+      gate.resolve();
+      await rejected;
+    } finally {
+      gate.resolve();
+      fence.close();
+    }
+  });
+
   test(`a generation read pending across ${notification} keeps its superseded signal`, async () => {
     let channel;
     class Channel {
@@ -265,6 +340,89 @@ for (const notification of ["broadcast", "durable read"]) {
       gate.resolve();
       fence.close();
       peer.close();
+    }
+  });
+}
+
+for (const operation of [
+  "cache validation",
+  "session validation",
+  "session acquisition",
+  "Bearer upgrade",
+]) {
+  test(`${operation} rechecks caller cancellation after asynchronous fence validation`, async () => {
+    const values = createMemoryStore();
+    const started = Promise.withResolvers();
+    const gate = Promise.withResolvers();
+    let reads = 0;
+    const fence = new SessionFence(crypto.randomUUID(), {
+      broadcast: false,
+      store: {
+        ...values,
+        getItem: async (key) => {
+          if (
+            ++reads ===
+            (operation === "Bearer upgrade" || operation === "session acquisition" ? 2 : 1)
+          ) {
+            started.resolve();
+            await gate.promise;
+          }
+          return await values.getItem(key);
+        },
+      },
+    });
+    const controller = new AbortController();
+    const reason = new Error("cancelled during validation");
+    try {
+      let pending;
+      let credentialRead;
+      if (operation === "cache validation") {
+        pending = new FencedCache("test", { fence }).assertCurrent({
+          generation: 0,
+          signal: controller.signal,
+        });
+      } else if (operation === "session validation") {
+        pending = new OidcSession("https://app.example/cb", {}, {}, { fence }).assertCurrent(
+          { generation: 0 },
+          controller.signal,
+        );
+      } else if (operation === "session acquisition") {
+        credentialRead = vi.fn(async () => ({ generation: 0 }));
+        const session = new OidcSession(
+          "https://app.example/cb",
+          {},
+          {},
+          {
+            namespace: "test",
+            fence,
+            cache: { getItem: credentialRead },
+          },
+        );
+        pending = session.get(
+          { issuer: "https://issuer.example" },
+          "test",
+          controller.signal,
+          () => true,
+        );
+      } else {
+        const provider = new OAuthBearerTokenProvider(
+          { id: "api", getAccessToken: async () => ({ token: "access" }) },
+          { resources: ["https://api.example/"], fence },
+        );
+        pending = provider.upgrade(
+          new Request("https://api.example/private", { signal: controller.signal }),
+        );
+      }
+      const rejected = assert.rejects(pending, (error) => error === reason);
+      await started.promise;
+      controller.abort(reason);
+      gate.resolve();
+      await rejected;
+      if (credentialRead !== undefined)
+        assert.equal(credentialRead.mock.calls.length, 0, "no credential read after cancellation");
+    } finally {
+      gate.resolve();
+      fence.close();
     }
   });
 }

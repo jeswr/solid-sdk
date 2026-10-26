@@ -62,6 +62,10 @@ export class ClientCredentialsTokenProvider implements TokenProvider {
     });
   }
 
+  get fence(): SessionFence {
+    return this.#tokens.fence;
+  }
+
   async matches(_: Request, challenge?: ChallengeContext): Promise<boolean> {
     const challenges = challenge?.challenges ?? [];
     return (

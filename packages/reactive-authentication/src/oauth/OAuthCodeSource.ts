@@ -191,6 +191,7 @@ export class OAuthCodeSource implements AccessTokenSource {
     const as = await abortable(this.#authorizationServer(), bound);
     bound.throwIfAborted();
     await this.#fence.assertCurrent(generation);
+    bound.throwIfAborted();
 
     if (rejectedToken !== undefined)
       await this.#session.invalidate(as.issuer, this.#context, rejectedToken);
