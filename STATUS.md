@@ -273,3 +273,117 @@ All requested findings are fixed. The conservative allocation reservations can
 reject a document before its exact expanded size reaches 1 MiB. No open questions
 or unfinished implementation work remain for this round; full-workspace
 validation and automated review retain the environmental limitations above.
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+## Fix round 4 — integrate with main
+
+- `c1254ec6 fix(mcp): integrate bounded tools with main` merges the authoritative
+  local `origin/main` at `809c3c12b59847444c2b83be757b4813c4865579` into this lane.
+  Main's server/resource structure is retained exactly. Search and fetch register
+  through its PodPort tool registry; `solid_search` retains its scoped ranked-array
+  response while `search` keeps the exact ChatGPT envelope. Internal adapter
+  metadata preserves the lane's streaming byte, RDF expansion, redirect and
+  deadline limits for fetch-backed PodPorts. Portable pods share discovery/scan
+  budgets and bounded parsing/output. Their byte-array interface requires the
+  backend to bound its own reads. Main's other tools, aliases and write policy
+  remain intact. README and the generated API report combine both surfaces.
+- `05770cca fix(mcp): retain portable WebID discovery` preserves main's configured
+  off-pod WebID exception when a portable backend returns the HTTP document URL
+  without its fragment. A focused regression failed before this fix and passed
+  afterward; another off-pod response document remains scope-checked.
+- `docs: record main integration validation` is the final commit, touching only
+  `STATUS.md`.
+
+The search/fetch contract and representation fixtures now run against both the
+legacy configuration and an injected fetch-backed PodPort. Portable fixtures
+cover exact search/fetch results, the legacy search result, shared discovery
+budgets, extensionless Type Index instances, output caps, remote JSON-LD refusal,
+response bases, and URL scope checks. All prior lane fixtures are retained.
+
+### Validation
+
+Successful explicit commands (exit 0):
+
+```sh
+pnpm --filter @jeswr/solid-mcp run lint
+pnpm --filter @jeswr/solid-mcp run build
+pnpm --filter @jeswr/solid-mcp run typecheck
+pnpm --filter @jeswr/solid-mcp run test
+pnpm run lint:root
+pnpm run test:root
+pnpm --filter @jeswr/solid-mcp run api:report
+```
+
+The package has **343 passing tests across 8 files**; root has **745 passing tests
+across 9 files**. API Extractor completed successfully with its existing warning
+about a bundled TypeScript older than the installed compiler. Workspace build
+prerequisites (`fetch-rdf`, `guarded-fetch`, `rdf-serialize`) were built locally;
+the newly imported workspace fetch-rdf replaces the earlier pinned artifact.
+Generated build and temporary API outputs are not committed.
+
+Final affected repository gate on `05770cca` (exit 0; **18/18 Turbo tasks
+successful**, 8 cached):
+
+```sh
+NODE_OPTIONS=--require=/tmp/sst-9s2-network-guard.cjs GIT_ALLOW_PROTOCOL=file TURBO_SCM_BASE=origin/main pnpm run gate
+```
+
+This includes the dependent personal-agent package: **531 tests passed across
+56 files**, alongside package and root checks. An earlier run timed out in two
+unchanged personal-agent fixtures (`policy-config` and `protected-disclosure`);
+both passed on the final run without changes to that package.
+
+Full-workspace gate (exit 1; **57 successful tasks out of 212 planned**, 15 cached):
+
+```sh
+NODE_OPTIONS=--require=/tmp/sst-9s2-network-guard.cjs GIT_ALLOW_PROTOCOL=file pnpm run gate:full
+```
+
+The unchanged `@jeswr/app-suite#build` fails when `next/font` tries to download
+Onest, Source Code Pro and Source Serif 4 from Google Fonts. The pre-existing
+verification guard refuses non-loopback connections and restricts Git transport
+to local files. No unrelated source was changed to address this failure.
+
+`roborev status` exits 127 because roborev is unavailable. Automated per-commit
+review remains unavailable. Lane changes pass whitespace checks with the API
+report's existing CRLF convention. Comparing against `origin/main` confirms that
+changes outside `packages/solid-mcp` consist only of this lane's existing
+`QUESTIONS.md` and `STATUS.md`.
+
+### Lockfile and source limitations
+
+`git fetch origin` used the prescribed local source clone
+(`/home/runner/work/solid-sdk`), followed by the merge. No network remote was
+fetched or merged, no branch was switched, and nothing was pushed or published.
+Main is authoritative outside the lane scope.
+
+Unfrozen lockfile regeneration was attempted with:
+
+```sh
+GIT_ALLOW_PROTOCOL=file pnpm install --lockfile-only --offline --ignore-scripts
+```
+
+It exits 1 because pnpm still attempts `git ls-remote` for federation-trust's
+existing `github:jeswr/solid-vc#main` dependency. HTTPS Git transport was refused
+before connecting. `--prefer-frozen-lockfile` also requires that resolution.
+No lockfile was hand-merged: the authoritative main lockfile is retained exactly.
+The following validation/install commands both succeeded without network access:
+
+```sh
+GIT_ALLOW_PROTOCOL=file pnpm install --lockfile-only --offline --ignore-scripts --frozen-lockfile
+GIT_ALLOW_PROTOCOL=file pnpm install --offline --frozen-lockfile --ignore-scripts
+```
+
+Full unfrozen regeneration remains blocked by the lane's prohibition on remote
+Git access. No dependencies were added or manifests changed beyond main's merge;
+no lifecycle scripts were enabled.
+
+The fetched main contains MCP-01 (`3a6ca88f`, #70), but no MCP-02 Streamable HTTP
+implementation. Conservatively, this round integrates with the actual fetched
+server/registry structure without inventing HTTP transport code. The original
+PodPort/registry dependency gap is resolved. The remaining source question for
+the program lead is which main revision contains the MCP-02 work referenced by
+this brief. Full-workspace validation, unfrozen lockfile regeneration and roborev
+retain the limitations above; scoped implementation and final affected validation
+are complete.
