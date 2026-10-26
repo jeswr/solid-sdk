@@ -552,3 +552,73 @@ Pod Manager's network-dependent build; these were left unchanged under the lane'
 scope restriction. The local roborev guidance was read, but `roborev` is unavailable
 and automated review remains with the dispatcher. No push, PR, branch switch,
 other checkout mutation or tracker change was performed. Open questions: none.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+
+## Fix round 6 — lexical ownership and global load checks
+
+Resumed on `lane/sst-z1d` at `ce78d4972dea1154251cc5f335dc3d2cb9517c3a`.
+Read the original and all earlier fix briefs and the complete supplied review at
+`lanes/reviews/solid-sdk-lane-sst-z1d-ce78d4972dea.md` in the tracker checkout.
+Both findings are addressed under the integrator's final resolution rule.
+
+Commits:
+
+- `ca9eee96` — `fix: check agent layers without build outputs`: remove filesystem
+  and TypeScript module resolution, import-target existence checks, realpaths and
+  installed-link inspection. Match bare imports to workspace manifest names or
+  treat them as external; map relative, absolute and file-URL paths lexically to
+  the longest project-directory prefix, allowing missing outputs/template files.
+  Apply the global model-SDK and channel-send restrictions to static imports,
+  re-exports, dynamic imports, CommonJS requires and import-equals declarations.
+  Cover missing builds/templates, manifest names distinct from directory names,
+  lexical ownership independent of symlinks, nested projects, every load form in
+  all checked roots, and missing relative/absolute/file-URL targets in regressions.
+- `359afaee` — `fix: normalize file URL scheme case`: apply the same lexical
+  ownership checks to uppercase `FILE:` URLs, with coverage across load forms.
+- The final `docs: record sst-z1d fix6 validation` commit updates this report last.
+
+Conservative interpretation: the earlier agent-only CommonJS and module-specifier
+bans remain in force; their literal targets also receive global checks. Paths
+lexically outside all workspace projects still fail closed. Bare aliases receive
+no special treatment based on dependency versions, installed links or exports;
+only manifest package names identify workspace projects, as directed. No package
+code, manifests, dependencies or unrelated source files changed.
+
+Validation:
+
+- The initial new regressions against the previous checker failed **21 tests**,
+  reproducing the missing-output and global-loading-form findings.
+- `pnpm exec biome check --write scripts/check-agent-layers.mjs test/agent-layers.test.mjs`
+  — PASS after formatting; final formatting also passes in the gate's root lint.
+- `NODE_OPTIONS=--require=/tmp/sst-z1d-network-guard.cjs pnpm exec vitest run`
+  — PASS: **303 root tests across four files**, with default timeouts. The final
+  affected gate repeats all 303 tests, including uppercase-file-URL coverage.
+- `NODE_OPTIONS=--require=/tmp/sst-z1d-network-guard.cjs pnpm run lint:root`
+  — PASS before any build. Also verified with a wrapper that would temporarily
+  remove generated `dist`, `.next`, `out` and `coverage` directories: it found
+  **zero** such directories, and root lint passed on the unbuilt checkout.
+  This includes Biome, lockfile transport, app-workspace, fetch and layer checks.
+- `TURBO_SCM_BASE=ce78d4972dea1154251cc5f335dc3d2cb9517c3a pnpm run gate --cache=local:rw --env-mode=loose`
+  — PASS: root lint and **303 root tests**, **1 successful / 1 total** Turbo task,
+  uncached, 6.567 seconds. Only root scripts/tests changed, so package-specific
+  lint/build/typecheck/test gates do not apply.
+- `pnpm run gate:full --cache=local:rw --env-mode=loose` — BLOCKED by unchanged
+  `@jeswr/unstorage-solid#build`, which attempts to clone its fetch-rdf dependency
+  from GitHub. Git refused it with `fatal: transport 'https' not allowed`.
+  **15 successful / 133 total** tasks, one cached, 6.585 seconds before failure.
+  Root lint, including the layer scan, passed in this run.
+- `git diff --check` — PASS. No dependencies added; `check:packages` not applicable.
+
+Gate commands retained `NODE_OPTIONS=--require=/tmp/sst-z1d-network-guard.cjs`,
+`GIT_ALLOW_PROTOCOL=file`, `TURBO_TELEMETRY_DISABLED=1` and `DO_NOT_TRACK=1`.
+Remote caching was disabled. No remote clone/fetch/merge completed and no live
+provider or pod calls ran. Logs: `/tmp/sst-z1d-fix6-red.log`,
+`/tmp/sst-z1d-fix6-root-tests.log`, `/tmp/sst-z1d-fix6-unbuilt-lint.log`,
+`/tmp/sst-z1d-fix6-gate.log` and `/tmp/sst-z1d-fix6-full.log`.
+
+Requested fixes and regressions are complete. Full-workspace validation remains
+blocked by the existing network-dependent build. Read the local roborev-review
+skill; `roborev` is unavailable, so automated review remains with the dispatcher.
+No push, PR, branch switch, other checkout mutation or tracker change was
+performed. Open questions: none.
