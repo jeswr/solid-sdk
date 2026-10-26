@@ -4,8 +4,6 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   test: {
     environment: "node",
-    // Coverage on shared CI workers can vary even for bounded tests.
-    testTimeout: 15_000,
     include: ["test/**/*.test.ts"],
     // CI safety net: budget tests run slowly under v8 coverage on shared runners (SUITE-T2 bounds them properly).
     testTimeout: 30_000,
