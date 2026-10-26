@@ -157,6 +157,10 @@ immediate UUID resources and ignores nested or off-container listing entries.
 with `prov:wasRevisionOf` and `prov:invalidatedAtTime`; original bytes remain
 unchanged, and the withdrawal reuses the original assertion graph and IRI,
 including skolemized nodes. Later classification recognizes the withdrawal across resources.
+The withdrawal's provenance also identifies the revised nanopub envelope. That
+target takes precedence over the shared assertion revision link, so a later batch
+can reassert identical facts as Current without changing assertion deduplication.
+Assertion-only revisions retain their existing assertion-wide semantics.
 `writeDefaultPolicy()` writes `/private/pkg/mcp-policy.ttl` only if absent and
 preserves owner edits, including concurrent first-run creation. Consumers apply
 the purpose predicate to their reads and own the special-category read audit.

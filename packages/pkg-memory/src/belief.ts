@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 
 import type { Nanopublication, Nanopublications } from "./model.js";
 import { graph, NS, RdfNode } from "./rdf.js";
@@ -17,10 +18,17 @@ const past = new Set(["Superseded", "Historical", "Retracted"]);
 export function classifyNanopublications(value: Nanopublications): ClassifiedNanopublication[] {
   const nanopubs = [...new Map(value.nanopubs.map((np) => [np.id, np])).values()];
   const replacements = (np: Nanopublication) =>
-    nanopubs.filter(
+    nanopubs.filter((other) => {
+      if (other.id === np.id) return false;
+      // A withdrawal identifies its target nanopub while keeping shared assertions.
+      const targets = new RdfNode(other.id, graph(value.dataset, other.provenanceId)).terms(
+        `${NS.prov}wasRevisionOf`,
+      );
       // Explicit revision links order statements; extraction clocks do not.
-      (other) => other.id !== np.id && other.supersedes.includes(np.assertionId),
-    );
+      return targets.size > 0
+        ? [...targets].some((target) => target.value === np.id)
+        : other.supersedes.includes(np.assertionId);
+    });
   const inactive = (np: Nanopublication) =>
     past.has(np.validity) ||
     replacements(np).length > 0 ||

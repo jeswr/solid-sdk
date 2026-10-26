@@ -28,7 +28,11 @@ const identity = { root: "https://example.org/pod/", webId: options.owner };
 const encode = (value: string) => new TextEncoder().encode(value);
 const decode = (value: Uint8Array) => new TextDecoder().decode(value);
 const statusError = (status: number) => Object.assign(new Error(`HTTP ${status}`), { status });
-const build = (batch = "store", fact: Fact = { template: "email", value: "avery@example.org" }) =>
+const build = (
+  batch = "store",
+  fact: Fact = { template: "email", value: "avery@example.org" },
+  generatedAt = options.generatedAt,
+) =>
   buildNanopublications(
     {
       batch_id: batch,
@@ -42,7 +46,7 @@ const build = (batch = "store", fact: Fact = { template: "email", value: "avery@
         },
       ],
     },
-    options,
+    { ...options, generatedAt },
   );
 function setup(overrides: Partial<PodPort> = {}) {
   const memory = createMemoryPodPort(identity);
@@ -497,6 +501,9 @@ it.each([
     ]),
   );
   expect(np.supersedes).toEqual([previous.assertionId]);
+  expect(
+    new RdfNode(np.id, graph(revision.dataset, np.provenanceId)).oneIri(`${NS.prov}wasRevisionOf`),
+  ).toBe(previous.id);
   expect(np.validity).toBe("Retracted");
   expect(np.attributedTo).toEqual([identity.webId]);
   expect(np.agent).toBe("https://example.org/client");
@@ -510,6 +517,30 @@ it.each([
   expect(classified.map((item) => item.belief)).toEqual(["past", "past"]);
   expect(classified.map((item) => item.corroboration)).toEqual([2, 2]);
   expect(classified.find((item) => item.id === previous.id)!.replacedBy).toEqual([np.id]);
+  const reassertion = await build("remember-again", fact, "2026-10-27T12:00:00Z");
+  await store.put(reassertion);
+  const remembered = reassertion.nanopubs[0]!;
+  expect(remembered.assertionId).toBe(previous.assertionId);
+  const history = await store.list();
+  for (const nanopubs of [history.nanopubs, [...history.nanopubs].reverse()]) {
+    const result = classifyNanopublications({ ...history, nanopubs });
+    expect(result.find((item) => item.id === remembered.id)).toMatchObject({
+      validity: "Current",
+      belief: "definitely",
+      replacedBy: [],
+      corroboration: 3,
+    });
+    expect(result.find((item) => item.id === previous.id)).toMatchObject({
+      belief: "past",
+      replacedBy: [np.id],
+    });
+  }
+  expect(
+    classifyNanopublications({
+      ...history,
+      nanopubs: history.nanopubs.filter((item) => item.id !== previous.id),
+    }).find((item) => item.id === remembered.id)!.belief,
+  ).toBe("definitely");
   const simultaneous = await store.retract(previous.id, {
     batchId: "same-clock",
     clientId: np.agent,
@@ -529,6 +560,19 @@ it.each([
   } finally {
     clock.useRealTimers();
   }
+  const secondWithdrawal = await store.retract(remembered.id, {
+    batchId: "forget-again",
+    clientId: np.agent,
+    generatedAt: "2026-10-28T12:00:00Z",
+  });
+  const final = classifyNanopublications(await store.list());
+  expect(final.find((item) => item.id === remembered.id)).toMatchObject({
+    belief: "past",
+    replacedBy: [secondWithdrawal.nanopubs[0]!.id],
+  });
+  expect(final.find((item) => item.id === previous.id)!.replacedBy).not.toContain(
+    secondWithdrawal.nanopubs[0]!.id,
+  );
 });
 
 it("writes a default policy once behind the ACL, preserving owner edits", async () => {

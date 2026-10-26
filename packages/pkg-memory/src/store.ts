@@ -164,6 +164,8 @@ export class NanopubStore {
     new RdfNode(previous.assertionId, provenance)
       .link(`${NS.prov}wasRevisionOf`, previous.assertionId)
       .text(`${NS.prov}invalidatedAtTime`, now, `${NS.xsd}dateTime`);
+    // Scope this withdrawal to its target envelope, not every copy of the assertion.
+    new RdfNode(np.id, provenance).link(`${NS.prov}wasRevisionOf`, previous.id);
     const dataset = new Store(
       [...value.dataset].filter(
         (q) => ![np.id, np.assertionId, np.provenanceId].includes(q.graph.value),
