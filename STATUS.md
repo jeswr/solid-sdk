@@ -640,3 +640,74 @@ Both requested findings are fixed and tested. No implementation work is unfinish
 there are no open questions. `roborev status` failed with exit 127 (`roborev: command not found`), so
 fresh automated per-commit verdicts could not be obtained locally. Dispatcher/security review remains
 outstanding; this security-critical package has not been merged.
+
+## Fix round 9 — review `c4836d9bf425`
+
+Completed both findings in `solid-sdk-lane-sst-8xm.28-c4836d9bf425.md`.
+Only `packages/reactive-authentication` and this report changed. No dependencies were added.
+
+| Commit | Change |
+| --- | --- |
+| `78ee24e1` | Carry the selected provider to transport initiation and check its synchronous resource guard alongside the manager boundary, after challenge cleanup and fence validation. Reuse the Bearer provider's existing resource assertion through an optional provider hook, preserving compatibility with existing providers. Add six regressions for initial and renewed tokens, revocation during cleanup with and without a manager fence, and revocation during final fence validation. |
+| `dcb7126f` | Use actual RPT expiry for UMA nonce retries. Keep the cache's existing renewal margin. Exercise signed one-second, ten-second and ordinary five-minute RPTs through token-endpoint and resource nonce challenges, verifying fresh proofs, the same token and body replay. Verify a nonce retry succeeds one millisecond before expiry and rejects at and after expiry without acquiring new credentials. |
+| Final documentation commit (this commit) | Record round-9 verification and the review-tool limitation. |
+
+The implementation uses the review's actual-expiry option for nonce retries. The provider guard is
+synchronous so no asynchronous gap remains between resource-policy validation and transport initiation.
+No broader protocol, session-policy or dependency change was needed.
+
+### Round-9 verification
+
+PASS required package gate and root checks, run before the final documentation commit:
+
+```sh
+pnpm --filter @jeswr/reactive-authentication run lint && pnpm --filter @jeswr/reactive-authentication run build && pnpm --filter @jeswr/reactive-authentication run typecheck && pnpm --filter @jeswr/reactive-authentication run test
+pnpm run lint:root
+git diff --check
+```
+
+- Package lint: zero errors; **63 warnings** and **22 informational diagnostics**, unchanged from round 8.
+- Build and typecheck: pass, including the SDK type-contract checks.
+- Tests: **308/308** pass in **29/29** files, with no skips.
+- Enforced coverage: statements **2076/2076**, branches **1534/1534**, functions **467/467**,
+  lines **1871/1871** — **100% in every metric**. Coverage configuration and thresholds are unchanged.
+- Root lint: Biome, lockfile transport, app workspace and raw-fetch guards pass.
+- Whitespace validation: pass.
+
+Regression sensitivity was checked before each implementation fix:
+
+```sh
+pnpm --filter @jeswr/reactive-authentication exec vitest run test/oauth-sdk-coverage.test.js --coverage.enabled=false '--testNamePattern=prevents the .* transport send'
+pnpm --filter @jeswr/reactive-authentication exec vitest run test/uma.test.js --coverage.enabled=false '--testNamePattern=nonce retry \((1|10)s RPT\)|until actual expiry'
+```
+
+Expected baseline results: all **6/6** boundary regressions failed because the credentialed transport
+call still ran after provider-resource revocation; all **3/3** UMA regressions failed with
+`No usable verified UMA RPT context for nonce retry` while the RPT was still valid.
+Every case passes in the final coverage-enforced gate. Focused verification also passed:
+
+```sh
+pnpm --filter @jeswr/reactive-authentication exec vitest run test/oauth-sdk-coverage.test.js test/fetch-coverage.test.js --coverage.enabled=false
+pnpm --filter @jeswr/reactive-authentication exec vitest run test/uma.test.js test/uma-coverage.test.js --coverage.enabled=false
+```
+
+These runs passed **27/27** boundary/fetch tests and **22/22** UMA tests. UMA regressions use the local
+protocol servers and a mocked wall clock, with actual signature, key-binding and nonce verification.
+
+Validation used Node `24.22.1` and pnpm `10.4.1`. No `check:packages` run was needed because no dependency
+was added. The dependant dry run selected only this package, so no dependant gate applies:
+
+```sh
+pnpm exec turbo run build typecheck test --filter=...@jeswr/reactive-authentication --dry=json
+```
+
+Per the lane brief, no whole-workspace gate or `gate:full` ran. No push, PR, branch switch, network Git
+operation or edits to another checkout were performed. The working tree is clean after this final
+report commit.
+
+### Round-9 remaining work and questions
+
+Both requested findings are fixed and tested. No implementation work is unfinished or blocked;
+there are no open questions. `roborev status` failed with exit 127 (`roborev: command not found`), so
+fresh automated per-commit verdicts could not be obtained locally. Dispatcher/security review remains
+outstanding; this security-critical package has not been merged.
