@@ -465,6 +465,17 @@ describe("mobile CI iOS fixture guardrails", () => {
   const releaseGuard =
     ios.match(/ {6}- name: Reject fixture ATS in Release builds\n[\s\S]*?(?= {6}- )/)?.[0] ?? "";
 
+  test("spends macOS runners only on PRs that touch the mobile projects", () => {
+    const pr = workflow.match(/^ {2}pull_request:\n([\s\S]*?)^ {2}push:/m)?.[1] ?? "";
+    const push = workflow.match(/^ {2}push:\n([\s\S]*?)^\S/m)?.[1] ?? "";
+    expect(pr).toContain('"apps/mobile/**"');
+    expect(pr).toContain('"packages/suite-native/**"');
+    expect(pr).not.toContain("pnpm-lock.yaml");
+    expect(push).toContain("branches: [main]");
+    expect(push).toContain('"pnpm-lock.yaml"');
+    expect(workflow).toContain("cancel-in-progress: true");
+  });
+
   test("keeps fixture debug settings out of the policy build", () => {
     expect(ios).toContain("pnpm --filter @jeswr/app-mobile run sync:ios");
     expect(ios.replace(releaseGuard, "")).not.toMatch(/MOBILE_DEBUG|SUITE_URL|ios-e2e\.mjs/);

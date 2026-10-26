@@ -5,12 +5,13 @@
 name: mobile
 
 on:
+  # Lockfile-only PRs skip this workflow: they are frequent and unrelated, and the macOS runners are
+  # scarce. Main pushes still run on lockfile changes, so dependency drift is caught after merge.
   pull_request:
     paths:
       - "apps/mobile/**"
       - "packages/suite-native/**"
       - ".github/workflows/mobile.yml"
-      - "pnpm-lock.yaml"
   push:
     branches: [main]
     paths:
