@@ -62,3 +62,49 @@ missing ordinal branch case; these were corrected before the passing results abo
   bootstrap also invokes a remote clone; it was not retried under the lane's no-fetch restriction.
 - No pushes, PRs, branch switches, merges, other-checkout edits or tracker mutations were performed.
   The dispatcher retains ownership of the bead lifecycle and integration review.
+
+## Fix round 2 — sst-oi07
+
+Based on review head `e896d0c579080dcf4f21ed0fbcc45b1a49a6e577`; changes stay on
+`lane/sst-oi07` and address the four supplied findings.
+
+### Commits
+
+- `4c598c08` — `fix: preserve calendar-relative quick-add deadlines`: limit recurrence-day
+  adjustment to actual time-only matches; distinguish month-name matches from relative months.
+  Add relative month/year regressions, including recurrence, titles and highlighting.
+- `08c9a4e2` — `fix: resolve elapsed deadlines without host DST`: retain chrono recognition,
+  resolve elapsed quantities with UTC calendar operations and instant arithmetic, and test the
+  reported host DST gap plus transition crossings, worded quantities and mixed durations.
+- `7a360f18` — `fix: mask complete quick-add reminder phrases`: preserve relative, compound,
+  named-time and calendar-first reminders while parsing adjacent deadlines and metadata.
+- `9bcc4d54` — `fix: retain chrono elapsed phrase syntax`: retain compact quantities and
+  last-value precedence for repeated units; exclude alphabetic fragments from quantities.
+- The final `docs: record quick-add round-two validation` commit records these results.
+
+### Final validation
+
+| Exact command | Result |
+| --- | --- |
+| `pnpm --filter @jeswr/suite-ui build` | PASS; build dependency only, no source changes. |
+| `pnpm --filter @jeswr/app-suite run lint && pnpm --filter @jeswr/app-suite run build && pnpm --filter @jeswr/app-suite run typecheck && TZ=UTC pnpm --filter @jeswr/app-suite run test` | PASS; lint, production build, typecheck and 230 tests. Quickadd coverage: 174/174 statements, 144/144 branches, 22/22 functions, 151/151 lines (100%). |
+| `TZ=America/New_York pnpm --filter @jeswr/app-suite test` | PASS; same 230 tests and 100% coverage, including `now=2026-03-08T02:30:00Z`, injected `tz=UTC`, and spring/fall transition crossings. |
+| `pnpm run lint:root` | PASS; all guards, including 74 contrast pairs. |
+| `TURBO_SCM_BASE=e896d0c579080dcf4f21ed0fbcc45b1a49a6e577 pnpm run gate` | PASS; 7/7 affected Turbo tasks, including the root tests with this report present. |
+| `GIT_ALLOW_PROTOCOL=file pnpm run gate:full` | FAIL outside this lane: `@jeswr/unstorage-solid#build`, nested npm install reports EROFS for `/home/runner/.npm/_cacache/tmp/`; 14 successful / 132 scheduled tasks before abort. |
+| `roborev status` | UNAVAILABLE; command not found (exit 127). |
+| `git diff --check` | PASS. |
+
+The full-gate attempt supplied `GIT_ALLOW_PROTOCOL=file` to prevent remote Git access, but
+Turbo's environment filtering did not forward it to the dependency bootstrap. Consequently,
+`unstorage-solid` cloned its pinned `fetch-rdf` source into a temporary build directory before
+failing on the read-only npm cache. This exceeded the lane's no-fetch restriction despite the
+attempted guard. The script removes that temporary directory in its `finally` block. The full
+gate was not retried, and no remote changes were made. Other checkouts were not edited.
+
+An initial standalone typecheck ran before the suite-ui dependency build; the ordered package
+gate passes after that build. Focused regression runs caught and corrected elapsed extraction
+edge cases before final validation. No dependencies, UI, screenshots, tracker state, pushes,
+PRs, branch switches or merges are part of this fix round. All four requested parser findings
+are addressed. Full-workspace validation and roborev remain limited as above; there are no
+open implementation questions or unfinished parser changes.
