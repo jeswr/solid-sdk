@@ -22,7 +22,9 @@ const inNamedGraph = (quad: Quad) => quad.graph.termType !== "DefaultGraph";
 
 const BLANK_LABEL = /^[A-Za-z0-9_][A-Za-z0-9_-]*$/;
 const LANGUAGE = /^[A-Za-z]{1,8}(-[A-Za-z0-9]{1,8})*$/;
-const PREFIX = /^([A-Za-z][A-Za-z0-9_-]*)?$/;
+/** Turtle PN_PREFIX (empty allowed): a letter first, no trailing dot. */
+const PREFIX =
+  /^(?:\p{L}(?:[\p{L}\p{N}\p{M}_\-.\u00B7\u203F\u2040]*[\p{L}\p{N}\p{M}_\-\u00B7\u203F\u2040])?)?$/u;
 
 /**
  * n3.Writer emits IRIs, blank-node labels and language tags verbatim, so a crafted value could
@@ -48,8 +50,12 @@ function injectionSafe(quads: readonly Quad[]): Quad[] {
       }
       case "Literal":
         if (value.language) {
+          const direction = (value as { direction?: string | null }).direction;
           if (!LANGUAGE.test(value.language)) {
             throw new TypeError(`Invalid language tag: ${JSON.stringify(value.language)}`);
+          }
+          if (direction && direction !== "ltr" && direction !== "rtl") {
+            throw new TypeError(`Invalid base direction: ${JSON.stringify(direction)}`);
           }
           return value;
         }
@@ -88,12 +94,23 @@ export function serializeQuads(
       `${format} cannot carry named graphs; use application/n-quads or application/trig`,
     );
   }
+  const safe = injectionSafe(quads);
+  // n3.Writer copies an IRI that already looks like `name:…` for a declared prefix verbatim, so a
+  // prefix is dropped whenever some IRI starts with its name (the output stays correct, unabbreviated).
+  const iris = new Set<string>();
+  for (const q of safe) {
+    for (const t of [q.subject, q.predicate, q.object, q.graph]) {
+      if (t.termType === "NamedNode") iris.add(t.value);
+      if (t.termType === "Literal") iris.add(t.datatype.value);
+    }
+  }
   const safePrefixes: Record<string, string> = {};
   for (const [name, namespace] of Object.entries(prefixes)) {
     if (!PREFIX.test(name)) throw new TypeError(`Invalid prefix name: ${JSON.stringify(name)}`);
+    if ([...iris].some((iri) => iri.startsWith(`${name}:`))) continue;
     safePrefixes[name] = escapeIri(namespace);
   }
-  return serialize(injectionSafe(quads), {
+  return serialize(safe, {
     format,
     prefixes: safePrefixes,
     emptyAsEmptyString: false,
