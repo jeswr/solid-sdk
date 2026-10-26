@@ -72,6 +72,7 @@ export class ClientCredentialsTokenProvider implements TokenProvider {
 
   async upgrade(request: Request, challenge?: ChallengeContext): Promise<Request> {
     const ticket = await this.#tokens.ticket(request.signal);
+    request = new Request(request, { signal: ticket.signal });
     const as = await this.#asProvider.getAuthorizationServer(request, challenge);
     const key = await this.#tokens.key([
       as.issuer,

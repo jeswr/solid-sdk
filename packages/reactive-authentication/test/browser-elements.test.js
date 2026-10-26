@@ -1,6 +1,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import assert from "node:assert/strict";
 import { afterAll, afterEach, beforeAll, beforeEach, test, vi } from "vitest";
+import { challengeContext } from "../src/challenge.js";
+import { ClientCredentialsTokenProvider, SolidUmaTokenProvider, XASProvider } from "../src/mod.js";
 
 // A small DOM event seam: the elements' actual implementation owns their state,
 // validation, abort handling and popup lifecycle. Real browser tests run separately.
@@ -94,6 +96,76 @@ afterEach(() => {
 afterAll(() => {
   vi.unstubAllGlobals();
 });
+
+for (const kind of ["UMA", "client credentials"]) {
+  test(`${kind} logout cancels issuer lookup and releases the picker lock for the next upgrade`, async () => {
+    vi.stubGlobal("navigator", { locks: browserLocks });
+    const picker = new IdpPicker();
+    picker.connectedCallback();
+    const opened = Promise.withResolvers();
+    const nextOpened = Promise.withResolvers();
+    const dialog = picker.node("dialog");
+    let shown = 0;
+    vi.spyOn(dialog, "showModal").mockImplementation(() => {
+      dialog.open = true;
+      if (++shown === 1) opened.resolve();
+      else nextOpened.resolve();
+    });
+    const unexpected = vi.fn(async () => {
+      throw new Error("cancelled issuer lookup must not acquire credentials");
+    });
+    const as = new XASProvider(picker, { fetch: unexpected });
+    const provider =
+      kind === "UMA"
+        ? new SolidUmaTokenProvider(
+            "https://app.example/callback",
+            { getCode: unexpected },
+            as,
+            { getClient: unexpected },
+            { context: unexpected },
+          )
+        : new ClientCredentialsTokenProvider(as, "client", "fixture-secret");
+    const challenge = challengeContext(
+      new Response(null, {
+        status: 401,
+        headers: {
+          "www-authenticate":
+            kind === "UMA"
+              ? 'UMA as_uri="https://pod.example", ticket="fixture-ticket"'
+              : 'DPoP algs="ES256"',
+        },
+      }),
+    );
+    const caller = new AbortController();
+    const nextCaller = new AbortController();
+    const request = new Request("https://pod.example/private", { signal: caller.signal });
+    const pending = provider.upgrade(request, challenge).catch((error) => error);
+    let next;
+    try {
+      await opened.promise;
+      await provider.forget();
+      assert.equal(request.signal.aborted, false, "logout does not abort the caller's signal");
+      assert.equal(dialog.open, false, "logout closes the active issuer picker");
+      assert.equal((await pending).name, "SessionSupersededError");
+      next = provider
+        .upgrade(new Request(request.url, { signal: nextCaller.signal }), challenge)
+        .catch((error) => error);
+      await nextOpened.promise;
+      assert.equal(shown, 2, "the next generation obtains the picker's Web Lock");
+      assert.equal(dialog.open, true);
+      const reason = new Error("caller cancelled the next attempt");
+      nextCaller.abort(reason);
+      assert.equal(await next, reason);
+      assert.equal(dialog.open, false);
+      assert.equal(unexpected.mock.calls.length, 0, "no discovery, login, context or grant");
+    } finally {
+      caller.abort();
+      nextCaller.abort();
+      await Promise.all([pending, next]);
+      await provider.forget();
+    }
+  });
+}
 
 for (const kind of ["issuer", "webid"]) {
   test(`${kind} picker aborts queued requests without opening or blocking the next dialog`, async () => {

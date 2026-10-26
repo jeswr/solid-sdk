@@ -593,6 +593,46 @@ test("uma-review #2: forget() while the trust policy is pending aborts that upgr
   assert.equal(uma.stats.exchanges.length, exchanges, "no exchange");
 });
 
+test("UMA logout cancels pending storage-context resolution before acquiring credentials", async () => {
+  const started = Promise.withResolvers();
+  const caller = new AbortController();
+  let paused = true;
+  let contextRequest;
+  const { manager, provider, code } = umaClient(uma, {
+    context: async (request) => {
+      if (!paused) return "verified-context";
+      contextRequest = request;
+      request.signal.throwIfAborted();
+      started.resolve();
+      return await new Promise((_, reject) => {
+        request.signal.addEventListener("abort", () => reject(request.signal.reason), {
+          once: true,
+        });
+      });
+    },
+  });
+  const exchanges = uma.stats.exchanges.length;
+  const request = new Request(`${uma.url}/uma/context-logout`, { signal: caller.signal });
+  const pending = manager.fetch(request).catch((error) => error);
+  try {
+    await started.promise;
+    await provider.forget();
+    assert.equal(request.signal.aborted, false);
+    assert.equal(contextRequest.signal.aborted, true, "context discovery observes logout");
+    assert.equal((await pending).name, "SessionSupersededError");
+    assert.equal(code.calls, 0);
+    assert.equal(uma.stats.exchanges.length, exchanges);
+    paused = false;
+    assert.equal((await manager.fetch(request)).status, 200);
+    assert.equal(code.calls, 1, "the next generation can log in");
+    assert.equal(uma.stats.exchanges.length, exchanges + 1);
+  } finally {
+    caller.abort();
+    await pending;
+    await provider.forget();
+  }
+});
+
 test("UMA preserves its captured generation when a peer logs out before ID token acquisition", async () => {
   const namespace = `uma-generation-${crypto.randomUUID()}`;
   const generations = createMemoryStore();
