@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+// AUTHORED-BY Codex GPT-6
 //
 // Shared "load an RDF dataset from a URL or an in-hand body" seam for the registry
 // and storage fetch paths. Both paths face the SAME decision — a body in hand is a
@@ -15,6 +16,7 @@
 
 import { fetchRdf, parseRdf, RdfFetchError } from "@jeswr/fetch-rdf";
 import type { DatasetCore } from "@rdfjs/types";
+import { federationDocumentLoader } from "./context-loader.js";
 import { classifyFetchError } from "./errors.js";
 import type { RegistryIssue } from "./types.js";
 
@@ -49,6 +51,7 @@ export async function loadDataset(
     try {
       const dataset = await parseRdf(options.body, options.bodyContentType ?? "text/turtle", {
         baseIRI: options.baseIRI ?? input,
+        documentLoader: federationDocumentLoader,
       });
       return { dataset };
     } catch (err) {
@@ -56,7 +59,10 @@ export async function loadDataset(
     }
   }
   try {
-    const fetched = await fetchRdf(input, options.fetch ? { fetch: options.fetch } : {});
+    const fetched = await fetchRdf(input, {
+      fetch: options.fetch,
+      documentLoader: federationDocumentLoader,
+    });
     return { dataset: fetched.dataset };
   } catch (err) {
     return {
