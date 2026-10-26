@@ -7,6 +7,8 @@ export default function ComponentsPage() {
       <p>Tokens and foundations for the suite.</p>
       <nav aria-label="Component fixtures">
         <a href="/dev/components/tokens">Tokens, typography and density</a>
+        <a href="/dev/components/data-table">DataTable</a>
+        <a href="/dev/components/file-grid">FileGrid</a>
       </nav>
     </main>
   );
