@@ -76,6 +76,45 @@ supported. Operations also accept a PodPort directly. `search` retains the exist
 ranked array output in this scaffold. HTTP, OAuth, memory, chat and capture tools are
 implemented by subsequent W9 tasks.
 
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+## Streamable HTTP
+
+```ts
+import { createServer } from "node:http";
+import { createMcpHttpHandler } from "@jeswr/solid-mcp/http";
+import { createSolidMcpServer } from "@jeswr/solid-mcp";
+
+const handler = createMcpHttpHandler({
+  resourceUrl: "https://mcp.example/mcp",
+  allowedOrigins: ["https://client.example"],
+  authenticate: async (request) => verifyMcpResourceToken(request.headers.get("authorization")),
+  server: async (principal) => createSolidMcpServer(await podConfigFor(principal)),
+});
+
+// Node: mount this handler at /mcp, preserving the public Host behind a proxy.
+createServer(handler).listen(3000, "127.0.0.1");
+// Web/serverless route: return await handler(request).
+```
+
+`verifyMcpResourceToken` and `podConfigFor` above are application callbacks: verify the MCP
+resource token (including audience), return a principal, and resolve that principal's pod
+session on the server. Return `null`, `undefined`, or `false` (or throw) to reject authentication.
+MCP bearer tokens must never be used as pod credentials. The `server` factory must return a
+fresh MCP SDK `McpServer` for every request; singleton reuse is rejected.
+
+The SDK transport runs in stateless mode with JSON responses and no session IDs. POST bodies
+are capped at 1 MiB, including chunked bodies; GET, DELETE and other methods return 405 after
+authentication. Invalid JSON/UTF-8 returns 400, oversized bodies return 413, and failures to
+authenticate return 401 with the protected-resource metadata challenge. The application serves
+that metadata separately at `<resourceUrl>/.well-known/oauth-protected-resource`.
+
+Host must exactly match the public URL's authority, including any port. Forwarding headers do
+not override this check. A Web Request without an explicit Host is checked using its URL;
+Node requests require Host. An absent Origin is accepted for native clients; present origins
+must exactly match `allowedOrigins`. Wildcards, opaque origins, and origin URLs with paths
+are rejected at configuration time. Allowed browser origins receive explicit CORS headers and
+unauthenticated POST preflight responses. No wildcard CORS or cookie credentials are enabled.
+
 ## Links
 
 - [Source](https://github.com/jeswr/solid-mcp)

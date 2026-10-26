@@ -1,3 +1,5 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /**
  * GitHub → Work & education. `/user` (profile, as `foaf:OnlineAccount`) +
  * `/user/repos` (as `schema:SoftwareSourceCode`). Snapshot semantics — the
@@ -14,12 +16,14 @@ import { arr, optionalDate, optionalText, SkipCounter } from "../core/safe.js";
 import type { ImportContext, ImportOutcome, IntegrationAdapter } from "../core/types.js";
 import { CLASSES, OnlineAccount, SoftwareSourceCode } from "../core/vocab.js";
 import { GITHUB_FIXTURES, type GitHubRepo, type GitHubUser } from "./fixtures.js";
+import { vocabMap } from "./vocab-map.js";
 
 const ID = "github";
 const API = "https://api.github.com";
 const SCOPES = ["read:user", "repo"] as const;
 
 export const githubAdapter: IntegrationAdapter = {
+  vocabMap,
   metadata: {
     id: ID,
     name: "GitHub",

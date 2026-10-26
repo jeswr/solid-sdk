@@ -1,18 +1,20 @@
 ---
 name: pkg-memory
-description: Use when implementing or consuming @jeswr/pkg-memory in the W9 MCP program.
+description: Build, serialize, or parse PKG nanopublications and the eight typed memory fact templates.
 ---
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 
-# @jeswr/pkg-memory
+# PKG nanopublications
 
-PKG nanopublication memory and purpose filtering (MCP-03 to MCP-07).
+Use `createFactAssertion` for structured facts, `buildNanopublications` for batches,
+`serializeNanopublications` for TriG, and `parseNanopublications` to read it back.
+The owner WebID is mandatory; never default to a real person's identity.
 
-This is an MCP-01 scaffold. Read `specs/mcp/DESIGN.md` in the Solid suite planning
-repository and the assigned task before adding a public API. Keep the package private,
-ESM, Node >=24, and securityCritical. Document all public exports with TSDoc.
+RDF writes use `@rdfjs/wrapper`, reads use graph-scoped typed accessors, parsing uses
+`@jeswr/fetch-rdf`, and serialization uses `@jeswr/rdf-serialize`. Keep assertion
+canonicalization compatible with RDFlib 7's builder; RDFC-1.0 labels are different.
 
-Use injected seams and recorded fixtures; never use real accounts or credentials.
-Use the workspace RDF and guarded-fetch helpers. Add testing fakes under `./testing`
-as behavior is implemented. Require 100% branch coverage for implemented security paths.
-Run lint, build, typecheck and test through pnpm before committing.
+Use only fictional `example.org` identities in fixtures. The five synthetic claims
+and Python-generated expected outputs in `test/fixtures` replace private pilot data.
+Supply source digests explicitly; this data-model package never reads source files.
+Belief classification, purpose filtering, and pod storage belong to MCP-05.
