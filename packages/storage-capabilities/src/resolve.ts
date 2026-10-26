@@ -15,7 +15,7 @@ import { PIM, SOLID, SSD } from "./vocab.js";
 const DEFAULT_TTL_MS = 3_600_000;
 const LWS_STORAGE = "https://www.w3.org/ns/lws#storage";
 // Increment whenever parser changes invalidate previously derived feature evidence.
-const PARSED_CACHE_VERSION = 1;
+const PARSED_CACHE_VERSION = 2;
 /** Shared module default so `capabilities()` and the resolver see the same records. */
 export const defaultCache = createMemoryCache();
 
@@ -167,7 +167,13 @@ export async function resolveStorageDescription(
   let cached = storageId === undefined ? undefined : await cache.get(storageId);
   let invalidationId = storageId;
   try {
-    if (cached && cached.version !== PARSED_CACHE_VERSION) {
+    if (
+      cached &&
+      (cached.version !== PARSED_CACHE_VERSION ||
+        cached.description.evidence?.includes("assumed-origin-root"))
+    ) {
+      // Assumed roots retain their provenance in the cached description, but cannot
+      // establish storage containment for a prefix hit, even at the current version.
       await cache.delete(cached.description.id);
       cached = undefined;
     }
@@ -278,7 +284,9 @@ export async function resolveStorageDescription(
       ];
     }
     await cache.set(description.id, { version: PARSED_CACHE_VERSION, description });
-    await cache.rememberPrefix(description.root, description.id);
+    if (!description.evidence?.includes("assumed-origin-root")) {
+      await cache.rememberPrefix(description.root, description.id);
+    }
     return description;
   } catch (error) {
     if (

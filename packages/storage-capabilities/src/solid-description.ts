@@ -137,6 +137,11 @@ function channelTypes(extra: ServiceEntry["extra"]): string[] {
   return (Array.isArray(value) ? value : [value]).filter((type) => CHANNEL_TYPES.has(type));
 }
 
+function notificationKey(endpoint: string, extra: ServiceEntry["extra"]): string | undefined {
+  const channel = extra[NOTIFY.channelType];
+  return typeof channel === "string" ? JSON.stringify([endpoint, channel]) : undefined;
+}
+
 function mergeService(left: ServiceEntry, right: ServiceEntry): ServiceEntry {
   const profiles = [...new Set([...(left.conformsTo ?? []), ...(right.conformsTo ?? [])])];
   return {
@@ -163,6 +168,7 @@ export function parseSolidDescription(
   // One expansion per node across the whole mapping; deriveFeatures resolves `{ "@id" }` refs.
   const visited = new Set<string>();
   const services: ServiceEntry[] = [];
+  const notificationIndices = new Map<string, number>();
   const subscriptions = new DescriptionDataset(dataset, DataFactory).subscriptions;
   const subscriptionExtras = new Map<string, Record<string, unknown>>();
   const seen = new Set<string>();
@@ -171,6 +177,8 @@ export function parseSolidDescription(
     seen.add(subscription.value);
     const extra = notificationExtra(subscription, visited);
     subscriptionExtras.set(subscription.value, extra);
+    const key = notificationKey(subscription.value, extra);
+    if (key !== undefined) notificationIndices.set(key, services.length);
     services.push({
       // Only recognised channel types become service types; others stay in `extra` so a
       // description cannot pose as another service class through notify:channelType.
@@ -196,17 +204,12 @@ export function parseSolidDescription(
       extra,
     };
     // SSD-CLI-6: match both endpoint and channel, including unknown channel IRIs.
-    const duplicate = notification
-      ? services.findIndex(
-          (other) =>
-            other.type.includes(SSD.SolidNotificationService) &&
-            other.endpoint === endpoint &&
-            typeof extra[NOTIFY.channelType] === "string" &&
-            other.extra[NOTIFY.channelType] === extra[NOTIFY.channelType],
-        )
-      : -1;
-    if (duplicate === -1) services.push(entry);
-    else {
+    const key = notification ? notificationKey(endpoint, extra) : undefined;
+    const duplicate = key === undefined ? undefined : notificationIndices.get(key);
+    if (duplicate === undefined) {
+      if (key !== undefined) notificationIndices.set(key, services.length);
+      services.push(entry);
+    } else {
       const previous = services[duplicate] as ServiceEntry;
       services[duplicate] = {
         ...mergeService(previous, entry),
@@ -223,6 +226,13 @@ export function parseSolidDescription(
       };
     }
   }
+  // Preserve first-listed query-service precedence without scanning per ACQ endpoint.
+  const queryIndices = new Map<string, number>();
+  for (const [index, service] of services.entries()) {
+    if (service.type.includes(SSD.SparqlQueryService) && !queryIndices.has(service.endpoint)) {
+      queryIndices.set(service.endpoint, index);
+    }
+  }
   for (const endpoint of root.iris(ACQ.endpoint)) {
     // SSD-CLI-7: the root ACQ predicate supplies the query profile too.
     const acq: ServiceEntry = {
@@ -231,10 +241,8 @@ export function parseSolidDescription(
       conformsTo: [ACQ.profile],
       extra: {},
     };
-    const duplicate = services.findIndex(
-      (service) => service.type.includes(SSD.SparqlQueryService) && service.endpoint === endpoint,
-    );
-    if (duplicate === -1) services.push(acq);
+    const duplicate = queryIndices.get(endpoint);
+    if (duplicate === undefined) services.push(acq);
     else services[duplicate] = mergeService(acq, services[duplicate] as ServiceEntry);
   }
   const capabilities: CapabilityEntry[] = root.nodes(LWS.capability).map((capability) => ({

@@ -58,7 +58,7 @@ const cache = createMemoryCache(); // Or createIndexedDbCache({ dbName: 'my-publ
 const description = await resolveStorageDescription(resourceUrl, { fetch: authFetch, cache });
 if (description.protocol === 'solid') {
   const observations = await probe(description.root, authFetch);
-  await cache.set(description.id, { description, probe: observations });
+  await cache.attachProbe?.(description.id, description, observations);
 }
 ```
 
@@ -71,6 +71,7 @@ errors reject the operation. `cache.delete(id)` invalidates the record; retained
 cannot serve a deleted record. Callers should invalidate session metadata on logout.
 
 Fresh descriptions resolve without fetching, including sibling URLs beneath a known root.
+Assumed roots never establish cached prefixes; later lookups repeat discovery.
 TTL comes from `Cache-Control: max-age`, otherwise one hour. On expiry, the resolver GETs the
 known description directly with `If-None-Match` when an ETag exists. A 304 retains the description
 and cached probe, bumps `fetchedAt`, and updates cache headers when supplied. A replacement body

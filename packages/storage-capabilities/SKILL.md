@@ -73,6 +73,9 @@ that evidence or the old `cross-origin-description` evidence.
 Parsed cache records carry a resolver version. A missing or different version invalidates the
 record and repeats discovery and an unconditional description GET; never reuse its ETag or probe.
 Cache implementations must preserve the version when attaching probes.
+Assumed roots never establish prefix mappings. Their `assumed-origin-root` evidence stays in the
+cached description; reject existing prefix hits carrying that evidence, even at the current version,
+and rediscover so one storage's notifications cannot contaminate a sibling storage on the same origin.
 
 All fetches use the injected transport, manual redirects and optional abort signal. Count body
 bytes while streaming and cap at 1 MiB regardless of Content-Length. The standard W3C notifications

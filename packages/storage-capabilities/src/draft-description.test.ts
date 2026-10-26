@@ -358,6 +358,67 @@ describe("entry merging and compatibility", () => {
     );
   });
 
+  test("ACQ merging retains first-listed query metadata when endpoints are repeated", async () => {
+    const d = await solid(`
+      <> acq:endpoint <sparql> ; did:service <#first>, <#second> .
+      <#first> a ssd:SparqlQueryService ; did:serviceEndpoint <sparql> ; <urn:extra> "first" .
+      <#second> a ssd:SparqlQueryService ; did:serviceEndpoint <sparql> ; <urn:extra> "second" .
+    `);
+    expect(d.services).toHaveLength(2);
+    expect(d.services[0]).toMatchObject({
+      id: `${ROOT}#first`,
+      conformsTo: [ACQ.profile],
+      extra: { "urn:extra": "first" },
+    });
+    expect(d.services[1]?.conformsTo).toBeUndefined();
+  });
+
+  test.each([
+    "ACQ",
+    "notifications",
+  ])("merges 16k %s endpoints with linear service checks", async (kind) => {
+    const size = 16_000;
+    const endpoints = Array.from({ length: size }, (_, index) => `<n${index}>`);
+    const body =
+      kind === "ACQ"
+        ? `<> acq:endpoint ${endpoints.join(",")} .`
+        : `<> notify:subscription ${endpoints.join(",")} ;
+           did:service ${endpoints.map((_, index) => `<s${index}>`).join(",")} .
+           ${endpoints
+             .map(
+               (endpoint, index) => `${endpoint} notify:channelType notify:WebSocketChannel2023 .
+                 <s${index}> a ssd:SolidNotificationService ; did:serviceEndpoint ${endpoint} ;
+                 notify:channelType notify:WebSocketChannel2023 .`,
+             )
+             .join("\n")}`;
+    const dataset = await parseRdf(PREFIXES + body, "text/turtle", { baseIRI: ROOT });
+    // Count service-type comparisons instead of relying on wall-clock speed. Fail early
+    // on a quadratic scan, without retaining millions of mock invocation records.
+    const includes = Array.prototype.includes;
+    let comparisons = 0;
+    let mapped: ReturnType<typeof parseSolidDescription>;
+    try {
+      Array.prototype.includes = function (value, fromIndex) {
+        if (value === SSD.SolidNotificationService || value === SSD.SparqlQueryService) {
+          comparisons++;
+          if (comparisons > size * 10)
+            throw new Error("Service merging exceeded linear work budget");
+        }
+        return includes.call(this, value, fromIndex);
+      };
+      mapped = parseSolidDescription(dataset, ROOT);
+    } finally {
+      Array.prototype.includes = includes;
+    }
+    expect(comparisons).toBeLessThanOrEqual(size * 10);
+    expect(mapped.services).toHaveLength(size);
+    expect(mapped.services[0]?.endpoint).toBe(`${ROOT}n0`);
+    expect(mapped.services[size - 1]?.endpoint).toBe(`${ROOT}n${size - 1}`);
+    if (kind === "ACQ")
+      expect(mapped.services.every((s) => s.conformsTo?.includes(ACQ.profile))).toBe(true);
+    else expect(mapped.services.every((s) => s.id !== undefined)).toBe(true);
+  }, 30_000);
+
   test.each([
     false,
     true,
