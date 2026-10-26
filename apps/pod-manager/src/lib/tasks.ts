@@ -206,6 +206,8 @@ export const TASKS_CONFIG: StoreConfig<Task> = {
 export function tasksStore(opts: {
   podRoot: string;
   webId: string;
+  /** Final document URL from the session profile load. */
+  profileDocumentUrl?: string;
   fetchImpl?: typeof fetch;
 }): ProductivityStore<Task> {
   return createStore(TASKS_CONFIG, opts);
