@@ -67,8 +67,15 @@ describe("bounded file readers", () => {
   });
 
   it("preserves header trimming, empty cells, duplicate columns and row padding", async () => {
-    const text = '\uFEFF A , B , A ,C\nfirst," second ",last\nonly\n1,2,3,4,ignored';
+    const text = '\uFEFF A , B , A ,C\nfirst," second ",last\nonly\n1,2,3,4';
     expect(await collect(csvRows(chunksFile(text)))).toEqual(csv.parseCsv(text).rows);
+  });
+
+  it("skips extra CSV cells including quoted delimiters, newlines and trailing empty fields", async () => {
+    const skip = vi.fn();
+    const text = 'A,B\n1,2,\n1,2,"ignored,\n""quoted""",more\nlast,kept\n1,2,extra';
+    expect(await collect(csvRows(chunksFile(text), skip))).toEqual([{ A: "last", B: "kept" }]);
+    expect(skip).toHaveBeenCalledTimes(3);
   });
 
   it.each(["", " \r\n", "Date,Description,Amount"])("handles empty CSV data %j", async (text) => {

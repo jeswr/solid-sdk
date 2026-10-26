@@ -16,6 +16,7 @@
  * end-to-end encrypted") are skipped.
  */
 import { DataFactory, Store } from "n3";
+import { ChunkSlices } from "../core/chunk-slices.js";
 import type { FileImportAdapter, FileImportContext, ImportFile } from "../core/file-import.js";
 import { fileText, textLines } from "../core/file-stream.js";
 import { recordFragment } from "../core/slug.js";
@@ -84,56 +85,117 @@ const IOS =
 const ANDROID =
   /^(\d{1,2})[/.](\d{1,2})[/.](\d{2,4}),?\s+(\d{1,2}):(\d{2})(?::(\d{2}))?(?:\s*([AaPp][Mm]))?\s+-\s+([^:]+):\s?([\s\S]*)$/;
 
-/** Parse a WhatsApp transcript into messages, joining continuation lines. */
+export const MAX_WHATSAPP_MESSAGE_BYTES = 1024 * 1024;
+export const MAX_WHATSAPP_CONTINUATION_LINES = 10_000;
+
+/** Parse an already decoded transcript with the same bounded message builder. */
 export function parseWhatsappChat(text: string, limit = Number.POSITIVE_INFINITY): ChatMessage[] {
-  const lines = text.split(/\r\n|\r|\n/);
   const out: ChatMessage[] = [];
-  let current: { when?: Date; sender: string; parts: string[] } | undefined;
-
-  const flush = () => {
-    if (current && out.length < limit) {
-      out.push({ when: current.when, sender: current.sender, text: current.parts.join("\n") });
+  if (limit <= 0) return out;
+  const parser = new WhatsappChatParser();
+  let start = 0;
+  for (let i = 0; i <= text.length; i++) {
+    if (i < text.length && text[i] !== "\r" && text[i] !== "\n") continue;
+    const message = parser.push(text.slice(start, i));
+    if (message) {
+      out.push(message);
+      if (out.length >= limit) return out;
     }
-    current = undefined;
-  };
-
-  for (const line of lines) {
-    // Strip the LRM/bidi marks WhatsApp sometimes prepends.
-    const clean = line.replace(/^[‎‏‪-‮]+/, "");
-    const m = clean.match(IOS) ?? clean.match(ANDROID);
-    if (m) {
-      flush();
-      if (out.length >= limit) break;
-      const [, a = "", b = "", y = "", h = "", mi = "", s, ampm, sender = "", body = ""] = m;
-      current = { when: buildDate(a, b, y, h, mi, s, ampm), sender: sender.trim(), parts: [body] };
-    } else if (current) {
-      current.parts.push(clean);
-    }
-    // else: a leading system line before any message — ignore.
+    if (text[i] === "\r" && text[i + 1] === "\n") i++;
+    start = i + 1;
   }
-  flush();
+  const last = parser.finish();
+  if (last) out.push(last);
   return out;
 }
 
-/** Keep a single multiline message until the next timestamped record. */
+/** Coalesce continuation slices and release them immediately on either cap.
+ * Count UTF-8 source bytes, including the timestamp/sender and one LF between
+ * lines. An overflow counts once, then ignores input until the next timestamp.
+ */
+class WhatsappChatParser {
+  private current:
+    | { when?: Date; sender: string; parts: ChunkSlices; bytes: number; continuations: number }
+    | undefined;
+  private discarding = false;
+
+  constructor(private readonly onSkip: () => void = () => {}) {}
+
+  push(line: string): ChatMessage | undefined {
+    // Strip the LRM/bidi marks WhatsApp sometimes prepends.
+    const clean = line.replace(/^[‎‏‪-‮]+/, "");
+    const match = clean.match(IOS) ?? clean.match(ANDROID);
+    if (match) {
+      const previous = this.finish();
+      const [, a = "", b = "", y = "", h = "", mi = "", s, ampm, sender = "", body = ""] = match;
+      this.discarding = false;
+      this.current = {
+        when: buildDate(a, b, y, h, mi, s, ampm),
+        sender: sender.trim(),
+        parts: new ChunkSlices(),
+        bytes: 0,
+        continuations: 0,
+      };
+      this.append(line, body, false);
+      return previous;
+    }
+    this.append(line, clean, true);
+    return undefined;
+  }
+
+  private append(raw: string, text: string, continuation: boolean): void {
+    const current = this.current;
+    if (!current) return;
+    if (continuation) {
+      if (++current.continuations > MAX_WHATSAPP_CONTINUATION_LINES) {
+        this.discard();
+        return;
+      }
+      current.bytes++;
+    }
+    for (let i = 0; i < raw.length; i++) {
+      const code = raw.codePointAt(i) as number;
+      current.bytes += code < 0x80 ? 1 : code < 0x800 ? 2 : code < 0x10000 ? 3 : 4;
+      if (code > 0xffff) i++;
+    }
+    if (current.bytes > MAX_WHATSAPP_MESSAGE_BYTES) {
+      this.discard();
+      return;
+    }
+    if (continuation) current.parts.push("\n");
+    current.parts.push(text);
+  }
+
+  discard(): void {
+    this.current = undefined;
+    if (!this.discarding) this.onSkip();
+    this.discarding = true;
+  }
+
+  finish(): ChatMessage | undefined {
+    const current = this.current;
+    this.current = undefined;
+    if (current) return { when: current.when, sender: current.sender, text: current.parts.text() };
+    return undefined;
+  }
+}
+
+/** Construct each message once, without joining and reparsing the transcript. */
 async function* streamWhatsappChat(
   file: ImportFile,
   onSkip: () => void,
 ): AsyncGenerator<ChatMessage> {
-  let pending: string[] = [];
+  const parser = new WhatsappChatParser(onSkip);
   for await (const line of textLines(fileText(file), () => {
     // A missing line may contain a timestamp: discard the pending message and
     // its continuations until a complete timestamp supplies a safe boundary.
-    pending = [];
-    onSkip();
+    parser.discard();
   })) {
-    const clean = line.replace(/^[‎‏‪-‮]+/, "");
-    if (IOS.test(clean) || ANDROID.test(clean)) {
-      yield* parseWhatsappChat(pending.join("\n"));
-      pending = [line];
-    } else if (pending.length) pending.push(line);
+    const message = parser.push(line);
+    if (message) yield message;
   }
-  yield* parseWhatsappChat(pending.join("\n"));
+  const last = parser.finish();
+  if (last) yield last;
 }
 
 function buildDate(

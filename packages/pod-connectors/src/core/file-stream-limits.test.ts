@@ -8,7 +8,11 @@ import { bankStatementsFileAdapter } from "../bank-statements/file-adapter.js";
 import { goodreadsFileAdapter } from "../goodreads/file-adapter.js";
 import { netflixFileAdapter } from "../netflix/file-adapter.js";
 import { uberFileAdapter } from "../uber/file-adapter.js";
-import { whatsappFileAdapter } from "../whatsapp/file-adapter.js";
+import {
+  MAX_WHATSAPP_CONTINUATION_LINES,
+  MAX_WHATSAPP_MESSAGE_BYTES,
+  whatsappFileAdapter,
+} from "../whatsapp/file-adapter.js";
 import type { ImportFile } from "./file-import.js";
 import {
   csvRecords,
@@ -221,10 +225,12 @@ describe("non-JSON allocation limits", () => {
       row: "2026-01-01,Synthetic,-1",
     },
   ])("reports skipped CSV records for $adapter.metadata.id", async ({ adapter, header, row }) => {
-    const file = streamed(`${header}\n${"x".repeat(MAX_CSV_RECORD_BYTES + 1)}\n${row}`);
+    const file = streamed(
+      `${header}\n${"x".repeat(MAX_CSV_RECORD_BYTES + 1)}\n${row},extra\n${row}`,
+    );
     const { report } = await fileImport(adapter, file);
-    expect(report.skipped).toBe(1);
-    expect(report.state?.counts.skipped).toBe(1);
+    expect(report.skipped).toBe(2);
+    expect(report.state?.counts.skipped).toBe(2);
   });
 
   it("reports skipped XML tags and text while preserving the next workout", async () => {
@@ -248,6 +254,125 @@ describe("non-JSON allocation limits", () => {
     expect(values).not.toContain("discard");
   });
 
+  it.each(["x", "é", "🌍"])("bounds aggregate WhatsApp message bytes (%s)", async (char) => {
+    const prefix = "[20/01/2026, 12:00:00] Synthetic: ";
+    const body = "x".repeat(128);
+    const remaining = MAX_WHATSAPP_MESSAGE_BYTES - prefix.length - body.length - 1;
+    const width = new TextEncoder().encode(char).length;
+    const continuation = char.repeat(Math.floor(remaining / width)) + "x".repeat(remaining % width);
+    const exact = `${prefix}${body}\n${continuation}`;
+    expect(new TextEncoder().encode(exact).length).toBe(MAX_WHATSAPP_MESSAGE_BYTES);
+    const { report, pod } = await fileImport(
+      whatsappFileAdapter,
+      streamed(`${exact}\n${exact}x\nignored\n${prefix}keep`, 4096),
+    );
+    expect(report.skipped).toBe(1);
+    expect(report.state?.counts.skipped).toBe(1);
+    expect(report.state?.counts.items).toBe(2);
+    const texts = pod
+      .dataset(report.written[0]?.url ?? "")
+      .getObjects(null, "https://schema.org/text", null);
+    expect(texts.map((term) => term.value)).toEqual([`${body}\n${continuation}`, "keep"]);
+  });
+
+  it.each([
+    1, 7, 4096,
+  ])("bounds WhatsApp continuations, including empty lines (%i-byte chunks)", async (size) => {
+    const prefix = "[20/01/2026, 12:00:00] Synthetic: ";
+    const exact = `${prefix}at cap\n${"\n".repeat(MAX_WHATSAPP_CONTINUATION_LINES)}`;
+    const oversized = `${prefix}discard\n${"x\n".repeat(MAX_WHATSAPP_CONTINUATION_LINES + 1)}ignored\n`;
+    const { report, pod } = await fileImport(
+      whatsappFileAdapter,
+      streamed(`${exact}${oversized}${prefix}keep`, size),
+    );
+    expect(report.skipped).toBe(1);
+    expect(report.state?.counts.skipped).toBe(1);
+    expect(report.state?.counts.items).toBe(2);
+    const texts = pod
+      .dataset(report.written[0]?.url ?? "")
+      .getObjects(null, "https://schema.org/text", null);
+    expect(texts.map((term) => term.value)).toEqual([
+      `at cap${"\n".repeat(MAX_WHATSAPP_CONTINUATION_LINES)}`,
+      "keep",
+    ]);
+  });
+
+  it.each([
+    "timestamp",
+    "eof",
+  ])("counts an overflowing WhatsApp message once before %s", async (end) => {
+    const prefix = "[20/01/2026, 12:00:00] Synthetic: ";
+    const oversized = "x".repeat(MAX_TEXT_LINE_BYTES + 1);
+    const tail = end === "timestamp" ? `\n${prefix}keep again` : "";
+    const { report } = await fileImport(
+      whatsappFileAdapter,
+      streamed(`${prefix}keep\n${prefix}discard\n${oversized}\n${oversized}\nignored${tail}`),
+    );
+    expect(report.skipped).toBe(1);
+    expect(report.state?.counts.skipped).toBe(1);
+    expect(report.state?.counts.items).toBe(end === "timestamp" ? 2 : 1);
+  });
+
+  it("counts the WhatsApp timestamp, sender and line separators toward the byte cap", async () => {
+    const prefix = "[20/01/2026, 12:00:00] Synthetic: ";
+    const line = `${prefix}${"x".repeat(MAX_WHATSAPP_MESSAGE_BYTES - prefix.length)}`;
+    const { report } = await fileImport(
+      whatsappFileAdapter,
+      streamed(`${prefix}keep\n${line}\n\n`),
+    );
+    expect(report.skipped).toBe(1);
+    expect(report.state?.counts.items).toBe(1);
+  });
+
+  it("bounds WhatsApp heap for a million short continuations", async () => {
+    const moduleUrl = new URL("../../dist/whatsapp/file-adapter.js", import.meta.url).href;
+    const script = `
+      import assert from 'node:assert/strict';
+      import { whatsappFileAdapter } from ${JSON.stringify(moduleUrl)};
+      globalThis.gc();
+      const baseline = process.memoryUsage().heapUsed;
+      let peak = baseline, reads = 0, skips = 0, writes = 0;
+      const sample = () => peak = Math.max(peak, process.memoryUsage().heapUsed);
+      const encoder = new TextEncoder();
+      const prefix = encoder.encode('[20/01/2026, 12:00:00] Synthetic: discard\\n');
+      const block = encoder.encode('x\\n'.repeat(32 * 1024));
+      const suffix = encoder.encode('[20/01/2026, 12:01:00] Synthetic: keep');
+      const stream = new ReadableStream({
+        pull(controller) {
+          sample();
+          if (reads === 0) controller.enqueue(prefix);
+          else if (reads <= 32) controller.enqueue(block);
+          else if (reads === 33) controller.enqueue(suffix);
+          else controller.close();
+          reads++;
+        }
+      }, { highWaterMark: 0 });
+      await whatsappFileAdapter.importFile({ name: 'synthetic.txt', size: 3 * 1024 * 1024,
+        type: 'text/plain', text: async () => { throw Error('Must stream'); }, stream: () => stream }, {
+        maxRows: 100_000, resolve: slug => 'https://synthetic.test/' + slug,
+        progress: sample, skip: () => { skips++; sample(); },
+        write: async doc => {
+          sample();
+          writes++;
+          assert.deepEqual(doc.dataset.getObjects(null, 'https://schema.org/text', null).map(term => term.value), ['keep']);
+        }
+      });
+      assert.equal(skips, 1);
+      assert.equal(writes, 1);
+      assert.equal(stream.locked, false);
+      assert.ok(peak - baseline < 32 * 1024 * 1024, 'Peak additional heap must stay below 32 MiB');
+      console.log(peak - baseline);
+    `;
+    const { stdout } = await promisify(execFile)(process.execPath, [
+      "--max-old-space-size=64",
+      "--expose-gc",
+      "--input-type=module",
+      "-e",
+      script,
+    ]);
+    expect(Number(stdout.trim())).toBeLessThan(32 * 1024 * 1024);
+  });
+
   it("bounds peak heap for large units, including ignored XML and admitted CSV cells", async () => {
     // Lazy inputs and a separate 64 MiB heap expose string-concatenation ropes
     // independently of Vitest's heap. The CSV case exercises cell parsing too.
@@ -258,16 +383,16 @@ describe("non-JSON allocation limits", () => {
       globalThis.gc();
       const baseline = process.memoryUsage().heapUsed;
       let peak = baseline;
-      for (const kind of ['tag', 'ignored-tag', 'text', 'comment', 'cdata', 'line', 'record', 'cell']) {
+      for (const kind of ['tag', 'ignored-tag', 'text', 'comment', 'cdata', 'line', 'record', 'cell', 'columns']) {
         globalThis.gc();
         let reads = 0, skips = 0, seen = 0;
         const encoder = new TextEncoder();
         const prefix = encoder.encode(kind === 'tag' ? '<Workout name="' : kind === 'ignored-tag' ? '<Record name="' :
-          kind === 'text' ? '<Ignored>' : kind === 'comment' ? '<!--' : kind === 'cdata' ? '<![CDATA[' : kind === 'record' || kind === 'cell' ? 'Name\\n"' : '');
+          kind === 'text' ? '<Ignored>' : kind === 'comment' ? '<!--' : kind === 'cdata' ? '<![CDATA[' : kind === 'columns' ? 'Name\\n' : kind === 'record' || kind === 'cell' ? 'Name\\n"' : '');
         const suffix = encoder.encode(kind === 'tag' || kind === 'ignored-tag' ? '"/><Workout/>' :
           kind === 'text' ? '</Ignored><Workout/>' : kind === 'comment' ? '--><Workout/>' : kind === 'cdata' ? ']]><Workout/>' : kind === 'record' || kind === 'cell' ? '"\\nlast' : '\\nlast');
-        const block = new Uint8Array(64 * 1024).fill(120);
-        const blocks = kind === 'cell' ? 63 : 64;
+        const block = kind === 'columns' ? encoder.encode('x,'.repeat(32 * 1024)) : new Uint8Array(64 * 1024).fill(120);
+        const blocks = kind === 'cell' || kind === 'columns' ? 63 : 64;
         const stream = new ReadableStream({
           pull(controller) {
             peak = Math.max(peak, process.memoryUsage().heapUsed);
@@ -281,7 +406,7 @@ describe("non-JSON allocation limits", () => {
         const file = { name: 'synthetic', size: 5 * 1024 * 1024, type: '',
           text: async () => { throw Error('Must stream'); }, stream: () => stream };
         const skip = () => skips++;
-        const source = kind === 'record' || kind === 'cell' ? csvRows(file, skip) :
+        const source = kind === 'record' || kind === 'cell' || kind === 'columns' ? csvRows(file, skip) :
           kind === 'line' ? textLines(fileText(file), skip) : xmlTags(fileText(file), skip, kind === 'ignored-tag' ? 'Workout' : undefined);
         for await (const value of source) {
           seen++;

@@ -117,6 +117,13 @@ quoted CSV records fail with an explicit error. A skipped WhatsApp line also
 discards the pending message and continuations until the next timestamp.
 CSV headers are parsed and normalised once per file, including bank column
 aliases, and are limited to 1,024 columns and 65,536 characters.
+CSV data tokenization retains only as many cells as the header contains. Extra
+fields are scanned without retaining their text, and the entire row is skipped
+and counted. WhatsApp constructs each message directly from coalesced slices,
+with a 1 MiB UTF-8 message limit and at most 10,000 continuation lines. The byte
+limit includes the timestamp and sender plus one LF between lines. Overflow
+discards the message and counts one skip, then ignores continuations until the
+next timestamped message. Transcripts are never joined and reparsed.
 OFX transactions use an incremental delimiter scanner and are limited to 64 KiB
 of UTF-8 text. Oversized or unfinished transactions are skipped and counted in
 `report.skipped` and `report.state.counts.skipped`.

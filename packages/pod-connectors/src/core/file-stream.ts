@@ -160,7 +160,7 @@ export async function* csvRowsFromChunks(
   for await (const record of csvRecords(chunks, onSkip)) {
     if (headers === undefined) headers = parseCsv(record).headers;
     else {
-      const cells = parseCsvRows(record)[0];
+      const cells = parseCsvRows(record, ",", headers.length, onSkip)[0];
       if (cells)
         yield Object.fromEntries(headers.map((header, i) => [header, (cells[i] ?? "").trim()]));
     }

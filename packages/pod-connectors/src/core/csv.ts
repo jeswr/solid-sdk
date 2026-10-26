@@ -31,30 +31,46 @@ export const MAX_CSV_COLUMNS = 1024;
 /**
  * Tokenise CSV text into a matrix of string cells. Handles quoting, embedded
  * commas/newlines, `""` escapes and CRLF/LF/CR line endings. A leading UTF-8
- * BOM is stripped. Blank trailing lines are dropped.
+ * BOM is stripped. Blank trailing lines are dropped. With maxColumns, retain
+ * only that many cells; scan excess fields without allocating their text and
+ * discard the whole row through onSkip.
  */
-export function parseCsvRows(text: string, delimiter = ","): string[][] {
+export function parseCsvRows(
+  text: string,
+  delimiter = ",",
+  maxColumns = Number.POSITIVE_INFINITY,
+  onSkip: () => void = () => {},
+): string[][] {
   const src = text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
   const rows: string[][] = [];
   let row: string[] = [];
   const field = new ChunkSlices();
   let inQuotes = false;
+  let excessiveColumns = false;
   let start = 0;
   let i = 0;
 
   const endField = (end: number) => {
-    field.push(src.slice(start, end));
-    row.push(field.text());
-    field.clear();
+    if (row.length < maxColumns) {
+      field.push(src.slice(start, end));
+      row.push(field.text());
+      field.clear();
+    } else excessiveColumns = true;
+  };
+  const endRow = () => {
+    if (excessiveColumns) onSkip();
+    else rows.push(row);
+    row = [];
+    excessiveColumns = false;
   };
 
   while (i < src.length) {
     const c = src[i];
     if (inQuotes) {
       if (c === '"') {
-        field.push(src.slice(start, i));
+        if (row.length < maxColumns) field.push(src.slice(start, i));
         if (src[i + 1] === '"') {
-          field.push('"');
+          if (row.length < maxColumns) field.push('"');
           i += 2;
         } else {
           inQuotes = false;
@@ -65,7 +81,7 @@ export function parseCsvRows(text: string, delimiter = ","): string[][] {
       continue;
     }
     if (c === '"') {
-      field.push(src.slice(start, i));
+      if (row.length < maxColumns) field.push(src.slice(start, i));
       inQuotes = true;
       start = ++i;
     } else if (c === delimiter) {
@@ -73,19 +89,13 @@ export function parseCsvRows(text: string, delimiter = ","): string[][] {
       start = ++i;
     } else if (c === "\r" || c === "\n") {
       endField(i);
-      rows.push(row);
-      row = [];
+      endRow();
       i += c === "\r" && src[i + 1] === "\n" ? 2 : 1;
       start = i;
     } else i++;
   }
-  field.push(src.slice(start));
-  const lastField = field.text();
-  // Flush the final field/row unless the input ended on a clean line break.
-  if (lastField.length > 0 || row.length > 0) {
-    row.push(lastField);
-    rows.push(row);
-  }
+  endField(src.length);
+  endRow();
 
   // Drop a single empty trailing row produced by a final newline.
   return rows.filter((r) => !(r.length === 1 && r[0] === ""));
