@@ -137,8 +137,17 @@ public final class ShareStore {
         }
     }
 
-    /** Streams the items into a new batch, enforcing every cap while copying. */
-    public synchronized Batch store(List<Incoming> items, long now) throws IOException, RejectedShare {
+    /** A JSON integer (org.json gives Integer or Long) as a long, or null for anything else. */
+    static Long wholeNumber(Object value) {
+        return value instanceof Integer || value instanceof Long ? ((Number) value).longValue() : null;
+    }
+
+    /**
+     * Streams the items into a new batch, enforcing every cap while copying. The copy runs in a
+     * fresh directory without the store lock (provider reads can stall); publishing the manifest
+     * and applying the pending caps happen under it.
+     */
+    public Batch store(List<Incoming> items, long now) throws IOException, RejectedShare {
         if (items.isEmpty()) throw new RejectedShare("no items");
         if (items.size() > MAX_ITEMS) throw new RejectedShare("too many items");
         evict(now);
@@ -173,10 +182,14 @@ public final class ShareStore {
             }
             manifest.setProperty("count", Integer.toString(items.size()));
             manifest.setProperty("receivedAt", Long.toString(now));
-            try (OutputStream out = new FileOutputStream(new File(dir, MANIFEST))) {
-                manifest.store(out, null);
+            synchronized (this) {
+                File partial = new File(dir, MANIFEST + ".tmp");
+                try (OutputStream out = new FileOutputStream(partial)) {
+                    manifest.store(out, null);
+                }
+                if (!partial.renameTo(new File(dir, MANIFEST))) throw new IOException("cannot publish batch");
+                evictOverflow(id);
             }
-            evictOverflow(id);
             return new Batch(id, now, manifest);
         } catch (IOException | RejectedShare | RuntimeException e) {
             delete(dir);
@@ -249,11 +262,14 @@ public final class ShareStore {
         }
     }
 
-    /** Deletes the oldest batches (never {@code keep}) until at most 10 batches and 500 MB remain. */
+    /**
+     * Deletes the oldest batches (never {@code keep}) until at most 10 batches and 500 MB remain.
+     * Copies still in progress (no manifest yet) count towards the bytes.
+     */
     private void evictOverflow(String keep) {
         List<Batch> batches = pending();
         long total = 0;
-        for (Batch batch : batches) total += bytes(batch.id);
+        for (String id : pendingIds()) total += bytes(id);
         int count = batches.size();
         for (Batch batch : batches) {
             if (count <= MAX_PENDING_BATCHES && total <= MAX_PENDING_BYTES) break;

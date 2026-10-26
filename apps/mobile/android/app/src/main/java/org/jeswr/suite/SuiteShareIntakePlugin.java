@@ -41,7 +41,9 @@ public class SuiteShareIntakePlugin extends Plugin {
         synchronized (SuiteShareIntakePlugin.class) {
             active = this;
         }
-        store(getContext()).evict(System.currentTimeMillis());
+        ShareStore shares = store(getContext());
+        // Off the main thread: eviction can wait for a share that is being stored.
+        new Thread(() -> shares.evict(System.currentTimeMillis()), "share-evict").start();
     }
 
     @Override
@@ -64,7 +66,8 @@ public class SuiteShareIntakePlugin extends Plugin {
     public void readChunk(PluginCall call) {
         String batchId = call.getString("batchId");
         Integer index = call.getInt("index");
-        Long offset = call.getLong("offset");
+        // JSON numbers below 2^31 arrive as Integer, so getLong() would return null for them.
+        Long offset = ShareStore.wholeNumber(call.getData().opt("offset"));
         Integer length = call.getInt("length");
         if (batchId == null || index == null || offset == null || length == null) {
             call.reject("batchId, index, offset and length are required", "INVALID_ARGUMENT");

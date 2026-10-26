@@ -85,6 +85,7 @@ describe("iOS project", () => {
     const controller = read("ios/App/App/MainViewController.swift");
     expect(controller).toContain('removeScriptMessageHandler(forName: "bridge")');
     expect(controller).toContain("BridgeOriginGuard(");
+    expect(controller).toContain("registerPluginInstance(SuiteShareIntakePlugin())");
     expect(read("ios/App/App/BridgeOriginGuard.swift")).toContain("message.frameInfo.isMainFrame");
     expect(controller).toContain("UIDelegateOriginGuard(");
     expect(read("ios/App/App/BridgeOriginGuard.swift")).toContain(

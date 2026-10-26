@@ -200,6 +200,54 @@ public class ShareStoreTest {
     }
 
     @Test
+    public void copiesInProgressCountTowardsThePendingBytes() throws Exception {
+        File partial = new File(root, "33333333-3333-3333-3333-333333333333");
+        assertTrue(partial.mkdirs());
+        try (java.io.OutputStream out = new java.io.FileOutputStream(new File(partial, "item-0"))) {
+            out.write(new byte[0]);
+        }
+        java.io.RandomAccessFile big = new java.io.RandomAccessFile(new File(partial, "item-0"), "rw");
+        big.setLength(ShareStore.MAX_PENDING_BYTES - 10);
+        big.close();
+        String older = storeOne(1).id;
+        String newer = store.store(Collections.singletonList(ShareStore.Incoming.file("x", "a/b", zeros(20))), 2).id;
+        List<String> ids = store.pending().stream().map(x -> x.id).collect(java.util.stream.Collectors.toList());
+        assertFalse("the older batch makes room", ids.contains(older));
+        assertTrue(ids.contains(newer));
+        assertTrue("an active copy is never evicted", partial.exists());
+    }
+
+    @Test
+    public void storingDoesNotHoldTheLockWhileCopying() throws Exception {
+        java.util.concurrent.CountDownLatch reading = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.CountDownLatch release = new java.util.concurrent.CountDownLatch(1);
+        Thread copier = new Thread(() -> {
+            try {
+                store.store(Collections.singletonList(ShareStore.Incoming.file("slow", "a/b", () -> {
+                    reading.countDown();
+                    try {
+                        release.await();
+                    } catch (InterruptedException e) {
+                        throw new IOException(e);
+                    }
+                    return new ByteArrayInputStream(new byte[1]);
+                })), 1);
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        });
+        copier.start();
+        assertTrue(reading.await(5, java.util.concurrent.TimeUnit.SECONDS));
+        long start = System.nanoTime();
+        assertTrue(store.pending().isEmpty());
+        store.evict(2);
+        assertTrue("pending() and evict() do not wait for the copy", System.nanoTime() - start < 1_000_000_000L);
+        release.countDown();
+        copier.join(5000);
+        assertEquals(1, store.pending().size());
+    }
+
+    @Test
     public void evictsWeekOldBatchesAndStalePartials() throws Exception {
         String old = storeOne(0).id;
         String fresh = storeOne(ShareStore.MAX_AGE_MS).id;
@@ -236,6 +284,15 @@ public class ShareStoreTest {
         store.acknowledge("../share");
         store.acknowledge(null);
         assertTrue(unrelated.exists());
+    }
+
+    @Test
+    public void readsJsonOffsetsWhetherIntegerOrLong() {
+        assertEquals(Long.valueOf(0), ShareStore.wholeNumber(0));
+        assertEquals(Long.valueOf(5_000_000_000L), ShareStore.wholeNumber(5_000_000_000L));
+        assertNull(ShareStore.wholeNumber(1.5));
+        assertNull(ShareStore.wholeNumber("0"));
+        assertNull(ShareStore.wholeNumber(null));
     }
 
     @Test

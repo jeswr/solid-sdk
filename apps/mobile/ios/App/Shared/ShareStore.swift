@@ -98,6 +98,20 @@ struct ShareStore {
         return formatter
     }
 
+    // MARK: Locking
+
+    /// Runs `body` holding an exclusive flock on share/.lock, which the app and the extension share,
+    /// so publishing, quota eviction and acknowledgement never interleave across processes.
+    private func locked<T>(_ body: () throws -> T) rethrows -> T {
+        try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let fd = open(root.appendingPathComponent(".lock").path, O_CREAT | O_RDWR, 0o600)
+        guard fd >= 0 else { return try body() }
+        defer { close(fd) }
+        flock(fd, LOCK_EX)
+        defer { flock(fd, LOCK_UN) }
+        return try body()
+    }
+
     // MARK: Storing
 
     /// Copies the items into a new batch, enforcing every cap while copying. Nothing is kept on failure.
@@ -135,8 +149,10 @@ struct ShareStore {
             }
             let manifest: [String: Any] = ["id": id, "receivedAt": Self.iso().string(from: now), "items": json]
             let data = try JSONSerialization.data(withJSONObject: manifest)
-            try data.write(to: dir.appendingPathComponent(Self.manifestName), options: .atomic)
-            evictOverflow(keeping: id)
+            try locked {
+                try data.write(to: dir.appendingPathComponent(Self.manifestName), options: .atomic)
+                evictOverflow(keeping: id)
+            }
             return Batch(id: id, receivedAt: now, json: manifest)
         } catch {
             try? fm.removeItem(at: dir)
@@ -185,6 +201,10 @@ struct ShareStore {
 
     func acknowledge(_ batchId: String?) {
         guard Self.isBatchId(batchId), let batchId = batchId else { return }
+        locked { remove(batchId) }
+    }
+
+    private func remove(_ batchId: String) {
         try? FileManager.default.removeItem(at: root.appendingPathComponent(batchId, isDirectory: true))
     }
 
@@ -192,6 +212,10 @@ struct ShareStore {
 
     /// Drops batches older than seven days and copies a killed extension left without a manifest.
     func evict(now: Date = Date()) {
+        locked { evictExpired(now: now) }
+    }
+
+    private func evictExpired(now: Date) {
         let fm = FileManager.default
         for id in batchIds() {
             let dir = root.appendingPathComponent(id, isDirectory: true)
@@ -201,21 +225,24 @@ struct ShareStore {
             }
         }
         for batch in pending() where now.timeIntervalSince(batch.receivedAt) > Self.maxAge {
-            acknowledge(batch.id)
+            remove(batch.id)
         }
     }
 
     /// Deletes the oldest batches (never `keeping`) until at most 10 batches and 500 MB remain.
+    /// Copies still in progress (no manifest yet) count towards the bytes. Caller holds the lock.
     private func evictOverflow(keeping: String) {
         let batches = pending()
-        var total = batches.reduce(Int64(0)) { $0 + bytes($1.id) }
+        var sizes: [String: Int64] = [:]
+        for id in batchIds() { sizes[id] = bytes(id) }
+        var total = sizes.values.reduce(0, +)
         var count = batches.count
         for batch in batches {
             if count <= Self.maxPendingBatches && total <= Self.maxPendingBytes { break }
             if batch.id == keeping { continue }
-            total -= bytes(batch.id)
+            total -= sizes[batch.id] ?? 0
             count -= 1
-            acknowledge(batch.id)
+            remove(batch.id)
         }
     }
 

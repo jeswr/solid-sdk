@@ -89,12 +89,17 @@ public class ShareReceiverActivity extends Activity {
 
     /** Opens a sender's content:// item. Our own providers are refused: no confused-deputy reads. */
     private ShareStore.Incoming file(Uri uri, ContentResolver resolver) throws Exception {
-        if (!ContentResolver.SCHEME_CONTENT.equals(uri.getScheme()) || uri.getAuthority() == null) {
+        String authority = uri.getAuthority();
+        if (!ContentResolver.SCHEME_CONTENT.equals(uri.getScheme()) || authority == null || authority.isEmpty()) {
             throw new ShareStore.RejectedShare("only content:// items are accepted");
         }
-        ProviderInfo provider = getPackageManager().resolveContentProvider(uri.getAuthority(), 0);
-        if (provider != null && getPackageName().equals(provider.packageName)) {
-            throw new ShareStore.RejectedShare("item from this app's own provider");
+        // "0@authority" names a provider for another user and skips a plain authority lookup.
+        if (authority.contains("@")) throw new ShareStore.RejectedShare("user-qualified authority");
+        ProviderInfo provider = getPackageManager().resolveContentProvider(authority, 0);
+        if (provider == null || provider.applicationInfo == null
+                || getPackageName().equals(provider.packageName)
+                || provider.applicationInfo.uid == getApplicationInfo().uid) {
+            throw new ShareStore.RejectedShare("item from this app or an unknown provider");
         }
         String name = null;
         try (Cursor cursor = resolver.query(uri, new String[] {OpenableColumns.DISPLAY_NAME}, null, null, null)) {
