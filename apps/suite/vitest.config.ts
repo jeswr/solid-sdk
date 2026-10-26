@@ -12,6 +12,7 @@ export default defineConfig({
         "src/apps/chat/lib/text/**/*.ts",
         "src/apps/photos/lib/exif/**/*.ts",
         "src/apps/photos/lib/library/**/*.ts",
+        "src/apps/photos/lib/timeline/**/*.ts",
         "src/apps/notes/lib/**/*.ts",
         "src/lib/order/**/*.ts",
         "src/apps/docs/lib/anchoring/**/*.ts",
