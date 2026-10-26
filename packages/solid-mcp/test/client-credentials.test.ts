@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { scopedFetch } from "../src/auth.js";
 import { createCliFetch } from "../src/client-credentials.js";
@@ -40,6 +41,49 @@ describe("CSS client credentials", () => {
     await Promise.all([fetch(`${POD}note`), fetch(`${POD}note`)]);
     expect(css.stats.tokens).toBe(2);
     expect(css.stats.discoveries).toBe(1);
+    expect(css.proofs[0].jwk).toEqual(css.proofs[1].jwk);
+  });
+  it("keeps an in-flight proof and header bound to the same token during renewal", async () => {
+    const css = mockCss();
+    const sent: string[] = [];
+    const fetch = await createCliFetch(config, async (input, init) => {
+      const request = new Request(input, init);
+      if (request.url.startsWith(POD)) {
+        const token = request.url === `${POD}in-flight` ? "fixture-token-1" : "fixture-token-2";
+        expect(request.headers.get("authorization")).toBe(`DPoP ${token}`);
+        proofOf(request, token);
+        sent.push(token);
+        return new Response("ok");
+      }
+      const response = await css.fetch(input, init);
+      if (request.url === TOKEN)
+        return Response.json({ ...(await response.json()), expires_in: 1 });
+      return response;
+    });
+    const now = Date.now();
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const signing = Promise.withResolvers<void>();
+    const resume = Promise.withResolvers<void>();
+    const sign = globalThis.crypto.subtle.sign.bind(globalThis.crypto.subtle);
+    vi.spyOn(globalThis.crypto.subtle, "sign").mockImplementationOnce(async (...args) => {
+      signing.resolve();
+      await resume.promise;
+      return sign(...args);
+    });
+
+    const inFlight = fetch(`${POD}in-flight`);
+    await signing.promise;
+    try {
+      vi.setSystemTime(now + 2_000);
+      expect((await fetch(`${POD}renewed`)).ok).toBe(true);
+      expect(css.stats.tokens).toBe(2);
+    } finally {
+      resume.resolve();
+    }
+    expect((await inFlight).ok).toBe(true);
+    expect((await fetch(`${POD}later`)).ok).toBe(true);
+    expect(sent).toEqual(["fixture-token-2", "fixture-token-1", "fixture-token-2"]);
+    expect(css.stats.tokens).toBe(2);
     expect(css.proofs[0].jwk).toEqual(css.proofs[1].jwk);
   });
   it("supports an explicit token endpoint without discovery", async () => {

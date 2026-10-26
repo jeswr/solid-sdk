@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import {
   acquireToken,
   assertEndpointTransport,
@@ -79,9 +80,11 @@ export async function createCliFetch(
     if (!pending) {
       pending = (async () => {
         try {
-          if (session)
-            Object.assign(session, await acquireToken(creds, session.keyPair, authTransport));
-          else session = await createSession(creds, authTransport);
+          // In-flight requests keep their token while signing proofs and retrying nonces.
+          if (session) {
+            const token = await acquireToken(creds, session.keyPair, authTransport);
+            session = { ...session, ...token };
+          } else session = await createSession(creds, authTransport);
           return session;
         } catch {
           throw new Error(
