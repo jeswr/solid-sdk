@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 /**
  * RDF parsing dispatch — body in, dataset out.
@@ -18,7 +19,8 @@
  * @packageDocumentation
  */
 
-import type { Quad } from "@rdfjs/types";
+import type { RdfMediaType } from "@jeswr/rdf-engine";
+import type { DatasetCore, Quad } from "@rdfjs/types";
 import contentType from "content-type";
 import { JsonLdParser } from "jsonld-streaming-parser";
 import { Parser, Store, StreamParser } from "n3";
@@ -73,7 +75,8 @@ interface QuadTransform {
 
 /**
  * Parse a Turtle / N-Triples / N-Quads / TriG / JSON-LD body into a
- * fresh in-memory N3 {@link Store}.
+ * fresh in-memory N3 {@link Store} by default. With `engine`, return its
+ * dataset as RDF/JS DatasetCore after buffering any stream input.
  *
  * Stream bodies are consumed incrementally: each chunk is written
  * straight into the relevant streaming parser, and each emitted quad
@@ -91,11 +94,21 @@ interface QuadTransform {
  *   {@link SUPPORTED_RDF_MEDIA_TYPES}, if the Content-Type header is
  *   malformed, or if the underlying parser throws.
  */
+export function parseRdf(
+  body: RdfBody,
+  contentTypeHeader: string | null,
+  options?: ParseRdfOptions & { engine?: undefined },
+): Promise<Store>;
+export function parseRdf(
+  body: RdfBody,
+  contentTypeHeader: string | null,
+  options?: ParseRdfOptions,
+): Promise<DatasetCore>;
 export async function parseRdf(
   body: RdfBody,
   contentTypeHeader: string | null,
   options: ParseRdfOptions = {},
-): Promise<Store> {
+): Promise<DatasetCore> {
   const rawHeader = contentTypeHeader ?? "text/turtle";
   let mediaType: string;
   try {
@@ -108,6 +121,20 @@ export async function parseRdf(
   }
 
   const baseIRI = options.baseIRI;
+
+  if (options.engine && (N3_FAMILY.has(mediaType) || JSON_LD_FAMILY.has(mediaType))) {
+    try {
+      const input = typeof body === "string" ? body : await bufferBody(body);
+      return await options.engine.parse(input, mediaType as RdfMediaType, {
+        ...(baseIRI !== undefined && { baseIri: baseIRI }),
+      });
+    } catch (cause) {
+      throw new RdfFetchError(
+        `Failed to parse ${mediaType} body${baseIRI ? ` at ${baseIRI}` : ""}.`,
+        { cause, contentType: rawHeader, ...(baseIRI !== undefined && { url: baseIRI }) },
+      );
+    }
+  }
 
   let parser: QuadTransform;
   if (N3_FAMILY.has(mediaType)) {
@@ -273,4 +300,29 @@ function waitForDrain(parser: QuadTransform): Promise<void> {
     parser.once("drain", onDrain);
     parser.once("error", onError);
   });
+}
+
+/** Engine parsing accepts buffered input; release the source on every exit path. */
+async function bufferBody(body: ReadableStream<Uint8Array>): Promise<string> {
+  const reader = body.getReader();
+  try {
+    const decoder = new TextDecoder();
+    const chunks: string[] = [];
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value !== undefined) chunks.push(decoder.decode(value, { stream: true }));
+    }
+    chunks.push(decoder.decode());
+    return chunks.join("");
+  } catch (cause) {
+    try {
+      await reader.cancel(cause);
+    } catch {
+      // Keep the original stream failure.
+    }
+    throw cause;
+  } finally {
+    reader.releaseLock();
+  }
 }

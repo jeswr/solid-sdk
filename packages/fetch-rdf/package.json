@@ -48,7 +48,8 @@
     "content-type": "^1.0.5",
     "jsonld-streaming-parser": "^5.0.0",
     "n3": "^2.0.3",
-    "@rdfjs/types": "^2.0.1"
+    "@rdfjs/types": "^2.0.1",
+    "@jeswr/rdf-engine": "workspace:*"
   },
   "devDependencies": {
     "@types/content-type": "^1.1.8",

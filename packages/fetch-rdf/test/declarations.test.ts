@@ -62,7 +62,7 @@ it("typechecks a downstream consumer using only production dependencies", () => 
     );
     writeFileSync(
       join(consumer, "index.ts"),
-      `import { fetchRdf, parseRdf, type FetchedRdf } from "@jeswr/fetch-rdf";
+      `import { fetchRdf, parseRdf, type FetchedRdf, type ParseRdfOptions, type FetchRdfOptions } from "@jeswr/fetch-rdf";
 const fetched: FetchedRdf = await fetchRdf("https://example.org/resource");
 const parsed = await parseRdf("", "text/turtle");
 const size: number = fetched.dataset.size + parsed.size;
@@ -71,6 +71,20 @@ fetched.dataset.addQuads(parsed.getQuads(null, null, null, null));
 fetched.dataset.addQuads(123);
 // @ts-expect-error The parseRdf return type must also retain N3 Store typing.
 parsed.addQuads(123);
+declare const parseOptions: ParseRdfOptions;
+declare const fetchOptions: FetchRdfOptions;
+declare const optionalParseOptions: ParseRdfOptions | undefined;
+declare const optionalFetchOptions: FetchRdfOptions | undefined;
+await parseRdf("", "text/turtle", optionalParseOptions);
+await fetchRdf("https://example.org/resource", optionalFetchOptions);
+const engineParsed = await parseRdf("", "text/turtle", parseOptions);
+const engineFetched = await fetchRdf("https://example.org/resource", fetchOptions);
+engineParsed.match(null, null, null, null);
+engineFetched.dataset.match(null, null, null, null);
+// @ts-expect-error An engine result exposes DatasetCore, not N3-specific methods.
+engineParsed.getQuads(null, null, null, null);
+// @ts-expect-error An engine fetch also exposes DatasetCore.
+engineFetched.dataset.addQuads([]);
 void size;
 `,
     );

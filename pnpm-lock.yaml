@@ -2501,6 +2501,9 @@ importers:
 
   packages/fetch-rdf:
     dependencies:
+      '@jeswr/rdf-engine':
+        specifier: workspace:*
+        version: link:../rdf-engine
       '@rdfjs/types':
         specifier: ^2.0.1
         version: 2.0.1

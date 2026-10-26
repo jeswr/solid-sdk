@@ -36,6 +36,12 @@ to `fetchRdf` or `parseRdf`. The helper refuses redirects and checks nested cont
 For offline ActivityStreams contexts, supply an explicit `{ load }` loader returning
 only bundled allowlisted contexts; this package does not bundle contexts itself.
 
+Pass `engine` to opt into `RdfEngine.parse`; fetch-rdf buffers stream input on this
+path and returns the engine dataset as `DatasetCore`. The default path still returns
+an N3 Store and streams input. The caller owns and disposes the engine; fetch-rdf
+imports its types only. `documentLoader` applies only to the default JSON-LD parser:
+Sparq 0.1.5 rejects remote contexts. Use real Node WASM in parser parity tests.
+
 ## Agent persona
 
 When this work is delegated to a sub-agent, spawn the `solid-data-modeler` persona from
