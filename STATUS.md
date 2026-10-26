@@ -935,3 +935,82 @@ Both requested findings are fixed and tested. No implementation work is unfinish
 there are no open questions. `roborev status` failed with exit 127 (`roborev: command not found`), so
 fresh automated per-commit verdicts could not be obtained locally. Dispatcher/security review remains
 outstanding; this security-critical package has not been merged.
+
+## Fix round 13 — review `8fc647239d6d`
+
+Completed both findings in `solid-sdk-lane-sst-8xm.28-8fc647239d6d.md`.
+Only `packages/reactive-authentication` and this report changed. No dependencies were added.
+
+| Commit | Change |
+| --- | --- |
+| `9d775c08` | Carry the provider-issued request in the reactive retry's optional `ChallengeContext.request` field. Select the nonce retry's RPT through that request's recorded context. Add a same-URL concurrent-context regression and adjust direct-provider nonce tests to retain the issuing request. |
+| `c47e1d24` | Bind UMA and client-credentials requests to their cache ticket's AbortSignal before issuer lookup, retaining the signal through UMA context resolution. Add real issuer-picker/Web Lock regressions for both providers and an abortable UMA context-resolution regression. |
+| Final documentation commit (this commit) | Record round-13 verification and the review-tool limitation. |
+
+Concurrent operations at one URL no longer select each other's RPTs for nonce retries. The reactive
+client retains the exact issued request even though transport and body replay use request copies.
+Direct provider callers may supply that issued request as the upgrade input or in the challenge's
+`request` field. Conservative handling: nonce-only retries without an exact recorded issuing request,
+including unbound copies, fail closed rather than selecting credentials from mutable URL-wide state.
+Expiry checks, invalidation, logout fencing and retry budgets remain covered.
+
+Calling either provider's `forget()` now closes a pending issuer picker, rejects its upgrade with
+`SessionSupersededError`, and releases the picker's Web Lock for the next generation. Caller aborts
+also propagate. UMA storage-context resolution receives the same logout-bound request and cancels
+before login or exchange; the next generation can authenticate successfully.
+
+### Round-13 verification
+
+PASS required package gate and root checks, run before the final documentation commit:
+
+```sh
+pnpm --filter @jeswr/reactive-authentication run lint && pnpm --filter @jeswr/reactive-authentication run build && pnpm --filter @jeswr/reactive-authentication run typecheck && pnpm --filter @jeswr/reactive-authentication run test
+pnpm run lint:root
+git diff --check
+```
+
+- Package lint: zero errors; **63 warnings** and **22 informational diagnostics**, unchanged from round 12.
+- Build and typecheck: pass, including the SDK type-contract checks.
+- Tests: **329/329** pass in **29/29** files, with no skips.
+- Enforced coverage: statements **2095/2095**, branches **1549/1549**, functions **469/469**,
+  lines **1892/1892** — **100% in every metric**. Coverage configuration and thresholds are unchanged.
+- Root lint: Biome, lockfile transport, app workspace and raw-fetch guards pass.
+- Whitespace validation: pass.
+
+Each new regression failed against its corresponding original implementation:
+
+```sh
+pnpm --filter @jeswr/reactive-authentication exec vitest run test/uma.test.js --coverage.enabled=false '--testNamePattern=concurrent UMA nonce retries'
+pnpm --filter @jeswr/reactive-authentication exec vitest run test/browser-elements.test.js --coverage.enabled=false '--testNamePattern=logout cancels issuer lookup'
+pnpm --filter @jeswr/reactive-authentication exec vitest run test/uma.test.js --coverage.enabled=false '--testNamePattern=logout cancels pending storage-context'
+```
+
+Expected baseline failures: the first concurrent operation retried with the second context's RPT;
+both providers left the issuer picker open after logout; and UMA context discovery's signal remained
+unaborted. The fixed concurrent test verifies distinct RPTs, fresh signed DPoP proofs with the correct
+nonce, unchanged request bodies, one nonce retry per operation, and no extra exchanges or logins.
+The picker tests use the actual `IdpPicker` and native Web Locks through the existing DOM event seam;
+they verify the next upgrade can open its picker and that cancellation performs no discovery, login,
+context lookup or grant. All **51/51** focused cases pass:
+
+```sh
+pnpm --filter @jeswr/reactive-authentication exec vitest run test/uma.test.js test/uma-coverage.test.js test/browser-elements.test.js --coverage.enabled=false
+```
+
+Validation used Node `24.22.1` and pnpm `10.4.1`. No `check:packages` run was needed because no dependency
+was added. The dependant dry run selected only this package, so no dependant gate applies:
+
+```sh
+pnpm exec turbo run build typecheck test --filter=...@jeswr/reactive-authentication --dry=json
+```
+
+Per the lane brief, no whole-workspace gate or `gate:full` ran. No push, PR, branch switch, network Git
+operation or edits to another checkout were performed. The working tree is clean after this final
+report commit.
+
+### Round-13 remaining work and questions
+
+Both requested findings are fixed and tested. No implementation work is unfinished or blocked;
+there are no open questions. `roborev status` failed with exit 127 (`roborev: command not found`), so
+fresh automated per-commit verdicts could not be obtained locally. Dispatcher/security review remains
+outstanding; this security-critical package has not been merged.
