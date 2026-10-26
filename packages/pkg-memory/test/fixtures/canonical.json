@@ -90,6 +90,18 @@
       "assertion": "_:a schema:value \"not-a-number\"^^xsd:decimal, \"1.2\"^^xsd:int, \"invalid\"^^xsd:float, \"invalid\"^^xsd:double .",
       "id": "urn:uuid:dc6b92e2-8acc-506b-92e8-53468a80e284",
       "graph": "<urn:uuid:03bd80e4-c941-52ae-87bf-e761459ca425> <https://schema.org/value> \"not-a-number\"^^<http://www.w3.org/2001/XMLSchema#decimal> .\n<urn:uuid:03bd80e4-c941-52ae-87bf-e761459ca425> <https://schema.org/value> \"invalid\"^^<http://www.w3.org/2001/XMLSchema#float> .\n<urn:uuid:03bd80e4-c941-52ae-87bf-e761459ca425> <https://schema.org/value> \"invalid\"^^<http://www.w3.org/2001/XMLSchema#double> .\n<urn:uuid:03bd80e4-c941-52ae-87bf-e761459ca425> <https://schema.org/value> \"1.2\"^^<http://www.w3.org/2001/XMLSchema#int> .\n"
+    },
+    {
+      "name": "negative-zero-utc",
+      "assertion": "<https://example.org/residence> schema:validFrom \"2026-01-01T12:00:00-00:00\"^^xsd:dateTime .",
+      "id": "urn:uuid:bad8048c-883e-569f-b9e7-c2e7af875bc1",
+      "graph": "<https://example.org/residence> <https://schema.org/validFrom> \"2026-01-01T12:00:00+00:00\"^^<http://www.w3.org/2001/XMLSchema#dateTime> .\n"
+    },
+    {
+      "name": "negative-zero-utc-fraction",
+      "assertion": "<https://example.org/residence> schema:validFrom \"2026-01-01T12:00:00.1-00:00\"^^xsd:dateTime .",
+      "id": "urn:uuid:69681deb-54af-595d-b600-2fbc424db007",
+      "graph": "<https://example.org/residence> <https://schema.org/validFrom> \"2026-01-01T12:00:00.100000+00:00\"^^<http://www.w3.org/2001/XMLSchema#dateTime> .\n"
     }
   ]
 }

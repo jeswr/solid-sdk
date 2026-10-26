@@ -59,6 +59,8 @@ cases = [
         '1e20', '-2.5e30', 'INF', '-INF', '+INF', 'NaN', '1e999', '-1e999',
     ])),
     ('invalid-numerics', '_:a schema:value "not-a-number"^^xsd:decimal, "1.2"^^xsd:int, "invalid"^^xsd:float, "invalid"^^xsd:double .'),
+    ('negative-zero-utc', '<https://example.org/residence> schema:validFrom "2026-01-01T12:00:00-00:00"^^xsd:dateTime .'),
+    ('negative-zero-utc-fraction', '<https://example.org/residence> schema:validFrom "2026-01-01T12:00:00.1-00:00"^^xsd:dateTime .'),
 ]
 rows = []
 for name, assertion in cases:

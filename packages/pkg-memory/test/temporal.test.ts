@@ -138,6 +138,8 @@ it.each([
   ["gYear", "0000", "0000"],
   ["gYear", "2026", "2026"],
   ["dateTime", "2024-02-29T23:59:59Z", "2024-02-29T23:59:59+00:00"],
+  ["dateTime", "2026-01-01T12:00:00-00:00", "2026-01-01T12:00:00+00:00"],
+  ["dateTime", "2026-01-01T12:00:00.1-00:00", "2026-01-01T12:00:00.100000+00:00"],
   ["dateTime", "2000-02-29T12:00:00+14:00", "2000-02-29T12:00:00+14:00"],
   ["dateTime", "2026-01-01T12:00:00-14:00", "2026-01-01T12:00:00-14:00"],
   ["dateTime", "2026-01-01T12:00:00+13:59", "2026-01-01T12:00:00+13:59"],
@@ -153,6 +155,34 @@ it.each([
       (q) => q.predicate.value === predicate,
     )!.object;
     expect(term.equals(df.literal(expected, df.namedNode(NS.xsd + datatype)))).toBe(true);
+  }
+});
+
+it.each([
+  ["", ""],
+  [".1", ".100000"],
+  [".000000", ""],
+])("shares assertion graphs for UTC spellings with fraction %j", async (fraction, expectedFraction) => {
+  const input = batch(assertion(`2026-01-01T12:00:00${fraction}-00:00`));
+  input.claims = ["-00:00", "+00:00", "Z"].flatMap((offset) => {
+    const value = `2026-01-01T12:00:00${fraction}${offset}`;
+    return [assertion(value), `<${entity}> <${predicate}> "${value}"^^xsd:dateTime .`].map(
+      (claim, index) => ({
+        id: `${offset}-${index}`,
+        assertion: claim,
+        epistemic: "Mentioned" as const,
+      }),
+    );
+  });
+  const built = await buildNanopublications(input, options);
+  const parsed = await parseNanopublications(await serializeNanopublications(built));
+  for (const result of [built, parsed]) {
+    expect(result.nanopubs).toHaveLength(6);
+    expect(new Set(result.nanopubs.map((n) => n.assertionId)).size).toBe(1);
+    const contents = graph(result.dataset, result.nanopubs[0]!.assertionId);
+    expect([...contents].map((q) => q.object)).toEqual([
+      df.literal(`2026-01-01T12:00:00${expectedFraction}+00:00`, df.namedNode(`${NS.xsd}dateTime`)),
+    ]);
   }
 });
 

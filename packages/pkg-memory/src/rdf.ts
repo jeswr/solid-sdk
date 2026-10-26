@@ -125,10 +125,12 @@ export function dateTime(value: string, requireTimezone = true): string {
   // Assertion literals describe local calendar values, not necessarily instants.
   if (!timezone) return value;
   // RDFlib normalizes UTC offsets and microsecond precision on parsing.
-  return value.replace(/Z$/, "+00:00").replace(/\.(\d+)(?=[+-])/, (_, digits: string) => {
-    const micros = digits.padEnd(6, "0").slice(0, 6);
-    return Number(micros) === 0 ? "" : `.${micros}`;
-  });
+  return value
+    .replace(/(?:Z|-00:00)$/, "+00:00")
+    .replace(/\.(\d+)(?=[+-])/, (_, digits: string) => {
+      const micros = digits.padEnd(6, "0").slice(0, 6);
+      return Number(micros) === 0 ? "" : `.${micros}`;
+    });
 }
 
 export function normalizeLiteral(term: Literal): Literal {
