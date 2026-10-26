@@ -7,6 +7,13 @@ import type { CapabilityEntry, ServiceEntry, StorageDescription } from "./types.
 import { ACQ, DCT, DID, LWS, NOTIFY, SSD } from "./vocab.js";
 
 const RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
+const CHANNEL_TYPES: ReadonlySet<string> = new Set([
+  NOTIFY.WebSocketChannel2023,
+  NOTIFY.StreamingHTTPChannel2023,
+  NOTIFY.WebhookChannel2023,
+  NOTIFY.LDNChannel2023,
+  NOTIFY.WebPushChannel2023,
+]);
 
 /** Small RDF view shared by subscription, service, and capability nodes. */
 class DescriptionNode extends TermWrapper {
@@ -86,6 +93,7 @@ function isNamedNode(term: Term): boolean {
 export function parseSolidDescription(
   dataset: DatasetCore,
   rootUrl: string,
+  notificationsOnly = false,
 ): Pick<StorageDescription, "services" | "capabilities"> {
   const root = new DescriptionNode(rootUrl, dataset, DataFactory);
   const services: ServiceEntry[] = [];
@@ -96,7 +104,9 @@ export function parseSolidDescription(
     seen.add(subscription.value);
     const channels = subscription.iris(NOTIFY.channelType);
     services.push({
-      type: [SSD.SolidNotificationService, ...channels],
+      // Only recognised channel types become service types; others stay in `extra` so a
+      // description cannot pose as another service class through notify:channelType.
+      type: [SSD.SolidNotificationService, ...channels.filter((type) => CHANNEL_TYPES.has(type))],
       endpoint: subscription.value,
       extra: {
         ...subscription.extra([RDF_TYPE, NOTIFY.channelType, NOTIFY.feature]),
@@ -107,6 +117,7 @@ export function parseSolidDescription(
       },
     });
   }
+  if (notificationsOnly) return { services, capabilities: [] };
   for (const service of root.nodes(DID.service)) {
     const endpoint = service.iris(DID.serviceEndpoint)[0];
     if (endpoint === undefined) continue;

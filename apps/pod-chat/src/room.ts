@@ -19,7 +19,7 @@
  * quads, never inline Turtle (house rule).
  */
 
-import type { DatasetCore } from "@rdfjs/types";
+import type { DatasetCore, DataFactory as RdfDataFactory, Term } from "@rdfjs/types";
 import {
   LiteralAs,
   LiteralFrom,
@@ -31,6 +31,7 @@ import {
   TermWrapper,
 } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
+import { canonicalizeChatDataset } from "./canonical-vocab.js";
 import { AS, AS_CLASS, CHAT_ROOM_CLASS, DCT, PC, RDF_TYPE } from "./vocab.js";
 
 /** A room participant as the UI consumes it (plain, serialisable). */
@@ -77,6 +78,11 @@ export class ParticipantDoc extends TermWrapper {
 
 /** Typed `@rdfjs/wrapper` view of a single room's `#it` subject. */
 export class RoomDoc extends TermWrapper {
+  constructor(term: string | Term, dataset: DatasetCore, factory: RdfDataFactory) {
+    const subject = typeof term === "string" ? factory.namedNode(term) : term;
+    super(subject, canonicalizeChatDataset(dataset, factory, subject), factory);
+  }
+
   get types(): Set<string> {
     return SetFrom.subjectPredicate(this, RDF_TYPE, NamedNodeAs.string, NamedNodeFrom.string);
   }
