@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # sst-7o0m — MON-L4 recurring transactions and forecasting
 
@@ -73,3 +74,37 @@ boundaries and caller-controlled posted/template deduplication; use plain recurr
 data with RDF translation left to persistence adapters. No ambiguity blocks use.
 
 No push, PR, branch switch, remote fetch, or edits to other checkouts were performed.
+
+## Fix round 1 — detection workload
+
+Review finding 1 is addressed in `0e4c65d3 fix(money): stop detection at schedule mismatches`.
+Candidate detection now compares each expected occurrence with the next observation
+immediately, rejects the first mismatch, and checks the final observation count.
+It no longer allocates an expected-date array. Candidate priority and accepted
+schedules are unchanged; the scan's ending day is calculated once per candidate.
+
+Three regression cases span years 0001–9999 with missing occurrences, irregular
+dates, and duplicate observations. They wrap the real calendar matcher and enforce
+a deterministic work bound without elapsed-time assertions. All three fail against
+the pre-fix implementation and pass with the fix.
+
+| Exact command | Fix-round result |
+| --- | --- |
+| `pnpm --filter @jeswr/app-suite exec vitest run test/money-forecast.test.ts --coverage.include='src/apps/money/lib/forecast/**/*.ts'` | PASS: 28 tests; forecast coverage 100% statements (167/167), branches (83/83), functions (33/33), lines (145/145). |
+| `pnpm --filter @jeswr/app-suite exec vitest run test/money-forecast.test.ts --coverage.enabled=false --testNamePattern='stops failed candidates early'` | Regression proof: all three new cases fail against the original detector; the fixed file was restored immediately afterward. |
+| `pnpm --filter @jeswr/suite-ui run build` | PASS: app workspace dependency. |
+| `pnpm --filter @jeswr/app-suite run lint` | PASS: warnings only. |
+| `pnpm --filter @jeswr/app-suite run build` | PASS. |
+| `pnpm --filter @jeswr/app-suite run typecheck` | PASS. |
+| `pnpm --filter @jeswr/app-suite run test` | PASS: 28 files, 1,205 tests; configured coverage 100% throughout. |
+| `pnpm run lint:root` | PASS. |
+| `TURBO_SCM_BASE=689c82a38fcc296b1904f33a9d3d19e4f3ca27df pnpm run gate` | PASS: 6/6 tasks. |
+| `pnpm run gate:full` | FAIL: 229/300 tasks succeeded before the same two pre-existing federation-codegen namespace/fixture failures documented above stopped the run. |
+| `git diff --exit-code 689c82a38fcc296b1904f33a9d3d19e4f3ca27df -- tools/federation-codegen packages/solid-federation-vocab` | PASS: failing areas are unchanged from the supplied fix-round starting commit. |
+| `git diff --check` | PASS. |
+
+No dependencies or unrelated implementation files changed. The supplied review
+finding is fixed; there are no new design questions. `roborev` remains unavailable
+in this sandbox, so a new automated per-commit verdict cannot be queued locally.
+The final documentation commit records this fix-round validation. No push, PR,
+branch switch, fetch, merge, or edits to other checkouts were performed.
