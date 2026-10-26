@@ -2,6 +2,7 @@
 // AUTHORED-BY Codex GPT-6
 import { fetchRdf, RdfFetchError } from "@jeswr/fetch-rdf";
 import type { DatasetCore } from "@rdfjs/types";
+import { isomorphic } from "rdf-isomorphic";
 import { ModelError } from "./errors";
 import { NS, node, requireHttp, Store, serialize } from "./rdf";
 export interface Resource {
@@ -57,7 +58,7 @@ export class RdfIO {
       isContainer
         ? !current.dataset.contains(resource.dataset) ||
           node(current.url, current.dataset).iris(`${NS.LDP}contains`).size > 0
-        : !current.dataset.equals(resource.dataset)
+        : !isomorphic([...current.dataset], [...resource.dataset])
     )
       throw new ModelError(412, url, current.etag);
     return current;

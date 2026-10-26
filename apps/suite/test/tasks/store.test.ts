@@ -271,6 +271,67 @@ describe("project discovery and first use", () => {
     pod.intercept = undefined;
     expect((await tasks.createProject("Home")).url).toBe(`${projects}home.ttl`);
   });
+  it("creates and updates scheduled tasks after blank-node relabelling without PUT ETags", async () => {
+    const pod = new Pod();
+    pod.omitPutEtags = true;
+    const tasks = store(pod, { typeIndex: false });
+    const project = await tasks.bootstrapInbox();
+    const created = await tasks.createTask(project, {
+      title: "Scheduled",
+      state: "open",
+      dueDate: now,
+      recurrence: { frequency: "DAILY", interval: 1 },
+      reminders: [{ offset: "-PT15M" }],
+    });
+    expect(created.etag).toBe('"1"');
+    expect(created.task.recurrence).toMatchObject({ frequency: "DAILY", interval: 1 });
+    expect(created.task.reminders).toMatchObject([{ offset: "-PT15M" }]);
+    // Parsing the persisted bytes again allocates fresh blank-node labels.
+    expect((await pod.dataset(created.url)).equals(created.dataset)).toBe(false);
+    const updated = await tasks.updateTask(created, (task) => {
+      task.title = "Updated schedule";
+      task.recurrence = { frequency: "WEEKLY", interval: 2 };
+      task.reminders = [{ offset: "-PT30M" }];
+    });
+    expect(updated.etag).toBe('"2"');
+    const read = await tasks.readTask(created.url);
+    expect(read.task.title).toBe("Updated schedule");
+    expect(read.task.recurrence).toMatchObject({ frequency: "WEEKLY", interval: 2 });
+    expect(read.task.reminders).toMatchObject([{ offset: "-PT30M" }]);
+    expect(
+      pod
+        .mutations()
+        .filter((request) => request.url === created.url)
+        .map((request) => [request.headers.get("If-None-Match"), request.headers.get("If-Match")]),
+    ).toEqual([
+      ["*", null],
+      [null, created.etag],
+    ]);
+  });
+  it("rejects a changed named identity in scheduled-task validator read-back", async () => {
+    const pod = new Pod();
+    pod.omitPutEtags = true;
+    const tasks = store(pod, { typeIndex: false });
+    const project = await tasks.bootstrapInbox();
+    const url = `${projects}inbox/task-1.ttl`;
+    pod.intercept = async (request) => {
+      if (request.method === "GET" && request.url === url) {
+        const dataset = await pod.dataset(url);
+        node(`${url}#it`, dataset).setIri(`${NS.WF}tracker`, `${projects}other.ttl#this`);
+        pod.seed(url, await serialize(dataset));
+      }
+      return undefined;
+    };
+    await expect(
+      tasks.createTask(project, {
+        title: "Scheduled",
+        state: "open",
+        dueDate: now,
+        recurrence: { frequency: "DAILY", interval: 1 },
+        reminders: [{ offset: "-PT15M" }],
+      }),
+    ).rejects.toMatchObject({ status: 412 });
+  });
   it.each([
     404, 412, 503,
   ])("handles container cleanup %s without deleting an edited container", async (status) => {
