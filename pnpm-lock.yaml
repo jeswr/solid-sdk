@@ -4535,10 +4535,29 @@ importers:
         version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@26.1.1)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1)(vite@8.1.4(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0))
 
   packages/storage-client:
+    dependencies:
+      '@jeswr/fetch-rdf':
+        specifier: workspace:*
+        version: link:../fetch-rdf
+      '@jeswr/rdf-serialize':
+        specifier: workspace:*
+        version: link:../rdf-serialize
+      '@jeswr/storage-capabilities':
+        specifier: workspace:*
+        version: link:../storage-capabilities
+      n3:
+        specifier: ^2.0.3
+        version: 2.1.1
     devDependencies:
       '@biomejs/biome':
         specifier: ^2.5.1
         version: 2.5.3
+      '@types/n3':
+        specifier: ^1.16.0
+        version: 1.26.1
+      fast-check:
+        specifier: ^4.3.0
+        version: 4.10.2
       typescript:
         specifier: ^6.0.3
         version: 6.0.3

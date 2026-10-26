@@ -1,9 +1,9 @@
 {
-  "$comment": "AUTHORED-BY Codex GPT-6.1-Sol",
+  "$comment": "AUTHORED-BY Codex GPT-6.1-Sol; AUTHORED-BY Claude Opus 5.5",
   "name": "@jeswr/storage-client",
   "version": "0.1.0",
   "private": true,
-  "description": "Protocol-neutral storage clients for Solid and LWS. Experimental, AI-agent-generated scaffold.",
+  "description": "Protocol-neutral storage clients for Solid and LWS. Experimental, AI-agent-generated.",
   "type": "module",
   "sideEffects": false,
   "securityCritical": true,
@@ -54,7 +54,15 @@
   "license": "MIT",
   "devDependencies": {
     "@biomejs/biome": "^2.5.1",
+    "@types/n3": "^1.16.0",
+    "fast-check": "^4.3.0",
     "typescript": "^6.0.3",
     "vitest": "^4.1.9"
+  },
+  "dependencies": {
+    "@jeswr/fetch-rdf": "workspace:*",
+    "@jeswr/rdf-serialize": "workspace:*",
+    "@jeswr/storage-capabilities": "workspace:*",
+    "n3": "^2.0.3"
   }
 }
