@@ -2,10 +2,14 @@
 
 import type { OdrlPolicy, RequestContext } from "@jeswr/solid-odrl";
 import { ACTION_IRI, evaluate, policyToRdf } from "@jeswr/solid-odrl";
-import { Parser, Store } from "n3";
+import { DataFactory, Parser, Store } from "n3";
 import { describe, expect, test, vi } from "vitest";
 import { createEngine } from "./engine.js";
-import { createRdfEngine, PolicyIdentifierCollisionError } from "./node.js";
+import {
+  createRdfEngine,
+  PolicyIdentifierCollisionError,
+  PolicySubjectUnsupportedError,
+} from "./node.js";
 import { createFakeRdfEngine } from "./testing.js";
 import type { PolicyContext } from "./types.js";
 
@@ -259,6 +263,91 @@ for (const [name, factory] of [
         });
         expect([...data]).toEqual(original);
         expect(await engine.evaluatePolicy(data, { action: "read", target: RES })).toEqual(result);
+      } finally {
+        engine.dispose();
+      }
+    });
+
+    test.each(
+      ["NamedNode", "BlankNode"].flatMap((termType) =>
+        ["unrelated", "permission", "prohibition", "obligation"].map((relation) => ({
+          termType,
+          relation,
+        })),
+      ),
+    )("keeps $termType policy identity apart from a same-value $relation subject", async ({
+      termType,
+      relation,
+    }) => {
+      const root =
+        termType === "NamedNode" ? DataFactory.namedNode(POLICY) : DataFactory.blankNode(POLICY);
+      const shadow =
+        termType === "NamedNode" ? DataFactory.blankNode(POLICY) : DataFactory.namedNode(POLICY);
+      const parsed = new Parser().parse(`
+        @prefix odrl: <${ODRL}> .
+        <urn:shadow> odrl:${relation} [ odrl:action odrl:read ] .
+        <${POLICY}> a odrl:Set, odrl:Policy ; odrl:conflict odrl:perm ;
+          odrl:permission [ odrl:action odrl:read ;
+            odrl:duty [ odrl:action odrl:attribute ] ] ;
+          odrl:obligation [ odrl:action odrl:inform ] .
+      `);
+      // Factory construction preserves a label that Turtle would scope/rename.
+      const data = new Store(
+        parsed.map((q) =>
+          DataFactory.quad(
+            q.subject.value === "urn:shadow"
+              ? shadow
+              : q.subject.value === POLICY
+                ? root
+                : q.subject,
+            q.predicate,
+            q.object,
+            q.graph,
+          ),
+        ),
+      );
+      const original = [...data];
+      const engine = factory();
+      try {
+        const expected = {
+          allow: true,
+          matched: [`${POLICY}#rule-1`],
+          unmet: [`${POLICY}#duty-2`, `${POLICY}#duty-1`],
+        };
+        expect(await engine.evaluatePolicy(data, { action: "read", target: RES })).toEqual(
+          expected,
+        );
+        expect(await engine.evaluatePolicy(data, { action: "read", target: RES })).toEqual(
+          expected,
+        );
+        expect([...data]).toEqual(original);
+      } finally {
+        engine.dispose();
+      }
+    });
+
+    test("rejects ambiguous typed policy subjects with the same value", async () => {
+      const data = dataset({
+        id: POLICY,
+        permissions: [{ type: "permission", action: "read" }],
+      });
+      data.addQuad(
+        DataFactory.blankNode(POLICY),
+        DataFactory.namedNode("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
+        DataFactory.namedNode(`${ODRL}Set`),
+      );
+      const original = [...data];
+      const engine = factory();
+      try {
+        for (const action of ["read", "unknown"]) {
+          const result = engine.evaluatePolicy(data, { action, target: RES });
+          await expect(result).rejects.toBeInstanceOf(PolicySubjectUnsupportedError);
+          await expect(result).rejects.toMatchObject({
+            name: "PolicySubjectUnsupportedError",
+            identifier: POLICY,
+          });
+        }
+        expect([...data]).toEqual(original);
       } finally {
         engine.dispose();
       }
