@@ -229,10 +229,16 @@ export function bindingStateFromSetup(status: string): BindingState {
   if (["none", "not_applicable"].includes(status)) return "none";
   return "setup-required";
 }
-/** Keep complete handle/URI tokens; strip prose punctuation at the end of a mention. */
+const NOTE_IDENTIFIER_CHARS = "[\\p{L}\\p{M}\\p{N}._@%+:/#=~!$&'*?^`{|}-]";
+const NOTE_IDENTIFIERS = new RegExp(
+  // Keep phone formatting and any adjacent suffix, so a longer identity cannot match a prefix.
+  `['\`]?\\+\\d[\\d ().-]{5,}\\d${NOTE_IDENTIFIER_CHARS}*|${NOTE_IDENTIFIER_CHARS}+`,
+  "gu",
+);
+/** Keep complete phone/handle/URI tokens; strip prose punctuation after a mention. */
 function noteIdentifiers(note: string): string[] {
-  return (note.normalize("NFC").match(/[\p{L}\p{M}\p{N}._@%+:/#=~!$&'*?^`{|}-]+/gu) ?? []).map(
-    (handle) => handle.replace(/[.:]+$/u, "").replace(/^(['`])(.*)\1$/u, "$2"),
+  return (note.normalize("NFC").match(NOTE_IDENTIFIERS) ?? []).map((handle) =>
+    handle.replace(/[.:]+$/u, "").replace(/^(['`])(.*)\1$/u, "$2"),
   );
 }
 /** Build privacy-safe settings, applying only the documented ODI correction and Telegram addition. */

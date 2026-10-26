@@ -224,6 +224,67 @@ describe("privacy and settings model", () => {
     ]);
   });
   it.each([
+    ["+1 202 555 0100", '"'],
+    ["+1 202 555 0100", "'"],
+    ["+1 202 555 0100", "`"],
+    ["+1 (202) 555-0100", '"'],
+    ["+1.202.555.0100", '"'],
+  ])("preserves complete formatted phone mentions: %s quoted with %s", (own, quote) => {
+    const other = "+1 (202) 555-0101";
+    const snap = parseSnapshot({
+      version: 1,
+      accounts: [own, other, "202"].map((handle, index) => ({
+        id: `phone-${index}`,
+        channel: "phone_messages",
+        provider: "fixture_provider",
+        organization: "personal",
+        identifiers: { primary: handle },
+        connector: { target: "fixture", setup_status: "planned" },
+      })),
+      notes: [`Identity conflict: ${quote}${own}${quote} versus (${other}).`],
+    });
+    const s = inventorySettings(snap, salt);
+    for (const account of s.connections.slice(0, 2))
+      expect(account).toMatchObject({
+        bindingState: "error",
+        identityConflicts: [
+          {
+            kind: "identity-mismatch",
+            handleHashes: [
+              hashHandle(own, salt, "phone_messages"),
+              hashHandle(other, salt, "phone_messages"),
+            ].sort(),
+          },
+        ],
+      });
+    expect(s.connections[2]).toMatchObject({
+      bindingState: "setup-required",
+      identityConflicts: [],
+    });
+    expect(JSON.stringify(s)).not.toContain(own);
+    expect(JSON.stringify(s)).not.toContain(other);
+  });
+  it.each([
+    "+1 202 555 01001",
+    "+1 (202) 555-0100x123",
+    "9+1 202 555 0100",
+  ])("does not match a phone inside a longer identifier: %s", (mention) => {
+    const snap = parseSnapshot({
+      version: 1,
+      accounts: ["+1 202 555 0100", "+1 (202) 555-0100"].map((handle, index) => ({
+        id: `phone-${index}`,
+        channel: "phone_messages",
+        provider: "fixture_provider",
+        organization: "personal",
+        identifiers: { primary: handle },
+        connector: { target: "fixture", setup_status: "planned" },
+      })),
+      notes: [`Identity conflict: ${mention} versus alternate@example.org.`],
+    });
+    for (const account of inventorySettings(snap, salt).connections)
+      expect(account).toMatchObject({ bindingState: "setup-required", identityConflicts: [] });
+  });
+  it.each([
     "matrix",
     "matrix_bot",
   ])("rejects encoded %s references regardless of case", (channel) => {
