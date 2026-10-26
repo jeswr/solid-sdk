@@ -296,3 +296,58 @@ added, so no dependency policy check was needed. Roborev is still unavailable. N
 real credential store, real op, network remote, tracker or other checkout was accessed or
 modified. The unrelated full-workspace failures and integration review remain outstanding;
 no requested implementation work or open questions remain.
+
+
+## Fix round 5 — review of `5377ddba8a1e`
+
+This round addresses exactly the two supplied findings and the prescribed prerequisite merge:
+
+- `67ec2636` — `chore: merge prescribed integration prerequisites`: fetched only the local
+  source repository's `agent/integration` branch and merged `93217230`. The merge was clean;
+  no conflict resolutions or changes to another checkout were needed.
+- `cc9570ed` — `fix(credentials): require Google email authority`: account selection requires
+  a verified email and either the Gmail/Googlemail suffix or a signed `hd` matching its domain.
+  First-consent regressions reject absent, malformed and mismatched `hd`; signed synthetic
+  provider-domain identities remain accepted. The existing stored `sub` remains the binding:
+  a changed subject with the same authoritative email is refused without replacing the grant.
+- `b66b9cd5` — `fix(credentials): preserve lock ownership`: lock records contain a random
+  owner token, PID and hostname. Recover only owners on this host whose PID probe reports
+  ESRCH; live, foreign-host, unverifiable and malformed owners retain their locks until the
+  existing typed timeout. Release compares the token before deletion. Tests cover old live
+  owners, token uniqueness, replacement during release/recovery, a real exited child PID,
+  permission refusals, failed writes and locks disappearing during recovery. The existing
+  `staleMs` option remains accepted for compatibility but never revokes a lock.
+- Final `docs: record fifth credential fix verification` commit — this record, committed last.
+
+Verification for this round:
+
+| Command | Result |
+| --- | --- |
+| `pnpm install --offline --frozen-lockfile --ignore-scripts` | PASS; refreshed dependency links for the prescribed merge without changing the lockfile or running lifecycle scripts. Warnings concerned workspace CLI bins not yet built. |
+| `pnpm exec turbo run lint build typecheck test --filter=@jeswr/agent-credentials --concurrency=4` | PASS; 5/5 tasks, all uncached, including root lint. 9 files, 152 tests; 100% statements (1400), branches (1057), functions (211), lines (1268), with per-file thresholds unchanged. |
+| `pnpm run lint:root` (invoked by package, affected and full gates) | PASS; all root guards passed. |
+| `TURBO_SCM_BASE=origin/agent/integration pnpm run gate` | PASS; 6/6 tasks, including 745 root tests; 4 tasks cached; 14.426s. |
+| `pnpm run gate:full` | FAIL in unchanged `@jeswr/federation-trust#test`: `test/characterization.test.ts:196` expects a different JSON key order in the serialized Ed25519 delegate key (`crv,x,kty` versus `kty,crv,x`). 281 successful tasks out of 345 scheduled before stopping; 1m58.089s. The previously blocked federation-codegen tests now PASS (26 tests). |
+| `pnpm --filter @jeswr/federation-trust run test` | FAIL independently with the same snapshot mismatch; 53 passed, 1 failed. No snapshot was updated. |
+| `git diff --exit-code 93217230 -- packages/federation-trust packages/solid-federation-vocab` | PASS; these paths match merged main. |
+| `git diff --check` and `git show --check --oneline` for both fix commits | PASS. |
+
+The three key authority/live-owner/replacement regressions were also run against the pre-fix
+source using coverage-disabled targeted Vitest selection; all three failed as expected. Fixed
+source was restored before committing and running the affected/full gates. Initial verification
+caught two new test-fixture assertion mistakes and one uncovered disappearing-lock branch;
+these were corrected before the passing package gate. No timeout flakes occurred.
+
+Both requested fixes and regression coverage are complete. The conservative authority check
+applies on every consent, preserving the existing expected-email check alongside subject pinning.
+No dependencies were added, so no dependency policy check was needed. No manifest, lockfile,
+coverage threshold or timeout setting changed beyond the prescribed merge. Build-generated,
+untracked callback/client-id assets were removed; no generated artifacts are committed.
+Tests use temporary stores and injected fake providers; no live credential, provider or real
+op was accessed. No network remote was fetched, pushed or modified, and no PR was opened.
+
+The full-workspace snapshot failure needs integration follow-up outside this brief. Roborev
+remains unavailable (`command -v roborev` found no executable), so automated per-commit review
+could not run; no tool was installed. Integration review, any follow-up bead for that unrelated
+failure, and tracker updates remain with the integration owner: this lane does not modify the
+external tracker or initialize a tracker in this worktree. Open questions: none.
