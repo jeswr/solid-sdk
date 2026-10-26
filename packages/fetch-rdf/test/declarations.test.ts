@@ -27,6 +27,7 @@ it("typechecks a downstream consumer using only production dependencies", () => 
     const manifest = JSON.parse(readFileSync(join(installed, "package.json"), "utf8")) as {
       dependencies: Record<string, string>;
     };
+    expect(manifest.dependencies).not.toHaveProperty("@jeswr/rdf-engine");
     // Copy the package rather than linking it: its declarations must resolve
     // solely against production dependencies, without workspace ambient types.
     for (const dependency of Object.keys(manifest.dependencies)) {
@@ -62,7 +63,7 @@ it("typechecks a downstream consumer using only production dependencies", () => 
     );
     writeFileSync(
       join(consumer, "index.ts"),
-      `import { fetchRdf, parseRdf, type FetchedRdf, type ParseRdfOptions, type FetchRdfOptions } from "@jeswr/fetch-rdf";
+      `import { fetchRdf, parseRdf, type FetchedRdf, type ParseRdfOptions, type FetchRdfOptions, type RdfParser } from "@jeswr/fetch-rdf";
 const fetched: FetchedRdf = await fetchRdf("https://example.org/resource");
 const parsed = await parseRdf("", "text/turtle");
 const size: number = fetched.dataset.size + parsed.size;
@@ -71,6 +72,21 @@ fetched.dataset.addQuads(parsed.getQuads(null, null, null, null));
 fetched.dataset.addQuads(123);
 // @ts-expect-error The parseRdf return type must also retain N3 Store typing.
 parsed.addQuads(123);
+const parser: RdfParser = {
+  async parse(input, mediaType, options) {
+    const text: string = input;
+    const base: string | undefined = options?.baseIri;
+    // @ts-expect-error Media types must retain their literal union.
+    const invalid: "application/xml" = mediaType;
+    return parsed;
+  },
+};
+const structuralParsed = await parseRdf("", "text/turtle", { engine: parser });
+const structuralFetched = await fetchRdf("https://example.org/resource", { engine: parser });
+// @ts-expect-error Structural parsers expose DatasetCore results.
+structuralParsed.getQuads(null, null, null, null);
+// @ts-expect-error Structural parser fetch results expose DatasetCore too.
+structuralFetched.dataset.addQuads([]);
 declare const parseOptions: ParseRdfOptions;
 declare const fetchOptions: FetchRdfOptions;
 declare const optionalParseOptions: ParseRdfOptions | undefined;

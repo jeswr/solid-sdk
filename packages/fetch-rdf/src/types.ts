@@ -1,11 +1,11 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /**
  * Public type definitions for `@jeswr/fetch-rdf`.
  *
  * @packageDocumentation
  */
 
-import type { RdfEngine } from "@jeswr/rdf-engine";
 import type { DatasetCore } from "@rdfjs/types";
 import type { IJsonLdParserOptions } from "jsonld-streaming-parser";
 import type { Store } from "n3";
@@ -13,10 +13,27 @@ import type { Store } from "n3";
 /** JSON-LD context loader, compatible with the streaming parser's loader seam. */
 export type DocumentLoader = NonNullable<IJsonLdParserOptions["documentLoader"]>;
 
+/** RDF syntaxes accepted by the optional parser seam. */
+export type RdfMediaType =
+  | "text/turtle"
+  | "application/n-triples"
+  | "application/n-quads"
+  | "application/trig"
+  | "application/ld+json";
+
+/** Structural parser seam, satisfied by RdfEngine without depending on its package. */
+export interface RdfParser {
+  parse(
+    input: string,
+    mediaType: RdfMediaType,
+    options?: { baseIri?: string },
+  ): Promise<DatasetCore>;
+}
+
 /** Options for {@link parseRdf}. */
 export interface ParseRdfOptions {
   /** Opt-in parser. Stream bodies are buffered; the engine owns syntax support. */
-  engine?: RdfEngine;
+  engine?: RdfParser;
   /**
    * Base IRI for resolving relative references in the body. In practice
    * this is the resource URL itself. Optional — the underlying parsers
@@ -30,7 +47,7 @@ export interface ParseRdfOptions {
 /** Options for {@link fetchRdf}. */
 export interface FetchRdfOptions {
   /** Opt-in parser; omitted by default to retain streaming N3/JSON-LD parsing. */
-  engine?: RdfEngine;
+  engine?: RdfParser;
   /** Default-parser JSON-LD context loader. Ignored with engine. Omit to refuse remote contexts. */
   documentLoader?: DocumentLoader;
   /**

@@ -1,7 +1,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { createRdfEngine } from "@jeswr/rdf-engine/node";
 import { afterAll, describe, expect, it, vi } from "vitest";
-import { fetchRdf, parseRdf, RdfFetchError } from "../src/index.js";
+import { fetchRdf, parseRdf, RdfFetchError, type RdfParser } from "../src/index.js";
 import { JSON_LD_SAMPLE, makeResponse, TURTLE_SAMPLE } from "./helpers.js";
 
 const engine = createRdfEngine();
@@ -17,6 +18,19 @@ const formats = [
 ] as const;
 
 describe("optional RDF engine", () => {
+  it("accepts a structural parser with no engine lifecycle methods", async () => {
+    const dataset = await parseRdf(TURTLE_SAMPLE, "text/turtle");
+    const parse = vi.fn(async () => dataset);
+    const parser: RdfParser = { parse };
+    expect(await parseRdf(TURTLE_SAMPLE, "text/turtle", { engine: parser })).toBe(dataset);
+    const result = await fetchRdf("https://example.org/resource", {
+      engine: parser,
+      fetch: async () => makeResponse(TURTLE_SAMPLE),
+    });
+    expect(result.dataset).toBe(dataset);
+    expect(parse).toHaveBeenCalledTimes(2);
+  });
+
   it.each(formats)("matches default RDF semantics for %s", async (mediaType, body) => {
     const defaultDataset = await parseRdf(body, mediaType);
     const engineDataset = await parseRdf(body, mediaType, { engine });

@@ -103,8 +103,11 @@ Without `engine`, parsing and `Store` return types stay unchanged. With `engine`
 stream bodies are buffered before `engine.parse`; its dataset is returned directly,
 typed as `DatasetCore` (`FetchedRdf<DatasetCore>` for fetch results). Engine failures
 are wrapped in `RdfFetchError`, preserving their cause, media type and resource URL.
-The caller owns the engine lifecycle. fetch-rdf imports only its types, so the
-default path does not initialize WASM.
+The caller owns the engine lifecycle. The `engine` option accepts the exported
+structural `RdfParser` interface: only `parse(string, mediaType, { baseIri? })`
+returning `Promise<DatasetCore>` is required. fetch-rdf has no production or type
+dependency on rdf-engine; callers provide it separately. The default path does
+not initialize WASM.
 
 The engine's JSON-LD support applies on this path: Sparq 0.1.5 refuses remote
 contexts. `documentLoader` configures only the default JSON-LD parser; use that

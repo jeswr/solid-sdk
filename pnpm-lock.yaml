@@ -2501,9 +2501,6 @@ importers:
 
   packages/fetch-rdf:
     dependencies:
-      '@jeswr/rdf-engine':
-        specifier: workspace:*
-        version: link:../rdf-engine
       '@rdfjs/types':
         specifier: ^2.0.1
         version: 2.0.1
@@ -2523,6 +2520,9 @@ importers:
       '@biomejs/biome':
         specifier: ^2.5.1
         version: 2.5.3
+      '@jeswr/rdf-engine':
+        specifier: workspace:*
+        version: link:../rdf-engine
       '@types/content-type':
         specifier: ^1.1.8
         version: 1.1.9

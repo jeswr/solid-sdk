@@ -19,14 +19,13 @@
  * @packageDocumentation
  */
 
-import type { RdfMediaType } from "@jeswr/rdf-engine";
 import type { DatasetCore, Quad } from "@rdfjs/types";
 import contentType from "content-type";
 import { JsonLdParser } from "jsonld-streaming-parser";
 import { Parser, Store, StreamParser } from "n3";
 import { refusingDocumentLoader } from "./document-loader.js";
 import { RdfFetchError } from "./errors.js";
-import type { ParseRdfOptions } from "./types.js";
+import type { ParseRdfOptions, RdfMediaType } from "./types.js";
 
 /** Media types this dispatch helper recognises. Anything else triggers
  * an {@link RdfFetchError} rather than a silent best-effort parse. */
