@@ -3,6 +3,61 @@
 
 # sst-vuhh — CON-02 lane report
 
+## Fix round 3 — 2026-10-26
+
+Starting revision: `939b1e0028ccd457b5a08eb101f3a553454b92a6` on `lane/sst-vuhh`.
+Only the collection-metadata finding in the supplied round 3 review was addressed.
+
+- `56aaba0b` — `fix: preserve collection metadata in incremental imports`: merge adapter
+  data before adding provenance, so only adapter-supplied subjects replace stored descriptions.
+  Existing collection type/name survive item-only and empty merge pages; explicit collection
+  descriptions still replace their old metadata. Six API/file regression cases also verify
+  current document/item provenance, unchanged retained-item provenance, item counts and adapter
+  input immutability. The item-only and empty cases reproduced metadata loss before the fix.
+- Final `docs: record third connector fix results` commit — this report, committed last.
+
+Validation commands on the final source revision:
+
+```sh
+GIT_ALLOW_PROTOCOL=file pnpm --filter @jeswr/pod-connectors^... run build
+pnpm --filter @jeswr/pod-connectors exec vitest run src/core/incremental.test.ts
+pnpm --filter @jeswr/pod-connectors run lint && pnpm --filter @jeswr/pod-connectors run build && pnpm --filter @jeswr/pod-connectors run typecheck && pnpm --filter @jeswr/pod-connectors run test
+pnpm run lint:root
+GIT_ALLOW_PROTOCOL=file TURBO_SCM_BASE=482fd9214b3876c5791ecdbb64f72286c69654e9 pnpm run gate --env-mode=loose
+GIT_ALLOW_PROTOCOL=file pnpm run gate:full --env-mode=loose
+pnpm run test:root
+GIT_ALLOW_PROTOCOL=file TURBO_SCM_BASE=482fd9214b3876c5791ecdbb64f72286c69654e9 pnpm run gate --env-mode=loose
+git diff --check
+```
+
+- Workspace dependency build: exit 0. The fresh checkout initially lacked guarded-fetch's
+  dist; building it enabled the regression run. Final targeted suite: **24 tests pass**.
+- Package gate: exit 0; lint has the same **36 existing warnings**, build/typecheck pass,
+  **44 files and 321 tests pass**. Root lint and all root guards: exit 0.
+- Initial affected workspace gate: exit 1, **7 successful / 9 total tasks**. The unchanged
+  `test/agent-layers.test.mjs:509` case for `module.require(TARGET);` exceeded its 5000 ms
+  timeout; root tests were **685 passed, 1 failed**. Connector tests passed within the gate.
+- Full workspace gate: exit 1, **18 successful / 60 total tasks** reported before aborting.
+  The unchanged unstorage-solid dependency bootstrap attempted its remote fetch-rdf clone;
+  `GIT_ALLOW_PROTOCOL=file`, inherited through `--env-mode=loose`, rejected it with
+  `fatal: transport 'https' not allowed` before network access. No workaround was made.
+- Standalone root suite: exit 0, **7 files and 686 tests pass**.
+- Affected workspace gate retry: exit 1, **7 successful / 9 total tasks**, with 6 cached.
+  The same unchanged root test group timed out for `export * from TARGET;`; again **685
+  passed, 1 failed**. Pod Manager's remaining dependent checks were interrupted by the root
+  failure. No unrelated tests, timeouts or build scripts were changed.
+- `git diff --check`: passed. Full and affected workspace verification remain incomplete.
+
+No dependencies, manifests or lockfile changed; `check:packages` is not applicable. Lifecycle
+scripts were never enabled. Regression tests use memory Pods and synthetic fixtures. No remote
+fetch/merge, push, PR, branch switch, publishing or changes to another checkout.
+`roborev` is not installed; asynchronous review remains unavailable and was not reconfigured.
+
+The requested fix is complete. No new open questions or unfinished implementation; verification
+and review limitations are recorded above. Earlier reports below remain historical context.
+
+---
+
 ## Fix round 2 — 2026-10-26
 
 Starting revision: `482fd9214b3876c5791ecdbb64f72286c69654e9` on `lane/sst-vuhh`.
