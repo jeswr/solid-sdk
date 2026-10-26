@@ -13,8 +13,9 @@ T-020 implements the ADR-003 §1 types (`src/types.ts`, re-exported as types fro
 (`retryOnConflict`, which re-reads before every retry, plus the in-house RFC 6902 `applyJsonPatch`),
 and `./memory` (`createMemoryStorage({ protocol, root, pageSize, moveResource, strictConditional, clock })`).
 T-021 adds the Solid backend's read side: `./solid` exports
-`createSolidBackend({ fetch, root, features? })`. `./lws` and `./testing` are still reserved
-(T-022…T-025); Solid mutations reject with `unsupported` until T-022.
+`createSolidBackend({ fetch, root, features? })`. T-023 adds `./lws` →
+`createLwsBackend({ fetch, root, storage?, features? })`. `./testing` is still reserved (T-025);
+Solid mutations reject with `unsupported` until T-022, LWS mutations until T-024.
 
 Solid read side (ADR-003 §6):
 - Every URL must be absolute and pass guarded-fetch `assertWithinPodScope(root, url)`; otherwise
@@ -42,6 +43,60 @@ Solid read side (ADR-003 §6):
   RDF (`unsupported` when none is advertised).
 - `Link` and WAC-Allow parsing reuse `@jeswr/storage-capabilities` (`parseLinkHeaders`,
   `parseWacAllow`).
+
+## LWS read side
+
+- `root` is a scoped HTTP(S) StorageRoot container URL ending `/`, without query/fragment
+  (including empty delimiters); malformed container roots throw TypeError, unsafe roots `scope`,
+  like Solid. `storage` is StorageDescription.id; default `root`: sparq's `LwsConfig::storage()`
+  returns the root and its lws#storage link names that URL (`src/lws/mod.rs:421-425`,
+  `src/lws/resources.rs:684-704`). `features` defaults to `deriveFeatures` for an undescribed LWS
+  storage (empty services/capabilities, probe source), or retains the supplied Features object.
+- Design call: `isWithinStorage` is the synchronous guarded-fetch root-prefix check, like Solid.
+  Every request must pass `scoped(root, …)` before fetch; storage-id equality never authorises an
+  authenticated request outside the root, narrowing ADR-003's non-path-aligned identifier rule.
+  On every response (HEAD, read, readRdf, list, metadata), ANY lws#storage link in the response URL's
+  context that differs from `storage` gives `scope` and discards the body. Matching/absent links
+  are accepted; links with a different anchor context are ignored. Errors never echo the foreign id.
+- `list` takes a scoped container ending `/`, without query/fragment (even empty `?`/`#`), else
+  `bad-request`. GET Accept: `application/lws+json, application/ld+json;q=0.5`. Cursors are scoped
+  first, then fetched verbatim, including opaque queries. Only 200 succeeds; other 2xx/3xx are
+  `invalid-response`, HTTP errors use the shared mapping, redirects are never followed.
+- Listing media type must be lws+json or ld+json. JSON is capped at **16 MiB of streamed bytes**
+  for listings and linksets, independently of Content-Length; overflow/bad JSON → `invalid-response`.
+  Top level must be an object, type (string/array) includes Container or ContainerPage (compact or
+  full https://www.w3.org/ns/lws# IRI), and items must be an array. sparq's ordinary pages all use
+  Container; type-search pages use ContainerPage (`src/lws/index.rs:625-675`). Each item must be an
+  object with string id; malformed structure → `invalid-response`. Resolve ids against response
+  URL; drop invalid, non-HTTP(S), unsafe or foreign ids; duplicate resolved ids keep the first.
+- Entry order follows the server. Kind depends only on Container type, never a trailing slash.
+  Content type is valid RFC 6838 `format` (shared MEDIA_TYPE with Solid), null for containers;
+  size is a non-negative safe integer; modified is a parseable date string; else null. Types retain
+  only absolute IRIs, excluding compact/full Container and DataResource; malformed optional fields
+  drop only that field. `total` is non-negative safe-integer totalItems or null; etag is verbatim.
+  `next` uses the first response-context next Link, resolved against that URL; foreign/unsafe or
+  self links → `invalid-response`. `listAll` uses shared paginate: loop guard, 10,000 pages maximum,
+  abort between entries. No client sorting or cursor reconstruction.
+- HEAD/read/readRdf share status, GET/HEAD headers, range validation, conditional 304, body buffering,
+  transport/abort mapping and RDF parsing with Solid (`src/read.ts`, `src/http.ts`). Accept defaults
+  to */*, readRdf to `text/turtle, application/ld+json;q=0.9`; 304 gives an empty dataset and
+  notModified, non-RDF/unparsable RDF → `not-rdf`. Only requested 206 and conditional 304 succeed.
+  Parent is the first `up` link only if scoped, metadataUrl the first scoped `linkset` link, else
+  null; do not fall through to a later safe link. Root parent is always null, root kind container;
+  other kinds use ONLY the exact https://www.w3.org/ns/lws#Container type link. allow is always null.
+- `metadata` does one HEAD, then GET metadataUrl with Accept application/linkset+json; absent/suppressed
+  linkset → `unsupported`. Accept application/linkset+json or application/json only. RFC 9264 §4.2:
+  object with linkset array of context objects, each with string anchor, all other keys relation
+  arrays of target objects with string href; malformed structure/reference → `invalid-response`.
+  Resolve anchors/hrefs against the linkset URL. Anchors must be HTTP(S), foreign anchors are kept
+  as data and never fetched; hrefs may name other absolute schemes. Duplicate anchors/relations
+  merge in order. Params keep only string-valued attributes except href; array attributes including
+  hreflang/title* are skipped (preserved in raw). raw is parsed JSON, url is the fetched linkset URL,
+  etag is its ETag. Maps and own-property params preserve hostile property names as data.
+- `parentOf` scopes first; root → null without a request, otherwise one HEAD returning parent.
+  write/writeRdf/create/patch/move/delete/setMetadata reject `unsupported` without fetching (T-024).
+  Fixtures in src/fixtures/lws.ts are synthetic, shaped exactly after the cited sparq lines; the
+  1,500-member listing overrides sparq's default page_size=100 to 500 for three pages.
 
 Rules the memory backend enforces, and the real backends must match:
 - Every mutation (`write`, `writeRdf`, `patch`, `setMetadata`, `move`, `delete`) needs `ifMatch`
