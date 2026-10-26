@@ -63,7 +63,14 @@ describe("project discovery and first use", () => {
         : undefined;
     await expect(tasks.createProject("Home")).rejects.toThrow(AggregateError);
     const reservations = () =>
-      pod.mutations().filter((request) => request.method === "PUT" && request.url.endsWith(".ttl"));
+      pod
+        .mutations()
+        .filter(
+          (request) =>
+            request.method === "PUT" &&
+            request.url.endsWith(".ttl") &&
+            request.headers.get("If-None-Match") === "*",
+        );
     await expect(tasks.createProject("Home")).rejects.toMatchObject({ status: 503 });
     expect(reservations()).toHaveLength(1);
     pod.intercept = undefined;
@@ -88,6 +95,106 @@ describe("project discovery and first use", () => {
       request.method === "DELETE" ? new Response(null, { status: 404 }) : undefined;
     pod.files.delete(url);
     expect((await tasks.createProject("Home")).url).toBe(url);
+  });
+  it.each([
+    "registration",
+    "finalization",
+    "container cleanup",
+  ])("preserves an Inbox adopted during the creator's failed %s", async (phase) => {
+    const pod = new Pod();
+    const url = `${projects}inbox.ttl`;
+    const container = `${projects}inbox/`;
+    await new TypeIndex(
+      new RdfIO(pod.fetch),
+      storage,
+      webId,
+      pod.ensurePrivateIndexAccess,
+    ).register([]);
+    const entered = Promise.withResolvers<void>();
+    const released = Promise.withResolvers<void>();
+    let blocked = false;
+    const creatorFetch: typeof fetch = async (input, init) => {
+      const target = String(input);
+      if (init?.method === "PUT" && target === indexUrl) {
+        if (phase !== "container cleanup" && !blocked) {
+          blocked = true;
+          entered.resolve();
+          await released.promise;
+        }
+        if (phase !== "finalization") return new Response(null, { status: 503 });
+      }
+      if (phase === "container cleanup" && init?.method === "DELETE" && target === container) {
+        entered.resolve();
+        await released.promise;
+      }
+      return pod.fetch(input, init);
+    };
+    const creator = store(pod, { fetch: creatorFetch });
+    const failed = expect(creator.bootstrapInbox()).rejects.toThrow(AggregateError);
+    await entered.promise;
+    const previousTracker = pod.files.get(url)?.body;
+    const previousContainer = pod.files.get(container)?.body;
+    const adopter = store(pod);
+    let adopted: Awaited<ReturnType<TaskStore["bootstrapInbox"]>>;
+    try {
+      adopted = await adopter.bootstrapInbox();
+      expect(adopted.tracker.title).toBe("Inbox");
+      expect(pod.files.get(url)?.body).not.toBe(previousTracker);
+      expect(pod.files.get(container)?.body).not.toBe(previousContainer);
+    } finally {
+      released.resolve();
+    }
+    await failed;
+    expect(pod.files.has(url)).toBe(true);
+    expect(pod.files.has(container)).toBe(true);
+    expect((await adopter.readProject(url)).etag).toBe(adopted.etag);
+    expect(
+      (await adopter.createTask(adopted, { title: "Survives", state: "open" })).task.title,
+    ).toBe("Survives");
+    // Retained compensation also cannot remove the adopted resource on a later call.
+    await expect(creator.createProject("Another")).rejects.toMatchObject({ status: 412 });
+    expect(pod.files.has(url)).toBe(true);
+    expect(pod.files.has(container)).toBe(true);
+  });
+  it.each([
+    "claim",
+    "finalization",
+  ])("retries a conditional Inbox %s conflict and preserves the concurrent revision", async (phase) => {
+    const pod = new Pod();
+    const tasks = store(pod, { typeIndex: false });
+    const inbox = await tasks.bootstrapInbox();
+    let writes = 0;
+    let conflicted = false;
+    pod.intercept = async (request) => {
+      if (request.url === inbox.url && request.method === "PUT") {
+        writes++;
+        if (writes === (phase === "claim" ? 1 : 2)) {
+          conflicted = true;
+          const dataset = await pod.dataset(inbox.url);
+          node(inbox.tracker.id, dataset).setText(`${NS.DCT}title`, "Adopted elsewhere");
+          pod.seed(inbox.url, await serialize(dataset));
+        }
+      }
+      return undefined;
+    };
+    const adopted = await tasks.bootstrapInbox();
+    expect(conflicted).toBe(true);
+    expect(adopted.tracker.title).toBe("Adopted elsewhere");
+    expect(adopted.tracker.modified?.getTime()).toBeGreaterThan(
+      inbox.tracker.modified?.getTime() as number,
+    );
+    expect(pod.mutations().some((request) => request.method === "DELETE")).toBe(false);
+  });
+  it("compensates a reserved container when claiming it fails", async () => {
+    const pod = new Pod();
+    const container = `${projects}home/`;
+    pod.intercept = (request) =>
+      request.url === container && request.method === "PUT" && request.headers.has("If-Match")
+        ? new Response(null, { status: 503 })
+        : undefined;
+    await expect(store(pod).createProject("Home")).rejects.toMatchObject({ status: 503 });
+    expect(pod.files.has(`${projects}home.ttl`)).toBe(false);
+    expect(pod.files.has(container)).toBe(false);
   });
   it("creates the Inbox, its hierarchy and private Type Index registrations idempotently", async () => {
     const pod = new Pod();

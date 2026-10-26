@@ -3,7 +3,7 @@
 
 import { ModelError } from "./errors";
 import { RdfIO, type Resource } from "./io";
-import { DataFactory, documentUrl, NS, requireTitle, Store, uniqueSlug } from "./rdf";
+import { DataFactory, documentUrl, NS, node, requireTitle, Store, uniqueSlug } from "./rdf";
 import { createTask, type TaskDetails, TaskItem, taskDetails, validateTask } from "./task";
 import { createTracker, TaskTracker } from "./tracker";
 import { type PrivateIndexAccess, TypeIndex } from "./type-index";
@@ -77,15 +77,24 @@ export class TaskStore {
   async bootstrapInbox(): Promise<StoredProject> {
     const url = `${this.projects}inbox.ttl`;
     for (let attempt = 0; ; attempt++) {
-      const existing = await this.io.optional(url);
-      if (existing) {
-        const project = await this.readProject(url);
-        if (!project.tracker.stateStore) throw new TypeError("Inbox has no stateStore.");
-        await this.io.container(project.tracker.stateStore);
-        await this.register(project.tracker.stateStore);
-        return project;
-      }
       try {
+        const existing = await this.io.optional(url);
+        if (existing) {
+          const project = await this.readProject(url);
+          const stateStore = project.tracker.stateStore;
+          if (!stateStore) throw new TypeError("Inbox has no stateStore.");
+          // Claim before repair so the creator's original validator cannot remove
+          // this tracker. Claim the container too in case tracker cleanup already won.
+          let resource = await this.claimResource(project, project.tracker.id);
+          await this.io.container(stateStore);
+          await this.claimResource(await this.io.read(stateStore), stateStore);
+          await this.register(stateStore);
+          resource = await this.claimResource(resource, project.tracker.id);
+          return {
+            ...resource,
+            tracker: new TaskTracker(project.tracker.id, resource.dataset, DataFactory),
+          };
+        }
         return await this.createProject("Inbox", true);
       } catch (error) {
         // A concurrent first-use client won the reservation. Re-read and repair it.
@@ -119,7 +128,14 @@ export class TaskStore {
       let container: Resource | undefined;
       try {
         container = await this.io.container(stateStore);
+        const claimed = await this.claimResource(
+          container ?? (await this.io.read(stateStore)),
+          stateStore,
+        );
+        if (container) container = claimed;
         await this.register(stateStore);
+        // Finalize only while this attempt still owns its tracker revision.
+        resource = await this.claimResource(resource, `${url}#this`);
       } catch (error) {
         this.pendingCleanup.set(resource.url, resource);
         // Only delete a task container reserved by this attempt, using its validator.
@@ -138,6 +154,14 @@ export class TaskStore {
       };
     }
     throw new ModelError(409, this.projects);
+  }
+  /** Change representation bytes so even content-based strong validators advance. */
+  private async claimResource(resource: Resource, subject: string): Promise<Resource> {
+    const dataset = new Store([...resource.dataset]);
+    const value = node(subject, dataset);
+    const previous = value.date(`${NS.DCT}modified`)?.getTime() ?? -Infinity;
+    value.setDate(`${NS.DCT}modified`, new Date(Math.max(this.now().getTime(), previous + 1)));
+    return this.io.write(resource.url, dataset, { etag: resource.etag });
   }
   private async cleanupProject(resource: Resource): Promise<void> {
     try {
