@@ -19,7 +19,7 @@ struct ShareStore {
     private static let manifestName = "batch.json"
 
     /// Calls `body` with a readable file URL that is valid only during the call.
-    typealias FileSource = (_ body: (URL) throws -> Void) throws -> Void
+    typealias FileSource = (_ body: @escaping (URL) throws -> Void) throws -> Void
 
     enum Incoming {
         case file(name: String?, mimeType: String?, source: FileSource)
