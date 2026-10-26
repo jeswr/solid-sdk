@@ -30,7 +30,7 @@ describe("selfDescribe", () => {
     const typeQuad = desc.quads.find(
       (q) =>
         q.predicate.value === "http://www.w3.org/1999/02/22-rdf-syntax-ns#type" &&
-        q.object.value === "https://w3id.org/jeswr/fed#App",
+        q.object.value === "https://jeswr.org/ns/fed#App",
     );
     expect(typeQuad?.subject.value).toBe(APP.id);
   });
@@ -103,9 +103,7 @@ describe("selfDescribe", () => {
     expect(quads.some((q) => q.object.value === "https://evil/o2")).toBe(false);
     // The app subject is intact and there is exactly one consumes object, whose
     // value is the percent-encoded (non-breaking) form of the payload.
-    const consumes = quads.filter(
-      (q) => q.predicate.value === "https://w3id.org/jeswr/fed#consumes",
-    );
+    const consumes = quads.filter((q) => q.predicate.value === "https://jeswr.org/ns/fed#consumes");
     expect(consumes).toHaveLength(1);
     expect(consumes[0]?.subject.value).toBe("https://app.example/clientid");
     expect(consumes[0]?.object.value).not.toContain(">");
@@ -130,6 +128,6 @@ describe("selfDescribe", () => {
       access: ["Read"],
     }).toString("application/n-triples");
     expect(nt).toContain("<https://app.example/id>");
-    expect(nt).toContain("<https://w3id.org/jeswr/fed#App>");
+    expect(nt).toContain("<https://jeswr.org/ns/fed#App>");
   });
 });

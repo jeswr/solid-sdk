@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+// AUTHORED-BY Codex GPT-6
 //
 // verify(...) — fetch (or accept) an app's federation registration document and
 // validate it against the fedapp vocabulary: exactly one fedapp:App, every
@@ -8,6 +9,7 @@
 
 import { fetchRdf, parseRdf, RdfFetchError } from "@jeswr/fetch-rdf";
 import type { DatasetCore } from "@rdfjs/types";
+import { federationDocumentLoader } from "./context-loader.js";
 import type { AppRegistration, SectorUse, VerificationIssue, VerificationResult } from "./types.js";
 import {
   accessModeName,
@@ -71,9 +73,13 @@ export async function verify(
     if (options.body !== undefined) {
       dataset = await parseRdf(options.body, options.bodyContentType ?? "text/turtle", {
         baseIRI: options.baseIRI ?? input,
+        documentLoader: federationDocumentLoader,
       });
     } else {
-      const fetched = await fetchRdf(input, options.fetch ? { fetch: options.fetch } : {});
+      const fetched = await fetchRdf(input, {
+        fetch: options.fetch,
+        documentLoader: federationDocumentLoader,
+      });
       dataset = fetched.dataset;
     }
   } catch (err) {
