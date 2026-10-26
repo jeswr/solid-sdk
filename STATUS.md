@@ -148,3 +148,50 @@ No pushes, PRs, branch switches, remote fetches, or merges occurred.
 Both supplied findings are addressed. No implementation work remains; open questions: none.
 Full-workspace validation and automated roborev review have the limitations above. No screenshots
 or browser checks apply to these pure model fixes.
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+## Fix round 3 — review of `84aba11610fd`
+
+Implemented exactly the two supplied recovery findings on `lane/sst-sf1j`.
+
+- `5fc96227` — `fix(photos): fence restored metadata across trash cycles`: assign each trash
+  cycle a fresh receipt and conditionally replace the live description with a durable tombstone.
+  Restore replaces only its matching tombstone using its ETag; purge retains the tombstone after
+  removing binaries and the trash record. Deterministic regressions pause an overlapping restore
+  before its create attempt and before its conditional replacement, then let a separate adapter
+  restore, retrash, and purge. Both stale writes fail without recreating a photo. Tests also cover
+  missing tombstone ETags, unrelated lifecycle receipts, and failed tombstone writes.
+- `70680558` — `fix(photos): preserve restore receipts through edits`: conditional `savePhoto`
+  reads the matching revision and carries its receipt into the replacement dataset. A regression
+  edits a photo after failed restore cleanup, then completes recovery with a fresh adapter while
+  retaining the edits and the exact live revision; retrashing and purging also succeed.
+- Final documentation commit — `docs(photos): record third review fixes and validation`:
+  update model integration notes, then this report last.
+
+Conservative lifecycle choice: retain a receipt-only item tombstone permanently after purge.
+`loadPhoto` returns no photo for it; create-only uploads cannot reuse its item URL. This keeps the
+live URL occupied and its generation durable across clients, including paused operations. Legacy
+trash records with absent original descriptions remain restorable using create-only preconditions.
+Ordinary edits retain completion evidence without adding it to the editable `Photo` fields.
+No dependencies, UI, tracker files, or unrelated source changes were added. Commits use the actual
+GPT-6 author provenance, requested git identity, and disabled signing. No pushes, PRs, branch
+switches, remote fetches, or merges occurred.
+
+### Fix-round-3 validation
+
+| Exact command | Result |
+| --- | --- |
+| `pnpm --filter '@jeswr/app-suite^...' run build` | PASS: all three workspace prerequisites. |
+| `pnpm --filter @jeswr/app-suite exec vitest run test/photos/trash.test.ts -t 'paused restore\|ordinary photo edits'` | Before fixes: both regressions failed, reproducing both findings. |
+| `pnpm --filter @jeswr/app-suite exec vitest run test/photos/trash.test.ts test/photos/io.test.ts` | After fixes: PASS, 29 tests. |
+| `pnpm --filter @jeswr/app-suite run lint && pnpm --filter @jeswr/app-suite run build && pnpm --filter @jeswr/app-suite run typecheck && pnpm --filter @jeswr/app-suite run test` | PASS: lint, production build, strict tsc, 9 files / 132 tests. |
+| `pnpm --filter @jeswr/app-suite run test:coverage` | PASS: every model file meets 100% statements, branches, functions, and lines; totals 572 statements, 372 branches, 163 functions, 488 lines. No coverage exclusions. |
+| `pnpm run lint:root` | PASS: all guards and 74 contrast pairs. |
+| `TURBO_SCM_BASE=25a9001cfeb4bcf53501005292d1860b25dacfaf pnpm run gate` | PASS: 9 / 9 tasks, including root tests, after updating the integration notes and before this final report. |
+| `GIT_ALLOW_PROTOCOL=file pnpm run gate:full --env-mode=loose` | BLOCKED in untouched `@jeswr/unstorage-solid#build`: its dependency bootstrap attempted a remote clone and Git rejected HTTPS transport before any network fetch. 26 / 81 scheduled tasks completed. Full-workspace validation remains incomplete under the lane's remote-fetch restriction. |
+| `git diff --check` | PASS. |
+| `command -v roborev` | Unavailable; no automated per-commit verdict could be collected. |
+
+Both supplied findings are addressed. No implementation work remains; open questions: none.
+Full-workspace validation and automated roborev review have the limitations above. No screenshots
+or browser checks apply to these pure model fixes.
