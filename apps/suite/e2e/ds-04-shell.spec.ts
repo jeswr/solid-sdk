@@ -121,19 +121,21 @@ test("keyboard skip link, persistent preferences and editable shortcut guards", 
   await expect(page.getByRole("link", { name: "Skip to main content" })).toBeFocused();
   await page.keyboard.press("Enter");
   await expect(page.getByRole("main")).toBeFocused();
-  const sidebar = page.getByRole("button", { name: "Toggle sidebar" });
-  const details = page.getByRole("button", { name: "Toggle details pane" });
+  const sidebar = page.locator('button[aria-label="Toggle sidebar"]');
+  const details = page.locator('button[aria-label="Toggle details pane"]');
   const initial = await sidebar.getAttribute("aria-expanded");
   await page.keyboard.press("[");
   await expect(sidebar).toHaveAttribute("aria-expanded", initial === "true" ? "false" : "true");
   if (initial === "false") await page.keyboard.press("[");
   await page.reload();
+  await expect(page).toHaveTitle("My Drive · Drive · Solid Suite");
   await expect(sidebar).toHaveAttribute("aria-expanded", "false");
   // Open details, persist across reload, then close via its own bracket shortcut.
   await details.focus();
   if ((await details.getAttribute("aria-expanded")) === "true") await page.keyboard.press("]");
   await page.keyboard.press("]");
   await page.reload();
+  await expect(page).toHaveTitle("My Drive · Drive · Solid Suite");
   if ((page.viewportSize()?.width ?? 1280) < 1024)
     await expect(page.getByRole("dialog", { name: "Details" })).toBeVisible();
   else await expect(details).toHaveAttribute("aria-expanded", "true");

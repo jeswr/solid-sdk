@@ -222,7 +222,11 @@ it.each([false, true])("supports all TopBar slots and refresh state %s", async (
     <>
       <TopBar
         appName="Drive"
-        context="Work"
+        context={
+          <nav aria-label="Current folder">
+            <a href="/drive/work">Work</a>
+          </nav>
+        }
         search={<input aria-label="Search Drive" />}
         actions={<button type="button">Upload</button>}
         offlinePill={<span role="status">Offline — showing saved copies</span>}
@@ -236,7 +240,7 @@ it.each([false, true])("supports all TopBar slots and refresh state %s", async (
       </main>
     </>,
   );
-  expect(screen.getByText("Work")).toBeTruthy();
+  expect(screen.getByRole("navigation", { name: "Current folder" })).toBeTruthy();
   expect(screen.queryByRole("status", { name: "Refreshing content" }) !== null).toBe(refreshing);
   expect(screen.getByRole("link", { name: "Back to My Drive" }).getAttribute("href")).toBe(
     "/drive/my",

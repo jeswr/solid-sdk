@@ -220,6 +220,9 @@ export function ShellFixture({
       details={details}
       topBar={{
         appName: "Drive",
+        ...(component === "top-bar"
+          ? { back: { href: "/dev/components", label: "Back to fixtures" } }
+          : {}),
         context: "My Drive",
         search: (
           <>

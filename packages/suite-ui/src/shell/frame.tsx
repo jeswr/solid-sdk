@@ -21,7 +21,7 @@ export interface ShellFrameProps {
   pageTitle: string;
   topBar: Omit<TopBarProps, "sidebarToggle" | "detailsToggle">;
   sidebar: SidebarNavProps;
-  details?: DetailsPaneProps;
+  details?: Omit<DetailsPaneProps, "onClose">;
   /** Supply AppRail / BottomTabBar; their app registration belongs to the shell app. */
   rail: ReactNode;
   tabBar: ReactNode;

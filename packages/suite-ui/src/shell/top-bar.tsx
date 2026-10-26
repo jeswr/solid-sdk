@@ -59,7 +59,7 @@ export function TopBar({
       )}
       <div className="suite-topbar-context">
         <span>{appName}</span>
-        {context && <span className="suite-context-extra">{context}</span>}
+        {context && <div className="suite-context-extra">{context}</div>}
       </div>
       <div className="suite-topbar-search">{search}</div>
       {actions && <div className="suite-topbar-actions">{actions}</div>}
@@ -81,7 +81,9 @@ export function TopBar({
       {bell}
       {account}
       {refreshing && (
-        <div className="suite-refresh-progress" role="status" aria-label="Refreshing content" />
+        <div className="suite-refresh-progress" role="status" aria-label="Refreshing content">
+          <span className="suite-visually-hidden">Refreshing content</span>
+        </div>
       )}
     </header>
   );

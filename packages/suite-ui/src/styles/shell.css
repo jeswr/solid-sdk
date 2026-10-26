@@ -157,7 +157,7 @@
   min-width: 0;
   font-weight: 500;
 }
-.suite-topbar-context > span {
+.suite-topbar-context > :is(span, div) {
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
@@ -402,4 +402,15 @@
   .suite-sheet-overlay {
     animation: none;
   }
+}
+
+.suite-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip-path: inset(100%);
+  white-space: nowrap;
 }

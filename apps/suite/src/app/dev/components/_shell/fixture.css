@@ -218,6 +218,9 @@
   }
 }
 @media (pointer: coarse) {
+  .ds04-rail a {
+    min-width: 44px;
+  }
   .ds04-rail a,
   .ds04-tabs a,
   .ds04-fixture-controls select {
