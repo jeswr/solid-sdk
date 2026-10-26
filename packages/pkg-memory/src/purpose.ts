@@ -99,7 +99,7 @@ export function purposeFilter(
   clientId: string,
 ): (fact: Pick<Nanopublication, "categories">) => boolean {
   if (!Object.hasOwn(MEMORY_PURPOSES, purpose)) throw new Error("Unsupported memory purpose");
-  const agent = iri(clientId);
+  if (iri(clientId) !== clientId) throw new Error("Unsafe client identity");
   return (fact) =>
     fact.categories.length > 0 &&
     evaluablePolicy(policy) &&
@@ -108,7 +108,7 @@ export function purposeFilter(
         evaluate(
           policy,
           {
-            agent,
+            agent: clientId,
             action: "read",
             target: categoryIri(category),
             attributes: { purpose: MEMORY_PURPOSES[purpose] },

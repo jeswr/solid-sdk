@@ -59,6 +59,47 @@ it("requires a supported purpose and safe client identity", () => {
   expect(() => purposeFilter(policy, "ServiceProvision", "not an iri")).toThrow();
 });
 
+it.each([
+  ...Array.from({ length: 0x21 }, (_, code) => code),
+  ...["<", ">", '"', "{", "}", "|", "^", "`", "\\"].map((character) => character.charCodeAt(0)),
+])("rejects client identities requiring transformation of code point %i", (code) => {
+  const raw = `${client}/${String.fromCharCode(code)}identity`;
+  const escaped = `${client}/%${code.toString(16).toUpperCase().padStart(2, "0")}identity`;
+  const fact = { categories: ["pd:Contact"] };
+  for (const scope of ["policy", "rule"]) {
+    const scoped: OdrlPolicy = {
+      id: policy.id,
+      assignee: scope === "policy" ? escaped : undefined,
+      permissions: [
+        { type: "permission", action: "read", assignee: scope === "rule" ? escaped : undefined },
+      ],
+    };
+    expect(purposeFilter(scoped, "ServiceProvision", escaped)(fact)).toBe(true);
+    expect(() => purposeFilter(scoped, "ServiceProvision", raw)).toThrow("Unsafe client identity");
+    try {
+      purposeFilter(scoped, "ServiceProvision", raw);
+    } catch (error) {
+      expect((error as Error).message).not.toContain(raw);
+      expect((error as Error).message).not.toContain(escaped);
+    }
+  }
+});
+
+it.each([
+  ["https://EXAMPLE.ORG:443/apps/../client", client],
+  [`${client}/%3eidentity`, `${client}/%3Eidentity`],
+  [`${client}/%20identity`, `${client}/%2520identity`],
+])("preserves the lexical client identity %s for assignee matching", (agent, other) => {
+  const scoped: OdrlPolicy = {
+    id: policy.id,
+    assignee: agent,
+    permissions: [{ type: "permission", action: "read" }],
+  };
+  const fact = { categories: ["pd:Contact"] };
+  expect(purposeFilter(scoped, "ServiceProvision", agent)(fact)).toBe(true);
+  expect(purposeFilter(scoped, "ServiceProvision", other)(fact)).toBe(false);
+});
+
 it("evaluates purpose, client, conflict strategy and duties on every call", () => {
   const scoped: OdrlPolicy = {
     id: policy.id,
