@@ -94,7 +94,9 @@ Optional `tokenUrl` pins the Pod token endpoint instead of discovering it. Optio
 `profileDocumentUrl` pins the canonical profile document; otherwise the WebID without its
 fragment is used and any redirect is refused. URLs use HTTPS. `readOnly: true` refuses the
 import. Each `connectors[id]` may also supply `tokenProxyUrl` or an installed-app
-`clientSecret`. These secrets and all session/source tokens remain in memory.
+`clientSecret`. A local source secret selects direct exchange with the adapter's HTTPS token
+endpoint, taking precedence over a token proxy. Without a local secret, the adapter's configured
+proxy mode is preserved. These secrets and all session/source tokens remain in memory.
 
 Pod login uses CSS client credentials and DPoP, including bounded nonce retries and an
 in-memory token cache. Source login displays a browser URL, binds only `127.0.0.1` on an

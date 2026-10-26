@@ -37,10 +37,15 @@ export async function authorizeLoopback(
   if (options.signal?.aborted) abort();
   const server = createServer();
   try {
-    textValue(config.clientId);
-    httpsUrl(config.authorizationEndpoint);
-    httpsUrl(config.tokenEndpoint);
-    if (config.tokenExchange === "proxy") httpsUrl(config.tokenProxyUrl);
+    // A locally configured secret is sent directly to the adapter's token endpoint.
+    // Use the same selection for validation and exchange; proxy hosts keep proxy mode.
+    const exchangeConfig: NodeOAuthConfig = config.clientSecret
+      ? { ...config, tokenExchange: "public" }
+      : config;
+    textValue(exchangeConfig.clientId);
+    httpsUrl(exchangeConfig.authorizationEndpoint);
+    httpsUrl(exchangeConfig.tokenEndpoint);
+    if (exchangeConfig.tokenExchange === "proxy") httpsUrl(exchangeConfig.tokenProxyUrl);
     const reserved = new Set([
       "response_type",
       "client_id",
@@ -144,7 +149,12 @@ export async function authorizeLoopback(
       }
       return response;
     };
-    return await exchangeCodeForToken(adapterId, config, { code, verifier, redirectUri }, exchange);
+    return await exchangeCodeForToken(
+      adapterId,
+      exchangeConfig,
+      { code, verifier, redirectUri },
+      exchange,
+    );
   } catch {
     if (options.signal?.aborted) throw new NodeRuntimeError("cancelled", "Import cancelled.");
     throw new NodeRuntimeError("auth", "Source loopback login failed or timed out.");

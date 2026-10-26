@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { request, Server } from "node:http";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { OAuthAppConfig } from "../core/types.js";
+import { createRegistry } from "../registry.js";
 import { authorizeLoopback } from "./loopback.js";
 
 const cfg: OAuthAppConfig = {
@@ -109,6 +110,36 @@ describe("source loopback login", () => {
     await expect(callback(redirect!.href)).rejects.toThrow();
   });
   it.each([
+    "github",
+    "strava",
+    "twitch",
+  ])("exchanges %s directly with a local secret, even when a proxy is configured", async (id) => {
+    const oauth = createRegistry().adapterById(id)?.oauth;
+    if (!oauth) throw new Error("Missing fixture OAuth configuration");
+    for (const tokenProxyUrl of [undefined, "https://proxy.test/token"]) {
+      const transport = vi.fn(async (url, init) => {
+        expect(url).toBe(oauth.tokenEndpoint);
+        expect(init.redirect).toBe("manual");
+        expect(new URLSearchParams(init.body).get("client_secret")).toBe("synthetic-secret");
+        return Response.json({ access_token: "synthetic-token" });
+      });
+      const token = await authorizeLoopback(
+        id,
+        { ...oauth, clientId: "synthetic-client", clientSecret: "synthetic-secret", tokenProxyUrl },
+        transport,
+        {
+          async openAuthorizationUrl(url) {
+            expect(url).not.toContain("synthetic-secret");
+            await callback(answer(url).redirect.href);
+          },
+        },
+      );
+      expect(token.accessToken).toBe("synthetic-token");
+      expect(transport).toHaveBeenCalledTimes(1);
+      expect(oauth.tokenExchange).toBe("proxy");
+    }
+  });
+  it.each([
     "mismatch",
     "missing-state",
     "duplicate-state",
@@ -208,8 +239,9 @@ describe("source loopback login", () => {
     expect(transport).toHaveBeenCalledTimes(1);
   });
   it("supports a configured token proxy and safely handles opener rejection", async () => {
-    const transport = vi.fn(async (url) => {
+    const transport = vi.fn(async (url, init) => {
       expect(url).toBe("https://proxy.test/token");
+      expect(new URLSearchParams(init.body).has("client_secret")).toBe(false);
       return Response.json({ access_token: "synthetic-token" });
     });
     await authorizeLoopback(
