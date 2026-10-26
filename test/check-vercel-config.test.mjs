@@ -482,6 +482,20 @@ export function GET(request) {
     }
   });
 
+  it("accepts a request-derived Next.js route formatted with trailing commas", () => {
+    const files = fixtures([{ ...nextApp, originEnv: undefined }]);
+    files["apps/next/src/app/clientid.jsonld/route.ts"] = `export function GET(request) {
+  return new Response(JSON.stringify({
+    client_id: new URL(
+      "/clientid.jsonld",
+      request.url,
+    ).toString(),
+    redirect_uris: [],
+  }), { headers: { "content-type": "application/ld+json" } });
+}`;
+    expect(scan(files).status).toBe(0);
+  });
+
   it.each([
     ["a static origin", nextRoute.replace("force-static", "force-dynamic")],
     [

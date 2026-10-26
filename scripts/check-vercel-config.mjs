@@ -139,7 +139,7 @@ function nextClientIdRouteSource(root, directory) {
 // Without an origin env, the route must build client_id from the request URL at request time.
 function isRequestDerivedRoute(source) {
   return (
-    /new\s+URL\(\s*(["'`])\/clientid\.jsonld\1\s*,\s*(?:request|req)\.url\s*\)/.test(source) &&
+    /new\s+URL\(\s*(["'`])\/clientid\.jsonld\1\s*,\s*(?:request|req)\.url\s*,?\s*\)/.test(source) &&
     !/\bdynamic\s*=\s*["'`]force-static["'`]/.test(source)
   );
 }
