@@ -3,7 +3,7 @@
 
 # sst-j2y — A-036 lane report
 
-Current validation and fixes are recorded in [Fix round 2](#fix-round-2).
+Current validation and fixes are recorded in [Fix round 3](#fix-round-3).
 The original implementation report below is historical.
 
 Implemented `@jeswr/agent-registry` on `lane/sst-j2y`. Only the package, the workspace
@@ -201,3 +201,68 @@ not run. No tooling or model endpoint was installed or invoked. No in-scope fixe
 remain unfinished and there are no implementation questions. No branch switch,
 fetch, merge, push, PR or changes to another checkout were performed. The final
 report is committed after validation, and the checkout is left clean.
+
+## Fix round 3
+
+Addressed the two conflict-preservation findings against `ea00a9305534` on
+`lane/sst-j2y`:
+
+- `eca20ef0` — `fix(agent-registry): preserve formatted phone conflicts`: keep
+  international phone mentions whole, including spaces, parentheses and dots.
+  Preserve adjacent identifier suffixes so longer identifiers cannot match an
+  account's prefix. Tests cover quoted mentions, exact conflict hashes, longer
+  identifiers, and number fragments that must not acquire conflicts.
+- `4c3da190` — `fix(agent-registry): retain notes-only conflict alternatives`:
+  discover explicit Matrix MXIDs and international phone identities alongside
+  email alternatives. Apply channel normalization before hashing, preserving
+  Matrix/Matrix bot case. Settings and offline RDF tests prove alternatives absent
+  from accounts and evidence survive as hashes, binding state becomes `error`,
+  and neither raw identity appears in output.
+- Report commit — `docs(agent-registry): record fix round 3 validation` (this file).
+
+Conservative choice: retain existing normalization and telephone formatting in
+hashes; discover only explicit email, MXID and international phone syntax from
+notes, without inferring identities from ambiguous prose or bare usernames.
+No dependencies, manifests, lockfiles or test configuration changed.
+`check:packages` was not needed. All added fixtures and transports are synthetic
+and offline.
+
+All validation used Node `v24.22.1` via `export PATH=/opt/node24/bin:$PATH`.
+The final package gate passed, with **124 tests in 3 files**:
+
+```sh
+pnpm --filter @jeswr/agent-registry run lint
+pnpm --filter @jeswr/agent-registry run build
+pnpm --filter @jeswr/agent-registry run typecheck
+pnpm --filter @jeswr/agent-registry run test
+```
+
+The affected gate passed **5/5 tasks**, including `pnpm run lint:root`, using the
+supplied review head as the local baseline:
+
+```sh
+TURBO_SCM_BASE=ea00a93055346b4fe78cbb97c90bd942a5607450 pnpm run gate
+```
+
+`pnpm run gate:full` failed at unchanged root tests in
+`test/agent-layers.test.mjs:509`: four disallowed-path cases exceeded Vitest's
+default 5-second timeout. Root tests reported 682 passed and 4 timed out;
+Turbo completed 74 of 238 tasks before stopping. No registry failure was reported.
+
+The standalone retry with CLI timeouts permitted by the brief passed **686 tests
+in 7 files**:
+
+```sh
+pnpm run test:root --testTimeout=30000 --hookTimeout=30000
+```
+
+The full-workspace gate remains recorded as failed; the standalone retry does not
+replace it. No unrelated source or timeout configuration was changed.
+
+No in-scope implementation remains unfinished and there are no open questions.
+A green full-workspace gate remains blocked by the root-test timeout failures.
+`roborev` is still unavailable and no post-commit hook is installed in this
+checkout, so automated per-commit review could not run. No tooling or model
+endpoint was installed or invoked. No branch switch, fetch, merge, push, PR or
+changes to another checkout were performed. The final report is committed after
+validation, and the checkout is left clean.
