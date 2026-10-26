@@ -17,7 +17,12 @@ export interface RecorderRoute {
  * Only explicit structural paths survive, so personal data used as object keys is removed too.
  */
 export function redactFixture(value: unknown, safeFields: readonly string[] = []): unknown {
-  const paths = safeFields.map((path) => path.split("."));
+  const paths = safeFields.map((path) => {
+    const parts = path.split(".");
+    if (parts.at(-1) === "*" || parts.some((part) => part.length === 0))
+      throw new Error("Recorder safe fields must name scalar fields, not blanket wildcards.");
+    return parts;
+  });
   function visit(input: unknown, candidates: readonly string[][]): unknown {
     if (Array.isArray(input)) {
       const next = candidates.filter((p) => p[0] === "*").map((p) => p.slice(1));

@@ -194,6 +194,24 @@ describe("CON-02 incremental writes", () => {
     }
   });
 
+  it("reserves the activity document, including query and fragment aliases", async () => {
+    for (const slug of ["_provenance.ttl", "_provenance.ttl#alias", "_provenance.ttl?alias"]) {
+      const port = writer();
+      const source = adapter(async (ctx) => {
+        await ctx.write({
+          slug,
+          category: "media",
+          forClass: CLASSES.MusicRecording,
+          dataset: new Store(),
+        });
+        return {};
+      });
+      await expect(runImport({ adapter: source, podWriter: port, mode: "demo" })).rejects.toThrow(
+        "Reserved connector provenance slug",
+      );
+    }
+  });
+
   it("re-reads between writes of the same slug and uses the newest ETag", async () => {
     const port = writer();
     const source = adapter(async (ctx) => {

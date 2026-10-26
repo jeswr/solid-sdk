@@ -27,6 +27,12 @@ describe("fixture recorder redaction", () => {
     expect(redactFixture(["private-value"])).toEqual(["[REDACTED]"]);
   });
 
+  it("rejects blanket wildcard paths rather than preserving an array of arbitrary scalars", () => {
+    for (const path of ["*", "items.*", "items..id", ""]) {
+      expect(() => redactFixture(["synthetic-private"], [path])).toThrow("scalar fields");
+    }
+  });
+
   it("never permits token, cookie or personal keys even when explicitly allowlisted", () => {
     const keys = [
       "access_token",

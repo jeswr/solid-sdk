@@ -43,7 +43,8 @@ export function createImportSession(
   }
   async function write(input: NormalisedDoc, conditions?: WriteConditions): Promise<WrittenDoc> {
     const url = writer.resolve(input.slug);
-    if (url === writer.resolve(RUNS)) throw new Error("Reserved connector provenance slug.");
+    if (url.split(/[?#]/, 1)[0] === writer.resolve(RUNS))
+      throw new Error("Reserved connector provenance slug.");
     if (!reads.has(url)) await read(input.slug);
     const previous = reads.get(url);
     const doc = vocabMap ? vocabMap({ ...input, dataset: copyDataset(input.dataset) }) : input;
