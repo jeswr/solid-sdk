@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /** Private credential storage, explicit OAuth login and channel token supply. */
 
 /** Dependencies and safe summaries for explicit OAuth operations. */
@@ -20,6 +21,14 @@ export type {
 } from "./store.js";
 /** Open an owner-only store, compute its platform path, or handle typed failures. */
 export { CredentialStore, defaultStoreDir, HelperError, tokenFileProviders } from "./store.js";
+/** Shared helper deadline, persistence reserve and parent kill timeout. */
+export {
+  CALL_TIMEOUT_MS,
+  HELPER_DEADLINE_MS,
+  HELPER_KILL_TIMEOUT_MS,
+  HELPER_PERSIST_RESERVE_MS,
+  LOCK_WAIT_MS,
+} from "./timeouts.js";
 /** Structural read/send token seam consumed by channel bindings. */
 export type { TokenProvider } from "./token-provider.js";
 /** Supply credentials for exactly one provider/account/resource/purpose. */

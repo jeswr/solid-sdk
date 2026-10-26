@@ -29,6 +29,12 @@ import {
   verifyIdentity,
 } from "./providers.js";
 import { type CredentialStore, type Grant, HelperError, type Profile } from "./store.js";
+import {
+  CALL_TIMEOUT_MS,
+  HELPER_DEADLINE_MS,
+  HELPER_PERSIST_RESERVE_MS,
+  LOCK_WAIT_MS,
+} from "./timeouts.js";
 
 export interface Deps {
   store: CredentialStore;
@@ -40,6 +46,13 @@ export const DEFAULT_LOGIN_TIMEOUT_MS = 5 * 60_000;
 const MAX_STRAY_CALLBACKS = 20;
 /** A cached access token is used only while it has at least this long left. */
 const ACCESS_MARGIN_MS = 2 * 60_000;
+
+/** Elapsed time uses a monotonic clock, independently of OAuth token expiry. */
+function remainingHelperTime(deadline: number, reserveMs = 0): number {
+  const remaining = deadline - performance.now() - reserveMs;
+  if (remaining <= 0) throw new HelperError("unavailable", "credential helper deadline exceeded");
+  return remaining;
+}
 
 export function loadProfile(store: CredentialStore, name: string): Profile {
   const p = store.profile(name);
@@ -379,7 +392,9 @@ export async function accessToken(
   deps: Deps,
   name: string,
   expected?: Pick<Profile, "provider" | "connectionId" | "purpose" | "resource">,
+  deadline = performance.now() + HELPER_DEADLINE_MS,
 ): Promise<IssuedToken> {
+  remainingHelperTime(deadline);
   const p = loadProfile(deps.store, name);
   if (
     expected &&
@@ -403,67 +418,83 @@ export async function accessToken(
     );
   const cached = usable(first, deps.now());
   if (cached) return cached;
-  return deps.store.withLock(name, async () => {
-    // Re-read under the lock (another process may have changed it) and re-check the binding.
-    const g = deps.store.grant(name);
-    if (g?.state !== "active")
-      throw new HelperError("revoked", "the grant needs re-consent (log in again)");
-    checkBinding(g, p, client);
-    const again = usable(g, deps.now());
-    if (again) return again; // refreshed by another process meanwhile
-    if (!g.refreshToken) throw new HelperError("revoked", "no refresh token (log in again)");
-    let answer: Awaited<ReturnType<typeof refresh>>;
-    try {
-      answer = await refresh(deps.transport, p, client, g.refreshToken);
-    } catch (error) {
-      if (error instanceof HelperError && error.code === "revoked") {
-        const { refreshToken: _r, access: _a, ...rest } = g;
+  const token = await deps.store.withLock(
+    name,
+    async () => {
+      // Re-read under the lock (another process may have changed it) and re-check the binding.
+      const g = deps.store.grant(name);
+      if (g?.state !== "active")
+        throw new HelperError("revoked", "the grant needs re-consent (log in again)");
+      checkBinding(g, p, client);
+      const again = usable(g, deps.now());
+      if (again) return again; // refreshed by another process meanwhile
+      if (!g.refreshToken) throw new HelperError("revoked", "no refresh token (log in again)");
+      // Never begin a potentially rotating request without its FULL call budget plus time
+      // to persist and unlock. Once an answer arrives, persistence must not be interrupted.
+      remainingHelperTime(deadline, CALL_TIMEOUT_MS + HELPER_PERSIST_RESERVE_MS);
+      let answer: Awaited<ReturnType<typeof refresh>>;
+      try {
+        answer = await refresh(deps.transport, p, client, g.refreshToken);
+      } catch (error) {
+        if (error instanceof HelperError && error.code === "revoked") {
+          const { refreshToken: _r, access: _a, ...rest } = g;
+          deps.store.putGrant({
+            ...rest,
+            state: "needs-reconsent",
+            problem:
+              "the provider refused the refresh token (revoked, expired or password changed)",
+            updatedAt: deps.now().toISOString(),
+          });
+        }
+        throw error;
+      }
+      // Microsoft explicitly requests scopes on refresh. Google omits that request field,
+      // retaining the stored grant's scopes (RFC 6749 §6); never infer broader permissions.
+      const granted = normaliseScopes(
+        p.provider,
+        answer.scope ??
+          (p.provider === "microsoft" ? requestedScopes(p) : g.grantedScopes).join(" "),
+      );
+      const lacking = missing(granted, requiredScopes(p));
+      const now = deps.now();
+      if (lacking.length > 0) {
+        const { access: _a, ...rest } = g;
         deps.store.putGrant({
           ...rest,
+          refreshToken: answer.refresh_token ?? g.refreshToken,
+          grantedScopes: granted,
           state: "needs-reconsent",
-          problem: "the provider refused the refresh token (revoked, expired or password changed)",
-          updatedAt: deps.now().toISOString(),
+          problem: `the grant no longer includes ${lacking.join(", ")}`,
+          updatedAt: now.toISOString(),
         });
+        throw new HelperError("scope", `the grant no longer includes ${lacking.join(", ")}`);
       }
-      throw error;
-    }
-    // Microsoft explicitly requests scopes on refresh. Google omits that request field,
-    // retaining the stored grant's scopes (RFC 6749 §6); never infer broader permissions.
-    const granted = normaliseScopes(
-      p.provider,
-      answer.scope ?? (p.provider === "microsoft" ? requestedScopes(p) : g.grantedScopes).join(" "),
-    );
-    const lacking = missing(granted, requiredScopes(p));
-    const now = deps.now();
-    if (lacking.length > 0) {
-      const { access: _a, ...rest } = g;
-      deps.store.putGrant({
-        ...rest,
+      const next: Grant = {
+        ...g,
         grantedScopes: granted,
-        state: "needs-reconsent",
-        problem: `the grant no longer includes ${lacking.join(", ")}`,
+        // Microsoft rotates refresh tokens: the new one replaces the old (atomically).
+        refreshToken: answer.refresh_token ?? g.refreshToken,
+        access: {
+          token: answer.access_token,
+          expiresAt: new Date(now.getTime() + answer.expires_in * 1000).toISOString(),
+        },
         updatedAt: now.toISOString(),
-      });
-      throw new HelperError("scope", `the grant no longer includes ${lacking.join(", ")}`);
-    }
-    const next: Grant = {
-      ...g,
-      grantedScopes: granted,
-      // Microsoft rotates refresh tokens: the new one replaces the old (atomically).
-      refreshToken: answer.refresh_token ?? g.refreshToken,
-      access: {
+      };
+      deps.store.putGrant(next);
+      return {
         token: answer.access_token,
-        expiresAt: new Date(now.getTime() + answer.expires_in * 1000).toISOString(),
-      },
-      updatedAt: now.toISOString(),
-    };
-    deps.store.putGrant(next);
-    return {
-      token: answer.access_token,
-      expiresAt: (next.access as { expiresAt: string }).expiresAt,
-      scopes: granted,
-    };
-  });
+        expiresAt: (next.access as { expiresAt: string }).expiresAt,
+        scopes: granted,
+      };
+    },
+    {
+      waitMs: Math.min(LOCK_WAIT_MS, remainingHelperTime(deadline, HELPER_PERSIST_RESERVE_MS)),
+      deadline,
+    },
+  );
+  // Check only AFTER persistence and the lock's finally block, never between receipt and write.
+  remainingHelperTime(deadline);
+  return token;
 }
 
 // ------------------------------------------------------------------ helper protocol
@@ -486,6 +517,7 @@ export async function helperExchange(
   deps: Deps,
   name: string,
   requestText: string,
+  deadline = performance.now() + HELPER_DEADLINE_MS,
 ): Promise<{ exit: number; stdout?: string; problem?: string }> {
   let req: z.infer<typeof helperRequest>;
   try {
@@ -501,12 +533,18 @@ export async function helperExchange(
       p.connectionId !== req.connectionId
     )
       return { exit: EXIT.refused, problem: "the request is not for this profile's account" };
-    const t = await accessToken(deps, name, {
-      provider: req.provider,
-      connectionId: req.connectionId,
-      purpose: req.purpose,
-      resource: p.resource,
-    });
+    const t = await accessToken(
+      deps,
+      name,
+      {
+        provider: req.provider,
+        connectionId: req.connectionId,
+        purpose: req.purpose,
+        resource: p.resource,
+      },
+      deadline,
+    );
+    remainingHelperTime(deadline);
     const lacking = missing(t.scopes, req.scopes);
     if (lacking.length > 0) return { exit: EXIT.revoked, problem: "scope not granted" };
     return {

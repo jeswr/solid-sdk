@@ -52,6 +52,7 @@ import {
   tenantMatches,
 } from "./providers.js";
 import { CredentialStore, HelperError, NAME, type Profile, writeFully } from "./store.js";
+import { HELPER_DEADLINE_MS } from "./timeouts.js";
 
 export interface CliIo {
   stdout: (s: string) => void;
@@ -581,9 +582,10 @@ async function run(
         return 0;
       }
       case "token": {
+        const deadline = performance.now() + HELPER_DEADLINE_MS;
         const name = profileName();
         const request = await (io.readStdin ?? readProcessStdin)();
-        const r = await helperExchange(deps, name, request);
+        const r = await helperExchange(deps, name, request, deadline);
         if (r.stdout !== undefined) io.stdout(r.stdout);
         else io.stderr(`awp-credentials token: ${r.problem ?? "failed"}\n`);
         return r.exit;

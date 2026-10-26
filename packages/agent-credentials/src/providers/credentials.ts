@@ -16,6 +16,7 @@ import { spawn } from "child_process";
 import { closeSync, constants, fstatSync, openSync, readFileSync } from "fs";
 import { isAbsolute } from "path";
 import { z } from "zod";
+import { HELPER_KILL_TIMEOUT_MS } from "../timeouts.js";
 import { parseRfc3339 } from "./common.js";
 
 export type ProviderFamily = "google" | "microsoft";
@@ -116,7 +117,6 @@ export function loadProviderConfig(path: string): ProviderConfig {
 
 // ------------------------------------------------------------------ helper-process provider
 
-const HELPER_TIMEOUT_MS = 10_000;
 const HELPER_MAX_OUTPUT = 16 * 1024;
 const helperOutput = z.object({
   access_token: z.string().regex(/^[\x21-\x7e]{8,8192}$/),
@@ -175,7 +175,7 @@ export function runHelper(
   command: string,
   args: readonly string[],
   request: unknown,
-  timeoutMs = HELPER_TIMEOUT_MS,
+  timeoutMs = HELPER_KILL_TIMEOUT_MS,
 ): Promise<string> {
   return new Promise((resolve, reject) => {
     let settled = false;

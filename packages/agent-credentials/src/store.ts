@@ -36,6 +36,7 @@ import { isAbsolute, join } from "path";
 import { setTimeout as sleep } from "timers/promises";
 import { z } from "zod";
 import { parseRfc3339 } from "./providers/common.js";
+import { LOCK_WAIT_MS } from "./timeouts.js";
 
 export class HelperError extends Error {
   constructor(
@@ -211,9 +212,10 @@ function ensureDir(path: string): void {
 }
 
 async function waitForLock(deadline: number): Promise<void> {
-  if (Date.now() > deadline)
+  const remaining = deadline - performance.now();
+  if (remaining <= 0)
     throw new HelperError("unavailable", "another helper process holds this profile's lock");
-  await sleep(20 + Math.floor(Math.random() * 30));
+  await sleep(Math.min(remaining, 20 + Math.floor(Math.random() * 30)));
 }
 
 /** Construct the platform default without opening or creating any directory. */
@@ -504,6 +506,8 @@ export class CredentialStore {
     fn: () => Promise<T>,
     opts: {
       waitMs?: number;
+      /** Absolute monotonic deadline, including release (performance.now()). */
+      deadline?: number;
       /** @deprecated Age no longer revokes locks. */
       staleMs?: number;
     } = {},
@@ -511,8 +515,8 @@ export class CredentialStore {
     if (!NAME.test(name)) throw new HelperError("invalid", `invalid name “${name}”`);
     const path = join(this.dir, "locks", `${name}.lock`);
     this.guard(path);
-    const waitMs = opts.waitMs ?? 20_000;
-    const deadline = Date.now() + waitMs;
+    const waitMs = opts.waitMs ?? LOCK_WAIT_MS;
+    const deadline = Math.min(performance.now() + waitMs, opts.deadline ?? Infinity);
     const owner = {
       token: randomBytes(32).toString("hex"),
       pid: process.pid,
@@ -560,8 +564,10 @@ export class CredentialStore {
       return await fn();
     } finally {
       try {
-        await this.withLockGuard(path, Date.now() + waitMs, () =>
-          this.releaseLock(path, owner.token),
+        await this.withLockGuard(
+          path,
+          Math.min(performance.now() + waitMs, opts.deadline ?? Infinity),
+          () => this.releaseLock(path, owner.token),
         );
       } catch {
         // Already gone, replaced or unreadable: never remove another owner's lock.

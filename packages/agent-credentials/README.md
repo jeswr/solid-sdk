@@ -56,6 +56,19 @@ DNS-pinning guarded fetch restricted to the official provider origins, refusing 
 and loopback. `provider-config` generates helpers invoking that entry, so spawned helpers
 can refresh tokens within the same 15-second / 256-KiB provider call limits.
 
+Helper deadlines share the exported constants `HELPER_DEADLINE_MS` (37 seconds) and
+`HELPER_KILL_TIMEOUT_MS` (40 seconds). The helper's monotonic deadline includes reading the
+request, waiting up to `LOCK_WAIT_MS` (20 seconds) for the profile lock, refreshing within
+`CALL_TIMEOUT_MS` (15 seconds, including the response body), atomically persisting the grant,
+and releasing the lock. It starts a refresh only if the full call budget and
+`HELPER_PERSIST_RESERVE_MS` (2 seconds) remain. Timeout returns a typed `unavailable` error
+(helper exit 1) after lock cleanup. A received refresh-token rotation is always persisted
+before checking the deadline again; crossing the deadline during persistence refuses token
+output but retains the new grant. The parent reserves another 3 seconds for process startup,
+protocol output and clean exit before killing an unresponsive helper. Blocking filesystem or
+OS stalls can exceed the persistence reserve; the bounded parent timeout remains the final
+backstop.
+
 Token files support anthropic, openai, slack, matrix, discord, telegram, bluesky and mastodon.
 Provision each purpose separately. The same token value is never automatically reused for
 another purpose. Tokens with an expiry refuse after expiry; static API/bot tokens can omit it.

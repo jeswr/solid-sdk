@@ -16,6 +16,9 @@ import { createHash, randomBytes, timingSafeEqual } from "crypto";
 import { createLocalJWKSet, decodeJwt, type JWTPayload, jwtVerify } from "jose";
 import { z } from "zod";
 import { type Grant, HelperError, type Profile } from "./store.js";
+import { CALL_TIMEOUT_MS } from "./timeouts.js";
+
+export { CALL_TIMEOUT_MS } from "./timeouts.js";
 
 // ------------------------------------------------------------------ transport
 
@@ -32,7 +35,6 @@ export const ALLOWED_ORIGINS: ReadonlySet<string> = new Set([
   "https://login.microsoftonline.com",
   "https://graph.microsoft.com",
 ]);
-export const CALL_TIMEOUT_MS = 15_000;
 export const MAX_BODY = 256 * 1024;
 
 /** One bounded call to an allow-listed origin; JSON answer (or a typed error, never the body). */
@@ -52,13 +54,38 @@ export async function call(
   }
   if (!ALLOWED_ORIGINS.has(origin))
     throw new HelperError("refused", `${what}: not an allowed provider origin`);
+  const stop = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => {
+      reject(new HelperError("unavailable", `${what}: the provider did not answer in time`));
+      stop.abort();
+    }, CALL_TIMEOUT_MS);
+  });
+  try {
+    // Bound headers AND body even when an injected transport ignores cancellation.
+    return await Promise.race([
+      readAnswer(transport, url, { ...init, signal: stop.signal }, what),
+      timeout,
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function readAnswer(
+  transport: Transport,
+  url: string,
+  init: RequestInit & { signal: AbortSignal },
+  what: string,
+): Promise<{ status: number; body: unknown }> {
   let res: Response;
   try {
     res = await transport(url, {
       ...init,
       redirect: "error",
-      signal: AbortSignal.timeout(CALL_TIMEOUT_MS),
     });
+    init.signal.throwIfAborted();
   } catch {
     throw new HelperError("unavailable", `${what}: the provider could not be reached`);
   }
@@ -66,6 +93,10 @@ export async function call(
   try {
     if (!res.body) throw new Error("missing response body");
     const reader = res.body.getReader();
+    const cancel = () => {
+      void reader.cancel().catch(() => undefined);
+    };
+    init.signal.addEventListener("abort", cancel, { once: true });
     const chunks: Uint8Array[] = [];
     let size = 0;
     try {
@@ -81,6 +112,7 @@ export async function call(
       }
       text = new TextDecoder().decode(Buffer.concat(chunks));
     } finally {
+      init.signal.removeEventListener("abort", cancel);
       reader.releaseLock();
     }
   } catch (error) {
