@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex
 "use client";
 /**
  * Drive dialogs (04-drive §2.9): New folder, Rename (with the extension
@@ -64,7 +65,7 @@ function NameDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const { dialog, closeDialog } = useDriveUi();
+  const { dialog, closeDialog, restoreDialogFocus } = useDriveUi();
   const actions = useDriveActions();
   const inputId = useId();
   const input = useRef<HTMLInputElement>(null);
@@ -119,7 +120,7 @@ function NameDialog({
   if (confirmExt && rename) {
     return (
       <AlertDialog open={open} onOpenChange={onOpenChange}>
-        <AlertDialogContent>
+        <AlertDialogContent onCloseAutoFocus={restoreDialogFocus}>
           <AlertDialogHeader>
             <AlertDialogTitle>
               {confirmExt.to
@@ -149,7 +150,7 @@ function NameDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="drv-dialog-sm">
+      <DialogContent className="drv-dialog-sm" onCloseAutoFocus={restoreDialogFocus}>
         <form onSubmit={onSubmit}>
           <DialogHeader>
             <DialogTitle>{rename ? "Rename" : "New folder"}</DialogTitle>
@@ -204,7 +205,7 @@ function MoveDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const { dialog, closeDialog } = useDriveUi();
+  const { dialog, closeDialog, restoreDialogFocus } = useDriveUi();
   const { client, driveRoot } = useDrive();
   const actions = useDriveActions();
   const items = dialog?.kind === "move" ? dialog.items : [];
@@ -227,7 +228,6 @@ function MoveDialog({
     }));
   };
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: reset when the dialog opens
   useEffect(() => {
     if (!open || !driveRoot) return;
     setNodes({});
@@ -396,7 +396,7 @@ function MoveDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="drv-dialog-md">
+      <DialogContent className="drv-dialog-md" onCloseAutoFocus={restoreDialogFocus}>
         <DialogHeader>
           <DialogTitle>
             Move {items.length === 1 ? `"${items[0]?.name}"` : `${items.length} items`}
@@ -447,7 +447,7 @@ function TrashConfirmDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const { dialog, closeDialog } = useDriveUi();
+  const { dialog, closeDialog, restoreDialogFocus } = useDriveUi();
   const actions = useDriveActions();
   const entries =
     dialog?.kind === "delete-forever" || dialog?.kind === "empty-trash" ? dialog.entries : [];
@@ -456,7 +456,7 @@ function TrashConfirmDialog({
   const first = entries[0];
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
-      <AlertDialogContent>
+      <AlertDialogContent onCloseAutoFocus={restoreDialogFocus}>
         <AlertDialogHeader>
           <AlertDialogTitle>
             {empty

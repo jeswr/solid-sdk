@@ -1,13 +1,20 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex
 "use client";
 /** Drive's route bodies: folder, Recent, Starred, Shared, Search, Trash and preview. */
 
 import { Alert, AlertDescription, Button, FileTypeIcon, IconButton } from "@jeswr/suite-ui";
 import { Clock, FolderOpen, HardDrive, Search, Star, Trash2, Users } from "lucide-react";
 import { notFound, useParams, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { decodeRef, InvalidRefError } from "@/lib/refs";
-import { DriveError, type DriveItem, nameOf, parentOf } from "../lib/client/client";
+import {
+  type DriveClient,
+  DriveError,
+  type DriveItem,
+  nameOf,
+  parentOf,
+} from "../lib/client/client";
 import { listTrash, recentFiles, searchByName, trashFolderOf } from "../lib/operations/operations";
 import type { TrashEntry } from "../lib/operations/trash-index";
 import { formatSize } from "../lib/view/view";
@@ -90,19 +97,70 @@ export function FolderRefView() {
   return <FolderView url={url} />;
 }
 
-export function RecentView() {
+/** A cancellable tree scan; results are tied to the root, query and request generation. */
+function useTreeFiles(query?: string) {
   const { client, driveRoot, changes } = useDrive();
-  const [items, setItems] = useState<BrowserItem[]>();
-  const [error, setError] = useState<unknown>();
+  const [snapshot, setSnapshot] = useState<{
+    client: DriveClient;
+    root: string;
+    query: string | undefined;
+    items?: BrowserItem[];
+    error?: unknown;
+  }>();
+  const [tick, setTick] = useState(0);
+  const generation = useRef(0);
+  const active = useRef<AbortController | undefined>(undefined);
   const load = useCallback(() => {
+    active.current?.abort();
+    setTick((value) => value + 1);
+  }, []);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: tick requests a new scan
+  useEffect(() => {
     if (!driveRoot) return;
-    recentFiles(client, [driveRoot]).then(setItems, setError);
-  }, [client, driveRoot]);
-  useEffect(load, [load]);
+    const request = ++generation.current;
+    const controller = new AbortController();
+    active.current = controller;
+    setSnapshot({ client, root: driveRoot, query });
+    // The operations' scan API does not expose cancellation. Bind its list seam to
+    // this request so aborted scans stop issuing IO, even if a transport ignores abort.
+    const scoped: DriveClient = {
+      ...client,
+      list: async (url, options) => {
+        controller.signal.throwIfAborted();
+        const items = await client.list(url, { ...options, signal: controller.signal });
+        controller.signal.throwIfAborted();
+        return items;
+      },
+    };
+    const result =
+      query === undefined
+        ? recentFiles(scoped, [driveRoot])
+        : searchByName(scoped, driveRoot, query);
+    result.then(
+      (items) => {
+        if (!controller.signal.aborted && request === generation.current)
+          setSnapshot({ client, root: driveRoot, query, items });
+      },
+      (error: unknown) => {
+        if (!controller.signal.aborted && request === generation.current)
+          setSnapshot({ client, root: driveRoot, query, error });
+      },
+    );
+    return () => controller.abort();
+  }, [client, driveRoot, query, tick]);
   useEffect(
-    () => (driveRoot ? changes.subscribe(driveRoot, load) : undefined),
+    () => (driveRoot ? changes.subscribeSubtree(driveRoot, load) : undefined),
     [driveRoot, changes, load],
   );
+  const current =
+    snapshot?.client === client && snapshot.root === driveRoot && snapshot.query === query
+      ? snapshot
+      : undefined;
+  return { items: current?.items, error: current?.error, load };
+}
+
+export function RecentView() {
+  const { items, error, load } = useTreeFiles();
   return (
     <FileBrowser
       title="Recent"
@@ -197,23 +255,14 @@ export function SharedView() {
 }
 
 export function SearchView() {
-  const { client, driveRoot, changes } = useDrive();
   const query = useSearchParams().get("q") ?? "";
-  const [items, setItems] = useState<BrowserItem[]>();
-  const load = useCallback(() => {
-    if (!driveRoot) return;
-    setItems(undefined);
-    searchByName(client, driveRoot, query).then(setItems, () => setItems([]));
-  }, [client, driveRoot, query]);
-  useEffect(load, [load]);
-  useEffect(
-    () => (driveRoot ? changes.subscribe(driveRoot, load) : undefined),
-    [driveRoot, changes, load],
-  );
+  const { items, error, load } = useTreeFiles(query);
   return (
     <FileBrowser
       title={query ? `Results for "${query}"` : "Search"}
       items={items}
+      error={error}
+      onRetry={load}
       columns={["location", "modified", "size"]}
       empty={{
         title: query ? "No results" : "Search your Drive",
@@ -227,18 +276,53 @@ export function SearchView() {
 export function PreviewRouteView() {
   const url = useRefParam();
   const { client } = useDrive();
-  const [item, setItem] = useState<DriveItem | "missing">();
+  const [result, setResult] = useState<{
+    url: string;
+    client: DriveClient;
+    item?: DriveItem;
+    error?: unknown;
+  }>();
+  const [attempt, setAttempt] = useState(0);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: attempt retries HEAD
   useEffect(() => {
     let live = true;
+    setResult(undefined);
     client.stat(url).then(
-      (found) => live && setItem(found),
-      () => live && setItem("missing"),
+      (item) => live && setResult({ url, client, item }),
+      (error: unknown) => live && setResult({ url, client, error }),
     );
     return () => {
       live = false;
     };
-  }, [client, url]);
-  if (item === "missing") notFound();
+  }, [client, url, attempt]);
+  const current = result?.url === url && result.client === client ? result : undefined;
+  const error = current?.error;
+  if (error instanceof DriveError && (error.status === 404 || error.status === 410)) notFound();
+  if (current && !current.item) {
+    const status = error instanceof DriveError ? error.status : undefined;
+    return (
+      <div className="drv-state" role="alert">
+        <h1>
+          {status === 401
+            ? "Sign in to open this file"
+            : status === 403
+              ? "You don't have access to this file"
+              : "Can't open this file"}
+        </h1>
+        <p>
+          {status === 401
+            ? "Sign in again, then retry."
+            : status === 403
+              ? "Request access from the owner, then retry."
+              : "The storage didn't respond. Try again."}
+        </p>
+        <Button variant="outline" onClick={() => setAttempt((value) => value + 1)}>
+          Retry
+        </Button>
+      </div>
+    );
+  }
+  const item = current?.item;
   if (!item)
     return (
       <div className="drv-boot" role="status">

@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex
 "use client";
 /**
  * The Drive listing (04-drive §2.2–2.4, §4): toolbar with filter chips, sort
@@ -22,7 +23,6 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-  FileTypeIcon,
   IconButton,
   Skeleton,
 } from "@jeswr/suite-ui";
@@ -45,6 +45,7 @@ import {
   type ReactNode,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -145,6 +146,24 @@ function hasFiles(event: DragEvent): boolean {
   return [...event.dataTransfer.types].includes("Files");
 }
 
+function reconcileSelection(
+  current: SelectionState,
+  ids: readonly string[],
+  previous: readonly string[],
+): SelectionState {
+  const selected = current.selected.filter((id) => ids.includes(id));
+  const focus =
+    current.focus && ids.includes(current.focus)
+      ? current.focus
+      : (ids[Math.min(Math.max(0, previous.indexOf(current.focus ?? "")), ids.length - 1)] ?? null);
+  const anchor = current.anchor && ids.includes(current.anchor) ? current.anchor : null;
+  return selected.length === current.selected.length &&
+    focus === current.focus &&
+    anchor === current.anchor
+    ? current
+    : { selected, focus, anchor };
+}
+
 export function FileBrowser(props: FileBrowserProps) {
   const { title, items, error, onRetry, folder, columns, empty, fixedOrder, refreshing } = props;
   const { prefs, updatePrefs, uploads, driveRoot } = useDrive();
@@ -152,7 +171,9 @@ export function FileBrowser(props: FileBrowserProps) {
   const actions = useDriveActions();
   const router = useRouter();
   const filters = useFilters();
-  const [selection, setSelection] = useState<SelectionState>(createSelection);
+  const [storedSelection, setSelection] = useState<SelectionState>(createSelection);
+  const previousIds = useRef<readonly string[]>([]);
+  const domFocus = useRef<string | undefined>(undefined);
   const [menuFor, setMenuFor] = useState<string>();
   const [dropTarget, setDropTarget] = useState<string>();
   const [dropping, setDropping] = useState(false);
@@ -174,6 +195,10 @@ export function FileBrowser(props: FileBrowserProps) {
     [items, filters.types, filters.modified, prefs.sort, fixedOrder],
   );
   const ids = useMemo(() => visible.map((item) => item.url), [visible]);
+  const selection = useMemo(
+    () => reconcileSelection(storedSelection, ids, previousIds.current),
+    [storedSelection, ids],
+  );
   const selected = useMemo(
     () => visible.filter((item) => selection.selected.includes(item.url)),
     [visible, selection.selected],
@@ -182,13 +207,24 @@ export function FileBrowser(props: FileBrowserProps) {
   // Clear the selection when the folder changes (04-drive §4.4).
   // biome-ignore lint/correctness/useExhaustiveDependencies: folder change is the event
   useEffect(() => setSelection(createSelection()), [folder]);
-  // Drop selected ids that disappeared (moved, trashed) after a refresh.
-  useEffect(() => {
-    setSelection((current) => {
-      const kept = current.selected.filter((id) => ids.includes(id));
-      return kept.length === current.selected.length ? current : { ...current, selected: kept };
-    });
-  }, [ids]);
+  useLayoutEffect(() => {
+    setSelection(selection);
+    previousIds.current = ids;
+    if (domFocus.current && !ids.includes(domFocus.current)) {
+      if (
+        document.activeElement === document.body ||
+        container.current?.contains(document.activeElement)
+      ) {
+        const next = selection.focus
+          ? container.current?.querySelector<HTMLElement>(
+              `[data-url="${CSS.escape(selection.focus)}"]`,
+            )
+          : container.current;
+        next?.focus();
+      }
+      domFocus.current = selection.focus ?? undefined;
+    }
+  }, [ids, selection]);
 
   const { setDetailsItems, setCurrentFolder, uploadRequest } = ui;
   useEffect(() => setDetailsItems(selected), [selected, setDetailsItems]);
@@ -205,7 +241,9 @@ export function FileBrowser(props: FileBrowserProps) {
 
   const dispatch = useCallback(
     (action: Parameters<typeof selectionReducer>[1]) =>
-      setSelection((current) => selectionReducer(current, action, ids)),
+      setSelection((current) =>
+        selectionReducer(reconcileSelection(current, ids, previousIds.current), action, ids),
+      ),
     [ids],
   );
 
@@ -761,7 +799,23 @@ export function FileBrowser(props: FileBrowserProps) {
       {props.banner}
       {toolbar}
       {/* biome-ignore lint/a11y/noStaticElementInteractions: keyboard model for the listing lives on its wrapper */}
-      <div ref={container} className="drv-content" onKeyDown={onKeyDown} {...contentDropProps}>
+      <div
+        ref={container}
+        className="drv-content"
+        data-drive-listing
+        tabIndex={-1}
+        onFocusCapture={(event) => {
+          domFocus.current = (event.target as HTMLElement).closest<HTMLElement>(
+            "[data-url]",
+          )?.dataset.url;
+        }}
+        onBlurCapture={(event) => {
+          if (event.relatedTarget && !event.currentTarget.contains(event.relatedTarget as Node))
+            domFocus.current = undefined;
+        }}
+        onKeyDown={onKeyDown}
+        {...contentDropProps}
+      >
         {body}
         {dropping && folder ? (
           <div className="drv-drop-overlay" aria-hidden="true">

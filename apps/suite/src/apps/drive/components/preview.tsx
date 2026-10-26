@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex
 "use client";
 /**
  * File preview (04-drive §2.7, §4.6): the full-screen preview dialog over a
@@ -13,7 +14,6 @@ import {
   DialogContent,
   DialogDescription,
   DialogTitle,
-  FileTypeIcon,
   IconButton,
   Skeleton,
 } from "@jeswr/suite-ui";
@@ -53,12 +53,19 @@ const LABELS: Record<string, string> = {
 function termLabel(iri: string): string {
   const tail = iri.split(/[#/]/).filter(Boolean).pop() ?? iri;
   return (
-    LABELS[tail] ??
+    (Object.hasOwn(LABELS, tail) ? LABELS[tail] : undefined) ??
     tail
       .replace(/[-_]/g, " ")
       .replace(/([a-z])([A-Z])/g, "$1 $2")
       .replace(/^./, (c) => c.toUpperCase())
   );
+}
+
+function filePreviewKind(item: DriveItem) {
+  // SVG is safe in an image element, which does not execute its scripts.
+  return item.contentType?.toLowerCase() === "image/svg+xml"
+    ? "image"
+    : previewKind(item.contentType);
 }
 
 /** A readable value for an object IRI: contact schemes lose their prefix. */
@@ -69,7 +76,7 @@ function valueLabel(iri: string): string {
 }
 
 function useLoadedFile(client: DriveClient, item: DriveItem): Loaded {
-  const kind = previewKind(item.contentType);
+  const kind = filePreviewKind(item);
   const [state, setState] = useState<Loaded>({ status: "loading" });
   useEffect(() => {
     let live = true;
@@ -93,11 +100,17 @@ function useLoadedFile(client: DriveClient, item: DriveItem): Loaded {
           truncated: blob.size > TEXT_LIMIT,
         } as const;
       }
-      objectUrl = URL.createObjectURL(
-        blob.type
-          ? blob
-          : new Blob([blob], { type: item.contentType ?? "application/octet-stream" }),
-      );
+      let media = blob;
+      if (kind === "pdf") {
+        if ((await blob.slice(0, 5).text()) !== "%PDF-") return { status: "error" } as const;
+        // The listing and GET may disagree. Never embed an HTML blob on our origin.
+        media = new Blob([blob], { type: "application/pdf" });
+      } else if (kind === "image" && !blob.type.startsWith("image/")) {
+        return { status: "error" } as const;
+      }
+      objectUrl = URL.createObjectURL(media);
+      // A read may finish after cleanup has already run.
+      if (!live) URL.revokeObjectURL(objectUrl);
       return { status: "blob", url: objectUrl } as const;
     };
     run().then(
@@ -108,7 +121,7 @@ function useLoadedFile(client: DriveClient, item: DriveItem): Loaded {
       live = false;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [client, item.url, item.contentType, kind]);
+  }, [client, item.url, kind]);
   return state;
 }
 
@@ -155,7 +168,7 @@ export function PreviewBody({ item }: { item: DriveItem }) {
   const { client } = useDrive();
   const actions = useDriveActions();
   const loaded = useLoadedFile(client, item);
-  const kind = previewKind(item.contentType);
+  const kind = filePreviewKind(item);
   if (loaded.status === "loading")
     return <Skeleton className="drv-preview-skeleton" aria-label="Loading preview" />;
   if (loaded.status === "error") {
@@ -221,7 +234,7 @@ export function PreviewBody({ item }: { item: DriveItem }) {
       // biome-ignore lint/performance/noImgElement: blob URLs bypass the Next image loader
       return <img className="drv-preview-image" src={loaded.url} alt={item.name} />;
     case "pdf":
-      return <iframe className="drv-preview-frame" src={loaded.url} title={item.name} />;
+      return <iframe className="drv-preview-frame" src={loaded.url} title={item.name} sandbox="" />;
     case "audio":
       // biome-ignore lint/a11y/useMediaCaption: user files have no caption track
       return <audio controls src={loaded.url} />;

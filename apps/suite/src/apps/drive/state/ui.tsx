@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex
 "use client";
 /**
  * Drive's UI state shared across routes: the open dialog, the preview, the
@@ -9,9 +10,17 @@
 
 import { toast } from "@jeswr/suite-ui";
 import { useRouter } from "next/navigation";
-import { createContext, type ReactNode, useCallback, useContext, useMemo, useState } from "react";
+import {
+  createContext,
+  type ReactNode,
+  useCallback,
+  useContext,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { encodeRef } from "@/lib/refs";
-import { DriveError, type DriveItem, nameOf, parentOf } from "../lib/client/client";
+import { type DriveClient, DriveError, type DriveItem, nameOf } from "../lib/client/client";
 import {
   copyItem,
   createFolder,
@@ -23,6 +32,7 @@ import {
 } from "../lib/operations/operations";
 import type { TrashEntry } from "../lib/operations/trash-index";
 import { useDrive } from "./drive-context";
+import { moveWithValidator } from "./undo";
 
 export type DriveDialog =
   | { kind: "new-folder"; parent: string }
@@ -40,6 +50,7 @@ interface DriveUiValue {
   readonly dialog: DriveDialog | undefined;
   readonly openDialog: (dialog: DriveDialog) => void;
   readonly closeDialog: () => void;
+  readonly restoreDialogFocus: (event: Event) => void;
   readonly preview: PreviewState | undefined;
   readonly setPreview: (preview: PreviewState | undefined) => void;
   readonly detailsOpen: boolean;
@@ -64,11 +75,48 @@ export function DriveUiProvider({ children }: { children: ReactNode }) {
   const [detailsItems, setDetailsItems] = useState<readonly DriveItem[]>([]);
   const [uploadRequest, setUploadRequest] = useState<{ id: number; folder: boolean }>();
   const [currentFolder, setCurrentFolder] = useState<string>();
+  const dialogFocus = useRef<{ element: HTMLElement | null; url: string | undefined } | undefined>(
+    undefined,
+  );
+  const dialogOpen = useRef(false);
+  const openDialog = useCallback((next: DriveDialog) => {
+    const item =
+      next.kind === "rename" ? next.item : next.kind === "move" ? next.items[0] : undefined;
+    const url = item?.url ?? ("entries" in next ? next.entries[0]?.url : undefined);
+    dialogFocus.current = {
+      element:
+        document.activeElement instanceof HTMLElement && document.activeElement !== document.body
+          ? document.activeElement
+          : null,
+      url,
+    };
+    dialogOpen.current = true;
+    setDialog(next);
+  }, []);
+  const closeDialog = useCallback(() => {
+    dialogOpen.current = false;
+    setDialog(undefined);
+  }, []);
+  const restoreDialogFocus = useCallback((event: Event) => {
+    event.preventDefault();
+    // Name -> extension confirmation replaces one dialog with another.
+    if (dialogOpen.current) return;
+    const saved = dialogFocus.current;
+    const row = saved?.url
+      ? document.querySelector<HTMLElement>(`[data-url="${CSS.escape(saved.url)}"]`)
+      : null;
+    const listing = document.querySelector<HTMLElement>("[data-drive-listing]");
+    const target = saved?.element?.isConnected ? saved.element : (row ?? listing);
+    target?.focus();
+    // A connected element may have become disabled or hidden during the mutation.
+    if (document.activeElement !== target) (row ?? listing)?.focus();
+  }, []);
   const value = useMemo<DriveUiValue>(
     () => ({
       dialog,
-      openDialog: setDialog,
-      closeDialog: () => setDialog(undefined),
+      openDialog,
+      closeDialog,
+      restoreDialogFocus,
       preview,
       setPreview,
       detailsOpen,
@@ -81,7 +129,17 @@ export function DriveUiProvider({ children }: { children: ReactNode }) {
       currentFolder,
       setCurrentFolder,
     }),
-    [dialog, preview, detailsOpen, detailsItems, uploadRequest, currentFolder],
+    [
+      dialog,
+      preview,
+      detailsOpen,
+      detailsItems,
+      uploadRequest,
+      currentFolder,
+      openDialog,
+      closeDialog,
+      restoreDialogFocus,
+    ],
   );
   return <DriveUiContext value={value}>{children}</DriveUiContext>;
 }
@@ -201,8 +259,27 @@ export function useDriveActions() {
       const pending = toast.loading(
         items.length === 1 ? `Moving ${items[0]?.name}…` : `Moving ${items.length} items…`,
       );
+      // Capture each validator before moving the next item in a potentially slow
+      // batch. URL equality does not establish which resource now occupies it.
+      const validators = new Map<string, string | undefined>();
+      const movingClient: DriveClient = undoable
+        ? {
+            ...client,
+            move: async (from, to) => {
+              const url = await client.move(from, to);
+              validators.set(
+                url,
+                await client.stat(url).then(
+                  (item) => item.etag,
+                  () => undefined,
+                ),
+              );
+              return url;
+            },
+          }
+        : client;
       const result = await moveItems(
-        client,
+        movingClient,
         items.map((item) => item.url),
         target,
       );
@@ -219,6 +296,8 @@ export function useDriveActions() {
         );
       }
       if (result.done.length === 0) return result;
+      // An unreadable/absent validator makes Undo fail closed for that item.
+      const undo = result.done.map((entry) => ({ ...entry, etag: validators.get(entry.to) }));
       const label = folderLabel(target, driveRoot);
       const first = result.done[0];
       const message =
@@ -231,14 +310,23 @@ export function useDriveActions() {
               action: {
                 label: "Undo",
                 onClick: async () => {
-                  for (const { from, to } of result.done) {
-                    const back = parentOf(from);
-                    if (!back) continue;
-                    await moveItems(client, [to], back).then(() => {
+                  const failed: string[] = [];
+                  for (const { from, to, etag } of undo) {
+                    try {
+                      if (!etag) throw new Error("No validator for Undo");
+                      await moveWithValidator(
+                        { storageUrl: session.storageUrl, fetch: session.fetch },
+                        to,
+                        from,
+                        etag,
+                      );
                       invalidate(to);
                       invalidate(from);
-                    });
+                    } catch {
+                      failed.push(nameOf(from));
+                    }
                   }
+                  if (failed.length > 0) toast.error(`Couldn't restore: ${failed.join(", ")}`);
                 },
               },
             }
@@ -246,7 +334,7 @@ export function useDriveActions() {
       });
       return result;
     },
-    [client, driveRoot, invalidate],
+    [client, driveRoot, invalidate, session],
   );
 
   const rename = useCallback(

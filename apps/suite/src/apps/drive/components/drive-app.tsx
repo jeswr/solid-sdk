@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex
 "use client";
 /**
  * Drive's app frame: the account session, Drive state, the interim suite
@@ -101,6 +102,7 @@ function DriveChrome({ children }: { children: ReactNode }) {
         </IconButton>
       }
       details={ui.detailsOpen ? <DetailsPane onClose={() => setDetailsOpen(false)} /> : undefined}
+      onDetailsClose={() => setDetailsOpen(false)}
     >
       {rootError ? (
         <div className="drv-state" role="alert">

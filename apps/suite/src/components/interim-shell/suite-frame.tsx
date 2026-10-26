@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex
 "use client";
 /**
  * Interim suite frame for the Drive and Docs first cut: rail, top bar, app
@@ -12,7 +13,7 @@ import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@jeswr/suite-
 import { FileText, HardDrive, Menu, Search } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 
 export type SuiteAppId = "drive" | "docs";
 
@@ -31,8 +32,9 @@ export interface SuiteFrameProps {
   actions?: ReactNode;
   /** Search placeholder and target (`?q=` is appended). */
   search?: { placeholder: string; action: string; scopeLabel: string };
-  /** Right-hand details pane (≥1024 only; apps show a sheet below that). */
+  /** Details shown in a pane at ≥1024px and a modal Sheet below that. */
   details?: ReactNode;
+  onDetailsClose?: () => void;
   children: ReactNode;
 }
 
@@ -97,10 +99,26 @@ export function SuiteFrame({
   actions,
   search,
   details,
+  onDetailsClose,
   children,
 }: SuiteFrameProps) {
   const pathname = usePathname();
   const [drawer, setDrawer] = useState(false);
+  const [detailsSide, setDetailsSide] = useState<"bottom" | "right" | "pane">("pane");
+  const detailsTrigger = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    const narrow = window.matchMedia("(max-width: 1023px)");
+    const phone = window.matchMedia("(max-width: 639px)");
+    const update = () =>
+      setDetailsSide(narrow.matches ? (phone.matches ? "bottom" : "right") : "pane");
+    update();
+    narrow.addEventListener("change", update);
+    phone.addEventListener("change", update);
+    return () => {
+      narrow.removeEventListener("change", update);
+      phone.removeEventListener("change", update);
+    };
+  }, []);
   // Close the drawer on navigation; pathname is the trigger, not a value we read.
   // biome-ignore lint/correctness/useExhaustiveDependencies: pathname change is the event
   useEffect(() => setDrawer(false), [pathname]);
@@ -151,10 +169,32 @@ export function SuiteFrame({
       <main id="main-content" className="ish-main" tabIndex={-1}>
         {children}
       </main>
-      {details ? (
+      {details && detailsSide === "pane" ? (
         <aside className="ish-details" aria-label="Details">
           {details}
         </aside>
+      ) : null}
+      {detailsSide !== "pane" ? (
+        <Sheet open={Boolean(details)} onOpenChange={(open) => !open && onDetailsClose?.()}>
+          <SheetContent
+            side={detailsSide}
+            className="ish-details-sheet"
+            showCloseButton={false}
+            onOpenAutoFocus={() => {
+              detailsTrigger.current =
+                document.activeElement instanceof HTMLElement ? document.activeElement : null;
+            }}
+            onCloseAutoFocus={(event) => {
+              event.preventDefault();
+              const trigger = detailsTrigger.current;
+              (trigger?.isConnected ? trigger : document.getElementById("main-content"))?.focus();
+            }}
+          >
+            <SheetTitle className="sr-only">Details</SheetTitle>
+            <SheetDescription className="sr-only">Details of the selected items</SheetDescription>
+            {details}
+          </SheetContent>
+        </Sheet>
       ) : null}
       <nav className="ish-tabbar" aria-label="Apps">
         {APPS.map(({ id, label, href, icon: Icon }) => (
