@@ -35,20 +35,46 @@ describe("ICS fixture round-trips", () => {
   });
 });
 describe("ICS compatibility and validation", () => {
-  it.each(["", "RRULE:FREQ=DAILY;COUNT=3\n"])(
-    "skips cancelled events and series with an explicit warning (%s)",
-    (recurrence) => {
-      const source =
-        ics(`${recurrence}STATUS:CANCELLED`).replace("END:VCALENDAR", "") +
-        ics("STATUS:CONFIRMED").replace("BEGIN:VCALENDAR\n", "");
-      const imported = importICal(source);
-      expect(imported.skipped).toBe(1);
-      expect(imported.warnings).toEqual(["Cancelled ICS event skipped"]);
-      expect(imported.events).toHaveLength(1);
-      expect(imported.timeZones).toEqual([undefined]);
-      expect(imported.events[0]?.recurrence).toBeUndefined();
-    },
-  );
+  it("requires persistent identities for otherwise indistinguishable events", () => {
+    const base: CalendarEvent = {
+      name: "Meeting",
+      start: new Date("2026-03-01T09:00Z"),
+      end: new Date("2026-03-01T10:00Z"),
+    };
+    const events: CalendarEvent[] = [
+      base,
+      { ...base, location: "Room 2" },
+      { ...base, description: "Another meeting" },
+      { ...base, recurrence: { frequency: "WEEKLY" } },
+    ];
+    for (const event of events)
+      expect(() => exportICal({ events: [event] })).toThrow("persistent UID or source URL");
+    expect(() => exportICal({ events: [{ ...base, uid: " " }] })).toThrow("persistent UID");
+    const items = events.map((data, i) => ({ data, url: `https://pod.example/events/${i}.ttl` }));
+    const imported = importICal(exportICal({ events: items }));
+    expect(imported.warnings).toEqual([]);
+    expect(imported.events.map((event) => event.uid)).toEqual(items.map((item) => item.url));
+    expect(importICal(exportICal({ events: imported.events }))).toEqual(imported);
+    const edited = { ...base, uid: "persistent@example.test", name: "Renamed", location: "New" };
+    expect(
+      importICal(exportICal({ events: [{ data: edited, url: items[0]?.url }] })).events[0]?.uid,
+    ).toBe(edited.uid);
+    expect(events.every((event) => event.uid === undefined)).toBe(true);
+  });
+  it.each([
+    "",
+    "RRULE:FREQ=DAILY;COUNT=3\n",
+  ])("skips cancelled events and series with an explicit warning (%s)", (recurrence) => {
+    const source =
+      ics(`${recurrence}STATUS:CANCELLED`).replace("END:VCALENDAR", "") +
+      ics("STATUS:CONFIRMED").replace("BEGIN:VCALENDAR\n", "");
+    const imported = importICal(source);
+    expect(imported.skipped).toBe(1);
+    expect(imported.warnings).toEqual(["Cancelled ICS event skipped"]);
+    expect(imported.events).toHaveLength(1);
+    expect(imported.timeZones).toEqual([undefined]);
+    expect(imported.events[0]?.recurrence).toBeUndefined();
+  });
   it.each([
     "",
     ";TZID=Europe/London",
@@ -117,7 +143,9 @@ describe("ICS compatibility and validation", () => {
     ] as const) {
       expect(() =>
         exportICal({
-          events: [{ name: "Mixed", start, recurrence: { frequency: "DAILY", until } }],
+          events: [
+            { uid: "Mixed", name: "Mixed", start, recurrence: { frequency: "DAILY", until } },
+          ],
           timeZone,
         }),
       ).toThrow("ICS DTSTART and UNTIL must use the same date kind");
@@ -129,6 +157,7 @@ describe("ICS compatibility and validation", () => {
       ["2026-07-01", "2026-07-03"],
     ] as const) {
       const event: CalendarEvent = {
+        uid: "Matching",
         name: "Matching",
         start,
         recurrence: { frequency: "DAILY", until },
@@ -164,6 +193,7 @@ describe("ICS compatibility and validation", () => {
     { frequency: "DAILY", count: 2 } as const,
   ])("rejects named-zone export without losing a later overlap start (%j)", (recurrence) => {
     const event: CalendarEvent = {
+      uid: "Repeated hour",
       name: "Repeated hour",
       start: new Date("2026-10-25T01:30Z"),
       end: new Date("2026-10-25T02:30Z"),
@@ -188,6 +218,7 @@ describe("ICS compatibility and validation", () => {
         exportICal({
           events: [
             {
+              uid: "Mixed exception",
               name: "Mixed exception",
               start,
               recurrence: { frequency: "DAILY", exceptDate: [exceptDate] },
@@ -197,6 +228,7 @@ describe("ICS compatibility and validation", () => {
       ).toThrow("ICS DTSTART and EXDATE must use the same date kind");
     }
     const event: CalendarEvent = {
+      uid: "Timed exception",
       name: "Timed exception",
       start: new Date("2026-03-01T09:00Z"),
       recurrence: { frequency: "DAILY", count: 3, exceptDate: [new Date("2026-03-02T09:00Z")] },
@@ -229,6 +261,7 @@ describe("ICS compatibility and validation", () => {
     "-PT24H",
   ])("exports fixed offset %s in exact time units", (triggerOffset) => {
     const event: CalendarEvent = {
+      uid: "Fixed alarm",
       name: "Fixed alarm",
       start: new Date("2026-03-08T13:00Z"),
       reminders: [{ triggerOffset }],
@@ -251,7 +284,7 @@ describe("ICS compatibility and validation", () => {
     expect(importICal(one).events[0]?.uid).not.toBe(importICal(two).events[0]?.uid);
     expect(importICal(one).events[0]?.name).toBe(e.name);
     expect(importICal(one).events[0]?.description).toBe("one\ntwo\nthree;comma,backslash\\");
-    expect(exportICal({ events: [e] })).toContain("UID:event-");
+    expect(() => exportICal({ events: [e] })).toThrow("persistent UID or source URL");
     expect(exportICal({ events: [] })).toContain("END:VCALENDAR");
     expect(foldContentLine("short")).toBe("short");
     const unicode = foldContentLine(e.name);
@@ -317,7 +350,13 @@ describe("ICS compatibility and validation", () => {
     expect(
       exportICal({
         events: [
-          { name: "D", start: "2026-03-01", end: "2026-03-02", recurrence: { frequency: "DAILY" } },
+          {
+            uid: "D",
+            name: "D",
+            start: "2026-03-01",
+            end: "2026-03-02",
+            recurrence: { frequency: "DAILY" },
+          },
         ],
         timeZone: "Europe/London",
       }),

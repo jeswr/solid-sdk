@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
-// Calendar-only port of Pod Manager ical.ts: TEXT escaping, unfolding, stable UID and UTF-8 folding.
+// Calendar-only port of Pod Manager ical.ts: TEXT escaping, unfolding and UTF-8 folding.
 import { RRule } from "rrule";
 import { fromWallClock } from "./recurrence";
 import type { CalendarDate, CalendarEvent, RecurrenceRule, Reminder, Weekday } from "./types";
@@ -50,15 +50,6 @@ export function parseICalDate(value: string, timeZone = "UTC"): CalendarDate {
   if (!Number.isFinite(+wall) || wall.toISOString().slice(11, 19) !== `${m[4]}:${m[5]}:${m[6]}`)
     throw new TypeError("Invalid ICS time");
   return m[7] ? wall : fromWallClock(wall, timeZone);
-}
-function stableUid(event: CalendarEvent, source?: string): string {
-  let hash = 0x811c9dc5;
-  for (const ch of source ??
-    `${event.name}|${formatICalDate(event.start)}|${event.end === undefined ? "" : formatICalDate(event.end)}`) {
-    hash ^= ch.charCodeAt(0);
-    hash = Math.imul(hash, 0x01000193);
-  }
-  return `event-${(hash >>> 0).toString(36)}@solid-suite`;
 }
 export function ruleToICal(rule: RecurrenceRule): string {
   validateRule(rule);
@@ -133,8 +124,10 @@ export function exportICal(opts: {
   for (const item of opts.events) {
     const { data: event, url } = "data" in item ? item : { data: item, url: undefined };
     validateEvent(event);
+    const uid = event.uid ?? url;
+    if (!uid?.trim()) throw new TypeError("ICS export requires a persistent UID or source URL");
     lines.push("BEGIN:VEVENT");
-    prop("UID", event.uid ?? stableUid(event, url));
+    prop("UID", uid);
     lines.push(`DTSTAMP:${formatICalDate(opts.now ?? new Date())}`);
     prop("SUMMARY", event.name);
     dateProp("DTSTART", event.start);
