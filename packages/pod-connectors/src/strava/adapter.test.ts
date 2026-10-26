@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 import { DataFactory } from "n3";
 import { describe, expect, it } from "vitest";
 import { demoImport, expectCleanTurtle, sparseImport, TEST_POD_ROOT } from "../core/testing.js";
@@ -64,6 +65,7 @@ describe("strava adapter contract", () => {
   // malformed start_date must not crash the cursor computation.
   it("survives a sparse live response (missing metrics, null entry, no sport type)", async () => {
     const { pod, report } = await sparseImport(stravaAdapter, [
+      { url: "https://www.strava.com/api/v3/athlete/activities?per_page=100&page=2", json: [] },
       {
         url: "https://www.strava.com/api/v3/athlete/activities",
         json: [

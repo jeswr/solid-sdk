@@ -65,11 +65,12 @@ export const stravaAdapter: IntegrationAdapter = {
         await getJson<StravaActivity[] | null>(
           ID,
           ctx.api,
-          `${API}/athlete/activities?per_page=100${after}&page=${page}`,
+          `${API}/athlete/activities?per_page=100&page=${page}${after}`,
         ),
       );
       list.push(...batch);
-      if (batch.length < 100) break;
+      // Strava explicitly allows short non-final pages.
+      if (batch.length === 0) break;
     }
 
     const workoutsDoc = ctx.resolve("fitness/activities.ttl");

@@ -192,14 +192,15 @@ describe("Tier A pagination and checkpoints", () => {
     );
   });
 
-  it("pages Strava activities before advancing the cursor and replaces incoming descriptions", async () => {
+  it("drains short Strava pages before advancing the cursor and replaces incoming descriptions", async () => {
     const url = "https://www.strava.com/api/v3/athlete/activities";
     const initial = await replay(stravaAdapter, [
-      { url, json: Array.from({ length: 100 }, (_, i) => ({ ...ACTIVITIES[0], id: i })) },
+      { url, json: Array.from({ length: 2 }, (_, i) => ({ ...ACTIVITIES[0], id: i })) },
       { url, json: [{ id: 101, name: "Last page", start_date: "2026-06-06T00:00:00Z" }] },
+      { url, json: [] },
     ]);
     expect(initial.report.cursor).toBe(String(Date.parse("2026-06-06T00:00:00Z") / 1000));
-    expect(initial.calls.map((c) => c.url.searchParams.get("page"))).toEqual(["1", "2"]);
+    expect(initial.calls.map((c) => c.url.searchParams.get("page"))).toEqual(["1", "2", "3"]);
     const second = await replay(
       stravaAdapter,
       [
@@ -210,6 +211,7 @@ describe("Tier A pagination and checkpoints", () => {
             { name: "Missing id", start_date: "2099-01-01" },
           ],
         },
+        { url, json: [] },
       ],
       { pod: initial.pod, state: initial.report.state },
     );
