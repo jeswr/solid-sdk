@@ -58,7 +58,7 @@ export class SheetResource extends TermWrapper {
     return OptionalFrom.subjectPredicate(this, `${DCT}modified`, LiteralAs.date);
   }
   set date(value: Date) {
-    OptionalAs.object(this, `${DCT}modified`, value, LiteralFrom.date);
+    OptionalAs.object(this, `${DCT}modified`, value, LiteralFrom.dateTime);
   }
 }
 
@@ -113,7 +113,7 @@ export function workbookDataset(container: string, metadata: WorkbookMetadata): 
   workbook.types.add(SPREADSHEET_CLASS);
   workbook.types.add(`${SCHEMA}Dataset`);
   workbook.setText(`${DCT}title`, metadata.title);
-  OptionalAs.object(workbook, `${DCT}created`, validDate(metadata.created), LiteralFrom.date);
+  OptionalAs.object(workbook, `${DCT}created`, validDate(metadata.created), LiteralFrom.dateTime);
   workbook.date = validDate(metadata.modified);
   workbook.setIri(`${DCT}creator`, metadata.creator);
   workbook.setIri(`${SCHEMA}encoding`, layout.snapshot);

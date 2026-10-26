@@ -162,11 +162,16 @@ export function createSheetStorage(fetch: typeof globalThis.fetch, podRoot: stri
         }
       }
       if (result.etag === null) throw new TypeError("Type Index has no strong ETag");
-      const registration = new SheetResource(
-        `${index}#sheets-${encodeURIComponent(subject)}`,
-        dataset,
-        DataFactory,
-      );
+      const base = `${index}#sheets-${encodeURIComponent(subject)}`;
+      let registrationIri = base;
+      for (
+        let suffix = 1;
+        dataset.match(DataFactory.namedNode(registrationIri), null, null).size > 0;
+        suffix++
+      ) {
+        registrationIri = `${base}-${suffix}`;
+      }
+      const registration = new SheetResource(registrationIri, dataset, DataFactory);
       registration.types.add(`${SOLID}TypeRegistration`);
       registration.setIri(`${SOLID}forClass`, SPREADSHEET_CLASS);
       registration.setIri(`${SOLID}instance`, subject);

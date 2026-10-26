@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { parseRdf } from "@jeswr/fetch-rdf";
+import type { Literal } from "@rdfjs/types";
 import { JsonLdSerializer } from "jsonld-streaming-serializer";
 import { DataFactory, Store } from "n3";
 import { describe, expect, it } from "vitest";
@@ -85,6 +86,27 @@ describe("spreadsheet RDF layout and metadata", () => {
         workbookDataset(BOOK, { ...META, sheets: [...META.sheets].reverse() }),
       ),
     ).toEqual(META);
+  });
+  it("writes creation and modification timestamps as xsd:dateTime, including updates", async () => {
+    const dataset = await parseRdf(await serializeWorkbook(BOOK, META), "text/turtle");
+    const subject = DataFactory.namedNode(workbookLayout(BOOK).subject);
+    const timestamp = (predicate: string) =>
+      [...dataset.match(subject, DataFactory.namedNode(predicate))].map((quad) => ({
+        value: quad.object.value,
+        datatype: (quad.object as Literal).datatype.value,
+      }));
+    expect(timestamp(`${DCT}created`)).toEqual([
+      { value: META.created.toISOString(), datatype: `${XSD}dateTime` },
+    ]);
+    expect(timestamp(`${DCT}modified`)).toEqual([
+      { value: META.modified.toISOString(), datatype: `${XSD}dateTime` },
+    ]);
+    const modified = new Date("2026-10-26T12:34:56.789Z");
+    new SheetResource(subject, dataset, DataFactory).date = modified;
+    expect(timestamp(`${DCT}modified`)).toEqual([
+      { value: modified.toISOString(), datatype: `${XSD}dateTime` },
+    ]);
+    expect(readWorkbookDataset(BOOK, dataset)).toEqual({ ...META, modified });
   });
   it("rejects invalid metadata and malformed RDF independently of parser errors", async () => {
     expect(() =>

@@ -185,6 +185,37 @@ describe("Type Index registration", () => {
     });
     expect((await storage.registerSpreadsheet(indexUrl, BOOK)).added).toBe(true);
   });
+  it.each([
+    "collection",
+    "instance",
+    "untyped",
+  ])("preserves an occupied %s subject and mints a separate idempotent registration", async (kind) => {
+    const { storage, fetch, resources } = memoryPod();
+    const base = `${indexUrl}#sheets-${encodeURIComponent(workbookLayout(BOOK).subject)}`;
+    const target = kind === "collection" ? "instanceContainer" : "instance";
+    const occupied =
+      kind === "untyped"
+        ? `<${base}> <https://schema.org/name> "Occupied".`
+        : `<${base}> a <${SOLID}TypeRegistration>; <${SOLID}forClass> <${SPREADSHEET_CLASS}>; <${SOLID}${target}> <${POD}other/>.`;
+    const body = `${existing} ${occupied} <${base}-1> <https://schema.org/name> "Also occupied".`;
+    const original = await parseRdf(body, "text/turtle", { baseIRI: indexUrl });
+    resources.set(indexUrl, { body, contentType: "text/turtle", etag: '"seed"' });
+    expect(await storage.registerSpreadsheet(indexUrl, BOOK)).toEqual({ added: true, etag: '"1"' });
+    const dataset = await parseRdf(resources.get(indexUrl)?.body ?? "", "text/turtle", {
+      baseIRI: indexUrl,
+    });
+    for (const quad of original) expect(dataset.has(quad)).toBe(true);
+    const registration = new SheetResource(`${base}-2`, dataset, DataFactory);
+    expect(registration.types).toContain(`${SOLID}TypeRegistration`);
+    expect(registration.iri(`${SOLID}forClass`)).toBe(SPREADSHEET_CLASS);
+    expect(registration.iri(`${SOLID}instance`)).toBe(workbookLayout(BOOK).subject);
+    expect(registration.iri(`${SOLID}instanceContainer`)).toBeUndefined();
+    expect(await storage.registerSpreadsheet(indexUrl, BOOK)).toEqual({
+      added: false,
+      etag: '"1"',
+    });
+    expect(fetch.mock.calls.filter(([, init]) => init?.method === "PUT")).toHaveLength(1);
+  });
   it("requires document URLs and readable indexes with strong ETags; never bootstraps", async () => {
     const fetch = vi
       .fn<typeof globalThis.fetch>()
