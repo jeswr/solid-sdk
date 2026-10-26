@@ -46,7 +46,7 @@ const MIME_TYPES: Record<string, FileType> = {
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "document",
   "application/vnd.oasis.opendocument.text": "document",
   "pd:document": "document",
-  "https://jeswr.org/ns/pod-docs#document": "document",
+  "https://w3id.org/jeswr/pod-docs#document": "document",
   "application/vnd.ms-excel": "spreadsheet",
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "spreadsheet",
   "application/vnd.oasis.opendocument.spreadsheet": "spreadsheet",

@@ -81,7 +81,7 @@ const typeExpectations = [
     null,
     "docs",
   ],
-  ["https://jeswr.org/ns/pod-docs#Document", "document", "file-text", null, "docs"],
+  ["https://w3id.org/jeswr/pod-docs#Document", "document", "file-text", null, "docs"],
   ["application/vnd.ms-excel", "spreadsheet", "table-2", "XLS", "sheets"],
   ["text/csv", "csv", "table-2", "CSV", "sheets"],
   ["audio/mpeg", "audio", "music-2", null, "music"],
