@@ -12,6 +12,7 @@ import type {
 import { CLASSES, MusicPlaylist, MusicRecording } from "../core/vocab.js";
 import { API, pages, spotifyJson } from "./api.js";
 import { SPOTIFY_FIXTURES, type SpotifyPlaylist, type SpotifyTrack } from "./fixtures.js";
+import { createSpotifySourceAuth } from "./source-auth.js";
 import { MEDIA, MediaThing, SCHEMA, TIME } from "./vocab.js";
 import { vocabMap } from "./vocab-map.js";
 
@@ -61,6 +62,13 @@ export function createSpotifyAdapter(limits?: RunLimits): IntegrationAdapter {
       tokenExchange: "public",
     },
     fixtures: () => SPOTIFY_FIXTURES,
+    createSourceAuth(config, token, sourceFetch) {
+      return createSpotifySourceAuth({
+        clientId: config.clientId ?? "",
+        token,
+        fetch: sourceFetch,
+      });
+    },
     async import(ctx: ImportContext): Promise<ImportOutcome> {
       const budget = new RunBudget("spotify", limits);
       const documents: NormalisedDoc[] = [];

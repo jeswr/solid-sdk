@@ -154,6 +154,9 @@ port fails login without falling back to another port. The flow times out after 
 Pod and source transports never share credentials;
 all authenticated transports refuse redirects. SIGINT/SIGTERM cancel the CLI.
 Profile-selected Type Index documents must also use HTTPS, even in another advertised storage.
+After source login, the CLI selects the adapter's optional `createSourceAuth` factory,
+falling back to the generic bearer transport. Spotify refreshes expired access tokens in
+memory through this factory. An explicit `options.sourceAuth` bypasses login and the factory.
 
 The CLI stores `<podRoot>integrations/<id>/state.json`, including failed outcomes while
 retaining the last successful checkpoint. Before accessing JSON, it discovers the resource's

@@ -238,6 +238,8 @@ export interface IntegrationAdapter {
   readonly metadata: IntegrationMetadata;
   /** Present iff `authKind === "oauth-pkce"`. */
   readonly oauth?: OAuthAppConfig;
+  /** Optional provider-specific session transport, selected by the Node CLI after login. */
+  createSourceAuth?(config: OAuthAppConfig, token: TokenSet, sourceFetch: typeof fetch): SourceAuth;
   /** Static headers every live API call needs (e.g. Twitch `Client-Id`). */
   readonly apiHeaders?: Readonly<Record<string, string>>;
   /** Recorded API fixtures — power demo mode AND the contract tests. */

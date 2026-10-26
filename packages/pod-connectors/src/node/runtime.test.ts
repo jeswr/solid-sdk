@@ -26,6 +26,7 @@ import * as registryModule from "../registry.js";
 import { spotifyAdapter } from "../spotify/adapter.js";
 import { parseImportArgs, runCli } from "./cli.js";
 import type { NodeConfig } from "./config.js";
+import * as loopback from "./loopback.js";
 import { createClientCredentialsFetch } from "./pod-auth.js";
 import { connectorState, createStateStore } from "./state.js";
 
@@ -1068,14 +1069,22 @@ describe("CLI import", () => {
     const { pod, transport } = fixturePod();
     const stdout = vi.fn(),
       stderr = vi.fn();
+    const openAuthorizationUrl = vi.fn(),
+      sourceTransport = vi.fn(),
+      sourceFactory = vi.spyOn(spotifyAdapter, "createSourceAuth");
     const result = await runCli(["import", "spotify"], {
       configPath: await configPath(),
       podTransport: transport,
       sourceAuth: { fetch: fixtureFetch("spotify", spotifyAdapter.fixtures()) },
+      sourceTransport,
+      openAuthorizationUrl,
       stdout,
       stderr,
     });
     expect(result).toBe(0);
+    expect(openAuthorizationUrl).not.toHaveBeenCalled();
+    expect(sourceTransport).not.toHaveBeenCalled();
+    expect(sourceFactory).not.toHaveBeenCalled();
     expect(stderr).not.toHaveBeenCalled();
     expect(stdout).toHaveBeenCalledWith(expect.stringContaining("Imported spotify:"));
     const saved = JSON.parse(pod.get(`${TEST_POD_ROOT}integrations/spotify/state.json`)!);
@@ -1187,6 +1196,145 @@ describe("CLI import", () => {
         },
       }),
     ).toBe(0);
+  });
+  it("uses generic source auth when the adapter has no session factory", async () => {
+    const { transport } = fixturePod();
+    const path = await configPath();
+    await writeFile(
+      path,
+      JSON.stringify({
+        ...config,
+        connectors: { github: { clientId: "synthetic-source-client" } },
+      }),
+    );
+    vi.spyOn(loopback, "authorizeLoopback").mockResolvedValue({
+      accessToken: "synthetic-source-token",
+      tokenType: "Bearer",
+    });
+    const source = fixtureFetch("github", [
+      { url: "https://api.github.com/user", json: { login: "synthetic-user" } },
+      { url: "https://api.github.com/user/repos", json: [] },
+    ]);
+    const sourceTransport = vi.fn<typeof fetch>(async (input, init) => {
+      const headers = new Headers(init?.headers);
+      expect(headers.get("authorization")).toBe("Bearer synthetic-source-token");
+      expect(headers.get("accept")).toBe("application/vnd.github+json");
+      expect(headers.has("dpop")).toBe(false);
+      return source(input, init);
+    });
+    expect(
+      await runCli(["import", "github"], {
+        configPath: path,
+        podTransport: transport,
+        sourceTransport,
+        stdout: vi.fn(),
+        stderr: vi.fn(),
+      }),
+    ).toBe(0);
+    expect(sourceTransport).toHaveBeenCalledTimes(2);
+  });
+  it.each([
+    false,
+    true,
+  ])("refreshes Spotify after a mid-import 401 (cancel refresh: %s)", async (cancelRefresh) => {
+    const { pod, transport } = fixturePod();
+    const path = await configPath();
+    await writeFile(
+      path,
+      JSON.stringify({
+        ...config,
+        connectors: { spotify: { clientId: "synthetic-source-client" } },
+      }),
+    );
+    const api = "https://api.spotify.com/v1";
+    const track = { id: "synthetic-track", name: "Synthetic Track" };
+    const source = fixtureFetch("spotify", [
+      { url: `${api}/me/tracks`, json: { items: [{ track }] } },
+      { url: `${api}/me/top/tracks`, json: { items: [] } },
+      { url: `${api}/me/top/artists`, json: { items: [] } },
+      { url: `${api}/me/following`, json: { artists: { items: [] } } },
+      { url: `${api}/me`, json: { id: "synthetic-user" } },
+      { url: `${api}/me/playlists`, json: { items: [] } },
+      {
+        url: `${api}/me/player/recently-played`,
+        json: { items: [{ track, played_at: "2026-10-25T12:00:00Z" }] },
+      },
+    ]);
+    const controller = new AbortController();
+    const credentials: (string | null)[] = [];
+    let refreshes = 0;
+    let expired = false;
+    const login = vi.spyOn(loopback, "authorizeLoopback").mockResolvedValue({
+      accessToken: "synthetic-source-old",
+      refreshToken: "synthetic-source-refresh",
+      tokenType: "Bearer",
+    });
+    const sourceTransport: typeof fetch = async (input, init) => {
+      const headers = new Headers(init?.headers);
+      expect(headers.has("dpop")).toBe(false);
+      expect(init?.redirect).toBe("manual");
+      if (String(input) === spotifyAdapter.oauth?.tokenEndpoint) {
+        const body = new URLSearchParams(String(init?.body));
+        expect(headers.has("authorization")).toBe(false);
+        expect(body.get("client_id")).toBe("synthetic-source-client");
+        refreshes++;
+        expect(Object.fromEntries(body)).toEqual({
+          client_id: "synthetic-source-client",
+          grant_type: "refresh_token",
+          refresh_token: "synthetic-source-refresh",
+        });
+        expect(init?.signal).toBe(controller.signal);
+        if (cancelRefresh) {
+          controller.abort();
+          init?.signal?.throwIfAborted();
+        }
+        return Response.json({ access_token: "synthetic-source-new", expires_in: 3600 });
+      }
+      expect(init?.signal).toBe(controller.signal);
+      const bearer = headers.get("authorization");
+      credentials.push(bearer);
+      if (new URL(String(input)).pathname === "/v1/me/top/tracks" && !expired) {
+        expired = true;
+        return new Response(null, { status: 401 });
+      }
+      expect(bearer).toBe(`Bearer synthetic-source-${expired ? "new" : "old"}`);
+      return source(input, init);
+    };
+    const stdout = vi.fn(),
+      stderr = vi.fn();
+    const result = await runCli(["import", "spotify"], {
+      configPath: path,
+      podTransport: transport,
+      sourceTransport,
+      signal: controller.signal,
+      stdout,
+      stderr,
+      openAuthorizationUrl: vi.fn(),
+    });
+    expect(result).toBe(cancelRefresh ? 130 : 0);
+    expect(login).toHaveBeenCalledExactlyOnceWith(
+      "spotify",
+      expect.objectContaining({ clientId: "synthetic-source-client" }),
+      expect.any(Function),
+      expect.objectContaining({ signal: controller.signal }),
+    );
+    expect(refreshes).toBe(1);
+    expect(credentials.slice(0, 2)).toEqual(Array(2).fill("Bearer synthetic-source-old"));
+    if (cancelRefresh) {
+      expect(credentials).toHaveLength(2);
+      expect(stdout).not.toHaveBeenCalled();
+    } else {
+      expect(credentials.length).toBeGreaterThan(2);
+      expect(stderr).not.toHaveBeenCalled();
+      const saved = JSON.parse(
+        pod.get(`${TEST_POD_ROOT}integrations/spotify/state.json`) ?? "null",
+      );
+      expect(saved).toMatchObject({ lastOutcome: "success", cursor: "after:1792929600000" });
+      expect(pod.get(`${TEST_POD_ROOT}integrations/spotify/music/recently-played.ttl`)).toContain(
+        "Synthetic Track",
+      );
+    }
+    for (const url of pod.urls()) expect(pod.get(url)).not.toContain("synthetic-source-");
   });
   it("refuses unreadable, non-regular and oversized export files before login", async () => {
     const path = await configPath();

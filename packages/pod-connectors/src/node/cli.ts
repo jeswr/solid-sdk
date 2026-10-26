@@ -137,7 +137,9 @@ export async function runCli(args: readonly string[], options: CliOptions = {}):
           ((url) => stderr(`Open this URL to connect the source:\n${url}\n`)),
         signal: options.signal,
       });
-      sourceAuth = createSourceAuth(command.id, adapter, token, sourceFetch);
+      sourceAuth =
+        adapter.createSourceAuth?.(sourceConfig, token, sourceFetch) ??
+        createSourceAuth(command.id, adapter, token, sourceFetch);
     }
     let next: ConnectorState | undefined;
     const state = previous && !command.since ? { ...previous, cursor: undefined } : previous;
