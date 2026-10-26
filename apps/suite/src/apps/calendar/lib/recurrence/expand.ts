@@ -61,6 +61,7 @@ export function expandRecurrence(input: RecurrenceInput, window: BusyInterval): 
   const wall = local(input.start);
   const seed = zone.resolve(wall);
   check(seed !== undefined, "nonexistent-time");
+  instant(seed);
   instant(seed + input.durationMs);
   const excluded = dates(input.exdates === undefined ? [] : input.exdates, zone);
   const included = dates(input.rdates === undefined ? [] : input.rdates, zone);
@@ -94,7 +95,7 @@ export function expandRecurrence(input: RecurrenceInput, window: BusyInterval): 
       count++;
       // The scan margin can reach starts that cannot overlap the window.
       if (candidate >= window.end) continue;
-      add(candidate);
+      add(instant(candidate));
     }
   }
   return [...results.values()].sort((a, b) => a.start - b.start);

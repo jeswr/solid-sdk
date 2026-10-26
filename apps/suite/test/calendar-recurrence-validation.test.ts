@@ -169,6 +169,32 @@ describe("recurrence rejects unsupported or malformed inputs", () => {
 
 describe("bounded, fail-closed expansion", () => {
   it.each([
+    "FREQ=DAILY",
+    "FREQ=DAILY;UNTIL=99991231T235959Z",
+  ])("filters generated zoned starts beyond the supported instant range for %s", (rrule) => {
+    expect(
+      expandRecurrence(
+        { ...base, start: "9999-12-30T23:00:00", timeZone: "America/New_York", rrule },
+        {
+          start: Date.parse("9999-12-31T00:00:00Z"),
+          end: Date.parse("9999-12-31T12:00:00Z"),
+        },
+      ),
+    ).toEqual([
+      { start: Date.parse("9999-12-31T04:00:00Z"), end: Date.parse("9999-12-31T05:00:00Z") },
+    ]);
+  });
+
+  it.each([
+    { start: "9999-12-31T23:00:00", timeZone: "America/New_York" },
+    { start: "0001-01-01T00:00:00", timeZone: "Asia/Kathmandu" },
+  ])("rejects out-of-range explicit zoned instants %# even outside the window", (date) => {
+    rejects({ ...base, ...date }, "invalid-date");
+    rejects({ ...base, timeZone: date.timeZone, rdates: [date.start] }, "invalid-date");
+    rejects({ ...base, timeZone: date.timeZone, exdates: [date.start] }, "invalid-date");
+  });
+
+  it.each([
     "9999-12-30T00:00:00Z",
     "9999-12-30T09:00:00Z",
   ])("ignores generated interval overflow at or after window end %s", (end) => {

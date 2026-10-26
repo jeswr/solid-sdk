@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { check, RecurrenceError } from "./errors";
 
 export const DAY = 86_400_000;
@@ -73,6 +74,7 @@ export class Zone {
 
   /** Test surrounding offsets, round-trip every candidate, choose the first fold instant.
    * The four-day neighbourhood also covers whole-day date-line transitions.
+   * Callers validate the supported instant range after filtering generated starts.
    */
   resolve(wall: number): number | undefined {
     const offsets = new Set<number>();
@@ -84,7 +86,7 @@ export class Zone {
       .map((offset) => wall - offset)
       .filter((candidate) => this.wall(candidate) === wall);
     if (candidates.length === 0) return undefined;
-    return instant(Math.min(...candidates));
+    return Math.min(...candidates);
   }
 
   explicit(value: string): number {
@@ -92,6 +94,6 @@ export class Zone {
     if (value.endsWith("Z")) return local(value.slice(0, -1));
     const result = this.resolve(local(value));
     check(result !== undefined, "nonexistent-time");
-    return result;
+    return instant(result);
   }
 }
