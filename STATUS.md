@@ -411,3 +411,41 @@ unsuccessful on the two load-sensitive timing checks, although all isolated root
 The full-workspace timing failures remain outside this brief. Roborev is unavailable (`command -v roborev` found no
 executable), so automated per-commit review could not run; no tool was installed. Integration
 review and any follow-up tracker work remain with the integration owner. Open questions: none.
+
+## Fix round 2 — helper binding review of `4e3cd405e442`
+
+- `63be7d0c` — `fix(credentials): bind helper issuance to validated request`:
+  pass the validated request's provider, connection and purpose, plus the selected profile's
+  resource, into `accessToken`. Its existing binding check now refuses a profile replacement
+  before reading a grant, returning token material or calling a provider.
+- Final `docs: record helper binding verification` commit — this verification record,
+  committed last.
+
+Four regression cases replace the actual profile file between helper validation and token
+issuance, changing each binding field independently. Each replacement has an otherwise valid
+cached grant, including overlapping scopes. All four returned a replacement token against the
+pre-fix source; with the fix, each returns exit 2, omits stdout and never reads the grant or
+calls the transport. Existing helper success, refresh and error tests remain passing.
+
+Verification used Node 24.22.1 (`PATH=/opt/node24/bin:$PATH` for every pnpm command):
+
+| Command | Result |
+| --- | --- |
+| `pnpm exec vitest run --root packages/agent-credentials test/grants.test.ts --coverage.enabled=false -t 'binds helper issuance'` | Expected FAIL before the source fix: all four regressions returned exit 0 with a token instead of refusing. All four pass in the package gate below. |
+| `pnpm exec turbo run lint build typecheck test --filter=@jeswr/agent-credentials --concurrency=4` | PASS; 5/5 tasks, all uncached, including root lint. 9 files, 165 tests; 100% statements, branches, functions and lines with per-file thresholds unchanged. 17.483s. |
+| `pnpm run lint:root` (invoked by the package, affected and full gates) | PASS; all root guards passed. |
+| `TURBO_SCM_BASE=4e3cd405e442d3671e575566049d0c9c58e6b5dc pnpm run gate` | PASS; 5/5 tasks, 4 cached, in 12.63s. The supplied starting SHA selects this round's changed package and dependents. |
+| `pnpm run gate:full` | FAIL in unchanged `@jeswr/federation-trust#test`, `test/characterization.test.ts:196`: the Ed25519 delegate-key snapshot expects property order `crv,x,kty` but receives `kty,crv,x`. That package reports 53 tests passed and 1 failed. Turbo stopped after 292 successful tasks out of 348 scheduled, in 9m25.239s. This mismatch is already recorded in the earlier verification above. |
+| `git diff --exit-code 4e3cd405e442d3671e575566049d0c9c58e6b5dc -- packages/federation-trust` | PASS; the failing package is unchanged from this round's supplied starting commit. |
+| `git diff --check` and `git show --check --oneline 63be7d0c` | PASS. |
+
+The requested fix and regression tests are complete. No dependency was added, so no dependency
+policy check was needed. No manifest, lockfile, timeout or coverage setting changed. Tests use
+temporary stores and synthetic credentials; no live provider, real credential store or real op
+was accessed. Generated untracked callback/client-id assets from the full gate were removed.
+No push, PR, branch switch, remote fetch, merge, external tracker or other checkout was involved.
+
+The full-workspace snapshot failure remains outside this brief. Roborev is unavailable
+(`command -v roborev` exits 1), so automated per-commit review could not run; no tool was
+installed. Integration review and any tracker follow-up remain with the integration owner.
+Open questions: none. No design changes or new ambiguous choices were required.
