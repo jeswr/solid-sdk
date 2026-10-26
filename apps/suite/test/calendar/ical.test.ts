@@ -37,6 +37,44 @@ describe("ICS fixture round-trips", () => {
 });
 describe("ICS compatibility and validation", () => {
   it.each([
+    ["Europe/London", "20260329T013000"],
+    ["America/New_York", "20260308T023000"],
+    ["Australia/Lord_Howe", "20261004T021500"],
+  ])("skips recurring gap starts without shifting their wall time in %s", (zone, local) => {
+    for (const params of [`;TZID=${zone}`, ""]) {
+      const source =
+        ics("RRULE:FREQ=DAILY;COUNT=3")
+          .replace("DTSTART:20260301T090000Z", `DTSTART${params}:${local}`)
+          .replace("END:VCALENDAR", "") +
+        ics("RRULE:FREQ=DAILY;COUNT=3").replace("BEGIN:VCALENDAR\n", "");
+      const imported = importICal(source, zone);
+      expect(imported.skipped).toBe(1);
+      expect(imported.warnings).toEqual(["Unsupported recurring ICS DTSTART in a timezone gap"]);
+      expect(imported.events).toHaveLength(1);
+      expect(imported.timeZones).toEqual([undefined]);
+      expect(imported.events[0]?.start).toEqual(new Date("2026-03-01T09:00Z"));
+      expect(imported.events[0]?.recurrence?.count).toBe(3);
+    }
+  });
+  it.each([
+    [";TZID=America/New_York", "20260308T013000", "2026-03-08T06:30Z"],
+    [";TZID=America/New_York", "20260308T033000", "2026-03-08T07:30Z"],
+    ["", "20260308T033000", "2026-03-08T07:30Z"],
+    ["", "20260308T023000Z", "2026-03-08T02:30Z"],
+  ])("retains valid recurring DTSTART%s:%s", (params, local, instant) => {
+    const imported = importICal(
+      ics("RRULE:FREQ=DAILY;COUNT=3").replace(
+        "DTSTART:20260301T090000Z",
+        `DTSTART${params}:${local}`,
+      ),
+      "America/New_York",
+    );
+    expect(imported.warnings).toEqual([]);
+    expect(imported.skipped).toBe(0);
+    expect(imported.events[0]?.start).toEqual(new Date(instant));
+    expect(imported.events[0]?.recurrence?.count).toBe(3);
+  });
+  it.each([
     ["Europe/London", "20260329T013000", "2026-03-29T01:30Z"],
     ["America/New_York", "20260308T023000", "2026-03-08T07:30Z"],
     ["Australia/Lord_Howe", "20261004T021500", "2026-10-03T15:45Z"],

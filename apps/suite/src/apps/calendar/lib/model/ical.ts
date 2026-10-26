@@ -2,7 +2,7 @@
 // AUTHORED-BY Codex GPT-6
 // Calendar-only port of Pod Manager ical.ts: TEXT escaping, unfolding and UTF-8 folding.
 import { RRule } from "rrule";
-import { fromWallClock } from "./recurrence";
+import { fromWallClock, wallClock } from "./recurrence";
 import type { CalendarDate, CalendarEvent, RecurrenceRule, Reminder, Weekday } from "./types";
 import { asDate, durationMilliseconds, validateEvent, validateRule } from "./validation";
 
@@ -312,6 +312,16 @@ function parseEventProperties(
     recurrence,
     reminders,
   };
+  // The model retains only the instant, so a gap-shifted DTSTART would change
+  // every subsequent occurrence's wall time. Reject until both can be stored.
+  if (
+    recurrence &&
+    event.start instanceof Date &&
+    !start.value.endsWith("Z") &&
+    formatICalDate(wallClock(event.start, zone(start) ?? floatingTimeZone)).slice(0, -1) !==
+      start.value
+  )
+    throw new TypeError("Unsupported recurring ICS DTSTART in a timezone gap");
   validateEvent(event);
   return { event, timeZone: zone(start) };
 }
