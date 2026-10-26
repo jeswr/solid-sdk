@@ -204,6 +204,8 @@ const invalidTerms = [
   ["Literal.direction without language", foreign(literal("v"), { direction: 7 })],
   ["Literal.datatype.value", foreign(literal("v"), { datatype: { value: 9 } })],
   ["language Literal.datatype.value", foreign(literal("v", "en"), { datatype: { value: null } })],
+  ["Literal without datatype", foreign(literal("v"), { datatype: undefined })],
+  ["unknown termType", foreign(namedNode("urn:o"), { termType: "Bogus" })],
 ] as const;
 
 describe("malformed RDF/JS fields", () => {
@@ -232,5 +234,72 @@ describe("malformed RDF/JS fields", () => {
       cause: expect.any(TypeError),
     });
     expect(fetch).not.toHaveBeenCalled();
+  });
+});
+
+/** An n3 instance whose public `value` disagrees with the private id n3.Store would match on. */
+function disguised(id: string, value: string): Quad["object"] {
+  const term = namedNode(id);
+  Object.defineProperty(term, "value", { value });
+  return term;
+}
+
+describe.each(["solid", "lws"] as const)("memory %s RDF patch term identity", (protocol) => {
+  async function seeded() {
+    const storage = createMemoryStorage({ protocol, root: ROOT });
+    const url =
+      protocol === "solid"
+        ? URL
+        : (await storage.create(ROOT, "", { contentType: "text/turtle" })).url;
+    const etag =
+      protocol === "solid"
+        ? (await storage.writeRdf(url, [quad(s, p, namedNode("urn:victim"))], { ifMatch: "*" }))
+            .etag
+        : (
+            await storage.writeRdf(url, [quad(s, p, namedNode("urn:victim"))], {
+              ifMatch: (await storage.head(url)).etag as string,
+            })
+          ).etag;
+    return { storage, url, etag: etag as string };
+  }
+
+  test("deletions match the RDF/JS value, never n3's private id", async () => {
+    const { storage, url, etag } = await seeded();
+    const before = await (await storage.read(url)).text();
+    await expect(
+      storage.patch(
+        url,
+        { kind: "rdf", inserts: [], deletes: [quad(s, p, disguised("urn:victim", "urn:absent"))] },
+        { ifMatch: etag },
+      ),
+    ).rejects.toMatchObject({ code: "conflict" });
+    expect(await (await storage.read(url)).text()).toBe(before);
+    expect((await storage.head(url)).etag).toBe(etag);
+  });
+
+  test("insertions store the RDF/JS value, never n3's private id", async () => {
+    const { storage, url, etag } = await seeded();
+    await storage.patch(
+      url,
+      { kind: "rdf", inserts: [quad(s, p, disguised("urn:id", "urn:intended"))], deletes: [] },
+      { ifMatch: etag },
+    );
+    const text = await (await storage.read(url)).text();
+    expect(text).toContain("urn:intended");
+    expect(text).not.toContain("urn:id");
+  });
+
+  test.each(invalidTerms)("refuses a non-string %s in a patch", async (_name, term) => {
+    const { storage, url, etag } = await seeded();
+    const before = await (await storage.read(url)).text();
+    const q =
+      term.termType === "DefaultGraph"
+        ? quad(s, p, s, term as Quad["graph"])
+        : quad(s, p, term as Quad["object"]);
+    await expect(
+      storage.patch(url, { kind: "rdf", inserts: [q], deletes: [] }, { ifMatch: etag }),
+    ).rejects.toMatchObject({ code: "bad-request" });
+    expect(await (await storage.read(url)).text()).toBe(before);
+    expect((await storage.head(url)).etag).toBe(etag);
   });
 });

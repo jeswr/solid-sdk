@@ -2,7 +2,7 @@
 import type { Quad } from "@jeswr/fetch-rdf";
 import { serialize } from "@jeswr/rdf-serialize";
 import { StorageError } from "./errors.js";
-import { injectionSafe } from "./rdf.js";
+import { injectionSafe, rebuildQuads } from "./rdf.js";
 
 /** Default-graph RDF statements for the Solid patch formulas. */
 export interface RdfPatchInput {
@@ -19,9 +19,12 @@ const terms = (q: Quad) => [q.subject, q.predicate, q.object];
 
 /** Validate before serialization; invalid RDF patches have no HTTP status. */
 export async function patchFormulas(input: RdfPatchInput, url = "") {
-  const { inserts, deletes, where = [] } = input;
-  if (inserts.length === 0 && deletes.length === 0) throw new TypeError("empty patch");
+  if (input.inserts.length === 0 && input.deletes.length === 0) throw new TypeError("empty patch");
   try {
+    // Validate the rebuilt terms (plain n3 instances), so what is checked is what is written.
+    const where = rebuildQuads(input.where ?? []);
+    const deletes = rebuildQuads(input.deletes);
+    const inserts = rebuildQuads(input.inserts);
     const bound = new Set(
       where
         .flatMap(terms)

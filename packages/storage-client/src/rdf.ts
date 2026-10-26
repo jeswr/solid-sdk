@@ -37,74 +37,113 @@ function stringField(value: unknown, field: string): string {
 }
 
 /**
+ * The term an RDF/JS object denotes, rebuilt with n3's DataFactory from its termType, value,
+ * language, direction and datatype only. n3 (Writer and Store) identifies its own term instances
+ * by a private `id`, so a caller's object, or any other property of it, must never be used.
+ * Non-string fields, malformed language tags and base directions are a TypeError.
+ */
+function rebuild(value: Term): Term {
+  const { namedNode, blankNode, variable, literal, defaultGraph } = DataFactory;
+  const lexical = stringField(value.value, "value");
+  switch (value.termType) {
+    case "NamedNode":
+      return namedNode(lexical);
+    case "BlankNode":
+      return blankNode(lexical);
+    case "Variable":
+      return variable(lexical);
+    case "Literal": {
+      const language = stringField(value.language, "language");
+      const baseDirection = (value as { direction?: unknown }).direction;
+      // RDF/JS 1.1 literals have no direction field; some factories use null for none.
+      const direction = stringField(
+        baseDirection === undefined || baseDirection === null ? "" : baseDirection,
+        "direction",
+      );
+      const datatype = stringField(value.datatype?.value, "datatype.value");
+      if (language) {
+        if (!LANGUAGE.test(language)) {
+          throw new TypeError(`Invalid language tag: ${JSON.stringify(language)}`);
+        }
+        if (direction && direction !== "ltr" && direction !== "rtl") {
+          throw new TypeError(`Invalid base direction: ${JSON.stringify(direction)}`);
+        }
+        return literal(lexical, direction ? `${language}--${direction}` : language);
+      }
+      return literal(lexical, namedNode(datatype));
+    }
+    case "DefaultGraph":
+      return defaultGraph();
+    default:
+      throw new TypeError(`${String(value.termType)} terms are not RDF/JS terms`);
+  }
+}
+
+/** `quads` rebuilt term by term (see `rebuild`). */
+export function rebuildQuads(quads: readonly Quad[]): Quad[] {
+  return quads.map((q) =>
+    DataFactory.quad(
+      rebuild(q.subject) as Quad["subject"],
+      rebuild(q.predicate) as Quad["predicate"],
+      rebuild(q.object) as Quad["object"],
+      rebuild(q.graph) as Quad["graph"],
+    ),
+  );
+}
+
+/**
  * n3.Writer emits IRIs, blank-node labels and language tags verbatim, so a crafted value could
- * break out of `<…>` and forge triples. Percent-encode IRIREF-forbidden characters in every IRI
- * (@jeswr/rdf-serialize `escapeIri`; legitimate IRIs are unchanged), relabel unsafe blank nodes
- * consistently, and refuse malformed language tags. Rebuild every term so the writer never
- * uses a caller's private `id` representation or mistakes foreign variables for blank nodes.
+ * break out of `<…>` and forge triples. Rebuild every term first (see `rebuild`), then
+ * percent-encode IRIREF-forbidden characters in every IRI (@jeswr/rdf-serialize `escapeIri`;
+ * legitimate IRIs are unchanged) and relabel unsafe or reserved blank-node labels consistently
+ * and deterministically (`x0`, `x1`, … avoiding every label in use). Variables are kept only
+ * when `allowVariables` (N3 Patch formulas).
  */
 export function injectionSafe(
   quads: readonly Quad[],
   allowVariables = false,
   reservedLabels: ReadonlySet<string> = new Set(),
 ): Quad[] {
-  const { namedNode, blankNode, variable, literal, quad, defaultGraph } = DataFactory;
+  const { namedNode, blankNode, literal, quad } = DataFactory;
+  const rebuilt = rebuildQuads(quads);
   const labels = new Map<string, string>();
   const taken = new Set([
     ...reservedLabels,
-    ...quads
+    ...rebuilt
       .flatMap((q) => [q.subject, q.predicate, q.object, q.graph])
       .filter((t) => t.termType === "BlankNode")
       .map((t) => t.value),
   ]);
   const term = (value: Term): Term => {
-    const lexical = stringField(value.value, "value");
     switch (value.termType) {
       case "NamedNode":
-        return namedNode(escapeIri(lexical));
+        return namedNode(escapeIri(value.value));
       case "BlankNode": {
-        if (BLANK_LABEL.test(lexical) && !reservedLabels.has(lexical)) return blankNode(lexical);
-        let label = labels.get(lexical);
+        if (BLANK_LABEL.test(value.value) && !reservedLabels.has(value.value)) return value;
+        let label = labels.get(value.value);
         if (label === undefined) {
           let index = labels.size;
           do {
             label = `x${index++}`;
           } while (taken.has(label));
           taken.add(label);
-          labels.set(lexical, label);
+          labels.set(value.value, label);
         }
         return blankNode(label);
       }
-      case "Literal": {
-        const language = stringField(value.language, "language");
-        const baseDirection = (value as { direction?: unknown }).direction;
-        // RDF/JS 1.1 literals have no direction field; some factories use null for none.
-        const direction = stringField(
-          baseDirection === undefined || baseDirection === null ? "" : baseDirection,
-          "direction",
-        );
-        const datatype = stringField(value.datatype.value, "datatype.value");
-        if (language) {
-          if (!LANGUAGE.test(language)) {
-            throw new TypeError(`Invalid language tag: ${JSON.stringify(language)}`);
-          }
-          if (direction && direction !== "ltr" && direction !== "rtl") {
-            throw new TypeError(`Invalid base direction: ${JSON.stringify(direction)}`);
-          }
-          return literal(lexical, direction ? `${language}--${direction}` : language);
-        }
-        return literal(lexical, namedNode(escapeIri(datatype)));
-      }
+      case "Literal":
+        return value.language
+          ? value
+          : literal(value.value, namedNode(escapeIri(value.datatype.value)));
       case "DefaultGraph":
-        return defaultGraph();
-      case "Variable":
-        if (allowVariables) return variable(lexical);
-        throw new TypeError(`${value.termType} terms cannot be serialised`);
+        return value;
       default:
+        // `rebuild` admits only Variable here.
+        if (allowVariables) return value;
         throw new TypeError(`${value.termType} terms cannot be serialised`);
     }
   };
-  return quads.map((q) =>
+  return rebuilt.map((q) =>
     quad(
       term(q.subject) as Quad["subject"],
       term(q.predicate) as Quad["predicate"],
@@ -191,6 +230,17 @@ export function applyQuadPatch(
   deletes: readonly Quad[],
   triplesOnly = false,
 ): void {
+  // Rebuild before any Store lookup or mutation: n3.Store matches n3 terms by their private `id`.
+  let rebuiltInserts: Quad[];
+  let rebuiltDeletes: Quad[];
+  try {
+    rebuiltInserts = rebuildQuads(inserts);
+    rebuiltDeletes = rebuildQuads(deletes);
+  } catch (error) {
+    throw new RdfPatchError("invalid", (error as Error).message);
+  }
+  inserts = rebuiltInserts;
+  deletes = rebuiltDeletes;
   for (const quad of [...inserts, ...deletes]) {
     if (hasTerm(quad, "Variable")) {
       throw new RdfPatchError("invalid", "Variables are only allowed in `where`");
