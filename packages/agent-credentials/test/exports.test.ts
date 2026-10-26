@@ -1,11 +1,10 @@
+// biome-ignore-all lint/style/useNodejsImportProtocol: agent layer requires bare module specifiers
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 
 import * as entry0 from "@jeswr/agent-credentials";
 import * as entry1 from "@jeswr/agent-credentials/testing";
-// biome-ignore lint/style/useNodejsImportProtocol: agent imports allow only bare package names or relative paths
 import { existsSync, readFileSync } from "fs";
-// biome-ignore lint/style/useNodejsImportProtocol: agent imports allow only bare package names or relative paths
 import { fileURLToPath } from "url";
 import { expect, it } from "vitest";
 
