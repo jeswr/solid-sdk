@@ -57,6 +57,17 @@ const fail = (sheets: readonly StructureSheet[], edit: StructureEdit, code?: str
 };
 
 describe("structural workbook plans", () => {
+  it("rewrites references to deleted blank cells while preserving literal values", () => {
+    const result = planStructureEdit(
+      workbook([formula(1, 1, "=$B$3+$B3+B$3+B3"), value(1, 2, "=B3")]),
+      deletion,
+    );
+    expect(result.sheets[0]?.cells).toEqual([
+      formula(1, 1, "=#REF!+#REF!+#REF!+#REF!"),
+      value(1, 2, "=B3"),
+    ]);
+    expect(result.changes).toHaveLength(1);
+  });
   it("inserts rows and reports every changed address with independent snapshots", () => {
     const input = workbook(
       [value(5, 1, "Dana"), value(1, 1, "example.org"), value(3, 1, 8), formula(1, 2, "=$A$3+A5")],
@@ -168,6 +179,27 @@ describe("structural workbook plans", () => {
 });
 
 describe("cutting rectangular ranges", () => {
+  it("moves mixed R1C1 range endpoints and preserves the plan as an exact patch", () => {
+    const input = workbook([formula(9, 9, "=SUM(R[-7]C[-7]:R3C3)", "R1C1"), value(2, 2, 8)]);
+    const result = planStructureEdit(input, move);
+    expect(result.sheets[0]?.cells).toEqual([
+      value(5, 5, 8),
+      formula(9, 9, "=SUM(R[-4]C[-4]:R6C6)", "R1C1"),
+    ]);
+    const patched = input.map((sheet) => ({ ...sheet, cells: [...sheet.cells] }));
+    for (const change of result.changes) {
+      const sheet = patched.find((sheet) => sheet.name === change.sheet) as {
+        cells: StructureCell[];
+      };
+      sheet.cells = sheet.cells.filter(
+        (cell) => cell.row !== change.row || cell.column !== change.column,
+      );
+      if (change.after !== null)
+        sheet.cells.push({ row: change.row, column: change.column, ...change.after });
+    }
+    for (const sheet of patched) sheet.cells.sort((a, b) => a.row - b.row || a.column - b.column);
+    expect(patched).toEqual(result.sheets);
+  });
   it("moves absolute/relative targets, overwrites destination, and clears blank-source destinations", () => {
     const input = workbook(
       [
