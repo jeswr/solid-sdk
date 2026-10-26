@@ -28,11 +28,13 @@ export function scoped(root: string, method: string, url: string): string {
     const canonical = assertWithinPodScope(root, url);
     // The slashless alias of the root is the root (guarded-fetch accepts both spellings), with
     // any query or fragment kept, so parents and listings never step above the storage.
+    // The suffix is sliced from the href, not rebuilt from URL.search/hash, which report an
+    // empty `?` or `#` as "" and would silently drop it.
     const parsed = new URL(canonical);
-    const { search, hash } = parsed;
     parsed.search = "";
     parsed.hash = "";
-    return `${parsed.href}/` === root ? `${root}${search}${hash}` : canonical;
+    const suffix = canonical.slice(parsed.href.length);
+    return `${parsed.href}/` === root ? `${root}${suffix}` : canonical;
   } catch (cause) {
     // Never echo embedded credentials (guarded-fetch redacts its own messages too).
     const shown = redacted(url);
