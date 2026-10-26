@@ -1,0 +1,108 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+// AUTHORED-BY Codex GPT-6.1-Sol
+
+exports[`amazon-orders: synthetic orders.csv > streams 7-byte chunks with sector mapping, provenance and stable re-import 1`] = `
+"<https://pod.test/alice/integrations/amazon-orders/finance/amazon-orders.ttl#order-synthetic-lamp-eea5e04b> a <https://jeswr.org/ns/sectors/finance#TransactionRecord>, <https://schema.org/Invoice>;
+    <https://schema.org/identifier> "synthetic-1";
+    <https://schema.org/name> "Synthetic lamp";
+    <https://schema.org/priceCurrency> "GBP";
+    <https://schema.org/provider> "Amazon";
+    <https://schema.org/totalPaymentDue> "12.50".
+"
+`;
+
+exports[`apple-health: synthetic export.xml > streams 7-byte chunks with sector mapping, provenance and stable re-import 1`] = `
+"<https://pod.test/alice/integrations/apple-health/health/workouts.ttl> a <https://jeswr.org/ns/sectors/health#HealthRecord>.
+<https://pod.test/alice/integrations/apple-health/health/workouts.ttl#workout-running-dcf14e4a> a <https://schema.org/ExerciseAction>;
+    <https://schema.org/duration> "PT10M";
+    <https://schema.org/exerciseType> "Running";
+    <https://schema.org/name> "Running";
+    <https://schema.org/startTime> "2026-01-01T12:00:00.000Z"^^<http://www.w3.org/2001/XMLSchema#dateTime>.
+"
+`;
+
+exports[`bank-statements: synthetic bank.csv > streams 7-byte chunks with sector mapping, provenance and stable re-import 1`] = `
+"<https://pod.test/alice/integrations/bank-statements/finance/bank-transactions.ttl#txn-synthetic-groceries-f3e94439> a <https://jeswr.org/ns/sectors/finance#TransactionRecord>, <https://schema.org/Invoice>;
+    <https://schema.org/dateCreated> "2026-01-20T00:00:00.000Z"^^<http://www.w3.org/2001/XMLSchema#dateTime>;
+    <https://schema.org/name> "Synthetic groceries";
+    <https://schema.org/totalPaymentDue> "-12.50".
+"
+`;
+
+exports[`bank-statements: synthetic bank.ofx > streams 7-byte chunks with sector mapping, provenance and stable re-import 1`] = `
+"<https://pod.test/alice/integrations/bank-statements/finance/bank-transactions.ttl#txn-synthetic-groceries-f3e94439> a <https://jeswr.org/ns/sectors/finance#TransactionRecord>, <https://schema.org/Invoice>;
+    <https://schema.org/dateCreated> "2026-01-20T00:00:00.000Z"^^<http://www.w3.org/2001/XMLSchema#dateTime>;
+    <https://schema.org/name> "Synthetic groceries";
+    <https://schema.org/priceCurrency> "GBP";
+    <https://schema.org/totalPaymentDue> "-12.50".
+"
+`;
+
+exports[`chatgpt: synthetic conversations.json > streams 7-byte chunks with sector mapping, provenance and stable re-import 1`] = `
+"<https://pod.test/alice/integrations/chatgpt/documents/chatgpt-conversations.ttl#chat-synthetic-chat-a43d595a> a <https://jeswr.org/ns/sectors/media#CreativeWork>, <https://schema.org/TextDigitalDocument>;
+    <https://schema.org/name> "Synthetic chat";
+    <https://schema.org/text> "You: Synthetic \\"hello\\" \\U0001f30d";
+    <https://schema.org/url> <https://chatgpt.com/c/synthetic-1>.
+"
+`;
+
+exports[`goodreads: synthetic library.csv > streams 7-byte chunks with sector mapping, provenance and stable re-import 1`] = `
+"<https://pod.test/alice/integrations/goodreads/documents/goodreads-library.ttl#book-synthetic-stars-6733d49c> a <https://jeswr.org/ns/sectors/media#CreativeWork>, <https://schema.org/Book>;
+    <https://schema.org/actionStatus> "read";
+    <https://schema.org/author> "Synthetic Author";
+    <https://schema.org/identifier> "100";
+    <https://schema.org/name> "Synthetic Stars";
+    <https://schema.org/ratingValue> "4"^^<http://www.w3.org/2001/XMLSchema#double>;
+    <https://schema.org/url> <https://www.goodreads.com/book/show/100>.
+"
+`;
+
+exports[`netflix: synthetic history.csv > streams 7-byte chunks with sector mapping, provenance and stable re-import 1`] = `
+"<https://pod.test/alice/integrations/netflix/media/viewing-history.ttl#watch-synthetic-cafe-orbit-part-1-ae5384c8> a <https://jeswr.org/ns/sectors/media#ListeningActivity>, <https://schema.org/WatchAction>;
+    <https://schema.org/name> "Synthetic café, \\"Orbit\\"\\nPart 1";
+    <https://schema.org/startTime> "2026-01-20T00:00:00.000Z"^^<http://www.w3.org/2001/XMLSchema#dateTime>.
+"
+`;
+
+exports[`steam: synthetic games.json > streams 7-byte chunks with sector mapping, provenance and stable re-import 1`] = `
+"<https://pod.test/alice/integrations/steam/media/steam-games.ttl#game-synthetic-game-cfe160ab> a <https://jeswr.org/ns/sectors/media#CreativeWork>, <https://schema.org/VideoGame>;
+    <https://schema.org/identifier> "100";
+    <https://schema.org/name> "Synthetic Game";
+    <https://schema.org/timeRequired> "PT1H15M";
+    <https://schema.org/url> <https://store.steampowered.com/app/100>.
+
+<https://pod.test/alice/integrations/steam/social/steam-account.ttl#account> a <http://xmlns.com/foaf/0.1/OnlineAccount>, <https://jeswr.org/ns/sectors/media#MediaAccount>;
+    <http://xmlns.com/foaf/0.1/accountName> "Synthetic Player";
+    <http://xmlns.com/foaf/0.1/accountServiceHomepage> <https://store.steampowered.com/>;
+    <https://schema.org/identifier> "12345";
+    <https://schema.org/name> "Synthetic Player";
+    <https://schema.org/url> <https://steamcommunity.com/profiles/12345>.
+"
+`;
+
+exports[`uber: synthetic trips.csv > streams 7-byte chunks with sector mapping, provenance and stable re-import 1`] = `
+"<https://pod.test/alice/integrations/uber/mobility/uber-trips.ttl#trip-testville-8514f04b> a <https://schema.org/TravelAction>;
+    <https://schema.org/description> "To Synthetic Square";
+    <https://schema.org/name> "in Testville";
+    <https://schema.org/startTime> "2026-01-01T12:00:00.000Z"^^<http://www.w3.org/2001/XMLSchema#dateTime>.
+
+<https://pod.test/alice/integrations/uber/finance/uber-fares.ttl#fare-testville-8514f04b> a <https://jeswr.org/ns/sectors/finance#TransactionRecord>, <https://schema.org/Invoice>;
+    <https://schema.org/dateCreated> "2026-01-01T12:00:00.000Z"^^<http://www.w3.org/2001/XMLSchema#dateTime>;
+    <https://schema.org/name> "in Testville";
+    <https://schema.org/priceCurrency> "GBP";
+    <https://schema.org/provider> "Uber";
+    <https://schema.org/totalPaymentDue> "8.25".
+"
+`;
+
+exports[`whatsapp: synthetic _chat.txt > streams 7-byte chunks with sector mapping, provenance and stable re-import 1`] = `
+"<https://pod.test/alice/integrations/whatsapp/social/whatsapp-chat.ttl#msg-synthetic-peer-dc970942> a <https://jeswr.org/ns/sectors/social#Note>, <https://schema.org/Message>;
+    <https://schema.org/dateCreated> "2026-01-20T12:01:00.000Z"^^<http://www.w3.org/2001/XMLSchema#dateTime>;
+    <https://schema.org/sender> "Synthetic Peer";
+    <https://schema.org/text> "Hi".
+<https://pod.test/alice/integrations/whatsapp/social/whatsapp-chat.ttl#msg-synthetic-sender-c375ded9> a <https://jeswr.org/ns/sectors/social#Note>, <https://schema.org/Message>;
+    <https://schema.org/dateCreated> "2026-01-20T12:00:00.000Z"^^<http://www.w3.org/2001/XMLSchema#dateTime>;
+    <https://schema.org/sender> "Synthetic Sender";
+    <https://schema.org/text> "Hello \\U0001f30d\\ncontinued".
+"
+`;
