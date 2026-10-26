@@ -13,6 +13,7 @@ import {
 } from "@jeswr/solid-dpop";
 import { podScopedUrlOrUndefined } from "./auth.js";
 import type { CliConfig } from "./cli-config.js";
+import { withProfileRedirects } from "./profile-redirects.js";
 
 const MAX_PROFILE_REDIRECTS = 5;
 
@@ -103,7 +104,7 @@ export async function createCliFetch(
   };
   await currentSession();
 
-  return async (input, init) => {
+  return withProfileRedirects(async (input, init) => {
     const request = new Request(input, init);
     if (!podScopedUrlOrUndefined(config, request.url)) {
       // Off-pod WebID discovery never receives this pod's credentials.
@@ -160,5 +161,5 @@ export async function createCliFetch(
       { headers, body },
       resourceTransport,
     );
-  };
+  });
 }

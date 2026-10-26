@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { spawn } from "node:child_process";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -65,31 +66,40 @@ describe("stdio executable", () => {
       await client.connect(transport);
       const { tools } = await client.listTools();
       expect(tools.map((t) => t.name).sort()).toEqual([
+        "pod_list",
+        "pod_read",
+        "pod_write",
+        "search",
         "solid_list",
         "solid_read",
         "solid_search",
         "solid_write",
       ]);
-      const list = await client.callTool({ name: "solid_list", arguments: { container: POD } });
-      expect(list.isError, text(list)).toBeFalsy();
-      expect(text(list)).toContain(`${POD}note`);
-      const read = await client.callTool({ name: "solid_read", arguments: { url: `${POD}note` } });
-      expect(read.isError).toBeFalsy();
-      expect(text(read)).toContain("hello fixture");
-      const search = await client.callTool({ name: "solid_search", arguments: { query: "note" } });
-      expect(search.isError).toBeFalsy();
-      expect(text(search)).toContain(`${POD}note`);
-      const write = await client.callTool({
-        name: "solid_write",
-        arguments: { url: `${POD}written`, content: "hello fixture", contentType: "text/plain" },
-      });
-      expect(write.isError).toBeFalsy();
+      for (const [listName, readName, searchName, writeName] of [
+        ["pod_list", "pod_read", "search", "pod_write"],
+        ["solid_list", "solid_read", "solid_search", "solid_write"],
+      ]) {
+        const list = await client.callTool({ name: listName, arguments: { container: POD } });
+        expect(list.isError, text(list)).toBeFalsy();
+        expect(text(list)).toContain(`${POD}note`);
+        const read = await client.callTool({ name: readName, arguments: { url: `${POD}note` } });
+        expect(read.isError).toBeFalsy();
+        expect(text(read)).toContain("hello fixture");
+        const search = await client.callTool({ name: searchName, arguments: { query: "note" } });
+        expect(search.isError).toBeFalsy();
+        expect(text(search)).toContain(`${POD}note`);
+        const write = await client.callTool({
+          name: writeName,
+          arguments: { url: `${POD}written`, content: "hello fixture", contentType: "text/plain" },
+        });
+        expect(write.isError).toBeFalsy();
+      }
       const stats = await client.callTool({
         name: "solid_read",
         arguments: { url: `${POD}stats` },
       });
       expect(text(stats)).toContain('"tokens":1');
-      expect(text(stats)).toContain('"writes":1');
+      expect(text(stats)).toContain('"writes":2');
       expect(stderr).not.toContain("fixture-secret");
       expect(stderr).not.toContain("fixture-token");
     } finally {
@@ -106,12 +116,14 @@ describe("stdio executable", () => {
     });
     try {
       await client.connect(transport);
-      const write = await client.callTool({
-        name: "solid_write",
-        arguments: { url: `${POD}written`, content: "hello fixture", contentType: "text/plain" },
-      });
-      expect(write.isError).toBe(true);
-      expect(text(write)).toMatch(/read-only/);
+      for (const name of ["pod_write", "solid_write"]) {
+        const write = await client.callTool({
+          name,
+          arguments: { url: `${POD}written`, content: "hello fixture", contentType: "text/plain" },
+        });
+        expect(write.isError).toBe(true);
+        expect(text(write)).toMatch(/read-only/);
+      }
     } finally {
       await client.close();
     }

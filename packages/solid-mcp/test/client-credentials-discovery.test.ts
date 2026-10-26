@@ -3,6 +3,7 @@ import { lookup } from "node:dns/promises";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createCliFetch } from "../src/client-credentials.js";
 import { search } from "../src/pod.js";
+import { createFetchPodPort } from "../src/pod-port.js";
 import { containerTurtle, makeFakePod } from "./fake-pod.js";
 import { ISSUER, mockCss, POD, proofOf } from "./fixtures/css.mjs";
 
@@ -259,7 +260,10 @@ describe("anonymous WebID profile redirects", () => {
     expect(requests).toBe(1);
   });
 
-  it("discovers Type Index hints through a redirected external profile during search", async () => {
+  it.each([
+    "fetch",
+    "PodPort",
+  ])("discovers Type Index hints through a redirected external profile using %s", async (source) => {
     const css = mockCss();
     const webId = `${profile}#me`;
     const index = `${POD}type-index`;
@@ -297,7 +301,11 @@ describe("anonymous WebID profile redirects", () => {
         headers: { "content-type": "text/turtle" },
       });
     });
-    const hits = await search({ ...config, fetch, webId }, "favorite");
+    const podConfig = { ...config, fetch, webId };
+    const hits = await search(
+      source === "PodPort" ? createFetchPodPort(podConfig) : podConfig,
+      "favorite",
+    );
     expect(hits).toEqual([{ url: instance, name: "favorite.ttl", snippet: "type-index instance" }]);
     expect(profiles).toEqual([webId, "https://profile.example/card"]);
     expect(authenticated).toContain(index);

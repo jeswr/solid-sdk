@@ -1,7 +1,7 @@
 # AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 #
-@prefix drawing: <https://w3id.org/jeswr/sectors/drawing#> .
-@prefix core:    <https://w3id.org/jeswr/core#> .
+@prefix drawing: <https://jeswr.org/ns/sectors/drawing#> .
+@prefix core:    <https://jeswr.org/ns/core#> .
 @prefix owl:     <http://www.w3.org/2002/07/owl#> .
 @prefix rdf:     <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
 @prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
@@ -21,7 +21,7 @@
 # SCOPE — this file authors the SECTOR ONLY: the domain marker, a thin gUFO-rooted
 # Scene class to hang the SHACL shape + alignments off, and the property spine the
 # fork actually needs to round-trip a scene to a pod. The detailed drawing vocab
-# (draw: = https://w3id.org/jeswr/drawing#, with draw:Scene rdfs:subClassOf
+# (draw: = https://jeswr.org/ns/drawing#, with draw:Scene rdfs:subClassOf
 # schema:CreativeWork, draw:sceneDocument, draw:schemaVersion, draw:thumbnail)
 # ships in the SEPARATE @jeswr/solid-drawing repo; the alignment HOOKS to those
 # forthcoming draw: terms live in drawing-alignments.ttl (Mode A, annotation-only,
@@ -35,22 +35,22 @@
 # the closed-world MUST/SHOULD.
 # =============================================================================
 
-<https://w3id.org/jeswr/sectors/drawing> a owl:Ontology ;
+<https://jeswr.org/ns/sectors/drawing> a owl:Ontology ;
     dcterms:title "Solid Drawing & Whiteboard Sector Ontology"@en ;
     rdfs:label "Solid Drawing & Whiteboard Sector Ontology"@en ;
     vann:preferredNamespacePrefix "drawing" ;
-    vann:preferredNamespaceUri "https://w3id.org/jeswr/sectors/drawing#" ;
-    owl:imports <https://w3id.org/jeswr/core> ;
-    owl:versionInfo "1.0.0" ;
-    owl:versionIRI <https://w3id.org/jeswr/sectors/drawing/1.0.0> ;
+    vann:preferredNamespaceUri "https://jeswr.org/ns/sectors/drawing#" ;
+    owl:imports <https://jeswr.org/ns/core> ;
+    owl:versionInfo "2.0.0" ;
+    owl:versionIRI <https://jeswr.org/ns/sectors/drawing/2.0.0> ;
     dcterms:description """The whiteboard / diagramming data sector — the domain a
         federated Excalidraw-style fork operates in. Authors the sector marker and
         a thin gUFO-rooted drawing:Scene (a core:InformationResource creative work)
         with the round-trip property spine (the opaque scene document, a schema
         version, an optional thumbnail). The detailed draw: vocabulary ships in the
         separate @jeswr/solid-drawing repo; this file aligns to those forthcoming
-        terms and to schema:CreativeWork in the companion alignments file."""@en ;
-    dcterms:modified "2026-06-21"^^xsd:date ;
+        terms and to schema:CreativeWork in the companion alignments file. Version 2.0.0 rebases this ontology from its legacy w3id namespace to https://jeswr.org/ns/ (DECISIONS V1)."""@en ;
+    dcterms:modified "2026-10-25"^^xsd:date ;
     rdfs:comment "Foundation sector for the 5-OSS-fork initiative (Excalidraw)."@en .
 
 # -----------------------------------------------------------------------------
@@ -104,13 +104,13 @@ drawing:thumbnail a owl:ObjectProperty ;
 
 # =============================================================================
 # SECTOR MARKER — the IRI an app's fedapp:sector points at to declare it operates
-# in this sector (https://w3id.org/jeswr/fed#sector). A skos:Concept in the
+# in this sector (https://jeswr.org/ns/fed#sector). A skos:Concept in the
 # federation sector register; dereferences to this ontology.
 # =============================================================================
 
-<https://w3id.org/jeswr/sectors/drawing#sector>
+<https://jeswr.org/ns/sectors/drawing#sector>
     a <http://www.w3.org/2004/02/skos/core#Concept> ;
     rdfs:label "Drawing & Whiteboard sector"@en ;
     rdfs:comment "The Drawing & Whiteboard data sector. The value an app's fedapp:sector names in its Client Identifier Document to declare it operates over whiteboard / diagramming data. Backed by this sector ontology."@en ;
-    rdfs:isDefinedBy <https://w3id.org/jeswr/sectors/drawing> ;
+    rdfs:isDefinedBy <https://jeswr.org/ns/sectors/drawing> ;
     skos:prefLabel "Drawing & Whiteboard"@en .

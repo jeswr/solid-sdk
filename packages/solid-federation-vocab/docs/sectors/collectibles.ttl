@@ -1,7 +1,7 @@
 # AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 #
-@prefix col:     <https://w3id.org/jeswr/sectors/collectibles#> .
-@prefix core:    <https://w3id.org/jeswr/core#> .
+@prefix col:     <https://jeswr.org/ns/sectors/collectibles#> .
+@prefix core:    <https://jeswr.org/ns/core#> .
 @prefix owl:     <http://www.w3.org/2002/07/owl#> .
 @prefix rdf:     <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
 @prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
@@ -60,14 +60,14 @@
 # hygiene: external classes referenced in axioms are declared as punned owl terms.
 # =============================================================================
 
-<https://w3id.org/jeswr/sectors/collectibles> a owl:Ontology ;
+<https://jeswr.org/ns/sectors/collectibles> a owl:Ontology ;
     dcterms:title "Solid Collectibles Sector Ontology"@en ;
     rdfs:label "Solid Collectibles Sector Ontology"@en ;
     vann:preferredNamespacePrefix "col" ;
-    vann:preferredNamespaceUri "https://w3id.org/jeswr/sectors/collectibles#" ;
-    owl:imports <https://w3id.org/jeswr/core> ;
-    owl:versionInfo "0.1.0" ;
-    owl:versionIRI <https://w3id.org/jeswr/sectors/collectibles/0.1.0> ;
+    vann:preferredNamespaceUri "https://jeswr.org/ns/sectors/collectibles#" ;
+    owl:imports <https://jeswr.org/ns/core> ;
+    owl:versionInfo "2.0.0" ;
+    owl:versionIRI <https://jeswr.org/ns/sectors/collectibles/2.0.0> ;
     dcterms:description """The provenance / valuation / insurance data sector for
         high-value collectible assets (art, antiques, wine, watches, cars) — the
         sector the Provena revenue product operates in. The asset itself stays a
@@ -78,8 +78,8 @@
         Replaces the reserved provena.example.org namespace and the non-existent
         schema:artworkMedium/artworkSize terms. Aligns Mode-A to schema.org, PROV-O
         and the linked.art (CIDOC-CRM) art-market profile in
-        collectibles-alignments.ttl."""@en ;
-    dcterms:modified "2026-07-03"^^xsd:date ;
+        collectibles-alignments.ttl. Version 2.0.0 rebases this ontology from its legacy w3id namespace to https://jeswr.org/ns/ (DECISIONS V1)."""@en ;
+    dcterms:modified "2026-10-25"^^xsd:date ;
     rdfs:comment "Sector ontology for the Provena product (revenue-products ontology review §1). PROV-O primary, used correctly; linked.art alignment is reference-only, never adopted."@en .
 
 # -----------------------------------------------------------------------------
@@ -318,9 +318,9 @@ col:precision-circa a col:DatePrecision, skos:Concept ;
 # federation sector register; dereferences to this ontology.
 # =============================================================================
 
-<https://w3id.org/jeswr/sectors/collectibles#sector>
+<https://jeswr.org/ns/sectors/collectibles#sector>
     a skos:Concept ;
     rdfs:label "Collectibles sector"@en ;
     rdfs:comment "The Collectibles (art / collectibles provenance, valuation and insurance) data sector. The value an app's fedapp:sector names in its Client Identifier Document to declare it operates over collectible-asset provenance data — the sector the Provena product declares. Backed by this sector ontology."@en ;
-    rdfs:isDefinedBy <https://w3id.org/jeswr/sectors/collectibles> ;
+    rdfs:isDefinedBy <https://jeswr.org/ns/sectors/collectibles> ;
     skos:prefLabel "Collectibles"@en .

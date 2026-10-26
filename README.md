@@ -60,10 +60,11 @@ Reusable agent guidance lives with the code it describes:
 
 - A skill for a workspace package is [`packages/<package>/SKILL.md`](packages/solid-dpop/SKILL.md).
   Keeping it beside the implementation makes API and security guidance reviewable in the same
-  change as the package.
+  change as the package. The `solid-fetch-rdf` skill is
+  [`packages/fetch-rdf/SKILL.md`](packages/fetch-rdf/SKILL.md).
 - Cross-cutting guidance is in [`skills/<skill>/SKILL.md`](skills/solid-server-matrix/SKILL.md).
   This also temporarily holds guidance for external suite packages that have not yet been imported
-  into this workspace (`@jeswr/fetch-rdf`, `@solid/object`, notifications, and Client Identifier
+  into this workspace (`@solid/object`, notifications, and Client Identifier
   Documents). Move such a skill beside its package when that package joins the monorepo.
 
 Every skill has trigger-oriented YAML frontmatter and a concise body. Update the relevant skill when
