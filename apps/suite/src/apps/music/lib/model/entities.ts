@@ -84,6 +84,7 @@ export class Album extends Recording {
     return [...new Set(this.iris(`${S}track`, `${MO}track`))];
   }
   addTrack(iri: string): void {
+    this.assertWritableSubject();
     SetFrom.subjectPredicate(this, `${S}track`, NamedNodeAs.string, NamedNodeFrom.string).add(
       httpIri(iri),
     );

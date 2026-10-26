@@ -151,6 +151,39 @@ describe("three-model reads", () => {
 });
 
 describe("canonical typed writes", () => {
+  it("rejects unsafe subjects before mutation and preserves safe lexical identities", async () => {
+    const dataset = new Store();
+    const safe = "https://POD.test:443/music/../track%3E%20one#it";
+    new Track(safe, dataset).stampType().title = "Safe";
+    const before = [...dataset];
+    for (const value of [
+      `${base}track> <https://evil.test/s> <https://evil.test/p> <https://evil.test/o>.#it`,
+      ...[" ", "<", ">", '"', "{", "}", "|", "^", "`", "\\", "\n", "\t", "\u0000"].map(
+        (character) => `${base}track${character}one#it`,
+      ),
+    ]) {
+      for (const subject of [value, DataFactory.namedNode(value)]) {
+        const track = new Track(subject, dataset);
+        for (const edit of [
+          () => track.stampType(),
+          () => {
+            track.title = "Unsafe";
+          },
+          () => {
+            track.loved = true;
+          },
+          () => track.writeIri(`${S}url`, trackIri),
+          () => new Album(subject, dataset).addTrack(trackIri),
+        ]) {
+          expect(edit).toThrow(InvalidMusicError);
+          expect([...dataset]).toEqual(before);
+        }
+      }
+    }
+    const parsed = await parseMusic(await serializeMusic(dataset), base);
+    expect(readLibrary(parsed).tracks.map((track) => track.value)).toEqual([safe]);
+  });
+
   it("round-trips all entity fields and writes schema + media, never new mo triples", async () => {
     const dataset = new Store();
     const artist = new Artist(artistIri, dataset).stampType().stampType();

@@ -13,7 +13,7 @@ import {
   TermWrapper,
 } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
-import { httpIri, nonEmpty } from "./validation";
+import { httpIri, InvalidMusicError, nonEmpty } from "./validation";
 import { canonicalize, NS, readPredicates, S, TYPE } from "./vocab";
 
 export { DataFactory, Store } from "n3";
@@ -66,6 +66,7 @@ export class MusicNode extends TermWrapper {
 
   stamp(...classes: string[]): this {
     httpIri(this.value);
+    this.assertWritableSubject();
     const types = SetFrom.subjectPredicate(this, TYPE, NamedNodeAs.string, NamedNodeFrom.string);
     for (const type of classes) types.add(type);
     return this;
@@ -87,10 +88,12 @@ export class MusicNode extends TermWrapper {
   }
 
   writeString(predicate: string, value: string | undefined): void {
+    this.assertWritableSubject();
     OptionalAs.object(this, predicate, value, LiteralFrom.string);
   }
 
   writeIri(predicate: string, value: string | undefined): void {
+    this.assertWritableSubject();
     OptionalAs.object(
       this,
       predicate,
@@ -101,8 +104,16 @@ export class MusicNode extends TermWrapper {
 
   /** Clear aliases only for the field explicitly being edited. */
   clear(predicate: string): void {
+    this.assertWritableSubject();
     for (const alias of readPredicates(predicate)) {
       SetFrom.subjectPredicate(this, alias, TermAs.is, TermFrom.instance).clear();
+    }
+  }
+
+  /** Reject unsafe named subjects without changing the identity of imported resources. */
+  protected assertWritableSubject(): void {
+    if (this.termType === "NamedNode" && httpIri(this.value) !== this.value) {
+      throw new InvalidMusicError("A subject IRI must already be escaped");
     }
   }
 }
