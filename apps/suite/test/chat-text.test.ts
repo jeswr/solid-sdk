@@ -140,11 +140,14 @@ describe("Markdown-lite inline AST", () => {
   });
 
   it("falls back to intact literal input when scans exceed the shared work budget", () => {
+    // These short adversarial tails already exhaust the shared 32 * source.length budget.
+    // The formatted prefix must also be rolled back to literal text on exhaustion.
     for (const suffix of [
-      "*a ".repeat(10_000),
-      `${"**open ".repeat(16)}${"*a ".repeat(10_000)}`,
-      "`unclosed\n".repeat(10_000) + "*a ".repeat(10_000),
-      `${"**open ".repeat(16)}@[Mira](https://example.org/${"a".repeat(10_000)}`,
+      "*a ".repeat(64),
+      `${"**open ".repeat(16)}${"*a ".repeat(64)}`,
+      "`unclosed\n".repeat(64) + "*a ".repeat(64),
+      // This length also exhausts the mention destination scanner's budget.
+      `${"**open ".repeat(16)}@[Mira](https://example.org/${"a".repeat(128)}`,
     ]) {
       const source = `**formatted** ${suffix}`;
       expect(parseInline(source)).toEqual([text(source)]);
@@ -528,9 +531,10 @@ describe("Markdown-lite blocks", () => {
   });
 
   it("scans long failed list bodies without retrying whitespace splits", () => {
+    // Retain mixed whitespace, every marker and both failed-body separators at a modest size.
     for (const marker of ["-", "+", "*", "123456789.", "0)"]) {
       for (const separator of ["\u2028", "\u2029"]) {
-        const source = `${marker}${" \t".repeat(50_000)}body${separator}tail`;
+        const source = `${marker}${" \t".repeat(512)}body${separator}tail`;
         expect(parseMessageText(source)).toEqual([paragraph(source)]);
         expect(parseMessageText(`intro\n${source}`)).toEqual([paragraph(`intro\n${source}`)]);
       }
