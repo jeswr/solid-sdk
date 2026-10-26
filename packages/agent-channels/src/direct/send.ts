@@ -61,6 +61,7 @@ export function createDirectSend(
     async transmit(wire, io) {
       if (io.dryRun !== false) return { outcome: "rejected", detail: "dry-run" };
       const account = accountId(io.account);
+      const accountRef = Object.freeze({ id: account });
       // Keep the checked bytes and their identity stable across asynchronous checks.
       const snapshot = { ...wire };
       const compactJws = assertWire(snapshot);
@@ -70,7 +71,7 @@ export function createDirectSend(
       try {
         const message = await verified(compactJws);
         assertCurrent(message);
-        assertGrant(await io.tokens.send(io.account), "send");
+        assertGrant(await io.tokens.send(accountRef), "send");
         assertCurrent(message);
         const previous = mailbox.accepted.get(message.id);
         if (previous) {

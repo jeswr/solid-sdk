@@ -88,6 +88,52 @@ describe("direct loopback", () => {
   });
 
   it.each([
+    { stage: "verification", mutation: "replace" },
+    { stage: "verification", mutation: "mutate" },
+    { stage: "credentials", mutation: "replace" },
+    { stage: "credentials", mutation: "mutate" },
+  ])("binds credentials and delivery to one account during $stage ($mutation)", async ({
+    stage,
+    mutation,
+  }) => {
+    const config = options();
+    const verify = vi.fn(verifyMessage);
+    const send = vi.fn(config.tokens.send.bind(config.tokens));
+    const tokens = { read: config.tokens.read.bind(config.tokens), send };
+    const binding = createInMemoryDirectBinding({ ...config, verify, tokens });
+    const wire = await binding.send.render(signed(), DIRECT);
+    const started = deferred<void>();
+    const resume = deferred<void>();
+    if (stage === "verification")
+      verify.mockImplementationOnce(async (jws) => {
+        started.resolve();
+        await resume.promise;
+        return verifyMessage(jws);
+      });
+    else
+      send.mockImplementationOnce(async (ref) => {
+        started.resolve();
+        await resume.promise;
+        return config.tokens.send(ref);
+      });
+
+    const ref = { ...account };
+    const io = { account: ref, tokens, dryRun: false };
+    const pending = binding.send.transmit(wire, io);
+    await started.promise;
+    const other = { id: "other-account" };
+    if (mutation === "replace") io.account = other;
+    else ref.id = other.id;
+    resume.resolve();
+    expect(await pending).toEqual({ outcome: "accepted", providerRef: `direct:${wire.digest}` });
+    expect(config.tokens.calls).toEqual([{ access: "send", account }]);
+    expect((await binding.ingest.list(account, undefined, limits)).items).toEqual([
+      { id: message.id, raw: wire.bytes },
+    ]);
+    expect((await binding.ingest.list(other, undefined, limits)).items).toEqual([]);
+  });
+
+  it.each([
     "verification",
     "credentials",
   ] as const)("keeps absence unknown during pending %s until delivery or rejection", async (stage) => {
