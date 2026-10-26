@@ -334,7 +334,9 @@ export function DataTable<T>({
                   </td>
                   {row.getVisibleCells().map((cell, index) => {
                     const column = columns.find((candidate) => candidate.id === cell.column.id);
-                    const value = column?.render?.(row.original) ?? String(cell.getValue());
+                    const value = column?.render
+                      ? column.render(row.original)
+                      : String(cell.getValue());
                     return (
                       <td key={cell.id}>
                         {index === 0 && !column?.render ? (

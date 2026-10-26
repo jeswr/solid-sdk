@@ -24,6 +24,7 @@ export function Toolbar({ label, actions }: ToolbarProps) {
   const root = useRef<HTMLDivElement>(null);
   const measure = useRef<HTMLDivElement>(null);
   const more = useRef<HTMLButtonElement>(null);
+  const menu = useRef<HTMLDivElement>(null);
   const restoreFocus = useRef(false);
   const expandFocus = useRef(false);
   /** The toolbar button that last held focus, to recover it if a re-render unmounts it. */
@@ -100,6 +101,15 @@ export function Toolbar({ label, actions }: ToolbarProps) {
     lastFocused.current = null;
     const active = document.activeElement;
     if (active && active !== document.body) return;
+    // A menu item moved back into the toolbar while the modal menu stays open:
+    // keep focus inside the menu, never on the trigger behind it.
+    if (menu.current?.isConnected) {
+      (
+        menu.current.querySelector<HTMLElement>('[role="menuitem"]:not([data-disabled])') ??
+        menu.current
+      ).focus();
+      return;
+    }
     // The focused action was reordered into overflow (or removed): keep focus in the toolbar.
     const same = Array.from(
       root.current?.querySelectorAll<HTMLButtonElement>("button[data-action-id]") ?? [],
@@ -177,7 +187,7 @@ export function Toolbar({ label, actions }: ToolbarProps) {
           </button>
         ))}
         {hidden.length > 0 && (
-          <DropdownMenu.Root open={open} onOpenChange={setOpen}>
+          <DropdownMenu.Root modal={false} open={open} onOpenChange={setOpen}>
             <DropdownMenu.Trigger
               ref={more}
               className="suite-button"
@@ -186,7 +196,7 @@ export function Toolbar({ label, actions }: ToolbarProps) {
             >
               More <ChevronDown size={16} strokeWidth={1.75} aria-hidden="true" />
             </DropdownMenu.Trigger>
-            <MenuContent label={`${label} — More`}>
+            <MenuContent ref={menu} label={`${label} — More`}>
               {hidden.map((action) => (
                 <DropdownMenu.Item
                   key={action.id}

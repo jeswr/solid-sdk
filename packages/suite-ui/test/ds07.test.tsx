@@ -114,6 +114,8 @@ describe("Toolbar", () => {
     render(<Toolbar label="Files" actions={actions} />);
     expect(screen.queryByRole("button", { name: "Download" })).toBeNull();
     await user.click(screen.getByRole("button", { name: "More" }));
+    // The explicit label names the menu, not Radix's trigger reference.
+    expect(screen.getByRole("menu", { name: "Files — More" })).toBeTruthy();
     expect(
       screen.getByRole("menuitem", { name: "Delete" }).getAttribute("data-disabled"),
     ).not.toBeNull();
@@ -157,6 +159,18 @@ describe("Toolbar", () => {
     act(() => (document.activeElement as HTMLElement).blur());
     rerender(<Toolbar label="Files" actions={actions} />);
     expect(document.activeElement).toBe(document.body);
+  });
+  it("keeps focus inside the open menu when widening moves its focused item into the toolbar", async () => {
+    const user = userEvent.setup();
+    render(<Toolbar label="Files" actions={actions} />);
+    await user.click(screen.getByRole("button", { name: "More" }));
+    act(() => screen.getByRole("menuitem", { name: "Share" }).focus());
+    resize(400);
+    expect(screen.getByRole("button", { name: "Share", hidden: true })).toBeTruthy();
+    expect(document.activeElement).toBe(screen.getByRole("menuitem", { name: "Download" }));
+    resize(480); // only the disabled Delete stays in overflow
+    expect(screen.getByRole("button", { name: "Download", hidden: true })).toBeTruthy();
+    expect(document.activeElement).toBe(screen.getByRole("menu"));
   });
   it("leaves modified arrow keys to the browser", () => {
     available = 900;

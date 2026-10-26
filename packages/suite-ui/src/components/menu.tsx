@@ -19,6 +19,8 @@ export function MenuContent({
         ref={ref}
         className="suite-menu"
         aria-label={label}
+        // Radix names the menu after its trigger; the explicit label must win.
+        aria-labelledby={undefined}
         sideOffset={4}
         collisionPadding={16}
         loop

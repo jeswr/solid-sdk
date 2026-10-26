@@ -687,3 +687,21 @@ it("gives column resize handles a 44px touch target on coarse pointers", () => {
     /min-height: 44px;\s+min-width: 44px;/,
   );
 });
+
+it("renders an empty cell when a custom renderer deliberately returns null", () => {
+  render(
+    <DataTable
+      items={items}
+      columns={[
+        columns[0] as DataColumn<Item>,
+        { id: "actions", header: "Actions", accessor: getKey, render: () => null },
+      ]}
+      getKey={getKey}
+      getLabel={getLabel}
+      label="Files"
+      onOpen={onOpen}
+    />,
+  );
+  const cells = within(screen.getByRole("row", { name: "Alpha" })).getAllByRole("cell");
+  expect(cells.at(-1)?.textContent).toBe("");
+});

@@ -111,7 +111,7 @@ export function Breadcrumbs({ items, label = "Breadcrumb" }: BreadcrumbsProps) {
             )}
             {collapsed && index === 1 && (
               <>
-                <DropdownMenu.Root open={open} onOpenChange={setOpen}>
+                <DropdownMenu.Root modal={false} open={open} onOpenChange={setOpen}>
                   <DropdownMenu.Trigger
                     ref={trigger}
                     className="suite-button suite-small"

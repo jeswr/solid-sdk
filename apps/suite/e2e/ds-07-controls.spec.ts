@@ -10,6 +10,10 @@ async function accessible(page: Page) {
     results.violations.filter((v) => v.impact === "serious" || v.impact === "critical"),
   ).toEqual([]);
 }
+/** The field's alert, not Next's always-present route announcer (also role="alert"). */
+function fieldError(page: Page) {
+  return page.getByRole("alert").and(page.locator(":not(#__next-route-announcer__)"));
+}
 async function capture(page: Page, info: TestInfo, state: string) {
   await accessible(page);
   const directory = fileURLToPath(new URL("../../../artifacts/screens/DS-07/", import.meta.url));
@@ -146,11 +150,11 @@ test("editable text: F2, validation, Enter, Escape and IME", async ({ page }, in
   await input.fill("");
   await input.press("Enter");
   await expect(input).toHaveAttribute("aria-invalid", "true");
-  await expect(page.getByRole("alert")).toHaveText("Enter a name");
+  await expect(fieldError(page)).toHaveText("Enter a name");
   await capture(page, info, "editable-text-required-error");
   await input.fill("Taken");
   await input.press("Enter");
-  await expect(page.getByRole("alert")).toHaveText("A file with this name already exists");
+  await expect(fieldError(page)).toHaveText("A file with this name already exists");
   await capture(page, info, "editable-text-name-taken");
   await input.fill("Campaign plan");
   await input.dispatchEvent("keydown", { key: "Enter", isComposing: true });
