@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { mkdir } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import AxeBuilder from "@axe-core/playwright";
@@ -188,3 +189,30 @@ test("collapsing a focused region returns focus to its toggle", async ({ page },
   await capture(page, info, "shell-focus-after-collapse");
   await reflow(page);
 });
+
+for (const region of ["sidebar", "details", "main"]) {
+  test(`breakpoint collapse handles focus in ${region}`, async ({ page }, info) => {
+    const narrowWidth = Math.min(page.viewportSize()?.width ?? 768, 768);
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await ready(page);
+    const target =
+      region === "sidebar"
+        ? page.getByRole("link", { name: "Work 12" })
+        : region === "details"
+          ? page.getByRole("complementary").getByRole("link", { name: "Open file" })
+          : page.getByRole("main");
+    await target.focus();
+    await page.setViewportSize({ width: narrowWidth, height: 900 });
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(page.getByRole("navigation", { name: "Drive sections" })).toHaveCount(0);
+    await expect(page.getByRole("complementary")).toHaveCount(0);
+    await expect(
+      region === "main"
+        ? target
+        : page.getByRole("button", {
+            name: region === "sidebar" ? "Toggle sidebar" : "Toggle details pane",
+          }),
+    ).toBeFocused();
+    await capture(page, info, `shell-breakpoint-focus-${region}`);
+  });
+}

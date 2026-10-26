@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 "use client";
 
 import {
@@ -17,11 +18,6 @@ import { ShellSheet } from "./sheet.js";
 import { TopBar, type TopBarProps } from "./top-bar.js";
 
 const desktopQuery = "(min-width: 1024px)";
-const subscribe = (listener: () => void) => {
-  const media = window.matchMedia(desktopQuery);
-  media.addEventListener("change", listener);
-  return () => media.removeEventListener("change", listener);
-};
 const desktopSnapshot = () => window.matchMedia(desktopQuery).matches;
 const serverSnapshot = () => false;
 
@@ -53,10 +49,27 @@ export function ShellFrame({
   children,
   skipLink = true,
 }: ShellFrameProps) {
-  const desktop = useSyncExternalStore(subscribe, desktopSnapshot, serverSnapshot);
   const frame = useRef<HTMLDivElement>(null);
   const sidebarRegion = useRef<HTMLDivElement>(null);
   const detailsRegion = useRef<HTMLDivElement>(null);
+  const breakpointFocus = useRef<string | null>(null);
+  const subscribe = useCallback((listener: () => void) => {
+    const media = window.matchMedia(desktopQuery);
+    const onChange = () => {
+      // Capture focus before React removes the desktop content on a narrow viewport.
+      breakpointFocus.current = !desktopSnapshot()
+        ? sidebarRegion.current?.contains(document.activeElement)
+          ? "Toggle sidebar"
+          : detailsRegion.current?.contains(document.activeElement)
+            ? "Toggle details pane"
+            : null
+        : null;
+      listener();
+    };
+    media.addEventListener("change", onChange);
+    return () => media.removeEventListener("change", onChange);
+  }, []);
+  const desktop = useSyncExternalStore(subscribe, desktopSnapshot, serverSnapshot);
   const sidebarId = useId();
   const detailsId = useId();
   const sidebarOpen = preferences.sidebarOpen ?? desktop;
@@ -70,8 +83,13 @@ export function ShellFrame({
   );
 
   useLayoutEffect(() => {
-    // Radix handles sheet focus. Desktop regions remain mounted while hidden.
-    if (!desktop) return;
+    const previousFocus = breakpointFocus.current;
+    breakpointFocus.current = null;
+    // Open sheets let Radix manage focus; default regions close at the breakpoint.
+    if (!desktop) {
+      if (previousFocus && !sidebarOpen && !detailsOpen) restoreFocus(previousFocus);
+      return;
+    }
     if (!sidebarOpen && sidebarRegion.current?.contains(document.activeElement))
       restoreFocus("Toggle sidebar");
     if (!detailsOpen && detailsRegion.current?.contains(document.activeElement))
@@ -87,7 +105,9 @@ export function ShellFrame({
       if (!isShellShortcut(event, event.target)) return;
       // Other dialogs/editors own their keyboard paths; only our shell sheets opt in.
       const dialog =
-        event.target instanceof Element ? event.target.closest('[role="dialog"]') : null;
+        event.target instanceof Element
+          ? event.target.closest('dialog, [role="dialog"], [role="alertdialog"]')
+          : null;
       if (dialog && dialog.id !== sidebarId && dialog.id !== detailsId) return;
       event.preventDefault();
       if (event.key === "[") {
@@ -138,7 +158,7 @@ export function ShellFrame({
         className="suite-sidebar-slot"
         hidden={!desktop || !sidebarOpen}
       >
-        <SidebarNav {...sidebar} />
+        {desktop && <SidebarNav {...sidebar} />}
       </div>
       <TopBar
         {...topBar}
@@ -162,7 +182,7 @@ export function ShellFrame({
         className="suite-details-slot"
         hidden={!desktop || !detailsOpen}
       >
-        {details && (
+        {desktop && details && (
           <DetailsPane
             {...details}
             onClose={() => {

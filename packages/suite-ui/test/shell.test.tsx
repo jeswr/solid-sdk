@@ -1,8 +1,9 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import axe from "axe-core";
-import { useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   DetailsPane,
@@ -35,9 +36,13 @@ const update = vi.fn();
 function Frame({
   initial = defaultShellPreferences,
   hasDetails = true,
+  sidebarContent,
+  detailsContent,
 }: {
   initial?: ShellPreferences;
   hasDetails?: boolean;
+  sidebarContent?: ReactNode;
+  detailsContent?: ReactNode;
 }) {
   const [preferences, setPreferences] = useState(initial);
   return (
@@ -49,9 +54,20 @@ function Frame({
         actions: <button type="button">Upload</button>,
         account: <button type="button">Account</button>,
       }}
-      sidebar={{ label: "Drive sections", header: <h2>Drive</h2>, sections }}
+      sidebar={{
+        label: "Drive sections",
+        header: <h2>Drive</h2>,
+        footer: sidebarContent,
+        sections,
+      }}
       {...(hasDetails
-        ? { details: { title: "Budget", metadata: [{ label: "Owner", value: "You" }] } }
+        ? {
+            details: {
+              title: "Budget",
+              metadata: [{ label: "Owner", value: "You" }],
+              children: detailsContent,
+            },
+          }
         : {})}
       rail={
         <nav aria-label="Apps">
@@ -165,16 +181,122 @@ describe("shell layout", () => {
     fireEvent.keyDown(main, { key: "]" });
     expect(document.activeElement).toBe(main);
   });
-  it("does not take shortcuts from another dialog", () => {
+  it.each([
+    "sidebar",
+    "details",
+    "main",
+  ])("handles focused %s content when the breakpoint collapses default regions", (region) => {
+    render(<Frame />);
+    const target =
+      region === "sidebar"
+        ? screen.getByRole("link", { name: "Work" })
+        : region === "details"
+          ? screen.getByRole("button", { name: "Close details" })
+          : screen.getByRole("main");
+    target.focus();
+    act(() => {
+      desktop = false;
+      for (const listener of listeners) listener();
+    });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(document.activeElement).toBe(
+      region === "main"
+        ? target
+        : screen.getByRole("button", {
+            name: region === "sidebar" ? "Toggle sidebar" : "Toggle details pane",
+          }),
+    );
+    expect(update).not.toHaveBeenCalled();
+  });
+  it.each([
+    "dialog",
+    "alertdialog",
+    "native",
+  ])("does not take shortcuts from another %s", (kind) => {
+    const action = <button type="button">Editor action</button>;
     render(
       <>
         <Frame />
-        <div role="dialog" aria-label="Editor dialog">
-          <button type="button">Editor action</button>
-        </div>
+        {kind === "native" ? (
+          <dialog open aria-label="Editor dialog">
+            {action}
+          </dialog>
+        ) : kind === "dialog" ? (
+          <div role="dialog" aria-label="Editor dialog">
+            {action}
+          </div>
+        ) : (
+          <div role="alertdialog" aria-label="Editor dialog">
+            {action}
+          </div>
+        )}
       </>,
     );
-    fireEvent.keyDown(screen.getByRole("button", { name: "Editor action" }), { key: "[" });
+    const button = screen.getByRole("button", { name: "Editor action" });
+    fireEvent.keyDown(button, { key: "[" });
+    fireEvent.keyDown(button, { key: "]" });
+    expect(update).not.toHaveBeenCalled();
+  });
+  it.each([
+    "sidebar",
+    "details",
+  ])("mounts one consumer instance in the mobile %s sheet", (region) => {
+    desktop = false;
+    const mounted = vi.fn();
+    const unmounted = vi.fn();
+    function Consumer() {
+      useEffect(() => {
+        mounted();
+        return () => {
+          unmounted();
+        };
+      }, []);
+      return (
+        <>
+          <label htmlFor="consumer-input">Consumer input</label>
+          <input id="consumer-input" />
+        </>
+      );
+    }
+    render(
+      <Frame
+        {...(region === "sidebar"
+          ? { sidebarContent: <Consumer /> }
+          : { detailsContent: <Consumer /> })}
+      />,
+    );
+    expect(mounted).not.toHaveBeenCalled();
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: region === "sidebar" ? "Toggle sidebar" : "Toggle details pane",
+      }),
+    );
+    expect(document.querySelectorAll("#consumer-input")).toHaveLength(1);
+    const input = screen.getByLabelText("Consumer input");
+    expect(screen.getByRole("dialog").contains(input)).toBe(true);
+    expect(mounted).toHaveBeenCalledTimes(1);
+    expect(unmounted).not.toHaveBeenCalled();
+  });
+  it.each([
+    "sidebar",
+    "details",
+  ])("moves focus into an explicitly open %s sheet after a breakpoint change", async (region) => {
+    render(
+      <Frame initial={{ sidebarOpen: region === "sidebar", detailsOpen: region === "details" }} />,
+    );
+    const target =
+      region === "sidebar"
+        ? screen.getByRole("link", { name: "Work" })
+        : screen.getByRole("button", { name: "Close details" });
+    target.focus();
+    act(() => {
+      desktop = false;
+      for (const listener of listeners) listener();
+    });
+    const sheet = screen.getByRole("dialog", {
+      name: region === "sidebar" ? "Drive sections" : "Details",
+    });
+    await waitFor(() => expect(sheet.contains(document.activeElement)).toBe(true));
     expect(update).not.toHaveBeenCalled();
   });
   it("has no details control when details are absent", async () => {
