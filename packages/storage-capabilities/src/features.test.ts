@@ -750,6 +750,9 @@ describe("deriveFeatures trust and robustness", () => {
       [{ type: [SSD.AccessControl], extra: { "https://unrelated.example/model": `${SSD_NS}ACP` } }],
     );
     expect(deriveFeatures(unrelated).accessControl.detail.model).toBe("none");
+    // An AccessControl capability with no extra members names no model.
+    const modelless = solid([], [{ type: [SSD.AccessControl] }]);
+    expect(deriveFeatures(modelless).accessControl.detail.model).toBe("none");
     // Models are unioned across every AccessControl capability, in any order.
     const reordered = solid(
       [],
