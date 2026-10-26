@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 /**
  * A typed fake fetch built from recorded fixture routes. Powers demo mode in
  * the UI and the adapter contract tests — **no live network ever**: an
@@ -6,8 +7,23 @@
 import { IntegrationSyncError, RateLimitedError } from "./errors.js";
 import type { FixtureRoute } from "./types.js";
 
-/** Build a `fetch`-shaped function answering from fixture routes. */
+/** Build a `fetch`-shaped function answering from fixture routes.
+ * Repeated method/prefix keys replay in array order and fail when exhausted.
+ * Single entries remain reusable for existing demo fixtures.
+ */
 export function fixtureFetch(adapterId: string, routes: readonly FixtureRoute[]): typeof fetch {
+  const groups = new Map<string, { routes: FixtureRoute[]; next: number }>();
+  const key = (route: FixtureRoute) =>
+    JSON.stringify([(route.method ?? "GET").toUpperCase(), route.url]);
+  for (const route of routes) {
+    const routeKey = key(route);
+    let group = groups.get(routeKey);
+    if (!group) {
+      group = { routes: [], next: 0 };
+      groups.set(routeKey, group);
+    }
+    group.routes.push(route);
+  }
   const impl = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const url =
       typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
@@ -15,9 +31,11 @@ export function fixtureFetch(adapterId: string, routes: readonly FixtureRoute[])
       init?.method ?? (input instanceof Request ? input.method : "GET")
     ).toUpperCase();
 
-    const route = routes.find(
+    const match = routes.find(
       (r) => (r.method ?? "GET").toUpperCase() === method && url.startsWith(r.url),
     );
+    const group = match ? groups.get(key(match)) : undefined;
+    const route = group?.routes[group.routes.length === 1 ? 0 : group.next++];
     if (!route) {
       throw new IntegrationSyncError(
         adapterId,

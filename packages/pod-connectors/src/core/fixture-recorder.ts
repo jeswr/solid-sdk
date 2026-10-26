@@ -57,7 +57,8 @@ export function createFixtureRecorder(options: {
       throw new Error("Recorder routes must be public HTTPS prefixes without query or fragment.");
     return { ...route, url: url.href };
   });
-  const recorded: FixtureRoute[] = [];
+  const recorded = new Map<number, FixtureRoute>();
+  let nextRequest = 0;
   const fetchImpl: typeof fetch = async (input, init) => {
     // Constructing a new Request from a POST Request transfers its body stream.
     // Read only URL/method metadata so the source transport receives the original body.
@@ -78,6 +79,7 @@ export function createFixtureRecorder(options: {
       );
     });
     if (!route) throw new Error("Request has no configured public recorder route.");
+    const sequence = nextRequest++;
     const response = await options.fetch(input, init);
     let body: unknown;
     try {
@@ -85,7 +87,7 @@ export function createFixtureRecorder(options: {
     } catch {
       throw new Error("Fixture recorder accepts JSON responses only.");
     }
-    recorded.push({
+    recorded.set(sequence, {
       url: route.url,
       method,
       status: response.status,
@@ -96,6 +98,7 @@ export function createFixtureRecorder(options: {
   return {
     fetch: fetchImpl,
     /** Detached serialisable snapshots; host chooses the save destination. */
-    fixtures: (): FixtureRoute[] => structuredClone(recorded),
+    fixtures: (): FixtureRoute[] =>
+      structuredClone([...recorded].sort(([a], [b]) => a - b).map(([, route]) => route)),
   };
 }

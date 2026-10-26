@@ -153,7 +153,10 @@ export interface ImportOutcome {
   readonly skipped?: number;
 }
 
-/** One recorded fixture route for the typed fake fetch. */
+/** One recorded fixture route for the typed fake fetch.
+ * Entries sharing a method and URL replay in array order, then fail on exhaustion.
+ * A single entry for a method/URL remains reusable for static demos.
+ */
 export interface FixtureRoute {
   /** HTTP method (default GET). */
   readonly method?: string;

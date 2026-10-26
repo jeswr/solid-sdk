@@ -132,6 +132,47 @@ describe("fixture recorder redaction", () => {
     expect(recorder.fixtures()).toHaveLength(1);
   });
 
+  it("records pages in request order and replays different responses without saving dynamic URLs", async () => {
+    let completeFirst: (response: Response) => void = () => {
+      throw new Error("First request not started");
+    };
+    const transport = vi
+      .fn<typeof fetch>()
+      .mockImplementationOnce(
+        () =>
+          new Promise<Response>((resolve) => {
+            completeFirst = resolve;
+          }),
+      )
+      .mockResolvedValueOnce(
+        Response.json({ page: 2, access_token: "synthetic-private" }, { status: 206 }),
+      );
+    const recorder = createFixtureRecorder({
+      fetch: transport,
+      routes: [{ url: "https://source.test/items", safeFields: ["page"] }],
+    });
+    const first = recorder.fetch("https://source.test/items?cursor=synthetic-private-first");
+    const second = await recorder.fetch(
+      "https://source.test/items?cursor=synthetic-private-second",
+    );
+    completeFirst(Response.json({ page: 1, email: "private@example.test" }));
+    expect(await (await first).json()).toEqual({ page: 1, email: "private@example.test" });
+    expect(await second.json()).toEqual({ page: 2, access_token: "synthetic-private" });
+    const fixtures = recorder.fixtures();
+    expect(fixtures.map((route) => route.json)).toEqual([{ page: 1 }, { page: 2 }]);
+    expect(fixtures.map((route) => route.url)).toEqual([
+      "https://source.test/items",
+      "https://source.test/items",
+    ]);
+    expect(JSON.stringify(fixtures)).not.toMatch(/cursor|synthetic-private|email|access_token/);
+    const replay = fixtureFetch("recorder", fixtures);
+    expect(await (await replay("https://source.test/items?page=1")).json()).toEqual({ page: 1 });
+    const replaySecond = await replay("https://source.test/items?page=2");
+    expect(replaySecond.status).toBe(206);
+    expect(await replaySecond.json()).toEqual({ page: 2 });
+    await expect(replay("https://source.test/items?page=3")).rejects.toThrow("No fixture recorded");
+  });
+
   it("leaves a Request body readable by the source transport and respects init overrides", async () => {
     const seen: string[] = [];
     const transport: typeof fetch = async (input, init) => {

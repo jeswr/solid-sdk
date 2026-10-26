@@ -110,7 +110,10 @@ const recorder = createFixtureRecorder({
 ```
 
 Recording preserves the original response for the adapter. Saved fixtures contain the static
-route prefix, method, status and redacted JSON only. All headers, request bodies, dynamic URLs
+route prefix, method, status and redacted JSON only. Responses sharing a method and static
+prefix replay in request order, even if recording responses complete out of order. Repeated
+keys form a finite sequence; replay fails when that sequence is exhausted. Single-entry keys
+remain reusable for existing static demo fixtures. All headers, request bodies, dynamic URLs
 and unlisted JSON fields are omitted. Known token, cookie and personal keys cannot be
 allowlisted; empty allowlists are the default. Hosts must ensure every allowed scalar is
 non-personal and use synthetic replacements when replay requires personal fields. Tests use

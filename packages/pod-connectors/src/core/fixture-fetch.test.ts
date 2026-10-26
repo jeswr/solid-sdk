@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 import { describe, expect, it } from "vitest";
 import { IntegrationSyncError, RateLimitedError } from "./errors.js";
 import { fixtureFetch, getJson, postJson } from "./fixture-fetch.js";
@@ -19,6 +20,43 @@ describe("fixtureFetch", () => {
     expect(await res.json()).toEqual({ items: [1, 2] });
     const posted = await api("https://api.test/v1/search", { method: "POST" });
     expect(posted.ok).toBe(true);
+  });
+
+  it("replays repeated normalized method/prefix keys in order with independent method queues", async () => {
+    const routes: FixtureRoute[] = [
+      { url: "https://api.test/items", json: { page: 1 } },
+      { method: "POST", url: "https://api.test/items", json: { page: 3 } },
+      { method: "get", url: "https://api.test/items", json: { page: 2 }, status: 206 },
+      { method: "post", url: "https://api.test/items", json: { page: 4 } },
+    ];
+    const replay = fixtureFetch("demo", routes);
+    expect(await (await replay("https://api.test/items?page=1")).json()).toEqual({ page: 1 });
+    expect(await (await replay("https://api.test/items", { method: "POST" })).json()).toEqual({
+      page: 3,
+    });
+    const second = await replay(new Request("https://api.test/items?page=2"));
+    expect(second.status).toBe(206);
+    expect(await second.json()).toEqual({ page: 2 });
+    expect(await (await replay("https://api.test/items", { method: "POST" })).json()).toEqual({
+      page: 4,
+    });
+    await expect(replay("https://api.test/items?page=3")).rejects.toBeInstanceOf(
+      IntegrationSyncError,
+    );
+    await expect(replay("https://api.test/items", { method: "POST" })).rejects.toBeInstanceOf(
+      IntegrationSyncError,
+    );
+    // A new replay owns fresh cursors and leaves the input fixtures untouched.
+    expect(await (await fixtureFetch("demo", routes)("https://api.test/items")).json()).toEqual({
+      page: 1,
+    });
+    expect(routes).toHaveLength(4);
+  });
+
+  it("keeps single-entry static fixtures reusable", async () => {
+    const replay = fixtureFetch("demo", ROUTES);
+    for (let i = 0; i < 2; i++)
+      expect(await (await replay("https://api.test/v1/me")).json()).toEqual({ id: "u1" });
   });
 
   it("throws (never hits the network) for an unrecorded call", async () => {
