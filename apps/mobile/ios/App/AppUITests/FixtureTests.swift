@@ -2,6 +2,12 @@
 import Foundation
 import XCTest
 
+/// A thrown error fails the test after the diagnostic attachment is recorded.
+private struct FixtureFailure: Error, CustomStringConvertible {
+    let message: String
+    var description: String { message }
+}
+
 final class FixtureTests: XCTestCase {
     override func setUpWithError() throws {
         try super.setUpWithError()
@@ -11,8 +17,14 @@ final class FixtureTests: XCTestCase {
     // The fixture is ordinary remote content in the real app's WKWebView. Only accessibility
     // is used here: the application has no test-only JavaScript or launch-argument hooks.
     private func readResult(_ app: XCUIApplication, page: String, done: Bool) throws -> (String, [String: Any]) {
-        let element = app.webViews.descendants(matching: .any).matching(identifier: "e2e-result").firstMatch
-        XCTAssertTrue(element.waitForExistence(timeout: 30), "Missing fixture result element")
+        // WKWebView exposes aria-label as the accessibility label; the HTML id is not an identifier.
+        let element = app.webViews.descendants(matching: .any)
+            .matching(NSPredicate(format: "identifier == %@ OR label == %@", "e2e-result", "e2e-result"))
+            .firstMatch
+        guard element.waitForExistence(timeout: 30) else {
+            attachDebug(app, reason: "Missing fixture result element on \(page)")
+            throw FixtureFailure(message: "Missing fixture result element")
+        }
         let ready = NSPredicate { _, _ in
             guard element.exists, let text = element.value as? String,
                   let data = text.data(using: .utf8),
@@ -20,11 +32,21 @@ final class FixtureTests: XCTestCase {
             return json["page"] as? String == page && json["done"] as? Bool == done
         }
         let expectation = XCTNSPredicateExpectation(predicate: ready, object: element)
-        XCTAssertEqual(XCTWaiter.wait(for: [expectation], timeout: 30), .completed,
-                       "Fixture did not finish: \(element.debugDescription)")
+        guard XCTWaiter.wait(for: [expectation], timeout: 30) == .completed else {
+            attachDebug(app, reason: "Fixture \(page) did not reach done=\(done)")
+            throw FixtureFailure(message: "Fixture did not finish: \(element.debugDescription)")
+        }
         let text = try XCTUnwrap(element.value as? String)
         let json = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any])
         return (text, json)
+    }
+
+    /// Diagnostics only: the host prints e2e-debug attachments on failure and never treats them as evidence.
+    private func attachDebug(_ app: XCUIApplication, reason: String) {
+        let attachment = XCTAttachment(string: "\(reason)\n\n\(app.debugDescription)")
+        attachment.name = "e2e-debug.txt"
+        attachment.lifetime = .keepAlways
+        add(attachment)
     }
 
     private func attach(_ text: String, name: String) {

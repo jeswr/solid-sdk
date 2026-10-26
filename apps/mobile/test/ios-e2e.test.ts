@@ -8,6 +8,7 @@ import { CAPABILITIES } from "../e2e/checks.ts";
 import {
   exportAttachments,
   readAttachments,
+  readDebugAttachments,
   runIOS,
   xcodebuildDiagnostics,
 } from "../e2e/ios-e2e.mjs";
@@ -233,6 +234,29 @@ describe("iOS host driver verdict and cleanup", () => {
     expect(report.status).toBe("failed");
     expect(report).toHaveProperty("error", expect.stringContaining("XCTest failed"));
     expect(report).toHaveProperty("error", expect.stringContaining("Evidence unavailable"));
+  });
+  test("collects e2e-debug attachments from the manifest or by name, inside the export only", async () => {
+    await mkdir(join(directory, "x"), { recursive: true });
+    await writeFile(join(directory, "x", "A1.txt"), "hierarchy dump");
+    await writeFile(join(directory, "x", "e2e-debug_2.txt"), "second dump");
+    await writeFile(
+      join(directory, "x", "manifest.json"),
+      JSON.stringify([
+        {
+          attachments: [
+            { suggestedHumanReadableName: "e2e-debug.txt", exportedFileName: "x/A1.txt" },
+          ],
+        },
+        {
+          attachments: [
+            { suggestedHumanReadableName: "e2e-debug.txt", exportedFileName: "../../etc/passwd" },
+          ],
+        },
+      ]),
+    );
+    const texts = await readDebugAttachments(directory);
+    expect(texts.sort()).toEqual(["hierarchy dump", "second dump"]);
+    expect(await readDebugAttachments(join(directory, "absent"))).toEqual([]);
   });
   test("prints the decisive xcodebuild lines and the log tail", () => {
     const log = [

@@ -157,6 +157,41 @@ export function xcodebuildDiagnostics(log, tail = 80) {
   ].join("\n");
 }
 
+/** Best-effort: e2e-debug attachments are printed on failure and never count as evidence. */
+export async function readDebugAttachments(directory, limit = 20000) {
+  const root = resolve(directory);
+  const paths = new Set();
+  async function walk(path) {
+    let entries;
+    try {
+      entries = await readdir(path, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const full = join(path, entry.name);
+      if (entry.isDirectory()) await walk(full);
+      else if (entry.name === "manifest.json") {
+        visit(JSON.parse(await readFile(full, "utf8")), (node) => {
+          const label = node.suggestedHumanReadableName;
+          if (typeof label === "string" && label.startsWith("e2e-debug"))
+            paths.add(resolve(root, String(node.exportedFileName)));
+        });
+      } else if (entry.name.includes("e2e-debug")) paths.add(full);
+    }
+  }
+  await walk(root);
+  const texts = [];
+  for (const path of paths) {
+    // As with evidence, a manifest may only point inside the fresh export directory.
+    if (!path.startsWith(`${root}/`)) continue;
+    try {
+      texts.push((await readFile(path, "utf8")).slice(0, limit));
+    } catch {}
+  }
+  return texts;
+}
+
 export async function runIOS({
   destination = process.env.TEST_DESTINATION,
   artifacts = defaultArtifacts,
@@ -232,6 +267,7 @@ export async function runIOS({
       report.exportFormat = await exportAttachments(bundle, attachments, run);
       evidence = await readAttachments(attachments);
     } catch (error) {
+      report.debug = await readDebugAttachments(attachments);
       // Missing evidence usually follows a failed test run; report that cause, not just its symptom.
       if (testError) throw new Error(`${testError}\nEvidence unavailable: ${error.message}`);
       throw error;
@@ -271,6 +307,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   console.log(`iOS e2e ${report.status}: ${join(defaultArtifacts, "report-ios.json")}`);
   if (report.status !== "passed") {
     console.error(report.error ?? report.cleanupError);
+    for (const text of report.debug ?? []) console.error(`--- e2e-debug attachment ---\n${text}`);
     try {
       console.error(
         xcodebuildDiagnostics(await readFile(join(defaultArtifacts, "xcodebuild-ios.log"), "utf8")),
