@@ -29,6 +29,8 @@ export function previewKind(
       "application/rdf+xml",
       "application/n-triples",
       "application/trig",
+      "text/n3",
+      "application/n-quads",
     ].includes(type)
   )
     return "typed";
@@ -171,7 +173,9 @@ function TextPreview({
 }) {
   const [text, setText] = useState<string>();
   const [raw, setRaw] = useState(false);
+  const tooLarge = blob.size > 1024 * 1024;
   useEffect(() => {
+    if (tooLarge) return;
     let active = true;
     blob.text().then(
       (value) => {
@@ -184,7 +188,13 @@ function TextPreview({
     return () => {
       active = false;
     };
-  }, [blob, onError]);
+  }, [blob, onError, tooLarge]);
+  if (tooLarge)
+    return (
+      <div className="su-feedback" role="status">
+        <p className="su-title">Too large to preview</p>
+      </div>
+    );
   if (text === undefined) return <SurfaceFeedback state={{ status: "loading" }} />;
   return (
     <>
@@ -291,7 +301,12 @@ function ReadyPreview({ source, url }: { source: PreviewSource; url: string }) {
         {kind === "pdf" && (
           <p className="su-muted">If the preview doesn't load, download the file.</p>
         )}
-        <a className="su-button" href={url} download={source.name}>
+        <a
+          className="su-button"
+          href={url}
+          download={source.name}
+          aria-label={`Download ${source.name}`}
+        >
           <Download size={16} aria-hidden="true" />
           Download<span className="su-sr-only"> {source.name}</span>
         </a>
@@ -314,7 +329,12 @@ function FailureDownload({ source }: { source: PreviewSource }) {
   const url = useBlobUrl(source.blob);
   return url ? (
     <div className="su-preview-footer">
-      <a className="su-button" href={url} download={source.name}>
+      <a
+        className="su-button"
+        href={url}
+        download={source.name}
+        aria-label={`Download ${source.name}`}
+      >
         Download<span className="su-sr-only"> {source.name}</span>
       </a>
     </div>

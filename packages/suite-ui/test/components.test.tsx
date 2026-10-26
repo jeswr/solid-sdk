@@ -388,3 +388,55 @@ describe("PreviewPane", () => {
     await screen.findByRole("alert");
   });
 });
+
+it.each([
+  "text/n3",
+  "application/n-quads",
+  "text/turtle",
+  "application/ld+json",
+  "application/n-triples",
+  "application/trig",
+  "application/rdf+xml",
+])("routes %s to typed content or the download fallback without reading raw data", async (type) => {
+  const data = source(type, "Private raw data");
+  const read = vi.spyOn(data.blob, "text");
+  const { container, rerender } = render(
+    <PreviewPane
+      source={{
+        ...data,
+        contentType: `${type.toUpperCase()}; charset=utf-8`,
+        typedView: <p>Readable typed content</p>,
+      }}
+    />,
+  );
+  await screen.findByText("Readable typed content");
+  expect(previewKind(type)).toBe("typed");
+  expect(container.textContent).not.toContain("Private raw data");
+  rerender(<PreviewPane source={data} />);
+  await screen.findByText("Can't preview this file");
+  expect(screen.getByRole("link", { name: "Download Example" })).toBeTruthy();
+  expect(container.querySelector("pre")).toBeNull();
+  expect(read).not.toHaveBeenCalled();
+});
+
+it.each([
+  "text/plain",
+  "text/markdown",
+])("bounds %s previews at 1 MiB before reading", async (type) => {
+  const blob = new NodeBlob([new Uint8Array(1024 * 1024 + 1)], { type }) as Blob;
+  const read = vi.spyOn(blob, "text").mockResolvedValue("Must not be read");
+  render(<PreviewPane source={{ name: "Large", blob }} />);
+  await screen.findByText("Too large to preview");
+  expect(screen.getByRole("link", { name: "Download Large" })).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "Show raw" })).toBeNull();
+  expect(read).not.toHaveBeenCalled();
+});
+
+it.each(["text/plain", "text/markdown"])("allows %s previews of exactly 1 MiB", async (type) => {
+  const blob = new NodeBlob([new Uint8Array(1024 * 1024)], { type }) as Blob;
+  const read = vi.spyOn(blob, "text").mockResolvedValue("Allowed text");
+  render(<PreviewPane source={{ name: "Boundary", blob }} />);
+  await screen.findByText("Allowed text");
+  expect(screen.getByRole("link", { name: "Download Boundary" })).toBeTruthy();
+  expect(read).toHaveBeenCalledOnce();
+});
