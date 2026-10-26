@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # sst-xgqz — MAI-L6 address lists and recipient autocomplete
 
@@ -65,3 +66,54 @@ No generated build output is included in lane commits.
   are the inherited workspace snapshot failure and the unavailable roborev review.
 - No push, PR, network-remote fetch, branch switch or edits to another checkout occurred.
   Bead closure remains with the dispatcher when the lane lands on main.
+
+## Codex fix round 2 — 2026-10-26
+
+Base: `77047d1785a188e0e0b1d790fa85a1930447335a`. This round addresses only
+the review finding about incomplete Unicode case folding in recipient autocomplete.
+
+### Commits and behavior
+
+- `0dd65c68` — `fix(mail): fully fold Unicode recipient prefixes`: reuse the existing
+  Unicode 17 default full-fold table for query and candidate keys, normalize the folded
+  result to NFC, and document the matching behavior. No dependency or shared-table changes.
+- Added 20 regression cases covering sharp S in both directions, expanding ligatures,
+  non-Latin and supplementary characters, combining-mark normalization after folding,
+  contact/recent names, address prefixes and Unicode domains. Folding changes only search
+  keys; returned recipient values keep their existing normalization. Matching remains
+  locale-independent and accent-sensitive, with fullwidth distinctions preserved.
+  Existing sigma-prefix regressions still pass.
+- Final documentation commit — `docs: record Unicode autocomplete fix validation`:
+  this round's results and limitations.
+
+### Validation
+
+Node `24.22.1`, pnpm `10.4.1`. Each pnpm command below ran after
+`export PATH="/opt/node24/bin:$PWD/node_modules/.bin:$PATH"` from this checkout's root.
+
+| Exact command | Result |
+| --- | --- |
+| `pnpm exec turbo run build --filter='@jeswr/app-suite^...' --concurrency=4` | PASS; five dependency builds. |
+| `pnpm --filter @jeswr/app-suite exec biome check src/apps/mail/lib/address/rank.ts test/mail-address.test.ts` | PASS; both changed TypeScript files have no lint diagnostics. |
+| `pnpm --filter @jeswr/app-suite exec vitest run test/mail-address.test.ts --coverage.include='src/apps/mail/lib/address/**/*.ts'` | PASS; 183 tests and 100% statements, branches, functions and lines. The new positive regressions reproduced the matching defect before the fix. |
+| `pnpm --filter @jeswr/app-suite run lint && pnpm --filter @jeswr/app-suite run build && pnpm --filter @jeswr/app-suite run typecheck && pnpm --filter @jeswr/app-suite run test` | PASS; 122 test files, 6,596 tests, 100% configured coverage across all four metrics. Existing app lint warnings only. |
+| `pnpm run lint:root` | PASS; all root guards, including 74 contrast pairs with zero failures. |
+| `TURBO_SCM_BASE=77047d1785a188e0e0b1d790fa85a1930447335a pnpm run gate` | PASS; 10 successful tasks, five cached. |
+| `pnpm run gate:full` | FAIL (exit 1); 58 successful tasks, 220 total, seven cached. Two root timing failures described below. |
+| `pnpm exec turbo run test:root --filter=// --concurrency=1` | FAIL (exit 1); isolated root rerun: 744 of 745 tests passed. The dependency-spec performance assertion still failed. |
+| `git diff --check` | PASS. |
+| `roborev status` | Unavailable (exit 127); roborev is not installed. |
+
+The full workspace gate stopped in root tests: the import-path rejection case in
+`test/agent-layers.test.mjs:509` exceeded its 5-second timeout, and the pathological
+dependency-spec check in `test/check-sdk-layers.test.mjs:328` took 58.7 ms against a
+50 ms limit. Rerunning the root suite without competing Turbo tasks cleared the timeout,
+but the performance check still took 59.1 ms. Neither test nor its guarded scripts has
+a diff from this round's base. They were left unchanged. The full gate's fail-fast exit
+does not establish that all remaining workspace tasks passed; the app and affected gates
+passed independently. Automated roborev review remains unavailable.
+
+No new dependencies, UI changes or committed generated artifacts. No branch switches,
+git fetches, merges, pushes, PRs or edits to other checkouts. No screenshots apply to this
+pure-library fix. The review finding is fixed; no implementation work or open questions remain.
+The remaining verification limitations are the root timing failure and unavailable roborev.
