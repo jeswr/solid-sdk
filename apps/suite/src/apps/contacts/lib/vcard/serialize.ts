@@ -51,7 +51,14 @@ function serializeCard(card: VCard): string {
   else if (card.version === "3.0") lines.push("N:;;;;");
   for (const email of card.emails)
     lines.push(fieldLine("EMAIL", email, escapeText(email.value), card.version));
-  for (const tel of card.tels) {
+  for (const input of card.tels) {
+    const parameters: Record<string, string[]> = {};
+    for (const [key, values] of Object.entries(input.parameters)) {
+      const upper = token(key).toUpperCase();
+      if (Object.hasOwn(parameters, upper)) throw new SyntaxError("Duplicate vCard parameter name");
+      parameters[upper] = values;
+    }
+    const tel = { ...input, parameters };
     const isUri = tel.parameters.VALUE?.[0]?.toLowerCase() === "uri";
     lines.push(
       fieldLine(

@@ -48,14 +48,22 @@ function property(line: string): Property {
 
 function logicalLines(text: string): string[] {
   const lines: string[] = [];
-  for (const line of text.replace(/^\uFEFF/, "").split(/\r\n|\r|\n/)) {
+  const physicalLines = text.replace(/^\uFEFF/, "").split(/\r\n|\r|\n/);
+  for (const [index, line] of physicalLines.entries()) {
     const previous = lines.at(-1);
     // Legacy v3 exports use MIME soft breaks, sometimes with an extra fold space.
-    // A vCard fold splitting an =HH escape must preserve the equals sign.
+    // Inspect all subsequent folds before deciding whether they complete an =HH escape.
+    let continuation = line;
+    if (previous?.endsWith("=")) {
+      for (const folded of physicalLines.slice(index + 1)) {
+        if (!/^[ \t]/.test(folded)) break;
+        continuation += folded.slice(1);
+      }
+    }
     const header = previous?.match(/^(?:[^":]|"[^"]*")*:/)?.[0];
     const soft =
       previous?.endsWith("=") &&
-      !/^[ \t][\da-f]{2}/i.test(line) &&
+      !/^[ \t][\da-f]{2}/i.test(continuation) &&
       header !== undefined &&
       property(header).parameters.ENCODING?.[0]?.toUpperCase() === "QUOTED-PRINTABLE";
     if (previous !== undefined && (soft || /^[ \t]/.test(line))) {

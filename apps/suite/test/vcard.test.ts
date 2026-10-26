@@ -145,6 +145,21 @@ describe("content lines and values", () => {
     expect(first(serializeVCards([card]))).toEqual(card);
   });
 
+  it.each([
+    ["=\r\n 4\r\n 1", "A"],
+    ["=\r\n\t4\r\n\t1", "A"],
+    ["=\n \n 4\n 1", "A"],
+    ["=\r\n 4\r\n 1=\r\n 4\r\n 2", "AB"],
+    ["=\r\n 4\r\n 1=\r\nnext", "Anext"],
+  ])("unfolds every continuation before decoding quoted-printable: %j", (value, expected) => {
+    const card = first(
+      wrap(`FN;ENCODING=QUOTED-PRINTABLE:${value}\nEMAIL:fiction@example.org\nN:;;;;`, "3.0"),
+    );
+    expect(card.fn).toBe(expected);
+    expect(card.emails[0]?.value).toBe("fiction@example.org");
+    expect(first(serializeVCards([card]))).toEqual(card);
+  });
+
   it("recognizes QP only in headers and allows folded and quoted parameter headers", () => {
     const card = first(
       wrap(
@@ -331,6 +346,35 @@ describe("serialization from plain objects", () => {
     const card = first(wrap(""));
     expect(serializeVCards([card])).toBe("BEGIN:VCARD\r\nVERSION:4.0\r\nFN:Test\r\nEND:VCARD\r\n");
     expect(first(serializeVCards([{ ...card, version: "3.0" }])).n).toEqual(emptyName);
+  });
+
+  it.each([
+    "3.0",
+    "4.0",
+  ] as const)("normalizes TEL parameter keys before v%s encoding", (version) => {
+    for (const key of ["value", "Value", "VALUE"]) {
+      const card = first(wrap("", version));
+      const value = "tel:+1-202-555-0100;ext=42,43";
+      const parameters = { [key]: ["uri"], type: ["work"] };
+      card.tels.push({ value, parameters });
+      const output = serializeVCards([card]);
+      const comma = version === "4.0" ? String.raw`\,` : ",";
+      expect(output).toContain(`TEL;VALUE=uri;TYPE=work:tel:+1-202-555-0100;ext=42${comma}43\r\n`);
+      expect(first(output).tels).toEqual([
+        { value, parameters: { VALUE: ["uri"], TYPE: ["work"] } },
+      ]);
+      expect(card.tels[0]?.parameters).toEqual({ [key]: ["uri"], type: ["work"] });
+    }
+  });
+
+  it("rejects TEL parameter keys that collide after normalization", () => {
+    const card = first(wrap(""));
+    card.tels.push({
+      value: "tel:+1-202-555-0100;ext=42",
+      parameters: { VALUE: ["uri"], value: ["text"] },
+    });
+    expect(() => serializeVCards([card])).toThrow(SyntaxError);
+    expect(() => serializeVCards([card])).toThrow("Duplicate vCard parameter name");
   });
 
   it("normalizes CRLF/CR/newline text and prevents line injection", () => {
