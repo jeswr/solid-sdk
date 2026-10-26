@@ -183,3 +183,62 @@ No dependencies were added, so no package-policy checks were needed. No push, PR
 branch switch, remote Git fetch/merge or other-checkout edit was performed. Automated
 roborev remains unavailable (no executable or post-commit hook); no automated verdict is
 claimed. The requested implementation fix is complete, with no new open questions.
+
+## Fix round 3 — 2026-10-26
+
+Review base: `bbdbe6608b4f70e09e9e2219134303f145900ae0`. All three findings in
+`solid-sdk-lane-sst-tsax-bbdbe6608b4f.md` are addressed. Changes are confined to the
+OAuth implementation, regression tests and this report.
+
+- `c317ae13` — `fix: validate duplicate OAuth parameters in one pass`: use a `Set`
+  instead of repeated `getAll` scans. Regression tests cover 5,000 distinct names without
+  rescans, a duplicate at the end, identical values, encoded names and empty names/input.
+- `5a92d124` — `fix: reject empty OAuth issuer query components`: detect query delimiters
+  in parsed issuer/resource URLs, including a bare `?`. Tests cover root/path identifiers
+  and preserve support for encoded `%3F` path characters.
+- `3ea7e573` — `fix: bound OAuth claims before issuing credentials`: share the existing
+  16,384-character token ceiling across verification and issuance, accounting for encoded
+  header/payload bytes, separators and the ES256 signature. Check size before storing a
+  grant/code and prepare the bounded access token before consuming a code/refresh token.
+  Regressions cover every variable claim/header field, Unicode/JSON escaping, the payload
+  size boundary, trusted/broker authorization, retryable code/refresh rejection without
+  consumption/rotation/revocation, and verifiable large-token issuance and refresh.
+- `docs: record OAuth round three fix results` — this final report commit.
+
+The conservative size policy preserves the verifier's existing ceiling and rejects excessive
+encoded claims with `invalid_request`; it does not increase the accepted token size.
+
+Before their fixes, the focused regressions failed as expected: duplicate validation **1
+failed, 5 passed**; empty queries **4 failed, 1 passed**; token sizes **16 failed, 2 passed**.
+Final package result: **198 tests passed; 355/355 statements, 303/303 branches, 52/52
+functions and 317/317 lines covered**. Coverage configuration and thresholds are unchanged.
+
+Commands ran on Node 24.22.1 / pnpm 10.4.1 before this final report commit.
+
+| Exact command | Result |
+| --- | --- |
+| `pnpm --filter @jeswr/guarded-fetch run build` | PASS; build the existing workspace dependency. |
+| `pnpm --filter @jeswr/mcp-oauth run lint` | PASS. |
+| `pnpm --filter @jeswr/mcp-oauth run build` | PASS. |
+| `pnpm --filter @jeswr/mcp-oauth run typecheck` | PASS; implementation and tests. |
+| `pnpm --filter @jeswr/mcp-oauth run test` | PASS; 198 tests, 100% coverage. |
+| `pnpm run lint:root` | PASS. |
+| `env GIT_ALLOW_PROTOCOL=none NODE_OPTIONS=--require=/tmp/sst-tsax-network-guard.cjs TURBO_SCM_BASE=798bb3329b323adde8b357add4b89187a4faaa5f pnpm run gate` | PASS; 7/7 tasks, including 26/26 root tests. |
+| `env GIT_ALLOW_PROTOCOL=none NODE_OPTIONS=--require=/tmp/sst-tsax-network-guard.cjs pnpm run gate:full` | FAIL outside this lane: `@jeswr/app-pod-manager#build`; 32 successful tasks before stopping. |
+| `git diff --check` | PASS. |
+
+The full gate retains the prior unrelated limitation: Pod Manager's unchanged
+`apps/pod-manager/src/app/layout.tsx` uses `next/font` to fetch Inter from Google Fonts.
+The existing temporary network guard refused that outbound connection; the build failed
+after three retries. No unrelated application workaround was added.
+
+Logs: `/tmp/sst-tsax-round3-unique-red.log`, `/tmp/sst-tsax-round3-query-red.log`,
+`/tmp/sst-tsax-round3-size-red.log`, `/tmp/sst-tsax-round3-package-gate.log`,
+`/tmp/sst-tsax-round3-lint-root.log`, `/tmp/sst-tsax-round3-gate.log` and
+`/tmp/sst-tsax-round3-gate-full.log`.
+
+No dependencies were added, so no package-policy checks were needed. No push, PR, publish,
+branch switch, remote Git fetch/merge or other-checkout edit was performed. Automated
+roborev remains unavailable (no executable or installed post-commit hook); no automated
+verdict is claimed. All requested implementation fixes are complete. Full-workspace
+validation and automated review retain the limitations above; there are no new open questions.
