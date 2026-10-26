@@ -101,8 +101,12 @@ export function useCollectionNavigation({
   }
 
   function onKeyDown(event: KeyboardEvent<HTMLElement>, key: string) {
+    if (event.defaultPrevented) return;
     const target = event.target as HTMLElement;
-    if (target.closest("input:not([type=checkbox]), textarea, select, [contenteditable=true]"))
+    const control = target.closest(
+      'button, a[href], input:not(.suite-selection-checkbox), textarea, select, [contenteditable]:not([contenteditable="false"]), [role="button"], [role="link"], [role="combobox"], [tabindex]',
+    );
+    if (control && control !== event.currentTarget && !control.matches(".suite-selection-checkbox"))
       return;
     const index = keys.indexOf(key);
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "a") {

@@ -329,7 +329,7 @@ export function DataTable<T>({
                     const value = column?.render?.(row.original) ?? String(cell.getValue());
                     return (
                       <td key={cell.id}>
-                        {index === 0 ? (
+                        {index === 0 && !column?.render ? (
                           <button
                             type="button"
                             className="suite-file-name"

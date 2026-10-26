@@ -319,3 +319,88 @@ it("uses the rendered first-column width as the pointer resize origin", () => {
     "44px 496px 180px",
   );
 });
+
+for (const kind of ["table", "grid"] as const) {
+  it(`${kind} leaves custom buttons and links in control of Enter and Space`, () => {
+    const onActivate = vi.fn();
+    const controls = () => (
+      <>
+        <button type="button" onClick={onActivate}>
+          <span>Custom action</span>
+        </button>
+        <a href="#custom">Custom link</a>
+      </>
+    );
+    const props = {
+      items: [items[0] as Item],
+      getKey,
+      getLabel,
+      label: "Files",
+      onOpen,
+      onDetails,
+    };
+    render(
+      kind === "table" ? (
+        <DataTable
+          {...props}
+          columns={[{ ...(columns[0] as DataColumn<Item>), render: controls }]}
+        />
+      ) : (
+        <FileGrid {...props} renderMetadata={controls} />
+      ),
+    );
+    const button = screen.getByRole("button", { name: "Custom action" });
+    expect(button.parentElement?.closest("button")).toBeNull();
+    for (const target of [
+      within(button).getByText("Custom action"),
+      screen.getByRole("link", { name: "Custom link" }),
+    ]) {
+      for (const key of ["Enter", " "]) expect(fireEvent.keyDown(target, { key })).toBe(true);
+    }
+    expect(onOpen).not.toHaveBeenCalled();
+    expect(onDetails).not.toHaveBeenCalled();
+    expect(
+      screen
+        .getByRole(kind === "table" ? "row" : "gridcell", { name: "Alpha" })
+        .getAttribute("aria-selected"),
+    ).toBe("false");
+    fireEvent.click(button);
+    expect(onActivate).toHaveBeenCalledOnce();
+  });
+
+  it(`${kind} respects prevented keyboard events from custom content`, () => {
+    const content = () => <span>Handled keys</span>;
+    const props = {
+      items: [items[0] as Item],
+      getKey,
+      getLabel,
+      label: "Files",
+      onOpen,
+      onDetails,
+    };
+    render(
+      kind === "table" ? (
+        <DataTable
+          {...props}
+          columns={[
+            columns[0] as DataColumn<Item>,
+            { ...(columns[1] as DataColumn<Item>), render: content },
+          ]}
+        />
+      ) : (
+        <FileGrid {...props} renderMetadata={content} />
+      ),
+    );
+    const target = screen.getByText("Handled keys");
+    target.addEventListener("keydown", (event) => event.preventDefault());
+    for (const key of ["Enter", " ", "a", "ArrowDown"])
+      fireEvent.keyDown(target, { key, ctrlKey: key === "a" });
+    expect(onOpen).not.toHaveBeenCalled();
+    expect(onDetails).not.toHaveBeenCalled();
+    expect(
+      screen
+        .getByRole(kind === "table" ? "row" : "gridcell", { name: "Alpha" })
+        .getAttribute("aria-selected"),
+    ).toBe("false");
+  });
+}
