@@ -27,6 +27,8 @@ export interface ClientIdDocument {
   grant_types: string[];
   response_types: string[];
   token_endpoint_auth_method: "none";
+  /** RFC 9449 §5.2: the server must refuse token requests without DPoP (ADR-004 D7). */
+  dpop_bound_access_tokens: true;
 }
 
 const LOOPBACK = new Set(["localhost", "127.0.0.1", "[::1]"]);
@@ -53,6 +55,7 @@ export function mobileClientIdDocument(options: MobileClientIdOptions): ClientId
     grant_types: ["authorization_code", "refresh_token"],
     response_types: ["code"],
     token_endpoint_auth_method: "none",
+    dpop_bound_access_tokens: true,
   };
   if (options.logoPath !== undefined) {
     if (!options.logoPath.startsWith("/")) throw new TypeError("logoPath must start with /");

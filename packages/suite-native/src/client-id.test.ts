@@ -19,6 +19,7 @@ test("builds a native Client Identifier Document whose client_id is its own URL"
     grant_types: ["authorization_code", "refresh_token"],
     response_types: ["code"],
     token_endpoint_auth_method: "none",
+    dpop_bound_access_tokens: true,
   });
 });
 

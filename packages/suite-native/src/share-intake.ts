@@ -49,6 +49,8 @@ export interface ShareIntakePlugin {
 export interface ShareLimits {
   maxItems: number;
   maxFileBytes: number;
+  /** Sum of file sizes in one batch (native code also bounds total pending bytes). */
+  maxBatchBytes: number;
   maxTextChars: number;
   chunkBytes: number;
 }
@@ -56,6 +58,7 @@ export interface ShareLimits {
 export const DEFAULT_SHARE_LIMITS: Readonly<ShareLimits> = Object.freeze({
   maxItems: 20,
   maxFileBytes: 100 * 1024 * 1024,
+  maxBatchBytes: 200 * 1024 * 1024,
   maxTextChars: 100_000,
   chunkBytes: 512 * 1024,
 });
@@ -137,11 +140,10 @@ export function validateShareBatch(
   }
   if (!Array.isArray(value.items) || value.items.length === 0) throw invalid("no items");
   if (value.items.length > limits.maxItems) throw invalid("too many items");
-  return {
-    id: value.id,
-    receivedAt: new Date(value.receivedAt).toISOString(),
-    items: value.items.map((entry) => item(entry, limits)),
-  };
+  const items = value.items.map((entry) => item(entry, limits));
+  const bytes = items.reduce((sum, entry) => sum + (entry.kind === "file" ? entry.size : 0), 0);
+  if (bytes > limits.maxBatchBytes) throw invalid("batch is too large");
+  return { id: value.id, receivedAt: new Date(value.receivedAt).toISOString(), items };
 }
 
 function decodeBase64(data: unknown): Uint8Array<ArrayBuffer> {

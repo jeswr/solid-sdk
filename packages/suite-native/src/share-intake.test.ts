@@ -98,6 +98,14 @@ describe("validateShareBatch", () => {
     expect(() => validateShareBatch(raw)).toThrow(InvalidShareError);
   });
 
+  test("bounds the total bytes of a batch", () => {
+    const big = file({ size: DEFAULT_SHARE_LIMITS.maxFileBytes });
+    expect(() => validateShareBatch(batch([big, big]))).not.toThrow();
+    expect(() => validateShareBatch(batch([big, big, file({ size: 1 })]))).toThrow(
+      "batch is too large",
+    );
+  });
+
   test("honours custom limits", () => {
     const limits = { ...DEFAULT_SHARE_LIMITS, maxItems: 1 };
     expect(() => validateShareBatch(batch([file(), file()]), limits)).toThrow(InvalidShareError);

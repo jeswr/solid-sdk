@@ -26,6 +26,12 @@ export interface NativeCodeDriverOptions {
   plugin: AuthSessionPlugin;
   /** Private-use scheme redirect (RFC 8252 §7.1), e.g. `org.jeswr.suite:/oauth/callback`. */
   redirectUri: string;
+  /**
+   * The issuer identifier of the authorization server behind an authorization URL, from the
+   * metadata pod-auth discovered. Mix-up defence (RFC 9207, Solid-OIDC §8): the callback must
+   * carry exactly one `iss` equal to it.
+   */
+  resolveIssuer(authorizationUrl: URL): string | Promise<string>;
   /** Accept `http://localhost` / loopback authorization endpoints (local CSS in development only). */
   allowInsecureLoopback?: boolean;
 }
@@ -90,7 +96,7 @@ function checkAuthorizationUrl(url: URL, redirect: Redirect, allowLoopback: bool
   return single(params, "state", bad("needs one state"));
 }
 
-function checkCallback(raw: string, redirect: Redirect, state: string, issuerOrigin: string) {
+function checkCallback(raw: string, redirect: Redirect, state: string, issuer: string) {
   const bad = (why: string) => () => new AuthorizationRequestError(`Callback ${why}`);
   let url: URL;
   try {
@@ -106,16 +112,8 @@ function checkCallback(raw: string, redirect: Redirect, state: string, issuerOri
   const returned = params.getAll("state");
   if (returned.length !== 1 || returned[0] !== state)
     throw new StateMismatchError("State mismatch");
-  const issuers = params.getAll("iss");
-  if (issuers.length > 1) throw bad("carries more than one iss")();
-  if (issuers.length === 1) {
-    let origin: string;
-    try {
-      origin = new URL(issuers[0] as string).origin;
-    } catch {
-      throw bad("carries an invalid iss")();
-    }
-    if (origin !== issuerOrigin) throw bad("iss does not match the authorization server")();
+  if (single(params, "iss", bad("needs exactly one iss")) !== issuer) {
+    throw bad("iss does not match the authorization server")();
   }
   if (params.has("error")) {
     const code = single(params, "error", bad("carries a malformed error"));
@@ -131,7 +129,8 @@ function abortError(): DOMException {
 /**
  * The native implementation of pod-auth's `ui.getCode`: opens the system browser through the
  * `SuiteAuthSession` plugin and returns the authorization code. Fails closed on any request or
- * callback that does not match the configured redirect, PKCE S256, and the request's `state`.
+ * callback that does not match the configured redirect, PKCE S256, the request's `state` and the
+ * resolved issuer.
  * Only the code leaves this function; PKCE verifier, DPoP and tokens stay in pod-auth.
  */
 export function createNativeCodeDriver(options: NativeCodeDriverOptions): GetCode {
@@ -139,6 +138,18 @@ export function createNativeCodeDriver(options: NativeCodeDriverOptions): GetCod
   const { plugin } = options;
   const allowLoopback = options.allowInsecureLoopback === true;
   let busy = false;
+  const resolve = async (authorizationUrl: URL): Promise<string> => {
+    let issuer: unknown;
+    try {
+      issuer = await options.resolveIssuer(authorizationUrl);
+    } catch {
+      throw new AuthorizationRequestError("Unknown authorization server");
+    }
+    if (typeof issuer !== "string" || issuer === "") {
+      throw new AuthorizationRequestError("Unknown authorization server");
+    }
+    return issuer;
+  };
 
   return async (authorizationUrl, signal) => {
     if (signal.aborted) throw abortError();
@@ -152,6 +163,8 @@ export function createNativeCodeDriver(options: NativeCodeDriverOptions): GetCod
     };
     signal.addEventListener("abort", onAbort, { once: true });
     try {
+      const issuer = await resolve(authorizationUrl);
+      if (aborted) throw abortError();
       let result: { url: string };
       try {
         result = await plugin.authenticate({
@@ -166,7 +179,7 @@ export function createNativeCodeDriver(options: NativeCodeDriverOptions): GetCod
         throw new NativeAuthError("The system browser sign-in failed");
       }
       if (aborted) throw abortError();
-      return checkCallback(String(result?.url), redirect, state, authorizationUrl.origin);
+      return checkCallback(String(result?.url), redirect, state, issuer);
     } finally {
       busy = false;
       signal.removeEventListener("abort", onAbort);

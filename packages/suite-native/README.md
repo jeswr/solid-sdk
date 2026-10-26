@@ -10,7 +10,7 @@ The seams the Solid Suite web app uses when it runs inside the iOS and Android s
 | Export | What it does |
 |---|---|
 | `platform()`, `isNativeApp()` | `"ios" \| "android" \| "web"` from the injected `Capacitor` global; no Capacitor import. |
-| `createNativeCodeDriver({ plugin, redirectUri })` | pod-auth's `ui.getCode` for the apps: opens the system browser (ASWebAuthenticationSession / Custom Tabs) and returns the authorization code after fail-closed checks on the request (https, PKCE S256, one `state`, our `redirect_uri`) and the callback (exact redirect, matching `state`, one `code`, `iss` origin, error responses as `AuthorizationError`). |
+| `createNativeCodeDriver({ plugin, redirectUri, resolveIssuer })` | pod-auth's `ui.getCode` for the apps: opens the system browser (ASWebAuthenticationSession / Custom Tabs) and returns the authorization code after fail-closed checks on the request (https, PKCE S256, one `state`, our `redirect_uri`) and the callback (exact redirect, matching `state`, one `code`, exactly one RFC 9207 `iss` equal to the resolved issuer, error responses as `AuthorizationError`). |
 | `share(content, { native, web })` | Native share sheet, else Web Share, else `ShareUnavailableError`. |
 | `createShareInbox(plugin)`, `validateShareBatch()` | Validated `ShareBatch`es from other apps, chunked size-checked file reads, acknowledgement. |
 | `mobileClientIdDocument({ origin })` | The `application_type: native` Client Identifier Document for `org.jeswr.suite:/oauth/callback`. |
@@ -20,7 +20,12 @@ The seams the Solid Suite web app uses when it runs inside the iOS and Android s
 import { createNativeCodeDriver, isNativeApp, MOBILE_REDIRECT_URI } from "@jeswr/suite-native";
 import { authSessionPlugin } from "@jeswr/suite-native/capacitor";
 
-const getCode = createNativeCodeDriver({ plugin: authSessionPlugin, redirectUri: MOBILE_REDIRECT_URI });
+const getCode = createNativeCodeDriver({
+  plugin: authSessionPlugin,
+  redirectUri: MOBILE_REDIRECT_URI,
+  // The issuer identifier pod-auth discovered for this authorization URL.
+  resolveIssuer: (url) => issuer,
+});
 // createPodAuth({ clientId: `${origin}/.well-known/solid-client-id-mobile.jsonld`,
 //                 redirectUri: MOBILE_REDIRECT_URI, ui: { getWebId, getCode } })
 ```
