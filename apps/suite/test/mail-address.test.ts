@@ -429,6 +429,51 @@ describe("recipient autocomplete", () => {
   });
 
   it.each([
+    ["Weiß", "WEISS"],
+    ["WEISS", "Weiß"],
+    ["Weiẞ", "weiss"],
+    ["Weiß Lane", "WEIS"],
+    ["ﬃnch", "FFIN"],
+    ["FFINCH", "ﬃn"],
+    ["ſage", "SAGE"],
+    ["µira", "ΜIRA"],
+    ["ϐeta", "ΒETA"],
+    ["Ꭰna", "ꭰNA"],
+    ["𐐀na", "𐐨NA"],
+    ["\u{16ea0}na", "\u{16ebb}NA"],
+    ["İvo", "i\u0307VO"],
+    ["ΐva", "Ϊ\u0301VA"],
+    ["\u1e9b\u0323ara", "\u1e69ARA"],
+    ["\u1e69ara", "\u1e9b\u0323ARA"],
+  ])("matches full Unicode case equivalents in names: %s / %s", (name, prefix) => {
+    const contact = { email: "mira@example.org", name };
+    const recent = { ...contact, frequency: 1, lastUsed: 0 };
+    expect(rankRecipients(prefix, [contact], []).map((entry) => entry.name)).toEqual([name]);
+    expect(rankRecipients(prefix, [], [recent]).map((entry) => entry.name)).toEqual([name]);
+  });
+
+  it("full-folds address queries and Unicode domain keys without changing returned addresses", () => {
+    const contact = { email: "WEISS@faß.example.org" };
+    const recent = { ...contact, frequency: 1, lastUsed: 0 };
+    for (const prefix of ["weiß@fass", "WEISS@FAẞ", "weiss@xn--fa-hia"]) {
+      expect(rankRecipients(prefix, [contact], []).map((entry) => entry.email)).toEqual([
+        "WEISS@xn--fa-hia.example.org",
+      ]);
+      expect(rankRecipients(prefix, [], [recent]).map((entry) => entry.email)).toEqual([
+        "WEISS@xn--fa-hia.example.org",
+      ]);
+    }
+  });
+
+  it.each([
+    ["Élo", "elo"],
+    ["ıvo", "IVO"],
+    ["Ｍira", "mira"],
+  ])("keeps accents, default locale and compatibility distinctions: %s / %s", (name, prefix) => {
+    expect(rankRecipients(prefix, [{ email: "person@example.org", name }], [])).toEqual([]);
+  });
+
+  it.each([
     "ΟΣΑ",
     "οσα",
     "οςα",

@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # Mail addresses (MAI-L6)
 
@@ -20,8 +21,9 @@ No I/O, clock, provider lookups, framework imports, or new dependencies.
   WHATWG/UTS 46 processing and a bounded RFC 3492 decoder. Standard IDNA case/NFC/compatibility
   mappings apply. Unicode labels containing only letters, marks, numbers and hyphens are supported;
   ASCII labels obey DNS label and total-domain length limits. Unicode-dot aliases are rejected.
-- `rankRecipients(query, contacts, recent, limit = 10)` matches case-insensitive NFC prefixes of
-  the full display name or full address (both ASCII/Unicode domain forms). Empty query matches
+- `rankRecipients(query, contacts, recent, limit = 10)` matches prefixes of the full display name
+  or full address (both ASCII/Unicode domain forms) using Unicode 17 default full case folding
+  followed by NFC normalization for query and candidate keys. Empty query matches
   all. Results sort by descending frequency, descending epoch-millisecond `lastUsed`, then canonical
   email in code-unit order. Recent records supply positive integer `frequency` and nonnegative safe
   integer `lastUsed`; duplicate usage records sum frequency and retain the latest time. First
