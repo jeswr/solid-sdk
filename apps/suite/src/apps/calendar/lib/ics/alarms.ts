@@ -13,7 +13,7 @@ import type { Reminder } from "./types";
 
 function duration(value: string): void {
   requireIcs(
-    /^[+-]?P(?:\d+W|\d+D(?:T(?:\d+H(?:\d+M)?(?:\d+S)?|\d+M(?:\d+S)?|\d+S))?|T(?:\d+H(?:\d+M)?(?:\d+S)?|\d+M(?:\d+S)?|\d+S))$/.test(
+    /^[+-]?P(?:\d+W|\d+D(?:T(?:\d+H(?:\d+M(?:\d+S)?)?|\d+M(?:\d+S)?|\d+S))?|T(?:\d+H(?:\d+M(?:\d+S)?)?|\d+M(?:\d+S)?|\d+S))$/.test(
       value,
     ),
     "invalid duration",
@@ -52,8 +52,8 @@ export function alarmLines(alarm: Reminder): string[] {
   );
   if (alarm.repeat !== undefined) {
     requireIcs(
-      Number.isSafeInteger(alarm.repeat) && alarm.repeat >= 0,
-      "expected nonnegative alarm repeat integer",
+      Number.isSafeInteger(alarm.repeat) && alarm.repeat >= 0 && alarm.repeat <= 2147483647,
+      "expected nonnegative alarm repeat integer at most 2147483647",
     );
     duration(alarm.duration as string);
     requireIcs(

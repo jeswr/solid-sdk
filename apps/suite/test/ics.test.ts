@@ -361,6 +361,9 @@ describe("alarms", () => {
     "PT1H",
     "PT1H2M",
     "PT1H2M3S",
+    "PT1H0M3S",
+    "-PT1H0M3S",
+    "+PT1H0M3S",
     "PT1M",
     "PT1M2S",
     "PT1S",
@@ -368,12 +371,52 @@ describe("alarms", () => {
     "P1DT1H",
     "P1DT1M",
     "P1DT1S",
+    "P1DT1H2M",
+    "P1DT1H0M3S",
+    "-P1DT1H0M3S",
+    "+P1DT1H0M3S",
     "+P2W",
   ])("accepts RFC duration %s", (triggerOffset) => {
     const reminder: Reminder = { action: "AUDIO", triggerOffset };
     expect(importICal(exported({ reminders: [reminder] })).events[0]?.reminders).toEqual([
       reminder,
     ]);
+  });
+  it.each([
+    "PT1H3S",
+    "-PT1H3S",
+    "+PT1H3S",
+    "P1DT1H3S",
+    "-P1DT1H3S",
+    "+P1DT1H3S",
+  ])("rejects trigger duration without intervening minutes %s", (triggerOffset) => {
+    expect(() =>
+      parsed([start, "BEGIN:VALARM", "ACTION:AUDIO", `TRIGGER:${triggerOffset}`, "END:VALARM"]),
+    ).toThrow("Invalid iCalendar: invalid duration");
+    expect(() => exported({ reminders: [{ action: "AUDIO", triggerOffset }] })).toThrow(
+      "Invalid iCalendar: invalid duration",
+    );
+  });
+  it.each([
+    "PT1H3S",
+    "+PT1H3S",
+    "P1DT1H3S",
+    "+P1DT1H3S",
+  ])("rejects repeat duration without intervening minutes %s", (duration) => {
+    expect(() =>
+      parsed([
+        start,
+        "BEGIN:VALARM",
+        "ACTION:AUDIO",
+        "TRIGGER:PT0S",
+        "REPEAT:1",
+        `DURATION:${duration}`,
+        "END:VALARM",
+      ]),
+    ).toThrow("Invalid iCalendar: invalid duration");
+    expect(() =>
+      exported({ reminders: [{ action: "AUDIO", triggerOffset: "PT0S", repeat: 1, duration }] }),
+    ).toThrow("Invalid iCalendar: invalid duration");
   });
   it.each([
     ["ACTION:PROCEDURE", "TRIGGER:-PT1H"],
@@ -421,7 +464,15 @@ describe("alarms", () => {
     ],
   ])("rejects invalid alarm %#", (...lines) =>
     expect(() => parsed([start, "BEGIN:VALARM", ...lines, "END:VALARM"])).toThrow());
-  it.each(["0", "+0", "+2", "+02"])("round-trips REPEAT:%s with a duration", (repeat) => {
+  it.each([
+    "0",
+    "+0",
+    "+2",
+    "+02",
+    "2147483646",
+    "2147483647",
+    "+2147483647",
+  ])("round-trips REPEAT:%s with a duration", (repeat) => {
     const reminder: Reminder = {
       action: "AUDIO",
       triggerOffset: "-PT1H",
@@ -439,6 +490,31 @@ describe("alarms", () => {
     ]);
     expect(calendar.events[0]?.reminders).toEqual([reminder]);
     expect(importICal(exported({ reminders: [reminder] }))).toEqual(calendar);
+  });
+  it.each([
+    "2147483648",
+    "+2147483648",
+    "9007199254740991",
+    "+9007199254740991",
+  ])("rejects REPEAT outside the RFC integer range %s", (repeat) => {
+    expect(() =>
+      parsed([
+        start,
+        "BEGIN:VALARM",
+        "ACTION:AUDIO",
+        "TRIGGER:PT0S",
+        `REPEAT:${repeat}`,
+        "DURATION:PT1M",
+        "END:VALARM",
+      ]),
+    ).toThrow("Invalid iCalendar: expected nonnegative alarm repeat integer");
+    expect(() =>
+      exported({
+        reminders: [
+          { action: "AUDIO", triggerOffset: "PT0S", repeat: Number(repeat), duration: "PT1M" },
+        ],
+      }),
+    ).toThrow("Invalid iCalendar: expected nonnegative alarm repeat integer");
   });
   it.each([0, 1, 2])("round-trips EMAIL with %i attachments", (count) => {
     const attachments = ["https://example.org/a", "https://example.org/b"].slice(0, count);
