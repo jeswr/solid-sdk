@@ -226,8 +226,9 @@ export async function* importMbox(
       // References supplies the root even when an earlier reply had incomplete ancestry.
       const ancestors = parent === undefined ? item.references : [...item.references, parent];
       const merged = new Set<string>();
-      for (const ancestor of ancestors) {
-        const previous = threads.get(ancestor);
+      // Earlier replies may have used this arriving message as their provisional root.
+      for (const candidate of [item.message, ...ancestors]) {
+        const previous = threads.get(candidate);
         if (previous !== undefined && previous !== item.thread) merged.add(previous);
       }
       if (merged.size > 0)

@@ -503,6 +503,43 @@ describe("injected pod I/O", () => {
       1,
     );
   });
+  it("reconciles persisted replies when their missing parent arrives with References", async () => {
+    async function* source() {
+      for (const headers of [
+        "Message-ID: <c>\nIn-Reply-To: <b>",
+        "Message-ID: <b>\nReferences: <root>",
+        "Message-ID: <later>\nIn-Reply-To: <c>",
+        "Message-ID: <root>",
+      ])
+        yield new TextEncoder().encode(`From sender\n${headers}\nSubject: Conversation\n\nBody\n`);
+    }
+    const s = server();
+    const imported = [];
+    const provisional = `${mailDocument(root, "threads", "<b>")}#it`;
+    const canonical = `${mailDocument(root, "threads", "<root>")}#it`;
+    for await (const item of importMbox(source(), storage, "personal", () => "fallback")) {
+      imported.push(item);
+      await persistImportedMail(s.store, item);
+      if (item.id === "<c>")
+        expect((await s.store.load(documentOf(provisional))).mailbox.thread(provisional).size).toBe(
+          1,
+        );
+      else {
+        expect((await s.store.load(documentOf(provisional))).mailbox.thread(provisional).size).toBe(
+          0,
+        );
+        expect(await loadThread(s.store, canonical)).toHaveLength(imported.length);
+      }
+    }
+    const members = (await s.store.load(documentOf(canonical))).mailbox.thread(canonical);
+    expect([...members.messageIris].sort()).toEqual(imported.map((item) => item.message).sort());
+    for (const item of imported) {
+      const loaded = await s.store.load(documentOf(item.message));
+      expect(loaded.mailbox.message(item.message).partOfThread).toBe(canonical);
+      expect(loaded.mailbox.message(item.message).body).toContain("Body");
+    }
+    expect((await loadThreads(s.store, inbox)).total).toBe(1);
+  });
   it("persists nested labels and delimiter-bearing message identifiers and accounts", async () => {
     const s = server();
     const item = await parseEmail(

@@ -409,6 +409,37 @@ it("honors References roots and reconciles cached descendants and missing ancest
   for (const item of items)
     expect(item.mailbox.message(item.message).partOfThread).toBe(item.thread);
 });
+it.each([
+  "References: <root>",
+  "In-Reply-To: <root>\nReferences: <root>",
+])("reconciles the arriving message's cached provisional thread with %s", async (ancestry) => {
+  const input = [
+    "Message-ID: <independent>",
+    "Message-ID: <c>\nIn-Reply-To: <b>",
+    "Message-ID: <early>\nIn-Reply-To: <c>",
+    `Message-ID: <b>\n${ancestry}`,
+    "Message-ID: <later>\nIn-Reply-To: <early>",
+    "Message-ID: <root>",
+  ]
+    .map((headers) => `From sender\n${headers}\n\nBody\n`)
+    .join("");
+  const items = (await collect(
+    importMbox(chunks(bytes(input)), storage, "personal", () => "id"),
+  )) as Awaited<ReturnType<typeof parseEmail>>[];
+  const provisional = `${mailDocument(root, "threads", "<b>")}#it`;
+  const canonical = `${mailDocument(root, "threads", "<root>")}#it`;
+  expect(items.map((item) => item.thread)).toEqual([
+    `${mailDocument(root, "threads", "<independent>")}#it`,
+    provisional,
+    provisional,
+    canonical,
+    canonical,
+    canonical,
+  ]);
+  expect(items[3]!.mergedThreads).toEqual([provisional]);
+  for (const item of items)
+    expect(item.mailbox.message(item.message).partOfThread).toBe(item.thread);
+});
 it("sorts equal-dated threads stably and resolves message-side membership alone", () => {
   const mailbox = new MailboxDataset(new Store(), DataFactory);
   for (const id of ["b", "a"]) {
