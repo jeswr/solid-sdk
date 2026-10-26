@@ -153,7 +153,7 @@ export function createSolidBackend(options: SolidBackendOptions): StorageClient 
     return {
       status,
       kind:
-        types.some((type) => LDP_CONTAINERS.has(type)) || url.endsWith("/")
+        types.some((type) => LDP_CONTAINERS.has(type)) || new URL(url).pathname.endsWith("/")
           ? "container"
           : "resource",
       parent: pathParent(url, root),
@@ -240,6 +240,14 @@ export function createSolidBackend(options: SolidBackendOptions): StorageClient 
 
     async list(url, opts = {}) {
       const container = scoped(root, "GET", url);
+      // A query or fragment would name a different RDF subject than the container itself.
+      if (new URL(container).search || new URL(container).hash) {
+        throw new StorageError("bad-request", {
+          method: "GET",
+          url: container,
+          message: "list() takes a container URL without a query or fragment",
+        });
+      }
       if (opts.cursor !== undefined) {
         throw new StorageError("bad-request", {
           method: "GET",
@@ -258,14 +266,10 @@ export function createSolidBackend(options: SolidBackendOptions): StorageClient 
       }
       const { dataset } = await rdfBody(result, "invalid-response");
       const listed = new Container(container, dataset, DataFactory);
-      // Containment is by path: a query or fragment on the listed URL does not change the parent.
-      const parent = new URL(container);
-      parent.search = "";
-      parent.hash = "";
       const items: Entry[] = [];
       // `contains` is a set of distinct members, so URLs are unique.
       for (const resource of listed.contains) {
-        const entry = entryOf(new Member(resource.id, dataset, DataFactory), parent.href);
+        const entry = entryOf(new Member(resource.id, dataset, DataFactory), container);
         if (entry) items.push(entry);
       }
       items.sort((a, b) => (a.url < b.url ? -1 : 1));

@@ -573,20 +573,23 @@ describe("review round 1 regressions", () => {
     expect(String((error.cause as Error).message)).not.toContain("secret");
   });
 
-  test("a query on the listed container keeps its direct members", async () => {
-    const storage = createSolidBackend({
-      root: CSS_ROOT,
-      fetch: async () =>
-        new Response("<> <http://www.w3.org/ns/ldp#contains> <a>, <b/c>.", {
+  test("list() refuses query or fragment URLs; kind follows the path, not the query", async () => {
+    const fetch = vi.fn(
+      async () =>
+        new Response('<> <urn:p> "file".', {
           headers: {
             "content-type": "text/turtle",
-            link: '<http://www.w3.org/ns/ldp#BasicContainer>; rel="type"',
+            link: '<http://www.w3.org/ns/ldp#Resource>; rel="type"',
           },
         }),
-    });
-    expect((await storage.list(`${CSS_ROOT}?x=1`)).items.map((item) => item.url)).toEqual([
-      `${CSS_ROOT}a`,
-    ]);
+    );
+    const storage = createSolidBackend({ root: CSS_ROOT, fetch });
+    await rejects(storage.list(`${CSS_ROOT}?x=1`), "bad-request");
+    await rejects(storage.list(`${CSS_ROOT}#top`), "bad-request");
+    await rejects(storage.list("https://css.example/alice?x=1"), "bad-request");
+    expect(fetch).not.toHaveBeenCalled();
+    expect((await storage.head(`${CSS_ROOT}file.ttl?source=/`)).kind).toBe("resource");
+    await rejects(storage.list(`${CSS_ROOT}file.ttl`), "method-not-allowed");
   });
 
   test("root aliases with a query or fragment stay the root", async () => {
