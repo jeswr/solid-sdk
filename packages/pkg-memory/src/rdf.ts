@@ -1,8 +1,9 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+import { parseRdf } from "@jeswr/fetch-rdf";
 import { safeIri } from "@jeswr/rdf-serialize";
-import type { DatasetCore, Literal, Term } from "@rdfjs/types";
+import type { DatasetCore, Literal, NamedNode, Quad, Term } from "@rdfjs/types";
 import { LiteralAs, NamedNodeAs, SetFrom, TermAs, TermFrom, TermWrapper } from "@rdfjs/wrapper";
-import { DataFactory as df, Store } from "n3";
+import { DataFactory as df, Literal as N3Literal, Parser, Store } from "n3";
 import { UnsupportedLiteralCharacterError, UnsupportedLiteralDatatypeError } from "./errors.js";
 
 export const NS = {
@@ -28,6 +29,49 @@ export const NS = {
   rdfs: "http://www.w3.org/2000/01/rdf-schema#",
   xsd: "http://www.w3.org/2001/XMLSchema#",
 } as const;
+
+/** Retain RDFlib's language spelling in both the RDF/JS term and N3's store key. */
+function languageLiteral(value: string, language: string): Literal {
+  const literal = new N3Literal(`"${value}"@${language}`);
+  Object.defineProperty(literal, "language", { value: language });
+  return literal;
+}
+
+const referenceFactory = {
+  ...df,
+  literal(value: string | number, languageOrDatatype?: string | NamedNode) {
+    return typeof languageOrDatatype === "string"
+      ? languageLiteral(String(value), languageOrDatatype)
+      : df.literal(value, languageOrDatatype);
+  },
+};
+
+/** N3 also recreates terms on reads; retain tag spelling through every store. */
+export class ReferenceStore extends Store {
+  constructor(quads: Quad[] = []) {
+    super(quads, { factory: referenceFactory });
+  }
+}
+
+/** Parse through the suite boundary while preserving reference LANGTAG spelling. */
+export async function parseReferenceRdf(
+  body: string,
+  format: "text/turtle" | "application/trig",
+  baseIRI?: string,
+): Promise<DatasetCore> {
+  const dataset = await parseRdf(body, format, { baseIRI });
+  if (![...dataset].some((q) => q.object.termType === "Literal" && q.object.language))
+    return dataset;
+  // fetch-rdf exposes no factory option. Replay its validated N3 input with a
+  // spelling-preserving factory; the default N3 factory lowercases LANGTAGs.
+  return new ReferenceStore(
+    new Parser({
+      format,
+      baseIRI,
+      factory: referenceFactory,
+    }).parse(body),
+  );
+}
 
 const supportedLiteralDatatypes = new Set([
   `${NS.xsd}string`,
@@ -132,7 +176,7 @@ export class RdfNode extends TermWrapper {
 }
 
 export function graph(dataset: DatasetCore, name: string): Store {
-  const out = new Store();
+  const out = new ReferenceStore();
   for (const q of dataset.match(null, null, null, df.namedNode(name))) {
     out.addQuad(df.quad(q.subject, q.predicate, q.object));
   }

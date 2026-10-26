@@ -1,8 +1,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { createHash } from "node:crypto";
 import type { DatasetCore, Term } from "@rdfjs/types";
-import { DataFactory as df, Store } from "n3";
-import { NS, normalizeLiteral, validateTermSafety } from "./rdf.js";
+import { DataFactory as df } from "n3";
+import { NS, normalizeLiteral, ReferenceStore as Store, validateTermSafety } from "./rdf.js";
 
 function uuid(namespace: string, name: string): string {
   const hash = createHash("sha1")

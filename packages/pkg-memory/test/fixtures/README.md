@@ -42,3 +42,12 @@ python3 ../generate-temporal-fixtures.py /path/to/knowledge-graph/pipeline/np_bu
 ```
 
 Format the generated JSON with the workspace's Biome formatter before committing.
+
+`literal-parity.json` pins independent RDFlib 7.1.4 IDs, skolemized graphs and
+language-tag spelling for uppercase, mixed-case and lowercase tags. Named-subject
+and blank-subject assertions exercise both N-Triples hashing and blank-node
+labeling. Generate this fixture without regenerating the existing oracles:
+
+```sh
+python3 ../generate-literal-fixtures.py /path/to/knowledge-graph/pipeline/np_builder.py
+```

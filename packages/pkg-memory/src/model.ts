@@ -1,9 +1,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { pathToFileURL } from "node:url";
-import { parseRdf } from "@jeswr/fetch-rdf";
 import { safeHttpIri, serialize } from "@jeswr/rdf-serialize";
 import type { DatasetCore, Term } from "@rdfjs/types";
-import { DataFactory as df, Store } from "n3";
+import { DataFactory as df } from "n3";
 import { canonicalizeAssertion, messageId, pkgId } from "./ids.js";
 import {
   dateTime,
@@ -11,8 +10,10 @@ import {
   graph,
   iri,
   NS,
+  parseReferenceRdf,
   putGraph,
   RdfNode,
+  ReferenceStore as Store,
   validateLiterals,
   validateTermSafety,
 } from "./rdf.js";
@@ -154,7 +155,7 @@ export async function parseAssertion(body: string, owner: string): Promise<Datas
     prefixes: { ...NS, me: webId },
     emptyAsEmptyString: false,
   });
-  const dataset = await parseRdf(preamble + body, "text/turtle");
+  const dataset = await parseReferenceRdf(preamble + body, "text/turtle");
   validateLiterals(dataset);
   return dataset;
 }
@@ -480,6 +481,6 @@ export async function parseNanopublications(
   trig: string,
   baseIRI?: string,
 ): Promise<Nanopublications> {
-  const dataset = await parseRdf(trig, "application/trig", { baseIRI });
+  const dataset = await parseReferenceRdf(trig, "application/trig", baseIRI);
   return readNanopublications(new Store([...dataset]));
 }

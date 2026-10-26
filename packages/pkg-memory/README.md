@@ -66,7 +66,9 @@ parsing and serialization, including caller-modified datasets.
 
 Nanopub, activity, message-fallback and annotation IDs use the reference UUIDv5
 namespace and name construction. Assertion IDs hash RDFlib 7's canonical N-Triples;
-its blank-node labels differ from RDFC-1.0. Generation time is injectable. Parsing
+its blank-node labels differ from RDFC-1.0. Language-tag spelling is preserved
+through hashing, graph storage and TriG parsing: `EN-US`, `en-US` and `en-us`
+produce the reference's distinct assertion IDs. Generation time is injectable. Parsing
 keeps each nanopub's provenance separate, even when assertions are shared, and
 rejects malformed skeletons, missing graphs, duplicate scalar fields and unknown
 statuses. It returns graph identifiers, statuses, evidence, attribution, categories,

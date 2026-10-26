@@ -1,0 +1,53 @@
+{
+  "$comment": "AUTHORED-BY Codex GPT-6; generated using RDFlib 7.1.4",
+  "languages": [
+    {
+      "language": "EN-US",
+      "assertion": "<https://example.org/subject> schema:name \"Hello\"@EN-US .",
+      "id": "urn:uuid:ef07ab89-1b23-5ebe-9c31-2e41dee81bad",
+      "graph": "<https://example.org/subject> <https://schema.org/name> \"Hello\"@EN-US .\n"
+    },
+    {
+      "language": "EN-US",
+      "assertion": "_:label schema:name \"Hello\"@EN-US .",
+      "id": "urn:uuid:f8561f90-9f46-5d7c-82b0-8eeb0c6acd14",
+      "graph": "<urn:uuid:034313e4-2817-537c-a6e9-6dc75831e5d7> <https://schema.org/name> \"Hello\"@EN-US .\n"
+    },
+    {
+      "language": "en-US",
+      "assertion": "<https://example.org/subject> schema:name \"Hello\"@en-US .",
+      "id": "urn:uuid:c7d0337b-e9f5-5090-9623-0f5b5466b63a",
+      "graph": "<https://example.org/subject> <https://schema.org/name> \"Hello\"@en-US .\n"
+    },
+    {
+      "language": "en-US",
+      "assertion": "_:label schema:name \"Hello\"@en-US .",
+      "id": "urn:uuid:156b0db7-5035-50b5-94ab-ac4a1d1c6c2e",
+      "graph": "<urn:uuid:a101ddf1-ec9c-512f-9a01-d82b16702e82> <https://schema.org/name> \"Hello\"@en-US .\n"
+    },
+    {
+      "language": "en-us",
+      "assertion": "<https://example.org/subject> schema:name \"Hello\"@en-us .",
+      "id": "urn:uuid:02f68022-47b1-5414-9e70-48c67fe8738d",
+      "graph": "<https://example.org/subject> <https://schema.org/name> \"Hello\"@en-us .\n"
+    },
+    {
+      "language": "en-us",
+      "assertion": "_:label schema:name \"Hello\"@en-us .",
+      "id": "urn:uuid:7fbd9c2f-1549-56e4-b7a8-c729ca0b98f6",
+      "graph": "<urn:uuid:1900a91f-eed3-5c7b-82d6-85b8a9bfde82> <https://schema.org/name> \"Hello\"@en-us .\n"
+    },
+    {
+      "language": "zh-Hant-TW",
+      "assertion": "<https://example.org/subject> schema:name \"Hello\"@zh-Hant-TW .",
+      "id": "urn:uuid:dffe55b8-17c0-5f46-a578-da9b8d65406d",
+      "graph": "<https://example.org/subject> <https://schema.org/name> \"Hello\"@zh-Hant-TW .\n"
+    },
+    {
+      "language": "zh-Hant-TW",
+      "assertion": "_:label schema:name \"Hello\"@zh-Hant-TW .",
+      "id": "urn:uuid:75e8d6be-4d3b-5d15-af06-fb9cb9c16a2f",
+      "graph": "<urn:uuid:6e7641db-e865-5853-98bd-e22672529c61> <https://schema.org/name> \"Hello\"@zh-Hant-TW .\n"
+    }
+  ]
+}
