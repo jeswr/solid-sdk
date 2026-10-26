@@ -44,6 +44,6 @@ export const ACTIVITIES: StravaActivity[] = [
 ];
 
 export const STRAVA_FIXTURES: readonly FixtureRoute[] = [
-  { url: "https://www.strava.com/api/v3/athlete/activities?per_page=100&page=2", json: [] },
   { url: "https://www.strava.com/api/v3/athlete/activities", json: ACTIVITIES },
+  { url: "https://www.strava.com/api/v3/athlete/activities", json: [] },
 ];

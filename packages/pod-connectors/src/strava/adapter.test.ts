@@ -65,7 +65,6 @@ describe("strava adapter contract", () => {
   // malformed start_date must not crash the cursor computation.
   it("survives a sparse live response (missing metrics, null entry, no sport type)", async () => {
     const { pod, report } = await sparseImport(stravaAdapter, [
-      { url: "https://www.strava.com/api/v3/athlete/activities?per_page=100&page=2", json: [] },
       {
         url: "https://www.strava.com/api/v3/athlete/activities",
         json: [
@@ -86,6 +85,7 @@ describe("strava adapter contract", () => {
           { id: 3, name: "Bad Date", sport_type: "Run", start_date: "not-a-date" },
         ],
       },
+      { url: "https://www.strava.com/api/v3/athlete/activities", json: [] },
     ]);
 
     expect(report.written.map((w) => w.url).sort()).toEqual([WORKOUTS_DOC, RIDES_DOC]);

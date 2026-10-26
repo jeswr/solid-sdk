@@ -13,6 +13,8 @@
  * public PKCE) — live mode needs the maintainer's token proxy.
  */
 import { DataFactory, Store } from "n3";
+import { RunBudget, type RunLimits } from "../core/budget.js";
+import { IntegrationSyncError } from "../core/errors.js";
 import { getJson } from "../core/fixture-fetch.js";
 import { arr, optionalDate, optionalNumber, optionalText, SkipCounter } from "../core/safe.js";
 import type { ImportContext, ImportOutcome, IntegrationAdapter } from "../core/types.js";
@@ -26,102 +28,150 @@ const SCOPES = ["read", "activity:read"] as const;
 
 const RIDE_TYPES = new Set(["Ride", "EBikeRide", "GravelRide", "MountainBikeRide", "Commute"]);
 
-export const stravaAdapter: IntegrationAdapter = {
-  vocabMap,
-  metadata: {
-    id: ID,
-    name: "Strava",
-    tier: "A",
-    authKind: "oauth-pkce",
-    scopes: SCOPES,
-    categories: ["health", "mobility"],
-    whatYouGet: "Workouts and swims into Health; rides and commutes into Mobility.",
-    requirements: [
-      "Create an API application at strava.com/settings/api.",
-      "Set the Authorization Callback Domain to the app's host.",
-      "Set NEXT_PUBLIC_STRAVA_CLIENT_ID.",
-      "Strava's token endpoint requires the client secret (no public PKCE): deploy the token-exchange proxy and set NEXT_PUBLIC_STRAVA_TOKEN_PROXY.",
-    ],
-  },
-  oauth: {
-    clientId: undefined,
-    authorizationEndpoint: "https://www.strava.com/oauth/authorize",
-    tokenEndpoint: "https://www.strava.com/oauth/token",
-    scopes: SCOPES,
-    tokenExchange: "proxy",
-    tokenProxyUrl: undefined,
-    extraAuthParams: { approval_prompt: "auto" },
-  },
-  fixtures: () => STRAVA_FIXTURES,
+/** Create an adapter with host-selected per-run source limits. */
+export function createStravaAdapter(limits?: RunLimits): IntegrationAdapter {
+  return {
+    vocabMap,
+    metadata: {
+      id: ID,
+      name: "Strava",
+      tier: "A",
+      authKind: "oauth-pkce",
+      scopes: SCOPES,
+      categories: ["health", "mobility"],
+      whatYouGet: "Workouts and swims into Health; rides and commutes into Mobility.",
+      requirements: [
+        "Create an API application at strava.com/settings/api.",
+        "Set the Authorization Callback Domain to the app's host.",
+        "Set NEXT_PUBLIC_STRAVA_CLIENT_ID.",
+        "Strava's token endpoint requires the client secret (no public PKCE): deploy the token-exchange proxy and set NEXT_PUBLIC_STRAVA_TOKEN_PROXY.",
+      ],
+    },
+    oauth: {
+      clientId: undefined,
+      authorizationEndpoint: "https://www.strava.com/oauth/authorize",
+      tokenEndpoint: "https://www.strava.com/oauth/token",
+      scopes: SCOPES,
+      tokenExchange: "proxy",
+      tokenProxyUrl: undefined,
+      extraAuthParams: { approval_prompt: "auto" },
+    },
+    fixtures: () => STRAVA_FIXTURES,
 
-  async import(ctx: ImportContext): Promise<ImportOutcome> {
-    const skipped = new SkipCounter();
+    async import(ctx: ImportContext): Promise<ImportOutcome> {
+      const budget = new RunBudget(ID, limits);
+      const skipped = new SkipCounter();
 
-    ctx.progress({ label: "Fetching your activities…", done: 0, total: 2 });
-    const after = ctx.cursor ? `&after=${encodeURIComponent(ctx.cursor)}` : "";
-    const list: (StravaActivity | null)[] = [];
-    for (let page = 1; ; page += 1) {
-      const batch = arr(
-        await getJson<StravaActivity[] | null>(
-          ID,
-          ctx.api,
-          `${API}/athlete/activities?per_page=100&page=${page}${after}`,
-        ),
-      );
-      list.push(...batch);
-      // Strava explicitly allows short non-final pages.
-      if (batch.length === 0) break;
-    }
-
-    const workoutsDoc = ctx.resolve("fitness/activities.ttl");
-    const ridesDoc = ctx.resolve("travel/rides.ttl");
-    // Let the framework replace incoming subjects, including removed optional fields.
-    const workouts = new Store();
-    const rides = new Store();
-
-    for (const a of list) {
-      // An activity with no id has no stable fragment IRI — skip it.
-      if (!a || a.id === undefined || a.id === null) {
-        skipped.skip();
-        continue;
+      ctx.progress({ label: "Fetching your activities…", done: 0, total: 2 });
+      const after = ctx.cursor ? `&after=${encodeURIComponent(ctx.cursor)}` : "";
+      const list: StravaActivity[] = [];
+      const seen = new Set<number>();
+      let before: number | undefined;
+      for (;;) {
+        budget.request();
+        const batch = arr(
+          await getJson<StravaActivity[] | null>(
+            ID,
+            ctx.api,
+            `${API}/athlete/activities?per_page=100${after}${before === undefined ? "" : `&before=${before}`}`,
+          ),
+        );
+        budget.items(batch.length);
+        // Short pages are not necessarily final. Traverse time windows rather than
+        // offsets so deletion of an already-read activity cannot shift an unseen one past us.
+        if (batch.length === 0) break;
+        const previousSize = seen.size;
+        let identified = 0;
+        let oldest = Number.POSITIVE_INFINITY;
+        for (const activity of batch) {
+          if (!activity || activity.id === undefined || activity.id === null) {
+            skipped.skip();
+            continue;
+          }
+          identified += 1;
+          const epoch = activityEpoch(activity);
+          if (epoch !== undefined) oldest = Math.min(oldest, epoch);
+          if (seen.has(activity.id)) continue;
+          seen.add(activity.id);
+          list.push(activity);
+        }
+        if (identified > 0 && seen.size === previousSize) {
+          throw new IntegrationSyncError(
+            ID,
+            "The platform returned a non-advancing activity window.",
+          );
+        }
+        if (ctx.cursor && oldest <= Number(ctx.cursor)) break;
+        if (Number.isFinite(oldest)) {
+          // Re-read the oldest second to include timestamp ties, deduplicating by id.
+          const nextBefore = oldest + 1;
+          if (before !== undefined && nextBefore > before) {
+            throw new IntegrationSyncError(
+              ID,
+              "The platform returned a non-advancing activity window.",
+            );
+          }
+          before = nextBefore;
+        }
       }
-      const sportType = optionalText(a.sport_type);
-      if (sportType !== undefined && RIDE_TYPES.has(sportType)) {
-        const ride = new TravelAction(`${ridesDoc}#activity-${a.id}`, rides, DataFactory).mark();
-        fill(ride, a);
-      } else {
-        const workout = new ExerciseAction(
-          `${workoutsDoc}#activity-${a.id}`,
-          workouts,
-          DataFactory,
-        ).mark();
-        fill(workout, a);
-        workout.exerciseType = sportType;
+
+      const workoutsDoc = ctx.resolve("fitness/activities.ttl");
+      const ridesDoc = ctx.resolve("travel/rides.ttl");
+      // Let the framework replace incoming subjects, including removed optional fields.
+      const workouts = new Store();
+      const rides = new Store();
+
+      for (const a of list) {
+        // An activity with no id has no stable fragment IRI — skip it.
+        if (!a || a.id === undefined || a.id === null) {
+          skipped.skip();
+          continue;
+        }
+        const sportType = optionalText(a.sport_type);
+        if (sportType !== undefined && RIDE_TYPES.has(sportType)) {
+          const ride = new TravelAction(`${ridesDoc}#activity-${a.id}`, rides, DataFactory).mark();
+          fill(ride, a);
+        } else {
+          const workout = new ExerciseAction(
+            `${workoutsDoc}#activity-${a.id}`,
+            workouts,
+            DataFactory,
+          ).mark();
+          fill(workout, a);
+          workout.exerciseType = sportType;
+        }
       }
-    }
 
-    ctx.progress({ label: "Saving workouts and rides…", done: 1, total: 2 });
-    await ctx.write({
-      slug: "fitness/activities.ttl",
-      category: "health",
-      forClass: CLASSES.ExerciseAction,
-      dataset: workouts,
-      writeMode: ctx.cursor ? "merge" : "replace",
-      sourceUrl: `${API}/athlete/activities`,
-    });
-    await ctx.write({
-      slug: "travel/rides.ttl",
-      category: "mobility",
-      forClass: CLASSES.TravelAction,
-      dataset: rides,
-      writeMode: ctx.cursor ? "merge" : "replace",
-      sourceUrl: `${API}/athlete/activities`,
-    });
+      ctx.progress({ label: "Saving workouts and rides…", done: 1, total: 2 });
+      await ctx.write({
+        slug: "fitness/activities.ttl",
+        category: "health",
+        forClass: CLASSES.ExerciseAction,
+        dataset: workouts,
+        writeMode: ctx.cursor ? "merge" : "replace",
+        sourceUrl: `${API}/athlete/activities`,
+      });
+      await ctx.write({
+        slug: "travel/rides.ttl",
+        category: "mobility",
+        forClass: CLASSES.TravelAction,
+        dataset: rides,
+        writeMode: ctx.cursor ? "merge" : "replace",
+        sourceUrl: `${API}/athlete/activities`,
+      });
 
-    ctx.progress({ label: "Done", done: 2, total: 2 });
-    return { cursor: nextCursor(ctx.cursor, list), skipped: skipped.value };
-  },
-};
+      ctx.progress({ label: "Done", done: 2, total: 2 });
+      return { cursor: nextCursor(ctx.cursor, list), skipped: skipped.value };
+    },
+  };
+}
+
+export const stravaAdapter: IntegrationAdapter = createStravaAdapter();
+
+function activityEpoch(activity: StravaActivity): number | undefined {
+  const date = optionalDate(activity.start_date);
+  return date ? Math.floor(date.getTime() / 1000) : undefined;
+}
 
 function fill(action: ExerciseAction | TravelAction, a: StravaActivity): void {
   action.name = optionalText(a.name);
@@ -140,10 +190,11 @@ function nextCursor(
   previous: string | undefined,
   activities: (StravaActivity | null)[],
 ): string | undefined {
-  const epochs = activities
-    .filter((a) => a?.id !== undefined && a?.id !== null)
-    .map((a) => (a?.start_date ? Math.floor(Date.parse(a.start_date) / 1000) : Number.NaN))
-    .filter((n) => Number.isFinite(n));
-  if (previous) epochs.push(Number.parseInt(previous, 10) || 0);
-  return epochs.length > 0 ? String(Math.max(...epochs)) : previous;
+  let newest = previous ? Number.parseInt(previous, 10) || 0 : undefined;
+  for (const activity of activities) {
+    if (!activity || activity.id === undefined || activity.id === null) continue;
+    const epoch = activityEpoch(activity);
+    if (epoch !== undefined) newest = newest === undefined ? epoch : Math.max(newest, epoch);
+  }
+  return newest === undefined ? previous : String(newest);
 }

@@ -125,10 +125,21 @@ mocked source transports and memory Pods only.
 
 GitHub repositories, Discord guilds, Twitch follows and Notion search exhaust their API
 pages within each run, then replace the snapshot. Page cursors are not persisted as change
-checkpoints. Strava exhausts activity pages after its saved timestamp; Reddit walks saved
+checkpoints. Strava traverses activity timestamp windows after its saved timestamp, using
+`before` with a one-second overlap and deduplicating activity IDs; Reddit walks saved
 posts newest-first to the last saved fullname and snapshots subscribed communities.
 Both use framework subject replacement for incremental writes. A cursor-free import
 replaces these collections, including items removed at the source.
+
+GitHub and Strava create one shared-core `RunBudget` per import. Hosts can inject
+`{ maxRequests, maxItems }` through `createGithubAdapter(limits)` or
+`createStravaAdapter(limits)` from their adapter entry points; the existing singleton exports
+use the shared defaults. GitHub's profile and repository requests share the same budget.
+Items are counted before buffering, including overlaps and malformed entries. Exceeding a
+budget or receiving a page/window whose valid IDs have all been seen fails without advancing the
+checkpoint. Strava also rejects windows that move forward in time. Under this conservative
+no-progress rule, a terminal overlap-only Strava window fails too; only an empty response
+or reaching the previous checkpoint ends traversal successfully.
 
 Dropbox drains `list_folder/continue` before returning its delta cursor. File metadata
 updates replace old descriptions, including removed optional fields; deleted path tombstones
