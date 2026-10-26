@@ -51,9 +51,11 @@ function logicalLines(text: string): string[] {
   for (const line of text.replace(/^\uFEFF/, "").split(/\r\n|\r|\n/)) {
     const previous = lines.at(-1);
     // Legacy v3 exports use MIME soft breaks, sometimes with an extra fold space.
+    // A vCard fold splitting an =HH escape must preserve the equals sign.
     const header = previous?.match(/^(?:[^":]|"[^"]*")*:/)?.[0];
     const soft =
       previous?.endsWith("=") &&
+      !/^[ \t][\da-f]{2}/i.test(line) &&
       header !== undefined &&
       property(header).parameters.ENCODING?.[0]?.toUpperCase() === "QUOTED-PRINTABLE";
     if (previous !== undefined && (soft || /^[ \t]/.test(line))) {

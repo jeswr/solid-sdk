@@ -132,6 +132,19 @@ describe("content lines and values", () => {
     expect(first(wrap("FN;ENCODING=QUOTED-PRINTABLE:Soft=\n fold", "3.0")).fn).toBe("Softfold");
   });
 
+  it.each([
+    "Andr=C3=\r\n A9",
+    "Andr=C3=\r\n\tA9",
+    "Andr=C3=\r\n a9",
+    "Andr=C3=A\r\n 9",
+    "Andr=C3=\r\n=A9",
+    "Andr=C3=\r\n =A9",
+  ])("distinguishes folded quoted-printable escapes from soft breaks: %j", (value) => {
+    const card = first(wrap(`FN;ENCODING=QUOTED-PRINTABLE:${value}\nN:;;;;`, "3.0"));
+    expect(card.fn).toBe("André");
+    expect(first(serializeVCards([card]))).toEqual(card);
+  });
+
   it("recognizes QP only in headers and allows folded and quoted parameter headers", () => {
     const card = first(
       wrap(
