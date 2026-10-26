@@ -4,6 +4,7 @@ description: Work on @jeswr/storage-client, the protocol-neutral storage clients
 ---
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- AUTHORED-BY Claude Opus 5.5 -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # @jeswr/storage-client
 
@@ -146,6 +147,8 @@ Rules the memory backend enforces, and the real backends must match:
   names (exact Turtle `PN_PREFIX`), so crafted terms can never forge triples. Prefixes are only
   cosmetic: a dotted prefix name, one that some IRI starts with (`name:`), or a namespace containing
   `[` (IPv6 hosts) is silently dropped.
+  Rebuild every term with n3's DataFactory from validated string RDF/JS fields (direction may be
+  absent), ignoring caller-supplied `id` properties and preserving variables and literal language/base direction.
   Moving a resource rewrites metadata anchors on that resource and its fragments only. `listAll` stops between entries once aborted.
 - A stale ETag gives `precondition-failed` (412) with the current `etag`. ETags change on every write,
   and a container's ETag changes only on membership changes.
