@@ -1,0 +1,721 @@
+{
+  "$comment": "AUTHORED-BY Codex GPT-6; generated using RDFlib 7.1.4",
+  "languages": [
+    {
+      "language": "EN-US",
+      "assertion": "<https://example.org/subject> schema:name \"Hello\"@EN-US .",
+      "id": "urn:uuid:ef07ab89-1b23-5ebe-9c31-2e41dee81bad",
+      "graph": "<https://example.org/subject> <https://schema.org/name> \"Hello\"@EN-US .\n"
+    },
+    {
+      "language": "EN-US",
+      "assertion": "_:label schema:name \"Hello\"@EN-US .",
+      "id": "urn:uuid:f8561f90-9f46-5d7c-82b0-8eeb0c6acd14",
+      "graph": "<urn:uuid:034313e4-2817-537c-a6e9-6dc75831e5d7> <https://schema.org/name> \"Hello\"@EN-US .\n"
+    },
+    {
+      "language": "en-US",
+      "assertion": "<https://example.org/subject> schema:name \"Hello\"@en-US .",
+      "id": "urn:uuid:c7d0337b-e9f5-5090-9623-0f5b5466b63a",
+      "graph": "<https://example.org/subject> <https://schema.org/name> \"Hello\"@en-US .\n"
+    },
+    {
+      "language": "en-US",
+      "assertion": "_:label schema:name \"Hello\"@en-US .",
+      "id": "urn:uuid:156b0db7-5035-50b5-94ab-ac4a1d1c6c2e",
+      "graph": "<urn:uuid:a101ddf1-ec9c-512f-9a01-d82b16702e82> <https://schema.org/name> \"Hello\"@en-US .\n"
+    },
+    {
+      "language": "en-us",
+      "assertion": "<https://example.org/subject> schema:name \"Hello\"@en-us .",
+      "id": "urn:uuid:02f68022-47b1-5414-9e70-48c67fe8738d",
+      "graph": "<https://example.org/subject> <https://schema.org/name> \"Hello\"@en-us .\n"
+    },
+    {
+      "language": "en-us",
+      "assertion": "_:label schema:name \"Hello\"@en-us .",
+      "id": "urn:uuid:7fbd9c2f-1549-56e4-b7a8-c729ca0b98f6",
+      "graph": "<urn:uuid:1900a91f-eed3-5c7b-82d6-85b8a9bfde82> <https://schema.org/name> \"Hello\"@en-us .\n"
+    },
+    {
+      "language": "zh-Hant-TW",
+      "assertion": "<https://example.org/subject> schema:name \"Hello\"@zh-Hant-TW .",
+      "id": "urn:uuid:dffe55b8-17c0-5f46-a578-da9b8d65406d",
+      "graph": "<https://example.org/subject> <https://schema.org/name> \"Hello\"@zh-Hant-TW .\n"
+    },
+    {
+      "language": "zh-Hant-TW",
+      "assertion": "_:label schema:name \"Hello\"@zh-Hant-TW .",
+      "id": "urn:uuid:75e8d6be-4d3b-5d15-af06-fb9cb9c16a2f",
+      "graph": "<urn:uuid:6e7641db-e865-5853-98bd-e22672529c61> <https://schema.org/name> \"Hello\"@zh-Hant-TW .\n"
+    }
+  ],
+  "scalars": [
+    {
+      "datatype": "string",
+      "value": "",
+      "accepted": true,
+      "assertion": "<https://example.org/subject> schema:value \"\" .",
+      "normalized": "",
+      "id": "urn:uuid:9df85a02-6e42-5412-8082-cd854cb236bf",
+      "graph": "<https://example.org/subject> <https://schema.org/value> \"\" .\n"
+    },
+    {
+      "datatype": "string",
+      "value": "  Synthetic text  ",
+      "accepted": true,
+      "assertion": "<https://example.org/subject> schema:value \"  Synthetic text  \" .",
+      "normalized": "  Synthetic text  ",
+      "id": "urn:uuid:5be07403-2538-50a1-95d4-30494e22aabe",
+      "graph": "<https://example.org/subject> <https://schema.org/value> \"  Synthetic text  \" .\n"
+    },
+    {
+      "datatype": "string",
+      "value": "TRUE",
+      "accepted": true,
+      "assertion": "<https://example.org/subject> schema:value \"TRUE\" .",
+      "normalized": "TRUE",
+      "id": "urn:uuid:417d536e-23f8-5924-8c46-b36bc42f60f7",
+      "graph": "<https://example.org/subject> <https://schema.org/value> \"TRUE\" .\n"
+    },
+    {
+      "datatype": "string",
+      "value": "line\nreturn\rtab\t",
+      "accepted": true,
+      "assertion": "<https://example.org/subject> schema:value \"line\\nreturn\\rtab\\t\" .",
+      "normalized": "line\nreturn\rtab\t",
+      "id": "urn:uuid:61ea1ef4-270d-5710-a3a6-ca812b540013",
+      "graph": "<https://example.org/subject> <https://schema.org/value> \"line\\nreturn\\rtab\t\" .\n"
+    },
+    {
+      "datatype": "integer",
+      "value": "0",
+      "accepted": true,
+      "assertion": "<https://example.org/subject> schema:value \"0\"^^xsd:integer .",
+      "normalized": "0",
+      "id": "urn:uuid:5018574d-2518-5278-b9a0-2ce91064c353",
+      "graph": "<https://example.org/subject> <https://schema.org/value> \"0\"^^<http://www.w3.org/2001/XMLSchema#integer> .\n"
+    },
+    {
+      "datatype": "integer",
+      "value": "1",
+      "accepted": true,
+      "assertion": "<https://example.org/subject> schema:value \"1\"^^xsd:integer .",
+      "normalized": "1",
+      "id": "urn:uuid:d317b306-43a9-5e85-962f-610c50ff2764",
+      "graph": "<https://example.org/subject> <https://schema.org/value> \"1\"^^<http://www.w3.org/2001/XMLSchema#integer> .\n"
+    },
+    {
+      "datatype": "integer",
+      "value": "-1",
+      "accepted": true,
+      "assertion": "<https://example.org/subject> schema:value \"-1\"^^xsd:integer .",
+      "normalized": "-1",
+      "id": "urn:uuid:950f8ffa-a500-59ee-9389-57d92f100b5b",
+      "graph": "<https://example.org/subject> <https://schema.org/value> \"-1\"^^<http://www.w3.org/2001/XMLSchema#integer> .\n"
+    },
+    {
+      "datatype": "integer",
+      "value": "9007199254740993",
+      "accepted": true,
+      "assertion": "<https://example.org/subject> schema:value \"9007199254740993\"^^xsd:integer .",
+      "normalized": "9007199254740993",
+      "id": "urn:uuid:3e386773-975c-5479-8d2e-14ea4e8c9c34",
+      "graph": "<https://example.org/subject> <https://schema.org/value> \"9007199254740993\"^^<http://www.w3.org/2001/XMLSchema#integer> .\n"
+    },
+    {
+      "datatype": "integer",
+      "value": "-9007199254740993",
+      "accepted": true,
+      "assertion": "<https://example.org/subject> schema:value \"-9007199254740993\"^^xsd:integer .",
+      "normalized": "-9007199254740993",
+      "id": "urn:uuid:c9c57eff-89df-5c43-870d-637de7329aeb",
+      "graph": "<https://example.org/subject> <https://schema.org/value> \"-9007199254740993\"^^<http://www.w3.org/2001/XMLSchema#integer> .\n"
+    },
+    {
+      "datatype": "integer",
+      "value": "",
+      "accepted": false,
+      "assertion": "<https://example.org/subject> schema:value \"\"^^xsd:integer .",
+      "normalized": "",
+      "id": "urn:uuid:819ade61-1a3a-5e64-b83d-ec4152724e9a",
+      "graph": "<https://example.org/subject> <https://schema.org/value> \"\"^^<http://www.w3.org/2001/XMLSchema#integer> .\n"
+    },
+    {
+      "datatype": "integer",
+      "value": "00",
+      "accepted": false,
+      "assertion": "<https://example.org/subject> schema:value \"00\"^^xsd:integer .",
+      "normalized": "0",
+      "id": "urn:uuid:5018574d-2518-5278-b9a0-2ce91064c353",
+      "graph": "<https://example.org/subject> <https://schema.org/value> \"0\"^^<http://www.w3.org/2001/XMLSchema#integer> .\n"
+    },
+    {
+      "datatype": "integer",
+      "value": "-0",
+      "accepted": false,
+      "assertion": "<https://example.org/subject> schema:value \"-0\"^^xsd:integer .",
+      "normalized": "0",
+      "id": "urn:uuid:5018574d-2518-5278-b9a0-2ce91064c353",
+      "graph": "<https://example.org/subject> <https://schema.org/value> \"0\"^^<http://www.w3.org/2001/XMLSchema#integer> .\n"
+    },
+    {
+      "datatype": "integer",
+      "value": "+1",
+      "accepted": false,
+      "assertion": "<https://example.org/subject> schema:value \"+1\"^^xsd:integer .",
+      "normalized": "1",
+      "id": "urn:uuid:d317b306-43a9-5e85-962f-610c50ff2764",
+      "graph": "<https://example.org/subject> <https://schema.org/value> \"1\"^^<http://www.w3.org/2001/XMLSchema#integer> .\n"
+    },
+    {
+      "datatype": "integer",
+      "value": "001",
+      "accepted": false,
+      "assertion": "<https://example.org/subject> schema:value \"001\"^^xsd:integer .",
+      "normalized": "1",
+      "id": "urn:uuid:d317b306-43a9-5e85-962f-610c50ff2764",
+      "graph": "<https://example.org/subject> <https://schema.org/value> \"1\"^^<http://www.w3.org/2001/XMLSchema#integer> .\n"
+    },
+    {
+      "datatype": "integer",
+      "value": "-001",
+      "accepted": false,
+      "assertion": "<https://example.org/subject> schema:value \"-001\"^^xsd:integer .",
+      "normalized": "-1",
+      "id": "urn:uuid:950f8ffa-a500-59ee-9389-57d92f100b5b",
+      "graph": "<https://example.org/subject> <https://schema.org/value> \"-1\"^^<http://www.w3.org/2001/XMLSchema#integer> .\n"
+    },
+    {
+      "datatype": "integer",
+      "value": " 1",
+      "accepted": false,
+      "assertion": "<https://example.org/subject> schema:value \" 1\"^^xsd:integer .",
+      "normalized": "1",
+      "id": "urn:uuid:d317b306-43a9-5e85-962f-610c50ff2764",
+      "graph": "<https://example.org/subject> <https://schema.org/value> \"1\"^^<http://www.w3.org/2001/XMLSchema#integer> .\n"
+    },
+    {
+      "datatype": "integer",
+      "value": "1 ",
+      "accepted": false,
+      "assertion": "<https://example.org/subject> schema:value \"1 \"^^xsd:integer .",
+      "normalized": "1",
+      "id": "urn:uuid:d317b306-43a9-5e85-962f-610c50ff2764",
+      "graph": "<https://example.org/subject> <https://schema.org/value> \"1\"^^<http://www.w3.org/2001/XMLSchema#integer> .\n"
+    },
+    {
+      "datatype": "integer",
+      "value": "1\n",
+      "accepted": false,
+      "assertion": "<https://example.org/subject> schema:value \"1\\n\"^^xsd:integer .",
+      "normalized": "1",
+      "id": "urn:uuid:d317b306-43a9-5e85-962f-610c50ff2764",
+      "graph": "<https://example.org/subject> <https://schema.org/value> \"1\"^^<http://www.w3.org/2001/XMLSchema#integer> .\n"
+    },
+    {
+      "datatype": "integer",
+      "value": "1\r",
+      "accepted": false,
+      "assertion": "<https://example.org/subject> schema:value \"1\\r\"^^xsd:integer .",
+      "normalized": "1",
+      "id": "urn:uuid:d317b306-43a9-5e85-962f-610c50ff2764",
+      "graph": "<https://example.org/subject> <https://schema.org/value> \"1\"^^<http://www.w3.org/2001/XMLSchema#integer> .\n"
+    },
+    {
+      "datatype": "integer",
+      "value": "1\t",
+      "accepted": false,
+      "assertion": "<https://example.org/subject> schema:value \"1\\t\"^^xsd:integer .",
+      "normalized": "1",
+      "id": "urn:uuid:d317b306-43a9-5e85-962f-610c50ff2764",
+      "graph": "<https://example.org/subject> <https://schema.org/value> \"1\"^^<http://www.w3.org/2001/XMLSchema#integer> .\n"
+    },
+    {
+      "datatype": "integer",
+      "value": " +0009007199254740993 ",
+      "accepted": false,
+      "assertion": "<https://example.org/subject> schema:value \" +0009007199254740993 \"^^xsd:integer .",
+      "normalized": "9007199254740993",
+      "id": "urn:uuid:3e386773-975c-5479-8d2e-14ea4e8c9c34",
+      "graph": "<https://example.org/subject> <https://schema.org/value> \"9007199254740993\"^^<http://www.w3.org/2001/XMLSchema#integer> .\n"
+    },
+    {
+      "datatype": "integer",
+      "value": "1.2",
+      "accepted": false,
+      "assertion": "<https://example.org/subject> schema:value \"1.2\"^^xsd:integer .",
+      "normalized": "1.2",
+      "id": "urn:uuid:e421f988-7eb9-5627-b96e-af0bb4bb0268",
+      "graph": "<https://example.org/subject> <https://schema.org/value> \"1.2\"^^<http://www.w3.org/2001/XMLSchema#integer> .\n"
+    },
+    {
+      "datatype": "integer",
+      "value": "1E3",
+      "accepted": false,
+      "assertion": "<https://example.org/subject> schema:value \"1E3\"^^xsd:integer .",
+      "normalized": "1E3",
+      "id": "urn:uuid:7c0a3d36-dc20-5fa7-b5cb-689358bdecf2",
+      "graph": "<https://example.org/subject> <https://schema.org/value> \"1E3\"^^<http://www.w3.org/2001/XMLSchema#integer> .\n"
+    },
+    {
+      "datatype": "integer",
+      "value": "invalid",
+      "accepted": false,
+      "assertion": "<https://example.org/subject> schema:value \"invalid\"^^xsd:integer .",
+      "normalized": "invalid",
+      "id": "urn:uuid:9d3b49c5-9201-5204-868b-e476da2a6c32",
+      "graph": "<https://example.org/subject> <https://schema.org/value> \"invalid\"^^<http://www.w3.org/2001/XMLSchema#integer> .\n"
+    },
+    {
+      "datatype": "integer",
+      "value": "\u0661",
+      "accepted": false,
+      "assertion": "<https://example.org/subject> schema:value \"\u0661\"^^xsd:integer .",
+      "normalized": "1",
+      "id": "urn:uuid:d317b306-43a9-5e85-962f-610c50ff2764",
+      "graph": "<https://example.org/subject> <https://schema.org/value> \"1\"^^<http://www.w3.org/2001/XMLSchema#integer> .\n"
+    },
+    {
+      "datatype": "decimal",
+      "value": "0",
+      "accepted": true,
+      "assertion": "<https://example.org/subject> schema:value \"0\"^^xsd:decimal .",
+      "normalized": "0",
+      "id": "urn:uuid:e809bab0-536a-58bf-951e-e2f5d5ab717b",
+      "graph": "<https://example.org/subject> <https://schema.org/value> \"0\"^^<http://www.w3.org/2001/XMLSchema#decimal> .\n"
+    },
+    {
+      "datatype": "decimal",
+      "value": "-0",
+      "accepted": true,
+      "assertion": "<https://example.org/subject> schema:value \"-0\"^^xsd:decimal .",
+      "normalized": "-0",
+      "id": "urn:uuid:064fb0ec-82c9-59b4-8a0f-c5a33dc0f3ab",
+      "graph": "<https://example.org/subject> <https://schema.org/value> \"-0\"^^<http://www.w3.org/2001/XMLSchema#decimal> .\n"
+    },
+    {
+      "datatype": "decimal",
+      "value": "1",
+      "accepted": true,
+      "assertion": "<https://example.org/subject> schema:value \"1\"^^xsd:decimal .",
+      "normalized": "1",
+      "id": "urn:uuid:641b4147-429d-50fd-b439-4356fc8cfbde",
+      "graph": "<https://example.org/subject> <https://schema.org/value> \"1\"^^<http://www.w3.org/2001/XMLSchema#decimal> .\n"
+    },
+    {
+      "datatype": "decimal",
+      "value": "-1",
+      "accepted": true,
+      "assertion": "<https://example.org/subject> schema:value \"-1\"^^xsd:decimal .",
+      "normalized": "-1",
+      "id": "urn:uuid:ebf637ee-7f5a-520d-ae9b-909995f1314e",
+      "graph": "<https://example.org/subject> <https://schema.org/value> \"-1\"^^<http://www.w3.org/2001/XMLSchema#decimal> .\n"
+    },
+    {
+      "datatype": "decimal",
+      "value": "0.00",
+      "accepted": true,
+      "assertion": "<https://example.org/subject> schema:value \"0.00\"^^xsd:decimal .",
+      "normalized": "0.00",
+      "id": "urn:uuid:5c918daf-e7c8-5388-b752-f7f2e8d725f7",
+      "graph": "<https://example.org/subject> <https://schema.org/value> \"0.00\"^^<http://www.w3.org/2001/XMLSchema#decimal> .\n"
+    },
+    {
+      "datatype": "decimal",
+      "value": "-0.00",
+      "accepted": true,
+      "assertion": "<https://example.org/subject> schema:value \"-0.00\"^^xsd:decimal .",
+      "normalized": "-0.00",
+      "id": "urn:uuid:2ce8a4dc-2416-50fd-9b70-ab8f545fcc71",
+      "graph": "<https://example.org/subject> <https://schema.org/value> \"-0.00\"^^<http://www.w3.org/2001/XMLSchema#decimal> .\n"
+    },
+    {
+      "datatype": "decimal",
+      "value": "2.00",
+      "accepted": true,
+      "assertion": "<https://example.org/subject> schema:value \"2.00\"^^xsd:decimal .",
+      "normalized": "2.00",
+      "id": "urn:uuid:5bd74879-97cd-54f0-abe7-0b02c319dd00",
+      "graph": "<https://example.org/subject> <https://schema.org/value> \"2.00\"^^<http://www.w3.org/2001/XMLSchema#decimal> .\n"
+    },
+    {
+      "datatype": "decimal",
+      "value": "-0.50",
+      "accepted": true,
+      "assertion": "<https://example.org/subject> schema:value \"-0.50\"^^xsd:decimal .",
+      "normalized": "-0.50",
+      "id": "urn:uuid:2a45a81b-594d-5d0b-aa65-a5143759b6d1",
+      "graph": "<https://example.org/subject> <https://schema.org/value> \"-0.50\"^^<http://www.w3.org/2001/XMLSchema#decimal> .\n"
+    },
+    {
+      "datatype": "decimal",
+      "value": "0.00500",
+      "accepted": true,
+      "assertion": "<https://example.org/subject> schema:value \"0.00500\"^^xsd:decimal .",
+      "normalized": "0.00500",
+      "id": "urn:uuid:09afb888-8e24-5ebe-98ac-aea3b8da1fa6",
+      "graph": "<https://example.org/subject> <https://schema.org/value> \"0.00500\"^^<http://www.w3.org/2001/XMLSchema#decimal> .\n"
+    },
+    {
+      "datatype": "decimal",
+      "value": "12345678901234567890.123456789000",
+      "accepted": true,
+      "assertion": "<https://example.org/subject> schema:value \"12345678901234567890.123456789000\"^^xsd:decimal .",
+      "normalized": "12345678901234567890.123456789000",
+      "id": "urn:uuid:b58de0ab-f1b3-5250-b78d-f2d885af95d8",
+      "graph": "<https://example.org/subject> <https://schema.org/value> \"12345678901234567890.123456789000\"^^<http://www.w3.org/2001/XMLSchema#decimal> .\n"
+    },
+    {
+      "datatype": "decimal",
+      "value": "",
+      "accepted": false,
+      "assertion": "<https://example.org/subject> schema:value \"\"^^xsd:decimal .",
+      "normalized": "",
+      "id": "urn:uuid:4f7813df-b4ed-5d25-8e89-e6c81831b5bc",
+      "graph": "<https://example.org/subject> <https://schema.org/value> \"\"^^<http://www.w3.org/2001/XMLSchema#decimal> .\n"
+    },
+    {
+      "datatype": "decimal",
+      "value": "00",
+      "accepted": false,
+      "assertion": "<https://example.org/subject> schema:value \"00\"^^xsd:decimal .",
+      "normalized": "0",
+      "id": "urn:uuid:e809bab0-536a-58bf-951e-e2f5d5ab717b",
+      "graph": "<https://example.org/subject> <https://schema.org/value> \"0\"^^<http://www.w3.org/2001/XMLSchema#decimal> .\n"
+    },
+    {
+      "datatype": "decimal",
+      "value": "-00",
+      "accepted": false,
+      "assertion": "<https://example.org/subject> schema:value \"-00\"^^xsd:decimal .",
+      "normalized": "-0",
+      "id": "urn:uuid:064fb0ec-82c9-59b4-8a0f-c5a33dc0f3ab",
+      "graph": "<https://example.org/subject> <https://schema.org/value> \"-0\"^^<http://www.w3.org/2001/XMLSchema#decimal> .\n"
+    },
+    {
+      "datatype": "decimal",
+      "value": "+1",
+      "accepted": false,
+      "assertion": "<https://example.org/subject> schema:value \"+1\"^^xsd:decimal .",
+      "normalized": "1",
+      "id": "urn:uuid:641b4147-429d-50fd-b439-4356fc8cfbde",
+      "graph": "<https://example.org/subject> <https://schema.org/value> \"1\"^^<http://www.w3.org/2001/XMLSchema#decimal> .\n"
+    },
+    {
+      "datatype": "decimal",
+      "value": "1.",
+      "accepted": false,
+      "assertion": "<https://example.org/subject> schema:value \"1.\"^^xsd:decimal .",
+      "normalized": "1",
+      "id": "urn:uuid:641b4147-429d-50fd-b439-4356fc8cfbde",
+      "graph": "<https://example.org/subject> <https://schema.org/value> \"1\"^^<http://www.w3.org/2001/XMLSchema#decimal> .\n"
+    },
+    {
+      "datatype": "decimal",
+      "value": ".5",
+      "accepted": false,
+      "assertion": "<https://example.org/subject> schema:value \".5\"^^xsd:decimal .",
+      "normalized": "0.5",
+      "id": "urn:uuid:92bf2c34-5fe4-57ab-9ab1-7ac9a603e6cb",
+      "graph": "<https://example.org/subject> <https://schema.org/value> \"0.5\"^^<http://www.w3.org/2001/XMLSchema#decimal> .\n"
+    },
+    {
+      "datatype": "decimal",
+      "value": "-.50",
+      "accepted": false,
+      "assertion": "<https://example.org/subject> schema:value \"-.50\"^^xsd:decimal .",
+      "normalized": "-0.50",
+      "id": "urn:uuid:2a45a81b-594d-5d0b-aa65-a5143759b6d1",
+      "graph": "<https://example.org/subject> <https://schema.org/value> \"-0.50\"^^<http://www.w3.org/2001/XMLSchema#decimal> .\n"
+    },
+    {
+      "datatype": "decimal",
+      "value": "+1.00",
+      "accepted": false,
+      "assertion": "<https://example.org/subject> schema:value \"+1.00\"^^xsd:decimal .",
+      "normalized": "1.00",
+      "id": "urn:uuid:6724cbf6-4823-5a0d-9f43-fe3c28bf442b",
+      "graph": "<https://example.org/subject> <https://schema.org/value> \"1.00\"^^<http://www.w3.org/2001/XMLSchema#decimal> .\n"
+    },
+    {
+      "datatype": "decimal",
+      "value": "01.00",
+      "accepted": false,
+      "assertion": "<https://example.org/subject> schema:value \"01.00\"^^xsd:decimal .",
+      "normalized": "1.00",
+      "id": "urn:uuid:6724cbf6-4823-5a0d-9f43-fe3c28bf442b",
+      "graph": "<https://example.org/subject> <https://schema.org/value> \"1.00\"^^<http://www.w3.org/2001/XMLSchema#decimal> .\n"
+    },
+    {
+      "datatype": "decimal",
+      "value": "-000.00",
+      "accepted": false,
+      "assertion": "<https://example.org/subject> schema:value \"-000.00\"^^xsd:decimal .",
+      "normalized": "-0.00",
+      "id": "urn:uuid:2ce8a4dc-2416-50fd-9b70-ab8f545fcc71",
+      "graph": "<https://example.org/subject> <https://schema.org/value> \"-0.00\"^^<http://www.w3.org/2001/XMLSchema#decimal> .\n"
+    },
+    {
+      "datatype": "decimal",
+      "value": " 1",
+      "accepted": false,
+      "assertion": "<https://example.org/subject> schema:value \" 1\"^^xsd:decimal .",
+      "normalized": "1",
+      "id": "urn:uuid:641b4147-429d-50fd-b439-4356fc8cfbde",
+      "graph": "<https://example.org/subject> <https://schema.org/value> \"1\"^^<http://www.w3.org/2001/XMLSchema#decimal> .\n"
+    },
+    {
+      "datatype": "decimal",
+      "value": "1 ",
+      "accepted": false,
+      "assertion": "<https://example.org/subject> schema:value \"1 \"^^xsd:decimal .",
+      "normalized": "1",
+      "id": "urn:uuid:641b4147-429d-50fd-b439-4356fc8cfbde",
+      "graph": "<https://example.org/subject> <https://schema.org/value> \"1\"^^<http://www.w3.org/2001/XMLSchema#decimal> .\n"
+    },
+    {
+      "datatype": "decimal",
+      "value": "1\n",
+      "accepted": false,
+      "assertion": "<https://example.org/subject> schema:value \"1\\n\"^^xsd:decimal .",
+      "normalized": "1",
+      "id": "urn:uuid:641b4147-429d-50fd-b439-4356fc8cfbde",
+      "graph": "<https://example.org/subject> <https://schema.org/value> \"1\"^^<http://www.w3.org/2001/XMLSchema#decimal> .\n"
+    },
+    {
+      "datatype": "decimal",
+      "value": "1\r",
+      "accepted": false,
+      "assertion": "<https://example.org/subject> schema:value \"1\\r\"^^xsd:decimal .",
+      "normalized": "1",
+      "id": "urn:uuid:641b4147-429d-50fd-b439-4356fc8cfbde",
+      "graph": "<https://example.org/subject> <https://schema.org/value> \"1\"^^<http://www.w3.org/2001/XMLSchema#decimal> .\n"
+    },
+    {
+      "datatype": "decimal",
+      "value": "1\t",
+      "accepted": false,
+      "assertion": "<https://example.org/subject> schema:value \"1\\t\"^^xsd:decimal .",
+      "normalized": "1",
+      "id": "urn:uuid:641b4147-429d-50fd-b439-4356fc8cfbde",
+      "graph": "<https://example.org/subject> <https://schema.org/value> \"1\"^^<http://www.w3.org/2001/XMLSchema#decimal> .\n"
+    },
+    {
+      "datatype": "decimal",
+      "value": "1E3",
+      "accepted": false,
+      "assertion": "<https://example.org/subject> schema:value \"1E3\"^^xsd:decimal .",
+      "normalized": "1000",
+      "id": "urn:uuid:3107a3ea-7749-546e-b9ad-03f6b5e3849b",
+      "graph": "<https://example.org/subject> <https://schema.org/value> \"1000\"^^<http://www.w3.org/2001/XMLSchema#decimal> .\n"
+    },
+    {
+      "datatype": "decimal",
+      "value": "1e-3",
+      "accepted": false,
+      "assertion": "<https://example.org/subject> schema:value \"1e-3\"^^xsd:decimal .",
+      "normalized": "0.001",
+      "id": "urn:uuid:120ed451-e22c-5eaf-ad1c-412441705c01",
+      "graph": "<https://example.org/subject> <https://schema.org/value> \"0.001\"^^<http://www.w3.org/2001/XMLSchema#decimal> .\n"
+    },
+    {
+      "datatype": "decimal",
+      "value": "NaN",
+      "accepted": false,
+      "assertion": "<https://example.org/subject> schema:value \"NaN\"^^xsd:decimal .",
+      "normalized": "NaN",
+      "id": "urn:uuid:7df8b98b-70ab-5da5-b48d-9d2a785fd5c3",
+      "graph": "<https://example.org/subject> <https://schema.org/value> \"NaN\"^^<http://www.w3.org/2001/XMLSchema#decimal> .\n"
+    },
+    {
+      "datatype": "decimal",
+      "value": "INF",
+      "accepted": false,
+      "assertion": "<https://example.org/subject> schema:value \"INF\"^^xsd:decimal .",
+      "normalized": "Infinity",
+      "id": "urn:uuid:52906e1b-4761-5a3a-9d3d-a2dbcc0ed990",
+      "graph": "<https://example.org/subject> <https://schema.org/value> \"Infinity\"^^<http://www.w3.org/2001/XMLSchema#decimal> .\n"
+    },
+    {
+      "datatype": "decimal",
+      "value": "Infinity",
+      "accepted": false,
+      "assertion": "<https://example.org/subject> schema:value \"Infinity\"^^xsd:decimal .",
+      "normalized": "Infinity",
+      "id": "urn:uuid:52906e1b-4761-5a3a-9d3d-a2dbcc0ed990",
+      "graph": "<https://example.org/subject> <https://schema.org/value> \"Infinity\"^^<http://www.w3.org/2001/XMLSchema#decimal> .\n"
+    },
+    {
+      "datatype": "decimal",
+      "value": "-Infinity",
+      "accepted": false,
+      "assertion": "<https://example.org/subject> schema:value \"-Infinity\"^^xsd:decimal .",
+      "normalized": "-Infinity",
+      "id": "urn:uuid:19ca2a22-3817-5d1a-9e3d-5b40a7b42fd7",
+      "graph": "<https://example.org/subject> <https://schema.org/value> \"-Infinity\"^^<http://www.w3.org/2001/XMLSchema#decimal> .\n"
+    },
+    {
+      "datatype": "decimal",
+      "value": "invalid",
+      "accepted": false,
+      "assertion": "<https://example.org/subject> schema:value \"invalid\"^^xsd:decimal .",
+      "normalized": "invalid",
+      "id": "urn:uuid:83c53353-1668-5ba6-b724-3a366c52d910",
+      "graph": "<https://example.org/subject> <https://schema.org/value> \"invalid\"^^<http://www.w3.org/2001/XMLSchema#decimal> .\n"
+    },
+    {
+      "datatype": "decimal",
+      "value": "1_000",
+      "accepted": false,
+      "assertion": "<https://example.org/subject> schema:value \"1_000\"^^xsd:decimal .",
+      "normalized": "1000",
+      "id": "urn:uuid:3107a3ea-7749-546e-b9ad-03f6b5e3849b",
+      "graph": "<https://example.org/subject> <https://schema.org/value> \"1000\"^^<http://www.w3.org/2001/XMLSchema#decimal> .\n"
+    },
+    {
+      "datatype": "decimal",
+      "value": "\uff11",
+      "accepted": false,
+      "assertion": "<https://example.org/subject> schema:value \"\uff11\"^^xsd:decimal .",
+      "normalized": "1",
+      "id": "urn:uuid:641b4147-429d-50fd-b439-4356fc8cfbde",
+      "graph": "<https://example.org/subject> <https://schema.org/value> \"1\"^^<http://www.w3.org/2001/XMLSchema#decimal> .\n"
+    },
+    {
+      "datatype": "boolean",
+      "value": "true",
+      "accepted": true,
+      "assertion": "<https://example.org/subject> schema:value \"true\"^^xsd:boolean .",
+      "normalized": "true",
+      "id": "urn:uuid:6b7db6ae-e484-58dd-aefe-667f9dce32ea",
+      "graph": "<https://example.org/subject> <https://schema.org/value> \"true\"^^<http://www.w3.org/2001/XMLSchema#boolean> .\n"
+    },
+    {
+      "datatype": "boolean",
+      "value": "false",
+      "accepted": true,
+      "assertion": "<https://example.org/subject> schema:value \"false\"^^xsd:boolean .",
+      "normalized": "false",
+      "id": "urn:uuid:5dfd10f4-c7be-5181-8b57-c5132f55f159",
+      "graph": "<https://example.org/subject> <https://schema.org/value> \"false\"^^<http://www.w3.org/2001/XMLSchema#boolean> .\n"
+    },
+    {
+      "datatype": "boolean",
+      "value": "",
+      "accepted": false,
+      "assertion": "<https://example.org/subject> schema:value \"\"^^xsd:boolean .",
+      "normalized": "false",
+      "id": "urn:uuid:5dfd10f4-c7be-5181-8b57-c5132f55f159",
+      "graph": "<https://example.org/subject> <https://schema.org/value> \"false\"^^<http://www.w3.org/2001/XMLSchema#boolean> .\n"
+    },
+    {
+      "datatype": "boolean",
+      "value": "TRUE",
+      "accepted": false,
+      "assertion": "<https://example.org/subject> schema:value \"TRUE\"^^xsd:boolean .",
+      "normalized": "true",
+      "id": "urn:uuid:6b7db6ae-e484-58dd-aefe-667f9dce32ea",
+      "graph": "<https://example.org/subject> <https://schema.org/value> \"true\"^^<http://www.w3.org/2001/XMLSchema#boolean> .\n"
+    },
+    {
+      "datatype": "boolean",
+      "value": "FALSE",
+      "accepted": false,
+      "assertion": "<https://example.org/subject> schema:value \"FALSE\"^^xsd:boolean .",
+      "normalized": "false",
+      "id": "urn:uuid:5dfd10f4-c7be-5181-8b57-c5132f55f159",
+      "graph": "<https://example.org/subject> <https://schema.org/value> \"false\"^^<http://www.w3.org/2001/XMLSchema#boolean> .\n"
+    },
+    {
+      "datatype": "boolean",
+      "value": "True",
+      "accepted": false,
+      "assertion": "<https://example.org/subject> schema:value \"True\"^^xsd:boolean .",
+      "normalized": "true",
+      "id": "urn:uuid:6b7db6ae-e484-58dd-aefe-667f9dce32ea",
+      "graph": "<https://example.org/subject> <https://schema.org/value> \"true\"^^<http://www.w3.org/2001/XMLSchema#boolean> .\n"
+    },
+    {
+      "datatype": "boolean",
+      "value": "False",
+      "accepted": false,
+      "assertion": "<https://example.org/subject> schema:value \"False\"^^xsd:boolean .",
+      "normalized": "false",
+      "id": "urn:uuid:5dfd10f4-c7be-5181-8b57-c5132f55f159",
+      "graph": "<https://example.org/subject> <https://schema.org/value> \"false\"^^<http://www.w3.org/2001/XMLSchema#boolean> .\n"
+    },
+    {
+      "datatype": "boolean",
+      "value": "1",
+      "accepted": false,
+      "assertion": "<https://example.org/subject> schema:value \"1\"^^xsd:boolean .",
+      "normalized": "true",
+      "id": "urn:uuid:6b7db6ae-e484-58dd-aefe-667f9dce32ea",
+      "graph": "<https://example.org/subject> <https://schema.org/value> \"true\"^^<http://www.w3.org/2001/XMLSchema#boolean> .\n"
+    },
+    {
+      "datatype": "boolean",
+      "value": "0",
+      "accepted": false,
+      "assertion": "<https://example.org/subject> schema:value \"0\"^^xsd:boolean .",
+      "normalized": "false",
+      "id": "urn:uuid:5dfd10f4-c7be-5181-8b57-c5132f55f159",
+      "graph": "<https://example.org/subject> <https://schema.org/value> \"false\"^^<http://www.w3.org/2001/XMLSchema#boolean> .\n"
+    },
+    {
+      "datatype": "boolean",
+      "value": "yes",
+      "accepted": false,
+      "assertion": "<https://example.org/subject> schema:value \"yes\"^^xsd:boolean .",
+      "normalized": "false",
+      "id": "urn:uuid:5dfd10f4-c7be-5181-8b57-c5132f55f159",
+      "graph": "<https://example.org/subject> <https://schema.org/value> \"false\"^^<http://www.w3.org/2001/XMLSchema#boolean> .\n"
+    },
+    {
+      "datatype": "boolean",
+      "value": " true",
+      "accepted": false,
+      "assertion": "<https://example.org/subject> schema:value \" true\"^^xsd:boolean .",
+      "normalized": "false",
+      "id": "urn:uuid:5dfd10f4-c7be-5181-8b57-c5132f55f159",
+      "graph": "<https://example.org/subject> <https://schema.org/value> \"false\"^^<http://www.w3.org/2001/XMLSchema#boolean> .\n"
+    },
+    {
+      "datatype": "boolean",
+      "value": "false ",
+      "accepted": false,
+      "assertion": "<https://example.org/subject> schema:value \"false \"^^xsd:boolean .",
+      "normalized": "false",
+      "id": "urn:uuid:5dfd10f4-c7be-5181-8b57-c5132f55f159",
+      "graph": "<https://example.org/subject> <https://schema.org/value> \"false\"^^<http://www.w3.org/2001/XMLSchema#boolean> .\n"
+    },
+    {
+      "datatype": "boolean",
+      "value": "true\n",
+      "accepted": false,
+      "assertion": "<https://example.org/subject> schema:value \"true\\n\"^^xsd:boolean .",
+      "normalized": "false",
+      "id": "urn:uuid:5dfd10f4-c7be-5181-8b57-c5132f55f159",
+      "graph": "<https://example.org/subject> <https://schema.org/value> \"false\"^^<http://www.w3.org/2001/XMLSchema#boolean> .\n"
+    },
+    {
+      "datatype": "boolean",
+      "value": "false\r",
+      "accepted": false,
+      "assertion": "<https://example.org/subject> schema:value \"false\\r\"^^xsd:boolean .",
+      "normalized": "false",
+      "id": "urn:uuid:5dfd10f4-c7be-5181-8b57-c5132f55f159",
+      "graph": "<https://example.org/subject> <https://schema.org/value> \"false\"^^<http://www.w3.org/2001/XMLSchema#boolean> .\n"
+    },
+    {
+      "datatype": "boolean",
+      "value": "true\t",
+      "accepted": false,
+      "assertion": "<https://example.org/subject> schema:value \"true\\t\"^^xsd:boolean .",
+      "normalized": "false",
+      "id": "urn:uuid:5dfd10f4-c7be-5181-8b57-c5132f55f159",
+      "graph": "<https://example.org/subject> <https://schema.org/value> \"false\"^^<http://www.w3.org/2001/XMLSchema#boolean> .\n"
+    }
+  ]
+}
