@@ -9,7 +9,7 @@
    and RFC 4180 CRLF separators; reject bare CR separators and malformed quoting.
 2. **Missing and ambiguous fields** (TSK-L6): require only TYPE and CONTENT, as
    explicitly specified; absent other columns behave as empty. Default empty
-   INDENT to 1. Reject duplicate headers, inconsistent widths, empty task/section
+   INDENT to 1. Reject duplicate known headers, inconsistent widths, empty task/section
    titles, invalid priorities, and invalid dates/zones with typed errors. Ignore
    extra columns. Reset the parent stack at sections; notes attach to the last
    task in file order, even across sections or skipped rows.
@@ -27,7 +27,9 @@
    underscore, hyphen), preserving case and duplicates. Leave markdown, escaped
    tokens, emails, links and code spans intact. Labels beside markdown punctuation
    remain literal to avoid changing markup. Durations must be positive finite
-   decimal amounts with the exact unit minute/day; a unit without an amount fails.
+   decimal amounts that round-trip without precision loss/exponent notation, with
+   the exact unit minute/day; a unit without an amount fails. Accept IANA names
+   and links supported by Intl, but reject non-IANA abbreviations such as PST.
 
 These choices allow implementation without a blocking design decision. No UI is
 built, so visual fixture routes, screenshots and browser checks do not apply.
