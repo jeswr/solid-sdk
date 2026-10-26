@@ -281,6 +281,25 @@ describe("calendar gap detection", () => {
     ).toEqual([]);
   });
 
+  it.each<BucketOptions["period"]>([
+    "day",
+    "week",
+    "month",
+  ])("enforces supported boundary years for %s gaps", (period) => {
+    const options = { ...utc, period };
+    for (const date of ["0000-01-01", "0000-12-31", "+010000-01-01"]) {
+      expect(() => detectGaps([], options, { start: date, end: date })).toThrow(RangeError);
+      expect(() => detectGaps([], options, { start: "0001-01-01", end: date })).toThrow(
+        "Expected a valid Gregorian YYYY-MM-DD date from 0001 to 9999",
+      );
+    }
+    expect(detectGaps([], options, { start: "0001-01-01", end: "0001-01-01" })).toEqual([
+      "0001-01-01",
+    ]);
+    const lastKey = { day: "9999-12-31", week: "9999-12-27", month: "9999-12-01" }[period];
+    expect(detectGaps([], options, { start: "9999-12-31", end: "9999-12-31" })).toEqual([lastKey]);
+  });
+
   it("rejects reversed, malformed and impossible dates and invalid observations", () => {
     for (const start of ["invalid", "2024-2-01", "2023-02-29", "2024-13-01"]) {
       expect(() => detectGaps([], utc, { start, end: "2024-03-01" })).toThrow(RangeError);

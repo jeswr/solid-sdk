@@ -11,11 +11,11 @@ export interface BucketOptions {
 export function calendarDate(key: string): Date {
   const date = new Date(`${key}T00:00:00.000Z`);
   if (
-    !/^\d{4}-\d{2}-\d{2}$/.test(key) ||
+    !/^(?!0000)\d{4}-\d{2}-\d{2}$/.test(key) ||
     !Number.isFinite(date.getTime()) ||
     date.toISOString().slice(0, 10) !== key
   ) {
-    throw new RangeError("Expected a valid Gregorian YYYY-MM-DD date");
+    throw new RangeError("Expected a valid Gregorian YYYY-MM-DD date from 0001 to 9999");
   }
   return date;
 }
