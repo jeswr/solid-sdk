@@ -40,8 +40,10 @@ export function parameter(params: URLSearchParams, name: string): string {
 }
 
 export function unique(params: URLSearchParams): void {
+  const names = new Set<string>();
   for (const name of params.keys()) {
-    if (params.getAll(name).length !== 1) throw new OAuthError("invalid_request");
+    if (names.has(name)) throw new OAuthError("invalid_request");
+    names.add(name);
   }
 }
 
