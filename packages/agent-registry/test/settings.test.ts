@@ -285,6 +285,41 @@ describe("privacy and settings model", () => {
       expect(account).toMatchObject({ bindingState: "setup-required", identityConflicts: [] });
   });
   it.each([
+    ["matrix", "@fixture:matrix.example", "@Other:Elsewhere.example"],
+    ["matrix_bot", "@fixture:matrix.example", "@Other:Elsewhere.example"],
+    ["phone_messages", "+12025550100", "+1 (202) 555-0101"],
+    ["signal", "+1 202 555 0100", "+12025550101"],
+  ])("retains notes-only %s alternatives with channel normalization", (channel, own, other) => {
+    const snap = parseSnapshot({
+      version: 1,
+      accounts: [
+        {
+          id: "fixture-account",
+          channel,
+          provider: "fixture_provider",
+          organization: "personal",
+          identifiers: { primary: own },
+          connector: { target: "fixture", setup_status: "planned" },
+        },
+      ],
+      notes: [`Identity conflict: (${own}) versus "${other}". Unresolved.`],
+    });
+    const s = inventorySettings(snap, salt);
+    expect(s.connections[0]).toMatchObject({
+      channelHandles: [hashHandle(own, salt, channel)],
+      bindingState: "error",
+      identityConflicts: [
+        {
+          kind: "identity-mismatch",
+          handleHashes: [hashHandle(own, salt, channel), hashHandle(other, salt, channel)].sort(),
+        },
+      ],
+    });
+    expect(s.unmatchedEvidence).toEqual([]);
+    expect(JSON.stringify(s)).not.toContain(own);
+    expect(JSON.stringify(s)).not.toContain(other);
+  });
+  it.each([
     "matrix",
     "matrix_bot",
   ])("rejects encoded %s references regardless of case", (channel) => {

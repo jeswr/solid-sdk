@@ -241,6 +241,14 @@ function noteIdentifiers(note: string): string[] {
     handle.replace(/[.:]+$/u, "").replace(/^(['`])(.*)\1$/u, "$2"),
   );
 }
+/** Discover explicit identities only; Matrix bot MXIDs use the same case-preserving rules. */
+function noteIdentityChannel(handle: string): string | undefined {
+  if (/^[\p{L}\p{M}\p{N}.!#$%&'*+/=?^_`{|}~-]+@[\p{L}\p{N}.-]+\.[\p{L}]{2,}$/u.test(handle))
+    return "email";
+  if (/^@[^@\s:]+:[\p{L}\p{N}.-]+(?::\d+)?$/u.test(handle)) return "matrix";
+  if (/^\+\d[\d ().-]{5,}\d$/u.test(handle)) return "phone_messages";
+  return undefined;
+}
 /** Build privacy-safe settings, applying only the documented ODI correction and Telegram addition. */
 export function inventorySettings(snapshot: RegistrySnapshot, salt: Uint8Array): Settings {
   const accounts = [...snapshot.accounts];
@@ -259,11 +267,10 @@ export function inventorySettings(snapshot: RegistrySnapshot, salt: Uint8Array):
     ...accounts.flatMap((a) => a.handles.map((handle) => ({ handle, channel: a.channel }))),
     ...snapshot.evidence.map((e) => ({ handle: e.identifier, channel: e.channel })),
     ...notes.flatMap(({ identifiers }) =>
-      identifiers
-        .filter((handle) =>
-          /^[\p{L}\p{M}\p{N}.!#$%&'*+/=?^_`{|}~-]+@[\p{L}\p{N}.-]+\.[\p{L}]{2,}$/u.test(handle),
-        )
-        .map((handle) => ({ handle, channel: "email" })),
+      identifiers.flatMap((handle) => {
+        const channel = noteIdentityChannel(handle);
+        return channel ? [{ handle, channel }] : [];
+      }),
     ),
   ].map(({ handle, channel }) => ({ handle: normaliseHandle(handle, channel), channel }));
   // Redaction deliberately checks case-insensitively, independently of identity matching.

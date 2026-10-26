@@ -157,6 +157,53 @@ describe("synthetic registry import", () => {
       ).toEqual(expected);
     }
   });
+  it.each([
+    ["matrix", "@fixture:matrix.example", "@Other:Elsewhere.example"],
+    ["matrix_bot", "@fixture:matrix.example", "@Other:Elsewhere.example"],
+    ["phone_messages", "+1 (202) 555-0100", "+1 202 555 0101"],
+  ])("writes both %s conflict identities from notes as hashes in RDF", async (channel, own, other) => {
+    const ports = harness(
+      stringify({
+        version: 1,
+        accounts: [
+          {
+            id: "fixture-account",
+            channel,
+            provider: "fixture_provider",
+            organization: "personal",
+            identifiers: { primary: own },
+            connector: { target: "fixture", setup_status: "planned" },
+          },
+        ],
+        notes: [`Identity conflict: (${own}) versus "${other}".`],
+      }),
+    );
+    const report = await importRegistry(config, ports);
+    const account = report.settings.connections[0];
+    if (!account) throw new Error("Fixture account absent");
+    const salt = await ports.salt.getSalt();
+    const expected = [
+      {
+        kind: "identity-mismatch",
+        handleHashes: [hashHandle(own, salt, channel), hashHandle(other, salt, channel)].sort(),
+      },
+    ];
+    expect(account.bindingState).toBe("error");
+    expect(account.identityConflicts).toEqual(expected);
+    const url = `${config.storageRoot}agent/accounts/${account.id}.ttl`;
+    const dataset = ports.storage.resources.get(url)?.dataset;
+    expect(
+      dataset
+        ?.getObjects(term(url), term(`${AGENT}identityConflict`), null)
+        .map((v) => JSON.parse(v.value)),
+    ).toEqual(expected);
+    expect(
+      dataset?.getObjects(term(url), term(`${AGENT}bindingState`), null).map((v) => v.value),
+    ).toEqual(["error"]);
+    const output = JSON.stringify({ report, resources: [...ports.storage.resources] });
+    expect(output).not.toContain(own);
+    expect(output).not.toContain(other);
+  });
   it("re-imports without duplicate resources or redundant content writes", async () => {
     const ports = harness();
     await importRegistry(config, ports);
