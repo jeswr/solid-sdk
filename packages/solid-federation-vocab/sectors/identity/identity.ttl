@@ -1,7 +1,7 @@
 # AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 #
-@prefix id:      <https://w3id.org/jeswr/sectors/identity#> .
-@prefix core:    <https://w3id.org/jeswr/core#> .
+@prefix id:      <https://jeswr.org/ns/sectors/identity#> .
+@prefix core:    <https://jeswr.org/ns/core#> .
 @prefix owl:     <http://www.w3.org/2002/07/owl#> .
 @prefix rdf:     <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
 @prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
@@ -40,14 +40,14 @@
 # Open-world by default; the SHACL profile carries the closed-world MUST/SHOULD.
 # =============================================================================
 
-<https://w3id.org/jeswr/sectors/identity> a owl:Ontology ;
+<https://jeswr.org/ns/sectors/identity> a owl:Ontology ;
     dcterms:title "Solid Identity & Profile Ontology (gUFO re-base)"@en ;
     rdfs:label "Solid Identity & Profile Ontology"@en ;
     vann:preferredNamespacePrefix "id" ;
-    vann:preferredNamespaceUri "https://w3id.org/jeswr/sectors/identity#" ;
-    owl:imports <https://w3id.org/jeswr/core> ;
-    owl:versionInfo "1.0.0" ;
-    owl:versionIRI <https://w3id.org/jeswr/sectors/identity/1.0.0> ;
+    vann:preferredNamespaceUri "https://jeswr.org/ns/sectors/identity#" ;
+    owl:imports <https://jeswr.org/ns/core> ;
+    owl:versionInfo "2.0.0" ;
+    owl:versionIRI <https://jeswr.org/ns/sectors/identity/2.0.0> ;
     dcterms:description """Personal identity & profile attributes for KYC reuse,
         tell-us-once, and verified claims, re-based onto the gUFO Core. Roots in
         core:Person (NaturalPerson SubKind), core:Identifier (the identifier
@@ -56,8 +56,8 @@
         structure as global abstract slots (§3.5) — no canonical 'the gender'.
         v1.0.0 is a BREAKING re-base of v0 (the meta-types change meaning), so a
         new MAJOR version. Aligns to vcard, schema:Person, ISO 3166 and the
-        eIDAS 2.0 PID attribute set in the companion alignments file."""@en ;
-    dcterms:modified "2026-06-13"^^xsd:date ;
+        eIDAS 2.0 PID attribute set in the companion alignments file. Version 2.0.0 rebases this ontology from its legacy w3id namespace to https://jeswr.org/ns/ (DECISIONS V1)."""@en ;
+    dcterms:modified "2026-10-25"^^xsd:date ;
     rdfs:comment "Re-based per R11 §4.2/§3.5."@en .
 
 # -----------------------------------------------------------------------------
@@ -336,13 +336,13 @@ id:Pronouns a owl:Class, gufo:Kind ;
 
 # =============================================================================
 # SECTOR MARKER — the IRI an app's fedapp:sector points at to declare it operates
-# in this sector (https://w3id.org/jeswr/fed#sector). A skos:Concept in the
+# in this sector (https://jeswr.org/ns/fed#sector). A skos:Concept in the
 # federation sector register; dereferences to this ontology.
 # =============================================================================
 
-<https://w3id.org/jeswr/sectors/identity#sector>
+<https://jeswr.org/ns/sectors/identity#sector>
     a <http://www.w3.org/2004/02/skos/core#Concept> ;
     rdfs:label "Identity & Profile sector"@en ;
     rdfs:comment "The Identity & Profile data sector. The value an app's fedapp:sector names in its Client Identifier Document to declare it operates over identity & profile data. Backed by this sector ontology."@en ;
-    rdfs:isDefinedBy <https://w3id.org/jeswr/sectors/identity> ;
+    rdfs:isDefinedBy <https://jeswr.org/ns/sectors/identity> ;
     skos:prefLabel "Identity & Profile"@en .

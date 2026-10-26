@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex GPT-5
 
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -76,11 +76,12 @@ afterEach(async () => {
 describe("parseSector", () => {
   it("projects the bookmarks node shape into typed cardinalities and RDF term kinds", async () => {
     const model = await parseSector(ONTOLOGY, SHAPES);
+    expect(model.prefixes.bookmark).toBe("https://jeswr.org/ns/sectors/bookmarks#");
     expect(model.shapes).toHaveLength(1);
     const shape = model.shapes[0];
     expect(shape).toMatchObject({
       className: "Bookmark",
-      targetClass: "https://w3id.org/jeswr/sectors/bookmarks#Bookmark",
+      targetClass: "https://jeswr.org/ns/sectors/bookmarks#Bookmark",
     });
 
     expect(shape?.properties).toEqual(
@@ -118,6 +119,12 @@ describe("parseSector", () => {
       packageName: "@jeswr/generated-bookmarks-sector-model",
     });
 
+    const committedFiles = (await readdir(COMMITTED, { recursive: true, withFileTypes: true }))
+      .filter((entry) => entry.isFile() && !entry.parentPath.includes("/dist"))
+      .map((entry) => join(entry.parentPath, entry.name).slice(COMMITTED.length + 1))
+      .sort();
+    expect(committedFiles).toEqual([...GENERATED_FILES].sort());
+
     for (const file of GENERATED_FILES) {
       const [actual, expected] = await Promise.all([
         readFile(join(outDir, file), "utf8"),
@@ -125,6 +132,20 @@ describe("parseSector", () => {
       ]);
       expect(actual, `${file} drifted from a fresh generation`).toBe(expected);
     }
+
+    const before = await Promise.all(
+      GENERATED_FILES.map((file) => readFile(join(outDir, file), "utf8")),
+    );
+    await generatePackage({
+      ontologyPath: ONTOLOGY,
+      shapesPath: SHAPES,
+      outDir,
+      packageName: "@jeswr/generated-bookmarks-sector-model",
+    });
+    const after = await Promise.all(
+      GENERATED_FILES.map((file) => readFile(join(outDir, file), "utf8")),
+    );
+    expect(after).toEqual(before);
   });
 
   it.each([

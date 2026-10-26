@@ -7,6 +7,7 @@
 // @rdfjs/wrapper mapping helpers. No `dataset.add(factory.quad(...))` and no
 // string-concatenated Turtle anywhere in this file.
 
+import type { DataFactory, DatasetCore } from "@rdfjs/types";
 import {
   DatasetWrapper,
   LiteralAs,
@@ -16,8 +17,8 @@ import {
   OptionalAs,
   OptionalFrom,
   SetFrom,
-  TermWrapper,
 } from "@rdfjs/wrapper";
+import { canonicalizeMoneyDataset, MoneyTerm } from "./canonical-vocab.js";
 import { FinClass, FinProp, PmClass, PmProp, RDF_TYPE } from "./vocab.js";
 
 /** The account-status phases, as a closed string union over the sector Phase partition. */
@@ -63,7 +64,7 @@ const TXN_CLASS: Record<TransactionKind, string> = {
  * `fin:MonetaryAmount` — a decimal value + an ISO 4217 currency code.
  * The value object reused by transactions, balances and holdings.
  */
-export class MonetaryAmount extends TermWrapper {
+export class MonetaryAmount extends MoneyTerm {
   /** The numeric value (`fin:amount`). */
   get amount(): number | undefined {
     return OptionalFrom.subjectPredicate(this, FinProp.amount, LiteralAs.number);
@@ -96,7 +97,7 @@ export class MonetaryAmount extends TermWrapper {
  * CreditAccount / InvestmentAccount sub-kinds). A reified relator: holder +
  * provider live in the profile, the account here carries kind, status and label.
  */
-export class FinancialAccount extends TermWrapper {
+export class FinancialAccount extends MoneyTerm {
   /** Live set of `rdf:type` IRIs. */
   get types(): Set<string> {
     return SetFrom.subjectPredicate(this, RDF_TYPE, NamedNodeAs.string, NamedNodeFrom.string);
@@ -161,7 +162,7 @@ export class FinancialAccount extends TermWrapper {
  * a money movement with a monetary amount, a posting time, an owning account,
  * and an optional category and counterparty.
  */
-export class Transaction extends TermWrapper {
+export class Transaction extends MoneyTerm {
   /** Live set of `rdf:type` IRIs. */
   get types(): Set<string> {
     return SetFrom.subjectPredicate(this, RDF_TYPE, NamedNodeAs.string, NamedNodeFrom.string);
@@ -234,7 +235,7 @@ export class Transaction extends TermWrapper {
 /**
  * `fin:Balance` — a point-in-time statement of the amount on an account.
  */
-export class Balance extends TermWrapper {
+export class Balance extends MoneyTerm {
   /** Live set of `rdf:type` IRIs. */
   get types(): Set<string> {
     return SetFrom.subjectPredicate(this, RDF_TYPE, NamedNodeAs.string, NamedNodeFrom.string);
@@ -274,7 +275,7 @@ export class Balance extends TermWrapper {
  * `fin:Holding` — a held position: a quantity of a financial instrument owned
  * within an investment account.
  */
-export class Holding extends TermWrapper {
+export class Holding extends MoneyTerm {
   /** Live set of `rdf:type` IRIs. */
   get types(): Set<string> {
     return SetFrom.subjectPredicate(this, RDF_TYPE, NamedNodeAs.string, NamedNodeFrom.string);
@@ -319,11 +320,10 @@ export class Holding extends TermWrapper {
 }
 
 /**
- * `pm:Category` — a user-defined spending category (an app-local concept; the
- * finance sector ontology has no category class). Categories are tagged onto
+ * `fin:BudgetCategory` — a user-defined spending category. Categories are tagged onto
  * transactions via `pm:category`.
  */
-export class Category extends TermWrapper {
+export class Category extends MoneyTerm {
   /** Live set of `rdf:type` IRIs. */
   get types(): Set<string> {
     return SetFrom.subjectPredicate(this, RDF_TYPE, NamedNodeAs.string, NamedNodeFrom.string);
@@ -337,7 +337,15 @@ export class Category extends TermWrapper {
     OptionalAs.object(this, PmProp.categoryLabel, value, LiteralFrom.string);
   }
 
-  /** Stamp this node as a `pm:Category` (call once when minting). */
+  /** The broader parent category (`skos:broader`). */
+  get parent(): string | undefined {
+    return OptionalFrom.subjectPredicate(this, PmProp.parent, NamedNodeAs.string);
+  }
+  set parent(value: string | undefined) {
+    OptionalAs.object(this, PmProp.parent, value, NamedNodeFrom.string);
+  }
+
+  /** Stamp this node as a `fin:BudgetCategory` (call once when minting). */
   markCategory(): void {
     this.types.add(PmClass.Category);
   }
@@ -350,6 +358,10 @@ export class Category extends TermWrapper {
  * DatasetWrapper (not reachable from one root term).
  */
 export class FinanceDocument extends DatasetWrapper {
+  constructor(dataset: DatasetCore, factory: DataFactory) {
+    super(canonicalizeMoneyDataset(dataset, factory), factory);
+  }
+
   /** Every `fin:FinancialAccount` subject in the document. */
   get accounts(): Iterable<FinancialAccount> {
     return this.instancesOf(FinClass.FinancialAccount, FinancialAccount);
@@ -375,7 +387,7 @@ export class FinanceDocument extends DatasetWrapper {
     return this.instancesOf(FinClass.MonetaryAmount, MonetaryAmount);
   }
 
-  /** Every `pm:Category` subject in the document. */
+  /** Every `fin:BudgetCategory` subject in the document. */
   get categories(): Iterable<Category> {
     return this.instancesOf(PmClass.Category, Category);
   }

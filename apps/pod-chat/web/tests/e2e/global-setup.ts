@@ -43,7 +43,7 @@ const ROOMS_CONTAINER = `${POD_ROOT}pod-chat/rooms/`;
 // vacuous 401 budget. parseRoom requires `<#it> a pc:ChatRoom` where pc: is the HTTPS
 // w3id namespace, and reads `as:name`/`dct:creator`/`dct:created` where as: is the HTTPS
 // w3.org form — both restated verbatim from src/vocab.ts here.
-const PC = "https://w3id.org/jeswr/pod-chat#";
+const PC = "https://jeswr.org/ns/pod-chat#";
 const AS = "https://www.w3.org/ns/activitystreams#";
 const DCT = "http://purl.org/dc/terms/";
 // The room COUNT is the regression knob: the 401 count must NOT scale with it.
@@ -169,7 +169,7 @@ export default async function globalSetup() {
       `${ROOMS_CONTAINER}room-${k}.ttl`,
       // The @jeswr/pod-chat data layer pins pc: to the HTTPS w3id namespace and as: to the
       // HTTPS w3.org form (src/vocab.ts); parseRoom only counts a resource as a room when
-      // `<#it> a https://w3id.org/jeswr/pod-chat#ChatRoom`. Seeding with a different scheme
+      // `<#it> a https://jeswr.org/ns/pod-chat#ChatRoom`. Seeding with a different scheme
       // makes every resource parse-but-not-a-room → an EMPTY room list (a vacuous 401
       // budget — the pod-photos gotcha). Use the EXACT schemes the accessors expect.
       `@prefix pc: <${PC}>.

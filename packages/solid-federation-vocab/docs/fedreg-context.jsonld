@@ -3,8 +3,8 @@
     "@version": 1.1,
     "@protected": true,
 
-    "fedreg": "https://w3id.org/jeswr/fedreg#",
-    "fedapp": "https://w3id.org/jeswr/fed#",
+    "fedreg": "https://jeswr.org/ns/fedreg#",
+    "fedapp": "https://jeswr.org/ns/fed#",
     "dcat": "http://www.w3.org/ns/dcat#",
     "dct": "http://purl.org/dc/terms/",
     "rdfs": "http://www.w3.org/2000/01/rdf-schema#",

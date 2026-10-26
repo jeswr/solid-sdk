@@ -1,7 +1,7 @@
 # AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 #
-@prefix eq:      <https://w3id.org/jeswr/sectors/equine#> .
-@prefix core:    <https://w3id.org/jeswr/core#> .
+@prefix eq:      <https://jeswr.org/ns/sectors/equine#> .
+@prefix core:    <https://jeswr.org/ns/core#> .
 @prefix owl:     <http://www.w3.org/2002/07/owl#> .
 @prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
 @prefix rdf:     <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
@@ -29,10 +29,12 @@
 # are load-bearing rdfs:subClassOf edges in equine.ttl, not annotations here.
 # =============================================================================
 
-<https://w3id.org/jeswr/sectors/equine/alignments> a owl:Ontology ;
+<https://jeswr.org/ns/sectors/equine/alignments> a owl:Ontology ;
+    dcterms:description "Version 2.0.0 rebases this ontology from its legacy w3id namespace to https://jeswr.org/ns/ (DECISIONS V1)."@en ;
+    owl:versionIRI <https://jeswr.org/ns/sectors/equine/alignments/2.0.0> ;
     dcterms:title "Solid Equine sector — external alignments"@en ;
-    owl:imports <https://w3id.org/jeswr/sectors/equine> ;
-    owl:versionInfo "0.1.0" ;
+    owl:imports <https://jeswr.org/ns/sectors/equine> ;
+    owl:versionInfo "2.0.0" ;
     rdfs:comment "Optional Mode-A bridge: the W3C Organization ontology for syndicates, schema.org for the price/amount predicates, and a broad DBpedia animal anchor for eq:Horse (schema.org has no animal class). External IRIs are real and governed by their bodies. Nothing is owl:imported into the reasoned closure."@en .
 
 dcterms:title a owl:AnnotationProperty .

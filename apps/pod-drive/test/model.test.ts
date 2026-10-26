@@ -16,7 +16,7 @@ const FULL = `
 @prefix posix: <http://www.w3.org/ns/posix/stat#> .
 @prefix dcterms: <http://purl.org/dc/terms/> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
-@prefix poddrive: <https://w3id.org/jeswr/pod-drive#> .
+@prefix poddrive: <https://jeswr.org/ns/pod-drive#> .
 
 <https://pod.example/drive/> a ldp:Container, ldp:BasicContainer, poddrive:DriveRoot ;
   ldp:contains

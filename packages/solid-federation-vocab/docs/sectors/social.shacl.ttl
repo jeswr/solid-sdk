@@ -1,8 +1,8 @@
 # AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 #
-@prefix social:  <https://w3id.org/jeswr/sectors/social#> .
-@prefix socsh:   <https://w3id.org/jeswr/sectors/social/shapes#> .
-@prefix core:    <https://w3id.org/jeswr/core#> .
+@prefix social:  <https://jeswr.org/ns/sectors/social#> .
+@prefix socsh:   <https://jeswr.org/ns/sectors/social/shapes#> .
+@prefix core:    <https://jeswr.org/ns/core#> .
 @prefix sh:      <http://www.w3.org/ns/shacl#> .
 @prefix owl:     <http://www.w3.org/2002/07/owl#> .
 @prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
@@ -19,16 +19,16 @@
 # Warning=SHOULD, Info=MAY); IMMUTABLE version IRI; additive.
 # =============================================================================
 
-<https://w3id.org/jeswr/sectors/social/profile> a prof:Profile ;
+<https://jeswr.org/ns/sectors/social/profile> a prof:Profile ;
     dcterms:title "Solid Social data-model profile (version-independent)"@en ;
-    dcterms:hasVersion <https://w3id.org/jeswr/sectors/social/profile/1.0.0> ;
+    dcterms:hasVersion <https://jeswr.org/ns/sectors/social/profile/1.0.0> ;
     rdfs:comment "Version-independent IRI resolving to the current Social profile. "@en .
 
-<https://w3id.org/jeswr/sectors/social/profile/1.0.0> a prof:Profile ;
+<https://jeswr.org/ns/sectors/social/profile/1.0.0> a prof:Profile ;
     dcterms:title "Solid Social data-model profile 1.0.0"@en ;
-    dcterms:isVersionOf <https://w3id.org/jeswr/sectors/social/profile> ;
+    dcterms:isVersionOf <https://jeswr.org/ns/sectors/social/profile> ;
     owl:versionInfo "1.0.0" ;
-    prof:isProfileOf <https://w3id.org/jeswr/sectors/social> ;
+    prof:isProfileOf <https://jeswr.org/ns/sectors/social> ;
     prof:hasToken "social-1.0.0" ;
     rdfs:comment "IMMUTABLE version IRI. Open shapes; sh:Violation=MUST, sh:Warning=SHOULD. "@en .
 
