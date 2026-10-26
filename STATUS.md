@@ -100,3 +100,47 @@ Commits for this round:
 
 `roborev status` remains unavailable (exit 127); the dispatcher must provide automated review.
 No unfinished implementation work or new open questions. No UI/screenshots apply.
+
+## Fix round 2 — generated zoned start overflow
+
+`Zone.resolve()` now returns the resolved instant without imposing the supported year range.
+Generated starts are range-checked after UNTIL/window filtering; explicit DTSTART, RDATE,
+and EXDATE still validate their resolved instants unconditionally. Visible occurrences
+continue to validate both endpoints. No dependencies, public API, or design changes.
+
+Regression tests cover the reviewed New York year-9999 start with and without UNTIL,
+and rejection of out-of-range explicit zoned dates at both supported date boundaries.
+The two generated-start cases failed with `invalid-date` before the fix.
+
+Validation for this round:
+
+- `pnpm --filter @jeswr/app-suite exec vitest run test/calendar-recurrence-validation.test.ts --coverage.enabled=false`
+  — before the fix: 2 expected regression failures, 97 passes.
+- `pnpm --filter @jeswr/app-suite exec vitest run test/calendar-recurrence.test.ts test/calendar-recurrence-validation.test.ts test/calendar-recurrence-busy.test.ts --coverage.include='src/apps/calendar/lib/recurrence/**/*.ts'`
+  — PASS: 124 tests; recurrence coverage 100% statements (194), branches (140),
+  functions (32), and lines (176).
+- `pnpm --filter @jeswr/suite-ui run build` — PASS (existing app prerequisite).
+- `pnpm --filter @jeswr/app-suite run lint && pnpm --filter @jeswr/app-suite run build && pnpm --filter @jeswr/app-suite run typecheck && pnpm --filter @jeswr/app-suite run test`
+  — PASS: 30 files / 1,301 tests, all configured coverage metrics 100%. Lint retains
+  21 existing Money warnings. An initial lint attempt identified formatting in the new
+  test; it was formatted before the successful chain.
+- `pnpm run lint:root` — PASS.
+- `TURBO_SCM_BASE=f73aa3c3477804925d5256219fd975bd7176554d pnpm run gate`
+  — PASS: 6/6 Turbo tasks, 0 cached.
+- `pnpm run gate:full` — FAIL after 209 successful / 290 planned tasks (5 cached),
+  in 1m15s, at the same two pre-existing `@jeswr/federation-codegen#test` failures:
+  `test/generator.test.ts:81` expects the old bookmarks namespace, and line 126
+  detects `ontology.ttl` drift. The diff relative to `f73aa3c34778` is empty for
+  `tools/federation-codegen` and `packages/solid-federation-vocab`. Remaining tasks
+  were aborted; unrelated repairs are outside this fix round.
+- `git diff --check` — PASS.
+
+Commits for this round:
+
+- `6fca6d76` — `fix(calendar): filter generated starts before range validation`
+  (fix and regression tests).
+- Final `docs(calendar): record zoned boundary fix validation` commit — this report.
+
+`roborev status` remains unavailable (exit 127); the dispatcher must provide automated review.
+No dependencies added or `check:packages` calls needed. No unfinished implementation work,
+new open questions, UI changes, or screenshots.
