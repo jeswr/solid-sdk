@@ -61,7 +61,7 @@ export class IdpPicker extends HTMLElement implements IssuerProvider {
   #webIdButton!: HTMLButtonElement;
   #webIdPicker: WebIdPicker | null = null;
   #suggestion = "";
-  #request?: Request;
+  #request: Request | undefined;
 
   /** Network options for WebID profile retrieval (non-reactive transport by default). */
   http?: HttpOptions;
@@ -105,47 +105,64 @@ export class IdpPicker extends HTMLElement implements IssuerProvider {
       { signal: request.signal },
       async (_) => {
         request.signal.throwIfAborted();
-        this.#request = request;
-        this.#input.value = this.#suggestion;
-        this.#code.innerText = request.url;
-        this.#dialog.returnValue = "";
-        this.#dialog.showModal();
+        const controller = new AbortController();
+        this.#request = new Request(request.clone(), {
+          signal: AbortSignal.any([request.signal, controller.signal]),
+        });
+        try {
+          this.#input.value = this.#suggestion;
+          this.#code.innerText = request.url;
+          this.#dialog.returnValue = "";
+          this.#webIdButton.disabled = this.#webIdPicker === null;
+          this.#dialog.showModal();
 
-        const { promise, reject, resolve } = Promise.withResolvers<URL>();
+          const { promise, reject, resolve } = Promise.withResolvers<URL>();
 
-        const onClose = () => {
-          request.signal.removeEventListener("abort", onAbort);
-          if (this.#dialog.returnValue !== "") {
-            resolve(new URL(this.#dialog.returnValue));
-          } else {
-            reject(new IssuerRequestCancelledError(request));
-          }
-        };
-        const onAbort = () => {
-          this.#dialog.removeEventListener("close", onClose);
-          this.#dialog.close();
-          reject(request.signal.reason);
-        };
+          const onClose = () => {
+            request.signal.removeEventListener("abort", onAbort);
+            if (this.#dialog.returnValue !== "") {
+              resolve(new URL(this.#dialog.returnValue));
+            } else {
+              reject(new IssuerRequestCancelledError(request));
+            }
+          };
+          const onAbort = () => {
+            this.#dialog.removeEventListener("close", onClose);
+            this.#dialog.close();
+            reject(request.signal.reason);
+          };
 
-        request.signal.addEventListener("abort", onAbort, onlyOnce);
-        this.#dialog.addEventListener("close", onClose, onlyOnce);
+          request.signal.addEventListener("abort", onAbort, onlyOnce);
+          this.#dialog.addEventListener("close", onClose, onlyOnce);
 
-        return await promise;
+          return await promise;
+        } finally {
+          controller.abort();
+          this.#request = undefined;
+        }
       },
     );
   }
 
   async #useWebId() {
+    const request = this.#request;
+    if (request === undefined || request.signal.aborted) return;
     this.#webIdButton.disabled = true;
     try {
-      const webid = await this.#webIdPicker!.getWebId(this.#request!);
-      const [issuer] = await issuersFromWebId(webid, this.#request!.signal, this.http);
+      const webid = await this.#webIdPicker!.getWebId(request);
+      if (request.signal.aborted) return;
+      const [issuer] = await issuersFromWebId(webid, request.signal, this.http);
+      if (request.signal.aborted) return;
       if (issuer === undefined)
         throw new ReactiveAuthenticationError("WebID profile lacks OIDC issuer");
       this.#input.value = issuer.href;
+    } catch (error) {
+      if (!request.signal.aborted) throw error;
     } finally {
-      this.#webIdButton.disabled = false;
-      this.#input.focus();
+      if (!request.signal.aborted) {
+        this.#webIdButton.disabled = false;
+        this.#input.focus();
+      }
     }
   }
 }

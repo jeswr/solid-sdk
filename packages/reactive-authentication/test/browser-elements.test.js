@@ -212,7 +212,25 @@ test("issuer picker confirms suggestions and handles cancellation and abort", as
   );
   const rejectedAbort = assert.rejects(aborted, /navigation/);
   controller.abort(new Error("navigation"));
+  await picker.node("#webid").emit("click");
   await rejectedAbort;
+});
+
+test("issuer picker ignores WebID actions outside an active operation", async () => {
+  const picker = new IdpPicker();
+  const getWebId = vi.fn();
+  picker.webIdPicker = { getWebId };
+  picker.connectedCallback();
+  const focus = vi.spyOn(picker.node("input"), "focus");
+  await picker.node("#webid").emit("click");
+  const pending = picker.getIssuer(new Request("https://pod.example/private"));
+  const rejected = assert.rejects(pending, { name: "IssuerRequestCancelledError" });
+  picker.node("dialog").close();
+  await rejected;
+  await picker.node("#webid").emit("click");
+  assert.equal(getWebId.mock.calls.length, 0);
+  assert.equal(focus.mock.calls.length, 0);
+  assert.equal(picker.node("#webid").disabled, false);
 });
 
 test("issuer picker reads a slotted WebID and restores controls after profile errors", async () => {
@@ -237,6 +255,112 @@ test("issuer picker reads a slotted WebID and restores controls after profile er
   picker.node("dialog").close();
   assert.equal((await pending).href, "https://issuer.example/");
 });
+
+for (const end of ["cancel", "abort", "confirm"]) {
+  for (const stage of ["webid", "profile", "profile-error"]) {
+    test(`issuer picker ignores stale ${stage} completion after ${end}`, async () => {
+      vi.stubGlobal("navigator", { locks: browserLocks });
+      const picker = new IdpPicker();
+      const oldWebId = Promise.withResolvers();
+      const oldProfile = Promise.withResolvers();
+      const profileStarted = Promise.withResolvers();
+      const nextWebId = Promise.withResolvers();
+      const childRequests = [];
+      picker.webIdPicker = {
+        getWebId: (request) => {
+          childRequests.push(request);
+          return childRequests.length === 1 ? oldWebId.promise : nextWebId.promise;
+        },
+      };
+      const profiles = [];
+      picker.http = {
+        fetch: async (url, init) => {
+          profiles.push({ url: url.href, signal: init.signal });
+          if (profiles.length === 1 && stage !== "webid") {
+            profileStarted.resolve();
+            return await oldProfile.promise;
+          }
+          return new Response(
+            "<https://next.example/#me> <http://www.w3.org/ns/solid/terms#oidcIssuer> <https://next-issuer.example/> .",
+          );
+        },
+      };
+      picker.connectedCallback();
+      const input = picker.node("input");
+      const button = picker.node("#webid");
+      const focus = vi.spyOn(input, "focus");
+      const dialog = picker.node("dialog");
+      const opened = [Promise.withResolvers(), Promise.withResolvers()];
+      let shown = 0;
+      vi.spyOn(dialog, "showModal").mockImplementation(() => {
+        dialog.open = true;
+        opened[shown++].resolve();
+      });
+      const controller = new AbortController();
+      const first = picker.getIssuer(
+        new Request("https://pod.example/first", { signal: controller.signal }),
+      );
+      const firstResult =
+        end === "confirm"
+          ? first
+          : assert.rejects(first, {
+              name: end === "cancel" ? "IssuerRequestCancelledError" : "AbortError",
+            });
+      await opened[0].promise;
+      const staleLookup = button.emit("click");
+      if (stage !== "webid") {
+        oldWebId.resolve(new URL("https://old.example/#me"));
+        await profileStarted.promise;
+      }
+      const second = picker.getIssuer(new Request("https://pod.example/second"));
+      if (end === "abort") controller.abort();
+      else {
+        if (end === "confirm") {
+          input.value = "https://confirmed.example/";
+          await picker.node("form").emit("submit");
+        }
+        dialog.close();
+      }
+      await firstResult;
+      await opened[1].promise;
+      assert.equal(childRequests[0].signal.aborted, true, "the completed lookup is cancelled");
+      if (stage !== "webid") {
+        assert.equal(profiles[0].signal.aborted, true, "profile retrieval uses the same context");
+      }
+      assert.equal(button.disabled, false, "the next dialog can start its own lookup");
+      input.value = "https://chosen.example/";
+      const currentLookup = button.emit("click");
+      assert.equal(childRequests[1].url, "https://pod.example/second");
+      assert.equal(childRequests[1].signal.aborted, false);
+      assert.equal(button.disabled, true);
+      if (stage === "webid") oldWebId.resolve(new URL("https://old.example/#me"));
+      else if (stage === "profile-error") oldProfile.reject(new Error("late profile failure"));
+      else {
+        oldProfile.resolve(
+          new Response(
+            "<https://old.example/#me> <http://www.w3.org/ns/solid/terms#oidcIssuer> <https://old-issuer.example/> .",
+          ),
+        );
+      }
+      await staleLookup;
+      assert.equal(input.value, "https://chosen.example/", "stale lookup cannot select an issuer");
+      assert.equal(button.disabled, true, "stale cleanup cannot enable the current lookup");
+      assert.equal(focus.mock.calls.length, 0, "stale cleanup cannot focus the current dialog");
+      assert.equal(profiles.length, stage === "webid" ? 0 : 1);
+      nextWebId.resolve(new URL("https://next.example/#me"));
+      await currentLookup;
+      assert.equal(input.value, "https://next-issuer.example/");
+      assert.equal(button.disabled, false);
+      assert.equal(focus.mock.calls.length, 1);
+      assert.equal(profiles.at(-1).signal.aborted, false);
+      await picker.node("form").emit("submit");
+      dialog.close();
+      assert.equal((await second).href, "https://next-issuer.example/");
+      assert.equal(childRequests[1].signal.aborted, true);
+      assert.equal(profiles.at(-1).signal.aborted, true);
+    });
+  }
+}
 
 function flow() {
   const element = new AuthorizationCodeFlow();
