@@ -57,7 +57,6 @@ class DescriptionNode extends TermWrapper {
     for (const quad of this.dataset.match(this as unknown as Term)) {
       if (!excluded.includes(quad.predicate.value)) predicates.add(quad.predicate.value);
     }
-    visited.add(this.value);
     return Object.fromEntries(
       [...predicates].map((predicate) => {
         const values = this.objects(predicate).map((term): unknown => {
@@ -71,6 +70,9 @@ class DescriptionNode extends TermWrapper {
           const id = blank ? `_:${term.value}` : term.value;
           if (visited.has(term.value) || depth >= 31) return { "@id": id };
           if (named && this.dataset.match(term as Term).size === 0) return term.value;
+          // Only nested expansions are recorded: entry roots stay expandable where nested, so a
+          // reference always has a definition inside some service or capability extra.
+          visited.add(term.value);
           // Keep the definition identifiable so later references can resolve to it.
           return {
             "@id": id,
