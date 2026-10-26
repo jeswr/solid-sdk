@@ -1,0 +1,83 @@
+# Disposable local interoperability stack: pinned images, loopback-only ports, no persistent volumes.
+# Started and removed by interop/local/stack.js under a unique Compose project name; never run `down` for
+# projects you did not start.
+name: ${RA_INTEROP_PROJECT:?set by interop/local/stack.js}
+services:
+  css:
+    # Community Solid Server 7.2.0 (Docker Hub solidproject/community-server), memory backend, WAC.
+    image: docker.io/solidproject/community-server:7.2.0@sha256:73465522db316ec2c7c0417bdf5b1b2eab432c70fab44fb25ba2f2098e21b9e5
+    command: ["-p", "${RA_INTEROP_CSS_PORT:-39301}", "-b", "http://localhost:${RA_INTEROP_CSS_PORT:-39301}/", "-c", "@css:config/default.json", "--seedConfig", "/interop/seed.json", "-l", "warn"]
+    # 39310 belongs to Manas, which shares this container's network namespace (so both see CSS as localhost).
+    ports: ["127.0.0.1:${RA_INTEROP_CSS_PORT:-39301}:${RA_INTEROP_CSS_PORT:-39301}", "127.0.0.1:39310:39310"]
+    volumes: ["./css/seed.json:/interop/seed.json:ro"]
+    labels: {org.solid.reactive-authentication.interop: "css"}
+  keycloak:
+    # Keycloak 26.7.4 (quay.io/keycloak/keycloak), dev mode with the disposable realm imported at start.
+    image: quay.io/keycloak/keycloak:26.7.4@sha256:82a77884f3af238beab1e7afd63b5f530e1b5c0590bd7aa60b40a40463e29b2c
+    command: ["start-dev", "--import-realm", "--http-port=8080", "--health-enabled=true"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin-local-only
+    ports: ["127.0.0.1:${RA_INTEROP_KEYCLOAK_PORT:-39380}:8080"]
+    volumes: ["./keycloak/realm-interop.json:/opt/keycloak/data/import/realm-interop.json:ro"]
+    labels: {org.solid.reactive-authentication.interop: "keycloak"}
+  nss:
+    # Node Solid Server 6.0.0 (latest release; Docker Hub has no 6.x image), built from the repository's own
+    # Dockerfile at the v6.0.0 commit. Multi-user (pods on <user>.localhost subdomains, as hosted NSS), plain
+    # HTTP on localhost (the Dockerfile's TLS config is replaced; hosted NSS targets cover TLS).
+    # NSS 6.0.0 crashes once on a fresh data directory (EEXIST in its startup), so it may restart once.
+    build:
+      context: https://github.com/nodeSolidServer/node-solid-server.git#1876c4b569c7458ba6af39aadd186f5158da2aae
+      # The upstream Dockerfile's floating `FROM node:lts`, pinned (node 24.21.0, 2026-09-27) via a BuildKit named context.
+      additional_contexts:
+        "node:lts": "docker-image://node:lts@sha256:64af3819f9275802414d7cdc38c27e9d82bd564dec4d4da87d008255d36c63b4"
+    image: ra-interop-nss:6.0.0-1876c4b
+    restart: on-failure:3
+    ports: ["127.0.0.1:39343:39343"]
+    volumes: ["./nss/config.json:/usr/src/app/config.json:ro"]
+    labels: {org.solid.reactive-authentication.interop: "nss"}
+  nextcloud:
+    # Solid Nextcloud (pdsinterop/solid-nextcloud) built from the repository's own Dockerfile at a pinned main
+    # commit on Nextcloud 30 (inside the app's supported 28–30 range), provisioned with the repository's
+    # init.sh like its CI. HTTPS with the harness's disposable test CA (interop/local/tls.js).
+    build:
+      context: https://github.com/pdsinterop/solid-nextcloud.git#b0743766631f88fca276f9405162e16c10688675
+      args: {NEXTCLOUD_VERSION: "30"}
+      # The upstream Dockerfile's floating `FROM nextcloud:30` and `COPY --from=composer:latest`, pinned (2026-09-27).
+      additional_contexts:
+        "nextcloud:30": "docker-image://nextcloud:30@sha256:fb966733647ea03f0446b0c22eac9733c8eb616d37b960caca9d4c3010e14a08"
+        "composer:latest": "docker-image://composer:latest@sha256:9715c7f69044da2a212a5fbde29ee7da24e364d426560ae6367b060236f847d7"
+    image: ra-interop-solid-nextcloud:b074376-nc30
+    ports: ["127.0.0.1:39445:443"]
+    volumes:
+      - "../.local-tls/server.pem:/tls/server.cert:ro"
+      - "../.local-tls/server-key.pem:/tls/server.key:ro"
+    labels: {org.solid.reactive-authentication.interop: "nextcloud"}
+  php:
+    # PHP Solid Server (pdsinterop/php-solid-server) at its last main commit e8d265c, built by interop/local/php/
+    # Dockerfile (the upstream Dockerfile with Debian 11 packages from archive.debian.org). Single user from
+    # USERNAME/PASSWORD, as in the upstream docker-compose.yml; HTTPS with the harness's disposable test CA.
+    # The upstream compose file also runs php-solid-pubsub-server; its current main crashes on the first
+    # connection and its 2022 commits need Debian 10 packages, so it is omitted: every write then answers 500
+    # after storing the data (the notification fails). The target is read-only, so this does not affect it.
+    build: {context: ./php}
+    image: ra-interop-php-solid-server:e8d265c
+    environment:
+      USERNAME: alice
+      PASSWORD: alice-local-only
+      SERVER_ROOT: https://localhost:39444
+    ports: ["127.0.0.1:39444:443"]
+    volumes:
+      - "../.local-tls/server.pem:/tls/server.cert:ro"
+      - "../.local-tls/server-key.pem:/tls/server.key:ro"
+    labels: {org.solid.reactive-authentication.interop: "php"}
+  manas:
+    # Manas 0.1.2 single_fs_wac (released binaries, checksum-verified), a resource server only: the pod owner signs
+    # in at the local CSS. It shares the css service's network namespace, so http://localhost:39301 (the issuer
+    # and WebID) and http://localhost:39310 (the pod) are the same URLs inside the containers and on the host.
+    build: {context: ./manas}
+    image: ra-interop-manas:0.1.2
+    network_mode: "service:css"
+    depends_on: [css]
+    volumes: ["./manas/config.toml:/etc/manas/config.toml:ro"]
+    labels: {org.solid.reactive-authentication.interop: "manas"}

@@ -1,0 +1,2284 @@
+{
+  "schemaVersion": 1,
+  "description": "Hosted Solid pod providers (census of solidproject.org/get_a_pod) and configurable closed-source deployments. Live, credentials from the environment; missing configuration is UNTESTED.",
+  "census": {
+    "source": {
+      "url": "https://solidproject.org/get_a_pod",
+      "file": "https://github.com/solid/solidproject.org/blob/1b5ab98c57f7818b56fa8b329b236da6e67616c5/get_a_pod.html",
+      "repository": "https://github.com/solid/solidproject.org",
+      "commit": "1b5ab98c57f7818b56fa8b329b236da6e67616c5",
+      "commitDate": "2026-08-05T20:59:10Z",
+      "commitSubject": "Add missing Pod providers to Get a Pod (#979)",
+      "read": "2026-09-27"
+    },
+    "alsoConsulted": {
+      "url": "https://solidproject.org/for_developers/getting_started",
+      "file": "for_developers/getting_started.html",
+      "commit": "34d62cc2976cf2a511e01806f758e5da48030449",
+      "commitDate": "2026-05-01T13:08:37Z",
+      "finding": "links to /get_a_pod and mentions Inrupt; lists no additional hosted providers"
+    },
+    "observed": "2026-09-27",
+    "method": "read-only GET of each provider's /.well-known/openid-configuration (and HEAD/GET of the listed registration page for headers) from a macOS workstation; no accounts, no authenticated requests",
+    "serverImplementationsListed": [
+      "Community Solid Server",
+      "Enterprise Solid Server",
+      "Trinpod",
+      "Manas",
+      "Node Solid Server",
+      "PHP Solid Server"
+    ],
+    "providers": [
+      {
+        "target": "brolly-id",
+        "listed": "brolly.id",
+        "organization": "Stucco Software",
+        "hostingLocation": "US",
+        "registration": "https://www.brolly.id/",
+        "issuer": "https://brolly.id",
+        "software": "unidentified (brolly.id)",
+        "softwareEvidence": "discovery served by 'railway-hikari', site by Vercel; the server software is not disclosed",
+        "discovery": {
+          "reachable": true,
+          "revocation": false,
+          "offlineAccess": true,
+          "refreshGrant": true,
+          "dpopAlgs": [
+            "ES256",
+            "RS256",
+            "EdDSA"
+          ],
+          "pkce": [
+            "S256"
+          ],
+          "registration": true,
+          "tokenAuth": [
+            "none"
+          ],
+          "notes": "issuer https://brolly.id (no trailing slash); solid_oidc_supported advertised; issuer host brolly.id, not www.brolly.id (www answers 404 for discovery)"
+        }
+      },
+      {
+        "target": "datapod-igrant-io",
+        "listed": "Data Pod",
+        "organization": "iGrant.io.Sweden",
+        "hostingLocation": "EU",
+        "registration": "https://igrant.io/datapod.html",
+        "issuer": "https://datapod.igrant.io",
+        "software": "Node Solid Server",
+        "softwareEvidence": "X-Powered-By: solid-server/5.7.4",
+        "discovery": {
+          "reachable": true,
+          "revocation": false,
+          "offlineAccess": true,
+          "refreshGrant": true,
+          "dpopAlgs": null,
+          "pkce": null,
+          "registration": true,
+          "tokenAuth": [
+            "client_secret_basic"
+          ],
+          "notes": "no code_challenge_methods_supported or dpop_signing_alg_values_supported advertised; the library's NSS nonce quirk list includes this origin"
+        }
+      },
+      {
+        "target": "inrupt-podspaces",
+        "listed": "Inrupt Pod Spaces",
+        "organization": "Inrupt Inc.",
+        "hostingLocation": "US & EU; or Asia Pacific",
+        "registration": "https://start.inrupt.com/profile",
+        "issuer": "https://login.inrupt.com",
+        "software": "Inrupt Enterprise Solid Server (PodSpaces)",
+        "softwareEvidence": "PodSpaces is Inrupt's hosted ESS; version not disclosed",
+        "discovery": {
+          "reachable": true,
+          "revocation": true,
+          "offlineAccess": true,
+          "refreshGrant": true,
+          "dpopAlgs": [
+            "RS256",
+            "ES256"
+          ],
+          "pkce": [
+            "plain",
+            "S256"
+          ],
+          "registration": true,
+          "tokenAuth": [
+            "client_secret_basic",
+            "client_secret_post"
+          ],
+          "notes": "issuer https://login.inrupt.com (no trailing slash); storage is served from https://storage.inrupt.com/"
+        }
+      },
+      {
+        "target": "privatedatapod-com",
+        "listed": "privatedatapod.com",
+        "organization": "Pod42 LLC",
+        "hostingLocation": "US",
+        "registration": "https://privatedatapod.com/",
+        "issuer": "https://privatedatapod.com/",
+        "software": "Community Solid Server",
+        "softwareEvidence": "X-Powered-By: Community Solid Server (no version disclosed)",
+        "discovery": {
+          "reachable": true,
+          "revocation": true,
+          "offlineAccess": true,
+          "refreshGrant": true,
+          "dpopAlgs": [
+            "RS256",
+            "RS384",
+            "RS512",
+            "PS256",
+            "PS384",
+            "PS512",
+            "ES256",
+            "ES256K",
+            "ES384",
+            "ES512",
+            "EdDSA"
+          ],
+          "pkce": [
+            "S256"
+          ],
+          "registration": true,
+          "tokenAuth": [
+            "client_secret_basic",
+            "client_secret_jwt",
+            "client_secret_post",
+            "private_key_jwt",
+            "none"
+          ],
+          "notes": "standard CSS .oidc/ endpoints incl. revocation and introspection"
+        }
+      },
+      {
+        "target": "redpencil-io",
+        "listed": "redpencil.io",
+        "organization": "redpencil.io",
+        "hostingLocation": "EU",
+        "registration": "https://solid.redpencil.io/",
+        "issuer": "https://solid.redpencil.io/",
+        "software": "Community Solid Server",
+        "softwareEvidence": "X-Powered-By: Community Solid Server (no version disclosed)",
+        "discovery": {
+          "reachable": true,
+          "revocation": true,
+          "offlineAccess": true,
+          "refreshGrant": true,
+          "dpopAlgs": [
+            "RS256",
+            "RS384",
+            "RS512",
+            "PS256",
+            "PS384",
+            "PS512",
+            "ES256",
+            "ES256K",
+            "ES384",
+            "ES512",
+            "EdDSA"
+          ],
+          "pkce": [
+            "S256"
+          ],
+          "registration": true,
+          "tokenAuth": [
+            "client_secret_basic",
+            "client_secret_jwt",
+            "client_secret_post",
+            "private_key_jwt",
+            "none"
+          ],
+          "notes": "standard CSS .oidc/ endpoints incl. revocation and introspection"
+        }
+      },
+      {
+        "target": "solid-openlinksw-com",
+        "listed": "solid.openlinksw.com",
+        "organization": "OpenLink Software",
+        "hostingLocation": "US",
+        "registration": "https://solid.openlinksw.com:8445/register",
+        "issuer": "https://solid.openlinksw.com:8445",
+        "software": "OpenLink Solid Server",
+        "softwareEvidence": "X-Powered-By: OpenLink Solid Server; endpoints (/authorize, /token, /register) resemble Node Solid Server's; licensing not stated",
+        "discovery": {
+          "reachable": true,
+          "revocation": false,
+          "offlineAccess": null,
+          "refreshGrant": true,
+          "dpopAlgs": null,
+          "pkce": null,
+          "registration": true,
+          "tokenAuth": [
+            "client_secret_basic"
+          ],
+          "notes": "served on port 8445; https://solid.openlinksw.com (port 443) reset the TLS connection; scopes_supported not advertised; NSS-like, but not in the library's NSS nonce quirk list (nonce behaviour unobserved)"
+        }
+      },
+      {
+        "target": "solidcommunity-net",
+        "listed": "solidcommunity.net",
+        "organization": "Solid Project",
+        "hostingLocation": "UK",
+        "registration": "https://solidcommunity.net/",
+        "issuer": "https://solidcommunity.net/",
+        "software": "Community Solid Server",
+        "softwareEvidence": "X-Powered-By: Community Solid Server (no version disclosed)",
+        "discovery": {
+          "reachable": true,
+          "revocation": true,
+          "offlineAccess": true,
+          "refreshGrant": true,
+          "dpopAlgs": [
+            "RS256",
+            "RS384",
+            "RS512",
+            "PS256",
+            "PS384",
+            "PS512",
+            "ES256",
+            "ES256K",
+            "ES384",
+            "ES512",
+            "EdDSA"
+          ],
+          "pkce": [
+            "S256"
+          ],
+          "registration": true,
+          "tokenAuth": [
+            "client_secret_basic",
+            "client_secret_jwt",
+            "client_secret_post",
+            "private_key_jwt",
+            "none"
+          ],
+          "notes": "standard CSS .oidc/ endpoints incl. revocation and introspection; served through Cloudflare"
+        }
+      },
+      {
+        "target": "solidcommunity-au",
+        "listed": "solidcommunity.au",
+        "organization": "Solid Community AU",
+        "hostingLocation": "Australia",
+        "registration": "https://pods.solidcommunity.au/",
+        "issuer": "https://pods.solidcommunity.au/",
+        "software": "Community Solid Server",
+        "softwareEvidence": "X-Powered-By: Community Solid Server (no version disclosed)",
+        "discovery": {
+          "reachable": true,
+          "revocation": true,
+          "offlineAccess": true,
+          "refreshGrant": true,
+          "dpopAlgs": [
+            "RS256",
+            "RS384",
+            "RS512",
+            "PS256",
+            "PS384",
+            "PS512",
+            "ES256",
+            "ES256K",
+            "ES384",
+            "ES512",
+            "EdDSA"
+          ],
+          "pkce": [
+            "S256"
+          ],
+          "registration": true,
+          "tokenAuth": [
+            "client_secret_basic",
+            "client_secret_jwt",
+            "client_secret_post",
+            "private_key_jwt",
+            "none"
+          ],
+          "notes": "standard CSS .oidc/ endpoints incl. revocation and introspection"
+        }
+      },
+      {
+        "target": "solidweb-me",
+        "listed": "solidweb.me",
+        "organization": "Meisdata",
+        "hostingLocation": "EU",
+        "registration": "https://solidweb.me/",
+        "issuer": "https://solidweb.me/",
+        "software": "Community Solid Server",
+        "softwareEvidence": "X-Powered-By: Community Solid Server (no version disclosed)",
+        "discovery": {
+          "reachable": true,
+          "revocation": true,
+          "offlineAccess": true,
+          "refreshGrant": true,
+          "dpopAlgs": [
+            "RS256",
+            "RS384",
+            "RS512",
+            "PS256",
+            "PS384",
+            "PS512",
+            "ES256",
+            "ES256K",
+            "ES384",
+            "ES512",
+            "EdDSA"
+          ],
+          "pkce": [
+            "S256"
+          ],
+          "registration": true,
+          "tokenAuth": [
+            "client_secret_basic",
+            "client_secret_jwt",
+            "client_secret_post",
+            "private_key_jwt",
+            "none"
+          ],
+          "notes": "standard CSS .oidc/ endpoints incl. revocation and introspection"
+        }
+      },
+      {
+        "target": "solidweb-org",
+        "listed": "solidweb.org",
+        "organization": "Solid Grassoots",
+        "hostingLocation": "EU",
+        "registration": "https://solidweb.org/",
+        "issuer": "https://solidweb.org",
+        "software": "Node Solid Server",
+        "softwareEvidence": "X-Powered-By: solid-server/6.0.0",
+        "discovery": {
+          "reachable": true,
+          "revocation": false,
+          "offlineAccess": true,
+          "refreshGrant": true,
+          "dpopAlgs": null,
+          "pkce": null,
+          "registration": true,
+          "tokenAuth": [
+            "client_secret_basic"
+          ],
+          "notes": "no code_challenge_methods_supported or dpop_signing_alg_values_supported advertised; the library's NSS nonce quirk list includes this origin (local NSS 6.0.0 omits the nonce claim)"
+        }
+      },
+      {
+        "target": "teamid-live",
+        "listed": "teamid.live",
+        "organization": "Meisdata",
+        "hostingLocation": "EU",
+        "registration": "https://teamid.live/",
+        "issuer": "https://teamid.live/",
+        "software": "Community Solid Server",
+        "softwareEvidence": "X-Powered-By: Community Solid Server (no version disclosed)",
+        "discovery": {
+          "reachable": true,
+          "revocation": true,
+          "offlineAccess": true,
+          "refreshGrant": true,
+          "dpopAlgs": [
+            "RS256",
+            "RS384",
+            "RS512",
+            "PS256",
+            "PS384",
+            "PS512",
+            "ES256",
+            "ES256K",
+            "ES384",
+            "ES512",
+            "EdDSA"
+          ],
+          "pkce": [
+            "S256"
+          ],
+          "registration": true,
+          "tokenAuth": [
+            "client_secret_basic",
+            "client_secret_jwt",
+            "client_secret_post",
+            "private_key_jwt",
+            "none"
+          ],
+          "notes": "standard CSS .oidc/ endpoints incl. revocation and introspection"
+        }
+      },
+      {
+        "target": "trinpod-eu",
+        "listed": "trinpod.eu",
+        "organization": "Graphmetrix",
+        "hostingLocation": "EU",
+        "registration": "https://trinpod.eu/",
+        "issuer": "https://trinpod.eu",
+        "software": "TrinPod",
+        "softwareEvidence": "X-Powered-By: TwinPod-Server/3.6.986",
+        "discovery": {
+          "reachable": "intermittent",
+          "revocation": false,
+          "offlineAccess": false,
+          "refreshGrant": true,
+          "dpopAlgs": [
+            "ES256",
+            "RS256"
+          ],
+          "pkce": [
+            "plain",
+            "S256"
+          ],
+          "registration": true,
+          "tokenAuth": [
+            "client_secret_basic"
+          ],
+          "notes": "discovery answered once; later GETs of https://trinpod.eu/ reset the TLS connection from this network (ECONNRESET); offline_access is not in scopes_supported although refresh_token is a supported grant; the listing's link text says https://trinpod.eu/ but its href is https://trinapp.com/"
+        }
+      },
+      {
+        "target": "trinpod-us",
+        "listed": "trinpod.us",
+        "organization": "Graphmetrix",
+        "hostingLocation": "USA",
+        "registration": "https://trinpod.us/",
+        "issuer": "https://trinpod.us",
+        "software": "TrinPod",
+        "softwareEvidence": "X-Powered-By: TwinPod-Server/3.6.986",
+        "discovery": {
+          "reachable": true,
+          "revocation": false,
+          "offlineAccess": false,
+          "refreshGrant": true,
+          "dpopAlgs": [
+            "ES256",
+            "RS256"
+          ],
+          "pkce": [
+            "plain",
+            "S256"
+          ],
+          "registration": true,
+          "tokenAuth": [
+            "client_secret_basic"
+          ],
+          "notes": "offline_access is not in scopes_supported although refresh_token is a supported grant; the listing's link text says https://trinpod.us/ but its href is https://trinapp.com/"
+        }
+      },
+      {
+        "target": "use-id",
+        "listed": "use.id",
+        "organization": "Digita",
+        "hostingLocation": "EU",
+        "registration": "https://get.use.id/people",
+        "issuer": null,
+        "software": "unidentified (use.id, Digita)",
+        "softwareEvidence": "not reachable: no header or discovery document could be read",
+        "discovery": {
+          "reachable": false,
+          "notes": "https://use.id, https://get.use.id and https://idp.use.id all reset the TLS handshake (ECONNRESET / SSL_ERROR_SYSCALL) from this network on 2026-09-27; no issuer could be observed"
+        }
+      },
+      {
+        "target": "solidweb-app",
+        "listed": "solidweb.app (experimental)",
+        "organization": "Meisdata",
+        "hostingLocation": "EU",
+        "registration": "https://solidweb.app/",
+        "issuer": "https://solidweb.app/",
+        "software": "unidentified (solidweb.app, experimental)",
+        "softwareEvidence": "Server: nginx; OpenID endpoints under /idp/ (oidc-provider style: /idp/token/revocation, /idp/token/introspection); software not disclosed",
+        "discovery": {
+          "reachable": true,
+          "revocation": true,
+          "offlineAccess": true,
+          "refreshGrant": true,
+          "dpopAlgs": [
+            "ES256",
+            "RS256"
+          ],
+          "pkce": [
+            "S256"
+          ],
+          "registration": true,
+          "tokenAuth": [
+            "none",
+            "client_secret_basic",
+            "client_secret_post"
+          ],
+          "notes": "solid_oidc_supported advertised; listed as experimental"
+        }
+      }
+    ]
+  },
+  "targets": [
+    {
+      "id": "brolly-id",
+      "name": "brolly.id (hosted Solid pod provider listed at solidproject.org/get_a_pod)",
+      "category": "live",
+      "adapter": "solid-oidc",
+      "software": {
+        "name": "unidentified (brolly.id)",
+        "source": "service"
+      },
+      "links": {
+        "registration": "https://www.brolly.id/",
+        "listing": "https://solidproject.org/get_a_pod#brolly_id"
+      },
+      "notes": [
+        "software: discovery served by 'railway-hikari', site by Vercel; the server software is not disclosed (inferred from response headers, not stated by the provider)",
+        "discovery 2026-09-27: issuer https://brolly.id (no trailing slash); solid_oidc_supported advertised; issuer host brolly.id, not www.brolly.id (www answers 404 for discovery)",
+        "client registration (discovery 2026-09-27): a registration_endpoint is advertised, so dynamic registration works without a hosted Client Identifier Document; no provider advertises Client Identifier Document support in its metadata (Solid-OIDC defines no such field), so the optional CLIENT_ID path is unverified here until a run",
+        "unattended (session mode): unverified — depends on whether the provider shows a login or consent page for a stored session; the non-interactive login fails closed if one appears"
+      ],
+      "env": [
+        {
+          "name": "RA_INTEROP_BROLLY_ID_WEBID",
+          "description": "WebID of a dedicated test account on brolly.id",
+          "pii": true
+        },
+        {
+          "name": "RA_INTEROP_BROLLY_ID_STORAGE",
+          "description": "storage root of the test account (ends with /)",
+          "pii": true
+        },
+        {
+          "name": "RA_INTEROP_BROLLY_ID_SCRATCH",
+          "description": "container dedicated to test writes inside the storage (ends with /); omit for read-only runs",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_BROLLY_ID_PRIVATE_RESOURCE",
+          "description": "an existing private resource of the test account (read-only runs)",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_BROLLY_ID_OTHER_PROTECTED",
+          "description": "a protected resource outside the test storage (read-only boundary probe)",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_BROLLY_ID_ISSUER",
+          "description": "override the expected issuer (defaults to the observed one)",
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_BROLLY_ID_STORAGE_STATE",
+          "description": "Playwright storageState file of a dedicated test account's signed-in identity-provider session (contains cookies; never commit). With --headed it seeds the browser; without --headed it enables the fail-closed non-interactive session mode (a configured file that does not exist is a configuration error)",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_BROLLY_ID_CLIENT_ID",
+          "description": "optional Solid-OIDC Client Identifier Document URL (https, publicly dereferenceable, its redirect_uris must include the redirect URI); omit to use dynamic registration",
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_SOLID_REDIRECT_URI",
+          "description": "loopback redirect URI (default http://127.0.0.1:39398/callback); with a Client Identifier Document it must be one of the document's redirect_uris",
+          "optional": true
+        }
+      ],
+      "config": {
+        "label": "brolly.id",
+        "storage": "${RA_INTEROP_BROLLY_ID_STORAGE}",
+        "webId": "${RA_INTEROP_BROLLY_ID_WEBID}",
+        "issuer": "${RA_INTEROP_BROLLY_ID_ISSUER:-https://brolly.id}",
+        "scratchContainer": "${RA_INTEROP_BROLLY_ID_SCRATCH}",
+        "privateResource": "${RA_INTEROP_BROLLY_ID_PRIVATE_RESOURCE}",
+        "otherProtected": "${RA_INTEROP_BROLLY_ID_OTHER_PROTECTED}",
+        "clientId": "${RA_INTEROP_BROLLY_ID_CLIENT_ID}",
+        "storageState": "${RA_INTEROP_BROLLY_ID_STORAGE_STATE}",
+        "redirectUri": "${RA_INTEROP_SOLID_REDIRECT_URI:-http://127.0.0.1:39398/callback}",
+        "login": {
+          "recipe": "manual"
+        }
+      },
+      "capabilities": {
+        "refreshTokens": true,
+        "refreshRotation": "unverified",
+        "revocation": false,
+        "storageDiscovery": "unverified"
+      },
+      "capabilityNotes": {
+        "refreshRotation": "whether refresh tokens rotate can only be observed with a test account (not yet run)",
+        "revocation": "the discovery document (read 2026-09-27) advertises no revocation_endpoint",
+        "storageDiscovery": "whether a private resource's 401 carries storage-root evidence (Link headers) can only be observed with a test account (not yet run)"
+      }
+    },
+    {
+      "id": "datapod-igrant-io",
+      "name": "Data Pod (hosted Solid pod provider listed at solidproject.org/get_a_pod)",
+      "category": "live",
+      "adapter": "solid-oidc",
+      "software": {
+        "name": "Node Solid Server",
+        "version": "5.7.4",
+        "source": "open",
+        "url": "https://github.com/nodeSolidServer/node-solid-server"
+      },
+      "links": {
+        "registration": "https://igrant.io/datapod.html",
+        "listing": "https://solidproject.org/get_a_pod#data_pod"
+      },
+      "notes": [
+        "software: X-Powered-By: solid-server/5.7.4 (inferred from response headers, not stated by the provider)",
+        "discovery 2026-09-27: no code_challenge_methods_supported or dpop_signing_alg_values_supported advertised; the library's NSS nonce quirk list includes this origin",
+        "client registration (discovery 2026-09-27): a registration_endpoint is advertised, so dynamic registration works without a hosted Client Identifier Document; no provider advertises Client Identifier Document support in its metadata (Solid-OIDC defines no such field), so the optional CLIENT_ID path is unverified here until a run",
+        "unattended (session mode): unverified — NSS-style servers show a consent page for new client origins; the non-interactive login fails closed if one appears"
+      ],
+      "env": [
+        {
+          "name": "RA_INTEROP_DATAPOD_IGRANT_IO_WEBID",
+          "description": "WebID of a dedicated test account on Data Pod",
+          "pii": true
+        },
+        {
+          "name": "RA_INTEROP_DATAPOD_IGRANT_IO_STORAGE",
+          "description": "storage root of the test account (ends with /)",
+          "pii": true
+        },
+        {
+          "name": "RA_INTEROP_DATAPOD_IGRANT_IO_SCRATCH",
+          "description": "container dedicated to test writes inside the storage (ends with /); omit for read-only runs",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_DATAPOD_IGRANT_IO_PRIVATE_RESOURCE",
+          "description": "an existing private resource of the test account (read-only runs)",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_DATAPOD_IGRANT_IO_OTHER_PROTECTED",
+          "description": "a protected resource outside the test storage (read-only boundary probe)",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_DATAPOD_IGRANT_IO_ISSUER",
+          "description": "override the expected issuer (defaults to the observed one)",
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_DATAPOD_IGRANT_IO_STORAGE_STATE",
+          "description": "Playwright storageState file of a dedicated test account's signed-in identity-provider session (contains cookies; never commit). With --headed it seeds the browser; without --headed it enables the fail-closed non-interactive session mode (a configured file that does not exist is a configuration error)",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_DATAPOD_IGRANT_IO_CLIENT_ID",
+          "description": "optional Solid-OIDC Client Identifier Document URL (https, publicly dereferenceable, its redirect_uris must include the redirect URI); omit to use dynamic registration",
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_SOLID_REDIRECT_URI",
+          "description": "loopback redirect URI (default http://127.0.0.1:39398/callback); with a Client Identifier Document it must be one of the document's redirect_uris",
+          "optional": true
+        }
+      ],
+      "config": {
+        "label": "Data Pod",
+        "storage": "${RA_INTEROP_DATAPOD_IGRANT_IO_STORAGE}",
+        "webId": "${RA_INTEROP_DATAPOD_IGRANT_IO_WEBID}",
+        "issuer": "${RA_INTEROP_DATAPOD_IGRANT_IO_ISSUER:-https://datapod.igrant.io}",
+        "scratchContainer": "${RA_INTEROP_DATAPOD_IGRANT_IO_SCRATCH}",
+        "privateResource": "${RA_INTEROP_DATAPOD_IGRANT_IO_PRIVATE_RESOURCE}",
+        "otherProtected": "${RA_INTEROP_DATAPOD_IGRANT_IO_OTHER_PROTECTED}",
+        "clientId": "${RA_INTEROP_DATAPOD_IGRANT_IO_CLIENT_ID}",
+        "storageState": "${RA_INTEROP_DATAPOD_IGRANT_IO_STORAGE_STATE}",
+        "redirectUri": "${RA_INTEROP_SOLID_REDIRECT_URI:-http://127.0.0.1:39398/callback}",
+        "login": {
+          "recipe": "manual"
+        }
+      },
+      "capabilities": {
+        "refreshTokens": true,
+        "refreshRotation": "unverified",
+        "revocation": false,
+        "storageDiscovery": "unverified"
+      },
+      "capabilityNotes": {
+        "refreshRotation": "whether refresh tokens rotate can only be observed with a test account (not yet run)",
+        "revocation": "the discovery document (read 2026-09-27) advertises no revocation_endpoint",
+        "storageDiscovery": "whether a private resource's 401 carries storage-root evidence (Link headers) can only be observed with a test account (not yet run)"
+      }
+    },
+    {
+      "id": "inrupt-podspaces",
+      "name": "Inrupt Pod Spaces (hosted Solid pod provider listed at solidproject.org/get_a_pod)",
+      "category": "live",
+      "adapter": "solid-oidc",
+      "software": {
+        "name": "Inrupt Enterprise Solid Server (PodSpaces)",
+        "source": "closed",
+        "url": "https://www.inrupt.com/products/enterprise-solid-server"
+      },
+      "links": {
+        "registration": "https://start.inrupt.com/profile",
+        "listing": "https://solidproject.org/get_a_pod#inrupt_pod_spaces"
+      },
+      "notes": [
+        "software: PodSpaces is Inrupt's hosted ESS; version not disclosed (inferred from response headers, not stated by the provider)",
+        "discovery 2026-09-27: issuer https://login.inrupt.com (no trailing slash); storage is served from https://storage.inrupt.com/",
+        "client registration (discovery 2026-09-27): a registration_endpoint is advertised, so dynamic registration works without a hosted Client Identifier Document; no provider advertises Client Identifier Document support in its metadata (Solid-OIDC defines no such field), so the optional CLIENT_ID path is unverified here until a run; Inrupt documents Client Identifier Documents for ESS/PodSpaces",
+        "unattended (session mode): unverified — depends on whether the provider shows a login or consent page for a stored session; the non-interactive login fails closed if one appears"
+      ],
+      "env": [
+        {
+          "name": "RA_INTEROP_INRUPT_PODSPACES_WEBID",
+          "description": "WebID of a dedicated test account on Inrupt Pod Spaces",
+          "pii": true
+        },
+        {
+          "name": "RA_INTEROP_INRUPT_PODSPACES_STORAGE",
+          "description": "storage root of the test account (ends with /)",
+          "pii": true
+        },
+        {
+          "name": "RA_INTEROP_INRUPT_PODSPACES_SCRATCH",
+          "description": "container dedicated to test writes inside the storage (ends with /); omit for read-only runs",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_INRUPT_PODSPACES_PRIVATE_RESOURCE",
+          "description": "an existing private resource of the test account (read-only runs)",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_INRUPT_PODSPACES_OTHER_PROTECTED",
+          "description": "a protected resource outside the test storage (read-only boundary probe)",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_INRUPT_PODSPACES_ISSUER",
+          "description": "override the expected issuer (defaults to the observed one)",
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_INRUPT_PODSPACES_STORAGE_STATE",
+          "description": "Playwright storageState file of a dedicated test account's signed-in identity-provider session (contains cookies; never commit). With --headed it seeds the browser; without --headed it enables the fail-closed non-interactive session mode (a configured file that does not exist is a configuration error)",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_INRUPT_PODSPACES_CLIENT_ID",
+          "description": "optional Solid-OIDC Client Identifier Document URL (https, publicly dereferenceable, its redirect_uris must include the redirect URI); omit to use dynamic registration",
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_SOLID_REDIRECT_URI",
+          "description": "loopback redirect URI (default http://127.0.0.1:39398/callback); with a Client Identifier Document it must be one of the document's redirect_uris",
+          "optional": true
+        }
+      ],
+      "config": {
+        "label": "Inrupt Pod Spaces",
+        "storage": "${RA_INTEROP_INRUPT_PODSPACES_STORAGE}",
+        "webId": "${RA_INTEROP_INRUPT_PODSPACES_WEBID}",
+        "issuer": "${RA_INTEROP_INRUPT_PODSPACES_ISSUER:-https://login.inrupt.com}",
+        "scratchContainer": "${RA_INTEROP_INRUPT_PODSPACES_SCRATCH}",
+        "privateResource": "${RA_INTEROP_INRUPT_PODSPACES_PRIVATE_RESOURCE}",
+        "otherProtected": "${RA_INTEROP_INRUPT_PODSPACES_OTHER_PROTECTED}",
+        "clientId": "${RA_INTEROP_INRUPT_PODSPACES_CLIENT_ID}",
+        "storageState": "${RA_INTEROP_INRUPT_PODSPACES_STORAGE_STATE}",
+        "redirectUri": "${RA_INTEROP_SOLID_REDIRECT_URI:-http://127.0.0.1:39398/callback}",
+        "login": {
+          "recipe": "manual"
+        }
+      },
+      "capabilities": {
+        "refreshTokens": true,
+        "refreshRotation": "unverified",
+        "revocation": true,
+        "storageDiscovery": "unverified"
+      },
+      "capabilityNotes": {
+        "refreshRotation": "whether refresh tokens rotate can only be observed with a test account (not yet run)",
+        "storageDiscovery": "whether a private resource's 401 carries storage-root evidence (Link headers) can only be observed with a test account (not yet run)"
+      }
+    },
+    {
+      "id": "privatedatapod-com",
+      "name": "privatedatapod.com (hosted Solid pod provider listed at solidproject.org/get_a_pod)",
+      "category": "live",
+      "adapter": "solid-oidc",
+      "software": {
+        "name": "Community Solid Server",
+        "source": "open",
+        "url": "https://github.com/CommunitySolidServer/CommunitySolidServer"
+      },
+      "links": {
+        "registration": "https://privatedatapod.com/",
+        "listing": "https://solidproject.org/get_a_pod#privatedatapod_com"
+      },
+      "notes": [
+        "software: X-Powered-By: Community Solid Server (no version disclosed) (inferred from response headers, not stated by the provider)",
+        "discovery 2026-09-27: standard CSS .oidc/ endpoints incl. revocation and introspection",
+        "client registration (discovery 2026-09-27): a registration_endpoint is advertised, so dynamic registration works without a hosted Client Identifier Document; no provider advertises Client Identifier Document support in its metadata (Solid-OIDC defines no such field), so the optional CLIENT_ID path is unverified here until a run; the server is Community Solid Server, whose documentation describes Client Identifier Document support",
+        "unattended (session mode): prefer the css-password recipe for a test-only account; a stored session alone still meets CSS's consent page for a newly registered client, so the non-interactive login is expected to fail closed (unverified)"
+      ],
+      "env": [
+        {
+          "name": "RA_INTEROP_PRIVATEDATAPOD_COM_WEBID",
+          "description": "WebID of a dedicated test account on privatedatapod.com",
+          "pii": true
+        },
+        {
+          "name": "RA_INTEROP_PRIVATEDATAPOD_COM_STORAGE",
+          "description": "storage root of the test account (ends with /)",
+          "pii": true
+        },
+        {
+          "name": "RA_INTEROP_PRIVATEDATAPOD_COM_SCRATCH",
+          "description": "container dedicated to test writes inside the storage (ends with /); omit for read-only runs",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_PRIVATEDATAPOD_COM_PRIVATE_RESOURCE",
+          "description": "an existing private resource of the test account (read-only runs)",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_PRIVATEDATAPOD_COM_OTHER_PROTECTED",
+          "description": "a protected resource outside the test storage (read-only boundary probe)",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_PRIVATEDATAPOD_COM_ISSUER",
+          "description": "override the expected issuer (defaults to the observed one)",
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_PRIVATEDATAPOD_COM_STORAGE_STATE",
+          "description": "Playwright storageState file of a dedicated test account's signed-in identity-provider session (contains cookies; never commit). With --headed it seeds the browser; without --headed it enables the fail-closed non-interactive session mode (a configured file that does not exist is a configuration error)",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_PRIVATEDATAPOD_COM_LOGIN",
+          "description": "login recipe: manual (default, needs --headed) or css-password for a test-only account",
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_PRIVATEDATAPOD_COM_EMAIL",
+          "description": "css-password recipe: the test-only account's email",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_PRIVATEDATAPOD_COM_PASSWORD",
+          "description": "css-password recipe: the test-only account's password",
+          "secret": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_PRIVATEDATAPOD_COM_CLIENT_ID",
+          "description": "optional Solid-OIDC Client Identifier Document URL (https, publicly dereferenceable, its redirect_uris must include the redirect URI); omit to use dynamic registration",
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_SOLID_REDIRECT_URI",
+          "description": "loopback redirect URI (default http://127.0.0.1:39398/callback); with a Client Identifier Document it must be one of the document's redirect_uris",
+          "optional": true
+        }
+      ],
+      "config": {
+        "label": "privatedatapod.com",
+        "storage": "${RA_INTEROP_PRIVATEDATAPOD_COM_STORAGE}",
+        "webId": "${RA_INTEROP_PRIVATEDATAPOD_COM_WEBID}",
+        "issuer": "${RA_INTEROP_PRIVATEDATAPOD_COM_ISSUER:-https://privatedatapod.com/}",
+        "scratchContainer": "${RA_INTEROP_PRIVATEDATAPOD_COM_SCRATCH}",
+        "privateResource": "${RA_INTEROP_PRIVATEDATAPOD_COM_PRIVATE_RESOURCE}",
+        "otherProtected": "${RA_INTEROP_PRIVATEDATAPOD_COM_OTHER_PROTECTED}",
+        "clientId": "${RA_INTEROP_PRIVATEDATAPOD_COM_CLIENT_ID}",
+        "storageState": "${RA_INTEROP_PRIVATEDATAPOD_COM_STORAGE_STATE}",
+        "redirectUri": "${RA_INTEROP_SOLID_REDIRECT_URI:-http://127.0.0.1:39398/callback}",
+        "login": {
+          "recipe": "${RA_INTEROP_PRIVATEDATAPOD_COM_LOGIN:-manual}",
+          "email": "${RA_INTEROP_PRIVATEDATAPOD_COM_EMAIL}",
+          "password": "${RA_INTEROP_PRIVATEDATAPOD_COM_PASSWORD}",
+          "webId": "${RA_INTEROP_PRIVATEDATAPOD_COM_WEBID}"
+        }
+      },
+      "capabilities": {
+        "refreshTokens": true,
+        "refreshRotation": "unverified",
+        "revocation": true,
+        "storageDiscovery": "unverified"
+      },
+      "capabilityNotes": {
+        "refreshRotation": "whether refresh tokens rotate can only be observed with a test account (not yet run)",
+        "storageDiscovery": "local CSS 7.2.0 advertises the storage root, but this deployment's CSS version and configuration are not disclosed; needs a test account to observe"
+      }
+    },
+    {
+      "id": "redpencil-io",
+      "name": "redpencil.io (hosted Solid pod provider listed at solidproject.org/get_a_pod)",
+      "category": "live",
+      "adapter": "solid-oidc",
+      "software": {
+        "name": "Community Solid Server",
+        "source": "open",
+        "url": "https://github.com/CommunitySolidServer/CommunitySolidServer"
+      },
+      "links": {
+        "registration": "https://solid.redpencil.io/",
+        "listing": "https://solidproject.org/get_a_pod#redpencil_io"
+      },
+      "notes": [
+        "software: X-Powered-By: Community Solid Server (no version disclosed) (inferred from response headers, not stated by the provider)",
+        "discovery 2026-09-27: standard CSS .oidc/ endpoints incl. revocation and introspection",
+        "client registration (discovery 2026-09-27): a registration_endpoint is advertised, so dynamic registration works without a hosted Client Identifier Document; no provider advertises Client Identifier Document support in its metadata (Solid-OIDC defines no such field), so the optional CLIENT_ID path is unverified here until a run; the server is Community Solid Server, whose documentation describes Client Identifier Document support",
+        "unattended (session mode): prefer the css-password recipe for a test-only account; a stored session alone still meets CSS's consent page for a newly registered client, so the non-interactive login is expected to fail closed (unverified)"
+      ],
+      "env": [
+        {
+          "name": "RA_INTEROP_REDPENCIL_IO_WEBID",
+          "description": "WebID of a dedicated test account on redpencil.io",
+          "pii": true
+        },
+        {
+          "name": "RA_INTEROP_REDPENCIL_IO_STORAGE",
+          "description": "storage root of the test account (ends with /)",
+          "pii": true
+        },
+        {
+          "name": "RA_INTEROP_REDPENCIL_IO_SCRATCH",
+          "description": "container dedicated to test writes inside the storage (ends with /); omit for read-only runs",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_REDPENCIL_IO_PRIVATE_RESOURCE",
+          "description": "an existing private resource of the test account (read-only runs)",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_REDPENCIL_IO_OTHER_PROTECTED",
+          "description": "a protected resource outside the test storage (read-only boundary probe)",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_REDPENCIL_IO_ISSUER",
+          "description": "override the expected issuer (defaults to the observed one)",
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_REDPENCIL_IO_STORAGE_STATE",
+          "description": "Playwright storageState file of a dedicated test account's signed-in identity-provider session (contains cookies; never commit). With --headed it seeds the browser; without --headed it enables the fail-closed non-interactive session mode (a configured file that does not exist is a configuration error)",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_REDPENCIL_IO_LOGIN",
+          "description": "login recipe: manual (default, needs --headed) or css-password for a test-only account",
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_REDPENCIL_IO_EMAIL",
+          "description": "css-password recipe: the test-only account's email",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_REDPENCIL_IO_PASSWORD",
+          "description": "css-password recipe: the test-only account's password",
+          "secret": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_REDPENCIL_IO_CLIENT_ID",
+          "description": "optional Solid-OIDC Client Identifier Document URL (https, publicly dereferenceable, its redirect_uris must include the redirect URI); omit to use dynamic registration",
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_SOLID_REDIRECT_URI",
+          "description": "loopback redirect URI (default http://127.0.0.1:39398/callback); with a Client Identifier Document it must be one of the document's redirect_uris",
+          "optional": true
+        }
+      ],
+      "config": {
+        "label": "redpencil.io",
+        "storage": "${RA_INTEROP_REDPENCIL_IO_STORAGE}",
+        "webId": "${RA_INTEROP_REDPENCIL_IO_WEBID}",
+        "issuer": "${RA_INTEROP_REDPENCIL_IO_ISSUER:-https://solid.redpencil.io/}",
+        "scratchContainer": "${RA_INTEROP_REDPENCIL_IO_SCRATCH}",
+        "privateResource": "${RA_INTEROP_REDPENCIL_IO_PRIVATE_RESOURCE}",
+        "otherProtected": "${RA_INTEROP_REDPENCIL_IO_OTHER_PROTECTED}",
+        "clientId": "${RA_INTEROP_REDPENCIL_IO_CLIENT_ID}",
+        "storageState": "${RA_INTEROP_REDPENCIL_IO_STORAGE_STATE}",
+        "redirectUri": "${RA_INTEROP_SOLID_REDIRECT_URI:-http://127.0.0.1:39398/callback}",
+        "login": {
+          "recipe": "${RA_INTEROP_REDPENCIL_IO_LOGIN:-manual}",
+          "email": "${RA_INTEROP_REDPENCIL_IO_EMAIL}",
+          "password": "${RA_INTEROP_REDPENCIL_IO_PASSWORD}",
+          "webId": "${RA_INTEROP_REDPENCIL_IO_WEBID}"
+        }
+      },
+      "capabilities": {
+        "refreshTokens": true,
+        "refreshRotation": "unverified",
+        "revocation": true,
+        "storageDiscovery": "unverified"
+      },
+      "capabilityNotes": {
+        "refreshRotation": "whether refresh tokens rotate can only be observed with a test account (not yet run)",
+        "storageDiscovery": "local CSS 7.2.0 advertises the storage root, but this deployment's CSS version and configuration are not disclosed; needs a test account to observe"
+      }
+    },
+    {
+      "id": "solid-openlinksw-com",
+      "name": "solid.openlinksw.com (hosted Solid pod provider listed at solidproject.org/get_a_pod)",
+      "category": "live",
+      "adapter": "solid-oidc",
+      "software": {
+        "name": "OpenLink Solid Server",
+        "source": "service",
+        "url": "https://www.openlinksw.com/"
+      },
+      "links": {
+        "registration": "https://solid.openlinksw.com:8445/register",
+        "listing": "https://solidproject.org/get_a_pod#solid_openlinksw_com"
+      },
+      "notes": [
+        "software: X-Powered-By: OpenLink Solid Server; endpoints (/authorize, /token, /register) resemble Node Solid Server's; licensing not stated (inferred from response headers, not stated by the provider)",
+        "discovery 2026-09-27: served on port 8445; https://solid.openlinksw.com (port 443) reset the TLS connection; scopes_supported not advertised; NSS-like, but not in the library's NSS nonce quirk list (nonce behaviour unobserved)",
+        "client registration (discovery 2026-09-27): a registration_endpoint is advertised, so dynamic registration works without a hosted Client Identifier Document; no provider advertises Client Identifier Document support in its metadata (Solid-OIDC defines no such field), so the optional CLIENT_ID path is unverified here until a run",
+        "unattended (session mode): unverified — NSS-style servers show a consent page for new client origins; the non-interactive login fails closed if one appears"
+      ],
+      "env": [
+        {
+          "name": "RA_INTEROP_SOLID_OPENLINKSW_COM_WEBID",
+          "description": "WebID of a dedicated test account on solid.openlinksw.com",
+          "pii": true
+        },
+        {
+          "name": "RA_INTEROP_SOLID_OPENLINKSW_COM_STORAGE",
+          "description": "storage root of the test account (ends with /)",
+          "pii": true
+        },
+        {
+          "name": "RA_INTEROP_SOLID_OPENLINKSW_COM_SCRATCH",
+          "description": "container dedicated to test writes inside the storage (ends with /); omit for read-only runs",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_SOLID_OPENLINKSW_COM_PRIVATE_RESOURCE",
+          "description": "an existing private resource of the test account (read-only runs)",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_SOLID_OPENLINKSW_COM_OTHER_PROTECTED",
+          "description": "a protected resource outside the test storage (read-only boundary probe)",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_SOLID_OPENLINKSW_COM_ISSUER",
+          "description": "override the expected issuer (defaults to the observed one)",
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_SOLID_OPENLINKSW_COM_STORAGE_STATE",
+          "description": "Playwright storageState file of a dedicated test account's signed-in identity-provider session (contains cookies; never commit). With --headed it seeds the browser; without --headed it enables the fail-closed non-interactive session mode (a configured file that does not exist is a configuration error)",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_SOLID_OPENLINKSW_COM_CLIENT_ID",
+          "description": "optional Solid-OIDC Client Identifier Document URL (https, publicly dereferenceable, its redirect_uris must include the redirect URI); omit to use dynamic registration",
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_SOLID_REDIRECT_URI",
+          "description": "loopback redirect URI (default http://127.0.0.1:39398/callback); with a Client Identifier Document it must be one of the document's redirect_uris",
+          "optional": true
+        }
+      ],
+      "config": {
+        "label": "solid.openlinksw.com",
+        "storage": "${RA_INTEROP_SOLID_OPENLINKSW_COM_STORAGE}",
+        "webId": "${RA_INTEROP_SOLID_OPENLINKSW_COM_WEBID}",
+        "issuer": "${RA_INTEROP_SOLID_OPENLINKSW_COM_ISSUER:-https://solid.openlinksw.com:8445}",
+        "scratchContainer": "${RA_INTEROP_SOLID_OPENLINKSW_COM_SCRATCH}",
+        "privateResource": "${RA_INTEROP_SOLID_OPENLINKSW_COM_PRIVATE_RESOURCE}",
+        "otherProtected": "${RA_INTEROP_SOLID_OPENLINKSW_COM_OTHER_PROTECTED}",
+        "clientId": "${RA_INTEROP_SOLID_OPENLINKSW_COM_CLIENT_ID}",
+        "storageState": "${RA_INTEROP_SOLID_OPENLINKSW_COM_STORAGE_STATE}",
+        "redirectUri": "${RA_INTEROP_SOLID_REDIRECT_URI:-http://127.0.0.1:39398/callback}",
+        "login": {
+          "recipe": "manual"
+        }
+      },
+      "capabilities": {
+        "refreshTokens": "unverified",
+        "refreshRotation": "unverified",
+        "revocation": false,
+        "storageDiscovery": "unverified"
+      },
+      "capabilityNotes": {
+        "refreshTokens": "discovery (2026-09-27) lists the refresh_token grant but no scopes_supported; issuance needs an account to observe",
+        "refreshRotation": "whether refresh tokens rotate can only be observed with a test account (not yet run)",
+        "revocation": "the discovery document (read 2026-09-27) advertises no revocation_endpoint",
+        "storageDiscovery": "whether a private resource's 401 carries storage-root evidence (Link headers) can only be observed with a test account (not yet run)"
+      }
+    },
+    {
+      "id": "solidcommunity-net",
+      "name": "solidcommunity.net (hosted Solid pod provider listed at solidproject.org/get_a_pod)",
+      "category": "live",
+      "adapter": "solid-oidc",
+      "software": {
+        "name": "Community Solid Server",
+        "source": "open",
+        "url": "https://github.com/CommunitySolidServer/CommunitySolidServer"
+      },
+      "links": {
+        "registration": "https://solidcommunity.net/",
+        "listing": "https://solidproject.org/get_a_pod#solidcommunity_net"
+      },
+      "notes": [
+        "software: X-Powered-By: Community Solid Server (no version disclosed) (inferred from response headers, not stated by the provider)",
+        "discovery 2026-09-27: standard CSS .oidc/ endpoints incl. revocation and introspection; served through Cloudflare",
+        "client registration (discovery 2026-09-27): a registration_endpoint is advertised, so dynamic registration works without a hosted Client Identifier Document; no provider advertises Client Identifier Document support in its metadata (Solid-OIDC defines no such field), so the optional CLIENT_ID path is unverified here until a run; the server is Community Solid Server, whose documentation describes Client Identifier Document support",
+        "unattended (session mode): prefer the css-password recipe for a test-only account; a stored session alone still meets CSS's consent page for a newly registered client, so the non-interactive login is expected to fail closed (unverified)"
+      ],
+      "env": [
+        {
+          "name": "RA_INTEROP_SOLIDCOMMUNITY_NET_WEBID",
+          "description": "WebID of a dedicated test account on solidcommunity.net",
+          "pii": true
+        },
+        {
+          "name": "RA_INTEROP_SOLIDCOMMUNITY_NET_STORAGE",
+          "description": "storage root of the test account (ends with /)",
+          "pii": true
+        },
+        {
+          "name": "RA_INTEROP_SOLIDCOMMUNITY_NET_SCRATCH",
+          "description": "container dedicated to test writes inside the storage (ends with /); omit for read-only runs",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_SOLIDCOMMUNITY_NET_PRIVATE_RESOURCE",
+          "description": "an existing private resource of the test account (read-only runs)",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_SOLIDCOMMUNITY_NET_OTHER_PROTECTED",
+          "description": "a protected resource outside the test storage (read-only boundary probe)",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_SOLIDCOMMUNITY_NET_ISSUER",
+          "description": "override the expected issuer (defaults to the observed one)",
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_SOLIDCOMMUNITY_NET_STORAGE_STATE",
+          "description": "Playwright storageState file of a dedicated test account's signed-in identity-provider session (contains cookies; never commit). With --headed it seeds the browser; without --headed it enables the fail-closed non-interactive session mode (a configured file that does not exist is a configuration error)",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_SOLIDCOMMUNITY_NET_LOGIN",
+          "description": "login recipe: manual (default, needs --headed) or css-password for a test-only account",
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_SOLIDCOMMUNITY_NET_EMAIL",
+          "description": "css-password recipe: the test-only account's email",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_SOLIDCOMMUNITY_NET_PASSWORD",
+          "description": "css-password recipe: the test-only account's password",
+          "secret": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_SOLIDCOMMUNITY_NET_CLIENT_ID",
+          "description": "optional Solid-OIDC Client Identifier Document URL (https, publicly dereferenceable, its redirect_uris must include the redirect URI); omit to use dynamic registration",
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_SOLID_REDIRECT_URI",
+          "description": "loopback redirect URI (default http://127.0.0.1:39398/callback); with a Client Identifier Document it must be one of the document's redirect_uris",
+          "optional": true
+        }
+      ],
+      "config": {
+        "label": "solidcommunity.net",
+        "storage": "${RA_INTEROP_SOLIDCOMMUNITY_NET_STORAGE}",
+        "webId": "${RA_INTEROP_SOLIDCOMMUNITY_NET_WEBID}",
+        "issuer": "${RA_INTEROP_SOLIDCOMMUNITY_NET_ISSUER:-https://solidcommunity.net/}",
+        "scratchContainer": "${RA_INTEROP_SOLIDCOMMUNITY_NET_SCRATCH}",
+        "privateResource": "${RA_INTEROP_SOLIDCOMMUNITY_NET_PRIVATE_RESOURCE}",
+        "otherProtected": "${RA_INTEROP_SOLIDCOMMUNITY_NET_OTHER_PROTECTED}",
+        "clientId": "${RA_INTEROP_SOLIDCOMMUNITY_NET_CLIENT_ID}",
+        "storageState": "${RA_INTEROP_SOLIDCOMMUNITY_NET_STORAGE_STATE}",
+        "redirectUri": "${RA_INTEROP_SOLID_REDIRECT_URI:-http://127.0.0.1:39398/callback}",
+        "login": {
+          "recipe": "${RA_INTEROP_SOLIDCOMMUNITY_NET_LOGIN:-manual}",
+          "email": "${RA_INTEROP_SOLIDCOMMUNITY_NET_EMAIL}",
+          "password": "${RA_INTEROP_SOLIDCOMMUNITY_NET_PASSWORD}",
+          "webId": "${RA_INTEROP_SOLIDCOMMUNITY_NET_WEBID}"
+        }
+      },
+      "capabilities": {
+        "refreshTokens": true,
+        "refreshRotation": "unverified",
+        "revocation": true,
+        "storageDiscovery": "unverified"
+      },
+      "capabilityNotes": {
+        "refreshRotation": "whether refresh tokens rotate can only be observed with a test account (not yet run)",
+        "storageDiscovery": "local CSS 7.2.0 advertises the storage root, but this deployment's CSS version and configuration are not disclosed; needs a test account to observe"
+      }
+    },
+    {
+      "id": "solidcommunity-au",
+      "name": "solidcommunity.au (hosted Solid pod provider listed at solidproject.org/get_a_pod)",
+      "category": "live",
+      "adapter": "solid-oidc",
+      "software": {
+        "name": "Community Solid Server",
+        "source": "open",
+        "url": "https://github.com/CommunitySolidServer/CommunitySolidServer"
+      },
+      "links": {
+        "registration": "https://pods.solidcommunity.au/",
+        "listing": "https://solidproject.org/get_a_pod#solidcommunity_au"
+      },
+      "notes": [
+        "software: X-Powered-By: Community Solid Server (no version disclosed) (inferred from response headers, not stated by the provider)",
+        "discovery 2026-09-27: standard CSS .oidc/ endpoints incl. revocation and introspection",
+        "client registration (discovery 2026-09-27): a registration_endpoint is advertised, so dynamic registration works without a hosted Client Identifier Document; no provider advertises Client Identifier Document support in its metadata (Solid-OIDC defines no such field), so the optional CLIENT_ID path is unverified here until a run; the server is Community Solid Server, whose documentation describes Client Identifier Document support",
+        "unattended (session mode): prefer the css-password recipe for a test-only account; a stored session alone still meets CSS's consent page for a newly registered client, so the non-interactive login is expected to fail closed (unverified)"
+      ],
+      "env": [
+        {
+          "name": "RA_INTEROP_SOLIDCOMMUNITY_AU_WEBID",
+          "description": "WebID of a dedicated test account on solidcommunity.au",
+          "pii": true
+        },
+        {
+          "name": "RA_INTEROP_SOLIDCOMMUNITY_AU_STORAGE",
+          "description": "storage root of the test account (ends with /)",
+          "pii": true
+        },
+        {
+          "name": "RA_INTEROP_SOLIDCOMMUNITY_AU_SCRATCH",
+          "description": "container dedicated to test writes inside the storage (ends with /); omit for read-only runs",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_SOLIDCOMMUNITY_AU_PRIVATE_RESOURCE",
+          "description": "an existing private resource of the test account (read-only runs)",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_SOLIDCOMMUNITY_AU_OTHER_PROTECTED",
+          "description": "a protected resource outside the test storage (read-only boundary probe)",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_SOLIDCOMMUNITY_AU_ISSUER",
+          "description": "override the expected issuer (defaults to the observed one)",
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_SOLIDCOMMUNITY_AU_STORAGE_STATE",
+          "description": "Playwright storageState file of a dedicated test account's signed-in identity-provider session (contains cookies; never commit). With --headed it seeds the browser; without --headed it enables the fail-closed non-interactive session mode (a configured file that does not exist is a configuration error)",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_SOLIDCOMMUNITY_AU_LOGIN",
+          "description": "login recipe: manual (default, needs --headed) or css-password for a test-only account",
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_SOLIDCOMMUNITY_AU_EMAIL",
+          "description": "css-password recipe: the test-only account's email",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_SOLIDCOMMUNITY_AU_PASSWORD",
+          "description": "css-password recipe: the test-only account's password",
+          "secret": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_SOLIDCOMMUNITY_AU_CLIENT_ID",
+          "description": "optional Solid-OIDC Client Identifier Document URL (https, publicly dereferenceable, its redirect_uris must include the redirect URI); omit to use dynamic registration",
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_SOLID_REDIRECT_URI",
+          "description": "loopback redirect URI (default http://127.0.0.1:39398/callback); with a Client Identifier Document it must be one of the document's redirect_uris",
+          "optional": true
+        }
+      ],
+      "config": {
+        "label": "solidcommunity.au",
+        "storage": "${RA_INTEROP_SOLIDCOMMUNITY_AU_STORAGE}",
+        "webId": "${RA_INTEROP_SOLIDCOMMUNITY_AU_WEBID}",
+        "issuer": "${RA_INTEROP_SOLIDCOMMUNITY_AU_ISSUER:-https://pods.solidcommunity.au/}",
+        "scratchContainer": "${RA_INTEROP_SOLIDCOMMUNITY_AU_SCRATCH}",
+        "privateResource": "${RA_INTEROP_SOLIDCOMMUNITY_AU_PRIVATE_RESOURCE}",
+        "otherProtected": "${RA_INTEROP_SOLIDCOMMUNITY_AU_OTHER_PROTECTED}",
+        "clientId": "${RA_INTEROP_SOLIDCOMMUNITY_AU_CLIENT_ID}",
+        "storageState": "${RA_INTEROP_SOLIDCOMMUNITY_AU_STORAGE_STATE}",
+        "redirectUri": "${RA_INTEROP_SOLID_REDIRECT_URI:-http://127.0.0.1:39398/callback}",
+        "login": {
+          "recipe": "${RA_INTEROP_SOLIDCOMMUNITY_AU_LOGIN:-manual}",
+          "email": "${RA_INTEROP_SOLIDCOMMUNITY_AU_EMAIL}",
+          "password": "${RA_INTEROP_SOLIDCOMMUNITY_AU_PASSWORD}",
+          "webId": "${RA_INTEROP_SOLIDCOMMUNITY_AU_WEBID}"
+        }
+      },
+      "capabilities": {
+        "refreshTokens": true,
+        "refreshRotation": "unverified",
+        "revocation": true,
+        "storageDiscovery": "unverified"
+      },
+      "capabilityNotes": {
+        "refreshRotation": "whether refresh tokens rotate can only be observed with a test account (not yet run)",
+        "storageDiscovery": "local CSS 7.2.0 advertises the storage root, but this deployment's CSS version and configuration are not disclosed; needs a test account to observe"
+      }
+    },
+    {
+      "id": "solidweb-me",
+      "name": "solidweb.me (hosted Solid pod provider listed at solidproject.org/get_a_pod)",
+      "category": "live",
+      "adapter": "solid-oidc",
+      "software": {
+        "name": "Community Solid Server",
+        "source": "open",
+        "url": "https://github.com/CommunitySolidServer/CommunitySolidServer"
+      },
+      "links": {
+        "registration": "https://solidweb.me/",
+        "listing": "https://solidproject.org/get_a_pod#solidweb_me"
+      },
+      "notes": [
+        "software: X-Powered-By: Community Solid Server (no version disclosed) (inferred from response headers, not stated by the provider)",
+        "discovery 2026-09-27: standard CSS .oidc/ endpoints incl. revocation and introspection",
+        "client registration (discovery 2026-09-27): a registration_endpoint is advertised, so dynamic registration works without a hosted Client Identifier Document; no provider advertises Client Identifier Document support in its metadata (Solid-OIDC defines no such field), so the optional CLIENT_ID path is unverified here until a run; the server is Community Solid Server, whose documentation describes Client Identifier Document support",
+        "unattended (session mode): prefer the css-password recipe for a test-only account; a stored session alone still meets CSS's consent page for a newly registered client, so the non-interactive login is expected to fail closed (unverified)"
+      ],
+      "env": [
+        {
+          "name": "RA_INTEROP_SOLIDWEB_ME_WEBID",
+          "description": "WebID of a dedicated test account on solidweb.me",
+          "pii": true
+        },
+        {
+          "name": "RA_INTEROP_SOLIDWEB_ME_STORAGE",
+          "description": "storage root of the test account (ends with /)",
+          "pii": true
+        },
+        {
+          "name": "RA_INTEROP_SOLIDWEB_ME_SCRATCH",
+          "description": "container dedicated to test writes inside the storage (ends with /); omit for read-only runs",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_SOLIDWEB_ME_PRIVATE_RESOURCE",
+          "description": "an existing private resource of the test account (read-only runs)",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_SOLIDWEB_ME_OTHER_PROTECTED",
+          "description": "a protected resource outside the test storage (read-only boundary probe)",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_SOLIDWEB_ME_ISSUER",
+          "description": "override the expected issuer (defaults to the observed one)",
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_SOLIDWEB_ME_STORAGE_STATE",
+          "description": "Playwright storageState file of a dedicated test account's signed-in identity-provider session (contains cookies; never commit). With --headed it seeds the browser; without --headed it enables the fail-closed non-interactive session mode (a configured file that does not exist is a configuration error)",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_SOLIDWEB_ME_LOGIN",
+          "description": "login recipe: manual (default, needs --headed) or css-password for a test-only account",
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_SOLIDWEB_ME_EMAIL",
+          "description": "css-password recipe: the test-only account's email",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_SOLIDWEB_ME_PASSWORD",
+          "description": "css-password recipe: the test-only account's password",
+          "secret": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_SOLIDWEB_ME_CLIENT_ID",
+          "description": "optional Solid-OIDC Client Identifier Document URL (https, publicly dereferenceable, its redirect_uris must include the redirect URI); omit to use dynamic registration",
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_SOLID_REDIRECT_URI",
+          "description": "loopback redirect URI (default http://127.0.0.1:39398/callback); with a Client Identifier Document it must be one of the document's redirect_uris",
+          "optional": true
+        }
+      ],
+      "config": {
+        "label": "solidweb.me",
+        "storage": "${RA_INTEROP_SOLIDWEB_ME_STORAGE}",
+        "webId": "${RA_INTEROP_SOLIDWEB_ME_WEBID}",
+        "issuer": "${RA_INTEROP_SOLIDWEB_ME_ISSUER:-https://solidweb.me/}",
+        "scratchContainer": "${RA_INTEROP_SOLIDWEB_ME_SCRATCH}",
+        "privateResource": "${RA_INTEROP_SOLIDWEB_ME_PRIVATE_RESOURCE}",
+        "otherProtected": "${RA_INTEROP_SOLIDWEB_ME_OTHER_PROTECTED}",
+        "clientId": "${RA_INTEROP_SOLIDWEB_ME_CLIENT_ID}",
+        "storageState": "${RA_INTEROP_SOLIDWEB_ME_STORAGE_STATE}",
+        "redirectUri": "${RA_INTEROP_SOLID_REDIRECT_URI:-http://127.0.0.1:39398/callback}",
+        "login": {
+          "recipe": "${RA_INTEROP_SOLIDWEB_ME_LOGIN:-manual}",
+          "email": "${RA_INTEROP_SOLIDWEB_ME_EMAIL}",
+          "password": "${RA_INTEROP_SOLIDWEB_ME_PASSWORD}",
+          "webId": "${RA_INTEROP_SOLIDWEB_ME_WEBID}"
+        }
+      },
+      "capabilities": {
+        "refreshTokens": true,
+        "refreshRotation": "unverified",
+        "revocation": true,
+        "storageDiscovery": "unverified"
+      },
+      "capabilityNotes": {
+        "refreshRotation": "whether refresh tokens rotate can only be observed with a test account (not yet run)",
+        "storageDiscovery": "local CSS 7.2.0 advertises the storage root, but this deployment's CSS version and configuration are not disclosed; needs a test account to observe"
+      }
+    },
+    {
+      "id": "solidweb-org",
+      "name": "solidweb.org (hosted Solid pod provider listed at solidproject.org/get_a_pod)",
+      "category": "live",
+      "adapter": "solid-oidc",
+      "software": {
+        "name": "Node Solid Server",
+        "version": "6.0.0",
+        "source": "open",
+        "url": "https://github.com/nodeSolidServer/node-solid-server"
+      },
+      "links": {
+        "registration": "https://solidweb.org/",
+        "listing": "https://solidproject.org/get_a_pod#solidweb_org"
+      },
+      "notes": [
+        "software: X-Powered-By: solid-server/6.0.0 (inferred from response headers, not stated by the provider)",
+        "discovery 2026-09-27: no code_challenge_methods_supported or dpop_signing_alg_values_supported advertised; the library's NSS nonce quirk list includes this origin (local NSS 6.0.0 omits the nonce claim)",
+        "client registration (discovery 2026-09-27): a registration_endpoint is advertised, so dynamic registration works without a hosted Client Identifier Document; no provider advertises Client Identifier Document support in its metadata (Solid-OIDC defines no such field), so the optional CLIENT_ID path is unverified here until a run",
+        "unattended (session mode): unverified — NSS-style servers show a consent page for new client origins; the non-interactive login fails closed if one appears"
+      ],
+      "env": [
+        {
+          "name": "RA_INTEROP_SOLIDWEB_ORG_WEBID",
+          "description": "WebID of a dedicated test account on solidweb.org",
+          "pii": true
+        },
+        {
+          "name": "RA_INTEROP_SOLIDWEB_ORG_STORAGE",
+          "description": "storage root of the test account (ends with /)",
+          "pii": true
+        },
+        {
+          "name": "RA_INTEROP_SOLIDWEB_ORG_SCRATCH",
+          "description": "container dedicated to test writes inside the storage (ends with /); omit for read-only runs",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_SOLIDWEB_ORG_PRIVATE_RESOURCE",
+          "description": "an existing private resource of the test account (read-only runs)",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_SOLIDWEB_ORG_OTHER_PROTECTED",
+          "description": "a protected resource outside the test storage (read-only boundary probe)",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_SOLIDWEB_ORG_ISSUER",
+          "description": "override the expected issuer (defaults to the observed one)",
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_SOLIDWEB_ORG_STORAGE_STATE",
+          "description": "Playwright storageState file of a dedicated test account's signed-in identity-provider session (contains cookies; never commit). With --headed it seeds the browser; without --headed it enables the fail-closed non-interactive session mode (a configured file that does not exist is a configuration error)",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_SOLIDWEB_ORG_CLIENT_ID",
+          "description": "optional Solid-OIDC Client Identifier Document URL (https, publicly dereferenceable, its redirect_uris must include the redirect URI); omit to use dynamic registration",
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_SOLID_REDIRECT_URI",
+          "description": "loopback redirect URI (default http://127.0.0.1:39398/callback); with a Client Identifier Document it must be one of the document's redirect_uris",
+          "optional": true
+        }
+      ],
+      "config": {
+        "label": "solidweb.org",
+        "storage": "${RA_INTEROP_SOLIDWEB_ORG_STORAGE}",
+        "webId": "${RA_INTEROP_SOLIDWEB_ORG_WEBID}",
+        "issuer": "${RA_INTEROP_SOLIDWEB_ORG_ISSUER:-https://solidweb.org}",
+        "scratchContainer": "${RA_INTEROP_SOLIDWEB_ORG_SCRATCH}",
+        "privateResource": "${RA_INTEROP_SOLIDWEB_ORG_PRIVATE_RESOURCE}",
+        "otherProtected": "${RA_INTEROP_SOLIDWEB_ORG_OTHER_PROTECTED}",
+        "clientId": "${RA_INTEROP_SOLIDWEB_ORG_CLIENT_ID}",
+        "storageState": "${RA_INTEROP_SOLIDWEB_ORG_STORAGE_STATE}",
+        "redirectUri": "${RA_INTEROP_SOLID_REDIRECT_URI:-http://127.0.0.1:39398/callback}",
+        "login": {
+          "recipe": "manual"
+        }
+      },
+      "capabilities": {
+        "refreshTokens": true,
+        "refreshRotation": "unverified",
+        "revocation": false,
+        "storageDiscovery": "unverified"
+      },
+      "capabilityNotes": {
+        "refreshRotation": "whether refresh tokens rotate can only be observed with a test account (not yet run)",
+        "revocation": "the discovery document (read 2026-09-27) advertises no revocation_endpoint",
+        "storageDiscovery": "whether a private resource's 401 carries storage-root evidence (Link headers) can only be observed with a test account (not yet run)"
+      }
+    },
+    {
+      "id": "teamid-live",
+      "name": "teamid.live (hosted Solid pod provider listed at solidproject.org/get_a_pod)",
+      "category": "live",
+      "adapter": "solid-oidc",
+      "software": {
+        "name": "Community Solid Server",
+        "source": "open",
+        "url": "https://github.com/CommunitySolidServer/CommunitySolidServer"
+      },
+      "links": {
+        "registration": "https://teamid.live/",
+        "listing": "https://solidproject.org/get_a_pod#teamid_live"
+      },
+      "notes": [
+        "software: X-Powered-By: Community Solid Server (no version disclosed) (inferred from response headers, not stated by the provider)",
+        "discovery 2026-09-27: standard CSS .oidc/ endpoints incl. revocation and introspection",
+        "client registration (discovery 2026-09-27): a registration_endpoint is advertised, so dynamic registration works without a hosted Client Identifier Document; no provider advertises Client Identifier Document support in its metadata (Solid-OIDC defines no such field), so the optional CLIENT_ID path is unverified here until a run; the server is Community Solid Server, whose documentation describes Client Identifier Document support",
+        "unattended (session mode): prefer the css-password recipe for a test-only account; a stored session alone still meets CSS's consent page for a newly registered client, so the non-interactive login is expected to fail closed (unverified)"
+      ],
+      "env": [
+        {
+          "name": "RA_INTEROP_TEAMID_LIVE_WEBID",
+          "description": "WebID of a dedicated test account on teamid.live",
+          "pii": true
+        },
+        {
+          "name": "RA_INTEROP_TEAMID_LIVE_STORAGE",
+          "description": "storage root of the test account (ends with /)",
+          "pii": true
+        },
+        {
+          "name": "RA_INTEROP_TEAMID_LIVE_SCRATCH",
+          "description": "container dedicated to test writes inside the storage (ends with /); omit for read-only runs",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_TEAMID_LIVE_PRIVATE_RESOURCE",
+          "description": "an existing private resource of the test account (read-only runs)",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_TEAMID_LIVE_OTHER_PROTECTED",
+          "description": "a protected resource outside the test storage (read-only boundary probe)",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_TEAMID_LIVE_ISSUER",
+          "description": "override the expected issuer (defaults to the observed one)",
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_TEAMID_LIVE_STORAGE_STATE",
+          "description": "Playwright storageState file of a dedicated test account's signed-in identity-provider session (contains cookies; never commit). With --headed it seeds the browser; without --headed it enables the fail-closed non-interactive session mode (a configured file that does not exist is a configuration error)",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_TEAMID_LIVE_LOGIN",
+          "description": "login recipe: manual (default, needs --headed) or css-password for a test-only account",
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_TEAMID_LIVE_EMAIL",
+          "description": "css-password recipe: the test-only account's email",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_TEAMID_LIVE_PASSWORD",
+          "description": "css-password recipe: the test-only account's password",
+          "secret": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_TEAMID_LIVE_CLIENT_ID",
+          "description": "optional Solid-OIDC Client Identifier Document URL (https, publicly dereferenceable, its redirect_uris must include the redirect URI); omit to use dynamic registration",
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_SOLID_REDIRECT_URI",
+          "description": "loopback redirect URI (default http://127.0.0.1:39398/callback); with a Client Identifier Document it must be one of the document's redirect_uris",
+          "optional": true
+        }
+      ],
+      "config": {
+        "label": "teamid.live",
+        "storage": "${RA_INTEROP_TEAMID_LIVE_STORAGE}",
+        "webId": "${RA_INTEROP_TEAMID_LIVE_WEBID}",
+        "issuer": "${RA_INTEROP_TEAMID_LIVE_ISSUER:-https://teamid.live/}",
+        "scratchContainer": "${RA_INTEROP_TEAMID_LIVE_SCRATCH}",
+        "privateResource": "${RA_INTEROP_TEAMID_LIVE_PRIVATE_RESOURCE}",
+        "otherProtected": "${RA_INTEROP_TEAMID_LIVE_OTHER_PROTECTED}",
+        "clientId": "${RA_INTEROP_TEAMID_LIVE_CLIENT_ID}",
+        "storageState": "${RA_INTEROP_TEAMID_LIVE_STORAGE_STATE}",
+        "redirectUri": "${RA_INTEROP_SOLID_REDIRECT_URI:-http://127.0.0.1:39398/callback}",
+        "login": {
+          "recipe": "${RA_INTEROP_TEAMID_LIVE_LOGIN:-manual}",
+          "email": "${RA_INTEROP_TEAMID_LIVE_EMAIL}",
+          "password": "${RA_INTEROP_TEAMID_LIVE_PASSWORD}",
+          "webId": "${RA_INTEROP_TEAMID_LIVE_WEBID}"
+        }
+      },
+      "capabilities": {
+        "refreshTokens": true,
+        "refreshRotation": "unverified",
+        "revocation": true,
+        "storageDiscovery": "unverified"
+      },
+      "capabilityNotes": {
+        "refreshRotation": "whether refresh tokens rotate can only be observed with a test account (not yet run)",
+        "storageDiscovery": "local CSS 7.2.0 advertises the storage root, but this deployment's CSS version and configuration are not disclosed; needs a test account to observe"
+      }
+    },
+    {
+      "id": "trinpod-eu",
+      "name": "trinpod.eu (hosted Solid pod provider listed at solidproject.org/get_a_pod)",
+      "category": "live",
+      "adapter": "solid-oidc",
+      "software": {
+        "name": "TrinPod",
+        "version": "3.6.986",
+        "source": "closed",
+        "url": "https://graphmetrix.com/trinpod-server"
+      },
+      "links": {
+        "registration": "https://trinpod.eu/",
+        "listing": "https://solidproject.org/get_a_pod#trinpod_eu"
+      },
+      "notes": [
+        "software: X-Powered-By: TwinPod-Server/3.6.986 (inferred from response headers, not stated by the provider)",
+        "discovery 2026-09-27: discovery answered once; later GETs of https://trinpod.eu/ reset the TLS connection from this network (ECONNRESET); offline_access is not in scopes_supported although refresh_token is a supported grant; the listing's link text says https://trinpod.eu/ but its href is https://trinapp.com/",
+        "client registration (discovery 2026-09-27): a registration_endpoint is advertised, so dynamic registration works without a hosted Client Identifier Document; no provider advertises Client Identifier Document support in its metadata (Solid-OIDC defines no such field), so the optional CLIENT_ID path is unverified here until a run",
+        "unattended (session mode): unverified — depends on whether the provider shows a login or consent page for a stored session; the non-interactive login fails closed if one appears"
+      ],
+      "env": [
+        {
+          "name": "RA_INTEROP_TRINPOD_EU_WEBID",
+          "description": "WebID of a dedicated test account on trinpod.eu",
+          "pii": true
+        },
+        {
+          "name": "RA_INTEROP_TRINPOD_EU_STORAGE",
+          "description": "storage root of the test account (ends with /)",
+          "pii": true
+        },
+        {
+          "name": "RA_INTEROP_TRINPOD_EU_SCRATCH",
+          "description": "container dedicated to test writes inside the storage (ends with /); omit for read-only runs",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_TRINPOD_EU_PRIVATE_RESOURCE",
+          "description": "an existing private resource of the test account (read-only runs)",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_TRINPOD_EU_OTHER_PROTECTED",
+          "description": "a protected resource outside the test storage (read-only boundary probe)",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_TRINPOD_EU_ISSUER",
+          "description": "override the expected issuer (defaults to the observed one)",
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_TRINPOD_EU_STORAGE_STATE",
+          "description": "Playwright storageState file of a dedicated test account's signed-in identity-provider session (contains cookies; never commit). With --headed it seeds the browser; without --headed it enables the fail-closed non-interactive session mode (a configured file that does not exist is a configuration error)",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_TRINPOD_EU_CLIENT_ID",
+          "description": "optional Solid-OIDC Client Identifier Document URL (https, publicly dereferenceable, its redirect_uris must include the redirect URI); omit to use dynamic registration",
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_SOLID_REDIRECT_URI",
+          "description": "loopback redirect URI (default http://127.0.0.1:39398/callback); with a Client Identifier Document it must be one of the document's redirect_uris",
+          "optional": true
+        }
+      ],
+      "config": {
+        "label": "trinpod.eu",
+        "storage": "${RA_INTEROP_TRINPOD_EU_STORAGE}",
+        "webId": "${RA_INTEROP_TRINPOD_EU_WEBID}",
+        "issuer": "${RA_INTEROP_TRINPOD_EU_ISSUER:-https://trinpod.eu}",
+        "scratchContainer": "${RA_INTEROP_TRINPOD_EU_SCRATCH}",
+        "privateResource": "${RA_INTEROP_TRINPOD_EU_PRIVATE_RESOURCE}",
+        "otherProtected": "${RA_INTEROP_TRINPOD_EU_OTHER_PROTECTED}",
+        "clientId": "${RA_INTEROP_TRINPOD_EU_CLIENT_ID}",
+        "storageState": "${RA_INTEROP_TRINPOD_EU_STORAGE_STATE}",
+        "redirectUri": "${RA_INTEROP_SOLID_REDIRECT_URI:-http://127.0.0.1:39398/callback}",
+        "login": {
+          "recipe": "manual"
+        }
+      },
+      "capabilities": {
+        "refreshTokens": "unverified",
+        "refreshRotation": "unverified",
+        "revocation": false,
+        "storageDiscovery": "unverified"
+      },
+      "capabilityNotes": {
+        "refreshTokens": "discovery (2026-09-27) lists the refresh_token grant but not the offline_access scope that Solid clients request; issuance needs an account to observe",
+        "refreshRotation": "whether refresh tokens rotate can only be observed with a test account (not yet run)",
+        "revocation": "the discovery document (read 2026-09-27) advertises no revocation_endpoint",
+        "storageDiscovery": "whether a private resource's 401 carries storage-root evidence (Link headers) can only be observed with a test account (not yet run)"
+      }
+    },
+    {
+      "id": "trinpod-us",
+      "name": "trinpod.us (hosted Solid pod provider listed at solidproject.org/get_a_pod)",
+      "category": "live",
+      "adapter": "solid-oidc",
+      "software": {
+        "name": "TrinPod",
+        "version": "3.6.986",
+        "source": "closed",
+        "url": "https://graphmetrix.com/trinpod-server"
+      },
+      "links": {
+        "registration": "https://trinpod.us/",
+        "listing": "https://solidproject.org/get_a_pod#trinpod_us"
+      },
+      "notes": [
+        "software: X-Powered-By: TwinPod-Server/3.6.986 (inferred from response headers, not stated by the provider)",
+        "discovery 2026-09-27: offline_access is not in scopes_supported although refresh_token is a supported grant; the listing's link text says https://trinpod.us/ but its href is https://trinapp.com/",
+        "client registration (discovery 2026-09-27): a registration_endpoint is advertised, so dynamic registration works without a hosted Client Identifier Document; no provider advertises Client Identifier Document support in its metadata (Solid-OIDC defines no such field), so the optional CLIENT_ID path is unverified here until a run",
+        "unattended (session mode): unverified — depends on whether the provider shows a login or consent page for a stored session; the non-interactive login fails closed if one appears"
+      ],
+      "env": [
+        {
+          "name": "RA_INTEROP_TRINPOD_US_WEBID",
+          "description": "WebID of a dedicated test account on trinpod.us",
+          "pii": true
+        },
+        {
+          "name": "RA_INTEROP_TRINPOD_US_STORAGE",
+          "description": "storage root of the test account (ends with /)",
+          "pii": true
+        },
+        {
+          "name": "RA_INTEROP_TRINPOD_US_SCRATCH",
+          "description": "container dedicated to test writes inside the storage (ends with /); omit for read-only runs",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_TRINPOD_US_PRIVATE_RESOURCE",
+          "description": "an existing private resource of the test account (read-only runs)",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_TRINPOD_US_OTHER_PROTECTED",
+          "description": "a protected resource outside the test storage (read-only boundary probe)",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_TRINPOD_US_ISSUER",
+          "description": "override the expected issuer (defaults to the observed one)",
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_TRINPOD_US_STORAGE_STATE",
+          "description": "Playwright storageState file of a dedicated test account's signed-in identity-provider session (contains cookies; never commit). With --headed it seeds the browser; without --headed it enables the fail-closed non-interactive session mode (a configured file that does not exist is a configuration error)",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_TRINPOD_US_CLIENT_ID",
+          "description": "optional Solid-OIDC Client Identifier Document URL (https, publicly dereferenceable, its redirect_uris must include the redirect URI); omit to use dynamic registration",
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_SOLID_REDIRECT_URI",
+          "description": "loopback redirect URI (default http://127.0.0.1:39398/callback); with a Client Identifier Document it must be one of the document's redirect_uris",
+          "optional": true
+        }
+      ],
+      "config": {
+        "label": "trinpod.us",
+        "storage": "${RA_INTEROP_TRINPOD_US_STORAGE}",
+        "webId": "${RA_INTEROP_TRINPOD_US_WEBID}",
+        "issuer": "${RA_INTEROP_TRINPOD_US_ISSUER:-https://trinpod.us}",
+        "scratchContainer": "${RA_INTEROP_TRINPOD_US_SCRATCH}",
+        "privateResource": "${RA_INTEROP_TRINPOD_US_PRIVATE_RESOURCE}",
+        "otherProtected": "${RA_INTEROP_TRINPOD_US_OTHER_PROTECTED}",
+        "clientId": "${RA_INTEROP_TRINPOD_US_CLIENT_ID}",
+        "storageState": "${RA_INTEROP_TRINPOD_US_STORAGE_STATE}",
+        "redirectUri": "${RA_INTEROP_SOLID_REDIRECT_URI:-http://127.0.0.1:39398/callback}",
+        "login": {
+          "recipe": "manual"
+        }
+      },
+      "capabilities": {
+        "refreshTokens": "unverified",
+        "refreshRotation": "unverified",
+        "revocation": false,
+        "storageDiscovery": "unverified"
+      },
+      "capabilityNotes": {
+        "refreshTokens": "discovery (2026-09-27) lists the refresh_token grant but not the offline_access scope that Solid clients request; issuance needs an account to observe",
+        "refreshRotation": "whether refresh tokens rotate can only be observed with a test account (not yet run)",
+        "revocation": "the discovery document (read 2026-09-27) advertises no revocation_endpoint",
+        "storageDiscovery": "whether a private resource's 401 carries storage-root evidence (Link headers) can only be observed with a test account (not yet run)"
+      }
+    },
+    {
+      "id": "use-id",
+      "name": "use.id (hosted Solid pod provider listed at solidproject.org/get_a_pod)",
+      "category": "live",
+      "adapter": "solid-oidc",
+      "software": {
+        "name": "unidentified (use.id, Digita)",
+        "source": "service"
+      },
+      "links": {
+        "registration": "https://get.use.id/people",
+        "listing": "https://solidproject.org/get_a_pod#use_id"
+      },
+      "notes": [
+        "software: not reachable: no header or discovery document could be read (inferred from response headers, not stated by the provider)",
+        "discovery 2026-09-27: https://use.id, https://get.use.id and https://idp.use.id all reset the TLS handshake (ECONNRESET / SSL_ERROR_SYSCALL) from this network on 2026-09-27; no issuer could be observed",
+        "client registration: unknown (discovery unreachable on 2026-09-27)",
+        "unattended (session mode): unverified — depends on whether the provider shows a login or consent page for a stored session; the non-interactive login fails closed if one appears"
+      ],
+      "env": [
+        {
+          "name": "RA_INTEROP_USE_ID_WEBID",
+          "description": "WebID of a dedicated test account on use.id",
+          "pii": true
+        },
+        {
+          "name": "RA_INTEROP_USE_ID_STORAGE",
+          "description": "storage root of the test account (ends with /)",
+          "pii": true
+        },
+        {
+          "name": "RA_INTEROP_USE_ID_SCRATCH",
+          "description": "container dedicated to test writes inside the storage (ends with /); omit for read-only runs",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_USE_ID_PRIVATE_RESOURCE",
+          "description": "an existing private resource of the test account (read-only runs)",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_USE_ID_OTHER_PROTECTED",
+          "description": "a protected resource outside the test storage (read-only boundary probe)",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_USE_ID_ISSUER",
+          "description": "the deployment's OpenID issuer, exactly as its discovery document states it"
+        },
+        {
+          "name": "RA_INTEROP_USE_ID_STORAGE_STATE",
+          "description": "Playwright storageState file of a dedicated test account's signed-in identity-provider session (contains cookies; never commit). With --headed it seeds the browser; without --headed it enables the fail-closed non-interactive session mode (a configured file that does not exist is a configuration error)",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_USE_ID_CLIENT_ID",
+          "description": "optional Solid-OIDC Client Identifier Document URL (https, publicly dereferenceable, its redirect_uris must include the redirect URI); omit to use dynamic registration",
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_SOLID_REDIRECT_URI",
+          "description": "loopback redirect URI (default http://127.0.0.1:39398/callback); with a Client Identifier Document it must be one of the document's redirect_uris",
+          "optional": true
+        }
+      ],
+      "config": {
+        "label": "use.id",
+        "storage": "${RA_INTEROP_USE_ID_STORAGE}",
+        "webId": "${RA_INTEROP_USE_ID_WEBID}",
+        "issuer": "${RA_INTEROP_USE_ID_ISSUER}",
+        "scratchContainer": "${RA_INTEROP_USE_ID_SCRATCH}",
+        "privateResource": "${RA_INTEROP_USE_ID_PRIVATE_RESOURCE}",
+        "otherProtected": "${RA_INTEROP_USE_ID_OTHER_PROTECTED}",
+        "clientId": "${RA_INTEROP_USE_ID_CLIENT_ID}",
+        "storageState": "${RA_INTEROP_USE_ID_STORAGE_STATE}",
+        "redirectUri": "${RA_INTEROP_SOLID_REDIRECT_URI:-http://127.0.0.1:39398/callback}",
+        "login": {
+          "recipe": "manual"
+        }
+      },
+      "capabilities": {
+        "refreshTokens": "unverified",
+        "refreshRotation": "unverified",
+        "revocation": "unverified",
+        "storageDiscovery": "unverified"
+      },
+      "capabilityNotes": {
+        "refreshTokens": "not observable: the provider was unreachable when the census was taken (2026-09-27); no discovery document could be read",
+        "refreshRotation": "not observable: the provider was unreachable when the census was taken (2026-09-27); no discovery document could be read",
+        "revocation": "not observable: the provider was unreachable when the census was taken (2026-09-27); no discovery document could be read",
+        "storageDiscovery": "not observable: the provider was unreachable when the census was taken (2026-09-27); no discovery document could be read"
+      }
+    },
+    {
+      "id": "solidweb-app",
+      "name": "solidweb.app (experimental) (hosted Solid pod provider listed at solidproject.org/get_a_pod)",
+      "category": "live",
+      "adapter": "solid-oidc",
+      "software": {
+        "name": "unidentified (solidweb.app, experimental)",
+        "source": "service"
+      },
+      "links": {
+        "registration": "https://solidweb.app/",
+        "listing": "https://solidproject.org/get_a_pod#solidweb_app"
+      },
+      "notes": [
+        "software: Server: nginx; OpenID endpoints under /idp/ (oidc-provider style: /idp/token/revocation, /idp/token/introspection); software not disclosed (inferred from response headers, not stated by the provider)",
+        "discovery 2026-09-27: solid_oidc_supported advertised; listed as experimental",
+        "client registration (discovery 2026-09-27): a registration_endpoint is advertised, so dynamic registration works without a hosted Client Identifier Document; no provider advertises Client Identifier Document support in its metadata (Solid-OIDC defines no such field), so the optional CLIENT_ID path is unverified here until a run",
+        "unattended (session mode): unverified — depends on whether the provider shows a login or consent page for a stored session; the non-interactive login fails closed if one appears"
+      ],
+      "env": [
+        {
+          "name": "RA_INTEROP_SOLIDWEB_APP_WEBID",
+          "description": "WebID of a dedicated test account on solidweb.app (experimental)",
+          "pii": true
+        },
+        {
+          "name": "RA_INTEROP_SOLIDWEB_APP_STORAGE",
+          "description": "storage root of the test account (ends with /)",
+          "pii": true
+        },
+        {
+          "name": "RA_INTEROP_SOLIDWEB_APP_SCRATCH",
+          "description": "container dedicated to test writes inside the storage (ends with /); omit for read-only runs",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_SOLIDWEB_APP_PRIVATE_RESOURCE",
+          "description": "an existing private resource of the test account (read-only runs)",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_SOLIDWEB_APP_OTHER_PROTECTED",
+          "description": "a protected resource outside the test storage (read-only boundary probe)",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_SOLIDWEB_APP_ISSUER",
+          "description": "override the expected issuer (defaults to the observed one)",
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_SOLIDWEB_APP_STORAGE_STATE",
+          "description": "Playwright storageState file of a dedicated test account's signed-in identity-provider session (contains cookies; never commit). With --headed it seeds the browser; without --headed it enables the fail-closed non-interactive session mode (a configured file that does not exist is a configuration error)",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_SOLIDWEB_APP_CLIENT_ID",
+          "description": "optional Solid-OIDC Client Identifier Document URL (https, publicly dereferenceable, its redirect_uris must include the redirect URI); omit to use dynamic registration",
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_SOLID_REDIRECT_URI",
+          "description": "loopback redirect URI (default http://127.0.0.1:39398/callback); with a Client Identifier Document it must be one of the document's redirect_uris",
+          "optional": true
+        }
+      ],
+      "config": {
+        "label": "solidweb.app (experimental)",
+        "storage": "${RA_INTEROP_SOLIDWEB_APP_STORAGE}",
+        "webId": "${RA_INTEROP_SOLIDWEB_APP_WEBID}",
+        "issuer": "${RA_INTEROP_SOLIDWEB_APP_ISSUER:-https://solidweb.app/}",
+        "scratchContainer": "${RA_INTEROP_SOLIDWEB_APP_SCRATCH}",
+        "privateResource": "${RA_INTEROP_SOLIDWEB_APP_PRIVATE_RESOURCE}",
+        "otherProtected": "${RA_INTEROP_SOLIDWEB_APP_OTHER_PROTECTED}",
+        "clientId": "${RA_INTEROP_SOLIDWEB_APP_CLIENT_ID}",
+        "storageState": "${RA_INTEROP_SOLIDWEB_APP_STORAGE_STATE}",
+        "redirectUri": "${RA_INTEROP_SOLID_REDIRECT_URI:-http://127.0.0.1:39398/callback}",
+        "login": {
+          "recipe": "manual"
+        }
+      },
+      "capabilities": {
+        "refreshTokens": true,
+        "refreshRotation": "unverified",
+        "revocation": true,
+        "storageDiscovery": "unverified"
+      },
+      "capabilityNotes": {
+        "refreshRotation": "whether refresh tokens rotate can only be observed with a test account (not yet run)",
+        "storageDiscovery": "whether a private resource's 401 carries storage-root evidence (Link headers) can only be observed with a test account (not yet run)"
+      }
+    },
+    {
+      "id": "ess-live",
+      "name": "Inrupt Enterprise Solid Server (any configured deployment)",
+      "category": "live",
+      "adapter": "solid-oidc",
+      "software": {
+        "name": "Inrupt Enterprise Solid Server",
+        "source": "closed",
+        "url": "https://www.inrupt.com/products/enterprise-solid-server"
+      },
+      "notes": [
+        "closed source: exercised only as a configured live deployment; the issuer must be given exactly as its discovery document states it",
+        "client registration: not observed (no census discovery for this deployment); configure a Client Identifier Document or rely on dynamic registration once the deployment's metadata is known",
+        "unattended (session mode): unverified — depends on whether the provider shows a login or consent page for a stored session; the non-interactive login fails closed if one appears"
+      ],
+      "env": [
+        {
+          "name": "RA_INTEROP_ESS_WEBID",
+          "description": "WebID of a dedicated test account on Inrupt Enterprise Solid Server (any configured deployment)",
+          "pii": true
+        },
+        {
+          "name": "RA_INTEROP_ESS_STORAGE",
+          "description": "storage root of the test account (ends with /)",
+          "pii": true
+        },
+        {
+          "name": "RA_INTEROP_ESS_SCRATCH",
+          "description": "container dedicated to test writes inside the storage (ends with /); omit for read-only runs",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_ESS_PRIVATE_RESOURCE",
+          "description": "an existing private resource of the test account (read-only runs)",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_ESS_OTHER_PROTECTED",
+          "description": "a protected resource outside the test storage (read-only boundary probe)",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_ESS_ISSUER",
+          "description": "the deployment's OpenID issuer, exactly as its discovery document states it"
+        },
+        {
+          "name": "RA_INTEROP_ESS_STORAGE_STATE",
+          "description": "Playwright storageState file of a dedicated test account's signed-in identity-provider session (contains cookies; never commit). With --headed it seeds the browser; without --headed it enables the fail-closed non-interactive session mode (a configured file that does not exist is a configuration error)",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_ESS_CLIENT_ID",
+          "description": "optional Solid-OIDC Client Identifier Document URL (https, publicly dereferenceable, its redirect_uris must include the redirect URI); omit to use dynamic registration",
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_SOLID_REDIRECT_URI",
+          "description": "loopback redirect URI (default http://127.0.0.1:39398/callback); with a Client Identifier Document it must be one of the document's redirect_uris",
+          "optional": true
+        }
+      ],
+      "config": {
+        "label": "Inrupt Enterprise Solid Server (any configured deployment)",
+        "storage": "${RA_INTEROP_ESS_STORAGE}",
+        "webId": "${RA_INTEROP_ESS_WEBID}",
+        "issuer": "${RA_INTEROP_ESS_ISSUER}",
+        "scratchContainer": "${RA_INTEROP_ESS_SCRATCH}",
+        "privateResource": "${RA_INTEROP_ESS_PRIVATE_RESOURCE}",
+        "otherProtected": "${RA_INTEROP_ESS_OTHER_PROTECTED}",
+        "clientId": "${RA_INTEROP_ESS_CLIENT_ID}",
+        "storageState": "${RA_INTEROP_ESS_STORAGE_STATE}",
+        "redirectUri": "${RA_INTEROP_SOLID_REDIRECT_URI:-http://127.0.0.1:39398/callback}",
+        "login": {
+          "recipe": "manual"
+        }
+      },
+      "capabilities": {
+        "refreshTokens": "unverified",
+        "refreshRotation": "unverified",
+        "revocation": "unverified",
+        "storageDiscovery": "unverified"
+      },
+      "capabilityNotes": {
+        "refreshTokens": "deployment-specific: record the observed behaviour here once a configured deployment has been run",
+        "refreshRotation": "deployment-specific: record the observed behaviour here once a configured deployment has been run",
+        "revocation": "deployment-specific: check the deployment's discovery document for revocation_endpoint and record it here",
+        "storageDiscovery": "deployment-specific: record whether 401 responses carry storage-root evidence once observed"
+      }
+    },
+    {
+      "id": "trinpod-server-live",
+      "name": "TrinPod server (any configured deployment)",
+      "category": "live",
+      "adapter": "solid-oidc",
+      "software": {
+        "name": "TrinPod",
+        "source": "closed",
+        "url": "https://graphmetrix.com/trinpod-server"
+      },
+      "notes": [
+        "closed source: exercised only as a configured live deployment; the issuer must be given exactly as its discovery document states it",
+        "client registration: not observed (no census discovery for this deployment); configure a Client Identifier Document or rely on dynamic registration once the deployment's metadata is known",
+        "unattended (session mode): unverified — depends on whether the provider shows a login or consent page for a stored session; the non-interactive login fails closed if one appears"
+      ],
+      "env": [
+        {
+          "name": "RA_INTEROP_TRINPOD_WEBID",
+          "description": "WebID of a dedicated test account on TrinPod server (any configured deployment)",
+          "pii": true
+        },
+        {
+          "name": "RA_INTEROP_TRINPOD_STORAGE",
+          "description": "storage root of the test account (ends with /)",
+          "pii": true
+        },
+        {
+          "name": "RA_INTEROP_TRINPOD_SCRATCH",
+          "description": "container dedicated to test writes inside the storage (ends with /); omit for read-only runs",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_TRINPOD_PRIVATE_RESOURCE",
+          "description": "an existing private resource of the test account (read-only runs)",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_TRINPOD_OTHER_PROTECTED",
+          "description": "a protected resource outside the test storage (read-only boundary probe)",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_TRINPOD_ISSUER",
+          "description": "the deployment's OpenID issuer, exactly as its discovery document states it"
+        },
+        {
+          "name": "RA_INTEROP_TRINPOD_STORAGE_STATE",
+          "description": "Playwright storageState file of a dedicated test account's signed-in identity-provider session (contains cookies; never commit). With --headed it seeds the browser; without --headed it enables the fail-closed non-interactive session mode (a configured file that does not exist is a configuration error)",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_TRINPOD_CLIENT_ID",
+          "description": "optional Solid-OIDC Client Identifier Document URL (https, publicly dereferenceable, its redirect_uris must include the redirect URI); omit to use dynamic registration",
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_SOLID_REDIRECT_URI",
+          "description": "loopback redirect URI (default http://127.0.0.1:39398/callback); with a Client Identifier Document it must be one of the document's redirect_uris",
+          "optional": true
+        }
+      ],
+      "config": {
+        "label": "TrinPod server (any configured deployment)",
+        "storage": "${RA_INTEROP_TRINPOD_STORAGE}",
+        "webId": "${RA_INTEROP_TRINPOD_WEBID}",
+        "issuer": "${RA_INTEROP_TRINPOD_ISSUER}",
+        "scratchContainer": "${RA_INTEROP_TRINPOD_SCRATCH}",
+        "privateResource": "${RA_INTEROP_TRINPOD_PRIVATE_RESOURCE}",
+        "otherProtected": "${RA_INTEROP_TRINPOD_OTHER_PROTECTED}",
+        "clientId": "${RA_INTEROP_TRINPOD_CLIENT_ID}",
+        "storageState": "${RA_INTEROP_TRINPOD_STORAGE_STATE}",
+        "redirectUri": "${RA_INTEROP_SOLID_REDIRECT_URI:-http://127.0.0.1:39398/callback}",
+        "login": {
+          "recipe": "manual"
+        }
+      },
+      "capabilities": {
+        "refreshTokens": "unverified",
+        "refreshRotation": "unverified",
+        "revocation": "unverified",
+        "storageDiscovery": "unverified"
+      },
+      "capabilityNotes": {
+        "refreshTokens": "deployment-specific: record the observed behaviour here once a configured deployment has been run",
+        "refreshRotation": "deployment-specific: record the observed behaviour here once a configured deployment has been run",
+        "revocation": "deployment-specific: check the deployment's discovery document for revocation_endpoint and record it here",
+        "storageDiscovery": "deployment-specific: record whether 401 responses carry storage-root evidence once observed"
+      }
+    }
+  ]
+}

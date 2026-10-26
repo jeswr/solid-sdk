@@ -1,0 +1,51 @@
+name: Live interoperability (manual)
+
+# Runs selected live targets (hosted Solid pods, OAuth/OIDC providers, LWS and Solid UMA deployments) on explicit
+# dispatch only (no schedule). Credentials come from ONE repository secret, INTEROP_LIVE_CONFIG: a JSON document
+# {"variables": {"RA_INTEROP_…": "…"}, "files": {"RA_INTEROP_…_STORAGE_STATE": {"base64": "…"}}} validated against
+# the variables the manifest declares (interop/lib/runConfig.js). Files (dedicated test-account IdP sessions,
+# private keys) are written to a private temporary directory (0700/0600) that is removed when the run ends; they
+# are never uploaded. Every selected target is required: missing configuration, an expired session (login forms
+# fail closed) or a target that needs a person (manual sign-in without a session file) fails the run.
+# Reports are sanitized (statuses, counts and allowlisted reasons only). See docs/interoperability/README.md.
+
+on:
+  workflow_dispatch:
+    inputs:
+      targets:
+        description: "Comma-separated target ids (see npm run interop:list)"
+        required: true
+        type: string
+      exercise-unverified:
+        description: "Also run scenarios whose capability is declared unverified (records what this run observes)"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    environment: interop-live
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+      - run: npm i
+      - run: npx playwright install --with-deps chromium
+      - name: Run the selected live targets (all required)
+        env:
+          TARGETS: ${{ inputs.targets }}
+          EXERCISE: ${{ inputs.exercise-unverified && '--exercise-unverified' || '' }}
+          RA_INTEROP_CONFIG: ${{ secrets.INTEROP_LIVE_CONFIG }}
+        run: npm run interop:live -- --target "$TARGETS" --require "$TARGETS" $EXERCISE --report-dir interop/reports/live
+      - if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: interop-live-report
+          path: interop/reports/live/report.*
+          if-no-files-found: error

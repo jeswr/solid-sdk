@@ -1,0 +1,674 @@
+{
+  "schemaVersion": 1,
+  "description": "Live standard OAuth 2.0 / OpenID Connect providers through the oauth-code adapter (server-side Node, real browser as login user agent). Missing configuration is UNTESTED; manual sign-in needs --headed.",
+  "targets": [
+    {
+      "id": "github",
+      "name": "GitHub OAuth app: server-side authorization code + S256 PKCE with client secret, REST API /user",
+      "category": "live",
+      "adapter": "oauth-code",
+      "software": {
+        "name": "GitHub",
+        "source": "service",
+        "url": "https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps"
+      },
+      "links": {
+        "authorization": "https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps",
+        "apiVersions": "https://docs.github.com/en/rest/about-the-rest-api/api-versions",
+        "refresh": "https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/refreshing-user-access-tokens",
+        "registerApp": "https://github.com/settings/applications/new"
+      },
+      "notes": [
+        "GitHub publishes no discovery document (https://github.com/.well-known/openid-configuration answered 404 on 2026-09-27); the endpoints below are trusted explicit metadata from GitHub's documentation, which states S256 is the only PKCE method",
+        "GET https://api.github.com/user without credentials answered 401 with no WWW-Authenticate header (2026-09-27); the Bearer provider answers challenge-less 401s from its configured resources",
+        "the client secret is sent as a form parameter (client_secret_post), as the documentation's examples do",
+        "unattended (session mode): plausible but unverified — an already-authorized OAuth app with unchanged scopes is redirected without a consent click, but GitHub may demand device verification, 2FA or re-authentication for a stored session; any such page makes the non-interactive login fail closed"
+      ],
+      "env": [
+        {
+          "name": "RA_INTEROP_GITHUB_CLIENT_ID",
+          "description": "client ID of a test OAuth app whose callback URL is the loopback redirect URI"
+        },
+        {
+          "name": "RA_INTEROP_GITHUB_CLIENT_SECRET",
+          "description": "client secret of that OAuth app (server-side only)",
+          "secret": true
+        },
+        {
+          "name": "RA_INTEROP_GITHUB_USER_ID",
+          "description": "numeric id of the test GitHub account (the /user response's id) to assert the identity (required: strict results must be tied to the configured test account)",
+          "pii": true
+        },
+        {
+          "name": "RA_INTEROP_GITHUB_REDIRECT_URI",
+          "description": "loopback redirect URI registered for the test client (default http://127.0.0.1:39398/callback)",
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_GITHUB_STORAGE_STATE",
+          "description": "Playwright storageState file of a dedicated test account's signed-in identity-provider session (contains cookies; never commit). With --headed it seeds the browser; without --headed it enables the fail-closed non-interactive session mode (a configured file that does not exist is a configuration error)",
+          "pii": true,
+          "optional": true
+        }
+      ],
+      "config": {
+        "label": "GitHub",
+        "authorizationServer": {
+          "issuer": "https://github.com/login/oauth",
+          "authorization_endpoint": "https://github.com/login/oauth/authorize",
+          "token_endpoint": "https://github.com/login/oauth/access_token",
+          "code_challenge_methods_supported": [
+            "S256"
+          ]
+        },
+        "clientId": "${RA_INTEROP_GITHUB_CLIENT_ID}",
+        "clientSecret": "${RA_INTEROP_GITHUB_CLIENT_SECRET}",
+        "tokenEndpointAuthMethod": "client_secret_post",
+        "scopes": [
+          "read:user",
+          "offline_access"
+        ],
+        "api": {
+          "url": "https://api.github.com/user",
+          "headers": {
+            "accept": "application/vnd.github+json",
+            "x-github-api-version": "2026-03-10"
+          },
+          "identity": {
+            "field": "id",
+            "expected": "${RA_INTEROP_GITHUB_USER_ID}"
+          }
+        },
+        "redirectUri": "${RA_INTEROP_GITHUB_REDIRECT_URI:-http://127.0.0.1:39398/callback}",
+        "storageState": "${RA_INTEROP_GITHUB_STORAGE_STATE}",
+        "login": {
+          "recipe": "manual"
+        }
+      },
+      "capabilities": {
+        "refreshTokens": true,
+        "refreshRotation": "unverified",
+        "revocation": false,
+        "shortLivedTokens": false,
+        "audienceRestriction": false
+      },
+      "capabilityNotes": {
+        "refreshRotation": "GitHub documents single-use refresh tokens for GitHub Apps; the OAuth-app page documents refresh tokens with offline_access but not their rotation: to be observed",
+        "revocation": "GitHub has no RFC 7009 revocation endpoint (tokens are revoked through the REST API DELETE /applications/{client_id}/token)",
+        "shortLivedTokens": "access tokens live about 8 hours (expiring user tokens); the expiry scenario needs a lifetime under 60 s",
+        "audienceRestriction": "the negative-audience scenario needs the harness's local introspecting API (see keycloak-no-audience); this target calls the provider's own API"
+      }
+    },
+    {
+      "id": "gitlab",
+      "name": "GitLab.com OpenID Connect: authorization code + S256 PKCE, rotating refresh tokens, REST API /api/v4/user",
+      "category": "live",
+      "adapter": "oauth-code",
+      "software": {
+        "name": "GitLab",
+        "source": "service",
+        "url": "https://docs.gitlab.com/api/oauth2/"
+      },
+      "links": {
+        "oauth": "https://docs.gitlab.com/api/oauth2/",
+        "oidc": "https://docs.gitlab.com/integration/openid_connect_provider/",
+        "registerApp": "https://gitlab.com/-/user_settings/applications"
+      },
+      "notes": [
+        "discovery 2026-09-27: issuer https://gitlab.com (no trailing slash), revocation_endpoint https://gitlab.com/oauth/revoke, PKCE plain and S256",
+        "GET https://gitlab.com/api/v4/user without credentials answered 401 with no WWW-Authenticate header (2026-09-27)",
+        "GitLab documents that a refresh invalidates the previous access and refresh token (rotation)",
+        "a non-confidential application needs no secret; set RA_INTEROP_GITLAB_CLIENT_SECRET for a confidential one",
+        "unattended (session mode): unverified and likely to fail closed on gitlab.com — the authorize page is shown again unless an administrator marked the application trusted (possible on self-managed instances only)"
+      ],
+      "env": [
+        {
+          "name": "RA_INTEROP_GITLAB_CLIENT_ID",
+          "description": "application ID of a test GitLab application (scopes openid, read_user) whose redirect URI is the loopback redirect URI"
+        },
+        {
+          "name": "RA_INTEROP_GITLAB_CLIENT_SECRET",
+          "description": "secret of a confidential application (omit for a non-confidential one)",
+          "secret": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_GITLAB_ISSUER",
+          "description": "issuer (default https://gitlab.com; a self-managed instance's URL)",
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_GITLAB_USER_ID",
+          "description": "numeric id of the test GitLab user (ID token sub and /api/v4/user id) (required: strict results must be tied to the configured test account)",
+          "pii": true
+        },
+        {
+          "name": "RA_INTEROP_GITLAB_REDIRECT_URI",
+          "description": "loopback redirect URI registered for the test client (default http://127.0.0.1:39398/callback)",
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_GITLAB_STORAGE_STATE",
+          "description": "Playwright storageState file of a dedicated test account's signed-in identity-provider session (contains cookies; never commit). With --headed it seeds the browser; without --headed it enables the fail-closed non-interactive session mode (a configured file that does not exist is a configuration error)",
+          "pii": true,
+          "optional": true
+        }
+      ],
+      "config": {
+        "label": "GitLab",
+        "issuer": "${RA_INTEROP_GITLAB_ISSUER:-https://gitlab.com}",
+        "clientId": "${RA_INTEROP_GITLAB_CLIENT_ID}",
+        "clientSecret": "${RA_INTEROP_GITLAB_CLIENT_SECRET}",
+        "scopes": [
+          "openid",
+          "read_user"
+        ],
+        "api": {
+          "url": "${RA_INTEROP_GITLAB_ISSUER:-https://gitlab.com}/api/v4/user",
+          "identity": {
+            "field": "id",
+            "expected": "${RA_INTEROP_GITLAB_USER_ID}"
+          }
+        },
+        "oidc": {
+          "subject": "${RA_INTEROP_GITLAB_USER_ID}"
+        },
+        "redirectUri": "${RA_INTEROP_GITLAB_REDIRECT_URI:-http://127.0.0.1:39398/callback}",
+        "storageState": "${RA_INTEROP_GITLAB_STORAGE_STATE}",
+        "login": {
+          "recipe": "manual"
+        }
+      },
+      "capabilities": {
+        "refreshTokens": true,
+        "refreshRotation": true,
+        "revocation": true,
+        "shortLivedTokens": false,
+        "audienceRestriction": false
+      },
+      "capabilityNotes": {
+        "shortLivedTokens": "access tokens live about 2 hours (expires_in 7200); the expiry scenario needs a lifetime under 60 s",
+        "audienceRestriction": "the negative-audience scenario needs the harness's local introspecting API (see keycloak-no-audience); this target calls the provider's own API"
+      }
+    },
+    {
+      "id": "auth0",
+      "name": "Auth0 tenant: authorization code + S256 PKCE, audience, offline_access with refresh token rotation, /userinfo",
+      "category": "live",
+      "adapter": "oauth-code",
+      "software": {
+        "name": "Auth0",
+        "source": "service",
+        "url": "https://auth0.com/docs/get-started/authentication-and-authorization-flow/authorization-code-flow-with-pkce"
+      },
+      "links": {
+        "rotation": "https://auth0.com/docs/secure/tokens/refresh-tokens/refresh-token-rotation",
+        "pkce": "https://auth0.com/docs/get-started/authentication-and-authorization-flow/authorization-code-flow-with-pkce"
+      },
+      "notes": [
+        "discovery of Auth0's public sample tenant (https://samples.auth0.com/, 2026-09-27): issuer with trailing slash, revocation_endpoint /oauth/revoke, PKCE S256; GET /userinfo without credentials answered 401 with WWW-Authenticate: Bearer realm=\"Users\", DPoP algs=\"ES256\"",
+        "refresh token rotation must be enabled on the application (Auth0 documents it as an application setting)",
+        "set RA_INTEROP_AUTH0_AUDIENCE to an API identifier to receive a JWT access token for it; with openid requested Auth0 also includes /userinfo in the audience",
+        "unattended (session mode): can work with a tenant session for a test user without MFA and with consent already granted (first-party applications skip consent); unverified until a run"
+      ],
+      "env": [
+        {
+          "name": "RA_INTEROP_AUTH0_ISSUER",
+          "description": "tenant issuer exactly as discovered, with the trailing slash (e.g. https://TENANT.eu.auth0.com/)"
+        },
+        {
+          "name": "RA_INTEROP_AUTH0_CLIENT_ID",
+          "description": "client ID of a test application (refresh token rotation on, allowed callback = the loopback redirect URI)"
+        },
+        {
+          "name": "RA_INTEROP_AUTH0_CLIENT_SECRET",
+          "description": "client secret for a Regular Web Application (omit for a public Native/SPA client)",
+          "secret": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_AUTH0_AUDIENCE",
+          "description": "API identifier for a JWT access token (optional)",
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_AUTH0_SUBJECT",
+          "description": "the test user's sub (ID token and /userinfo) (required: strict results must be tied to the configured test account)",
+          "pii": true
+        },
+        {
+          "name": "RA_INTEROP_AUTH0_REDIRECT_URI",
+          "description": "loopback redirect URI registered for the test client (default http://127.0.0.1:39398/callback)",
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_AUTH0_STORAGE_STATE",
+          "description": "Playwright storageState file of a dedicated test account's signed-in identity-provider session (contains cookies; never commit). With --headed it seeds the browser; without --headed it enables the fail-closed non-interactive session mode (a configured file that does not exist is a configuration error)",
+          "pii": true,
+          "optional": true
+        }
+      ],
+      "config": {
+        "label": "Auth0",
+        "issuer": "${RA_INTEROP_AUTH0_ISSUER}",
+        "clientId": "${RA_INTEROP_AUTH0_CLIENT_ID}",
+        "clientSecret": "${RA_INTEROP_AUTH0_CLIENT_SECRET}",
+        "audience": "${RA_INTEROP_AUTH0_AUDIENCE}",
+        "scopes": [
+          "openid",
+          "profile",
+          "offline_access"
+        ],
+        "api": {
+          "url": "${RA_INTEROP_AUTH0_ISSUER}userinfo",
+          "identity": {
+            "field": "sub",
+            "expected": "${RA_INTEROP_AUTH0_SUBJECT}"
+          }
+        },
+        "oidc": {
+          "subject": "${RA_INTEROP_AUTH0_SUBJECT}"
+        },
+        "redirectUri": "${RA_INTEROP_AUTH0_REDIRECT_URI:-http://127.0.0.1:39398/callback}",
+        "storageState": "${RA_INTEROP_AUTH0_STORAGE_STATE}",
+        "login": {
+          "recipe": "manual"
+        }
+      },
+      "capabilities": {
+        "refreshTokens": true,
+        "refreshRotation": true,
+        "revocation": true,
+        "shortLivedTokens": false,
+        "audienceRestriction": false
+      },
+      "capabilityNotes": {
+        "shortLivedTokens": "access tokens live about 24 hours by default (configurable per API); the expiry scenario needs a lifetime under 60 s",
+        "audienceRestriction": "the negative-audience scenario needs the harness's local introspecting API (see keycloak-no-audience); this target calls the provider's own API"
+      }
+    },
+    {
+      "id": "okta",
+      "name": "Okta custom authorization server: authorization code + S256 PKCE, offline_access with rotation, /v1/userinfo",
+      "category": "live",
+      "adapter": "oauth-code",
+      "software": {
+        "name": "Okta",
+        "source": "service",
+        "url": "https://developer.okta.com/docs/guides/implement-grant-type/authcodepkce/main/"
+      },
+      "links": {
+        "refresh": "https://developer.okta.com/docs/guides/refresh-tokens/main/",
+        "authServers": "https://developer.okta.com/docs/concepts/auth-servers/"
+      },
+      "notes": [
+        "Okta's discovery and userinfo are tenant-specific and were not probed (no tenant); capability values rest on Okta's documentation and must be confirmed by the first run",
+        "enable 'Rotate token after every use' for the application's refresh tokens (Okta's default for SPAs; web apps default to persistent tokens)",
+        "unattended (session mode): can work when the org's sign-on policy lets the stored session satisfy the authorization request without MFA or re-authentication; unverified until a run"
+      ],
+      "env": [
+        {
+          "name": "RA_INTEROP_OKTA_ISSUER",
+          "description": "custom authorization server issuer without trailing slash (e.g. https://DOMAIN.okta.com/oauth2/default)"
+        },
+        {
+          "name": "RA_INTEROP_OKTA_CLIENT_ID",
+          "description": "client ID of a test app integration (refresh token grant, rotation on, sign-in redirect = the loopback redirect URI)"
+        },
+        {
+          "name": "RA_INTEROP_OKTA_CLIENT_SECRET",
+          "description": "client secret for a Web app integration (omit for a public Native/SPA one)",
+          "secret": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_OKTA_SUBJECT",
+          "description": "the test user's sub (required: strict results must be tied to the configured test account)",
+          "pii": true
+        },
+        {
+          "name": "RA_INTEROP_OKTA_REDIRECT_URI",
+          "description": "loopback redirect URI registered for the test client (default http://127.0.0.1:39398/callback)",
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_OKTA_STORAGE_STATE",
+          "description": "Playwright storageState file of a dedicated test account's signed-in identity-provider session (contains cookies; never commit). With --headed it seeds the browser; without --headed it enables the fail-closed non-interactive session mode (a configured file that does not exist is a configuration error)",
+          "pii": true,
+          "optional": true
+        }
+      ],
+      "config": {
+        "label": "Okta",
+        "issuer": "${RA_INTEROP_OKTA_ISSUER}",
+        "clientId": "${RA_INTEROP_OKTA_CLIENT_ID}",
+        "clientSecret": "${RA_INTEROP_OKTA_CLIENT_SECRET}",
+        "scopes": [
+          "openid",
+          "profile",
+          "offline_access"
+        ],
+        "api": {
+          "url": "${RA_INTEROP_OKTA_ISSUER}/v1/userinfo",
+          "identity": {
+            "field": "sub",
+            "expected": "${RA_INTEROP_OKTA_SUBJECT}"
+          }
+        },
+        "oidc": {
+          "subject": "${RA_INTEROP_OKTA_SUBJECT}"
+        },
+        "redirectUri": "${RA_INTEROP_OKTA_REDIRECT_URI:-http://127.0.0.1:39398/callback}",
+        "storageState": "${RA_INTEROP_OKTA_STORAGE_STATE}",
+        "login": {
+          "recipe": "manual"
+        }
+      },
+      "capabilities": {
+        "refreshTokens": true,
+        "refreshRotation": true,
+        "revocation": "unverified",
+        "shortLivedTokens": false,
+        "audienceRestriction": false
+      },
+      "capabilityNotes": {
+        "revocation": "Okta documents /v1/revoke, but this tenant's discovery document was not read (no tenant configured yet); record it once observed",
+        "shortLivedTokens": "access tokens live about 1 hour by default; the expiry scenario needs a lifetime under 60 s",
+        "audienceRestriction": "the negative-audience scenario needs the harness's local introspecting API (see keycloak-no-audience); this target calls the provider's own API"
+      }
+    },
+    {
+      "id": "google-web-server",
+      "name": "Google OAuth 2.0 web-server flow without GIS: confidential client, access_type=offline + consent, OpenID userinfo",
+      "category": "live",
+      "adapter": "oauth-code",
+      "software": {
+        "name": "Google Identity",
+        "source": "service",
+        "url": "https://developers.google.com/identity/protocols/oauth2/web-server"
+      },
+      "links": {
+        "webServer": "https://developers.google.com/identity/protocols/oauth2/web-server",
+        "openidConnect": "https://developers.google.com/identity/openid-connect/openid-connect"
+      },
+      "notes": [
+        "discovery 2026-09-27: issuer https://accounts.google.com, revocation_endpoint https://oauth2.googleapis.com/revoke, PKCE plain and S256",
+        "GET https://openidconnect.googleapis.com/v1/userinfo without credentials answered 401 with no WWW-Authenticate header (2026-09-27)",
+        "Google returns a refresh token for access_type=offline only on consent (hence prompt=consent) and does not return a new one on refresh",
+        "Google's OpenID documentation allows ID tokens with iss accounts.google.com (without https://); the library requires the discovered issuer exactly, so such a token would FAIL rather than be accepted",
+        "unattended (session mode): not expected to work — this target sends prompt=consent (Google returns a refresh token only on consent), so every authorization shows a consent page, and Google may block automated browsers; run it headed"
+      ],
+      "env": [
+        {
+          "name": "RA_INTEROP_GOOGLE_WEB_CLIENT_ID",
+          "description": "client ID of a test 'Web application' OAuth client whose authorized redirect URI is the loopback redirect URI"
+        },
+        {
+          "name": "RA_INTEROP_GOOGLE_WEB_CLIENT_SECRET",
+          "description": "its client secret (server-side only)",
+          "secret": true
+        },
+        {
+          "name": "RA_INTEROP_GOOGLE_WEB_SUBJECT",
+          "description": "the test account's sub (required: strict results must be tied to the configured test account)",
+          "pii": true
+        },
+        {
+          "name": "RA_INTEROP_GOOGLE_WEB_REDIRECT_URI",
+          "description": "loopback redirect URI registered for the test client (default http://127.0.0.1:39398/callback)",
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_GOOGLE_WEB_STORAGE_STATE",
+          "description": "Playwright storageState file of a dedicated test account's signed-in identity-provider session (contains cookies; never commit). With --headed it seeds the browser; without --headed it enables the fail-closed non-interactive session mode (a configured file that does not exist is a configuration error)",
+          "pii": true,
+          "optional": true
+        }
+      ],
+      "config": {
+        "label": "Google",
+        "issuer": "https://accounts.google.com",
+        "clientId": "${RA_INTEROP_GOOGLE_WEB_CLIENT_ID}",
+        "clientSecret": "${RA_INTEROP_GOOGLE_WEB_CLIENT_SECRET}",
+        "scopes": [
+          "openid"
+        ],
+        "parameters": {
+          "access_type": "offline"
+        },
+        "prompt": "consent",
+        "api": {
+          "url": "https://openidconnect.googleapis.com/v1/userinfo",
+          "identity": {
+            "field": "sub",
+            "expected": "${RA_INTEROP_GOOGLE_WEB_SUBJECT}"
+          }
+        },
+        "oidc": {
+          "subject": "${RA_INTEROP_GOOGLE_WEB_SUBJECT}"
+        },
+        "redirectUri": "${RA_INTEROP_GOOGLE_WEB_REDIRECT_URI:-http://127.0.0.1:39398/callback}",
+        "storageState": "${RA_INTEROP_GOOGLE_WEB_STORAGE_STATE}",
+        "login": {
+          "recipe": "manual"
+        }
+      },
+      "capabilities": {
+        "refreshTokens": true,
+        "refreshRotation": false,
+        "revocation": true,
+        "shortLivedTokens": false,
+        "audienceRestriction": false
+      },
+      "capabilityNotes": {
+        "refreshRotation": "Google does not issue a new refresh token on refresh (documented for the web-server flow)",
+        "shortLivedTokens": "access tokens live about 1 hour; the expiry scenario needs a lifetime under 60 s",
+        "audienceRestriction": "the negative-audience scenario needs the harness's local introspecting API (see keycloak-no-audience); this target calls the provider's own API"
+      }
+    },
+    {
+      "id": "entra-code",
+      "name": "Microsoft Entra ID v2.0 authorization code + S256 PKCE without MSAL, Microsoft Graph /me",
+      "category": "live",
+      "adapter": "oauth-code",
+      "software": {
+        "name": "Microsoft Entra ID",
+        "source": "service",
+        "url": "https://learn.microsoft.com/en-us/entra/identity-platform/v2-oauth2-auth-code-flow"
+      },
+      "links": {
+        "codeFlow": "https://learn.microsoft.com/en-us/entra/identity-platform/v2-oauth2-auth-code-flow",
+        "redirectUris": "https://learn.microsoft.com/en-us/entra/identity-platform/reply-url"
+      },
+      "notes": [
+        "discovery of a tenant-specific v2.0 issuer (2026-09-27): issuer https://login.microsoftonline.com/{tenant-id}/v2.0, no revocation_endpoint, token auth client_secret_post/client_secret_basic",
+        "GET https://graph.microsoft.com/v1.0/me without credentials answered 401 with WWW-Authenticate: Bearer (2026-09-27)",
+        "use the tenant ID (GUID): 'common' and domain names discover an issuer that differs from the configured one",
+        "the Web platform accepts http redirect URIs only on localhost (the portal refuses http://127.0.0.1), hence the localhost default; SPA redirect URIs cannot be redeemed server-side",
+        "Microsoft documents that each refresh returns a new refresh token while the old one is not revoked",
+        "unattended (session mode): only in a test tenant where the test user has no MFA/Conditional Access prompt and consent is already granted; security defaults require MFA periodically, which fails closed; unverified"
+      ],
+      "env": [
+        {
+          "name": "RA_INTEROP_ENTRA_TENANT_ID",
+          "description": "directory (tenant) ID GUID of the test tenant"
+        },
+        {
+          "name": "RA_INTEROP_ENTRA_CLIENT_ID",
+          "description": "application (client) ID of a test app registration (Web or Mobile/desktop platform, redirect = the loopback redirect URI, delegated User.Read)"
+        },
+        {
+          "name": "RA_INTEROP_ENTRA_CLIENT_SECRET",
+          "description": "client secret for the Web platform (omit for a public Mobile/desktop client)",
+          "secret": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_ENTRA_USER_OBJECT_ID",
+          "description": "the test user's object id (Graph /me id) (required: strict results must be tied to the configured test account)",
+          "pii": true
+        },
+        {
+          "name": "RA_INTEROP_ENTRA_REDIRECT_URI",
+          "description": "loopback redirect URI registered for the test client (default http://localhost:39398/callback)",
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_ENTRA_STORAGE_STATE",
+          "description": "Playwright storageState file of a dedicated test account's signed-in identity-provider session (contains cookies; never commit). With --headed it seeds the browser; without --headed it enables the fail-closed non-interactive session mode (a configured file that does not exist is a configuration error)",
+          "pii": true,
+          "optional": true
+        }
+      ],
+      "config": {
+        "label": "Microsoft Entra ID",
+        "issuer": "https://login.microsoftonline.com/${RA_INTEROP_ENTRA_TENANT_ID}/v2.0",
+        "clientId": "${RA_INTEROP_ENTRA_CLIENT_ID}",
+        "clientSecret": "${RA_INTEROP_ENTRA_CLIENT_SECRET}",
+        "scopes": [
+          "openid",
+          "profile",
+          "offline_access",
+          "https://graph.microsoft.com/User.Read"
+        ],
+        "api": {
+          "url": "https://graph.microsoft.com/v1.0/me",
+          "identity": {
+            "field": "id",
+            "expected": "${RA_INTEROP_ENTRA_USER_OBJECT_ID}"
+          }
+        },
+        "redirectUri": "${RA_INTEROP_ENTRA_REDIRECT_URI:-http://localhost:39398/callback}",
+        "storageState": "${RA_INTEROP_ENTRA_STORAGE_STATE}",
+        "login": {
+          "recipe": "manual"
+        }
+      },
+      "capabilities": {
+        "refreshTokens": true,
+        "refreshRotation": true,
+        "revocation": false,
+        "shortLivedTokens": false,
+        "audienceRestriction": false
+      },
+      "capabilityNotes": {
+        "revocation": "the v2.0 discovery document advertises no revocation_endpoint (read 2026-09-27)",
+        "shortLivedTokens": "access tokens live about 60 to 90 minutes; the expiry scenario needs a lifetime under 60 s",
+        "audienceRestriction": "the negative-audience scenario needs the harness's local introspecting API (see keycloak-no-audience); this target calls the provider's own API"
+      }
+    },
+    {
+      "id": "oidc-generic",
+      "name": "Any OpenID Connect provider configured wholly by environment variables",
+      "category": "live",
+      "adapter": "oauth-code",
+      "software": {
+        "name": "any OpenID Connect provider",
+        "source": "service",
+        "url": "https://openid.net/specs/openid-connect-core-1_0.html"
+      },
+      "links": {
+        "discovery": "https://openid.net/specs/openid-connect-discovery-1_0.html"
+      },
+      "notes": [
+        "capabilities are provider-specific: this target only asserts login, API access, boundary and logout; add a provider-specific target once refresh behaviour is observed",
+        "unattended (session mode): depends entirely on the provider's session, consent and MFA policies; unverified"
+      ],
+      "env": [
+        {
+          "name": "RA_INTEROP_OIDC_ISSUER",
+          "description": "issuer exactly as its discovery document states it"
+        },
+        {
+          "name": "RA_INTEROP_OIDC_CLIENT_ID",
+          "description": "client ID registered with the loopback redirect URI"
+        },
+        {
+          "name": "RA_INTEROP_OIDC_CLIENT_SECRET",
+          "description": "client secret of a confidential client (omit for public)",
+          "secret": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_OIDC_API_URL",
+          "description": "https URL of a read-only API accepting the access token (e.g. the userinfo endpoint) that answers 401 without credentials"
+        },
+        {
+          "name": "RA_INTEROP_OIDC_IDENTITY_FIELD",
+          "description": "JSON field of the API response identifying the user (default sub)",
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_OIDC_SUBJECT",
+          "description": "expected value of that field and of the ID token sub (required: strict results must be tied to the configured test account)",
+          "pii": true
+        },
+        {
+          "name": "RA_INTEROP_OIDC_AUDIENCE",
+          "description": "audience parameter (e.g. Auth0-style)",
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_OIDC_RESOURCE",
+          "description": "RFC 8707 resource indicator",
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_OIDC_PROMPT",
+          "description": "prompt parameter (e.g. consent)",
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_OIDC_REDIRECT_URI",
+          "description": "loopback redirect URI registered for the test client (default http://127.0.0.1:39398/callback)",
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_OIDC_STORAGE_STATE",
+          "description": "Playwright storageState file of a dedicated test account's signed-in identity-provider session (contains cookies; never commit). With --headed it seeds the browser; without --headed it enables the fail-closed non-interactive session mode (a configured file that does not exist is a configuration error)",
+          "pii": true,
+          "optional": true
+        }
+      ],
+      "config": {
+        "label": "the OpenID provider",
+        "issuer": "${RA_INTEROP_OIDC_ISSUER}",
+        "clientId": "${RA_INTEROP_OIDC_CLIENT_ID}",
+        "clientSecret": "${RA_INTEROP_OIDC_CLIENT_SECRET}",
+        "audience": "${RA_INTEROP_OIDC_AUDIENCE}",
+        "resource": "${RA_INTEROP_OIDC_RESOURCE}",
+        "prompt": "${RA_INTEROP_OIDC_PROMPT}",
+        "scopes": [
+          "openid",
+          "profile"
+        ],
+        "api": {
+          "url": "${RA_INTEROP_OIDC_API_URL}",
+          "identity": {
+            "field": "${RA_INTEROP_OIDC_IDENTITY_FIELD:-sub}",
+            "expected": "${RA_INTEROP_OIDC_SUBJECT}"
+          }
+        },
+        "redirectUri": "${RA_INTEROP_OIDC_REDIRECT_URI:-http://127.0.0.1:39398/callback}",
+        "storageState": "${RA_INTEROP_OIDC_STORAGE_STATE}",
+        "login": {
+          "recipe": "manual"
+        }
+      },
+      "capabilities": {
+        "refreshTokens": "unverified",
+        "refreshRotation": "unverified",
+        "revocation": "unverified",
+        "shortLivedTokens": false,
+        "audienceRestriction": false
+      },
+      "capabilityNotes": {
+        "refreshTokens": "provider-specific and unknown for a generic target (no offline_access is requested)",
+        "refreshRotation": "provider-specific and unknown for a generic target",
+        "revocation": "provider-specific: logout still runs, without asserting revocation",
+        "shortLivedTokens": "a generic target declares no token lifetime for the expiry scenario",
+        "audienceRestriction": "the negative-audience scenario needs the harness's local introspecting API (see keycloak-no-audience); this target calls the provider's own API"
+      }
+    }
+  ]
+}

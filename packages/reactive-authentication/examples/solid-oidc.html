@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Solid-OIDC with reactive authentication</title>
+<!-- Requires an import map (or bundler) for the package and its dependencies; see ../index.html. -->
+<authorization-code-flow></authorization-code-flow>
+<idp-picker>
+    <option value="https://solidcommunity.net"></option>
+    <option value="https://login.inrupt.com"></option>
+</idp-picker>
+<button id="logout">Log out</button>
+<pre id="output"></pre>
+<script type="module">
+import "@solid/reactive-authentication/registerElements"
+import {
+    CachingAuthorizationServerProvider, CachingClientProvider, CachingIssuerProvider, CredentialBoundary,
+    DPoPTokenProvider, DynamicRegistrationClientProvider, HintIssuerProvider, ReactiveFetchManager, XASProvider,
+    createBrowserCaches, readIssuerHint, storageContextKey,
+} from "@solid/reactive-authentication"
+
+// One namespace per application, client configuration and account.
+const namespace = "example-app/v1/default-account"
+const caches = createBrowserCaches(namespace, {persistSessions: true})
+
+// Which URLs may ever receive credentials. Widen it when the user chooses a storage (e.g. from pim:storage).
+const boundary = new CredentialBoundary(["https://alice.solidcommunity.net/"])
+
+// Issuer: a hint from third-party-initiated login (?iss=...) if it is one we list, else ask the user.
+const picker = document.querySelector("idp-picker")
+const knownIssuers = new Set(["https://solidcommunity.net/", "https://login.inrupt.com/"])
+const hint = readIssuerHint(location.href)
+history.replaceState(null, "", location.pathname) // hints are single-use
+const context = storageContextKey({mappings: caches.storageContext})
+const issuer = new CachingIssuerProvider(new HintIssuerProvider(hint, picker, i => knownIssuers.has(i.href)), caches.issuer, context)
+
+const provider = new DPoPTokenProvider(
+    new URL("callback.html", location.href).href,           // posts its URL back to the opener
+    document.querySelector("authorization-code-flow"),       // popup UI
+    new CachingAuthorizationServerProvider(new XASProvider(issuer), caches.authorizationServer, context),
+    new CachingClientProvider(new DynamicRegistrationClientProvider(), caches.client),
+    caches.token,
+    {namespace, sessionStore: caches.sessions, fence: caches.fence, verifyWebId: true, context,
+     ...(hint.loginHint === undefined ? {} : {authorizationParameters: {login_hint: hint.loginHint}})},
+)
+
+const manager = new ReactiveFetchManager({providers: [provider], boundary, fence: caches.fence})
+
+const resource = new Request("https://alice.solidcommunity.net/private/notes.ttl")
+const response = await manager.fetch(resource)          // 401 → login (popup) → retried with DPoP
+const identity = await provider.identity(resource)       // validated ID token claims; WebID checked against its profile
+document.querySelector("#output").textContent = `${response.status} as ${identity?.webId}`
+
+document.querySelector("#logout").onclick = () => manager.logout() // all tabs sharing the namespace
+</script>
+</html>

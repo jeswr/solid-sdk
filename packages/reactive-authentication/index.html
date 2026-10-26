@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1"/>
+        <title>reactive fetch</title>
+        <script type="importmap">
+            {
+              "imports": {
+                "@key-value-kit/core": "https://cdn.jsdelivr.net/npm/@key-value-kit/core@0.1.0-alpha.0/dist/index.js",
+                "@key-value-kit/storage/memory": "https://cdn.jsdelivr.net/npm/@key-value-kit/storage@0.1.0-alpha.0/dist/memory.js",
+                "@key-value-kit/storage/indexeddb": "https://cdn.jsdelivr.net/npm/@key-value-kit/storage@0.1.0-alpha.0/dist/indexeddb.js",
+                "idb-keyval": "https://cdn.jsdelivr.net/npm/idb-keyval@6.3.0/dist/index.js",
+                "oauth4webapi": "https://cdn.jsdelivr.net/npm/oauth4webapi@3.8.8/+esm",
+                "dpop": "https://cdn.jsdelivr.net/npm/dpop@2.1.1/+esm",
+                "jose": "https://cdn.jsdelivr.net/npm/jose@6.2.12/+esm",
+                "multiformats": "https://cdn.jsdelivr.net/npm/multiformats@14.0.5/+esm",
+                "multiformats/bases/base58": "https://cdn.jsdelivr.net/npm/multiformats@14.0.5/bases/base58/+esm",
+                "http-link-header": "https://cdn.jsdelivr.net/npm/http-link-header@1.1.4/+esm",
+                "n3": "https://esm.sh/n3@2.0.3",
+                "@rdfjs/wrapper": "https://cdn.jsdelivr.net/npm/@rdfjs/wrapper@0.34.0/+esm"
+              }
+            }
+        </script>
+        <script type="module">
+            import {
+                CachingAuthorizationServerProvider,
+                CachingClientProvider,
+                CachingIssuerProvider,
+                CredentialBoundary,
+                DPoPTokenProvider,
+                DynamicRegistrationClientProvider,
+                ReactiveFetchManager,
+                XASProvider,
+                storageContextKey,
+            } from "./dist/mod.js"
+            import "./dist/registerElements.js"
+
+            /* Reactive fetch infrastructure */
+            const ui = document.querySelector("authorization-code-flow")
+            const issuerUi = document.querySelector("idp-picker")
+            const context = storageContextKey()
+            const issuerProvider = new CachingIssuerProvider(issuerUi, undefined, context)
+            const asProvider = new CachingAuthorizationServerProvider(new XASProvider(issuerProvider), undefined, context)
+            const callbackUri = new URL("/callback.html", location.href).toString()
+            const clientProvider = new CachingClientProvider(new DynamicRegistrationClientProvider())
+            // const clientProvider = new CachingClientProvider(new ClientIdClientProvider(new URL("./id.jsonld", location.href)))
+
+            const dPoPTokenProvider = new DPoPTokenProvider(callbackUri, ui, asProvider, clientProvider)
+
+            // Only these demo storages may ever receive credentials.
+            const buttons = [...document.querySelectorAll("button.fetch")]
+            const boundary = new CredentialBoundary(buttons.map(b => new URL("./", b.value).href).filter(u => u.startsWith("https:")))
+            const manager = new ReactiveFetchManager({providers: [dPoPTokenProvider], boundary})
+            const fetch = manager.fetch
+
+            /* Page functionality: Buttons */
+            document.addEventListener("DOMContentLoaded", () =>
+                buttons.forEach(button =>
+                    button.addEventListener("click", async e =>
+                        await f(e.target.value))))
+            document.querySelector("#logout").addEventListener("click", () => manager.logout())
+
+            async function f(uri) {
+                console.log(`Start fetch to ${uri}`)
+
+                try {
+                    const response = await fetch(uri)
+                    console.log(`Fetch ${response.status} for ${uri}`, response)
+                } catch (e) {
+                    console.error(`Fetch failed to ${uri}`, e)
+                }
+            }
+        </script>
+    </head>
+    <body>
+        <button id="logout">Log out</button>
+        <button class="fetch" value="https://echo.free.beeceptor.com/">echo</button>
+        <button class="fetch" value="https://langsamu.solidcommunity.net/settings/">solidcommunity.net (CSS)</button>
+        <button class="fetch" value="https://storage.inrupt.com/d5e2efbd-1dd6-4c45-b6a3-e61a05bb9d49/">PodSpaces (ESS)</button>
+        <button class="fetch" value="https://langsamu.datapod.igrant.io/settings/">datapod.igrant.io (NSS 5.7.4)</button>
+        <button class="fetch" value="https://langsamu.solidweb.app/settings/">solidweb.app (JSS)</button>
+        <button class="fetch" value="https://teamid.live/langsamu/settings/">teamid.live (CSS)</button>
+        <button class="fetch" value="https://langsamu.solidweb.org/settings/">solidweb.org (NSS 6.0.0)</button>
+        <button class="fetch" value="https://langsamu.privatedatapod.com/settings/">privatedatapod (CSS)</button>
+        <button class="fetch" value="https://solidweb.me/langsamu/profile/">solidweb.me (CSS)</button>
+        <button class="fetch" value="http://localhost:3000/a/profile/">localhost (CSS)</button>
+        <authorization-code-flow>
+            <span slot="new-text">USER INTERACTION NEEDED TO LAUNCH AUTHORIZATION CODE FLOW IN NEW WINDOW.</span>
+            <span slot="new-open">OPEN</span>
+            <span slot="new-cancel">CANCEL OPEN</span>
+            <span slot="switch-text">THERE IS AN ONGOING AUTHORIZATION CODE FLOW IN ANOTHER WINDOW.</span>
+            <span slot="switch-open">SWITCH</span>
+            <span slot="switch-cancel">CANCEL SWITCH</span>
+        </authorization-code-flow>
+        <idp-picker>
+            <option value="https://solidcommunity.net"></option>
+            <option value="https://datapod.igrant.io"></option>
+            <option value="https://solidweb.app"></option>
+            <option value="https://login.inrupt.com"></option>
+            <option value="https://teamid.live"></option>
+            <option value="https://solidweb.org"></option>
+            <option value="https://privatedatapod.com"></option>
+            <option value="https://solidweb.me/"></option>
+            <option value="http://localhost:3000"></option>
+            <webid-picker slot="webid-picker">
+                <option value="https://YOUR_USERNAME.solidcommunity.net/profile/card#me"></option>
+                <option value="https://id.inrupt.com/YOUR_USERNAME"></option>
+                <option value="https://YOUR_USERNAME.datapod.igrant.io/profile/card#me"></option>
+                <option value="https://YOUR_USERNAME.solidweb.app/profile/card.jsonld#me"></option>
+                <option value="https://teamid.live/YOUR_USERNAME/profile/card#me"></option>
+                <option value="https://YOUR_USERNAME.solidweb.org/profile/card#me"></option>
+                <option value="https://solidweb.me/YOUR_USERNAME/profile/card#me"></option>
+            </webid-picker>
+        </idp-picker>
+    </body>
+</html>

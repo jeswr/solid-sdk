@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Reactive authentication: popup lifecycle</title>
+<script src="/test/browser/.bundle/page.js"></script>
+<authorization-code-flow></authorization-code-flow>
+<pre id="result">Running…</pre>
+<script type="module">
+const q = new URLSearchParams(location.search)
+const rs = q.get("rs")
+const element = document.querySelector("authorization-code-flow")
+element.closedPollMs = 50
+const callback = new URL("/callback.html", location.href).href
+const authorize = (target, extra = "") => new URL(`${target}?redirect_uri=${encodeURIComponent(callback)}${extra}`)
+const settle = promise => promise.then(v => ({ok: v.value}), e => ({error: e.name}))
+const sleep = ms => new Promise(r => setTimeout(r, ms))
+const result = {}
+try {
+    // 1. A popup on another origin posts a forged callback; the page itself posts one too. Both are ignored.
+    const forged = new AbortController()
+    const forgedCode = settle(element.getCode(authorize(`${rs}/popup-evil`), forged.signal))
+    await sleep(800)
+    window.postMessage(`${callback}?code=from-page`, "*")
+    await sleep(200)
+    // 2. While the first flow holds the lock, a queued flow can be aborted.
+    const queued = new AbortController()
+    const queuedCode = settle(element.getCode(authorize(callback, "&code=queued"), queued.signal))
+    await sleep(100)
+    queued.abort()
+    result.queued = await queuedCode
+    forged.abort()
+    result.forged = await forgedCode
+    // 3. The user closes the popup: the flow settles as cancelled.
+    const closing = settle(element.getCode(authorize(`${rs}/popup-evil`), new AbortController().signal))
+    await sleep(500)
+    open("", "oidcAuthentication")?.close()
+    result.closed = await closing
+    // 4. A genuine callback on the redirect_uri origin, from the popup, resolves.
+    const genuine = await element.getCode(authorize(callback, "&code=good"), new AbortController().signal)
+    result.genuine = new URL(genuine.value).searchParams.get("code")
+    genuine[Symbol.dispose]()
+} catch (e) {
+    result.error = String(e.stack ?? e)
+}
+window.__result = result
+document.querySelector("#result").textContent = JSON.stringify(result)
+</script>
+</html>

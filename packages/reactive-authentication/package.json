@@ -1,0 +1,82 @@
+{
+  "name": "@solid/reactive-authentication",
+  "version": "0.1.5",
+  "author": "Samu Lang (https://github.com/langsamu)",
+  "contributors": [
+    "Matthieu Bosquet (https://github.com/matthieubosquet)",
+    "Samu Lang (https://github.com/langsamu)",
+    "Jesse Wright (https://github.com/jeswr)"
+  ],
+  "main": "dist/mod.js",
+  "type": "module",
+  "types": "./dist/mod.d.ts",
+  "exports": {
+    ".": "./dist/mod.js",
+    "./elements": "./dist/elements.js",
+    "./registerElements": "./dist/registerElements.js",
+    "./service-worker": "./dist/service-worker.js"
+  },
+  "sideEffects": [
+    "./dist/registerElements.js"
+  ],
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md",
+    "docs"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jeswr/reactive-authentication-ai.git"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "npm run build && npm run test:types && node --test --test-concurrency=1 test/*.test.js",
+    "test:browser": "npm run build && node test/browser/run.js",
+    "docs": "typedoc",
+    "check": "npm test && npm run test:browser && npm pack --dry-run && npm audit --omit=dev --audit-level=moderate",
+    "test:types": "tsc -p test/types",
+    "interop:list": "node interop/run.js --list",
+    "interop:local": "npm run build && node interop/run.js --suite local --target css-local,css-local-client-id,css-local-client-credentials,keycloak-public,keycloak-confidential,keycloak-confidential-post,keycloak-plain-oauth,keycloak-short-lived,keycloak-no-audience --strict",
+    "interop:local:browser": "npm run build && node interop/run.js --suite local --target css-local-browser --strict",
+    "interop:local:incompatible": "npm run build && node interop/run.js --suite local --target nss-local,nextcloud-local,php-local,manas-local --verify-known-incompatible",
+    "interop:live": "npm run build && node interop/run.js --suite live",
+    "test:browser:regressions": "npm run build && node --test test/browser/sdk-regressions.test.js"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@key-value-kit/core": "0.1.0-alpha.0",
+    "@key-value-kit/storage": "0.1.0-alpha.0",
+    "@rdfjs/wrapper": "^0.34",
+    "dpop": "^2",
+    "http-link-header": "^1.1.4",
+    "jose": "^6.2.12",
+    "multiformats": "^14.0.5",
+    "n3": "^2",
+    "oauth4webapi": "^3"
+  },
+  "devDependencies": {
+    "@azure/msal-browser": "^5.23.0",
+    "@noble/curves": "^2.4.0",
+    "@rdfjs/types": "^2",
+    "@types/google.accounts": "^0.0.18",
+    "@types/http-link-header": "^1.0.7",
+    "@types/n3": "^1",
+    "@types/node": "^24.19.0",
+    "@xmldom/xmldom": "^0.9.12",
+    "esbuild": "^0.28.2",
+    "fake-indexeddb": "^6.2.5",
+    "playwright": "^1.63.0",
+    "typedoc": "^0.28.18",
+    "typedoc-plugin-mdn-links": "^5.1.1",
+    "typescript": "^6",
+    "xml-crypto": "^6.3.2",
+    "xpath": "^0.0.35"
+  },
+  "engines": {
+    "node": ">=24.5.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

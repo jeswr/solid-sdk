@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Service worker authentication</title>
+<authorization-code-flow></authorization-code-flow>
+<idp-picker></idp-picker>
+<script type="module">
+import "@solid/reactive-authentication/registerElements"
+import { ReactiveFetchWorkerManager } from "@solid/reactive-authentication"
+
+// The page only provides UI; the worker holds credentials and decides what to authenticate.
+await new ReactiveFetchWorkerManager({
+    codeProvider: document.querySelector("authorization-code-flow"),
+    issuerProvider: document.querySelector("idp-picker"),
+    scriptUrl: new URL("./dist/sw.js", location.href),
+}).register()
+
+// Plain fetch: the worker upgrades it after a 401 inside its boundary.
+const response = await fetch("https://alice.solidcommunity.net/private/notes.ttl")
+console.log(response.status)
+</script>
+</html>
