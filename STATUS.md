@@ -90,3 +90,29 @@ API addition retains existing string values and adds only optional type metadata
 Full-workspace verification remains blocked by the unrelated bootstrap failure. Roborev is
 still unavailable (`command -v roborev` finds no CLI; no post-commit hook exists); the supplied
 review was addressed directly. Integration and bead closure remain with the dispatcher.
+
+## Fix round 2 — review a58472bfdfcb
+
+- `cae0cb1b fix: preserve folded quoted-printable escapes` addresses the sole finding:
+  a space/tab continuation completing an `=HH` byte preserves the preceding equals sign.
+  The review's `Andr=C3=\r\n A9` example now decodes to `André`. Conservative compatibility:
+  complete encoded-byte continuations take precedence over legacy MIME soft breaks;
+  existing soft breaks, including those with an extra fold space, remain supported.
+- Six regression cases cover space/tab folds, lowercase hex, a fold after the first hex
+  digit, and MIME soft breaks with/without a fold space; all assert semantic round trips.
+- Final documentation commit (`docs: record vCard folding fix verification`) records these results.
+
+| Exact command | Result |
+| --- | --- |
+| `pnpm --filter @jeswr/app-suite exec vitest run test/vcard.test.ts --coverage.enabled=false` | Before the parser fix: 3 failed, 65 passed; the space/tab/lowercase encoded-byte boundary cases reproduce the finding. |
+| `pnpm --filter @jeswr/app-suite run test` | PASS; 69 tests across 2 files, per-file 100% vCard coverage. |
+| `pnpm --filter @jeswr/suite-ui run build && pnpm --filter @jeswr/app-suite run lint && pnpm --filter @jeswr/app-suite run build && pnpm --filter @jeswr/app-suite run typecheck && pnpm --filter @jeswr/app-suite run test` | PASS; app gate and workspace build prerequisite, 69 tests. |
+| `TURBO_SCM_BASE=a58472bfdfcb9ea8e19a222e3fa1f92583c4f5e5 GIT_ALLOW_PROTOCOL=file pnpm run gate` | PASS; 6/6 tasks, including root lint and guards. |
+| `GIT_ALLOW_PROTOCOL=file pnpm run gate:full` | BLOCKED; unchanged `@jeswr/unstorage-solid#build` bootstrap fails during npm install with EROFS writing `/home/runner/.npm/_cacache`; 26/155 tasks successful before Turbo stopped. Remote Git transports were disabled. |
+| `git diff --check` | PASS. |
+
+Final per-file vCard coverage: **100% statements (230/230), branches (165/165),
+functions (30/30), lines (199/199)**. No dependencies, manifests, UI, tracker state,
+other packages, or other checkouts changed. No new open questions or unfinished implementation.
+Full-workspace verification remains blocked by the unrelated bootstrap failure. Roborev CLI
+remains unavailable; the supplied review was addressed directly without installing tooling.
