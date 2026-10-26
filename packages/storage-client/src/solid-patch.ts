@@ -25,6 +25,15 @@ export async function patchFormulas(
 ) {
   if (input.inserts.length === 0 && input.deletes.length === 0) throw new TypeError("empty patch");
   try {
+    // SPARQL 1.1 cannot preserve base direction. CSS 8.0.0-alpha.3's n3 2.1.1 parser
+    // accepts @en--ltr in N3 Patch and preserves direction, so that format keeps it.
+    if (
+      format === "application/sparql-update" &&
+      [...input.inserts, ...input.deletes]
+        .flatMap(terms)
+        .some((term) => term.termType === "Literal" && (term as { direction?: unknown }).direction)
+    )
+      throw new TypeError("SPARQL 1.1 Update cannot express directional literals");
     // Validate the rebuilt terms (plain n3 instances), so what is checked is what is written.
     const where = rebuildQuads(input.where ?? []);
     const deletes = rebuildQuads(input.deletes);
@@ -43,6 +52,12 @@ export async function patchFormulas(
       for (const q of quads) {
         if (q.graph.termType !== "DefaultGraph")
           throw new TypeError("Patch formulas require the default graph");
+        if (
+          !["NamedNode", "BlankNode", "Variable"].includes(q.subject.termType) ||
+          !["NamedNode", "Variable"].includes(q.predicate.termType) ||
+          !["NamedNode", "BlankNode", "Literal", "Variable"].includes(q.object.termType)
+        )
+          throw new TypeError("Invalid patch term position");
         for (const term of terms(q)) {
           if (term.termType === "BlankNode" && (format === "text/n3" || name !== "inserts"))
             throw new TypeError("Blank nodes are only allowed in SPARQL Update inserts");

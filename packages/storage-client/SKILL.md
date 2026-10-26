@@ -82,8 +82,9 @@ Solid write side (ADR-003 §6, T-022; implementation isolated in `src/solid-writ
 - RDF patches use `buildN3Patch`'s fixed InsertDeletePatch envelope; formula order is nonempty
   where, deletes, inserts. Every triple line is serialized through rdf-serialize/n3.Writer in
   N-Triples style; the final semicolon is followed by `.\n`. Serialization reuses rdf.ts IRI
-  escaping and language checks. Reject non-default graphs and blank nodes in all N3 formulas
-  (where/deletes/inserts).
+  escaping and language checks. Subjects must be NamedNode/BlankNode/Variable, predicates
+  NamedNode/Variable and objects NamedNode/BlankNode/Literal/Variable. Reject non-default graphs
+  and blank nodes in all N3 formulas (where/deletes/inserts).
   Solid Protocol §5.3.1 forbids blank nodes in insertions and deletions; this corrects ADR-003 §6's
   "blank nodes in inserts are allowed by CSS" remark. CSS enforces the prohibition. Variables
   must match SPARQL VARNAME minus the leading digit (start with a letter or underscore, as n3/CSS
@@ -95,6 +96,9 @@ Solid write side (ADR-003 §6, T-022; implementation isolated in `src/solid-writ
   DATA then INSERT DATA joined by `;\n`. Select the format before the single validation pass:
   SPARQL INSERT DATA allows insert blank nodes; where/deletes still refuse them. SPARQL retains
   deterministic collision-free blank-node relabeling (reserving `_:patch`) for stable bytes.
+  Directional literals are bad-request (status null) before HTTP with SPARQL 1.1 Update, which
+  cannot express their base direction. N3 Patch retains them: installed CSS 8.0.0-alpha.3 uses
+  n3 2.1.1, whose N3PatchBodyParser accepts `"example"@en--ltr` with its complete term intact.
   Otherwise unsupported (`feature: 'patch'`). N3 requires every deletion to match (409),
   preserving memory conflict semantics; SPARQL DELETE DATA silently
   ignores absent triples. JSON patch requires application/json-patch+json in any advertised format
@@ -106,23 +110,30 @@ Solid write side (ADR-003 §6, T-022; implementation isolated in `src/solid-writ
   Children and the final container DELETE are unconditional: child ETags are unknown and container
   membership changes its ETag. Concurrent additions can make the final DELETE conflict (409).
 - Solid move is emulated (features.move.detail.native false): refuse the root, require a container
-  destination, reject self/subtree container cycles with conflict, validate/encode an explicit name
+  destination, reject self/subtree container cycles with conflict before requests, comparing
+  percent-decoded path segments (raw segment on decoding failure; decoded slashes remain inside
+  their segment). Requests retain raw path spellings. Validate/encode an explicit name
   or retain the raw source segment. Read/head the source and compare its ETag before any writes.
   Resources stream their GET body/Content-Type into PUT with If-None-Match:* then DELETE source
-  with If-Match matching that GET's ETag. Missing GET ETags or missing/malformed Content-Type
+  with If-Match matching that GET's ETag. Source validators must be single strong entity-tags;
+  missing/unusable GET ETags or missing/malformed Content-Type
   are invalid-response errors identifying the source GET, before its destination PUT.
 - Container moves walk listAll recursively before writes, capped at 2000 resources including the
   top container (unsupported/feature move above the cap). Preflight HEADs every member to discover
-  describedby exclusions and rejects unversioned copied resources before writes. No resource GET
+  auxiliary exclusions and rejects missing/unusable validators for copied resources before writes;
+  any supplied auxiliary-resource validator used for teardown must also be strong. No resource GET
   bodies are read during preflight. Copy breadth-first, creating containers before children and
   streaming one resource at a time without buffering. Record each GET ETag for depth-first source
   deletion: copied resources use that validator, auxiliary members use their HEAD ETag when present,
-  containers remain unconditional because membership changes their ETag. Listed .acl/.acr and
-  advertised describedby documents are excluded from implicit copies; source teardown still deletes
-  listed auxiliary members. ACLs and metadata are not copied implicitly.
+  containers remain unconditional because membership changes their ETag. Listed .acl/.acr,
+  advertised describedby documents, and every scoped rel="acl" link target (WAC or ACP,
+  regardless of filename) discovered during header preflight are excluded from implicit copies;
+  source teardown still deletes listed auxiliary members. The explicit move source is never
+  excluded. ACLs and metadata are not copied implicitly.
 - Copy failure rolls back completed copies deepest-first and rethrows the original error. Resource
-  cleanup trusts only its own PUT-response ETag; follow-up HEAD observations are kept separately
-  for successful results. Copies without a create-response ETag and their ancestors are preserved,
+  cleanup trusts only its own PUT-response ETag when it is exactly one strong entity-tag (no
+  wildcard, weak tag, list or malformed value); follow-up HEAD observations are kept separately
+  for successful results. Copies without a usable create-response ETag and their ancestors are preserved,
   reporting a partial move (conflict with the original cause). Validated containers are removed
   unconditionally after children. Any source DELETE failure (including 4xx/5xx) throws conflict,
   cause = delete error. Retain acknowledged deleted sources' copies; before removing any other

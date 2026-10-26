@@ -1712,3 +1712,295 @@ test.each([
   );
   expect(calls).toHaveLength(0);
 });
+
+describe("round-4 write regressions", () => {
+  const unusableEtags = [
+    "*",
+    'W/"weak"',
+    '"one", "two"',
+    "unquoted",
+    '"has space"',
+    '"has\ttab"',
+    '"has\x7Fdel"',
+    '"embedded"quote"',
+  ];
+
+  test.each(
+    unusableEtags,
+  )("rollback preserves a concurrent edit after creation ETag %s", async (etag) => {
+    const dest = `${DEST}today.ttl`;
+    let bytes = "copied";
+    const { storage, calls } = backend({
+      [`PUT ${dest}`]: response(201, { etag }),
+      [`DELETE ${URL}`]: () => {
+        bytes = "concurrent edit";
+        return response(403, {});
+      },
+      [`DELETE ${dest}`]: () => {
+        bytes = "deleted";
+        return response();
+      },
+    });
+    const error = await rejection(storage.move(URL, DEST, { ifMatch: TAG }), "conflict");
+    expect(error.message).toContain("partial");
+    expect(error.cause).toMatchObject({ code: "forbidden" });
+    expect(calls.at(-1)).toMatchObject({ method: "HEAD", url: URL });
+    expect(calls.some((call) => call.method === "DELETE" && call.url === dest)).toBe(false);
+    expect(bytes).toBe("concurrent edit");
+  });
+
+  test("an unusable creation ETag also preserves ancestor containers", async () => {
+    const { storage, calls } = await treeBackend({
+      [`PUT ${COPY}sub/b`]: response(201, { etag: "*" }),
+      [`DELETE ${SRC}sub/b`]: response(403, {}),
+    });
+    expect(
+      (await rejection(storage.move(SRC, DEST, { ifMatch: '"source"' }), "conflict")).message,
+    ).toContain("partial");
+    expect(
+      calls
+        .filter((call) => call.method === "DELETE" && call.url.startsWith(COPY))
+        .map((call) => call.url),
+    ).toEqual([`${COPY}a`]);
+  });
+
+  test.each(
+    unusableEtags,
+  )("unusable source ETag %s is refused in initial reads, preflight and GET rechecks", async (etag) => {
+    for (const [method, url] of [
+      ["GET", URL],
+      ["HEAD", SRC],
+    ] as const) {
+      const { storage, calls } = backend({
+        [`${method} ${url}`]: response(200, { etag, "content-type": "text/plain" }, "bytes"),
+      });
+      expect(
+        await rejection(storage.move(url, DEST, { ifMatch: TAG }), "invalid-response"),
+      ).toMatchObject({ method, url, status: null });
+      expect(calls.map((call) => call.method)).toEqual([method]);
+    }
+    const preflight = await treeBackend({ [`HEAD ${SRC}a`]: response(200, { etag }) });
+    expect(
+      await rejection(
+        preflight.storage.move(SRC, DEST, { ifMatch: '"source"' }),
+        "invalid-response",
+      ),
+    ).toMatchObject({ method: "HEAD", url: `${SRC}a` });
+    expect(preflight.calls.every((call) => ["HEAD", "GET"].includes(call.method))).toBe(true);
+    const recheck = await treeBackend({
+      [`GET ${SRC}a`]: response(200, { etag, "content-type": "text/plain" }, "bytes"),
+    });
+    expect(
+      await rejection(recheck.storage.move(SRC, DEST, { ifMatch: '"source"' }), "invalid-response"),
+    ).toMatchObject({ method: "GET", url: `${SRC}a` });
+    expect(recheck.calls.filter((call) => call.method === "PUT").map((call) => call.url)).toEqual([
+      COPY,
+    ]);
+    expect(
+      recheck.calls.filter((call) => call.method === "DELETE").map((call) => call.url),
+    ).toEqual([COPY]);
+  });
+
+  test.each([
+    '""',
+    '"!#~\x80\xFF\\"',
+  ])("strong ETag %s is used verbatim for conditional source deletion", async (etag) => {
+    const { storage, calls } = backend({
+      [`GET ${URL}`]: response(200, { etag, "content-type": "text/plain" }, "bytes"),
+      [`PUT ${DEST}today.ttl`]: response(201, { etag }),
+      [`DELETE ${URL}`]: response(),
+    });
+    expect((await storage.move(URL, DEST, { ifMatch: etag })).etag).toBe(etag);
+    expect(calls.at(-1)?.headers.get("if-match")).toBe(etag);
+  });
+
+  test("a reported creation ETag remains verbatim even when unusable for rollback", async () => {
+    const { storage } = backend({
+      [`PUT ${DEST}today.ttl`]: response(201, { etag: "*" }),
+      [`DELETE ${URL}`]: response(),
+    });
+    expect((await storage.move(URL, DEST, { ifMatch: TAG })).etag).toBe("*");
+  });
+
+  test.each([
+    [SRC, `${ROOT}%73ource/sub/`],
+    [SRC, `${ROOT}%73ource/`],
+    [`${ROOT}%73ource/`, `${SRC}sub/`],
+    [`${ROOT}%FF/`, `${ROOT}%FF/sub/`],
+  ])("encoded container cycle %s into %s is refused before requests", async (source, parent) => {
+    const { storage, calls } = backend();
+    expect(
+      await rejection(storage.move(source, parent, { ifMatch: TAG }), "conflict"),
+    ).toMatchObject({ status: null });
+    expect(calls).toHaveLength(0);
+  });
+
+  test.each([
+    [SRC, `${ROOT}source-other/`],
+    [SRC, ROOT],
+    [`${ROOT}%FF/`, `${ROOT}%FE/`],
+  ])("cycle comparison retains segment boundaries and raw request spelling for %s into %s", async (source, parent) => {
+    const { storage, calls } = backend({ [`HEAD ${source}`]: response(403, {}) });
+    await rejection(storage.move(source, parent, { ifMatch: TAG }), "forbidden");
+    expect(calls.map((call) => [call.method, call.url])).toEqual([["HEAD", source]]);
+  });
+
+  test.each([
+    [`${ROOT}source%2Fpart/`, `${ROOT}source/part/`],
+    [`${ROOT}source/part/`, `${ROOT}source%2Fpart/`],
+  ])("scope already refuses encoded path delimiters for %s into %s", async (source, parent) => {
+    const { storage, calls } = backend();
+    await rejection(storage.move(source, parent, { ifMatch: TAG }), "scope");
+    expect(calls).toHaveLength(0);
+  });
+
+  test("all advertised ACL/ACP targets are excluded even when discovered after their listing entries", async () => {
+    const access = `${SRC}access`,
+      policy = `${SRC}access-policy`,
+      resource = `${SRC}file`;
+    const body = await serializeQuads(
+      [access, policy, resource].map((url) =>
+        quad(nn(SRC), nn("http://www.w3.org/ns/ldp#contains"), nn(url)),
+      ),
+      "text/turtle",
+    );
+    const { storage, calls } = await treeBackend({
+      [`GET ${SRC}`]: response(200, { "content-type": "text/turtle" }, body),
+      [`HEAD ${access}`]: response(200, { etag: '"access"' }),
+      [`HEAD ${policy}`]: response(200, { etag: '"policy"' }),
+      [`HEAD ${resource}`]: response(200, {
+        etag: '"source"',
+        link: `<${access}>; rel="acl", <${policy}>; rel="acl"`,
+      }),
+      [`GET ${access}`]: response(
+        200,
+        { etag: '"access"', "content-type": "text/plain" },
+        "access rules",
+      ),
+      [`GET ${policy}`]: response(
+        200,
+        { etag: '"policy"', "content-type": "text/plain" },
+        "policy rules",
+      ),
+      [`GET ${resource}`]: response(
+        200,
+        { etag: '"source"', "content-type": "text/plain" },
+        "bytes",
+      ),
+      [`PUT ${COPY}access`]: response(201),
+      [`PUT ${COPY}access-policy`]: response(201),
+      [`PUT ${COPY}file`]: response(201),
+      [`DELETE ${resource}`]: response(),
+      [`DELETE ${policy}`]: response(),
+      [`DELETE ${access}`]: response(),
+    });
+    await storage.move(SRC, DEST, { ifMatch: '"source"' });
+    expect(calls.filter((call) => call.method === "PUT").map((call) => call.url)).toEqual([
+      COPY,
+      `${COPY}file`,
+    ]);
+    expect(calls.some((call) => call.method === "GET" && [access, policy].includes(call.url))).toBe(
+      false,
+    );
+    expect(
+      calls
+        .find((call) => call.method === "DELETE" && call.url === policy)
+        ?.headers.get("if-match"),
+    ).toBe('"policy"');
+  });
+
+  test("an unusable auxiliary HEAD ETag is refused before conditional teardown or writes", async () => {
+    const { storage, calls } = await treeBackend({
+      [`HEAD ${SRC}a`]: response(200, { etag: "*", link: `<${SRC}a>; rel="acl"` }),
+    });
+    expect(
+      await rejection(storage.move(SRC, DEST, { ifMatch: '"source"' }), "invalid-response"),
+    ).toMatchObject({ method: "HEAD", url: `${SRC}a` });
+    expect(calls.every((call) => ["HEAD", "GET"].includes(call.method))).toBe(true);
+  });
+
+  test("an explicitly moved advertised auxiliary resource is kept as the move source", async () => {
+    const source = `${ROOT}access`,
+      dest = `${DEST}access`;
+    const { storage, calls } = backend({
+      [`GET ${source}`]: response(
+        200,
+        { etag: TAG, "content-type": "text/plain", link: `<${source}>; rel="acl"` },
+        "explicit access policy",
+      ),
+      [`PUT ${dest}`]: response(201),
+      [`DELETE ${source}`]: response(),
+    });
+    expect((await storage.move(source, DEST, { ifMatch: TAG })).url).toBe(dest);
+    expect(await new Response(calls[1]?.body as ReadableStream).text()).toBe(
+      "explicit access policy",
+    );
+  });
+
+  test.each([
+    "ltr",
+    "rtl",
+  ] as const)("SPARQL refuses directional %s inserts and deletes before HTTP", async (direction) => {
+    const statement = quad(s, p, literal("example", { language: "en", direction }));
+    const { storage, calls } = backend(
+      {},
+      { features: withFormats({ "text/turtle": ["application/sparql-update"] }) },
+    );
+    for (const patch of [n3([statement]), n3([], [statement])])
+      expect(
+        await rejection(storage.patch(URL, patch, { ifMatch: TAG }), "bad-request"),
+      ).toMatchObject({ status: null, url: URL });
+    expect(calls).toHaveLength(0);
+  });
+
+  test("N3 preserves directional terms supported by CSS's installed n3 parser", async () => {
+    for (const direction of ["ltr", "rtl"] as const) {
+      const statement = quad(s, p, literal("example", { language: "en", direction }));
+      const patch = n3([statement], [statement], [statement]);
+      const body = await buildN3Patch(patch);
+      expect(body).toContain(`"example"@en--${direction}`);
+      const parsed = new Parser({ format: "text/n3" })
+        .parse(body)
+        .filter((q) => q.predicate.equals(p));
+      expect(parsed).toHaveLength(3);
+      for (const q of parsed) expect(q.object.equals(statement.object)).toBe(true);
+      const { storage, calls } = backend();
+      await storage.patch(URL, patch, { ifMatch: TAG });
+      expect(calls[0]?.body).toBe(body);
+    }
+  });
+
+  test("invalid RDF term positions are refused in every formula before serialization or HTTP", async () => {
+    const base = { subject: q.subject, predicate: q.predicate, object: q.object, graph: q.graph };
+    const malformed = [
+      { ...base, subject: literal("example") },
+      { ...base, subject: defaultGraph() },
+      { ...base, predicate: literal("example") },
+      { ...base, predicate: blankNode("predicate") },
+      { ...base, predicate: defaultGraph() },
+      { ...base, object: defaultGraph() },
+      { ...base, graph: variable("graph") },
+    ] as Quad[];
+    for (const statement of malformed) {
+      for (const patch of [n3([statement]), n3([], [statement]), n3([q], [], [statement])]) {
+        expect(await rejection(buildN3Patch(patch), "bad-request")).toMatchObject({ status: null });
+        for (const features of [
+          undefined,
+          withFormats({ "text/turtle": ["application/sparql-update"] }),
+        ]) {
+          const { storage, calls } = backend({}, { features });
+          expect(
+            await rejection(storage.patch(URL, patch, { ifMatch: TAG }), "bad-request"),
+          ).toMatchObject({ status: null });
+          expect(calls).toHaveLength(0);
+        }
+      }
+    }
+  });
+
+  test("bound variables remain valid in every triple position", async () => {
+    const statement = quad(variable("s"), variable("p"), variable("o"));
+    const body = await buildN3Patch(n3([statement], [statement], [statement]));
+    expect(body.match(/\?s \?p \?o \./g)).toHaveLength(3);
+  });
+});

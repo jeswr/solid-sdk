@@ -23,6 +23,31 @@ const LDP_CONTAINER = '<http://www.w3.org/ns/ldp#BasicContainer>; rel="type"';
 const LDP_RESOURCE = '<http://www.w3.org/ns/ldp#Resource>; rel="type"';
 const BASE32 = "abcdefghijklmnopqrstuvwxyz234567";
 
+// If-Match uses strong comparison: wildcards, weak tags and lists cannot identify copied bytes.
+function usableEtag(value: string | null | undefined): value is string {
+  return typeof value === "string" && /^"[\x21\x23-\x7E\x80-\xFF]*"$/.test(value);
+}
+
+// Decode only for cycle comparisons. Requests retain the raw spelling, including non-UTF-8 names.
+function movePath(url: string): string[] {
+  return new URL(url).pathname
+    .replace(/\/$/, "")
+    .split("/")
+    .map((segment) => {
+      try {
+        return decodeURIComponent(segment);
+      } catch {
+        return segment;
+      }
+    });
+}
+function withinMoveSource(url: string, source: string): boolean {
+  const path = movePath(url);
+  const sourcePath = movePath(source);
+  // Keep decoded slashes inside their segment, never join them into a path again.
+  return sourcePath.length <= path.length && sourcePath.every((part, i) => part === path[i]);
+}
+
 function header(value: unknown, name: string): asserts value is string {
   if (
     typeof value !== "string" ||
@@ -98,9 +123,14 @@ export function solidWrites(options: SolidBackendOptions, client: () => StorageC
       throw new StorageError("precondition-failed", { method, url, status: 412, etag: current });
   }
   function requireEtag(read: ReadResult, method: string): string {
-    if (read.etag) return read.etag;
+    if (usableEtag(read.etag)) return read.etag;
     discard(read.body);
-    throw error("invalid-response", method, read.url, "Conditional moves require source ETags");
+    throw error(
+      "invalid-response",
+      method,
+      read.url,
+      "Conditional moves require strong source ETags",
+    );
   }
   async function etag(
     url: string,
@@ -216,7 +246,7 @@ export function solidWrites(options: SolidBackendOptions, client: () => StorageC
     // Only a resource's own create validator can make its deletion safe; an emptied container
     // is removed unconditionally (a concurrent member makes its DELETE fail with 409).
     for (const copy of copies)
-      if (copy.kind === "resource" && !copy.creationEtag) keep.add(copy.url);
+      if (copy.kind === "resource" && !usableEtag(copy.creationEtag)) keep.add(copy.url);
     // A retained descendant also prevents cleanup of its containing copies.
     for (const copy of copies)
       if (copy.kind === "container" && [...keep].some((url) => url.startsWith(copy.url)))
@@ -382,7 +412,7 @@ export function solidWrites(options: SolidBackendOptions, client: () => StorageC
       conditional(opts.ifMatch);
       if (source === root) throw error("method-not-allowed", "MOVE", source);
       const kind = source.endsWith("/") ? "container" : "resource";
-      if (kind === "container" && parent.startsWith(source))
+      if (kind === "container" && withinMoveSource(parent, source))
         throw error("conflict", "MOVE", source, "Cannot move a container into itself");
       const segment =
         nameFor("MOVE", source, opts.name) ??
@@ -401,26 +431,35 @@ export function solidWrites(options: SolidBackendOptions, client: () => StorageC
       const excluded = new Set<string>();
       for (const node of nodes) {
         if (node.url !== source && /\.(acl|acr)$/.test(node.url)) excluded.add(node.url);
-        // Preflight only headers: discover every metadata exclusion before any body is copied.
+        // Preflight only headers: discover every auxiliary exclusion before any body is copied.
         const read =
           node.url === source ? first : await client().head(node.url, { signal: opts.signal });
-        if (read.metadataUrl) {
-          const metadataUrl = target("GET", read.metadataUrl);
-          if (metadataUrl !== source) excluded.add(metadataUrl);
+        const auxiliary = (read.links.get("acl") ?? []).map((link) => link.target);
+        if (read.metadataUrl) auxiliary.push(read.metadataUrl);
+        for (const url of auxiliary) {
+          const auxiliaryUrl = target("GET", url);
+          if (auxiliaryUrl !== source) excluded.add(auxiliaryUrl);
         }
         sourceEtags.set(node.url, read.etag);
       }
       const planned = nodes.filter((node) => !excluded.has(node.url));
-      // Reject unversioned members before creating the destination tree. GET validators are
+      // Reject unusable validators before writes, including any used for auxiliary teardown.
+      // Auxiliary members may have no ETag and are then deleted unconditionally. GET validators are
       // checked again when streaming, since those alone identify the bytes actually copied.
-      for (const node of planned)
-        if (node.kind === "resource" && !sourceEtags.get(node.url))
+      for (const node of nodes) {
+        const sourceEtag = sourceEtags.get(node.url);
+        if (
+          node.kind === "resource" &&
+          !usableEtag(sourceEtag) &&
+          (!excluded.has(node.url) || sourceEtag !== null)
+        )
           throw error(
             "invalid-response",
             "HEAD",
             node.url,
-            "Conditional moves require source ETags",
+            "Conditional moves require strong source ETags",
           );
+      }
       const copies: Copy[] = [];
       try {
         for (const node of planned) {
