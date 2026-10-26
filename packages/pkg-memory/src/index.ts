@@ -1,5 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-/** PKG nanopublication model and fact templates (MCP-04). */
+/** PKG nanopublication model, belief and purpose policy. */
+export type { Belief, ClassifiedNanopublication } from "./belief.js";
+export { classifyNanopublications } from "./belief.js";
 export {
   UnsupportedLiteralCharacterError,
   UnsupportedLiteralDatatypeError,
@@ -27,5 +29,12 @@ export {
   serializeNanopublications,
   VALIDITY_STATUSES,
 } from "./model.js";
+export type { MemoryPurpose } from "./purpose.js";
+export {
+  createDefaultPolicy,
+  isSpecialCategory,
+  MEMORY_PURPOSES,
+  purposeFilter,
+} from "./purpose.js";
 export type { Fact, TemporalValue } from "./templates.js";
 export { createFactAssertion } from "./templates.js";

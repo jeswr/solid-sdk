@@ -87,10 +87,32 @@ rejects malformed skeletons, missing graphs, duplicate scalar fields and unknown
 statuses. It returns graph identifiers, statuses, evidence, attribution, categories,
 revision links and a complete dataset; it does not infer template inputs from RDF.
 
-This is a model/parser, not the KG SHACL validator. It preserves the builder's
-optional evidence/category fields; consumers must enforce their own provenance
-and purpose requirements. Belief classification, purpose policy, and pod storage
-are MCP-05. No owner identity or data access is implicit.
+This is not the KG SHACL validator. The model preserves the builder's optional
+evidence/category fields; consumers enforce their own provenance requirements.
+No owner identity or data access is implicit.
+
+`classifyNanopublications(result)` returns a derived view with `belief` equal to
+`definitely`, `might`, `mentioned`, or `past`, distinct-nanopub `corroboration`
+counts, and `replacedBy` nanopub IDs. Past validity, provenance invalidation and
+later revisions take precedence. Current Documented facts are definite; current
+explicit/summary facts need no unresolved contradiction in either direction.
+Other live claims are `might`, except `Mentioned`. Retired contradictory claims
+do not block current explicit facts. The source dataset is never modified.
+Consumers acting on a fact must additionally require `validity === "Current"`.
+
+`purposeFilter(policy, purpose, clientId)` returns an array-filter predicate over
+nanopub metadata. Purpose is the closed `ServiceProvision | Personalisation` enum;
+each category is an ODRL read target, evaluated against that DPV purpose and the
+client ID. Every category must be permitted; missing categories, unmatched rules
+and outstanding duties deny. Both full category IRIs and `pd:` names are supported.
+`createDefaultPolicy(id, owner)` permits contact/address/preferences for these
+purposes, including contact data used for scheduling; health/genetics/mental
+health/finance deny for all clients until the owner edits the policy. The spec
+does not name a category for other scheduling data, so none is invented.
+`isSpecialCategory(category)` recognizes the local DPV-PD special-category list,
+including health and biometric descendants; financial data is separately denied
+by the default policy. No vocabulary fetching or implicit subclass inference
+occurs. Unknown categories require an explicit policy permit.
 
 Offline fixtures contain only fictional identities. See
 [test/fixtures/README.md](test/fixtures/README.md) for the independent Python oracle.
@@ -101,3 +123,7 @@ committed canonicalization edge cases. RDFlib 7.1.4 itself can choose different
 canonical IDs across runs on some highly symmetric regular blank-node graphs;
 byte parity on those graphs is not a stable reference contract. Templates use
 plain-string literals (RDF/JS merges plain strings and explicit `xsd:string`).
+
+Belief tests cover the KG §4.1 status matrix and the independent synthetic builder
+oracle. The supplied snapshot omits `pipeline/queries/*.rq` and the private pilot;
+exact query/pilot parity has not been verified.
