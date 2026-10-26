@@ -1,7 +1,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 
 import { DataFactory, Store } from "n3";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   asDate,
   buildCalendar,
@@ -309,22 +310,62 @@ describe("recurrence and reminders", () => {
       ),
     ).toHaveLength(2);
   });
-  it("rejects nonexistent wall times and skips a DST-gap occurrence", () => {
+  it("rejects nonexistent wall times without consuming recurrence count", () => {
     expect(() => fromWallClock(date("2026-03-29T01:30Z"), "Europe/London")).toThrow(
       "does not exist",
     );
+    const gap: CalendarEvent = {
+      name: "Gap",
+      start: date("2026-03-28T01:30Z"),
+      recurrence: { frequency: "DAILY", count: 3 },
+    };
+    const starts = (event: CalendarEvent, from = "2026-03-28Z", to = "2026-04-05Z") =>
+      expandEvent(event, date(from), date(to), "Europe/London").map((e) =>
+        asDate(e.start).toISOString(),
+      );
+    expect(starts(gap)).toEqual([
+      "2026-03-28T01:30:00.000Z",
+      "2026-03-30T00:30:00.000Z",
+      "2026-03-31T00:30:00.000Z",
+    ]);
+    expect(starts(gap, "2026-03-31Z")).toEqual(["2026-03-31T00:30:00.000Z"]);
+    expect(starts(gap, "2026-04-01Z")).toEqual([]);
+    expect(starts(gap, "2026-03-28Z", "2026-03-30Z")).toEqual(["2026-03-28T01:30:00.000Z"]);
+    expect(
+      starts({
+        ...gap,
+        recurrence: {
+          frequency: "DAILY",
+          count: 3,
+          exceptDate: ["2026-03-28", date("2026-03-30T00:30Z")],
+        },
+      }),
+    ).toEqual(["2026-03-31T00:30:00.000Z"]);
+    expect(starts({ ...gap, recurrence: { frequency: "DAILY", until: "2026-03-31" } })).toEqual(
+      starts(gap),
+    );
+  });
+  it.each([
+    ["Europe/London", "2026-10-25T01:30Z", "2026-10-25T00:30Z"],
+    ["America/New_York", "2026-11-01T01:30Z", "2026-11-01T05:30Z"],
+    ["Australia/Lord_Howe", "2026-04-05T01:45Z", "2026-04-04T14:45Z"],
+  ])("resolves overlapping wall times to the first instant in %s", (zone, wall, first) => {
+    expect(fromWallClock(date(wall), zone)).toEqual(date(first));
+    expect(fromWallClock(wallClock(date(first), zone), zone)).toEqual(date(first));
+  });
+  it("retains a first-occurrence start when expanding through a DST overlap", () => {
     expect(
       expandEvent(
         {
-          name: "Gap",
-          start: date("2026-03-28T01:30Z"),
-          recurrence: { frequency: "DAILY", count: 3 },
+          name: "Overlap",
+          start: date("2026-10-25T00:30Z"),
+          recurrence: { frequency: "DAILY", count: 2 },
         },
-        date("2026-03-28Z"),
-        date("2026-04-01Z"),
+        date("2026-10-25Z"),
+        date("2026-10-27Z"),
         "Europe/London",
-      ),
-    ).toHaveLength(2);
+      ).map((e) => asDate(e.start).toISOString()),
+    ).toEqual(["2026-10-25T00:30:00.000Z", "2026-10-26T01:30:00.000Z"]);
   });
   it("computes sorted absolute and offset fire times without mutating reminders", () => {
     expect(computeFireTimes(event).map((d) => d.toISOString())).toEqual([
@@ -336,6 +377,37 @@ describe("recurrence and reminders", () => {
 });
 
 describe("ported agenda helpers and month listing selection", () => {
+  it.each([
+    "America/Los_Angeles",
+    "Europe/London",
+    "Pacific/Auckland",
+  ])("keeps civil dates in their display day and month in %s", (zone) => {
+    vi.stubEnv("TZ", zone);
+    try {
+      const allDay = item({ name: "All day", start: "2026-03-01" });
+      const timed = item({ name: "Timed", start: new Date(2026, 2, 1, 9) });
+      const previous = item({ name: "Previous", start: "2026-02-28" });
+      const input = [timed, allDay, previous];
+      expect(dayKey(allDay.data.start)).toBe("2026-03-01");
+      expect(monthKey(allDay.data.start)).toBe("2026-03");
+      expect(sortByStart(input)).toEqual([previous, allDay, timed]);
+      const days = groupByDay(input);
+      expect(days.map((day) => day.key)).toEqual(["2026-02-28", "2026-03-01"]);
+      expect(days[1]?.date).toEqual(new Date(2026, 2, 1));
+      expect(days[1]?.events).toEqual([allDay, timed]);
+      expect([...groupByMonth(input)]).toEqual([
+        ["2026-02", [previous]],
+        ["2026-03", [allDay, timed]],
+      ]);
+      const cell = monthMatrix(new Date(2026, 2, 15), input)
+        .flat()
+        .find((cell) => dayKey(cell.date) === "2026-03-01");
+      expect(cell?.inMonth).toBe(true);
+      expect(cell?.events).toEqual([allDay, timed]);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
   it("sorts and groups without mutating inputs; constructs a fixed six-week grid", () => {
     const first = item({ name: "A", start: date("2026-03-02T10:00Z") });
     const second = item({ name: "B", start: date("2026-03-02T09:00Z") });

@@ -1,19 +1,27 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// Agenda helpers ported from Pod Manager calendar.ts; local-time keys retain its behavior.
-import type { CalendarEvent, StoredItem } from "./types";
+// AUTHORED-BY Codex GPT-6
+// Agenda helpers ported from Pod Manager calendar.ts; civil dates retain their calendar fields.
+import type { CalendarDate, CalendarEvent, StoredItem } from "./types";
 import { asDate } from "./validation";
+
+function displayDate(value: CalendarDate): Date {
+  asDate(value);
+  return typeof value === "string" ? new Date(`${value}T00:00:00`) : value;
+}
 /** Sort events ascending by start time (chronological agenda order). */
 export function sortByStart(items: StoredItem<CalendarEvent>[]): StoredItem<CalendarEvent>[] {
-  return [...items].sort((a, b) => +asDate(a.data.start) - +asDate(b.data.start));
+  return [...items].sort((a, b) => +displayDate(a.data.start) - +displayDate(b.data.start));
 }
 
-/** Stable `YYYY-MM` key for an event's start month (local time). */
-export function monthKey(date: Date): string {
+/** Stable `YYYY-MM` key: civil fields for dates, local time for instants. */
+export function monthKey(date: CalendarDate): string {
+  if (typeof date === "string") return date.slice(0, 7);
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
 }
 
-/** Stable `YYYY-MM-DD` key for a date (local time). */
-export function dayKey(date: Date): string {
+/** Stable `YYYY-MM-DD` key: civil fields for dates, local time for instants. */
+export function dayKey(date: CalendarDate): string {
+  if (typeof date === "string") return date;
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(
     date.getDate(),
   ).padStart(2, "0")}`;
@@ -35,13 +43,12 @@ export interface AgendaDay {
 export function groupByDay(items: StoredItem<CalendarEvent>[]): AgendaDay[] {
   const byKey = new Map<string, AgendaDay>();
   for (const item of sortByStart(items)) {
-    const start = asDate(item.data.start);
-    const key = dayKey(start);
+    const key = dayKey(item.data.start);
     let day = byKey.get(key);
     if (!day) {
       day = {
         key,
-        date: new Date(start.getFullYear(), start.getMonth(), start.getDate()),
+        date: new Date(`${key}T00:00:00`),
         events: [],
       };
       byKey.set(key, day);
@@ -67,7 +74,7 @@ export interface MonthCell {
 export function monthMatrix(anchor: Date, items: StoredItem<CalendarEvent>[]): MonthCell[][] {
   const byDay = new Map<string, StoredItem<CalendarEvent>[]>();
   for (const item of items) {
-    const k = dayKey(asDate(item.data.start));
+    const k = dayKey(item.data.start);
     const list = byDay.get(k) ?? [];
     list.push(item);
     byDay.set(k, list);
@@ -119,7 +126,7 @@ export function groupByMonth(
 ): Map<string, StoredItem<CalendarEvent>[]> {
   const months = new Map<string, StoredItem<CalendarEvent>[]>();
   for (const item of sortByStart(items)) {
-    const key = monthKey(asDate(item.data.start));
+    const key = monthKey(item.data.start);
     const list = months.get(key) ?? [];
     list.push(item);
     months.set(key, list);

@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { RRule } from "rrule";
 import type { CalendarDate, CalendarEvent, RecurrenceRule } from "./types";
 import { asDate, durationMilliseconds, validateEvent, validateRule } from "./validation";
@@ -28,14 +29,18 @@ export function wallClock(date: Date, timeZone: string): Date {
     ),
   );
 }
-/** Resolve a floating wall-clock value using Intl; reject nonexistent DST-gap times. */
+/** Resolve a wall time to its first occurrence; reject nonexistent DST-gap times. */
 export function fromWallClock(wall: Date, timeZone: string): Date {
-  let instant = new Date(wall);
-  for (let i = 0; i < 4; i++) {
-    const delta = +wall - +wallClock(instant, timeZone);
-    if (!delta) return instant;
-    instant = new Date(+instant + delta);
+  let earliest = Infinity;
+  // Sample both sides of a transition, then test each observed offset explicitly.
+  // An overlap has two matching instants; a gap has none.
+  for (const delta of [-86400000, 0, 86400000]) {
+    const sample = new Date(+wall + delta);
+    const offset = +wallClock(sample, timeZone) - +sample;
+    const candidate = new Date(+wall - offset);
+    if (+wallClock(candidate, timeZone) === +wall) earliest = Math.min(earliest, +candidate);
   }
+  if (Number.isFinite(earliest)) return new Date(earliest);
   throw new TypeError("Local time does not exist in this timezone");
 }
 export function toRRule(rule: RecurrenceRule, start: CalendarDate, timeZone = "UTC"): RRule {
@@ -83,10 +88,23 @@ export function expandEvent(
   const floatingFrom = wallClock(new Date(+from - duration), zone);
   const floatingTo = wallClock(to, zone);
   // Pad for offset changes at range boundaries; exact filtering follows conversion.
-  const dates = toRRule(rule, event.start, zone).between(
-    new Date(+floatingFrom - 86400000),
+  const dates: { wall: Date; date: Date }[] = [];
+  // COUNT applies to valid local times from DTSTART, before EXDATE/range filtering.
+  // Let rrule bound the search by the range, and stop once that valid count is met.
+  toRRule({ ...rule, count: undefined }, event.start, zone).between(
+    rule.count === undefined ? new Date(+floatingFrom - 86400000) : wallClock(start, zone),
     new Date(+floatingTo + 86400000),
     true,
+    (wall) => {
+      let date: Date;
+      try {
+        date = fromWallClock(wall, zone);
+      } catch {
+        return true;
+      }
+      dates.push({ wall, date });
+      return rule.count === undefined || dates.length < rule.count;
+    },
   );
   const until =
     rule.until === undefined
@@ -94,13 +112,7 @@ export function expandEvent(
       : typeof rule.until === "string"
         ? +fromWallClock(new Date(+asDate(rule.until) + 86399999), zone)
         : +asDate(rule.until);
-  return dates.flatMap((wall) => {
-    let date: Date;
-    try {
-      date = fromWallClock(wall, zone);
-    } catch {
-      return [];
-    }
+  return dates.flatMap(({ wall, date }) => {
     if (
       +date > until ||
       !overlaps(date) ||
