@@ -430,8 +430,8 @@ encoding links only after every download and content write succeeds. Previous ve
 removed after the metadata commit. A failed commit attempts to remove staged representations
 while preserving anything linked by the current metadata. Matching checksum/modified-time
 metadata and every expected encoding link avoid another download only when no `contentSkipped`
-reason is present. Downloads may overlap; each file's Pod
-mutations and cleanup are serialized within the runtime. Every successful store lists that
+reason is present. The shared runner refuses overlapping imports for this connector container;
+hosts sharing the pod across processes must serialize runs. Every successful store lists that
 file's container and removes unlinked canonical representations, including abandoned exports
 and legacy `content`, `content.pdf`, and `content.txt` paths. This also runs for metadata-only
 transitions even when previous metadata has no encoding links.

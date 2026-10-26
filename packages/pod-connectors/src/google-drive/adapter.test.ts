@@ -1,6 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { createHash } from "node:crypto";
-import { setImmediate } from "node:timers/promises";
 import { Container, Resource } from "@solid/object";
 import { DataFactory, Store, Writer } from "n3";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -1025,45 +1024,62 @@ describe("Drive malformed snapshots", () => {
 });
 
 describe("Drive staged representations", () => {
-  it("keeps mutations queued until a failed predecessor has finished rollback", async () => {
-    const { podWriter, pod, run, metadata } = await imported();
+  it.each([
+    "success",
+    "failure",
+  ])("refuses overlapping imports without touching the pod and releases the claim after %s", async (outcome) => {
+    const { podWriter, pod, run } = setup();
     const first = { ...BINARY, md5Checksum: "first" };
-    const second = { ...BINARY, md5Checksum: "second" };
     const committing = Promise.withResolvers<void>();
     const resume = Promise.withResolvers<void>();
     const write = podWriter.write;
-    let failFirst = true;
+    let suspend = true;
     vi.spyOn(podWriter, "write").mockImplementation(async (doc, conditions) => {
-      if (doc.slug === `${path(BINARY.id)}meta.ttl` && failFirst) {
-        failFirst = false;
+      if (doc.slug === `${path(BINARY.id)}meta.ttl` && suspend) {
+        suspend = false;
         committing.resolve();
         await resume.promise;
-        throw new Error("Interrupted metadata write");
+        if (outcome === "failure") throw new Error("Interrupted metadata write");
       }
       return write(doc, conditions);
     });
     const firstResult = run(full([first]), { media: CONTENT }).result;
-    const failed = expect(firstResult).rejects.toThrow("Interrupted metadata write");
+    const finished =
+      outcome === "failure"
+        ? expect(firstResult).rejects.toThrow("Interrupted metadata write")
+        : expect(firstResult).resolves.toMatchObject({ cursor: "1000" });
     await committing.promise;
-    const downloaded = Promise.withResolvers<void>();
-    const secondResult = run(full([second]), {
-      media: {
-        [mediaUrl(BINARY.id)]: () => {
-          downloaded.resolve();
-          return new Response("next");
-        },
-      },
-    }).result;
-    await downloaded.promise;
-    // Drain the response reader and hash microtasks so the second mutation is queued.
-    await setImmediate();
-    expect(pod.bytes(contentUrl(second))).toBeUndefined();
-    resume.resolve();
-    await failed;
-    await secondResult;
-    expect(pod.bytes(contentUrl(first))).toBeUndefined();
-    expect(new TextDecoder().decode(pod.bytes(contentUrl(second)))).toBe("next");
-    expect([...metadata(BINARY.id).encodings]).toEqual([contentUrl(second)]);
+    try {
+      const snapshot = () => pod.urls().map((url) => [url, pod.get(url), pod.bytes(url)]);
+      const before = snapshot();
+      const puts = pod.putCount;
+      const podFetch = vi.fn(pod.fetch);
+      // A distinct writer must still share the claim for this connector container.
+      const otherWriter = createFetchPodWriter({
+        adapterId: "google-drive",
+        webId: TEST_WEBID,
+        profileDocumentUrl: TEST_PROFILE_DOC,
+        podRoot: TEST_POD_ROOT,
+        fetch: podFetch,
+      });
+      const api = vi.fn(fixtureMediaFetch(full([BINARY]), CONTENT));
+      await expect(
+        runImport({
+          adapter: googleDriveAdapter,
+          mode: "live",
+          sourceAuth: { fetch: api },
+          podWriter: otherWriter,
+        }),
+      ).rejects.toThrow("An import for this connector is already running.");
+      expect(api).not.toHaveBeenCalled();
+      expect(podFetch).not.toHaveBeenCalled();
+      expect(snapshot()).toEqual(before);
+      expect(pod.putCount).toBe(puts);
+    } finally {
+      resume.resolve();
+      await finished;
+    }
+    expect((await run(full([first]), { media: CONTENT }).result).cursor).toBe("1000");
   });
 
   it.each([
@@ -1100,14 +1116,52 @@ describe("Drive staged representations", () => {
     const newRoutes = [
       changes({ changes: [{ fileId: BINARY.id, file: newer }], newStartPageToken: "new" }),
     ];
-    await run(newRoutes, { state, media: { [mediaUrl(BINARY.id)]: bytes("new!") } }).result;
-    const winningMetadata = pod.get(metaUrl(BINARY.id));
+    let winningMetadata: string | undefined;
+    let etag: string | undefined;
+    try {
+      // Another process writes directly, outside this process's import-session claim.
+      const writer = createFetchPodWriter({
+        adapterId: "google-drive",
+        webId: TEST_WEBID,
+        profileDocumentUrl: TEST_PROFILE_DOC,
+        podRoot: TEST_POD_ROOT,
+        fetch: pod.fetch,
+      });
+      const slug = `${path(BINARY.id)}meta.ttl`;
+      const existing = await writer.read(slug);
+      if (!existing?.etag || !writer.writeBinary) throw new Error("Expected memory Pod ports");
+      etag = existing.etag;
+      const dataset = new Store([...existing.dataset]);
+      const item = new DriveMetadata(`${metaUrl(BINARY.id)}#it`, dataset, DataFactory);
+      item.name = newer.name;
+      item.checksum = newer.md5Checksum;
+      item.dateModified = new Date(newer.modifiedTime);
+      item.encodings.clear();
+      item.encodings.add(contentUrl(newer));
+      await writer.writeBinary({
+        slug: contentUrl(newer).slice(ROOT.length),
+        contentType: "image/png",
+        body: new TextEncoder().encode("new!"),
+        mode: "create",
+      });
+      await writer.write(
+        {
+          slug,
+          category: "documents",
+          forClass: "https://schema.org/DigitalDocument",
+          dataset,
+        },
+        { ifMatch: etag },
+      );
+      winningMetadata = pod.get(metaUrl(BINARY.id));
+    } finally {
+      resume.resolve();
+      await failed;
+    }
     expect(read.mock.calls.map(([slug]) => slug)).toContain(`${path(BINARY.id)}meta.ttl`);
-    resume.resolve();
-    await failed;
-    expect(
-      write.mock.calls.filter(([doc]) => doc.slug === `${path(BINARY.id)}meta.ttl`),
-    ).toHaveLength(2);
+    const commits = write.mock.calls.filter(([doc]) => doc.slug === `${path(BINARY.id)}meta.ttl`);
+    expect(commits).toHaveLength(1);
+    expect(commits[0]?.[1]).toEqual({ ifMatch: etag });
     expect(pod.get(metaUrl(BINARY.id))).toBe(winningMetadata);
     expect(metadata(BINARY.id).name).toBe("Newer metadata");
     expect([...metadata(BINARY.id).encodings]).toEqual([contentUrl(newer)]);

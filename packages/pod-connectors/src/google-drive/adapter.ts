@@ -24,23 +24,6 @@ const ID = "google-drive";
 const FIELDS =
   "id,name,mimeType,parents,size,md5Checksum,modifiedTime,createdTime,ownedByMe,webViewLink,trashed";
 const REPRESENTATION = /^content(?:-[a-f0-9]{24})?(?:\.(?:pdf|txt))?$/;
-// Downloads may overlap; mutations of one file must not race another run's cleanup.
-const mutations = new Map<string, Promise<void>>();
-async function mutate<T>(iri: string, action: () => Promise<T>): Promise<T> {
-  const previous = mutations.get(iri);
-  let release = () => {};
-  const pending = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  mutations.set(iri, pending);
-  await previous;
-  try {
-    return await action();
-  } finally {
-    release();
-    if (mutations.get(iri) === pending) mutations.delete(iri);
-  }
-}
 const EXPORTABLE = new Set(
   ["document", "spreadsheet", "presentation", "drawing"].map((type) => `${GOOGLE_APPS}${type}`),
 );
@@ -280,27 +263,25 @@ class Sync {
   async remove(id: string): Promise<void> {
     const path = root(id);
     const slug = `${path}meta.ttl`;
-    await mutate(this.ctx.resolve(slug), async () => {
-      const dataset = await this.ctx.read(slug);
-      if (dataset) {
-        const item = new DriveMetadata(`${this.ctx.resolve(slug)}#it`, dataset, DataFactory);
-        // Publish the incomplete state before deleting any linked representations.
-        // Retain source id and provenance for replay/full reconciliation.
-        item.encodings.clear();
-        item.contentSkipped = "pending-deletion";
-        await this.ctx.write({
-          slug,
-          category: "documents",
-          forClass: CLASSES.DigitalDocument,
-          dataset,
-          skipRegistration: true,
-        });
-      }
-      await this.clean(path, new Set());
-      // The pending-deletion write changed the ETag and cleared the retained read.
-      await this.ctx.read(slug);
-      await this.ctx.remove(slug);
-    });
+    const dataset = await this.ctx.read(slug);
+    if (dataset) {
+      const item = new DriveMetadata(`${this.ctx.resolve(slug)}#it`, dataset, DataFactory);
+      // Publish the incomplete state before deleting any linked representations.
+      // Retain source id and provenance for replay/full reconciliation.
+      item.encodings.clear();
+      item.contentSkipped = "pending-deletion";
+      await this.ctx.write({
+        slug,
+        category: "documents",
+        forClass: CLASSES.DigitalDocument,
+        dataset,
+        skipRegistration: true,
+      });
+    }
+    await this.clean(path, new Set());
+    // The pending-deletion write changed the ETag and cleared the retained read.
+    await this.ctx.read(slug);
+    await this.ctx.remove(slug);
   }
 
   async store(file: DriveFile): Promise<void> {
@@ -326,42 +307,40 @@ class Sync {
     for (const id of arr(file.parents))
       if (validId(id)) item.parents.add(`${this.ctx.resolve(`${root(id)}meta.ttl`)}#it`);
     const content = folder ? [] : await this.content(file, item, old, path, mimeType);
-    await mutate(this.ctx.resolve(slug), async () => {
-      const staged: string[] = [];
-      try {
-        for (const doc of content) {
-          // Include an attempted PUT: the server may store it before the transport fails.
-          staged.push(doc.slug);
-          await this.ctx.writeBinary(doc);
-        }
-        await this.ctx.write({
-          slug,
-          category: "documents",
-          forClass: CLASSES.DigitalDocument,
-          dataset,
-          registrationContainer: "drive/",
-        });
-      } catch (error) {
-        // Never roll back a representation linked by the winning metadata, even if
-        // two imports selected the same source version or the PUT response was lost.
-        try {
-          const current = await this.ctx.read(slug);
-          const keep = new DriveMetadata(iri, current ?? new Store(), DataFactory).encodings;
-          for (const name of staged)
-            if (!keep.has(this.ctx.resolve(name))) {
-              try {
-                await this.ctx.remove(name);
-              } catch {
-                /* A later successful store reconciles abandoned representations. */
-              }
-            }
-        } catch {
-          /* Preserve the original failure if current metadata cannot be read. */
-        }
-        throw error;
+    const staged: string[] = [];
+    try {
+      for (const doc of content) {
+        // Include an attempted PUT: the server may store it before the transport fails.
+        staged.push(doc.slug);
+        await this.ctx.writeBinary(doc);
       }
-      await this.clean(path, item.encodings);
-    });
+      await this.ctx.write({
+        slug,
+        category: "documents",
+        forClass: CLASSES.DigitalDocument,
+        dataset,
+        registrationContainer: "drive/",
+      });
+    } catch (error) {
+      // Never roll back a representation linked by the winning metadata, even if
+      // two imports selected the same source version or the PUT response was lost.
+      try {
+        const current = await this.ctx.read(slug);
+        const keep = new DriveMetadata(iri, current ?? new Store(), DataFactory).encodings;
+        for (const name of staged)
+          if (!keep.has(this.ctx.resolve(name))) {
+            try {
+              await this.ctx.remove(name);
+            } catch {
+              /* A later successful store reconciles abandoned representations. */
+            }
+          }
+      } catch {
+        /* Preserve the original failure if current metadata cannot be read. */
+      }
+      throw error;
+    }
+    await this.clean(path, item.encodings);
   }
 
   private async clean(path: string, keep: ReadonlySet<string>): Promise<void> {

@@ -114,7 +114,8 @@ where `<v>` is 24 SHA-256 hex characters of checksum, else modified time, else d
 (the first representation for exports). Without source version fields, download on every import. Commit
 their links through the conditional metadata write before deleting previous versions; on
 failure, best-effort roll back staging without deleting currently linked representations.
-Serialize each file's Pod mutations and cleanup within the runtime. After every store,
+Rely on the shared runner's per-container claim to refuse overlapping in-process imports;
+hosts sharing a pod across processes must serialize runs. After every store,
 reconcile canonical representation children through an @solid/object Container listing,
 including legacy paths and orphaned exports regardless of previous encoding links.
 For deletions, conditionally rewrite existing metadata first: clear all encoding links, set
