@@ -262,9 +262,13 @@ Index registration. Failed runs attempt provenance recording and retain the orig
 
 Each adapter exposes a `vocab-map.ts` seam, applied by the runner without mutating adapter
 input. Existing music, calendar and social class alignments add sector types alongside legacy
-types. Detailed adapter field mappings remain with their later connector tasks. The ontology
-package currently has no runtime API, so its exact term IRIs are isolated in
-`core/federation-vocab.ts` for the subsequent constants switch (see root `QUESTIONS.md`).
+types. Detailed adapter field mappings remain with their later connector tasks. Namespace
+bases come from `@jeswr/suite-vocab` (`NS`), with adapter terms assembled in
+`core/federation-vocab.ts` and adapter vocab modules. Pod reads resolve legacy
+`https://w3id.org/jeswr/` vocabulary predicates and class IRIs through `canonicalize()`
+before typed access, including Type Index matching and incremental reconciliation.
+Rewritten documents use canonical jeswr vocabulary while resource identifiers, literal
+contents and standard namespaces retain their spelling (mail keeps `http://schema.org/`).
 
 ## Streaming file imports
 
@@ -447,7 +451,8 @@ Folder ids, rather than names, identify folders; `schema:isPartOf` links mirror 
 tree without moving resources on rename. Metadata uses `https://schema.org/`:
 `DigitalDocument` for files, `Collection` for folders, source id/URL, name, media type,
 size and timestamps. `schema:DigitalDocument` is registered once for `drive/`.
-`poddrive:md5Checksum` and `poddrive:contentSkipped` use `https://jeswr.org/ns/pod-drive#`.
+`poddrive:md5Checksum` and `poddrive:contentSkipped` use `NS.POD_DRIVE` from
+`@jeswr/suite-vocab` (`https://jeswr.org/ns/pod-drive#`).
 `schema:encoding` links identify successfully copied content.
 
 Only explicitly owned files are copied. Non-owned files, unknown binary sizes, unsupported

@@ -2,6 +2,7 @@
 // AUTHORED-BY Codex GPT-6
 import type { DatasetCore } from "@rdfjs/types";
 import { DataFactory } from "n3";
+import { canonicalizeJeswrDataset } from "./canonical-vocab.js";
 import { IntegrationSyncError } from "./errors.js";
 import { copyDataset, mergeItems } from "./incremental.js";
 import { registrationsFor } from "./pod-writer.js";
@@ -52,7 +53,10 @@ export function createImportSession(
   ): WriteConditions | undefined =>
     !existing ? { ifNoneMatch: "*" } : existing.etag ? { ifMatch: existing.etag } : undefined;
   async function read(slug: string): Promise<DatasetCore | undefined> {
-    const existing = await writer.read(slug);
+    const stored = await writer.read(slug);
+    const existing = stored
+      ? { ...stored, dataset: canonicalizeJeswrDataset(stored.dataset) }
+      : undefined;
     reads.set(writer.resolve(slug), existing);
     return existing ? copyDataset(existing.dataset) : undefined;
   }
@@ -145,7 +149,7 @@ export function createImportSession(
   }
   async function recordRun() {
     const previous = await writer.read(RUNS);
-    const dataset = copyDataset(previous?.dataset);
+    const dataset = canonicalizeJeswrDataset(previous?.dataset);
     const activity = new Provenance(activityUrl, dataset, DataFactory);
     activity.types.add(`${PROV}Activity`);
     activity.associatedWith = connector;

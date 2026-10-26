@@ -27,6 +27,15 @@ registration; authenticated profile and Type Index operations refuse redirects.
 All tests use recorded fixtures and memory Pods. Use ./testing for consumers. Run lint,
 build, typecheck and test, then the workspace gates before completing a change.
 
+CON-13 takes every jeswr namespace base from `@jeswr/suite-vocab` (`NS`); assemble local
+term names in the existing vocab modules. Keep standard namespace spellings exact,
+especially mail's `http://schema.org/`. Pod read boundaries use `canonicalizeJeswrDataset`
+to resolve suite aliases through `canonicalize()` before typed access and reconciliation,
+including custom PodWriter ports and provenance documents. Type Index class comparisons
+also accept legacy IRIs. Restrict canonicalization to suite vocabulary predicates and
+class values; preserve resource identifiers, literal contents and standard IRIs. Rewrites
+emit canonical jeswr terms. Keep the source-literal guard and legacy Pod regressions green.
+
 CON-02 adds the shared incremental write pipeline, host-owned ConnectorState, PROV activity
 recording and per-adapter vocab-map.ts hooks. Preserve ETags on automatic merges and never
 advance checkpoints on failure. The fixture recorder exposes only allowlisted non-personal JSON
@@ -106,7 +115,8 @@ using the shared Drive OAuth configuration. Keep it Tier B. Files live at
 `drive/files/<pathId(id)>/meta.ttl`; tree membership uses `schema:isPartOf` links to parent
 metadata subjects. Files are `schema:DigitalDocument`, folders only `schema:Collection`;
 register DigitalDocument for `drive/` through `registrationContainer`. Typed Drive accessors
-keep checksum/copy-state glue in `https://jeswr.org/ns/pod-drive#`.
+keep checksum/copy-state glue in suite-vocab's `NS.POD_DRIVE`
+(`https://jeswr.org/ns/pod-drive#`).
 
 Capture the start token before full listing, stage every changes page before applying it,
 and only fall back once on changes-feed HTTP 404/410. Reconcile absent files after a valid

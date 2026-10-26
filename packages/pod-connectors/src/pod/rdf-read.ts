@@ -20,7 +20,9 @@
  * @see https://developer.mozilla.org/docs/Web/HTTP/Caching#heuristic_caching
  */
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.1-Sol
 import { type FetchedRdf, fetchRdf } from "@jeswr/fetch-rdf";
+import { canonicalizeJeswrDataset } from "../core/canonical-vocab.js";
 import { RemoteContextRefusedError } from "../core/errors.js";
 
 /** Request headers that force conditional revalidation through HTTP caches. */
@@ -44,7 +46,7 @@ export async function freshRdf(
   // can distinguish context policy failures from other fetch/parse failures.
   let refusal: RemoteContextRefusedError | undefined;
   try {
-    return await fetchRdf(url, {
+    const result = await fetchRdf(url, {
       fetch: fetchImpl,
       headers: REVALIDATE_HEADERS,
       documentLoader: {
@@ -54,6 +56,7 @@ export async function freshRdf(
         },
       },
     });
+    return { ...result, dataset: canonicalizeJeswrDataset(result.dataset) };
   } catch (cause) {
     if (refusal) throw refusal;
     throw cause;
