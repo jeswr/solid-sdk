@@ -36,10 +36,10 @@ public class MainActivity extends BridgeActivity {
         bridge.setWebViewClient(new SuiteWebViewClient(bridge));
         WebView webView = bridge.getWebView();
         // Capacitor's cookie and HTTP plugins install JavascriptInterfaces for every frame whatever
-        // their config. The suite patches neither, so remove both and restart the first load so no
-        // document sees them (DESIGN D3). The plugin bridge itself cannot fall back to an interface:
-        // WEB_MESSAGE_LISTENER is checked above and the origin rules (local origin + server.url, a
-        // validated bare origin, no allowNavigation) are always valid.
+        // their config, and its bridge falls back to an "androidBridge" interface if registering the
+        // origin-scoped web message listener throws. Remove all three and restart the first load so
+        // no document sees them (DESIGN D3). Removing "androidBridge" leaves the listener (a separate
+        // mechanism) in place; after a fallback it leaves the suite without a bridge: fail closed.
         for (String name : FRAME_INTERFACES) {
             webView.removeJavascriptInterface(name);
         }
@@ -48,6 +48,7 @@ public class MainActivity extends BridgeActivity {
     }
 
     private static final String[] FRAME_INTERFACES = {
+        "androidBridge",
         "CapacitorCookiesAndroidInterface",
         "CapacitorHttpAndroidInterface",
     };

@@ -67,6 +67,8 @@ public class SuiteAuthSessionPlugin extends Plugin {
             JSObject ret = new JSObject();
             ret.put("url", url);
             call.resolve(ret);
+        } else if (result.getResultCode() == AuthManagementActivity.RESULT_NO_BROWSER) {
+            call.reject("No browser is available to sign in", "NO_BROWSER");
         } else {
             call.reject("Sign-in was cancelled", USER_CANCELLED);
         }

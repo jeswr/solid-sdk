@@ -2,6 +2,7 @@
 package org.jeswr.suite;
 
 import android.app.Activity;
+import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
@@ -17,6 +18,7 @@ public class AuthManagementActivity extends Activity {
     static final String EXTRA_AUTHORIZATION_URL = "org.jeswr.suite.AUTHORIZATION_URL";
     static final String EXTRA_CALLBACK_URL = "org.jeswr.suite.CALLBACK_URL";
     static final String ACTION_CANCEL = "org.jeswr.suite.CANCEL_SIGN_IN";
+    static final int RESULT_NO_BROWSER = RESULT_FIRST_USER;
     private static final String STATE_BROWSER_OPEN = "browserOpen";
 
     private final AuthTransaction transaction = new AuthTransaction();
@@ -37,8 +39,14 @@ public class AuthManagementActivity extends Activity {
         super.onResume();
         switch (transaction.onResume()) {
             case LAUNCH_BROWSER:
-                new CustomTabsIntent.Builder().setShowTitle(true).build()
-                    .launchUrl(this, Uri.parse(transaction.authorizationUrl()));
+                try {
+                    new CustomTabsIntent.Builder().setShowTitle(true).build()
+                        .launchUrl(this, Uri.parse(transaction.authorizationUrl()));
+                } catch (ActivityNotFoundException e) {
+                    transaction.cancel();
+                    setResult(RESULT_NO_BROWSER);
+                    finish();
+                }
                 break;
             case CANCELLED:
                 setResult(RESULT_CANCELED);
