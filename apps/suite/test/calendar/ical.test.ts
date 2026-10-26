@@ -1,8 +1,10 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { readdirSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   type CalendarEvent,
+  expandEvent,
   exportICal,
   foldContentLine,
   formatICalDate,
@@ -32,6 +34,103 @@ describe("ICS fixture round-trips", () => {
   });
 });
 describe("ICS compatibility and validation", () => {
+  it.each([
+    "",
+    ";TZID=Europe/London",
+  ])("uses the DTSTART timezone for a floating UNTIL (%s)", (params) => {
+    const source = ics("RRULE:FREQ=DAILY;UNTIL=20260703T083000").replace(
+      "DTSTART:20260301T090000Z",
+      `DTSTART${params}:20260701T090000`,
+    );
+    const imported = importICal(source, "Europe/London");
+    expect(imported.warnings).toEqual([]);
+    const event = imported.events[0] as CalendarEvent;
+    expect(event.recurrence?.until).toEqual(new Date("2026-07-03T07:30Z"));
+    expect(
+      expandEvent(event, new Date("2026-07-01Z"), new Date("2026-07-05Z"), "Europe/London").map(
+        (event) => event.start,
+      ),
+    ).toEqual([new Date("2026-07-01T08:00Z"), new Date("2026-07-02T08:00Z")]);
+    const utcCutoff = importICal(
+      source.replace("UNTIL=20260703T083000", "UNTIL=20260703T083000Z"),
+      "Europe/London",
+    );
+    expect(utcCutoff.events[0]?.recurrence?.until).toEqual(new Date("2026-07-03T08:30Z"));
+  });
+  it("parses ambiguous local ICS dates as the first occurrence", () => {
+    expect(parseICalDate("20261025T013000", "Europe/London")).toEqual(
+      new Date("2026-10-25T00:30Z"),
+    );
+    const imported = importICal(
+      ics("RRULE:FREQ=DAILY;COUNT=2").replace(
+        "DTSTART:20260301T090000Z",
+        "DTSTART;TZID=Europe/London:20261025T013000",
+      ),
+    );
+    expect(imported.events[0]?.start).toEqual(new Date("2026-10-25T00:30Z"));
+  });
+  it.each([false, true])("rejects the whole overridden series, override first: %s", (first) => {
+    const master =
+      "BEGIN:VEVENT\nUID:series\nSUMMARY:Master\nDTSTART:20260301T090000Z\nRRULE:FREQ=DAILY;COUNT=3\nEND:VEVENT";
+    const override =
+      "BEGIN:VEVENT\nUID:series\nSUMMARY:Moved\nRECURRENCE-ID:20260302T090000Z\nDTSTART:20260302T110000Z\nEND:VEVENT";
+    const unrelated =
+      "BEGIN:VEVENT\nUID:other\nSUMMARY:Other\nDTSTART;TZID=Europe/London:20260701T090000\nEND:VEVENT";
+    const components = first ? [override, unrelated, master] : [master, unrelated, override];
+    const imported = importICal(`BEGIN:VCALENDAR\n${components.join("\n")}\nEND:VCALENDAR`);
+    expect(imported.events.map((event) => event.uid)).toEqual(["other"]);
+    expect(imported.timeZones).toEqual(["Europe/London"]);
+    expect(imported.skipped).toBe(2);
+    expect(imported.warnings).toEqual([
+      "Unsupported ICS recurrence override; skipped entire series",
+      "Unsupported ICS recurrence override; skipped entire series",
+    ]);
+  });
+  it("skips a standalone override without affecting UID-less events", () => {
+    const imported = importICal(
+      ics("RECURRENCE-ID:20260302T090000Z").replace("END:VCALENDAR", "") +
+        ics("").replace("BEGIN:VCALENDAR\n", ""),
+    );
+    expect(imported.events).toHaveLength(1);
+    expect(imported.skipped).toBe(1);
+    expect(imported.warnings).toEqual(["Unsupported ICS event property"]);
+  });
+  it.each(["UTC", "Europe/London"])("rejects mixed DTSTART/UNTIL date kinds in %s", (timeZone) => {
+    for (const [start, until] of [
+      [new Date("2026-03-01T09:00Z"), "2026-03-03"],
+      ["2026-03-01", new Date("2026-03-03T09:00Z")],
+    ] as const) {
+      expect(() =>
+        exportICal({
+          events: [{ name: "Mixed", start, recurrence: { frequency: "DAILY", until } }],
+          timeZone,
+        }),
+      ).toThrow("ICS DTSTART and UNTIL must use the same date kind");
+    }
+  });
+  it.each([
+    "UTC",
+    "Europe/London",
+  ])("round-trips matching DTSTART/UNTIL kinds in %s", (timeZone) => {
+    for (const [start, until] of [
+      [new Date("2026-07-01T08:00Z"), new Date("2026-07-03T07:30Z")],
+      ["2026-07-01", "2026-07-03"],
+    ] as const) {
+      const event: CalendarEvent = {
+        name: "Matching",
+        start,
+        recurrence: { frequency: "DAILY", until },
+      };
+      const exported = exportICal({ events: [event], timeZone });
+      expect(exported).toContain(
+        typeof start === "string" ? "UNTIL=20260703" : "UNTIL=20260703T073000Z",
+      );
+      const imported = importICal(exported);
+      expect(imported.warnings).toEqual([]);
+      expect(imported.events[0]?.start).toEqual(start);
+      expect(imported.events[0]?.recurrence?.until).toEqual(until);
+    }
+  });
   it("handles timezone-qualified and floating dates explicitly", () => {
     const source =
       'BEGIN:VCALENDAR\nBEGIN:VEVENT\nSUMMARY:London\nUID:london@example.test\nDTSTART;TZID="Europe/London":20260701T090000\nDTEND;TZID=Europe/London:20260701T100000\nRRULE:FREQ=WEEKLY;COUNT=3\nEND:VEVENT\nEND:VCALENDAR';

@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 // Calendar-only port of Pod Manager ical.ts: TEXT escaping, unfolding, stable UID and UTF-8 folding.
 import { RRule } from "rrule";
 import { fromWallClock, wallClock } from "./recurrence";
@@ -70,7 +71,7 @@ export function ruleToICal(rule: RecurrenceRule): string {
   if (rule.byMonth?.length) parts.push(`BYMONTH=${rule.byMonth.join(",")}`);
   return parts.join(";");
 }
-function ruleFromICal(value: string): RecurrenceRule {
+function ruleFromICal(value: string, timeZone: string): RecurrenceRule {
   // Reject fields the shared shape cannot represent, rather than silently changing a series.
   const bag = new Map(
     value
@@ -94,7 +95,7 @@ function ruleFromICal(value: string): RecurrenceRule {
     frequency: bag.get("FREQ") as RecurrenceRule["frequency"],
     interval: bag.has("INTERVAL") ? Number(bag.get("INTERVAL")) : undefined,
     count: bag.has("COUNT") ? Number(bag.get("COUNT")) : undefined,
-    until: bag.has("UNTIL") ? parseICalDate(bag.get("UNTIL") as string) : undefined,
+    until: bag.has("UNTIL") ? parseICalDate(bag.get("UNTIL") as string, timeZone) : undefined,
     byDay: bag.get("BYDAY")?.split(",") as Weekday[] | undefined,
     byMonthDay: numbers("BYMONTHDAY"),
     byMonth: numbers("BYMONTH"),
@@ -136,6 +137,11 @@ export function exportICal(opts: {
     if (event.location !== undefined) prop("LOCATION", event.location);
     if (event.description !== undefined) prop("DESCRIPTION", event.description);
     if (event.recurrence) {
+      if (
+        event.recurrence.until !== undefined &&
+        typeof event.recurrence.until !== typeof event.start
+      )
+        throw new TypeError("ICS DTSTART and UNTIL must use the same date kind");
       lines.push(`RRULE:${ruleToICal(event.recurrence)}`);
       for (const date of event.recurrence.exceptDate ?? []) dateProp("EXDATE", date);
     }
@@ -163,7 +169,7 @@ export interface ImportedICal {
   warnings: string[];
   skipped: number;
 }
-/** Unknown properties/components are ignored; unsupported recurrence/alarm semantics skip the event. */
+/** Unsupported overrides skip every component with that UID; other unsupported semantics skip the event. */
 export function importICal(text: string, floatingTimeZone = "UTC"): ImportedICal {
   const result: ImportedICal = { events: [], timeZones: [], warnings: [], skipped: 0 };
   const lines = text
@@ -171,6 +177,7 @@ export function importICal(text: string, floatingTimeZone = "UTC"): ImportedICal
     .replace(/\r\n[ \t]|\n[ \t]/g, "")
     .split(/\r?\n/);
   const stack: string[] = [];
+  const components: { properties: Property[]; alarms: Property[][] }[] = [];
   let event: Property[] = [],
     alarms: Property[][] = [],
     alarm: Property[] = [];
@@ -203,14 +210,7 @@ export function importICal(text: string, floatingTimeZone = "UTC"): ImportedICal
       }
       if (component === "VALARM" && stack.at(-1) === "VEVENT") alarms.push(alarm);
       if (component === "VEVENT") {
-        try {
-          const parsed = parseEventProperties(event, alarms, floatingTimeZone);
-          result.events.push(parsed.event);
-          result.timeZones.push(parsed.timeZone);
-        } catch (error) {
-          result.skipped++;
-          result.warnings.push((error as Error).message);
-        }
+        components.push({ properties: event, alarms });
       }
       continue;
     }
@@ -218,6 +218,29 @@ export function importICal(text: string, floatingTimeZone = "UTC"): ImportedICal
     if (stack.at(-1) === "VALARM") alarm.push(property);
   }
   if (stack.length) result.warnings.push("Unclosed ICS component");
+  const uid = (properties: Property[]) => {
+    const value = properties.find((p) => p.name === "UID")?.value;
+    return value === undefined ? undefined : unescapeText(value);
+  };
+  const overridden = new Set(
+    components
+      .filter(({ properties }) => properties.some((p) => p.name === "RECURRENCE-ID"))
+      .map(({ properties }) => uid(properties))
+      .filter((value) => value !== undefined),
+  );
+  for (const { properties, alarms } of components) {
+    try {
+      const seriesUid = uid(properties);
+      if (seriesUid !== undefined && overridden.has(seriesUid))
+        throw new TypeError("Unsupported ICS recurrence override; skipped entire series");
+      const parsed = parseEventProperties(properties, alarms, floatingTimeZone);
+      result.events.push(parsed.event);
+      result.timeZones.push(parsed.timeZone);
+    } catch (error) {
+      result.skipped++;
+      result.warnings.push((error as Error).message);
+    }
+  }
   return result;
 }
 function parseEventProperties(
@@ -238,7 +261,7 @@ function parseEventProperties(
     return value;
   };
   const rule = get("RRULE");
-  const recurrence = rule ? ruleFromICal(rule.value) : undefined;
+  const recurrence = rule ? ruleFromICal(rule.value, zone(start) ?? floatingTimeZone) : undefined;
   const exceptions = properties
     .filter((p) => p.name === "EXDATE")
     .flatMap((p) => p.value.split(",").map((value) => date({ ...p, value })));
