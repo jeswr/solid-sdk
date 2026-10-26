@@ -682,3 +682,58 @@ blocked by the existing network-dependent build; no workaround was added. Read
 unavailable, so automated review remains with the dispatcher under an allowed
 review environment. No pushes, PRs, branch switches, other checkout mutations or
 tracker changes were performed. Open questions: none.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+
+## Fix round 8 — enforce the path character allowlist globally
+
+Resumed on `lane/sst-z1d` at `26d4508539f92d359d01e496e63bcd93d1a908c1`.
+Read the original and all earlier fix briefs and the complete supplied review
+`solid-sdk-lane-sst-z1d-26d4508539f9.md`. Addressed its single finding using the
+integrator's exact character allowlist.
+
+Commits:
+
+- `7a9ac39c` — `fix: restrict path specifiers to safe characters`: reject decoded
+  relative and absolute path literals containing any character outside
+  `^[A-Za-z0-9@._/-]+$`, before lexical ownership classification. Regression tests
+  cover all 13 checked module load forms, every checked source root, embedded and
+  trailing prohibited characters, ESM-normalized backslashes/control characters
+  in channel-send paths, and the complete allowed alphabet with missing targets.
+- The final `docs: record sst-z1d fix8 validation` commit updates this report last.
+
+Only the shared checker, its tests and this report changed. Existing `file:` URL
+checks remain in effect; no additional URL handling or package behavior changed.
+No package-specific gates apply because no packages were touched. No dependencies
+were added, so `check:packages` was not applicable.
+
+Validation:
+
+- Initial regression run against the previous checker — **46 failed / 293 passed**,
+  reproducing the path-character gap and the updated diagnostic expectations.
+- `pnpm exec biome check --write scripts/check-agent-layers.mjs test/agent-layers.test.mjs`
+  — PASS after formatting; final root lint also passes without writing changes.
+- `NODE_OPTIONS=--require=/tmp/sst-z1d-network-guard.cjs pnpm run lint:root`
+  — PASS: Biome, lockfile transport, app workspace, fetch guard and agent layers.
+- `TURBO_SCM_BASE=26d4508539f92d359d01e496e63bcd93d1a908c1 pnpm run gate --cache=local:rw --env-mode=loose`
+  — PASS: root lint and **371 root tests across four files**, default timeouts;
+  **1 successful / 1 total** Turbo task, uncached, 6.494 seconds.
+- `pnpm run gate:full --cache=local:rw --env-mode=loose` — BLOCKED by unchanged
+  `@jeswr/unstorage-solid#build`: its fetch-rdf dependency clone is refused with
+  `fatal: transport 'https' not allowed`. **21 successful / 77 total** tasks,
+  one cached, 9.375 seconds. The unchanged Pod Manager build also encountered the
+  network guard while requesting external resources. No workaround was added.
+- `git diff --check` — PASS.
+
+Both Turbo commands used `NODE_OPTIONS=--require=/tmp/sst-z1d-network-guard.cjs`,
+`GIT_ALLOW_PROTOCOL=file`, `TURBO_TELEMETRY_DISABLED=1` and `DO_NOT_TRACK=1`.
+Remote caching was disabled. No remote clone/fetch/merge completed or live
+provider/pod calls ran. Logs: `/tmp/sst-z1d-fix8-red.log`,
+`/tmp/sst-z1d-fix8-gate.log`, `/tmp/sst-z1d-fix8-lint.log` and
+`/tmp/sst-z1d-fix8-full.log`.
+
+The requested fix and regression coverage are complete. Full-workspace validation
+remains blocked by the existing network-dependent builds. Read the local
+roborev-review skill; `roborev` is unavailable, so automated review remains with
+the dispatcher. No pushes, PRs, branch switches, other checkout mutations or
+tracker changes were performed. Open questions: none.
