@@ -434,3 +434,61 @@ it("bounds repeated Type Index conflicts", async () => {
   ).rejects.toMatchObject({ status: 412 });
   expect(writes).toBe(4);
 });
+
+it.each([false, true])("recovers profile linking conflicts (new link: %s)", async (linked) => {
+  const concurrentIndex = `${POD}settings/concurrent.ttl`;
+  let profiles = 0;
+  let profilePuts = 0;
+  const writes: { url: string; body: string; etag: string | null }[] = [];
+  const { fetch: transport } = mockFetch({
+    [`PUT ${PRIVATE_INDEX}`]: { status: 201 },
+    [`GET ${PRIVATE_INDEX}`]: { body: "" },
+    [`GET ${concurrentIndex}`]: { body: "" },
+    [`PUT ${concurrentIndex}`]: { status: 201 },
+  });
+  const fetchImpl: typeof fetch = async (url, init) => {
+    if (String(url) === WEBID) {
+      profiles++;
+      return new Response(
+        profiles > 1
+          ? `${profileWith(linked ? { privateIndex: concurrentIndex } : {})}\n<${WEBID}> <https://example.org/note> "remote".`
+          : profileWith({}),
+        { headers: { "content-type": "text/turtle", etag: profiles === 1 ? '"old"' : '"fresh"' } },
+      );
+    }
+    if (String(url) === PROFILE_DOC && init?.method === "PUT") {
+      writes.push({
+        url: String(url),
+        body: String(init.body),
+        etag: new Headers(init.headers).get("if-match"),
+      });
+      return new Response(null, { status: ++profilePuts === 1 ? 412 : 205 });
+    }
+    return transport(url, init);
+  };
+  const result = await ensureTypeRegistrations({
+    webId: WEBID,
+    podRoot: POD,
+    registrations: [REG],
+    fetchImpl,
+  });
+  expect(result.indexUrl).toBe(linked ? concurrentIndex : PRIVATE_INDEX);
+  expect(profiles).toBe(2);
+  expect(profilePuts).toBe(linked ? 1 : 2);
+  if (!linked)
+    expect(writes[1]).toMatchObject({ etag: '"fresh"', body: expect.stringContaining('"remote"') });
+});
+
+it.each([412, 403])("bounds or propagates profile linking failures (%s)", async (status) => {
+  const { fetch, calls } = mockFetch({
+    [`GET ${WEBID}`]: { body: profileWith({}) },
+    [`PUT ${PRIVATE_INDEX}`]: { status: 412 },
+    [`PUT ${PROFILE_DOC}`]: { status },
+  });
+  await expect(
+    ensureTypeRegistrations({ webId: WEBID, podRoot: POD, registrations: [REG], fetchImpl: fetch }),
+  ).rejects.toMatchObject({ status });
+  const writes = calls.filter((call) => call.url === PROFILE_DOC);
+  expect(writes).toHaveLength(status === 412 ? 4 : 1);
+  expect(writes.every((call) => call.headers["if-match"] === "*")).toBe(true);
+});

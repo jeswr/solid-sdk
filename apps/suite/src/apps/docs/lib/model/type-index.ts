@@ -205,20 +205,31 @@ export async function ensureTypeRegistrations(opts: {
   assertWithinPodScope(new URL(".", webId).href, webId);
   for (const registration of registrations) assertWithinPodScope(podRoot, registration.container);
 
-  const { dataset: profileDs, etag: profileEtag } = await readRdf(webId, profileFetch);
-  const links = typeIndexLinks(webId, profileDs);
-  let indexUrl = links.privateIndex;
+  let indexUrl: string;
   let bootstrapped = false;
-
-  if (indexUrl) indexUrl = assertWithinPodScope(podRoot, indexUrl);
-
-  if (!indexUrl) {
+  // Linking races with other first-use clients too: always re-read the profile
+  // after a conflict and prefer the link that the other writer established.
+  for (let attempt = 0; ; attempt++) {
+    const { dataset: profileDs, etag: profileEtag } = await readRdf(webId, profileFetch);
+    const linked = typeIndexLinks(webId, profileDs).privateIndex;
+    if (linked) {
+      indexUrl = assertWithinPodScope(podRoot, linked);
+      break;
+    }
     indexUrl = new URL("settings/privateTypeIndex.ttl", podRoot).toString();
     await createIndexDocument(indexUrl, fetchImpl);
-    const anchor = new ProfileTypeIndexAnchor(webId, profileDs, DataFactory);
-    anchor.privateIndex = indexUrl;
-    await writeRdf(documentUrl(webId), profileDs, { etag: profileEtag, fetchImpl: profileFetch });
     bootstrapped = true;
+    new ProfileTypeIndexAnchor(webId, profileDs, DataFactory).privateIndex = indexUrl;
+    try {
+      await writeRdf(documentUrl(webId), profileDs, {
+        etag: profileEtag ?? "*",
+        fetchImpl: profileFetch,
+      });
+      break;
+    } catch (error) {
+      if (!(error instanceof ResourceWriteError && error.status === 412) || attempt >= 3)
+        throw error;
+    }
   }
 
   // Re-read and reapply on a concurrent registration instead of replaying stale RDF.
