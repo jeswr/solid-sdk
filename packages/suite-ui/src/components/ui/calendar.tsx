@@ -4,7 +4,12 @@
 
 import { ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
 import * as React from "react";
-import { type DayButton, DayPicker, getDefaultClassNames } from "react-day-picker";
+import {
+  type CustomComponents,
+  type DayButton,
+  DayPicker,
+  getDefaultClassNames,
+} from "react-day-picker";
 import { cn } from "../../lib/utils.js";
 import { Button, buttonVariants } from "./button.js";
 import { IconButton } from "./icon-button.js";
@@ -107,73 +112,79 @@ function Calendar({
         ...classNames,
       }}
       components={{
-        Root: ({ className, rootRef, ...props }) => {
-          return <div data-slot="calendar" ref={rootRef} className={cn(className)} {...props} />;
-        },
-        Chevron: ({ className, orientation, ...props }) => {
-          if (orientation === "left") {
-            return (
-              <ChevronLeftIcon
-                aria-hidden="true"
-                strokeWidth={1.75}
-                className={cn("size-4", className)}
-                {...props}
-              />
-            );
-          }
-
-          if (orientation === "right") {
-            return (
-              <ChevronRightIcon
-                aria-hidden="true"
-                strokeWidth={1.75}
-                className={cn("size-4", className)}
-                {...props}
-              />
-            );
-          }
-
-          return (
-            <ChevronDownIcon
-              aria-hidden="true"
-              strokeWidth={1.75}
-              className={cn("size-4", className)}
-              {...props}
-            />
-          );
-        },
-        PreviousMonthButton: ({ children: _children, ...buttonProps }) => (
-          <IconButton
-            {...buttonProps}
-            label={buttonProps["aria-label"] ?? "Previous month"}
-            variant="ghost"
-          >
-            <ChevronLeftIcon aria-hidden="true" strokeWidth={1.75} size={16} />
-          </IconButton>
-        ),
-        NextMonthButton: ({ children: _children, ...buttonProps }) => (
-          <IconButton
-            {...buttonProps}
-            label={buttonProps["aria-label"] ?? "Next month"}
-            variant="ghost"
-          >
-            <ChevronRightIcon aria-hidden="true" strokeWidth={1.75} size={16} />
-          </IconButton>
-        ),
+        Root: CalendarRoot,
+        Chevron: CalendarChevron,
+        PreviousMonthButton: CalendarPreviousMonthButton,
+        NextMonthButton: CalendarNextMonthButton,
         DayButton: CalendarDayButton,
-        WeekNumber: ({ children, ...props }) => {
-          return (
-            <td {...props}>
-              <div className="flex size-(--cell-size) items-center justify-center text-center">
-                {children}
-              </div>
-            </td>
-          );
-        },
+        WeekNumber: CalendarWeekNumber,
         ...components,
       }}
       {...props}
     />
+  );
+}
+
+function CalendarRoot({
+  className,
+  rootRef,
+  ...props
+}: React.ComponentProps<CustomComponents["Root"]>) {
+  return <div data-slot="calendar" ref={rootRef} className={cn(className)} {...props} />;
+}
+
+function CalendarChevron({
+  className,
+  orientation,
+  ...props
+}: React.ComponentProps<CustomComponents["Chevron"]>) {
+  const Icon =
+    orientation === "left"
+      ? ChevronLeftIcon
+      : orientation === "right"
+        ? ChevronRightIcon
+        : ChevronDownIcon;
+  return (
+    <Icon aria-hidden="true" strokeWidth={1.75} className={cn("size-4", className)} {...props} />
+  );
+}
+
+function CalendarPreviousMonthButton({
+  children: _children,
+  ...buttonProps
+}: React.ComponentProps<CustomComponents["PreviousMonthButton"]>) {
+  return (
+    <IconButton
+      {...buttonProps}
+      label={buttonProps["aria-label"] ?? "Previous month"}
+      variant="ghost"
+    >
+      <ChevronLeftIcon aria-hidden="true" strokeWidth={1.75} size={16} />
+    </IconButton>
+  );
+}
+
+function CalendarNextMonthButton({
+  children: _children,
+  ...buttonProps
+}: React.ComponentProps<CustomComponents["NextMonthButton"]>) {
+  return (
+    <IconButton {...buttonProps} label={buttonProps["aria-label"] ?? "Next month"} variant="ghost">
+      <ChevronRightIcon aria-hidden="true" strokeWidth={1.75} size={16} />
+    </IconButton>
+  );
+}
+
+function CalendarWeekNumber({
+  children,
+  ...props
+}: React.ComponentProps<CustomComponents["WeekNumber"]>) {
+  return (
+    <td {...props}>
+      <div className="flex size-(--cell-size) items-center justify-center text-center">
+        {children}
+      </div>
+    </td>
   );
 }
 

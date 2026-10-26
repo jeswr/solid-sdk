@@ -2,9 +2,11 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import axe from "axe-core";
+import { useState } from "react";
 import { afterEach, expect, it, vi } from "vitest";
 import {
   Button,
+  Calendar,
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
@@ -60,6 +62,27 @@ it("IconButton pairs its name with a keyboard tooltip and prevents disabled acti
 });
 it("requires a nonempty IconButton label", () =>
   expect(() => render(<IconButton label=" ">+</IconButton>)).toThrow("non-empty label"));
+
+it.each([
+  ["Next", ["February 2026", "March 2026"]],
+  ["Previous", ["December 2025", "November 2025"]],
+] as const)("retains controlled Calendar navigation focus when moving %s", (direction, months) => {
+  function ControlledCalendar() {
+    const [month, setMonth] = useState(new Date(2026, 0, 1));
+    return <Calendar month={month} onMonthChange={setMonth} />;
+  }
+  render(<ControlledCalendar />);
+  const label = `Go to the ${direction} Month`;
+  const button = screen.getByRole("button", { name: label });
+  button.focus();
+  for (const month of months) {
+    // A keyboard-activated native button dispatches a click while retaining focus.
+    fireEvent.click(button);
+    expect(screen.getByText(month)).toBeDefined();
+    expect(screen.getByRole("button", { name: label })).toBe(button);
+    expect(document.activeElement).toBe(button);
+  }
+});
 
 it.each([
   { props: {}, expected: ["0"] },
