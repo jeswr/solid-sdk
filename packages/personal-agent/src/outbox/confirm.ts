@@ -1,11 +1,11 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
+// AUTHORED-BY Codex GPT-6
 /**
  * The GRADUATED human-confirm gate (§7). When the ODRL mandate does NOT pre-authorize an
  * action autonomously (a `confirm-required` decision), the owner must confirm it — and the
- * friction scales with the risk:
- *  - LOW (a reply to a known thread) → a simple confirm suffices;
- *  - HIGH (a novel recipient, any spend, bulk) → an EXPLICIT typed acknowledgement that echoes
- *    the recipient — never a one-tap yes.
+ * gate requires an EXPLICIT typed acknowledgement that echoes the recipient. Low friction
+ * would require Reader-owned evidence binding both the thread and recipient; this synchronous
+ * API has no such evidence source, so it always requires high friction.
  *
  * `confirmProposal` does NOT mutate the Actor-writable proposal (its `status` field is
  * advisory, and the Actor can write it — so it can never be the authorization). It produces a
@@ -20,18 +20,16 @@ import { proposalContentDigest } from "../pod/digest.js";
 import type { ActionProposal, ConfirmFriction } from "../pod/proposals.js";
 
 /**
- * Classify the confirmation friction an intent warrants. A reply to a known thread with zero
- * spend is LOW; a fresh send to a possibly-novel recipient, or any nonzero spend, is HIGH.
+ * Actor-written linkage, provenance and friction cannot establish a known thread or recipient.
+ * Without independently verified Reader evidence, every intent requires HIGH friction.
  */
-export function classifyFriction(proposal: ActionProposal): ConfirmFriction {
-  if ((proposal.spend ?? 0) > 0) return "high";
-  if (!proposal.inReplyTo) return "high"; // no known thread → treat the recipient as novel
-  return "low";
+export function classifyFriction(_proposal: ActionProposal): ConfirmFriction {
+  return "high";
 }
 
 /** The owner's acknowledgement. High-friction requires `typedAcknowledgement`. */
 export interface ConfirmInput {
-  /** A simple confirm — sufficient for LOW friction. */
+  /** A simple confirm. Insufficient without independently verified Reader evidence. */
   readonly confirm?: boolean;
   /** An explicit typed acknowledgement — REQUIRED for HIGH friction; must echo the recipient. */
   readonly typedAcknowledgement?: string;
@@ -46,15 +44,8 @@ export interface ConfirmInput {
  * confirmations container (`writeConfirmation`).
  */
 export function confirmProposal(proposal: ActionProposal, input: ConfirmInput): Confirmation {
-  // RECOMPUTE the friction owner-side — never trust the Actor-written `proposal.friction`,
-  // or a deceived Actor could downgrade a novel/high-value send to a one-tap confirm.
-  const friction = classifyFriction(proposal);
-  if (friction === "high") {
-    if (input.typedAcknowledgement !== proposal.recipient) {
-      throw new Error("confirmProposal: high-friction confirm requires the recipient typed back");
-    }
-  } else if (input.confirm !== true && input.typedAcknowledgement !== proposal.recipient) {
-    throw new Error("confirmProposal: a confirmation is required");
+  if (input.typedAcknowledgement !== proposal.recipient) {
+    throw new Error("confirmProposal: high-friction confirm requires the recipient typed back");
   }
   return {
     proposalId: proposal.id,

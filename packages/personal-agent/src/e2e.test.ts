@@ -339,7 +339,10 @@ describe("personal-agent end-to-end (Reader → Actor → ODRL-enforced outbox)"
       pod.fetch,
       CONFIRMATIONS,
       OWNER,
-      confirmProposal(loaded.proposal, { confirm: true, confirmedAt: FIXED.toISOString() }),
+      confirmProposal(loaded.proposal, {
+        typedAcknowledgement: loaded.proposal.recipient,
+        confirmedAt: FIXED.toISOString(),
+      }),
     );
     expect((await runOutboxOnce(config)).sent).toBe(1);
   });
@@ -486,7 +489,10 @@ describe("personal-agent end-to-end (Reader → Actor → ODRL-enforced outbox)"
       pod.fetch,
       CONFIRMATIONS,
       OWNER,
-      confirmProposal(loaded.proposal, { confirm: true, confirmedAt: FIXED.toISOString() }),
+      confirmProposal(loaded.proposal, {
+        typedAcknowledgement: loaded.proposal.recipient,
+        confirmedAt: FIXED.toISOString(),
+      }),
     );
     const second = await runOutboxOnce(config);
     expect(second.sent).toBe(1);
@@ -512,7 +518,10 @@ describe("personal-agent end-to-end (Reader → Actor → ODRL-enforced outbox)"
       pod.fetch,
       CONFIRMATIONS,
       OWNER,
-      confirmProposal(mislabelled, { confirm: true, confirmedAt: FIXED.toISOString() }),
+      confirmProposal(mislabelled, {
+        typedAcknowledgement: mislabelled.recipient,
+        confirmedAt: FIXED.toISOString(),
+      }),
     );
     const recorder = new RecordingSender(() => FIXED);
     const readOnly: OdrlPolicy = {
@@ -602,8 +611,9 @@ describe("personal-agent end-to-end (Reader → Actor → ODRL-enforced outbox)"
     // confirmations container (NOT touching the Actor-writable proposal).
     const loaded = (await listProposals(pod.fetch, PROPOSALS))[0];
     expect(loaded).toBeDefined();
-    const confirmation = confirmProposal(loaded?.proposal as ActionProposal, {
-      confirm: true,
+    if (!loaded) throw new Error("missing proposal");
+    const confirmation = confirmProposal(loaded.proposal, {
+      typedAcknowledgement: loaded.proposal.recipient,
       confirmedAt: FIXED.toISOString(),
     });
     await writeConfirmation(pod.fetch, CONFIRMATIONS, OWNER, confirmation);
@@ -653,7 +663,10 @@ describe("personal-agent end-to-end (Reader → Actor → ODRL-enforced outbox)"
       pod.fetch,
       CONFIRMATIONS,
       OWNER,
-      confirmProposal(original, { confirm: true, confirmedAt: FIXED.toISOString() }),
+      confirmProposal(original, {
+        typedAcknowledgement: original.recipient,
+        confirmedAt: FIXED.toISOString(),
+      }),
     );
     // A deceived Actor then swaps the recipient (OVERWRITES the proposal resource — the MCP
     // write tool is a PUT, so it can rewrite an existing proposal).
