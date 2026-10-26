@@ -1,12 +1,12 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { fetchRdf } from "@jeswr/fetch-rdf";
+import { type FetchedRdf, fetchRdf, RdfFetchError } from "@jeswr/fetch-rdf";
 import { assertWithinPodScope, createPodScopedFetch, normalizePodBase } from "@jeswr/guarded-fetch";
-import { SetFrom, TermAs, TermFrom, TermWrapper } from "@rdfjs/wrapper";
+import { serialize } from "@jeswr/rdf-serialize";
 import { DataFactory, Store } from "n3";
 import { DriveResource } from "./model.js";
 import { iri, quadsToTurtle } from "./serialize.js";
 import { buildDriveRootMarker, buildDriveRootRegistration, findDriveRoots } from "./type-index.js";
-import { LDP, RDF } from "./vocab.js";
+import { LDP } from "./vocab.js";
 
 export class DriveWriteError extends Error {
   constructor(
@@ -26,7 +26,8 @@ export interface DriveRootOptions {
 
 /**
  * Injected-fetch Solid RDF bootstrap, independent of the future SDK façade.
- * Both writes are conditional. Concurrent callers converge through server preconditions;
+ * Creation and registration are conditional; marker insertion only appends metadata.
+ * Concurrent callers converge through server preconditions and bounded marker re-reads;
  * no module-global account state or rejected-promise cache is retained.
  */
 export async function ensureDriveRoot(
@@ -43,11 +44,6 @@ export async function ensureDriveRoot(
   if (index.etag === null) throw new TypeError("The private Type Index needs an ETag.");
 
   const rootUrl = new URL("drive/", storage).href;
-  const description = new Store(buildDriveRootMarker(rootUrl));
-  const root = new TermWrapper(iri(rootUrl), description, DataFactory);
-  SetFrom.subjectPredicate(root, RDF.type, TermAs.term, TermFrom.itself).add(
-    DataFactory.namedNode(LDP.BasicContainer),
-  );
   const created = await scopedFetch(rootUrl, {
     method: "PUT",
     headers: {
@@ -55,15 +51,52 @@ export async function ensureDriveRoot(
       "If-None-Match": "*",
       Link: `<${LDP.BasicContainer}>; rel="type"`,
     },
-    body: await quadsToTurtle(description),
+    body: "",
   });
-  if (created.status === 412) {
-    // Another caller won, or the path was already occupied. Never overwrite it.
+  if (created.ok) {
+    // CSS ignores container PUT bodies. Discover and PATCH its description instead.
     const current = await fetchRdf(rootUrl, { fetch: scopedFetch });
-    if (!new DriveResource(rootUrl, current.dataset, DataFactory).isDriveRoot) {
-      throw new DriveWriteError(412, rootUrl);
+    let metadataUrl: string | undefined;
+    const links = current.response.headers.get("Link") ?? "";
+    for (const link of links.matchAll(/<([^>]*)>((?:[^",]|"[^"]*")*)/g)) {
+      // Both capture groups are mandatory, even when their strings are empty.
+      const rel = /(?:^|;)\s*rel\s*=\s*(?:"([^"]*)"|([^;\s]+))/i.exec(link[2] as string);
+      if ((rel?.[1] ?? rel?.[2] ?? "").split(/\s+/).includes("describedby")) {
+        metadataUrl = assertWithinPodScope(storage, new URL(link[1] as string, rootUrl).href);
+        break;
+      }
     }
-  } else if (!created.ok) {
+    if (metadataUrl === undefined) throw new TypeError("The drive root needs a describedby link.");
+    const patched = await scopedFetch(metadataUrl, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/sparql-update" },
+      body: `INSERT DATA { ${await serialize(buildDriveRootMarker(rootUrl))} }`,
+    });
+    if (!patched.ok) throw new DriveWriteError(patched.status, metadataUrl);
+    const verified = await fetchRdf(rootUrl, { fetch: scopedFetch });
+    const root = new DriveResource(rootUrl, verified.dataset, DataFactory);
+    if (!root.isDriveRoot) {
+      throw new TypeError("The drive root marker was not persisted.");
+    }
+  } else if (created.status === 409 || created.status === 412) {
+    // Another initializer may still be PATCHing its newly created container.
+    // Only adopt a marked container; never mark or overwrite an occupied path.
+    for (let attempt = 0; ; attempt++) {
+      let current: FetchedRdf;
+      try {
+        current = await fetchRdf(rootUrl, { fetch: scopedFetch });
+      } catch (error) {
+        if (error instanceof RdfFetchError && error.status === 404) {
+          throw new DriveWriteError(created.status, rootUrl);
+        }
+        throw error;
+      }
+      const root = new DriveResource(rootUrl, current.dataset, DataFactory);
+      if (root.isDriveRoot) break;
+      if (attempt === 4) throw new DriveWriteError(created.status, rootUrl);
+      await new Promise((resolve) => setTimeout(resolve, 50 * 2 ** attempt));
+    }
+  } else {
     throw new DriveWriteError(created.status, rootUrl);
   }
 

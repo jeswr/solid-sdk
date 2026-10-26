@@ -3,22 +3,24 @@ import { RdfFetchError } from "@jeswr/fetch-rdf";
 import { DataFactory } from "n3";
 import { describe, expect, it } from "vitest";
 import { DriveResource } from "../../src/apps/drive/lib/model/model.js";
-import { DriveWriteError, ensureDriveRoot } from "../../src/apps/drive/lib/model/root.js";
+import { ensureDriveRoot } from "../../src/apps/drive/lib/model/root.js";
 import { quadsToTurtle } from "../../src/apps/drive/lib/model/serialize.js";
 import {
   buildDriveRootRegistration,
   findDriveRoots,
 } from "../../src/apps/drive/lib/model/type-index.js";
-import { PODDRIVE, SOLID } from "../../src/apps/drive/lib/model/vocab.js";
+import { LDP, PODDRIVE, SOLID } from "../../src/apps/drive/lib/model/vocab.js";
 import { turtle } from "./helpers.js";
 
 const storage = "https://pod.example/alice/";
 const root = `${storage}drive/`;
+const metadata = `${root}description`;
+const containerBody = `<${root}> a <${LDP.BasicContainer}>.`;
 const index = `${storage}settings/private.ttl`;
 const options = { storageUrl: storage, typeIndexUrl: index };
 
-/** In-memory HTTP storage enforcing actual If-Match/If-None-Match preconditions. */
-function memory() {
+/** CSS-style storage: ignores container PUT bodies and PATCHes linked metadata only. */
+function memory(existingStatus: 409 | 412 = 409) {
   const files = new Map<string, { body: string; version: number }>([
     [index, { body: "", version: 1 }],
   ]);
@@ -36,23 +38,42 @@ function memory() {
       if (method === "GET") {
         response = file
           ? new Response(file.body, {
-              headers: { "Content-Type": "text/turtle", ETag: `"${file.version}"` },
+              headers: {
+                "Content-Type": "text/turtle",
+                ETag: `"${file.version}"`,
+                ...(url === root ? { Link: `<description>; rel="describedby"` } : {}),
+              },
             })
           : new Response(null, { status: 404 });
       } else if (method === "PUT") {
         if (!headers.has("If-Match") && !headers.has("If-None-Match"))
           throw new TypeError("Unconditional write");
-        if (
+        if (url === root && file) {
+          response = new Response(null, { status: existingStatus });
+        } else if (
           (headers.get("If-None-Match") === "*" && file) ||
           (headers.has("If-Match") && headers.get("If-Match") !== `"${file?.version}"`)
         ) {
           response = new Response(null, { status: 412 });
         } else {
-          files.set(url, { body: String(init?.body), version: (file?.version ?? 0) + 1 });
+          files.set(url, {
+            body: url === root ? containerBody : String(init?.body),
+            version: (file?.version ?? 0) + 1,
+          });
           if (url === index) indexWrites++;
           if (url === root) rootCreates++;
           response = new Response(null, { status: 201 });
         }
+      } else if (method === "PATCH" && url === metadata) {
+        expect(headers.get("Content-Type")).toBe("application/sparql-update");
+        const inserts = /^INSERT DATA \{([\s\S]*)\}$/.exec(String(init?.body));
+        expect(inserts).not.toBeNull();
+        const current = files.get(root);
+        if (!current) throw new Error("Missing container");
+        const dataset = turtle(current.body);
+        dataset.addQuads([...turtle(inserts?.[1] ?? "")]);
+        files.set(root, { body: await quadsToTurtle(dataset), version: current.version + 1 });
+        response = new Response(null, { status: 205 });
       } else throw new Error(`Unexpected method ${method}`);
     }
     Object.defineProperty(response, "url", { value: url });
@@ -100,10 +121,20 @@ describe("ensureDriveRoot", () => {
     expect(await ensureDriveRoot(m.fetch, options)).toBe(root);
     expect(m.rootCreates).toBe(1);
     expect(m.indexWrites).toBe(1);
+    expect(m.calls.filter((call) => call.method === "PATCH")).toHaveLength(1);
+    const patched = m.calls.findIndex((call) => call.method === "PATCH");
+    const verified = m.calls.findIndex(
+      (call, i) => i > patched && call.url === root && call.method === "GET",
+    );
+    const registered = m.calls.findIndex((call) => call.url === index && call.method === "PUT");
+    expect(verified).toBeGreaterThan(patched);
+    expect(registered).toBeGreaterThan(verified);
   });
 
-  it("converges under concurrent independent callers without duplicate registrations", async () => {
-    const m = memory();
+  it.each([
+    409, 412,
+  ] as const)("converges under concurrent callers with %s conflicts", async (status) => {
+    const m = memory(status);
     expect(
       await Promise.all(Array.from({ length: 8 }, () => ensureDriveRoot(m.fetch, options))),
     ).toEqual(Array(8).fill(root));
@@ -111,7 +142,7 @@ describe("ensureDriveRoot", () => {
     expect(m.indexWrites).toBe(1);
     const dataset = turtle(m.files.get(index)?.body ?? "");
     expect(dataset.match(null, DataFactory.namedNode(SOLID.instanceContainer), null).size).toBe(1);
-    expect(m.calls.some((call) => call.url === root && call.status === 412)).toBe(true);
+    expect(m.calls.some((call) => call.url === root && call.status === status)).toBe(true);
   });
 
   it("finds legacy roots at non-default locations without creating drive/", async () => {
@@ -195,23 +226,29 @@ describe("ensureDriveRoot", () => {
     m.setBefore((url, method) =>
       url === root && method === "PUT" ? new Response(null, { status }) : undefined,
     );
-    await expect(ensureDriveRoot(m.fetch, options)).rejects.toBeInstanceOf(DriveWriteError);
+    await expect(ensureDriveRoot(m.fetch, options)).rejects.toMatchObject({
+      name: "DriveWriteError",
+      status,
+      url: root,
+    });
     expect(m.indexWrites).toBe(0);
   });
 
-  it("refuses to adopt an occupied path without a DriveRoot marker", async () => {
-    const m = memory();
+  it.each([409, 412] as const)("refuses an unmarked occupied path after %s", async (status) => {
+    const m = memory(status);
     m.files.set(root, { body: "", version: 1 });
     await expect(ensureDriveRoot(m.fetch, options)).rejects.toMatchObject({
-      status: 412,
+      status,
       url: root,
     });
     expect(m.indexWrites).toBe(0);
     expect(m.files.get(root)?.body).toBe("");
   });
 
-  it("recovers on the next call after a registration failure", async () => {
-    const m = memory();
+  it.each([
+    409, 412,
+  ] as const)("recovers after registration failure with %s on the next PUT", async (status) => {
+    const m = memory(status);
     m.setBefore((url, method) =>
       url === index && method === "PUT" ? new Response(null, { status: 500 }) : undefined,
     );
@@ -220,6 +257,121 @@ describe("ensureDriveRoot", () => {
     expect(await ensureDriveRoot(m.fetch, options)).toBe(root);
     expect(m.rootCreates).toBe(1);
     expect(m.indexWrites).toBe(1);
+    expect(m.calls.filter((call) => call.method === "PATCH")).toHaveLength(1);
+  });
+
+  it.each([
+    403, 409, 500,
+  ])("propagates metadata PATCH failure %s without registration", async (status) => {
+    const m = memory();
+    m.setBefore((url, method) =>
+      url === metadata && method === "PATCH" ? new Response(null, { status }) : undefined,
+    );
+    await expect(ensureDriveRoot(m.fetch, options)).rejects.toMatchObject({
+      name: "DriveWriteError",
+      status,
+      url: metadata,
+    });
+    expect(m.indexWrites).toBe(0);
+  });
+
+  it("verifies that a successful PATCH actually persisted the marker", async () => {
+    const m = memory();
+    m.setBefore((url, method) =>
+      url === metadata && method === "PATCH" ? new Response(null, { status: 204 }) : undefined,
+    );
+    await expect(ensureDriveRoot(m.fetch, options)).rejects.toThrow("marker was not persisted");
+    expect(m.indexWrites).toBe(0);
+  });
+
+  it.each([
+    null,
+    '<description>; title="rel=describedby"',
+    "<description>; rel=type",
+    '<description>; rel=""',
+  ])("refuses missing metadata discovery (%s)", async (link) => {
+    const m = memory();
+    m.setBefore((url, method) => {
+      if (url !== root || method !== "GET") return undefined;
+      const headers = new Headers({ "Content-Type": "text/turtle" });
+      if (link !== null) headers.set("Link", link);
+      return new Response(containerBody, { headers });
+    });
+    await expect(ensureDriveRoot(m.fetch, options)).rejects.toThrow("needs a describedby link");
+    expect(m.calls.some((call) => call.method === "PATCH")).toBe(false);
+    expect(m.indexWrites).toBe(0);
+  });
+
+  it("finds relative metadata links among other links and multi-valued relations", async () => {
+    const m = memory();
+    let reads = 0;
+    m.setBefore((url, method) => {
+      if (url !== root || method !== "GET" || reads++ > 0) return undefined;
+      return new Response(containerBody, {
+        headers: {
+          "Content-Type": "text/turtle",
+          Link: '<https://example.org/a,b>; rel=type; title="a,b", <description>; title="metadata"; rel="other describedby"',
+        },
+      });
+    });
+    expect(await ensureDriveRoot(m.fetch, options)).toBe(root);
+    expect(m.calls.some((call) => call.url === metadata && call.method === "PATCH")).toBe(true);
+  });
+
+  it("rejects a foreign metadata link before sending a PATCH", async () => {
+    const m = memory();
+    m.setBefore((url, method) =>
+      url === root && method === "GET"
+        ? new Response(containerBody, {
+            headers: {
+              "Content-Type": "text/turtle",
+              Link: "<https://evil.example/meta>; rel=describedby",
+            },
+          })
+        : undefined,
+    );
+    await expect(ensureDriveRoot(m.fetch, options)).rejects.toThrow();
+    expect(m.calls.some((call) => call.method === "PATCH")).toBe(false);
+    expect(m.indexWrites).toBe(0);
+  });
+
+  it("allows the winning caller time to persist its marker after a 409", async () => {
+    const m = memory();
+    let release: (() => void) | undefined;
+    const waiting = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const fetch: typeof globalThis.fetch = async (input, init) => {
+      if (String(input) === metadata && init?.method === "PATCH") await waiting;
+      const response = await m.fetch(input, init);
+      if (
+        String(input) === root &&
+        init?.method !== "PUT" &&
+        m.calls.some((call) => call.status === 409)
+      ) {
+        release?.();
+      }
+      return response;
+    };
+    expect(
+      await Promise.all([ensureDriveRoot(fetch, options), ensureDriveRoot(fetch, options)]),
+    ).toEqual([root, root]);
+    expect(m.rootCreates).toBe(1);
+    expect(m.indexWrites).toBe(1);
+    expect(m.calls.filter((call) => call.method === "PATCH")).toHaveLength(1);
+  });
+
+  it("propagates an unreadable existing container after a conflict", async () => {
+    const m = memory();
+    m.files.set(root, { body: containerBody, version: 1 });
+    m.setBefore((url, method) =>
+      url === root && method === "GET" ? new Response(null, { status: 403 }) : undefined,
+    );
+    await expect(ensureDriveRoot(m.fetch, options)).rejects.toMatchObject({
+      name: "RdfFetchError",
+      status: 403,
+    });
+    expect(m.indexWrites).toBe(0);
   });
 
   it.each([
