@@ -11,6 +11,8 @@ export default defineConfig({
         "src/apps/photos/lib/library/**/*.ts",
         "src/lib/order/**/*.ts",
         "src/apps/docs/lib/anchoring/**/*.ts",
+        "src/apps/health/lib/stats/**/*.ts",
+        "src/apps/sheets/lib/univer-spike/**/*.ts",
       ],
       reporter: ["text", "json-summary"],
       thresholds: {
