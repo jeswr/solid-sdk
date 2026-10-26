@@ -1,5 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { type Property, requireIcs } from "./content";
+import { type Property, parameter, requireIcs } from "./content";
 import type { CalendarDate } from "./types";
 
 export function validateDate(date: CalendarDate): void {
@@ -31,7 +31,7 @@ export function validateDate(date: CalendarDate): void {
 }
 
 export function readDate(prop: Property): CalendarDate {
-  const kind = (prop.params.get("VALUE") ?? "DATE-TIME").toUpperCase();
+  const kind = (parameter(prop, "VALUE") ?? "DATE-TIME").toUpperCase();
   const dateOnly = kind === "DATE";
   requireIcs(dateOnly || kind === "DATE-TIME", "unsupported date value type");
   const match = (
@@ -39,7 +39,7 @@ export function readDate(prop: Property): CalendarDate {
   ).exec(prop.value);
   requireIcs(match, "invalid basic date");
   const value = `${match[1]}-${match[2]}-${match[3]}${dateOnly ? "" : `T${match[4]}:${match[5]}:${match[6]}${match[7] ?? ""}`}`;
-  const tzid = prop.params.get("TZID");
+  const tzid = parameter(prop, "TZID");
   const date = tzid === undefined ? { value } : { value, tzid };
   validateDate(date);
   return date;

@@ -7,12 +7,15 @@ Events use `name`, ISO `start`/`end`, `location`, `description`, `recurrence`, a
 `reminders`. Required `uid` and UTC `dtstamp` preserve identity and deterministic exports.
 DATE is `YYYY-MM-DD`; DATE-TIME is `YYYY-MM-DDTHH:mm:ss` with optional `Z`.
 TZID accompanies a wall-clock value (`tzid` for start, `endTzid` for end); each is independent.
-DATE ends are exclusive; a missing end stays absent. Leap-second `:60` is retained.
+Floating starts and ends must both be floating. DATE ends are exclusive; a missing end stays
+absent. Leap-second `:60` is retained.
 Recurrence selectors use RFC weekday codes (`MO`, `-1FR`); `exceptDate` belongs to
 `recurrence` when a rule exists, otherwise to the event. `rdate` and exceptions contain
 `{ value, tzid? }` entries. Rules retain all RFC BY* selectors, COUNT/UNTIL, and WKST.
 Reminders use `triggerOffset` (duration) or UTC `triggerTime`; DISPLAY, AUDIO and EMAIL,
-RELATED, repeat/duration, text, recipients and URI attachments are supported.
+RELATED, repeat/duration (including zero repeats), text, recipients and URI attachments are supported.
+EMAIL uses an `attachments` array; the singular `attachment` remains supported for existing
+callers and AUDIO alarms. AUDIO accepts at most one attachment.
 
 Supplied VTIMEZONE definitions are retained as opaque components. Callers provide definitions
 when required for export; this module does not generate a timezone database or evaluate DST.

@@ -32,6 +32,11 @@ function eventLines(event: CalendarEvent): string[] {
       (event.start.length === 10) === (event.end.length === 10),
       "DTEND value type must match DTSTART",
     );
+    const floatingStart =
+      event.start.length !== 10 && !event.start.endsWith("Z") && event.tzid === undefined;
+    const floatingEnd =
+      event.end.length !== 10 && !event.end.endsWith("Z") && event.endTzid === undefined;
+    requireIcs(floatingStart === floatingEnd, "DTEND floating form must match DTSTART");
     // Compare only when both values use the same clock; cross-zone instants need a TZ engine.
     if (event.tzid === event.endTzid && event.start.endsWith("Z") === event.end.endsWith("Z"))
       requireIcs(event.end > event.start, "DTEND must be later than DTSTART");

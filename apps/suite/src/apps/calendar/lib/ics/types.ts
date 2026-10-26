@@ -33,7 +33,10 @@ export interface Reminder {
   description?: string;
   summary?: string;
   attendees?: string[];
+  /** Single attachment, retained for existing callers and AUDIO alarms. */
   attachment?: string;
+  /** EMAIL alarms may carry multiple URI attachments. */
+  attachments?: string[];
   repeat?: number;
   duration?: string;
 }

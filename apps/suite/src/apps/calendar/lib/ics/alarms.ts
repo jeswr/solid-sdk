@@ -1,7 +1,14 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { all, type Component, escapeText, one, requireIcs, unescapeText } from "./content";
+import {
+  all,
+  type Component,
+  escapeText,
+  one,
+  parameter,
+  requireIcs,
+  unescapeText,
+} from "./content";
 import { basicDate, readDate, utc } from "./dates";
-import { positive } from "./recurrence";
 import type { Reminder } from "./types";
 
 function duration(value: string): void {
@@ -44,7 +51,10 @@ export function alarmLines(alarm: Reminder): string[] {
     "REPEAT and DURATION must occur together",
   );
   if (alarm.repeat !== undefined) {
-    positive(alarm.repeat);
+    requireIcs(
+      Number.isSafeInteger(alarm.repeat) && alarm.repeat >= 0,
+      "expected nonnegative alarm repeat integer",
+    );
     duration(alarm.duration as string);
     requireIcs(
       !/^-/.test(alarm.duration as string) && /[1-9]/.test(alarm.duration as string),
@@ -65,9 +75,17 @@ export function alarmLines(alarm: Reminder): string[] {
     uri(attendee);
     lines.push(`ATTENDEE:${attendee}`);
   }
-  if (alarm.attachment !== undefined) {
-    uri(alarm.attachment);
-    lines.push(`ATTACH:${alarm.attachment}`);
+  requireIcs(
+    alarm.action === "EMAIL" || alarm.attachments === undefined,
+    "attachments need EMAIL action",
+  );
+  const attachments = [
+    ...(alarm.attachments ?? []),
+    ...(alarm.attachment === undefined ? [] : [alarm.attachment]),
+  ];
+  for (const attachment of attachments) {
+    uri(attachment);
+    lines.push(`ATTACH:${attachment}`);
   }
   return [...lines, "END:VALARM"];
 }
@@ -76,11 +94,11 @@ export function readAlarm(component: Component): Reminder {
   const action = one(component, "ACTION", true)?.value.toUpperCase() as Reminder["action"];
   const trigger = one(component, "TRIGGER", true) as NonNullable<ReturnType<typeof one>>;
   const alarm: Reminder = { action };
-  const kind = (trigger.params.get("VALUE") ?? "DURATION").toUpperCase();
+  const kind = (parameter(trigger, "VALUE") ?? "DURATION").toUpperCase();
   requireIcs(kind === "DURATION" || kind === "DATE-TIME", "unsupported trigger type");
   if (kind === "DATE-TIME") alarm.triggerTime = readDate(trigger).value;
   else alarm.triggerOffset = trigger.value;
-  const related = trigger.params.get("RELATED");
+  const related = parameter(trigger, "RELATED");
   if (related !== undefined) alarm.related = related.toUpperCase() as Reminder["related"] & string;
   for (const [name, key] of [
     ["DESCRIPTION", "description"],
@@ -98,14 +116,17 @@ export function readAlarm(component: Component): Reminder {
   if (interval) alarm.duration = interval.value;
   const attendees = all(component, "ATTENDEE");
   if (attendees.length) alarm.attendees = attendees.map((prop) => prop.value);
-  const attachment = one(component, "ATTACH");
-  if (attachment) {
+  const attachments = all(component, "ATTACH");
+  if (action !== "EMAIL") one(component, "ATTACH");
+  for (const attachment of attachments) {
     requireIcs(
-      (attachment.params.get("VALUE") ?? "URI").toUpperCase() === "URI",
+      (parameter(attachment, "VALUE") ?? "URI").toUpperCase() === "URI",
       "binary alarm attachment unsupported",
     );
-    alarm.attachment = attachment.value;
+    if (action !== "EMAIL") alarm.attachment = attachment.value;
   }
+  if (action === "EMAIL" && attachments.length)
+    alarm.attachments = attachments.map((attachment) => attachment.value);
   alarmLines(alarm);
   return alarm;
 }

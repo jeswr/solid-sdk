@@ -93,6 +93,25 @@ describe("content lines", () => {
       "VTIMEZONE",
     );
   });
+  it("accepts quoted parameter lists on ignored event properties", () => {
+    expect(
+      parsed([
+        start,
+        'ATTENDEE;MEMBER="mailto:a@example.org","mailto:b@example.org":mailto:c@example.org',
+      ]).events,
+    ).toEqual([baseEvent]);
+  });
+  it("preserves parameter value boundaries in opaque timezone components", () => {
+    const timezone = [
+      "BEGIN:VTIMEZONE",
+      "TZID:Custom/Example",
+      'X-INFO;X-LIST="a,b;c:d",plain,"last":Fictional',
+      "END:VTIMEZONE",
+    ].join("\r\n");
+    const calendar = importICal(exportICal({ events: [], timezones: [timezone] }));
+    expect(calendar.timezones?.[0]).toContain('X-LIST="a,b;c:d","plain","last"');
+    expect(importICal(exportICal(calendar))).toEqual(calendar);
+  });
   it.each([
     "",
     "BEGIN:VCALENDAR",
@@ -115,6 +134,12 @@ describe("content lines", () => {
     "DTSTART;X=:20261025T090000Z",
     "DTSTART;X=1;X=2:20261025T090000Z",
     "DTSTART;X*=1:20261025T090000Z",
+    "DTSTART;X=,a:20261025T090000Z",
+    "DTSTART;X=a,:20261025T090000Z",
+    "DTSTART;X=a,,b:20261025T090000Z",
+    'DTSTART;X="a","b"junk:20261025T090000Z',
+    "DTSTART;VALUE=DATE-TIME,DATE:20261025T090000Z",
+    "DTSTART;TZID=Europe/London,Europe/Paris:20261025T090000",
   ])("rejects malformed parameters %s", (line) => expect(() => parsed([line])).toThrow());
   it.each([
     'DTSTART;X="valid"junk:20261025T090000Z',
@@ -141,9 +166,17 @@ describe("date values", () => {
     { start: "2026-12-31T23:59:60Z" },
     { start: "2026-10-25T09:00:00", tzid: "Custom, East" },
     { end: "2026-10-25T09:00:00", endTzid: "Europe/Paris" },
-    { start: "2026-10-25T09:00:00", end: "2026-10-25T08:00:00Z" },
+    { start: "2026-10-25T09:00:00", end: "2026-10-25T10:00:00" },
+    { start: "2026-10-25T09:00:00", tzid: "Europe/London", end: "2026-10-25T08:00:00Z" },
   ])("preserves explicit clocks %#", (changes) =>
     expect(importICal(exported(changes)).events[0]).toEqual({ ...baseEvent, ...changes }));
+  it.each([
+    ["DTSTART:20261025T090000", "DTEND:20261025T100000Z"],
+    ["DTSTART:20261025T090000", "DTEND;TZID=Europe/Paris:20261025T100000"],
+    ["DTSTART:20261025T090000Z", "DTEND:20261025T100000"],
+    ["DTSTART;TZID=Europe/Paris:20261025T090000", "DTEND:20261025T100000"],
+  ])("rejects mixed floating forms %s %s", (start, end) =>
+    expect(() => parsed([start, end])).toThrow("floating form"));
   it.each([
     "DTSTART;VALUE=DATE:19000229",
     "DTSTART;VALUE=DATE:20260229",
@@ -172,6 +205,10 @@ describe("date values", () => {
     expect(() => parsed([...(line.startsWith("DTSTART") ? [] : [start]), line])).toThrow());
   it.each([
     { start: "bad" },
+    { start: "2026-10-25T09:00:00", end: "2026-10-25T10:00:00Z" },
+    { start: "2026-10-25T09:00:00", end: "2026-10-25T10:00:00", endTzid: "Europe/Paris" },
+    { end: "2026-10-25T10:00:00" },
+    { start: "2026-10-25T09:00:00", tzid: "Europe/Paris", end: "2026-10-25T10:00:00" },
     { start: "2026-10-25T09:00:00+01:00" },
     { tzid: "Europe/London" },
     { tzid: "bad\nTZID" },
@@ -292,7 +329,16 @@ describe("alarms", () => {
     ["ACTION:AUDIO", "TRIGGER:-PT1H", "REPEAT:2"],
     ["ACTION:AUDIO", "TRIGGER:-PT1H", "DURATION:PT1M"],
     ["ACTION:AUDIO", "TRIGGER:-PT1H", "REPEAT:1.5", "DURATION:PT1M"],
-    ["ACTION:AUDIO", "TRIGGER:-PT1H", "REPEAT:0", "DURATION:PT1M"],
+    ["ACTION:AUDIO", "TRIGGER:-PT1H", "REPEAT:-1", "DURATION:PT1M"],
+    ["ACTION:AUDIO", "TRIGGER:-PT1H", "REPEAT:9007199254740992", "DURATION:PT1M"],
+    ["ACTION:AUDIO", "TRIGGER:-PT1H", "REPEAT:0"],
+    ["ACTION:AUDIO", "TRIGGER;RELATED=START,END:-PT1H"],
+    [
+      "ACTION:AUDIO",
+      "TRIGGER:PT1H",
+      "ATTACH:https://example.org/a",
+      "ATTACH:https://example.org/b",
+    ],
     ["ACTION:AUDIO", "TRIGGER:-PT1H", "REPEAT:2", "DURATION:-PT1M"],
     ["ACTION:AUDIO", "TRIGGER:-PT1H", "REPEAT:2", "DURATION:PT0S"],
     ["ACTION:AUDIO", "TRIGGER:P"],
@@ -311,6 +357,106 @@ describe("alarms", () => {
     ],
   ])("rejects invalid alarm %#", (...lines) =>
     expect(() => parsed([start, "BEGIN:VALARM", ...lines, "END:VALARM"])).toThrow());
+  it("round-trips explicit zero repeats with a duration", () => {
+    const reminder: Reminder = {
+      action: "AUDIO",
+      triggerOffset: "-PT1H",
+      repeat: 0,
+      duration: "PT1M",
+    };
+    const calendar = parsed([
+      start,
+      "BEGIN:VALARM",
+      "ACTION:AUDIO",
+      "TRIGGER:-PT1H",
+      "REPEAT:0",
+      "DURATION:PT1M",
+      "END:VALARM",
+    ]);
+    expect(calendar.events[0]?.reminders).toEqual([reminder]);
+    expect(importICal(exported({ reminders: [reminder] }))).toEqual(calendar);
+  });
+  it.each([0, 1, 2])("round-trips EMAIL with %i attachments", (count) => {
+    const attachments = ["https://example.org/a", "https://example.org/b"].slice(0, count);
+    const calendar = parsed([
+      start,
+      "BEGIN:VALARM",
+      "ACTION:EMAIL",
+      "TRIGGER:-PT1H",
+      "DESCRIPTION:Hello",
+      "SUMMARY:Hello",
+      "ATTENDEE:mailto:a@example.org",
+      ...attachments.map((uri) => `ATTACH;VALUE=URI:${uri}`),
+      "END:VALARM",
+    ]);
+    expect(calendar.events[0]?.reminders?.[0]).toEqual({
+      action: "EMAIL",
+      triggerOffset: "-PT1H",
+      description: "Hello",
+      summary: "Hello",
+      attendees: ["mailto:a@example.org"],
+      ...(count ? { attachments } : {}),
+    });
+    expect(importICal(exportICal(calendar))).toEqual(calendar);
+  });
+  it("keeps the legacy singular EMAIL attachment export", () => {
+    const reminder: Reminder = {
+      action: "EMAIL",
+      triggerOffset: "PT0S",
+      description: "Hello",
+      summary: "Hello",
+      attendees: ["mailto:a@example.org"],
+      attachment: "https://example.org/a",
+    };
+    expect(
+      importICal(exported({ reminders: [reminder] })).events[0]?.reminders?.[0]?.attachments,
+    ).toEqual([reminder.attachment]);
+  });
+  it.each([
+    "ATTACH;VALUE=BINARY:AAAA",
+    "ATTACH:bad",
+  ])("validates every EMAIL attachment %s", (invalid) => {
+    expect(() =>
+      parsed([
+        start,
+        "BEGIN:VALARM",
+        "ACTION:EMAIL",
+        "TRIGGER:-PT1H",
+        "DESCRIPTION:Hello",
+        "SUMMARY:Hello",
+        "ATTENDEE:mailto:a@example.org",
+        "ATTACH:https://example.org/a",
+        invalid,
+        "END:VALARM",
+      ]),
+    ).toThrow();
+  });
+  it.each([
+    -1,
+    1.5,
+    Number.NaN,
+    Number.POSITIVE_INFINITY,
+    Number.MAX_SAFE_INTEGER + 1,
+  ])("rejects invalid model repeat %s", (repeat) => {
+    expect(() =>
+      exported({
+        reminders: [{ action: "AUDIO", triggerOffset: "PT0S", repeat, duration: "PT1M" }],
+      }),
+    ).toThrow("nonnegative");
+  });
+  it("rejects the EMAIL attachment collection on AUDIO", () => {
+    expect(() =>
+      exported({
+        reminders: [
+          {
+            action: "AUDIO",
+            triggerOffset: "PT0S",
+            attachments: ["https://example.org/a", "https://example.org/b"],
+          },
+        ],
+      }),
+    ).toThrow("EMAIL");
+  });
   it("rejects missing/double triggers and preserves text payloads", () => {
     for (const alarm of [
       { action: "AUDIO" },

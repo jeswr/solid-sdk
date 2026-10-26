@@ -101,7 +101,7 @@ export function readRule(value: string): RecurrenceRule {
     if (name === "UNTIL") {
       rule.until = readDate({
         name,
-        params: new Map([["VALUE", data.length === 8 ? "DATE" : "DATE-TIME"]]),
+        params: new Map([["VALUE", [data.length === 8 ? "DATE" : "DATE-TIME"]]]),
         value: data,
       }).value;
     } else if (name === "BYDAY") rule.byDay = data.split(",");

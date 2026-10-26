@@ -34,7 +34,7 @@ export function foldLine(value: string): string {
 
 export interface Property {
   name: string;
-  params: Map<string, string>;
+  params: Map<string, string[]>;
   value: string;
 }
 export interface Component {
@@ -59,22 +59,31 @@ function property(line: string): Property {
   );
   const name = segments.shift() as string;
   requireIcs(/^[a-z\d-]+$/i.test(name), "invalid property name");
-  const params = new Map<string, string>();
+  const params = new Map<string, string[]>();
   for (const segment of segments) {
     const equal = segment.indexOf("=");
     const key = segment.slice(0, equal).toUpperCase();
-    let value = segment.slice(equal + 1);
+    const value = segment.slice(equal + 1);
     requireIcs(
       equal > 0 && /^[A-Z\d-]+$/.test(key) && value && !params.has(key),
       "invalid parameter",
     );
-    requireIcs(/^(?:"[^"]*"|[^"]+)$/.test(value), "invalid quoted parameter");
-    if (value.startsWith('"')) {
-      value = value.slice(1, -1);
-    }
-    params.set(key, value);
+    const values = value.match(/"[^"]*"|[^",]+/g);
+    requireIcs(values && values.join(",") === value, "invalid quoted parameter list");
+    params.set(
+      key,
+      values.map((part) => (part.startsWith('"') ? part.slice(1, -1) : part)),
+    );
   }
   return { name: name.toUpperCase(), params, value: line.slice(index + 1) };
+}
+
+/** Read a supported singleton parameter without collapsing a list into one value. */
+export function parameter(prop: Property, name: string): string | undefined {
+  const values = prop.params.get(name);
+  if (values === undefined) return undefined;
+  requireIcs(values.length === 1, `expected one ${name} parameter value`);
+  return values[0];
 }
 
 export function parseComponent(text: string): Component {
@@ -114,7 +123,7 @@ export function componentLines(component: Component): string[] {
     `BEGIN:${component.name}`,
     ...component.properties.map(
       (prop) =>
-        `${prop.name}${[...prop.params].map(([key, value]) => `;${key}="${value}"`).join("")}:${prop.value}`,
+        `${prop.name}${[...prop.params].map(([key, values]) => `;${key}=${values.map((value) => `"${value}"`).join(",")}`).join("")}:${prop.value}`,
     ),
     ...component.children.flatMap(componentLines),
     `END:${component.name}`,
