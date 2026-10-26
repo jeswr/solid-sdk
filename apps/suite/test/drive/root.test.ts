@@ -1,6 +1,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { RdfFetchError } from "@jeswr/fetch-rdf";
-import { DataFactory, Parser, Store } from "n3";
+import { serialize } from "@jeswr/rdf-serialize";
+import { DataFactory, Parser, Store, Writer } from "n3";
 import { describe, expect, it } from "vitest";
 import { DriveResource } from "../../src/apps/drive/lib/model/model.js";
 import {
@@ -18,12 +20,23 @@ import { turtle } from "./helpers.js";
 const storage = "https://pod.example/alice/";
 const root = `${storage}drive/`;
 const metadata = `${root}description`;
-const containerBody = `<${root}> a <${LDP.BasicContainer}>.`;
+const containerBody = containerDescription(root);
 const index = `${storage}settings/private.ttl`;
 const options = { storageUrl: storage, typeIndexUrl: index };
 
+function containerDescription(url: string): string {
+  const { namedNode, quad } = DataFactory;
+  return new Writer().quadsToString([
+    quad(namedNode(url), namedNode(RDF.type), namedNode(LDP.BasicContainer)),
+  ]);
+}
+
 /** CSS-style storage: ignores container PUT bodies and PATCHes linked metadata only. */
-function memory(existingStatus: 409 | 412 = 409) {
+function memory(existingStatus: 409 | 412 = 409, storageUrl = storage) {
+  const root = `${storageUrl}drive/`;
+  const metadata = `${root}description`;
+  const containerBody = containerDescription(root);
+  const index = `${storageUrl}settings/private.ttl`;
   const files = new Map<string, { body: string; version: number }>([
     [index, { body: "", version: 1 }],
   ]);
@@ -35,9 +48,17 @@ function memory(existingStatus: 409 | 412 = 409) {
     const url = String(input);
     const method = init?.method ?? "GET";
     const headers = new Headers(init?.headers);
-    let response = before?.(url, method);
+    let response =
+      (method === "PUT" || method === "PATCH") &&
+      !headers.has("If-Match") &&
+      !headers.has("If-None-Match")
+        ? new Response(null, { status: 428 })
+        : before?.(url, method);
     if (!response) {
       const file = files.get(url);
+      const preconditionFails = () =>
+        (headers.get("If-None-Match") === "*" && files.has(url)) ||
+        (headers.has("If-Match") && headers.get("If-Match") !== `"${files.get(url)?.version}"`);
       if (method === "GET") {
         response = file
           ? new Response(file.body, {
@@ -49,14 +70,9 @@ function memory(existingStatus: 409 | 412 = 409) {
             })
           : new Response(null, { status: 404 });
       } else if (method === "PUT") {
-        if (!headers.has("If-Match") && !headers.has("If-None-Match"))
-          throw new TypeError("Unconditional write");
         if (url === root && file) {
           response = new Response(null, { status: existingStatus });
-        } else if (
-          (headers.get("If-None-Match") === "*" && file) ||
-          (headers.has("If-Match") && headers.get("If-Match") !== `"${file?.version}"`)
-        ) {
+        } else if (preconditionFails()) {
           response = new Response(null, { status: 412 });
         } else {
           files.set(url, {
@@ -65,15 +81,25 @@ function memory(existingStatus: 409 | 412 = 409) {
           });
           if (url === index) indexWrites++;
           if (url === root) rootCreates++;
-          response = new Response(null, { status: 201 });
+          response = new Response(null, {
+            status: 201,
+            headers: { ETag: `"${(file?.version ?? 0) + 1}"` },
+          });
         }
       } else if (method === "PATCH" && url === metadata) {
         // A conforming server need only support N3 Patch, not SPARQL Update.
-        if (headers.get("Content-Type") !== "text/n3") {
+        if (preconditionFails()) {
+          response = new Response(null, { status: 412 });
+        } else if (headers.get("Content-Type") !== "text/n3") {
           response = new Response(null, { status: 415 });
         } else {
+          // This is the mock server parsing a PATCH request. fetch-rdf parses
+          // response representations and does not support N3 formula syntax.
           const patch = new Store(
-            new Parser({ format: "N3", baseIRI: url }).parse(String(init?.body)),
+            new Parser({ format: "N3", baseIRI: url })
+              .parse(String(init?.body))
+              // N3 2.0.3 emits a sentinel quad with a null predicate for {}.
+              .filter((quad) => quad.predicate !== null),
           );
           const inserts = patch.getQuads(
             null,
@@ -92,18 +118,37 @@ function memory(existingStatus: 409 | 412 = 409) {
               DataFactory.defaultGraph(),
             ),
           ).toHaveLength(1);
-          expect(patch.getQuads(null, null, null, DataFactory.defaultGraph())).toHaveLength(2);
+          const where = patch.getQuads(
+            insert.subject,
+            `${SOLID.ns}where`,
+            null,
+            DataFactory.defaultGraph(),
+          );
+          expect(where).toHaveLength(1);
+          expect(patch.getQuads(null, null, null, where[0]?.object ?? null)).toHaveLength(0);
+          expect(patch.getQuads(null, null, null, DataFactory.defaultGraph())).toHaveLength(3);
           const current = files.get(root);
           if (!current) throw new Error("Missing container");
           const dataset = turtle(current.body);
+          const description = turtle(file?.body ?? "");
           // Apply the parsed insertion formula to the target document's default graph.
           for (const quad of patch.match(null, null, null, insert.object)) {
             expect(quad.subject.termType).toBe("NamedNode");
             expect(quad.object.termType).toBe("NamedNode");
             dataset.addQuad(quad.subject, quad.predicate, quad.object);
+            description.addQuad(quad.subject, quad.predicate, quad.object);
           }
-          files.set(root, { body: await quadsToTurtle(dataset), version: current.version + 1 });
-          response = new Response(null, { status: 205 });
+          const rootBody = await quadsToTurtle(dataset);
+          const metadataBody = await quadsToTurtle(description);
+          // Check and commit atomically after async serialization: two callers
+          // must not both pass If-None-Match before either write is persisted.
+          if (preconditionFails()) {
+            response = new Response(null, { status: 412 });
+          } else {
+            files.set(root, { body: rootBody, version: current.version + 1 });
+            files.set(metadata, { body: metadataBody, version: (file?.version ?? 0) + 1 });
+            response = new Response(null, { status: 205 });
+          }
         }
       } else if (method === "DELETE" && url === root) {
         if (!headers.has("If-Match")) throw new TypeError("Unconditional deletion");
@@ -160,6 +205,226 @@ async function initializationFailure(
 }
 
 describe("ensureDriveRoot", () => {
+  it("round-trips root IRIs containing replacement-string metacharacters in N3 formulae", async () => {
+    const unusualStorage = `${storage}$&/`;
+    const unusualRoot = `${unusualStorage}drive/`;
+    const m = memory(409, unusualStorage);
+    expect(
+      await ensureDriveRoot(m.fetch, {
+        storageUrl: unusualStorage,
+        typeIndexUrl: `${unusualStorage}settings/private.ttl`,
+      }),
+    ).toBe(unusualRoot);
+    expect(
+      new DriveResource(unusualRoot, turtle(m.files.get(unusualRoot)?.body ?? ""), DataFactory)
+        .isDriveRoot,
+    ).toBe(true);
+  });
+
+  it("makes the server mock reject unconditional PATCHes", async () => {
+    const m = memory();
+    expect((await m.fetch(metadata, { method: "PATCH" })).status).toBe(428);
+  });
+
+  it.each([
+    409, 412,
+  ] as const)("recovers a committed creation with a lost response (%s)", async (status) => {
+    const m = memory(status);
+    const cause = new TypeError("Creation response lost");
+    const fetch: typeof globalThis.fetch = async (input, init) => {
+      const response = await m.fetch(input, init);
+      if (String(input) === root && init?.method === "PUT") throw cause;
+      return response;
+    };
+    const failure = await initializationFailure(ensureDriveRoot(fetch, options));
+    expect(failure.cause).toBe(cause);
+    expect(m.files.get(root)?.body).toBe(containerBody);
+    expect(await ensureDriveRoot(m.fetch, options)).toBe(root);
+    expect(await failure.resume()).toBe(root);
+    expect(m.rootCreates).toBe(1);
+    expect(m.indexWrites).toBe(1);
+  });
+
+  it("resumes directly after losing the container creation response", async () => {
+    const m = memory();
+    const fetch: typeof globalThis.fetch = async (input, init) => {
+      const response = await m.fetch(input, init);
+      if (init?.method === "PUT" && String(input) === root) throw new TypeError("Disconnected");
+      return response;
+    };
+    const failure = await initializationFailure(ensureDriveRoot(fetch, options));
+    expect(await failure.resume()).toBe(root);
+    expect(m.rootCreates).toBe(1);
+    expect(m.indexWrites).toBe(1);
+  });
+
+  it.each([
+    409, 412,
+  ] as const)("adopts an existing empty, unmarked container (%s)", async (status) => {
+    const m = memory(status);
+    m.files.set(root, { body: containerBody, version: 3 });
+    expect(await ensureDriveRoot(m.fetch, options)).toBe(root);
+    expect(m.rootCreates).toBe(0);
+    expect(m.indexWrites).toBe(1);
+  });
+
+  it("refuses to adopt an existing container with children", async () => {
+    const m = memory();
+    const body = await serialize([
+      ...turtle(containerBody),
+      DataFactory.quad(
+        DataFactory.namedNode(root),
+        DataFactory.namedNode(LDP.contains),
+        DataFactory.namedNode(`${root}keep.txt`),
+      ),
+    ]);
+    m.files.set(root, { body, version: 7 });
+    await expect(ensureDriveRoot(m.fetch, options)).rejects.toMatchObject({
+      status: 409,
+      url: root,
+    });
+    expect(m.files.get(root)?.body).toBe(body);
+    expect(m.calls.some((call) => call.method === "PATCH")).toBe(false);
+    expect(m.indexWrites).toBe(0);
+  });
+
+  it.each([
+    "creation",
+    "first read",
+  ])("rejects a populated replacement using the %s validator", async (validator) => {
+    const m = memory();
+    m.setBefore((url, method) =>
+      (
+        validator === "creation"
+          ? url === root && method === "GET"
+          : url === metadata && method === "PATCH"
+      )
+        ? new Response(null, { status: 503 })
+        : undefined,
+    );
+    const fetch: typeof globalThis.fetch = async (input, init) => {
+      const response = await m.fetch(input, init);
+      if (validator === "first read" && String(input) === root && init?.method === "PUT")
+        response.headers.delete("ETag");
+      return response;
+    };
+    const failure = await initializationFailure(ensureDriveRoot(fetch, options));
+    const replacement = await serialize([
+      ...turtle(containerBody),
+      DataFactory.quad(
+        DataFactory.namedNode(root),
+        DataFactory.namedNode(LDP.contains),
+        DataFactory.namedNode(`${root}replacement.txt`),
+      ),
+    ]);
+    m.files.delete(root);
+    m.files.set(root, { body: replacement, version: 9 });
+    m.setBefore(undefined);
+    const patches = m.calls.filter((call) => call.method === "PATCH").length;
+    const rejected = await initializationFailure(failure.resume());
+    expect(rejected.cause).toMatchObject({ name: "DriveWriteError", status: 409, url: root });
+    expect(m.files.get(root)?.body).toBe(replacement);
+    expect(m.calls.filter((call) => call.method === "PATCH")).toHaveLength(patches);
+    expect(m.indexWrites).toBe(0);
+  });
+
+  it("uses the description's strong ETag, independently of the container ETag", async () => {
+    const m = memory();
+    m.files.set(metadata, { body: "", version: 17 });
+    expect(await ensureDriveRoot(m.fetch, options)).toBe(root);
+    const patch = m.calls.find((call) => call.method === "PATCH");
+    expect(patch?.headers.get("If-Match")).toBe('"17"');
+    expect(patch?.headers.has("If-None-Match")).toBe(false);
+  });
+
+  it.each([
+    "create",
+    "update",
+  ])("re-reads and retries once on a metadata %s race", async (operation) => {
+    const m = memory();
+    if (operation === "update") m.files.set(metadata, { body: "", version: 1 });
+    const unrelated = DataFactory.quad(
+      DataFactory.namedNode(root),
+      DataFactory.namedNode("https://example.org/title"),
+      DataFactory.literal("Keep me"),
+    );
+    const changed = await serialize([unrelated]);
+    let race = true;
+    m.setBefore((url, method) => {
+      if (url === metadata && method === "PATCH" && race) {
+        race = false;
+        m.files.set(metadata, { body: changed, version: 12 });
+      }
+      return undefined;
+    });
+    expect(await ensureDriveRoot(m.fetch, options)).toBe(root);
+    const patches = m.calls.filter((call) => call.method === "PATCH");
+    expect(patches.map((call) => call.status)).toEqual([412, 205]);
+    expect(patches[0]?.headers.get(operation === "create" ? "If-None-Match" : "If-Match")).toBe(
+      operation === "create" ? "*" : '"1"',
+    );
+    expect(patches[1]?.headers.get("If-Match")).toBe('"12"');
+    expect(turtle(m.files.get(metadata)?.body ?? "").has(unrelated)).toBe(true);
+  });
+
+  it("bounds metadata conflict retries and keeps the handle resumable", async () => {
+    const m = memory();
+    m.setBefore((url, method) =>
+      url === metadata && method === "PATCH" ? new Response(null, { status: 412 }) : undefined,
+    );
+    const failure = await initializationFailure(ensureDriveRoot(m.fetch, options));
+    expect(failure.cause).toMatchObject({ status: 412, url: metadata });
+    expect(m.calls.filter((call) => call.method === "PATCH")).toHaveLength(2);
+    expect(m.indexWrites).toBe(0);
+    m.setBefore(undefined);
+    expect(await failure.resume()).toBe(root);
+  });
+
+  it.each([403, 500])("does not treat unreadable metadata (%s) as absent", async (status) => {
+    const m = memory();
+    m.setBefore((url, method) =>
+      url === metadata && method === "GET" ? new Response(null, { status }) : undefined,
+    );
+    const failure = await initializationFailure(ensureDriveRoot(m.fetch, options));
+    expect(failure.cause).toMatchObject({ name: "RdfFetchError", status });
+    expect(m.calls.some((call) => call.method === "PATCH")).toBe(false);
+    expect(m.indexWrites).toBe(0);
+  });
+
+  it.each([
+    null,
+    'W/"1"',
+    "unquoted",
+  ])("refuses an unsafe description validator (%s)", async (etag) => {
+    const m = memory();
+    m.setBefore((url, method) => {
+      if (url !== metadata || method !== "GET") return undefined;
+      const headers = new Headers({ "Content-Type": "text/turtle" });
+      if (etag !== null) headers.set("ETag", etag);
+      return new Response("", { headers });
+    });
+    const failure = await initializationFailure(ensureDriveRoot(m.fetch, options));
+    expect(String(failure.cause)).toContain("description needs a strong ETag");
+    expect(m.calls.some((call) => call.method === "PATCH")).toBe(false);
+    expect(m.indexWrites).toBe(0);
+  });
+
+  it.each([1, 2])("refuses a weak index validator at read %s", async (read) => {
+    const m = memory();
+    let reads = 0;
+    m.setBefore((url, method) =>
+      url === index && method === "GET" && ++reads === read
+        ? new Response("", { headers: { "Content-Type": "text/turtle", ETag: 'W/"1"' } })
+        : undefined,
+    );
+    await expect(ensureDriveRoot(m.fetch, options)).rejects.toThrow(
+      "private Type Index needs a strong ETag",
+    );
+    expect(m.rootCreates).toBe(read - 1);
+    expect(m.indexWrites).toBe(0);
+    if (read === 1) expect(m.calls.map((call) => call.method)).toEqual(["GET"]);
+  });
+
   it("bootstraps against an N3-only server and does no writes on a second visit", async () => {
     const m = memory();
     expect(await ensureDriveRoot(m.fetch, { ...options, storageUrl: storage.slice(0, -1) })).toBe(
@@ -293,7 +558,9 @@ describe("ensureDriveRoot", () => {
     expect(m.indexWrites).toBe(0);
   });
 
-  it.each([409, 412] as const)("refuses an unmarked occupied path after %s", async (status) => {
+  it.each([
+    409, 412,
+  ] as const)("refuses a non-container at the root path after %s", async (status) => {
     const m = memory(status);
     m.files.set(root, { body: "", version: 1 });
     await expect(ensureDriveRoot(m.fetch, options)).rejects.toMatchObject({
@@ -330,8 +597,6 @@ describe("ensureDriveRoot", () => {
     expect(m.indexWrites).toBe(0);
     expect(m.files.has(root)).toBe(true);
     expect(m.calls.some((call) => call.method === "DELETE")).toBe(false);
-    // A fresh caller cannot claim the preserved, unmarked container.
-    await expect(ensureDriveRoot(m.fetch, options)).rejects.toMatchObject({ status: 409 });
     m.setBefore(undefined);
     expect(await failure.resume()).toBe(root);
     expect(m.rootCreates).toBe(1);
@@ -443,7 +708,9 @@ describe("ensureDriveRoot", () => {
     const result: unknown = await ensureDriveRoot(fetch, options).catch((error: unknown) => error);
     // Auxiliary writes do not change the container representation or validator.
     expect(m.files.get(root)).toEqual({ body: containerBody, version: 1 });
-    expect(m.files.get(url)).toEqual(changed);
+    expect(
+      [...turtle(changed.body)].every((quad) => turtle(m.files.get(url)?.body ?? "").has(quad)),
+    ).toBe(true);
     expect(m.calls.some((call) => call.method === "DELETE")).toBe(false);
     expect(m.indexWrites).toBe(0);
     expect(result).toBeInstanceOf(DriveRootInitializationError);
@@ -451,7 +718,9 @@ describe("ensureDriveRoot", () => {
       throw new Error("Expected resume handle");
     m.setBefore(undefined);
     expect(await result.resume()).toBe(root);
-    expect(m.files.get(url)).toEqual(changed);
+    expect(
+      [...turtle(changed.body)].every((quad) => turtle(m.files.get(url)?.body ?? "").has(quad)),
+    ).toBe(true);
     expect(m.rootCreates).toBe(1);
   });
 
@@ -570,7 +839,7 @@ describe("ensureDriveRoot", () => {
     expect(await failure.resume()).toBe(root);
   });
 
-  it("allows the winning caller time to persist its marker after a 409", async () => {
+  it("converges when a second caller adopts an empty container during initialization", async () => {
     const m = memory();
     let release: (() => void) | undefined;
     const waiting = new Promise<void>((resolve) => {
@@ -593,7 +862,9 @@ describe("ensureDriveRoot", () => {
     ).toEqual([root, root]);
     expect(m.rootCreates).toBe(1);
     expect(m.indexWrites).toBe(1);
-    expect(m.calls.filter((call) => call.method === "PATCH")).toHaveLength(1);
+    expect(m.calls.filter((call) => call.method === "PATCH" && call.status === 205)).toHaveLength(
+      1,
+    );
   });
 
   it("propagates an unreadable existing container after a conflict", async () => {
@@ -618,7 +889,7 @@ describe("ensureDriveRoot", () => {
     expect(m.calls.map((call) => call.method)).toEqual(["GET"]);
   });
 
-  it.each([1, 2])("refuses an index without an ETag at read %s", async (read) => {
+  it.each([1, 2])("refuses an index without a strong ETag at read %s", async (read) => {
     const m = memory();
     let reads = 0;
     m.setBefore((url, method) => {
@@ -627,7 +898,7 @@ describe("ensureDriveRoot", () => {
       }
       return undefined;
     });
-    await expect(ensureDriveRoot(m.fetch, options)).rejects.toThrow("needs an ETag");
+    await expect(ensureDriveRoot(m.fetch, options)).rejects.toThrow("needs a strong ETag");
     expect(m.indexWrites).toBe(0);
     expect(m.rootCreates).toBe(read - 1);
   });

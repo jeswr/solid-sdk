@@ -1,12 +1,48 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { type FetchedRdf, fetchRdf, RdfFetchError } from "@jeswr/fetch-rdf";
 import { assertWithinPodScope, createPodScopedFetch, normalizePodBase } from "@jeswr/guarded-fetch";
 import { serialize } from "@jeswr/rdf-serialize";
+import { SetFrom, TermAs, TermFrom } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
-import { DriveResource } from "./model.js";
+import { DriveContainer, DriveResource } from "./model.js";
 import { iri, quadsToTurtle } from "./serialize.js";
 import { buildDriveRootMarker, buildDriveRootRegistration, findDriveRoots } from "./type-index.js";
-import { LDP, SOLID } from "./vocab.js";
+import { LDP, RDF, SOLID } from "./vocab.js";
+
+function strongEtag(etag: string | null): string | undefined {
+  return etag !== null && /^"[\x21\x23-\x7e\x80-\xff]*"$/.test(etag) ? etag : undefined;
+}
+
+function indexEtag(etag: string | null): string {
+  const validator = strongEtag(etag);
+  if (validator === undefined) throw new TypeError("The private Type Index needs a strong ETag.");
+  return validator;
+}
+
+async function driveRootPatch(rootUrl: string): Promise<string> {
+  const { blankNode, defaultGraph, namedNode, quad } = DataFactory;
+  const patch = blankNode("patch");
+  const where = blankNode("where");
+  const inserts = blankNode("inserts");
+  const dataset = new Store([
+    quad(patch, namedNode(RDF.type), namedNode(`${SOLID.ns}InsertDeletePatch`)),
+    quad(patch, namedNode(`${SOLID.ns}where`), where),
+    quad(patch, namedNode(`${SOLID.ns}inserts`), inserts),
+    ...buildDriveRootMarker(rootUrl).map((q) => quad(q.subject, q.predicate, q.object, inserts)),
+  ]);
+  // n3.Writer emits labelled graphs as TriG, even with format text/n3. Serialize
+  // every triple with Writer (via serialize), then inline the two formula graphs
+  // at their fixed blank-node references. No RDF terms or patch triples are text-built.
+  let document = await serialize(dataset.getQuads(null, null, null, defaultGraph()));
+  for (const graph of [where, inserts]) {
+    const formula = await serialize(
+      dataset.getQuads(null, null, null, graph).map((q) => quad(q.subject, q.predicate, q.object)),
+    );
+    document = document.replaceAll(`_:${graph.value}`, () => ["{", formula, "}"].join("\n"));
+  }
+  return document;
+}
 
 export class DriveWriteError extends Error {
   constructor(
@@ -18,7 +54,7 @@ export class DriveWriteError extends Error {
   }
 }
 
-/** A confirmed creation whose marker initialization can be retried without deleting it. */
+/** A possibly committed creation whose initialization can be retried without deleting it. */
 export class DriveRootInitializationError extends Error {
   constructor(
     cause: unknown,
@@ -38,8 +74,8 @@ export interface DriveRootOptions {
 
 /**
  * Injected-fetch Solid RDF bootstrap, independent of the future SDK façade.
- * Creation and registration are conditional; marker insertion only appends metadata.
- * Concurrent callers converge through server preconditions and bounded marker re-reads;
+ * Creation, marker insertion, and registration are conditional.
+ * Concurrent callers converge through server preconditions and bounded re-reads;
  * initialization failures preserve the container and expose a caller-held resume handle.
  * No module-global account state or rejected-promise cache is retained.
  */
@@ -54,49 +90,96 @@ export async function ensureDriveRoot(
   const existing = findDriveRoots(index.dataset)[0];
   if (existing !== undefined) return assertWithinPodScope(storage, existing);
   // Refuse to create an orphan root if an existing index cannot be updated safely.
-  if (index.etag === null) throw new TypeError("The private Type Index needs an ETag.");
+  indexEtag(index.etag);
 
   const rootUrl = new URL("drive/", storage).href;
-  const created = await scopedFetch(rootUrl, {
-    method: "PUT",
-    headers: {
-      "Content-Type": "text/turtle",
-      "If-None-Match": "*",
-      Link: `<${LDP.BasicContainer}>; rel="type"`,
-    },
-    body: "",
-  });
-  async function initialize(): Promise<void> {
+  let rootEtag: string | undefined;
+  let created: Response;
+  try {
+    created = await scopedFetch(rootUrl, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "text/turtle",
+        "If-None-Match": "*",
+        Link: `<${LDP.BasicContainer}>; rel="type"`,
+      },
+      body: "",
+    });
+  } catch (error) {
+    // The server may have committed the PUT before the connection failed.
+    throw new DriveRootInitializationError(error, resume);
+  }
+
+  function validateRoot(current: FetchedRdf, status = 409): DriveResource {
+    const root = new DriveResource(rootUrl, current.dataset, DataFactory);
+    const types = SetFrom.subjectPredicate(root, RDF.type, TermAs.term, TermFrom.itself);
+    const isContainer = [...types].some(
+      (type) =>
+        type.termType === "NamedNode" &&
+        (type.value === LDP.Container || type.value === LDP.BasicContainer),
+    );
+    // A URL alone is not an identity. A matching strong validator permits
+    // resuming our container; otherwise only an empty container can be adopted.
+    if (
+      !isContainer ||
+      (!root.isDriveRoot &&
+        (rootEtag === undefined || current.etag !== rootEtag) &&
+        new DriveContainer(rootUrl, current.dataset, DataFactory).contains.size > 0)
+    ) {
+      throw new DriveWriteError(status, rootUrl);
+    }
+    return root;
+  }
+
+  async function initialize(current?: FetchedRdf): Promise<void> {
     try {
-      // CSS ignores container PUT bodies. Discover and PATCH its description instead.
-      const current = await fetchRdf(rootUrl, { fetch: scopedFetch });
-      if (new DriveResource(rootUrl, current.dataset, DataFactory).isDriveRoot) return;
-      let metadataUrl: string | undefined;
-      const links = current.response.headers.get("Link") ?? "";
-      for (const link of links.matchAll(/<([^>]*)>((?:[^",]|"[^"]*")*)/g)) {
-        // Both capture groups are mandatory, even when their strings are empty.
-        const rel = /(?:^|;)\s*rel\s*=\s*(?:"([^"]*)"|([^;\s]+))/i.exec(link[2] as string);
-        if ((rel?.[1] ?? rel?.[2] ?? "").split(/\s+/).includes("describedby")) {
-          metadataUrl = assertWithinPodScope(storage, new URL(link[1] as string, rootUrl).href);
-          break;
+      for (let attempt = 0; ; attempt++) {
+        // CSS ignores container PUT bodies. Discover and PATCH its description instead.
+        current ??= await fetchRdf(rootUrl, { fetch: scopedFetch });
+        if (validateRoot(current).isDriveRoot) return;
+        rootEtag = strongEtag(current.etag);
+        let metadataUrl: string | undefined;
+        const links = current.response.headers.get("Link") ?? "";
+        for (const link of links.matchAll(/<([^>]*)>((?:[^",]|"[^"]*")*)/g)) {
+          // Both capture groups are mandatory, even when their strings are empty.
+          const rel = /(?:^|;)\s*rel\s*=\s*(?:"([^"]*)"|([^;\s]+))/i.exec(link[2] as string);
+          if ((rel?.[1] ?? rel?.[2] ?? "").split(/\s+/).includes("describedby")) {
+            metadataUrl = assertWithinPodScope(storage, new URL(link[1] as string, rootUrl).href);
+            break;
+          }
         }
-      }
-      if (metadataUrl === undefined)
-        throw new TypeError("The drive root needs a describedby link.");
-      const patched = await scopedFetch(metadataUrl, {
-        method: "PATCH",
-        headers: { "Content-Type": "text/n3" },
-        body: `@prefix solid: <${SOLID.ns}>.\n_:patch a solid:InsertDeletePatch; solid:inserts { ${await serialize(buildDriveRootMarker(rootUrl))} }.`,
-      });
-      if (!patched.ok) throw new DriveWriteError(patched.status, metadataUrl);
-      const verified = await fetchRdf(rootUrl, { fetch: scopedFetch });
-      const root = new DriveResource(rootUrl, verified.dataset, DataFactory);
-      if (!root.isDriveRoot) {
-        throw new TypeError("The drive root marker was not persisted.");
+        if (metadataUrl === undefined)
+          throw new TypeError("The drive root needs a describedby link.");
+        let precondition: Record<string, string>;
+        try {
+          const description = await fetchRdf(metadataUrl, { fetch: scopedFetch });
+          const etag = strongEtag(description.etag);
+          if (etag === undefined) throw new TypeError("The drive description needs a strong ETag.");
+          precondition = { "If-Match": etag };
+        } catch (error) {
+          if (!(error instanceof RdfFetchError && error.status === 404)) throw error;
+          precondition = { "If-None-Match": "*" };
+        }
+        const patched = await scopedFetch(metadataUrl, {
+          method: "PATCH",
+          headers: { "Content-Type": "text/n3", ...precondition },
+          body: await driveRootPatch(rootUrl),
+        });
+        if (patched.status === 412 && attempt === 0) {
+          current = undefined;
+          continue;
+        }
+        if (!patched.ok) throw new DriveWriteError(patched.status, metadataUrl);
+        const verified = await fetchRdf(rootUrl, { fetch: scopedFetch });
+        const root = validateRoot(verified);
+        if (!root.isDriveRoot) {
+          throw new TypeError("The drive root marker was not persisted.");
+        }
+        return;
       }
     } catch (error) {
       // A container validator cannot cover independently edited auxiliary resources.
-      // Preserve everything, and only let the creator explicitly resume its own work.
+      // Preserve everything; resumption revalidates the container before marking it.
       throw new DriveRootInitializationError(error, resume);
     }
   }
@@ -108,25 +191,21 @@ export async function ensureDriveRoot(
   }
 
   if (created.ok) {
+    rootEtag = strongEtag(created.headers.get("ETag"));
     await initialize();
   } else if (created.status === 409 || created.status === 412) {
-    // Another initializer may still be PATCHing its newly created container.
-    // Only adopt a marked container; never mark or overwrite an occupied path.
-    for (let attempt = 0; ; attempt++) {
-      let current: FetchedRdf;
-      try {
-        current = await fetchRdf(rootUrl, { fetch: scopedFetch });
-      } catch (error) {
-        if (error instanceof RdfFetchError && error.status === 404) {
-          throw new DriveWriteError(created.status, rootUrl);
-        }
-        throw error;
+    // Adopt a marked or empty container, including a PUT whose response was lost.
+    let current: FetchedRdf;
+    try {
+      current = await fetchRdf(rootUrl, { fetch: scopedFetch });
+    } catch (error) {
+      if (error instanceof RdfFetchError && error.status === 404) {
+        throw new DriveWriteError(created.status, rootUrl);
       }
-      const root = new DriveResource(rootUrl, current.dataset, DataFactory);
-      if (root.isDriveRoot) break;
-      if (attempt === 4) throw new DriveWriteError(created.status, rootUrl);
-      await new Promise((resolve) => setTimeout(resolve, 50 * 2 ** attempt));
+      throw error;
     }
+    validateRoot(current, created.status);
+    await initialize(current);
   } else {
     throw new DriveWriteError(created.status, rootUrl);
   }
@@ -135,7 +214,7 @@ export async function ensureDriveRoot(
     // Re-read after creation: preserve registrations written while the root was being created.
     const current = await fetchRdf(indexUrl, { fetch: scopedFetch });
     if (findDriveRoots(current.dataset).includes(rootUrl)) return;
-    if (current.etag === null) throw new TypeError("The private Type Index needs an ETag.");
+    const etag = indexEtag(current.etag);
     const dataset = new Store([...current.dataset]);
     const registrationUrl = new URL(indexUrl);
     registrationUrl.hash = "poddrive";
@@ -146,7 +225,7 @@ export async function ensureDriveRoot(
     dataset.addQuads(buildDriveRootRegistration(registrationUrl.href, rootUrl));
     const response = await scopedFetch(indexUrl, {
       method: "PUT",
-      headers: { "Content-Type": "text/turtle", "If-Match": current.etag },
+      headers: { "Content-Type": "text/turtle", "If-Match": etag },
       body: await quadsToTurtle(dataset),
     });
     if (response.status === 412 && retry) return register(false);
