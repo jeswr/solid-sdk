@@ -1,15 +1,12 @@
 {
+  "$comment": "AUTHORED-BY Codex GPT-6.1-Sol",
   "name": "@jeswr/pkg-memory",
   "version": "0.1.0",
   "private": true,
-  "description": "PKG nanopublication memory and purpose filtering (MCP-03 to MCP-07).",
+  "description": "Personal knowledge nanopublications and typed fact templates. Experimental, AI-agent-generated.",
   "type": "module",
-  "license": "MIT",
   "sideEffects": false,
   "securityCritical": true,
-  "engines": {
-    "node": ">=24"
-  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -25,16 +22,29 @@
     "README.md",
     "SKILL.md"
   ],
+  "engines": {
+    "node": ">=24"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "tsc -p tsconfig.test.json --noEmit",
     "lint": "biome check .",
     "test": "vitest run"
   },
+  "license": "MIT",
+  "dependencies": {
+    "@jeswr/fetch-rdf": "workspace:*",
+    "@jeswr/rdf-serialize": "workspace:*",
+    "@rdfjs/types": "^2.0.1",
+    "@rdfjs/wrapper": "^0.34.0",
+    "n3": "^2.0.3"
+  },
   "devDependencies": {
+    "@types/n3": "^1.26.1",
+    "@vitest/coverage-v8": "^4.1.10",
+    "rdf-isomorphic": "^2.0.1",
     "@biomejs/biome": "^2.5.1",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.9",
-    "@vitest/coverage-v8": "^4.1.10"
+    "vitest": "^4.1.9"
   }
 }

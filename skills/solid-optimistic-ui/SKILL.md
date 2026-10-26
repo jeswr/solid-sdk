@@ -2,13 +2,16 @@
 name: solid-optimistic-ui
 description: Use when Solid app interactions block on pod writes, implementing optimistic non-blocking mutations, save indicators, rollback after failure, debounced teardown flushes, or guarding stale writes from clobbering newer edits.
 ---
+
+## Quick reference
+
 <!-- AUTHORED-BY Codex GPT-5 -->
 
-# Make pod mutations optimistic
+**Make pod mutations optimistic**
 
 Update local UI state first, persist asynchronously, reconcile in the background, and expose a small non-blocking saving state.
 
-## Correct rollback
+### Correct rollback
 
 Capture both the original fields and the optimistic result.
 
@@ -23,7 +26,7 @@ persist(write).catch(() => {
 });
 ```
 
-## Persistence lifecycle
+### Persistence lifecycle
 
 - Keep optimistic state in the durable, WebID-scoped cache so a reload during a write does not resurrect older state.
 - Reconcile after success because a server-side write may update coupled fields.
@@ -35,8 +38,17 @@ persist(write).catch(() => {
 
 Use `role="status"` and `aria-live="polite"` for Saving/Saved/Error feedback. Avoid modal progress and avoid blocking the user's next action.
 
-## Agent persona
+### Agent persona
 
 When this work is delegated to a sub-agent, spawn the `solid-frontend-dev` persona from
 [`.claude/agents/solid-frontend-dev.md`](../../.claude/agents/solid-frontend-dev.md) — it routes through this skill.
 Orchestration: `.claude/agents/solid-app-orchestration.md`.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+
+## Detailed patterns
+
+Read [solid-app-shell](../solid-app-shell/SKILL.md) for the detailed source behind this
+quick reference: field-scoped rollback, mutation ownership, teardown flushes,
+save indicators, and background reconciliation. The original detailed source is
+named `solid-app-shell`; both existing skill names remain discoverable.
