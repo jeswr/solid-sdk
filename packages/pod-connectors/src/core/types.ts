@@ -1,3 +1,5 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /**
  * The integration adapter contract (docs/integrations-catalog.md §"The common
  * adapter shape"). An adapter pulls a user's data from a platform API,
@@ -83,6 +85,13 @@ export interface NormalisedDoc {
   /** The document content, built via the typed vocab wrappers. */
   readonly dataset: DatasetCore;
   /**
+   * Replace the document by default (snapshot semantics). Use "merge" for incremental
+   * pages: incoming deterministic subjects replace their descriptions; absent subjects survive.
+   */
+  readonly writeMode?: "replace" | "merge";
+  /** Source document for items without their own schema:url (e.g. file exports). */
+  readonly sourceUrl?: string;
+  /**
    * Skip Type-Index registration for this doc's class (default false). Used
    * for companion documents that ride along in an already-registered
    * container (e.g. a profile doc beside the repositories collection).
@@ -144,11 +153,14 @@ export interface ImportOutcome {
   readonly skipped?: number;
 }
 
-/** One recorded fixture route for the typed fake fetch. */
+/** One recorded fixture route for the typed fake fetch.
+ * Entries sharing a method and URL replay in array order, then fail on exhaustion.
+ * A single entry for a method/URL remains reusable for static demos.
+ */
 export interface FixtureRoute {
   /** HTTP method (default GET). */
   readonly method?: string;
-  /** Exact URL or prefix the request URL must start with. */
+  /** URL prefix on the same origin and complete path segments; longest match wins. */
   readonly url: string;
   /** JSON body to answer with. */
   readonly json: unknown;
@@ -156,7 +168,26 @@ export interface FixtureRoute {
 }
 
 /** The adapter: metadata + auth config + the import implementation. */
+/** Per-adapter vocabulary seam; preserves legacy types for older readers. */
+export type VocabMap = (doc: NormalisedDoc) => NormalisedDoc;
+
+/** Host-persisted state. Dates are ISO strings; counts describe the latest successful run. */
+export interface ConnectorState {
+  readonly connectedAt: string;
+  readonly lastSync?: string;
+  readonly cursor?: string;
+  readonly lastOutcome: "success" | "error";
+  readonly counts: { readonly documents: number; readonly items: number; readonly skipped: number };
+}
+
+export interface ConnectorStateOptions {
+  readonly state?: ConnectorState;
+  /** Called after completion or failure; failures retain the previous checkpoint. */
+  readonly onState?: (state: ConnectorState) => void;
+}
+
 export interface IntegrationAdapter {
+  readonly vocabMap?: VocabMap;
   readonly metadata: IntegrationMetadata;
   /** Present iff `authKind === "oauth-pkce"`. */
   readonly oauth?: OAuthAppConfig;

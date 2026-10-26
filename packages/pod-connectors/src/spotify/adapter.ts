@@ -1,3 +1,5 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /**
  * Spotify → Media. Top tracks (`/me/top/tracks`) and playlists
  * (`/me/playlists`) as `schema:MusicRecording` / `schema:MusicPlaylist`.
@@ -10,12 +12,14 @@ import { arr, optionalNumber, optionalText, SkipCounter } from "../core/safe.js"
 import type { ImportContext, ImportOutcome, IntegrationAdapter } from "../core/types.js";
 import { CLASSES, MusicPlaylist, MusicRecording } from "../core/vocab.js";
 import { SPOTIFY_FIXTURES, type SpotifyPlaylists, type SpotifyTopTracks } from "./fixtures.js";
+import { vocabMap } from "./vocab-map.js";
 
 const ID = "spotify";
 const API = "https://api.spotify.com/v1";
 const SCOPES = ["user-top-read", "playlist-read-private"] as const;
 
 export const spotifyAdapter: IntegrationAdapter = {
+  vocabMap,
   metadata: {
     id: ID,
     name: "Spotify",

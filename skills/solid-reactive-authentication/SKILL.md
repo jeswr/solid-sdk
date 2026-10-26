@@ -84,7 +84,9 @@ manager.registerGlobally(); // 0.1.3: the constructor does NOT patch globalThis.
 ```
 
 `/callback.html` (in `public/` for Next.js) contains the line
-`<script>opener.postMessage(location.href)</script>`.
+`<script>opener?.postMessage(location.href, location.origin)</script>`.
+This assumes a same-origin opener; a missing opener requires a different callback transport,
+as described under Pitfalls below.
 
 **Do not write code against** `IdpPicker`, `issuerFrom`, `GetIssuerCallback`, a 3-argument
 `DPoPTokenProvider`, `registerElements`, or `AuthorizationCodeFlowUI` — these appear in the
@@ -184,7 +186,8 @@ should import a shared provider/component rather than copying these files:
    implementation `promptWebIdDialog` is included) → profile dereference → `solid:oidcIssuer`
    resolution → `chooseIssuer` when several (default **throws** `AmbiguousIssuerError`, never
    silently first). Its `allowInsecureLoopback` option also makes **interactive login against
-   local CSS work** — the one thing the published provider cannot do. **E2E-verified**: a
+   any loopback HTTP issuer work (CSS or a local broker/OP)** — the one thing the published
+   provider cannot do. **E2E-verified**: a
    headless Playwright run drives the full popup login (WebID dialog → CSS login → consent →
    authenticated read) against a live local CSS, 3/3 stable — see
    [`webid-token-provider.e2e.md`](references/webid-token-provider.e2e.md) for the verification record. Its
@@ -226,7 +229,7 @@ a permanent fork. The behaviour to implement:
 4. **Run the flow.** Trigger the authorization-code flow against the chosen issuer (the
    `<authorization-code-flow>` popup handles user interaction). Validate errors into clear UI
    states: malformed WebID, unreachable profile, cancelled popup (`CodeRequestCancelledError`).
-5. **After login.** Fetch the profile and render the account (name/avatar via the
+5. **After login.** Reuse the fetched candidate/profile dataset and render the account (name/avatar via the
    `ProfileAgent` reference class in the `solid-object` skill); append it to recent accounts.
 6. **Storage selection.** When the profile advertises more than one `pim:storage`, **ask the
    user which storage to use** — never pick one silently. Remember the choice per account.
@@ -278,6 +281,81 @@ Auth.js `OIDCConfig` with the DPoP-injecting `customFetch`; composes `@jeswr/sol
 RFC 9449 proofs; verified-WebID-only, fail-closed; ships a `solidDpopFetch` for authed pod requests
 from the persisted session.)
 
+## Pitfalls
+
+These lessons apply when maintaining legacy direct integrations. The bundled source examples
+are historical reading material: they still contain the cache, storage, and cancellation defects
+below. Use the shared auth packages for new code; do not copy those examples unchanged.
+
+### Broker issuers and loopback HTTP
+
+A resource server (RS) may trust a separate Solid-OIDC broker which federates to Keycloak.
+Resolve `solid:oidcIssuer` from the WebID through typed RDF accessors; the broker is the issuer,
+not necessarily the RS host. The published provider's fixed host map can report `Unknown issuer`
+for this topology; an existing WebID-resolving provider avoids that assumption.
+`allowInsecureLoopback` applies to any loopback HTTP issuer, including a local broker/OP on a
+different port, not just CSS. Keep the opt-in loopback-only; remote issuers remain HTTPS-strict.
+
+### Proving a session
+
+A public profile read or a HEAD returning 403/404 does not prove authentication.
+For a legacy manager with no session-query/token-attached API, use a canary PUT to a unique
+app-owned resource which rejects anonymous writes, and accept only a successful 201/204.
+Serialize RDF through the suite writers, clean up the canary, and verify token attachment for
+that login attempt where the provider exposes a seam. A public-writable canary proves nothing.
+A persistent 401 is a failed attempt to diagnose; it does not uniquely mean popup cancellation.
+Do not invent `lastTokenAttached` or `isAuthenticated()` manager APIs from the NOTES proposal.
+
+### Expired and rejected cached tokens
+
+An issuer-session cache needs expiry and eviction: derive `expiresAt` from `expires_in` when
+advertised, with a small skew (the source used 30 seconds). Keep replacement login single-flight:
+identity-check deletion, install the pending replacement synchronously without an intervening
+await, re-read the cache after awaiting an expired entry, and evict rejected login promises.
+For revocation before expiry, evict only when the rejected request carried that session's own
+`Authorization: DPoP <accessToken>` value; concurrent anonymous requests to the same method/URL
+are not evidence of a bad token. Identity-check eviction so an old failure cannot drop a newer
+session, generation-fence login completion, and bound the authenticated retry to one.
+Existing integrations importing `oauth4webapi` or `dpop` directly must declare those direct
+dependencies rather than rely on transitive hoisting (subject to the repo's dependency policy).
+
+### Callback origins and custom-element registration
+
+Send callback URLs containing authorization codes only to the intended app origin. For the
+same-origin callback/opener layout use `opener?.postMessage(location.href, location.origin)`;
+the receiver must also validate message origin and source. COOP can sever the opener; optional
+chaining prevents a throw but cannot deliver a code through a missing opener.
+Do not rely on bundler side-effect registration of `<authorization-code-flow>`. In the browser,
+after dynamically importing `AuthorizationCodeFlow`, guard registration with
+`if (!customElements.get("authorization-code-flow")) { customElements.define("authorization-code-flow", AuthorizationCodeFlow); }`.
+Wait for definition and read `getCode` lazily, as described above; keep browser-only imports out
+of SSR evaluation.
+
+### Recent accounts and profile reuse
+
+Treat parsed recent-account JSON as unknown. Require an array, discard non-object entries and
+entries without a string `webId`, default missing/non-string `displayName` to the WebID, and
+retain optional avatar/issuer/storage fields only when strings. Malformed storage must not block
+login. Resolve injected storage or browser `localStorage` per method call, not in a constructor
+default evaluated during SSR. Catch unavailable/throwing storage: `list()` returns `[]`, while
+`remember()` and `forget()` become no-ops.
+Avoid fetching the profile again after `fetchLoginCandidate`: when maintaining that helper,
+return its already-fetched `dataset` on `LoginCandidate`, then derive storage/name/avatar with
+`WebIdDataset` and typed profile accessors. The historical helper does not yet return this field.
+
+### Reachable cancellation and nonce retries
+
+Retain an `AbortController`, not just `new AbortController().signal`, so app teardown or closing
+login can abort shared issuer resolution and authorization. A provider cancel hook such as
+`abort(reason?)` must reach that controller. If reuse after cancellation is supported, replace
+the controller and fence/drop pending work so an aborted generation cannot repopulate sessions;
+one caller's cancellation must not accidentally cancel another caller's shared login.
+For oauth4webapi nonce challenges, process the token response and apply `isDPoPNonceError` to
+the caught error, then retry at most once with the same DPoP handle, which tracks server nonces.
+In the workspace's 3.8.6 API the helper does not recognize a raw `Response`; the NOTES response
+snippet would skip the retry. Keep the pinned API's processing/validation, including PKCE,
+state and nonce checks, rather than copying that snippet.
+
 ## Gotchas
 
 | Gotcha | Detail |
@@ -285,7 +363,7 @@ from the persisted session.)
 | Construct + `registerGlobally()` **once, early** | The constructor does NOT patch `globalThis.fetch` in 0.1.3 — `registerGlobally()` does; do it before any library captures a `fetch` reference, or those calls bypass auth |
 | Untyped `querySelector` fails to compile | The library doesn't augment `HTMLElementTagNameMap` — use `querySelector<AuthorizationCodeFlow>(…)` |
 | `Unknown issuer` | Host outside the 0.1.2 built-in map — see above |
-| `only requests to HTTPS are allowed` on local login | The 0.1.2 HTTP-issuer wall — use the bundled `WebIdDPoPTokenProvider` with `allowInsecureLoopback: true` for local CSS |
+| `only requests to HTTPS are allowed` on local login | The 0.1.2 HTTP-issuer wall — an existing WebID-resolving provider can opt into `allowInsecureLoopback: true` for CSS or a local loopback broker/OP |
 | CSS-only auth failure `iat is not recent enough` | A *second* auth layer sending ms-unit DPoP `iat`; this library is correct — remove the other layer |
 | Worker mode | `ReactiveFetchWorkerManager` registers a repo-relative worker path; treat as not production-ready in 0.1.x |
 | Probe correlation lost in the provider | The manager does `new Request(input, init)` before `upgrade()` — a `WeakMap<Request>`/expando/symbol is dropped; only `url`/`method`/`headers` survive |

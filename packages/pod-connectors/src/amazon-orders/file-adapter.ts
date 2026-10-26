@@ -1,3 +1,5 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /**
  * Amazon orders → Finance (Tier-C file import).
  *
@@ -18,6 +20,7 @@ import type { FileImportAdapter, FileImportContext, ImportFile } from "../core/f
 import { recordFragment } from "../core/slug.js";
 import type { IntegrationMetadata } from "../core/types.js";
 import { CLASSES, Invoice } from "../core/vocab.js";
+import { vocabMap } from "./vocab-map.js";
 
 const ID = "amazon-orders";
 
@@ -51,6 +54,7 @@ function pick(row: Record<string, string>, names: readonly string[]): string | u
 }
 
 export const amazonOrdersFileAdapter: FileImportAdapter = {
+  vocabMap,
   metadata,
   accept: ".csv,text/csv",
   fileHint:
