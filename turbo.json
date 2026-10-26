@@ -4,8 +4,7 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
-      "outputs": ["dist/**", ".next/**", "!.next/cache/**", "out/**"],
-      "env": ["APP_ORIGIN", "APP_STATIC_EXPORT"]
+      "outputs": ["dist/**", ".next/**", "!.next/cache/**", "out/**"]
     },
     "lint": {
       "dependsOn": ["//#lint:root"]
