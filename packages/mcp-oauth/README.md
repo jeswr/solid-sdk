@@ -69,7 +69,10 @@ revocation before access-token expiry. MCP revocation and code/refresh reuse ret
 pod session as well. The built-in broker's durable `isActive` check rejects every grant bound
 to a retired or expired session during access verification and token issuance. Direct broker
 revocation has the same effect; affected grant records are marked revoked when next checked.
-Legacy injected providers may omit `isActive`, retaining grant-local verification behavior.
+The grant store persists session-wide revocation intent before broker credential cleanup. All
+bound grants remain denied if cleanup fails, across workers and restarts sharing the stores.
+Subsequent checks retry cleanup even for an already-revoked grant. Legacy injected providers may
+omit `isActive`; session-wide MCP revocation still applies through the grant store.
 
 ```ts
 import { createPodSessionProvider, createSessionVault } from "@jeswr/mcp-oauth";
@@ -137,7 +140,10 @@ grant revocation must be irreversible. Reject overwrites/collisions. Keep replay
 through family expiry and never reuse IDs. Memory stores have no cleanup and are intended
 for tests/single-process bounded deployments; production composition supplies durable stores,
 expiry cleanup and request rate limits. Multiple workers must share stores and the signing key.
-The `./testing` export supplies isolated `createMemoryStores`, `MemoryStore` and `MemoryGrantStore`.
+`GrantStore.revokeSession` must durably and idempotently retain irreversible session tombstones;
+`isSessionRevoked` must observe them across workers. Keep these tombstones while any bound grant
+can be used, and never reuse retired session IDs. The `./testing` export supplies isolated
+`createMemoryStores`, `MemoryStore` and `MemoryGrantStore`.
 
 Run `pnpm --filter @jeswr/mcp-oauth run lint`, `build`, `typecheck`, and `test`.
 Tests use only injected broker/fetch fixtures and enforce 100% branch coverage.

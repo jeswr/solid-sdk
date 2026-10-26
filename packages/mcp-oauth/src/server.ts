@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { timingSafeEqual } from "node:crypto";
 import { Clients, clientMetadata } from "./clients.js";
 import { generateSigningKey, JwtService } from "./jwt.js";
@@ -159,7 +160,6 @@ export class AuthorizationServer {
     const grant = await this.stores.grants.get(claims.sid as string);
     if (
       !grant ||
-      grant.revoked ||
       grant.expiresAt <= this.now() ||
       grant.resource !== resource ||
       grant.clientId !== claims.client_id ||
@@ -168,7 +168,7 @@ export class AuthorizationServer {
     ) {
       throw new OAuthError("invalid_token", 401);
     }
-    if (!(await this.sessionActive(grant))) throw new OAuthError("invalid_token", 401);
+    if (!(await this.grantActive(grant))) throw new OAuthError("invalid_token", 401);
     return {
       clientId: grant.clientId,
       webId: grant.session.webId,
@@ -262,11 +262,7 @@ export class AuthorizationServer {
   ): Promise<Response> {
     const identity = { id: session.id, webId: session.webId };
     if (!identity.id || !identity.webId) throw new Error("Pod identity is required");
-    if (
-      this.options.podSessions.isActive &&
-      !(await this.options.podSessions.isActive(identity.id))
-    )
-      throw new OAuthError("access_denied");
+    if (!(await this.sessionActive(identity.id))) throw new OAuthError("access_denied");
     const permitted = await this.options.consent(
       structuredCloneContext(request, client, authorization, identity),
     );
@@ -335,9 +331,9 @@ export class AuthorizationServer {
       expiresAt = record.expiresAt;
     }
     const grant = await this.stores.grants.get(grantId);
-    if (!grant || grant.revoked || grant.expiresAt <= this.now() || grant.resource !== resource)
+    if (!grant || grant.expiresAt <= this.now() || grant.resource !== resource)
       throw new OAuthError("invalid_grant");
-    if (!(await this.sessionActive(grant))) throw new OAuthError("invalid_grant");
+    if (!(await this.grantActive(grant))) throw new OAuthError("invalid_grant");
     const requestedScopes = new Set((params.get("scope") ?? grant.scope).split(" "));
     const grantedScopes = new Set(grant.scope.split(" "));
     if (
@@ -367,8 +363,7 @@ export class AuthorizationServer {
     }
     // Re-read after asynchronous writes so concurrent replay/revocation cannot resurrect a grant.
     const current = await this.stores.grants.get(grantId);
-    if (!current || current.revoked) throw new OAuthError("invalid_grant");
-    if (!(await this.sessionActive(current))) throw new OAuthError("invalid_grant");
+    if (!current || !(await this.grantActive(current))) throw new OAuthError("invalid_grant");
     return json({
       access_token: accessToken,
       token_type: "Bearer",
@@ -398,19 +393,29 @@ export class AuthorizationServer {
   }
 
   private async revokeGrant(grant: Grant): Promise<void> {
-    // MCP revocation is durable first, even if upstream credential retirement fails.
+    // Deny every bound grant durably before either grant-local or broker cleanup can fail.
+    await this.stores.grants.revokeSession(grant.session.id);
     await this.stores.grants.revoke(grant.id);
     await this.options.podSessions.revoke(grant.session.id);
   }
 
-  private async sessionActive(grant: Grant): Promise<boolean> {
-    if (
-      !this.options.podSessions.isActive ||
-      (await this.options.podSessions.isActive(grant.session.id))
-    )
-      return true;
-    await this.stores.grants.revoke(grant.id);
-    return false;
+  private async sessionActive(sessionId: string): Promise<boolean> {
+    if (await this.stores.grants.isSessionRevoked(sessionId)) {
+      try {
+        // Retry independently of grant.revoked; the durable intent survives cleanup failures.
+        await this.options.podSessions.revoke(sessionId);
+      } catch {
+        // Keep denying the session and retain the tombstone for the next cleanup attempt.
+      }
+      return false;
+    }
+    return !this.options.podSessions.isActive || this.options.podSessions.isActive(sessionId);
+  }
+
+  private async grantActive(grant: Grant): Promise<boolean> {
+    const active = await this.sessionActive(grant.session.id);
+    if (!active) await this.stores.grants.revoke(grant.id);
+    return active && !grant.revoked;
   }
 }
 

@@ -593,4 +593,72 @@ describe("MCP grant to pod session boundary", () => {
       expect((await oauth.refresh(id, sibling.refresh_token)).status).toBe(400);
     }
   });
+
+  it.each([
+    "revoke",
+    "code",
+    "refresh",
+  ])("persists session revocation through cleanup failures on %s and retries after restart", async (trigger) => {
+    const f = brokerFixture();
+    const { session } = await f.login();
+    const oauth = fixture({ podSessions: f.provider });
+    const id = await oauth.register();
+    const authorize = async (clientId: string) => {
+      const response = await oauth.server.authorize(oauth.authRequest(clientId), session);
+      return new URL(response.headers.get("location") as string).searchParams.get("code") as string;
+    };
+    const code = await authorize(id);
+    const tokens = await (await oauth.exchange(id, code)).json();
+    const siblingId = await oauth.register();
+    const sibling = await (await oauth.exchange(siblingId, await authorize(siblingId))).json();
+    const pendingCode = await authorize(siblingId);
+    const other = await f.login();
+    const otherResponse = await oauth.server.authorize(oauth.authRequest(id), other.session);
+    const otherCode = new URL(otherResponse.headers.get("location") as string).searchParams.get(
+      "code",
+    ) as string;
+    const unrelated = await (await oauth.exchange(id, otherCode)).json();
+    if (trigger === "refresh")
+      expect((await oauth.refresh(id, tokens.refresh_token)).status).toBe(200);
+
+    const cleanup = vi.spyOn(f.vault, "delete").mockRejectedValue(new Error("vault unavailable"));
+    const rejected =
+      trigger === "revoke"
+        ? await oauth.form("revoke", { client_id: id, token: tokens.refresh_token })
+        : trigger === "code"
+          ? await oauth.exchange(id, code)
+          : await oauth.refresh(id, tokens.refresh_token);
+    expect(rejected.status).toBe(500);
+    expect(await rejected.json()).toEqual({ error: "server_error" });
+    expect(await f.provider.isActive(session.id)).toBe(true);
+
+    const restarted = fixture({
+      stores: oauth.stores,
+      signingKey: oauth.key,
+      podSessions: createPodSessionProvider(f.options),
+    });
+    for (const token of [tokens.access_token, sibling.access_token]) {
+      await expect(restarted.server.verifyAccessToken(token, RESOURCE)).rejects.toMatchObject({
+        error: "invalid_token",
+      });
+    }
+    expect((await restarted.refresh(siblingId, sibling.refresh_token)).status).toBe(400);
+    expect((await restarted.exchange(siblingId, pendingCode)).status).toBe(400);
+    const denied = await restarted.server.authorize(restarted.authRequest(id), session);
+    expect(new URL(denied.headers.get("location") as string).searchParams.get("error")).toBe(
+      "access_denied",
+    );
+    await expect(
+      restarted.server.verifyAccessToken(unrelated.access_token, RESOURCE),
+    ).resolves.toMatchObject({ sessionId: other.session.id });
+    expect(cleanup.mock.calls.length).toBeGreaterThan(1);
+
+    // Already-revoked grants still drive credential cleanup after the vault recovers.
+    cleanup.mockRestore();
+    const retry = vi.spyOn(f.vault, "delete");
+    expect((await restarted.exchange(id, code)).status).toBe(400);
+    expect(retry).toHaveBeenCalledWith(`session:${session.id}`);
+    expect(await f.provider.isActive(session.id)).toBe(false);
+  });
+
 });
