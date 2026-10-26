@@ -28,6 +28,7 @@ export interface PreviewCard extends PreviewFields {
 function resolveUrl(value: string, base?: string): string {
   // URL() repairs backslashes, controls and incomplete absolute URLs; reject them explicitly.
   if (
+    !value.isWellFormed() ||
     // biome-ignore lint/suspicious/noControlCharactersInRegex: URL parsing otherwise silently strips controls.
     /[\u0000-\u0020\u007f\\]/.test(value) ||
     (/^[a-z][a-z0-9+.-]*:/i.test(value) && !/^https?:\/\/[^/]/i.test(value))

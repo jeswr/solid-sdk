@@ -196,6 +196,7 @@ describe("chat link preview metadata", () => {
     "https://example.org\n",
     "https://user@example.org",
     "https://[bad",
+    "https://example.org/\ud800",
   ])("rejects invalid page URL %s", (page) => rejects("", "invalid-url", page));
 
   it("returns typed errors for runtime non-string inputs without exposing input", () => {
