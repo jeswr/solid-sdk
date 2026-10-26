@@ -176,6 +176,56 @@ it("keeps writes private on ACL failure and retries initialization on a later ca
   await expect(store.put(value)).resolves.toHaveLength(1);
 });
 
+it.each([
+  "nanopub",
+  "policy",
+])("initializes a fresh %s store when ACL writes implicitly create CSS containers", async (operation) => {
+  const { store, pod, memory, write } = setup();
+  const implicitlyCreated: string[] = [];
+  write.mockImplementation(async (url, body, type, cond) => {
+    // CSS has already created these containers while processing their ACL PUTs.
+    if (url.endsWith("/")) throw statusError(409);
+    const result = await memory.write(url, body, type, cond);
+    if (url.endsWith("/.acl")) {
+      const container = url.slice(0, -4);
+      await memory.write(container, encode(""), "text/turtle", { ifNoneMatch: "*" });
+      implicitlyCreated.push(container);
+    }
+    return result;
+  });
+  if (operation === "nanopub") await expect(store.put(await build())).resolves.toHaveLength(1);
+  else await expect(store.writeDefaultPolicy()).resolves.toHaveProperty("id", store.policyUrl);
+  expect(implicitlyCreated).toEqual(
+    ["private/", "private/pkg/", "private/pkg/mcp/"].map((path) => identity.root + path),
+  );
+  expect(write.mock.calls.some((call) => call[0].endsWith("/"))).toBe(false);
+  for (const url of implicitlyCreated) {
+    const dataset = await parseRdf(decode((await pod.read(`${url}.acl`)).body), "text/turtle");
+    expect(
+      new RdfNode(`${url}.acl#owner`, dataset).oneIri("http://www.w3.org/ns/auth/acl#agent"),
+    ).toBe(identity.webId);
+  }
+  const firstPrivateWrite = write.mock.calls.findIndex((call) => !call[0].endsWith(".acl"));
+  expect(firstPrivateWrite).toBeGreaterThan(2);
+});
+
+it("fails closed if container state cannot be rechecked after its ACL write", async () => {
+  const { store, pod, memory, write } = setup();
+  let aclWritten = false;
+  write.mockImplementation(async (url, body, type, cond) => {
+    const result = await memory.write(url, body, type, cond);
+    aclWritten = true;
+    return result;
+  });
+  pod.read = async (url) => {
+    if (url === `${identity.root}private/` && aclWritten) throw statusError(403);
+    return memory.read(url);
+  };
+  await expect(store.put(await build())).rejects.toMatchObject({ status: 403 });
+  expect(write.mock.calls).toHaveLength(1);
+  expect(write.mock.calls[0]![0]).toBe(`${identity.root}private/.acl`);
+});
+
 it("conditionally replaces only the store's ACL and retains existing containers", async () => {
   const { store, pod, write } = setup();
   await store.put(await build());

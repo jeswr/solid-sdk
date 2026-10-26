@@ -234,7 +234,8 @@ export class NanopubStore {
       const existingAcl = await this.readOptional(`${container}.acl`);
       if (container === this.container || !existingAcl)
         await this.protectResource(container, true, existingAcl);
-      if (!existing) {
+      // CSS can create the container implicitly when its ACL is written.
+      if (!existing && !(await this.readOptional(container))) {
         const description = new Store();
         new RdfNode(container, description).link(
           `${NS.rdf}type`,
