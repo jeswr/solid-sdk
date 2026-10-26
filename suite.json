@@ -73,7 +73,16 @@
     "@jeswr/mcp-oauth",
     "@jeswr/agent-session-capture",
     "@jeswr/suite-vocab",
-    "@jeswr/pod-connectors"
+    "@jeswr/pod-connectors",
+    "@jeswr/agent-model",
+    "@jeswr/agent-channels",
+    "@jeswr/agent-mandate",
+    "@jeswr/agent-executor",
+    "@jeswr/agent-audit",
+    "@jeswr/agent-model-gateway",
+    "@jeswr/agent-credentials",
+    "@jeswr/agent-memory",
+    "@jeswr/agent-registry"
   ],
   "applications": [
     {
@@ -144,6 +153,11 @@
     {
       "slug": "mcp-server",
       "name": "@jeswr/app-mcp-server",
+      "kind": "application"
+    },
+    {
+      "slug": "agent-daemon",
+      "name": "@jeswr/app-agent-daemon",
       "kind": "application"
     }
   ],
