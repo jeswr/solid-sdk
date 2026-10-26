@@ -164,6 +164,8 @@ describe("contact normalisation", () => {
     "ftp://example.org/mira",
     "https://",
     "https:///",
+    "https:///example.org/mira",
+    "https://@example.org/mira",
     "https://[invalid]/",
     "https://mira:secret@example.org/",
     "https://mira@example.org/",

@@ -62,16 +62,14 @@ export function normaliseName(value: string): string {
 /** Validate without WHATWG URL canonicalisation: RDF identifier spelling stays exact. */
 export function validateWebId(value: string): string {
   text(value, "invalid-webid");
-  if (!/^https?:\/\//i.test(value) || /[\s\\<>"{}|^`\p{Cc}]/u.test(value)) {
+  if (!/^https?:\/\/[^/?#@]+(?:[/?#]|$)/i.test(value) || /[\s\\<>"{}|^`\p{Cc}]/u.test(value)) {
     throw new DedupeError("invalid-webid");
   }
   if (/%(?![0-9a-f]{2})/i.test(value)) throw new DedupeError("invalid-webid");
-  let url: URL;
   try {
-    url = new URL(value);
+    new URL(value);
   } catch {
     throw new DedupeError("invalid-webid");
   }
-  if (!url.hostname || url.username || url.password) throw new DedupeError("invalid-webid");
   return value;
 }
