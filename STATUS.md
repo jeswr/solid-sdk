@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # sst-6sex — MCP-10 lane report
 
@@ -97,3 +98,61 @@ local credential destruction without requiring an issuer revocation endpoint, an
 refresh/crash handling. A claimed refresh interrupted by process failure requires new login;
 stale file lock cleanup requires the store to be offline. MCP-11 owns HTTP/browser composition
 and serving the Client ID Document; MCP-15 owns the later pod-auth migration.
+
+## Fix round 2 — review of `2a97ab38bde4`
+
+Both requested findings are fixed on `lane/sst-6sex`; this round starts at
+`2a97ab38bde485b8c5afe4779c56ae1e967d33c2`.
+
+- `d42ac762` — `fix(mcp-oauth): persist session revocation intent`: persist irreversible
+  session tombstones before grant-local revocation and broker cleanup. All bound grants check
+  the intent; already-revoked grants retry cleanup. Tests cover vault outages on explicit revoke,
+  code replay and refresh reuse, server reconstruction with shared stores, sibling access/refresh
+  tokens and pending codes, denied new authorization, unrelated sessions, and cleanup recovery.
+  Custom `GrantStore` implementations must implement durable, idempotent `revokeSession` and
+  shared `isSessionRevoked` reads, as documented in the package README.
+- `a344516e` — `fix(mcp-oauth): send validated request snapshots`: construct the effective
+  Request before asynchronous operations, validate its URL and headers, and send that same
+  snapshot. Tests mutate URLs, headers, Request inputs and options during liveness checks and
+  refresh, including DPoP nonce retries.
+- The final `docs: record second review fix results` commit records this validation.
+
+All commands below use Node `v24.22.1` with `/opt/node24/bin` prepended to PATH and pnpm `10.4.1`.
+
+```sh
+pnpm exec turbo run build --filter=@jeswr/mcp-oauth
+pnpm --filter @jeswr/mcp-oauth run lint && pnpm --filter @jeswr/mcp-oauth run build && pnpm --filter @jeswr/mcp-oauth run typecheck && pnpm --filter @jeswr/mcp-oauth run test
+pnpm run lint:root
+TURBO_SCM_BASE=2a97ab38bde485b8c5afe4779c56ae1e967d33c2 pnpm run gate
+git diff --check
+```
+
+PASS: dependency-first build, package gate (238 tests; 100% statements, branches, functions and
+lines), root lint, affected gate and whitespace checks. Regression tests first reproduced both
+findings against the previous implementation. All new tests use offline issuer fixtures.
+The final affected gate after artifact cleanup passed all ten tasks (seven cached), including
+all 745 root tests, before the report commit.
+
+```sh
+pnpm run gate:full
+pnpm exec turbo run test:root
+pnpm run gate:full
+pnpm --filter @jeswr/federation-trust run test
+git diff 2a97ab38bde485b8c5afe4779c56ae1e967d33c2 -- packages/federation-trust scripts test package.json vitest.config.ts
+```
+
+The first full gate stopped on the unchanged root timing assertion at
+`test/check-sdk-layers.test.mjs:328` (95.48 ms against a 50 ms limit). The isolated root run
+passed all 745 tests; the full retry restored that passing result from cache. The full retry
+then failed at the previously recorded federation-trust snapshot mismatch:
+`test/characterization.test.ts:196` expects serialized JWK keys in `crv,x,kty` order and receives
+`kty,crv,x`. The isolated package command reproduced it (53 pass, one fail). The comparison
+against this round's base is empty for both failing test surfaces. The full retry completed
+296 of 350 tasks, including 67 restored from cache. No unrelated source or snapshot was changed.
+
+Generated callback/Client ID files from the eight pod app builds were removed. No dependency
+was added, so no package-policy check or lockfile change was needed. No push, PR, branch switch,
+merge, publication, tracker mutation, or other-checkout write occurred. `roborev` remains
+unavailable; automated per-commit review could not be run. The requested implementation is
+complete, the full gate remains blocked by the unrelated snapshot failure, and this round
+introduces no open questions.
