@@ -2,7 +2,16 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import { execFileSync, spawnSync } from "child_process";
-import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { fileURLToPath } from "url";
@@ -16,7 +25,7 @@ import {
   StoreTokenProvider,
   tokenFileProviders,
 } from "../src/index.js";
-import { accessToken, grantBindingProblem, helperExchange } from "../src/operations.js";
+import { accessToken, grantBindingProblem, helperExchange, logout } from "../src/operations.js";
 import { noTransport } from "../src/providers.js";
 import { provisionValue } from "../src/provision.js";
 import type { Grant, Profile } from "../src/store.js";
@@ -69,6 +78,91 @@ function grant(p: Profile, over: Partial<Grant> = {}): Grant {
     ...over,
   };
 }
+it.each([
+  "google",
+  "microsoft",
+] as const)("removes corrupt and legacy %s grants locally under the profile lock without deserializing", async (provider) => {
+  const p = profile({ provider });
+  store.putProfile(p);
+  const path = join(store.dir, "grants", `${p.name}.json`);
+  const lock = join(store.dir, "locks", `${p.name}.lock`);
+  const transport = vi.fn(noTransport);
+  const read = vi.spyOn(store, "grant");
+  const remove = store.removeGrant.bind(store);
+  vi.spyOn(store, "removeGrant").mockImplementation((name) => {
+    expect(existsSync(lock)).toBe(true);
+    return remove(name);
+  });
+  for (const content of [
+    "{corrupt",
+    JSON.stringify({ ...grant(p), purpose: undefined, resource: undefined }),
+  ]) {
+    writeFileSync(path, content, { mode: 0o600 });
+    await expect(
+      logout({ store, transport, now: () => now }, p.name, false),
+    ).resolves.toMatchObject({ removed: true, revoked: false });
+    expect(existsSync(path)).toBe(false);
+    expect(existsSync(lock)).toBe(false);
+  }
+  expect(read).not.toHaveBeenCalled();
+  expect(transport).not.toHaveBeenCalled();
+});
+it("preserves unreadable Google grants on remote revoke and skips remote calls without a refresh token", async () => {
+  const p = profile();
+  store.putProfile(p);
+  const path = join(store.dir, "grants", `${p.name}.json`);
+  const transport = vi.fn(noTransport);
+  const deps = { store, transport, now: () => now };
+  for (const content of [
+    "{corrupt",
+    JSON.stringify({ ...grant(p), purpose: undefined, resource: undefined }),
+  ]) {
+    writeFileSync(path, content, { mode: 0o600 });
+    await expect(logout(deps, p.name, true)).rejects.toThrow(/corrupt/);
+    expect(readFileSync(path, "utf8")).toBe(content);
+    expect(existsSync(join(store.dir, "locks", `${p.name}.lock`))).toBe(false);
+  }
+  store.putGrant(grant(p));
+  expect(await logout(deps, p.name, true)).toMatchObject({ removed: true, revoked: false });
+  expect(await logout(deps, p.name, true)).toMatchObject({ removed: false, revoked: false });
+  expect(transport).not.toHaveBeenCalled();
+});
+it("removes unreadable Microsoft grants with --revoke without reading or contacting a provider", async () => {
+  const p = profile({ provider: "microsoft" });
+  store.putProfile(p);
+  writeFileSync(join(store.dir, "grants", `${p.name}.json`), "{corrupt", { mode: 0o600 });
+  const read = vi.spyOn(store, "grant");
+  const transport = vi.fn(noTransport);
+  expect(await logout({ store, transport, now: () => now }, p.name, true)).toMatchObject({
+    removed: true,
+    revoked: false,
+    remains: expect.stringContaining("Microsoft"),
+  });
+  expect(read).not.toHaveBeenCalled();
+  expect(transport).not.toHaveBeenCalled();
+});
+it("retains filesystem protections when locally removing unreadable grants", async () => {
+  const p = profile();
+  store.putProfile(p);
+  const path = join(store.dir, "grants", `${p.name}.json`);
+  const transport = vi.fn(noTransport);
+  const deps = { store, transport, now: () => now };
+  writeFileSync(path, "{corrupt", { mode: 0o644 });
+  await expect(logout(deps, p.name, false)).rejects.toThrow(/chmod 600/);
+  expect(readFileSync(path, "utf8")).toBe("{corrupt");
+  rmSync(path);
+  const target = join(base, "target.json");
+  writeFileSync(target, "{corrupt", { mode: 0o600 });
+  symlinkSync(target, path);
+  await expect(logout(deps, p.name, false)).rejects.toThrow(/symbolic link/);
+  expect(readFileSync(target, "utf8")).toBe("{corrupt");
+  rmSync(path);
+  mkdirSync(path, { mode: 0o700 });
+  await expect(logout(deps, p.name, false)).rejects.toThrow(/not a file/);
+  expect(existsSync(path)).toBe(true);
+  expect(existsSync(join(store.dir, "locks", `${p.name}.lock`))).toBe(false);
+  expect(transport).not.toHaveBeenCalled();
+});
 it("constructs platform paths without creating or reading the real store", () => {
   const home = join(base, "absent-home");
   expect(defaultStoreDir({ platform: "darwin", home })).toBe(

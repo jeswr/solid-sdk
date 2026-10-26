@@ -530,15 +530,17 @@ export async function logout(
 ): Promise<{ removed: boolean; revoked: boolean; remains: string }> {
   const p = loadProfile(deps.store, name);
   return deps.store.withLock(name, async () => {
-    const g = deps.store.grant(name);
     let revoked = false;
-    if (revoke && g?.refreshToken && p.provider === "google") {
-      // Only a grant that really belongs to this profile is revoked at the provider.
-      const problem = grantBindingProblem(g, p, undefined);
-      if (problem)
-        throw new HelperError("invalid", `${problem}; not revoked (use logout without --revoke)`);
-      await revokeGoogle(deps.transport, g.refreshToken);
-      revoked = true;
+    if (revoke && p.provider === "google") {
+      const g = deps.store.grant(name);
+      if (g?.refreshToken) {
+        // Only a grant that really belongs to this profile is revoked at the provider.
+        const problem = grantBindingProblem(g, p, undefined);
+        if (problem)
+          throw new HelperError("invalid", `${problem}; not revoked (use logout without --revoke)`);
+        await revokeGoogle(deps.transport, g.refreshToken);
+        revoked = true;
+      }
     }
     const removed = deps.store.removeGrant(name);
     const remains = revoked
