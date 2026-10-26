@@ -1,0 +1,11 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Authorization callback</title>
+<p>Returning to the application…</p>
+<script>
+// Reports this URL (with the authorization response) to the opener on this origin; <authorization-code-flow> checks
+// the message source and origin.
+opener?.postMessage(location.href, location.origin)
+</script>
+</html>

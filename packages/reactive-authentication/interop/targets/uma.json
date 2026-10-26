@@ -1,0 +1,206 @@
+{
+  "schemaVersion": 1,
+  "description": "External Solid-OIDC + UMA 2.0 deployments (Solid-OIDC §9, SolidUmaTokenProvider). Live, configured wholly by environment; missing configuration is UNTESTED. No mock UMA server is listed here: the repository's test/helpers/uma.js is a unit-test fixture, not interoperability evidence.",
+  "targets": [
+    {
+      "id": "inrupt-podspaces-uma",
+      "name": "Inrupt PodSpaces storage via its UMA authorization server (Solid-OIDC §9 ID token claim push)",
+      "category": "live",
+      "adapter": "solid-uma",
+      "software": {
+        "name": "Inrupt Enterprise Solid Server (PodSpaces), UMA service",
+        "source": "closed",
+        "url": "https://www.inrupt.com/products/enterprise-solid-server"
+      },
+      "links": {
+        "registration": "https://start.inrupt.com/profile",
+        "umaMetadata": "https://uma.inrupt.com/.well-known/uma2-configuration",
+        "solidOidc": "https://solidproject.org/TR/solid-oidc#uma"
+      },
+      "notes": [
+        "public discovery 2026-09-27 (unauthenticated GETs only): https://storage.inrupt.com/<path> answered 401 with WWW-Authenticate: UMA as_uri=\"https://uma.inrupt.com\", ticket=\"…\", then Bearer and DPoP challenges; https://uma.inrupt.com/.well-known/uma2-configuration has issuer https://uma.inrupt.com, token_endpoint https://uma.inrupt.com/token, grant_types_supported [uma-ticket] and uma_profiles_supported including http://openid.net/specs/openid-connect-core-1_0.html#IDToken (and a VC profile)",
+        "the UMA server is on another origin than the storage, so it is trusted explicitly (umaServers); the Solid-OIDC issuer is https://login.inrupt.com",
+        "whether PodSpaces issues an RPT for a pushed login.inrupt.com ID token (and whether that ID token carries cnf) has not been observed: no test account was used",
+        "unattended (session mode): unverified — login.inrupt.com may show a consent page for a newly registered client; the non-interactive login fails closed if it does",
+        "Solid UMA evidence requires the whole Solid-OIDC §9 flow on the wire (UMA challenge with as_uri and ticket, uma2-configuration advertising the ID token profile, uma-ticket grant pushing the DPoP-bound ID token, RPT use); an ordinary OAuth Bearer or DPoP access token — e.g. from Keycloak — never counts",
+        "claims gathering (need_info with redirect_user) is not automated by the library: a deployment that asks for more claims FAILs uma.login-read with that reason"
+      ],
+      "env": [
+        {
+          "name": "RA_INTEROP_INRUPT_PODSPACES_UMA_WEBID",
+          "description": "WebID of a dedicated test account on Inrupt PodSpaces; its profile names the Solid-OIDC issuer",
+          "pii": true
+        },
+        {
+          "name": "RA_INTEROP_INRUPT_PODSPACES_UMA_STORAGE",
+          "description": "storage of the test account (ends with /); the credential boundary",
+          "pii": true
+        },
+        {
+          "name": "RA_INTEROP_INRUPT_PODSPACES_UMA_SCRATCH",
+          "description": "container dedicated to test writes inside the storage (ends with /); omit for read-only runs",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_INRUPT_PODSPACES_UMA_PRIVATE_RESOURCE",
+          "description": "an existing private resource of the test account whose unauthenticated GET answers 401 with an UMA challenge (read-only runs)",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_INRUPT_PODSPACES_UMA_OTHER_PROTECTED",
+          "description": "a protected resource outside the test storage (read-only boundary probe)",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_INRUPT_PODSPACES_UMA_ISSUER",
+          "description": "the Solid-OIDC issuer expected in the ID token (override; defaults to the observed one)",
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_INRUPT_PODSPACES_UMA_UMA_SERVER",
+          "description": "the UMA authorization server (as_uri) to trust (override; defaults to the observed one)",
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_INRUPT_PODSPACES_UMA_CLIENT_ID",
+          "description": "optional Solid-OIDC Client Identifier Document URL (its redirect_uris must include the redirect URI); omit to use dynamic registration",
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_INRUPT_PODSPACES_UMA_STORAGE_STATE",
+          "description": "Playwright storageState file of a dedicated test account's signed-in identity-provider session (contains cookies; never commit). With --headed it seeds the browser; without --headed it enables the fail-closed non-interactive session mode (a configured file that does not exist is a configuration error)",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_SOLID_REDIRECT_URI",
+          "description": "loopback redirect URI (default http://127.0.0.1:39398/callback); with a Client Identifier Document it must be one of the document's redirect_uris",
+          "optional": true
+        }
+      ],
+      "config": {
+        "label": "Inrupt PodSpaces (UMA)",
+        "webId": "${RA_INTEROP_INRUPT_PODSPACES_UMA_WEBID}",
+        "storage": "${RA_INTEROP_INRUPT_PODSPACES_UMA_STORAGE}",
+        "issuer": "${RA_INTEROP_INRUPT_PODSPACES_UMA_ISSUER:-https://login.inrupt.com}",
+        "umaServers": ["${RA_INTEROP_INRUPT_PODSPACES_UMA_UMA_SERVER:-https://uma.inrupt.com}"],
+        "scratchContainer": "${RA_INTEROP_INRUPT_PODSPACES_UMA_SCRATCH}",
+        "privateResource": "${RA_INTEROP_INRUPT_PODSPACES_UMA_PRIVATE_RESOURCE}",
+        "otherProtected": "${RA_INTEROP_INRUPT_PODSPACES_UMA_OTHER_PROTECTED}",
+        "clientId": "${RA_INTEROP_INRUPT_PODSPACES_UMA_CLIENT_ID}",
+        "storageState": "${RA_INTEROP_INRUPT_PODSPACES_UMA_STORAGE_STATE}",
+        "redirectUri": "${RA_INTEROP_SOLID_REDIRECT_URI:-http://127.0.0.1:39398/callback}",
+        "login": {
+          "recipe": "manual"
+        }
+      },
+      "capabilities": {
+        "writes": "unverified"
+      },
+      "capabilityNotes": {
+        "writes": "whether an RPT obtained with the ID token claim authorizes a create-only PUT (201) and conditional updates in the scratch container has not been observed (no test account yet)"
+      }
+    },
+    {
+      "id": "solid-uma",
+      "name": "Configured Solid-OIDC + UMA deployment (any resource server answering UMA challenges with a Solid-OIDC-profile UMA server)",
+      "category": "live",
+      "adapter": "solid-uma",
+      "software": {
+        "name": "unspecified Solid-OIDC + UMA 2.0 deployment",
+        "source": "service",
+        "url": "https://solidproject.org/TR/solid-oidc#uma"
+      },
+      "links": {
+        "solidOidc": "https://solidproject.org/TR/solid-oidc#uma",
+        "umaGrant": "https://docs.kantarainitiative.org/uma/wg/rec-oauth-uma-grant-2.0.html"
+      },
+      "notes": [
+        "configure a deployment you are allowed to test (e.g. a self-hosted ESS, or a Solid server fronted by a Solid-OIDC-profile UMA server); the UMA server's uma2-configuration must list the ID token profile in uma_profiles_supported",
+        "unattended (session mode): depends on the Solid-OIDC provider's session, consent and MFA policies; unverified",
+        "Solid UMA evidence requires the whole Solid-OIDC §9 flow on the wire (UMA challenge with as_uri and ticket, uma2-configuration advertising the ID token profile, uma-ticket grant pushing the DPoP-bound ID token, RPT use); an ordinary OAuth Bearer or DPoP access token — e.g. from Keycloak — never counts",
+        "claims gathering (need_info with redirect_user) is not automated by the library: a deployment that asks for more claims FAILs uma.login-read with that reason"
+      ],
+      "env": [
+        {
+          "name": "RA_INTEROP_SOLID_UMA_WEBID",
+          "description": "WebID of a dedicated test account at the deployment's Solid-OIDC provider; its profile names the Solid-OIDC issuer",
+          "pii": true
+        },
+        {
+          "name": "RA_INTEROP_SOLID_UMA_STORAGE",
+          "description": "storage of the test account (ends with /); the credential boundary",
+          "pii": true
+        },
+        {
+          "name": "RA_INTEROP_SOLID_UMA_SCRATCH",
+          "description": "container dedicated to test writes inside the storage (ends with /); omit for read-only runs",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_SOLID_UMA_PRIVATE_RESOURCE",
+          "description": "an existing private resource of the test account whose unauthenticated GET answers 401 with an UMA challenge (read-only runs)",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_SOLID_UMA_OTHER_PROTECTED",
+          "description": "a protected resource outside the test storage (read-only boundary probe)",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_SOLID_UMA_ISSUER",
+          "description": "the Solid-OIDC issuer expected in the ID token"
+        },
+        {
+          "name": "RA_INTEROP_SOLID_UMA_UMA_SERVER",
+          "description": "the UMA authorization server (as_uri) to trust; omit to trust only an as_uri on the resource's own origin",
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_SOLID_UMA_CLIENT_ID",
+          "description": "optional Solid-OIDC Client Identifier Document URL (its redirect_uris must include the redirect URI); omit to use dynamic registration",
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_SOLID_UMA_STORAGE_STATE",
+          "description": "Playwright storageState file of a dedicated test account's signed-in identity-provider session (contains cookies; never commit). With --headed it seeds the browser; without --headed it enables the fail-closed non-interactive session mode (a configured file that does not exist is a configuration error)",
+          "pii": true,
+          "optional": true
+        },
+        {
+          "name": "RA_INTEROP_SOLID_REDIRECT_URI",
+          "description": "loopback redirect URI (default http://127.0.0.1:39398/callback); with a Client Identifier Document it must be one of the document's redirect_uris",
+          "optional": true
+        }
+      ],
+      "config": {
+        "label": "the configured Solid UMA deployment",
+        "webId": "${RA_INTEROP_SOLID_UMA_WEBID}",
+        "storage": "${RA_INTEROP_SOLID_UMA_STORAGE}",
+        "issuer": "${RA_INTEROP_SOLID_UMA_ISSUER}",
+        "umaServers": ["${RA_INTEROP_SOLID_UMA_UMA_SERVER}"],
+        "scratchContainer": "${RA_INTEROP_SOLID_UMA_SCRATCH}",
+        "privateResource": "${RA_INTEROP_SOLID_UMA_PRIVATE_RESOURCE}",
+        "otherProtected": "${RA_INTEROP_SOLID_UMA_OTHER_PROTECTED}",
+        "clientId": "${RA_INTEROP_SOLID_UMA_CLIENT_ID}",
+        "storageState": "${RA_INTEROP_SOLID_UMA_STORAGE_STATE}",
+        "redirectUri": "${RA_INTEROP_SOLID_REDIRECT_URI:-http://127.0.0.1:39398/callback}",
+        "login": {
+          "recipe": "manual"
+        }
+      },
+      "capabilities": {
+        "writes": "unverified"
+      },
+      "capabilityNotes": {
+        "writes": "deployment-specific: whether RPTs authorize create-only PUTs (201) and conditional updates is only known after a run"
+      }
+    }
+  ]
+}

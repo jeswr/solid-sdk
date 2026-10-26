@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Google Drive API with Google Identity Services</title>
+<!-- Google's SDK; register a Web application OAuth client with this page's origin as an authorized JavaScript origin. -->
+<script src="https://accounts.google.com/gsi/client" async></script>
+<button type="button" id="connect">Connect Google Drive</button>
+<pre id="output"></pre>
+<script type="module">
+import {
+    CredentialBoundary, GoogleTokenSource, InteractionRequiredError, OAuthBearerTokenProvider, ReactiveFetchManager,
+} from "@jeswr/reactive-authentication"
+
+await new Promise(resolve => addEventListener("load", resolve, {once: true})) // GIS script loaded
+const button = document.querySelector("#connect")
+const drive = new GoogleTokenSource(google.accounts.oauth2, {
+    clientId: "1234567890-abc.apps.googleusercontent.com",
+    scopes: ["https://www.googleapis.com/auth/drive.readonly"],
+    onInteractionRequired: () => { button.hidden = false }, // ask for a click; never open popups by ourselves
+})
+const resources = new CredentialBoundary(["https://www.googleapis.com/drive/"]) // this token's only API
+const manager = new ReactiveFetchManager({providers: [new OAuthBearerTokenProvider(drive, {resources})], boundary: resources})
+
+async function listFiles() {
+    try {
+        const response = await manager.fetch("https://www.googleapis.com/drive/v3/files?pageSize=5")
+        document.querySelector("#output").textContent = JSON.stringify(await response.json(), null, 2)
+    } catch (e) {
+        if (!(e instanceof InteractionRequiredError)) throw e // otherwise the button is shown
+    }
+}
+
+// The popup must start inside the click: authorize() calls requestAccessToken synchronously.
+button.addEventListener("click", async () => {
+    await drive.authorize()
+    button.hidden = true
+    await listFiles()
+})
+await listFiles()
+</script>
+</html>

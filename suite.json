@@ -86,6 +86,7 @@
     "@jeswr/agent-memory",
     "@jeswr/agent-registry",
     "@jeswr/fetch-rdf",
+    "@jeswr/reactive-authentication",
     "@jeswr/suite-native"
   ],
   "applications": [
