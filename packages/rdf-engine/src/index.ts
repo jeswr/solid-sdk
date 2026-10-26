@@ -3,7 +3,11 @@
 import { createEngine, type Runtime } from "./engine.js";
 import type { RdfEngine, RdfEngineOptions } from "./types.js";
 
-export { FormGraphUnsupportedError, PolicyIdentifierCollisionError } from "./errors.js";
+export {
+  FormGraphUnsupportedError,
+  PolicyIdentifierCollisionError,
+  PolicySubjectUnsupportedError,
+} from "./errors.js";
 export type * from "./types.js";
 
 // The web binding owns module-global WASM memory, so both initialization paths must share it.

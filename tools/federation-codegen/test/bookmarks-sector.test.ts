@@ -37,6 +37,23 @@ async function validate(store: Store) {
 }
 
 describe("generated bookmarks-sector model", () => {
+  it("reads canonical bookmark types, notes, archive flags and tags from existing data", () => {
+    const store = new Store(
+      new Parser().parse(`
+      @prefix bookmark: <https://jeswr.org/ns/sectors/bookmarks#> .
+      <${SUBJECT}> a bookmark:Bookmark ; bookmark:notes "Canonical notes" ;
+        bookmark:archived true ; bookmark:hasTag <https://alice.example/tags/solid> ;
+        <http://schema.org/url> <https://example.org/article> .
+    `),
+    );
+    const bookmark = new Bookmark(SUBJECT, store, DataFactory);
+    expect(bookmark.isBookmark).toBe(true);
+    expect(bookmark.notes).toBe("Canonical notes");
+    expect(bookmark.archived).toBe(true);
+    expect([...bookmark.hasTag]).toEqual(["https://alice.example/tags/solid"]);
+    expect(bookmark.url).toBe("https://example.org/article");
+  });
+
   it("writes every sector shape property through @rdfjs/wrapper and conforms to SHACL", async () => {
     const store = new Store();
     const bookmark = new Bookmark(SUBJECT, store, DataFactory).mark();

@@ -1,3 +1,5 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /**
  * WhatsApp → Social & interests (Tier-C file import).
  *
@@ -18,6 +20,7 @@ import type { FileImportAdapter, FileImportContext, ImportFile } from "../core/f
 import { recordFragment } from "../core/slug.js";
 import type { IntegrationMetadata } from "../core/types.js";
 import { CLASSES, Message } from "../core/vocab.js";
+import { vocabMap } from "./vocab-map.js";
 
 const ID = "whatsapp";
 
@@ -39,6 +42,7 @@ export interface ChatMessage {
 }
 
 export const whatsappFileAdapter: FileImportAdapter = {
+  vocabMap,
   metadata,
   accept: ".txt,text/plain",
   fileHint:

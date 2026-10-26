@@ -23,7 +23,7 @@ describe("serialize", () => {
     });
     const nt = await serialize(built.quads, "application/n-triples");
     // N-Triples uses full IRIs, no prefixes.
-    expect(nt).toContain("<https://w3id.org/jeswr/fedreg#Registry>");
+    expect(nt).toContain("<https://jeswr.org/ns/fedreg#Registry>");
     expect(nt).not.toContain("@prefix");
   });
 
