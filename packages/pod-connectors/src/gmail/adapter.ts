@@ -6,14 +6,16 @@
  * relabelled messages). An expired history id (404) falls back to a full sync, which also
  * removes stored messages Gmail no longer lists (tracked in `gmail-index.ttl`).
  */
+import { Container } from "@solid/object";
 import { DataFactory, Store } from "n3";
 import { createGoogleOAuthConfig, GOOGLE_SCOPES } from "../adapters/google/oauth.js";
 import { IntegrationSyncError } from "../core/errors.js";
 import { getJson } from "../core/fixture-fetch.js";
+import { Provenance } from "../core/provenance.js";
 import type { ImportContext, ImportOutcome, IntegrationAdapter } from "../core/types.js";
 import { PodThing } from "../core/vocab.js";
 import { accountRoot, SYSTEM_FOLDERS } from "../mail/paths.js";
-import { MAIL_CLASSES, MailCollection, MailMessage } from "../mail/vocab.js";
+import { MAIL_CLASSES, MailMessage, MailSourceIndex } from "../mail/vocab.js";
 import {
   createMailWriter,
   type MailFolder,
@@ -113,7 +115,8 @@ async function labelFolders(ctx: ImportContext): Promise<Map<string, MailFolder>
   return folders;
 }
 
-const webUrl = (id: string) => `https://mail.google.com/mail/#all/${encodeURIComponent(id)}`;
+const WEB_URL = "https://mail.google.com/mail/#all/";
+const webUrl = (id: string) => `${WEB_URL}${encodeURIComponent(id)}`;
 const validId = (id: unknown): id is string =>
   typeof id === "string" && /^[0-9a-zA-Z_-]+$/.test(id);
 
@@ -122,36 +125,79 @@ interface Indexed {
   readonly thread?: string;
 }
 
+const INCOMPLETE = "incomplete";
+
 /**
  * Which pod document holds each Gmail message (keyed by its Gmail web URL). Deletions and
  * full-sync sweeps need it because document ids come from untrusted Message-ID headers.
+ * Before a run first changes the mailbox the index is marked incomplete; a later run that
+ * finds the mark recovers mappings for messages written after the last successful save.
  */
 class SourceIndex {
   private dirty = false;
+  private marked = false;
   private constructor(
     private readonly ctx: ImportContext,
-    private readonly slug: string,
+    private readonly account: string,
     readonly entries: Map<string, Indexed>,
   ) {}
 
+  private get slug(): string {
+    return `${accountRoot(this.account)}gmail-index.ttl`;
+  }
+
   static async load(ctx: ImportContext, account: string): Promise<SourceIndex> {
-    const slug = `${accountRoot(account)}gmail-index.ttl`;
-    const entries = new Map<string, Indexed>();
-    const dataset = await ctx.read(slug);
-    if (dataset) {
-      const base = ctx.resolve("mail/").slice(0, -"mail/".length);
-      const list = new MailCollection(`${ctx.resolve(slug)}#it`, dataset, DataFactory);
-      for (const iri of list.members) {
-        const source = new PodThing(iri, dataset, DataFactory).sourceUrl;
-        const doc = iri.split("#", 1)[0] as string;
-        if (!source || !doc.startsWith(base)) continue;
-        entries.set(source, {
-          slug: doc.slice(base.length),
+    const index = new SourceIndex(ctx, account, new Map());
+    const dataset = await ctx.read(index.slug);
+    if (!dataset) return index;
+    const list = new MailSourceIndex(`${ctx.resolve(index.slug)}#it`, dataset, DataFactory);
+    for (const iri of list.members) {
+      const source = new PodThing(iri, dataset, DataFactory).sourceUrl;
+      const slug = index.slugOf(iri);
+      if (source && slug)
+        index.entries.set(source, {
+          slug,
           thread: new MailMessage(iri, dataset, DataFactory).partOfThread,
         });
-      }
     }
-    return new SourceIndex(ctx, slug, entries);
+    if (list.status === INCOMPLETE) await index.recover();
+    return index;
+  }
+
+  /** Message document slug for an IRI inside this account's messages container. */
+  private slugOf(iri: string): string | undefined {
+    const doc = iri.split("#", 1)[0] as string;
+    const messages = this.ctx.resolve(`${accountRoot(this.account)}messages/`);
+    const name = doc.slice(messages.length);
+    return doc.startsWith(messages) && /^[^/]+\.ttl$/.test(name)
+      ? `${accountRoot(this.account)}messages/${name}`
+      : undefined;
+  }
+
+  /** After an interrupted run, map stored messages the index does not know yet. */
+  private async recover(): Promise<void> {
+    const container = `${accountRoot(this.account)}messages/`;
+    const listing = await this.ctx.read(container);
+    if (!listing) return;
+    const known = new Set([...this.entries.values()].map((entry) => entry.slug));
+    for (const child of new Container(this.ctx.resolve(container), listing, DataFactory).contains) {
+      const slug = this.slugOf(child.value);
+      if (!slug || known.has(slug)) continue;
+      const dataset = await this.ctx.read(slug);
+      if (!dataset) continue;
+      const iri = `${this.ctx.resolve(slug)}#it`;
+      const thread = new MailMessage(iri, dataset, DataFactory).partOfThread;
+      for (const source of new Provenance(iri, dataset, DataFactory).derivedFrom)
+        if (source.startsWith(WEB_URL)) this.set(source, { slug, thread });
+    }
+    this.marked = true;
+  }
+
+  /** Call before the first mailbox change of a run. */
+  async begin(): Promise<void> {
+    if (this.marked) return;
+    await this.write(INCOMPLETE);
+    this.marked = true;
   }
 
   set(source: string, entry: Indexed): void {
@@ -166,11 +212,17 @@ class SourceIndex {
   }
 
   async save(): Promise<void> {
-    if (!this.dirty) return;
+    if (!this.dirty && !this.marked) return;
+    await this.write(undefined);
+    this.dirty = this.marked = false;
+  }
+
+  private async write(status: string | undefined): Promise<void> {
     const dataset = new Store();
-    const list = new MailCollection(`${this.ctx.resolve(this.slug)}#it`, dataset, DataFactory);
+    const list = new MailSourceIndex(`${this.ctx.resolve(this.slug)}#it`, dataset, DataFactory);
     list.types.add(MAIL_CLASSES.Folder);
     list.title = "Gmail message index";
+    list.status = status;
     for (const [source, { slug, thread }] of this.entries) {
       const iri = `${this.ctx.resolve(slug)}#it`;
       list.members.add(iri);
@@ -184,7 +236,6 @@ class SourceIndex {
       dataset,
       skipRegistration: true,
     });
-    this.dirty = false;
   }
 }
 
@@ -287,6 +338,7 @@ class Sync {
       folders.push({ key: "Archive", title: "Archive" });
     const received = Number(message.internalDate);
     let stored: StoredMail;
+    await this.index.begin();
     try {
       stored = await this.mail.add({
         raw,
@@ -320,6 +372,7 @@ class Sync {
   }
 
   private async drop(source: string, entry: Indexed): Promise<void> {
+    await this.index.begin();
     await this.mail.removeMessage(entry.slug, entry.thread);
     this.index.delete(source);
   }

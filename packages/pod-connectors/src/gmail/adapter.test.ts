@@ -333,6 +333,50 @@ describe("Gmail history continuation", () => {
     expect([...message(pod, LUNCH_1).folderIris]).toEqual([`${folder("system:archive")}#it`]);
   });
 
+  it("recovers messages an interrupted run wrote before its index was saved", async () => {
+    const { pod, run, state } = await imported();
+    const added: GmailMessage = {
+      id: "m5",
+      threadId: "t5",
+      labelIds: ["INBOX"],
+      raw: rawMessage(["From: a@example.test", "Message-ID: <late@example.test>", "", "Hi"]),
+    };
+    const history = (records: unknown[]): FixtureRoute => ({
+      url: `${GMAIL_API}/history`,
+      json: { history: records, historyId: "1010" },
+    });
+    // m5 is written, then the next fetch fails: the run ends before the index is saved.
+    await expect(
+      run(
+        [
+          ...base,
+          history([
+            { id: "1005", messagesAdded: [{ message: { id: "m5", threadId: "t5" } }] },
+            { id: "1006", messagesAdded: [{ message: { id: "m6", threadId: "t6" } }] },
+          ]),
+          fetched(added),
+          { url: `${GMAIL_API}/messages/m6`, json: {}, status: 500 },
+        ],
+        state,
+      ).result,
+    ).rejects.toMatchObject({ status: 500 });
+    const late = msg("<late@example.test>");
+    expect(pod.get(late)).toBeDefined();
+    // Gmail deletes m5 before the retry, which replays the same history.
+    await run(
+      [
+        ...base,
+        history([
+          { id: "1005", messagesAdded: [{ message: { id: "m5", threadId: "t5" } }] },
+          { id: "1007", messagesDeleted: [{ message: { id: "m5", threadId: "t5" } }] },
+        ]),
+      ],
+      state,
+    ).result;
+    expect(pod.get(late)).toBeUndefined();
+    expect(pod.get(`${ACCOUNT}gmail-index.ttl`)).not.toContain("incomplete");
+  });
+
   it("removes a thread document when its last message is deleted", async () => {
     const { pod, run, state } = await imported();
     await run(

@@ -12,6 +12,7 @@
  * (never from the message's previous document), and thread members whose message
  * documents no longer exist are dropped.
  */
+import { Container } from "@solid/object";
 import { DataFactory, Store } from "n3";
 import { Provenance } from "../core/provenance.js";
 import type { ImportContext } from "../core/types.js";
@@ -90,7 +91,7 @@ export function binaryType(contentType: string): string {
 const docOf = (iri: string) => iri.split("#", 1)[0] as string;
 
 export function createMailWriter(ctx: MailPorts, account: string): MailWriter {
-  const root = accountRoot(account);
+  const accountDir = accountRoot(account);
   const base = ctx.resolve("mail/").slice(0, -"mail/".length);
   const slugOf = (url: string) => {
     if (!url.startsWith(base)) throw new TypeError("Mail document outside the connector");
@@ -119,6 +120,25 @@ export function createMailWriter(ctx: MailPorts, account: string): MailWriter {
     return dataset && new MailMessage(iriOf(slug), dataset, DataFactory);
   };
 
+  /**
+   * Source thread key, else the References root (MAI-01), else the parent's stored thread, else
+   * the parent id. A reply stored before its parent keeps the parent id as its thread key.
+   */
+  async function threadOf(
+    key: string | undefined,
+    root: string | undefined,
+    parent: string | undefined,
+    id: string,
+  ): Promise<string> {
+    if (key ?? root) return threadSlug(account, (key ?? root) as string);
+    if (!parent) return threadSlug(account, id);
+    const stored = (await existing(messageSlug(account, parent)))?.partOfThread;
+    const doc = stored && docOf(stored);
+    return doc?.startsWith(ctx.resolve(`${accountDir}threads/`)) && doc.endsWith(".ttl")
+      ? slugOf(doc)
+      : threadSlug(account, parent);
+  }
+
   async function add(item: MailItem): Promise<StoredMail> {
     const mail = await parseMail(item.raw);
     let id = mail.messageId ?? item.fallbackId;
@@ -135,10 +155,13 @@ export function createMailWriter(ctx: MailPorts, account: string): MailWriter {
     const slug = messageSlug(account, id);
     const iri = iriOf(slug);
 
+    // Bytes are replaced, never kept create-only: an interrupted earlier write may have left
+    // another item's bytes at this id without the message document that records ownership.
     const eml = await ctx.writeBinary({
       slug: emlSlug(account, id),
       contentType: "message/rfc822",
       body: item.raw,
+      mode: "replace",
     });
     const dataset = new Store();
     const message = new MailMessage(iri, dataset, DataFactory);
@@ -159,16 +182,14 @@ export function createMailWriter(ctx: MailPorts, account: string): MailWriter {
       : undefined;
     message.encoding = eml.url;
     if (mail.inReplyTo) message.inReplyTo = iriOf(messageSlug(account, mail.inReplyTo));
-    const threadDoc = threadSlug(
-      account,
-      item.threadKey ?? mail.references[0] ?? mail.inReplyTo ?? id,
-    );
+    const threadDoc = await threadOf(item.threadKey, mail.references[0], mail.inReplyTo, id);
     message.partOfThread = iriOf(threadDoc);
     for (const [index, part] of mail.attachments.entries()) {
       const stored = await ctx.writeBinary({
         slug: attachmentSlug(account, id, index),
         contentType: binaryType(part.contentType),
         body: part.content,
+        mode: "replace",
       });
       message.attachments.add(stored.url);
       const metadata = new MailAttachment(stored.url, dataset, DataFactory);
@@ -184,6 +205,9 @@ export function createMailWriter(ctx: MailPorts, account: string): MailWriter {
       message.folderIris.add(iriOf(folder));
     }
     desired.set(iri, folders);
+    // Attachments the previous version had beyond this one's are no longer linked.
+    for (const old of previous?.attachments ?? [])
+      if (!message.attachments.has(old)) await ctx.remove(slugOf(old));
     // Folders named on the previous version are reconciled too, even if no longer known.
     for (const old of previous?.folderIris ?? []) remember(slugOf(docOf(old)));
     const oldThread = previous?.partOfThread;
@@ -203,7 +227,7 @@ export function createMailWriter(ctx: MailPorts, account: string): MailWriter {
       forClass: MAIL_CLASSES.EmailMessage,
       dataset,
       sourceUrl: item.sourceUrl,
-      registrationContainer: root,
+      registrationContainer: accountDir,
     });
     return { slug, iri, thread: iriOf(threadDoc) };
   }
@@ -226,6 +250,16 @@ export function createMailWriter(ctx: MailPorts, account: string): MailWriter {
   }
 
   async function flush(known: readonly MailFolder[] = []): Promise<void> {
+    // Every stored folder is reconciled too: a label deleted at the source may still list a
+    // message whose previous version (the only other record of it) was already replaced.
+    const listing = `${accountDir}folders/`;
+    const stored = await ctx.read(listing);
+    if (stored)
+      for (const child of new Container(ctx.resolve(listing), stored, DataFactory).contains) {
+        const rest = child.value.slice(ctx.resolve(listing).length);
+        if (child.value.startsWith(ctx.resolve(listing)) && /^[^/]+\.ttl$/.test(rest))
+          remember(`${listing}${rest}`);
+      }
     for (const { key, title } of known) {
       const slug = folderSlug(account, key);
       if (title || !titles.has(slug)) titles.set(slug, title);

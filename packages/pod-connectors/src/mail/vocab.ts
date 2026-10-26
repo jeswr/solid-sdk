@@ -137,6 +137,20 @@ export class MailCollection extends Typed {
   }
 }
 
+/** A connector's source inventory: a collection whose status marks an unfinished run. */
+export class MailSourceIndex extends MailCollection {
+  get status(): string | undefined {
+    return OptionalFrom.subjectPredicate(
+      this,
+      `${MAIL_SCHEMA}creativeWorkStatus`,
+      LiteralAs.string,
+    );
+  }
+  set status(value: string | undefined) {
+    OptionalAs.object(this, `${MAIL_SCHEMA}creativeWorkStatus`, value, LiteralFrom.string);
+  }
+}
+
 export class MailAttachment extends Typed {
   get name(): string | undefined {
     return OptionalFrom.subjectPredicate(this, `${MAIL_SCHEMA}name`, LiteralAs.string);

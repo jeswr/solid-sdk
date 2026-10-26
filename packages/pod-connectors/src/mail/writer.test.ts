@@ -6,7 +6,7 @@ import { createFetchPodWriter } from "../core/pod-writer.js";
 import { createMemoryPod, TEST_POD_ROOT, TEST_PROFILE_DOC, TEST_WEBID } from "../core/testing.js";
 import type { ImportContext } from "../core/types.js";
 import { rawMessage } from "../gmail/fixtures.js";
-import { attachmentSlug, folderSlug, messageSlug, pathId, threadSlug } from "./paths.js";
+import { attachmentSlug, emlSlug, folderSlug, messageSlug, pathId, threadSlug } from "./paths.js";
 import { MailCollection, MailMessage } from "./vocab.js";
 import { createMailWriter, type MailFolder, MailParseError, type MailWriter } from "./writer.js";
 
@@ -215,6 +215,70 @@ describe("MailWriter", () => {
     ]);
     const folder = url(folderSlug(ME, "Label_1"));
     expect(new MailCollection(`${folder}#it`, pod.dataset(folder), DataFactory).title).toBe("New");
+  });
+
+  it("follows a parent's stored thread for In-Reply-To chains without References", async () => {
+    const pod = await withWriter(async (mail) => {
+      await mail.add({ raw: raw("p1"), folders: [INBOX], read: true, fallbackId: "1" });
+      await mail.add({
+        raw: raw("p2", ["In-Reply-To: <p1@x.test>"]),
+        folders: [INBOX],
+        read: true,
+        fallbackId: "2",
+      });
+      const third = await mail.add({
+        raw: raw("p3", ["In-Reply-To: <p2@x.test>"]),
+        folders: [INBOX],
+        read: true,
+        fallbackId: "3",
+      });
+      expect(third.thread).toBe(`${url(threadSlug(ME, "<p1@x.test>"))}#it`);
+    });
+    expect(membersOf(pod, threadSlug(ME, "<p1@x.test>"))).toHaveLength(3);
+  });
+
+  it("replaces bytes an interrupted write left without an owning message document", async () => {
+    const pod = createMemoryPod();
+    const eml = emlSlug(ME, "<own@x.test>");
+    await withWriter(async (_mail, ctx) => {
+      await ctx.writeBinary({ slug: eml, contentType: "message/rfc822", body: raw("own") });
+      await ctx.writeBinary({
+        slug: attachmentSlug(ME, "<own@x.test>", 0),
+        contentType: "text/plain",
+        body: new TextEncoder().encode("stale"),
+      });
+    }, pod);
+    const fresh = raw("own", ["Subject: fresh"]);
+    await withWriter(
+      async (mail) =>
+        void (await mail.add({
+          raw: fresh,
+          folders: [INBOX],
+          read: true,
+          fallbackId: "b",
+          sourceUrl: "https://source.test/b",
+        })),
+      pod,
+    );
+    expect(pod.bytes(url(eml))).toEqual(fresh);
+  });
+
+  it("drops memberships of labels that vanished while a run was interrupted", async () => {
+    const pod = createMemoryPod();
+    const item = (folders: { key: string; title: string }[]) => ({
+      raw: raw("gone"),
+      folders,
+      read: true,
+      fallbackId: "g",
+    });
+    const label = { key: "Label_9", title: "Gone" };
+    await withWriter(async (mail) => void (await mail.add(item([label]))), pod);
+    await withWriter(async (mail) => {
+      await mail.add(item([]));
+      throw new Error("crash");
+    }, pod).catch(() => undefined);
+    await withWriter(async (mail) => void (await mail.add(item([]))), pod, []);
+    expect(pod.get(url(folderSlug(ME, "Label_9")))).toBeUndefined();
   });
 
   it("rejects unparseable MIME with MailParseError", async () => {
