@@ -149,7 +149,8 @@ floating. Repeated daylight-saving times select the first occurrence; nonexisten
 times or invalid zones fail before writing or advancing the checkpoint.
 Recurrence rules use VOC-01's structured fields
 and deterministic linked nodes, with `schema:Schedule` as an additional type and
-`schema:scheduleTimezone` for the source time zone. Interval and count use
+`schema:scheduleTimezone` for the source time zone. Each event supports at most one
+RRULE; multiple RRULEs fail before writing or advancing the checkpoint. Interval and count use
 `xsd:positiveInteger`; month-day selectors support `1`–`31` and `-1` (last day).
 Cancelled items remove their event descriptions and recurrence nodes. Cancelled
 instances add `schema:exceptDate` to the master's recurrence without creating an event

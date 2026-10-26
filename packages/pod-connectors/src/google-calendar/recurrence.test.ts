@@ -8,7 +8,6 @@ describe("VOC-01 recurrence mapping", () => {
       parseRecurrence([
         "RRULE:FREQ=MONTHLY;INTERVAL=2;COUNT=10;BYDAY=MO,WE;BYMONTHDAY=1,31,-1;BYMONTH=1,6",
         "EXDATE;VALUE=DATE:20260101,20260601",
-        "RRULE:FREQ=YEARLY;UNTIL=20301231",
       ]),
     ).toEqual([
       {
@@ -20,6 +19,13 @@ describe("VOC-01 recurrence mapping", () => {
         byMonth: [1, 6],
         exceptDate: ["2026-01-01", "2026-06-01"],
       },
+    ]);
+  });
+
+  it("maps a single yearly rule with an all-day limit and preceding exceptions", () => {
+    expect(
+      parseRecurrence(["EXDATE;VALUE=DATE:20260101,20260601", "RRULE:FREQ=YEARLY;UNTIL=20301231"]),
+    ).toEqual([
       {
         frequency: "YEARLY",
         until: "2030-12-31",
@@ -29,6 +35,16 @@ describe("VOC-01 recurrence mapping", () => {
         exceptDate: ["2026-01-01", "2026-06-01"],
       },
     ]);
+  });
+
+  it.each([
+    ["RRULE:FREQ=WEEKLY;BYDAY=MO", "RRULE:FREQ=MONTHLY;BYMONTHDAY=1"],
+    ["RRULE:FREQ=WEEKLY;BYDAY=MO", "RRULE:FREQ=WEEKLY;BYDAY=MO"],
+    ["RRULE:FREQ=WEEKLY;BYDAY=MO", "EXDATE;VALUE=DATE:20260601", "RRULE:FREQ=MONTHLY;BYMONTHDAY=1"],
+  ])("rejects multiple RRULE entries outside the profile cardinality: %j", (...lines) => {
+    expect(() => parseRecurrence(lines)).toThrow(
+      "Unsupported or malformed Calendar recurrence; checkpoint unchanged.",
+    );
   });
 
   it("preserves UTC and rule-local exception timestamps with their time zone", () => {

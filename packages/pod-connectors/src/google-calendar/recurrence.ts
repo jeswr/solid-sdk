@@ -123,7 +123,8 @@ export function parseRecurrence(lines: readonly string[], timeZone?: string): Ca
       for (const date of value.split(",")) exceptions.push(icalDate(date));
       continue;
     }
-    if (name !== "RRULE") recurrenceError();
+    // CalendarEventShape allows at most one recurrence; rule unions are unsupported.
+    if (name !== "RRULE" || rules.length > 0) recurrenceError();
     const rule: CalendarRecurrence = {
       frequency: "",
       byDay: [],

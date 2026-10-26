@@ -567,6 +567,53 @@ describe("Google Calendar synchronization", () => {
     expect(pod.get(DOC)).toBe(before);
   });
 
+  it.each([
+    "full",
+    "incremental",
+    "resync",
+  ])("rejects multiple RRULEs before writing or advancing the checkpoint (%s)", async (mode) => {
+    const { pod, podWriter, run } = setup();
+    const initial = mode === "full" ? undefined : await run([route(EVENTS)]).result;
+    const before = pod.get(DOC);
+    const write = vi.spyOn(podWriter, "write");
+    const onState = vi.fn();
+    const routes = [
+      route({ items: [{ ...EVENTS.items[1], summary: "Do not persist" }], nextPageToken: "last" }),
+      route({
+        items: [
+          {
+            ...EVENTS.items[0],
+            recurrence: ["RRULE:FREQ=WEEKLY;BYDAY=MO", "RRULE:FREQ=MONTHLY;BYMONTHDAY=1"],
+          },
+        ],
+        nextSyncToken: "unused",
+      }),
+    ];
+    if (mode === "resync") routes.unshift(route({}, 410));
+    await expect(
+      runImport({
+        adapter: googleCalendarAdapter,
+        mode: "live",
+        podWriter,
+        state: initial?.state,
+        onState,
+        sourceAuth: { fetch: fixtureFetch("google-calendar", routes) },
+      }),
+    ).rejects.toMatchObject({
+      name: "IntegrationSyncError",
+      adapterId: "google-calendar",
+      message: "Unsupported or malformed Calendar recurrence; checkpoint unchanged.",
+    });
+    expect(write.mock.calls.some(([doc]) => doc.slug === "calendar/events.ttl")).toBe(false);
+    expect(pod.get(DOC)).toBe(before);
+    expect(onState).toHaveBeenCalledTimes(1);
+    expect(onState.mock.calls[0][0]).toMatchObject({
+      lastOutcome: "error",
+      cursor: initial?.cursor,
+      lastSync: initial?.state.lastSync,
+    });
+  });
+
   it("retains conditional-write protection when the document changes during the source request", async () => {
     const { pod, podWriter, run } = setup();
     const initial = await run([route(EVENTS)]).result;
