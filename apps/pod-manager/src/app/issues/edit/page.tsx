@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate; see docs/MODEL-PROVENANCE.md
+// AUTHORED-BY Codex GPT-6.1-Sol
 "use client";
 
 /**
@@ -16,6 +17,7 @@ import { ChevronRight, Loader2, Save, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { issuesStore, isWebId, type Issue, type IssueState } from "@/lib/issues";
 import { useStore, useItem } from "@/components/use-productivity";
+import { useSession } from "@/components/session-provider";
 import { ErrorState } from "@/components/states";
 import { ResourceWriteError } from "@/lib/errors";
 import { Button } from "@/components/ui/button";
@@ -44,6 +46,7 @@ function IssueEditor() {
 
   const router = useRouter();
   const store = useStore<Issue>(issuesStore);
+  const { issueAssignments } = useSession();
   const { data: item, loading, error } = useItem(store, url);
 
   const [title, setTitle] = useState("");
@@ -69,7 +72,7 @@ function IssueEditor() {
 
   async function onSave(e: React.FormEvent) {
     e.preventDefault();
-    if (!store) return;
+    if (!store || !issueAssignments) return;
     if (!title.trim()) {
       toast.error("Please enter a title.");
       return;
@@ -91,8 +94,8 @@ function IssueEditor() {
         const { url: created } = await store.create(issue, title);
         toast.success("Issue created");
         router.replace(`/issues/edit?id=${encodeURIComponent(created)}`);
-      } else if (url) {
-        await store.update(url, issue, etag);
+      } else if (url && item) {
+        await issueAssignments.updateFromUser(store, { ...item, etag }, issue);
         toast.success("Issue saved");
         router.push("/issues");
       }

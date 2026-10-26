@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate; see docs/MODEL-PROVENANCE.md
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * Issues (lightweight tracker) — one `wf:Task` per resource under `issues/`.
  *
@@ -28,8 +29,8 @@
  * apps (e.g. solid-issues) that enumerate `wf:Task` registrations will discover
  * PM's issues container, and PM will discover theirs.
  *
- * SAME-POD ONLY: like Tasks/Bookmarks this is plain typed-CRUD on the owner's
- * own pod — no cross-pod posting, no inbox sends, no SSRF surface.
+ * CRUD stays on the owner's pod. Explicit user edits can additionally announce
+ * assignment changes through the validated cross-pod notification sender.
  *
  * Mirrors `tasks.ts`/`bookmarks.ts`: a typed `@rdfjs/wrapper` doc, a pure
  * parse/build pair, a `StoreConfig`, and a store factory. Pure sort/group
@@ -47,6 +48,7 @@ import {
   TermWrapper,
 } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
+import { sendNotification } from "./notify-send.js";
 import {
   createStore,
   type ProductivityStore,
@@ -364,4 +366,68 @@ export function issuesStore(opts: {
   fetchImpl?: typeof fetch;
 }): ProductivityStore<Issue> {
   return createStore(ISSUES_CONFIG, opts);
+}
+
+/** Session-scoped options for best-effort issue assignment announcements. */
+export interface IssueAssignmentOptions {
+  actorWebId: string;
+  /** Omit in production so the auth-patched global fetch runs. */
+  fetchImpl?: typeof fetch;
+  /** The edit already succeeded; this hook only reports notification failures. */
+  onError?: (message: string, detail: unknown) => void;
+}
+
+/**
+ * One announcer per signed-in session, shared across editor visits. Only the
+ * explicit user-edit entry point sends; ordinary store CRUD remains silent.
+ */
+export class IssueAssignmentAnnouncer {
+  private readonly announced = new Set<string>();
+
+  constructor(private readonly opts: IssueAssignmentOptions) {}
+
+  /** Save an existing issue, then start delivery without waiting for the inbox. */
+  async updateFromUser(
+    store: ProductivityStore<Issue>,
+    previous: StoredItem<Issue>,
+    issue: Issue,
+  ): Promise<{ etag: string | null }> {
+    const { assignee, title } = issue;
+    const previousAssignee = previous.data.assignee;
+    const url = previous.url;
+    const result = await store.update(url, issue, previous.etag);
+    if (
+      !assignee || !isWebId(assignee) ||
+      assignee === previousAssignee || assignee === this.opts.actorWebId
+    ) {
+      return result;
+    }
+
+    const key = JSON.stringify([url, assignee]);
+    if (this.announced.has(key)) return result;
+    // Reserve before discovery awaits so overlapping saves cannot double-send.
+    this.announced.add(key);
+    void sendNotification(
+      {
+        recipientWebId: assignee,
+        actorWebId: this.opts.actorWebId,
+        type: "Announce",
+        object: `${url}#it`,
+        target: assignee,
+        summary: title.trim()
+          ? `You were assigned to "${title.trim()}"`
+          : "You were assigned to an issue",
+      },
+      this.opts.fetchImpl,
+    ).catch((error: unknown) => {
+      // Failed delivery may be retried by a later user assignment transition.
+      this.announced.delete(key);
+      try {
+        this.opts.onError?.("Couldn't notify the assignee.", error);
+      } catch {
+        // A reporting hook must not turn background delivery into a rejection.
+      }
+    });
+    return result;
+  }
 }
