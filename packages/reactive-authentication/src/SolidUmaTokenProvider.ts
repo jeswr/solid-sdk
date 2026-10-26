@@ -189,6 +189,7 @@ export class SolidUmaTokenProvider implements TokenProvider {
 
     // Captured before any await, so a logout while the policy (or anything later) is pending wins.
     const ticket = await this.#rpts.ticket(request.signal);
+    request = new Request(request, { signal: ticket.signal });
 
     // Trust first: no discovery, login or credential use for an untrusted authorization server.
     const policy = this.#options.trustAuthorizationServer ?? sameOriginAsResource;
