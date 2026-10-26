@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { readdirSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { rewriteManifest } from "../../../scripts/mirror-publish.mjs";
@@ -12,11 +13,13 @@ describe("interop mirror artifacts", () => {
     const mirror = rewriteManifest(
       manifest,
       new Map([
+        ["@jeswr/fetch-rdf", sha],
         ["@jeswr/rdf-serialize", sha],
         ["@jeswr/solid-task-model", sha],
       ]),
     );
     expect(mirror.dependencies).not.toHaveProperty("@jeswr/suite-vocab");
+    expect(mirror.dependencies["@jeswr/fetch-rdf"]).toBe(`github:jeswr/fetch-rdf#${sha}`);
     expect(mirror.dependencies["@jeswr/rdf-serialize"]).toBe(`github:jeswr/rdf-serialize#${sha}`);
     expect(mirror.dependencies["@jeswr/solid-task-model"]).toBe(
       `github:jeswr/solid-task-model#${sha}`,

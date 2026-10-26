@@ -172,6 +172,8 @@ export const GROUPS_CONFIG: StoreConfig<Group> = {
 export function groupsStore(opts: {
   podRoot: string;
   webId: string;
+  /** Final document URL from the session profile load. */
+  profileDocumentUrl?: string;
   fetchImpl?: typeof fetch;
 }): ProductivityStore<Group> {
   return createStore(GROUPS_CONFIG, opts);
