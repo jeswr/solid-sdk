@@ -43,6 +43,11 @@ Validate with this package's `lint`, `build`, `typecheck` and `test` scripts.
   Keep `file_paths.xml` scoped to `cache/share-out/` alone. iOS uses `tmp/share-out/`.
 - Native stores reserve active uploads' declared bytes, reject malformed arguments and incomplete
   commits, and enforce 24-hour retention, 100 MiB total, and 20 files, evicting oldest committed
-  files. Do not delete files when the share sheet closes: the recipient may read them later.
+  files. `shareFiles` passes the ids it has already staged as `begin({ keep })`, so a batch never
+  evicts its own files; begin fails instead when only kept files remain. Do not delete files when
+  the share sheet closes: the recipient may read them later.
+- iOS registers `SuiteSharePlugin` under the name `Share`, replacing @capacitor/share 8.0.3,
+  which would hand any app-container `file:` URL to the sheet. It accepts only committed
+  share-out files and https URLs without credentials. Keep that override registered.
 - Keep store logic independent of Android/Capacitor APIs, test it with JVM JUnit, and maintain
   mobile guard tests for registration, FileProvider scope, and Xcode App target source entries.

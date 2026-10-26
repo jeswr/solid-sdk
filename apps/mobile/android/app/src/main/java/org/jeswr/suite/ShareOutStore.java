@@ -6,10 +6,13 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Pattern;
 
@@ -64,7 +67,24 @@ public final class ShareOutStore {
         return safe.isEmpty() ? "shared-file" : safe;
     }
 
-    public synchronized String begin(String name, String mimeType, long size, long now) throws IOException {
+    /** Ids of files already staged for the same share: absent, or an array of fewer than 20 ids. */
+    static Set<String> keepIds(Object raw) throws IOException {
+        Set<String> ids = new HashSet<>();
+        if (raw == null) return ids;
+        if (!(raw instanceof Object[]) || ((Object[]) raw).length >= MAX_FILES) throw new IOException("Invalid keep list");
+        for (Object id : (Object[]) raw) {
+            if (!(id instanceof String) || !isId((String) id)) throw new IOException("Invalid keep id");
+            ids.add((String) id);
+        }
+        return ids;
+    }
+
+    public String begin(String name, String mimeType, long size, long now) throws IOException {
+        return begin(name, mimeType, size, Collections.emptySet(), now);
+    }
+
+    /** {@code keep} names files already staged for the same share, so making room never evicts them. */
+    public synchronized String begin(String name, String mimeType, long size, Set<String> keep, long now) throws IOException {
         if (name == null || name.length() > 4096 || mimeType == null || mimeType.length() > 255 ||
             !MIME.matcher(mimeType).matches() || size < 0 || size > MAX_BYTES) throw new IOException("Invalid staging metadata");
         evict(now);
@@ -76,7 +96,7 @@ public final class ShareOutStore {
         // Active uploads reserve their declared size and cannot be evicted by a concurrent begin.
         for (File dir : dirs) {
             if (count < MAX_FILES && reserved <= MAX_BYTES - size) break;
-            if (uploads.containsKey(dir.getName())) continue;
+            if (uploads.containsKey(dir.getName()) || keep.contains(dir.getName())) continue;
             reserved -= reservedBytes(dir);
             remove(dir);
             count--;

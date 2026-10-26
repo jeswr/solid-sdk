@@ -164,6 +164,29 @@ public class ShareOutStoreTest {
         assertEquals(20, count());
     }
 
+    @Test public void filesKeptForTheSameShareAreNeverEvicted() throws Exception {
+        String kept = completed("first", now);
+        String other = completed("second", now + 1);
+        for (int i = 2; i < 20; i++) completed("f" + i, now + i);
+        String id = store.begin("next", "text/plain", 0, java.util.Collections.singleton(kept), now + 30);
+        assertTrue(new File(root, kept).exists());
+        assertFalse(new File(root, other).exists());
+        assertTrue(new File(root, id).exists());
+        // When only kept files remain there is no room, so the share fails instead of losing them.
+        java.util.Set<String> all = new java.util.HashSet<>(java.util.Arrays.asList(root.list()));
+        assertThrows(IOException.class, () -> store.begin("more", "text/plain", 0, all, now + 31));
+        assertEquals(20, count());
+    }
+
+    @Test public void keepListsMustBeArraysOfIds() throws Exception {
+        assertTrue(ShareOutStore.keepIds(null).isEmpty());
+        String id = UUID.randomUUID().toString();
+        assertEquals(java.util.Collections.singleton(id), ShareOutStore.keepIds(new Object[]{id}));
+        for (Object bad : new Object[]{"x", 1, new Object[]{"../x"}, new Object[]{1}, new Object[]{null}, new Object[ShareOutStore.MAX_FILES]}) {
+            assertThrows(IOException.class, () -> ShareOutStore.keepIds(bad));
+        }
+    }
+
     @Test public void activeUploadsCannotBeEvictedByAnotherBegin() throws Exception {
         for (int i = 0; i < 20; i++) begin(0);
         assertThrows(IOException.class, () -> begin(0));

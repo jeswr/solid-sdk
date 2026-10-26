@@ -39,7 +39,8 @@ final class ShareOutStore {
         return name.isEmpty ? "shared-file" : name
     }
 
-    func begin(name: String, mimeType: String, size: Int64, now: Date = Date()) throws -> String {
+    /// `keep` names files already staged for the same share, so making room never evicts them.
+    func begin(name: String, mimeType: String, size: Int64, keep: Set<String> = [], now: Date = Date()) throws -> String {
         guard name.utf8.count <= 16384, mimeType.utf8.count <= 255,
               mimeType.range(of: "^[a-zA-Z0-9][a-zA-Z0-9!#$&^_.+-]*/[a-zA-Z0-9][a-zA-Z0-9!#$&^_.+-]*\\z", options: .regularExpression) != nil,
               size >= 0, size <= Self.maxBytes else { throw Failure.invalid }
@@ -50,7 +51,7 @@ final class ShareOutStore {
         var count = dirs.count
         for dir in dirs {
             if count < Self.maxFiles && reserved <= Self.maxBytes - size { break }
-            if uploads[dir.lastPathComponent] != nil { continue }
+            if uploads[dir.lastPathComponent] != nil || keep.contains(dir.lastPathComponent) { continue }
             reserved -= try reservedBytes(dir)
             try fm.removeItem(at: dir)
             count -= 1
@@ -118,6 +119,17 @@ final class ShareOutStore {
             count -= 1
         }
         guard count <= Self.maxFiles, total <= Self.maxBytes else { throw Failure.busy }
+    }
+
+    /// The committed staged file `url` names, or nil. Only these may leave through the share sheet.
+    func committedFile(_ url: URL) -> URL? {
+        guard url.isFileURL, (url.host ?? "").isEmpty, url.query == nil, url.fragment == nil else { return nil }
+        let file = url.standardizedFileURL
+        let dir = file.deletingLastPathComponent()
+        let id = dir.lastPathComponent
+        guard dir.deletingLastPathComponent().path == root.path, Self.isId(id), uploads[id] == nil,
+              (try? safe(dir)) == true, (try? safe(file)) == true, (try? regularSize(file)) != nil else { return nil }
+        return file
     }
 
     private func upload(_ id: String) throws -> Upload {

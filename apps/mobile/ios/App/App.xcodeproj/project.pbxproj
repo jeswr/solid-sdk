@@ -33,6 +33,7 @@
 		FCC925B160BB4ACCC138F1F3 /* MainViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 86715AC00533AB53B5552859 /* MainViewController.swift */; };
 		6E1FEF325ABDB3C2D6FDE130 /* SuiteShareStagingPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73F75F2B869217CCDB2E1C09 /* SuiteShareStagingPlugin.swift */; };
 		C8EC118C0D45E7603829900B /* ShareOutStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03854134D908D75711A671CB /* ShareOutStore.swift */; };
+		237A340C9DA2749F39F58A68 /* SuiteSharePlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2751FA75371AA06F59E3AB8 /* SuiteSharePlugin.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -97,6 +98,7 @@
 		73F75F2B869217CCDB2E1C09 /* SuiteShareStagingPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SuiteShareStagingPlugin.swift; sourceTree = "<group>"; };
 		03854134D908D75711A671CB /* ShareOutStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareOutStore.swift; sourceTree = "<group>"; };
 		F1C4DD9DB0AC40043749312B /* AppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		B2751FA75371AA06F59E3AB8 /* SuiteSharePlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SuiteSharePlugin.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -179,6 +181,7 @@
 				50B271D01FEDC1A000F3C39B /* public */,
 				3531ECFDEC29FDB44678B88B /* SuiteShareIntakePlugin.swift */,
 				73F75F2B869217CCDB2E1C09 /* SuiteShareStagingPlugin.swift */,
+				B2751FA75371AA06F59E3AB8 /* SuiteSharePlugin.swift */,
 				E79D38B5A0EDD8CF09BFFA26 /* App.entitlements */,
 			);
 			path = App;
@@ -355,6 +358,7 @@
 				C4FB9110CBA07C628BFD8FB9 /* SuiteShareIntakePlugin.swift in Sources */,
 				C8EC118C0D45E7603829900B /* ShareOutStore.swift in Sources */,
 				6E1FEF325ABDB3C2D6FDE130 /* SuiteShareStagingPlugin.swift in Sources */,
+				237A340C9DA2749F39F58A68 /* SuiteSharePlugin.swift in Sources */,
 				893AD332353FE6DBA483E06A /* ShareStore.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

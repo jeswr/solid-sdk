@@ -189,6 +189,20 @@ describe("shareFiles", () => {
     expect(t.native.share).toHaveBeenCalledWith({ title: "From my pod", files: [uri, uri] });
     expect(t.staging.abort).not.toHaveBeenCalled();
   });
+  test("pins the files already staged for the same share", async () => {
+    const t = targets();
+    const ids = ["1", "2", "3"].map((n) => `${n.repeat(8)}-1234-1234-1234-123456789abc`);
+    const uriFor = (stagingId: string) => `file:///cache/share-out/${stagingId}/file.txt`;
+    for (const stagingId of ids) t.staging.begin.mockResolvedValueOnce({ stagingId });
+    t.staging.commit.mockImplementation(async ({ stagingId }) => ({ uri: uriFor(stagingId) }));
+    await shareFiles([file, file, file], {}, t);
+    expect(t.staging.begin.mock.calls.map(([options]) => options.keep)).toEqual([
+      undefined,
+      [ids[0]],
+      [ids[0], ids[1]],
+    ]);
+    expect(t.native.share).toHaveBeenCalledWith({ files: ids.map(uriFor) });
+  });
   test("retains files after the sheet is dismissed", async () => {
     const t = targets();
     t.native.share.mockRejectedValue(new Error("Share canceled"));

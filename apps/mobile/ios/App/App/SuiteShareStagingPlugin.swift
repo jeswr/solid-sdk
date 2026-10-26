@@ -13,14 +13,23 @@ public class SuiteShareStagingPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "commit", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "abort", returnType: CAPPluginReturnPromise)
     ]
-    private let queue = DispatchQueue(label: "org.jeswr.suite.share-staging")
-    private var cachedStore: ShareOutStore?
+    // One store for the process: SuiteSharePlugin checks outgoing files against it on this queue.
+    private static let queue = DispatchQueue(label: "org.jeswr.suite.share-staging")
+    private static var cachedStore: ShareOutStore?
+    private var queue: DispatchQueue { Self.queue }
 
-    private func store() throws -> ShareOutStore {
+    private static func store() throws -> ShareOutStore {
         if let store = cachedStore { return store }
         let store = try ShareOutStore()
         cachedStore = store
         return store
+    }
+
+    private func store() throws -> ShareOutStore { try Self.store() }
+
+    /// The committed staged file a share request names, or nil for any other URL.
+    static func committedFile(_ url: URL) -> URL? {
+        return queue.sync { (try? store())?.committedFile(url) }
     }
 
     override public func load() {
@@ -44,7 +53,14 @@ public class SuiteShareStagingPlugin: CAPPlugin, CAPBridgedPlugin {
                 guard let name = call.getString("name"), let mime = call.getString("mimeType") else {
                     throw ShareOutStore.Failure.invalid
                 }
-                let id = try self.store().begin(name: name, mimeType: mime, size: self.integer(call, "size"))
+                var keep = Set<String>()
+                if let raw = call.options["keep"] {
+                    guard let ids = raw as? [String], ids.count < ShareOutStore.maxFiles, ids.allSatisfy(ShareOutStore.isId) else {
+                        throw ShareOutStore.Failure.invalid
+                    }
+                    keep = Set(ids)
+                }
+                let id = try self.store().begin(name: name, mimeType: mime, size: self.integer(call, "size"), keep: keep)
                 call.resolve(["stagingId": id])
             } catch { call.reject("Cannot begin staging", "INVALID_ARGUMENT") }
         }

@@ -54,6 +54,7 @@ describe("iOS project", () => {
       "SuiteOrigin.swift",
       "SuiteShareIntakePlugin.swift",
       "SuiteShareStagingPlugin.swift",
+      "SuiteSharePlugin.swift",
       "ShareOutStore.swift",
     ]) {
       expect(pbxproj).toContain(`${file} in Sources */,`);
@@ -64,7 +65,11 @@ describe("iOS project", () => {
     const appSources = pbxproj.match(
       /504EC3001FED79650016851F \/\* Sources \*\/ = \{[\s\S]*?\n\t\t\};/,
     )?.[0];
-    for (const file of ["SuiteShareStagingPlugin.swift", "ShareOutStore.swift"]) {
+    for (const file of [
+      "SuiteShareStagingPlugin.swift",
+      "SuiteSharePlugin.swift",
+      "ShareOutStore.swift",
+    ]) {
       const ref = pbxproj.match(
         new RegExp(
           `([A-F0-9]{24}) /\\* ${file.replaceAll(".", "\\.")} \\*/ = \\{isa = PBXFileReference;`,
@@ -90,6 +95,18 @@ describe("iOS project", () => {
     }
     expect(source).toContain("self.store().commit(id: id).absoluteString");
     expect(read("ios/App/Shared/ShareOutStore.swift")).not.toMatch(/import (Capacitor|UIKit)/);
+  });
+
+  test("replaces @capacitor/share on iOS so only committed staged files can be shared", () => {
+    const main = read("ios/App/App/MainViewController.swift");
+    // Registered after the staging plugin, and after Capacitor's own plugins have loaded.
+    expect(main.indexOf("registerPluginInstance(SuiteSharePlugin())")).toBeGreaterThan(
+      main.indexOf("registerPluginInstance(SuiteShareStagingPlugin())"),
+    );
+    const source = read("ios/App/App/SuiteSharePlugin.swift");
+    expect(source).toContain('jsName = "Share"');
+    expect(source).toContain("committed: SuiteShareStagingPlugin.committedFile");
+    expect(source).toContain('parsed.scheme == "https"');
   });
 
   test("embeds a Share Extension that shares the App Group with the app", () => {

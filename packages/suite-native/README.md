@@ -62,7 +62,9 @@ validate metadata and contiguous offsets, reserve declared sizes for active uplo
 reject incomplete commits, and retain committed files after completion or dismissal.
 On startup and staging access they delete files older than 24 hours and evict the oldest
 committed files to keep at most 20 files and 100 MiB total. Active uploads cannot be
-evicted for capacity; a new upload fails when those reservations fill the cache.
+evicted for capacity, and nor can the files `shareFiles` has already staged for the same
+share (it passes their ids as `keep`); a new upload fails when those fill the cache. On iOS
+the shell replaces the `Share` plugin with one that shares only committed share-out files.
 
 Private at 0.1.0. From the workspace root:
 

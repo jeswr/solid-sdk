@@ -10,6 +10,7 @@ import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 import java.io.File;
 import java.io.IOException;
+import org.json.JSONArray;
 
 /** Thin bridge over the plain-Java store. Only bytes and display metadata enter native code. */
 @CapacitorPlugin(name = "SuiteShareStaging")
@@ -31,10 +32,21 @@ public class SuiteShareStagingPlugin extends Plugin {
         return ShareOutStore.integer(call.getData().opt(key));
     }
 
+    /** JSON arrays become Object[] for ShareOutStore.keepIds; any other value is rejected there. */
+    private static Object keepValue(Object raw) {
+        if (!(raw instanceof JSONArray)) return raw;
+        JSONArray list = (JSONArray) raw;
+        if (list.length() >= ShareOutStore.MAX_FILES) return raw;
+        Object[] values = new Object[list.length()];
+        for (int i = 0; i < values.length; i++) values[i] = list.opt(i);
+        return values;
+    }
+
     @PluginMethod
     public void begin(PluginCall call) {
         try {
-            String id = store().begin(call.getString("name"), call.getString("mimeType"), integer(call, "size"), System.currentTimeMillis());
+            String id = store().begin(call.getString("name"), call.getString("mimeType"), integer(call, "size"),
+                ShareOutStore.keepIds(keepValue(call.getData().opt("keep"))), System.currentTimeMillis());
             JSObject result = new JSObject();
             result.put("stagingId", id);
             call.resolve(result);

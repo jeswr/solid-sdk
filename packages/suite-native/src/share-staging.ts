@@ -4,7 +4,13 @@ import { sanitiseFileName } from "./share-intake.js";
 
 /** Native cache writer. No URLs, credentials or authenticated fetch cross this seam. */
 export interface ShareStagingPlugin {
-  begin(options: { name: string; mimeType: string; size: number }): Promise<{ stagingId: string }>;
+  /** `keep` lists files already staged for the same share, which native code must not evict. */
+  begin(options: {
+    name: string;
+    mimeType: string;
+    size: number;
+    keep?: string[];
+  }): Promise<{ stagingId: string }>;
   writeChunk(options: { stagingId: string; offset: number; data: string }): Promise<void>;
   commit(options: { stagingId: string }): Promise<{ uri: string }>;
   abort(options: { stagingId: string }): Promise<void>;
@@ -60,6 +66,16 @@ export async function stageFile(
   plugin: ShareStagingPlugin,
   limits: Partial<ShareStagingLimits> = {},
 ): Promise<string> {
+  return (await stage(blob, options, plugin, limits, [])).uri;
+}
+
+async function stage(
+  blob: Blob,
+  options: { name: string; mimeType?: string },
+  plugin: ShareStagingPlugin,
+  limits: Partial<ShareStagingLimits>,
+  keep: readonly string[],
+): Promise<{ stagingId: string; uri: string }> {
   const { maxFileBytes, chunkBytes } = { ...DEFAULT_SHARE_STAGING_LIMITS, ...limits };
   for (const [value, cap] of [
     [maxFileBytes, DEFAULT_SHARE_STAGING_LIMITS.maxFileBytes],
@@ -72,7 +88,7 @@ export async function stageFile(
   const metadata = fileOptions(blob, options, maxFileBytes);
   let stagingId: string | undefined;
   try {
-    const begun = await plugin.begin(metadata);
+    const begun = await plugin.begin(keep.length > 0 ? { ...metadata, keep: [...keep] } : metadata);
     // A malformed id is never sent back to native code, including in abort().
     if (
       typeof begun?.stagingId !== "string" ||
@@ -108,7 +124,7 @@ export async function stageFile(
     ) {
       throw new TypeError("Invalid staged file URI");
     }
-    return committed.uri;
+    return { stagingId, uri: committed.uri };
   } catch (error) {
     if (stagingId !== undefined) await plugin.abort({ stagingId }).catch(() => undefined);
     throw error;
@@ -131,7 +147,11 @@ export async function shareFiles(
   if (total > DEFAULT_SHARE_STAGING_LIMITS.maxFileBytes) {
     throw new TypeError("Shared files exceed the cache size limit");
   }
-  const uris: string[] = [];
-  for (const file of files) uris.push(await stageFile(file.blob, file, targets.staging));
-  return share({ ...content, files: uris }, { native: targets.native });
+  // Each file pins the earlier ones, so staging a batch never evicts its own files.
+  const staged: { stagingId: string; uri: string }[] = [];
+  for (const file of files) {
+    const keep = staged.map(({ stagingId }) => stagingId);
+    staged.push(await stage(file.blob, file, targets.staging, {}, keep));
+  }
+  return share({ ...content, files: staged.map(({ uri }) => uri) }, { native: targets.native });
 }

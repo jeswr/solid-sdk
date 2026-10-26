@@ -22,4 +22,20 @@ final class BridgeOriginGuardTests: XCTestCase {
         XCTAssertFalse(BridgeOriginGuard.allows(isMainFrame: true, origin: nil, allowed: allowed))
         XCTAssertFalse(BridgeOriginGuard.allows(isMainFrame: false, origin: nil, allowed: allowed))
     }
+
+    func testShareAcceptsOnlyHTTPSURLsAndCommittedFiles() throws {
+        let staged = try XCTUnwrap(URL(string: "file:///tmp/share-out/x/a.txt"))
+        let committed: (URL) -> URL? = { $0 == staged ? staged : nil }
+        XCTAssertEqual(SuiteSharePlugin.items(text: "hi", url: "https://pod.example/a", files: [staged.absoluteString],
+                                              committed: committed)?.count, 3)
+        for url in ["http://pod.example/a", "https://u:p@pod.example/a", "file:///etc/passwd", "javascript:x", "https:///a"] {
+            XCTAssertNil(SuiteSharePlugin.items(text: nil, url: url, files: nil, committed: committed), url)
+        }
+        for files in [["file:///private/var/mobile/secret"], [1], "file:///tmp/share-out/x/a.txt",
+                      Array(repeating: staged.absoluteString, count: 21)] as [Any] {
+            XCTAssertNil(SuiteSharePlugin.items(text: nil, url: nil, files: files, committed: committed))
+        }
+        XCTAssertNil(SuiteSharePlugin.items(text: String(repeating: "x", count: 10_001), url: nil, files: nil, committed: committed))
+        XCTAssertNil(SuiteSharePlugin.items(text: nil, url: nil, files: nil, committed: committed))
+    }
 }

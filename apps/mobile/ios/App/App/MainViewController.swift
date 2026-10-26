@@ -17,6 +17,8 @@ class MainViewController: CAPBridgeViewController {
         bridge.registerPluginInstance(SuiteAuthSessionPlugin())
         bridge.registerPluginInstance(SuiteShareIntakePlugin())
         bridge.registerPluginInstance(SuiteShareStagingPlugin())
+        // Takes over the "Share" name from @capacitor/share so only staged files can be shared.
+        bridge.registerPluginInstance(SuiteSharePlugin())
         guard let allowed = SuiteOrigin(url: bridge.config.serverURL) else {
             fatalError("server.url must be the https suite origin")
         }
