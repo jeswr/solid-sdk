@@ -24,6 +24,7 @@ export default defineConfig({
         "src/apps/tasks/lib/quickadd/**/*.ts",
         "src/apps/music/lib/metadata/**/*.ts",
         "src/apps/music/lib/lyrics/**/*.ts",
+        "src/apps/music/lib/scrobbles/**/*.ts",
         "src/apps/contacts/lib/vcard/**/*.ts",
         "src/apps/contacts/lib/phone/**/*.ts",
         "src/apps/contacts/lib/model/**/*.ts",
