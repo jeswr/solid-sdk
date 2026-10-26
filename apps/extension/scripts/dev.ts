@@ -119,7 +119,7 @@ function pinExtension(userDataDir: string, extensionId: string) {
   pinExtension(userDataDir, extensionId);
 
   // 4. Start two test site servers, both configured with the extension's redirect URI
-  const redirectUri = `https://${extensionId}.chromiumapp.org/callback`;
+  const redirectUri = `https://${extensionId}.chromiumapp.org/`;
   const appClientIdUrl = `http://localhost:${CLIENT_ID_SITE_PORT}/client-id`;
 
   console.log('Starting test sites...');

@@ -1,144 +1,157 @@
-// AUTHORED-BY Claude Opus 4.8
-/**
- * Tests for the static Solid-OIDC Client Identifier Document + its in-code mirror.
- *
- * The published Client ID Document (`public/clientid.jsonld`, copied into the build) lets
- * the extension log in with a STABLE named identity instead of throwaway dynamic
- * registration. These assert:
- *   (1) the shipped JSON has every member Solid-OIDC requires, with the right values;
- *   (2) the in-code mirror CLIENT_ID_DOCUMENT agrees byte-for-byte with the shipped JSON
- *       (so the asset can never silently drift from what the flow expects);
- *   (3) the document's redirect_uri shape matches auth-flow.ts's chromiumapp.org callback;
- *   (4) the reachability probe is fail-closed: the shipped placeholder URL is treated as
- *       unreachable so initiateLogin() falls back to dynamic client registration.
- */
-
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { describe, expect, it } from 'vitest';
+// AUTHORED-BY GPT-6.1-Sol (Codex)
+import { spawnSync } from 'node:child_process';
+import { createHash, createPublicKey } from 'node:crypto';
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
+import { describe, expect, it, vi } from 'vitest';
+import { isPublishedClientIdReachable } from '../src/background/client-id';
 import {
-  CLIENT_ID_DOCUMENT,
   CLIENT_ID_SCOPE,
-  isPlaceholderClientId,
-  isPublishedClientIdReachable,
   PUBLISHED_CLIENT_ID_URL,
+  renderClientIdDocument,
   SOLID_OIDC_CONTEXT,
-} from '../src/background/client-id';
+} from '../src/background/client-id-template';
 
-const shippedJson = JSON.parse(
-  readFileSync(fileURLToPath(new URL('../public/clientid.jsonld', import.meta.url)), 'utf8'),
-) as Record<string, unknown>;
+const expectedId = 'bicabcdahgfbkgmlidjpmiadmjlppikk';
+const documentPath = new URL('../public/clientid.jsonld', import.meta.url);
+const shippedJson = JSON.parse(readFileSync(documentPath, 'utf8'));
 
-describe('the shipped Client Identifier Document (public/clientid.jsonld)', () => {
-  it('declares the Solid-OIDC @context', () => {
-    expect(shippedJson['@context']).toBe(SOLID_OIDC_CONTEXT);
-    expect(SOLID_OIDC_CONTEXT).toBe('https://www.w3.org/ns/solid/oidc-context.jsonld');
-  });
+// Compute independently of the build script, from the actual committed DER public key.
+function extensionIdFromKey(key: string): string {
+  const der = Buffer.from(key, 'base64');
+  expect(der.toString('base64')).toBe(key);
+  expect(createPublicKey({ key: der, format: 'der', type: 'spki' }).type).toBe('public');
+  return [...createHash('sha256').update(der).digest().subarray(0, 16)]
+    .flatMap((byte) => [byte >> 4, byte & 15])
+    .map((nibble) => String.fromCharCode(97 + nibble))
+    .join('');
+}
 
-  it('has the spec-required members for a public-client app', () => {
-    expect(typeof shippedJson.client_id).toBe('string');
-    expect(shippedJson.client_name).toBe('Solid Browser Extension');
-    expect(shippedJson.scope).toBe(CLIENT_ID_SCOPE);
-    expect(shippedJson.scope).toBe('openid webid offline_access');
-    // A browser-extension app is a PUBLIC client → no client secret → auth method "none".
-    expect(shippedJson.token_endpoint_auth_method).toBe('none');
-    expect(shippedJson.grant_types).toEqual(['authorization_code', 'refresh_token']);
-    expect(shippedJson.response_types).toEqual(['code']);
-  });
-
-  it('redirect_uris is the chromiumapp.org callback shape (matches auth-flow getRedirectURL("callback"))', () => {
-    const uris = shippedJson.redirect_uris as string[];
-    expect(Array.isArray(uris)).toBe(true);
-    expect(uris).toHaveLength(1);
-    // chrome.identity.getRedirectURL('callback') => https://<extension-id>.chromiumapp.org/callback
-    expect(uris[0]).toMatch(/^https:\/\/[^/]+\.chromiumapp\.org\/callback$/);
-  });
-
-  it('client_id self-references the published URL (spec: the doc client_id MUST equal its URL)', () => {
-    // Both are the placeholder today — the maintainer sets them to the real hosted URL.
+describe('generated Client Identifier Document', () => {
+  it('renders the required public-client fields from one template', () => {
+    expect(renderClientIdDocument(expectedId)).toEqual({
+      '@context': 'https://www.w3.org/ns/solid/oidc-context.jsonld',
+      client_id: 'https://jeswr.github.io/solid-browser-extension/clientid.jsonld',
+      client_name: 'Solid Browser Extension',
+      client_uri: 'https://github.com/jeswr/solid-browser-extension',
+      logo_uri: 'https://jeswr.github.io/solid-browser-extension/icon128.png',
+      redirect_uris: [`https://${expectedId}.chromiumapp.org/`],
+      grant_types: ['authorization_code', 'refresh_token'],
+      response_types: ['code'],
+      scope: 'openid webid offline_access',
+      token_endpoint_auth_method: 'none',
+      application_type: 'web',
+    });
+    expect(shippedJson).toEqual(renderClientIdDocument(expectedId));
     expect(shippedJson.client_id).toBe(PUBLISHED_CLIENT_ID_URL);
+    expect(shippedJson['@context']).toBe(SOLID_OIDC_CONTEXT);
+    expect(shippedJson.scope).toBe(CLIENT_ID_SCOPE);
+    expect(JSON.stringify(shippedJson)).not.toContain('REPLACE-ME');
   });
 
-  it('the in-code mirror CLIENT_ID_DOCUMENT agrees byte-for-byte with the shipped JSON', () => {
-    // The single source of truth check: if either side changes, this fails loudly.
-    expect(JSON.parse(JSON.stringify(CLIENT_ID_DOCUMENT))).toEqual(shippedJson);
+  it('computes the pinned ID from the manifest public key and matches the redirect URI', () => {
+    const manifest = JSON.parse(
+      readFileSync(new URL('../src/manifest.json', import.meta.url), 'utf8'),
+    );
+    expect(manifest.key, 'The dispatcher public key must be pinned in the manifest').toBeTypeOf(
+      'string',
+    );
+    const id = extensionIdFromKey(manifest.key);
+    expect(id).toBe(expectedId);
+    expect(shippedJson.redirect_uris).toEqual([`https://${id}.chromiumapp.org/`]);
   });
+
+  it.each([
+    { mode: 'render', args: [] },
+    { mode: 'check', args: ['--check'] },
+  ])('$mode uses the committed key without EXT_PUBKEY or dependencies', ({ args }) => {
+    const directory = mkdtempSync(join(tmpdir(), 'solid-client-id-'));
+    const paths = [
+      'package.json',
+      'scripts/render-client-id.ts',
+      'src/background/client-id-template.ts',
+      'src/manifest.json',
+      'public/clientid.jsonld',
+    ];
+    const env = { ...process.env };
+    delete env.EXT_PUBKEY;
+    try {
+      for (const path of paths) {
+        const destination = join(directory, path);
+        mkdirSync(dirname(destination), { recursive: true });
+        copyFileSync(new URL(`../${path}`, import.meta.url), destination);
+      }
+      const result = spawnSync(
+        process.execPath,
+        [join(directory, 'scripts/render-client-id.ts'), ...args],
+        { cwd: directory, encoding: 'utf8', env },
+      );
+      expect(result.stderr).toBe('');
+      expect(result.status).toBe(0);
+      for (const path of ['src/manifest.json', 'public/clientid.jsonld']) {
+        expect(readFileSync(join(directory, path), 'utf8')).toBe(
+          readFileSync(new URL(`../${path}`, import.meta.url), 'utf8'),
+        );
+      }
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it('substitutes a different valid ID rather than hardcoding the redirect', () => {
+    const id = 'abcdefghijklmnopabcdefghijklmnop';
+    expect(renderClientIdDocument(id).redirect_uris).toEqual([`https://${id}.chromiumapp.org/`]);
+  });
+
+  it.each([
+    '',
+    'a'.repeat(31),
+    'a'.repeat(33),
+    'z'.repeat(32),
+    '../evil',
+    expectedId.toUpperCase(),
+  ])('rejects an invalid extension ID (%s)', (id) =>
+    expect(() => renderClientIdDocument(id)).toThrow('Invalid Chromium extension ID'));
 });
 
-describe('PUBLISHED_CLIENT_ID_URL placeholder (needs:user — hosting)', () => {
-  it('is a clearly-marked, non-real placeholder so the maintainer must fill it in', () => {
-    expect(PUBLISHED_CLIENT_ID_URL).toContain('REPLACE-ME');
-    expect(isPlaceholderClientId(PUBLISHED_CLIENT_ID_URL)).toBe(true);
-    // It IS at least a well-formed https: URL (so wiring/validation paths are exercised).
-    expect(() => new URL(PUBLISHED_CLIENT_ID_URL)).not.toThrow();
-    expect(new URL(PUBLISHED_CLIENT_ID_URL).protocol).toBe('https:');
+describe('Client ID Document reachability (fixture fetches only)', () => {
+  it.each([
+    '',
+    'invalid',
+    'http://example.com/clientid.jsonld',
+    'file:///clientid.jsonld',
+  ])('rejects invalid/non-HTTPS URLs before fetching: %s', async (url) => {
+    const fetchSpy = vi.fn<typeof fetch>();
+    expect(await isPublishedClientIdReachable(url, fetchSpy)).toBe(false);
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
-});
 
-describe('isPublishedClientIdReachable — fail-closed fallback to dynamic registration', () => {
-  it('returns false for the placeholder WITHOUT making a network call', async () => {
-    let called = false;
-    const fetchSpy = (async () => {
-      called = true;
-      return new Response('{}');
-    }) as unknown as typeof fetch;
+  it.each([
+    () => new Response('not found', { status: 404 }),
+    () => new Response('not JSON'),
+    () => Response.json(null),
+    () => Response.json({}),
+    () => Response.json({ client_id: 42 }),
+    () => Response.json({ client_id: 'https://other.example/clientid.jsonld' }),
+    () => Response.json({ client_id: `${PUBLISHED_CLIENT_ID_URL}/` }),
+  ])('fails closed for an unavailable or invalid document', async (response) => {
+    const fetchSpy = vi.fn<typeof fetch>().mockResolvedValue(response());
     expect(await isPublishedClientIdReachable(PUBLISHED_CLIENT_ID_URL, fetchSpy)).toBe(false);
-    expect(called).toBe(false); // short-circuited on the placeholder sentinel
   });
 
-  it('returns false for an empty URL', async () => {
-    expect(await isPublishedClientIdReachable('')).toBe(false);
+  it('fails closed on network errors', async () => {
+    const fetchSpy = vi.fn<typeof fetch>().mockRejectedValue(new Error('network down'));
+    expect(await isPublishedClientIdReachable(PUBLISHED_CLIENT_ID_URL, fetchSpy)).toBe(false);
   });
 
-  it('returns false for a non-HTTPS URL (the published doc must be HTTPS)', async () => {
-    const fetchSpy = (async () => new Response('{}')) as unknown as typeof fetch;
-    expect(await isPublishedClientIdReachable('http://example.com/cid.jsonld', fetchSpy)).toBe(
-      false,
-    );
-  });
-
-  it('returns false on a non-2xx response', async () => {
-    const fetchSpy = (async () =>
-      new Response('not found', { status: 404 })) as unknown as typeof fetch;
-    expect(await isPublishedClientIdReachable('https://real.example/cid.jsonld', fetchSpy)).toBe(
-      false,
-    );
-  });
-
-  it('returns false when the doc client_id does NOT self-reference its URL', async () => {
-    const fetchSpy = (async () =>
-      new Response(JSON.stringify({ client_id: 'https://other.example/x' }), {
-        status: 200,
-      })) as unknown as typeof fetch;
-    expect(await isPublishedClientIdReachable('https://real.example/cid.jsonld', fetchSpy)).toBe(
-      false,
-    );
-  });
-
-  it('returns false on a network error (never throws)', async () => {
-    const fetchSpy = (async () => {
-      throw new Error('network down');
-    }) as unknown as typeof fetch;
-    await expect(
-      isPublishedClientIdReachable('https://real.example/cid.jsonld', fetchSpy),
-    ).resolves.toBe(false);
-  });
-
-  it('returns TRUE for a reachable, self-referencing https doc', async () => {
-    const url = 'https://real.example/cid.jsonld';
-    const fetchSpy = (async () =>
-      new Response(JSON.stringify({ client_id: url, client_name: 'X' }), {
-        status: 200,
-      })) as unknown as typeof fetch;
-    expect(await isPublishedClientIdReachable(url, fetchSpy)).toBe(true);
-  });
-
-  it('tolerates a trailing-slash difference in the self-reference', async () => {
-    const url = 'https://real.example/cid.jsonld/';
-    const fetchSpy = (async () =>
-      new Response(JSON.stringify({ client_id: 'https://real.example/cid.jsonld' }), {
-        status: 200,
-      })) as unknown as typeof fetch;
-    expect(await isPublishedClientIdReachable(url, fetchSpy)).toBe(true);
+  it('accepts an exact self-reference, omitting cookies and refusing redirects', async () => {
+    const fetchSpy = vi.fn<typeof fetch>().mockResolvedValue(Response.json(shippedJson));
+    expect(await isPublishedClientIdReachable(PUBLISHED_CLIENT_ID_URL, fetchSpy)).toBe(true);
+    expect(fetchSpy).toHaveBeenCalledWith(PUBLISHED_CLIENT_ID_URL, {
+      headers: { Accept: 'application/ld+json, application/json' },
+      credentials: 'omit',
+      redirect: 'error',
+    });
   });
 });

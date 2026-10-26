@@ -32,7 +32,7 @@ async function globalSetup() {
 
   console.log('Discovering extension ID...');
   const extensionId = await discoverExtensionId();
-  const redirectUri = `https://${extensionId}.chromiumapp.org/callback`;
+  const redirectUri = `https://${extensionId}.chromiumapp.org/`;
   console.log(`  Extension ID: ${extensionId}`);
 
   // Port 8080: basic test site + extension's Client ID Document

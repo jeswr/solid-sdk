@@ -9,13 +9,17 @@
  *
  * Login uses a PUBLISHED Solid-OIDC Client Identifier Document URL as the `client_id`
  * (so the consent screen shows a stable name and `token_endpoint_auth_method=none`
- * public-client behaviour is correct), falling back to dynamic client registration only
- * when no Client ID Document is configured (dev). A page may supply its OWN Client ID
+ * public-client behaviour is correct). Dynamic registration is used only when the trusted
+ * clientIdMode setting is 'dcr'. A page may supply its OWN Client ID
  * Document via `window.solid.setClientId(...)` to identify itself to the pod.
  */
 
 import * as jose from 'jose';
-import { isPublishedClientIdReachable, PUBLISHED_CLIENT_ID_URL } from './client-id';
+import {
+  CLIENT_ID_SCOPE,
+  isPublishedClientIdReachable,
+  PUBLISHED_CLIENT_ID_URL,
+} from './client-id';
 import { createDpopProof, dpopThumbprint, generateDpopKeyPair } from './core/dpop';
 import { DpopKeyDb } from './core/dpop-key-db';
 import { loadSessionDpopKeyPair, persistDpopKeyPair } from './core/dpop-key-store';
@@ -25,22 +29,13 @@ import {
   type AuthParams,
   clearAuthParams,
   loadAuthParams,
+  loadClientIdMode,
   type StoredSession,
   saveAuthParams,
   saveSession,
 } from './session-store';
 
-/**
- * The extension's own published Client Identifier Document URL — see client-id.ts (the
- * static doc is committed at `public/clientid.jsonld`, copied into the build). This is a
- * PLACEHOLDER (`REPLACE-ME.example`) until the maintainer hosts the document and pins the
- * real URL (a needs:user step — see client-id.ts). Because the placeholder is unreachable,
- * the flow auto-falls-back to dynamic client registration (see initiateLogin), so shipping
- * the placeholder does NOT break login.
- */
-const DEFAULT_CLIENT_ID = PUBLISHED_CLIENT_ID_URL;
-
-const SCOPE = 'openid webid offline_access';
+const SCOPE = CLIENT_ID_SCOPE;
 
 interface OidcConfig {
   authorization_endpoint: string;
@@ -74,7 +69,7 @@ async function fetchOidcConfig(issuer: string): Promise<OidcConfig> {
 
 /** The fixed redirect URI this extension is registered with (chrome.identity). */
 function getRedirectUri(): string {
-  return chrome.identity.getRedirectURL('callback');
+  return chrome.identity.getRedirectURL();
 }
 
 async function fetchProfile(webId: string): Promise<string> {
@@ -136,6 +131,7 @@ export async function initiateLogin(
   options: InitiateLoginOptions,
 ): Promise<{ session: StoredSession; name: string | null; photoUrl: string | null }> {
   const { webId } = options;
+  const clientIdMode = await loadClientIdMode();
   const turtle = await fetchProfile(webId);
   const profile = parseWebIdProfile(webId, turtle);
   const issuer = await selectIssuer(
@@ -147,24 +143,21 @@ export async function initiateLogin(
   const config = await fetchOidcConfig(issuer);
   const redirectUri = getRedirectUri();
 
-  // Client-id resolution order:
-  //   1. a page-supplied Client ID Document URL (the page identifying itself), used as-is;
-  //   2. otherwise the extension's OWN published Client ID Document — but ONLY if it is
-  //      actually reachable + self-consistent (the IdP will need to dereference it). The
-  //      shipped value is a placeholder until hosted (needs:user), so this probe fails and
-  //      we fall through to (3) — keeping login working with no published client-id;
-  //   3. dynamic client registration (the fallback), when there is no usable client-id.
+  // A page-declared document keeps precedence. Only the extension's trusted setting can
+  // select DCR; document failure must never silently change the client's identity.
   let clientId = options.clientId || '';
-  if (!clientId && DEFAULT_CLIENT_ID && (await isPublishedClientIdReachable(DEFAULT_CLIENT_ID))) {
-    clientId = DEFAULT_CLIENT_ID;
-  }
   if (!clientId) {
-    if (!config.registration_endpoint) {
-      throw new Error(
-        'No client identifier configured and the issuer offers no dynamic registration endpoint.',
-      );
+    if (clientIdMode === 'document') {
+      if (!(await isPublishedClientIdReachable(PUBLISHED_CLIENT_ID_URL))) {
+        throw new Error('The published Client ID Document is unavailable or invalid.');
+      }
+      clientId = PUBLISHED_CLIENT_ID_URL;
+    } else {
+      if (!config.registration_endpoint) {
+        throw new Error('clientIdMode=dcr but the issuer offers no dynamic registration endpoint.');
+      }
+      clientId = await dynamicClientRegistration(config.registration_endpoint, redirectUri);
     }
-    clientId = await dynamicClientRegistration(config.registration_endpoint, redirectUri);
   }
 
   const codeVerifier = randomB64Url(32);

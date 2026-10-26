@@ -109,15 +109,15 @@ Explicit `solid.fetch` calls retain the worker's denial response.
 - **Login:** Solid-OIDC **authorization-code + PKCE + DPoP**, driven by
   `chrome.identity.launchWebAuthFlow` (a service worker has no `window`). The WebID's
   `solid:oidcIssuer` is resolved by **proper RDF parsing** (N3.js, not regex). The extension's
-  own published Solid-OIDC **Client Identifier Document** (committed at `public/clientid.jsonld`,
-  copied into the build, mirrored + shape-tested in `src/background/client-id.ts`) is used as the
-  `client_id` (stable consent-screen name + `token_endpoint_auth_method: "none"` public-client
-  behaviour) **when its hosted URL is reachable**; otherwise the flow falls back to **dynamic
-  client registration**. The hosted URL is a `REPLACE-ME` **placeholder** (`PUBLISHED_CLIENT_ID_URL`)
-  — actually HOSTING the document at a stable HTTPS URL (and pinning the real extension-id
-  `chromiumapp.org` redirect into it) is a **needs:user** step; until then the unreachable
-  placeholder transparently falls back to dynamic registration, so login keeps working. A page
-  may still declare its own Client ID Document via `solid.setClientId(...)`.
+  own Solid-OIDC **Client Identifier Document** is generated from
+  `src/background/client-id-template.ts` and the manifest's public key into
+  `public/clientid.jsonld` before builds (Node 24 required). The document's `client_id` is
+  `https://jeswr.github.io/solid-browser-extension/clientid.jsonld`, its redirect is
+  `https://bicabcdahgfbkgmlidjpmiadmjlppikk.chromiumapp.org/`, and its auth method is `none`.
+  The build rejects a missing or mismatched public key; the dispatcher-supplied key can be
+  imported with `EXT_PUBKEY=/path/to/extension-pubkey.b64 npm run generate:client-id`.
+  The public key belongs in `manifest.key`; the extension signing private key stays with Jesse.
+  A page may still declare its own Client ID Document via `solid.setClientId(...)`.
 - **Session:** the access + refresh token are persisted in `chrome.storage.local`; the
   DPoP keypair is persisted separately as a **non-extractable** `CryptoKey` object directly
   in IndexedDB (`core/dpop-key-db.ts`) — non-extractable `CryptoKey`s are structured-clone
@@ -128,6 +128,25 @@ Explicit `solid.fetch` calls retain the worker's denial response.
   refresh token (no popup). The restore decision logic is the suite's audited
   [`@jeswr/solid-session-restore`](https://github.com/jeswr/solid-session-restore) (fail-closed,
   WebID-scoped).
+
+The trusted `clientIdMode` setting is stored as `solid:client-id-mode` in
+`chrome.storage.local`. It accepts `document` or `dcr`, defaulting to `dcr` while Pages
+enablement is pending. `dcr` uses dynamic client registration without probing the hosted
+document. `document` uses the published URL and fails login if the document cannot be
+fetched or does not self-reference; it never silently registers a different client.
+Malformed settings fail closed. A page-declared Client ID Document keeps precedence in
+either mode, and page messages cannot set the mode.
+
+`.github/workflows/pages.yml` renders and publishes only the public document and its logo
+on `main` (or manual dispatch from `main`). **Jesse must enable GitHub Pages with GitHub
+Actions as its source**; the workflow does not enable Pages. Once hosting is available,
+set the mode from an extension context's DevTools console:
+
+```js
+await chrome.storage.local.set({ 'solid:client-id-mode': 'document' });
+```
+
+Use `dcr` in the same setting to retain dynamic registration during local development.
 
 ## The pinned toolbar identity
 

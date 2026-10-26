@@ -24,6 +24,7 @@ const KEYS = {
   profile: 'solid:profile',
   recentAccounts: 'solid:recent-accounts',
   clientIds: 'solid:client-ids',
+  clientIdMode: 'solid:client-id-mode',
   podOrigins: 'solid:pod-origins',
   grantedOrigins: 'solid:granted-origins',
   classGrants: 'solid:class-grants',
@@ -147,6 +148,20 @@ async function rememberAccount(profile: StoredProfile): Promise<void> {
 }
 
 // --- Per-origin client IDs + pod origins (credential-boundary inputs) ------------------
+
+export type ClientIdMode = 'document' | 'dcr';
+
+/** Keep login working until Jesse enables Pages (DESIGN §2 D2). */
+export const DEFAULT_CLIENT_ID_MODE: ClientIdMode = 'dcr';
+
+/** Only extension contexts configure this setting; page messages cannot override it. */
+export async function loadClientIdMode(): Promise<ClientIdMode> {
+  const result = await chrome.storage.local.get(KEYS.clientIdMode);
+  const mode: unknown = result[KEYS.clientIdMode];
+  if (mode === undefined) return DEFAULT_CLIENT_ID_MODE;
+  if (mode === 'document' || mode === 'dcr') return mode;
+  throw new Error('Invalid clientIdMode setting; expected document or dcr.');
+}
 
 export async function loadClientIds(): Promise<Record<string, string>> {
   return (await get<Record<string, string>>(KEYS.clientIds)) ?? {};

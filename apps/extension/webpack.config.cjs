@@ -46,9 +46,7 @@ module.exports = {
         { from: 'src/consent/consent.html', to: 'consent/consent.html' },
         { from: 'src/consent/consent.css', to: 'consent/consent.css' },
         { from: 'src/icons', to: 'icons' },
-        // The static Solid-OIDC Client Identifier Document (see client-id.ts). Shipped so a
-        // build can be hosted with the doc alongside; the in-flow client_id points at the
-        // eventual HOSTED URL (PUBLISHED_CLIENT_ID_URL), which is a needs:user placeholder.
+        // Generated from client-id-template.ts and the manifest's pinned public key.
         { from: 'public/clientid.jsonld', to: 'clientid.jsonld' },
       ],
     }),
