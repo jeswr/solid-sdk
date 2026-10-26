@@ -153,7 +153,10 @@ function contactPointValue(term: Term, dataset: DatasetCore, predicate: string) 
 /** Reuse the shared setters for new values; preserve metadata on every retained node. */
 function reconcileContactPoints(contact: Contact, desired: Contact): void {
   const subject = DataFactory.namedNode(contact.id);
+  const webId = contact.webId;
   for (const field of ["hasEmail", "hasTelephone", "url"]) {
+    // The scalar WebID exposes only one URL value, not the whole URL collection.
+    if (field === "url" && webId === desired.webId) continue;
     const predicate = `${VCARD}${field}`;
     const node = DataFactory.namedNode(predicate);
     const pending = new Map(
@@ -169,6 +172,7 @@ function reconcileContactPoints(contact: Contact, desired: Contact): void {
         pending.delete(value);
         continue;
       }
+      if (field === "url" && (webId === undefined || value !== webId)) continue;
       contact.dataset.delete(edge);
       // A removed value node may still belong to another contact or property.
       if (

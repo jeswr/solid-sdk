@@ -126,6 +126,36 @@ describe("address book CRUD with protocol preconditions", () => {
     });
   });
 
+  test("renames a loaded contact without deleting its additional URLs or structured metadata", async () => {
+    const { model, pod, book } = await setup();
+    pod.seed(
+      ALICE,
+      `${fixture("alice")}
+      <#this> vcard:url <https://alice.example/direct>, _:homepage .
+      _:homepage a vcard:Home; vcard:value <https://alice.example/home>; vcard:pref "2" .`,
+    );
+    const person = await model.loadContact(ALICE);
+    expect(person.data.webId).toBe("https://alice.example/profile#me");
+    await model.updateContact(book, person, { ...person.data, name: "Alicia" });
+    const updated = await model.loadContact(ALICE);
+    expect(updated.data).toEqual({ ...person.data, name: "Alicia" });
+    const { namedNode } = DataFactory;
+    const vcard = "http://www.w3.org/2006/vcard/ns#";
+    const urls = [...updated.dataset.match(namedNode(`${ALICE}#this`), namedNode(`${vcard}url`))];
+    expect(urls).toHaveLength(3);
+    expect(urls.some((edge) => edge.object.value === "https://alice.example/direct")).toBe(true);
+    const homepage = [...updated.dataset.match(null, namedNode(`${vcard}value`))].find(
+      (quad) => quad.object.value === "https://alice.example/home",
+    );
+    expect(homepage).toBeDefined();
+    expect(urls.some((edge) => edge.object.equals(homepage?.subject))).toBe(true);
+    expect([...updated.dataset.match(homepage?.subject)].map((quad) => quad.object.value)).toEqual([
+      `${vcard}Home`,
+      "https://alice.example/home",
+      "2",
+    ]);
+  });
+
   test("creates, renames and changes membership of groups without disturbing other index entries", async () => {
     const { model, book } = await setup();
     const id = await model.createGroup(

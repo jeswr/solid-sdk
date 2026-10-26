@@ -144,7 +144,8 @@ test("renaming parsed contacts preserves every structured value node and its met
     _:work2 a vcard:Work; vcard:value <mailto:alice@example.org>; vcard:pref "2" .
     <#this> vcard:hasTelephone _:phone .
     _:phone a vcard:Work; vcard:value <tel:+441234567>; vcard:pref "1" .
-    <#this> vcard:url _:web .
+    <#this> vcard:url _:web, _:homepage .
+    _:homepage a vcard:Home; vcard:value <https://alice.example/home>; vcard:pref "2" .
     _:web a vcard:WebId; vcard:value <https://alice.example/profile#me>;
       <https://example.org/verified> true .`,
     ALICE,
@@ -159,6 +160,81 @@ test("renaming parsed contacts preserves every structured value node and its met
       expect(dataset.has(quad)).toBe(true);
     }
   }
+});
+
+test.each([
+  "https://alice.example/#me",
+  undefined,
+])("preserves unrelated URL RDF when the selected WebID is unchanged (%s)", async (webId) => {
+  const dataset = await parse(
+    `${VCARD_PREFIX}
+      <#this> a vcard:Individual; vcard:fn "Alice";
+        ${webId ? `vcard:url <${webId}>;` : ""}
+        vcard:url _:home, <ftp://example.org/>, "legacy", _:empty .
+      _:home a vcard:Home; vcard:value <${webId ? "https://alice.example/home" : "ftp://example.org/home"}>;
+        vcard:pref "2" .
+      _:empty vcard:note "Keep this URL metadata" .`,
+    ALICE,
+  );
+  const contact = new Contact(`${ALICE}#this`, dataset, DataFactory);
+  expect(contact.webId).toBe(webId);
+  const original = [...dataset];
+  applyContact(contact, { ...contactData(contact), name: "Alicia" });
+  expect(dataset.size).toBe(original.length);
+  for (const quad of original) {
+    if (quad.predicate.value !== "http://www.w3.org/2006/vcard/ns#fn") {
+      expect(dataset.has(quad)).toBe(true);
+    }
+  }
+});
+
+test.each([
+  "https://new.example/#me",
+  undefined,
+  "https://alice.example/home",
+])("edits only the selected WebID value while retaining other URLs (%s)", async (webId) => {
+  const dataset = await parse(
+    `${VCARD_PREFIX}
+      <#this> a vcard:Individual; vcard:fn "Alice";
+        vcard:url _:web, <https://alice.example/#me>, _:home, <https://alice.example/direct>, "legacy" .
+      _:web a vcard:WebId; vcard:value <https://alice.example/#me>; vcard:pref "1" .
+      _:home a vcard:Home; vcard:value <https://alice.example/home>; vcard:pref "2" .`,
+    ALICE,
+  );
+  const contact = new Contact(`${ALICE}#this`, dataset, DataFactory);
+  expect(contact.webId).toBe("https://alice.example/#me");
+  const { namedNode } = DataFactory;
+  const url = namedNode("http://www.w3.org/2006/vcard/ns#url");
+  const edges = [...dataset.match(namedNode(contact.id), url)];
+  const web = edges[0]?.object;
+  expect(web).toBeDefined();
+  const retained = [...dataset].filter(
+    (quad) => !quad.subject.equals(web) && !edges.slice(0, 2).some((edge) => edge.equals(quad)),
+  );
+  applyContact(contact, webId === undefined ? { name: "Alice" } : { name: "Alice", webId });
+  for (const quad of retained) expect(dataset.has(quad)).toBe(true);
+  expect(dataset.match(web).size).toBe(0);
+  expect([...dataset].some((quad) => quad.object.value === "https://alice.example/#me")).toBe(
+    false,
+  );
+  if (webId) {
+    expect([...dataset].some((quad) => quad.object.value === webId)).toBe(true);
+  }
+});
+
+test("adding a first WebID preserves URL nodes outside the readable scalar field", async () => {
+  const dataset = await parse(
+    `${VCARD_PREFIX}
+    <#this> a vcard:Individual; vcard:fn "Alice"; vcard:url _:empty, <ftp://example.org/> .
+    _:empty vcard:note "Keep this URL metadata" .`,
+    ALICE,
+  );
+  const contact = new Contact(`${ALICE}#this`, dataset, DataFactory);
+  expect(contact.webId).toBeUndefined();
+  const original = [...dataset];
+  applyContact(contact, { name: "Alice", webId: "https://alice.example/#me" });
+  expect(contact.webId).toBe("https://alice.example/#me");
+  for (const quad of original) expect(dataset.has(quad)).toBe(true);
 });
 
 test("reconciles added and removed values without rebuilding retained or shared nodes", async () => {
