@@ -272,3 +272,27 @@ The requested fix and regression tests are complete. The full-workspace gate rem
 by the unchanged federation-codegen failures. Roborev remains unavailable (`command -v roborev`
 found no executable); no tool was installed. Integration review and bead closure remain with
 the integration owner. No tracker, remote or other checkout was modified. Open questions: none.
+
+### Resumed round 4 verification
+
+The resumed checkout already contained the requested implementation and regressions in
+`4d6b07ca`, followed by verification commit `f1d146cc`. Re-read the complete supplied review
+and earlier briefs and checked the existing migration against the single finding. No further
+implementation changes were necessary. This final `docs: record resumed credential verification`
+commit changes only STATUS.md.
+
+| Command | Result |
+| --- | --- |
+| `pnpm exec turbo run lint build typecheck test --filter=@jeswr/agent-credentials --concurrency=4` | PASS; 5/5 tasks, including uncached root lint; 3 tasks cached. |
+| `pnpm --filter @jeswr/agent-credentials run test` | PASS, fresh run; 9 files, 143 tests; 100% statements (1386), branches (1043), functions (209), lines (1255). |
+| `TURBO_SCM_BASE=0d45e1083ce2a9396e1b42a9931ac6bb5002e382 pnpm run gate` | PASS; 6/6 tasks, including root lint and 686 root tests; 4 tasks cached; 11.384s. |
+| `pnpm run gate:full` | FAIL in `@jeswr/federation-codegen#test`: the same two namespace fixture failures recorded above; 143 successful tasks out of 197 scheduled before stopping; 3.015s. |
+| `git diff --exit-code 3bcdbbf106b0508636d643eddeab3512510e83ec -- tools/federation-codegen packages/solid-federation-vocab` | PASS; failing paths remain unchanged. |
+| `git diff --check` | PASS. |
+
+The existing regression tests cover replacement of historical reference-keyed filenames with
+the same or a new reference and preservation on validation/write failure. No dependencies were
+added, so no dependency policy check was needed. Roborev is still unavailable. No live provider,
+real credential store, real op, network remote, tracker or other checkout was accessed or
+modified. The unrelated full-workspace failures and integration review remain outstanding;
+no requested implementation work or open questions remain.
