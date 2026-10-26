@@ -1,3 +1,5 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /**
  * X (Twitter) → Social & interests. Your own posts (`/2/users/me/tweets`) as
  * `schema:SocialMediaPosting`.
@@ -13,12 +15,14 @@ import { getJson } from "../core/fixture-fetch.js";
 import type { ImportContext, ImportOutcome, IntegrationAdapter } from "../core/types.js";
 import { CLASSES, SocialMediaPosting } from "../core/vocab.js";
 import { X_TWITTER_FIXTURES, type XTweetsAnswer } from "./fixtures.js";
+import { vocabMap } from "./vocab-map.js";
 
 const ID = "x-twitter";
 const API = "https://api.twitter.com/2";
 const SCOPES = ["tweet.read", "users.read", "offline.access"] as const;
 
 export const xTwitterAdapter: IntegrationAdapter = {
+  vocabMap,
   metadata: {
     id: ID,
     name: "X (Twitter)",
