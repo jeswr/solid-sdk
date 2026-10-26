@@ -99,3 +99,50 @@ message IDs, URL cursors, exclusive since, first title/message wins, owner WebID
 requirement, read-only default and provider IDs. There are no other blocking
 questions. ACL-before-content support is required from the server/port; there is
 no permissive fallback. Listing scans chat resources without a shared index.
+
+## Fix round 1 — review at 71278b5da95a
+
+- `72bd090a` — `fix: harden chat saves and incomplete listings`: resolves all
+  three review findings. ChatPodPort now discovers WAC ACL associations from
+  the target's Link header instead of guessing a suffix. The adapter checks
+  unique, unanchored, pod-scoped ACL URLs, refuses ACP and discovery redirects,
+  and allows advertised ACLs on 404 before container creation. Existing non-WAC
+  ACL documents abort saves; associations are rechecked after container creation.
+  Chat PUTs use manual redirects and reject every 3xx. Listing skips only
+  metadata 404s, preserving permission, transport, malformed-data and message
+  errors. Regression tests and API documentation cover the changed behavior.
+- Final documentation commit — `docs: record chat review fix validation`.
+
+Final checks for this round (all fetches in tests are in-memory fixtures):
+
+```sh
+pnpm --filter @jeswr/solid-chat-interop run lint && pnpm --filter @jeswr/solid-chat-interop run build && pnpm --filter @jeswr/solid-chat-interop run typecheck && pnpm --filter @jeswr/solid-chat-interop run test
+# PASS: lint/build/typecheck; 116 tests in 7 files.
+
+pnpm --filter @jeswr/solid-mcp run lint && pnpm --filter @jeswr/solid-mcp run build && pnpm --filter @jeswr/solid-mcp run typecheck && pnpm --filter @jeswr/solid-mcp run test
+# PASS: lint/build/typecheck; 115 tests in 4 files.
+
+PATH=/tmp/sst-fv0j-no-remote-git:$PATH TURBO_SCM_BASE=71278b5da95ad44e04afff0a1dde06ef8baada15 pnpm run gate
+# PASS: lint:root (including workspace/transport/fetch guards); 26/26 Turbo tasks.
+
+PATH=/tmp/sst-fv0j-no-remote-git:$PATH pnpm run gate:full
+# FAIL: unchanged @jeswr/federation-trust#test; 167/232 tasks completed.
+```
+
+The package checks also used the same PATH wrapper to refuse remote Git
+operations. Dependency-first builds restored missing workspace dist output.
+The exact-pinned fetch-rdf dist artifact described above was again copied into
+this checkout's node_modules; no remote clone/fetch or lifecycle scripts ran.
+No dependencies or lockfile changes were needed; check:packages is not applicable.
+Logs: `/tmp/sst-fv0j-fix-{interop-gate,mcp-gate,gate,gate-full}.log`.
+
+Full-gate completion remains blocked by the existing “delegation credential
+structure is stable” snapshot mismatch at
+`packages/federation-trust/test/characterization.test.ts:196`; that package is
+unchanged. Roborev and its post-commit hook remain unavailable, so no automated
+review verdict could be obtained. No task implementation remains unfinished.
+
+Conservative compatibility choice: servers must advertise an unambiguous WAC
+ACL even before container creation and support the ACL-first write sequence;
+otherwise saving fails closed. No new open questions. The earlier shared
+PodPort/registry coordination question is unchanged.
