@@ -140,3 +140,46 @@ publish, branch switch or other-checkout edit was performed. Automated roborev r
 unavailable in this checkout; no new automated verdict is claimed. All four implementation
 fixes are complete. Full-workspace validation and automated review retain the limitations
 above; there are no new open questions.
+
+## Fix round 2 — 2026-10-26
+
+Review base: `798bb3329b323adde8b357add4b89187a4faaa5f`. The single supplied callback
+error-propagation finding is addressed; changes are limited to that fix, its tests and this report.
+
+- `360ac640` — `fix: redirect OAuth callback completion errors`: revalidate the stored
+  client's exact redirect before broker completion. Catch asynchronous broker/consent
+  completion failures and redirect with the OAuth error (or generic `server_error`), the
+  original client state and configured issuer. Invalid client/redirect revalidation stays
+  local. Tests verify both error kinds from both completion stages, existing query
+  preservation, issuer spelling, response headers, no issued grants/codes and replay
+  rejection; they also verify that revalidation failures never invoke broker completion.
+- `docs: record OAuth callback fix results` — this final report commit.
+
+The regression suite was checked against the original callback: **6 failed, 164 passed**.
+With the fix, **170 tests pass; 344/344 statements, 301/301 branches, 50/50 functions and
+306/306 lines are covered**. Coverage configuration and thresholds remain unchanged.
+
+| Exact command | Result |
+| --- | --- |
+| `pnpm --filter @jeswr/guarded-fetch run build` | PASS; build the existing workspace dependency. |
+| `pnpm --filter @jeswr/mcp-oauth run lint` | PASS. |
+| `pnpm --filter @jeswr/mcp-oauth run build` | PASS. |
+| `pnpm --filter @jeswr/mcp-oauth run typecheck` | PASS; implementation and tests. |
+| `pnpm --filter @jeswr/mcp-oauth run test` | PASS; 170 tests, 100% coverage. |
+| `pnpm run lint:root` | PASS. |
+| `env GIT_ALLOW_PROTOCOL=none NODE_OPTIONS=--require=/tmp/sst-tsax-network-guard.cjs TURBO_SCM_BASE=798bb3329b323adde8b357add4b89187a4faaa5f pnpm run gate` | PASS; 6/6 tasks. |
+| `env GIT_ALLOW_PROTOCOL=none NODE_OPTIONS=--require=/tmp/sst-tsax-network-guard.cjs pnpm run gate:full` | FAIL outside this lane: `@jeswr/app-pod-manager#build`; 59 successful tasks before stopping. Root tests passed, 26/26. |
+| `git diff --check` | PASS. |
+
+The full gate retains the prior unrelated limitation: Pod Manager's unchanged `next/font`
+build tries to fetch Inter from Google Fonts, refused by the existing temporary network
+guard. No unrelated workaround was added. All gates ran before the final report commit.
+
+Logs: `/tmp/sst-tsax-round2-regression.log`, `/tmp/sst-tsax-round2-package-gate.log`,
+`/tmp/sst-tsax-round2-lint-root.log`, `/tmp/sst-tsax-round2-gate.log` and
+`/tmp/sst-tsax-round2-gate-full.log`.
+
+No dependencies were added, so no package-policy checks were needed. No push, PR, publish,
+branch switch, remote Git fetch/merge or other-checkout edit was performed. Automated
+roborev remains unavailable (no executable or post-commit hook); no automated verdict is
+claimed. The requested implementation fix is complete, with no new open questions.
