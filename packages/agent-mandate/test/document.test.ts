@@ -6,6 +6,7 @@ import { beforeAll, expect, it } from "vitest";
 import { mandateToTurtle, parseMandateCredential } from "../src/document.js";
 import { createVcMandateVerifier, issueMandate } from "../src/mandate.js";
 import { node, RDF_TYPE, SEC, turtle } from "../src/rdf.js";
+import { AGENT, ODRL } from "../src/types.js";
 import {
   ACTOR,
   alterProofOptions,
@@ -58,6 +59,63 @@ it("verifies the exported mandate proof configuration independently with WebCryp
   expect((created as unknown as { datatype: { value: string } }).datatype.value).toBe(
     "http://www.w3.org/2001/XMLSchema#dateTime",
   );
+});
+it("preserves ACL, delegation and extension vocabulary in signed mandate Turtle", async () => {
+  const m = {
+    ...mandate(),
+    autonomous: {
+      id: "urn:policy",
+      permissions: [
+        {
+          type: "permission" as const,
+          action: "append",
+          constraints: [
+            { leftOperand: "delegationDepth", operator: "lteq" as const, rightOperand: 1 },
+            { leftOperand: `${AGENT}binding`, operator: "eq" as const, rightOperand: "gmail" },
+          ],
+        },
+        { type: "permission" as const, action: "control" },
+        { type: "permission" as const, action: `${AGENT}SendMessage` },
+      ],
+    },
+  };
+  const credential = await issueMandate(m, key, {
+    statusListCredential: STATUS,
+    statusListIndex: "1",
+  });
+  const document = await mandateToTurtle(credential);
+  expect(await verifyExportedRdf(document, ID, key.publicKey)).toBe(true);
+  const store = await parseRdf(document, "text/turtle");
+  expect(
+    [...store].filter((q) => q.predicate.value === `${ODRL}action`).map((q) => q.object.value),
+  ).toEqual(
+    expect.arrayContaining([
+      "http://www.w3.org/ns/auth/acl#Append",
+      "http://www.w3.org/ns/auth/acl#Control",
+      `${AGENT}SendMessage`,
+    ]),
+  );
+  expect(
+    [...store].filter((q) => q.predicate.value === `${ODRL}leftOperand`).map((q) => q.object.value),
+  ).toEqual(
+    expect.arrayContaining([
+      "https://w3id.org/jeswr/odrl-delegation#delegationDepth",
+      `${AGENT}binding`,
+    ]),
+  );
+  const parsed = await parseMandateCredential(document);
+  expect(parsed).toBeDefined();
+  const loaded = await createVcMandateVerifier({
+    read: async () => parsed,
+    ownerWebId: OWNER,
+    agentWebId: ACTOR,
+    statusListCredential: STATUS,
+    webIdKeyResolver: await profileResolver(key),
+    resolveStatus: async () => ({ status: "valid" }),
+    now: clock,
+  }).load();
+  expect(loaded?.id).toBe(m.id);
+  expect(loaded?.autonomous).toMatchObject(m.autonomous);
 });
 it.each([
   "named",

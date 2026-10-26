@@ -1,6 +1,15 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
-import type { OdrlDuty, OdrlPolicy } from "@jeswr/solid-odrl";
+import {
+  ACTION_IRI,
+  IRI_TO_ACTION,
+  IRI_TO_LEFT_OPERAND,
+  IRI_TO_OPERATOR,
+  LEFT_OPERAND_IRI,
+  type OdrlDuty,
+  type OdrlPolicy,
+  OPERATOR_IRI,
+} from "@jeswr/solid-odrl";
 import type { JsonValue } from "@jeswr/solid-vc";
 import { type Node, RDF_TYPE } from "./rdf.js";
 import { AGENT, type Constraint, type Limit, ODRL, type Policy, type Rule } from "./types.js";
@@ -8,6 +17,12 @@ import { AGENT, type Constraint, type Limit, ODRL, type Policy, type Rule } from
 const uri = (value: string): string => (value.includes(":") ? value : `${ODRL}${value}`);
 const local = (value: string): string =>
   value.startsWith(ODRL) ? value.slice(ODRL.length) : value;
+const mapped = (value: string, names: Readonly<Record<string, string>>): string =>
+  Object.hasOwn(names, value) ? (names[value] as string) : value;
+/** Shared action identities, with explicit extension IRIs left intact. */
+export const actionIri = (value: string): string => uri(mapped(value, ACTION_IRI));
+/** Shared operand identities for signed RDF and external engine context. */
+export const leftOperandIri = (value: string): string => uri(mapped(value, LEFT_OPERAND_IRI));
 const opt = (key: string, value: JsonValue | undefined): Record<string, JsonValue> =>
   value === undefined ? {} : { [key]: value };
 
@@ -25,8 +40,8 @@ function encodeConstraint(c: Constraint): JsonValue {
   supportedFields(c, ["leftOperand", "operator", "rightOperand", "datatype"]);
   validateScalarCardinality(c.operator, Array.isArray(c.rightOperand) ? c.rightOperand.length : 1);
   return {
-    [`${ODRL}leftOperand`]: uri(c.leftOperand),
-    [`${ODRL}operator`]: uri(c.operator),
+    [`${ODRL}leftOperand`]: leftOperandIri(c.leftOperand),
+    [`${ODRL}operator`]: uri(mapped(c.operator, OPERATOR_IRI)),
     [`${ODRL}rightOperand`]: c.rightOperand as JsonValue,
     ...opt(`${AGENT}datatype`, c.datatype),
   };
@@ -34,7 +49,7 @@ function encodeConstraint(c: Constraint): JsonValue {
 function encodeDuty(d: OdrlDuty): JsonValue {
   supportedFields(d, ["action", "id", "target", "constraints"]);
   return {
-    [`${ODRL}action`]: uri(d.action),
+    [`${ODRL}action`]: actionIri(d.action),
     ...opt(`${ODRL}uid`, d.id),
     ...opt(`${ODRL}target`, d.target),
     [`${ODRL}constraint`]: (d.constraints ?? []).map(encodeConstraint),
@@ -52,7 +67,7 @@ function encodeRule(r: Rule): JsonValue {
     "duties",
   ]);
   return {
-    [`${ODRL}action`]: uri(r.action),
+    [`${ODRL}action`]: actionIri(r.action),
     ...opt(`${ODRL}uid`, r.id),
     ...opt(`${ODRL}target`, r.target),
     ...opt(`${ODRL}assigner`, r.assigner),
@@ -109,10 +124,10 @@ function decodeConstraint(n: Node): Constraint {
       : v.value;
   });
   if (rights.length === 0) throw new Error("Missing right operand");
-  const operator = local(n.iri(`${ODRL}operator`)) as Constraint["operator"];
+  const operator = mapped(n.iri(`${ODRL}operator`), IRI_TO_OPERATOR) as Constraint["operator"];
   validateScalarCardinality(operator, rights.length);
   return {
-    leftOperand: local(n.iri(`${ODRL}leftOperand`)),
+    leftOperand: mapped(n.iri(`${ODRL}leftOperand`), IRI_TO_LEFT_OPERAND),
     operator,
     rightOperand: rights.length === 1 ? (rights[0] as string | number) : rights,
     datatype: optional(n, `${AGENT}datatype`),
@@ -120,7 +135,7 @@ function decodeConstraint(n: Node): Constraint {
 }
 function decodeDuty(n: Node): OdrlDuty {
   return {
-    action: local(n.iri(`${ODRL}action`)) as OdrlDuty["action"],
+    action: mapped(n.iri(`${ODRL}action`), IRI_TO_ACTION) as OdrlDuty["action"],
     id: optional(n, `${ODRL}uid`),
     target: optional(n, `${ODRL}target`),
     constraints: n.values(`${ODRL}constraint`).map(decodeConstraint) as OdrlDuty["constraints"],
@@ -129,7 +144,7 @@ function decodeDuty(n: Node): OdrlDuty {
 function decodeRule(n: Node, type: Rule["type"]): Rule {
   return {
     type,
-    action: local(n.iri(`${ODRL}action`)),
+    action: mapped(n.iri(`${ODRL}action`), IRI_TO_ACTION),
     id: optional(n, `${ODRL}uid`),
     target: optional(n, `${ODRL}target`),
     assigner: optional(n, `${ODRL}assigner`),

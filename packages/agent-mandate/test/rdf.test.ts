@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 
+import { ACTION_IRI, LEFT_OPERAND_IRI } from "@jeswr/solid-odrl";
 import type { JsonValue } from "@jeswr/solid-vc";
 import { credentialToRdf } from "@jeswr/solid-vc";
 import { Store, Writer } from "n3";
@@ -55,6 +56,60 @@ it("preserves RDF policy parties, constraints and duty actions", () => {
   expect(parsed).toMatchObject(p);
   expect(parsed.obligations).toMatchObject(p.obligations as object);
   expect(parsed.permissions?.[0]?.duties).toMatchObject(p.permissions?.[0]?.duties as object);
+});
+it.each(
+  Object.entries(ACTION_IRI),
+)("preserves the shared action identity for %s", (action, iri) => {
+  const p: Policy = {
+    id: "urn:policy",
+    permissions: [{ type: "permission", action, duties: [{ action: action as "append" }] }],
+    prohibitions: [{ type: "prohibition", action }],
+    obligations: [{ action: action as "append" }],
+  };
+  const n = view(encodePolicy(p));
+  for (const predicate of ["permission", "prohibition", "obligation"])
+    expect(n.one(`${ODRL}${predicate}`).iri(`${ODRL}action`)).toBe(iri);
+  expect(n.one(`${ODRL}permission`).one(`${ODRL}duty`).iri(`${ODRL}action`)).toBe(iri);
+  expect(decodePolicy(n)).toMatchObject(p);
+});
+it.each(
+  Object.entries(LEFT_OPERAND_IRI),
+)("preserves the shared operand identity for %s", (leftOperand, iri) => {
+  const p: Policy = {
+    id: "urn:policy",
+    permissions: [
+      {
+        type: "permission",
+        action: "read",
+        constraints: [{ leftOperand, operator: "eq", rightOperand: 1 }],
+      },
+    ],
+  };
+  const n = view(encodePolicy(p));
+  expect(n.one(`${ODRL}permission`).one(`${ODRL}constraint`).iri(`${ODRL}leftOperand`)).toBe(iri);
+  expect(decodePolicy(n)).toMatchObject(p);
+});
+it.each([
+  `${AGENT}Custom`,
+  "https://extension.example/vocab#term",
+  `${ODRL}extension`,
+])("preserves explicit extension identities: %s", (iri) => {
+  const p: Policy = {
+    id: "urn:policy",
+    permissions: [
+      {
+        type: "permission",
+        action: iri,
+        constraints: [{ leftOperand: iri, operator: iri as "eq", rightOperand: "value" }],
+      },
+    ],
+  };
+  const n = view(encodePolicy(p));
+  const r = n.one(`${ODRL}permission`);
+  expect(r.iri(`${ODRL}action`)).toBe(iri);
+  expect(r.one(`${ODRL}constraint`).iri(`${ODRL}leftOperand`)).toBe(iri);
+  expect(r.one(`${ODRL}constraint`).iri(`${ODRL}operator`)).toBe(iri);
+  expect(decodePolicy(n)).toMatchObject(p);
 });
 it.each([
   "eq",

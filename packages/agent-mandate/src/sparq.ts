@@ -1,13 +1,14 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 
 import { credentialToRdf } from "@jeswr/solid-vc";
 // biome-ignore lint/style/useNodejsImportProtocol: the agent import guard requires bare module names
 import { spawnSync } from "child_process";
 import { Store } from "n3";
-import { encodePolicy } from "./codec.js";
+import { actionIri, encodePolicy, leftOperandIri } from "./codec.js";
 import { supportedPolicy } from "./policy.js";
 import { turtle } from "./rdf.js";
-import { AGENT, type Effect, ODRL, type PolicyEngine, type Rule } from "./types.js";
+import { AGENT, type Effect, type PolicyEngine, type Rule } from "./types.js";
 
 /** The pilot's local binary protocol, selected explicitly without fallback. */
 export const SPARQ_DECIDE_API = "sparq-policy-decide/1";
@@ -74,7 +75,7 @@ export function sparqPolicyEngine(
         });
         const attributes = { ...request.attributes, dateTime: request.at };
         const context = Object.entries(attributes).map(([leftOperand, value]) => ({
-          leftOperand: leftOperand.includes(":") ? leftOperand : `${ODRL}${leftOperand}`,
+          leftOperand: leftOperandIri(leftOperand),
           value: {
             type:
               leftOperand === "dateTime"
@@ -91,7 +92,7 @@ export function sparqPolicyEngine(
           api: SPARQ_DECIDE_API,
           policy: { format: "turtle", text: await turtle(new Store(graph)) },
           request: {
-            action: request.action.includes(":") ? request.action : `${ODRL}${request.action}`,
+            action: actionIri(request.action),
             target: request.target,
             context,
           },

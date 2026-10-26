@@ -1,5 +1,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
+import { parseRdf } from "@jeswr/fetch-rdf";
 import { expect, it } from "vitest";
+import { node } from "../src/rdf.js";
 import {
   type ProcessOptions,
   type ProcessResult,
@@ -7,6 +10,7 @@ import {
   sparqPolicyEngine,
 } from "../src/sparq.js";
 import type { Policy } from "../src/types.js";
+import { AGENT, ODRL } from "../src/types.js";
 import { ACTOR, intent } from "./helpers.js";
 
 const policy: Policy = { id: "urn:policy", permissions: [{ type: "permission", action: "read" }] };
@@ -131,4 +135,45 @@ it("rejects unbounded timeouts and permits carrying unresolved context", async (
   expect(await engine(response({ unresolved: [] })).evaluate(policy, intent())).toEqual({
     effect: "permit",
   });
+});
+it.each([
+  ["append", "http://www.w3.org/ns/auth/acl#Append"],
+  ["control", "http://www.w3.org/ns/auth/acl#Control"],
+  [`${AGENT}SendMessage`, `${AGENT}SendMessage`],
+])("sends shared vocabulary identities to the external engine: %s", async (action, iri) => {
+  let input = "";
+  await sparqPolicyEngine({
+    binary: "test",
+    run(_binary, args) {
+      input = args.input;
+      return { stdout: response(), status: 0 };
+    },
+  }).evaluate(
+    {
+      id: "urn:policy",
+      permissions: [
+        {
+          type: "permission",
+          action,
+          constraints: [{ leftOperand: "delegationDepth", operator: "lteq", rightOperand: 1 }],
+        },
+      ],
+    },
+    intent({ action, attributes: { delegationDepth: 1, [`${AGENT}binding`]: "gmail" } }),
+  );
+  const doc = JSON.parse(input);
+  expect(doc.request.action).toBe(iri);
+  expect(doc.request.context[0].leftOperand).toBe(
+    "https://w3id.org/jeswr/odrl-delegation#delegationDepth",
+  );
+  expect(doc.request.context[1].leftOperand).toBe(`${AGENT}binding`);
+  const store = await parseRdf(doc.policy.text, "text/turtle");
+  const rule = node(store, "urn:example:sparq-envelope")
+    .one("https://www.w3.org/2018/credentials#credentialSubject")
+    .one(`${AGENT}policy`)
+    .one(`${ODRL}permission`);
+  expect(rule.iri(`${ODRL}action`)).toBe(iri);
+  expect(rule.one(`${ODRL}constraint`).iri(`${ODRL}leftOperand`)).toBe(
+    "https://w3id.org/jeswr/odrl-delegation#delegationDepth",
+  );
 });
