@@ -4,6 +4,7 @@
 import { readFile } from "node:fs/promises";
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { policyToTurtle } from "@jeswr/solid-odrl";
+import type { Term } from "@rdfjs/types";
 import { DataFactory, Store } from "n3";
 import { isomorphic } from "rdf-isomorphic";
 import { expect, it, vi } from "vitest";
@@ -162,6 +163,308 @@ async function symmetricSharedAuthors(ids = ["one", "two"]) {
   }
   return { value, author, other, sourcesId };
 }
+
+// Force independent store instances to validate against the same old collection.
+function concurrentStores(context = setup()) {
+  let release!: () => void;
+  const listed = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let listings = 0;
+  const list = context.pod.list;
+  context.pod.list = async (url) => {
+    const snapshot = await list(url);
+    if (++listings <= 2) {
+      if (listings === 2) release();
+      await listed;
+    }
+    return snapshot;
+  };
+  return { ...context, other: new NanopubStore(context.pod) };
+}
+
+it.each([
+  "sources",
+  "entities",
+  "assertion",
+  "references",
+])("reserves shared %s graphs before concurrent conflicting puts can publish a nanopub", async (kind) => {
+  const { store, other, pod, write } = concurrentStores();
+  const fixture =
+    kind === "assertion"
+      ? sharedBlankAssertions
+      : (ids: string[], batch: string) => sharedBlankBatchGraphs(batch, ids);
+  const first = await fixture(["one"], "concurrent-conflict");
+  const second = await fixture(["two"], "concurrent-conflict");
+  if (kind === "assertion") {
+    const common = first.nanopubs[0]!.assertionId;
+    const assertion = graph(second.dataset, common);
+    new RdfNode(identity.webId, assertion).text(`${NS.schema}name`, "different");
+    putGraph(second.dataset as Store, common, assertion);
+  } else {
+    const name = pkgId("batch", "concurrent-conflict", kind === "references" ? "entities" : kind);
+    const contents = graph(second.dataset, name);
+    if (kind === "references") {
+      const source = "https://example.org/document";
+      const author = new RdfNode(source, contents).one(`${NS.schema}author`);
+      const fresh = DataFactory.blankNode();
+      const replaced = new Store();
+      for (const q of contents)
+        new RdfNode(q.subject.equals(author) ? fresh : q.subject, replaced).add(
+          q.predicate.value,
+          q.object.equals(author) ? fresh : q.object,
+        );
+      for (const q of [...second.dataset]) if (q.graph.value === name) second.dataset.delete(q);
+      putGraph(second.dataset as Store, name, replaced);
+    } else {
+      new RdfNode("https://example.org/document", contents).text(
+        `${NS.schema}description`,
+        "different",
+      );
+      putGraph(second.dataset as Store, name, contents);
+    }
+  }
+  const results = await Promise.allSettled([store.put(first), other.put(second)]);
+  expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+  const rejected = results.find((result) => result.status === "rejected") as PromiseRejectedResult;
+  expect(rejected.reason.message).toMatch(/Conflicting/);
+  expect((await store.list()).nanopubs).toHaveLength(1);
+  const nanopubs = write.mock.calls.filter(([url]) => /\/[\da-f-]+\.trig$/.test(url));
+  expect(nanopubs).toHaveLength(1);
+  const reservations = (await pod.list(store.container)).filter(({ url }) =>
+    url.endsWith(".reservation"),
+  );
+  expect(reservations.length).toBeGreaterThanOrEqual(3);
+  for (const entry of reservations) {
+    const aclIndex = write.mock.calls.findIndex(([url]) => url === `${entry.url}.acl`);
+    const dataIndex = write.mock.calls.findIndex(([url]) => url === entry.url);
+    expect(aclIndex).toBeLessThan(dataIndex);
+    expect(write.mock.calls[dataIndex]![3]).toEqual({ ifNoneMatch: "*" });
+  }
+});
+
+it.each([
+  [false, false],
+  [true, false],
+  [true, true],
+])("accepts identical concurrent graph reservations (same nanopub: %s, octet-stream: %s)", async (same, octet) => {
+  const { store, other, memory, write } = concurrentStores();
+  if (octet)
+    write.mockImplementation((url, bytes, type, cond) => {
+      if (type === "application/trig") throw statusError(415);
+      return memory.write(url, bytes, type, cond);
+    });
+  const first = await sharedBlankBatchGraphs("concurrent-identical", ["one"]);
+  const second = await sharedBlankBatchGraphs("concurrent-identical", [same ? "one" : "two"]);
+  await expect(Promise.all([store.put(first), other.put(second)])).resolves.toHaveLength(2);
+  expect((await store.list()).nanopubs).toHaveLength(same ? 1 : 2);
+});
+
+it("lists legacy collections and validates new puts before reserving any graphs", async () => {
+  const { store, memory, write } = setup();
+  const first = await sharedBlankBatchGraphs("legacy", ["one"]);
+  const url = store.url(first.nanopubs[0]!.id);
+  await memory.write(url, encode(await serializeNanopublications(first)), "application/trig", {});
+  expect((await store.list()).nanopubs).toEqual(first.nanopubs);
+  const conflicting = await sharedBlankBatchGraphs("legacy", ["two"]);
+  const name = pkgId("batch", "legacy", "sources");
+  const sources = graph(conflicting.dataset, name);
+  new RdfNode("https://example.org/document", sources).text(`${NS.schema}description`, "different");
+  putGraph(conflicting.dataset as Store, name, sources);
+  await expect(store.put(conflicting)).rejects.toThrow("Conflicting copies");
+  expect(write).not.toHaveBeenCalled();
+  const matching = await sharedBlankBatchGraphs("legacy", ["two"]);
+  await store.put(matching);
+  expect((await store.list()).nanopubs).toHaveLength(2);
+});
+
+it.each([
+  "type",
+  "identity",
+  "literal context",
+  "foreign context",
+  "missing context",
+  "parse",
+  "read",
+])("fails closed on a reservation with invalid %s without publishing a nanopub", async (failure) => {
+  const { store, memory, pod, write } = setup();
+  const value = await build("orphan-reservation");
+  const name = [
+    value.nanopubs[0]!.assertionId,
+    ...["sources", "entities"].map((kind) => pkgId("batch", "orphan-reservation", kind)),
+  ].sort()[0]!;
+  const url = `${store.container}shared-${name.slice("urn:uuid:".length)}.reservation`;
+  // A previous writer crashed after installing its graph reservations.
+  write.mockImplementation((target, bytes, type, cond) =>
+    target.endsWith(".trig")
+      ? Promise.reject(statusError(500))
+      : memory.write(target, bytes, type, cond),
+  );
+  await expect(store.put(value)).rejects.toMatchObject({ status: 500 });
+  expect((await store.list()).nanopubs).toHaveLength(0);
+  const existing = await memory.read(url);
+  const dataset = new Store([...(await parseRdf(decode(existing.body), "application/trig"))]);
+  const metadata = new RdfNode(url, dataset);
+  if (failure === "identity") {
+    metadata.terms(`${NS.pkg}reservedGraph`).clear();
+    metadata.link(`${NS.pkg}reservedGraph`, pkgId("wrong"));
+  }
+  if (failure.endsWith("context")) {
+    metadata.terms(`${NS.pkg}contextGraph`).clear();
+    if (failure === "literal context") metadata.text(`${NS.pkg}contextGraph`, "invalid");
+    if (failure === "foreign context")
+      metadata.link(`${NS.pkg}contextGraph`, "https://example.org/foreign");
+  }
+  const { serialize } = await import("@jeswr/rdf-serialize");
+  await memory.write(
+    url,
+    failure === "parse"
+      ? encode("not TriG")
+      : encode(await serialize([...dataset], { format: "application/trig" })),
+    failure === "type" ? "text/turtle" : "application/trig",
+    {},
+  );
+  if (failure === "read")
+    pod.read = async (target) => {
+      if (target === url) throw statusError(403);
+      return memory.read(target);
+    };
+  write.mockReset().mockImplementation(memory.write);
+  const result = store.put(value);
+  if (failure === "read") await expect(result).rejects.toMatchObject({ status: 403 });
+  else await expect(result).rejects.toThrow();
+  expect(write.mock.calls.some(([target]) => target.endsWith(".trig"))).toBe(false);
+  expect((await store.list()).nanopubs).toHaveLength(0);
+});
+
+it("keeps orphaned reservations authoritative and permits a matching retry using octet-stream", async () => {
+  const { store, memory, write } = setup();
+  const first = await sharedBlankBatchGraphs("crash-reservation", ["one"]);
+  write.mockImplementation((url, bytes, type, cond) => {
+    if (type === "application/trig") throw statusError(415);
+    if (url.endsWith(".trig")) throw statusError(500);
+    return memory.write(url, bytes, type, cond);
+  });
+  await expect(store.put(first)).rejects.toMatchObject({ status: 500 });
+  expect((await store.list()).nanopubs).toHaveLength(0);
+  write.mockReset().mockImplementation(memory.write);
+  const conflicting = await sharedBlankBatchGraphs("crash-reservation", ["two"]);
+  const name = pkgId("batch", "crash-reservation", "entities");
+  const entities = graph(conflicting.dataset, name);
+  new RdfNode("https://example.org/document", entities).text(`${NS.schema}description`, "conflict");
+  putGraph(conflicting.dataset as Store, name, entities);
+  await expect(store.put(conflicting)).rejects.toThrow("Conflicting copies");
+  expect(write.mock.calls.some(([url]) => url.endsWith(".trig"))).toBe(false);
+  await store.put(first);
+  expect((await store.list()).nanopubs).toHaveLength(1);
+});
+
+it("reserves joint blank-node identity when singleton reservations have different earlier contexts", async () => {
+  const context = setup();
+  const { store, memory, write } = context;
+  const assertionSeed = await sharedBlankAssertions(["seed"], "earlier-assertion");
+  const batchSeed = await sharedBlankBatchGraphs("joint-race", ["seed"]);
+  write.mockImplementation((url, bytes, type, cond) =>
+    url.endsWith(".trig") ? Promise.reject(statusError(500)) : memory.write(url, bytes, type, cond),
+  );
+  await expect(store.put(assertionSeed)).rejects.toMatchObject({ status: 500 });
+  await expect(store.put(batchSeed)).rejects.toMatchObject({ status: 500 });
+  expect((await store.list()).nanopubs).toHaveLength(0);
+  write.mockReset().mockImplementation(memory.write);
+  const assertionId = assertionSeed.nanopubs[0]!.assertionId;
+  const assertion = graph(assertionSeed.dataset, assertionId);
+  const preference = new RdfNode(identity.webId, assertion).one(`${NS.schema}hasPreference`);
+  const nested = new RdfNode(preference, assertion).one(`${NS.schema}additionalProperty`);
+  const incoming = async (id: string, linked: boolean) => {
+    const value = await sharedBlankBatchGraphs("joint-race", [id]);
+    const np = value.nanopubs[0]!;
+    const dataset = new Store();
+    const replaceAssertion = (term: Term) =>
+      term.value === np.assertionId ? DataFactory.namedNode(assertionId) : term;
+    for (const name of new Set([...value.dataset].map((q) => q.graph.value))) {
+      if (name === np.assertionId) continue;
+      const contents = new Store();
+      for (const q of graph(value.dataset, name))
+        new RdfNode(replaceAssertion(q.subject), contents).add(
+          q.predicate.value,
+          replaceAssertion(q.object),
+        );
+      putGraph(dataset, name, contents);
+    }
+    const sources = graph(value.dataset, pkgId("batch", "joint-race", "sources"));
+    const author = new RdfNode("https://example.org/document", sources).one(`${NS.schema}author`);
+    const detail = new RdfNode(author, sources).one(`${NS.schema}additionalProperty`);
+    const independent = DataFactory.blankNode();
+    const align = (term: Term) =>
+      term.equals(preference)
+        ? linked
+          ? author
+          : independent
+        : term.equals(nested)
+          ? detail
+          : term;
+    const contents = new Store();
+    for (const q of assertion)
+      new RdfNode(align(q.subject), contents).add(q.predicate.value, align(q.object));
+    putGraph(dataset, assertionId, contents);
+    return { dataset, nanopubs: [{ ...np, assertionId }] };
+  };
+  const first = await incoming("one", true);
+  const second = await incoming("two", false);
+  const { other } = concurrentStores(context);
+  const results = await Promise.allSettled([store.put(first), other.put(second)]);
+  expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+  const rejected = results.find((result) => result.status === "rejected") as PromiseRejectedResult;
+  expect(rejected.reason.message).toMatch(/Conflicting blank-node references/);
+  expect((await store.list()).nanopubs).toHaveLength(1);
+});
+
+it.each([
+  "different bytes",
+  "missing",
+  "unsupported type",
+  "octet-stream",
+])("only accepts an identical existing nanopub after a create conflict (%s)", async (mode) => {
+  const { store, memory, pod, write } = setup();
+  const value = await build("nanopub-conflict");
+  const url = store.url(value.nanopubs[0]!.id);
+  await store.put(value);
+  const existing = await memory.read(url);
+  // Hide only the nanopub listing to simulate a concurrent writer installing it.
+  pod.list = async () => [];
+  if (mode === "different bytes") {
+    const contents = graph(value.dataset, value.nanopubs[0]!.pubinfoId);
+    new RdfNode(value.nanopubs[0]!.id, contents).text(`${NS.schema}name`, "changed");
+    putGraph(value.dataset as Store, value.nanopubs[0]!.pubinfoId, contents);
+  }
+  if (mode === "unsupported type" || mode === "octet-stream")
+    await memory.write(
+      url,
+      existing.body,
+      mode === "octet-stream" ? "application/octet-stream" : "text/plain",
+      {},
+    );
+  if (mode === "missing")
+    write.mockImplementation((target, bytes, type, cond) =>
+      target === url ? Promise.reject(statusError(412)) : memory.write(target, bytes, type, cond),
+    );
+  if (mode === "missing") await memory.delete(url);
+  if (mode === "octet-stream") await expect(store.put(value)).resolves.toEqual([url]);
+  else await expect(store.put(value)).rejects.toMatchObject({ status: 412 });
+});
+
+it.each([403, 412])("fails closed after a container creation error (%s)", async (status) => {
+  const { store, memory, write } = setup();
+  write.mockImplementation((url, bytes, type, cond) =>
+    url.endsWith("/") ? Promise.reject(statusError(status)) : memory.write(url, bytes, type, cond),
+  );
+  await expect(store.put(await build())).rejects.toMatchObject({
+    status: status === 412 ? 404 : status,
+  });
+  expect(
+    write.mock.calls.some(([url]) => url.endsWith(".trig") || url.endsWith(".reservation")),
+  ).toBe(false);
+});
 
 it.each([
   false,
@@ -831,7 +1134,7 @@ it("writes owner-only ACLs before containers/data, splits nanopubs, and reloads 
   expect(new Set(loaded.nanopubs.map((np) => np.id))).toEqual(
     new Set(source.nanopubs.map((np) => np.id)),
   );
-  await expect(store.put(source)).rejects.toMatchObject({ status: 412 });
+  await expect(store.put(source)).resolves.toEqual(urls);
 });
 
 it("replaces an orphan public resource ACL conditionally before writing private bytes", async () => {
@@ -964,7 +1267,7 @@ it("conditionally replaces only the store's ACL and retains existing containers"
   await store.put(await build());
   write.mockClear();
   await new NanopubStore(pod).put(await build("second"));
-  expect(write.mock.calls.filter((call) => call[0].endsWith(".acl"))).toHaveLength(2);
+  expect(write.mock.calls.filter((call) => call[0].endsWith(".acl"))).toHaveLength(9);
   expect(write.mock.calls[0]![0]).toBe(`${store.container}.acl`);
   expect(write.mock.calls[0]![3].ifMatch).toBeDefined();
   expect(write.mock.calls[1]![3]).toEqual({ ifNoneMatch: "*" });
@@ -995,7 +1298,9 @@ it.each([
     expect(write.mock.calls.some((call) => call[0] === `${url}.acl`)).toBe(false);
   }
   expect(
-    write.mock.calls.filter((call) => call[0].endsWith(".acl")).map((call) => call[0]),
+    write.mock.calls
+      .filter((call) => call[0].endsWith(".acl") && !call[0].endsWith(".reservation.acl"))
+      .map((call) => call[0]),
   ).toEqual([`${store.container}.acl`, `${store.url(value.nanopubs[0]!.id)}.acl`]);
   const aclCall = write.mock.calls.findIndex((call) => call[0] === `${store.container}.acl`);
   const dataCall = write.mock.calls.findIndex((call) => call[0].endsWith(".trig"));
@@ -1009,7 +1314,9 @@ it("leaves existing shared ancestors without local ACLs untouched", async () => 
   const value = await build();
   await store.put(value);
   expect(
-    write.mock.calls.filter((call) => call[0].endsWith(".acl")).map((call) => call[0]),
+    write.mock.calls
+      .filter((call) => call[0].endsWith(".acl") && !call[0].endsWith(".reservation.acl"))
+      .map((call) => call[0]),
   ).toEqual([`${store.container}.acl`, `${store.url(value.nanopubs[0]!.id)}.acl`]);
 });
 

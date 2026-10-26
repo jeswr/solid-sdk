@@ -15,7 +15,15 @@ import {
 import { type PodConditions, type PodPort, podStatus } from "./pod-port.js";
 import { readMemoryPolicy } from "./policy.js";
 import { createDefaultPolicy } from "./purpose.js";
-import { dateTime, graph, NS, putGraph, RdfNode, ReferenceStore as Store } from "./rdf.js";
+import {
+  dateTime,
+  graph,
+  NS,
+  parseReferenceRdf,
+  putGraph,
+  RdfNode,
+  ReferenceStore as Store,
+} from "./rdf.js";
 
 const encode = (body: string) => new TextEncoder().encode(body);
 const decode = (body: Uint8Array) => new TextDecoder("utf-8", { fatal: true }).decode(body);
@@ -92,20 +100,7 @@ export class NanopubStore {
         pkgId("batch", np.batch, "entities"),
       ]);
       for (const part of parts) {
-        const common = new Set(part.sharedGraphs.filter((name) => names.has(name)));
-        for (const name of common) {
-          const incoming = graph(part.dataset, name);
-          const retained = graph(stored.dataset, name);
-          const fingerprint = (contents: DatasetCore) =>
-            contents.size === 0 ? "" : canonicalizeGraphWithLabels(contents).id;
-          if (fingerprint(incoming) !== fingerprint(retained))
-            throw new Error("Conflicting copies of a shared nanopublication graph");
-        }
-        if (
-          sharedGraphLabels(part.dataset, common).id !==
-          sharedGraphLabels(stored.dataset, common).id
-        )
-          throw new Error("Conflicting blank-node references in shared graphs");
+        validateSharedCopies(part.dataset, stored.dataset, part.sharedGraphs, names);
       }
     }
     // Also check joint references across the whole collection, including new
@@ -122,6 +117,22 @@ export class NanopubStore {
       })),
     );
     await this.initialize();
+    // Immutable graph reservations precede EVERY dependent nanopub. A crash can
+    // leave a reservation alone, but cannot expose an unreserved nanopub. Each
+    // reservation retains its shared-graph context so joint blank-node identity
+    // is checked even when concurrent writers saw the same old collection.
+    const reservations = new Map<string, { part: (typeof parts)[number]; required: string[] }>();
+    for (const part of parts) {
+      // Reserve every possible overlap (at most seven). Singleton reservations
+      // fix graph contents; joint reservations fix blank-node correspondence even
+      // when earlier orphan reservations came from disjoint graph contexts.
+      for (let mask = 1; mask < 1 << part.sharedGraphs.length; mask++) {
+        const required = part.sharedGraphs.filter((_, i) => mask & (1 << i)).sort();
+        reservations.set(required.join("|"), { part, required });
+      }
+    }
+    for (const [, { part, required }] of [...reservations].sort(([a], [b]) => a.localeCompare(b)))
+      await this.reserveGraphs(required, part.dataset, part.sharedGraphs);
     for (const resource of resources) await this.writeNanopub(resource.url, resource.bytes);
     return resources.map((resource) => resource.url);
   }
@@ -280,7 +291,7 @@ export class NanopubStore {
       if (container !== this.container && existing) continue;
       const existingAcl = await this.readOptional(`${container}.acl`);
       if (container === this.container || !existingAcl)
-        await this.protectResource(container, true, existingAcl);
+        await this.protectResource(container, true, existingAcl, true);
       // CSS can create the container implicitly when its ACL is written.
       if (!existing && !(await this.readOptional(container))) {
         const description = new Store();
@@ -288,9 +299,19 @@ export class NanopubStore {
           `${NS.rdf}type`,
           "http://www.w3.org/ns/ldp#BasicContainer",
         );
-        await this.pod.write(container, encode(await serialize([...description])), "text/turtle", {
-          ifNoneMatch: "*",
-        });
+        try {
+          await this.pod.write(
+            container,
+            encode(await serialize([...description])),
+            "text/turtle",
+            {
+              ifNoneMatch: "*",
+            },
+          );
+        } catch (error) {
+          if (podStatus(error) !== 412) throw error;
+          await this.pod.read(container);
+        }
       }
     }
   }
@@ -298,6 +319,7 @@ export class NanopubStore {
     url: string,
     inherit: boolean,
     existing: { etag?: string } | undefined,
+    acceptIdentical = false,
   ) {
     const dataset = new Store();
     const authorization = new RdfNode(`${url}.acl#owner`, dataset)
@@ -306,21 +328,79 @@ export class NanopubStore {
       .link(`${acl}accessTo`, url);
     if (inherit) authorization.link(`${acl}default`, url);
     for (const mode of ["Read", "Write", "Control"]) authorization.link(`${acl}mode`, acl + mode);
-    await this.pod.write(
-      `${url}.acl`,
-      encode(await serialize([...dataset])),
-      "text/turtle",
-      this.condition(existing),
-    );
-  }
-  private async writeNanopub(url: string, bytes: Uint8Array): Promise<void> {
-    // A resource ACL overrides the container default, including orphan ACLs.
-    await this.protectResource(url, false, await this.readOptional(`${url}.acl`));
+    const bytes = encode(await serialize([...dataset]));
     try {
-      await this.pod.write(url, bytes, "application/trig", { ifNoneMatch: "*" });
+      await this.pod.write(`${url}.acl`, bytes, "text/turtle", this.condition(existing));
+    } catch (error) {
+      // Concurrent initialization/reservations may install the same owner ACL.
+      // Any different ACL, unreadable state or other failure still fails closed.
+      if (
+        !acceptIdentical ||
+        podStatus(error) !== 412 ||
+        !equalBytes((await this.pod.read(`${url}.acl`)).body, bytes)
+      )
+        throw error;
+    }
+  }
+  private async reserveGraphs(
+    required: string[],
+    dataset: DatasetCore,
+    names: string[],
+  ): Promise<void> {
+    const name =
+      required.length === 1
+        ? (required[0] as string)
+        : pkgId("store", "joint-reservation", ...required);
+    const url = `${this.container}shared-${name.slice("urn:uuid:".length)}.reservation`;
+    const contents = new Store();
+    const labels = sharedGraphLabels(dataset, new Set(names)).labels;
+    const canonical = (term: Term) =>
+      term.termType === "BlankNode" ? df.blankNode(labels.get(term.value) as string) : term;
+    const manifest = new RdfNode(url, contents).link(`${NS.pkg}reservedGraph`, name);
+    for (const graphName of names) {
+      manifest.link(`${NS.pkg}contextGraph`, graphName);
+      const canonicalGraph = new Store();
+      for (const quad of graph(dataset, graphName))
+        new RdfNode(canonical(quad.subject), canonicalGraph).add(
+          quad.predicate.value,
+          canonical(quad.object),
+        );
+      putGraph(contents, graphName, canonicalGraph);
+    }
+    const bytes = encode(await serialize([...contents], { format: "application/trig" }));
+    try {
+      await this.writeNanopub(url, bytes, true);
+    } catch (error) {
+      if (podStatus(error) !== 412) throw error;
+      const retained = await this.readOptional(url);
+      if (!retained) throw error;
+      const type = retained.contentType.split(";")[0]?.trim().toLowerCase();
+      if (type !== "application/trig" && type !== "application/octet-stream")
+        throw new Error("Unsupported shared graph reservation media type");
+      const stored = await parseReferenceRdf(decode(retained.body), "application/trig", url);
+      const metadata = new RdfNode(url, graphDefault(stored));
+      if (metadata.oneIri(`${NS.pkg}reservedGraph`) !== name)
+        throw new Error("Shared graph reservation identity mismatch");
+      const context = new Set(
+        [...metadata.terms(`${NS.pkg}contextGraph`)].map((term) => {
+          if (term.termType !== "NamedNode" || !uuid.test(term.value))
+            throw new Error("Invalid shared graph reservation context");
+          return term.value;
+        }),
+      );
+      if (!required.every((name) => context.has(name)))
+        throw new Error("Missing shared graph reservation context");
+      validateSharedCopies(dataset, stored, names, context);
+    }
+  }
+  private async writeNanopub(url: string, bytes: Uint8Array, reservation = false): Promise<void> {
+    // A resource ACL overrides the container default, including orphan ACLs.
+    await this.protectResource(url, false, await this.readOptional(`${url}.acl`), true);
+    try {
+      if (!(await this.createResource(url, bytes, "application/trig", reservation))) return;
     } catch (error) {
       if (podStatus(error) !== 415) throw error;
-      await this.pod.write(url, bytes, "application/octet-stream", { ifNoneMatch: "*" });
+      if (!(await this.createResource(url, bytes, "application/octet-stream", reservation))) return;
       await this.verifyBytes(url, bytes);
       return;
     }
@@ -333,6 +413,34 @@ export class NanopubStore {
       await this.verifyBytes(url, bytes);
     }
   }
+  /** A duplicate nanopub is idempotent only when its entire RDF dataset agrees. */
+  private async createResource(
+    url: string,
+    bytes: Uint8Array,
+    type: string,
+    reservation: boolean,
+  ): Promise<boolean> {
+    try {
+      await this.pod.write(url, bytes, type, { ifNoneMatch: "*" });
+      return true;
+    } catch (error) {
+      if (reservation || podStatus(error) !== 412) throw error;
+      const stored = await this.readOptional(url);
+      if (!stored) throw error;
+      const mediaType = stored.contentType.split(";")[0]?.trim().toLowerCase();
+      if (mediaType !== "application/trig" && mediaType !== "application/octet-stream") throw error;
+      const incoming = await parseNanopublications(decode(bytes));
+      const retained = await parseNanopublications(decode(stored.body));
+      const names = new Set([...incoming.dataset].map((quad) => quad.graph.value));
+      for (const quad of retained.dataset) names.add(quad.graph.value);
+      if (
+        sharedGraphLabels(incoming.dataset, names, new Set()).id !==
+        sharedGraphLabels(retained.dataset, names, new Set()).id
+      )
+        throw error;
+      return false;
+    }
+  }
   private async verifyBytes(url: string, bytes: Uint8Array): Promise<void> {
     const stored = await this.pod.read(url);
     if (
@@ -341,6 +449,27 @@ export class NanopubStore {
     )
       throw new Error("Pod did not preserve nanopublication bytes in octet-stream fallback");
   }
+}
+
+function graphDefault(dataset: DatasetCore): Store {
+  return new Store([...dataset.match(null, null, null, df.defaultGraph())]);
+}
+
+function validateSharedCopies(
+  incoming: DatasetCore,
+  retained: DatasetCore,
+  names: string[],
+  retainedNames: Set<string>,
+): void {
+  const common = new Set(names.filter((name) => retainedNames.has(name)));
+  for (const name of common) {
+    const fingerprint = (contents: DatasetCore) =>
+      contents.size === 0 ? "" : canonicalizeGraphWithLabels(contents).id;
+    if (fingerprint(graph(incoming, name)) !== fingerprint(graph(retained, name)))
+      throw new Error("Conflicting copies of a shared nanopublication graph");
+  }
+  if (sharedGraphLabels(incoming, common).id !== sharedGraphLabels(retained, common).id)
+    throw new Error("Conflicting blank-node references in shared graphs");
 }
 
 /** Encode (graph, predicate) pairs only for joint matching, never for stored RDF. */

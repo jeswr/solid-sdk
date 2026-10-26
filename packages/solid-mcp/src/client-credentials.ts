@@ -15,6 +15,7 @@ import {
 } from "@jeswr/solid-dpop";
 import { podScopedUrlOrUndefined } from "./auth.js";
 import type { CliConfig } from "./cli-config.js";
+import { withProfileLimits } from "./profile-limits.js";
 import { withProfileRedirects } from "./profile-redirects.js";
 
 const MAX_PROFILE_REDIRECTS = 5;
@@ -110,90 +111,103 @@ export async function createCliFetch(
   return withProfileRedirects(async (input, init) => {
     const request = new Request(input, init);
     if (!podScopedUrlOrUndefined(config, request.url)) {
-      // Off-pod WebID discovery never receives this pod's credentials.
-      const headers = new Headers(request.headers);
-      headers.delete("authorization");
-      headers.delete("dpop");
-      const follow = request.redirect === "follow" && ["GET", "HEAD"].includes(request.method);
-      let anonymousRequest = request;
-      let allowLoopback = false;
-      for (let hop = 0; ; hop++) {
-        // The generic Node guard follows redirects itself. Use its pinning
-        // dispatcher here so this loop can enforce same-origin before each hop.
-        const dispatcher =
-          hop > 0
-            ? createPinningDispatcher({
-                allowLoopback,
-                resolveAll: dnsLookup,
-              })
-            : undefined;
-        let response: Response;
-        try {
-          if (dispatcher) {
-            // Use the dispatcher's matching HTTP client: Node's built-in fetch
-            // may use a different major version of the dispatcher protocol.
-            // A fresh dispatcher has no redirect interceptor; this loop follows hops.
-            const target = new URL(anonymousRequest.url);
-            const result = await dispatcher.request({
-              origin: target.origin,
-              path: target.pathname + target.search,
-              method: anonymousRequest.method as "GET" | "HEAD",
-              headers: Object.fromEntries(headers),
-              signal: anonymousRequest.signal,
-            });
-            const responseHeaders = new Headers();
-            for (const [name, values] of Object.entries(result.headers))
-              for (const value of Array.isArray(values)
-                ? values
-                : values === undefined
-                  ? []
-                  : [values])
-                responseHeaders.append(name, value);
-            const noBody =
-              anonymousRequest.method === "HEAD" || [204, 205, 304].includes(result.statusCode);
-            if (noBody) result.body.resume();
-            response = new Response(
-              noBody ? null : (Readable.toWeb(result.body) as ReadableStream<Uint8Array>),
-              {
-                status: result.statusCode,
-                headers: responseHeaders,
-              },
-            );
-          } else {
-            response = await fetchImpl(anonymousRequest, {
-              headers,
-              redirect: "manual",
-              credentials: "omit",
-            });
+      return withProfileLimits(request, async (request) => {
+        // Off-pod WebID discovery never receives this pod's credentials.
+        const headers = new Headers(request.headers);
+        headers.delete("authorization");
+        headers.delete("dpop");
+        const follow = request.redirect === "follow" && ["GET", "HEAD"].includes(request.method);
+        let anonymousRequest = request;
+        let allowLoopback = false;
+        for (let hop = 0; ; hop++) {
+          anonymousRequest.signal.throwIfAborted();
+          // The generic Node guard follows redirects itself. Use its pinning
+          // dispatcher here so this loop can enforce same-origin before each hop.
+          const dispatcher =
+            hop > 0
+              ? createPinningDispatcher({
+                  allowLoopback,
+                  resolveAll: dnsLookup,
+                })
+              : undefined;
+          let response: Response;
+          try {
+            if (dispatcher) {
+              // Use the dispatcher's matching HTTP client: Node's built-in fetch
+              // may use a different major version of the dispatcher protocol.
+              // A fresh dispatcher has no redirect interceptor; this loop follows hops.
+              const target = new URL(anonymousRequest.url);
+              const result = await dispatcher.request({
+                origin: target.origin,
+                path: target.pathname + target.search,
+                method: anonymousRequest.method as "GET" | "HEAD",
+                headers: Object.fromEntries(headers),
+                signal: anonymousRequest.signal,
+              });
+              const responseHeaders = new Headers();
+              for (const [name, values] of Object.entries(result.headers))
+                for (const value of Array.isArray(values)
+                  ? values
+                  : values === undefined
+                    ? []
+                    : [values])
+                  responseHeaders.append(name, value);
+              const noBody =
+                anonymousRequest.method === "HEAD" || [204, 205, 304].includes(result.statusCode);
+              if (noBody) result.body.destroy();
+              response = new Response(
+                noBody
+                  ? null
+                  : (Readable.toWeb(result.body, {
+                      strategy: {
+                        highWaterMark: result.body.readableHighWaterMark,
+                        size: (chunk) => chunk.byteLength,
+                      },
+                    }) as ReadableStream<Uint8Array>),
+                {
+                  status: result.statusCode,
+                  headers: responseHeaders,
+                },
+              );
+              Object.defineProperty(response, "url", { value: anonymousRequest.url });
+            } else {
+              response = await fetchImpl(anonymousRequest, {
+                headers,
+                redirect: "manual",
+                credentials: "omit",
+              });
+            }
+          } catch (error) {
+            if (dispatcher)
+              throw new Error("Invalid anonymous profile redirect.", { cause: error });
+            throw error;
+          } finally {
+            void dispatcher?.close().catch(() => {});
           }
-        } catch (error) {
-          if (dispatcher) throw new Error("Invalid anonymous profile redirect.", { cause: error });
-          throw error;
-        } finally {
-          void dispatcher?.close().catch(() => {});
+          const location = response.headers.get("location");
+          if (!follow || ![301, 302, 303, 307, 308].includes(response.status) || !location)
+            return response;
+          await response.body?.cancel();
+          if (hop === MAX_PROFILE_REDIRECTS)
+            throw new Error("Too many anonymous profile redirects.");
+          let target: URL;
+          try {
+            target = new URL(location, anonymousRequest.url);
+            if (location.trim().startsWith("//") || target.origin !== new URL(request.url).origin)
+              throw new Error();
+            // Only operator-configured loopback origins retain the local development allowance.
+            allowLoopback =
+              isLoopbackHost(target.hostname) &&
+              [config.podRoot, config.webId].some(
+                (url) => url && new URL(url).origin === target.origin,
+              );
+            await assertSafeUrl(target.href, { allowLoopback, dnsLookup });
+          } catch {
+            throw new Error("Invalid anonymous profile redirect.");
+          }
+          anonymousRequest = new Request(target, anonymousRequest);
         }
-        const location = response.headers.get("location");
-        if (!follow || ![301, 302, 303, 307, 308].includes(response.status) || !location)
-          return response;
-        await response.body?.cancel();
-        if (hop === MAX_PROFILE_REDIRECTS) throw new Error("Too many anonymous profile redirects.");
-        let target: URL;
-        try {
-          target = new URL(location, anonymousRequest.url);
-          if (location.trim().startsWith("//") || target.origin !== new URL(request.url).origin)
-            throw new Error();
-          // Only operator-configured loopback origins retain the local development allowance.
-          allowLoopback =
-            isLoopbackHost(target.hostname) &&
-            [config.podRoot, config.webId].some(
-              (url) => url && new URL(url).origin === target.origin,
-            );
-          await assertSafeUrl(target.href, { allowLoopback, dnsLookup });
-        } catch {
-          throw new Error("Invalid anonymous profile redirect.");
-        }
-        anonymousRequest = new Request(target, anonymousRequest);
-      }
+      });
     }
     const state = await currentSession();
     const headers = Object.fromEntries(request.headers);

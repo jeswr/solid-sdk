@@ -3,6 +3,7 @@ name: pkg-memory
 description: Build, parse and classify PKG nanopublications, enforce purpose policies, and store memory through PodPort.
 ---
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # PKG nanopublications
 
@@ -34,3 +35,10 @@ TriG rejection (HTTP 415) or rewriting permits only the same bytes stored as
 octet-stream. Strong ETags are required for replacements. Never use a Turtle or
 flattened-graph fallback. Retraction appends a revising nanopub; it does not edit
 or delete the original. Use the exported memory PodPort for offline tests.
+
+Shared assertion/source/entity graphs are reserved create-only before dependent
+nanopubs. Keep reservation context for joint blank-node correspondence, protect
+reservations with owner-only ACLs, and ignore them in nanopub listings. Orphaned
+reservations remain authoritative. Identical nanopub retries are idempotent only
+after full dataset comparison; conflicting contents must reject. Keep validation
+against legacy collections that have no reservations.

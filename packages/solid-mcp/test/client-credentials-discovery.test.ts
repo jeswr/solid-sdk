@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6
 import { lookup } from "node:dns/promises";
 import { Readable } from "node:stream";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createCliFetch as cliFetch } from "../src/client-credentials.js";
 import { search } from "../src/pod.js";
 import { createFetchPodPort } from "../src/pod-port.js";
@@ -61,8 +61,112 @@ beforeEach(() => {
     .mockReset()
     .mockResolvedValue([{ address: "93.184.216.34", family: 4 }]);
 });
+afterEach(() => vi.useRealTimers());
 
 describe("anonymous WebID profile redirects", () => {
+  it.each([
+    false,
+    true,
+  ])("caps endless profile bodies at the resource byte limit (redirect: %s)", async (redirect) => {
+    const css = mockCss();
+    let produced = 0;
+    const cancelled = vi.fn();
+    const fetch = await createCliFetch(config, async (input, init) => {
+      const request = new Request(input, init);
+      if (request.url.startsWith(ISSUER)) return css.fetch(input, init);
+      if (redirect && request.url === profile)
+        return new Response(null, { status: 302, headers: { location: "/card" } });
+      return new Response(
+        new ReadableStream({
+          pull(controller) {
+            produced += 64 * 1024;
+            controller.enqueue(new Uint8Array(64 * 1024));
+          },
+          cancel: cancelled,
+        }),
+      );
+    });
+    await expect(fetch(profile)).rejects.toThrow(/body exceeds cap/);
+    await vi.waitFor(() => expect(cancelled).toHaveBeenCalled());
+    expect(produced).toBeGreaterThan(1024 * 1024);
+    expect(produced).toBeLessThan(2 * 1024 * 1024);
+  });
+
+  it("rejects an oversized declared body and cancels it before buffering", async () => {
+    const css = mockCss();
+    const cancelled = vi.fn();
+    const fetch = await createCliFetch(config, async (input, init) => {
+      const request = new Request(input, init);
+      if (request.url.startsWith(ISSUER)) return css.fetch(input, init);
+      return new Response(new ReadableStream({ cancel: cancelled }), {
+        headers: { "content-length": String(1024 * 1024 + 1) },
+      });
+    });
+    await expect(fetch(profile)).rejects.toThrow(/body exceeds cap/);
+    expect(cancelled).toHaveBeenCalled();
+  });
+
+  it("uses one deadline across a slow initial request and redirect hops", async () => {
+    const css = mockCss();
+    const signals: AbortSignal[] = [];
+    const fetch = await createCliFetch(config, async (input, init) => {
+      const request = new Request(input, init);
+      if (request.url.startsWith(ISSUER)) return css.fetch(input, init);
+      signals.push(request.signal);
+      await new Promise((resolve) => setTimeout(resolve, 4_000));
+      return new Response(null, { status: 302, headers: { location: `/card-${signals.length}` } });
+    });
+    vi.useFakeTimers();
+    const result = fetch(profile);
+    const rejected = expect(result).rejects.toMatchObject({ name: "TimeoutError" });
+    await vi.advanceTimersByTimeAsync(10_000);
+    await rejected;
+    expect(signals).toHaveLength(3);
+    expect(signals.every((signal) => signal.aborted)).toBe(true);
+    await vi.advanceTimersByTimeAsync(4_000);
+    expect(signals).toHaveLength(3);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it.each([
+    "deadline",
+    "caller",
+  ])("aborts stalled redirected body consumption through the %s signal", async (cause) => {
+    const css = mockCss();
+    const ready = Promise.withResolvers<void>();
+    const cancelled = vi.fn();
+    let signal: AbortSignal | undefined;
+    const fetch = await createCliFetch(config, async (input, init) => {
+      const request = new Request(input, init);
+      if (request.url.startsWith(ISSUER)) return css.fetch(input, init);
+      if (request.url === profile)
+        return new Response(null, { status: 302, headers: { location: "/card" } });
+      signal = request.signal;
+      ready.resolve();
+      return new Response(new ReadableStream({ cancel: cancelled }));
+    });
+    vi.useFakeTimers();
+    const caller = new AbortController();
+    const rejected = expect(fetch(profile, { signal: caller.signal })).rejects.toMatchObject({
+      name: cause === "caller" ? "AbortError" : "TimeoutError",
+    });
+    await ready.promise;
+    if (cause === "caller") caller.abort();
+    else await vi.advanceTimersByTimeAsync(10_000);
+    await rejected;
+    expect(signal?.aborted).toBe(true);
+    await vi.waitFor(() => expect(cancelled).toHaveBeenCalled());
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("does not dispatch a request when the caller has already aborted", async () => {
+    const css = mockCss();
+    const fetch = await createCliFetch(config, css.fetch);
+    await expect(fetch(profile, { signal: AbortSignal.abort() })).rejects.toMatchObject({
+      name: "AbortError",
+    });
+    expect(css.stats.reads).toBe(0);
+  });
   it.each([
     ["HEAD", 200],
     ["GET", 204],
@@ -118,6 +222,7 @@ describe("anonymous WebID profile redirects", () => {
       },
     });
     expect(await response.text()).toBe("public profile");
+    expect(response.url).toBe("https://profile.example/public-profile");
     expect(urls).toEqual([
       profile,
       "https://profile.example/card",
@@ -321,6 +426,51 @@ describe("anonymous WebID profile redirects", () => {
     });
     expect((await fetch(profile, init)).status).toBe(302);
     expect(requests).toBe(1);
+  });
+
+  it.each([
+    "fetch",
+    "PodPort",
+  ])("resolves relative Type Index links against the final anonymous profile URL using %s", async (source) => {
+    const css = mockCss();
+    const podRoot = "https://profile.example/alice/";
+    const webId = "https://profile.example/id#me";
+    const card = `${podRoot}profile`;
+    const index = `${podRoot}index.ttl`;
+    const instance = `${podRoot}favorite.ttl`;
+    const solid = "http://www.w3.org/ns/solid/terms#";
+    const pod = makeFakePod({
+      [podRoot]: { contentType: "text/turtle", body: containerTurtle(podRoot, []) },
+      [index]: {
+        contentType: "text/turtle",
+        body: `<#registration> <${solid}instance> <favorite.ttl> .`,
+      },
+    });
+    const urls: string[] = [];
+    const fetch = await createCliFetch({ ...config, podRoot, webId }, async (input, init) => {
+      const request = new Request(input, init);
+      if (request.url.startsWith(ISSUER)) return css.fetch(input, init);
+      urls.push(request.url);
+      if (request.url === webId)
+        return new Response(null, { status: 303, headers: { location: "/alice/profile" } });
+      if (request.url === card) {
+        expect(request.headers.has("authorization")).toBe(false);
+        return new Response(
+          `<${webId}> <${solid}publicTypeIndex> <index.ttl>, </outside-index.ttl> .`,
+          {
+            headers: { "content-type": "text/turtle" },
+          },
+        );
+      }
+      expect(request.url.startsWith(podRoot)).toBe(true);
+      expect(request.headers.has("authorization")).toBe(true);
+      return pod.fetch(input, init);
+    });
+    const podConfig = { ...config, fetch, podRoot, webId };
+    expect(
+      await search(source === "PodPort" ? createFetchPodPort(podConfig) : podConfig, "favorite"),
+    ).toEqual([{ url: instance, name: "favorite.ttl", snippet: "type-index instance" }]);
+    expect(urls).toEqual([webId, card, index, podRoot]);
   });
 
   it.each([

@@ -159,11 +159,22 @@ provenance graphs) rejects before any Pod write; local cross-graph sharing remai
 supported. Owner-only WAC ACLs are written before creating
 containers and data. Existing shared ancestor containers and their ACLs are
 preserved; replacement is limited to the store's own `mcp/` ACL and the dedicated
-ACLs of nanopub and policy resources. Each nanopub's owner-only ACL is established
+ACLs of nanopub, graph reservation and policy resources. Each nanopub's owner-only ACL is established
 conditionally before writing its private bytes, replacing any orphan resource ACL
 that would override the container default. The adapter must support the spec's
 `.acl` convention; ACL failures stop the operation. Existing ACL replacement needs
 a strong ETag.
+
+Before publishing any nanopub, `put` conditionally creates immutable
+`shared-*.reservation` resources for its assertion, sources and entities graphs
+and their possible overlaps. Reservations hold canonical blank-node labels and shared graph context;
+an existing reservation must agree on graph contents and joint blank-node identity.
+Concurrent conflicting puts therefore cannot publish conflicting graph copies.
+Reservations have owner-only ACLs, use the same TriG/octet-stream storage rules,
+and are ignored by `list`. A crash leaving only reservations is safe, and matching
+retries can continue. Identical nanopub retries succeed after verifying the entire
+stored RDF dataset; different contents still reject. Collections created before
+reservations remain readable and are checked against new puts before any write.
 
 The store tries `application/trig` and reads the representation back. An HTTP 415
 or changed bytes/media type triggers the sole fallback, `application/octet-stream`,

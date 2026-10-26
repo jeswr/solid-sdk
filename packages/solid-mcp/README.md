@@ -183,6 +183,10 @@ alias. Both adapter and server default to read-only; opt into writes at both lay
 The configured WebID remains readable for Type Index discovery even when off-pod;
 off-pod profile redirects are refused for ordinary injected fetch functions. The CLI's
 anonymous transport permits bounded, validated same-origin profile redirects.
+Anonymous profile reads share one 10-second deadline across the initial request,
+redirects and body consumption, retain caller cancellation, and reject bodies
+over the guarded-fetch resource limit of 1 MiB. Relative RDF links resolve against
+the validated final profile URL and discovered locations remain pod-scoped.
 Client tools and resources are always confined to the pod root. A custom PodPort
 must enforce its data boundary and mutation policy too.
 
