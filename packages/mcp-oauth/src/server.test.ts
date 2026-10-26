@@ -311,6 +311,70 @@ describe("authorization restrictions and upstream transactions", () => {
 
 describe("token replay, binding, expiry and revocation", () => {
   it.each([
+    "read mcp",
+    "mcp read",
+    "read mcp read",
+  ])("refreshes equivalent scope sets: %s", async (scope) => {
+    const f = fixture();
+    const id = await f.register();
+    const tokens = await (await f.exchange(id, await f.code(id, { scope: "mcp read" }))).json();
+    const response = await f.refresh(id, tokens.refresh_token, { scope });
+    expect(response.status).toBe(200);
+    const rotated = await response.json();
+    expect(rotated.scope).toBe("mcp read");
+    expect(rotated.refresh_token).not.toBe(tokens.refresh_token);
+    await expect(f.server.verifyAccessToken(rotated.access_token, RESOURCE)).resolves.toMatchObject(
+      {
+        scope: "mcp read",
+      },
+    );
+  });
+
+  it.each([
+    "read",
+    "mcp read write",
+    "read write",
+    "MCP read",
+    "mcp  read",
+    "",
+  ])("rejects changed refresh scope without consuming the token: %s", async (scope) => {
+    const f = fixture();
+    const id = await f.register();
+    const tokens = await (await f.exchange(id, await f.code(id, { scope: "mcp read" }))).json();
+    const rejected = await f.refresh(id, tokens.refresh_token, { scope });
+    expect(rejected.status).toBe(400);
+    expect(await rejected.json()).toEqual({ error: "invalid_scope" });
+    await expect(f.server.verifyAccessToken(tokens.access_token, RESOURCE)).resolves.toBeDefined();
+    const retried = await f.refresh(id, tokens.refresh_token);
+    expect(retried.status).toBe(200);
+    const rotated = await retried.json();
+    await expect(f.server.verifyAccessToken(rotated.access_token, RESOURCE)).resolves.toBeDefined();
+    expect((await f.refresh(id, tokens.refresh_token)).status).toBe(400);
+    await expect(f.server.verifyAccessToken(rotated.access_token, RESOURCE)).rejects.toMatchObject({
+      error: "invalid_token",
+    });
+  });
+
+  it("keeps a code usable after rejecting its requested scope", async () => {
+    const f = fixture();
+    const id = await f.register();
+    const code = await f.code(id);
+    expect(await (await f.exchange(id, code, { scope: "read" })).json()).toEqual({
+      error: "invalid_scope",
+    });
+    expect((await f.exchange(id, code)).status).toBe(200);
+  });
+
+  it("refreshes an empty scope set", async () => {
+    const f = fixture();
+    const id = await f.register();
+    const tokens = await (await f.exchange(id, await f.code(id, { scope: undefined }))).json();
+    const response = await f.refresh(id, tokens.refresh_token, { scope: "" });
+    expect(response.status).toBe(200);
+    expect((await response.json()).scope).toBe("");
+  });
+
+  it.each([
     { code_verifier: "b".repeat(43) },
     { code_verifier: "plain" },
     { code_verifier: "!".repeat(43) },

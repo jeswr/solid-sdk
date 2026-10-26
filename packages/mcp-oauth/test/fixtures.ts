@@ -83,8 +83,8 @@ export function fixture(overrides: Partial<AuthorizationServerOptions> = {}) {
     if (response.status !== 201) throw new Error(`Fixture registration failed: ${response.status}`);
     return (await response.json()).client_id as string;
   };
-  const code = async (clientId: string) => {
-    const response = await server.authorize(authRequest(clientId), SESSION);
+  const code = async (clientId: string, changes = {}) => {
+    const response = await server.authorize(authRequest(clientId, changes), SESSION);
     return new URL(response.headers.get("location") as string).searchParams.get("code") as string;
   };
   const exchange = (clientId: string, codeValue: string, changes = {}) =>

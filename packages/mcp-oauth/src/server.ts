@@ -290,8 +290,10 @@ export class AuthorizationServer {
     const resource = parameter(params, "resource");
     if (resource !== this.resource) throw new OAuthError("invalid_target");
     let grantId: string;
+    let hash: string;
+    let expiresAt: number;
     if (type === "authorization_code") {
-      const hash = digest(parameter(params, "code"));
+      hash = digest(parameter(params, "code"));
       const record = await this.stores.codes.get(hash);
       if (!record || record.authorization.clientId !== clientId)
         throw new OAuthError("invalid_grant");
@@ -302,30 +304,35 @@ export class AuthorizationServer {
         !timingSafeEqual(Buffer.from(digest(verifier)), Buffer.from(record.authorization.challenge))
       )
         throw new OAuthError("invalid_grant");
-      const used = await this.stores.codes.consume(hash);
-      if (!used?.firstUse) {
-        await this.stores.grants.revoke(record.grantId);
-        throw new OAuthError("invalid_grant");
-      }
-      if (record.expiresAt <= this.now()) throw new OAuthError("invalid_grant");
       grantId = record.grantId;
+      expiresAt = record.expiresAt;
     } else {
-      const hash = digest(parameter(params, "refresh_token"));
+      hash = digest(parameter(params, "refresh_token"));
       const record = await this.stores.refreshTokens.get(hash);
       if (!record || record.clientId !== clientId) throw new OAuthError("invalid_grant");
-      const used = await this.stores.refreshTokens.consume(hash);
-      if (!used?.firstUse) {
-        await this.stores.grants.revoke(record.grantId);
-        throw new OAuthError("invalid_grant");
-      }
-      if (record.expiresAt <= this.now()) throw new OAuthError("invalid_grant");
       grantId = record.grantId;
+      expiresAt = record.expiresAt;
     }
     const grant = await this.stores.grants.get(grantId);
     if (!grant || grant.revoked || grant.expiresAt <= this.now() || grant.resource !== resource)
       throw new OAuthError("invalid_grant");
-    if (params.has("scope") && params.get("scope") !== grant.scope)
+    const requestedScopes = new Set((params.get("scope") ?? grant.scope).split(" "));
+    const grantedScopes = new Set(grant.scope.split(" "));
+    if (
+      requestedScopes.size !== grantedScopes.size ||
+      [...requestedScopes].some((scope) => !grantedScopes.has(scope))
+    )
       throw new OAuthError("invalid_scope");
+    // Validate the request before atomically consuming its credential; invalid scope is retryable.
+    const used =
+      type === "authorization_code"
+        ? await this.stores.codes.consume(hash)
+        : await this.stores.refreshTokens.consume(hash);
+    if (!used?.firstUse) {
+      await this.stores.grants.revoke(grantId);
+      throw new OAuthError("invalid_grant");
+    }
+    if (expiresAt <= this.now()) throw new OAuthError("invalid_grant");
     const accessToken = this.jwt.issue(grant);
     let refreshToken: string | undefined;
     if (grant.refreshAllowed) {
