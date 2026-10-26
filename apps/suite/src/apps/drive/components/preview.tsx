@@ -317,6 +317,19 @@ function PreviewHeader({
   );
 }
 
+/** Native and ARIA controls own their keys, including media controls in shadow trees. */
+function isInteractiveKey(event: KeyboardEvent): boolean {
+  return event
+    .composedPath()
+    .some(
+      (target) =>
+        target instanceof Element &&
+        target.closest(
+          'audio, video, input, select, textarea, button, a[href], [contenteditable]:not([contenteditable="false"]), [role="slider"], [role="spinbutton"], [role="combobox"], [role="textbox"], [role="listbox"], [role="menu"], [role="tree"]',
+        ),
+    );
+}
+
 /** The preview over a listing; ←/→ step through the listing's files. */
 export function PreviewDialog() {
   const { preview, setPreview } = useDriveUi();
@@ -326,6 +339,7 @@ export function PreviewDialog() {
   useEffect(() => {
     if (!preview) return;
     const onKey = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || isInteractiveKey(event)) return;
       if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
       const delta = event.key === "ArrowLeft" ? -1 : 1;
       const index = preview.index + delta;
@@ -342,6 +356,10 @@ export function PreviewDialog() {
     <Dialog open onOpenChange={(open) => !open && setPreview(undefined)}>
       <DialogContent
         className="drv-preview-dialog"
+        onEscapeKeyDown={(event) => {
+          // Radix handles Escape during document capture, before React's key handlers.
+          if (isInteractiveKey(event)) event.preventDefault();
+        }}
         showCloseButton={false}
         onOpenAutoFocus={(event) => {
           // Focus the viewer, not the first toolbar button (its tooltip would cover the header).

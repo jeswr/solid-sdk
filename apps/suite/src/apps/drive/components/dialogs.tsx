@@ -45,11 +45,17 @@ export function DriveDialogs() {
   return (
     <>
       <NameDialog
+        key={`name-${dialog?.id}`}
         open={dialog?.kind === "new-folder" || dialog?.kind === "rename"}
         onOpenChange={onOpenChange}
       />
-      <MoveDialog open={dialog?.kind === "move"} onOpenChange={onOpenChange} />
+      <MoveDialog
+        key={`move-${dialog?.id}`}
+        open={dialog?.kind === "move"}
+        onOpenChange={onOpenChange}
+      />
       <TrashConfirmDialog
+        key={`trash-${dialog?.id}`}
         open={dialog?.kind === "delete-forever" || dialog?.kind === "empty-trash"}
         onOpenChange={onOpenChange}
       />
@@ -214,11 +220,14 @@ function MoveDialog({
   const [target, setTarget] = useState<string>();
   const [busy, setBusy] = useState(false);
   const tree = useRef<HTMLDivElement>(null);
+  const generation = useRef(0);
 
   const load = async (url: string) => {
     if (nodes[url]) return;
+    const request = generation.current;
     setNodes((current) => ({ ...current, [url]: "loading" }));
     const children = await client.list(url).catch(() => []);
+    if (request !== generation.current) return;
     setNodes((current) => ({
       ...current,
       [url]: children
@@ -230,12 +239,14 @@ function MoveDialog({
 
   useEffect(() => {
     if (!open || !driveRoot) return;
+    const request = ++generation.current;
     setNodes({});
     setExpanded(new Set([driveRoot]));
     setTarget(undefined);
     void (async () => {
       setNodes({ [driveRoot]: "loading" });
       const children = await client.list(driveRoot).catch(() => []);
+      if (request !== generation.current) return;
       setNodes({
         [driveRoot]: children
           .filter((child) => child.kind === "folder" && !isHidden(child))
@@ -243,6 +254,9 @@ function MoveDialog({
           .map((child) => ({ url: child.url, name: child.name })),
       });
     })();
+    return () => {
+      ++generation.current;
+    };
   }, [open, driveRoot, client]);
 
   const validity = (url: string): { valid: true } | { valid: false; reason: string } => {

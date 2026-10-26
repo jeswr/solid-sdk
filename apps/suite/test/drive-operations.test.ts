@@ -281,6 +281,15 @@ describe("Drive writes against the demo pod", () => {
             url: `${DRIVE}Archive/Photos/`,
             etag: expect.any(String),
             children: [`${DRIVE}Archive/Photos/hills.png`, `${DRIVE}Archive/Photos/sunset.png`],
+            tree: [
+              {
+                url: `${DRIVE}Archive/Photos/`,
+                etag: expect.any(String),
+                children: [`${DRIVE}Archive/Photos/hills.png`, `${DRIVE}Archive/Photos/sunset.png`],
+              },
+              { url: `${DRIVE}Archive/Photos/hills.png`, etag: expect.any(String) },
+              { url: `${DRIVE}Archive/Photos/sunset.png`, etag: expect.any(String) },
+            ],
           },
         },
       ],

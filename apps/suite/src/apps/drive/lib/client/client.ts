@@ -37,6 +37,14 @@ export interface MoveResult {
   /** Identity of the copied version, captured inside the move. */
   readonly etag?: string;
   readonly children?: readonly string[];
+  /** Every copied identity and the final container memberships verified by the move. */
+  readonly tree?: readonly MoveResource[];
+}
+
+export interface MoveResource {
+  readonly url: string;
+  readonly etag: string;
+  readonly children?: readonly string[];
 }
 
 export interface DriveClient {
@@ -411,7 +419,7 @@ export function createSolidDriveClient(options: {
     const deleted: string[] = [];
     let deleting = false;
     let verifyingCopy = false;
-    const destinations = new Map<string, CreatedResource>();
+    const destinations = new Map<string, MoveResource>();
     const verifyDestination = async (source: Pick<SourceSnapshot, "url">) => {
       const destination = destinations.get(source.url) as CreatedResource;
       verifyingCopy = true;
@@ -434,8 +442,8 @@ export function createSolidDriveClient(options: {
           const url = `${to}${node.url.slice(from.length)}`;
           const copied = created.find((resource) => resource.url === url) as CreatedResource;
           // A later HEAD must never invent an identity missing from the PUT.
-          validator(url, copied.etag);
-          if (node.children?.length) {
+          const copiedEtag = validator(url, copied.etag);
+          if (node.children) {
             // Populating a container changes its creation validator. Bind its
             // final listing to the expected children, whose PUT identities are
             // independently checked before any source deletion.
@@ -448,8 +456,12 @@ export function createSolidDriveClient(options: {
               current.items.some((item) => !expected.has(item.url))
             )
               throw new DriveError("conflict", 409, url);
-            destinations.set(node.url, { url, etag: current.etag });
-          } else destinations.set(node.url, copied);
+            destinations.set(node.url, {
+              url,
+              etag: node.children.length ? validator(url, current.etag) : copiedEtag,
+              children: [...expected],
+            });
+          } else destinations.set(node.url, { url, etag: copiedEtag });
           for (const child of node.children ?? []) await capture(child);
         };
         await capture(source);
@@ -479,7 +491,10 @@ export function createSolidDriveClient(options: {
       url: to,
       ...(etag ? { etag } : {}),
       ...(source.children
-        ? { children: source.children.map((child) => `${to}${child.url.slice(from.length)}`) }
+        ? {
+            children: source.children.map((child) => `${to}${child.url.slice(from.length)}`),
+            tree: [...destinations.values()],
+          }
         : {}),
     };
   };

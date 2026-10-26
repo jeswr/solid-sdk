@@ -68,7 +68,10 @@ const drive = {
     fetch: vi.fn<typeof globalThis.fetch>(),
   },
   invalidate: vi.fn(),
-  changes: { subscribe: vi.fn(() => () => {}) },
+  changes: {
+    subscribe: vi.fn((_folder: string, _listener: () => void) => () => {}),
+    subscribeSubtree: vi.fn((_folder: string, _listener: () => void) => () => {}),
+  },
 };
 let ui: ReturnType<typeof useDriveUi>;
 let actions: ReturnType<typeof useDriveActions>;
@@ -104,6 +107,7 @@ function row(host: Element, item = items[0]) {
   return found;
 }
 afterEach(() => {
+  vi.restoreAllMocks();
   vi.clearAllMocks();
   mocks.client.stat.mockReset();
   mocks.client.move.mockReset();
@@ -113,7 +117,188 @@ afterEach(() => {
   mocks.params = new URLSearchParams();
   drive.uploads.tasks = [];
   drive.client = mocks.client as unknown as DriveClient;
+  drive.driveRoot = ROOT;
   drive.session.fetch.mockReset();
+});
+
+it("folder Undo refuses unrelated nested replacements despite an unchanged root and direct-child set", async () => {
+  const pod = createDemoPod({
+    root: drive.session.storageUrl,
+    seed: [{ path: "drive/A/nested/note", body: "original", contentType: "text/plain" }],
+  });
+  const client = createSolidDriveClient({ storageUrl: drive.session.storageUrl, fetch: pod.fetch });
+  drive.client = client;
+  drive.session.fetch.mockImplementation(pod.fetch);
+  const actualUndo = await vi.importActual<typeof import("../src/apps/drive/state/undo")>(
+    "../src/apps/drive/state/undo",
+  );
+  mocks.undoMove.mockImplementation(actualUndo.moveWithValidator);
+  const folder = await client.stat(`${ROOT}A/`);
+  const view = await mount(tree([folder]));
+  await act(async () => {
+    await actions.move([folder], `${ROOT}B/`);
+  });
+  const undo = mocks.toast.success.mock.calls.at(-1)?.[1] as {
+    action: { onClick: () => Promise<void> };
+  };
+  const moved = `${ROOT}B/A/`;
+  const before = await client.stat(moved);
+  await client.move(`${moved}nested/note`, `${ROOT}elsewhere`);
+  await client.write(`${moved}nested/note`, "unrelated", {
+    contentType: "text/plain",
+    ifNoneMatch: "*",
+  });
+  expect((await client.stat(moved)).etag).toBe(before.etag);
+  await act(async () => undo.action.onClick());
+  expect(mocks.toast.error).toHaveBeenCalledWith(
+    expect.stringContaining("cannot be safely undone"),
+  );
+  expect(await (await client.read(`${moved}nested/note`)).text()).toBe("unrelated");
+  expect(pod.has(folder.url)).toBe(false);
+  await view.unmount();
+});
+
+it.each([
+  "rename",
+  "new-folder",
+  "move",
+] as const)("a slow %s submission cannot close a newer dialog or disable its submission", async (kind) => {
+  const pending = deferred<void>();
+  const operation =
+    kind === "move"
+      ? vi.spyOn(operations, "moveItems").mockImplementation(async () => {
+          await pending.promise;
+          return { done: [], failed: [] };
+        })
+      : vi
+          .spyOn(operations, kind === "rename" ? "renameItem" : "createFolder")
+          .mockImplementation(async () => {
+            await pending.promise;
+            return `${ROOT}Changed.txt`;
+          });
+  mocks.client.list.mockResolvedValue([]);
+  const view = await mount(tree(items, true));
+  await act(async () =>
+    ui.openDialog(
+      kind === "rename"
+        ? { kind, item: items[0] as DriveItem }
+        : kind === "new-folder"
+          ? { kind, parent: ROOT }
+          : { kind, items: [items[0] as DriveItem] },
+    ),
+  );
+  if (kind === "move") {
+    // The item's parent is already ROOT; use a different source for this submission.
+    await act(async () =>
+      ui.openDialog({ kind, items: [{ ...(items[0] as DriveItem), url: `${ROOT}Other/A.txt` }] }),
+    );
+    const target = document.querySelector('[role="treeitem"]') as Element;
+    await click(target);
+    const move = [...document.querySelectorAll("button")].find(
+      (button) => button.textContent === "Move",
+    );
+    await click(move as Element);
+  } else {
+    const input = document.querySelector<HTMLInputElement>(
+      'input[autocomplete="off"]',
+    ) as HTMLInputElement;
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+    await act(async () => {
+      setter?.call(input, "Changed.txt");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input
+        .closest("form")
+        ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+  }
+  expect(operation).toHaveBeenCalledTimes(1);
+  await key(document.querySelector('[role="dialog"]') as Element, "Escape");
+  await act(async () => ui.openDialog({ kind: "new-folder", parent: ROOT }));
+  const create = [...document.querySelectorAll("button")].find(
+    (button) => button.textContent === "Create",
+  );
+  expect(create?.disabled).toBe(false);
+  await act(async () => pending.resolve());
+  expect(document.querySelector('[role="dialog"]')?.textContent).toContain("New folder");
+  expect(ui.dialog?.kind).toBe("new-folder");
+  await view.unmount();
+  operation.mockRestore();
+});
+
+it("Trash keeps the latest refresh when an older listing resolves empty", async () => {
+  const earlier = deferred<Awaited<ReturnType<typeof operations.listTrash>>>();
+  const entry = {
+    url: `${ROOT}.trash/slot/A.txt`,
+    original: `${ROOT}A.txt`,
+    name: "A.txt",
+    trashedAt: new Date(),
+  };
+  const listing = vi
+    .spyOn(operations, "listTrash")
+    .mockReturnValueOnce(earlier.promise)
+    .mockResolvedValue([entry]);
+  const view = await mount(h(DriveUiProvider, null, h(Probe), h(TrashView)));
+  const refresh = drive.changes.subscribeSubtree.mock.calls.at(-1)?.[1] as () => void;
+  await act(async () => refresh());
+  expect(view.host.textContent).toContain("A.txt");
+  await act(async () => earlier.resolve([]));
+  expect(view.host.textContent).toContain("A.txt");
+  expect(view.host.textContent).not.toContain("Trash is empty");
+  await view.unmount();
+  listing.mockRestore();
+});
+
+it("Trash ignores an abandoned refresh error after a newer refresh succeeds", async () => {
+  const earlier = deferred<Awaited<ReturnType<typeof operations.listTrash>>>();
+  const entry = {
+    url: `${ROOT}.trash/slot/A.txt`,
+    original: `${ROOT}A.txt`,
+    name: "A.txt",
+    trashedAt: new Date(),
+  };
+  vi.spyOn(operations, "listTrash").mockReturnValueOnce(earlier.promise).mockResolvedValue([entry]);
+  const view = await mount(h(DriveUiProvider, null, h(Probe), h(TrashView)));
+  await act(async () => drive.changes.subscribeSubtree.mock.calls.at(-1)?.[1]());
+  await act(async () => earlier.reject(new Error("old request failed")));
+  expect(view.host.textContent).toContain("A.txt");
+  expect(view.host.textContent).not.toContain("Trash is empty");
+  await view.unmount();
+});
+
+it("Trash hides the old account's entries and rejects its delayed listing after a root change", async () => {
+  const earlier = deferred<Awaited<ReturnType<typeof operations.listTrash>>>();
+  const entry = {
+    url: `${ROOT}.trash/slot/A.txt`,
+    original: `${ROOT}A.txt`,
+    name: "A.txt",
+    trashedAt: new Date(),
+  };
+  vi.spyOn(operations, "listTrash").mockReturnValueOnce(earlier.promise).mockResolvedValue([]);
+  const render = () => h(DriveUiProvider, null, h(Probe), h(TrashView));
+  const view = await mount(render());
+  drive.driveRoot = "https://other.example/drive/";
+  await view.render(render());
+  await act(async () => earlier.resolve([entry]));
+  expect(view.host.textContent).toContain("Trash is empty");
+  expect(view.host.textContent).not.toContain("A.txt");
+  await view.unmount();
+});
+
+it("a reopened Move dialog ignores the older folder-tree listing", async () => {
+  const earlier = deferred<DriveItem[]>();
+  mocks.client.list
+    .mockReturnValueOnce(earlier.promise)
+    .mockResolvedValue([{ url: `${ROOT}Current/`, name: "Current", kind: "folder" }]);
+  const view = await mount(tree(items, true));
+  await act(async () => ui.openDialog({ kind: "move", items }));
+  await key(document.querySelector('[role="dialog"]') as Element, "Escape");
+  await act(async () => ui.openDialog({ kind: "move", items }));
+  expect(document.querySelector('[role="tree"]')?.textContent).toContain("Current");
+  await act(async () =>
+    earlier.resolve([{ url: `${ROOT}Abandoned/`, name: "Abandoned", kind: "folder" }]),
+  );
+  expect(document.querySelector('[role="tree"]')?.textContent).not.toContain("Abandoned");
+  await view.unmount();
 });
 
 it("Undo uses the move response validator even if a replacement is present before a later HEAD", async () => {
@@ -202,13 +387,41 @@ it("Trash lists partial recovery copies with a warning", async () => {
     name: "Folder",
     trashedAt: new Date(),
     status: "partial" as const,
+    remaining: [`${ROOT}.trash/00000000-0000-0000-0000-000000000000/Folder/nested/note`],
   };
   const listing = vi.spyOn(operations, "listTrash").mockResolvedValue([entry]);
   const view = await mount(h(DriveUiProvider, null, h(Probe), h(TrashView)));
   expect(view.host.querySelector('[role="note"]')?.textContent).toContain("Partly moved to Trash");
   expect(view.host.textContent).toContain("Restore to recover missing items");
+  expect(view.host.textContent).toContain("Recovery copies: note");
   await view.unmount();
   listing.mockRestore();
+});
+
+it("partial restore reports occupied locations and refreshes both recovery and original listings", async () => {
+  const entry = {
+    url: `${ROOT}.trash/00000000-0000-0000-0000-000000000000/Folder/`,
+    original: `${ROOT}Folder/`,
+    name: "Folder",
+    trashedAt: new Date(),
+    status: "partial" as const,
+  };
+  const error = new operations.TrashRestorePartialError([
+    { url: `${entry.url}note`, error: new DriveError("conflict", 412, `${entry.original}note`) },
+  ]);
+  vi.spyOn(operations, "restoreItems").mockResolvedValue({
+    done: [],
+    failed: [{ url: entry.url, error }],
+  });
+  const view = await mount(tree(items));
+  await act(async () => actions.restore([entry]));
+  expect(mocks.toast.error).toHaveBeenCalledWith(
+    "1 items could not be restored because their location is in use",
+  );
+  expect(mocks.toast.success).not.toHaveBeenCalled();
+  expect(drive.invalidate).toHaveBeenCalledWith(entry.url);
+  expect(drive.invalidate).toHaveBeenCalledWith(entry.original);
+  await view.unmount();
 });
 
 it("catches unexpected trash failures and shows an error toast", async () => {
@@ -543,6 +756,10 @@ it("captures a moved folder's child set immediately for Undo", async () => {
     url: destination,
     etag: '"folder-version"',
     children: [child.url],
+    tree: [
+      { url: destination, etag: '"folder-version"', children: [child.url] },
+      { url: child.url, etag: '"file-version"' },
+    ],
   });
   mocks.client.stat.mockResolvedValue({ etag: '"folder-version"' });
   mocks.client.list.mockResolvedValue([child]);
@@ -559,7 +776,10 @@ it("captures a moved folder's child set immediately for Undo", async () => {
     destination,
     folder.url,
     '"folder-version"',
-    [child.url],
+    [
+      { url: destination, etag: '"folder-version"', children: [child.url] },
+      { url: child.url, etag: '"file-version"' },
+    ],
   );
   await view.unmount();
 });

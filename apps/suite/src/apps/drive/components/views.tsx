@@ -336,15 +336,31 @@ export function PreviewRouteView() {
 export function TrashView() {
   const { client, driveRoot, changes } = useDrive();
   const ui = useDriveUi();
-  const [entries, setEntries] = useState<TrashEntry[]>();
+  const [snapshot, setSnapshot] = useState<{
+    client: DriveClient;
+    root: string;
+    entries: TrashEntry[];
+  }>();
+  const generation = useRef(0);
+  const entries =
+    snapshot?.client === client && snapshot.root === driveRoot ? snapshot.entries : undefined;
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const load = useCallback(() => {
+    const request = ++generation.current;
     if (!driveRoot) return;
-    listTrash(client, driveRoot).then(setEntries, () => setEntries([]));
+    const accept = (entries: TrashEntry[]) => {
+      if (request === generation.current) setSnapshot({ client, root: driveRoot, entries });
+    };
+    listTrash(client, driveRoot).then(accept, () => accept([]));
   }, [client, driveRoot]);
-  useEffect(load, [load]);
+  useEffect(() => {
+    load();
+    return () => {
+      ++generation.current;
+    };
+  }, [load]);
   useEffect(
-    () => (driveRoot ? changes.subscribe(trashFolderOf(driveRoot), load) : undefined),
+    () => (driveRoot ? changes.subscribeSubtree(trashFolderOf(driveRoot), load) : undefined),
     [driveRoot, changes, load],
   );
   const chosen = (entries ?? []).filter((entry) => selected.has(entry.url));
@@ -459,6 +475,9 @@ export function TrashView() {
                           <span role="note">
                             Partly moved to Trash. Restore to recover missing items; existing files
                             will be kept.
+                            {entry.remaining?.length
+                              ? ` Recovery copies: ${entry.remaining.map(nameOf).join(", ")}.`
+                              : null}
                           </span>
                         ) : null}
                       </div>

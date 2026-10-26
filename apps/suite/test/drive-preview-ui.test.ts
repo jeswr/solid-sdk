@@ -41,6 +41,94 @@ const item: DriveItem = {
 const create = vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:preview");
 const revoke = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
 
+it("preview shortcuts preserve native audio control keys", async () => {
+  client.read.mockResolvedValue(new Blob(["audio"], { type: "audio/mpeg" }));
+  const setPreview = vi.fn();
+  ui.mockReturnValue({
+    preview: { items: [{ ...item, contentType: "audio/mpeg" }, item], index: 0 },
+    setPreview,
+  });
+  const view = await mount(h(PreviewDialog));
+  const audio = document.querySelector("audio") as HTMLAudioElement;
+  expect(audio).not.toBeNull();
+  await act(async () => audio.focus());
+  const right = new KeyboardEvent("keydown", {
+    key: "ArrowRight",
+    bubbles: true,
+    cancelable: true,
+  });
+  await act(async () => {
+    audio.dispatchEvent(right);
+  });
+  expect(right.defaultPrevented).toBe(false);
+  expect(setPreview).not.toHaveBeenCalled();
+  await view.unmount();
+});
+
+it.each([
+  "video",
+  "input",
+  "select",
+  "textarea",
+  "contenteditable",
+  "slider",
+  "spinbutton",
+  "button",
+  "link",
+])("preview leaves ArrowLeft, ArrowRight and Escape to an interactive %s", async (kind) => {
+  client.read.mockResolvedValue(new Blob(["plain"], { type: "text/plain" }));
+  const setPreview = vi.fn();
+  ui.mockReturnValue({
+    preview: { items: [item, { ...item, contentType: "text/plain" }, item], index: 1 },
+    setPreview,
+  });
+  const view = await mount(h(PreviewDialog));
+  const tag =
+    kind === "contenteditable" || kind === "slider" || kind === "spinbutton"
+      ? "div"
+      : kind === "link"
+        ? "a"
+        : kind;
+  const control = document.createElement(tag);
+  control.tabIndex = 0;
+  if (kind === "contenteditable") control.setAttribute("contenteditable", "true");
+  if (kind === "slider" || kind === "spinbutton") control.setAttribute("role", kind);
+  if (kind === "link") control.setAttribute("href", "#native");
+  const nested = document.createElement("span");
+  control.append(nested);
+  document.querySelector(".drv-preview-body")?.append(control);
+  await act(async () => control.focus());
+  for (const key of ["ArrowLeft", "ArrowRight", "Escape"]) {
+    const event = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true });
+    await act(async () => {
+      nested.dispatchEvent(event);
+    });
+    // Radix's Escape cancellation keeps the modal open; seeking/editing keys
+    // must reach the control without cancelling its native default action.
+    if (key !== "Escape") expect(event.defaultPrevented).toBe(false);
+  }
+  expect(setPreview).not.toHaveBeenCalled();
+  await view.unmount();
+});
+
+it("preview arrows navigate from the viewer and Escape still closes it", async () => {
+  client.read.mockResolvedValue(new Blob(["plain"], { type: "text/plain" }));
+  const setPreview = vi.fn();
+  const preview = { items: [item, { ...item, contentType: "text/plain" }, item], index: 1 };
+  ui.mockReturnValue({ preview, setPreview });
+  const view = await mount(h(PreviewDialog));
+  const content = document.querySelector('[role="dialog"]') as HTMLElement;
+  for (const key of ["ArrowLeft", "ArrowRight", "Escape"]) {
+    await act(async () => {
+      content.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
+    });
+  }
+  expect(setPreview).toHaveBeenCalledWith({ ...preview, index: 0 });
+  expect(setPreview).toHaveBeenCalledWith({ ...preview, index: 2 });
+  expect(setPreview).toHaveBeenCalledWith(undefined);
+  await view.unmount();
+});
+
 it("preview close focuses the listing when the previewed row has disappeared", async () => {
   client.read.mockResolvedValue(new Blob(["%PDF-1.7"]));
   function Viewer({ hasRow }: { hasRow: boolean }) {
