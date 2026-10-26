@@ -146,8 +146,7 @@ class ServiceBuilder {
   type = new Set<string>();
   private profiles = new Set<string>();
   private readonly features = new Set<string>();
-  private readonly extras = new Map<string, unknown>();
-  private readonly nodes = new Map<string, Record<string, unknown>>();
+  private readonly extras = new Map<string, Map<string, unknown>>();
   private id: string | undefined;
   readonly endpoint: string;
 
@@ -167,24 +166,21 @@ class ServiceBuilder {
       if (this.notification && predicate === NOTIFY.feature) {
         for (const feature of value as string[]) this.features.add(feature);
       } else {
-        this.extras.set(
-          predicate,
-          Array.isArray(value)
-            ? value.map((item) => this.retainDefinition(item))
-            : this.retainDefinition(value),
-        );
+        const values = this.extras.get(predicate) ?? new Map<string, unknown>();
+        for (const item of Array.isArray(value) ? value : [value]) {
+          // Mapper values are strings or node objects. Keep scalar values distinct from
+          // node IDs, and union incoming values without copying an expansion to every ref.
+          const node = item as Record<string, unknown>;
+          const key = typeof item === "string" ? `value:${item}` : `node:${node["@id"]}`;
+          // A depth-limited reference can precede its definition. Retain the definition
+          // at this predicate when it arrives, without removing any sibling values.
+          if (!values.has(key) || (typeof item !== "string" && Object.keys(node).length > 1)) {
+            values.set(key, item);
+          }
+        }
+        this.extras.set(predicate, values);
       }
     }
-  }
-
-  private retainDefinition(value: unknown): unknown {
-    // Mapper values are strings or node objects (arrays are handled by add).
-    if (typeof value === "string") return value;
-    const node = value as Record<string, unknown>;
-    const id = node["@id"] as string;
-    if (Object.keys(node).length > 1) this.nodes.set(id, node);
-    // A later reference must not erase the sole expansion, including in repeated extras.
-    return this.nodes.get(id) ?? node;
   }
 
   addAcq(): void {
@@ -194,7 +190,12 @@ class ServiceBuilder {
   }
 
   build(): ServiceEntry {
-    const extra = Object.fromEntries(this.extras);
+    const extra = Object.fromEntries(
+      [...this.extras].map(([predicate, values]) => {
+        const items = [...values.values()];
+        return [predicate, items.length === 1 ? items[0] : items];
+      }),
+    );
     if (this.notification) extra[NOTIFY.feature] = [...this.features];
     return {
       type: [...this.type],
@@ -220,16 +221,23 @@ export function parseSolidDescription(
   const root = new DescriptionNode(rootUrl, dataset, DataFactory);
   // One expansion per node across the whole mapping; deriveFeatures resolves `{ "@id" }` refs.
   const visited = new Set<string>();
+  // Expand capabilities first so their definitions survive service merging, regardless of
+  // the predicates or nested wrappers through which services also reference those nodes.
+  const capabilities: CapabilityEntry[] = notificationsOnly
+    ? []
+    : root.nodes(LWS.capability).map((capability) => ({
+        type: capability.types,
+        ...capability.identity,
+        extra: capability.extra([RDF_TYPE], visited),
+      }));
   const services: ServiceBuilder[] = [];
   const notificationServices = new Map<string, ServiceBuilder>();
   const subscriptions = new DescriptionDataset(dataset, DataFactory).subscriptions;
-  const subscriptionExtras = new Map<string, Record<string, unknown>>();
   const seen = new Set<string>();
   for (const subscription of subscriptions) {
     if (subscription.termType !== "NamedNode" || seen.has(subscription.value)) continue;
     seen.add(subscription.value);
     const extra = notificationExtra(subscription, visited);
-    subscriptionExtras.set(subscription.value, extra);
     const key = notificationKey(subscription.value, extra);
     const builder = new ServiceBuilder(
       {
@@ -253,7 +261,7 @@ export function parseSolidDescription(
     const types = service.types;
     const notification = types.includes(SSD.SolidNotificationService);
     const extra = notification
-      ? (subscriptionExtras.get(service.value) ?? notificationExtra(service, visited))
+      ? notificationExtra(service, visited)
       : service.extra([RDF_TYPE, DID.serviceEndpoint, DCT.conformsTo], visited);
     const entry: ServiceEntry = {
       type: [...types, ...(notification ? channelTypes(extra) : [])],
@@ -292,10 +300,5 @@ export function parseSolidDescription(
     if (duplicate === undefined) services.push(new ServiceBuilder(acq));
     else duplicate.addAcq();
   }
-  const capabilities: CapabilityEntry[] = root.nodes(LWS.capability).map((capability) => ({
-    type: capability.types,
-    ...capability.identity,
-    extra: capability.extra([RDF_TYPE], visited),
-  }));
   return { services: services.map((service) => service.build()), capabilities };
 }

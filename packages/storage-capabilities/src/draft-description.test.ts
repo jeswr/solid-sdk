@@ -297,14 +297,13 @@ describe("entry merging and compatibility", () => {
       `);
     expect(d.services).toHaveLength(1);
     const value = d.services[0]?.extra["urn:shared"];
-    const format = Array.isArray(value) ? value[0] : value;
+    const reference = Array.isArray(value) ? value[0] : value;
+    const format = d.capabilities[0]?.extra[`${SSD_NS}format`] as Record<string, unknown>;
     expect(format).toMatchObject({
       [SSD.source]: "text/turtle",
       [SSD.patchType]: "application/sparql-update",
     });
-    expect(d.capabilities[0]?.extra[`${SSD_NS}format`]).toEqual({
-      "@id": (format as Record<string, unknown>)["@id"],
-    });
+    expect(reference).toEqual({ "@id": format["@id"] });
     expect(deriveFeatures(d).patch).toEqual({
       state: "available",
       evidence: "solid-description:PatchSupport",
@@ -312,7 +311,7 @@ describe("entry merging and compatibility", () => {
     });
   });
 
-  test("retains references to format definitions expanded by another service", async () => {
+  test("retains service references to format definitions expanded in capabilities", async () => {
     const d = await solid(`
       <> notify:subscription <first>, <second> ;
         lws:capability [ a ssd:PatchSupport ; ssd:format _:fmt ] .
@@ -321,11 +320,107 @@ describe("entry merging and compatibility", () => {
       _:fmt ssd:source "text/turtle" ; ssd:patchType "application/sparql-update" .
     `);
     expect(d.services).toHaveLength(2);
-    expect(d.services[1]?.extra["urn:shared"]).toEqual(d.capabilities[0]?.extra[`${SSD_NS}format`]);
+    const format = d.capabilities[0]?.extra[`${SSD_NS}format`] as Record<string, unknown>;
+    for (const service of d.services) {
+      expect(service.extra["urn:shared"]).toEqual({ "@id": format["@id"] });
+    }
     expect(deriveFeatures(d).patch).toMatchObject({
       state: "available",
       detail: { formats: { "text/turtle": ["application/sparql-update"] } },
     });
+  });
+
+  test.each([
+    200, 400,
+  ])("shared notification extras serialize once across %s merged predicates", async (size) => {
+    const references = Array.from(
+      { length: size },
+      (_, index) => `<urn:copy:${index}> _:shared`,
+    ).join(" ; ");
+    const values = Array.from({ length: size }, (_, index) => `"shared value ${index}"`).join(", ");
+    const body = `
+      <> notify:subscription <notifications> ; did:service <#listed> .
+      <notifications> notify:channelType notify:WebSocketChannel2023 ; <urn:first> _:shared .
+      <#listed> a ssd:SolidNotificationService ; did:serviceEndpoint <notifications> ;
+        notify:channelType notify:WebSocketChannel2023 ; <urn:first> _:shared ; ${references} .
+      _:shared <urn:values> ${values} .
+    `;
+    const d = await solid(body);
+    const serialized = JSON.stringify(d);
+    expect(d.services).toHaveLength(1);
+    expect(serialized.length).toBeLessThan((PREFIXES + body).length * 6);
+    expect(serialized.match(/"urn:values":/g)).toHaveLength(1);
+    const extra = JSON.parse(serialized).services[0].extra;
+    for (let index = 0; index < size; index++) {
+      expect(extra[`urn:copy:${index}`]).toEqual({ "@id": extra["urn:first"]["@id"] });
+    }
+  });
+
+  test.each([
+    ["narrowed arrays", "_:fmt, _:other", "_:other", 2],
+    ["replaced nested wrappers", "_:first", "_:second", 2],
+    ["a wrapper narrowed out of an array", "_:first, _:other", "_:other", 2],
+  ])("merged notifications preserve patch definitions with %s", async (_name, first, second, count) => {
+    const d = JSON.parse(
+      JSON.stringify(
+        await solid(`
+          <> notify:subscription <notifications> ; did:service <#listed> ;
+            lws:capability [ a ssd:PatchSupport ; ssd:format _:fmt ] .
+          <notifications> notify:channelType notify:WebSocketChannel2023 ; <urn:shared> ${first} .
+          <#listed> a ssd:SolidNotificationService ; did:serviceEndpoint <notifications> ;
+            notify:channelType notify:WebSocketChannel2023 ; <urn:shared> ${second} .
+          _:first <urn:nested> [ <urn:format> _:fmt ] .
+          _:second <urn:nested> [ <urn:label> "replacement" ] .
+          _:fmt ssd:source "text/turtle" ; ssd:patchType "application/sparql-update" .
+          _:other <urn:label> "also kept" .
+        `),
+      ),
+    );
+    expect(d.services).toHaveLength(1);
+    expect(deriveFeatures(d).patch).toEqual({
+      state: "available",
+      evidence: "solid-description:PatchSupport",
+      detail: { formats: { "text/turtle": ["application/sparql-update"] } },
+    });
+    expect(d.services[0].extra["urn:shared"]).toHaveLength(count);
+  });
+
+  test("merging unions scalar and array extras and distinguishes node IDs from scalar values", async () => {
+    const d = await solid(`
+      <> notify:subscription <notifications> ; did:service <#listed> .
+      <notifications> notify:channelType notify:WebSocketChannel2023 ;
+        <urn:values> "first", "shared" ; ssd:format <#fmt> .
+      <#listed> a ssd:SolidNotificationService ; did:serviceEndpoint <notifications> ;
+        notify:channelType notify:WebSocketChannel2023 ;
+        <urn:values> "shared", "last" ; ssd:format "${ROOT}#fmt" .
+      <#fmt> ssd:source "text/turtle" ; ssd:patchType "application/sparql-update" .
+    `);
+    expect(d.services[0]?.extra["urn:values"]).toEqual(["first", "shared", "last"]);
+    expect(d.services[0]?.extra[`${SSD_NS}format`]).toEqual([
+      {
+        "@id": `${ROOT}#fmt`,
+        [SSD.source]: "text/turtle",
+        [SSD.patchType]: "application/sparql-update",
+      },
+      `${ROOT}#fmt`,
+    ]);
+  });
+
+  test("a subscription also listed at another endpoint expands its extras once", async () => {
+    const d = await solid(`
+      <> notify:subscription <notifications> ; did:service <notifications> .
+      <notifications> a ssd:SolidNotificationService ; did:serviceEndpoint <other> ;
+        notify:channelType notify:WebSocketChannel2023 ;
+        <urn:shared> [ <urn:definition> "kept" ] .
+    `);
+    expect(d.services.map((service) => service.endpoint)).toEqual([
+      `${ROOT}notifications`,
+      `${ROOT}other`,
+    ]);
+    const definition = d.services[0]?.extra["urn:shared"] as Record<string, unknown>;
+    expect(definition["urn:definition"]).toBe("kept");
+    expect(d.services[1]?.extra["urn:shared"]).toEqual({ "@id": definition["@id"] });
+    expect(JSON.stringify(d).match(/"urn:definition":/g)).toHaveLength(1);
   });
 
   test("merges 6k duplicate notifications with linear metadata work", async () => {
@@ -374,7 +469,9 @@ describe("entry merging and compatibility", () => {
     );
     for (let index = 0; index < size; index++)
       expect(service?.extra[`urn:extra:${index}`]).toBe("kept");
-    expect(service?.extra["urn:last"]).toBe(String(size - 1));
+    expect(service?.extra["urn:last"]).toEqual(
+      Array.from({ length: size }, (_, index) => String(index)),
+    );
   }, 30_000);
 
   test("notify:channelType wins over sparq's legacy ssd:channelType", async () => {
