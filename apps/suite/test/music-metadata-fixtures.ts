@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 // All bytes are generated here: fictional tags, no recordings or third-party fixtures.
 export const text = (value: string) => new TextEncoder().encode(value);
 export function join(...parts: Uint8Array[]): Uint8Array<ArrayBuffer> {
@@ -42,6 +43,7 @@ export function id3(
   encoding: 0 | 1 | 2 | 3 = version === 3 ? 1 : 3,
   withPicture = true,
   title = "Paper Moon",
+  numbers: { track?: string; year?: string } = { track: "7/12", year: "2024" },
 ) {
   function encoded(value: string) {
     if (encoding === 0) return Uint8Array.from(value, (char) => char.charCodeAt(0));
@@ -64,9 +66,9 @@ export function id3(
     ["TIT2", title],
     ["TPE1", "Mira Example"],
     ["TALB", "Fictional Skies"],
-    ["TRCK", "7/12"],
+    ...(numbers.track === undefined ? [] : [["TRCK", numbers.track]]),
     ["TPOS", "2/3"],
-    [version === 3 ? "TYER" : "TDRC", "2024"],
+    ...(numbers.year === undefined ? [] : [[version === 3 ? "TYER" : "TDRC", numbers.year]]),
   ];
   const frames = entries.map(([id, value]) =>
     frame(id as string, join(new Uint8Array([encoding]), encoded(value as string))),

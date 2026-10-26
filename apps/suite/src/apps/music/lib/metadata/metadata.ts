@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { parseBuffer } from "music-metadata";
+// AUTHORED-BY Codex GPT-6
+import { type IAudioMetadata, parseBuffer } from "music-metadata";
 
 /** Missing fields are null; track and disc are their numbers, without totals. */
 export interface AudioMetadata {
@@ -24,17 +25,31 @@ export interface AudioMetadata {
  * Uses music-metadata's browser-compatible Uint8Array API (no File or I/O).
  */
 export async function extractAudioMetadata(buffer: ArrayBuffer): Promise<AudioMetadata> {
-  const { common, format } = await parseBuffer(new Uint8Array(buffer), undefined, {
+  const { common, format, native } = await parseBuffer(new Uint8Array(buffer), undefined, {
     duration: true,
   });
   return {
     title: common.title ?? null,
     artist: common.artist ?? null,
     album: common.album ?? null,
-    track: common.track.no,
+    track: id3Number(native, ["TRCK"]) ?? common.track.no,
     disc: common.disk.no,
-    year: common.year ?? null,
+    year: id3Number(native, ["TDRC", "TYER"]) ?? common.year ?? null,
     duration: format.duration ?? null,
     coverArtMime: common.picture?.[0]?.format ?? null,
   };
+}
+
+// The parser's common track and derived year can be overwritten by ID3v1.
+// Resolve these from native tags first, matching its ID3v2 source priority.
+function id3Number(native: IAudioMetadata["native"], ids: readonly string[]): number | null {
+  for (const source of ["ID3v2.4", "ID3v2.3"]) {
+    for (const id of ids) {
+      const value = native[source]?.findLast((tag) => tag.id === id)?.value;
+      if (typeof value !== "string") continue;
+      const number = Number.parseInt(value, 10);
+      if (!Number.isNaN(number)) return number;
+    }
+  }
+  return null;
 }

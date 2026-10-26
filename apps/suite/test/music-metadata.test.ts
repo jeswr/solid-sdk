@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { describe, expect, it, vi } from "vitest";
 import { type AudioMetadata, extractAudioMetadata } from "../src/apps/music/lib/metadata";
 import {
@@ -75,13 +76,39 @@ describe("extractAudioMetadata", () => {
     });
   });
 
-  it("prefers ID3v2 over conflicting ID3v1 tags", async () => {
+  it.each([3, 4] as const)("prefers ID3v2.%i over conflicting ID3v1 tags", async (version) => {
     const legacy = id3v1();
     legacy.fill(0, 3, 33);
     legacy.set(text("Earlier fictional title"), 3);
-    expect(await extractAudioMetadata(join(id3(4), mpeg(), legacy).buffer)).toMatchObject(
+    legacy.set(text("1999"), 93);
+    legacy[126] = 9;
+    expect(await extractAudioMetadata(join(id3(version), mpeg(), legacy).buffer)).toMatchObject(
       taggedWithoutDuration(),
     );
+  });
+
+  it.each([
+    3, 4,
+  ] as const)("uses ID3v1 track and year when ID3v2.%i omits them", async (version) => {
+    const modern = id3(version, undefined, true, undefined, {});
+    expect(await extractAudioMetadata(join(modern, mpeg(), id3v1()).buffer)).toMatchObject(
+      taggedWithoutDuration(),
+    );
+  });
+
+  it.each([
+    [{ track: "7/12" }, { track: 7, year: 1999 }],
+    [{ year: "2024-05-06" }, { track: 9, year: 2024 }],
+    [
+      { track: "invalid", year: "invalid" },
+      { track: 9, year: 1999 },
+    ],
+  ])("falls back to ID3v1 separately for missing or invalid ID3v2 numbers %j", async (numbers, expected) => {
+    const modern = id3(4, undefined, true, undefined, numbers);
+    const legacy = id3v1();
+    legacy.set(text("1999"), 93);
+    legacy[126] = 9;
+    expect(await extractAudioMetadata(join(modern, mpeg(), legacy).buffer)).toMatchObject(expected);
   });
 
   it("reads FLAC Vorbis comments, STREAMINFO duration and PICTURE MIME", async () => {
