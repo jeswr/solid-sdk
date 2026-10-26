@@ -17,6 +17,9 @@ Branch: `lane/sst-93m.5`. Base: `3696bed75683e5c7aa253ba8a7cc163f5b8a1e07`.
 - `da7b6843 fix: preserve shell slot accessibility` — semantic breadcrumb content
   in TopBar, readable refresh status, frame-owned close behavior, coarse-pointer
   fixture targets, mobile back-slot example, modal-safe Playwright locators.
+- `9843c22f fix: restore focus after shell region collapse` — return focus from
+  a collapsed desktop sidebar/details region to its TopBar toggle; preserve main
+  content focus. Add regression unit tests and a browser path in all six projects.
 - Final documentation commit: records this status after the gates.
 
 ## Validation commands and results
@@ -136,3 +139,46 @@ the same 54 existing warnings. Full gate: FAIL at the same unrelated
 Browser execution, screenshots and visual/complete browser axe verification remain
 for the dispatcher; none were attempted here. `roborev` remains unavailable.
 The conservative choices in `QUESTIONS.md` remain unchanged.
+
+## Focus regression verification — 2026-10-26
+
+This continuation started at `8f1962ce` with a clean tree. The existing DS-04
+implementation was present. Review found that pressing `[` or `]` while focus
+was inside a desktop region left focus in its hidden subtree. A new unit test
+reproduced the failure before the fix. The frame now restores focus before paint
+when collapsing the focused region; shortcuts from main content keep that focus.
+Radix continues to manage focus for modal sheets. No dependencies were added;
+there are no new `check:packages` results.
+
+Exact validation commands:
+
+```sh
+pnpm --filter @jeswr/suite-ui run test -- -t 'collapsed desktop regions'
+pnpm --filter @jeswr/suite-ui run lint && pnpm --filter @jeswr/suite-ui run build && pnpm --filter @jeswr/suite-ui run typecheck && pnpm --filter @jeswr/suite-ui run test
+PATH="$PWD/node_modules/.bin:$PATH" pnpm --filter @jeswr/app-suite run lint && PATH="$PWD/node_modules/.bin:$PATH" pnpm --filter @jeswr/app-suite run build && PATH="$PWD/node_modules/.bin:$PATH" pnpm --filter @jeswr/app-suite run typecheck && PATH="$PWD/node_modules/.bin:$PATH" pnpm --filter @jeswr/app-suite run test
+pnpm run lint:root
+PATH="$PWD/node_modules/.bin:$PATH" TURBO_SCM_BASE=3696bed75683e5c7aa253ba8a7cc163f5b8a1e07 pnpm run gate
+PATH="$PWD/node_modules/.bin:$PATH" pnpm run gate:full
+pnpm --filter @jeswr/app-suite exec playwright test --list e2e/ds-04-shell.spec.ts
+git diff --check
+```
+
+The first command intentionally reproduced the regression (1 failure / 21 passes;
+the script's extra `--` caused all tests to run). After the fix, PASS: changed
+projects' lint/build/typecheck/tests (22 suite-ui tests and 5,825 app-suite tests),
+root lint (74 contrast pairs pass), affected gate (14/14 tasks; 4 cached), browser
+spec collection (108 cases), and whitespace validation. The app retains its 54
+existing lint warnings and reports 100% coverage for its configured library scope.
+
+Full-workspace gate: FAIL at the previously documented, unchanged
+`@jeswr/federation-trust` characterization snapshot (`test/characterization.test.ts:196`;
+JWK key order `crv,x,kty` versus `kty,crv,x`). That package has 53 passes / 1 failure;
+Turbo reports 244 successful tasks / 372 total, 204 cached, before cancellation.
+No unrelated package files or generated artifacts were changed.
+
+Screenshots taken: none. Browser execution, visual comparison and full browser axe
+remain for the dispatcher, as instructed; the added case captures
+`shell-focus-after-collapse-<project>.png` in `artifacts/screens/DS-04/`.
+`roborev` is still unavailable. The three conservative readings in `QUESTIONS.md`
+remain unchanged; this continuation adds no design questions. The final status
+commit follows the gates and includes only this report.
