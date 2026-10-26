@@ -1,5 +1,7 @@
 # AUTHORED-BY Codex GPT-6.1-Sol
+<https://pod.test/alice/integrations/bank-statements/finance/bank-transactions.ttl#txn-synthetic-groceries-f3e94439-activity> a <https://jeswr.org/ns/core#Activity>.
 <https://pod.test/alice/integrations/bank-statements/finance/bank-transactions.ttl#txn-synthetic-groceries-f3e94439> a <https://jeswr.org/ns/sectors/finance#TransactionRecord>, <https://schema.org/Invoice>;
+    <https://jeswr.org/ns/core#about> <https://pod.test/alice/integrations/bank-statements/finance/bank-transactions.ttl#txn-synthetic-groceries-f3e94439-activity>;
     <https://schema.org/dateCreated> "2026-01-20T00:00:00.000Z"^^<http://www.w3.org/2001/XMLSchema#dateTime>;
     <https://schema.org/name> "Synthetic groceries";
     <https://schema.org/priceCurrency> "GBP";

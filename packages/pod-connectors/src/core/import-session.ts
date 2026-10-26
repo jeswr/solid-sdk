@@ -50,6 +50,11 @@ export function createImportSession(
       throw new Error("Reserved connector provenance slug.");
     if (!reads.has(url)) await read(input.slug);
     const previous = reads.get(url);
+    const sourceSubjects = new Set(
+      [...input.dataset]
+        .filter((q) => q.subject.termType === "NamedNode")
+        .map((q) => q.subject.value),
+    );
     const doc = vocabMap ? vocabMap({ ...input, dataset: copyDataset(input.dataset) }) : input;
     const incoming = copyDataset(doc.dataset);
     const subjects = new Set(
@@ -70,7 +75,10 @@ export function createImportSession(
       item.generatedBy.clear();
       item.generatedBy.add(activityUrl);
       used.add(origin);
-      if (subject !== url) itemKeys.add(JSON.stringify([url, subject]));
+      // Sector maps can add linked people/activities. Counts describe the
+      // adapter's source items; every mapped resource still gets provenance.
+      if (subject !== url && sourceSubjects.has(subject))
+        itemKeys.add(JSON.stringify([url, subject]));
     }
     const result = await writer.write({ ...doc, dataset }, conditions ?? conditionFor(previous));
     for (const request of registrationsFor([result])) {

@@ -1,9 +1,9 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { FEDERATION } from "../core/federation-vocab.js";
+import { createFileVocabMap } from "../core/file-vocab-map.js";
 import { CLASSES } from "../core/vocab.js";
-import { createVocabMap } from "../core/vocab-map.js";
 
-/** Sector classes supplement the legacy types; source fields retain their meaning. */
-export const vocabMap = createVocabMap({
+/** Sector classes and required properties supplement the legacy source fields. */
+export const vocabMap = createFileVocabMap({
   [CLASSES.Invoice]: FEDERATION.TransactionRecord,
 });

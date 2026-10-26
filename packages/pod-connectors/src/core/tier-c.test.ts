@@ -1,5 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { DataFactory, Writer } from "n3";
+import { readFileSync } from "node:fs";
+import type { DatasetCore } from "@rdfjs/types";
+import { DataFactory, Parser, Store, Writer } from "n3";
 import { describe, expect, it, vi } from "vitest";
 import { amazonOrdersFileAdapter } from "../amazon-orders/file-adapter.js";
 import { appleHealthFileAdapter } from "../apple-health/file-adapter.js";
@@ -16,6 +18,56 @@ import { PROV, Provenance } from "./provenance.js";
 import { fileImport, TEST_POD_ROOT } from "./testing.js";
 import { CLASSES, PodThing, SCHEMA } from "./vocab.js";
 
+const SH = "http://www.w3.org/ns/shacl#";
+const RDF_TYPE = DataFactory.namedNode("http://www.w3.org/1999/02/22-rdf-syntax-ns#type");
+const sectorShapes = new Store(
+  ["media", "finance", "health", "social"].flatMap((sector) =>
+    new Parser().parse(
+      readFileSync(
+        new URL(
+          `../../../solid-federation-vocab/sectors/${sector}/${sector}.shacl.ttl`,
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+    ),
+  ),
+);
+
+/** No shared SHACL helper is exported by the suite. Assert the required direct
+ * predicates, cardinalities, datatypes and linked classes from the source shapes.
+ * Warning/Info constraints are advisory; this is not a general SHACL engine.
+ */
+function expectRequiredSectorProperties(dataset: DatasetCore): void {
+  for (const target of sectorShapes.getQuads(null, `${SH}targetClass`, null, null)) {
+    const nodes = [...dataset.match(null, RDF_TYPE, target.object)];
+    for (const property of sectorShapes.getObjects(target.subject, `${SH}property`, null)) {
+      if (!sectorShapes.countQuads(property, `${SH}severity`, `${SH}Violation`, null)) continue;
+      const path = required(sectorShapes.getObjects(property, `${SH}path`, null)[0]);
+      for (const { subject } of nodes) {
+        const values = [...dataset.match(subject, path)].map((quad) => quad.object);
+        const context = `${subject.value}: ${path.value}`;
+        const min = sectorShapes.getObjects(property, `${SH}minCount`, null)[0];
+        const max = sectorShapes.getObjects(property, `${SH}maxCount`, null)[0];
+        if (min) expect(values.length, context).toBeGreaterThanOrEqual(Number(min.value));
+        if (max) expect(values.length, context).toBeLessThanOrEqual(Number(max.value));
+        for (const value of values) {
+          const datatype = sectorShapes.getObjects(property, `${SH}datatype`, null)[0];
+          if (datatype) {
+            expect(value.termType, context).toBe("Literal");
+            if (value.termType === "Literal") expect(value.datatype.value).toBe(datatype.value);
+          }
+          const linkedClass = sectorShapes.getObjects(property, `${SH}class`, null)[0];
+          if (linkedClass) {
+            expect(value.termType, context).toBe("NamedNode");
+            expect([...dataset.match(value, RDF_TYPE, linkedClass)].length, context).toBe(1);
+          }
+        }
+      }
+    }
+  }
+}
+
 /** Synthetic exports only: no downloaded personal data or source transport. */
 const fixtures: {
   adapter: FileImportAdapter;
@@ -23,12 +75,13 @@ const fixtures: {
   text: string;
   types: readonly string[];
   value: string;
+  items?: number;
 }[] = [
   {
     adapter: appleHealthFileAdapter,
     name: "export.xml",
     text: '<HealthData><Workout workoutActivityType="HKWorkoutActivityTypeRunning" duration="10" durationUnit="min" startDate="2026-01-01 12:00:00 +0000"/></HealthData>',
-    types: [CLASSES.ExerciseAction, FEDERATION.HealthRecord],
+    types: [CLASSES.ExerciseAction, FEDERATION.HealthRecord, FEDERATION.Person],
     value: "PT10M",
   },
   {
@@ -42,18 +95,25 @@ const fixtures: {
     adapter: amazonOrdersFileAdapter,
     name: "orders.csv",
     text: 'Order ID,Product Name,Total Owed,Currency\nsynthetic-1,"Synthetic lamp",12.50,GBP\n',
-    types: [CLASSES.Invoice, FEDERATION.TransactionRecord],
+    types: [CLASSES.Invoice, FEDERATION.TransactionRecord, FEDERATION.Activity],
     value: "12.50",
   },
   {
     adapter: uberFileAdapter,
+    items: 2,
     name: "trips.csv",
     text: "City,Begin Trip Time,Dropoff Address,Fare Amount,Fare Currency\nTestville,2026-01-01 12:00:00,Synthetic Square,8.25,GBP",
-    types: [CLASSES.TravelAction, CLASSES.Invoice, FEDERATION.TransactionRecord],
+    types: [
+      CLASSES.TravelAction,
+      CLASSES.Invoice,
+      FEDERATION.TransactionRecord,
+      FEDERATION.Activity,
+    ],
     value: "8.25",
   },
   {
     adapter: whatsappFileAdapter,
+    items: 2,
     name: "_chat.txt",
     text: "[20/01/2026, 12:00:00] Synthetic Sender: Hello 🌍\r\ncontinued\r\n[20/01/2026, 12:01:00] Synthetic Peer: Hi",
     types: [CLASSES.Message, FEDERATION.Note],
@@ -68,6 +128,7 @@ const fixtures: {
   },
   {
     adapter: steamFileAdapter,
+    items: 2,
     name: "games.json",
     text: JSON.stringify({
       response: { games: [{ appid: 100, name: "Synthetic Game", playtime_forever: 75 }] },
@@ -106,14 +167,14 @@ const fixtures: {
     adapter: bankStatementsFileAdapter,
     name: "bank.csv",
     text: "Date,Description,Amount\n2026-01-20,Synthetic groceries,-12.50",
-    types: [CLASSES.Invoice, FEDERATION.TransactionRecord],
+    types: [CLASSES.Invoice, FEDERATION.TransactionRecord, FEDERATION.Activity],
     value: "-12.50",
   },
   {
     adapter: bankStatementsFileAdapter,
     name: "bank.ofx",
     text: "OFXHEADER:100\r\n<OFX><CURDEF>GBP\r\n<STMTTRN><DTPOSTED>20260120<TRNAMT>-12.50<NAME>Synthetic groceries</STMTTRN></OFX>",
-    types: [CLASSES.Invoice, FEDERATION.TransactionRecord],
+    types: [CLASSES.Invoice, FEDERATION.TransactionRecord, FEDERATION.Activity],
     value: "GBP",
   },
 ];
@@ -161,6 +222,7 @@ for (const fixture of fixtures) {
       const mappings: string[] = [];
       for (const written of report.written) {
         const dataset = pod.dataset(written.url);
+        expectRequiredSectorProperties(dataset);
         if (chunkSize === 7) {
           const quads = [...dataset].filter((q) => !q.predicate.value.startsWith(PROV));
           quads.sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
@@ -206,6 +268,7 @@ for (const fixture of fixtures) {
         );
       }
       expect(report.state?.lastOutcome).toBe("success");
+      expect(report.state?.counts.items).toBe(fixture.items ?? 1);
       const again = await fileImport(fixture.adapter, file, { pod });
       expect(again.report.state?.counts).toEqual(report.state?.counts);
       for (const written of report.written) {

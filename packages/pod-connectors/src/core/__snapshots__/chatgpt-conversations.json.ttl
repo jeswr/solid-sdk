@@ -1,5 +1,6 @@
 # AUTHORED-BY Codex GPT-6.1-Sol
-<https://pod.test/alice/integrations/chatgpt/documents/chatgpt-conversations.ttl#chat-synthetic-chat-a43d595a> a <https://jeswr.org/ns/sectors/media#CreativeWork>, <https://schema.org/TextDigitalDocument>;
+<https://pod.test/alice/integrations/chatgpt/documents/chatgpt-conversations.ttl#chat-synthetic-chat-a43d595a> <http://purl.org/dc/terms/title> "Synthetic chat";
+    a <https://jeswr.org/ns/sectors/media#CreativeWork>, <https://schema.org/TextDigitalDocument>;
     <https://schema.org/name> "Synthetic chat";
     <https://schema.org/text> "You: Synthetic \"hello\" \U0001f30d";
     <https://schema.org/url> <https://chatgpt.com/c/synthetic-1>.

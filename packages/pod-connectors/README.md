@@ -104,6 +104,8 @@ JSON array members are parsed incrementally. UTF-8 decoding spans chunks; reader
 are released or cancelled when parsing ends or fails. The 64 MiB limit is also
 checked against actual bytes read. Existing deterministic documents and the
 100,000-record cap are preserved: RDF snapshots remain in memory up to that cap.
+CSV headers are parsed and normalised once per file, including bank column
+aliases, and are limited to 1,024 columns and 65,536 characters.
 Select the extracted export file, rather than the ZIP archive.
 
 Per-importer vocab maps retain legacy schema.org/FOAF types and source fields,
@@ -115,6 +117,12 @@ class. Financial lines are `fin:TransactionRecord`, viewing events are
 `media:CreativeWork`, and WhatsApp messages are `social:Note`. Uber journey types
 and all existing category/Type Index registration classes are preserved. See
 root `QUESTIONS.md` for conservative mappings where the spec leaves terms open.
+Sector mappings also carry the required shape properties: creative works have
+`dcterms:title`, notes have `social:content`, transaction records link through
+`core:about` to distinct local activities, and health records name an unnamed
+local `core:Person` through `core:subject`. Financial activities retain the broad
+`core:Activity` type because exports may omit the currency or posting time needed
+by the `fin:Transaction` shape; missing source facts are not inferred.
 Goodreads books, Steam items/accounts and conversations with a ChatGPT id carry
 their source item URL for provenance; other records use the connector export URN.
 No MCP-16 parser is present in this checkout, so ChatGPT reuses its existing
@@ -122,7 +130,9 @@ conversation parser for each streamed conversation.
 
 Synthetic fixture tests cover every importer with one-byte, seven-byte and
 single-chunk input, sorted Turtle mapping snapshots, provenance and stable
-re-import. The Apple Health streaming test lazily generates over 50 MiB of
+re-import. They assert the required predicates, cardinalities, datatypes and
+linked classes from the checked-in sector shapes without adding a SHACL dependency.
+The Apple Health streaming test lazily generates over 50 MiB of
 `export.xml` and retains only workouts. Tests make no production requests.
 
 ## Recording fixtures

@@ -1,5 +1,6 @@
 # AUTHORED-BY Codex GPT-6.1-Sol
-<https://pod.test/alice/integrations/steam/media/steam-games.ttl#game-synthetic-game-cfe160ab> a <https://jeswr.org/ns/sectors/media#CreativeWork>, <https://schema.org/VideoGame>;
+<https://pod.test/alice/integrations/steam/media/steam-games.ttl#game-synthetic-game-cfe160ab> <http://purl.org/dc/terms/title> "Synthetic Game";
+    a <https://jeswr.org/ns/sectors/media#CreativeWork>, <https://schema.org/VideoGame>;
     <https://schema.org/identifier> "100";
     <https://schema.org/name> "Synthetic Game";
     <https://schema.org/timeRequired> "PT1H15M";

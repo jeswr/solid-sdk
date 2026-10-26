@@ -1,5 +1,7 @@
 # AUTHORED-BY Codex GPT-6.1-Sol
-<https://pod.test/alice/integrations/apple-health/health/workouts.ttl> a <https://jeswr.org/ns/sectors/health#HealthRecord>.
+<https://pod.test/alice/integrations/apple-health/health/workouts.ttl> a <https://jeswr.org/ns/sectors/health#HealthRecord>;
+    <https://jeswr.org/ns/core#subject> <https://pod.test/alice/integrations/apple-health/health/workouts.ttl#subject>.
+<https://pod.test/alice/integrations/apple-health/health/workouts.ttl#subject> a <https://jeswr.org/ns/core#Person>.
 <https://pod.test/alice/integrations/apple-health/health/workouts.ttl#workout-running-dcf14e4a> a <https://schema.org/ExerciseAction>;
     <https://schema.org/duration> "PT10M";
     <https://schema.org/exerciseType> "Running";
