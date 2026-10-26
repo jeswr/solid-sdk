@@ -17,6 +17,7 @@
   },
   "packages": [
     "@jeswr/agent-authz-verifier",
+    "@jeswr/agentic-legacy-bridge",
     "@jeswr/app-shell",
     "@jeswr/auth-solid",
     "create-solid-app",
@@ -28,6 +29,7 @@
     "@jeswr/matrix-chat-to-pod",
     "n8n-nodes-solid",
     "@jeswr/openclaw-memory-solid",
+    "@jeswr/personal-agent",
     "@jeswr/rdf-serialize",
     "@jeswr/rxdb-solid",
     "@jeswr/solid-a2a",
@@ -82,7 +84,8 @@
     "@jeswr/agent-model-gateway",
     "@jeswr/agent-credentials",
     "@jeswr/agent-memory",
-    "@jeswr/agent-registry"
+    "@jeswr/agent-registry",
+    "@jeswr/fetch-rdf"
   ],
   "applications": [
     {

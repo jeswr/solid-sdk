@@ -25,12 +25,37 @@ export type { ValidationReport, ValidationResult } from "@sparq-org/sparq";
 
 import type { ValidationReport } from "@sparq-org/sparq";
 
+/** Request inputs supported by the authoritative solid-odrl evaluator. */
+export interface PolicyContext {
+  action: string;
+  target: string;
+  assignee?: string;
+  purpose?: string;
+  now?: Date;
+}
+/** Decision and stable identifiers of matching rules and active unfulfilled duties. */
+export interface PolicyResult {
+  allow: boolean;
+  matched: string[];
+  unmet: string[];
+}
+/** Options passed verbatim to Sparq's form derivation. */
+export interface FormOptions {
+  mode: "edit" | "view";
+  shape?: string;
+}
+
 /** Lazy, disposable RDF engine and local named-graph indexes (ADR-007). */
 export interface RdfEngine {
   ready(): Promise<void>;
   readonly loaded: boolean;
   /** Optional Sparq build features, detected at initialization; null before loading. */
-  readonly features: { serialize: boolean; parseShaclCompact: boolean } | null;
+  readonly features: {
+    serialize: boolean;
+    parseShaclCompact: boolean;
+    /** A versioned policy export is available; no WASM policy adapter is enabled yet. */
+    policyEvaluate: boolean;
+  } | null;
   /** Materialize an RDF/JS DatasetCore with fresh, document-scoped blank-node identities. */
   parse(
     input: string | Uint8Array,
@@ -40,6 +65,21 @@ export interface RdfEngine {
   serialize(data: QuadSource, format: RdfMediaType, opts?: SerializeOptions): Promise<string>;
   validate(data: QuadSource, shapes: QuadSource | string): Promise<ValidationReport>;
   canonicalize(data: QuadSource): Promise<string>;
+  /**
+   * Evaluate the first policy using solid-odrl; unfulfilled duties remain advisory.
+   * @throws {PolicyIdentifierCollisionError} If a generated trace ID aliases a named node.
+   */
+  evaluatePolicy(policy: DatasetCore, ctx: PolicyContext): Promise<PolicyResult>;
+  /**
+   * Return Sparq's FormDescription JSON without reconstructing its fields.
+   * @throws {FormGraphUnsupportedError} If data or shapes contain non-default graph quads.
+   */
+  deriveForm(
+    data: DatasetCore,
+    shapes: DatasetCore,
+    focus: string,
+    opts: FormOptions,
+  ): Promise<unknown>;
   /** Create an owned local named-graph SPARQL index. */
   createIndex(opts?: IndexOptions): Promise<LocalIndex>;
   dispose(): void;

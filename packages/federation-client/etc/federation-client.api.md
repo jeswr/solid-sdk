@@ -68,7 +68,7 @@ export function discoverFromRegistry(registryUrl: string, options?: RegistryOpti
 export { DnsLookup }
 
 // @public
-export const FEDAPP: "https://w3id.org/jeswr/fed#";
+export const FEDAPP: "https://jeswr.org/ns/fed#";
 
 export { guardedFetch }
 
