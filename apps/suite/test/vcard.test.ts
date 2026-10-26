@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { describe, expect, it } from "vitest";
 import { parseVCards, serializeVCards, type VCard } from "../src/apps/contacts/lib/vcard";
 import { apple, google, quotedPrintable, version4 } from "./fixtures/vcard/exports";
@@ -158,6 +159,30 @@ describe("content lines and values", () => {
     expect(card.fn).toBe(expected);
     expect(card.emails[0]?.value).toBe("fiction@example.org");
     expect(first(serializeVCards([card]))).toEqual(card);
+  });
+
+  it.each([
+    ["ordinary properties", "X-EXTRA:value=\n".repeat(50_000), undefined],
+    [
+      "quoted-printable soft breaks",
+      `NOTE;ENCODING=QUOTED-PRINTABLE:${"=41=\n".repeat(50_000)}=41\n`,
+      "A".repeat(50_001),
+    ],
+    [
+      "empty quoted-printable folds",
+      `NOTE;ENCODING=QUOTED-PRINTABLE:=${"\n ".repeat(50_000)}4\n\t1\n`,
+      "A",
+    ],
+  ])("bounds processing of large inputs with %s", (_, properties, note) => {
+    const text = wrap(`${properties}EMAIL:fiction@example.org`, "3.0");
+    const started = performance.now();
+    const card = first(text);
+    const elapsed = performance.now() - started;
+    expect(card.fn).toBe("Test");
+    expect(card.note).toBe(note);
+    expect(card.emails[0]?.value).toBe("fiction@example.org");
+    // Generous headroom for a linear pass; repeated suffix copies/scans exceed this budget.
+    expect(elapsed).toBeLessThan(2_000);
   });
 
   it("recognizes QP only in headers and allows folded and quoted parameter headers", () => {

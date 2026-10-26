@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { decodeQuotedPrintable, split, unescapeText, unescapeUri } from "./text";
 import type { VCard, VCardField } from "./types";
 
@@ -49,23 +50,29 @@ function property(line: string): Property {
 function logicalLines(text: string): string[] {
   const lines: string[] = [];
   const physicalLines = text.replace(/^\uFEFF/, "").split(/\r\n|\r|\n/);
-  for (const [index, line] of physicalLines.entries()) {
+  for (let index = 0; index < physicalLines.length; index++) {
+    let line = physicalLines[index] as string;
     const previous = lines.at(-1);
     // Legacy v3 exports use MIME soft breaks, sometimes with an extra fold space.
-    // Inspect all subsequent folds before deciding whether they complete an =HH escape.
-    let continuation = line;
+    let soft = false;
     if (previous?.endsWith("=")) {
-      for (const folded of physicalLines.slice(index + 1)) {
-        if (!/^[ \t]/.test(folded)) break;
-        continuation += folded.slice(1);
+      const header = previous.match(/^(?:[^":]|"[^"]*")*:/)?.[0];
+      if (
+        header !== undefined &&
+        property(header).parameters.ENCODING?.[0]?.toUpperCase() === "QUOTED-PRINTABLE"
+      ) {
+        // Consume folds only until two hex digits can be classified. Empty folds
+        // advance the same index, so no remaining suffix is copied or rescanned.
+        while (
+          /^[ \t][\da-f]?$/i.test(line) &&
+          index + 1 < physicalLines.length &&
+          /^[ \t]/.test(physicalLines[index + 1] as string)
+        ) {
+          line += (physicalLines[++index] as string).slice(1);
+        }
+        soft = !/^[ \t][\da-f]{2}/i.test(line);
       }
     }
-    const header = previous?.match(/^(?:[^":]|"[^"]*")*:/)?.[0];
-    const soft =
-      previous?.endsWith("=") &&
-      !/^[ \t][\da-f]{2}/i.test(continuation) &&
-      header !== undefined &&
-      property(header).parameters.ENCODING?.[0]?.toUpperCase() === "QUOTED-PRINTABLE";
     if (previous !== undefined && (soft || /^[ \t]/.test(line))) {
       lines[lines.length - 1] =
         (soft ? previous.slice(0, -1) : previous) + line.replace(/^[ \t]/, "");
