@@ -218,7 +218,10 @@ describe("observation normalisation", () => {
   });
 
   it.each([null, undefined, [], 1, "observation"])("rejects malformed observation %s", (value) => {
-    expectCode(() => normaliseObservation(value as UnitObservation), "invalid-observation");
+    expectCode(
+      () => normaliseObservation(value as unknown as UnitObservation),
+      "invalid-observation",
+    );
   });
 
   it("propagates typed validation errors without modifying an observation", () => {

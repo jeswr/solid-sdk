@@ -21,7 +21,7 @@ export function normaliseObservation<T extends UnitObservation>(
   if (observation === null || typeof observation !== "object" || Array.isArray(observation)) {
     throw new UnitError("invalid-observation", "Expected a scalar observation record");
   }
-  const unit = canonicalUnit(observation.measure);
+  const unit = canonicalUnit<T["measure"]>(observation.measure);
   const value = convertUnit(observation.value, observation.unit, unit, observation.measure);
   return { ...observation, value, unit };
 }
