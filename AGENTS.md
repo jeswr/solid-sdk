@@ -55,6 +55,27 @@ package plan or explicit maintainer direction.
    reviews every commit (`.roborev.toml`: codex / gpt-5.6-sol, min severity low); read verdicts
    and address findings.
 
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
+`pnpm run check:sdk-layers` (also part of `lint:root`) runs `scripts/check-sdk-layers.mjs`
+against the `dependencies`, `peerDependencies`, and `optionalDependencies` of workspace
+package, app (including `apps/*/web`), and tool manifests, enforcing ADR-001 D1 and its
+2026-10-25 amendment. Apps cannot depend directly
+on `@sparq-org/sparq` or the `@jeswr/storage-client/solid` and `/lws` backends;
+`@jeswr/storage-client` may depend only on `@jeswr/storage-capabilities`, `@jeswr/fetch-rdf`,
+`@jeswr/rdf-serialize`, `@jeswr/guarded-fetch`, `@solid/object`, `@rdfjs/wrapper`, and `n3`;
+`@jeswr/pod-auth` cannot depend on `@jeswr/storage-client`. In storage-client and pod-auth
+manifests, and for restricted package keys (including subpaths) in any scanned manifest,
+the guard accepts only `workspace:*`, `workspace:^`, `workspace:~`,
+`workspace:<semver range>`, and plain semver ranges. Aliases, paths, other protocols,
+and tags fail with "unsupported dependency spec for a layered package" without printing
+their specs. Layer rules apply to the dependency key. Unrestricted manifests' unrelated
+dependencies are ignored.
+It reports violating manifest paths, fields, and dependency names. Development
+dependencies and source import restrictions are outside this manifest check's scope.
+Fixture tests run through `pnpm run test:root`; `--root <directory>` selects
+an isolated workspace for testing the script.
+
 <!-- AUTHORED-BY Codex GPT-5 -->
 ## Local agent skills
 

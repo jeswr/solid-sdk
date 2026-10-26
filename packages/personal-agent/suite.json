@@ -1,0 +1,39 @@
+{
+  "$schema": "https://raw.githubusercontent.com/jeswr/full-solid-ecosystem/main/tracking/schema/suite.schema.json",
+  "id": "personal-agent",
+  "kind": "package",
+  "name": "Personal Agent (NOW)",
+  "repo": "https://github.com/jeswr/personal-agent",
+  "category": "agentic",
+  "maturity": "alpha",
+  "visibility": "public",
+  "securityCritical": true,
+  "stack": {
+    "lang": "TypeScript (ESM, NodeNext)",
+    "runtime": "Node >=22",
+    "rdf": "n3 ^2.x + @jeswr/fetch-rdf parseRdf + @solid/object typed accessors",
+    "reader": "@jeswr/agentic-legacy-bridge (git, sha-pinned) — parseEmail/importInbound/interpreters/metadata",
+    "pod-tools": "@jeswr/solid-mcp (git, sha-pinned) — read-only pod MCP tools for the Actor",
+    "guarded-fetch": "@jeswr/guarded-fetch (git, sha-pinned) — SSRF-safe Gmail API reads",
+    "actor-runtime": "@anthropic-ai/claude-agent-sdk (optional peer; live loop is credential-gated)",
+    "test": "vitest ^3.x",
+    "lint": "@biomejs/biome ^2.x",
+    "node": ">=22"
+  },
+  "dependsOn": [
+    "agentic-legacy-bridge",
+    "solid-mcp",
+    "guarded-fetch",
+    "fetch-rdf",
+    "solid-object"
+  ],
+  "federation": {
+    "sectors": ["communication", "agentic"],
+    "produces": ["chat", "agentic-interpretation", "metadata-protocol", "action-proposal"],
+    "consumes": ["chat", "agentic-interpretation", "metadata-protocol"],
+    "note": "M1 of the maintainer's personal agent (agentic-solid-vision/docs/NOW-PERSONAL-AGENT.md): the works-today counterpart of the Accountable Web of Agents vision paper. Composes the suite's hardened packages under a hard Reader / pod / Actor / outbox trust split (section 2 + section 7) so NO single context both reads hostile input and holds act-credentials. (a) The READER: a thin Gmail ChannelAdapter (users.messages.list+get?format=raw via an injectable gmail.readonly token seam + SSRF-guarded fetch, redirect-refusing) feeds the LANDED @jeswr/agentic-legacy-bridge pipeline (hardened parseEmail -> owner-private ACL-first importInbound + the deterministic-first section 5 metadata interpreter: composeInterpreters(structuredMetadata, deterministic, optional-LLM)); no bespoke RFC/RDF parsing. (b) POD-AS-STATE: owner-private inbox/proposals/outbox containers, fail-closed owner-only WAC ACL written BEFORE any content (bridge buildOwnerOnlyAclTurtle), regression-tested. (c) The ACTOR skeleton on the Claude Agent SDK (section 3.3): deterministic section 5 path FIRST (reads landed structured-metadata Interpretations with zero LLM tokens), LLM only for residual prose via the bridge Interpreter seam; reads the pod through @jeswr/solid-mcp read-only tools; a fail-closed canUseTool gate (allow pod reads + proposal-container writes ONLY; deny Bash/Write/Edit/WebFetch/everything else); the Actor only PROPOSES (writes an agentic:ActionProposal record) and holds NO send tokens. (d) The OUTBOX EXECUTOR: deterministic, no-LLM, consumes ONLY human-confirmed proposals, builds the section 5.2 signed carrier (bridge buildReply/buildActionMetadata + injectable solid-vc signer seam), sends via an injectable per-channel ChannelSender seam that alone holds send-scope tokens, and writes a PROV receipt. Every credential is a seam (Gmail OAuth token, pod authed fetch, channel send tokens, the billed Anthropic API key) — M1 builds to the seams and stops there; no live credentials required to build/test. Untrusted-email surface exhaustively hostile-input tested (over-cap/redirect/non-2xx/header-injection/HTML-body/script-in-JSON-LD/path-traversal message-ids) by composing the bridge's hardened parsers, never re-opening a hole. One minted namespace only (https://w3id.org/jeswr/agentic#) reusing the bridge's vocab for the proposal record; everything else reuses schema.org/PROV/dct. ignore-scripts=true; committed dist (GitHub-installable; @jeswr git deps ship their own committed dist). npm publish deferred (needs:user). needs:user for go-live: Gmail OAuth app + gmail.readonly token, a billed Anthropic API key, per-channel send tokens, an always-on host."
+  },
+  "status": {
+    "generatedAt": "2026-07-06T00:00:00.000Z"
+  }
+}
