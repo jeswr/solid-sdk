@@ -354,3 +354,65 @@ independent automated per-commit review remains outstanding. No pushes, PRs,
 branch switches, remote fetches/merges, tracker changes, or edits to other
 checkouts were performed. No implementation work or new open questions remain;
 the earlier pilot/live-server verification limits still apply.
+
+## Review fix round 2 — cross-resource graph identity
+
+Review/fix base and affected-gate comparison:
+`2bfa746b274fca34fa5a1402068318c8a7482cb9`; branch remains `lane/sst-vcij`.
+
+- `16a4789a` — `fix(pkg-memory): reject unsupported blank-node sharing`:
+  validate the complete resource split before any Pod mutation. A blank node
+  used by multiple resources must occur in a common assertion, sources, or
+  entities graph in every resource that uses it. Reject provenance-only,
+  publication-only, and unanchored cross-batch sharing; preserve local
+  cross-graph nodes and supported shared nodes. Document this storage boundary.
+- `a9a49822` — `fix(pkg-memory): match shared graph nodes jointly`: determine
+  node correspondence from all repeated graphs together, retaining graph
+  identity in an internal matching projection. Symmetric source authors can be
+  distinguished by entities without depending on triple order. Genuine graph
+  content and cross-graph identity conflicts still reject. Regressions verify
+  whole-dataset isomorphism, provenance joins, repeated reads, and both listing
+  orders after reordering stored triples.
+- Final documentation commit — `docs: record sst-vcij graph identity validation`:
+  this report, committed last after the required gates.
+
+Conservative choice: use the review's explicitly permitted rejection of
+unsupported sharing before writing. No persistent mapping format was introduced.
+There are no new design questions.
+
+### Validation
+
+Commands ran in this checkout with `/opt/node24/bin` first on `PATH`
+(Node v24.22.1 and pnpm 10.4.1).
+
+| Exact command | Result |
+| --- | --- |
+| `pnpm exec turbo run build --filter=@jeswr/pkg-memory...` | PASS; four dependency-first builds. |
+| `pnpm --filter @jeswr/pkg-memory exec vitest run test/store.test.ts -t 'shared only between private\|local blank node shared' --coverage.enabled=false` | Expected FAIL before the first fix; both unsupported-sharing cases reproduced the finding. |
+| `pnpm --filter @jeswr/pkg-memory exec vitest run test/store.test.ts -t 'resolves symmetric blank nodes' --coverage.enabled=false` | Expected FAIL before the joint-mapping fix; both listing orders reproduced the finding. |
+| `pnpm --filter @jeswr/pkg-memory exec vitest run test/store.test.ts --coverage.enabled=false` | PASS after both fixes; 68 tests. |
+| `pnpm --filter @jeswr/pkg-memory run lint` | PASS. |
+| `pnpm --filter @jeswr/pkg-memory run build` | PASS. |
+| `pnpm --filter @jeswr/pkg-memory run typecheck` | PASS, including tests. |
+| `pnpm --filter @jeswr/pkg-memory run test` | PASS; 11 files, 570 tests; 100% statements, branches, functions, and lines. |
+| `pnpm run lint:root` (via the affected gate) | PASS. |
+| `TURBO_SCM_BASE=2bfa746b274fca34fa5a1402068318c8a7482cb9 pnpm run gate` | PASS; 8 successful tasks. |
+| `pnpm run gate:full` (first attempt) | FAIL outside this lane; root pathological-spec timing test measured 62.27 ms against its 50 ms limit; 685 other root tests passed. |
+| `pnpm exec turbo run test:root` | PASS without competing builds; all 686 root tests. |
+| `pnpm run gate:full` (retry) | FAIL outside this lane; 285 successful tasks before `@jeswr/federation-codegen#test` stopped the run (2 failed, 23 passed tests). The passing root tests were cached. |
+| `git diff --check 2bfa746b274fca34fa5a1402068318c8a7482cb9` | PASS. |
+
+The full-gate retry reproduced the two previously documented namespace
+mismatches in `tools/federation-codegen/test/generator.test.ts`: the Bookmark
+target class and generated ontology bytes. The tool/vocabulary inputs and root
+timing test/guard are unchanged from this review base, verified with
+`git diff 2bfa746b274fca34fa5a1402068318c8a7482cb9 --exit-code -- tools/federation-codegen packages/solid-federation-vocab test/check-sdk-layers.test.mjs scripts/check-sdk-layers.mjs`.
+Generated web-public build artifacts were removed before the final commit.
+
+No dependency, manifest, or lockfile changed; no dependency policy check was
+needed. Tests use fictional identities and the memory PodPort. `roborev` remains
+unavailable (`command -v roborev` found no executable), so independent automated
+per-commit review remains outstanding. Both requested findings are implemented.
+No pushes, PRs, branch switches, remote fetches/merges, tracker changes, or edits
+to other checkouts were performed. No implementation work or open questions
+remain; the earlier pilot/live-server verification limits still apply.
