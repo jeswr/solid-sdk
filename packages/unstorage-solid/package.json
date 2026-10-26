@@ -58,6 +58,7 @@
     "unstorage": "^1.10.0"
   },
   "dependencies": {
+    "@jeswr/guarded-fetch": "workspace:*",
     "@rdfjs/types": "^2.0.1",
     "@rdfjs/wrapper": "^0.34.0",
     "@solid/object": "^0.6.0",
