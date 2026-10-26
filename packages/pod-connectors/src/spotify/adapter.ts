@@ -67,12 +67,22 @@ export const spotifyAdapter: IntegrationAdapter = {
     };
     const track = (value: SpotifyTrack | null | undefined, slug: string, ds: Store) => {
       const id = optionalText(value?.id);
-      if (!value || !id || value.type === "episode" || value.is_local) {
+      if (
+        !value ||
+        !id ||
+        (value.type && !["track", "episode"].includes(value.type)) ||
+        value.is_local
+      ) {
         skipped.skip();
         return undefined;
       }
-      const iri = `${ctx.resolve(slug)}#track-${encodeURIComponent(id)}`;
-      const rec = new MusicRecording(iri, ds, DataFactory).mark();
+      const kind = value.type === "episode" ? "episode" : "track";
+      const iri = `${ctx.resolve(slug)}#${kind}-${encodeURIComponent(id)}`;
+      const rec = new MusicRecording(iri, ds, DataFactory);
+      if (kind === "episode") {
+        rec.types.add(`${SCHEMA}PodcastEpisode`);
+        rec.types.add(`${MEDIA}PodcastEpisode`);
+      } else rec.mark();
       rec.name = optionalText(value.name);
       rec.identifier = id;
       rec.byArtist =
@@ -85,9 +95,9 @@ export const spotifyAdapter: IntegrationAdapter = {
       rec.duration = ms !== undefined && ms >= 0 ? isoDuration(ms) : undefined;
       rec.sourceUrl =
         optionalText(value.external_urls?.spotify) ??
-        `https://open.spotify.com/track/${encodeURIComponent(id)}`;
+        `https://open.spotify.com/${kind}/${encodeURIComponent(id)}`;
       const media = new MediaThing(iri, ds, DataFactory);
-      media.types.add(`${MEDIA}Track`);
+      if (kind === "track") media.types.add(`${MEDIA}Track`);
       media.types.add(`${MEDIA}CreativeWork`);
       media.title = rec.name ?? id;
       return iri;
@@ -219,7 +229,7 @@ export const spotifyAdapter: IntegrationAdapter = {
         event.types.add(`${MEDIA}PlaybackEvent`);
         event.types.add(`${SCHEMA}ListenAction`);
         event.identifier = id;
-        event.sourceUrl = `https://open.spotify.com/track/${encodeURIComponent(item?.track?.id ?? "")}`;
+        event.sourceUrl = `https://open.spotify.com/${item?.track?.type === "episode" ? "episode" : "track"}/${encodeURIComponent(item?.track?.id ?? "")}`;
         event.playedWork = work;
         event.playedVia = "https://open.spotify.com/";
         const instantIri = `${ctx.resolve(historySlug)}#time-${date.getTime()}`;

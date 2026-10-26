@@ -162,5 +162,6 @@ The listener is the implicit Pod owner; no listening duration is inferred from t
 
 All demos remain fixture-backed. Public environment-variable configuration belongs to the
 host application. Playlist item requests use Spotify's current `/playlists/{id}/items`
-endpoint and accept both `item` and legacy `track` payloads. Availability and permission
+endpoint and accept both `item` and legacy `track` payloads, including podcast episodes
+as `media:PodcastEpisode` plus `schema:PodcastEpisode`. Availability and permission
 errors (including playlists inaccessible to the registered client) are surfaced to the host.

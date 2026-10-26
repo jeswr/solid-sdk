@@ -135,6 +135,47 @@ describe("Spotify production import", () => {
     }
   });
 
+  it("retains podcast playlist items and reports unavailable/local/unknown items", async () => {
+    const api = source((url) => {
+      if (url.pathname === "/v1/me/playlists")
+        return json({ items: [{ id: "mixed", name: "Mixed" }] });
+      if (url.pathname === "/v1/playlists/mixed/items")
+        return json({
+          items: [
+            {
+              item: {
+                id: "episode1",
+                type: "episode",
+                name: "Synthetic episode",
+                duration_ms: 60000,
+              },
+            },
+            { track: TOP_TRACKS.items?.[0] },
+            null,
+            { item: { id: "local1", is_local: true } },
+            { item: { id: "unknown1", type: "unknown" } },
+          ],
+        });
+      return undefined;
+    });
+    const { pod, report } = await imported(api);
+    const ds = pod.dataset(`${ROOT}music/playlists.ttl`);
+    const episode = nn(`${ROOT}music/playlists.ttl#episode-episode1`);
+    expect(ds.getQuads(episode, TYPE, nn(`${MEDIA}PodcastEpisode`), null)).toHaveLength(1);
+    expect(ds.getQuads(episode, TYPE, nn(`${SCHEMA}PodcastEpisode`), null)).toHaveLength(1);
+    expect(ds.getQuads(episode, TYPE, nn(`${SCHEMA}MusicRecording`), null)).toHaveLength(0);
+    expect(
+      ds.getQuads(
+        episode,
+        nn(`${SCHEMA}url`),
+        nn("https://open.spotify.com/episode/episode1"),
+        null,
+      ),
+    ).toHaveLength(1);
+    expect(ds.getQuads(null, nn(`${SCHEMA}itemListElement`), null, null)).toHaveLength(2);
+    expect(report.skipped).toBe(3);
+  });
+
   it("follows recently-played before pagination, persists after, and merges increments without duplication", async () => {
     const firstTime = Date.parse("2026-10-25T12:00:00Z");
     const secondTime = firstTime + 1000;
