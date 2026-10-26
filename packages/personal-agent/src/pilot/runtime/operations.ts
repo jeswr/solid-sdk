@@ -158,6 +158,11 @@ export interface OperationHandler {
   readonly inputSchema?: z.ZodType<JsonObject>;
   /** Peer must present a representation statement covering this operation. */
   readonly requiresRepresentation: boolean;
+  /**
+   * Which agreed role supplies a direct result, declared by both local handlers.
+   * Without this obligation, delivery requires an explicit invocation.
+   */
+  readonly agreementDelivery?: "offeror" | "acceptor";
 
   /** Initiator: the intent evaluated before sending an opening proposal. */
   intentForProposal?(ctx: HandlerContext, terms: JsonObject): ActionIntent;

@@ -1182,7 +1182,15 @@ export class AgentRuntime {
 
     const next = transition(
       conv,
-      { type: "message", direction: "in", message: msg, at: this.now() },
+      {
+        type: "message",
+        direction: "in",
+        message: msg,
+        at: this.now(),
+        agreementDelivery: conv.operation
+          ? this.handlers.get(operationKey(conv.operation))?.agreementDelivery
+          : undefined,
+      },
       this.limits,
     );
     if (!next.ok) {
@@ -3007,7 +3015,15 @@ export class AgentRuntime {
     if (!opts.force || !isTerminal(conv.phase)) {
       const next = transition(
         conv,
-        { type: "message", direction: "out", message, at: message.createdAt },
+        {
+          type: "message",
+          direction: "out",
+          message,
+          at: message.createdAt,
+          agreementDelivery: conv.operation
+            ? this.handlers.get(operationKey(conv.operation))?.agreementDelivery
+            : undefined,
+        },
         this.limits,
       );
       if (!next.ok) {

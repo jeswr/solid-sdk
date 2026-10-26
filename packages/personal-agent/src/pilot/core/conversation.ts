@@ -93,6 +93,8 @@ export type ConversationEvent =
       readonly direction: "in" | "out";
       readonly message: AnyMessage;
       readonly at: string;
+      /** Local operation obligation, never taken from the peer's message. */
+      readonly agreementDelivery?: "offeror" | "acceptor";
     }
   | { readonly type: "approval-pending"; readonly at: string }
   | { readonly type: "approval-resolved"; readonly at: string }
@@ -255,18 +257,20 @@ export function transition(
         return fail("terms-digest-mismatch", "accepted terms digest differs from the offer");
       }
       const { openProposal: _closed, ...rest } = base;
+      // An offer can request data or promise a result. The local operation's
+      // obligation chooses the supplier; the opposite side is the requester.
       next = {
         ...rest,
         phase: "agreed",
         agreement: message.body.agreement,
-        ...(state.operation
+        ...(state.operation && event.agreementDelivery
           ? {
               requests: {
                 ...state.requests,
                 [message.body.agreement]: {
                   operation: state.operation,
                   basis: { kind: "agreement", agreement: message.body.agreement },
-                  by: open.by,
+                  by: event.agreementDelivery === "offeror" ? by : open.by,
                 },
               },
             }

@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 /**
  * Domain adapter: UC-01 mortgage prequalification (synthetic; no real lending, account or
  * institutional membership). One negotiation per relationship, on the shared runtime:
@@ -223,6 +224,7 @@ export interface ConsumerPolicy {
 }
 
 export class ConsumerMortgageHandler implements OperationHandler {
+  readonly agreementDelivery = "acceptor";
   readonly description = prequalDescription([MODEL_MONTHLY], ["initiator"]);
   readonly termsSchema = prequalTerms as unknown as z.ZodType<JsonObject>;
   readonly requiresRepresentation = true;
@@ -443,6 +445,7 @@ export function grantFromTerms(
 }
 
 export class LenderPrequalHandler implements OperationHandler {
+  readonly agreementDelivery = "acceptor";
   readonly description: OperationDescription;
   readonly termsSchema = prequalTerms as unknown as z.ZodType<JsonObject>;
   readonly requiresRepresentation = true;
@@ -684,6 +687,7 @@ export class LenderPrequalHandler implements OperationHandler {
 // ------------------------------------------------------------------ lender → underwriter
 
 export class LenderUnderwritingHandler implements OperationHandler {
+  readonly agreementDelivery = "acceptor";
   readonly description: OperationDescription = {
     id: UNDERWRITING_OP.id,
     version: UNDERWRITING_OP.version,
@@ -746,6 +750,7 @@ export class LenderUnderwritingHandler implements OperationHandler {
 }
 
 export class UnderwriterHandler implements OperationHandler {
+  readonly agreementDelivery = "acceptor";
   readonly description: OperationDescription = {
     id: UNDERWRITING_OP.id,
     version: UNDERWRITING_OP.version,
