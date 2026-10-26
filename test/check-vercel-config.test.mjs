@@ -421,6 +421,17 @@ describe("Vercel config guard", () => {
 
 describe("pod app Vercel routes", () => {
   const apps = JSON.parse(readFileSync(join(checkout, "scripts/vercel-apps.json"), "utf8"));
+  for (const app of apps.filter((app) => app.framework === "vite")) {
+    // Rewritten nested paths serve index.html, so Vercel builds need root-absolute assets.
+    it(`${app.project} builds root-absolute asset URLs on Vercel`, () => {
+      const vite = readFileSync(join(checkout, app.rootDirectory, "vite.config.ts"), "utf8");
+      expect(vite).toContain('base: process.env.VERCEL === "1" ? "/" : "./",');
+      const turbo = JSON.parse(
+        readFileSync(join(checkout, app.rootDirectory, "turbo.json"), "utf8"),
+      );
+      expect(turbo.tasks.build.env).toContain("VERCEL");
+    });
+  }
   for (const app of apps.filter(
     (app) => app.framework === "vite" && app.project !== "solid-app-store",
   )) {
