@@ -93,3 +93,28 @@ Validation on the final implementation:
 - `roborev status` — unavailable (`roborev: command not found`, exit 127). The mandated automated review remains for the dispatcher; no tooling was installed.
 
 No UI changed; screenshots/Playwright/axe are not applicable. No open implementation questions remain. Full-workspace validation and automated review remain incomplete for the external reasons above. Final documentation commit: `docs: record second docs review fix validation` (this file, committed last after the gates).
+
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+## Fix round 3
+
+Starting head: `d44f22bba23fd6377b4642b0410eb96f7190cbd7`. All three findings in the supplied round-three review are addressed on `lane/sst-f77f`:
+
+- `7f41535d fix: refuse redirects in docs store requests` — wraps the injected account fetch with the shared redirect-refusal wrapper. Document reads/saves, container creation/listing, copied asset reads/writes, copy finalization, profile reads in `list()`, and the fetch passed to full-state persistence all force manual redirects and reject redirect responses. Fifteen regressions cover these paths and verify that no redirect destination is fetched; listing still isolates an unreadable child.
+- `8505b9f2 fix: fall back from weak docs write validators` — weak ETags cannot satisfy strong `If-Match` comparison, so RDF replacement writes use the existing existence fallback (`If-Match: *`). Strong validators retain conflict detection; create-only writes use only `If-None-Match: *`. Regressions exercise saves, copy finalization, profile linking and index registration against a transport that rejects weak `If-Match`, and verify that successful weak-ETag operations do not enter conflict retries. Updated older assertions that expected weak validators to be forwarded.
+- `5ddbe0b4 fix: capture docs snapshot format during retries` — requires `format` alongside `body` in regenerated and copied snapshots, and captures the initial save format with its body. Updated every local adapter fixture. HTML/Markdown conflict regressions check persisted/reopened body, format, word count and revision history, including regeneration that supersedes the initial input format.
+
+The reported failures were reproduced before their fixes. The final app suite has 232 passing tests, 23 more than the starting head. No dependencies, UI or unrelated source files changed.
+
+Validation on the final implementation:
+
+- `PATH="$PWD/node_modules/.bin:$PATH" pnpm --filter @jeswr/suite-vocab --filter @jeswr/suite-ui --filter @jeswr/guarded-fetch run build` — PASS; builds the existing workspace dependencies required by the app.
+- `PATH="$PWD/node_modules/.bin:$PATH" pnpm --filter @jeswr/app-suite run test:coverage` — PASS: 11 files / 232 tests; 100% statements (496/496), branches (281/281), functions (119/119), and lines (446/446) across `lib/model`.
+- `PATH="$PWD/node_modules/.bin:$PATH" pnpm --filter @jeswr/app-suite run lint && PATH="$PWD/node_modules/.bin:$PATH" pnpm --filter @jeswr/app-suite run build && PATH="$PWD/node_modules/.bin:$PATH" pnpm --filter @jeswr/app-suite run typecheck && PATH="$PWD/node_modules/.bin:$PATH" pnpm --filter @jeswr/app-suite run test` — PASS, including the Next production build and all 232 tests.
+- `pnpm run lint:root` — PASS, including workspace/transport/fetch/token guards and all 74 contrast pairs.
+- `PATH="$PWD/node_modules/.bin:$PATH" TURBO_SCM_BASE=9e9f7ffbb1da2e4e2484e11192e7c00ecfcad165 GIT_ALLOW_PROTOCOL=file pnpm run gate --env-mode=loose` — PASS: 9/9 tasks successful (0 cached); includes 41 root tests and 232 app tests. Log: `/tmp/sst-f77f-round3-gate.log`.
+- `PATH="$PWD/node_modules/.bin:$PATH" GIT_ALLOW_PROTOCOL=file pnpm run gate:full --env-mode=loose` — BLOCKED outside this lane: `@jeswr/unstorage-solid#build` invokes its existing dependency bootstrap, and Git refuses its HTTPS clone with `fatal: transport 'https' not allowed` before network transport. Turbo stopped with 12 successful / 124 total tasks (5 cached). No remote fetch or merge occurred. Log: `/tmp/sst-f77f-round3-full-gate.log`.
+- `git diff d44f22bba23fd6377b4642b0410eb96f7190cbd7 --check` — PASS.
+- `roborev status` — unavailable, exit 127 (`roborev: command not found`); automated per-commit review remains for the dispatcher.
+
+Conservative choices: store account requests refuse every redirect, and weak validators use the existing no-validator existence policy. `If-Match: *` prevents replacement of a missing resource but cannot detect concurrent edits. Snapshot adapters must now return their captured body's format explicitly. No open implementation questions or unfinished fixes remain. Full-workspace validation and automated review remain incomplete for the external reasons above. No UI changed, so screenshots/Playwright/axe are not applicable. Final documentation commit: `docs: record third docs review fix validation` (this file, committed last after the gates).
