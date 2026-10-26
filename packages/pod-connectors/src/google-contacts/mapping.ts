@@ -113,7 +113,8 @@ export function personDocument(
     contact.telephones.add(node);
     const wrapper = new ContactValue(node, dataset, DataFactory);
     wrapper.kind = phone.type;
-    if (/^\+?[0-9][0-9().-]*$/.test(value)) wrapper.iri = `tel:${value}`;
+    // Only global numbers form a tel: URI without a phone-context (RFC 3966 §5.1.5).
+    if (/^\+[0-9][0-9().-]*$/.test(value)) wrapper.iri = `tel:${value}`;
     else wrapper.raw = raw;
   }
   for (const [index, address] of fields(person.addresses).entries()) {

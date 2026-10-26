@@ -104,6 +104,7 @@ describe("Google Contacts mapping", () => {
           {},
           { value: " " },
           { value: "+12025550101" },
+          { value: "555-0101" },
           { value: "ask > reception", canonicalForm: "bad canonical" },
         ],
         addresses: [null, {}, { streetAddress: "One", type: "work" }],
@@ -115,12 +116,15 @@ describe("Google Contacts mapping", () => {
     expect(fn).toBe("(unnamed contact)");
     const contact = new Contact(`${resolve(doc.slug)}#this`, doc.dataset, DataFactory);
     expect([...contact.emails]).toHaveLength(1);
-    expect([...contact.telephones]).toHaveLength(2);
+    expect([...contact.telephones]).toHaveLength(3);
     expect([...contact.addresses]).toHaveLength(2);
     const iriObjects = [...doc.dataset]
       .filter((q) => q.object.termType === "NamedNode")
       .map((q) => q.object.value);
     expect(iriObjects).toContain("mailto:safe@example.test");
+    expect(iriObjects).toContain("tel:+12025550101");
+    // A local number has no phone-context, so it stays a literal (RFC 3966 §5.1.5).
+    expect(iriObjects).not.toContain("tel:555-0101");
     expect(iriObjects.some((iri) => iri.includes(">"))).toBe(false);
     expect(
       [...doc.dataset].some(

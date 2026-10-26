@@ -21,7 +21,7 @@ vi.mock("../core/budget.js", async (importOriginal) => {
     ...actual,
     RunBudget: class extends actual.RunBudget {
       constructor(id: string) {
-        super(id, { maxRequests: 3, maxItems: 3 });
+        super(id, { maxRequests: 3, maxItems: 3, maxBytes: 20_000 });
       }
     },
   };
@@ -158,6 +158,23 @@ describe("Google Contacts source budgets", () => {
     );
     await expect(run(api)).rejects.toThrow("too large");
     expect(api).toHaveBeenCalledTimes(1);
+    unchanged();
+  });
+
+  it.each([
+    200, 400,
+  ])("counts response bytes against the run's data budget (%s)", async (status) => {
+    const { run, unchanged } = await setup();
+    const padding = "x".repeat(25_000);
+    const api = vi.fn(async () =>
+      Response.json(
+        status === 200
+          ? { connections: [], nextSyncToken: "s", padding }
+          : { error: { details: [{ reason: "OTHER" }], padding } },
+        { status },
+      ),
+    );
+    await expect(run(api)).rejects.toThrow("data budget");
     unchanged();
   });
 });

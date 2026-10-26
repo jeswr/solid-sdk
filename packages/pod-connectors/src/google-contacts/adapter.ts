@@ -224,12 +224,14 @@ async function connections(
       async (input, init) => {
         const response = await ctx.api(input, init);
         if (response.status === 400) {
-          const body = (await readJson(response, ID, PEOPLE_API).catch((error: unknown) => {
-            // Preserve the HTTP error mapping for invalid JSON; size and stream failures propagate.
-            if (error instanceof IntegrationSyncError && error.cause instanceof SyntaxError)
-              return undefined;
-            throw error;
-          })) as { error?: { details?: { reason?: string }[] } } | undefined;
+          const body = (await readJson(response, ID, PEOPLE_API, undefined, budget).catch(
+            (error: unknown) => {
+              // Preserve the HTTP error mapping for invalid JSON; size and stream failures propagate.
+              if (error instanceof IntegrationSyncError && error.cause instanceof SyntaxError)
+                return undefined;
+              throw error;
+            },
+          )) as { error?: { details?: { reason?: string }[] } } | undefined;
           const details = body?.error?.details;
           if (
             Array.isArray(details) &&
@@ -240,7 +242,7 @@ async function connections(
               url: PEOPLE_API,
             });
         }
-        return response;
+        return response.ok ? metered(response, budget) : response;
       },
       `${PEOPLE_API}?${params}`,
     );
@@ -264,4 +266,22 @@ async function connections(
     seen.add(page.nextPageToken);
     pageToken = page.nextPageToken;
   }
+}
+
+/** Count a response body against the run's data budget as getJson streams it. */
+function metered(response: Response, budget: RunBudget): Response {
+  if (!response.body) return response;
+  const counted = response.body.pipeThrough(
+    new TransformStream<Uint8Array, Uint8Array>({
+      transform(chunk, controller) {
+        budget.bytes(chunk.byteLength);
+        controller.enqueue(chunk);
+      },
+    }),
+  );
+  return new Response(counted, {
+    status: response.status,
+    statusText: response.statusText,
+    headers: response.headers,
+  });
 }
