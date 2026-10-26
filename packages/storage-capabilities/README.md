@@ -1,5 +1,6 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- AUTHORED-BY Codex GPT-6 -->
+<!-- AUTHORED-BY Claude Opus 5.5 -->
 
 # @jeswr/storage-capabilities
 
@@ -86,8 +87,7 @@ CSS JSON-LD; other remote contexts are refused without a network request.
 `probe(root, fetch, { signal?, now? })` uses OPTIONS, then HEAD if OPTIONS fails or is unsupported.
 It returns parsed Accept-Patch, Accept-Post, WAC-Allow, ACL/ACP links and Allow with raw header
 evidence. Denied HEAD responses can still supply observations. Run it only for Solid; LWS
-descriptions are authoritative. Feature derivation and the `capabilities()` convenience API
-belong to T-014.
+descriptions are authoritative. See "Feature flags" below for `deriveFeatures` and `capabilities()`.
 
 Internal helpers:
 
@@ -143,3 +143,24 @@ functions, lines, and statements.
 Resolver tests use injected fetch and clocks for request counts, TTL/ETag/304 refresh,
 ancestor limits, NSS discovery, HTTP/parse errors, redirect/origin refusal, and streaming
 body limits. Both caches share a contract suite; IndexedDB is tested with fake-indexeddb.
+
+## Feature flags
+
+`deriveFeatures(description, probe?)` is pure and deterministic and implements the ADR-002 mapping
+table. `capabilities(url, options)` resolves the storage, probes a Solid root (OPTIONS, then HEAD)
+only when the description leaves `accessControl` or `patch` unknown, caches the probe with the
+description, and returns `Features`. LWS storages are never probed. A failed probe leaves those
+features `unknown` and is retried on the next call.
+
+```ts
+import { capabilities } from '@jeswr/storage-capabilities';
+
+const features = await capabilities(resourceUrl, { fetch: authFetch });
+if (features.liveUpdates.state === 'available') subscribe(features.liveUpdates.detail);
+```
+
+`@jeswr/storage-capabilities/testing` also exports four synthetic server fixtures (`cssStorage`,
+`sparqLwsStorage`, `essStorage`, `nssStorage`, plus `storageFixtures`) and `fixtureFetch(fixture)`,
+a replaying fake `fetch` that records each request as `"<METHOD> <URL>"`. The fixtures follow each
+server's public behaviour. They are not captured responses.
+

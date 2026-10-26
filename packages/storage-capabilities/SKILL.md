@@ -4,6 +4,7 @@ description: Work on @jeswr/storage-capabilities, the storage description discov
 ---
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- AUTHORED-BY Codex GPT-6 -->
+<!-- AUTHORED-BY Claude Opus 5.5 -->
 
 # @jeswr/storage-capabilities
 
@@ -56,7 +57,6 @@ fetch remains responsible for SSRF and credential destination policy. Do not add
 
 `probe(root, fetch, { signal?, now? })` tries OPTIONS, then HEAD on a transport/HTTP failure, and
 records one response through `parseProbeHeaders`. Never invoke it automatically for LWS.
-`deriveFeatures` and `capabilities` remain T-014's work.
 
 Cache factories store the public description and optional probe. Prefix lookup matches the longest
 normalised root with origin/path boundaries; get/set copy metadata. Deleting a record invalidates
@@ -81,3 +81,32 @@ Keep development tool versions aligned with the root manifest. The pinned pnpm 1
 `ignore-scripts` requires local tool declarations for filtered scripts.
 
 Validate changes with this package's `lint`, `build`, `typecheck`, and `test` scripts.
+
+## Feature vocabulary (T-014, for app authors)
+
+Call `capabilities(url, { fetch })` and branch on `state` (`available` | `unavailable` | `unknown`).
+Treat `unknown` as "do not offer the feature yet", not as an error. `evidence` names what decided
+the state: `<source>:<TypeLocalName>[:<endpoint>]`, `<source>:absent:<TypeLocalName>`, `header:<Name>`,
+`emulated`, `default:n3-patch` or `none`. Use it in logs and share-dialog copy, never for logic.
+
+| Feature | Meaning for an app |
+|---|---|
+| `liveUpdates` | `detail.channels` in preference order `websocket`, `sse`, `webhook` (LWS only, needs the SDK relay), `legacy-ws` (NSS `Updates-Via`). Solid webhook/LDN-only storages are `unavailable`. |
+| `realtimeCollab` | A `ssd:CrdtSyncService` conforming to `ssd:y-protocol-v1`. `detail.endpoint` is the ticket endpoint. |
+| `serverSearch` | ACQ / `ssd:SparqlQueryService` endpoint. |
+| `typeIndex` | `mode: 'server'` (LWS, both TypeIndex and TypeSearch services) or `'client'` (Solid profile type indexes). |
+| `accessRequests` / `accessGrants` | LWS services or the `ssd:` Solid equivalents. `profiles` must include `lws:AccessProfile` before pod-access uses them. |
+| `accessControl` | `odrl-grants` / `none` on LWS. On Solid: the `ssd:AccessControl` capability, else the probe (ACP link beats acl link beats WAC-Allow). |
+| `versioning` / `trash` | `ssd:VersioningService` / `ssd:TrashService` endpoints. |
+| `move` | LWS `MoveResource` (`native: true`, `containers`, `preservesIdentifier`). On Solid it is always available as copy+delete emulation that changes the URL. |
+| `patch` | `formats` maps a resource media type to patch media types. LWS always includes JSON Patch for `application/json` and linksets. Solid uses the `ssd:PatchSupport` capability, else Accept-Patch, else N3 Patch. |
+| `resumableUploads` / `recursiveDelete` | Capability local names `ResumableUploads` / `RecursiveDelete`. |
+| `pagination` | Always on LWS, never on Solid. |
+| `rdfConneg` | Always on Solid (Turtle, JSON-LD). On LWS only with a `ContentNegotiation` capability whose source is RDF. |
+
+Trust: only notification entries are read from a cross-origin Solid description. `legacy-ws` comes
+only from the resolver's own `Updates-Via` mapping. An unrecognised `notify:channelType` never
+becomes a service type. Unknown types are ignored, and `deriveFeatures` never throws (fast-check
+property test). Without a description document (NSS), rows that depend on the description are
+`unknown`, not `unavailable`.
+
