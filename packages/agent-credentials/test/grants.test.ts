@@ -2,6 +2,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import { execFileSync, spawnSync } from "child_process";
+import { createHash } from "crypto";
 import {
   chmodSync,
   existsSync,
@@ -28,7 +29,7 @@ import {
 import { accessToken, grantBindingProblem, helperExchange, logout } from "../src/operations.js";
 import { noTransport } from "../src/providers.js";
 import { provisionValue } from "../src/provision.js";
-import type { Grant, Profile } from "../src/store.js";
+import type { Grant, Profile, TokenFile } from "../src/store.js";
 
 let base: string;
 let store: CredentialStore;
@@ -300,6 +301,76 @@ it.each(
   await expect(t.purpose === "read" ? tokens.read("owner") : tokens.send("owner")).rejects.toThrow(
     /exactly one/,
   );
+});
+it.each([
+  "same",
+  "different",
+])("migrates legacy reference-keyed tokens when reprovisioning the %s reference", async (referenceChoice) => {
+  const legacy = (over: Partial<TokenFile> = {}): TokenFile => {
+    const record = {
+      version: 1 as const,
+      provider: "slack" as const,
+      account: "owner",
+      purpose: "read" as const,
+      token: "test-old-token-0123456789",
+      credentialRef: "op://fixture/item/token",
+      ...over,
+    };
+    // The filename algorithm used before tuple-keyed provisioning was introduced.
+    return {
+      ...record,
+      name: `${record.provider}-${createHash("sha256")
+        .update(JSON.stringify([record.credentialRef, record.account, record.purpose]))
+        .digest("hex")
+        .slice(0, 20)}`,
+    };
+  };
+  const original = legacy();
+  store.putTokenFile(original);
+  const unrelated = [
+    legacy({ account: "other" }),
+    legacy({ purpose: "send" }),
+    legacy({ provider: "discord" }),
+  ];
+  for (const record of unrelated) store.putTokenFile(record);
+  const tokens = new StoreTokenProvider("slack", { store, now: () => now });
+  expect(await tokens.read("owner")).toBe(original.token);
+  const options = {
+    store,
+    provider: original.provider,
+    account: original.account,
+    purpose: original.purpose,
+    reference:
+      referenceChoice === "same" ? original.credentialRef : "op://fixture/replacement/token",
+    value: "test-new-token-0123456789",
+    now,
+  };
+  expect(() => provisionValue({ ...options, value: "invalid" })).toThrow(/invalid record/);
+  expect(store.tokenFile(original.name)).toEqual(original);
+  expect(await tokens.read("owner")).toBe(original.token);
+  expect(provisionValue(options)).toEqual({ credentialRef: options.reference });
+  expect(store.tokenFile(original.name)).toBeUndefined();
+  expect(await tokens.read("owner")).toBe(options.value);
+  const canonical = fixtureValue(
+    store.tokenFiles().find((name) => !unrelated.some((record) => record.name === name)),
+  );
+  expect(canonical).toBe(
+    `slack-${createHash("sha256")
+      .update(JSON.stringify(["slack", "owner", "read"]))
+      .digest("hex")
+      .slice(0, 20)}`,
+  );
+  // Also repair stores containing both a canonical record and several legacy references.
+  const secondLegacy = legacy({ credentialRef: "op://fixture/another/token" });
+  store.putTokenFile(original);
+  store.putTokenFile(secondLegacy);
+  await expect(tokens.read("owner")).rejects.toThrow(/exactly one/);
+  provisionValue({ ...options, value: "test-final-token-0123456789" });
+  expect(await tokens.read("owner")).toBe("test-final-token-0123456789");
+  expect(store.tokenFile(original.name)).toBeUndefined();
+  expect(store.tokenFile(secondLegacy.name)).toBeUndefined();
+  expect(store.tokenFiles()).toHaveLength(unrelated.length + 1);
+  for (const record of unrelated) expect(store.tokenFile(record.name)).toEqual(record);
 });
 it("validates provisioned registration shapes and never returns secret material", () => {
   const opts = {

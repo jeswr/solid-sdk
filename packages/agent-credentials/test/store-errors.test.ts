@@ -1,9 +1,11 @@
 // biome-ignore-all lint/style/useNodejsImportProtocol: agent layer requires bare module specifiers
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import * as fs from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { provisionValue } from "../src/provision.js";
 import { CredentialStore, writeFully } from "../src/store.js";
 
 vi.mock("fs", async (original) => {
@@ -141,6 +143,70 @@ it("keeps the previous record on short/failed writes and failed rename, and remo
     });
   store.putClient({ ...client, importedFrom: "new" });
   expect(store.googleClient()?.importedFrom).toBe("new");
+});
+it("preserves legacy tokens on migration write failures and retries cleanup safely", async () => {
+  const record = {
+    version: 1 as const,
+    name: "slack-legacy",
+    provider: "slack" as const,
+    account: "owner",
+    purpose: "read" as const,
+    token: "test-old-token-0123456789",
+    credentialRef: "op://fixture/item/token",
+  };
+  store.putTokenFile(record);
+  const path = join(dir, "providers", `${record.name}.json`);
+  const before = fs.readFileSync(path, "utf8");
+  const options = {
+    store,
+    provider: record.provider,
+    account: record.account,
+    purpose: record.purpose,
+    reference: record.credentialRef,
+    value: "test-new-token-0123456789",
+    now: new Date("2026-10-26T00:00:00Z"),
+  };
+  for (const operation of [fs.writeSync, fs.fsyncSync, fs.renameSync]) {
+    vi.mocked(operation).mockImplementationOnce(() => {
+      throw errno("EIO");
+    });
+    expect(() => provisionValue(options)).toThrow(/test-io/);
+    expect(fs.readFileSync(path, "utf8")).toBe(before);
+    expect(fs.readdirSync(join(dir, "providers"))).toEqual([`${record.name}.json`]);
+  }
+  // A cleanup failure cannot report success, and a retry repairs both filenames.
+  vi.mocked(fs.unlinkSync).mockImplementationOnce(() => {
+    throw errno("EACCES");
+  });
+  expect(() => provisionValue(options)).toThrow(/test-io/);
+  expect(fs.readFileSync(path, "utf8")).toBe(before);
+  expect(store.tokenFiles()).toHaveLength(2);
+  provisionValue(options);
+  expect(fs.existsSync(path)).toBe(false);
+  expect(store.tokenFiles()).toHaveLength(1);
+  const replacement = fixtureValue(store.tokenFile(fixtureValue(store.tokenFiles()[0])));
+  expect(replacement.token).toBe(options.value);
+  // A record disappearing after enumeration is not a matching legacy credential.
+  vi.spyOn(store, "tokenFiles").mockReturnValueOnce(["already-removed"]);
+  store.replaceTokenFile(replacement);
+  expect(store.tokenFile(replacement.name)).toEqual(replacement);
+});
+it("refuses insecure legacy tokens before writing a migration replacement", () => {
+  const record = {
+    version: 1 as const,
+    name: "slack-legacy",
+    provider: "slack" as const,
+    account: "owner",
+    purpose: "read" as const,
+    token: "test-old-token-0123456789",
+    credentialRef: "op://fixture/item/token",
+  };
+  store.putTokenFile(record);
+  const path = join(dir, "providers", `${record.name}.json`);
+  fs.chmodSync(path, 0o640);
+  expect(() => store.replaceTokenFile({ ...record, name: "slack-canonical" })).toThrow(/chmod 600/);
+  expect(fs.existsSync(join(dir, "providers/slack-canonical.json"))).toBe(false);
+  expect(fs.readFileSync(path, "utf8")).toContain(record.token);
 });
 it("bounds records, rejects all group/world permissions, and validates before replacing", () => {
   const path = join(dir, "clients/google.json");

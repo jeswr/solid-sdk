@@ -389,6 +389,26 @@ export class CredentialStore {
     validFor(tokenFileSchema, record);
     this.write(this.path("providers", record.name), record);
   }
+  /** Replace a tuple, migrating older keys only after the new record is safely written. */
+  replaceTokenFile(record: TokenFile): void {
+    validFor(tokenFileSchema, record);
+    const previous = this.tokenFiles().filter((name) => {
+      if (name === record.name) return false;
+      const existing = this.tokenFile(name);
+      return (
+        existing?.provider === record.provider &&
+        existing.account === record.account &&
+        existing.purpose === record.purpose
+      );
+    });
+    this.write(this.path("providers", record.name), record);
+    for (const name of previous) {
+      const path = this.path("providers", name);
+      this.guard(path);
+      checkOwnerOnly(path, "file");
+      unlinkSync(path);
+    }
+  }
   tokenFiles(): string[] {
     this.guard(join(this.dir, "providers", "probe"));
     return readdirSync(join(this.dir, "providers"))

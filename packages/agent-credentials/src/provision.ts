@@ -54,7 +54,7 @@ export function provisionValue(options: {
       .update(JSON.stringify([provider, options.account, options.purpose]))
       .digest("hex")
       .slice(0, 20)}`;
-    store.putTokenFile({
+    store.replaceTokenFile({
       version: 1,
       name,
       provider,
