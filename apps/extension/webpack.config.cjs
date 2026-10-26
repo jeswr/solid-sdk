@@ -41,6 +41,7 @@ module.exports = {
       patterns: [
         { from: 'src/manifest.json', to: 'manifest.json' },
         { from: 'src/shared/suite-tokens.css', to: 'shared/suite-tokens.css' },
+        { from: 'src/shared/fonts', to: 'shared/fonts' },
         { from: 'src/shared/account-surface.css', to: 'shared/account-surface.css' },
         { from: 'src/shared/permission-surface.css', to: 'shared/permission-surface.css' },
         { from: 'src/popup/popup.html', to: 'popup/popup.html' },
