@@ -102,8 +102,10 @@ jobs:
         timeout-minutes: 10
         run: |
           mkdir -p apps/mobile/e2e/artifacts
+          # Print the emulator's own log whenever boot fails, not only when the process exits.
+          trap 'status=$?; [ "$status" = 0 ] || tail -n 200 apps/mobile/e2e/artifacts/emulator.log; exit "$status"' EXIT
           echo no | avdmanager create avd --force --name suite-e2e --package "system-images;android-35;google_apis;x86_64" --device pixel_6
-          emulator -avd suite-e2e -port 5554 -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -accel on > apps/mobile/e2e/artifacts/emulator.log 2>&1 &
+          emulator -avd suite-e2e -port 5554 -no-window -no-audio -no-boot-anim -no-snapshot -no-metrics -gpu swiftshader_indirect -accel on > apps/mobile/e2e/artifacts/emulator.log 2>&1 &
           emulator_pid=$!
           timeout 180 adb wait-for-device
           booted=0
