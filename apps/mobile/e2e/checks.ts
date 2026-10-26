@@ -8,6 +8,8 @@ export const FRAME_PROBES = [
   "capacitorPlugin",
   "webMessage",
 ] as const;
+export const IOS_FRAME_PROBES = ["webkitBridge", "prompt"] as const;
+export const IOS_OBSERVATION_MS = 2000;
 
 const record = (value: unknown): Record<string, unknown> =>
   value !== null && typeof value === "object" && !Array.isArray(value)
@@ -28,7 +30,12 @@ export function parseDevtoolsSockets(unix: string, pid: string): string[] {
   ];
 }
 
-export function checkFixture(value: unknown, suiteOrigin: string, foreignOrigin: string): string[] {
+export function checkFixture(
+  value: unknown,
+  suiteOrigin: string,
+  foreignOrigin: string,
+  platform: "android" | "ios" = "android",
+): string[] {
   const result = record(value);
   const failures: string[] = [];
   if (result.done !== true || result.page !== "index") failures.push("Fixture did not finish");
@@ -46,6 +53,45 @@ export function checkFixture(value: unknown, suiteOrigin: string, foreignOrigin:
     failures.push("Missing cross-origin hostile frame evidence");
   }
   const attempts = record(hostile.attempts);
+  if (platform === "ios") {
+    if (result.platform !== "ios") failures.push("Missing iOS platform evidence");
+    const ios = record(result.ios);
+    const controls = record(ios.top);
+    const responses = ios.responses;
+    if (!Array.isArray(responses)) failures.push("Missing iOS native response history");
+    for (const key of IOS_FRAME_PROBES) {
+      const control = record(controls[key]);
+      const attempt = record(attempts[key]);
+      const controlWorks =
+        key === "webkitBridge"
+          ? control.status === "resolved" && Array.isArray(record(control.data).batches)
+          : control.status === "response" &&
+            typeof control.value === "string" &&
+            ["true", "false"].includes(control.value);
+      // Silence is meaningful only if the identical native operation works in the main frame.
+      if (result.topBridge !== true || !controlWorks) {
+        failures.push(`iOS iframe isolation is vacuous: ${key} top-frame control failed`);
+      }
+      const callbackValid =
+        key !== "webkitBridge" ||
+        (typeof attempt.callbackId === "string" &&
+          attempt.callbackId.startsWith("mob07-hostile-") &&
+          attempt.callbackId !== control.callbackId &&
+          typeof control.callbackId === "string" &&
+          !responsesAsRecords(responses).some((reply) => reply.callbackId === attempt.callbackId));
+      if (
+        attempt.status !== "no-response" ||
+        (key === "prompt" && attempt.value !== null) ||
+        typeof attempt.observedMs !== "number" ||
+        !Number.isFinite(attempt.observedMs) ||
+        attempt.observedMs < IOS_OBSERVATION_MS ||
+        !callbackValid
+      ) {
+        failures.push(`Hostile frame native effect accessible or unproven: ${key}`);
+      }
+    }
+    return failures;
+  }
   const noTransport = FRAME_PROBES.filter((probe) => probe !== "capacitorPlugin").every(
     (probe) => record(attempts[probe]).status === "unavailable",
   );
@@ -70,6 +116,8 @@ export function checkFixture(value: unknown, suiteOrigin: string, foreignOrigin:
   }
   return failures;
 }
+
+const responsesAsRecords = (value: unknown) => (Array.isArray(value) ? value.map(record) : []);
 
 export function checkTextShare(value: unknown, text: string): string[] {
   if (!Array.isArray(value) || value.length !== 1)
@@ -137,6 +185,32 @@ export function checkNavigation(value: unknown, suiteOrigin: string, target: str
     navigation.target === target
     ? []
     : ["Foreign top-frame navigation was allowed or refusal was not proven"];
+}
+
+/** XCUITest reads the document before tapping, after refusal, and after foregrounding again. */
+export function checkIOSNavigation(value: unknown, suiteOrigin: string, target: string): string[] {
+  const evidence = record(value);
+  const before = record(evidence.before);
+  const failures: string[] = [];
+  if (
+    before.page !== "navigation" ||
+    before.origin !== suiteOrigin ||
+    before.done !== false ||
+    record(before.navigation).attempted !== false ||
+    typeof before.documentId !== "string" ||
+    !before.documentId ||
+    before.href !== `${suiteOrigin}/navigation.html?manual=1`
+  ) {
+    failures.push("Missing pre-navigation document identity");
+  }
+  for (const key of ["after", "reactivated"]) {
+    const current = record(evidence[key]);
+    failures.push(...checkNavigation(current, suiteOrigin, target));
+    if (current.documentId !== before.documentId || current.href !== before.href) {
+      failures.push(`Navigation document did not survive: ${key}`);
+    }
+  }
+  return failures;
 }
 
 /** adb shell joins its arguments into shell source, even when execFile is used on the host. */

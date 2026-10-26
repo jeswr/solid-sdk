@@ -26,19 +26,21 @@ const verdict = (attempts: unknown) =>
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => vi.useRealTimers());
 
-async function hostile(window: object, advance = 0) {
+async function hostile(window: object, advance = 0, ios = false) {
   const postMessage = vi.fn();
   const context = createContext({
     window,
     location: {
       origin: foreignOrigin,
-      search: `?parent=${encodeURIComponent(suiteOrigin)}&nonce=probe`,
+      search: `?parent=${encodeURIComponent(suiteOrigin)}&nonce=probe${ios ? "&platform=ios" : ""}`,
     },
     URLSearchParams,
     parent: { postMessage },
     setTimeout,
     clearTimeout,
+    performance: { now: () => Date.now() },
   });
+  if (ios) runInContext(script("ios-probes"), context);
   const completion = runInContext(script("hostile"), context);
   await vi.advanceTimersByTimeAsync(advance);
   await completion;
@@ -51,6 +53,65 @@ async function hostile(window: object, advance = 0) {
 }
 
 describe("hostile-frame JavaScript", () => {
+  test("iOS sends a typed getPending message and the actual Capacitor prompt command", async () => {
+    const postMessage = vi.fn();
+    const prompt = vi.fn(() => null);
+    const attempts = await hostile(
+      { webkit: { messageHandlers: { bridge: { postMessage } } }, prompt },
+      2000,
+      true,
+    );
+    expect(postMessage).toHaveBeenCalledWith({
+      type: "message",
+      callbackId: "mob07-hostile-probe-webkit",
+      pluginId: "SuiteShareIntake",
+      methodName: "getPending",
+      options: {},
+    });
+    expect(prompt).toHaveBeenCalledWith(JSON.stringify({ type: "CapacitorCookies.isEnabled" }));
+    expect(attempts).toEqual({
+      webkitBridge: {
+        status: "no-response",
+        callbackId: "mob07-hostile-probe-webkit",
+        observedMs: 2000,
+        data: undefined,
+      },
+      prompt: { status: "no-response", observedMs: 2000, value: null },
+    });
+  });
+  test("iOS records native effects and preserves normal callback delivery", async () => {
+    const original = vi.fn();
+    const window = {
+      Capacitor: { fromNative: original },
+      webkit: {
+        messageHandlers: {
+          bridge: {
+            postMessage: (call: object) => {
+              window.Capacitor.fromNative({ ...call, success: true, data: { batches: [] } });
+            },
+          },
+        },
+      },
+      prompt: vi.fn(() => "false"),
+    };
+    const attempts = await hostile(window, 2000, true);
+    expect(attempts.webkitBridge.status).toBe("resolved");
+    expect(attempts.prompt.status).toBe("response");
+    expect(original).toHaveBeenCalledOnce();
+  });
+  test("missing or throwing iOS transports fail instead of claiming isolation", async () => {
+    const attempts = await hostile(
+      {
+        prompt: () => {
+          throw new Error("broken");
+        },
+      },
+      0,
+      true,
+    );
+    expect(attempts.webkitBridge.status).toBe("error");
+    expect(attempts.prompt.status).toBe("error");
+  });
   test("reports unavailable native transports", async () => {
     const attempts = await hostile({});
     expect(Object.keys(attempts)).toHaveLength(5);
@@ -185,10 +246,11 @@ describe("hostile-frame JavaScript", () => {
   });
 });
 
-function topFrame(hasPlugin = true) {
+function topFrame(hasPlugin = true, ios = false) {
   const listeners = new Map<string, (event: object) => void>();
   const contentWindow = {};
   const frame = { contentWindow, src: "" };
+  const result = { value: "" };
   const getPending = vi.fn(async () => ({ batches: [] as object[] }));
   let received: ((batch: object) => void) | undefined;
   const addListener = vi.fn(async (_name: string, callback: (batch: object) => void) => {
@@ -210,11 +272,33 @@ function topFrame(hasPlugin = true) {
     location: { origin: suiteOrigin },
     navigator: { locks: {}, serviceWorker: {} },
     crypto: { randomUUID: () => "nonce" },
-    document: { querySelector: () => frame },
+    document: { querySelector: (selector: string) => (selector === "#hostile" ? frame : result) },
     fetch: async () => ({ json: async () => ({ suiteOrigin, foreignOrigin }) }),
     setTimeout,
     clearTimeout,
+    performance: { now: () => Date.now() },
   });
+  if (ios) {
+    Object.assign(window, {
+      webkit: {
+        messageHandlers: {
+          bridge: {
+            postMessage: (call: object) => {
+              queueMicrotask(() =>
+                context.window.Capacitor.fromNative({
+                  ...call,
+                  success: true,
+                  data: { batches: [] },
+                }),
+              );
+            },
+          },
+        },
+      },
+      prompt: vi.fn(() => "false"),
+    });
+    runInContext(script("ios-probes"), context);
+  }
   runInContext(script("index"), context);
   return {
     context,
@@ -224,6 +308,7 @@ function topFrame(hasPlugin = true) {
     getPending,
     addListener,
     acknowledge,
+    result,
     receive: (batch: object) => received?.(batch),
   };
 }
@@ -295,13 +380,53 @@ describe("top-frame fixture JavaScript", () => {
       "Error: Native call or hostile frame timed out",
     );
   });
+  test("renders iOS evidence and watches hostile replies delivered to the top frame", async () => {
+    const top = topFrame(true, true);
+    await vi.advanceTimersByTimeAsync(2000);
+    const state = top.context.window.__e2e;
+    expect(state.ios.top.webkitBridge).toMatchObject({ status: "resolved", data: { batches: [] } });
+    expect(state.ios.top.prompt).toMatchObject({ status: "response", value: "false" });
+    expect(top.frame.src).toContain("&platform=ios");
+    top.context.window.Capacitor.fromNative({
+      callbackId: "mob07-hostile-nonce-webkit",
+      success: true,
+      data: { batches: [] },
+    });
+    top.listeners.get("message")?.({
+      source: top.contentWindow,
+      origin: foreignOrigin,
+      data: {
+        type: "mob07-hostile",
+        nonce: "nonce",
+        result: {
+          origin: foreignOrigin,
+          attempts: {
+            webkitBridge: {
+              status: "no-response",
+              callbackId: "mob07-hostile-nonce-webkit",
+              observedMs: 2000,
+            },
+            prompt: { status: "no-response", observedMs: 2000, value: null },
+          },
+        },
+      },
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(JSON.parse(top.result.value)).toMatchObject({ done: true, platform: "ios" });
+    expect(checkFixture(state, suiteOrigin, foreignOrigin, "ios")).toContain(
+      "Hostile frame native effect accessible or unproven: webkitBridge",
+    );
+  });
 });
 
 test("navigation fixture attempts the foreign origin and checks the surviving document", async () => {
   const assign = vi.fn();
   const context = createContext({
     window: {},
-    location: { origin: suiteOrigin, assign },
+    location: { origin: suiteOrigin, href: `${suiteOrigin}/navigation.html`, search: "", assign },
+    crypto: { randomUUID: () => "navigation-id" },
+    URLSearchParams,
+    document: { querySelector: () => ({ value: "", addEventListener: vi.fn() }) },
     setTimeout,
     fetch: async () => ({ json: async () => ({ suiteOrigin, foreignOrigin }) }),
   });
@@ -313,5 +438,52 @@ test("navigation fixture attempts the foreign origin and checks the surviving do
   expect(context.window.__e2e).toMatchObject({
     done: true,
     navigation: { attempted: true, refused: true },
+  });
+});
+
+test("manual navigation exposes a pre-attempt result and waits for a real link activation", async () => {
+  const assign = vi.fn();
+  const result = { value: "" };
+  let click: ((event: { preventDefault: () => void }) => void) | undefined;
+  const link = {
+    href: "",
+    addEventListener: (_name: string, callback: typeof click) => {
+      click = callback;
+    },
+  };
+  const location = {
+    origin: suiteOrigin,
+    href: `${suiteOrigin}/navigation.html?manual=1`,
+    search: "?manual=1",
+    assign,
+  };
+  const context = createContext({
+    window: {},
+    location,
+    crypto: { randomUUID: () => "navigation-id" },
+    URLSearchParams,
+    document: { querySelector: (selector: string) => (selector === "#e2e-result" ? result : link) },
+    setTimeout,
+    fetch: async () => ({ json: async () => ({ suiteOrigin, foreignOrigin }) }),
+  });
+  runInContext(script("navigation"), context);
+  await vi.advanceTimersByTimeAsync(0);
+  expect(assign).not.toHaveBeenCalled();
+  expect(link.href).toBe(`${foreignOrigin}/foreign.html`);
+  expect(JSON.parse(result.value)).toMatchObject({
+    done: false,
+    documentId: "navigation-id",
+    navigation: { attempted: false },
+  });
+  const preventDefault = vi.fn();
+  click?.({ preventDefault });
+  expect(preventDefault).toHaveBeenCalledOnce();
+  expect(assign).toHaveBeenCalledWith(`${foreignOrigin}/foreign.html`);
+  await vi.advanceTimersByTimeAsync(2000);
+  expect(JSON.parse(result.value)).toMatchObject({
+    done: true,
+    href: location.href,
+    origin: suiteOrigin,
+    navigation: { refused: true },
   });
 });

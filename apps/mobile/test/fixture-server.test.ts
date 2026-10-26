@@ -111,6 +111,7 @@ describe("loopback-only static fixture server", () => {
       "/foreign.html",
       "/index.js",
       "/hostile.js",
+      "/ios-probes.js",
       "/navigation.js?cache=none",
     ]) {
       const response = request(path);
