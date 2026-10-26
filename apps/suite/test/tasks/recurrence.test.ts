@@ -24,6 +24,26 @@ const isoDates = (dates: Date[]) =>
   );
 
 describe("recurrence expansion", () => {
+  it("constructs monthly target dates without normalizing an intermediate DST gap", () => {
+    const previousZone = process.env.TZ;
+    try {
+      process.env.TZ = "Australia/Sydney";
+      for (const month of [8, 9]) {
+        const start = new Date(2028, month, 15, 2, 30);
+        const rule: RecurrenceRule = { frequency: "MONTHLY", count: 3 };
+        const expected = [0, 1, 2].map((offset) => new Date(2028, month + offset, 15, 2, 30));
+        expect(expandRecurrence(rule, start, 10)).toEqual(expected);
+        expect(nextOccurrence(rule, start)).toEqual(expected[1]);
+      }
+      const start = new Date(2028, 8, 1, 2, 30);
+      expect(expandRecurrence({ frequency: "MONTHLY", count: 2 }, start, 10)).toEqual([
+        start,
+        new Date(2028, 10, 1, 2, 30),
+      ]);
+    } finally {
+      process.env.TZ = previousZone;
+    }
+  });
   // Independent expected dates generated with rrule.js 2.8.1 (temporary tool, no app dependency).
   it.each(
     rruleFixtures,

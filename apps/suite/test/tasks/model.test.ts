@@ -424,6 +424,23 @@ describe("completion roll-forward", () => {
     expect(noDue.original.dueDate?.getTime()).toBe(now.getTime() + 86400000);
     expect(noDue.original.allDay).toBeUndefined();
   });
+  it("advances monthly completion when the first of the month falls in a DST gap", () => {
+    const previousZone = process.env.TZ;
+    try {
+      process.env.TZ = "Australia/Sydney";
+      const data: TaskDetails = {
+        ...details,
+        dueDate: new Date(2028, 9, 15, 2, 30),
+        recurrence: { frequency: "MONTHLY" },
+      };
+      const result = planCompletion(data, taskUrl, now);
+      expect(result.original.state).toBe("open");
+      expect(result.original.dueDate).toEqual(new Date(2028, 10, 15, 2, 30));
+      expect(result.copy?.state).toBe("closed");
+    } finally {
+      process.env.TZ = previousZone;
+    }
+  });
   it("keeps the intended time after completing across a DST gap", () => {
     const data: TaskDetails = {
       ...details,

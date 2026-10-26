@@ -127,11 +127,11 @@ function* occurrences(rule: RecurrenceRule, due: Date): Generator<Date> {
         return date;
       });
     } else if (rule.frequency === "MONTHLY") {
-      candidate.setDate(1);
-      candidate.setMonth(due.getMonth() + period * interval);
-      const month = candidate.getMonth();
-      candidate.setDate(rule.byMonthDay ?? due.getDate());
-      candidates = candidate.getMonth() === month ? [candidate] : [];
+      const month = due.getMonth() + period * interval;
+      // Set the final calendar date in one operation: an intermediate first of
+      // the month can itself fall in a DST gap and normalize the intended hour.
+      candidate.setFullYear(due.getFullYear(), month, rule.byMonthDay ?? due.getDate());
+      candidates = candidate.getMonth() === month % 12 ? [candidate] : [];
     } else {
       candidate.setFullYear(due.getFullYear() + period * interval);
       candidates = candidate.getMonth() === due.getMonth() ? [candidate] : [];
