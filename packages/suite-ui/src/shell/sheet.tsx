@@ -1,8 +1,9 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 "use client";
 
-import { Dialog } from "radix-ui";
 import { X } from "lucide-react";
+import { Dialog } from "radix-ui";
 import type { ReactNode } from "react";
 
 /** Shell-only shadcn Sheet anatomy; Radix owns modality, Escape and focus trapping. */
@@ -39,7 +40,8 @@ export function ShellSheet({
           <div className="suite-sheet-heading">
             <Dialog.Title>{title}</Dialog.Title>
             <Dialog.Close
-              className="suite-icon-button"
+              data-slot="shell-sheet-close"
+              className="suite-shell-icon-button"
               aria-label={`Close ${title.toLowerCase()}`}
               title="Close (Esc)"
             >

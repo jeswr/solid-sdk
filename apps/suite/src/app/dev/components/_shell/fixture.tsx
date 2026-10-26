@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 "use client";
 
 import { type DetailsPaneProps, ShellFrame, type SidebarNavProps } from "@jeswr/suite-ui/shell";
@@ -194,7 +195,8 @@ export function ShellFixture({
             title="Account"
             aria-label="Account"
           >
-            <span className="ds04-avatar">AW</span>
+            {/* Initials are drawn by CSS so the link's name stays its label alone. */}
+            <span className="ds04-avatar" data-initials="AW" aria-hidden="true" />
           </a>
         </nav>
       }
@@ -233,7 +235,7 @@ export function ShellFixture({
             </label>
             <a
               href="#fixture-filter"
-              className="suite-icon-button ds04-mobile-search"
+              className="suite-shell-icon-button ds04-mobile-search"
               title="Search Drive"
               aria-label="Search Drive"
             >
@@ -256,7 +258,7 @@ export function ShellFixture({
         bell: (
           <a
             href="#fixture-notes"
-            className="suite-icon-button ds04-bell"
+            className="suite-shell-icon-button ds04-bell"
             aria-label="Notifications, 2 unread"
             title="Notifications, 2 unread"
           >
@@ -266,11 +268,12 @@ export function ShellFixture({
         account: (
           <a
             href="#fixture-notes"
-            className="suite-icon-button"
+            className="suite-shell-icon-button"
             aria-label="Account, Alice Wilder"
             title="Account, Alice Wilder"
           >
-            <span className="ds04-avatar">AW</span>
+            {/* Initials are drawn by CSS so the link's name stays its label alone. */}
+            <span className="ds04-avatar" data-initials="AW" aria-hidden="true" />
           </a>
         ),
         refreshing: state === "refreshing",

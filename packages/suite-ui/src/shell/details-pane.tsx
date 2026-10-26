@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 "use client";
 
 import { X } from "lucide-react";
@@ -31,7 +32,8 @@ export function DetailsPane({
         {onClose && (
           <button
             type="button"
-            className="suite-icon-button"
+            data-slot="details-pane-close"
+            className="suite-shell-icon-button"
             onClick={onClose}
             aria-label="Close details"
             title="Close details (])"

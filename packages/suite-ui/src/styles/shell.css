@@ -115,7 +115,7 @@
   text-decoration: none;
 }
 .suite-sidebar-nav a:hover,
-.suite-icon-button:hover {
+.suite-shell-icon-button:hover {
   background: var(--surface-2);
 }
 .suite-sidebar-nav a[aria-current="page"] {
@@ -179,7 +179,7 @@
 .suite-topbar-offline {
   min-width: 0;
 }
-.suite-icon-button {
+.suite-shell-icon-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -391,7 +391,7 @@
   }
 }
 @media (pointer: coarse) {
-  .suite-icon-button,
+  .suite-shell-icon-button,
   .suite-sidebar-nav a,
   .suite-nav-group {
     min-width: 44px;

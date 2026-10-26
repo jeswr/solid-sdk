@@ -1,8 +1,9 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 "use client";
 
-import { Collapsible } from "radix-ui";
 import { ChevronDown, type LucideIcon } from "lucide-react";
+import { Collapsible } from "radix-ui";
 import { type ReactNode, useId } from "react";
 
 export interface SidebarItem {
@@ -43,7 +44,13 @@ function Section({
           <a href={href} aria-current={current ? "page" : undefined} onClick={onNavigate}>
             {Icon && <Icon size={20} strokeWidth={1.75} aria-hidden="true" />}
             <span className="suite-nav-label">{label}</span>
-            {count !== undefined && <span className="suite-nav-count">{count}</span>}
+            {/* The space keeps label and count separate words in the link's name. */}
+            {count !== undefined && (
+              <>
+                {" "}
+                <span className="suite-nav-count">{count}</span>
+              </>
+            )}
           </a>
         </li>
       ))}
@@ -52,7 +59,7 @@ function Section({
   return section.collapsible ? (
     <Collapsible.Root defaultOpen={section.defaultOpen ?? true} className="suite-nav-section">
       <h3 id={headingId}>
-        <Collapsible.Trigger className="suite-nav-group">
+        <Collapsible.Trigger data-slot="sidebar-nav-group" className="suite-nav-group">
           <ChevronDown size={16} strokeWidth={1.75} aria-hidden="true" />
           {section.label}
         </Collapsible.Trigger>

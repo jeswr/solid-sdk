@@ -40,6 +40,9 @@
   font-size: var(--text-xs);
   font-weight: 600;
 }
+.ds04-avatar::before {
+  content: attr(data-initials);
+}
 .ds04-tabs {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));

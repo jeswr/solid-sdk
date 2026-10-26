@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 "use client";
 
 import { ArrowLeft, Menu, PanelRight } from "lucide-react";
@@ -35,7 +36,7 @@ export function TopBar({
     <header className="suite-topbar">
       {back && (
         <a
-          className="suite-icon-button suite-back"
+          className="suite-shell-icon-button suite-back"
           href={back.href}
           aria-label={back.label}
           title={back.label}
@@ -46,7 +47,8 @@ export function TopBar({
       {sidebarToggle && (
         <button
           type="button"
-          className="suite-icon-button"
+          data-slot="top-bar-sidebar-toggle"
+          className="suite-shell-icon-button"
           aria-label="Toggle sidebar"
           title="Toggle sidebar ([)"
           aria-keyshortcuts="["
@@ -67,7 +69,8 @@ export function TopBar({
       {detailsToggle && (
         <button
           type="button"
-          className="suite-icon-button"
+          data-slot="top-bar-details-toggle"
+          className="suite-shell-icon-button"
           aria-label="Toggle details pane"
           title="Toggle details pane (])"
           aria-keyshortcuts="]"
