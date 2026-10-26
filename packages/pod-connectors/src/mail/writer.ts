@@ -179,7 +179,13 @@ export function createMailWriter(ctx: MailPorts, account: string): MailWriter {
       : undefined;
     message.encoding = ctx.resolve(emlSlug(account, id));
     if (mail.inReplyTo) message.inReplyTo = iriOf(messageSlug(account, mail.inReplyTo));
-    const threadDoc = await threadOf(item.threadKey, mail.references[0] ?? mail.inReplyTo, id);
+    // Without a source key, a stored message keeps its thread (reconciliation is not
+    // retroactive), so a replay never strands it in two conversations.
+    const kept = previous?.partOfThread && docOf(previous.partOfThread);
+    const threadDoc =
+      !item.threadKey && kept?.startsWith(ctx.resolve(`${accountDir}threads/`))
+        ? slugOf(kept)
+        : await threadOf(item.threadKey, mail.references[0] ?? mail.inReplyTo, id);
     message.partOfThread = iriOf(threadDoc);
     const parts = mail.attachments.map((part, index) => ({
       part,

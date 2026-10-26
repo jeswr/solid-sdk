@@ -450,6 +450,24 @@ describe("MailWriter", () => {
     expect(pod.bytes(second)).toBeUndefined();
   });
 
+  it("keeps a stored message's thread when its parent arrives later", async () => {
+    const pod = createMemoryPod();
+    const reply = {
+      raw: raw("late-child", ["In-Reply-To: <late-parent@x.test>"]),
+      folders: [INBOX],
+      read: true,
+      fallbackId: "c",
+    };
+    await withWriter(async (mail) => void (await mail.add(reply)), pod);
+    await withWriter(async (mail) => {
+      await mail.add({ raw: raw("late-parent"), folders: [INBOX], read: true, fallbackId: "p" });
+      const again = await mail.add(reply);
+      expect(again.thread).toBe(`${url(threadSlug(ME, "<late-parent@x.test>"))}#it`);
+    }, pod);
+    // The provisional thread is the parent id, which the parent also uses: one conversation.
+    expect(membersOf(pod, threadSlug(ME, "<late-parent@x.test>"))).toHaveLength(2);
+  });
+
   it("rejects unparseable MIME with MailParseError", async () => {
     let nested = "";
     for (let i = 0; i < 300; i++)

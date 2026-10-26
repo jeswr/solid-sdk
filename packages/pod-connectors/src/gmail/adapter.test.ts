@@ -385,6 +385,47 @@ describe("Gmail history continuation", () => {
     expect(pod.get(`${ACCOUNT}gmail-index.ttl`)).not.toContain("incomplete");
   });
 
+  it("never lets a stale index entry delete another message's document", async () => {
+    const { pod, run, state } = await imported();
+    const copy: GmailMessage = { ...(MESSAGES.m1 as GmailMessage), id: "m7", threadId: "t7" };
+    // m1 is deleted and m7 (same Message-ID) takes its document; the run then fails, so the
+    // saved index still maps m1 to that document.
+    await expect(
+      run(
+        [
+          ...base,
+          {
+            url: `${GMAIL_API}/history`,
+            json: {
+              history: [
+                { id: "1101", messagesDeleted: [{ message: { id: "m1", threadId: "t1" } }] },
+                { id: "1102", messagesAdded: [{ message: { id: "m7", threadId: "t7" } }] },
+                { id: "1103", messagesAdded: [{ message: { id: "m8", threadId: "t8" } }] },
+              ],
+              historyId: "1103",
+            },
+          },
+          fetched(copy),
+          { url: `${GMAIL_API}/messages/m8`, json: {}, status: 500 },
+        ],
+        state,
+      ).result,
+    ).rejects.toMatchObject({ status: 500 });
+    // A full sync lists only m7: sweeping m1's stale entry must keep m7's document.
+    await run([
+      ...base,
+      { url: `${GMAIL_API}/messages`, json: { messages: [copy] } },
+      fetched(copy),
+    ]).result;
+    expect(pod.get(LUNCH_1)).toBeDefined();
+    expect(
+      new Provenance(`${LUNCH_1}#it`, pod.dataset(LUNCH_1), DataFactory).derivedFrom.has(
+        "https://mail.google.com/mail/#all/m7",
+      ),
+    ).toBe(true);
+    expect(pod.bytes(LUNCH_1.replace(/\.ttl$/, ".eml"))).toBeDefined();
+  });
+
   it("removes a thread document when its last message is deleted", async () => {
     const { pod, run, state } = await imported();
     await run(

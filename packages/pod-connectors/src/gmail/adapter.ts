@@ -374,7 +374,12 @@ class Sync {
 
   private async drop(source: string, entry: Indexed): Promise<void> {
     await this.index.begin();
-    await this.mail.removeMessage(entry.slug, entry.thread);
+    // A stale entry (its run failed before the index was saved) may name a document that
+    // another Gmail message now owns: only the owner's document is removed.
+    const stored = await this.ctx.read(entry.slug);
+    const iri = `${this.ctx.resolve(entry.slug)}#it`;
+    if (!stored || new Provenance(iri, stored, DataFactory).derivedFrom.has(source))
+      await this.mail.removeMessage(entry.slug, entry.thread);
     this.index.delete(source);
   }
 }
