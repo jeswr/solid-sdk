@@ -209,3 +209,67 @@ manifests changed; `check:packages` is not applicable.
 Both requested findings are fixed. No open questions or unfinished implementation
 work remain for this round; full-workspace validation and automated review have
 the environmental limitations above.
+
+## Fix round 3 — review of `db37da5c40a2`
+
+- `5b095636 fix: budget JSON-LD contexts before expansion` fixes both requested
+  findings. Inline context normalization and RDF term creation share the existing
+  1 MiB allocation budget. A parser-instance adapter charges context copies and
+  inheritance, base/vocabulary resolution, and conservative UTF-8 upper bounds
+  before each prefix expansion. It handles context arrays, scoped contexts, and
+  chained prefixes, including contexts that emit no quads. Remote contexts remain
+  refused by the normalized-input guard and an explicit refusing document loader.
+  Scoped-context error wrapping preserves the allocation-limit classification,
+  so fetch returns empty text with `truncated: true` and search skips the document.
+  Search returns redirect responses to the scope guard before reading their
+  bodies; JSON-LD normalization occurs only in the final-response RDF parser.
+- `docs: record third review fix validation` records this round's results and is
+  the final commit, touching only `STATUS.md`.
+
+Fifteen new fixture tests cover unused prefix/vocabulary expansion, arrays,
+scoped contexts, chained prefixes, valid scoped inheritance, the combined
+context/RDF allocation limit, fetch truncation, and all four search parsing
+stages. Redirect regressions cover container, Type Index, and literal reads,
+checking all five redirect statuses with empty, malformed, oversized,
+remote-context, and stalled bodies. They assert that redirect bodies are never
+read and that the scope guard cancels the stalled stream. Thirteen targeted
+regressions fail against the original source and pass with the fix. The complete
+package suite has **186 passing tests across 6 files**.
+
+Successful package gate commands (exit 0 each), run with
+`NODE_OPTIONS=--require=/tmp/sst-9s2-network-guard.cjs` and
+`GIT_ALLOW_PROTOCOL=file` exported:
+
+```sh
+pnpm --filter @jeswr/solid-mcp run lint
+pnpm --filter @jeswr/solid-mcp run build
+pnpm --filter @jeswr/solid-mcp run typecheck
+pnpm --filter @jeswr/solid-mcp run test
+pnpm run lint:root
+```
+
+Affected repository gate (exit 0; **8/8 Turbo tasks successful**):
+
+```sh
+NODE_OPTIONS=--require=/tmp/sst-9s2-network-guard.cjs GIT_ALLOW_PROTOCOL=file TURBO_SCM_BASE=1743fe2d9e035a62944fc4fe27896982fa8f00e8 pnpm run gate
+```
+
+Full-workspace gate (exit 1; **31 successful tasks out of 156 planned**, 5 cached):
+
+```sh
+NODE_OPTIONS=--require=/tmp/sst-9s2-network-guard.cjs GIT_ALLOW_PROTOCOL=file pnpm run gate:full
+```
+
+The unchanged `@jeswr/app-pod-manager#build` fails because `next/font` attempts
+to fetch Inter from Google Fonts, blocked by the fixture-only network guard.
+`roborev status` exits 127 because roborev is unavailable, so automated per-commit
+review remains unavailable. `git diff --check` passes. No dependencies or
+manifests changed; `check:packages` is not applicable. The pinned fetch-rdf
+prebuilt output was restored from the same local temporary artifact used in
+earlier rounds, and the guarded-fetch/rdf-serialize workspace dependencies were
+built locally. No remote Git fetch/merge or production-service requests occurred.
+
+All requested findings are fixed. The conservative allocation reservations can
+reject a document before its exact expanded size reaches 1 MiB. No open questions
+or unfinished implementation work remain for this round; full-workspace
+validation and automated review retain the environmental limitations above.
