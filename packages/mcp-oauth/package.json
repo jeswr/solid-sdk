@@ -1,15 +1,12 @@
 {
+  "$comment": "AUTHORED-BY Codex GPT-6.1-Sol",
   "name": "@jeswr/mcp-oauth",
   "version": "0.1.0",
   "private": true,
-  "description": "MCP OAuth authorization and resource server glue (MCP-09 and MCP-10).",
+  "description": "Resource-bound OAuth authorization server for MCP. Experimental, AI-agent-generated.",
   "type": "module",
-  "license": "MIT",
   "sideEffects": false,
   "securityCritical": true,
-  "engines": {
-    "node": ">=24"
-  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -25,16 +22,24 @@
     "README.md",
     "SKILL.md"
   ],
+  "engines": {
+    "node": ">=24"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json",
     "lint": "biome check .",
     "test": "vitest run"
   },
+  "dependencies": {
+    "@jeswr/guarded-fetch": "workspace:*"
+  },
   "devDependencies": {
     "@biomejs/biome": "^2.5.1",
+    "@types/node": "^25.9.2",
+    "@vitest/coverage-v8": "^4.1.10",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.9",
-    "@vitest/coverage-v8": "^4.1.10"
-  }
+    "vitest": "^4.1.9"
+  },
+  "license": "MIT"
 }
