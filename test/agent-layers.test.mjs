@@ -506,6 +506,93 @@ describe("global restrictions across module load forms", () => {
       }
   });
 
+  it.each(forms)("rejects disallowed path characters globally: %s", (form) => {
+    for (const prefix of ["./", "../", "/"])
+      for (const character of [
+        "\\",
+        "\t",
+        "\n",
+        "\r",
+        " ",
+        "\0",
+        "\x7f",
+        "é",
+        "?",
+        "#",
+        "%",
+        ":",
+        "!",
+        "$",
+        "&",
+        "'",
+        "(",
+        ")",
+        "*",
+        "+",
+        ",",
+        ";",
+        "=",
+        "[",
+        "]",
+        "{",
+        "}",
+        "<",
+        ">",
+        "|",
+        "^",
+        "`",
+        "~",
+      ])
+        for (const specifier of [
+          `${prefix}local${character}.js`,
+          `${prefix}local.js${character}`,
+        ]) {
+          expect(
+            scan("tools/ordinary/index.ts", form.replace("TARGET", JSON.stringify(specifier))),
+          ).toContain(
+            `tools/ordinary/index.ts:1: relative and absolute module specifiers must match ^[A-Za-z0-9@._/-]+$: ${specifier}`,
+          );
+        }
+  });
+
+  it.each(
+    forms,
+  )("allows the exact path alphabet without requiring targets to exist: %s", (form) => {
+    const directory = workspace({ "tools/ordinary/index.ts": "" });
+    const file = join(directory, "tools/ordinary/index.ts");
+    for (const specifier of [
+      "./ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789@._-/missing.js",
+      "../ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789@._-/missing.js",
+      join(
+        directory,
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789@._-/missing.js",
+      ),
+    ]) {
+      writeFileSync(file, form.replace("TARGET", JSON.stringify(specifier)));
+      expect(checkAgentLayers(directory)).toEqual([]);
+    }
+  });
+
+  it.each([
+    "packages/ordinary/src/index.ts",
+    "packages/agent-model/src/index.ts",
+    "apps/ordinary/web/src/index.ts",
+    "tools/ordinary/index.ts",
+    "scripts/ordinary.ts",
+    "test/ordinary.test.ts",
+    "index.ts",
+  ])("rejects ESM-normalized path characters in every checked root: %s", (path) => {
+    for (const specifier of [
+      "./gmail\\send.js",
+      "./gmail/se\tnd.js",
+      "./gmail/se\nnd.js",
+      "./gmail/se\rnd.js",
+    ])
+      expect(scan(path, `import ${JSON.stringify(specifier)};`).join("\n")).toContain(
+        "relative and absolute module specifiers must match ^[A-Za-z0-9@._/-]+$",
+      );
+  });
+
   it.each(forms)("rejects URL suffixes and escapes globally: %s", (form) => {
     for (const kind of ["relative", "absolute", "file", "file-upper"])
       for (const suffix of ["?raw", "#fragment", "%2ejs", "%zz"]) {
@@ -523,12 +610,16 @@ describe("global restrictions across module load forms", () => {
               : "./local.js") + suffix;
         writeFileSync(file, form.replace("TARGET", JSON.stringify(specifier)));
         expect(checkAgentLayers(directory)).toContain(
-          `tools/ordinary/index.ts:1: relative, absolute and file: module specifiers must not contain ?, # or %: ${specifier}`,
+          `tools/ordinary/index.ts:1: ${kind.startsWith("file") ? "relative, absolute and file: module specifiers must not contain ?, # or %" : "relative and absolute module specifiers must match ^[A-Za-z0-9@._/-]+$"}: ${specifier}`,
         );
       }
   });
 
   it.each([
+    "../../../packages/agent-channels/src/gmail\\send.js",
+    "../../../packages/agent-channels/src/gmail/se\tnd.js",
+    "../../../packages/agent-channels/src/gmail/se\nnd.js",
+    "../../../packages/agent-channels/src/gmail/se\rnd.js",
     "../../../packages/agent-channels/src/gmail/send.js?raw",
     "../../../packages/agent-channels/src/gmail/send.js#fragment",
     "../../../packages/agent-channels/src/gmail/%73end.js",
@@ -537,7 +628,7 @@ describe("global restrictions across module load forms", () => {
   ])("rejects escaped and suffixed cross-project targets: %s", (specifier) => {
     expect(
       scan("apps/ordinary/src/index.ts", `import ${JSON.stringify(specifier)};`).join("\n"),
-    ).toContain("module specifiers must not contain ?, # or %");
+    ).toContain("relative and absolute module specifiers must match ^[A-Za-z0-9@._/-]+$");
   });
 
   it("checks literal templates and wrapped literals outside agent projects", () => {
@@ -839,7 +930,7 @@ describe("root project enforcement", () => {
       ).join("\n"),
     ).toContain("executor-only");
     expect(scan(`index.${extension}`, 'await import("./local.js?raw");').join("\n")).toContain(
-      "module specifiers must not contain ?, # or %",
+      "relative and absolute module specifiers must match ^[A-Za-z0-9@._/-]+$",
     );
   });
 

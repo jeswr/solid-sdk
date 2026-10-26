@@ -138,6 +138,10 @@ function projectTarget(project, path) {
 }
 
 function importTargets(projects, file, specifier) {
+  if ((specifier.startsWith(".") || isAbsolute(specifier)) && /[^A-Za-z0-9@._/-]/.test(specifier))
+    return {
+      error: "relative and absolute module specifiers must match ^[A-Za-z0-9@._/-]+$",
+    };
   if (
     (specifier.startsWith(".") || isAbsolute(specifier) || /^file:/i.test(specifier)) &&
     /[?#%]/.test(specifier)
