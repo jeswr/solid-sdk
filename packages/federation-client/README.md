@@ -10,6 +10,10 @@ available separately through the same client.
 > Experimental. Registry and storage discovery use the provided guards. For attacker-controlled
 > registration URLs, pass a guarded fetch explicitly to `verify` or `list`.
 
+Readers accept canonical `https://jeswr.org/ns/` and legacy `https://w3id.org/jeswr/`
+vocabulary terms. Canonical properties take precedence per field; builders write canonical
+terms. Resource identifiers and caller-supplied spec-version IRIs retain their identity.
+
 ## Install
 
 ```sh
@@ -25,7 +29,7 @@ import { selfDescribe, verify } from "@jeswr/federation-client";
 
 const description = selfDescribe({
   id: "https://app.example/clientid.jsonld",
-  sectors: ["https://w3id.org/jeswr/sectors/scheduling"],
+  sectors: ["https://jeswr.org/ns/sectors/scheduling"],
   access: ["Read", "Write"],
   consumes: ["http://www.w3.org/2005/01/wf/flow#Task"],
 });
@@ -50,7 +54,7 @@ const result = await verify("https://app.example/clientid.jsonld", {
 
 - [Source](https://github.com/jeswr/federation-client)
 - [Issues](https://github.com/jeswr/federation-client/issues)
-- [`fedapp:` vocabulary](https://w3id.org/jeswr/fed)
+- [`fedapp:` vocabulary](https://jeswr.org/ns/fed)
 - [Solid Client Identifier Documents](https://solidproject.org/TR/oidc#clientids)
 
 ## License
