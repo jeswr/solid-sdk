@@ -1,3 +1,5 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /**
  * Google Photos → Media. Library **metadata** (filename, type, dimensions,
  * capture time and the hosted asset URL — never the bytes) as
@@ -13,12 +15,14 @@ import { getJson } from "../core/fixture-fetch.js";
 import type { ImportContext, ImportOutcome, IntegrationAdapter } from "../core/types.js";
 import { CLASSES, MediaItem } from "../core/vocab.js";
 import { GOOGLE_PHOTOS_FIXTURES, type GPhotosMediaItemsList } from "./fixtures.js";
+import { vocabMap } from "./vocab-map.js";
 
 const ID = "google-photos";
 const API = "https://photoslibrary.googleapis.com/v1";
 const SCOPES = ["https://www.googleapis.com/auth/photoslibrary.readonly"] as const;
 
 export const googlePhotosAdapter: IntegrationAdapter = {
+  vocabMap,
   metadata: {
     id: ID,
     name: "Google Photos",

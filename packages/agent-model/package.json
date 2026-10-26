@@ -2,34 +2,106 @@
   "name": "@jeswr/agent-model",
   "version": "0.1.0",
   "private": true,
-  "description": "Channel-neutral logical model (experimental scaffold).",
+  "description": "Channel-neutral agent interaction model and pod record RDF mappings",
   "type": "module",
   "license": "MIT",
-  "x-authored-by": "Codex GPT-6.1-Sol",
   "sideEffects": false,
   "securityCritical": false,
   "engines": {
     "node": ">=24"
   },
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "default": "./dist/index.js"
-    },
-    "./testing": {
-      "types": "./dist/testing.d.ts",
-      "default": "./dist/testing.js"
-    }
-  },
   "files": [
     "dist",
+    "docs",
     "README.md",
     "SKILL.md"
   ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./core/types": {
+      "types": "./dist/core/types.d.ts",
+      "import": "./dist/core/types.js",
+      "default": "./dist/core/types.js"
+    },
+    "./core/canonical": {
+      "types": "./dist/core/canonical.d.ts",
+      "import": "./dist/core/canonical.js",
+      "default": "./dist/core/canonical.js"
+    },
+    "./core/schema": {
+      "types": "./dist/core/schema.d.ts",
+      "import": "./dist/core/schema.js",
+      "default": "./dist/core/schema.js"
+    },
+    "./core/limits": {
+      "types": "./dist/core/limits.d.ts",
+      "import": "./dist/core/limits.js",
+      "default": "./dist/core/limits.js"
+    },
+    "./core/conversation": {
+      "types": "./dist/core/conversation.d.ts",
+      "import": "./dist/core/conversation.js",
+      "default": "./dist/core/conversation.js"
+    },
+    "./vocab": {
+      "types": "./dist/vocab.d.ts",
+      "import": "./dist/vocab.js",
+      "default": "./dist/vocab.js"
+    },
+    "./profile/vocabulary": {
+      "types": "./dist/profile/vocabulary.d.ts",
+      "import": "./dist/profile/vocabulary.js",
+      "default": "./dist/profile/vocabulary.js"
+    },
+    "./rdf": {
+      "types": "./dist/rdf/records.d.ts",
+      "import": "./dist/rdf/records.js",
+      "default": "./dist/rdf/records.js"
+    },
+    "./rdf/serialise": {
+      "types": "./dist/rdf/serialise.d.ts",
+      "import": "./dist/rdf/serialise.js",
+      "default": "./dist/rdf/serialise.js"
+    },
+    "./rdf/evidence": {
+      "types": "./dist/rdf/evidence.d.ts",
+      "import": "./dist/rdf/evidence.js",
+      "default": "./dist/rdf/evidence.js"
+    },
+    "./testing": {
+      "types": "./dist/testing.d.ts",
+      "import": "./dist/testing.js",
+      "default": "./dist/testing.js"
+    }
+  },
   "scripts": {
-    "build": "pnpm -w exec tsc -p packages/agent-model/tsconfig.json",
-    "typecheck": "pnpm -w exec tsc -p packages/agent-model/tsconfig.json --noEmit && pnpm -w exec tsc -p packages/agent-model/tsconfig.test.json",
-    "lint": "pnpm -w exec biome check packages/agent-model",
-    "test": "pnpm -w exec vitest run --root packages/agent-model"
-  }
+    "lint": "biome check .",
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@jeswr/fetch-rdf": "workspace:*",
+    "@jeswr/rdf-serialize": "workspace:*",
+    "@solid/object": "^0.6.0",
+    "@rdfjs/wrapper": "^0.34.0",
+    "canonicalize": "^1.0.8",
+    "n3": "^2.1.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@rdfjs/types": "^2.0.1",
+    "@types/n3": "^1.26.1",
+    "fast-check": "^4.3.0",
+    "@biomejs/biome": "^2.5.1",
+    "@types/node": "^25.9.2",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.9",
+    "@jeswr/personal-agent": "workspace:*"
+  },
+  "x-authored-by": "Codex GPT-6.1-Sol"
 }

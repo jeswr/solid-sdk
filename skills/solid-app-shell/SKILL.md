@@ -190,6 +190,18 @@ Building a list/browser view over a pod container surfaced three patterns worth 
 - Read for cross-app class mapping, prebuild environment precedence, and controlled forms. [references/interop-and-forms.md](references/interop-and-forms.md).
 - Read when integrating shared chrome, Tailwind tokens, theming, or Lit/React controls. [references/chrome-integration.md](references/chrome-integration.md).
 
+## Pitfalls
+
+### Paginated sources and snapshot overwrites
+
+When syncing a local API into a pod by replacing a whole RDF document, a fresh dataset plus
+conditional PUT overwrites everything, even if the source API silently capped the first page.
+An oversized `limit` is not proof of completeness. Follow every page/cursor until the API's
+completion condition (for example, `offset >= total`), assemble the complete snapshot, then
+serialize through the suite RDF writer and perform the conditional write. If a page fails or
+pagination stops making progress, fail the sync without writing a partial replacement.
+An ETag prevents conflicting writes; it cannot detect a truncated source snapshot.
+
 ## Gotchas
 
 | Gotcha | Detail |
