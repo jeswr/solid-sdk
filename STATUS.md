@@ -42,3 +42,27 @@ Screenshots/Playwright/axe: not applicable because this lane builds no UI; no br
 `roborev status` could not run (`roborev: command not found`, exit 127); no post-commit review hook is installed in this checkout. Automated per-commit review remains for the dispatcher; this lane did not install tooling or push/open a PR.
 
 Implementation is complete for DOC-00. Final documentation commit: `docs: record DOC-00 lane validation` (this file, committed last after verification). Full-workspace validation and automated review are the only uncompleted checks; neither required changing this lane's model implementation.
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+## Fix round 1
+
+Starting head: `f66e87fa0c7c86b3ffafbdb3cc55cec0f6597c1c`. All three supplied review findings are addressed on `lane/sst-f77f`:
+
+- `b7411eb1 fix: reserve fresh docs companion containers` — reserve the companion tree with create-only writes before publishing the document. A collision on any companion or the document advances the slug. Regression tests cover orphaned containers/updates, simultaneous creation, copying, and permission failures before document publication.
+- `75b81f9a fix: bootstrap missing linked docs type indexes` — recover an explicit linked-index 404 with a create-only write at the advertised URL, then re-read and register using its fresh ETag. Tests cover concurrent bootstrap (412), preservation of other registrations, permission/network failures, bounded recovery, and document creation/copying.
+- `5946529a fix: retain format changes in docs revisions` — compare both body and format after the ten-minute interval. Tests cover format-only saves before, at, and after the boundary.
+
+Each regression was observed failing before its fix. The final app suite has 155 passing tests (19 more than the starting head). No dependencies, UI, or unrelated source files changed.
+
+Validation on the final implementation:
+
+- `PATH="$PWD/node_modules/.bin:$PATH" pnpm --filter @jeswr/suite-vocab --filter @jeswr/suite-ui run build` — PASS; fresh-checkout workspace declarations are required before testing the app. The initial test attempt without these build outputs failed module resolution.
+- `pnpm --filter @jeswr/app-suite run test:coverage` — PASS: 9 files / 155 tests; 100% statements (424/424), branches (213/213), functions (113/113), and lines (385/385).
+- `pnpm --filter @jeswr/app-suite run lint && pnpm --filter @jeswr/app-suite run build && pnpm --filter @jeswr/app-suite run typecheck && pnpm --filter @jeswr/app-suite run test` — PASS, including the production build and all 155 tests.
+- `pnpm run lint:root` — PASS.
+- `PATH="$PWD/node_modules/.bin:$PATH" TURBO_SCM_BASE=f66e87fa0c7c86b3ffafbdb3cc55cec0f6597c1c GIT_ALLOW_PROTOCOL=file pnpm run gate` — PASS: 7/7 tasks successful.
+- `PATH="$PWD/node_modules/.bin:$PATH" GIT_ALLOW_PROTOCOL=file pnpm run gate:full` — FAILED outside this lane: `@jeswr/unstorage-solid#build` runs `npm install --ignore-scripts` in its dependency bootstrap and hits `EROFS` writing `/home/runner/.npm/_cacache`. 32 successful / 171 total tasks (4 cached). The Git transport restriction supplied to this command was filtered by Turbo's environment handling: the existing bootstrap cloned its upstream dependency into a temporary directory before the npm failure. This breached the lane's no-fetch restriction despite the attempted guard; no further bootstrap attempt was made. No fetched changes were merged into this branch.
+- `git diff f66e87fa0c7c86b3ffafbdb3cc55cec0f6597c1c --check` — PASS.
+- `roborev status` — unavailable, exit 127 (`roborev: command not found`). Automated per-commit review remains for the dispatcher.
+
+Conservative collision handling preserves existing resources and leaves any partial companion reservations in place; it never deletes a container that another writer might be using. Missing-index recovery shares the existing three-retry budget and does not rewrite an already-linked profile. No open implementation questions or unfinished fixes remain. Full-workspace validation and automated review remain incomplete for the reasons above. Final fix-round documentation commit: `docs: record docs review fix validation`.
