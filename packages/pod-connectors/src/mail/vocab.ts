@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * Typed accessors for the pod-mail model (apps MAI-00/MAI-01), which uses
  * `http://schema.org/` + SIOC + DCTERMS. Kept wire-compatible with
@@ -134,20 +135,6 @@ export class MailCollection extends Typed {
   }
   get members(): Set<string> {
     return this.iris(`${MAIL_SCHEMA}hasPart`);
-  }
-}
-
-/** A connector's source inventory: a collection whose status marks an unfinished run. */
-export class MailSourceIndex extends MailCollection {
-  get status(): string | undefined {
-    return OptionalFrom.subjectPredicate(
-      this,
-      `${MAIL_SCHEMA}creativeWorkStatus`,
-      LiteralAs.string,
-    );
-  }
-  set status(value: string | undefined) {
-    OptionalAs.object(this, `${MAIL_SCHEMA}creativeWorkStatus`, value, LiteralFrom.string);
   }
 }
 

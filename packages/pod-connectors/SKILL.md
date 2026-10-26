@@ -38,5 +38,16 @@ for non-RDF resources and source deletions. Keep binaries inside the connector c
 to create-only, and replace only under a strong ETag.
 
 Mail sources (Gmail, Takeout mbox) go through `src/mail/writer.ts` so the pod-mail layout and
-vocabulary (`http://schema.org/`, matching apps/suite's mail model) stay identical. Keep Message-ID
-document ids, write `.eml` create-only, and flush thread/folder membership once per run.
+vocabulary (`http://schema.org/`, matching apps/suite's mail model) stay identical. Gmail supplies
+`documentId: "gmail-" + id` and a source-native thread key; validate opaque ids against
+`[A-Za-z0-9_-]{1,256}` and skip invalid ones. File/mbox imports keep Message-ID document ids with
+collision fallback and References/In-Reply-To ancestry. Gmail history deletions resolve slugs
+directly; full syncs list the account's `messages/` container and sweep unseen Gmail message RDF
+documents. There is no Gmail source index. Keep Spam/Trash in the full source listing.
+
+Additions commit RDF, then `.eml`/attachment bytes, then thread/folder memberships in `flush()`.
+Retire dropped attachments before replacing the RDF that records them. Deletions reverse the
+order: read the message, persist membership removals conditionally, delete attachments and `.eml`,
+and delete message RDF last. Keep that document available for retries until cleanup succeeds;
+a missing document is a no-op. Reconcile all stored folders, including vanished labels, so
+interrupted relabeling cannot strand memberships. Preserve one run per connector container.

@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6.1-Sol
 import { DataFactory } from "n3";
 import { describe, expect, it } from "vitest";
 import { runImport } from "../core/import-runner.js";
@@ -151,7 +152,7 @@ describe("MailWriter", () => {
       expect(stored.thread).toBe(`${url(threadSlug(ME, "fallback-1"))}#it`);
       await mail.flush();
       await mail.removeMessage(stored.slug);
-      await mail.removeMessage(stored.slug, stored.thread);
+      await mail.removeMessage(stored.slug);
     });
     const inbox = folderSlug(ME, "Inbox");
     expect(pod.get(url(inbox))).toBeDefined();
@@ -189,6 +190,64 @@ describe("MailWriter", () => {
     });
     expect(pod.bytes(url(messageSlug(ME, "src-2").replace(/\.ttl$/, ".eml")))).toBeDefined();
     expect(membersOf(pod, folderSlug(ME, "Inbox"))).toHaveLength(2);
+  });
+
+  it("uses an explicit document id without a Message-ID collision fallback", async () => {
+    const pod = await withWriter(async (mail) => {
+      const item = { raw: raw("same"), folders: [INBOX], read: true, fallbackId: "fallback" };
+      await mail.add({ ...item, sourceUrl: "https://source.test/1" });
+      const stored = await mail.add({
+        ...item,
+        documentId: "source-2",
+        sourceUrl: "https://source.test/2",
+      });
+      expect(stored.id).toBe("source-2");
+      const updated = await mail.add({
+        ...item,
+        raw: raw("changed"),
+        documentId: stored.id,
+        sourceUrl: "https://source.test/3",
+      });
+      expect(updated.slug).toBe(stored.slug);
+    });
+    const doc = url(messageSlug(ME, "source-2"));
+    expect(new MailMessage(`${doc}#it`, pod.dataset(doc), DataFactory).identifier).toBe(
+      "<changed@x.test>",
+    );
+    expect(pod.get(url(messageSlug(ME, "fallback")))).toBeUndefined();
+  });
+
+  it("stops deletion before bytes or RDF when a conditional membership write fails", async () => {
+    const pod = createMemoryPod();
+    const item = { raw: raw("delete"), folders: [INBOX], read: true, fallbackId: "d" };
+    await withWriter(async (mail) => void (await mail.add(item)), pod);
+    const slug = messageSlug(ME, "<delete@x.test>");
+    const inbox = url(folderSlug(ME, "Inbox"));
+    let conflicted = false;
+    const failing: typeof fetch = (input, init) => {
+      if (String(input) === inbox && init?.method === "PUT") {
+        expect(new Headers(init.headers).get("if-match")).toBeTruthy();
+        conflicted = true;
+        return Promise.resolve(new Response(null, { status: 412 }));
+      }
+      return pod.fetch(input, init);
+    };
+    await expect(
+      withWriter(async (mail) => mail.removeMessage(slug), pod, undefined, failing),
+    ).rejects.toThrow();
+    expect(conflicted).toBe(true);
+    expect(pod.get(url(slug))).toBeDefined();
+    expect(pod.bytes(url(emlSlug(ME, "<delete@x.test>")))).toBeDefined();
+    expect(membersOf(pod, folderSlug(ME, "Inbox"))).toEqual([`${url(slug)}#it`]);
+    await withWriter(async (mail) => {
+      await mail.removeMessage(slug);
+      expect(membersOf(pod, folderSlug(ME, "Inbox"))).toEqual([]);
+      // Even an interruption before flush leaves no deferred membership cleanup.
+      throw new Error("crash");
+    }, pod).catch(() => undefined);
+    expect(pod.get(url(slug))).toBeUndefined();
+    expect(pod.bytes(url(emlSlug(ME, "<delete@x.test>")))).toBeUndefined();
+    await withWriter(async (mail) => mail.removeMessage(slug), pod);
   });
 
   it("repairs folder and thread membership when a run is replayed after a crash", async () => {

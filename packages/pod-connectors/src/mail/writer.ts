@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * Shared MailWriter: stores raw RFC 822 messages in the pod-mail layout (apps MAI-01)
  * through the connector ports. Used by the Gmail API importer (CON-07) and the Takeout
@@ -10,7 +11,8 @@
  * source cursor, so the next run replays the same changes. Membership is therefore
  * reconciled from each touched message's desired state against every known folder
  * (never from the message's previous document), and thread members whose message
- * documents no longer exist are dropped.
+ * documents no longer exist are dropped. Deletions commit collection cleanup before bytes
+ * and finally RDF, keeping their cleanup inventory available across every interruption.
  */
 import { Container } from "@solid/object";
 import { DataFactory, Store } from "n3";
@@ -54,7 +56,7 @@ export interface MailItem {
   readonly threadKey?: string;
   /** Document id when the message has no usable Message-ID, or another source item owns it. */
   readonly fallbackId: string;
-  /** Keep this document id (the item was stored before): documents are never re-keyed. */
+  /** Explicit source identity (Gmail), or a previously stored document id. Bypasses Message-ID keying. */
   readonly documentId?: string;
   /** Source item URL recorded as provenance (`prov:wasDerivedFrom`); identifies the item. */
   readonly sourceUrl?: string;
@@ -75,10 +77,10 @@ export interface MailWriter {
   /** Store one message. Throws `MailParseError` for unparseable input (skip it). */
   add(item: MailItem): Promise<StoredMail>;
   /**
-   * Delete a stored message, its source and attachments, and drop its memberships. When the
-   * document is already gone (a replayed deletion), `thread` lets the membership still be dropped.
+   * Drop memberships immediately, then delete attachments, the source and finally RDF.
+   * The RDF retains cleanup inventory until deletion completes; a missing document is a no-op.
    */
-  removeMessage(slug: string, thread?: string): Promise<void>;
+  removeMessage(slug: string): Promise<void>;
   /** Reconcile touched messages against `folders` (all folders the source knows) and write. */
   flush(folders?: readonly MailFolder[]): Promise<void>;
 }
@@ -251,18 +253,53 @@ export function createMailWriter(ctx: MailPorts, account: string): MailWriter {
     return { slug, iri, thread: iriOf(threadDoc), id };
   }
 
-  async function removeMessage(slug: string, threadIri?: string): Promise<void> {
+  /** All stored folders, including labels that disappeared or changed before a failed flush. */
+  async function storedFolders(): Promise<Set<string>> {
+    const listing = `${accountDir}folders/`;
+    const stored = await ctx.read(listing);
+    const slugs = new Set<string>();
+    if (stored)
+      for (const child of new Container(ctx.resolve(listing), stored, DataFactory).contains) {
+        const rest = child.value.slice(ctx.resolve(listing).length);
+        if (child.value.startsWith(ctx.resolve(listing)) && /^[^/]+\.ttl$/.test(rest))
+          slugs.add(`${listing}${rest}`);
+      }
+    return slugs;
+  }
+
+  /** Persist just this removal without flushing pending additions for other messages. */
+  async function dropMember(slug: string, iri: string, forClass: string): Promise<void> {
+    const current = await ctx.read(slug);
+    if (!current) return;
+    const dataset = new Store([...current]);
+    const collection = new MailCollection(iriOf(slug), dataset, DataFactory);
+    if (!collection.members.delete(iri)) return;
+    if (collection.members.size === 0 && !slug.includes("/folders/system:")) {
+      await ctx.remove(slug);
+      return;
+    }
+    await ctx.write({ slug, category: "mail", forClass, dataset, skipRegistration: true });
+  }
+
+  async function removeMessage(slug: string): Promise<void> {
     const iri = iriOf(slug);
     const previous = await existing(slug);
+    if (!previous) return;
     desired.set(iri, new Set());
-    for (const folder of previous?.folderIris ?? []) remember(slugOf(docOf(folder)));
-    const memberOf = previous?.partOfThread ?? threadIri;
+    const memberOf = previous.partOfThread;
     if (memberOf) {
-      const entry = thread(slugOf(docOf(memberOf)));
+      const slug = slugOf(docOf(memberOf));
+      const entry = thread(slug);
       entry.drop.add(iri);
       entry.add.delete(iri);
+      await dropMember(slug, iri, MAIL_CLASSES.Conversation);
     }
-    if (!previous) return;
+    const folders = await storedFolders();
+    for (const folder of previous.folderIris) folders.add(slugOf(docOf(folder)));
+    for (const folder of [...folders].sort()) {
+      remember(folder);
+      await dropMember(folder, iri, MAIL_CLASSES.Folder);
+    }
     for (const attachment of previous.attachments) await ctx.remove(slugOf(attachment));
     if (previous.encoding) await ctx.remove(slugOf(previous.encoding));
     await ctx.remove(slug);
@@ -271,14 +308,7 @@ export function createMailWriter(ctx: MailPorts, account: string): MailWriter {
   async function flush(known: readonly MailFolder[] = []): Promise<void> {
     // Every stored folder is reconciled too: a label deleted at the source may still list a
     // message whose previous version (the only other record of it) was already replaced.
-    const listing = `${accountDir}folders/`;
-    const stored = await ctx.read(listing);
-    if (stored)
-      for (const child of new Container(ctx.resolve(listing), stored, DataFactory).contains) {
-        const rest = child.value.slice(ctx.resolve(listing).length);
-        if (child.value.startsWith(ctx.resolve(listing)) && /^[^/]+\.ttl$/.test(rest))
-          remember(`${listing}${rest}`);
-      }
+    for (const slug of await storedFolders()) remember(slug);
     for (const { key, title } of known) {
       const slug = folderSlug(account, key);
       if (title || !titles.has(slug)) titles.set(slug, title);

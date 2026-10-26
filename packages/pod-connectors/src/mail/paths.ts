@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * The pod-mail layout (apps MAI-01 `paths.ts`), relative to the connector container:
  * `mail/<account>/{messages,threads,folders}/<id>.ttl`, the `.eml` beside each message,
@@ -23,20 +24,6 @@ export function accountRoot(account: string): string {
 
 export function messageSlug(account: string, id: string): string {
   return `${accountRoot(account)}messages/${pathId(nonEmpty(id, "message id"))}.ttl`;
-}
-
-/** The document id of a `messageSlug`, or undefined for any other slug. */
-export function messageIdOf(account: string, slug: string): string | undefined {
-  const prefix = `${accountRoot(account)}messages/`;
-  const name = slug.slice(prefix.length, -".ttl".length);
-  if (!slug.startsWith(prefix) || !slug.endsWith(".ttl") || !name || name.includes("/"))
-    return undefined;
-  try {
-    const id = decodeURIComponent(name.replace(/~/g, "%"));
-    return messageSlug(account, id) === slug ? id : undefined;
-  } catch {
-    return undefined;
-  }
 }
 
 export function emlSlug(account: string, id: string): string {
