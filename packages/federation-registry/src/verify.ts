@@ -26,7 +26,6 @@ import {
   FEDREG_STORAGE,
   FEDREG_SUPPORTS_SECTOR,
   statusName,
-  VALID_STATUS_IRIS,
 } from "./vocab.js";
 import type { MembershipNode, StorageNode, TermWrapperType } from "./wrappers.js";
 
@@ -106,7 +105,7 @@ function validateStatus(statusIris: readonly string[], id: string, issues: Regis
     });
   }
   for (const s of statusIris) {
-    if (!VALID_STATUS_IRIS.has(s)) {
+    if (statusName(s) === undefined) {
       issues.push({
         code: "unknown-status",
         message: `fedreg:status is not a known fedreg:MembershipStatus value: ${s}`,

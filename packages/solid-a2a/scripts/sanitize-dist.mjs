@@ -28,7 +28,7 @@
  * matches neither is returned unchanged for the fail-closed guard to reject — never
  * silently stripped.
  */
-import { isAbsolute, relative, resolve } from "node:path";
+import { basename, dirname, isAbsolute, relative, resolve } from "node:path";
 
 /**
  * Host/home absolute-path prefixes used only to produce a MORE SPECIFIC error message
@@ -150,6 +150,12 @@ export function pkgRelativePath(p, packageRoot, baseDir = packageRoot) {
   if (packageRoot && isAbsolute(abs)) {
     const rel = toPosix(relative(packageRoot, abs));
     const escapes = rel === "" || rel === ".." || rel.startsWith("../");
+    // Workspace dependencies (and their source maps) are siblings under packages/.
+    // Classify by that root, never an arbitrary /packages/ substring in a host path.
+    if (basename(dirname(packageRoot)) === "packages") {
+      const workspace = /^\.\.\/([a-z0-9][a-z0-9._-]*)\/((?:dist|src)\/.+)$/.exec(rel);
+      if (workspace) return `${workspace[1]}/${workspace[2]}`;
+    }
     if (!escapes) {
       // Under the package root. A dependency installed in the package's OWN
       // node_modules still lives under the root — detect it by a real node_modules
