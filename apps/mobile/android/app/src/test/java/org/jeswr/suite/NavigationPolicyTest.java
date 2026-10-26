@@ -27,6 +27,22 @@ public class NavigationPolicyTest {
     }
 
     @Test
+    public void allowsOnlyGetLoadsOfTheSuiteOrTheExactOfflinePage() {
+        NavigationPolicy p = new NavigationPolicy("https://suite.example", "https://localhost/offline.html");
+        assertTrue(p.allowsMainFrameLoad("https://suite.example/drive", "GET"));
+        assertTrue(p.allowsMainFrameLoad("https://localhost/offline.html?x#y", "GET"));
+        assertFalse("POST responses can redirect off-origin", p.allowsMainFrameLoad("https://suite.example/form", "POST"));
+        assertFalse(p.allowsMainFrameLoad("https://suite.example/drive", null));
+        assertFalse(p.allowsMainFrameLoad("https://localhost/other.html", "GET"));
+        assertFalse(p.allowsMainFrameLoad("https://localhost/", "GET"));
+        assertFalse(p.allowsMainFrameLoad("http://localhost/offline.html", "GET"));
+        assertFalse(p.allowsMainFrameLoad("https://evil.example/", "GET"));
+        assertTrue(p.isErrorPage("https://LOCALHOST:443/offline.html"));
+        assertFalse(p.isErrorPage(null));
+        assertFalse("no offline page configured", policy.isErrorPage("https://localhost/offline.html"));
+    }
+
+    @Test
     public void opensOnlySafeSchemesExternally() {
         assertTrue(policy.mayOpenExternally("https://example.org/"));
         assertTrue(policy.mayOpenExternally("http://example.org/"));

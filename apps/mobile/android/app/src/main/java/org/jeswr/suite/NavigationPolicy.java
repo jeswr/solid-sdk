@@ -9,12 +9,34 @@ import java.util.Locale;
 public final class NavigationPolicy {
 
     private final String suiteOrigin;
+    private final String errorPage;
 
     public NavigationPolicy(String suiteUrl) {
+        this(suiteUrl, null);
+    }
+
+    /** {@code errorUrl} is Capacitor's local offline page (https://localhost/offline.html), or null. */
+    public NavigationPolicy(String suiteUrl, String errorUrl) {
         this.suiteOrigin = origin(suiteUrl);
         if (this.suiteOrigin == null) {
             throw new IllegalArgumentException("server.url must be an http(s) URL");
         }
+        this.errorPage = page(errorUrl);
+    }
+
+    /**
+     * True when a main-frame load may proceed: GET only (POST responses can redirect anywhere
+     * without passing shouldOverrideUrlLoading), to the suite origin or exactly the offline page.
+     */
+    public boolean allowsMainFrameLoad(String url, String method) {
+        if (!"GET".equals(method)) return false;
+        return staysInApp(url) || isErrorPage(url);
+    }
+
+    /** True for exactly the offline page, ignoring query and fragment. */
+    public boolean isErrorPage(String url) {
+        String target = page(url);
+        return errorPage != null && errorPage.equals(target);
     }
 
     /** True when the main frame may navigate to {@code url} inside the app WebView. */
@@ -32,6 +54,18 @@ public final class NavigationPolicy {
             return scheme.equals("https") || scheme.equals("http") || scheme.equals("mailto") || scheme.equals("tel");
         } catch (URISyntaxException e) {
             return false;
+        }
+    }
+
+    /** origin + raw path, or null when not an http(s) URL. */
+    static String page(String url) {
+        String origin = origin(url);
+        if (origin == null) return null;
+        try {
+            String path = new URI(url).getRawPath();
+            return origin + (path == null || path.isEmpty() ? "/" : path);
+        } catch (URISyntaxException e) {
+            return null;
         }
     }
 
