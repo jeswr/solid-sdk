@@ -51,3 +51,30 @@ order: read the message, persist membership removals conditionally, delete attac
 and delete message RDF last. Keep that document available for retries until cleanup succeeds;
 a missing document is a no-op. Reconcile all stored folders, including vanished labels, so
 interrupted relabeling cannot strand memberships. Preserve one run per connector container.
+adapter mappings remain owned by their follow-on connector tasks.
+
+CON-03 implements `./node` and the `pod-connectors` bin. Keep its imports separate from
+browser entry points. Read `src/node/config.ts` and the README's Node CLI section before
+changing the provisional MCP JSON schema. Never read process environment in this package;
+use the 0600 owner-held config descriptor, with no symlink following. Reuse solid-dpop for
+Pod client credentials and preserve its guarded discovery, transport separation, nonce
+retries, memory-only cache, and redirect refusal. CON-12 owns the later pod-auth migration.
+Preserve the effective request signal in the exported Pod fetch, including refresh and
+nonce retry transports; reject already-aborted requests before sending. Use per-request
+transport closures so concurrent callers keep separate signals, and compose any internal
+signal with the caller's using AbortSignal.any.
+
+Source login binds only `127.0.0.1`, with `/oauth-callback` as the fixed callback path.
+`connectors[id].callbackPort` (also accepted by authorizeLoopback's NodeOAuthConfig) selects
+a fixed port, validated as an integer from 1024 to 65535; omission uses an OS-assigned port.
+Adapters with OAuth `requiresCallbackPort: true` (Twitch) require this setting for both
+direct and proxy exchange: fail with a clear configuration error before opening the browser
+if missing. Register `http://127.0.0.1:<callbackPort>/oauth-callback` with the provider; never
+fall back to another port if binding fails. Validate Host, path, state,
+and code before S256 exchange. Reserved OAuth parameters cannot be overridden. Always
+close the listener on completion, timeout, cancellation, and errors. Never persist tokens.
+The state store requires an advertised in-container WAC ACL and installs owner-only grants
+before accessing JSON. Keep ETags and create-only writes; a failed import retains its prior
+successful cursor/counts/time, and failed state persistence must produce a nonzero exit.
+CLI tests use fixture source transports and a memory Pod; only callback tests open loopback
+sockets. Never include arbitrary server/exception text in CLI diagnostics.

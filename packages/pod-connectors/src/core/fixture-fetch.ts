@@ -4,6 +4,8 @@
  * the UI and the adapter contract tests — **no live network ever**: an
  * unmatched request throws instead of hitting the wire.
  */
+
+import { readJson } from "./budget.js";
 import { IntegrationSyncError, RateLimitedError } from "./errors.js";
 import { matchingFixtureRoute } from "./fixture-route.js";
 import type { FixtureRoute } from "./types.js";
@@ -53,7 +55,10 @@ export function fixtureFetch(adapterId: string, routes: readonly FixtureRoute[])
   return impl as typeof fetch;
 }
 
-/** `GET`/parse JSON with adapter-grade error mapping (429 → RateLimitedError). */
+/**
+ * `GET`/parse JSON with adapter-grade error mapping (429 → RateLimitedError); the body is
+ * read through the `MAX_JSON_BYTES` cap.
+ */
 export async function getJson<T>(
   adapterId: string,
   api: typeof fetch,
@@ -75,7 +80,7 @@ export async function getJson<T>(
       status: res.status,
     });
   }
-  return (await res.json()) as T;
+  return (await readJson(res, adapterId, url)) as T;
 }
 
 /** `POST` JSON and parse the JSON answer, with the same error mapping. */

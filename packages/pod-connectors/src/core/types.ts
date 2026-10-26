@@ -55,6 +55,14 @@ export interface OAuthAppConfig {
   readonly tokenProxyUrl?: string;
   /** Optional installed-app secret injected by a Node host; never persist or expose in a UI. */
   readonly clientSecret?: string;
+  /**
+   * Direct Node exchange with a local client secret: form-post secret by default,
+   * or HTTP Basic client authentication with a form or JSON body.
+   * Proxies keep their form contract.
+   */
+  readonly tokenRequest?: "form" | "basic-form" | "basic-json";
+  /** Node loopback login requires a fixed, provider-registered callback port. */
+  readonly requiresCallbackPort?: boolean;
   /** Extra query params some platforms require on the authorize URL. */
   readonly extraAuthParams?: Readonly<Record<string, string>>;
   /**

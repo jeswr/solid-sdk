@@ -6,9 +6,9 @@
  * `schema:Dataset`. Every call needs the `Notion-Version` header.
  *
  * Live-mode honesty: Notion's token endpoint requires HTTP Basic auth with
- * the client secret (no public PKCE) — live mode needs the maintainer's
- * token proxy. Snapshot semantics (search has page cursors, not change
- * cursors).
+ * the client secret (no public PKCE) — browser live mode needs the maintainer's
+ * token proxy; Node hosts can supply a local secret. Snapshot semantics (search has
+ * page cursors, not change cursors).
  */
 import { DataFactory, Store } from "n3";
 import { postJson } from "../core/fixture-fetch.js";
@@ -45,6 +45,7 @@ export const notionAdapter: IntegrationAdapter = {
     scopes: [],
     tokenExchange: "proxy",
     tokenProxyUrl: undefined,
+    tokenRequest: "basic-json",
     extraAuthParams: { owner: "user" },
   },
   apiHeaders: { "notion-version": "2022-06-28" },
