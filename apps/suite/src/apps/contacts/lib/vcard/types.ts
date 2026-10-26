@@ -39,6 +39,8 @@ export interface VCard {
   title?: string;
   /** Kept verbatim: full/reduced dates, text birthdays and Apple's year-1604 sentinel. */
   bday?: string;
+  /** Explicit BDAY VALUE parameter, lowercase; omitted when the source uses the default type. */
+  bdayValueType?: string;
   note?: string;
   /** URI only, never fetched. */
   photo?: string;

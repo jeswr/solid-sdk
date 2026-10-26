@@ -1,4 +1,15 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+import type { VCardVersion } from "./types";
+
+/** v4 escapes commas in every property value, including URIs (RFC 6350 erratum 3845). */
+export function unescapeUri(value: string, version: VCardVersion): string {
+  return version === "4.0" ? value.replace(/\\,/g, ",") : value;
+}
+
+export function escapeUri(value: string, version: VCardVersion): string {
+  return version === "4.0" ? value.replace(/,/g, "\\,") : value;
+}
+
 /** Split without losing escaped delimiters; optionally respect parameter quotes. */
 export function split(value: string, delimiter: string, quotes = false): string[] {
   const parts: string[] = [];

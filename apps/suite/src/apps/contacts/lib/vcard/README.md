@@ -13,7 +13,7 @@ const person: VCard = {
   version: "4.0",
   fn: "Rowan Example",
   emails: [{ value: "rowan@example.org", parameters: { TYPE: ["home"] } }],
-  tels: [{ value: "tel:+1-202-555-0142", parameters: { TYPE: ["cell"] } }],
+  tels: [{ value: "tel:+1-202-555-0142", parameters: { TYPE: ["cell"], VALUE: ["uri"] } }],
   addresses: [],
   categories: ["Example friends"],
 };
@@ -25,12 +25,15 @@ The object properties map to FN (`fn`), N (`n`), EMAIL (`emails`), TEL (`tels`),
 and CATEGORIES (`categories`). Names and addresses use arrays per component so escaped
 commas and multiple component values remain distinct. Organization components are an ordered
 array. All values are strings, including birthdays; dates are never converted through `Date`.
+The optional `bdayValueType` preserves an explicit BDAY VALUE parameter (lowercase), including
+`"text"` for freeform birthdays; omit it to use the version's default birthday type.
 Repeated categories accumulate; repeated singular properties use their last value.
 
 EMAIL, TEL and ADR carry uppercase parameter names (TYPE values lowercase) and optional Apple
 property groups. TYPE lists, PREF, quoted delimiters and v4 RFC 6868 caret escaping survive
-semantic round trips. v4 TEL defaults to a URI; set `VALUE: ["text"]` for freeform phone text.
-v3 TEL defaults to text and supports explicit `VALUE: ["uri"]`.
+semantic round trips. TEL defaults to text; set `VALUE: ["uri"]` for URI handling in either
+version. v4 PHOTO and URI TEL values escape commas on export and decode escaped commas on
+import; v3 URI punctuation is preserved literally. Other TEXT escapes do not apply to URIs.
 
 Import accepts multiple mixed-version cards, BOM, CRLF/LF/CR, space/tab line folding, Google
 repeated TYPE parameters, Apple grouped fields and birthday sentinels, plus v3 legacy

@@ -1,5 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { escapeText, fold } from "./text";
+import { escapeText, escapeUri, fold } from "./text";
 import type { VCard, VCardField } from "./types";
 
 function token(value: string): string {
@@ -35,9 +35,9 @@ function fieldLine(
   return `${header}:${value}`;
 }
 
-function uri(value: string): string {
+function uri(value: string, version: VCard["version"]): string {
   if (!/^[a-z][a-z\d+.-]*:[^\s]*$/i.test(value)) throw new SyntaxError("Invalid vCard URI");
-  return value;
+  return escapeUri(value, version);
 }
 
 function serializeCard(card: VCard): string {
@@ -52,10 +52,15 @@ function serializeCard(card: VCard): string {
   for (const email of card.emails)
     lines.push(fieldLine("EMAIL", email, escapeText(email.value), card.version));
   for (const tel of card.tels) {
-    const isUri =
-      tel.parameters.VALUE?.[0]?.toLowerCase() === "uri" ||
-      (card.version === "4.0" && tel.parameters.VALUE?.[0]?.toLowerCase() !== "text");
-    lines.push(fieldLine("TEL", tel, isUri ? uri(tel.value) : escapeText(tel.value), card.version));
+    const isUri = tel.parameters.VALUE?.[0]?.toLowerCase() === "uri";
+    lines.push(
+      fieldLine(
+        "TEL",
+        tel,
+        isUri ? uri(tel.value, card.version) : escapeText(tel.value),
+        card.version,
+      ),
+    );
   }
   for (const address of card.addresses) {
     const a = address.value;
@@ -64,15 +69,18 @@ function serializeCard(card: VCard): string {
       .join(";");
     lines.push(fieldLine("ADR", address, value, card.version));
   }
+  if (card.bday !== undefined) {
+    const type = card.bdayValueType === undefined ? "" : `;VALUE=${token(card.bdayValueType)}`;
+    lines.push(`BDAY${type}:${escapeText(card.bday)}`);
+  }
   if (card.org !== undefined) lines.push(`ORG:${card.org.map(escapeText).join(";")}`);
   for (const [name, value] of [
     ["TITLE", card.title],
-    ["BDAY", card.bday],
     ["NOTE", card.note],
   ] as const) {
     if (value !== undefined) lines.push(`${name}:${escapeText(value)}`);
   }
-  if (card.photo !== undefined) lines.push(`PHOTO;VALUE=URI:${uri(card.photo)}`);
+  if (card.photo !== undefined) lines.push(`PHOTO;VALUE=URI:${uri(card.photo, card.version)}`);
   if (card.categories.length) lines.push(`CATEGORIES:${card.categories.map(escapeText).join(",")}`);
   lines.push("END:VCARD");
   return `${lines.map(fold).join("\r\n")}\r\n`;

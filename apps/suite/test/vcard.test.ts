@@ -147,6 +147,53 @@ describe("content lines and values", () => {
     expect(qp.note).toBe("softbreak");
   });
 
+  it.each(["3.0", "4.0"])("keeps quoted encoding lookalikes separate in v%s", (version) => {
+    const card = first(
+      wrap(
+        'TEL;LABEL="Room;ENCODING=QUOTED-PRINTABLE;desk":555-0100=\nEMAIL:fiction@example.org',
+        version,
+      ),
+    );
+    expect(card.tels[0]?.value).toBe("555-0100=");
+    expect(card.tels[0]?.parameters.LABEL).toEqual(["Room;ENCODING=QUOTED-PRINTABLE;desk"]);
+    expect(card.emails[0]?.value).toBe("fiction@example.org");
+    expect(first(serializeVCards([card])).tels).toEqual(card.tels);
+  });
+
+  it("decodes only lowercase caret newlines and preserves unknown sequences", () => {
+    const card = first(wrap(`EMAIL;LABEL="Room^North^nSouth^x^^^'":fiction@example.org`));
+    expect(card.emails[0]?.parameters.LABEL).toEqual(['Room^North\nSouth^x^"']);
+    expect(first(serializeVCards([card]))).toEqual(card);
+  });
+
+  it.each([
+    "TEL:555-0100",
+    String.raw`TEL:555\,0100\;desk\nnext`,
+    "TEL;VALUE=text:555-0100",
+  ])("round-trips v4 telephone text: %s", (line) => {
+    const card = first(wrap(line));
+    expect(card.tels[0]?.value).toBe(line.endsWith("next") ? "555,0100;desk\nnext" : "555-0100");
+    expect(serializeVCards([card])).toContain(`${line}\r\n`);
+    expect(first(serializeVCards([card]))).toEqual(card);
+  });
+
+  it.each(["text", "TEXT", "date", "date-and-or-time"])("preserves BDAY VALUE=%s", (type) => {
+    const value = type.toLowerCase() === "text" ? String.raw`circa 1800\, spring` : "18000101";
+    const card = first(wrap(`BDAY;VALUE=${type}:${value}`));
+    expect(card.bdayValueType).toBe(type.toLowerCase());
+    expect(card.bday).toBe(type.toLowerCase() === "text" ? "circa 1800, spring" : "18000101");
+    expect(serializeVCards([card])).toContain(`BDAY;VALUE=${type.toLowerCase()}:${value}\r\n`);
+    expect(first(serializeVCards([card]))).toEqual(card);
+  });
+
+  it("uses the final birthday's value type, including the default", () => {
+    const card = first(wrap("BDAY;VALUE=text:circa 1800\nBDAY:--0709"));
+    expect(card.bday).toBe("--0709");
+    expect(card.bdayValueType).toBeUndefined();
+    expect(serializeVCards([card])).toContain("BDAY:--0709\r\n");
+    expect(first(serializeVCards([card]))).toEqual(card);
+  });
+
   it("unescapes delimiters, escaped backslashes and uppercase newlines exactly once", () => {
     const card = first(
       wrap(String.raw`N:One\,Two;A\\,B\;C;;;\n
@@ -211,19 +258,34 @@ CATEGORIES:one\\,two,three\,four`),
     expect(card.categories).toEqual(["A", "B"]);
   });
 
-  it("keeps URI punctuation unescaped for photos and v3/v4 URI phones", () => {
-    for (const version of ["3.0", "4.0"]) {
-      const card = first(
-        wrap(
-          String.raw`TEL;VALUE=URI:tel:+1-202-555-0100;ext=2,3\N
-PHOTO;VALUE=URI:https://example.org/a,b;c.jpg`,
-          version,
-        ),
-      );
-      expect(card.tels[0]?.value).toBe(String.raw`tel:+1-202-555-0100;ext=2,3\N`);
-      expect(first(serializeVCards([card])).tels).toEqual(card.tels);
-      expect(serializeVCards([card])).toContain("PHOTO;VALUE=URI:https://example.org/a,b;c.jpg");
-    }
+  it.each(["3.0", "4.0"])("encodes URI commas for v%s without TEXT escaping", (version) => {
+    const comma = version === "4.0" ? String.raw`\,` : ",";
+    const card = first(
+      wrap(
+        String.raw`TEL;VALUE=URI:tel:+1-202-555-0100;ext=2${comma}3\N
+PHOTO;VALUE=URI:https://example.org/a${comma}b;c.jpg`,
+        version,
+      ),
+    );
+    expect(card.tels[0]?.value).toBe(String.raw`tel:+1-202-555-0100;ext=2,3\N`);
+    expect(card.photo).toBe("https://example.org/a,b;c.jpg");
+    const output = serializeVCards([card]);
+    expect(output).toContain(String.raw`TEL;VALUE=URI:tel:+1-202-555-0100;ext=2${comma}3\N`);
+    expect(output).toContain(`PHOTO;VALUE=URI:https://example.org/a${comma}b;c.jpg`);
+    expect(first(output).tels).toEqual(card.tels);
+    expect(first(output).photo).toBe(card.photo);
+  });
+
+  it("decodes v4 default PHOTO URI commas and leaves other URI escapes intact", () => {
+    const card = first(wrap(String.raw`PHOTO:https://example.org/a\,b\;c\N.jpg`));
+    expect(card.photo).toBe(String.raw`https://example.org/a,b\;c\N.jpg`);
+    expect(first(serializeVCards([card]))).toEqual(card);
+  });
+
+  it("keeps v3 URI backslashes intact", () => {
+    const card = first(wrap(String.raw`PHOTO;VALUE=URI:https://example.org/a\,b.jpg`, "3.0"));
+    expect(card.photo).toBe(String.raw`https://example.org/a\,b.jpg`);
+    expect(first(serializeVCards([card])).photo).toBe(card.photo);
   });
 
   it.each([
@@ -336,7 +398,10 @@ describe("malformed input", () => {
     expect(() => serializeVCards([{ ...card, version: "2.1" as "4.0" }])).toThrow("version");
     expect(() => serializeVCards([{ ...card, photo: "relative.jpg" }])).toThrow("URI");
     expect(() =>
-      serializeVCards([{ ...card, tels: [{ value: "bad\nURI", parameters: {} }] }]),
+      serializeVCards([{ ...card, bday: "circa 1800", bdayValueType: "text\nNOTE" }]),
+    ).toThrow("parameter");
+    expect(() =>
+      serializeVCards([{ ...card, tels: [{ value: "bad\nURI", parameters: { VALUE: ["uri"] } }] }]),
     ).toThrow("URI");
     for (const group of ["bad\ngroup", ""]) {
       expect(() =>

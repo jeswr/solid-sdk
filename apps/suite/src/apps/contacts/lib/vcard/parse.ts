@@ -1,5 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { decodeQuotedPrintable, split, unescapeText } from "./text";
+import { decodeQuotedPrintable, split, unescapeText, unescapeUri } from "./text";
 import type { VCard, VCardField } from "./types";
 
 interface Property extends VCardField<string> {
@@ -53,7 +53,9 @@ function logicalLines(text: string): string[] {
     // Legacy v3 exports use MIME soft breaks, sometimes with an extra fold space.
     const header = previous?.match(/^(?:[^":]|"[^"]*")*:/)?.[0];
     const soft =
-      previous?.endsWith("=") && /;ENCODING="?QUOTED-PRINTABLE"?(?:;|:)/i.test(header ?? "");
+      previous?.endsWith("=") &&
+      header !== undefined &&
+      property(header).parameters.ENCODING?.[0]?.toUpperCase() === "QUOTED-PRINTABLE";
     if (previous !== undefined && (soft || /^[ \t]/.test(line))) {
       lines[lines.length - 1] =
         (soft ? previous.slice(0, -1) : previous) + line.replace(/^[ \t]/, "");
@@ -128,7 +130,7 @@ function cardFrom(properties: Property[]): VCard {
     if (version === "4.0") {
       for (const key of Object.keys(parameters)) {
         parameters[key] = (parameters[key] as string[]).map((value) =>
-          value.replace(/\^(\^|n|')/gi, (_, char: string) =>
+          value.replace(/\^(\^|n|')/g, (_, char: string) =>
             char === "^" ? "^" : char === "'" ? '"' : "\n",
           ),
         );
@@ -151,12 +153,8 @@ function cardFrom(properties: Property[]): VCard {
         card.emails.push(field);
         break;
       case "TEL":
-        // URI values do not use TEXT backslash escaping.
-        if (
-          parameters.VALUE?.[0]?.toLowerCase() === "uri" ||
-          (version === "4.0" && parameters.VALUE?.[0]?.toLowerCase() !== "text")
-        )
-          field.value = raw;
+        // TEL defaults to TEXT; explicit URI values use only version-specific comma escaping.
+        if (parameters.VALUE?.[0]?.toLowerCase() === "uri") field.value = unescapeUri(raw, version);
         card.tels.push(field);
         break;
       case "ADR":
@@ -173,12 +171,15 @@ function cardFrom(properties: Property[]): VCard {
         break;
       case "BDAY":
         card.bday = value;
+        if (parameters.VALUE?.[0] !== undefined)
+          card.bdayValueType = parameters.VALUE[0].toLowerCase();
+        else delete card.bdayValueType;
         break;
       case "NOTE":
         card.note = value;
         break;
       case "PHOTO":
-        if (/^[a-z][a-z\d+.-]*:[^\s]*$/i.test(raw)) card.photo = raw;
+        if (/^[a-z][a-z\d+.-]*:[^\s]*$/i.test(raw)) card.photo = unescapeUri(raw, version);
         break;
       case "CATEGORIES":
         card.categories.push(...split(raw, ",").map(unescapeText));
