@@ -149,6 +149,8 @@ describe("Android project", () => {
   test("the main activity refuses the legacy bridge", () => {
     const activity = read("android/app/src/main/java/org/jeswr/suite/MainActivity.java");
     expect(activity).toContain("WebViewFeature.WEB_MESSAGE_LISTENER");
+    expect(activity).toContain("WebViewFeature.DOCUMENT_START_SCRIPT");
+    expect(activity).toContain("usesProxyInjection()");
     expect(activity).toContain("new SuiteWebViewClient(bridge)");
     expect(activity).toContain('"CapacitorCookiesAndroidInterface"');
     expect(activity).toContain('"CapacitorHttpAndroidInterface"');
