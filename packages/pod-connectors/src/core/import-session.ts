@@ -67,7 +67,7 @@ export function createImportSession(
       used.add(origin);
       if (subject !== url) itemKeys.add(JSON.stringify([url, subject]));
     }
-    const dataset = mergeItems(previous?.dataset, incoming);
+    const dataset = doc.writeMode === "merge" ? mergeItems(previous?.dataset, incoming) : incoming;
     const result = await writer.write({ ...doc, dataset }, conditions ?? conditionFor(previous));
     reads.delete(url);
     const index = written.findIndex((w) => w.url === result.url);

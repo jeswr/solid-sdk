@@ -84,6 +84,11 @@ export interface NormalisedDoc {
   readonly forClass: string;
   /** The document content, built via the typed vocab wrappers. */
   readonly dataset: DatasetCore;
+  /**
+   * Replace the document by default (snapshot semantics). Use "merge" for incremental
+   * pages: incoming deterministic subjects replace their descriptions; absent subjects survive.
+   */
+  readonly writeMode?: "replace" | "merge";
   /** Source document for items without their own schema:url (e.g. file exports). */
   readonly sourceUrl?: string;
   /**

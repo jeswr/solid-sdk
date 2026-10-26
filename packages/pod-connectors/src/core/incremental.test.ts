@@ -128,6 +128,7 @@ describe("CON-02 incremental writes", () => {
         slug: "items.ttl",
         category: "media",
         forClass: CLASSES.MusicRecording,
+        writeMode: "merge",
         dataset,
       });
       return { cursor: ctx.cursor ? "page-three" : "page-two", skipped: 1 };
@@ -159,6 +160,83 @@ describe("CON-02 incremental writes", () => {
       [...ds].filter((q) => q.predicate.value === "https://schema.org/identifier"),
     ).toHaveLength(3);
   });
+
+  for (const snapshot of [
+    {
+      source: spotifyAdapter,
+      slug: "music/playlists.ttl",
+      route: "https://api.spotify.com/v1/me/playlists",
+      payload: (ids: string[]) => ({ items: ids.map((id) => ({ id, name: id })) }),
+    },
+    {
+      source: githubAdapter,
+      slug: "work/repositories.ttl",
+      route: "https://api.github.com/user/repos",
+      payload: (ids: string[]) => ids.map((id) => ({ id, name: id })),
+    },
+  ]) {
+    it(`replaces ${snapshot.source.metadata.id} snapshots, including an empty collection`, async () => {
+      let ids = ["A", "B"];
+      const source = {
+        ...snapshot.source,
+        fixtures: () =>
+          snapshot.source
+            .fixtures()
+            .map((route) =>
+              route.url === snapshot.route ? { ...route, json: snapshot.payload(ids) } : route,
+            ),
+      };
+      const { pod } = await demoImport(source);
+      const url = `${TEST_POD_ROOT}integrations/${source.metadata.id}/${snapshot.slug}`;
+      const itemIds = () =>
+        [...pod.dataset(url)]
+          .filter((q) => q.predicate.value === "https://schema.org/identifier")
+          .map((q) => q.object.value)
+          .sort();
+      expect(itemIds()).toEqual(["A", "B"]);
+      ids = ["B"];
+      await demoImport(source, { pod });
+      expect(itemIds()).toEqual(["B"]);
+      ids = [];
+      await demoImport(source, { pod });
+      expect(itemIds()).toEqual([]);
+    });
+  }
+
+  for (const writeMode of [undefined, "replace"] as const) {
+    it(`honours deletions from a read dataset with ${writeMode ?? "default"} writes`, async () => {
+      const pod = createMemoryPod();
+      const port = writer(pod);
+      const url = port.resolve("items.ttl");
+      const dataset = new Store();
+      song(dataset, `${url}#removed`, "removed", "Removed");
+      song(dataset, `${url}#kept`, "kept", "Kept");
+      await port.write({
+        slug: "items.ttl",
+        category: "media",
+        forClass: CLASSES.MusicRecording,
+        dataset,
+      });
+      const source = adapter(async (ctx) => {
+        const edited = copyDataset(await ctx.read("items.ttl"));
+        for (const quad of [...edited])
+          if (quad.subject.value === `${url}#removed`) edited.delete(quad);
+        await ctx.write({
+          slug: "items.ttl",
+          category: "media",
+          forClass: CLASSES.MusicRecording,
+          dataset: edited,
+          writeMode,
+        });
+        return {};
+      });
+      await runImport({ adapter: source, podWriter: port, mode: "demo" });
+      const result = pod.dataset(url);
+      expect(new MusicRecording(`${url}#removed`, result, DataFactory).name).toBeUndefined();
+      expect(new MusicRecording(`${url}#kept`, result, DataFactory).name).toBe("Kept");
+      expect((await port.read("items.ttl"))?.etag).toBe('"v2"');
+    });
+  }
 
   it("keeps the successful checkpoint on a source, registration or provenance failure", async () => {
     const previous: ConnectorState = {
@@ -238,6 +316,7 @@ describe("CON-02 incremental writes", () => {
         slug: "items.ttl",
         category: "media",
         forClass: CLASSES.MusicRecording,
+        writeMode: "merge",
         dataset,
         sourceUrl: "https://source.test/export",
       });
@@ -311,6 +390,7 @@ describe("CON-02 incremental writes", () => {
           slug: "items.ttl",
           category: "media",
           forClass: CLASSES.MusicRecording,
+          writeMode: "merge",
           dataset,
         });
       }
@@ -385,6 +465,7 @@ it("shares merge, provenance and host state with file imports", async () => {
         slug: "items.ttl",
         category: "media",
         forClass: CLASSES.MusicRecording,
+        writeMode: "merge",
         dataset,
       });
     },

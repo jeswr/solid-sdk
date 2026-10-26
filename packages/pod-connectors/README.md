@@ -70,13 +70,16 @@ Pass host-owned `state: ConnectorState` into `runImport` (or `runFileImport`) an
 successful cursor, sync time and counts. State contains ISO date strings and never tokens or
 exception text. An explicit `cursor` overrides the state's cursor for API imports.
 
-The shared write pipeline reads each deterministic slug before writing, merges by deterministic named item
-subject, replaces descriptions of incoming items and retains items absent
-from the current page. `schema:identifier` is descriptive metadata and may be shared by
-distinct items (for example, lines of one Amazon order). Adapters must use deterministic
-linked-node identifiers and implement
-source-specific deletions. ETags and create-only conditions protect automatic merges; a 412
-surfaces to the host without advancing its checkpoint. Repeated writes re-read the current ETag.
+The shared write pipeline reads each deterministic slug before writing. Documents default to
+replacement (`writeMode: 'replace'`), preserving snapshot behavior for Spotify, GitHub and other
+existing adapters, including empty snapshots and deletions from a dataset returned by `ctx.read`.
+Incremental adapters can set `NormalisedDoc.writeMode: 'merge'` to replace descriptions of incoming
+deterministic named subjects while retaining subjects absent from the current page.
+`schema:identifier` is descriptive metadata and may be shared by distinct items (for example,
+lines of one Amazon order). Adapters must use deterministic linked-node identifiers and implement
+source-specific deletions with replacement writes. ETags and create-only conditions protect both
+write modes; a 412 surfaces to the host without advancing its checkpoint. Repeated writes re-read
+the current ETag.
 
 Every collection and item carries `prov:wasDerivedFrom` and `prov:wasGeneratedBy`. Item
 `schema:url` supplies its source; `NormalisedDoc.sourceUrl` can supply a document-specific
