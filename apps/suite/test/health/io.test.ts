@@ -109,6 +109,8 @@ it.each(
   Object.entries(LEGACY_NAMESPACES).filter(([, canonical]) => canonical === NS.HEALTH),
 )("migrates legacy namespace %s once, preserving identities/literals and foreign data", async (legacy) => {
   const { store, put, resources, calls } = make();
+  await store.initialize();
+  calls.length = 0;
   put(
     "record.ttl",
     `<#record> a <${legacy}HealthRecord>; <${NS.CORE}subject> <${OWNER}>.
@@ -127,6 +129,7 @@ it.each(
 });
 it("migrates predicate-only aliases and leaves canonical / arbitrary non-type objects alone", async () => {
   const { store, put } = make();
+  await store.initialize();
   const legacy = Object.keys(LEGACY_NAMESPACES).find((key) => LEGACY_NAMESPACES[key] === NS.CORE);
   assert(legacy);
   put("record.ttl", `<#r> <${legacy}subject> <${OWNER}>.`);
@@ -176,6 +179,7 @@ it("never writes unconditionally or swallows permission, parse, transport or con
     throw new Error("offline");
   });
   await expect(store.read("offline.ttl")).rejects.toThrow();
+  await store.initialize();
   faults.set(`PUT ${BASE}conflict.ttl`, () => new Response(null, { status: 412 }));
   await expect(
     store.write("conflict.ttl", emptyHealthDocument(), { create: true }),
@@ -279,4 +283,214 @@ it("refuses even an in-scope redirect before following it", async () => {
   );
   await expect(store.read("redirect.ttl")).rejects.toThrow();
   expect(calls).toHaveLength(1);
+});
+
+function ownerAcl(url: string, defaults = false) {
+  return `@prefix acl: <${NS.ACL}>. <#owner> a acl:Authorization;
+    acl:accessTo <${url}>; ${defaults ? `acl:default <${url}>;` : ""}
+    acl:agent <${OWNER}>; acl:mode acl:Read, acl:Write, acl:Control.`;
+}
+it.each([
+  "observation",
+  "record",
+  "migration",
+  "direct",
+  "route",
+  "index",
+])("refuses a resource ACL override before a sensitive %s write", async (operation) => {
+  const { store, put, resources, calls } = make();
+  await store.initialize();
+  const path = {
+    observation: "observations/2025-01.ttl",
+    record: "records/one.ttl",
+    migration: "record.ttl",
+    direct: "direct.ttl",
+    route: "workouts/run/route.gpx",
+    index: "workouts/run/index.ttl",
+  }[operation] as string;
+  const url = `${BASE}${path}`;
+  const legacy = Object.keys(LEGACY_NAMESPACES).find((key) => LEGACY_NAMESPACES[key] === NS.CORE);
+  put(path, `<#it> <${legacy}subject> <${OWNER}>.`);
+  put(
+    `${path}.acl`,
+    `${ownerAcl(url)}
+      <#public> a <${NS.ACL}Authorization>; <${NS.ACL}accessTo> <${url}>;
+      <${NS.ACL}agentClass> <${NS.FOAF}Agent>; <${NS.ACL}mode> <${NS.ACL}Read>.`,
+  );
+  const before = resources.get(url);
+  assert(before);
+  calls.length = 0;
+  const action = () => {
+    switch (operation) {
+      case "observation":
+        return store.addObservation("two", input);
+      case "record":
+        return store.saveRecord(
+          "one",
+          { kind: "records", name: "x", patient: OWNER, reference: OWNER, reminders: [] },
+          { etag: before.etag },
+        );
+      case "migration":
+        return store.migrate(path);
+      case "direct":
+        return store.write(path, emptyHealthDocument(), { etag: before.etag });
+      default:
+        return store.importGpx("run", SAMPLE_GPX);
+    }
+  };
+  await expect(action()).rejects.toThrow("not owner-private");
+  expect(resources.get(url)).toEqual(before);
+  expect(calls.some((call) => call.url === url && call.method === "PUT")).toBe(false);
+});
+it("uses the resource ACL link and accepts private overrides without default rules", async () => {
+  const { store, put, faults, calls } = make();
+  await store.addObservation("one", input);
+  const url = `${BASE}observations/2025-01.ttl`;
+  put("permissions.ttl", ownerAcl(url));
+  faults.set(
+    `HEAD ${url}`,
+    () => new Response(null, { headers: { link: '<../permissions.ttl>; rel="acl"' } }),
+  );
+  await store.addObservation("two", input);
+  expect(await store.metric("steps", range)).toHaveLength(2);
+  expect(calls.some((call) => call.url === `${BASE}permissions.ttl` && call.method === "GET")).toBe(
+    true,
+  );
+});
+it.each([
+  "head",
+  "missing-link",
+  "foreign-link",
+  "denied-acl",
+  "broken-acl",
+  "empty-acl",
+])("fails closed when resource privacy cannot be established: %s", async (scenario) => {
+  const { store, faults, put, calls } = make();
+  await store.addObservation("one", input);
+  const url = `${BASE}observations/2025-01.ttl`;
+  if (scenario === "head") faults.set(`HEAD ${url}`, () => new Response(null, { status: 403 }));
+  if (scenario === "missing-link") faults.set(`HEAD ${url}`, () => new Response());
+  if (scenario === "foreign-link")
+    faults.set(
+      `HEAD ${url}`,
+      () => new Response(null, { headers: { link: '<https://foreign.example/acl>; rel="acl"' } }),
+    );
+  if (scenario === "denied-acl")
+    faults.set(`GET ${url}.acl`, () => new Response(null, { status: 403 }));
+  if (scenario === "broken-acl") put("observations/2025-01.ttl.acl", "not turtle");
+  if (scenario === "empty-acl") put("observations/2025-01.ttl.acl", "");
+  calls.length = 0;
+  await expect(store.addObservation("two", input)).rejects.toThrow();
+  expect(calls.some((call) => call.url === url && call.method === "PUT")).toBe(false);
+});
+it("walks missing inherited ACLs only inside the health scope and requires private defaults", async () => {
+  const { store, put, resources, calls } = make();
+  await store.initialize();
+  put("nested/", "");
+  put("nested/data.ttl", "");
+  await expect(
+    store.write("nested/data.ttl", emptyHealthDocument(), { create: true }),
+  ).rejects.toMatchObject({ status: 412 });
+  put("nested/.acl", ownerAcl(`${BASE}nested/`));
+  await expect(
+    store.write("nested/new.ttl", emptyHealthDocument(), { create: true }),
+  ).rejects.toThrow("not owner-private");
+  resources.delete(`${BASE}nested/.acl`);
+  resources.delete(`${BASE}.acl`);
+  calls.length = 0;
+  await expect(
+    store.write("nested/data.ttl", emptyHealthDocument(), { create: true }),
+  ).rejects.toThrow("inheritance");
+  expect(calls.every((call) => call.url.startsWith(BASE))).toBe(true);
+  await expect(
+    store.write("absent/new.ttl", emptyHealthDocument(), { create: true }),
+  ).rejects.toMatchObject({ status: 404 });
+});
+
+it("lists complete workouts and resumes an identical GPX after its index write fails", async () => {
+  const { store, faults, resources, calls } = make();
+  await store.importGpx("complete", SAMPLE_GPX);
+  const index = `${BASE}workouts/run/index.ttl`;
+  const route = `${BASE}workouts/run/route.gpx`;
+  faults.set(`PUT ${index}`, () => new Response(null, { status: 500 }));
+  await expect(store.importGpx("run", SAMPLE_GPX)).rejects.toMatchObject({ status: 500 });
+  const uploaded = resources.get(route);
+  expect(uploaded?.body).toBe(SAMPLE_GPX);
+  expect(await store.loadWorkouts()).toHaveLength(1);
+  faults.delete(`PUT ${index}`);
+  await store.importGpx("run", SAMPLE_GPX);
+  expect(resources.get(route)).toEqual(uploaded);
+  expect(await store.loadWorkouts()).toHaveLength(2);
+  expect(
+    calls
+      .filter((call) => call.method === "PUT" && call.url === route)
+      .every((call) => call.headers.get("if-none-match") === "*"),
+  ).toBe(true);
+});
+it("does not reuse a different GPX upload or hide upload/read failures", async () => {
+  const { store, faults, resources } = make();
+  const index = `${BASE}workouts/run/index.ttl`;
+  const route = `${BASE}workouts/run/route.gpx`;
+  faults.set(`PUT ${route}`, () => new Response(null, { status: 403 }));
+  await expect(store.importGpx("run", SAMPLE_GPX)).rejects.toMatchObject({ status: 403 });
+  faults.delete(`PUT ${route}`);
+  faults.set(`PUT ${index}`, () => new Response(null, { status: 500 }));
+  await expect(store.importGpx("run", SAMPLE_GPX)).rejects.toMatchObject({ status: 500 });
+  faults.delete(`PUT ${index}`);
+  await expect(store.importGpx("run", SAMPLE_GPX.replace("Run", "Walk"))).rejects.toMatchObject({
+    status: 412,
+  });
+  expect(resources.has(index)).toBe(false);
+  faults.set(`GET ${route}`, () => new Response(null, { status: 403 }));
+  await expect(store.importGpx("run", SAMPLE_GPX)).rejects.toMatchObject({ status: 403 });
+});
+it("does not treat a privacy precondition failure as a resumable route conflict", async () => {
+  const { store, faults, resources, calls } = make();
+  await store.importGpx("run", SAMPLE_GPX);
+  const index = `${BASE}workouts/run/index.ttl`;
+  resources.delete(index);
+  faults.set(`HEAD ${BASE}workouts/run/route.gpx`, () => new Response(null, { status: 412 }));
+  calls.length = 0;
+  await expect(store.importGpx("run", SAMPLE_GPX)).rejects.toMatchObject({
+    status: 412,
+    operation: "inspect privacy",
+  });
+  expect(resources.has(index)).toBe(false);
+  expect(calls.some((call) => call.method === "PUT" && call.url === index)).toBe(false);
+});
+it.each([
+  "denied",
+  "malformed",
+  "missing-file",
+])("does not hide workout read failures: %s", async (scenario) => {
+  const { store, faults, put } = make();
+  await store.importGpx("run", SAMPLE_GPX);
+  const path = scenario === "missing-file" ? "workouts/legacy.ttl" : "workouts/run/index.ttl";
+  if (scenario === "malformed") put(path, "not turtle");
+  else {
+    if (scenario === "missing-file") put(path, "");
+    faults.set(
+      `GET ${BASE}${path}`,
+      () => new Response(null, { status: scenario === "missing-file" ? 404 : 403 }),
+    );
+  }
+  await expect(store.loadWorkouts()).rejects.toThrow();
+});
+
+it.each([
+  "dateTimeStamp",
+  "dateTime",
+  "date",
+])("reads metrics with xsd:%s timestamps", async (datatype) => {
+  const { store, put } = make();
+  const lexical = datatype === "date" ? "2025-01-01" : "2025-01-01T02:00:00+02:00";
+  put(
+    "observations/2025-01.ttl",
+    `
+    <#it> a <${NS.HEALTH}StepCountObservation>;
+      <${NS.HEALTH}effectiveTime> <#time>; <${NS.HEALTH}value> 100;
+      <${NS.HEALTH}hasUnit> <${NS.UNIT}NUM>; <${NS.HEALTH}unitCode> "1".
+    <#time> <http://www.w3.org/2006/time#inXSDDateTimeStamp> "${lexical}"^^<${NS.XSD}${datatype}>.`,
+  );
+  expect(await store.metric("steps", range)).toMatchObject([{ at: input.at, value: 100 }]);
 });

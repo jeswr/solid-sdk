@@ -28,7 +28,7 @@ export function podFixture() {
       "content-type": resource?.type ?? "text/turtle",
     };
     if (resource) responseHeaders.etag = resource.etag;
-    if (url.endsWith("/")) responseHeaders.link = `<${url}.acl>; rel="acl"`;
+    if (!url.endsWith(".acl")) responseHeaders.link = `<${url}.acl>; rel="acl"`;
     if (method === "PUT") {
       if (headers.get("if-none-match") === "*" && resource)
         return new Response(null, { status: 412 });

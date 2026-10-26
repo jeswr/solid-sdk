@@ -75,6 +75,8 @@ export function createHealthStore(fetch: typeof globalThis.fetch, storage: strin
     };
   }
   async function put(path: string, body: string, contentType: string, condition: Precondition) {
+    precondition(condition);
+    await verifyPrivacy(resolve(path));
     return checked(
       await transport(resolve(path), {
         method: "PUT",
@@ -107,33 +109,12 @@ export function createHealthStore(fetch: typeof globalThis.fetch, storage: strin
         : response;
     // The Link header is authoritative. Never assume a .acl suffix or overwrite
     // an existing container's deliberately shared access rules.
-    const link = metadata.headers.get("link") ?? "";
-    const acl = link
-      .split(",")
-      .map((part) => part.match(/<([^>]+)>\s*;\s*rel="?acl"?(?:\s*;|\s*$)/i))
-      .find((match) => match !== null)?.[1];
-    if (acl === undefined) throw new TypeError("Owner-private creation requires an ACL link");
-    const aclUrl = assertWithinPodScope(base, new URL(acl, url).href);
+    const aclUrl = aclLink(metadata, url);
     // Retry after a partial creation must never mistake inherited public access
     // for successful privacy setup. Verify existing ACLs, or create a missing one.
     try {
       const existing = await fetchRdf(aclUrl, { fetch: transport });
-      const rules = [...new AclResource(existing.dataset, DataFactory).authorizations];
-      if (rules.length !== 1) throw new TypeError("Container is not owner-private");
-      const rule = rules[0] as Authorization;
-      if (
-        rule.accessTo !== url ||
-        rule.default !== url ||
-        rule.agent.size !== 1 ||
-        !rule.agent.has(owner) ||
-        rule.agentClass.size !== 0 ||
-        rule.agentGroup !== undefined ||
-        rule.origin.size !== 0 ||
-        !rule.canRead ||
-        !rule.canWrite ||
-        !rule.canReadWriteAcl
-      )
-        throw new TypeError("Container is not owner-private");
+      verifyOwnerAcl(existing.dataset, url, true);
       return;
     } catch (error) {
       if (!(error instanceof RdfFetchError && error.status === 404)) throw error;
@@ -155,6 +136,56 @@ export function createHealthStore(fetch: typeof globalThis.fetch, storage: strin
       }),
       "set owner access",
     );
+  }
+  function aclLink(metadata: Response, url: string): string {
+    const link = metadata.headers.get("link") ?? "";
+    const acl = link
+      .split(",")
+      .map((part) => part.match(/<([^>]+)>\s*;\s*rel="?acl"?(?:\s*;|\s*$)/i))
+      .find((match) => match !== null)?.[1];
+    if (acl === undefined) throw new TypeError("Owner-private access requires an ACL link");
+    return assertWithinPodScope(base, new URL(acl, url).href);
+  }
+  function verifyOwnerAcl(dataset: DatasetCore, url: string, inherited: boolean) {
+    const rules = [...new AclResource(dataset, DataFactory).authorizations];
+    if (rules.length !== 1) throw new TypeError("Resource is not owner-private");
+    const rule = rules[0] as Authorization;
+    if (
+      rule.accessTo !== url ||
+      (inherited && rule.default !== url) ||
+      rule.agent.size !== 1 ||
+      !rule.agent.has(owner) ||
+      rule.agentClass.size !== 0 ||
+      rule.agentGroup !== undefined ||
+      rule.origin.size !== 0 ||
+      !rule.canRead ||
+      !rule.canWrite ||
+      !rule.canReadWriteAcl
+    )
+      throw new TypeError("Resource is not owner-private");
+  }
+  async function verifyParentPrivacy(url: string) {
+    if (url === base) throw new TypeError("Cannot establish owner-private inheritance");
+    await verifyPrivacy(
+      assertWithinPodScope(base, new URL(url.endsWith("/") ? "../" : ".", url).href),
+      true,
+    );
+  }
+  async function verifyPrivacy(url: string, inherited = false): Promise<void> {
+    const metadata = await transport(url, { method: "HEAD" });
+    if (metadata.status === 404 && !inherited) {
+      await verifyParentPrivacy(url);
+      return;
+    }
+    checked(metadata, "inspect privacy");
+    const aclUrl = aclLink(metadata, url);
+    try {
+      const acl = await fetchRdf(aclUrl, { fetch: transport });
+      verifyOwnerAcl(acl.dataset, url, inherited);
+    } catch (error) {
+      if (!(error instanceof RdfFetchError && error.status === 404)) throw error;
+      await verifyParentPrivacy(url);
+    }
   }
   async function initialize() {
     await createContainer(base);
@@ -239,7 +270,15 @@ export function createHealthStore(fetch: typeof globalThis.fetch, storage: strin
     new Details(iri, document, DataFactory).source = "GPX";
     await initialize();
     await createContainer(path);
-    await put(`${path}route.gpx`, xml, "application/gpx+xml", { create: true });
+    try {
+      await put(`${path}route.gpx`, xml, "application/gpx+xml", { create: true });
+    } catch (error) {
+      if (!(error instanceof HealthIoError && error.operation === "write" && error.status === 412))
+        throw error;
+      // Resume only an identical upload; never replace a different route on retry.
+      const route = checked(await transport(resolve(`${path}route.gpx`)), "read GPX");
+      if ((await route.text()) !== xml) throw error;
+    }
     await write(`${path}index.ttl`, document, { create: true });
     return workout;
   }
@@ -247,7 +286,13 @@ export function createHealthStore(fetch: typeof globalThis.fetch, storage: strin
     const result = [];
     for (const url of await listing("workouts/")) {
       const path = url.endsWith("/") ? `${url}index.ttl` : url;
-      result.push(...workouts((await read(path)).document));
+      try {
+        result.push(...workouts((await read(path)).document));
+      } catch (error) {
+        // A directory can remain after the route upload but before its index exists.
+        if (!(url.endsWith("/") && error instanceof RdfFetchError && error.status === 404))
+          throw error;
+      }
     }
     return result;
   }
