@@ -3,6 +3,7 @@ import { safeIri } from "@jeswr/rdf-serialize";
 import type { DatasetCore, Literal, Term } from "@rdfjs/types";
 import { LiteralAs, NamedNodeAs, SetFrom, TermAs, TermFrom, TermWrapper } from "@rdfjs/wrapper";
 import { DataFactory as df, Store } from "n3";
+import { UnsupportedLiteralCharacterError, UnsupportedLiteralDatatypeError } from "./errors.js";
 
 export const NS = {
   pkg: "https://jeswr.org/ns/pkg#",
@@ -27,6 +28,32 @@ export const NS = {
   rdfs: "http://www.w3.org/2000/01/rdf-schema#",
   xsd: "http://www.w3.org/2001/XMLSchema#",
 } as const;
+
+const supportedLiteralDatatypes = new Set([
+  `${NS.xsd}string`,
+  `${NS.rdf}langString`,
+  `${NS.xsd}integer`,
+  `${NS.xsd}decimal`,
+  `${NS.xsd}boolean`,
+  `${NS.xsd}dateTime`,
+  `${NS.xsd}date`,
+  `${NS.xsd}gYear`,
+  `${NS.xsd}gYearMonth`,
+]);
+
+function validateLiteral(term: Literal): void {
+  if (!supportedLiteralDatatypes.has(term.datatype.value))
+    throw new UnsupportedLiteralDatatypeError(term.datatype.value);
+  // These characters split Python's N-Triples hash input into additional lines.
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: explicitly reject the control characters in the parity policy.
+  const separator = /[\u2028\u2029\u0085\u000b\u000c\u001c-\u001e]/u.exec(term.value);
+  if (separator) throw new UnsupportedLiteralCharacterError(separator[0].codePointAt(0) as number);
+}
+
+/** Validate the literal parity boundary without changing serialized graph values. */
+export function validateLiterals(dataset: DatasetCore): void {
+  for (const q of dataset) if (q.object.termType === "Literal") validateLiteral(q.object);
+}
 
 export function iri(value: string): string {
   const safe = safeIri(value);
@@ -54,6 +81,7 @@ export class RdfNode extends TermWrapper {
     return SetFrom.subjectPredicate(this, predicate, TermAs.term, TermFrom.itself);
   }
   add(predicate: string, value: Term): this {
+    if (value.termType === "Literal") validateLiteral(value);
     this.terms(predicate).add(value);
     return this;
   }
@@ -156,6 +184,8 @@ function calendarLiteral(value: string, datatype: "date" | "gYear" | "gYearMonth
 }
 
 export function normalizeLiteral(term: Literal): Literal {
+  // Validate before trimming numeric whitespace or normalizing dateTime values.
+  validateLiteral(term);
   if (term.datatype.value === `${NS.xsd}dateTime`)
     return df.literal(dateTime(term.value, false), term.datatype);
   const datatype = term.datatype.value.replace(NS.xsd, "");
@@ -165,13 +195,7 @@ export function normalizeLiteral(term: Literal): Literal {
   )
     return df.literal(calendarLiteral(term.value, datatype), term.datatype);
   const value = term.value.trim();
-  if (
-    term.datatype.value.startsWith(NS.xsd) &&
-    /^(integer|nonPositiveInteger|negativeInteger|long|int|short|byte|nonNegativeInteger|unsignedLong|unsignedInt|unsignedShort|unsignedByte|positiveInteger)$/.test(
-      datatype,
-    ) &&
-    /^[+-]?\d+$/.test(value)
-  ) {
+  if (term.datatype.value === `${NS.xsd}integer` && /^[+-]?\d+$/.test(value)) {
     return df.literal(BigInt(value).toString(), term.datatype);
   }
   if (term.datatype.value === `${NS.xsd}decimal` && /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(value)) {
@@ -180,20 +204,6 @@ export function normalizeLiteral(term: Literal): Literal {
     const [integer, fraction] = value.replace(/^\+/, "").split(".");
     const whole = (integer as string).replace(/^(-?)0+(?=\d)/, "$1").replace(/^-?$/, "$&0");
     return df.literal(whole + (fraction ? `.${fraction}` : ""), term.datatype);
-  }
-  if (
-    [`${NS.xsd}float`, `${NS.xsd}double`].includes(term.datatype.value) &&
-    /^(?:[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?|[+-]?INF|NaN)$/.test(value)
-  ) {
-    const number = Number(value.replace("INF", "Infinity"));
-    let normalized: string;
-    if (Number.isNaN(number)) normalized = "nan";
-    else if (!Number.isFinite(number)) normalized = number < 0 ? "-inf" : "inf";
-    else if (Object.is(number, -0)) normalized = "-0.0";
-    else if (number !== 0 && (Math.abs(number) < 1e-4 || Math.abs(number) >= 1e16))
-      normalized = number.toExponential().replace(/e([+-])(\d)$/, "e$10$2");
-    else normalized = Number.isInteger(number) ? `${number}.0` : String(number);
-    return df.literal(normalized, term.datatype);
   }
   if (
     term.datatype.value === `${NS.xsd}boolean` &&

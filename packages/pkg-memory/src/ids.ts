@@ -40,14 +40,6 @@ function termN3(term: Term, nt = false): string {
   if (term.termType === "NamedNode") return `<${term.value}>`;
   if (term.termType === "BlankNode") return `_:${term.value}`;
   if (term.termType !== "Literal") throw new Error("Expected RDF 1.1 term");
-  if (
-    !nt &&
-    [`${NS.xsd}float`, `${NS.xsd}double`].includes(term.datatype.value) &&
-    ["inf", "-inf", "nan"].includes(term.value)
-  ) {
-    const value = term.value === "nan" ? "NaN" : term.value.toUpperCase();
-    return `"${value}"^^<${term.datatype.value}>`;
-  }
   let text: string;
   if (!nt && term.value.includes("\n")) {
     let encoded = term.value.replaceAll("\\", "\\\\").replaceAll('"""', '\\"\\"\\"');

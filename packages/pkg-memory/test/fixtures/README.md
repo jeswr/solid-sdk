@@ -24,7 +24,11 @@ python3 ../generate-fixtures.py /path/to/knowledge-graph/pipeline/np_builder.py
 blank nodes, cycles, language and typed literals, multiline strings and Unicode
 ordering. Numeric cases cover exact decimal scale, signed zero, all derived
 integer datatypes, floating-point notation and non-finite values, and unchanged
-invalid numeric literals. These do not contain person records.
+invalid numeric literals. The `derived-integers`, `floating-point` and
+`invalid-numerics` cases are retained as historical oracle data and now assert
+typed rejection: they contain datatypes outside the explicit nine-datatype
+allowlist. Supported numeric normalization and rejected datatypes are covered
+separately in `../literal-policy.test.ts`. These do not contain person records.
 
 `temporal.json` pins RDFlib 7.1.4 lexical values, assertion IDs, and graphs for
 `dateTime`, `date`, `gYear`, and `gYearMonth`. Equivalent inputs cover missing

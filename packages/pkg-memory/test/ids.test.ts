@@ -10,13 +10,20 @@ import {
   PKG_NAMESPACE_UUID,
   parseAssertion,
   pkgId,
+  UnsupportedLiteralDatatypeError,
 } from "../src/index.js";
 import { exampleBuildOptions } from "../src/testing.js";
 
-it("matches RDFlib's symmetric, connected, escaped and typed canonicalization oracles", async () => {
+it("matches supported RDFlib canonicalization oracles and rejects unsupported historical cases", async () => {
   const fixtures: { cases: { name: string; assertion: string; id: string; graph: string }[] } =
     JSON.parse(await readFile(new URL("./fixtures/canonical.json", import.meta.url), "utf8"));
   for (const fixture of fixtures.cases) {
+    if (["derived-integers", "floating-point", "invalid-numerics"].includes(fixture.name)) {
+      await expect(parseAssertion(fixture.assertion, exampleBuildOptions().owner)).rejects.toThrow(
+        UnsupportedLiteralDatatypeError,
+      );
+      continue;
+    }
     const result = canonicalizeAssertion(
       await parseAssertion(fixture.assertion, exampleBuildOptions().owner),
     );

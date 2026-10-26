@@ -42,6 +42,22 @@ prefixes (`me:` resolves to the required owner WebID). Turtle bodies are RDF syn
 use typed templates for untrusted structured tool values. Source hashes are supplied
 by the caller; the model performs no filesystem reads or network requests.
 
+Literal datatypes are limited to `xsd:string` (including plain strings),
+`rdf:langString`, `xsd:integer`, `xsd:decimal`, `xsd:boolean`, `xsd:dateTime`,
+`xsd:date`, `xsd:gYear` and `xsd:gYearMonth`. Only these datatypes have supported
+RDFlib 7.1.4 normalization. All other literal datatypes, including derived integer
+types, floating-point types, `xsd:time`, `xsd:duration`, `xsd:token`, binary types
+and custom datatypes, throw the exported `UnsupportedLiteralDatatypeError`
+(a `TypeError` with a `datatype` IRI property).
+
+Literals containing U+2028, U+2029, U+0085, U+000B, U+000C or U+001C–U+001E
+throw the exported `UnsupportedLiteralCharacterError` (a `TypeError` with the
+numeric `codePoint` property). These characters are rejected before normalization
+or hashing because Python's line splitting changes the reference hash input.
+Ordinary newlines, carriage returns and tabs remain supported. Literal validation
+applies to raw RDF/JS assertions, Turtle parsing, templates, batch metadata, TriG
+parsing and serialization, including caller-modified datasets.
+
 Nanopub, activity, message-fallback and annotation IDs use the reference UUIDv5
 namespace and name construction. Assertion IDs hash RDFlib 7's canonical N-Triples;
 its blank-node labels differ from RDFC-1.0. Generation time is injectable. Parsing

@@ -5,7 +5,7 @@ import { safeHttpIri, serialize } from "@jeswr/rdf-serialize";
 import type { DatasetCore, Term } from "@rdfjs/types";
 import { DataFactory as df, Store } from "n3";
 import { canonicalizeAssertion, messageId, pkgId } from "./ids.js";
-import { dateTime, expand, graph, iri, NS, putGraph, RdfNode } from "./rdf.js";
+import { dateTime, expand, graph, iri, NS, putGraph, RdfNode, validateLiterals } from "./rdf.js";
 
 /** How a claim entered the graph, orthogonal to validity. */
 export const EPISTEMIC_STATUSES = [
@@ -144,7 +144,9 @@ export async function parseAssertion(body: string, owner: string): Promise<Datas
     prefixes: { ...NS, me: webId },
     emptyAsEmptyString: false,
   });
-  return parseRdf(preamble + body, "text/turtle");
+  const dataset = await parseRdf(preamble + body, "text/turtle");
+  validateLiterals(dataset);
+  return dataset;
 }
 /** Port of the reference builder; atomic on invalid claims or references. */
 export async function buildNanopublications(
@@ -381,6 +383,7 @@ function optionalText(node: RdfNode, predicate: string): string | undefined {
   return node.terms(predicate).size === 0 ? undefined : node.oneText(predicate);
 }
 function readNanopublications(dataset: Store): Nanopublications {
+  validateLiterals(dataset);
   const ids = new Set<string>();
   // A head links its component graphs from the nanopub's own named graph.
   // Type statements elsewhere (including assertion/entity graphs) are data.
@@ -455,7 +458,8 @@ function readNanopublications(dataset: Store): Nanopublications {
   return { dataset, nanopubs };
 }
 /** Serialize all named graphs as TriG through the suite Writer. */
-export function serializeNanopublications(value: Nanopublications): Promise<string> {
+export async function serializeNanopublications(value: Nanopublications): Promise<string> {
+  validateLiterals(value.dataset);
   return serialize([...value.dataset], { format: "application/trig", prefixes: { ...NS } });
 }
 /** Parse TriG and read metadata only from each nanopub's linked graphs. */
