@@ -73,3 +73,64 @@ They do not block this implementation. No DRV-L5 functionality is deferred.
 Workspace-wide green verification is blocked by the existing federation-trust snapshot mismatch;
 automated roborev review is unavailable in this environment. The dispatcher must account for these
 two verification limitations before merging.
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+## Fix round 2 — history accumulation
+
+Addressed the sole finding in the supplied review of `e5bba677`: per-file histories now
+append to private arrays during folding instead of copying every earlier event. The public
+`FileActivity` type, event validation, ordering and detached output behavior are unchanged.
+The same improvement applies to `recentFiles`, including calls with a result limit.
+
+### Commits
+
+- `d56c05e8` — `fix(suite): append Drive activity histories`: accumulation fix and two
+  deterministic regressions for `foldActivity` and `recentFiles(input, 1)`.
+- Final `docs: record activity accumulation fix checks` commit records this verification.
+
+### Verification
+
+Package and workspace checks below used `PATH="/opt/node24/bin:$PWD/node_modules/.bin:$PATH"`;
+the focused activity command used `PATH="/opt/node24/bin:$PATH"`. Both select the provisioned
+Node 24 and cached pnpm 10.4.1. Workspace gates and the root diagnostic additionally used
+`GIT_ALLOW_PROTOCOL=file` to prohibit network Git access. No dependency installation, fetch,
+merge, push or branch switch was performed in this fix round.
+
+| Command | Result |
+| --- | --- |
+| `pnpm exec turbo run build --filter='@jeswr/app-suite^...'` | PASS; all 5 dependency builds |
+| `pnpm --filter @jeswr/app-suite run lint` | PASS; 54 existing warnings |
+| `pnpm --filter @jeswr/app-suite run build` | PASS; production build |
+| `pnpm --filter @jeswr/app-suite run typecheck` | PASS |
+| `pnpm --filter @jeswr/app-suite run test` | PASS on isolated retry; 122 files, 6482 tests; 100% configured coverage |
+| `pnpm --filter @jeswr/app-suite exec vitest run test/drive-activity.test.ts --coverage.include='src/apps/drive/lib/activity/**/*.ts'` | PASS; 69 tests; activity coverage 98/98 statements, 64/64 branches, 20/20 functions, 90/90 lines |
+| `pnpm run lint:root` | PASS |
+| `TURBO_SCM_BASE=e5bba677241a8005533a081346ec2c287e02ae9f pnpm run gate` | PASS; 10 tasks successful, 5 cached |
+| `pnpm run gate:full` | FAIL; 38 tasks successful, 7 cached; untouched root timing tests described below |
+| `pnpm exec vitest run test/agent-layers.test.mjs test/check-sdk-layers.test.mjs --maxWorkers=1` | PASS; both root files, 643 tests, existing timing limits unchanged |
+| `git diff --check` | PASS |
+
+Both new regressions fail against the original implementation: folding 1024 events across
+two interleaved files visits 263680 events, exceeding the linear bound of 3072. They pass
+with the fix and verify complete chronological histories, actor retention, detached event
+records, latest timestamps and a one-file recent result. Event visits are counted rather
+than elapsed time; the array iterator is restored in `finally` before assertions.
+
+The first full app test attempt overlapped the production build and timed out in the
+unchanged CSV boundary test (`test/sheets-csv.test.ts:306`, 30-second limit). After the
+build finished, the exact app test command passed; the affected gate also passed it.
+
+The full-workspace gate stopped in `//#test:root`: five cases in
+`test/agent-layers.test.mjs:509` exceeded their 5-second timeout, and
+`test/check-sdk-layers.test.mjs:328` measured 88.52 ms against its 50 ms budget.
+The root suite reported 739 passing tests and 6 failures. These tests and their guard
+implementations are outside this fix and were not changed.
+Rerunning those two files alone with one worker passed all 643 tests, supporting a
+contention-related failure. This diagnostic pass does not make the full-workspace gate green.
+
+No dependencies or UI were added; dependency-policy checks and screenshots are not
+applicable. The supplied review finding is addressed. `roborev` remains unavailable in
+this environment, so per-commit automated review could not run. No implementation work
+is deferred and no new API questions were introduced. Full-workspace green verification
+remains unavailable from this run.
