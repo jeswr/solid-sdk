@@ -52,8 +52,8 @@ export interface DriveClient {
   readonly storageUrl: string;
   /** Children of a folder (hidden dot-names included; the UI filters them). */
   list(folderUrl: string, options?: { signal?: AbortSignal }): Promise<DriveItem[]>;
-  /** Metadata for one item (HEAD). */
-  stat(url: string): Promise<DriveItem & { etag?: string }>;
+  /** Metadata for one item (HEAD), optionally conditional on the expected version. */
+  stat(url: string, options?: { ifMatch: string }): Promise<DriveItem & { etag?: string }>;
   read(url: string): Promise<Blob>;
   /** Bytes and validator from the same GET, for subsequent conditional deletion. */
   readVersion(url: string): Promise<{ body: Blob; etag?: string }>;
@@ -250,8 +250,14 @@ export function createSolidDriveClient(options: {
 
   const list: DriveClient["list"] = async (url, opts) => (await listing(url, opts)).items;
 
-  const stat: DriveClient["stat"] = async (url) => {
-    const response = await ensureOk(await http(url, { method: "HEAD" }), url);
+  const stat: DriveClient["stat"] = async (url, opts) => {
+    const response = await ensureOk(
+      await http(url, {
+        method: "HEAD",
+        ...(opts ? { headers: { "if-match": opts.ifMatch } } : {}),
+      }),
+      url,
+    );
     const length = response.headers.get("content-length");
     const modified = response.headers.get("last-modified");
     const contentType = response.headers.get("content-type")?.split(";")[0]?.trim();

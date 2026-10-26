@@ -121,6 +121,52 @@ afterEach(() => {
   drive.session.fetch.mockReset();
 });
 
+it("Star keeps native Enter activation without opening a preview", async () => {
+  const view = await mount(tree(items));
+  const star = row(view.host).querySelector<HTMLButtonElement>(".drv-star");
+  if (!star) throw new Error("Missing Star button");
+  const enter = new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true });
+  await act(async () => {
+    star.focus();
+    // jsdom does not synthesize the browser's default keyboard click.
+    if (star.dispatchEvent(enter)) star.click();
+  });
+  expect(enter.defaultPrevented).toBe(false);
+  expect(ui.preview).toBeUndefined();
+  expect(drive.updatePrefs).toHaveBeenCalledTimes(1);
+  const update = drive.updatePrefs.mock.calls[0]?.[0] as (prefs: typeof drive.prefs) => {
+    starred: string[];
+  };
+  expect(update(drive.prefs).starred).toEqual([items[0]?.url]);
+  await view.unmount();
+});
+
+it.each(["list", "grid"])("Enter on the %s roving item still opens the file", async (mode) => {
+  drive.prefs.view = mode;
+  const view = await mount(tree(items));
+  const target = row(view.host);
+  await act(async () => target.focus());
+  await key(target, "Enter");
+  expect(ui.preview).toEqual({ items, index: 0 });
+  await view.unmount();
+});
+
+it("grid name descendants keep their own keys without opening a preview", async () => {
+  drive.prefs.view = "grid";
+  const view = await mount(tree(items));
+  const name = row(view.host).querySelector<HTMLElement>(".drv-card-name");
+  if (!name) throw new Error("Missing name");
+  name.tabIndex = 0;
+  const enter = new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true });
+  await act(async () => {
+    name.focus();
+    name.dispatchEvent(enter);
+  });
+  expect(enter.defaultPrevented).toBe(false);
+  expect(ui.preview).toBeUndefined();
+  await view.unmount();
+});
+
 it("More actions Enter reopens the dismissed menu without opening a preview", async () => {
   const view = await mount(tree(items));
   const trigger = row(view.host).querySelector<HTMLButtonElement>(".drv-more");
@@ -175,6 +221,9 @@ it.each([
   ["select", "aria-label", "Choose"],
   ["textarea", "aria-label", "Edit"],
   ["div", "contenteditable", "true"],
+  ["button", "type", "button"],
+  ["a", "href", "/drive/my"],
+  ["div", "tabindex", "0"],
 ])("listing ignores Enter inside %s[%s=%s]", async (tag, attribute, value) => {
   const view = await mount(tree(items));
   const control = document.createElement(tag);
