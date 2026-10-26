@@ -87,3 +87,32 @@ Browser axe results, visual comparison against the mockups, and screenshot revie
 `roborev` is not installed/on PATH here, so per-commit review verdicts are unavailable. No tracker changes were made in this lane checkout.
 
 [QUESTIONS.md](QUESTIONS.md) records five nonblocking conservative choices: unspecified file badges/hues, the spec's 20px app glyph versus the small mockup glyph, the normative 12px minimum versus smaller mockup badges, unspecified small-atom contracts, and §9's application to async surfaces. These were implemented conservatively; no product decision is blocked.
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+## Fix round 1 — review of d18f07436ed1
+
+Only the three requested component-contract findings were changed:
+
+- `c0e234a0 fix: normalize progress fill by maximum`: use Radix's effective maximum for the indicator; cover custom maxima, endpoints, default/fallback maxima and indeterminate values.
+- `851ddbd4 fix: preserve invalid control borders`: explicitly restore destructive border precedence over adapter defaults, including checked and indeterminate checkboxes. This conservative fix leaves the existing adapter cascade otherwise intact. A CSS cascade regression test covers inputs, textareas, selects and all checkbox states.
+- `9d7bfdee fix: retain density across overlay portals`: capture the existing DOM `data-density` scope at overlay roots using an inert template marker, carry it through React context, and apply it to content and submenu content. Tests cover all nine portal families in both densities, changes/removal while open, triggerless default-open dialogs, nested portals and portalled submenus. Browser specs now assert portalled density, actual dialog/popover control heights, and invalid border colours.
+- Final documentation commit: this fix-round validation report.
+
+No dependencies or fixture designs changed. The existing `data-density` consumer API is preserved. No network Git operation, push, PR, branch switch or other-checkout edit was performed in this round.
+
+Validation commands:
+
+```sh
+pnpm --filter @jeswr/suite-ui run lint && pnpm --filter @jeswr/suite-ui run build && pnpm --filter @jeswr/suite-ui run typecheck && pnpm --filter @jeswr/suite-ui run test
+pnpm --filter @jeswr/app-suite run lint && pnpm --filter @jeswr/app-suite run build && pnpm --filter @jeswr/app-suite run typecheck && pnpm --filter @jeswr/app-suite run test
+PATH="/tmp/ds02-git-guard:$PATH" TURBO_SCM_BASE=d18f07436ed1e8d97ced566e5345897e87e0e28d pnpm run gate
+PATH="/tmp/ds02-git-guard:$PATH" pnpm run gate:full
+pnpm --filter @jeswr/app-suite exec playwright test --list
+git diff --check
+```
+
+Package and app lint/build/typecheck/test pass. The final affected gate rebuilds and validates the final source: **9/9 tasks pass**, including root lint/guards, all **111 suite-ui tests** across six files, and the fixture-app test. The harmless jsdom canvas warning remains. The CSS regression test substitutes literal token colours because jsdom cannot resolve CSS custom properties; dispatcher browser assertions use the real compiled styles.
+
+The full-workspace gate exits 1 at the pre-existing `@jeswr/unstorage-solid#build` bootstrap, which attempts `git clone https://github.com/jeswr/fetch-rdf.git`. The temporary PATH guard rejects it before any network Git operation (29 tasks succeeded before the gate stopped). This is the same unrelated blocker documented above; its build scripts were left unchanged.
+
+Playwright discovery passes with **606 cases** across two files and six projects. No browser was launched or screenshots taken, as required by the original brief. Browser execution, actual layout/colour assertions and screenshots remain for the dispatcher. `git diff --check` passes; generated build output is uncommitted. `roborev` remains unavailable on PATH, so per-commit automated verdicts could not be read. All requested fixes are implemented; this fix round adds no open questions.
