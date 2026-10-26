@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { afterEach, expect, test, vi } from "vitest";
 import { CapabilitiesError, parseLwsDescription } from "./index.js";
 import { sparqLwsCid } from "./testing.js";

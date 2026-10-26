@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /**
  * Google Takeout → Documents / Media / Calendar (Tier-C file import).
  *

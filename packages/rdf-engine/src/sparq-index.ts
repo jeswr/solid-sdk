@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 import type { Term } from "@rdfjs/types";
 import type { Store } from "@sparq-org/sparq/wasm-node";
 import { DataFactory } from "n3";

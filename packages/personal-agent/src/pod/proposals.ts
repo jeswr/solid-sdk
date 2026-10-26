@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
+// AUTHORED-BY Codex GPT-6
 /**
  * The ACTION-PROPOSAL record — the ONLY thing the Actor writes, and the ONLY thing
  * the outbox executor sends. The Actor PROPOSES (writes a `pending` record); a human

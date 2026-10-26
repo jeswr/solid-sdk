@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /**
  * Notion → Documents. `POST /v1/search` lists everything the integration can
  * see: pages become `schema:TextDigitalDocument`, databases become

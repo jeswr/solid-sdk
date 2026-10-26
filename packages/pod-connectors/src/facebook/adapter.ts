@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /**
  * Facebook → Social & interests. Your own posts (`/me/posts`) as
  * `schema:SocialMediaPosting` and the groups you belong to (`/me/groups`) as

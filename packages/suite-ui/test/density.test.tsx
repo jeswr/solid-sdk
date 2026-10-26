@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";

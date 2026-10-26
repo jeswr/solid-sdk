@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 /**
  * Persistent runtime state with crash-safe snapshots and a conservative process lock.
  *

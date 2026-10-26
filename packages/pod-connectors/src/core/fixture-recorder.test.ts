@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { describe, expect, it, vi } from "vitest";
 import { fixtureFetch } from "./fixture-fetch.js";
 import { createFixtureRecorder, redactFixture } from "./fixture-recorder.js";

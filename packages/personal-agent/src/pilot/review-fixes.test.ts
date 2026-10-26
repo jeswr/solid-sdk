@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 /**
  * Regression tests for the Phase 1 supervisor review findings 2–6 and the retention policy.
  * Crashes are simulated the way a killed process looks from outside: a snapshot write that

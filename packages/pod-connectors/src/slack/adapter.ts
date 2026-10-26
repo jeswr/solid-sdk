@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /**
  * Slack → Work & education. Your workspace and its channels
  * (`auth.test` + `conversations.list`) as `foaf:Group` — the workspace as the

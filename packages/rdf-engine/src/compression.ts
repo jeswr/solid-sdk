@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 import { decode } from "./rdf.js";
 
 export function codec(bytes: Uint8Array): "gzip" | "zstd" {

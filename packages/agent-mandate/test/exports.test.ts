@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 
 import * as entry0 from "@jeswr/agent-mandate";
 import * as entry1 from "@jeswr/agent-mandate/testing";

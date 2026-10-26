@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
+// AUTHORED-BY Codex GPT-6
 /**
  * The LIVE Actor — the §3.3 Claude Agent SDK `query()` loop, wired to the pod through two
  * `@jeswr/solid-mcp` servers: a READ-ONLY `pod` server and a single WRITE `proposals`

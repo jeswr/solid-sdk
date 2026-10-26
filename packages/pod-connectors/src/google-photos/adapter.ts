@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /**
  * Google Photos → Media. Library **metadata** (filename, type, dimensions,
  * capture time and the hosted asset URL — never the bytes) as

@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { matchingFixtureRoute } from "./fixture-route.js";
 import type { FixtureRoute } from "./types.js";
 

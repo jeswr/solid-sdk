@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 
 /** Best-effort cleanup, called without awaiting so response errors propagate immediately. */
 export async function cancelResponseBody(response: Response): Promise<void> {

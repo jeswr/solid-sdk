@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /**
  * X (Twitter) → Social & interests. Your own posts (`/2/users/me/tweets`) as
  * `schema:SocialMediaPosting`.

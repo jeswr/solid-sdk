@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import type { BlankNode, Quad, Term } from "@rdfjs/types";
 import type * as Wasm from "@sparq-org/sparq/wasm-node";
 import { DataFactory, Store } from "n3";

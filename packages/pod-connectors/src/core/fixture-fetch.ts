@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 /**
  * A typed fake fetch built from recorded fixture routes. Powers demo mode in
  * the UI and the adapter contract tests — **no live network ever**: an

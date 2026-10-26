@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
+// AUTHORED-BY Codex GPT-6
 import type { OdrlPolicy } from "@jeswr/solid-odrl";
 import { describe, expect, it } from "vitest";
 import type { ActionProposal } from "../pod/proposals.js";

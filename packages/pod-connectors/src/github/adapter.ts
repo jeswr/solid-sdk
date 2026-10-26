@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /**
  * GitHub → Work & education. `/user` (profile, as `foaf:OnlineAccount`) +
  * `/user/repos` (as `schema:SoftwareSourceCode`). Snapshot semantics — the

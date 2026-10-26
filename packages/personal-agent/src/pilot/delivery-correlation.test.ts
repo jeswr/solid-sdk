@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 import { describe, expect, it, vi } from "vitest";
 import { type ConversationState, openConversation, transition } from "./core/conversation.js";
 import { DEFAULT_LIMITS } from "./core/limits.js";

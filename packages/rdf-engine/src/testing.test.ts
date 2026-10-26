@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { expect, test, vi } from "vitest";
 import { createFakeRdfEngine, FakeEngineUnsupportedError } from "./testing.js";
 

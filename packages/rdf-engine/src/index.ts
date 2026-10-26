@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { createEngine, type Runtime } from "./engine.js";
 import type { RdfEngine, RdfEngineOptions } from "./types.js";
 

@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 /**
  * Retention and capacity policy for retained runtime state.
  *

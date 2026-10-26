@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 /**
  * Domain adapter: UC-01 mortgage prequalification (synthetic; no real lending, account or
  * institutional membership). One negotiation per relationship, on the shared runtime:

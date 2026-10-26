@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
+// AUTHORED-BY Codex GPT-6
 /**
  * Vocabulary — the IRI constants this package writes for its ONE new concept: the
  * outbound ACTION PROPOSAL record (the Reader/Actor/outbox split's only new data

@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
+// AUTHORED-BY Codex GPT-6
 /**
  * The ODRL evaluation the outbox executor runs against the owner's signed mandate for
  * EVERY outbound intent (the enforcement point, §5/§7). All policy logic is delegated to

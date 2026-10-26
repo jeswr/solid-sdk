@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 import { describe, expect, it, vi } from "vitest";
 import { fetchRdf, RdfFetchError } from "../src/index.js";
 

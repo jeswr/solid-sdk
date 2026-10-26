@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Fable 5
+// AUTHORED-BY Codex GPT-6
 /**
  * build-dist — produce the committed, self-contained `dist/` for GitHub-branch
  * installs under `ignore-scripts=true`.

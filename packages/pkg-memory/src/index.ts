@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /** PKG nanopublication model and fact templates (MCP-04). */
 export {
   UnsupportedBlankNodeLabelError,

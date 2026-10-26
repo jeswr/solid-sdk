@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 import { afterEach, expect, test, vi } from "vitest";
 import { createIndexedDbPersistence } from "./indexeddb.js";
 

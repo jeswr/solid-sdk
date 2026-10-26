@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+// AUTHORED-BY Codex GPT-6
 //
 // list(...) — discover app registrations. Two shapes are supported, matching
 // Linked-Data-API conventions:

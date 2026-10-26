@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /**
  * Pinterest → Media + Social. Your boards (`/v5/boards`) name the collections;
  * your pins (`/v5/pins`) are saved two ways — the pinned image as

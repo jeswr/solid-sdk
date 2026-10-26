@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 
 import { RdfFetchError } from "@jeswr/fetch-rdf";
 import { PodScopeError, RedirectRefusedError } from "@jeswr/guarded-fetch";

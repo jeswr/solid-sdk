@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /**
  * Garmin → Health + Mobility. Your Garmin Connect activities split by kind:
  * fitness activities (running, cycling…) become `schema:ExerciseAction` in

@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 import { BlankNode, DataFactory as df } from "n3";
 import { expect, it } from "vitest";
 import {

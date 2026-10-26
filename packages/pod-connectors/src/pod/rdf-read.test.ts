@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 import { RdfFetchError } from "@jeswr/fetch-rdf";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { RemoteContextRefusedError } from "../core/errors.js";

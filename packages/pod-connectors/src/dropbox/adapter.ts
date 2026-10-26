@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /**
  * Dropbox → Documents. File **metadata** (name, path, size, modified — never
  * the file bytes) as `schema:DigitalDocument`.

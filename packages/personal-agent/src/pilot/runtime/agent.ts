@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 /**
  * The pilot agent runtime: one deterministic engine shared by every scenario.
  *

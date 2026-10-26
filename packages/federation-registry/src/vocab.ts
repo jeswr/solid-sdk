@@ -1,5 +1,6 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 //
 // Term IRIs for the Federation Catalogue / Registry vocabulary (fedreg:) and the
 // adjacent vocabularies it references (DCAT, Dublin Core Terms, RDF). These are

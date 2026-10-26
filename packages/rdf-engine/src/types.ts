@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import type { DatasetCore, Quad } from "@rdfjs/types";
 
 /** Supported single-document RDF syntaxes. Remote JSON-LD contexts are not supported. */

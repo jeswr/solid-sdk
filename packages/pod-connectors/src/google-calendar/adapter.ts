@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /**
  * Google Calendar → Calendar. Upcoming events from the user's primary
  * calendar (`/calendar/v3/calendars/primary/events`) as `schema:Event`.

@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 /**
  * Domain adapters plug into the runtime as OPERATION HANDLERS.
  *

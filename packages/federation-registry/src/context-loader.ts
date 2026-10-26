@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 import type { DocumentLoader } from "@jeswr/fetch-rdf";
 import oidc from "./contexts/oidc-context.json" with { type: "json" };
 

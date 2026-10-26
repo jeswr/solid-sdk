@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /**
  * Spotify → Media. Top tracks (`/me/top/tracks`) and playlists
  * (`/me/playlists`) as `schema:MusicRecording` / `schema:MusicPlaylist`.

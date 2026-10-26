@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 
 import { createLocalIndex } from "./local-index.js";
 import { evaluatePolicy } from "./policy.js";

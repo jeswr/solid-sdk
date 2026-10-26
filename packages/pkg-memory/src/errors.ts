@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /** The blank-node label cannot be emitted as a Turtle/TriG BLANK_NODE_LABEL. */
 export class UnsupportedBlankNodeLabelError extends TypeError {
   constructor() {

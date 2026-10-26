@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
+// AUTHORED-BY Codex GPT-6
 /**
  * Build the fail-closed Claude Agent SDK `query()` option set for the Actor (§3.3). This
  * is the trust boundary that must be audited — one option object:

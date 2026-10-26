@@ -1,3 +1,4 @@
+# AUTHORED-BY Codex GPT-6
 """Generate literal parity oracles with RDFlib 7.1.4 and the reference builder."""
 import importlib.util
 import json

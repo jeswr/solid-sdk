@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { Store } from "n3";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { createRdfEngine } from "./node.js";

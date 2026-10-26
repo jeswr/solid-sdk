@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 /**
  * The deterministic conversation state machine (one instance per conversation per side).
  *

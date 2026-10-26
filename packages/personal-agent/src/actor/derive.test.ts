@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 import { vocab } from "@jeswr/agentic-legacy-bridge";
 import { describe, expect, it } from "vitest";
 import { deriveProposals } from "./derive.js";

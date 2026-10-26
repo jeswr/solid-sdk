@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 import type { OdrlDuty, OdrlPolicy, OdrlRule } from "@jeswr/solid-odrl";
 import { ACTION_IRI, evaluate, IRI_TO_ACTION, policyFromRdf } from "@jeswr/solid-odrl";
 import type { DatasetCore, Term } from "@rdfjs/types";

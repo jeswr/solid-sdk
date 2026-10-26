@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 
 import * as model from "@jeswr/agent-model";
 import { exampleRecords } from "@jeswr/agent-model/testing";

@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 
 import * as runtime from "@sparq-org/sparq/wasm-node";
 import { afterEach, expect, test, vi } from "vitest";

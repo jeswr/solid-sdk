@@ -19,6 +19,7 @@
  *
  * @see https://developer.mozilla.org/docs/Web/HTTP/Caching#heuristic_caching
  */
+// AUTHORED-BY Codex GPT-6
 import { type FetchedRdf, fetchRdf } from "@jeswr/fetch-rdf";
 import { RemoteContextRefusedError } from "../core/errors.js";
 
