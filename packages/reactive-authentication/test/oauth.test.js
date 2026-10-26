@@ -7,6 +7,7 @@ import {
   idTokenUsable,
   OAuthBearerTokenProvider,
   OAuthCodeSource,
+  ReactiveAuthenticationClient,
   ReactiveFetchManager,
 } from "../src/mod.js";
 import { withMockedDate } from "./helpers/clock.js";
@@ -188,6 +189,90 @@ test("expiry and rejection renew via the refresh token; concurrent requests neve
       await short.close();
     }
   }));
+
+test("concurrent 401s for successive Bearer tokens preserve the current token's rejection", async () => {
+  const { code, source, bearer } = oauthClient();
+  const lateResponse = Promise.withResolvers();
+  const releaseLate = Promise.withResolvers();
+  const currentRenewal = Promise.withResolvers();
+  const releaseCurrent = Promise.withResolvers();
+  const getAccessToken = source.getAccessToken.bind(source);
+  let current;
+  let heldRenewal = false;
+  source.getAccessToken = async (options) => {
+    if (current !== undefined && options.rejectedToken === current.token && !heldRenewal) {
+      heldRenewal = true;
+      currentRenewal.resolve();
+      await releaseCurrent.promise;
+    }
+    return await getAccessToken(options);
+  };
+  const old = await source.authorize();
+  provider.revoke(old.token);
+  const attempts = [];
+  const client = new ReactiveAuthenticationClient({
+    providers: [bearer],
+    boundary: new CredentialBoundary([`${api.url}/`], { allowInsecureHttp: true }),
+    fetch: async (request) => {
+      attempts.push(request);
+      const response = await transport(request);
+      if (request.headers.get("authorization") === `Bearer ${old.token}`) {
+        lateResponse.resolve();
+        await releaseLate.promise;
+      }
+      return response;
+    },
+  });
+  const refreshes = provider.stats.refresh;
+  const pending = [];
+  try {
+    const late = client.fetch(`${api.url}/late-rejection`);
+    pending.push(late);
+    await lateResponse.promise;
+    // The source rotates while the old credential's 401 remains in flight.
+    current = await source.getAccessToken({
+      signal: new AbortController().signal,
+      rejectedToken: old.token,
+    });
+    assert.notEqual(current.token, old.token);
+    provider.revoke(current.token);
+    const newer = client.fetch(`${api.url}/current-rejection`);
+    pending.push(newer);
+    await currentRenewal.promise;
+
+    // The current token is already rejected, but its renewal is waiting when the old 401 arrives.
+    releaseLate.resolve();
+    assert.equal(
+      (await late).status,
+      200,
+      "late rejection must still renew the rejected current token",
+    );
+    releaseCurrent.resolve();
+    assert.equal((await newer).status, 200);
+
+    const fresh = await source.authorize();
+    assert.notEqual(fresh.token, current.token);
+    for (const [path, first] of [
+      ["/late-rejection", old.token],
+      ["/current-rejection", current.token],
+    ]) {
+      assert.deepEqual(
+        attempts
+          .filter((request) => new URL(request.url).pathname === path)
+          .map((request) => request.headers.get("authorization")),
+        [null, `Bearer ${first}`, `Bearer ${fresh.token}`],
+        "each request uses its single renewal for the fresh token",
+      );
+    }
+    assert.equal(provider.stats.refresh - refreshes, 2, "one rotation and one shared renewal");
+    assert.equal(provider.stats.reuse, 0, "no rotating refresh token is consumed twice");
+    assert.equal(code.calls, 1, "renewal needs no new authorization flow");
+  } finally {
+    releaseLate.resolve();
+    releaseCurrent.resolve();
+    await Promise.allSettled(pending);
+  }
+});
 
 test("tokens shorter-lived than the expiry skew are reused, and concurrent renewals share one refresh grant", () =>
   withMockedDate(async (advance) => {
