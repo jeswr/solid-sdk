@@ -35,6 +35,8 @@ const report = {
 let fixture;
 let cdp;
 let serial;
+// Diagnostics and cleanup touch a device only once it is proven to be a booted emulator.
+let emulatorVerified = false;
 let forwardCreated = false;
 const reversed = [];
 
@@ -225,6 +227,7 @@ async function run() {
     ) {
       throw new Error("This harness requires a booted Android emulator");
     }
+    emulatorVerified = true;
     report.serial = serial;
     report.origins = { suite: fixture.suiteOrigin, foreign: fixture.foreignOrigin };
   });
@@ -347,20 +350,22 @@ try {
       report.snapshotError = String(snapshotError);
     }
   }
-  try {
-    await writeFile(
-      new URL("logcat.txt", artifacts),
-      await adb(["logcat", "-d", "-v", "threadtime"]),
-    );
-  } catch (logError) {
-    report.logcatError = String(logError);
+  if (emulatorVerified) {
+    try {
+      await writeFile(
+        new URL("logcat.txt", artifacts),
+        await adb(["logcat", "-d", "-v", "threadtime"]),
+      );
+    } catch (logError) {
+      report.logcatError = String(logError);
+    }
   }
   process.exitCode = 1;
 } finally {
   cdp?.close();
   const cleanupErrors = [];
   for (const cleanup of [
-    () => serial && shell("am", "force-stop", APP),
+    () => emulatorVerified && shell("am", "force-stop", APP),
     () => forwardCreated && adb(["forward", "--remove", "tcp:9222"]),
     ...reversed.map((port) => () => adb(["reverse", "--remove", `tcp:${port}`])),
     () => fixture?.close(),

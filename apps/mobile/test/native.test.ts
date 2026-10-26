@@ -304,6 +304,9 @@ describe("mobile CI emulator guardrails", () => {
     const driver = read("e2e/android-e2e.mjs");
     expect(driver).toContain("../android/app/build/outputs/apk/debug/app-debug.apk");
     expect(driver).not.toContain("app-release");
+    // A rejected physical device never gets logcat collection or a force-stop.
+    expect(driver).toContain("if (emulatorVerified) {");
+    expect(driver).toContain('() => emulatorVerified && shell("am", "force-stop", APP)');
     expect(job).toContain("if: failure()");
     expect(job).toContain("adb logcat -d -v threadtime");
     expect(job).toContain("name: android-e2e-diagnostics");
@@ -314,6 +317,8 @@ describe("mobile CI emulator guardrails", () => {
     const boot = job.match(/ {6}- name: Create and boot the AVD\n[\s\S]*?(?= {6}- )/)?.[0] ?? "";
     expect(boot).toContain("timeout-minutes: 10");
     expect(boot).not.toContain("adb wait-for-device");
+    expect(boot).toContain("deadline=$((SECONDS + 420))");
+    expect(job).toMatch(/- name: Print the emulator log\n {8}if: failure\(\)/);
     expect(boot).toContain('export ANDROID_AVD_HOME="$RUNNER_TEMP/avd"');
     const shellCalls = boot.split("\n").filter((line) => line.includes("adb shell"));
     expect(shellCalls).toHaveLength(5);

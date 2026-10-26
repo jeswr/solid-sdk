@@ -102,8 +102,6 @@ jobs:
         timeout-minutes: 10
         run: |
           mkdir -p apps/mobile/e2e/artifacts
-          # Print the emulator's own log whenever boot fails, not only when the process exits.
-          trap 'status=$?; [ "$status" = 0 ] || tail -n 200 apps/mobile/e2e/artifacts/emulator.log; exit "$status"' EXIT
           # avdmanager and the emulator disagree on the default AVD directory on hosted runners.
           export ANDROID_AVD_HOME="$RUNNER_TEMP/avd"
           mkdir -p "$ANDROID_AVD_HOME"
@@ -111,7 +109,9 @@ jobs:
           emulator -avd suite-e2e -port 5554 -no-window -no-audio -no-boot-anim -no-snapshot -no-metrics -gpu swiftshader_indirect -accel on > apps/mobile/e2e/artifacts/emulator.log 2>&1 &
           emulator_pid=$!
           booted=0
-          for attempt in $(seq 1 180); do
+          # A wall-clock deadline inside the step timeout, so a failure reaches the diagnostics steps.
+          deadline=$((SECONDS + 420))
+          while [ "$SECONDS" -lt "$deadline" ]; do
             kill -0 "$emulator_pid" || { cat apps/mobile/e2e/artifacts/emulator.log; exit 1; }
             if [ "$(timeout 10 adb shell getprop sys.boot_completed | tr -d '\r')" = "1" ]; then
               booted=1
@@ -131,6 +131,10 @@ jobs:
         run: ./gradlew --no-daemon --stacktrace assembleDebug
       - name: Exercise the fixture WebView and share receiver
         run: node apps/mobile/e2e/android-e2e.mjs
+      - name: Print the emulator log
+        if: failure()
+        timeout-minutes: 1
+        run: tail -n 200 apps/mobile/e2e/artifacts/emulator.log || true
       - name: Collect emulator logcat
         if: failure()
         timeout-minutes: 1
