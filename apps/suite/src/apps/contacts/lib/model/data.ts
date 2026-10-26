@@ -7,8 +7,8 @@ import {
   ContactGroup,
 } from "@jeswr/solid-task-model/contacts";
 import type { DatasetCore, Term } from "@rdfjs/types";
-import { DatasetWrapper } from "@rdfjs/wrapper";
-import { DataFactory } from "n3";
+import { DatasetWrapper, NamedNodeAs, OptionalFrom, TermWrapper } from "@rdfjs/wrapper";
+import { DataFactory, Store } from "n3";
 
 export const VCARD = "http://www.w3.org/2006/vcard/ns#";
 export const CONTACT_CLASS = `${VCARD}Individual`;
@@ -134,14 +134,67 @@ export function validateContact(data: ContactData): void {
   }
 }
 
+// AUTHORED-BY Codex GPT-6
+/** Match the shared readers, retaining the original nodes for values still present. */
+function contactPointValue(term: Term, dataset: DatasetCore, predicate: string) {
+  const value =
+    term.termType === "BlankNode"
+      ? OptionalFrom.subjectPredicate(
+          new TermWrapper(term, dataset, DataFactory),
+          `${VCARD}value`,
+          NamedNodeAs.string,
+        )
+      : term.termType === "NamedNode"
+        ? term.value
+        : undefined;
+  return predicate === `${VCARD}hasTelephone` ? value?.replace(/[(). -]/g, "") : value;
+}
+
+/** Reuse the shared setters for new values; preserve metadata on every retained node. */
+function reconcileContactPoints(contact: Contact, desired: Contact): void {
+  const subject = DataFactory.namedNode(contact.id);
+  for (const field of ["hasEmail", "hasTelephone", "url"]) {
+    const predicate = `${VCARD}${field}`;
+    const node = DataFactory.namedNode(predicate);
+    const pending = new Map(
+      [...desired.dataset.match(subject, node)].map((edge) => [
+        contactPointValue(edge.object, desired.dataset, predicate),
+        edge,
+      ]),
+    );
+    const wanted = new Set(pending.keys());
+    for (const edge of [...contact.dataset.match(subject, node)]) {
+      const value = contactPointValue(edge.object, contact.dataset, predicate);
+      if (wanted.has(value)) {
+        pending.delete(value);
+        continue;
+      }
+      contact.dataset.delete(edge);
+      // A removed value node may still belong to another contact or property.
+      if (
+        edge.object.termType === "BlankNode" &&
+        contact.dataset.match(null, null, edge.object).size === 0
+      ) {
+        for (const quad of [...contact.dataset.match(edge.object)]) contact.dataset.delete(quad);
+      }
+    }
+    for (const edge of pending.values()) {
+      contact.dataset.add(edge);
+      for (const quad of desired.dataset.match(edge.object)) contact.dataset.add(quad);
+    }
+  }
+}
+
 export function applyContact(contact: Contact, data: ContactData): void {
   validateContact(data);
+  const desired = new Contact(contact.id, new Store(), DataFactory);
+  desired.setEmails(data.emails ?? []);
+  desired.setPhones((data.phones ?? []).map((phone) => phone.replace(/[(). -]/g, "")));
+  desired.setWebId(safeHttpIri(data.webId));
+  reconcileContactPoints(contact, desired);
   contact.name = data.name;
-  contact.setEmails(data.emails ?? []);
-  contact.setPhones((data.phones ?? []).map((phone) => phone.replace(/[(). -]/g, "")));
   contact.note = data.note;
   contact.organization = data.organization;
-  contact.setWebId(safeHttpIri(data.webId));
 }
 
 /** Refuse deletion of source RDF outside the flat fields that the migration can reproduce. */

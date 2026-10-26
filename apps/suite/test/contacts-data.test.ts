@@ -20,6 +20,7 @@ import {
   sortedSections,
   validateContact,
 } from "../src/apps/contacts/lib/model";
+import { applyContact } from "../src/apps/contacts/lib/model/data";
 import { ALICE, BOOK, FRIENDS, fixture, parse, ROOT, VCARD_PREFIX } from "./contacts-support";
 
 describe("contacts pure data", () => {
@@ -133,4 +134,84 @@ describe("contacts pure data", () => {
       expect(() => validateContact(data)).toThrow(TypeError);
     }
   });
+});
+
+// AUTHORED-BY Codex GPT-6
+test("renaming parsed contacts preserves every structured value node and its metadata", async () => {
+  const dataset = await parse(
+    `${fixture("alice")}
+    <#this> vcard:hasEmail _:work2 .
+    _:work2 a vcard:Work; vcard:value <mailto:alice@example.org>; vcard:pref "2" .
+    <#this> vcard:hasTelephone _:phone .
+    _:phone a vcard:Work; vcard:value <tel:+441234567>; vcard:pref "1" .
+    <#this> vcard:url _:web .
+    _:web a vcard:WebId; vcard:value <https://alice.example/profile#me>;
+      <https://example.org/verified> true .`,
+    ALICE,
+  );
+  const contact = new Contact(`${ALICE}#this`, dataset, DataFactory);
+  const original = [...dataset];
+  applyContact(contact, { ...contactData(contact), name: "Alicia" });
+  expect(contact.name).toBe("Alicia");
+  expect(dataset.size).toBe(original.length);
+  for (const quad of original) {
+    if (quad.predicate.value !== "http://www.w3.org/2006/vcard/ns#fn") {
+      expect(dataset.has(quad)).toBe(true);
+    }
+  }
+});
+
+test("reconciles added and removed values without rebuilding retained or shared nodes", async () => {
+  const dataset = await parse(
+    `${VCARD_PREFIX}
+    <#this> a vcard:Individual; vcard:fn "Alice";
+      vcard:hasEmail <mailto:direct@example.org>, _:work, _:old, _:shared, "invalid", _:empty;
+      vcard:hasTelephone [ a vcard:Work; vcard:value <tel:+44-123> ];
+      vcard:url [ a vcard:WebId; vcard:value <https://alice.example/#me> ] .
+    _:work a vcard:Work; vcard:value <mailto:work@example.org>; vcard:pref "1" .
+    _:old a vcard:Home; vcard:value <mailto:old@example.org> .
+    _:shared a vcard:Work; vcard:value <mailto:shared@example.org> .
+    _:empty a vcard:Home .
+    <#other> vcard:hasEmail _:shared .`,
+    ALICE,
+  );
+  const contact = new Contact(`${ALICE}#this`, dataset, DataFactory);
+  const original = [...dataset];
+  const { namedNode } = DataFactory;
+  const email = namedNode("http://www.w3.org/2006/vcard/ns#hasEmail");
+  const subject = namedNode(contact.id);
+  const removed = [...dataset.match(subject, email)].find((edge) =>
+    [...dataset.match(edge.object)].some((quad) => quad.object.value === "mailto:old@example.org"),
+  )?.object;
+  expect(removed).toBeDefined();
+  applyContact(contact, {
+    name: "Alicia",
+    emails: ["direct@example.org", "work@example.org", "new@example.org"],
+    phones: ["+44 (123)", "+44567"],
+    webId: "https://new.example/#me",
+  });
+  expect(contact.emails).toEqual([
+    "mailto:direct@example.org",
+    "mailto:work@example.org",
+    "mailto:new@example.org",
+  ]);
+  expect(contact.phones).toEqual(["tel:+44-123", "tel:+44567"]);
+  expect(contact.webId).toBe("https://new.example/#me");
+  expect(dataset.match(removed).size).toBe(0);
+  // All surviving old nodes, including the other contact's shared node, keep their RDF.
+  for (const quad of original) {
+    if (
+      quad.object.value === "mailto:direct@example.org" ||
+      quad.object.value === "mailto:work@example.org" ||
+      quad.object.value === "mailto:shared@example.org" ||
+      quad.object.value === "tel:+44-123" ||
+      quad.predicate.value === "http://www.w3.org/2006/vcard/ns#pref"
+    ) {
+      expect(dataset.has(quad)).toBe(true);
+    }
+  }
+  applyContact(contact, { name: "Cleared" });
+  expect(contactData(contact)).toEqual({ name: "Cleared" });
+  expect(dataset.match(subject, email).size).toBe(0);
+  expect(dataset.match(null, email).size).toBe(1);
 });
