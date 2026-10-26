@@ -12,13 +12,13 @@ export function mountProfileSwitcher(parent: HTMLElement): {
   root.id = 'profiles';
   root.setAttribute('aria-labelledby', 'profiles-heading');
   root.innerHTML = `
-    <div class="profiles-heading"><h2 id="profiles-heading">Profiles</h2>
+    <div class="profiles-heading"><h2 id="profiles-heading">Accounts</h2>
       <span id="profiles-count"></span></div>
     <p class="profile-hint">Choose the default account for Solid.</p>
-    <ul id="profile-list" aria-label="Saved profiles"></ul>
-    <p id="profiles-empty" hidden>No profiles yet. Sign in to add your first account.</p>
-    <button type="button" id="profile-add">Add profile</button>
-    <p id="profile-limit" class="profile-hint" hidden>All 8 profile slots are in use.</p>
+    <ul id="profile-list" aria-label="Saved accounts"></ul>
+    <p id="profiles-empty" hidden>No accounts yet. Sign in to add your first account.</p>
+    <button type="button" id="profile-add">Add account</button>
+    <p id="profile-limit" class="profile-hint" hidden>All 8 account slots are in use.</p>
     <form id="profile-editor" hidden aria-labelledby="profile-editor-heading">
       <h3 id="profile-editor-heading"></h3>
       <p id="profile-editor-help" class="profile-hint"></p>
@@ -29,9 +29,9 @@ export function mountProfileSwitcher(parent: HTMLElement): {
         <button type="button" id="profile-cancel">Cancel</button>
       </div>
     </form>
-    <p id="profile-status" role="status" aria-atomic="true">Loading profiles…</p>
+    <p id="profile-status" role="status" aria-atomic="true">Loading accounts…</p>
     <p id="profile-error" role="alert" aria-atomic="true"></p>
-    <button type="button" id="profile-retry" hidden>Retry profiles</button>`;
+    <button type="button" id="profile-retry" hidden>Retry accounts</button>`;
   parent.append(root);
   const get = <T extends HTMLElement>(id: string): T => root.querySelector(`#${id}`) as T;
   const list = get<HTMLUListElement>('profile-list');
@@ -54,6 +54,7 @@ export function mountProfileSwitcher(parent: HTMLElement): {
     el.textContent = text;
     el.dataset.focus = key;
     el.setAttribute('aria-label', label);
+    el.title = label;
     el.addEventListener('click', () => {
       if (!controller.state.busy) click();
     });
@@ -87,11 +88,11 @@ export function mountProfileSwitcher(parent: HTMLElement): {
     editor.hidden = false;
     get('profile-editor-heading').textContent =
       action === 'add'
-        ? 'Add profile'
+        ? 'Add account'
         : `${action === 'rename' ? 'Rename' : 'Remove'} ${profile?.label}`;
     get('profile-editor-help').textContent =
       action === 'remove'
-        ? 'Removing this profile revokes its app access and deletes its saved data from this extension. Your pod is kept.'
+        ? 'Removing this account revokes its app access and deletes its saved data from this extension. Your pod is kept.'
         : action === 'add'
           ? 'Enter your account ID to sign in. Your current default stays selected.'
           : 'Choose a name to help you recognise this account.';
@@ -99,13 +100,13 @@ export function mountProfileSwitcher(parent: HTMLElement): {
     input.hidden = removal;
     input.required = !removal;
     get('profile-input-label').hidden = removal;
-    get('profile-input-label').textContent = action === 'add' ? 'Account ID' : 'Profile name';
+    get('profile-input-label').textContent = action === 'add' ? 'Account ID' : 'Account name';
     input.type = action === 'add' ? 'url' : 'text';
     input.maxLength = action === 'rename' ? 200 : 2048;
     input.value = action === 'rename' ? (profile?.label ?? '') : '';
     input.setCustomValidity('');
     save.textContent = removal
-      ? 'Remove profile'
+      ? 'Remove account'
       : action === 'add'
         ? 'Sign in and add'
         : 'Save name';
@@ -165,7 +166,11 @@ export function mountProfileSwitcher(parent: HTMLElement): {
         const name = doc.createElement('strong');
         name.textContent = profile.label;
         const id = doc.createElement('small');
-        id.textContent = `Account ID: ${profile.webId}`;
+        try {
+          id.textContent = new URL(profile.webId).host;
+        } catch {
+          id.textContent = 'Account address unavailable';
+        }
         id.className = 'profile-id';
         id.title = id.textContent;
         const session = doc.createElement('small');
@@ -189,6 +194,22 @@ export function mountProfileSwitcher(parent: HTMLElement): {
           },
         );
         select.setAttribute('aria-pressed', String(selected));
+        if (selected) {
+          // Lucide icon, ISC licence
+          const check = doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
+          check.setAttribute('class', 'profile-check');
+          check.setAttribute('viewBox', '0 0 24 24');
+          check.setAttribute('fill', 'none');
+          check.setAttribute('stroke', 'currentColor');
+          check.setAttribute('stroke-width', '1.75');
+          check.setAttribute('stroke-linecap', 'round');
+          check.setAttribute('stroke-linejoin', 'round');
+          check.setAttribute('aria-hidden', 'true');
+          const path = doc.createElementNS('http://www.w3.org/2000/svg', 'path');
+          path.setAttribute('d', 'm20 6-11 11-5-5');
+          check.append(path);
+          select.prepend(check);
+        }
         actions.append(select);
         if (profile.sessionState === 'signed-out') {
           actions.append(
@@ -199,17 +220,17 @@ export function mountProfileSwitcher(parent: HTMLElement): {
         }
         for (const action of ['rename', 'remove'] as const) {
           const retryRemoval = action === 'remove' && profile.sessionState === 'removing';
-          actions.append(
-            button(
-              retryRemoval ? 'Retry removal' : action === 'rename' ? 'Rename' : 'Remove',
-              `${action}:${profile.id}`,
-              `${retryRemoval ? 'Retry removal of' : action === 'rename' ? 'Rename' : 'Remove'} ${profile.label}`,
-              () => {
-                if (retryRemoval) void controller.remove(profile.id);
-                else openEditor(action, profile);
-              },
-            ),
+          const control = button(
+            retryRemoval ? 'Retry removal' : action === 'rename' ? 'Rename' : 'Remove',
+            `${action}:${profile.id}`,
+            `${retryRemoval ? 'Retry removal of' : action === 'rename' ? 'Rename' : 'Remove'} ${profile.label}`,
+            () => {
+              if (retryRemoval) void controller.remove(profile.id);
+              else openEditor(action, profile);
+            },
           );
+          control.classList.toggle('profile-destructive', action === 'remove');
+          actions.append(control);
         }
         row.append(identity, actions);
         list.append(row);
@@ -231,7 +252,7 @@ export function mountProfileSwitcher(parent: HTMLElement): {
     save.disabled = state.busy;
     get<HTMLButtonElement>('profile-cancel').disabled = state.busy;
     get('profile-status').textContent =
-      state.status || (state.ready || state.error ? '' : 'Loading profiles…');
+      state.status || (state.ready || state.error ? '' : 'Loading accounts…');
     get('profile-error').textContent = state.error;
     get('profile-retry').hidden = !state.error || state.busy;
     // Apply disabled states before moving focus, including the busy → idle render.

@@ -55,7 +55,7 @@ describe('profile UI controller', () => {
     send.mockResolvedValue({ ok: true, profiles: [], defaultProfileId: null });
     await controller.remove('1');
     expect(send).toHaveBeenLastCalledWith({ type: 'SOLID_PROFILE_REMOVE', profileId: '1' });
-    expect(controller.state).toMatchObject({ status: 'Profile removed.', defaultProfileId: null });
+    expect(controller.state).toMatchObject({ status: 'Account removed.', defaultProfileId: null });
   });
 
   it('keeps the current list on cancellation/failure and permits retry', async () => {

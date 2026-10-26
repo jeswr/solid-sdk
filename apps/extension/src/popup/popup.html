@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=340" />
   <title>Solid</title>
+  <link rel="stylesheet" href="../shared/suite-tokens.css" />
   <link rel="stylesheet" href="popup.css" />
   <link rel="stylesheet" href="../popup/profiles.css" />
 </head>
@@ -12,13 +13,14 @@
   <div class="container">
     <header class="topbar">
       <div class="brand">
-        <svg class="logo" viewBox="18 18 316 286" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-          <g fill-rule="nonzero" fill="none">
-            <path d="M93.15102 275.19708l-57.1148-99.0597c-5.30816-9.1852-5.30816-20.50408 0-29.66326l57.1148-99.08572c5.33418-9.21122 15.14388-14.85765 25.73418-14.85765h114.2296c10.5903 0 20.42602 5.64643 25.73418 14.85765l57.16684 99.03368c5.30816 9.1852 5.30816 20.50408 0 29.66326L258.875 275.2231c-5.33418 9.21122-15.14388 14.85765-25.73418 14.85765H118.93724c-10.64234 0-20.45204-5.67245-25.78622-14.88367z" fill="#7C4DFF"/>
-            <path d="M118.46888 142.2328h117.53418c1.48316 0 2.65408-1.19695 2.65408-2.65409v-22.03928c0-14.6495-11.89132-26.54085-26.54081-26.54085h-70.56735c-20.5301-.026-37.15722 16.60105-37.15722 37.13115-.02594 7.83214 6.271 14.10306 14.07712 14.10306zM129.99592 239.60116H200.225c21.20663 0 38.43214-17.22551 38.43214-38.43214 0-7.07755-5.72449-12.82806-12.82806-12.82806H106.94184c-1.45715 0-2.55005 1.17091-2.55005 2.55v23.05408c-.02597 14.18112 11.47505 25.65612 25.60413 25.65612z" fill="#F7F7F7"/>
-            <path d="M109.59592 139.3185l87.66275 87.66276c5.80255 5.80255 15.19592 5.80255 20.99847 0l15.19592-15.19592c5.80255-5.80255 5.80255-15.19591 0-20.99847l-87.63673-87.66275c-5.80255-5.80255-15.19592-5.80255-20.99847 0l-15.19592 15.19592c-5.8546 5.80255-5.8546 15.22194-.02602 20.99847z" fill="#F7F7F7"/>
-          </g>
-        </svg>
+        <span class="brand-mark" aria-hidden="true">
+          <svg class="brand-pod" viewBox="0 0 40 40"><polygon points="20,4 34,12 34,28 20,36 6,28 6,12"/></svg>
+          <!-- Lucide icon, ISC licence -->
+          <svg class="brand-key" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M2.586 17.414A2 2 0 0 0 2 18.828V21a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h1a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h.172a2 2 0 0 0 1.414-.586l.814-.814a6.5 6.5 0 1 0-4-4z"/>
+            <circle cx="16.5" cy="7.5" r=".5" fill="currentColor"/>
+          </svg>
+        </span>
         <h1 class="brand-name">Solid</h1>
       </div>
       <jeswr-theme-toggle></jeswr-theme-toggle>
@@ -26,6 +28,10 @@
 
     <!-- First-run nudge: extensions cannot self-pin. -->
     <div id="pin-nudge" class="pin-nudge" hidden>
+      <!-- Lucide icon, ISC licence -->
+      <svg class="pin-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M16 9V4l1-1V2H7v1l1 1v5a2 2 0 0 1-1 2l-2 1v2h14v-2l-2-1a2 2 0 0 1-1-2ZM12 14v8"/>
+      </svg>
       <span>Pin Solid to your toolbar (puzzle icon &rarr; pin) to keep your account a click away.</span>
       <button id="pin-nudge-dismiss" type="button" class="link-btn">Got it</button>
     </div>
@@ -37,21 +43,27 @@
            `.autoRestore = false` PROPERTY in account-surface.ts (NOT a markup attribute —
            the surface owns the restore flow; see the note there). -->
       <section id="signed-out" hidden>
-        <jeswr-login-panel id="login-panel"></jeswr-login-panel>
+        <div id="login-form"><jeswr-login-panel id="login-panel"></jeswr-login-panel></div>
       </section>
 
       <!-- Restoring / signing in -->
-      <section id="busy" hidden>
+      <section id="busy" role="status" aria-live="polite" hidden>
         <div class="spinner" aria-hidden="true"></div>
         <p id="busy-text">Restoring your session&hellip;</p>
       </section>
 
       <!-- Signed in -->
       <section id="signed-in" hidden>
-        <jeswr-account-menu id="account-menu"></jeswr-account-menu>
+        <div class="account-card">
+          <jeswr-account-menu id="account-menu"></jeswr-account-menu>
+          <div class="account-details">
+            <p id="account-name"></p>
+            <p id="account-host"></p>
+          </div>
+        </div>
         <nav class="shortcuts" aria-label="Pod shortcuts">
           <a id="shortcut-profile" class="shortcut" href="#" target="_blank" rel="noopener noreferrer">
-            Open profile
+            Open my pod
           </a>
         </nav>
       </section>

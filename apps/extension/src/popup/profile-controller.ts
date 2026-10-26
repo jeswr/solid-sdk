@@ -59,18 +59,18 @@ export class ProfileController {
   }
 
   add(webId: string): Promise<boolean> {
-    return this.mutate({ type: 'SOLID_PROFILE_ADD', webId: webId.trim() }, 'Profile added.');
+    return this.mutate({ type: 'SOLID_PROFILE_ADD', webId: webId.trim() }, 'Account added.');
   }
 
   rename(profileId: string, label: string): Promise<boolean> {
     return this.mutate(
       { type: 'SOLID_PROFILE_RENAME', profileId, label: label.trim() },
-      'Profile renamed.',
+      'Account renamed.',
     );
   }
 
   remove(profileId: string): Promise<boolean> {
-    return this.mutate({ type: 'SOLID_PROFILE_REMOVE', profileId }, 'Profile removed.');
+    return this.mutate({ type: 'SOLID_PROFILE_REMOVE', profileId }, 'Account removed.');
   }
 
   setDefault(profileId: string): Promise<boolean> {
@@ -142,7 +142,9 @@ export class ProfileController {
 }
 
 function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : 'Profile operation failed. Try again.';
+  return error instanceof Error
+    ? error.message
+    : 'Something went wrong with that account. Try again.';
 }
 
 function sendProfileMessage(message: ProfileRequest): Promise<ProfilesResponse> {

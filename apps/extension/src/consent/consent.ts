@@ -11,6 +11,7 @@
  * target URL can never inject markup into the extension's trusted chrome.
  */
 
+import { applyResolvedTheme, readStoredTheme, resolveTheme } from '@jeswr/solid-elements';
 import type { ConsentDecisionMessage, PendingConsentView } from '../shared/messages';
 
 function fmtExpiry(ms: number): string {
@@ -104,6 +105,7 @@ function sendDecision(consentId: string, approvedClasses: string[], profileId?: 
 }
 
 async function main(): Promise<void> {
+  applyResolvedTheme(resolveTheme(readStoredTheme() ?? 'system'));
   const consentId = new URLSearchParams(window.location.search).get('consentId');
   if (!consentId) {
     showError('Missing consent request id.');

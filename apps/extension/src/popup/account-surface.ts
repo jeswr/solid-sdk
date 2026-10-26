@@ -151,6 +151,16 @@ export function mountAccountSurface(els: AccountSurfaceElements): MountedAccount
   function renderSignedIn(state: SessionState): void {
     accountMenu.setAttribute('webid', state.webId ?? '');
     accountMenu.setAttribute('name', state.name ?? '');
+    const name = hostDoc.getElementById('account-name');
+    const host = hostDoc.getElementById('account-host');
+    if (name) name.textContent = state.name || 'Your account';
+    if (host) {
+      try {
+        host.textContent = new URL(state.webId ?? '').host;
+      } catch {
+        host.textContent = '';
+      }
+    }
     if (state.photoUrl) accountMenu.setAttribute('avatar-url', state.photoUrl);
     else accountMenu.removeAttribute('avatar-url');
 

@@ -1,36 +1,152 @@
-/* AUTHORED-BY GPT-6.1-Sol (Codex) — shared Solid Suite account controls. */
-[hidden] { display: none !important; }
-:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
-.skip-link { position: absolute; top: -100px; color: var(--primary); background: var(--surface); padding: 8px; z-index: 10; }
-.skip-link:focus { top: 4px; }
-#profiles { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border); }
-.profiles-heading { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
-#profiles h2 { font-size: 18px; line-height: 26px; font-weight: 600; margin: 0; }
-#profiles h3 { font-size: 14px; line-height: 22px; margin: 0 0 8px; overflow-wrap: anywhere; }
-#profiles-count, .profile-hint, #profile-status { color: var(--foreground-muted); font-size: 13px; line-height: 20px; }
-.profile-hint { margin: 4px 0 12px; }
-#profile-list { list-style: none; padding: 0; margin: 0 0 12px; max-height: 352px; overflow-y: auto; scrollbar-gutter: stable; }
-#profile-list li { border: 1px solid var(--border); border-radius: 10px; background: var(--surface); padding: 12px; margin-bottom: 8px; }
-.profile-identity { display: flex; align-items: flex-start; gap: 8px; }
-.profile-avatar { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 50%; flex: none; overflow: hidden; color: var(--accent-foreground); background: var(--accent); font-size: 13px; font-weight: 600; }
+/* AUTHORED-BY Codex GPT-6.1-Sol — shared suite AccountSwitcher. */
+#profiles {
+  margin-top: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border);
+}
+.profiles-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-2);
+}
+#profiles h2 {
+  margin: 0;
+  font-size: var(--text-lg);
+  line-height: var(--lh-lg);
+  font-weight: var(--weight-lg);
+  letter-spacing: var(--tracking-lg);
+}
+#profiles h3 {
+  margin: 0 0 var(--space-2);
+  overflow-wrap: anywhere;
+  font-size: var(--text-md);
+  line-height: var(--lh-md);
+  font-weight: var(--weight-lg);
+}
+#profiles-count, .profile-hint, #profile-status, #profile-error, #profiles-empty {
+  font-size: var(--text-sm);
+  line-height: var(--lh-sm);
+  font-weight: var(--weight-sm);
+}
+#profiles-count, .profile-hint, #profile-status, #profiles-empty { color: var(--foreground-muted); }
+.profile-hint { margin: var(--space-1) 0 var(--space-3); }
+#profile-list { list-style: none; padding: 0; margin: 0 0 var(--space-3); }
+#profile-list li {
+  min-height: var(--row-h, 44px);
+  padding: var(--space-3);
+  margin-bottom: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  transition: background-color var(--duration-fast) var(--ease-standard);
+}
+#profile-list li:hover { background: var(--surface-2); }
+.profile-identity { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
+.profile-avatar {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--space-8);
+  height: var(--space-8);
+  border-radius: var(--radius-full);
+  flex: none;
+  overflow: hidden;
+  color: var(--foreground);
+  background: var(--surface-3);
+  font-size: var(--text-sm);
+  line-height: var(--lh-sm);
+  font-weight: var(--weight-lg);
+}
 .profile-avatar img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .profile-text { min-width: 0; }
-.profile-text strong { display: block; font-size: 14px; line-height: 22px; overflow-wrap: anywhere; }
-.profile-text small { display: block; color: var(--foreground-muted); font-size: 12px; line-height: 16px; overflow-wrap: anywhere; }
-.profile-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
-#profiles button, #profiles input { font: inherit; min-height: 36px; border-radius: 6px; padding: 6px 8px; }
-#profiles button { border: 1px solid var(--input); color: var(--foreground); background: var(--surface); cursor: pointer; }
-#profiles button:hover { background: var(--surface-2); }
-#profiles button[aria-pressed="true"] { background: var(--accent); color: var(--accent-foreground); }
-#profiles button:disabled, #profiles button[aria-disabled="true"] { opacity: 0.6; cursor: default; }
+.profile-text strong {
+  display: block;
+  overflow-wrap: anywhere;
+  font-size: var(--text-base);
+  line-height: var(--lh-base);
+  font-weight: var(--weight-lg);
+}
+.profile-text small {
+  display: block;
+  overflow-wrap: anywhere;
+  color: var(--foreground-muted);
+  font-size: var(--text-sm);
+  line-height: var(--lh-sm);
+  font-weight: var(--weight-sm);
+}
+.profile-actions { display: flex; flex-wrap: wrap; gap: var(--space-1); margin-top: var(--space-2); }
+#profiles button, #profiles input {
+  min-width: var(--space-6);
+  min-height: var(--control-h, 36px);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-md);
+  font: inherit;
+  scroll-margin: var(--space-2);
+}
+#profiles button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  border: 1px solid var(--border);
+  color: var(--foreground);
+  background: var(--surface-2);
+  cursor: pointer;
+  transition: background-color var(--duration-fast) var(--ease-standard),
+    border-color var(--duration-fast) var(--ease-standard);
+}
+#profiles button:hover { background: var(--surface-3); }
+#profile-list button {
+  min-height: var(--control-h-sm, 28px);
+  padding: 0 var(--space-2);
+  border-color: transparent;
+  background: transparent;
+  font-size: var(--text-sm);
+  line-height: var(--lh-sm);
+}
+#profile-list button:hover { background: var(--surface-2); }
+#profiles button[aria-pressed="true"] {
+  border-radius: var(--radius-sm);
+  background: var(--primary-soft);
+  color: var(--primary-soft-foreground);
+}
+.profile-check { width: var(--space-4); height: var(--space-4); flex: none; }
 #profiles .profile-destructive { color: var(--destructive); }
-#profile-editor { border: 1px solid var(--border); background: var(--surface-2); border-radius: 10px; padding: 12px; margin-top: 12px; }
-#profile-input-label { display: block; margin-bottom: 4px; }
-#profile-input { width: 100%; border: 1px solid var(--input); background: var(--surface); color: var(--foreground); }
-#profile-error { color: var(--destructive); font-size: 13px; line-height: 20px; overflow-wrap: anywhere; }
+#profiles .profile-destructive:hover { background: var(--destructive-soft); }
+#profiles button:disabled, #profiles button[aria-disabled="true"] { cursor: default; opacity: 0.6; }
+#profile-editor {
+  margin-top: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+#profile-input-label { display: block; margin-bottom: var(--space-1); }
+#profile-input {
+  width: 100%;
+  border: 1px solid var(--input);
+  background: var(--background);
+  color: var(--foreground);
+}
+#profiles #profile-save {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: var(--primary-foreground);
+}
+#profiles #profile-save.profile-destructive {
+  border-color: var(--destructive);
+  background: var(--destructive);
+  color: var(--destructive-foreground);
+}
+#profile-error { color: var(--destructive); overflow-wrap: anywhere; }
 #profile-error:empty, #profile-status:empty { margin: 0; }
-#profiles button, #profiles input { scroll-margin: 8px; }
-@media (pointer: coarse) { #profiles button, #profiles input { min-height: 44px; } }
-@media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }
-
-.profile-text .profile-id { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media (min-width: 768px) {
+  #profile-list li { display: flex; justify-content: space-between; align-items: center; gap: var(--space-4); }
+  #profile-list .profile-actions { flex: none; margin-top: 0; }
+}
+@media (pointer: coarse) {
+  #profile-list li { min-height: 44px; }
+  #profiles button, #profiles input { min-width: 44px; min-height: 44px; }
+}
