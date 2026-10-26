@@ -138,10 +138,8 @@ describe("Vercel config guard", () => {
     expect(result.stdout).toContain("1 deployments checked");
     expect(result.stderr).toBe("");
 
-    if (app.framework === "next") {
-      delete files["scripts/vercel-apps.json"][0].originEnv;
-      expect(scan(files).status).toBe(0);
-    }
+    delete files["scripts/vercel-apps.json"][0].originEnv;
+    expect(scan(files).status).toBe(0);
   });
 
   it("accepts Next.js without originEnv or a Turbo config when a request-derived client ID route exists", () => {
@@ -162,7 +160,6 @@ export function GET(request) {
   it.each([
     undefined,
     true,
-    false,
   ])("rejects Vite without originEnv when clientIdDocument is %j", (clientIdDocument) => {
     const files = fixtures([{ ...viteApp, originEnv: undefined, clientIdDocument }]);
     expectFailure(files, "scripts/vercel-apps.json[0]: invalid deployment entry");
@@ -268,6 +265,36 @@ export function GET(request) {
       );
     if (kind === "unrelated build")
       files["apps/example/web/package.json"].scripts.build = "echo built";
+    expectFailure(
+      files,
+      "apps/example/web/package.json: build/prebuild must generate clientid.jsonld",
+    );
+  });
+
+  it.each([
+    [
+      "comment-only",
+      `// env.APP_ORIGIN "clientid.jsonld"\n/* env.APP_ORIGIN */\nexport default {};`,
+    ],
+    ["similarly named origin", viteConfig.replaceAll("env.APP_ORIGIN", "env.OTHER_APP_ORIGIN")],
+  ])("rejects a %s Vite client ID config", (_kind, config) => {
+    const files = fixtures();
+    files["apps/example/web/package.json"].scripts.build = "vite build";
+    files["apps/example/web/vite.config.ts"] = config;
+    expectFailure(
+      files,
+      "apps/example/web/package.json: build/prebuild must generate clientid.jsonld",
+    );
+  });
+
+  it.each([
+    "vite build --config other.config.ts",
+    "vite build -c other.config.ts",
+    "vite build --config=other.config.ts",
+  ])("rejects a Vite client ID config bypassed by %s", (build) => {
+    const files = fixtures();
+    files["apps/example/web/package.json"].scripts.build = build;
+    files["apps/example/web/vite.config.ts"] = viteConfig;
     expectFailure(
       files,
       "apps/example/web/package.json: build/prebuild must generate clientid.jsonld",
@@ -453,6 +480,24 @@ export function GET(request) {
       if (kind === "unrelated build") files["apps/next/package.json"].scripts.build = "echo built";
       expectFailure(files, "next build with a clientid.jsonld GET route");
     }
+  });
+
+  it.each([
+    ["a static origin", nextRoute.replace("force-static", "force-dynamic")],
+    [
+      "force-static",
+      `export const dynamic = "force-static";
+export function GET(request) {
+  return new Response(JSON.stringify({
+    client_id: new URL("/clientid.jsonld", request.url).toString(),
+    redirect_uris: [new URL("/callback.html", request.url).toString()]
+  }), { headers: { "content-type": "application/ld+json" } });
+}`,
+    ],
+  ])("rejects a Next.js route without originEnv that has %s", (_kind, route) => {
+    const files = fixtures([{ ...nextApp, originEnv: undefined }]);
+    files["apps/next/src/app/clientid.jsonld/route.ts"] = route;
+    expectFailure(files, "GET route deriving client_id from the request URL");
   });
 
   it("requires a Next.js route without originEnv even when a generator is configured", () => {

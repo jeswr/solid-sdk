@@ -112,32 +112,46 @@ function checkIgnoreCommand(root, app, failures) {
   }
 }
 
-function hasNextClientIdRoute(root, directory) {
+// Drop comments so a mention in a comment can't satisfy a source check (keeps "https://").
+function stripComments(source) {
+  return source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*$/gm, "$1");
+}
+
+function nextClientIdRouteSource(root, directory) {
   for (const base of ["src/app", "app"]) {
     for (const extension of ["ts", "js", "mjs"]) {
       const path = join(root, directory, base, "clientid.jsonld", `route.${extension}`);
       if (!existsSync(path)) continue;
-      const source = readFileSync(path, "utf8");
+      const source = stripComments(readFileSync(path, "utf8"));
       if (
         /export\s+(?:(?:async\s+)?function\s+GET\s*\(|const\s+GET\s*=)/.test(source) &&
         ["client_id", "redirect_uris", "application/ld+json"].every((value) =>
           source.includes(value),
         )
       ) {
-        return true;
+        return source;
       }
     }
   }
-  return false;
+  return null;
+}
+
+// Without an origin env, the route must build client_id from the request URL at request time.
+function isRequestDerivedRoute(source) {
+  return (
+    /new\s+URL\(\s*(["'`])\/clientid\.jsonld\1\s*,\s*(?:request|req)\.url\s*\)/.test(source) &&
+    !/\bdynamic\s*=\s*["'`]force-static["'`]/.test(source)
+  );
 }
 
 function hasViteClientIdConfig(root, directory, originEnv) {
+  const reads = new RegExp(`\\benv(?:\\.${originEnv}\\b|\\[\\s*["'\`]${originEnv}["'\`]\\s*\\])`);
   for (const extension of ["ts", "js", "mjs"]) {
     const path = join(root, directory, `vite.config.${extension}`);
     if (!existsSync(path)) continue;
-    const source = readFileSync(path, "utf8");
+    const source = stripComments(readFileSync(path, "utf8"));
     // The emitting plugin may live in an imported helper, so check its config inputs.
-    if (["clientid.jsonld", originEnv].every((value) => source.includes(value))) return true;
+    if (/["'`][^"'`\n]*clientid\.jsonld["'`]/.test(source) && reads.test(source)) return true;
   }
   return false;
 }
@@ -148,22 +162,27 @@ function checkClientIdBuild(root, app, manifest, failures) {
   const hasGenerator = [build, manifest.scripts?.prebuild].some(
     (script) => typeof script === "string" && script.includes("gen-clientid"),
   );
+  const routeSource =
+    app.framework === "next" && hasBuild && /\bnext\s+build\b/.test(build)
+      ? nextClientIdRouteSource(root, app.rootDirectory)
+      : null;
   const hasNextRoute =
-    app.framework === "next" &&
-    hasBuild &&
-    /\bnext\s+build\b/.test(build) &&
-    hasNextClientIdRoute(root, app.rootDirectory);
+    routeSource !== null && (app.originEnv !== undefined || isRequestDerivedRoute(routeSource));
+  // An explicit --config could select a different file from the one checked here.
   const hasViteConfig =
     app.framework === "vite" &&
     hasBuild &&
     /\bvite\s+build\b/.test(build) &&
+    !/\bvite\s+build\b[^&|;]*\s(?:--config|-c)(?:[\s=]|$)/.test(build) &&
     hasViteClientIdConfig(root, app.rootDirectory, app.originEnv);
   const generatesClientId = app.originEnv !== undefined && (hasGenerator || hasViteConfig);
   if (!hasBuild || (!generatesClientId && !hasNextRoute)) {
     failures.push(
       `${app.rootDirectory}/package.json: build/prebuild must generate clientid.jsonld via gen-clientid${
         app.framework === "next"
-          ? " or next build with a clientid.jsonld GET route"
+          ? ` or next build with a clientid.jsonld GET route${
+              app.originEnv === undefined ? " deriving client_id from the request URL" : ""
+            }`
           : ` or vite build with a Vite config referencing clientid.jsonld and ${app.originEnv}`
       }`,
     );
@@ -185,9 +204,9 @@ function checkVercelConfig(root) {
           (key) => typeof app[key] !== "string" || !app[key].trim(),
         ) ||
         !["vite", "next"].includes(app.framework) ||
-        // Only Next.js can omit originEnv, using a request-derived client ID route.
+        // originEnv may be omitted by a Next.js request-derived client ID route or an opt-out.
         (app.originEnv === undefined
-          ? app.framework !== "next"
+          ? app.framework !== "next" && app.clientIdDocument !== false
           : !["APP_ORIGIN", "NEXT_PUBLIC_APP_ORIGIN"].includes(app.originEnv))
       ) {
         failures.push(`${path}[${index}]: invalid deployment entry`);
