@@ -450,3 +450,88 @@ against the implementation and regressions directly. Full-workspace green
 verification remains blocked by the unrelated remote-cloning helper above.
 All commits stay on `lane/sst-k9mk` in this checkout; nothing was pushed,
 published, merged, or changed in another checkout.
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+## Fix round 6 — 2026-10-26
+
+Resumed at `86ed4adf` and read the supplied review in full. Addressed its one
+high finding: JSON-LD context loading bypassed the scoped connector transport
+and could reach the host's globally authenticated fetch.
+
+### Commits
+
+- `e81ff145` — `fix: refuse remote connector RDF contexts`: install a refusing
+  `documentLoader` on the shared connector RDF read path, covering document,
+  profile, registration, and Type Index discovery reads. Reject every context
+  URL with the exported `RemoteContextRefusedError` (a `RdfFetchError` subtype),
+  without any context fetch fallback. Preserve inline context support, relative
+  RDF identifiers, ETags, cache revalidation, and response metadata. Add 13
+  regression cases and document the policy in the package README.
+- The final `docs: record connector context fix validation` commit updates only
+  this report, last.
+
+### Implementation boundary and dependency policy
+
+The installed `@jeswr/fetch-rdf` 0.1 API exposes no `documentLoader` option.
+The connector read helper therefore retains its fetch/result/error contract,
+uses its `parseRdf` for other RDF formats, and invokes `JsonLdParser` with the
+refusing loader for JSON-LD. Its existing transitive `jsonld-streaming-parser`
+dependency is now direct (`^5.0.0`, locked to the existing `5.0.1`) so the
+required loader can actually be passed to the parser. No new resolved package
+or version was introduced. `pnpm run check:packages jsonld-streaming-parser`
+passed in full mode before adding that direct edge. Frozen offline installation
+passed with lifecycle scripts ignored.
+
+Conservative interpretation of the integrator's design call: the package
+contains no bundled context documents, so every context URL is refused;
+document-inline context objects continue to work. Context parser wrapping
+does not erase the typed policy error exposed to callers.
+
+### Validation
+
+Runtime: Node `24.22.1`, pnpm `10.4.1`.
+
+```sh
+pnpm run check:packages jsonld-streaming-parser
+GIT_ALLOW_PROTOCOL=file pnpm exec turbo run build --filter=@jeswr/pod-connectors...
+pnpm --filter @jeswr/pod-connectors exec vitest run src/pod/rdf-read.test.ts
+GIT_ALLOW_PROTOCOL=file pnpm install --frozen-lockfile --offline --ignore-scripts
+pnpm --filter @jeswr/pod-connectors exec biome check --write src/pod/rdf-read.ts src/pod/rdf-read.test.ts src/core/errors.ts
+GIT_ALLOW_PROTOCOL=file pnpm --filter @jeswr/pod-connectors run lint && GIT_ALLOW_PROTOCOL=file pnpm --filter @jeswr/pod-connectors run build && pnpm --filter @jeswr/pod-connectors run typecheck && pnpm --filter @jeswr/pod-connectors run test
+pnpm run lint:root
+GIT_ALLOW_PROTOCOL=file TURBO_SCM_BASE=917d3be9c7967622829adc43c1aaabb0964ec993 pnpm run gate --env-mode=loose
+GIT_ALLOW_PROTOCOL=file pnpm run gate:full --env-mode=loose
+git diff --check
+```
+
+- Dependency-first build and frozen offline installation: **PASS**.
+- Before implementation, the initial regression suite failed all 10 refusal
+  cases and demonstrated global context-fetch calls. The completed suite:
+  **PASS, 13 tests**. It covers connector documents, registration profiles and
+  indexes, discovery, context arrays, nested and scoped contexts, `@import`,
+  same-Pod and relative context URLs, inline JSON-LD parsing and registration,
+  and typed malformed-JSON-LD failures. Explicitly injected read paths make
+  zero global fetch calls; refusal cases make no extra transport calls or writes.
+- Pod Connectors lint/build/typecheck/tests: **PASS, 282 tests in 42 files**.
+- Root lint: **PASS**, separately and within the affected gate.
+- Affected gate: **PASS, 11/11 tasks (0 cached)**. Pod Manager also passes
+  lint, production static build, typecheck, and tests: **930 passed, 1 existing
+  skip, 68 files**. Root tests: **26 passed**.
+- Full-workspace gate: **BLOCKED/FAIL**, 12 successful tasks, 35 scheduled,
+  2 cached. The unchanged `@jeswr/unstorage-solid#build` helper attempted to
+  clone fetch-rdf over HTTPS; `GIT_ALLOW_PROTOCOL=file` refused it with
+  `fatal: transport 'https' not allowed`. `--env-mode=loose` propagates that
+  restriction to subprocesses. No remote source was fetched and no unrelated
+  helper or generated tracked file was changed.
+- `git diff --check`: **PASS**. Existing non-fatal Biome and guarded-fetch
+  webpack warnings remain.
+
+### Scope, review, and open questions
+
+The supplied finding is fixed; no requested implementation remains unfinished
+and there are no open questions. `roborev` and its post-commit hook are absent
+from this sandbox, so no automated per-commit verdict was produced. The
+supplied finding was checked directly against the fix and regressions.
+Full-workspace green verification remains blocked by the unrelated remote
+clone helper described above. All commits stay on `lane/sst-k9mk` in this
+checkout; nothing was pushed, published, merged, or changed in another checkout.
