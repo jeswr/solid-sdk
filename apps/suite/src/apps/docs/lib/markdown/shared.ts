@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { type DocsMark, type DocsNode, MarkdownError } from "./types";
 
@@ -53,7 +54,7 @@ export function safeLink(href: string): void {
 }
 const entities: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'" };
 export function decode(value: string): string {
-  return value.replace(/&(#x[\da-f]+|#\d+|[a-z][\da-z]*);/gi, (_raw, name: string) => {
+  return value.replace(/&(#x[\da-f]{1,6}|#\d{1,7}|[a-z][\da-z]*);/gi, (_raw, name: string) => {
     if (name.startsWith("#")) {
       const hex = name[1]?.toLowerCase() === "x";
       const code = Number.parseInt(name.slice(hex ? 2 : 1), hex ? 16 : 10);

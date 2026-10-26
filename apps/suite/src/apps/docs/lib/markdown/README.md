@@ -1,3 +1,4 @@
+<!-- AUTHORED-BY Codex GPT-6 -->
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 
 # Docs Markdown subset
@@ -17,7 +18,7 @@ DOC-L4 is narrower than the eventual editor import/export integration in 05-docs
 | ATX / setext headings 1–3 | `heading`, `attrs.level` |
 | Paragraph, soft newline | `paragraph`, `text` (LF retained) |
 | Emphasis / strong / code span | `italic` / `bold` / `code` marks |
-| Inline, reference, angle autolinks | `link` mark, `attrs.href`, optional `attrs.title` |
+| Inline, reference, angle and bare GFM autolinks | `link` mark, `attrs.href`, optional `attrs.title` |
 | Fenced / indented code | `codeBlock`, optional `attrs.language`, unmarked text |
 | Block quote | `blockquote`, block content |
 | Bullet / ordered list | `bulletList` / `orderedList` (`attrs.start`), `listItem` |
@@ -32,9 +33,11 @@ nodes merge, and marks have a stable order. Markdown spelling, bullet characters
 layout, and reference definitions are not retained; exports use canonical inline links and fences.
 
 Links must be syntactically valid absolute http(s) or mailto URLs without whitespace, control
-characters, angle brackets, or backslashes. Bare GFM URL/email linkification stays plain text.
+characters, angle brackets, or backslashes. Bare GFM URL/email autolinks decode character references
+in their text and destinations. A bare URL hiding CommonMark emphasis fails with `unrepresentable`.
 Code fence info supports a single language identifier (`[\w+-]+`). Character references support
 `amp`, `lt`, `gt`, `quot`, `apos`, and numeric Unicode scalar values except control ranges.
+Numeric references require 1–7 decimal or 1–6 hexadecimal digits; other spellings stay literal.
 Other named references and escaped ampersands inside link destinations, titles, or definitions are unsupported;
 these are rejected rather than decoded incorrectly. Code content is never entity-decoded.
 

@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { Lexer } from "marked";
 import { describe, expect, it, vi } from "vitest";
@@ -143,6 +144,76 @@ describe("DOC-L4 Markdown and Docs JSON", () => {
     const href = "https://example.org/&amp;&#65;&copy;";
     expect(roundTrip(`<${href}>`)).toEqual(doc(p(t(href, [{ type: "link", attrs: { href } }]))));
   });
+  it.each([
+    ["https://example.org/?a=1&amp;b=2", "https://example.org/?a=1&b=2"],
+    ["https://example.org/a_b_c", "https://example.org/a_b_c"],
+    ["https://example.org/a*b", "https://example.org/a*b"],
+    ["www.example.org", "http://www.example.org"],
+    ["mira@example.org", "mailto:mira@example.org"],
+  ])("imports bare autolinks with decoded text and destination: %s", (source, href) => {
+    const label = source.startsWith("https:") ? href : source;
+    expect(roundTrip(source)).toEqual(doc(p(t(label, [{ type: "link", attrs: { href } }]))));
+    expect(roundTrip(`**before** ${source} _after_`)).toEqual(
+      doc(
+        p(
+          t("before", [m("bold")]),
+          t(" "),
+          t(label, [{ type: "link", attrs: { href } }]),
+          t(" "),
+          t("after", [m("italic")]),
+        ),
+      ),
+    );
+  });
+  it.each([
+    "https://example.org/*foo*",
+    "https://example.org/**foo**",
+    "https://example.org/_foo_",
+    "https://example.org/*foo*/tail",
+    "https://example.org/first https://example.org/*foo*",
+  ])("rejects bare URLs that hide CommonMark emphasis: %s", (source) => {
+    errorCode(() => markdownToDocs(source), "unrepresentable");
+    errorCode(() => markdownToDocs(source, { unsupported: "literal" }), "unrepresentable");
+  });
+  it.each([
+    ["a*b*c", "a*b*c"],
+    ["a*b*", "a*b*"],
+    ["*b*c", "*b*c"],
+    ["*word*", "_word_"],
+    ["(*word*)", "\\(_word_\\)"],
+    ["*!*", "_\\!_"],
+    ["*🌿*", "_🌿_"],
+    ["*“word”*", "_“word”_"],
+    ["foo-_(bar)_", "foo\\-_\\(bar\\)_"],
+    ["é*b*文", "é*b*文"],
+    ["*a `b` c*", "_a `b` c_"],
+  ])("chooses emphasis delimiters that preserve flanking: %s", (source, output) => {
+    expect(docsToMarkdown(roundTrip(source))).toBe(output);
+  });
+  it.each([
+    ["65", "A"],
+    ["0000065", "A"],
+    ["x41", "A"],
+    ["X000041", "A"],
+    ["00000065", null],
+    ["x0000041", null],
+    ["12345678", null],
+    ["x1234567", null],
+    ["", null],
+    ["x", null],
+    ["-65", null],
+  ])("decodes only numeric references matching CommonMark digit limits: %s", (reference, decoded) => {
+    const source = `&${"#"}${reference};`;
+    const value = decoded ?? source;
+    expect(roundTrip(source)).toEqual(doc(p(t(value))));
+    const href = `https://example.org/?value=${value}`;
+    expect(roundTrip(`[site](https://example.org/?value=${source})`)).toEqual(
+      doc(p(t("site", [{ type: "link", attrs: { href } }]))),
+    );
+    expect(roundTrip(`https://example.org/?value=${source}&end=1`)).toEqual(
+      doc(p(t(`${href}&end=1`, [{ type: "link", attrs: { href: `${href}&end=1` } }]))),
+    );
+  });
   it("normalizes CRLF, lone CR, empty input and Markdown spelling", () => {
     expect(markdownToDocs("\r\n\r")).toEqual(doc(p()));
     expect(roundTrip("A\r\n\r\nB")).toEqual(doc(p(t("A")), p(t("B"))));
@@ -192,7 +263,11 @@ describe("DOC-L4 Markdown and Docs JSON", () => {
   });
 
   it("never treats escaped unsupported syntax or code as markup", () => {
-    roundTrip("\\!\\[image\\]\\(https://example.org/image.png\\) \\<b\\>");
+    roundTrip("\\!\\[image\\]\\(example.org/image.png\\) \\<b\\>");
+    errorCode(
+      () => markdownToDocs("\\!\\[image\\]\\(https://example.org/image.png\\)"),
+      "unsupported",
+    );
     roundTrip("`![image](https://example.org/) &copy; [^note]`");
     roundTrip("```html\n<div> &copy;\n```");
     const literal = markdownToDocs("~~literal~~", { unsupported: "literal" });
@@ -335,6 +410,8 @@ describe("DOC-L4 Markdown and Docs JSON", () => {
     doc(p(t("a\n\nb"))),
     doc(p(t("a\nb", [m("code")]))),
     doc(p(t("a ", [m("bold")]), t("b"))),
+    doc(p(t(" ", [m("italic")]))),
+    doc(p(t("a ", [m("italic")]), t("b"))),
     doc(
       b("orderedList", [b("listItem", [p(t("a"))]), b("listItem", [p(t("b"))])], {
         start: 999_999_999,

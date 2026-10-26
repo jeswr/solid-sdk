@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { markdownToDocs } from "./parse";
 import {
@@ -159,11 +160,30 @@ function close(mark: DocsMark): string {
       const title = attrs.title ? ` "${attributeText(attrs.title as string)}"` : "";
       return `](<${attributeText(attrs.href as string)}>${title})`;
     }
-    case "bold":
-      return "**";
     default:
-      return "_";
+      return "**";
   }
+}
+function punctuation(value: string): boolean {
+  return /[\p{P}\p{S}]/u.test(value);
+}
+function flanking(before: string, after: string): { left: boolean; right: boolean } {
+  const whitespace = (value: string) => value === "" || /[\t\n\f\r \p{Zs}]/u.test(value);
+  return {
+    left: !whitespace(after) && (!punctuation(after) || whitespace(before) || punctuation(before)),
+    right: !whitespace(before) && (!punctuation(before) || whitespace(after) || punctuation(after)),
+  };
+}
+function emphasis(body: string, before: string, after: string): string {
+  const opening = flanking(before, body[0] as string);
+  const closing = flanking(body.slice(-1), after);
+  // An underscore cannot open/close inside a word, even when an asterisk can.
+  return opening.left &&
+    (!opening.right || punctuation(before)) &&
+    closing.right &&
+    (!closing.left || punctuation(after))
+    ? "_"
+    : "*";
 }
 function inline(content: DocsNode[]): string {
   let result = "";
@@ -189,7 +209,11 @@ function inline(content: DocsNode[]): string {
           marks: (child.marks as DocsMark[]).filter((item) => !same(item, selected)),
         })),
       );
-      result += (selected.type === "link" ? "[" : close(selected)) + body + close(selected);
+      const delimiter =
+        selected.type === "italic"
+          ? emphasis(body, result.slice(-1), content[end]?.text?.[0] ?? "")
+          : close(selected);
+      result += (selected.type === "link" ? "[" : delimiter) + body + delimiter;
       index = end;
     } else {
       if (node.type === "hardBreak") result += "\\\n";

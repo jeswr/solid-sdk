@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { Lexer, type MarkedToken, type Token, type Tokens } from "marked";
 import {
@@ -15,6 +16,28 @@ import { type DocsMark, type DocsNode, MarkdownError, type MarkdownOptions } fro
 
 function inline(tokens: Token[], marks: DocsMark[], depth: number): DocsNode[] {
   depthGuard(depth);
+  let offset = 0;
+  const bareLinks = tokens.flatMap((token) => {
+    const start = offset;
+    offset += token.raw.length;
+    return token.type === "link" && !/^[[<]/.test(token.raw) ? [{ start, end: offset }] : [];
+  });
+  if (bareLinks.length) {
+    // Re-lex the whole inline source: GFM may end a URL before its closing emphasis delimiter.
+    offset = 0;
+    for (const token of Lexer.lexInline(tokens.map((entry) => entry.raw).join(""), {
+      gfm: false,
+    })) {
+      const start = offset;
+      offset += token.raw.length;
+      if (
+        (token.type === "em" || token.type === "strong") &&
+        bareLinks.some((link) => start < link.end && offset > link.start)
+      ) {
+        throw new MarkdownError("unrepresentable", "Bare URL would hide CommonMark emphasis");
+      }
+    }
+  }
   return mergeText(
     tokens.flatMap((entry): DocsNode[] => {
       const token = entry as MarkedToken;
@@ -40,8 +63,7 @@ function inline(tokens: Token[], marks: DocsMark[], depth: number): DocsNode[] {
         case "br":
           return [block("hardBreak")];
         case "link": {
-          // GFM bare-URL linkification is outside CommonMark. Retain those URLs as plain text.
-          if (!/^[[<]/.test(token.raw)) return text(token.raw, marks);
+          const bare = !/^[[<]/.test(token.raw);
           const destination = token.raw.indexOf("](");
           if (destination >= 0 && /\\&/.test(token.raw.slice(destination))) {
             fail("Escaped link character references are unsupported");
@@ -53,6 +75,7 @@ function inline(tokens: Token[], marks: DocsMark[], depth: number): DocsNode[] {
           const linkedMarks = sortedMarks([...marks, { type: "link", attrs }]);
           // CommonMark does not interpret character references inside angle autolinks.
           if (autolink) return text(token.text, linkedMarks);
+          if (bare) return text(decode(token.text), linkedMarks);
           return inline(token.tokens, linkedMarks, depth + 1);
         }
         default:
