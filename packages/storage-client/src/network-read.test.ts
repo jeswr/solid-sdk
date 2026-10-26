@@ -3,6 +3,7 @@
 import { LinkHeaderOverflowError } from "@jeswr/storage-capabilities";
 import { describe, expect, test, vi } from "vitest";
 import { StorageError } from "./errors.js";
+import { CSS_ROOT, cssReadExchanges } from "./fixtures/css.js";
 import { scoped } from "./http.js";
 import { createLwsBackend } from "./lws.js";
 import { createSolidBackend } from "./solid.js";
@@ -16,7 +17,91 @@ const factories = [
   { protocol: "lws", create: createLwsBackend },
 ] as const;
 
-describe.each(factories)("$protocol request scope", ({ create }) => {
+describe.each(factories)("$protocol request scope", ({ create, protocol }) => {
+  test.each([
+    "https://alice:SECRET@evil.example/",
+    "https://alice:SECRET@lws.example/storage/",
+    "https:alice:SECRET@evil.example/",
+    String.raw`https:\\alice:SECRET@evil.example/`,
+  ])("listAll scopes %s before checking an already-aborted signal", async (url) => {
+    const fetch = vi.fn<AuthFetch>();
+    const storage = create({ root: `${ROOT}storage/`, fetch });
+    const signal = AbortSignal.abort("stop");
+    const expected = await storage.list(url, { signal }).catch((error: StorageError) => error);
+    const error = await Array.fromAsync(storage.listAll(url, { signal })).catch(
+      (error: StorageError) => error,
+    );
+    expect(error).toBeInstanceOf(StorageError);
+    expect(error).toMatchObject({ code: "scope", url: expected.url, message: expected.message });
+    expect([error.message, error.url, String(error.cause)].join("\n")).not.toContain("SECRET");
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    "?",
+    "#",
+    "?page=1",
+    "#top",
+  ])("listAll rejects container suffix %s before checking an already-aborted signal", async (suffix) => {
+    const root = `${ROOT}storage/`;
+    const url = `${root.slice(0, -1)}${suffix}`;
+    const fetch = vi.fn<AuthFetch>();
+    const storage = create({ root, fetch });
+    const signal = AbortSignal.abort("stop");
+    const expected = await storage.list(url, { signal }).catch((error: StorageError) => error);
+    const error = await Array.fromAsync(storage.listAll(url, { signal })).catch(
+      (error: StorageError) => error,
+    );
+    expect(error).toBeInstanceOf(StorageError);
+    expect(error).toMatchObject({
+      code: "bad-request",
+      url: expected.url,
+      message: expected.message,
+    });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  test("listAll uses the canonical container in abort errors before the first request", async () => {
+    const root = `${ROOT}storage/`;
+    const url = "HTTPS://LWS.EXAMPLE:443/SECRET/../storage";
+    const fetch = vi.fn<AuthFetch>();
+    const storage = create({ root, fetch });
+    const error = await Array.fromAsync(
+      storage.listAll(url, { signal: AbortSignal.abort("stop") }),
+    ).catch((error: StorageError) => error);
+    expect(error).toBeInstanceOf(StorageError);
+    expect(error).toMatchObject({ code: "network", retryable: false, url: root });
+    expect([error.message, error.url, String(error.cause)].join("\n")).not.toContain("SECRET");
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  test("listAll uses the canonical container when aborted at a page boundary", async () => {
+    const root = `${ROOT}storage/`;
+    const url = "HTTPS://LWS.EXAMPLE:443/SECRET/../storage";
+    const fixture = cssReadExchanges[`GET ${CSS_ROOT}notes/`];
+    const fetch = vi.fn<AuthFetch>(async () =>
+      protocol === "solid"
+        ? new Response(fixture?.body, { headers: fixture?.headers })
+        : new Response(JSON.stringify({ type: "Container", items: [{ id: "child" }] }), {
+            headers: { "content-type": "application/lws+json", link: "<?page=2>; rel=next" },
+          }),
+    );
+    const storage = create({ root, fetch });
+    const list = vi.spyOn(storage, "list");
+    const controller = new AbortController();
+    const iterator = storage.listAll(url, { signal: controller.signal })[Symbol.asyncIterator]();
+    for (let i = 0; i < (protocol === "solid" ? 3 : 1); i++)
+      expect((await iterator.next()).value).toBeDefined();
+    controller.abort("stop");
+    const error = await iterator.next().catch((error: StorageError) => error);
+    expect(error).toBeInstanceOf(StorageError);
+    expect(error).toMatchObject({ code: "network", retryable: false, url: root });
+    expect([error.message, error.url, String(error.cause)].join("\n")).not.toContain("SECRET");
+    expect(list).toHaveBeenCalledWith(root, { cursor: undefined, signal: controller.signal });
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(fetch.mock.calls[0]?.[0]).toBe(root);
+  });
+
   test.each([
     "https:evil.example/steal",
     "https:alice:SECRET@evil.example/steal",

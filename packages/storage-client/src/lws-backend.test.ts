@@ -214,9 +214,101 @@ describe("sparq fixtures and pagination", () => {
     expect((await storage.list(CONTAINER)).next).toEqual({ url: `${CONTAINER}?page=2` });
     expect((await listing().storage.list(CONTAINER)).next).toBeNull();
   });
+
+  test("a slashless root next link is compared and returned in canonical form", async () => {
+    const root = `${ROOT}storage/`;
+    const alias = root.slice(0, -1);
+    const fetch = vi.fn<AuthFetch>(
+      async () =>
+        new Response(JSON.stringify(pageBody()), {
+          headers: { "content-type": "application/lws+json", link: `<${alias}>; rel=next` },
+        }),
+    );
+    const storage = createLwsBackend({ root, fetch });
+    for (const container of [root, alias]) {
+      await rejects(storage.list(container));
+      await rejects(collect(storage.listAll(container)));
+    }
+    expect(fetch).toHaveBeenCalledTimes(4);
+    expect(fetch.mock.calls.every(([url]) => url === root)).toBe(true);
+
+    const cursor = `${alias}?token=a%2fb&x=1&x=2`;
+    const page = await storage.list(root, { cursor: { url: cursor } });
+    expect(page.next).toEqual({ url: root });
+    expect(fetch.mock.calls.at(-1)?.[0]).toBe(`${root}?token=a%2fb&x=1&x=2`);
+  });
 });
 
 describe("listing validation and advisory fields", () => {
+  test.each([0, 1])("bounds raw items per page at 10000 (excess %i)", async (excess) => {
+    const items = Array.from({ length: 10000 }, (_, i) => ({ id: String(i) }));
+    // A duplicate still counts toward the raw item budget.
+    if (excess) items.push({ id: "0" });
+    const result = listing(pageBody(items)).storage.list(CONTAINER);
+    if (excess) await rejects(result);
+    else {
+      const page = await result;
+      expect(page.items).toHaveLength(10000);
+      expect(page.items[0]?.url).toBe(`${CONTAINER}0`);
+      expect(page.items.at(-1)?.url).toBe(`${CONTAINER}9999`);
+    }
+  });
+
+  test.each([0, 1])("bounds cumulative resolved item id lengths (excess %i)", async (excess) => {
+    const cap = 4 * 1024 * 1024;
+    const cursor = `${CONTAINER}?token=${"x".repeat(8000)}`;
+    const items = Array.from({ length: 500 }, (_, i) => ({ id: `#${i}` }));
+    const used = items.reduce((sum, { id }) => sum + new URL(id, cursor).href.length, 0);
+    const finalId = `${ROOT}${"y".repeat(cap - used - ROOT.length + excess)}`;
+    items.push({ id: finalId });
+    const raw = pageBody(items);
+    expect(JSON.stringify(raw).length).toBeLessThan(200000);
+    const { storage } = backend({
+      [`GET ${cursor}`]: {
+        status: 200,
+        headers: { "content-type": "application/lws+json" },
+        body: JSON.stringify(raw),
+      },
+    });
+    const result = storage.list(CONTAINER, { cursor: { url: cursor } });
+    if (excess) await rejects(result);
+    else {
+      const page = await result;
+      expect(page.items).toHaveLength(items.length);
+      expect(page.items[0]?.url).toBe(`${cursor}#0`);
+      expect(page.items.at(-1)?.url).toBe(finalId);
+      expect(page.items.reduce((sum, { url }) => sum + url.length, 0)).toBe(cap);
+    }
+  });
+
+  test.each([
+    "unique",
+    "duplicate",
+    "foreign",
+  ])("rejects 10000 %s references expanded against a long cursor", async (kind) => {
+    const cursor = `${CONTAINER}?token=${"x".repeat(8000)}`;
+    const raw = pageBody(
+      Array.from({ length: 10000 }, (_, i) => ({
+        id:
+          kind === "foreign"
+            ? `${FOREIGN}${"x".repeat(500)}#${i}`
+            : `#${kind === "unique" ? i : "same"}`,
+      })),
+    );
+    // Each case stays below the independent 16 MiB wire cap.
+    expect(JSON.stringify(raw).length).toBeLessThan(16 * 1024 * 1024);
+    const { storage, calls } = backend({
+      [`GET ${cursor}`]: {
+        status: 200,
+        headers: { "content-type": "application/lws+json" },
+        body: JSON.stringify(raw),
+      },
+    });
+    const error = await rejects(storage.list(CONTAINER, { cursor: { url: cursor } }));
+    expect(error.message).toContain("Resolved listing IDs exceed 4 MiB");
+    expect(calls).toHaveLength(1);
+  });
+
   test("relative and non-path-aligned members, deduplication and field mapping preserve server order", async () => {
     const { storage } = listing(
       pageBody([

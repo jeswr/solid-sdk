@@ -44,6 +44,9 @@ Solid read side (ADR-003 §6):
 - Scope errors redact embedded credentials of the target and the root in every authority
   spelling (backslashes included). `list()` refuses a URL with a query or fragment
   (`bad-request`), `kind` follows the path (never the query), and the slashless root alias is the root even with a query or fragment (`parentOf` → null).
+  Both network backends' `listAll()` scope, canonicalise and validate the container exactly as
+  `list()` before pagination checks aborts, so even an already-aborted signal cannot expose raw
+  container credentials in errors. Pagination receives only the canonical container and cursors.
 - `readRdf` accepts `text/turtle, application/ld+json;q=0.9`, maps 304 to `notModified`, and
   reports a non-RDF or unparsable body as `not-rdf`. `metadata` reads the `describedby` document as
   RDF (`unsupported` when none is advertised).
@@ -84,13 +87,20 @@ Solid read side (ADR-003 §6):
   Container; type-search pages use ContainerPage (`src/lws/index.rs:625-675`). Each item must be an
   object with string id; malformed structure → `invalid-response`. Resolve ids against response
   URL; drop invalid, non-HTTP(S), unsafe or foreign ids; duplicate resolved ids keep the first.
+  Each page accepts at most **10,000 raw items** and **4 MiB of cumulative resolved id lengths**,
+  measured in UTF-16 code units before retaining entries. Every successfully resolved id occurrence
+  counts, including duplicates and ids later dropped by scope checks. Exceeding either budget gives
+  `invalid-response`; exact limits are accepted. These budgets apply independently of the streamed
+  JSON byte cap and prevent short ids from amplifying a long cursor URL.
 - Entry order follows the server. Kind depends only on Container type, never a trailing slash.
   Content type is valid RFC 6838 `format` (shared MEDIA_TYPE with Solid), null for containers;
   size is a non-negative safe integer; modified is a parseable date string; else null. Types retain
   only absolute IRIs, excluding compact/full Container and DataResource; malformed optional fields
   drop only that field. `total` is non-negative safe-integer totalItems or null; etag is verbatim.
   `next` uses the first response-context next Link, resolved against that URL; foreign/unsafe or
-  self links → `invalid-response`. `listAll` uses shared paginate: loop guard, 10,000 pages maximum,
+  self links → `invalid-response`. Compare next links with the current page after scoping and
+  canonicalisation (including the slashless root alias), and return canonical cursor URLs with
+  opaque queries preserved. `listAll` uses shared paginate: loop guard, 10,000 pages maximum,
   abort between entries. No client sorting or cursor reconstruction.
 - HEAD/read/readRdf share status, GET/HEAD headers, range validation, conditional 304, body buffering,
   transport/abort mapping and RDF parsing with Solid (`src/read.ts`, `src/http.ts`). Accept defaults

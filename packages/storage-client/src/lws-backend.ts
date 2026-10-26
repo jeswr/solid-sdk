@@ -2,7 +2,15 @@
 // LWS read side (ADR-003 §7, T-023); mutations arrive with T-024.
 import { deriveFeatures, type Features } from "@jeswr/storage-capabilities";
 import { StorageError } from "./errors.js";
-import { dateOf, discard, linksOf, mediaTypeOf, type ReadShape, scoped } from "./http.js";
+import {
+  dateOf,
+  discard,
+  linksOf,
+  listingContainer,
+  mediaTypeOf,
+  type ReadShape,
+  scoped,
+} from "./http.js";
 import { paginate, throwIfAborted } from "./internal.js";
 import {
   acceptReadStatus,
@@ -15,6 +23,9 @@ import type { AuthFetch, Entry, MetadataLink, ReadResult, StorageClient } from "
 const LWS = "https://www.w3.org/ns/lws#";
 /** A hard byte limit, enforced while streaming (never trust Content-Length). */
 const MAX_JSON_BYTES = 16 * 1024 * 1024;
+const MAX_LIST_ITEMS = 10000;
+/** Cumulative resolved item id lengths, measured in UTF-16 code units before filtering. */
+const MAX_LIST_URL_LENGTH = 4 * 1024 * 1024;
 const MAX_LINKSET_TARGETS = 10000;
 /** Cumulative resolved anchor + href lengths, measured in UTF-16 code units. */
 const MAX_LINKSET_URL_BYTES = 4 * 1024 * 1024;
@@ -236,13 +247,7 @@ export function createLwsBackend(options: LwsBackendOptions): StorageClient {
     readRdf,
     isWithinStorage,
     async list(url, opts = {}) {
-      const container = scoped(root, "GET", url);
-      if (!container.endsWith("/") || /[?#]/.test(container))
-        throw new StorageError("bad-request", {
-          method: "GET",
-          url: container,
-          message: "list() takes a container URL ending with '/' without a query or fragment",
-        });
+      const container = listingContainer(root, url, "lws");
       const result = await get(
         opts.cursor === undefined ? container : opts.cursor.url,
         { Accept: LIST_ACCEPT },
@@ -259,13 +264,20 @@ export function createLwsBackend(options: LwsBackendOptions): StorageClient {
         !Array.isArray(raw.items)
       )
         throw invalid(result.url, "Expected Container or ContainerPage with items array");
+      if (raw.items.length > MAX_LIST_ITEMS)
+        throw invalid(result.url, "Listing exceeds 10000 items");
       const seen = new Set<string>();
       const items: Entry[] = [];
+      let urlLength = 0;
       for (const item of raw.items) {
         if (!object(item) || typeof item.id !== "string")
           throw invalid(result.url, "Expected item with string id");
         const id = resolve(item.id, result.url);
-        if (id === null || !isWithinStorage(id) || seen.has(id)) continue;
+        if (id === null) continue;
+        urlLength += id.length;
+        if (urlLength > MAX_LIST_URL_LENGTH)
+          throw invalid(result.url, "Resolved listing IDs exceed 4 MiB");
+        if (!isWithinStorage(id) || seen.has(id)) continue;
         seen.add(id);
         const types = typesOf(item.type);
         const kind = hasType(types, "Container") ? "container" : "resource";
@@ -288,20 +300,28 @@ export function createLwsBackend(options: LwsBackendOptions): StorageClient {
           ),
         });
       }
-      const next = result.links.get("next")?.[0]?.target;
-      if (next !== undefined && (!isWithinStorage(next) || next === new URL(result.url).href))
-        throw invalid(result.url, "Invalid next page URL");
+      const nextLink = result.links.get("next")?.[0]?.target;
+      let next: string | null = null;
+      if (nextLink !== undefined) {
+        try {
+          next = scoped(root, "GET", nextLink);
+        } catch {
+          throw invalid(result.url, "Invalid next page URL");
+        }
+        if (next === result.url) throw invalid(result.url, "Invalid next page URL");
+      }
       return {
         items,
-        next: next === undefined ? null : { url: next },
+        next: next === null ? null : { url: next },
         total: count(raw.totalItems),
         etag: result.etag,
       };
     },
-    listAll(url, opts = {}) {
-      return paginate(
-        url,
-        (cursor) => client.list(url, { cursor, signal: opts.signal }),
+    async *listAll(url, opts = {}) {
+      const container = listingContainer(root, url, "lws");
+      yield* paginate(
+        container,
+        (cursor) => client.list(container, { cursor, signal: opts.signal }),
         opts.signal,
       );
     },

@@ -51,6 +51,21 @@ export function scoped(root: string, method: string, url: string): string {
   }
 }
 
+/** Scope and validate a listing container before requests or pagination can check aborts. */
+export function listingContainer(root: string, url: string, protocol: "solid" | "lws"): string {
+  const container = scoped(root, "GET", url);
+  // Empty query/fragment delimiters survive in href even though URL.search/hash report "".
+  if (/[?#]/.test(container) || (protocol === "lws" && !container.endsWith("/"))) {
+    const ending = protocol === "lws" ? " ending with '/'" : "";
+    throw new StorageError("bad-request", {
+      method: "GET",
+      url: container,
+      message: `list() takes a container URL${ending} without a query or fragment`,
+    });
+  }
+  return container;
+}
+
 /**
  * Send one request. Redirects are never followed (a 3xx surfaces as `invalid-response`).
  * Transport failures become `network` (retryable), aborts become non-retryable `network`.

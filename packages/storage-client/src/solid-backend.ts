@@ -6,7 +6,7 @@ import { LiteralAs, OptionalFrom } from "@rdfjs/wrapper";
 import { Container, Resource } from "@solid/object/solid";
 import { DataFactory } from "n3";
 import { StorageError } from "./errors.js";
-import { allowOf, discard, linksOf, type ReadShape, scoped } from "./http.js";
+import { allowOf, discard, linksOf, listingContainer, type ReadShape, scoped } from "./http.js";
 import { paginate, pathParent } from "./internal.js";
 import {
   acceptReadStatus,
@@ -166,16 +166,7 @@ export function createSolidBackend(options: SolidBackendOptions): StorageClient 
     features,
 
     async list(url, opts = {}) {
-      const container = scoped(root, "GET", url);
-      // A query or fragment (even an empty `?` or `#`, which URL.search/hash report as "") would
-      // name a different RDF subject than the container. In a canonical href both are delimiters.
-      if (/[?#]/.test(container)) {
-        throw new StorageError("bad-request", {
-          method: "GET",
-          url: container,
-          message: "list() takes a container URL without a query or fragment",
-        });
-      }
+      const container = listingContainer(root, url, "solid");
       if (opts.cursor !== undefined) {
         throw new StorageError("bad-request", {
           method: "GET",
@@ -204,10 +195,11 @@ export function createSolidBackend(options: SolidBackendOptions): StorageClient 
       return { items, next: null, total: items.length, etag: result.etag } satisfies Page<Entry>;
     },
 
-    listAll(url, opts = {}) {
-      return paginate(
-        url,
-        (cursor) => client.list(url, { cursor, signal: opts.signal }),
+    async *listAll(url, opts = {}) {
+      const container = listingContainer(root, url, "solid");
+      yield* paginate(
+        container,
+        (cursor) => client.list(container, { cursor, signal: opts.signal }),
         opts.signal,
       );
     },
