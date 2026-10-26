@@ -3,6 +3,7 @@
 @import "@jeswr/suite-ui/styles/tokens.css";
 @import "@jeswr/suite-ui/styles/theme.css";
 @import "@jeswr/suite-ui/styles/density.css";
+@import "@jeswr/suite-ui/styles/sharing.css";
 
 * {
   box-sizing: border-box;
@@ -265,4 +266,15 @@ button {
     transition: none;
     scroll-behavior: auto;
   }
+}
+
+.sharing-fixture-grid {
+  display: grid;
+  gap: var(--space-6);
+  max-width: 880px;
+  min-width: 0;
+}
+nav[aria-label="Component fixtures"] {
+  display: grid;
+  gap: var(--space-2);
 }
