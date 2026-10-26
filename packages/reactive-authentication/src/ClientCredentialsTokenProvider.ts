@@ -41,6 +41,8 @@ export class ClientCredentialsTokenProvider implements TokenProvider {
   readonly #options: ClientCredentialsOptions;
   readonly #tokens: FencedCache<ClientCredentialsToken>;
   readonly #issued = new Map<string, string>();
+  // Outstanding requests must outlive the bounded token history used for request copies.
+  #requests = new WeakMap<Request, string>();
 
   constructor(
     asProvider: AuthorizationServerProvider,
@@ -104,22 +106,29 @@ export class ClientCredentialsTokenProvider implements TokenProvider {
       token.accessToken,
     );
     await this.#tokens.assertCurrent(ticket);
+    this.#issued.delete(token.accessToken);
     this.#issued.set(token.accessToken, key);
+    if (this.#issued.size > 100) this.#issued.delete(this.#issued.keys().next().value!);
     const headers = new Headers(request.headers);
     headers.set("DPoP", proof);
     headers.set("Authorization", `DPoP ${token.accessToken}`);
-    return new Request(request, { headers });
+    const upgraded = new Request(request, { headers });
+    this.#requests.set(upgraded, key);
+    return upgraded;
   }
 
   async invalidate(upgraded: Request): Promise<void> {
     const rejected = upgraded.headers.get("Authorization")?.replace(/^DPoP /, "");
-    const key = rejected === undefined ? undefined : this.#issued.get(rejected);
-    if (key !== undefined)
+    const key =
+      this.#requests.get(upgraded) ??
+      (rejected === undefined ? undefined : this.#issued.get(rejected));
+    if (key !== undefined && rejected !== undefined)
       await this.#tokens.removeIf(key, (token) => token.accessToken === rejected);
   }
 
   async forget(): Promise<void> {
     this.#issued.clear();
+    this.#requests = new WeakMap();
     await this.#tokens.forget();
   }
 
