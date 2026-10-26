@@ -36,6 +36,7 @@ const NOW0 = Date.parse("2026-10-19T08:00:00Z");
 const GOOGLE_CLIENT = "123456789012-fixtureclient.apps.googleusercontent.com";
 const GOOGLE_SECRET = "GOCSPX-fixture-client-secret-000";
 const MS_CLIENT = "00000000-1111-4222-8333-444444444444";
+const MS_OID = "bbbbbbbb-cccc-4ddd-8eee-ffffffffffff";
 const MS_WORK_TID = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
 const ACCOUNT = "owner.fixture@example.org";
 type PrivateKey = Awaited<ReturnType<typeof generateKeyPair>>["privateKey"];
@@ -595,7 +596,7 @@ describe("Microsoft (public client, PKCE, tenant/account constraints)", () => {
       "https://graph.microsoft.com/Calendars.ReadBasic openid profile offline_access";
     fake.identity = {
       sub: "ms-pairwise-sub-1", // Entra ID tokens always carry sub (pairwise)
-      oid: "ms-oid-1",
+      oid: MS_OID,
       tid: type === "personal" ? MICROSOFT.CONSUMERS_TID : MS_WORK_TID,
       preferred_username: ACCOUNT,
     };
@@ -616,6 +617,10 @@ describe("Microsoft (public client, PKCE, tenant/account constraints)", () => {
       "--account-type",
       type,
       ...(tenant ? ["--tenant", tenant] : []),
+      "--tenant-id",
+      type === "personal" ? MICROSOFT.CONSUMERS_TID : MS_WORK_TID,
+      "--object-id",
+      MS_OID,
     );
     expect(add.code, add.all()).toBe(0);
     return fake;
@@ -634,7 +639,7 @@ describe("Microsoft (public client, PKCE, tenant/account constraints)", () => {
     expect(new URLSearchParams(exchange?.body).has("client_secret")).toBe(false);
     const g1 = readGrant();
     expect(g1).toMatchObject({
-      account: { subject: "ms-oid-1", tenant: MICROSOFT.CONSUMERS_TID, username: ACCOUNT },
+      account: { subject: MS_OID, tenant: MICROSOFT.CONSUMERS_TID, username: ACCOUNT },
       grantedScopes: expect.arrayContaining(["Calendars.ReadBasic"]),
     });
     clock += 3600000;
@@ -660,7 +665,18 @@ describe("Microsoft (public client, PKCE, tenant/account constraints)", () => {
     const fake = await setupMicrosoft("work-or-school", MS_WORK_TID);
     fake.identity = { ...fake.identity, tid: MICROSOFT.CONSUMERS_TID };
     await expect((await browserLogin(fake)).result).rejects.toMatchObject({ code: "account" });
-    fake.identity = { ...fake.identity, tid: MS_WORK_TID, preferred_username: "other@example.org" };
+    fake.identity = {
+      ...fake.identity,
+      tid: MS_WORK_TID,
+      oid: "cccccccc-dddd-4eee-8fff-aaaaaaaaaaaa",
+    };
+    await expect((await browserLogin(fake)).result).rejects.toMatchObject({ code: "account" });
+    fake.identity = {
+      ...fake.identity,
+      oid: MS_OID,
+      tid: MS_WORK_TID,
+      preferred_username: "other@example.org",
+    };
     await expect((await browserLogin(fake)).result).rejects.toMatchObject({ code: "account" });
     expect(() => lstatSync(grantFile())).toThrow();
   });
@@ -1345,12 +1361,16 @@ it("refuses signed tokens with non-string nonce, missing identity claims and a c
   const ms = {
     ...profile,
     provider: "microsoft" as const,
-    microsoft: { accountType: "work-or-school" as const, tenant: "organizations" as const },
+    microsoft: {
+      accountType: "work-or-school" as const,
+      tenant: "organizations" as const,
+      expectedIdentity: { tenantId: MS_WORK_TID, objectId: MS_OID },
+    },
   };
   const identity = {
     sub: "fixture",
     tid: MS_WORK_TID,
-    oid: "fixture-oid",
+    oid: MS_OID,
     preferred_username: ACCOUNT,
     nonce: "nonce",
   };
@@ -1369,6 +1389,38 @@ it("refuses signed tokens with non-string nonce, missing identity claims and a c
         now(),
       ),
     ).rejects.toThrow(/account chosen/);
+  for (const claims of [
+    { ...identity, oid: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee" },
+    { ...identity, oid: 42 },
+    { ...identity, tid: "cccccccc-dddd-4eee-8fff-aaaaaaaaaaaa" },
+  ])
+    await expect(
+      verifyIdentity(
+        keys,
+        ms,
+        { clientId: GOOGLE_CLIENT },
+        await sign(claims, `${MICROSOFT.authority}/${claims.tid}/v2.0`),
+        "nonce",
+        undefined,
+        now(),
+      ),
+    ).rejects.toThrow(/trusted Microsoft identity/);
+  const validToken = await sign(identity, `${MICROSOFT.authority}/${MS_WORK_TID}/v2.0`);
+  for (const microsoft of [
+    undefined,
+    { accountType: "work-or-school" as const, tenant: "organizations" as const },
+  ])
+    await expect(
+      verifyIdentity(
+        keys,
+        { ...ms, microsoft },
+        { clientId: GOOGLE_CLIENT },
+        validToken,
+        "nonce",
+        undefined,
+        now(),
+      ),
+    ).rejects.toThrow(/trusted Microsoft tenant\/object identity|no account type\/tenant/);
   const existing: Grant = {
     version: 1,
     profile: ms.name,
@@ -1409,11 +1461,15 @@ it("enforces Microsoft signing-key issuers, including tenant templates, before s
     account: ACCOUNT,
     inventory: false,
     createdAt: now().toISOString(),
-    microsoft: { accountType: "work-or-school" as const, tenant: "organizations" as const },
+    microsoft: {
+      accountType: "work-or-school" as const,
+      tenant: "organizations" as const,
+      expectedIdentity: { tenantId: MS_WORK_TID, objectId: MS_OID },
+    },
   };
   const token = await new SignJWT({
     sub: "fixture",
-    oid: "fixture-oid",
+    oid: MS_OID,
     tid: MS_WORK_TID,
     preferred_username: ACCOUNT,
     nonce: "nonce",
@@ -1436,7 +1492,7 @@ it("enforces Microsoft signing-key issuers, including tenant templates, before s
     );
   for (const allowed of [issuer, `${MICROSOFT.authority}/{tenantid}/v2.0`])
     await expect(verify([{ ...publicJwk, issuer: allowed }])).resolves.toMatchObject({
-      subject: "fixture-oid",
+      subject: MS_OID,
       tenant: MS_WORK_TID,
     });
   for (const restricted of [
@@ -1460,5 +1516,5 @@ it("enforces Microsoft signing-key issuers, including tenant templates, before s
       { ...publicJwk, issuer: "https://evil.example/{tenantid}/v2.0" },
       { ...publicJwk, issuer },
     ]),
-  ).resolves.toMatchObject({ subject: "fixture-oid" });
+  ).resolves.toMatchObject({ subject: MS_OID });
 });

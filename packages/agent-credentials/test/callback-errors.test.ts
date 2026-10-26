@@ -1,5 +1,6 @@
 // biome-ignore-all lint/style/useNodejsImportProtocol: agent layer requires bare module specifiers
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { mkdtempSync, rmSync, writeFileSync } from "fs";
 import type { Server } from "http";
 import { createServer } from "http";
@@ -121,6 +122,40 @@ it("refuses missing or mismatched tenant binding and reports missing Microsoft c
       undefined,
     ),
   ).toContain("tenant");
+  const identity = {
+    tenantId: "9188040d-6c67-4c5b-b112-36a304b66dad",
+    objectId: "bbbbbbbb-cccc-4ddd-8eee-ffffffffffff",
+  };
+  const bound = {
+    ...g,
+    account: { ...g.account, subject: identity.objectId, tenant: identity.tenantId },
+  };
+  const trusted: Profile = {
+    ...ms,
+    microsoft: { ...fixtureValue(ms.microsoft), expectedIdentity: identity },
+  };
+  expect(grantBindingProblem(bound, ms, undefined)).toContain("trusted Microsoft");
+  expect(grantBindingProblem(bound, trusted, undefined)).toBeUndefined();
+  expect(
+    grantBindingProblem(
+      { ...bound, account: { ...bound.account, subject: "other" } },
+      trusted,
+      undefined,
+    ),
+  ).toContain("trusted Microsoft");
+  expect(
+    grantBindingProblem(
+      bound,
+      {
+        ...trusted,
+        microsoft: {
+          ...fixtureValue(trusted.microsoft),
+          expectedIdentity: { ...identity, tenantId: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee" },
+        },
+      },
+      undefined,
+    ),
+  ).toContain("trusted Microsoft");
   store.putProfile(ms);
   expect(status(store, () => []).profiles[0]?.client).toBe("missing");
   store.putClient({

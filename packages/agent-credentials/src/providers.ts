@@ -447,6 +447,7 @@ export async function verifyIdentity(
   if (typeof claims.nonce !== "string" || !sameSecret(claims.nonce, nonce))
     throw new HelperError("account", "the ID token does not belong to this login (nonce)");
   const expected = p.account.toLowerCase();
+  const expectedMicrosoftIdentity = p.microsoft?.expectedIdentity;
   let account: Grant["account"];
   if (p.provider === "google") {
     const email = String(claims.email ?? "").toLowerCase();
@@ -472,6 +473,10 @@ export async function verifyIdentity(
         "account",
         "the account that consented is not the account chosen for this profile",
       );
+    if (!expectedMicrosoftIdentity)
+      throw new HelperError("account", "a trusted Microsoft tenant/object identity is required");
+    if (tid !== expectedMicrosoftIdentity.tenantId || oid !== expectedMicrosoftIdentity.objectId)
+      throw new HelperError("account", "the account does not match the trusted Microsoft identity");
     account = { subject: oid, tenant: tid, username };
   }
   if (

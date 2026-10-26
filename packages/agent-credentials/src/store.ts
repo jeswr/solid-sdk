@@ -1,5 +1,6 @@
 // biome-ignore-all lint/style/useNodejsImportProtocol: agent layer requires bare module specifiers
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /**
  * The credential helper's private store: ONE dedicated, operator-chosen directory.
  *
@@ -116,6 +117,8 @@ export const profileSchema = z.strictObject({
     .strictObject({
       accountType: z.enum(["personal", "work-or-school"]),
       tenant: z.union([z.literal("consumers"), z.literal("organizations"), z.uuid()]),
+      /** Trusted operator input, verified outside the OAuth response; never infer from a UPN. */
+      expectedIdentity: z.strictObject({ tenantId: z.uuid(), objectId: z.uuid() }).optional(),
     })
     .optional(),
   createdAt: iso,

@@ -1,5 +1,6 @@
 // biome-ignore-all lint/style/useNodejsImportProtocol: agent layer requires bare module specifiers
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { spawn } from "child_process";
 import { EventEmitter } from "events";
 import * as fs from "fs";
@@ -134,6 +135,22 @@ it("rejects missing options, unknown commands and malformed profiles without lea
     ["--connection", "owner", "--account", `a@${"b".repeat(250)}.example`],
     ["--connection", "owner", "--account", p.account, "--account-type", "personal"],
     ["--connection", "owner", "--account", p.account, "--tenant", "organizations"],
+    [
+      "--connection",
+      "owner",
+      "--account",
+      p.account,
+      "--tenant-id",
+      "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+    ],
+    [
+      "--connection",
+      "owner",
+      "--account",
+      p.account,
+      "--object-id",
+      "bbbbbbbb-cccc-4ddd-8eee-ffffffffffff",
+    ],
   ])
     expect((await run([...add, ...extra])).code).toBe(1);
   const ms = [
@@ -150,7 +167,36 @@ it("rejects missing options, unknown commands and malformed profiles without lea
   ];
   expect((await run(ms)).code).toBe(1);
   expect((await run([...ms, "--account-type", "work-or-school", "--tenant", "bad"])).code).toBe(1);
-  expect((await run([...ms, "--account-type", "work-or-school"])).code).toBe(0);
+  for (const extra of [
+    [],
+    ["--tenant-id", "bad"],
+    ["--tenant-id", "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"],
+    ["--tenant-id", "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee", "--object-id", "bad"],
+    [
+      "--tenant-id",
+      "9188040d-6c67-4c5b-b112-36a304b66dad",
+      "--object-id",
+      "bbbbbbbb-cccc-4ddd-8eee-ffffffffffff",
+    ],
+  ])
+    expect((await run([...ms, "--account-type", "work-or-school", ...extra])).code).toBe(1);
+  expect(
+    (
+      await run([
+        ...ms,
+        "--account-type",
+        "work-or-school",
+        "--tenant-id",
+        "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+        "--object-id",
+        "bbbbbbbb-cccc-4ddd-8eee-ffffffffffff",
+      ])
+    ).code,
+  ).toBe(0);
+  expect(store.profile("ms")?.microsoft?.expectedIdentity).toEqual({
+    tenantId: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+    objectId: "bbbbbbbb-cccc-4ddd-8eee-ffffffffffff",
+  });
   expect(
     (
       await run([
@@ -425,3 +471,18 @@ it("does not crash the caller when helper pipes emit stream errors", async () =>
 });
 
 import { fixtureValue } from "./fixture.js";
+
+it("refuses generating duplicate helper mappings before writing or replacing configuration", async () => {
+  store.putProfile(p);
+  const out = join(base, "providers.json");
+  expect((await run(["provider-config", "--out", out])).code).toBe(0);
+  const original = fs.readFileSync(out, "utf8");
+  store.putProfile({ ...p, name: "duplicate" });
+  const result = await run(["provider-config", "--out", out, "--force"]);
+  expect(result.code).toBe(1);
+  expect(result.err.join("")).toContain("duplicate");
+  expect(fs.readFileSync(out, "utf8")).toBe(original);
+  const absent = join(base, "absent.json");
+  expect((await run(["provider-config", "--out", absent])).code).toBe(1);
+  expect(fs.existsSync(absent)).toBe(false);
+});

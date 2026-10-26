@@ -9,6 +9,7 @@
  *   profile add --name N --provider google|microsoft --connection ID --account ADDRESS
               [--purpose read|send] [--resource mail|calendar|teams]
  *               [--calendar-inventory] [--account-type personal|work-or-school] [--tenant T]
+              [--tenant-id GUID --object-id GUID] (trusted Microsoft account identity)
  *   profile remove --name N
  *   login --profile N [--open] [--timeout-seconds S]      (the ONLY command that signs in)
  *   status [--json]
@@ -44,7 +45,14 @@ import {
   logout,
   status,
 } from "./operations.js";
-import { GOOGLE, noTransport, requestedScopes, type Transport } from "./providers.js";
+import { providerConfigSchema } from "./providers/credentials.js";
+import {
+  GOOGLE,
+  noTransport,
+  requestedScopes,
+  type Transport,
+  tenantMatches,
+} from "./providers.js";
 import { CredentialStore, HelperError, NAME, type Profile, writeFully } from "./store.js";
 
 export interface CliIo {
@@ -245,6 +253,7 @@ Every command needs --dir DIR (absolute; or AWP_CREDENTIALS_DIR). None prints a 
   profile add --name N --provider google|microsoft --connection ID --account ADDRESS
               [--purpose read|send] [--resource mail|calendar|teams]
               [--calendar-inventory] [--account-type personal|work-or-school] [--tenant T]
+              [--tenant-id GUID --object-id GUID] (trusted Microsoft account identity)
   profile remove --name N
   login --profile N [--open] [--timeout-seconds S]   the only command that signs in
   status [--json]
@@ -271,6 +280,8 @@ function parse(argv: readonly string[]) {
       "calendar-inventory": { type: "boolean" },
       "account-type": { type: "string" },
       tenant: { type: "string" },
+      "tenant-id": { type: "string" },
+      "object-id": { type: "string" },
       profile: { type: "string" },
       open: { type: "boolean" },
       "timeout-seconds": { type: "string" },
@@ -402,8 +413,29 @@ async function run(
               "invalid",
               "--account-type personal|work-or-school is required for Microsoft",
             );
-        } else if (values["account-type"] || values.tenant)
-          throw new HelperError("invalid", "--account-type/--tenant are for Microsoft profiles");
+          const tenantId = values["tenant-id"] ?? "";
+          const objectId = values["object-id"] ?? "";
+          const guid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+          if (
+            !guid.test(tenantId) ||
+            !guid.test(objectId) ||
+            !tenantMatches(microsoft.tenant, tenantId)
+          )
+            throw new HelperError(
+              "invalid",
+              "--tenant-id and --object-id must be trusted account GUIDs matching the chosen tenant",
+            );
+          microsoft.expectedIdentity = { tenantId, objectId };
+        } else if (
+          values["account-type"] ||
+          values.tenant ||
+          values["tenant-id"] ||
+          values["object-id"]
+        )
+          throw new HelperError(
+            "invalid",
+            "--account-type/--tenant/--tenant-id/--object-id are for Microsoft profiles",
+          );
         const p: Profile = {
           version: 1,
           name,
@@ -533,6 +565,11 @@ async function run(
               credential: { type: "helper", command: process.execPath, args },
             };
           });
+        if (!providerConfigSchema.safeParse({ version: 1, accounts }).success)
+          throw new HelperError(
+            "invalid",
+            "provider configuration contains duplicate or invalid mappings",
+          );
         writePrivateFile(
           out,
           `${JSON.stringify({ version: 1, accounts }, null, 2)}\n`,

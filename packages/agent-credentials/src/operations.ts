@@ -329,6 +329,7 @@ export function grantBindingProblem(
   p: Profile,
   clientId: string | undefined,
 ): string | undefined {
+  const identity = p.microsoft?.expectedIdentity;
   if (g.profile !== p.name) return "the grant record belongs to another profile";
   if (g.purpose !== p.purpose || g.resource !== p.resource)
     return "the grant record is for another purpose or resource";
@@ -342,6 +343,14 @@ export function grantBindingProblem(
     (!p.microsoft || !g.account.tenant || !tenantMatches(p.microsoft.tenant, g.account.tenant))
   )
     return "the grant record's tenant does not match the profile's account type/tenant";
+  if (p.provider === "microsoft") {
+    if (
+      !identity ||
+      g.account.tenant !== identity.tenantId ||
+      g.account.subject !== identity.objectId
+    )
+      return "the grant record does not match a trusted Microsoft tenant/object identity";
+  }
   if (clientId !== undefined && g.clientId !== clientId)
     return "the grant was issued to a different OAuth client than the one registered (log in again)";
   return undefined;

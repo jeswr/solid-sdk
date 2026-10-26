@@ -1,5 +1,6 @@
 // biome-ignore-all lint/style/useNodejsImportProtocol: agent layer requires bare module specifiers
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /**
  * Provider credentials: a SEPARABLE token supply, never stored settings.
  *
@@ -72,7 +73,13 @@ export const providerConfigSchema = z.strictObject({
         credential: helperSchema,
       }),
     )
-    .max(50),
+    .max(50)
+    .refine(
+      (accounts) =>
+        new Set(accounts.map((a) => JSON.stringify([a.provider, a.connectionId]))).size ===
+        accounts.length,
+      "duplicate provider/connection mappings are not allowed",
+    ),
 });
 export type ProviderConfig = z.infer<typeof providerConfigSchema>;
 
@@ -110,14 +117,17 @@ export class HelperTokenProvider implements AccessTokenProvider {
   constructor(private readonly config: ProviderConfig) {}
 
   async getAccessToken(request: TokenRequest): Promise<AccessToken> {
-    const entry = this.config.accounts.find(
+    const entries = this.config.accounts.filter(
       (a) => a.connectionId === request.connectionId && a.provider === request.provider,
     );
-    if (!entry)
+    if (entries.length === 0)
       throw new CredentialError(
         "not-configured",
         `no ${request.provider} credential is configured for account “${request.connectionId}”`,
       );
+    if (entries.length !== 1)
+      throw new CredentialError("invalid", "exactly one matching helper mapping is required");
+    const entry = entries[0] as ProviderConfig["accounts"][number];
     const out = await runHelper(entry.credential.command, entry.credential.args, {
       provider: request.provider,
       connectionId: request.connectionId,

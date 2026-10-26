@@ -1,6 +1,7 @@
 // biome-ignore-all lint/style/useNodejsImportProtocol: agent layer requires bare module specifiers
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "fs";
+// AUTHORED-BY Codex GPT-6
+import { chmodSync, existsSync, mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -10,6 +11,7 @@ import {
   CredentialError,
   HelperTokenProvider,
   loadProviderConfig,
+  providerConfigSchema,
   runHelper,
 } from "../src/providers/credentials.js";
 import { GOOGLE_FREEBUSY_URL, googleFreeBusy } from "../src/providers/google.js";
@@ -426,6 +428,38 @@ describe("credential supply (separable, no stored tokens)", () => {
     expect(
       loadProviderConfig(config({ type: "helper", command: process.execPath, args: [] })).accounts,
     ).toHaveLength(1);
+  });
+
+  it("rejects duplicate mappings on load and refuses ambiguous lookups before invoking a helper", async () => {
+    const marker = join(dir, "helper-ran");
+    const entry = {
+      connectionId: "acct-g",
+      provider: "google" as const,
+      credential: {
+        type: "helper" as const,
+        command: process.execPath,
+        args: ["-e", `require('fs').writeFileSync(${JSON.stringify(marker)}, 'ran')`],
+      },
+    };
+    const duplicated = { version: 1 as const, accounts: [entry, entry] };
+    const path = join(dir, "duplicates.json");
+    writeFileSync(path, JSON.stringify(duplicated), { mode: 0o600 });
+    expect(() => loadProviderConfig(path)).toThrow(/duplicate/);
+    await expect(
+      new HelperTokenProvider(duplicated).getAccessToken({
+        provider: "google",
+        connectionId: "acct-g",
+        scopes: [],
+      }),
+    ).rejects.toMatchObject({ code: "invalid" });
+    expect(existsSync(marker)).toBe(false);
+    // The key includes both provider and connection; neither alone makes a duplicate.
+    expect(
+      providerConfigSchema.parse({
+        version: 1,
+        accounts: [entry, { ...entry, connectionId: "other" }, { ...entry, provider: "microsoft" }],
+      }).accounts,
+    ).toHaveLength(3);
   });
 
   it("runs the operator's helper without a shell and maps its answers", async () => {
