@@ -7,6 +7,7 @@ import {
   GoogleTokenSource,
   MsalTokenSource,
   OAuthBearerTokenProvider,
+  ReactiveAuthenticationClient,
   ReactiveFetchManager,
   SessionFence,
 } from "../src/mod.js";
@@ -25,6 +26,82 @@ function google() {
       callback({ successful: false });
     },
   };
+}
+
+for (const stage of [
+  "challenge cleanup",
+  "fenced challenge cleanup",
+  "transport fence verification",
+]) {
+  for (const attempt of ["initial", "renewal"]) {
+    test(`Bearer resource revocation during ${stage} prevents the ${attempt} transport send`, async () => {
+      const root = "https://api.example/";
+      const resources = new CredentialBoundary([root]);
+      const boundary = new CredentialBoundary([root]);
+      const started = Promise.withResolvers();
+      const gate = Promise.withResolvers();
+      const generations = createMemoryStore();
+      const revokeAt = attempt === "initial" ? 1 : 2;
+      let cleanups = 0;
+      const fence = new SessionFence(`oauth-send-${crypto.randomUUID()}`, {
+        broadcast: false,
+        store: {
+          ...generations,
+          getItem: async (key) => {
+            if (stage === "transport fence verification" && cleanups === revokeAt) {
+              started.resolve();
+              await gate.promise;
+            }
+            return await generations.getItem(key);
+          },
+        },
+      });
+      let tokens = 0;
+      const source = {
+        id: "revocable-api",
+        getAccessToken: async () => ({ token: `access-${++tokens}` }),
+      };
+      const provider = new OAuthBearerTokenProvider(source, { resources, fence });
+      const sent = [];
+      const client = new ReactiveAuthenticationClient({
+        providers: [provider],
+        boundary,
+        ...(stage === "challenge cleanup" ? {} : { fence }),
+        fetch: async (request) => {
+          sent.push(request);
+          if (sent.length > revokeAt) return new Response("accepted");
+          return new Response(
+            new ReadableStream({
+              cancel: async () => {
+                if (++cleanups === revokeAt && stage !== "transport fence verification") {
+                  started.resolve();
+                  await gate.promise;
+                }
+              },
+            }),
+            { status: 401, headers: { "www-authenticate": "Bearer" } },
+          );
+        },
+      });
+      try {
+        const pending = client.fetch(`${root}private`, { method: "PUT", body: "write" });
+        const rejected = assert.rejects(pending, /not a resource of revocable-api/);
+        await started.promise;
+        assert.equal(tokens, revokeAt, "the provider already attached the token");
+        resources.delete(root);
+        assert.equal(boundary.allows(`${root}private`), true, "the manager still permits the API");
+        gate.resolve();
+        await rejected;
+        assert.equal(sent.length, revokeAt, "no transport call after resource revocation");
+        assert.equal(sent[0].headers.has("authorization"), false);
+        if (attempt === "renewal")
+          assert.equal(sent[1].headers.get("authorization"), "Bearer access-1");
+      } finally {
+        gate.resolve();
+        fence.close();
+      }
+    });
+  }
 }
 
 for (const stage of ["initial token", "renewal token", "fence verification"]) {

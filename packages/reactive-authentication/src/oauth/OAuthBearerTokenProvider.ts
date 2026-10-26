@@ -8,8 +8,8 @@ import type { AccessToken, AccessTokenSource } from "./AccessTokenSource.js";
 export interface OAuthBearerTokenProviderOptions {
   /**
    * The API URLs this provider's tokens are for (e.g. `https://www.googleapis.com/drive/`). Required and
-   * checked in both `matches` and `upgrade`, independently of the manager's boundary, so tokens for one API
-   * never reach another.
+   * checked in `matches`, `upgrade` and immediately before transport initiation, independently of the
+   * manager's boundary, so tokens for one API never reach another.
    */
   readonly resources: CredentialBoundary | Iterable<string | URL>;
 
@@ -49,10 +49,7 @@ export class OAuthBearerTokenProvider implements TokenProvider {
   }
 
   async upgrade(request: Request): Promise<Request> {
-    if (!this.#resources.allows(request.url))
-      throw new ReactiveAuthenticationError(
-        `${request.url} is not a resource of ${this.#source.id}`,
-      );
+    this.assertAllowed(request);
     // The fence signal is captured before any await, so a logout from here on aborts this upgrade.
     const signal = AbortSignal.any([request.signal, this.#fence.signal]);
     const generation = await this.#fence.generation();
@@ -60,15 +57,19 @@ export class OAuthBearerTokenProvider implements TokenProvider {
     const token = await this.#token(signal);
     signal.throwIfAborted();
     await this.#fence.assertCurrent(generation);
-    if (!this.#resources.allows(request.url))
-      throw new ReactiveAuthenticationError(
-        `${request.url} is not a resource of ${this.#source.id}`,
-      );
+    this.assertAllowed(request);
 
     const headers = new Headers(request.headers);
     headers.delete("DPoP"); // a stale proof bound to another token must not accompany a Bearer token
     headers.set("Authorization", `Bearer ${token.token}`);
     return new Request(request, { headers });
+  }
+
+  assertAllowed(request: Request): void {
+    if (!this.#resources.allows(request.url))
+      throw new ReactiveAuthenticationError(
+        `${request.url} is not a resource of ${this.#source.id}`,
+      );
   }
 
   async invalidate(upgraded: Request): Promise<void> {

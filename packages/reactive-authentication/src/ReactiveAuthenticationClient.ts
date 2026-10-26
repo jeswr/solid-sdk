@@ -169,7 +169,7 @@ export class ReactiveAuthenticationClient {
       const upgraded = await provider.upgrade(attempt.request(session.signal), challenge);
       await discard(challenge.response);
 
-      const result = await this.#send(withRedirect(upgraded, "manual"), session, true);
+      const result = await this.#send(withRedirect(upgraded, "manual"), session, provider);
       if (redirectStatuses.has(result.status) || result.type === "opaqueredirect") {
         return await this.#followRedirect(attempt, result, session, hops);
       }
@@ -217,14 +217,15 @@ export class ReactiveAuthenticationClient {
     );
   }
 
-  async #send(request: Request, session: Session, credentialed = false): Promise<Response> {
+  async #send(request: Request, session: Session, provider?: TokenProvider): Promise<Response> {
     const send = async () => {
       this.#assertNotAborted(session);
-      if (credentialed && !this.#boundary.allows(request.url)) {
+      if (provider !== undefined && !this.#boundary.allows(request.url)) {
         throw new ReactiveAuthenticationError(
           `Credential boundary no longer allows ${request.url}`,
         );
       }
+      provider?.assertAllowed?.(request);
       // Keep validation and transport initiation under the shared fence lock. Wrapping the promise
       // releases the lock before the response arrives, so logout never waits for the network.
       return { response: this.#fetch(request) };
