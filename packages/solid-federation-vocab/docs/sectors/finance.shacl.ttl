@@ -1,8 +1,8 @@
 # AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 #
-@prefix fin:     <https://w3id.org/jeswr/sectors/finance#> .
-@prefix finsh:   <https://w3id.org/jeswr/sectors/finance/shapes#> .
-@prefix core:    <https://w3id.org/jeswr/core#> .
+@prefix fin:     <https://jeswr.org/ns/sectors/finance#> .
+@prefix finsh:   <https://jeswr.org/ns/sectors/finance/shapes#> .
+@prefix core:    <https://jeswr.org/ns/core#> .
 @prefix sh:      <http://www.w3.org/ns/shacl#> .
 @prefix owl:     <http://www.w3.org/2002/07/owl#> .
 @prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
@@ -23,34 +23,34 @@
 #  - IMMUTABLE version IRI (…/1.0.0) + version-independent IRI; additive-only.
 # =============================================================================
 
-<https://w3id.org/jeswr/sectors/finance/profile> a prof:Profile ;
+<https://jeswr.org/ns/sectors/finance/profile> a prof:Profile ;
     dcterms:title "Solid Finance data-model profile (version-independent)"@en ;
-    dcterms:hasVersion <https://w3id.org/jeswr/sectors/finance/profile/1.0.0> ,
-                       <https://w3id.org/jeswr/sectors/finance/profile/1.1.0> ,
-                       <https://w3id.org/jeswr/sectors/finance/profile/1.2.0> ;
+    dcterms:hasVersion <https://jeswr.org/ns/sectors/finance/profile/1.0.0> ,
+                       <https://jeswr.org/ns/sectors/finance/profile/1.1.0> ,
+                       <https://jeswr.org/ns/sectors/finance/profile/1.2.0> ;
     rdfs:comment "Version-independent IRI resolving to the current Finance profile (latest: 1.2.0). "@en .
 
-<https://w3id.org/jeswr/sectors/finance/profile/1.0.0> a prof:Profile ;
+<https://jeswr.org/ns/sectors/finance/profile/1.0.0> a prof:Profile ;
     dcterms:title "Solid Finance data-model profile 1.0.0"@en ;
-    dcterms:isVersionOf <https://w3id.org/jeswr/sectors/finance/profile> ;
+    dcterms:isVersionOf <https://jeswr.org/ns/sectors/finance/profile> ;
     owl:versionInfo "1.0.0" ;
-    prof:isProfileOf <https://w3id.org/jeswr/sectors/finance> ;
+    prof:isProfileOf <https://jeswr.org/ns/sectors/finance> ;
     prof:hasToken "finance-1.0.0" ;
     rdfs:comment "IMMUTABLE version IRI. Open shapes; sh:Violation=MUST, sh:Warning=SHOULD. "@en .
 
-<https://w3id.org/jeswr/sectors/finance/profile/1.1.0> a prof:Profile ;
+<https://jeswr.org/ns/sectors/finance/profile/1.1.0> a prof:Profile ;
     dcterms:title "Solid Finance data-model profile 1.1.0"@en ;
-    dcterms:isVersionOf <https://w3id.org/jeswr/sectors/finance/profile> ;
+    dcterms:isVersionOf <https://jeswr.org/ns/sectors/finance/profile> ;
     owl:versionInfo "1.1.0" ;
-    prof:isProfileOf <https://w3id.org/jeswr/sectors/finance> ;
+    prof:isProfileOf <https://jeswr.org/ns/sectors/finance> ;
     prof:hasToken "finance-1.1.0" ;
     rdfs:comment "IMMUTABLE version IRI. ADDITIVE over 1.0.0: adds the Budget + BudgetCategory (envelope) shapes for the Actual Budget use case. Open shapes; sh:Violation=MUST, sh:Warning=SHOULD. "@en .
 
-<https://w3id.org/jeswr/sectors/finance/profile/1.2.0> a prof:Profile ;
+<https://jeswr.org/ns/sectors/finance/profile/1.2.0> a prof:Profile ;
     dcterms:title "Solid Finance data-model profile 1.2.0"@en ;
-    dcterms:isVersionOf <https://w3id.org/jeswr/sectors/finance/profile> ;
+    dcterms:isVersionOf <https://jeswr.org/ns/sectors/finance/profile> ;
     owl:versionInfo "1.2.0" ;
-    prof:isProfileOf <https://w3id.org/jeswr/sectors/finance> ;
+    prof:isProfileOf <https://jeswr.org/ns/sectors/finance> ;
     prof:hasToken "finance-1.2.0" ;
     rdfs:comment "IMMUTABLE version IRI. ADDITIVE over 1.1.0: adds the double-entry LEDGER shapes (LedgerAccount/JournalEntry/LedgerEntry — Keystone) and the private-equity shapes (Fund/Commitment/Notice — CapNote). Open shapes; sh:Violation=MUST, sh:Warning=SHOULD. "@en .
 

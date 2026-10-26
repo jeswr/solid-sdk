@@ -101,7 +101,7 @@
   "devDependencies": {
     "@biomejs/biome": "^2.5.0",
     "@custom-elements-manifest/analyzer": "^0.11.0",
-    "@jeswr/fetch-rdf": "^0.1.0",
+    "@jeswr/fetch-rdf": "workspace:*",
     "@jeswr/guarded-fetch": "workspace:*",
     "@jeswr/solid-bookmark": "workspace:*",
     "@jeswr/solid-chat-interop": "workspace:*",

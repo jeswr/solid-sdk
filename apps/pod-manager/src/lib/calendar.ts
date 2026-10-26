@@ -143,6 +143,8 @@ export const CALENDAR_CONFIG: StoreConfig<CalendarEvent> = {
 export function calendarStore(opts: {
   podRoot: string;
   webId: string;
+  /** Final document URL from the session profile load. */
+  profileDocumentUrl?: string;
   fetchImpl?: typeof fetch;
 }): ProductivityStore<CalendarEvent> {
   return createStore(CALENDAR_CONFIG, opts);
