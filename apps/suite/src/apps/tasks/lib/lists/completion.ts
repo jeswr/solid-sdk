@@ -54,7 +54,15 @@ export function completeTask<T extends ListTask>(
       options.occurrenceId !== task.id,
     "Repeating completion requires a distinct occurrence ID",
   );
-  const { recurrence: _recurrence, ...snapshot } = task;
+  const {
+    recurrence: _recurrence,
+    id: _id,
+    state: _state,
+    completedAt: _completedAt,
+    modifiedAt: _modifiedAt,
+    derivedFrom: _derivedFrom,
+    ...snapshot
+  } = task;
   return {
     task: { ...task, due, modifiedAt: timestamp },
     completedOccurrence: {
