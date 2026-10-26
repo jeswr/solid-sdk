@@ -3067,6 +3067,9 @@ importers:
       '@zazuko/env-node':
         specifier: ^3.0.0
         version: 3.1.0(@rdfjs/types@2.0.1)(@types/clownface@2.0.10)(@types/rdf-dataset-ext@1.0.8)(@types/rdfjs__data-model@2.0.9)(@types/rdfjs__dataset@2.0.7)(@types/rdfjs__environment@1.0.0)(@types/rdfjs__fetch-lite@3.0.11)(@types/rdfjs__formats@4.0.1)(@types/rdfjs__namespace@2.0.10)(@types/rdfjs__term-map@2.0.10)(@types/rdfjs__term-set@2.0.9)(@types/rdfjs__traverser@0.1.5)
+      esbuild:
+        specifier: ^0.28.1
+        version: 0.28.1
       rdf-validate-shacl:
         specifier: ^0.6.5
         version: 0.6.5
