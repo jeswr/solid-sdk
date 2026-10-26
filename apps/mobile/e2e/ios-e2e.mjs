@@ -142,6 +142,21 @@ export async function readAttachments(directory) {
   );
 }
 
+const DIAGNOSTIC =
+  /error:|\*\* (BUILD|TEST)|Test Case .* failed|XCTAssert|Failing tests|Testing failed|timed out/i;
+
+/** The CI log cannot rely on downloaded artifacts, so failures print the decisive xcodebuild lines. */
+export function xcodebuildDiagnostics(log, tail = 80) {
+  const lines = log.split("\n");
+  const decisive = [...new Set(lines.filter((line) => DIAGNOSTIC.test(line)))].slice(-60);
+  return [
+    "--- decisive xcodebuild lines ---",
+    ...decisive,
+    `--- last ${tail} lines ---`,
+    ...lines.slice(-tail),
+  ].join("\n");
+}
+
 export async function runIOS({
   destination = process.env.TEST_DESTINATION,
   artifacts = defaultArtifacts,
@@ -212,8 +227,15 @@ export async function runIOS({
       );
     }
     // Export even on a failed XCTest run so any available fixture evidence is preserved.
-    report.exportFormat = await exportAttachments(bundle, attachments, run);
-    const evidence = await readAttachments(attachments);
+    let evidence;
+    try {
+      report.exportFormat = await exportAttachments(bundle, attachments, run);
+      evidence = await readAttachments(attachments);
+    } catch (error) {
+      // Missing evidence usually follows a failed test run; report that cause, not just its symptom.
+      if (testError) throw new Error(`${testError}\nEvidence unavailable: ${error.message}`);
+      throw error;
+    }
     report.fixture = evidence["e2e-result.json"];
     report.navigation = evidence["e2e-navigation.json"];
     report.failures = [
@@ -249,6 +271,13 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   console.log(`iOS e2e ${report.status}: ${join(defaultArtifacts, "report-ios.json")}`);
   if (report.status !== "passed") {
     console.error(report.error ?? report.cleanupError);
+    try {
+      console.error(
+        xcodebuildDiagnostics(await readFile(join(defaultArtifacts, "xcodebuild-ios.log"), "utf8")),
+      );
+    } catch {
+      console.error("No xcodebuild log was written");
+    }
     process.exitCode = 1;
   }
 }

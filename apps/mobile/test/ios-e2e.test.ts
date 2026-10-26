@@ -5,7 +5,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { CAPABILITIES } from "../e2e/checks.ts";
-import { exportAttachments, readAttachments, runIOS } from "../e2e/ios-e2e.mjs";
+import {
+  exportAttachments,
+  readAttachments,
+  runIOS,
+  xcodebuildDiagnostics,
+} from "../e2e/ios-e2e.mjs";
 
 let directory: string;
 beforeEach(async () => {
@@ -222,6 +227,24 @@ describe("iOS host driver verdict and cleanup", () => {
     expect(run.mock.calls).toHaveLength(2);
     expect(report.status).toBe("failed");
     expect(report).toHaveProperty("error", expect.stringContaining("XCTest failed"));
+  });
+  test("reports the XCTest failure, not only the missing evidence it caused", async () => {
+    const { report } = await scenario({ xcodeFails: true, missing: true });
+    expect(report.status).toBe("failed");
+    expect(report).toHaveProperty("error", expect.stringContaining("XCTest failed"));
+    expect(report).toHaveProperty("error", expect.stringContaining("Evidence unavailable"));
+  });
+  test("prints the decisive xcodebuild lines and the log tail", () => {
+    const log = [
+      "noise",
+      "App.swift:3: error: cannot find type",
+      "more noise",
+      "** TEST FAILED **",
+    ].join("\n");
+    const out = xcodebuildDiagnostics(log, 2);
+    expect(out).toContain("App.swift:3: error: cannot find type");
+    expect(out).toContain("** TEST FAILED **");
+    expect(out.split("--- last 2 lines ---")[1]).not.toContain("noise\nApp.swift");
   });
   test("missing attachments and cleanup errors are failures", async () => {
     expect((await scenario({ missing: true })).report.status).toBe("failed");
