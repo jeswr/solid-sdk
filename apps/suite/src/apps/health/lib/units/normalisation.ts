@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { type CanonicalUnit, canonicalUnit, convertUnit, type Measure } from "./conversion";
 import { UnitError } from "./errors";
 
@@ -9,19 +10,22 @@ export interface UnitObservation {
   readonly unit: string;
 }
 
-export type NormalisedObservation<T extends UnitObservation> = Omit<T, "value" | "unit"> & {
+/** Only required fields are guaranteed; metadata ownership/enumerability is not typed. */
+export type NormalisedObservation<T extends UnitObservation> = {
+  readonly measure: T["measure"];
   readonly value: number;
   readonly unit: CanonicalUnit<T["measure"]>;
 };
 
-/** Return a fresh record, preserving caller metadata without mutating the input. */
+/** Return a fresh record, shallow-copying only own enumerable metadata properties. */
 export function normaliseObservation<T extends UnitObservation>(
   observation: T,
 ): NormalisedObservation<T> {
   if (observation === null || typeof observation !== "object" || Array.isArray(observation)) {
     throw new UnitError("invalid-observation", "Expected a scalar observation record");
   }
-  const unit = canonicalUnit<T["measure"]>(observation.measure);
-  const value = convertUnit(observation.value, observation.unit, unit, observation.measure);
-  return { ...observation, value, unit };
+  const { measure, value: inputValue, unit: inputUnit } = observation;
+  const unit = canonicalUnit<T["measure"]>(measure);
+  const value = convertUnit(inputValue, inputUnit, unit, measure);
+  return { ...observation, measure, value, unit };
 }

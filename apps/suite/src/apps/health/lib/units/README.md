@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # Health measurement units
 
@@ -61,12 +62,18 @@ Non-finite inputs, overflow, complete underflow to zero, and changes lost entire
 when adding a temperature offset fail closed; other floating point rounding is
 inherent in the numeric API. No input strings are parsed or coerced.
 
-`normaliseObservation({ measure, value, unit, ...metadata })` returns a shallow copy
-with canonical `unit` and converted `value`, retaining other fields and their types.
-It never mutates inputs, including frozen records. Metadata is opaque and is not
-validated or recursively cloned; adapt RDF/QUDT data through the caller's typed data
-layer. It validates scalar records and propagates conversion errors. Normalising
-an already canonical observation is idempotent.
+`normaliseObservation({ measure, value, unit, ...metadata })` returns a fresh plain
+record with explicit `measure`, canonical `unit` and converted `value`, including
+when the input exposes required fields through prototype getters or non-enumerable
+properties. The return type guarantees only these three fields; TypeScript cannot
+distinguish own enumerable metadata from inherited or non-enumerable properties.
+Only own enumerable metadata properties (string or symbol keys) are shallow-copied;
+their values retain reference identity. Prototype getters/methods and non-enumerable
+metadata are omitted, and property descriptors are not preserved. Metadata is opaque
+and is not validated or recursively cloned; adapt RDF/QUDT data through the caller's
+typed data layer. Inputs, including frozen records, are never mutated. The function
+validates scalar records and propagates conversion errors. Normalising an already
+canonical observation is idempotent.
 
 All validation failures throw `UnitError` (an `Error`) with a stable `code`:
 `unknown-unit`, `unknown-measure`, `incompatible-unit`, `invalid-value`,

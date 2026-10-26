@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { describe, expect, it } from "vitest";
+// AUTHORED-BY Codex GPT-6
+import { describe, expect, expectTypeOf, it } from "vitest";
 import {
   canonicalUnit,
   convertUnit,
@@ -203,7 +204,7 @@ describe("observation normalisation", () => {
       unit: canonicalUnit(measure),
       value: expect.any(Number),
     });
-    expect(result.source).toBe(observation.source);
+    expect(Reflect.get(result, "source")).toBe(observation.source);
     expect(result.value).toBeCloseTo(expected, 10);
     expect(observation).toMatchObject({ unit, value });
     expect(normaliseObservation(result)).toEqual(result);
@@ -215,6 +216,88 @@ describe("observation normalisation", () => {
     const value: number = result.value;
     expect(unit).toBe("kg");
     expect(value).toBe(0.90718474);
+  });
+
+  it("materialises prototype observation getters into an idempotent plain record", () => {
+    class Reading implements UnitObservation {
+      get measure() {
+        return "mass" as const;
+      }
+      get value() {
+        return 2500;
+      }
+      get unit() {
+        return "g";
+      }
+      get source() {
+        return "Fictional device";
+      }
+      describe() {
+        return "Fictional reading";
+      }
+    }
+    const observation = Object.freeze(new Reading());
+    const result = normaliseObservation(observation);
+    expect(result).toEqual({ measure: "mass", value: 2.5, unit: "kg" });
+    expect(Object.getPrototypeOf(result)).toBe(Object.prototype);
+    expect(normaliseObservation(result)).toEqual(result);
+    expect(result).not.toHaveProperty("source");
+    expect(result).not.toHaveProperty("describe");
+    expectTypeOf(result).toEqualTypeOf<{
+      readonly measure: "mass";
+      readonly value: number;
+      readonly unit: "kg";
+    }>();
+    expect(observation.value).toBe(2500);
+  });
+
+  it("materialises required non-enumerable fields without promising metadata in its type", () => {
+    const observation = {
+      measure: "mass",
+      value: 2500,
+      unit: "g",
+      source: "Fictional device",
+    } as const;
+    for (const key of ["measure", "value", "unit", "source"]) {
+      Object.defineProperty(observation, key, { enumerable: false });
+    }
+    const result = normaliseObservation(Object.freeze(observation));
+    expect(result).toEqual({ measure: "mass", value: 2.5, unit: "kg" });
+    expect(normaliseObservation(result)).toEqual(result);
+    expect(result).not.toHaveProperty("source");
+    expectTypeOf(result).toEqualTypeOf<{
+      readonly measure: "mass";
+      readonly value: number;
+      readonly unit: "kg";
+    }>();
+  });
+
+  it("shallow-copies own enumerable metadata getters and symbol keys as values", () => {
+    const key = Symbol("metadata");
+    const source = Object.freeze({ name: "Fictional device" });
+    const observation = Object.freeze({
+      measure: "mass",
+      value: 2500,
+      unit: "g",
+      get source() {
+        return source;
+      },
+      [key]: source,
+    } as const);
+    const result = normaliseObservation(observation);
+    expect(Object.getOwnPropertyDescriptor(result, "source")).toEqual({
+      value: source,
+      enumerable: true,
+      configurable: true,
+      writable: true,
+    });
+    expect(Reflect.get(result, "source")).toBe(source);
+    expect(Reflect.get(result, key)).toBe(source);
+    expectTypeOf(result).toEqualTypeOf<{
+      readonly measure: "mass";
+      readonly value: number;
+      readonly unit: "kg";
+    }>();
   });
 
   it.each([null, undefined, [], 1, "observation"])("rejects malformed observation %s", (value) => {
