@@ -104,8 +104,10 @@ describe("Spotify production import", () => {
       if (path === "/v1/me/tracks") return json({ ...page, items: [{ track: page.items[0] }] });
       if (path === "/v1/me/playlists")
         return json({ ...page, items: [{ ...page.items[0], owner: { id: "fixture-user" } }] });
-      if (path.endsWith("/items"))
+      if (path.endsWith("/items")) {
+        expect(url.searchParams.get("additional_types")).toBe("track,episode");
         return json({ ...page, items: [{ item: TOP_TRACKS.items?.[0] }] });
+      }
       if (path === "/v1/me/following") return json({ artists: page });
       if (path.startsWith("/v1/me/top/")) return json(page);
       return undefined;
@@ -141,7 +143,8 @@ describe("Spotify production import", () => {
     const api = source((url) => {
       if (url.pathname === "/v1/me/playlists")
         return json({ items: [{ id: "mixed", name: "Mixed", collaborative: true }] });
-      if (url.pathname === "/v1/playlists/mixed/items")
+      if (url.pathname === "/v1/playlists/mixed/items") {
+        expect(url.searchParams.get("additional_types")).toBe("track,episode");
         return json({
           items: [
             {
@@ -158,6 +161,7 @@ describe("Spotify production import", () => {
             { item: { id: "unknown1", type: "unknown" } },
           ],
         });
+      }
       return undefined;
     });
     const { pod, report } = await imported(api);

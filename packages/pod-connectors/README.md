@@ -149,8 +149,8 @@ endpoint without a client secret or API bearer header; redirects are refused. Co
 401s share one refresh. GET retries are limited to one refresh per request. API 429s wait
 for `Retry-After` (seconds or HTTP date), with at most three retries. Playlist item 403/404
 responses retain the playlist metadata and count its inaccessible contents once in `skipped`;
-other failures reach the host without advancing its checkpoint. Unusable or oversized delays surface as
-`RateLimitedError` for the host to schedule later.
+other failures reach the host without advancing its checkpoint. Unusable or oversized delays
+surface as `RateLimitedError` for the host to schedule later.
 
 The opaque successful cursor is `after:<epoch-ms>` of the newest imported play. Hosts may
 supply `before:<epoch-ms>` for an explicit older-history import. Pagination follows the
@@ -163,7 +163,8 @@ The listener is the implicit Pod owner; no listening duration is inferred from t
 
 All demos remain fixture-backed. Public environment-variable configuration belongs to the
 host application. Playlist item requests use Spotify's current `/playlists/{id}/items`
-endpoint and accept both `item` and legacy `track` payloads, including podcast episodes
+endpoint with `additional_types=track,episode` and accept both `item` and legacy `track`
+payloads, including podcast episodes
 as `media:PodcastEpisode` plus `schema:PodcastEpisode`. Items are requested only for playlists
 owned by the current user or marked collaborative. Other playlists retain their metadata
 without items and count once in `skipped`. Inaccessible contents do not prevent the remaining

@@ -187,7 +187,7 @@ export const spotifyAdapter: IntegrationAdapter = {
         try {
           for await (const items of pages<TrackItem>(
             ctx,
-            `${API}/playlists/${encodeURIComponent(id)}/items?limit=50`,
+            `${API}/playlists/${encodeURIComponent(id)}/items?limit=50&additional_types=track,episode`,
           )) {
             for (const item of arr(items.items)) {
               position++;
