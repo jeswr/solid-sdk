@@ -34,6 +34,7 @@ import {
 import { DataFactory, Store } from "n3";
 import { ResourceWriteError } from "./errors.js";
 import { readRdf, writeRdf } from "./rdf-io.js";
+import { verifyPrivateIndexAccess } from "./type-index-access.js";
 import { NS, RDF_TYPE } from "./vocab.js";
 
 const SOLID = NS.SOLID;
@@ -219,6 +220,7 @@ export async function ensureTypeRegistrations(opts: {
     indexUrl = new URL("settings/privateTypeIndex.ttl", podRoot).toString();
     await createIndexDocument(indexUrl, fetchImpl);
     bootstrapped = true;
+    await verifyPrivateIndexAccess(indexUrl, webId, podRoot, fetchImpl);
     new ProfileTypeIndexAnchor(webId, profileDs, DataFactory).privateIndex = indexUrl;
     try {
       await writeRdf(documentUrl(webId), profileDs, {
@@ -243,6 +245,7 @@ export async function ensureTypeRegistrations(opts: {
       bootstrapped = true;
       continue;
     }
+    await verifyPrivateIndexAccess(indexUrl, webId, podRoot, fetchImpl);
     const { dataset: indexDs, etag: indexEtag } = fetched;
     const index = new TypeIndexDataset(indexDs, DataFactory);
 

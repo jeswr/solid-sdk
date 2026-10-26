@@ -49,6 +49,7 @@ export interface MockResponse {
   contentType?: string | undefined;
   /** `etag` header to return. */
   etag?: string | undefined;
+  headers?: Record<string, string> | undefined;
 }
 
 /** A recorded call made against a {@link mockFetch}. */
@@ -81,6 +82,7 @@ export function mockFetch(script: Record<string, MockResponse>): {
     const status = planned.status ?? (method === "PUT" ? 201 : method === "DELETE" ? 205 : 200);
     const responseHeaders: Record<string, string> = {
       "content-type": planned.contentType ?? "text/turtle",
+      ...planned.headers,
     };
     if (planned.etag) responseHeaders.etag = planned.etag;
     return new Response(method === "GET" ? (planned.body ?? "") : null, {
@@ -89,4 +91,18 @@ export function mockFetch(script: Record<string, MockResponse>): {
     });
   }) as typeof fetch;
   return { fetch: impl, calls };
+}
+
+/** Explicit owner-only WAC fixture for tests that write a private Type Index. */
+export function privateIndexPolicy(resource: string, owner: string): Record<string, MockResponse> {
+  return {
+    [`HEAD ${resource}`]: { headers: { link: `<${resource}.acl>; rel="acl"` } },
+    [`GET ${resource}.acl`]: {
+      body: `
+      @prefix acl: <http://www.w3.org/ns/auth/acl#>.
+      <#owner> a acl:Authorization; acl:accessTo <${resource}>;
+        acl:agent <${owner}>; acl:mode acl:Read, acl:Write, acl:Control.
+    `,
+    },
+  };
 }

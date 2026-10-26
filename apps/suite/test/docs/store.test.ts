@@ -15,7 +15,7 @@ import {
   DocsStore,
   type StoredDocument,
 } from "../../src/apps/docs/lib/model/store.js";
-import { mockFetch, type RecordedCall, turtleToStore } from "./helpers.js";
+import { mockFetch, privateIndexPolicy, type RecordedCall, turtleToStore } from "./helpers.js";
 
 const POD = "https://pod.example/";
 const WEBID = `${POD}profile/card#me`;
@@ -70,6 +70,11 @@ async function server() {
       headers,
       body: typeof init?.body === "string" ? init.body : undefined,
     });
+    const policy = privateIndexPolicy(INDEX, WEBID)[`${method} ${url}`];
+    if (policy)
+      return new Response(method === "GET" ? policy.body : null, {
+        headers: { "content-type": "text/turtle", ...policy.headers },
+      });
     const existing = resources.get(url);
     if (method === "GET")
       return existing
@@ -107,6 +112,39 @@ function listing(children: string[]): string {
 }
 
 describe("store creation and scope", () => {
+  it("creates both documents when first-use profile linking races", async () => {
+    const s = await server();
+    const profileDocument = WEBID.split("#")[0] as string;
+    const profile = { body: "", etag: '"profile-old"', contentType: "text/turtle" };
+    s.resources.set(WEBID, profile);
+    s.resources.set(profileDocument, profile);
+    let profileReads = 0;
+    let release = () => {};
+    const initialReads = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const profileStatuses: number[] = [];
+    const fetchImpl: typeof fetch = async (url, init) => {
+      const response = await s.fetchImpl(url, init);
+      if (String(url) === WEBID && ++profileReads <= 2) {
+        if (profileReads === 2) release();
+        await initialReads;
+      }
+      if (String(url) === profileDocument && init?.method === "PUT") {
+        profileStatuses.push(response.status);
+        if (response.ok) s.resources.set(WEBID, s.resources.get(profileDocument) as typeof profile);
+      }
+      return response;
+    };
+    const store = new DocsStore(POD, WEBID, fetchImpl);
+    const documents = await Promise.all([
+      store.create({ title: "First" }),
+      store.create({ title: "Second" }),
+    ]);
+    expect(profileStatuses.sort()).toEqual([201, 412]);
+    expect(s.resources.get(WEBID)?.body).toContain(INDEX);
+    for (const doc of documents) expect(await store.read(doc.url)).toEqual(doc);
+  });
   it.each([
     "create",
     "copy",

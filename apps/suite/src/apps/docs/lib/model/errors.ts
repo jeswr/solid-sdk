@@ -75,3 +75,11 @@ export class ResourceReadError extends PodDocsError {
     this.name = "ResourceReadError";
   }
 }
+
+/** The effective private-index policy could not be verified as owner-only. */
+export class PrivateIndexAccessError extends PodDocsError {
+  constructor(readonly url: string) {
+    super(`Owner-only access could not be verified for private Type Index: ${url}`);
+    this.name = "PrivateIndexAccessError";
+  }
+}

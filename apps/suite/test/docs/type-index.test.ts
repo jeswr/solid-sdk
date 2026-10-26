@@ -14,7 +14,7 @@ import {
   typeIndexLinks,
 } from "../../src/apps/docs/lib/model/type-index.js";
 import { DOCUMENT_CLASS } from "../../src/apps/docs/lib/model/vocab.js";
-import { mockFetch, turtleToStore } from "./helpers.js";
+import { mockFetch, privateIndexPolicy, turtleToStore } from "./helpers.js";
 
 const WEBID = "https://alice.pod/profile/card#me";
 const PROFILE_DOC = "https://alice.pod/profile/card";
@@ -100,6 +100,7 @@ describe("ensureTypeRegistrations", () => {
   ])("repairs a missing linked index with create-only PUT (%s)", async (status) => {
     const linkedIndex = `${POD}preferences/documents.ttl`;
     const { fetch: transport, calls } = mockFetch({
+      ...privateIndexPolicy(linkedIndex, WEBID),
       [`GET ${WEBID}`]: { body: profileWith({ privateIndex: linkedIndex }) },
       [`GET ${linkedIndex}`]: {
         body: `@prefix solid: <http://www.w3.org/ns/solid/terms#>.
@@ -149,7 +150,12 @@ describe("ensureTypeRegistrations", () => {
         .map((reg) => reg.forClass)
         .sort(),
     ).toEqual([DOCUMENT_CLASS, "https://example.org/Other"].sort());
-    expect(calls.every((call) => call.url === WEBID || call.url === linkedIndex)).toBe(true);
+    expect(
+      calls.every(
+        (call) =>
+          call.url === WEBID || call.url === linkedIndex || call.url === `${linkedIndex}.acl`,
+      ),
+    ).toBe(true);
   });
 
   it.each([
@@ -159,6 +165,7 @@ describe("ensureTypeRegistrations", () => {
     "offline",
   ] as const)("propagates linked index read failure %s without writing", async (status) => {
     const { fetch: transport, calls } = mockFetch({
+      ...privateIndexPolicy(PRIVATE_INDEX, WEBID),
       [`GET ${WEBID}`]: { body: profileWith({ privateIndex: PRIVATE_INDEX }) },
       [`GET ${PRIVATE_INDEX}`]: { status: status === "offline" ? 500 : status },
     });
@@ -179,6 +186,7 @@ describe("ensureTypeRegistrations", () => {
 
   it("propagates permission failures when creating a missing linked index", async () => {
     const { fetch, calls } = mockFetch({
+      ...privateIndexPolicy(PRIVATE_INDEX, WEBID),
       [`GET ${WEBID}`]: { body: profileWith({ privateIndex: PRIVATE_INDEX }) },
       [`PUT ${PRIVATE_INDEX}`]: { status: 403 },
     });
@@ -195,6 +203,7 @@ describe("ensureTypeRegistrations", () => {
 
   it("bounds recovery if a linked index keeps disappearing", async () => {
     const { fetch, calls } = mockFetch({
+      ...privateIndexPolicy(PRIVATE_INDEX, WEBID),
       [`GET ${WEBID}`]: { body: profileWith({ privateIndex: PRIVATE_INDEX }) },
       [`PUT ${PRIVATE_INDEX}`]: { status: 201 },
     });
@@ -214,6 +223,7 @@ describe("ensureTypeRegistrations", () => {
 
   it("bootstraps a private index, links it from the profile, and adds the registration", async () => {
     const { fetch, calls } = mockFetch({
+      ...privateIndexPolicy(PRIVATE_INDEX, WEBID),
       [`GET ${WEBID}`]: { body: profileWith({}), etag: 'W/"p"' },
       [`PUT ${PRIVATE_INDEX}`]: { status: 201 },
       [`PUT ${PROFILE_DOC}`]: { status: 205 },
@@ -243,6 +253,7 @@ describe("ensureTypeRegistrations", () => {
 
   it("adds to an existing private index without bootstrapping", async () => {
     const { fetch, calls } = mockFetch({
+      ...privateIndexPolicy(PRIVATE_INDEX, WEBID),
       [`GET ${WEBID}`]: { body: profileWith({ privateIndex: PRIVATE_INDEX }), etag: 'W/"p"' },
       [`GET ${PRIVATE_INDEX}`]: {
         body: "@prefix solid: <http://www.w3.org/ns/solid/terms#> . <> a solid:TypeIndex .",
@@ -268,6 +279,7 @@ describe("ensureTypeRegistrations", () => {
   it("bootstraps private storage even when a public index exists", async () => {
     const publicIndex = "https://alice.pod/public.ttl";
     const { fetch, calls } = mockFetch({
+      ...privateIndexPolicy(PRIVATE_INDEX, WEBID),
       [`GET ${WEBID}`]: { body: profileWith({ publicIndex }), etag: '"p"' },
       [`PUT ${PRIVATE_INDEX}`]: { status: 201 },
       [`PUT ${PROFILE_DOC}`]: { status: 205 },
@@ -290,6 +302,7 @@ describe("ensureTypeRegistrations", () => {
       <#reg> a solid:TypeRegistration ; solid:forClass <${DOCUMENT_CLASS}> ; solid:instanceContainer <${CONTAINER}> .
     `;
     const { fetch, calls } = mockFetch({
+      ...privateIndexPolicy(PRIVATE_INDEX, WEBID),
       [`GET ${WEBID}`]: { body: profileWith({ privateIndex: PRIVATE_INDEX }), etag: 'W/"p"' },
       [`GET ${PRIVATE_INDEX}`]: { body: existingIndex, etag: 'W/"i"' },
     });
@@ -314,6 +327,7 @@ describe("ensureTypeRegistrations", () => {
       <#reg> a solid:TypeRegistration ; solid:forClass <${DOCUMENT_CLASS}> ; solid:instanceContainer <${CONTAINER}> .
     `;
     const { fetch } = mockFetch({
+      ...privateIndexPolicy(PRIVATE_INDEX, WEBID),
       [`GET ${WEBID}`]: { body: profileWith({}), etag: 'W/"p"' },
       [`PUT ${PRIVATE_INDEX}`]: { status: 412 }, // create-only collision
       [`PUT ${PROFILE_DOC}`]: { status: 205 },
@@ -331,6 +345,7 @@ describe("ensureTypeRegistrations", () => {
 
   it("propagates a non-412 failure while creating the index document", async () => {
     const { fetch } = mockFetch({
+      ...privateIndexPolicy(PRIVATE_INDEX, WEBID),
       [`GET ${WEBID}`]: { body: profileWith({}), etag: 'W/"p"' },
       [`PUT ${PRIVATE_INDEX}`]: { status: 500 },
     });
@@ -353,6 +368,7 @@ describe("discoverRegistrations", () => {
       PROFILE_DOC,
     );
     const { fetch } = mockFetch({
+      ...privateIndexPolicy(PRIVATE_INDEX, WEBID),
       [`GET ${Public}`]: {
         body: `@prefix solid: <http://www.w3.org/ns/solid/terms#> . <#r> a solid:TypeRegistration ; solid:forClass <${DOCUMENT_CLASS}> ; solid:instanceContainer <${CONTAINER}> .`,
       },
@@ -369,13 +385,18 @@ describe("discoverRegistrations", () => {
 
   it("treats a 404/403 index as contributing nothing", async () => {
     const profile = turtleToStore(profileWith({ privateIndex: PRIVATE_INDEX }), PROFILE_DOC);
-    const { fetch } = mockFetch({}); // private index → 404
+    const { fetch } = mockFetch({
+      ...privateIndexPolicy(PRIVATE_INDEX, WEBID),
+    }); // private index → 404
     await expect(discoverRegistrations(WEBID, profile, fetch, POD)).resolves.toEqual([]);
   });
 
   it("propagates a non-404/403 index read failure", async () => {
     const profile = turtleToStore(profileWith({ privateIndex: PRIVATE_INDEX }), PROFILE_DOC);
-    const { fetch } = mockFetch({ [`GET ${PRIVATE_INDEX}`]: { status: 500, body: "err" } });
+    const { fetch } = mockFetch({
+      ...privateIndexPolicy(PRIVATE_INDEX, WEBID),
+      [`GET ${PRIVATE_INDEX}`]: { status: 500, body: "err" },
+    });
     await expect(discoverRegistrations(WEBID, profile, fetch, POD)).rejects.toMatchObject({
       status: 500,
     });
@@ -383,13 +404,16 @@ describe("discoverRegistrations", () => {
 
   it("returns nothing when the profile advertises no indexes", async () => {
     const profile = turtleToStore(profileWith({}), PROFILE_DOC);
-    const { fetch } = mockFetch({});
+    const { fetch } = mockFetch({
+      ...privateIndexPolicy(PRIVATE_INDEX, WEBID),
+    });
     await expect(discoverRegistrations(WEBID, profile, fetch, POD)).resolves.toEqual([]);
   });
 });
 
 it("re-reads and reapplies registrations on 412 without losing concurrent entries", async () => {
   const { fetch: initial } = mockFetch({
+    ...privateIndexPolicy(PRIVATE_INDEX, WEBID),
     [`GET ${WEBID}`]: { body: profileWith({ privateIndex: PRIVATE_INDEX }) },
     [`GET ${PRIVATE_INDEX}`]: { body: "", etag: '"old"' },
   });
@@ -400,7 +424,7 @@ it("re-reads and reapplies registrations on 412 without losing concurrent entrie
       writes.push(String(init.body));
       return new Response(null, { status: ++puts === 1 ? 412 : 205 });
     }
-    if (String(url) === PRIVATE_INDEX && puts === 1) {
+    if (String(url) === PRIVATE_INDEX && init?.method !== "HEAD" && puts === 1) {
       return new Response(
         `<#remote> a <http://www.w3.org/ns/solid/terms#TypeRegistration>; <http://www.w3.org/ns/solid/terms#forClass> <https://example.org/Other>.`,
         { headers: { "content-type": "text/turtle", etag: '"new"' } },
@@ -418,6 +442,7 @@ it("re-reads and reapplies registrations on 412 without losing concurrent entrie
 
 it("bounds repeated Type Index conflicts", async () => {
   const { fetch: reads } = mockFetch({
+    ...privateIndexPolicy(PRIVATE_INDEX, WEBID),
     [`GET ${WEBID}`]: { body: profileWith({ privateIndex: PRIVATE_INDEX }) },
     [`GET ${PRIVATE_INDEX}`]: { body: "", etag: '"old"' },
   });
@@ -441,6 +466,8 @@ it.each([false, true])("recovers profile linking conflicts (new link: %s)", asyn
   let profilePuts = 0;
   const writes: { url: string; body: string; etag: string | null }[] = [];
   const { fetch: transport } = mockFetch({
+    ...privateIndexPolicy(PRIVATE_INDEX, WEBID),
+    ...privateIndexPolicy(concurrentIndex, WEBID),
     [`PUT ${PRIVATE_INDEX}`]: { status: 201 },
     [`GET ${PRIVATE_INDEX}`]: { body: "" },
     [`GET ${concurrentIndex}`]: { body: "" },
@@ -481,6 +508,7 @@ it.each([false, true])("recovers profile linking conflicts (new link: %s)", asyn
 
 it.each([412, 403])("bounds or propagates profile linking failures (%s)", async (status) => {
   const { fetch, calls } = mockFetch({
+    ...privateIndexPolicy(PRIVATE_INDEX, WEBID),
     [`GET ${WEBID}`]: { body: profileWith({}) },
     [`PUT ${PRIVATE_INDEX}`]: { status: 412 },
     [`PUT ${PROFILE_DOC}`]: { status },

@@ -174,12 +174,13 @@ describe("legacy document vocabulary", () => {
 });
 
 it("adds a canonical registration alongside an old registration on ensure", async () => {
-  const { mockFetch, turtleToStore } = await import("./helpers.js");
+  const { mockFetch, privateIndexPolicy, turtleToStore } = await import("./helpers.js");
   const { ensureTypeRegistrations } = await import("../../src/apps/docs/lib/model/type-index.js");
   const webId = "https://pod.example/profile/card#me";
   const indexUrl = "https://pod.example/settings/privateTypeIndex.ttl";
   const container = "https://pod.example/docs/";
   const { fetch, calls } = mockFetch({
+    ...privateIndexPolicy(indexUrl, webId),
     [`GET ${webId}`]: { body: `<${webId}> <${SUITE_NS.SOLID}privateTypeIndex> <${indexUrl}> .` },
     [`GET ${indexUrl}`]: {
       body: `@prefix solid: <${SUITE_NS.SOLID}> .
