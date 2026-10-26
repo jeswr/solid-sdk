@@ -3,15 +3,24 @@
  * Gmail → Mail (CON-07). Full sync lists every message and stores its raw RFC 822 source
  * through the shared MailWriter (pod-mail layout, `.eml` beside each message). The cursor
  * is the mailbox `historyId`; later runs replay `users.history.list` (added, deleted and
- * relabelled messages). An expired history id (404) falls back to a full sync.
+ * relabelled messages). An expired history id (404) falls back to a full sync, which also
+ * removes stored messages Gmail no longer lists (tracked in `gmail-index.ttl`).
  */
 import { DataFactory, Store } from "n3";
 import { createGoogleOAuthConfig, GOOGLE_SCOPES } from "../adapters/google/oauth.js";
 import { IntegrationSyncError } from "../core/errors.js";
 import { getJson } from "../core/fixture-fetch.js";
-import { Provenance } from "../core/provenance.js";
 import type { ImportContext, ImportOutcome, IntegrationAdapter } from "../core/types.js";
-import { createMailWriter, type MailWriter } from "../mail/writer.js";
+import { PodThing } from "../core/vocab.js";
+import { accountRoot, SYSTEM_FOLDERS } from "../mail/paths.js";
+import { MAIL_CLASSES, MailCollection, MailMessage } from "../mail/vocab.js";
+import {
+  createMailWriter,
+  type MailFolder,
+  MailParseError,
+  type MailWriter,
+  type StoredMail,
+} from "../mail/writer.js";
 import {
   GMAIL_API,
   GMAIL_FIXTURES,
@@ -59,9 +68,11 @@ export const gmailAdapter: IntegrationAdapter = {
     const profile = await getJson<GmailProfile>(ID, ctx.api, `${GMAIL_API}/profile`);
     if (typeof profile?.emailAddress !== "string" || typeof profile.historyId !== "string")
       throw new IntegrationSyncError(ID, "Gmail returned an incomplete mailbox profile.");
-    const labels = await labelNames(ctx);
-    const mail = createMailWriter(ctx, profile.emailAddress);
-    const sync = new Sync(ctx, mail, labels);
+    const account = profile.emailAddress;
+    const labels = await labelFolders(ctx);
+    const mail = createMailWriter(ctx, account);
+    const index = await SourceIndex.load(ctx, account);
+    const sync = new Sync(ctx, mail, labels, index);
 
     let cursor: string | undefined;
     if (ctx.cursor) {
@@ -78,55 +89,138 @@ export const gmailAdapter: IntegrationAdapter = {
       cursor = profile.historyId;
     }
     ctx.progress({ label: "Updating folders and conversations…", done: sync.done });
-    await mail.flush();
+    const known = new Map<string, MailFolder>();
+    for (const key of SYSTEM_FOLDERS) known.set(key, { key, title: key });
+    for (const folder of labels.values()) known.set(folder.key, folder);
+    await mail.flush([...known.values()]);
+    await index.save();
     ctx.progress({ label: "Done", done: sync.done, total: sync.done });
     return { cursor, skipped: sync.skipped || undefined };
   },
 };
 
-async function labelNames(ctx: ImportContext): Promise<Map<string, string>> {
+/** Label id → folder. System folders are keyed by name, user labels by their stable id. */
+async function labelFolders(ctx: ImportContext): Promise<Map<string, MailFolder>> {
   const list = await getJson<GmailLabelList>(ID, ctx.api, `${GMAIL_API}/labels`);
-  const names = new Map<string, string>();
+  const folders = new Map<string, MailFolder>();
   for (const label of list?.labels ?? []) {
-    if (!label || typeof label.id !== "string") continue;
-    const name = SYSTEM_LABELS[label.id] ?? (label.type === "user" ? label.name : undefined);
-    if (typeof name === "string" && name.trim()) names.set(label.id, name);
+    if (!label || !validId(label.id)) continue;
+    const system = SYSTEM_LABELS[label.id];
+    if (system) folders.set(label.id, { key: system, title: system });
+    else if (label.type === "user" && typeof label.name === "string" && label.name.trim())
+      folders.set(label.id, { key: label.id, title: label.name });
   }
-  return names;
+  return folders;
 }
 
 const webUrl = (id: string) => `https://mail.google.com/mail/#all/${encodeURIComponent(id)}`;
 const validId = (id: unknown): id is string =>
   typeof id === "string" && /^[0-9a-zA-Z_-]+$/.test(id);
 
+interface Indexed {
+  readonly slug: string;
+  readonly thread?: string;
+}
+
+/**
+ * Which pod document holds each Gmail message (keyed by its Gmail web URL). Deletions and
+ * full-sync sweeps need it because document ids come from untrusted Message-ID headers.
+ */
+class SourceIndex {
+  private dirty = false;
+  private constructor(
+    private readonly ctx: ImportContext,
+    private readonly slug: string,
+    readonly entries: Map<string, Indexed>,
+  ) {}
+
+  static async load(ctx: ImportContext, account: string): Promise<SourceIndex> {
+    const slug = `${accountRoot(account)}gmail-index.ttl`;
+    const entries = new Map<string, Indexed>();
+    const dataset = await ctx.read(slug);
+    if (dataset) {
+      const base = ctx.resolve("mail/").slice(0, -"mail/".length);
+      const list = new MailCollection(`${ctx.resolve(slug)}#it`, dataset, DataFactory);
+      for (const iri of list.members) {
+        const source = new PodThing(iri, dataset, DataFactory).sourceUrl;
+        const doc = iri.split("#", 1)[0] as string;
+        if (!source || !doc.startsWith(base)) continue;
+        entries.set(source, {
+          slug: doc.slice(base.length),
+          thread: new MailMessage(iri, dataset, DataFactory).partOfThread,
+        });
+      }
+    }
+    return new SourceIndex(ctx, slug, entries);
+  }
+
+  set(source: string, entry: Indexed): void {
+    const current = this.entries.get(source);
+    if (current?.slug === entry.slug && current.thread === entry.thread) return;
+    this.entries.set(source, entry);
+    this.dirty = true;
+  }
+
+  delete(source: string): void {
+    if (this.entries.delete(source)) this.dirty = true;
+  }
+
+  async save(): Promise<void> {
+    if (!this.dirty) return;
+    const dataset = new Store();
+    const list = new MailCollection(`${this.ctx.resolve(this.slug)}#it`, dataset, DataFactory);
+    list.types.add(MAIL_CLASSES.Folder);
+    list.title = "Gmail message index";
+    for (const [source, { slug, thread }] of this.entries) {
+      const iri = `${this.ctx.resolve(slug)}#it`;
+      list.members.add(iri);
+      new PodThing(iri, dataset, DataFactory).sourceUrl = source;
+      new MailMessage(iri, dataset, DataFactory).partOfThread = thread;
+    }
+    await this.ctx.write({
+      slug: this.slug,
+      category: "mail",
+      forClass: MAIL_CLASSES.Folder,
+      dataset,
+      skipRegistration: true,
+    });
+    this.dirty = false;
+  }
+}
+
 class Sync {
   done = 0;
   skipped = 0;
+  private readonly seen = new Set<string>();
   constructor(
     private readonly ctx: ImportContext,
     private readonly mail: MailWriter,
-    private readonly labels: ReadonlyMap<string, string>,
+    private readonly labels: ReadonlyMap<string, MailFolder>,
+    private readonly index: SourceIndex,
   ) {}
 
+  /** Lists every message (Spam and Trash included) and removes stored ones no longer listed. */
   async full(): Promise<void> {
     let pageToken: string | undefined;
     do {
-      const params = new URLSearchParams({ maxResults: "100" });
+      const params = new URLSearchParams({ maxResults: "100", includeSpamTrash: "true" });
       if (pageToken) params.set("pageToken", pageToken);
       const page = await getJson<GmailMessageList>(
         ID,
         this.ctx.api,
         `${GMAIL_API}/messages?${params}`,
       );
-      for (const ref of page?.messages ?? []) await this.store(ref?.id, ref?.threadId);
+      for (const ref of page?.messages ?? []) await this.store(ref?.id);
       pageToken = page?.nextPageToken || undefined;
     } while (pageToken);
+    for (const [source, entry] of [...this.index.entries])
+      if (!this.seen.has(source)) await this.drop(source, entry);
   }
 
   /** Replays history pages from `start`; returns the mailbox historyId to persist. */
   async history(start: string): Promise<string> {
-    const changed = new Map<string, string | undefined>();
-    const deleted = new Map<string, string | undefined>();
+    const changed = new Set<string>();
+    const deleted = new Set<string>();
     let pageToken: string | undefined;
     let latest = start;
     do {
@@ -143,22 +237,21 @@ class Sync {
         for (const { message } of record?.messagesDeleted ?? []) {
           if (!validId(message?.id)) continue;
           changed.delete(message.id);
-          deleted.set(message.id, message.threadId);
+          deleted.add(message.id);
         }
         for (const group of [record?.messagesAdded, record?.labelsAdded, record?.labelsRemoved])
           for (const { message } of group ?? [])
-            if (validId(message?.id) && !deleted.has(message.id))
-              changed.set(message.id, message.threadId);
+            if (validId(message?.id) && !deleted.has(message.id)) changed.add(message.id);
       }
       if (typeof page?.historyId === "string") latest = page.historyId;
       pageToken = page?.nextPageToken || undefined;
     } while (pageToken);
-    for (const [id, threadId] of deleted) await this.remove(id, threadId);
-    for (const [id, threadId] of changed) await this.store(id, threadId);
+    for (const id of deleted) await this.remove(id);
+    for (const id of changed) await this.store(id);
     return latest;
   }
 
-  private async store(id: unknown, threadId: unknown): Promise<void> {
+  private async store(id: unknown): Promise<void> {
     if (!validId(id)) {
       this.skipped++;
       return;
@@ -172,12 +265,14 @@ class Sync {
       );
     } catch (error) {
       // Deleted between listing and fetching: a deletion, not a failure.
-      if (error instanceof IntegrationSyncError && error.status === 404)
-        return this.remove(id, validId(threadId) ? threadId : undefined);
+      if (error instanceof IntegrationSyncError && error.status === 404) return this.remove(id);
       throw error;
     }
     const labelIds = Array.isArray(message?.labelIds) ? message.labelIds : [];
-    if (labelIds.includes("SPAM")) return this.remove(id, message.threadId);
+    if (labelIds.includes("SPAM")) return this.remove(id);
+    const source = webUrl(id);
+    // Anything kept from here on is not swept by a full sync, even if it cannot be re-read.
+    this.seen.add(source);
     if (typeof message?.raw !== "string" || message.raw.length > (MAX_RAW_BYTES * 4) / 3 + 4) {
       this.skipped++;
       return;
@@ -189,35 +284,44 @@ class Sync {
     }
     const folders = labelIds.flatMap((label) => this.labels.get(label) ?? []);
     if (!labelIds.some((label) => ["INBOX", "SENT", "DRAFT", "TRASH"].includes(label)))
-      folders.push("Archive");
+      folders.push({ key: "Archive", title: "Archive" });
     const received = Number(message.internalDate);
-    await this.mail.add({
-      raw,
-      folders,
-      read: !labelIds.includes("UNREAD"),
-      threadKey: validId(message.threadId) ? `gmail-${message.threadId}` : undefined,
-      fallbackId: `gmail-${id}`,
-      sourceUrl: webUrl(id),
-      receivedAt: Number.isFinite(received) && received > 0 ? new Date(received) : undefined,
-    });
+    let stored: StoredMail;
+    try {
+      stored = await this.mail.add({
+        raw,
+        folders,
+        read: !labelIds.includes("UNREAD"),
+        threadKey: validId(message.threadId) ? `gmail-${message.threadId}` : undefined,
+        fallbackId: `gmail-${id}`,
+        sourceUrl: source,
+        receivedAt: Number.isFinite(received) && received > 0 ? new Date(received) : undefined,
+      });
+    } catch (error) {
+      // One malformed message must not block the mailbox.
+      if (!(error instanceof MailParseError)) throw error;
+      this.skipped++;
+      return;
+    }
+    const previous = this.index.entries.get(source);
+    // The same Gmail message re-keyed (e.g. its Message-ID now collides) leaves no orphan.
+    if (previous && previous.slug !== stored.slug)
+      await this.mail.removeMessage(previous.slug, previous.thread);
+    this.index.set(source, { slug: stored.slug, thread: stored.thread });
     this.done++;
     if (this.done % 25 === 0)
       this.ctx.progress({ label: `Saved ${this.done} messages…`, done: this.done });
   }
 
-  /** Deleted Gmail ids are found through their thread, whose members carry the source URL. */
-  private async remove(id: string, threadId: string | undefined): Promise<void> {
-    if (!validId(threadId)) return;
+  private async remove(id: string): Promise<void> {
     const source = webUrl(id);
-    for (const slug of await this.mail.threadMessages(`gmail-${threadId}`)) {
-      const dataset = await this.ctx.read(slug);
-      const message = new Provenance(
-        `${this.ctx.resolve(slug)}#it`,
-        dataset ?? new Store(),
-        DataFactory,
-      );
-      if (message.derivedFrom.has(source)) await this.mail.removeMessage(slug);
-    }
+    const entry = this.index.entries.get(source);
+    if (entry) await this.drop(source, entry);
+  }
+
+  private async drop(source: string, entry: Indexed): Promise<void> {
+    await this.mail.removeMessage(entry.slug, entry.thread);
+    this.index.delete(source);
   }
 }
 

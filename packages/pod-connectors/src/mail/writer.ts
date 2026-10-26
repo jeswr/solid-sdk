@@ -3,11 +3,17 @@
  * Shared MailWriter: stores raw RFC 822 messages in the pod-mail layout (apps MAI-01)
  * through the connector ports. Used by the Gmail API importer (CON-07) and the Takeout
  * mbox path (CON-08). Message documents are written as they arrive; thread and folder
- * membership is accumulated and written once by `flush()`, so a large mailbox does not
- * rewrite its Inbox document per message.
+ * membership is reconciled once by `flush()`, so a large mailbox does not rewrite its
+ * Inbox document per message.
+ *
+ * Replay safety: a run that fails after writing messages but before `flush()` keeps its
+ * source cursor, so the next run replays the same changes. Membership is therefore
+ * reconciled from each touched message's desired state against every known folder
+ * (never from the message's previous document), and thread members whose message
+ * documents no longer exist are dropped.
  */
-import type { DatasetCore } from "@rdfjs/types";
 import { DataFactory, Store } from "n3";
+import { Provenance } from "../core/provenance.js";
 import type { ImportContext } from "../core/types.js";
 import { htmlToText } from "./html-text.js";
 import { parseMail } from "./parse.js";
@@ -17,10 +23,11 @@ import {
   emlSlug,
   folderSlug,
   messageSlug,
-  SYSTEM_FOLDERS,
   threadSlug,
 } from "./paths.js";
 import { MAIL_CLASSES, MailAttachment, MailCollection, MailMessage } from "./vocab.js";
+
+export { MailParseError } from "./parse.js";
 
 /** The connector ports the writer needs (API and file imports both provide them). */
 export type MailPorts = Pick<
@@ -28,83 +35,105 @@ export type MailPorts = Pick<
   "resolve" | "read" | "write" | "writeBinary" | "remove"
 >;
 
+/**
+ * A folder: `key` names its document (a system folder name such as `Inbox`, a source label
+ * id, or a label name), `title` is its display name and may change between runs.
+ */
+export interface MailFolder {
+  readonly key: string;
+  readonly title: string;
+}
+
 export interface MailItem {
   /** RFC 822 source bytes. */
   readonly raw: Uint8Array;
-  /** Folder titles; system names (`Inbox`, `Sent`, …) map to the reserved system folders. */
-  readonly folders: readonly string[];
+  readonly folders: readonly MailFolder[];
   readonly read: boolean;
   /** Source-native thread key; defaults to the MAI-01 References/In-Reply-To root. */
   readonly threadKey?: string;
-  /** Document id when the message has no usable Message-ID. */
+  /** Document id when the message has no usable Message-ID, or another source item owns it. */
   readonly fallbackId: string;
-  /** Source item URL recorded as provenance (`prov:wasDerivedFrom`). */
+  /** Source item URL recorded as provenance (`prov:wasDerivedFrom`); identifies the item. */
   readonly sourceUrl?: string;
   readonly receivedAt?: Date;
 }
 
+export interface StoredMail {
+  readonly slug: string;
+  /** Message subject IRI. */
+  readonly iri: string;
+  /** Thread subject IRI. */
+  readonly thread: string;
+}
+
 export interface MailWriter {
-  /** Store one message and return its document slug. */
-  add(item: MailItem): Promise<string>;
-  /** Delete a stored message, its source and attachments, and drop its memberships. */
-  removeMessage(slug: string): Promise<void>;
-  /** Message slugs recorded on a thread (pending changes included). */
-  threadMessages(threadKey: string): Promise<string[]>;
-  /** Write every touched thread and folder document. */
-  flush(): Promise<void>;
+  /** Store one message. Throws `MailParseError` for unparseable input (skip it). */
+  add(item: MailItem): Promise<StoredMail>;
+  /**
+   * Delete a stored message, its source and attachments, and drop its memberships. When the
+   * document is already gone (a replayed deletion), `thread` lets the membership still be dropped.
+   */
+  removeMessage(slug: string, thread?: string): Promise<void>;
+  /** Reconcile touched messages against `folders` (all folders the source knows) and write. */
+  flush(folders?: readonly MailFolder[]): Promise<void>;
 }
 
 /** RDF and malformed MIME types from untrusted mail are stored as opaque bytes. */
-function binaryType(contentType: string): string {
-  const type = contentType.split(";", 1)[0]?.trim().toLowerCase() ?? "";
+export function binaryType(contentType: string): string {
+  const type = String(contentType.split(";", 1)[0]).trim().toLowerCase();
   const rdf = /^(text\/(turtle|n3)|application\/(ld\+json|n-triples|n-quads|trig|rdf\+xml))$/;
   return /^[a-z0-9][a-z0-9!#$&^_.+-]*\/[a-z0-9][a-z0-9!#$&^_.+-]*$/.test(type) && !rdf.test(type)
     ? type
     : "application/octet-stream";
 }
 
-interface Pending {
-  readonly kind: "thread" | "folder";
-  title?: string;
-  readonly add: Set<string>;
-  readonly drop: Set<string>;
-}
-
 const docOf = (iri: string) => iri.split("#", 1)[0] as string;
 
 export function createMailWriter(ctx: MailPorts, account: string): MailWriter {
   const root = accountRoot(account);
-  const pending = new Map<string, Pending>();
   const base = ctx.resolve("mail/").slice(0, -"mail/".length);
   const slugOf = (url: string) => {
     if (!url.startsWith(base)) throw new TypeError("Mail document outside the connector");
     return url.slice(base.length);
   };
-  const touch = (slug: string, kind: Pending["kind"]): Pending => {
-    let entry = pending.get(slug);
-    if (!entry) {
-      entry = { kind, add: new Set(), drop: new Set() };
-      pending.set(slug, entry);
-    }
-    return entry;
+  const iriOf = (slug: string) => `${ctx.resolve(slug)}#it`;
+  /** Desired folder documents of every message touched this run (empty = in no folder). */
+  const desired = new Map<string, Set<string>>();
+  /** Folder documents to reconcile, with their current title ("" keeps the stored one). */
+  const titles = new Map<string, string>();
+  const remember = (slug: string) => {
+    if (!titles.has(slug)) titles.set(slug, "");
   };
-  const member = (slug: string, kind: Pending["kind"], message: string, keep: boolean) => {
-    const entry = touch(slug, kind);
-    (keep ? entry.add : entry.drop).add(message);
-    (keep ? entry.drop : entry.add).delete(message);
+  /** Thread document slug → members to add / drop, plus the first subject seen. */
+  const threads = new Map<string, { add: Set<string>; drop: Set<string>; title?: string }>();
+  const thread = (slug: string) => {
+    let entry = threads.get(slug);
+    if (!entry) {
+      entry = { add: new Set(), drop: new Set() };
+      threads.set(slug, entry);
+    }
     return entry;
   };
   const existing = async (slug: string) => {
     const dataset = await ctx.read(slug);
-    return dataset && new MailMessage(`${ctx.resolve(slug)}#it`, dataset, DataFactory);
+    return dataset && new MailMessage(iriOf(slug), dataset, DataFactory);
   };
 
-  async function add(item: MailItem): Promise<string> {
+  async function add(item: MailItem): Promise<StoredMail> {
     const mail = await parseMail(item.raw);
-    const id = mail.messageId ?? item.fallbackId;
+    let id = mail.messageId ?? item.fallbackId;
+    let previous = await existing(messageSlug(account, id));
+    // Message-IDs are untrusted and can repeat: another source item keeps its document.
+    if (
+      previous &&
+      item.sourceUrl !== undefined &&
+      !new Provenance(previous.value, previous.dataset, DataFactory).derivedFrom.has(item.sourceUrl)
+    ) {
+      id = item.fallbackId;
+      previous = await existing(messageSlug(account, id));
+    }
     const slug = messageSlug(account, id);
-    const iri = `${ctx.resolve(slug)}#it`;
-    const previous = await existing(slug);
+    const iri = iriOf(slug);
 
     const eml = await ctx.writeBinary({
       slug: emlSlug(account, id),
@@ -114,7 +143,7 @@ export function createMailWriter(ctx: MailPorts, account: string): MailWriter {
     const dataset = new Store();
     const message = new MailMessage(iri, dataset, DataFactory);
     message.types.add(MAIL_CLASSES.EmailMessage);
-    message.identifier = id;
+    message.identifier = mail.messageId ?? id;
     message.subjectLine = mail.subject;
     message.bodyHtml = mail.html;
     message.body = mail.text ?? (mail.html === undefined ? undefined : htmlToText(mail.html));
@@ -129,10 +158,12 @@ export function createMailWriter(ctx: MailPorts, account: string): MailWriter {
       ? (previous?.dateRead ?? mail.date ?? item.receivedAt ?? new Date(0))
       : undefined;
     message.encoding = eml.url;
-    if (mail.inReplyTo)
-      message.inReplyTo = `${ctx.resolve(messageSlug(account, mail.inReplyTo))}#it`;
-    const thread = threadSlug(account, item.threadKey ?? mail.inReplyTo ?? id);
-    message.partOfThread = `${ctx.resolve(thread)}#it`;
+    if (mail.inReplyTo) message.inReplyTo = iriOf(messageSlug(account, mail.inReplyTo));
+    const threadDoc = threadSlug(
+      account,
+      item.threadKey ?? mail.references[0] ?? mail.inReplyTo ?? id,
+    );
+    message.partOfThread = iriOf(threadDoc);
     for (const [index, part] of mail.attachments.entries()) {
       const stored = await ctx.writeBinary({
         slug: attachmentSlug(account, id, index),
@@ -145,22 +176,26 @@ export function createMailWriter(ctx: MailPorts, account: string): MailWriter {
       metadata.name = part.name;
       metadata.contentType = part.contentType;
     }
-    const folders = new Set(item.folders.map((title) => folderSlug(account, title)));
-    for (const title of item.folders) {
-      const folder = folderSlug(account, title);
-      message.folderIris.add(`${ctx.resolve(folder)}#it`);
-      member(folder, "folder", iri, true).title = title;
+    const folders = new Set<string>();
+    for (const { key, title } of item.folders) {
+      const folder = folderSlug(account, key);
+      folders.add(folder);
+      titles.set(folder, title);
+      message.folderIris.add(iriOf(folder));
     }
-    // Memberships the source no longer reports are dropped (archive, label removal, thread move).
-    for (const old of previous?.folderIris ?? []) {
-      const oldSlug = slugOf(docOf(old));
-      if (!folders.has(oldSlug)) member(oldSlug, "folder", iri, false);
-    }
+    desired.set(iri, folders);
+    // Folders named on the previous version are reconciled too, even if no longer known.
+    for (const old of previous?.folderIris ?? []) remember(slugOf(docOf(old)));
     const oldThread = previous?.partOfThread;
-    if (oldThread && docOf(oldThread) !== ctx.resolve(thread))
-      member(slugOf(docOf(oldThread)), "thread", iri, false);
-    const threadEntry = member(thread, "thread", iri, true);
-    threadEntry.title ??= mail.subject;
+    if (oldThread && docOf(oldThread) !== ctx.resolve(threadDoc)) {
+      const entry = thread(slugOf(docOf(oldThread)));
+      entry.drop.add(iri);
+      entry.add.delete(iri);
+    }
+    const entry = thread(threadDoc);
+    entry.add.add(iri);
+    entry.drop.delete(iri);
+    entry.title ??= mail.subject;
 
     await ctx.write({
       slug,
@@ -170,62 +205,93 @@ export function createMailWriter(ctx: MailPorts, account: string): MailWriter {
       sourceUrl: item.sourceUrl,
       registrationContainer: root,
     });
-    return slug;
+    return { slug, iri, thread: iriOf(threadDoc) };
   }
 
-  async function removeMessage(slug: string): Promise<void> {
+  async function removeMessage(slug: string, threadIri?: string): Promise<void> {
+    const iri = iriOf(slug);
     const previous = await existing(slug);
+    desired.set(iri, new Set());
+    for (const folder of previous?.folderIris ?? []) remember(slugOf(docOf(folder)));
+    const memberOf = previous?.partOfThread ?? threadIri;
+    if (memberOf) {
+      const entry = thread(slugOf(docOf(memberOf)));
+      entry.drop.add(iri);
+      entry.add.delete(iri);
+    }
     if (!previous) return;
-    const iri = previous.value;
-    for (const folder of previous.folderIris) member(slugOf(docOf(folder)), "folder", iri, false);
-    if (previous.partOfThread) member(slugOf(docOf(previous.partOfThread)), "thread", iri, false);
     for (const attachment of previous.attachments) await ctx.remove(slugOf(attachment));
     if (previous.encoding) await ctx.remove(slugOf(previous.encoding));
     await ctx.remove(slug);
   }
 
-  async function threadMessages(threadKey: string): Promise<string[]> {
-    const slug = threadSlug(account, threadKey);
-    const dataset = await ctx.read(slug);
-    const members = new Set(
-      dataset ? new MailCollection(`${ctx.resolve(slug)}#it`, dataset, DataFactory).members : [],
-    );
-    const entry = pending.get(slug);
-    for (const iri of entry?.add ?? []) members.add(iri);
-    for (const iri of entry?.drop ?? []) members.delete(iri);
-    return [...members].map((iri) => slugOf(docOf(iri)));
-  }
-
-  async function flush(): Promise<void> {
-    for (const [slug, entry] of [...pending.entries()].sort(([a], [b]) => a.localeCompare(b))) {
-      const current: DatasetCore | undefined = await ctx.read(slug);
+  async function flush(known: readonly MailFolder[] = []): Promise<void> {
+    for (const { key, title } of known) {
+      const slug = folderSlug(account, key);
+      if (title || !titles.has(slug)) titles.set(slug, title);
+    }
+    for (const [slug, title] of [...titles.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+      const current = await ctx.read(slug);
       const dataset = new Store([...(current ?? [])]);
-      const collection = new MailCollection(`${ctx.resolve(slug)}#it`, dataset, DataFactory);
-      for (const iri of entry.drop) collection.members.delete(iri);
-      for (const iri of entry.add) collection.members.add(iri);
-      pending.delete(slug);
-      const system = entry.kind === "folder" && slug.includes("/folders/system:");
-      if (collection.members.size === 0 && !system) {
+      const folder = new MailCollection(iriOf(slug), dataset, DataFactory);
+      let changed = !current;
+      for (const [iri, folders] of desired) {
+        const want = folders.has(slug);
+        if (want !== folder.members.has(iri)) {
+          changed = true;
+          if (want) folder.members.add(iri);
+          else folder.members.delete(iri);
+        }
+      }
+      if (title && folder.title !== title) {
+        folder.title = title;
+        changed = true;
+      }
+      const system = slug.includes("/folders/system:");
+      if (folder.members.size === 0 && !system) {
         if (current) await ctx.remove(slug);
         continue;
       }
-      if (entry.kind === "thread") {
-        collection.types.add(MAIL_CLASSES.Conversation);
-        collection.types.add(MAIL_CLASSES.SiocThread);
-      } else collection.types.add(MAIL_CLASSES.Folder);
+      if (!changed) continue;
+      folder.types.add(MAIL_CLASSES.Folder);
+      await ctx.write({
+        slug,
+        category: "mail",
+        forClass: MAIL_CLASSES.Folder,
+        dataset,
+        skipRegistration: true,
+      });
+    }
+    titles.clear();
+    for (const [slug, entry] of [...threads.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+      const current = await ctx.read(slug);
+      const dataset = new Store([...(current ?? [])]);
+      const collection = new MailCollection(iriOf(slug), dataset, DataFactory);
+      for (const iri of entry.drop) collection.members.delete(iri);
+      for (const iri of entry.add) collection.members.add(iri);
+      // Members left by an interrupted earlier run are dropped once their documents are gone.
+      for (const iri of [...collection.members])
+        if (!entry.add.has(iri) && !(await ctx.read(slugOf(docOf(iri)))))
+          collection.members.delete(iri);
+      if (collection.members.size === 0) {
+        if (current) await ctx.remove(slug);
+        continue;
+      }
+      collection.types.add(MAIL_CLASSES.Conversation);
+      collection.types.add(MAIL_CLASSES.SiocThread);
       if (collection.title === undefined && entry.title !== undefined)
         collection.title = entry.title;
       await ctx.write({
         slug,
         category: "mail",
-        forClass: entry.kind === "thread" ? MAIL_CLASSES.Conversation : MAIL_CLASSES.Folder,
+        forClass: MAIL_CLASSES.Conversation,
         dataset,
         skipRegistration: true,
       });
     }
+    threads.clear();
+    desired.clear();
   }
 
-  return { add, removeMessage, threadMessages, flush };
+  return { add, removeMessage, flush };
 }
-
-export { SYSTEM_FOLDERS };

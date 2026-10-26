@@ -101,9 +101,13 @@ describe("Gmail full import", () => {
 
     expect(members(pod, folder("system:inbox"))).toEqual([`${LUNCH_1}#it`]);
     expect(members(pod, folder("system:sent"))).toEqual([`${LUNCH_2}#it`]);
-    expect(members(pod, folder("Receipts"))).toEqual([`${RECEIPT}#it`]);
+    expect(members(pod, folder("Label_1"))).toEqual([`${RECEIPT}#it`]);
     expect(members(pod, folder("system:starred"))).toEqual([`${RECEIPT}#it`]);
     expect(members(pod, folder("system:archive"))).toEqual([`${RECEIPT}#it`]);
+    expect(
+      new MailCollection(`${folder("Label_1")}#it`, pod.dataset(folder("Label_1")), DataFactory)
+        .title,
+    ).toBe("Receipts");
     expect(pod.urls().some((u) => u.includes("CATEGORY"))).toBe(false);
   });
 
@@ -171,6 +175,76 @@ describe("Gmail full import", () => {
       fetched(bare),
     ]).result;
     expect(message(pod, msg("gmail-m9")).subjectLine).toBe("No id");
+  });
+});
+
+describe("Gmail full resync", () => {
+  it("lists Spam and Trash, sweeps vanished messages and follows label renames", async () => {
+    const { pod, run } = setup();
+    const first = run(GMAIL_FIXTURES);
+    await first.result;
+    const list = first.api.mock.calls
+      .map(([u]) => new URL(String(u)))
+      .find((u) => u.pathname.endsWith("/messages"));
+    expect(list?.searchParams.get("includeSpamTrash")).toBe("true");
+
+    const renamed = {
+      url: `${GMAIL_API}/labels`,
+      json: {
+        labels: [
+          { id: "INBOX", name: "INBOX", type: "system" },
+          { id: "Label_1", name: "Invoices", type: "user" },
+        ],
+      },
+    };
+    await run([
+      ...base.filter((r) => !r.url.endsWith("/labels")),
+      renamed,
+      { url: `${GMAIL_API}/messages`, json: { messages: [MESSAGES.m1, MESSAGES.m3] } },
+      fetched(MESSAGES.m1 as GmailMessage),
+      fetched(MESSAGES.m3 as GmailMessage),
+    ]).result;
+    expect(pod.get(LUNCH_2)).toBeUndefined();
+    expect(members(pod, THREAD_1)).toEqual([`${LUNCH_1}#it`]);
+    expect(members(pod, folder("system:sent"))).toEqual([]);
+    expect(
+      new MailCollection(`${folder("Label_1")}#it`, pod.dataset(folder("Label_1")), DataFactory)
+        .title,
+    ).toBe("Invoices");
+  });
+
+  it("skips a message whose MIME cannot be parsed", async () => {
+    const { pod, run } = setup();
+    let nested = "";
+    for (let i = 0; i < 300; i++)
+      nested += `Content-Type: multipart/mixed; boundary="b${i}"\n\n--b${i}\n`;
+    const broken: GmailMessage = {
+      id: "m8",
+      threadId: "t8",
+      labelIds: ["INBOX"],
+      raw: btoa(nested).replace(/\+/g, "-").replace(/\//g, "_"),
+    };
+    const report = await run([
+      ...base,
+      { url: `${GMAIL_API}/messages`, json: { messages: [broken, MESSAGES.m1] } },
+      fetched(broken),
+      fetched(MESSAGES.m1 as GmailMessage),
+    ]).result;
+    expect(report.skipped).toBe(1);
+    expect(pod.get(LUNCH_1)).toBeDefined();
+  });
+
+  it("keeps two Gmail messages that share a Message-ID", async () => {
+    const { pod, run } = setup();
+    const copy: GmailMessage = { ...(MESSAGES.m1 as GmailMessage), id: "m7", threadId: "t7" };
+    await run([
+      ...base,
+      { url: `${GMAIL_API}/messages`, json: { messages: [MESSAGES.m1, copy] } },
+      fetched(MESSAGES.m1 as GmailMessage),
+      fetched(copy),
+    ]).result;
+    expect(pod.get(LUNCH_1)).toBeDefined();
+    expect(pod.get(msg("gmail-m7"))).toBeDefined();
   });
 });
 
@@ -276,7 +350,7 @@ describe("Gmail history continuation", () => {
     ).result;
     expect(pod.get(RECEIPT)).toBeUndefined();
     expect(pod.get(`${ACCOUNT}threads/gmail-t3.ttl`)).toBeUndefined();
-    expect(pod.get(folder("Receipts"))).toBeUndefined();
+    expect(pod.get(folder("Label_1"))).toBeUndefined();
     expect(members(pod, folder("system:starred"))).toEqual([]);
     expect(pod.urls().some((u) => u.includes("attachments"))).toBe(false);
   });
