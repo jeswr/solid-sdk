@@ -3,6 +3,8 @@
 @import "@jeswr/suite-ui/styles/tokens.css";
 @import "@jeswr/suite-ui/styles/theme.css";
 @import "@jeswr/suite-ui/styles/density.css";
+@import "@jeswr/suite-ui/styles/components.css";
+@source "../../../../packages/suite-ui/src";
 
 * {
   box-sizing: border-box;
@@ -197,8 +199,8 @@ ul {
   display: block;
   margin-bottom: var(--space-2);
 }
-input,
-button {
+input:not([data-slot]),
+button:not([data-slot]) {
   font: inherit;
   border-radius: var(--radius-md);
   background: var(--surface);
@@ -211,11 +213,11 @@ button {
   min-height: var(--control-h-sm);
   margin-top: var(--space-2);
 }
-input,
-select {
+input:not([data-slot]),
+select:not([data-slot]) {
   border: 1px solid var(--input);
 }
-button {
+button:not([data-slot]) {
   border: 1px solid var(--border-strong);
 }
 .density-grid-card {
@@ -265,4 +267,63 @@ button {
     transition: none;
     scroll-behavior: auto;
   }
+}
+.fixture-density,
+.fixture-field {
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+}
+.fixture-component {
+  display: grid;
+  align-content: start;
+  gap: var(--space-4);
+}
+.fixture-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+.fixture-app-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 152px), 1fr));
+  gap: var(--space-6);
+}
+.fixture-app-grid li {
+  display: grid;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+}
+.fixture-app-grid .fixture-row {
+  gap: var(--space-1);
+}
+.fixture-file-grid {
+  display: grid;
+  gap: var(--space-6);
+}
+.fixture-file-grid li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  min-height: var(--row-h);
+  overflow-wrap: anywhere;
+}
+.fixture-file-grid li > span:last-child {
+  min-width: 0;
+}
+.fixture-empty {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: var(--space-3);
+  text-align: center;
+}
+.fixture-empty p {
+  color: var(--foreground-muted);
+}
+nav[aria-label="Component fixtures"] {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3) var(--space-6);
 }
