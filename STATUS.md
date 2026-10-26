@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 # DS-04 — sst-93m.5 lane report
 
 Branch: `lane/sst-93m.5`. Base: `3696bed75683e5c7aa253ba8a7cc163f5b8a1e07`.
@@ -182,3 +183,56 @@ remain for the dispatcher, as instructed; the added case captures
 `roborev` is still unavailable. The three conservative readings in `QUESTIONS.md`
 remain unchanged; this continuation adds no design questions. The final status
 commit follows the gates and includes only this report.
+
+## Review fix round 1 — 2026-10-26
+
+Started at `c162f8617595a90d6dd3db771a332a17a1b5af1f` on
+`lane/sst-93m.5`, with a clean tree. Addressed only the three supplied review
+findings in `8c22fbc9 fix: correct responsive shell content and focus`:
+
+- Desktop sidebar/details consumer content renders only at desktop widths;
+  mobile content mounts solely in its sheet, avoiding duplicate IDs, label
+  targets and consumer effects.
+- Capture focus before the breakpoint removes desktop content, then restore
+  it to the corresponding visible toggle when default regions close. Preserve
+  main focus and let Radix focus explicitly opened sheets.
+- Exclude native `dialog` and `role="alertdialog"` ancestors from bracket
+  shortcuts, alongside other `role="dialog"` ancestors.
+
+Regression unit tests reproduced six failures before the implementation fix.
+Coverage now checks single consumer mounts/IDs and label targets in both mobile
+sheets, breakpoint focus for sidebar/details/main, explicit-open sheet focus,
+and both bracket keys in all three dialog types. Browser specs add breakpoint
+focus paths at the existing light/dark viewport projects.
+
+Exact validation commands:
+
+```sh
+pnpm --filter @jeswr/suite-ui run test
+pnpm --filter @jeswr/suite-ui run lint && pnpm --filter @jeswr/suite-ui run build && pnpm --filter @jeswr/suite-ui run typecheck && pnpm --filter @jeswr/suite-ui run test
+PATH="$PWD/node_modules/.bin:$PATH" pnpm exec turbo run build --filter='@jeswr/app-suite^...' --concurrency=4
+PATH="$PWD/node_modules/.bin:$PATH" pnpm --filter @jeswr/app-suite run lint && PATH="$PWD/node_modules/.bin:$PATH" pnpm --filter @jeswr/app-suite run build && PATH="$PWD/node_modules/.bin:$PATH" pnpm --filter @jeswr/app-suite run typecheck && PATH="$PWD/node_modules/.bin:$PATH" pnpm --filter @jeswr/app-suite run test
+pnpm run lint:root
+PATH="$PWD/node_modules/.bin:$PATH" TURBO_SCM_BASE=c162f8617595a90d6dd3db771a332a17a1b5af1f pnpm run gate
+PATH="$PWD/node_modules/.bin:$PATH" pnpm run gate:full
+pnpm --filter @jeswr/app-suite exec playwright test --list e2e/ds-04-shell.spec.ts
+git diff --check
+```
+
+PASS after the fix: both changed projects' lint/build/typecheck/tests (31 suite-ui
+tests; 5,825 app-suite tests), dependency builds, root lint (74 contrast pairs),
+affected gate (13/13 tasks, 5 cached), Playwright collection (126 cases), and
+whitespace validation. App lint retains the existing 54 warnings.
+
+Full-workspace gate: FAIL at the previously documented, unrelated
+`@jeswr/federation-trust#test` snapshot, `test/characterization.test.ts:196`,
+“delegation credential structure is stable”: embedded JWK field order
+`crv,x,kty` versus `kty,crv,x` (53 passes / 1 failure). Turbo reports 284 successful
+tasks / 346 total, 12 cached, before cancellation. That package and the lockfile
+are unchanged. Removed the 16 untracked public client-ID/callback files generated
+by unrelated app builds; no generated artifacts are committed.
+
+No dependencies were added. Screenshots taken: none; browser execution and full
+browser axe remain with the dispatcher, as required by the brief. `roborev` is
+unavailable in this environment. No open questions or unfinished review findings.
+The final documentation commit records this report after the gates.
