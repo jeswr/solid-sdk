@@ -3,8 +3,8 @@
 import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { dirname, join, relative } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import { checkAgentLayers } from "../scripts/check-agent-layers.mjs";
 
@@ -302,7 +302,7 @@ describe("agent layer boundaries (DESIGN §2.2)", () => {
   });
 });
 
-describe("resolved workspace ownership", () => {
+describe("lexical workspace ownership", () => {
   function fixture(
     source,
     target = "packages/channel-store/gmail/send.ts",
@@ -340,34 +340,29 @@ describe("resolved workspace ownership", () => {
     expect(checkAgentLayers(directory).join("\n")).toContain("gateway must not import agent-audit");
   });
 
-  it.each([
-    "relative",
-    "bare",
-  ])("resolves %s workspace links before applying the allowlist", (kind) => {
-    const specifier =
-      kind === "relative" ? "../node_modules/alias/gmail/send.js" : "alias/gmail/send.js";
+  it.each(["bare", "relative"])("ignores installed symlink targets for %s imports", (kind) => {
+    const specifier = kind === "bare" ? "alias/gmail/send.js" : "./local.js";
     const directory = fixture(`import "${specifier}";`);
     const modules = join(directory, "packages/agent-model-gateway/node_modules");
     mkdirSync(modules, { recursive: true });
     symlinkSync(join(directory, "packages/channel-store"), join(modules, "alias"), "dir");
-    expect(checkAgentLayers(directory).join("\n")).toContain("executor-only");
-  });
-
-  it("resolves a workspace link to a project subdirectory", () => {
-    const directory = fixture('import "alias/send.js";');
-    const modules = join(directory, "packages/agent-model-gateway/node_modules");
-    mkdirSync(modules, { recursive: true });
-    symlinkSync(join(directory, "packages/channel-store/gmail"), join(modules, "alias"), "dir");
-    expect(checkAgentLayers(directory).join("\n")).toContain("executor-only");
-  });
-
-  it("checks source file symlinks by their real owner", () => {
-    const directory = fixture('import "./local.js";');
     symlinkSync(
       join(directory, "packages/channel-store/gmail/send.ts"),
-      join(directory, "packages/agent-model-gateway/src/local.ts"),
+      join(directory, "packages/agent-model-gateway/src/local.js"),
     );
-    expect(checkAgentLayers(directory).join("\n")).toContain("executor-only");
+    writeFileSync(
+      join(directory, "packages/agent-model-gateway/package.json"),
+      JSON.stringify({
+        name: "@jeswr/agent-model-gateway",
+        devDependencies: { alias: "link:../channel-store" },
+      }),
+    );
+    const failures = checkAgentLayers(directory);
+    if (kind === "bare") {
+      expect(failures).toEqual([
+        "packages/agent-model-gateway/src/index.ts:1: agent-model-gateway dependency is outside DESIGN §2.2: alias/gmail/send.js",
+      ]);
+    } else expect(failures).toEqual([]);
   });
 
   it("uses the longest workspace project prefix for nested apps", () => {
@@ -393,97 +388,165 @@ describe("resolved workspace ownership", () => {
     expect(checkAgentLayers(directory).join("\n")).toContain("gateway must not import agent-audit");
   });
 
-  it.each([
-    "relative",
-    "workspace-link",
-  ])("fails closed for a %s outside all workspace projects", (kind) => {
-    const outside = workspace({ "index.js": "export {};" });
-    const directory = fixture(
-      kind === "relative" ? 'import "../node_modules/alias/index.js";' : 'import "alias/index.js";',
+  it("fails closed for lexical paths outside all workspace projects", () => {
+    const directory = fixture('import "../../../../outside/index.js";');
+    expect(checkAgentLayers(directory).join("\n")).toContain("outside every workspace project");
+  });
+
+  it("maps bare workspace exports by package name without builds or installed links", () => {
+    const directory = workspace({
+      "packages/agent-executor/src/index.ts": 'import "@jeswr/agent-channels/gmail/send";',
+      "packages/channel-store/package.json": JSON.stringify({
+        name: "@jeswr/agent-channels",
+        exports: { "./gmail/send": "./dist/transport.js" },
+      }),
+    });
+    expect(checkAgentLayers(directory)).toEqual([]);
+    writeFileSync(
+      join(directory, "packages/agent-executor/src/index.ts"),
+      'import "@jeswr/agent-channels";',
     );
-    // A relative symlink keeps the specifier in the agent allowlist.
-    const modules = join(directory, "packages/agent-model-gateway/node_modules");
-    mkdirSync(modules, { recursive: true });
-    symlinkSync(outside, join(modules, "alias"), "dir");
-    if (kind === "workspace-link")
-      writeFileSync(
-        join(directory, "packages/agent-model-gateway/package.json"),
-        JSON.stringify({
-          name: "@jeswr/agent-model-gateway",
-          dependencies: { alias: "link:../../../outside" },
-        }),
-      );
-    expect(checkAgentLayers(directory).join("\n")).toContain("outside every workspace project");
+    expect(checkAgentLayers(directory).join("\n")).toContain("send subpaths only");
   });
 
-  it("fails closed for relative imports into installed non-workspace packages", () => {
-    const directory = fixture('import "../node_modules/openai/index.js";');
-    const external = join(directory, "packages/agent-model-gateway/node_modules/openai");
-    mkdirSync(external, { recursive: true });
-    writeFileSync(join(external, "index.js"), "export {};");
-    expect(checkAgentLayers(directory).join("\n")).toContain("outside every workspace project");
-  });
-
-  it("preserves the send restriction when a workspace export has a different filename", () => {
-    const directory = fixture('import "alias/gmail/send";', "packages/channel-store/transport.ts");
+  it("restricts bare send exports even when exports point at another filename", () => {
+    const directory = fixture('import "@jeswr/agent-channels/gmail/send";');
     writeFileSync(
       join(directory, "packages/channel-store/package.json"),
       JSON.stringify({
         name: "@jeswr/agent-channels",
-        exports: { "./gmail/send": "./transport.ts" },
+        exports: { "./gmail/send": "./dist/transport.js" },
       }),
     );
-    const modules = join(directory, "packages/agent-model-gateway/node_modules");
-    mkdirSync(modules, { recursive: true });
-    symlinkSync(join(directory, "packages/channel-store"), join(modules, "alias"), "dir");
     expect(checkAgentLayers(directory).join("\n")).toContain("executor-only");
   });
 
-  it("allows executor send links resolved through declarations", () => {
+  it("allows missing local files and generated template content", () => {
     const directory = workspace({
-      "packages/agent-executor/src/index.ts": 'import "alias/gmail/send";',
-      "packages/channel-store/package.json": JSON.stringify({
-        name: "@jeswr/agent-channels",
-        exports: { "./gmail/send": "./gmail/send.d.ts" },
-      }),
-      "packages/channel-store/gmail/send.d.ts": "export {};",
+      "packages/agent-model/src/index.ts": 'import "./missing.js";',
+      "packages/create-solid-demo/template/apps/tour/src/index.ts":
+        'import "../content/walkthrough.json";',
     });
-    const modules = join(directory, "packages/agent-executor/node_modules");
-    mkdirSync(modules, { recursive: true });
-    symlinkSync(join(directory, "packages/channel-store"), join(modules, "alias"), "dir");
     expect(checkAgentLayers(directory)).toEqual([]);
   });
 
-  it("checks workspace exports whose target symlink escapes the workspace", () => {
-    const outside = workspace({ "index.js": "export {};" });
-    const directory = fixture('import "alias/entry";', "packages/channel-store/local.ts");
-    writeFileSync(
-      join(directory, "packages/channel-store/package.json"),
-      JSON.stringify({
-        name: "@jeswr/agent-channels",
-        exports: { "./entry": "./escape.js" },
-      }),
-    );
-    symlinkSync(join(outside, "index.js"), join(directory, "packages/channel-store/escape.js"));
-    const modules = join(directory, "packages/agent-model-gateway/node_modules");
-    mkdirSync(modules, { recursive: true });
-    symlinkSync(join(directory, "packages/channel-store"), join(modules, "alias"), "dir");
-    expect(checkAgentLayers(directory).join("\n")).toContain("outside every workspace project");
+  it("applies cross-project rules to missing generated targets", () => {
+    const directory = fixture('import "../../channel-store/dist/gmail/send.js";');
+    expect(checkAgentLayers(directory).join("\n")).toContain("executor-only");
   });
 
-  it("fails closed for unresolved relative imports", () => {
-    expect(checkAgentLayers(fixture('import "./missing.js";')).join("\n")).toContain(
-      "cannot resolve import target",
-    );
-  });
-
-  it("allows resolved local imports and permitted cross-project types", () => {
+  it("allows lexical local imports and permitted cross-project types", () => {
     const directory = fixture(
       'import "./local.js"; import type { Ingest } from "../../channel-store/ingest.js";',
       "packages/channel-store/ingest.ts",
     );
     writeFileSync(join(directory, "packages/agent-model-gateway/src/local.ts"), "export {};");
     expect(checkAgentLayers(directory)).toEqual([]);
+  });
+});
+
+describe("global restrictions across module load forms", () => {
+  const forms = [
+    "import TARGET;",
+    "export * from TARGET;",
+    "await import(TARGET);",
+    "require(TARGET);",
+    "(require as Loader)(TARGET);",
+    "module.require(TARGET);",
+    'module["require"](TARGET);',
+    "require.resolve(TARGET);",
+    "module.require.resolve(TARGET);",
+    "createRequire(import.meta.url)(TARGET);",
+    "import value = require(TARGET);",
+    "import type Value = require(TARGET);",
+    "type Value = import(TARGET).Value;",
+  ];
+
+  it.each(forms)("checks bare specifiers across all checked roots: %s", (form) => {
+    for (const path of [
+      "packages/ordinary/src/index.ts",
+      "apps/ordinary/web/src/index.ts",
+      "tools/ordinary/index.ts",
+      "scripts/ordinary.ts",
+      "test/ordinary.test.ts",
+    ]) {
+      for (const [target, reason] of [
+        ["openai/resources", "gateway-only"],
+        ["@anthropic-ai/sdk", "gateway-only"],
+        ["@jeswr/agent-channels/gmail/send", "executor-only"],
+      ])
+        expect(scan(path, form.replace("TARGET", JSON.stringify(target))).join("\n")).toContain(
+          reason,
+        );
+    }
+  });
+
+  it.each(forms)("checks relative, absolute and file URL targets lexically: %s", (form) => {
+    for (const kind of ["relative", "absolute", "file"])
+      for (const [name, subpath, reason] of [
+        ["@jeswr/agent-channels", "dist/gmail/send.js", "executor-only"],
+        ["openai", "dist/index.js", "gateway-only"],
+        ["@anthropic-ai/sdk", "dist/index.js", "gateway-only"],
+      ]) {
+        const directory = workspace({
+          "apps/ordinary/web/package.json": '{"name":"@jeswr/ordinary-web"}',
+          "apps/ordinary/web/src/index.ts": "",
+          "tools/provider store/package.json": JSON.stringify({ name }),
+        });
+        const file = join(directory, "apps/ordinary/web/src/index.ts");
+        const target = join(directory, "tools/provider store", subpath);
+        const specifier =
+          kind === "file"
+            ? pathToFileURL(target).href
+            : kind === "absolute"
+              ? target
+              : relative(dirname(file), target);
+        writeFileSync(file, form.replace("TARGET", JSON.stringify(specifier)));
+        expect(checkAgentLayers(directory).join("\n")).toContain(reason);
+      }
+  });
+
+  it("checks literal templates and wrapped literals outside agent projects", () => {
+    for (const source of [
+      "require(`openai`);",
+      'await import(("openai" as string));',
+      'module[("require" as const)]("openai");',
+    ])
+      expect(scan("apps/ordinary/src/index.ts", source).join("\n")).toContain("gateway-only");
+  });
+
+  it("reports malformed file URLs without crashing the scan", () => {
+    expect(
+      scan("tools/ordinary/index.ts", 'import "file://remote.example/module.js";').join("\n"),
+    ).toContain("invalid file URL import target");
+  });
+
+  it("preserves global exceptions without permitting agent CommonJS", () => {
+    expect(scan("packages/agent-model-gateway/src/index.ts", 'import "openai";')).toEqual([]);
+    expect(
+      scan("packages/agent-executor/src/index.ts", 'import "@jeswr/agent-channels/gmail/send";'),
+    ).toEqual([]);
+    expect(
+      scan(
+        "packages/agent-channels/test/send.test.ts",
+        'import "@jeswr/agent-channels/gmail/send";',
+      ),
+    ).toEqual([]);
+    expect(
+      scan(
+        "packages/ordinary/src/index.ts",
+        'require("ordinary-external"); import value = require("other-external");',
+      ),
+    ).toEqual([]);
+    for (const [path, target] of [
+      ["packages/agent-model-gateway/src/index.ts", "openai"],
+      ["packages/agent-executor/src/index.ts", "@jeswr/agent-channels/gmail/send"],
+      ["packages/agent-channels/test/send.test.ts", "@jeswr/agent-channels/gmail/send"],
+    ]) {
+      const failures = scan(path, `require(${JSON.stringify(target)});`);
+      expect(failures.length).toBeGreaterThan(0);
+      for (const failure of failures) expect(failure).toContain("CommonJS");
+    }
   });
 });
 
@@ -652,9 +715,9 @@ describe("agent module load allowlist", () => {
       `await import(${literal});`,
       `type Value = import(${literal}).Value;`,
     ])
-      expect(scan(path, source)).toEqual([
+      expect(scan(path, source)).toContain(
         `${path}:1: agent module specifier must be a bare package name or relative path: ${target}`,
-      ]);
+      );
   });
 
   it.each([
@@ -679,7 +742,10 @@ describe("agent module load allowlist", () => {
         source.replace("TARGET", JSON.stringify(target)),
       );
       expect(failures.length).toBeGreaterThan(0);
-      for (const failure of failures) expect(failure).toContain("CommonJS");
+      expect(failures.some((failure) => failure.includes("CommonJS"))).toBe(true);
+      if (target === "openai") expect(failures.join("\n")).toContain("gateway-only");
+      if (target === "@jeswr/agent-channels/gmail/send")
+        expect(failures.join("\n")).toContain("executor-only");
     }
   });
 

@@ -3,8 +3,8 @@
 // AUTHORED-BY Codex GPT-6
 
 // Agent DESIGN §2.2. Fold this into check-sdk-layers.mjs when sdk-core T-003 lands.
-import { existsSync, globSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
-import { dirname, extname, join, relative, resolve } from "node:path";
+import { existsSync, globSync, readdirSync, readFileSync } from "node:fs";
+import { dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import ts from "typescript";
 
@@ -64,7 +64,7 @@ function allowedModuleSpecifier(specifier) {
 function context(root, file, projects) {
   const path = relative(root, file).replaceAll("\\", "/");
   const parts = path.split("/");
-  const owner = owningProject(projects, realpathSync(file));
+  const owner = owningProject(projects, resolve(file));
   return {
     path,
     packageName: owner?.manifest.name,
@@ -114,7 +114,7 @@ function workspaceProjects(root) {
   return manifests
     .map((path) => {
       const manifest = JSON.parse(readFileSync(join(root, path), "utf8"));
-      return { directory: realpathSync(dirname(join(root, path))), manifest };
+      return { directory: resolve(root, dirname(path)), manifest };
     })
     .sort((a, b) => b.directory.length - a.directory.length);
 }
@@ -122,26 +122,10 @@ function workspaceProjects(root) {
 function owningProject(projects, path) {
   return projects.find(({ directory }) => {
     const suffix = relative(directory, path);
-    if (suffix.split("/").includes("node_modules")) return false;
     return (
       suffix === "" || (!suffix.startsWith("../") && suffix !== ".." && !suffix.startsWith("/"))
     );
   });
-}
-
-const resolutionOptions = {
-  allowJs: true,
-  resolveJsonModule: true,
-  moduleResolution: ts.ModuleResolutionKind.Bundler,
-  module: ts.ModuleKind.ESNext,
-};
-
-function resolvedFile(file, specifier) {
-  const literal = resolve(dirname(file), specifier);
-  if (specifier.startsWith(".") && existsSync(literal) && statSync(literal).isFile())
-    return realpathSync(literal);
-  const resolved = ts.resolveModuleName(specifier, file, resolutionOptions, ts.sys).resolvedModule;
-  return resolved && realpathSync(resolved.resolvedFileName);
 }
 
 function projectTarget(project, path) {
@@ -154,40 +138,26 @@ function projectTarget(project, path) {
 }
 
 function importTargets(projects, file, specifier) {
-  const sourceProject = owningProject(projects, realpathSync(file));
-  const relativeImport = specifier.startsWith(".");
-  let workspaceLink = false;
-  let linkedProject;
-  if (!relativeImport && allowedModuleSpecifier(specifier)) {
-    const name = packageName(specifier);
-    const version = [...dependencyFields, "devDependencies"]
-      .map((field) => sourceProject?.manifest[field]?.[name])
-      .find(Boolean);
-    workspaceLink = /^(?:workspace|link):/.test(version ?? "");
-    // Node searches ancestor node_modules directories; realpath identifies workspace aliases.
-    for (let directory = dirname(file); ; directory = dirname(directory)) {
-      const installed = join(directory, "node_modules", name);
-      if (existsSync(installed)) {
-        const linked = realpathSync(installed);
-        linkedProject = owningProject(projects, linked);
-        workspaceLink ||= Boolean(linkedProject);
-        break;
-      }
-      if (dirname(directory) === directory) break;
+  let target;
+  if (specifier.startsWith("file:")) {
+    try {
+      target = fileURLToPath(specifier);
+    } catch {
+      return { error: "invalid file URL import target" };
     }
+  } else if (specifier.startsWith(".") || isAbsolute(specifier)) {
+    target = resolve(dirname(file), specifier);
+  } else {
+    // Bare packages are identified by manifest name, independently of installs/exports/builds.
+    const name = packageName(specifier);
+    const project = projects.find(({ manifest }) => manifest.name === name);
+    return {
+      targets: [project ? `${project.manifest.name}${specifier.slice(name.length)}` : specifier],
+    };
   }
-  if (!relativeImport && !workspaceLink) return { targets: [specifier] };
-  const target = resolvedFile(file, specifier);
-  if (!target) return { error: "cannot resolve import target" };
   const project = owningProject(projects, target);
   if (!project) return { error: "import target is outside every workspace project" };
-  // Keep the actual module subpath so send entrypoints remain restricted within their own project.
-  const targets = [projectTarget(project, target)];
-  if (workspaceLink)
-    targets.push(
-      `${(linkedProject ?? project).manifest.name}${specifier.slice(packageName(specifier).length)}`,
-    );
-  return { targets: [...new Set(targets)] };
+  return { targets: [projectTarget(project, target)] };
 }
 
 function importFailures(ctx, target, typeOnly = false, manifest = false) {
@@ -259,6 +229,27 @@ function isPropertyName(node) {
   );
 }
 
+function accessName(expression) {
+  const value = ts.skipOuterExpressions(expression);
+  if (ts.isIdentifier(value)) return value.text;
+  if (ts.isPropertyAccessExpression(value)) return value.name.text;
+  if (ts.isElementAccessExpression(value) && value.argumentExpression) {
+    const key = ts.skipOuterExpressions(value.argumentExpression);
+    if (ts.isStringLiteralLike(key)) return key.text;
+  }
+}
+
+function commonJsLoad(expression) {
+  const value = ts.skipOuterExpressions(expression);
+  if (accessName(value) === "require") return true;
+  if (
+    (ts.isPropertyAccessExpression(value) || ts.isElementAccessExpression(value)) &&
+    accessName(value) === "resolve"
+  )
+    return commonJsLoad(value.expression);
+  return ts.isCallExpression(value) && accessName(value.expression) === "createRequire";
+}
+
 function sourceFailures(root, file, projects) {
   const ctx = context(root, file, projects);
   const text = readFileSync(file, "utf8");
@@ -271,14 +262,17 @@ function sourceFailures(root, file, projects) {
       `${ctx.path}:${source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1}: ${message}`,
     );
   function checkImport(node, specifier, typeOnly = false) {
-    const value = specifier && ts.isStringLiteral(specifier) ? specifier.text : undefined;
+    const literal = specifier && (agentSource ? specifier : ts.skipOuterExpressions(specifier));
+    const value =
+      literal && (agentSource ? ts.isStringLiteral(literal) : ts.isStringLiteralLike(literal))
+        ? literal.text
+        : undefined;
     if (value === undefined) {
       if (agentSource) report(node, "unverifiable dynamic import; use a string literal");
       return;
     }
     if (agentSource && !allowedModuleSpecifier(value)) {
       report(node, `agent module specifier must be a bare package name or relative path: ${value}`);
-      return;
     }
     const { targets, error } = importTargets(projects, file, value);
     if (error) {
@@ -322,9 +316,13 @@ function sourceFailures(root, file, projects) {
       ts.isExternalModuleReference(node.moduleReference)
     ) {
       if (agentSource) report(node, "CommonJS import-equals is forbidden; use literal ESM imports");
+      checkImport(node, node.moduleReference.expression, node.isTypeOnly);
     } else if (ts.isImportTypeNode(node) && ts.isLiteralTypeNode(node.argument)) {
       checkImport(node, node.argument.literal, true);
-    } else if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword)
+    } else if (
+      ts.isCallExpression(node) &&
+      (node.expression.kind === ts.SyntaxKind.ImportKeyword || commonJsLoad(node.expression))
+    )
       checkImport(node, node.arguments[0]);
     ts.forEachChild(node, visit);
   }
