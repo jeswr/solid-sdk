@@ -35,14 +35,16 @@ const units = [
 ] as const;
 
 // Shared with reminder masking so worded and compound durations stay intact.
-const durationUnit = `${amount}\\s*(?:${units.map(([unit]) => unit).join("|")})\\b`;
+const durationUnit = `${amount}\\s*(?:${units.map(([unit]) => unit).join("|")})(?=\\d|\\b)`;
 export const durationPattern = `${durationUnit}(?:\\s*,?\\s*(?:and\\s*)?${durationUnit})*`;
 
 /** Resolve chrono-recognised elapsed phrases without host-local Date setters. */
 export function elapsedInstant(text: string, now: Date): Date {
   const negative = /^(?:last|past|-)|\b(?:ago|before|earlier)\b/i.test(text);
   const values = units.map(([unit]) => {
-    const match = [...text.toLowerCase().matchAll(new RegExp(`(${amount})\\s*(${unit})\\b`, "g"))]
+    const match = [
+      ...text.toLowerCase().matchAll(new RegExp(`(${amount})\\s*(${unit})(?=\\d|\\b)`, "g")),
+    ]
       .filter((fragment) => !/^[a-z]+$/.test(fragment[0]))
       .at(-1);
     if (!match) return 0;

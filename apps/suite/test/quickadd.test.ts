@@ -505,3 +505,102 @@ describe("time zones, DST and determinism", () => {
     expect(ctx.now.toISOString()).toBe(before);
   });
 });
+
+describe("round-three deadline regressions", () => {
+  it.each([
+    ["2026-11-01T00:30:00Z", "UTC", "this month", date("2026-11-01")],
+    ["2026-11-01T00:30:00Z", "UTC", "this week", date("2026-11-01")],
+    ["2027-01-01T00:30:00Z", "UTC", "this year", date("2027-01-01")],
+    ["2026-11-01T00:30:00Z", "America/New_York", "this month", date("2026-10-01")],
+    ["2026-11-01T00:30:00Z", "Asia/Kolkata", "this month", date("2026-11-01")],
+    ["2026-11-01T00:30:00Z", "UTC", "this month at 5pm", timed("2026-11-01T17:00:00.000Z", "UTC")],
+    ["2026-11-01T00:30:00Z", "UTC", "this week at 5pm", timed("2026-11-01T17:00:00.000Z", "UTC")],
+    ["2027-01-01T00:30:00Z", "UTC", "this year at 5pm", timed("2027-01-01T17:00:00.000Z", "UTC")],
+    [
+      "2026-11-01T00:30:00Z",
+      "America/New_York",
+      "this month 5pm UTC",
+      timed("2026-11-01T17:00:00.000Z", "America/New_York"),
+    ],
+  ] as const)("resolves %s / %s / %s independently of host TZ", (now, tz, phrase, due) => {
+    for (const recurrence of ["", "daily "]) {
+      const input = `Review ${recurrence}${phrase}`;
+      const result = parseQuickAdd(input, { now: new Date(now), tz });
+      expect(result.due).toEqual(due);
+      expect(result.title).toBe("Review");
+      expect(result.spans.at(-1)).toEqual({
+        kind: "due",
+        start: 7 + recurrence.length,
+        end: input.length,
+        text: phrase,
+      });
+    }
+  });
+
+  it.each([
+    "2 hours before 5pm",
+    "2 hours after 5pm",
+    "2 hours before Monday",
+    "2 days after 3 November",
+    "2 hours before tomorrow 5pm",
+    "2 hours before an unresolved event",
+    "2 hours before",
+    "2 days since Monday",
+    "2 hours from Monday",
+    "5pm +2 hours",
+    "5pm -2 hours",
+    "tomorrow then 2 hours before an unresolved event",
+  ])("preserves unsupported anchored offset %s without a partial deadline", (phrase) => {
+    for (const recurrence of ["", "daily "]) {
+      const input = `Call ${recurrence}${phrase} p1 @calls`;
+      const result = parseQuickAdd(input, { ...ctx, tz: "UTC" });
+      expect(result.due).toBeUndefined();
+      expect(result.title).toBe(`Call ${phrase}`);
+      expect(result.priority).toBe(1);
+      expect(result.labels).toEqual(["calls"]);
+      expect(result.spans.some((span) => span.kind === "due")).toBe(false);
+    }
+  });
+
+  it.each([
+    ["in 1h30m", "2026-10-23T12:30:00.000Z"],
+    ["in 1h30m45s", "2026-10-23T12:30:45.000Z"],
+    ["in 1d2h30m", "2026-10-24T13:30:00.000Z"],
+    ["1h30m ago", "2026-10-23T09:30:00.000Z"],
+    ["in 1h30m2h", "2026-10-23T13:30:00.000Z"],
+  ])("keeps every compact duration unit in %s", (phrase, expected) => {
+    const input = `Call ${phrase}`;
+    expect(parseQuickAdd(input, { ...ctx, tz: "UTC" })).toEqual({
+      title: "Call",
+      due: timed(expected, "UTC"),
+      priority: 4,
+      labels: [],
+      spans: [{ kind: "due", start: 5, end: input.length, text: phrase }],
+    });
+  });
+
+  it.each([
+    "!9am on Monday",
+    "!14:00 on 3 November",
+    "!noon on 2026-11-03",
+    "!in 1h30m",
+  ])("preserves connected reminder %s without inventing a deadline", (reminder) => {
+    expect(parseQuickAdd(`Call ${reminder}`, ctx)).toEqual({
+      title: `Call ${reminder}`,
+      priority: 4,
+      labels: [],
+      spans: [],
+    });
+    for (const input of [`Call ${reminder} tomorrow 5pm p1`, `Call tomorrow 5pm ${reminder} p1`]) {
+      const result = parseQuickAdd(input, ctx);
+      expect(result.title).toBe(`Call ${reminder}`);
+      expect(result.due).toEqual(timed("2026-10-24T16:00:00.000Z"));
+      expect(result.spans.map((span) => span.text)).toEqual(["tomorrow 5pm", "p1"]);
+      for (const span of result.spans) expect(input.slice(span.start, span.end)).toBe(span.text);
+    }
+  });
+  it("keeps unresolved connected reminder qualifiers literal", () => {
+    const input = "Call !9am on an unresolved event tomorrow";
+    expect(parseQuickAdd(input, ctx)).toEqual({ title: input, priority: 4, labels: [], spans: [] });
+  });
+});

@@ -63,7 +63,22 @@ export function parseQuickAdd(text: string, ctx: QuickAddContext): QuickAddResul
       parser
         .parse(remaining, { instant: today, timezone: 0 }, { forwardDate: true })
         .find((candidate) => candidate.index === 0)?.text;
-    if (reminder) mask(marker.index, marker[0].length + reminder.length);
+    if (reminder) {
+      let length = reminder.length;
+      const suffix = remaining.slice(length);
+      const connector = /^\s+on\s+/i.exec(suffix);
+      if (connector) {
+        // Parse one calendar qualifier without merging an adjacent, separate deadline.
+        const calendarParser = parser.clone();
+        calendarParser.refiners = [];
+        const qualifier = calendarParser
+          .parse(suffix.slice(connector[0].length), { instant: today, timezone: 0 })
+          .find((candidate) => candidate.index === 0);
+        // Unknown connected qualifiers stay literal, including their remaining text.
+        length += qualifier ? connector[0].length + qualifier.text.length : suffix.length;
+      }
+      mask(marker.index, marker[0].length + length);
+    }
   }
   let recurrence: RecurrenceRule | undefined;
   for (const match of working.matchAll(recurrencePattern)) {
@@ -75,25 +90,33 @@ export function parseQuickAdd(text: string, ctx: QuickAddContext): QuickAddResul
     addSpan("recurrence", match.index, match[0].length);
   }
   if (recurrence) result.recurrence = recurrence;
+  // Chrono merges anchored offsets into relative results, discarding their anchor.
+  // Until exact anchor resolution is supported, preserve all deadline text in that input.
+  const unresolvedAnchor = new RegExp(
+    `${durationPattern}\\s*(?:before|after|since|from(?!\\s+now\\b))\\b|[+-]\\s*${durationPattern}`,
+    "i",
+  ).test(working);
   // A UTC surrogate supplies the injected zone's wall clock to chrono, independent of host TZ.
-  const matches = parser
-    .parse(working, { instant: today, timezone: 0 }, { forwardDate: true })
-    .flatMap((candidate) => {
-      const tags = candidate.start.tags();
-      const elapsed = tags.has("result/relativeDateAndTime") || tags.has("casualReference/now");
-      if (elapsed || !candidate.start.isCertain("timezoneOffset")) return [candidate];
-      // Infer explicit-zone dates against the real clock in that zone.
-      return parser
-        .parse(
-          candidate.text,
-          {
-            instant: ctx.now,
-            timezone: Number(candidate.start.get("timezoneOffset")),
-          },
-          { forwardDate: true },
-        )
-        .map((resolved) => ({ ...resolved, index: candidate.index + resolved.index }));
-    });
+  const matches = (
+    unresolvedAnchor
+      ? []
+      : parser.parse(working, { instant: today, timezone: 0 }, { forwardDate: true })
+  ).flatMap((candidate) => {
+    const tags = candidate.start.tags();
+    const elapsed = tags.has("result/relativeDateAndTime") || tags.has("casualReference/now");
+    if (elapsed || !candidate.start.isCertain("timezoneOffset")) return [candidate];
+    // Infer explicit-zone dates against the real clock in that zone.
+    return parser
+      .parse(
+        candidate.text,
+        {
+          instant: ctx.now,
+          timezone: Number(candidate.start.get("timezoneOffset")),
+        },
+        { forwardDate: true },
+      )
+      .map((resolved) => ({ ...resolved, index: candidate.index + resolved.index }));
+  });
   const match = matches.find(
     (candidate) =>
       !candidate.end &&
@@ -119,9 +142,22 @@ export function parseQuickAdd(text: string, ctx: QuickAddContext): QuickAddResul
           Number(start.get("day")),
         ),
       );
+      // Chrono's "this period" parser reads host-local fields from the surrogate.
+      // Resolve period boundaries directly from the injected calendar instead.
+      const period = /^this\s+(week|month|year)s?\b/i.exec(match.text)?.[1]?.toLowerCase();
+      if (period) {
+        const reference = start.isCertain("timezoneOffset")
+          ? new Date(ctx.now.getTime() + Number(start.get("timezoneOffset")) * 60_000)
+          : today;
+        calendar.setTime(reference.getTime());
+        if (period === "week") calendar.setUTCDate(calendar.getUTCDate() - calendar.getUTCDay());
+        else calendar.setUTCDate(1);
+        if (period === "year") calendar.setUTCMonth(0);
+      }
       // A lone time qualifies the recurrence's initial day, rather than changing its weekday.
       if (
         recurrence &&
+        !period &&
         start.isCertain("hour") &&
         !(["day", "weekday", "month", "year"] as const).some((part) => start.isCertain(part))
       ) {
@@ -145,7 +181,7 @@ export function parseQuickAdd(text: string, ctx: QuickAddContext): QuickAddResul
       }
     }
     if (due) addSpan("due", match.index, match.text.length);
-  } else if (recurrence) {
+  } else if (recurrence && !unresolvedAnchor) {
     due = { kind: "date", date: recurrenceStart(recurrence, today).toISOString().slice(0, 10) };
   }
   if (due) result.due = due;

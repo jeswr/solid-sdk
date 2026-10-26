@@ -30,3 +30,12 @@ resource matching, multiline hierarchy and chips belong to the consuming compose
 Calendar dates use the injected zone, never the machine zone. Nonexistent DST wall times remain
 in the title with no due/span; repeated times choose the earlier instant. An explicit numeric or
 named timezone recognised by chrono overrides the injected zone for that phrase's instant.
+
+Anchored offsets (`2 hours before 5pm`, `2 days after Monday`, `5pm +2 hours`) remain literal.
+When an unmasked offset has an anchor, the parser leaves all deadline text in that input unparsed
+and does not infer a due date from recurrence; metadata and recurrence tokens still parse.
+This avoids resolving the offset against now or consuming only part of its anchor. Elapsed
+phrases such as `in 1h30m` and `two hours ago` still resolve against the injected instant.
+Time-first reminders include calendar qualifiers explicitly connected by `on` (`!9am on Monday`);
+a separate following deadline (`tomorrow 5pm`) remains eligible for due parsing. If a connected
+qualifier is unrecognised, its remaining text stays literal without a partial deadline.
