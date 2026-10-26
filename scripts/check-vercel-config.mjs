@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // AUTHORED-BY Codex GPT-5.6 (Sol)
+// AUTHORED-BY Codex GPT-6.1 (Sol)
 
 import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -79,6 +80,8 @@ function checkViteConfig(root, directory, failures) {
 }
 
 function checkBuildEnv(root, app, failures) {
+  // Next.js routes can derive their origin from the request instead of a build env.
+  if (app.originEnv === undefined) return;
   // Turbo infers NEXT_PUBLIC_* for Next.js, including cache-key inputs.
   if (app.framework === "next" && app.originEnv.startsWith("NEXT_PUBLIC_")) return;
   const path = `${app.rootDirectory}/turbo.json`;
@@ -128,6 +131,17 @@ function hasNextClientIdRoute(root, directory) {
   return false;
 }
 
+function hasViteClientIdConfig(root, directory, originEnv) {
+  for (const extension of ["ts", "js", "mjs"]) {
+    const path = join(root, directory, `vite.config.${extension}`);
+    if (!existsSync(path)) continue;
+    const source = readFileSync(path, "utf8");
+    // The emitting plugin may live in an imported helper, so check its config inputs.
+    if (["clientid.jsonld", originEnv].every((value) => source.includes(value))) return true;
+  }
+  return false;
+}
+
 function checkClientIdBuild(root, app, manifest, failures) {
   const build = manifest.scripts?.build;
   const hasBuild = typeof build === "string" && build.trim() !== "";
@@ -139,10 +153,18 @@ function checkClientIdBuild(root, app, manifest, failures) {
     hasBuild &&
     /\bnext\s+build\b/.test(build) &&
     hasNextClientIdRoute(root, app.rootDirectory);
-  if (!hasBuild || (!hasGenerator && !hasNextRoute)) {
+  const hasViteConfig =
+    app.framework === "vite" &&
+    hasBuild &&
+    /\bvite\s+build\b/.test(build) &&
+    hasViteClientIdConfig(root, app.rootDirectory, app.originEnv);
+  const generatesClientId = app.originEnv !== undefined && (hasGenerator || hasViteConfig);
+  if (!hasBuild || (!generatesClientId && !hasNextRoute)) {
     failures.push(
       `${app.rootDirectory}/package.json: build/prebuild must generate clientid.jsonld via gen-clientid${
-        app.framework === "next" ? " or next build with a clientid.jsonld GET route" : ""
+        app.framework === "next"
+          ? " or next build with a clientid.jsonld GET route"
+          : ` or vite build with a Vite config referencing clientid.jsonld and ${app.originEnv}`
       }`,
     );
   }
@@ -163,8 +185,10 @@ function checkVercelConfig(root) {
           (key) => typeof app[key] !== "string" || !app[key].trim(),
         ) ||
         !["vite", "next"].includes(app.framework) ||
-        (app.clientIdDocument !== false &&
-          !["APP_ORIGIN", "NEXT_PUBLIC_APP_ORIGIN"].includes(app.originEnv))
+        // Only Next.js can omit originEnv, using a request-derived client ID route.
+        (app.originEnv === undefined
+          ? app.framework !== "next"
+          : !["APP_ORIGIN", "NEXT_PUBLIC_APP_ORIGIN"].includes(app.originEnv))
       ) {
         failures.push(`${path}[${index}]: invalid deployment entry`);
         continue;

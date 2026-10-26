@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-5.6 (Sol)
+// AUTHORED-BY Codex GPT-6.1 (Sol)
 
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -42,6 +43,13 @@ export function GET() {
     headers: { "content-type": "application/ld+json" }
   });
 }`;
+const viteConfig = `import { defineConfig, loadEnv } from "vite";
+import { hostedClientIdConfig } from "./src/lib/hosted-client-id.js";
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), "");
+  if (!env.APP_ORIGIN) return {};
+  return hostedClientIdConfig(env, { client_id: "/clientid.jsonld" });
+});`;
 
 afterEach(() => {
   for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
@@ -120,7 +128,7 @@ describe("Vercel config guard", () => {
   it.each([
     viteApp,
     { ...nextApp, originEnv: "APP_ORIGIN" },
-  ])("accepts $framework without a client ID mechanism or origin env config when clientIdDocument is false", (app) => {
+  ])("accepts $framework without a client ID mechanism or Turbo env config when clientIdDocument is false", (app) => {
     const files = fixtures([{ ...app, clientIdDocument: false }]);
     files[`${app.rootDirectory}/package.json`].scripts.build = `${app.framework} build`;
     delete files[`${app.rootDirectory}/src/app/clientid.jsonld/route.ts`];
@@ -130,8 +138,43 @@ describe("Vercel config guard", () => {
     expect(result.stdout).toContain("1 deployments checked");
     expect(result.stderr).toBe("");
 
-    delete files["scripts/vercel-apps.json"][0].originEnv;
-    expect(scan(files).status).toBe(0);
+    if (app.framework === "next") {
+      delete files["scripts/vercel-apps.json"][0].originEnv;
+      expect(scan(files).status).toBe(0);
+    }
+  });
+
+  it("accepts Next.js without originEnv or a Turbo config when a request-derived client ID route exists", () => {
+    const files = fixtures([{ ...nextApp, originEnv: undefined }]);
+    files["apps/next/src/app/clientid.jsonld/route.ts"] = `export const dynamic = "force-dynamic";
+export function GET(request) {
+  return new Response(JSON.stringify({
+    client_id: new URL("/clientid.jsonld", request.url).toString(),
+    redirect_uris: [new URL("/callback.html", request.url).toString()]
+  }), { headers: { "content-type": "application/ld+json" } });
+}`;
+    expect(files["apps/next/turbo.json"]).toBeUndefined();
+    const result = scan(files);
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe("");
+  });
+
+  it.each([
+    undefined,
+    true,
+    false,
+  ])("rejects Vite without originEnv when clientIdDocument is %j", (clientIdDocument) => {
+    const files = fixtures([{ ...viteApp, originEnv: undefined, clientIdDocument }]);
+    expectFailure(files, "scripts/vercel-apps.json[0]: invalid deployment entry");
+  });
+
+  it.each([viteApp, nextApp])("rejects unsupported originEnv values for $framework", (app) => {
+    for (const originEnv of [null, "", "VITE_APP_ORIGIN", "OTHER_APP_ORIGIN"]) {
+      for (const clientIdDocument of [undefined, false]) {
+        const files = fixtures([{ ...app, originEnv, clientIdDocument }]);
+        expectFailure(files, "scripts/vercel-apps.json[0]: invalid deployment entry");
+      }
+    }
   });
 
   it.each([
@@ -194,6 +237,41 @@ describe("Vercel config guard", () => {
       { key: "access-control-allow-origin", value: "*" },
     ];
     expect(scan(files).status).toBe(0);
+  });
+
+  it("accepts a Vite config that emits the client ID from APP_ORIGIN during build", () => {
+    const files = fixtures();
+    files["apps/example/web/package.json"].scripts.build =
+      "tsc -p tsconfig.build.json && vite build";
+    files["apps/example/web/vite.config.ts"] = viteConfig;
+    expect(scan(files).status).toBe(0);
+  });
+
+  it.each([
+    "missing config",
+    "no document",
+    "wrong origin",
+    "unrelated build",
+  ])("rejects a Vite client ID mechanism with %s", (kind) => {
+    const files = fixtures();
+    files["apps/example/web/package.json"].scripts.build = "vite build";
+    if (kind !== "missing config") files["apps/example/web/vite.config.ts"] = viteConfig;
+    if (kind === "no document")
+      files["apps/example/web/vite.config.ts"] = viteConfig.replaceAll(
+        "clientid.jsonld",
+        "other.json",
+      );
+    if (kind === "wrong origin")
+      files["apps/example/web/vite.config.ts"] = viteConfig.replaceAll(
+        "APP_ORIGIN",
+        "OTHER_ORIGIN",
+      );
+    if (kind === "unrelated build")
+      files["apps/example/web/package.json"].scripts.build = "echo built";
+    expectFailure(
+      files,
+      "apps/example/web/package.json: build/prebuild must generate clientid.jsonld",
+    );
   });
 
   it.each(["/(.*)", "/:path*", "/:path(.*)"])("accepts the SPA catch-all %s", (source) => {
@@ -365,13 +443,22 @@ describe("Vercel config guard", () => {
     "missing build",
     "unrelated build",
   ])("rejects a Next.js client ID mechanism with %s", (kind) => {
-    const files = fixtures([nextApp]);
-    const route = "apps/next/src/app/clientid.jsonld/route.ts";
-    if (kind === "missing route") delete files[route];
-    if (kind === "incomplete route")
-      files[route] = "export function GET() { return new Response(''); }";
-    if (kind === "missing build") delete files["apps/next/package.json"].scripts.build;
-    if (kind === "unrelated build") files["apps/next/package.json"].scripts.build = "echo built";
+    for (const originEnv of [nextApp.originEnv, undefined]) {
+      const files = fixtures([{ ...nextApp, originEnv }]);
+      const route = "apps/next/src/app/clientid.jsonld/route.ts";
+      if (kind === "missing route") delete files[route];
+      if (kind === "incomplete route")
+        files[route] = "export function GET() { return new Response(''); }";
+      if (kind === "missing build") delete files["apps/next/package.json"].scripts.build;
+      if (kind === "unrelated build") files["apps/next/package.json"].scripts.build = "echo built";
+      expectFailure(files, "next build with a clientid.jsonld GET route");
+    }
+  });
+
+  it("requires a Next.js route without originEnv even when a generator is configured", () => {
+    const files = fixtures([{ ...nextApp, originEnv: undefined }]);
+    delete files["apps/next/src/app/clientid.jsonld/route.ts"];
+    files["apps/next/package.json"].scripts.build = "node scripts/gen-clientid.mjs && next build";
     expectFailure(files, "next build with a clientid.jsonld GET route");
   });
 
@@ -414,17 +501,21 @@ describe("Vercel config guard", () => {
   it("checks the actual manifest independent of the invoking directory", () => {
     const result = runNode([guard], { cwd: tmpdir() });
     expect(result.status).toBe(0);
-    expect(result.stdout).toContain("11 deployments checked");
+    expect(result.stdout).toContain("14 deployments checked");
     expect(result.stderr).toBe("");
   });
 });
 
-describe("pod app Vercel routes", () => {
+describe("Vite app Vercel routes", () => {
   const apps = JSON.parse(readFileSync(join(checkout, "scripts/vercel-apps.json"), "utf8"));
   for (const app of apps.filter((app) => app.framework === "vite")) {
     // Rewritten nested paths serve index.html, so Vercel builds need root-absolute assets.
     it(`${app.project} builds root-absolute asset URLs on Vercel`, () => {
       const vite = readFileSync(join(checkout, app.rootDirectory, "vite.config.ts"), "utf8");
+      if (app.rootDirectory === "apps/access-manager") {
+        expect(vite).not.toMatch(/\bbase\s*:/);
+        return;
+      }
       expect(vite).toContain('base: process.env.VERCEL === "1" ? "/" : "./",');
       const turbo = JSON.parse(
         readFileSync(join(checkout, app.rootDirectory, "turbo.json"), "utf8"),
