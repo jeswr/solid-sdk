@@ -1,5 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import type { CompletionOptions, TreeTask } from "./types";
+import type { CompletionOptions, CompletionTask, TreeTask } from "./types";
 import { descendants, getTask, readForest, requireInput } from "./validation";
 
 /**
@@ -12,7 +12,7 @@ export function setTaskCompletion<T extends TreeTask>(
   id: string,
   state: TreeTask["state"],
   options: CompletionOptions = {},
-): T[] {
+): CompletionTask<T>[] {
   const forest = readForest(tasks);
   const task = getTask(forest, id);
   requireInput(state === "open" || state === "completed", "Unknown completion state");

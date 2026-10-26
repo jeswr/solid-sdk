@@ -31,6 +31,12 @@ export interface CompletionOptions {
   readonly completeAncestors?: boolean;
 }
 
+/** Widen edited fields even when the caller supplied literal/narrow task types. */
+export type ReparentedTask<T extends TreeTask> = Omit<T, "parentId" | "orderKey"> &
+  Pick<TreeTask, "parentId" | "orderKey">;
+
+export type CompletionTask<T extends TreeTask> = Omit<T, "state"> & Pick<TreeTask, "state">;
+
 export interface TreeProgress {
   readonly completed: number;
   readonly open: number;

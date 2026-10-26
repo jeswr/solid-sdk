@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // biome-ignore-all lint/style/noNonNullAssertion: Fixtures and explicit identity assertions establish these entries.
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
 import {
   deleteSubtree,
   getProgress,
@@ -300,6 +300,23 @@ describe("explicit completion policies", () => {
 });
 
 describe("progress and immutability", () => {
+  it("widens edited literal types while preserving caller metadata types", () => {
+    const narrow = {
+      id: id("narrow"),
+      orderKey: "C",
+      state: "open",
+      title: "Plan picnic",
+    } as const;
+    // A fully narrow array exposes the original unsound return-type regression.
+    const completed = setTaskCompletion([narrow], narrow.id, "completed");
+    expectTypeOf(completed[0]!.state).toEqualTypeOf<TreeTask["state"]>();
+    expectTypeOf(completed[0]!.title).toEqualTypeOf<"Plan picnic">();
+    const moved = moveTask([narrow], narrow.id, undefined, 0);
+    expectTypeOf(moved[0]!.parentId).toEqualTypeOf<string | undefined>();
+    expectTypeOf(moved[0]!.orderKey).toEqualTypeOf<string>();
+    expectTypeOf(moved[0]!.title).toEqualTypeOf<"Plan picnic">();
+    expect(completed[0]!.state).toBe("completed");
+  });
   it("counts direct children by default and descendants explicitly, excluding the parent", () => {
     expect(getProgress(forest, a.id)).toEqual({
       total: 2,

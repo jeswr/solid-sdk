@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { generateKeyBetween } from "../../../../lib/order";
-import { TaskTreeError, type TreeTask } from "./types";
+import { type ReparentedTask, TaskTreeError, type TreeTask } from "./types";
 import { descendants, type Forest, getTask, readForest, requireInput } from "./validation";
 
 function relocate<T extends TreeTask>(
@@ -9,7 +9,7 @@ function relocate<T extends TreeTask>(
   task: T,
   parentId: string | undefined,
   index: number,
-): T[] {
+): ReparentedTask<T>[] {
   let parent = parentId === undefined ? undefined : getTask(forest, parentId);
   while (parent !== undefined) {
     if (parent.id === task.id)
@@ -30,12 +30,12 @@ function relocate<T extends TreeTask>(
   ) {
     return [...tasks];
   }
-  const { parentId: _previousParent, ...rest } = task;
-  const moved = {
+  const { parentId: _previousParent, orderKey: _previousKey, ...rest } = task;
+  const moved: ReparentedTask<T> = {
     ...rest,
     ...(parentId === undefined ? {} : { parentId }),
     orderKey: generateKeyBetween(previous, next),
-  } as T;
+  };
   return tasks.map((item) => (item.id === task.id ? moved : item));
 }
 
@@ -45,13 +45,16 @@ export function moveTask<T extends TreeTask>(
   id: string,
   parentId: string | undefined,
   index: number,
-): T[] {
+): ReparentedTask<T>[] {
   const forest = readForest(tasks);
   return relocate(tasks, forest, getTask(forest, id), parentId, index);
 }
 
 /** Append under the preceding sibling. First siblings cannot be indented. */
-export function indentTask<T extends TreeTask>(tasks: readonly T[], id: string): T[] {
+export function indentTask<T extends TreeTask>(
+  tasks: readonly T[],
+  id: string,
+): ReparentedTask<T>[] {
   const forest = readForest(tasks);
   const task = getTask(forest, id);
   const siblings = forest.children.get(task.parentId) as T[];
@@ -61,7 +64,10 @@ export function indentTask<T extends TreeTask>(tasks: readonly T[], id: string):
 }
 
 /** Promote after the former parent, retaining every descendant's parent link and order key. */
-export function outdentTask<T extends TreeTask>(tasks: readonly T[], id: string): T[] {
+export function outdentTask<T extends TreeTask>(
+  tasks: readonly T[],
+  id: string,
+): ReparentedTask<T>[] {
   const forest = readForest(tasks);
   const task = getTask(forest, id);
   if (task.parentId === undefined)
