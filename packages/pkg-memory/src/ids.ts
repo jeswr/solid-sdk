@@ -185,6 +185,13 @@ export function canonicalizeAssertion(
       if (t.termType === "NamedNode" && iri(t.value) !== t.value)
         throw new Error("Unsafe assertion IRI");
     }
+    // Turtle LANGTAG syntax; the end assertion also excludes a trailing newline.
+    if (
+      q.object.termType === "Literal" &&
+      q.object.language &&
+      !/^[a-z]+(?:-[a-z0-9]+)*(?![\s\S])/i.test(q.object.language)
+    )
+      throw new Error("Invalid language tag");
     normalized.addQuad(
       df.quad(
         q.subject,

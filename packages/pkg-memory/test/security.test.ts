@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 import {
   type Batch,
   buildNanopublications,
+  canonicalizeAssertion,
   createFactAssertion,
   type Fact,
   parseAssertion,
@@ -58,6 +59,52 @@ it.each([
   expect([...parsed.dataset].some((q) => q.subject.value === "https://example.org/evil")).toBe(
     false,
   );
+});
+
+it.each([
+  "en_US",
+  "1en",
+  "-en",
+  "en-",
+  "en-1-",
+  "en\n",
+  "en\r",
+  "en\t",
+  "fr-é",
+  "en . <https://example.org/evil> <https://schema.org/name> <https://example.org/object> #",
+])("rejects malformed raw assertion language tag %j before hashing or writing", async (language) => {
+  const b = batch();
+  const assertion = new Store([
+    df.quad(df.blankNode("label"), df.namedNode(`${NS.schema}name`), df.literal("Text", language)),
+  ]);
+  b.claims[0]!.assertion = assertion;
+  expect(() => canonicalizeAssertion(assertion)).toThrow("Invalid language tag");
+  await expect(buildNanopublications(b, options)).rejects.toThrow("Invalid language tag");
+});
+
+it.each([
+  "en",
+  "EN-US",
+  "es-419",
+  "zh-Hant-TW",
+  "x-private",
+  "",
+])("round-trips valid raw assertion language tag %j without changing its graph", async (language) => {
+  const b = batch();
+  const literal = df.literal("Synthetic label", language || undefined);
+  b.claims[0]!.assertion = new Store([
+    df.quad(df.namedNode(owner), df.namedNode(`${NS.schema}name`), literal),
+  ]);
+  const built = await buildNanopublications(b, options);
+  const parsed = await parseNanopublications(await serializeNanopublications(built));
+  const assertion = parsed.dataset.getQuads(
+    null,
+    null,
+    null,
+    df.namedNode(built.nanopubs[0]!.assertionId),
+  );
+  expect(assertion).toHaveLength(1);
+  expect(assertion[0]!.object.equals(literal)).toBe(true);
 });
 
 it("escapes IRIREF delimiters at all builder IRI boundaries without adding statements", async () => {
