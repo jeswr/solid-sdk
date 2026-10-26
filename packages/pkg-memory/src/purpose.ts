@@ -1,7 +1,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { evaluate, type OdrlPolicy } from "@jeswr/solid-odrl";
+// AUTHORED-BY Codex GPT-6
+import { evaluate, type OdrlConstraint, type OdrlPolicy, OPERATOR_IRI } from "@jeswr/solid-odrl";
 import type { Nanopublication } from "./model.js";
-import { iri, NS } from "./rdf.js";
+import { dateTime, iri, NS } from "./rdf.js";
 
 /** Closed purposes named by MCP DESIGN §4. */
 export const MEMORY_PURPOSES = {
@@ -56,6 +57,41 @@ function categoryIri(category: string): string {
 export function isSpecialCategory(category: string): boolean {
   return special.has(categoryIri(category));
 }
+
+/** The filter supplies only purpose and the evaluation time; never guess other context. */
+function evaluableConstraint(constraint: OdrlConstraint): boolean {
+  const { leftOperand, operator, rightOperand, datatype } = constraint;
+  if (leftOperand !== "purpose" && leftOperand !== "dateTime") return false;
+  if (!Object.hasOwn(OPERATOR_IRI, operator)) return false;
+  const rights = Array.isArray(rightOperand) ? rightOperand : [rightOperand];
+  if (
+    rights.length === 0 ||
+    (!["isAnyOf", "isAllOf", "isNoneOf"].includes(operator) && rights.length !== 1)
+  )
+    return false;
+  if (
+    datatype !== undefined &&
+    datatype !== `${NS.xsd}string` &&
+    !(leftOperand === "dateTime" && datatype === `${NS.xsd}dateTime`)
+  )
+    return false;
+  return rights.every((value) => {
+    if (typeof value !== "string" || value.length === 0) return false;
+    if (leftOperand === "purpose") return true;
+    try {
+      dateTime(value);
+      return Number.isFinite(Date.parse(value));
+    } catch {
+      return false;
+    }
+  });
+}
+
+function evaluablePolicy(policy: OdrlPolicy): boolean {
+  const rules = [...(policy.permissions ?? []), ...(policy.prohibitions ?? [])];
+  const duties = [...(policy.obligations ?? []), ...rules.flatMap((rule) => rule.duties ?? [])];
+  return [...rules, ...duties].every((rule) => (rule.constraints ?? []).every(evaluableConstraint));
+}
 /** Build a per-call predicate: all categories need an explicit, duty-free ODRL permit. */
 export function purposeFilter(
   policy: OdrlPolicy,
@@ -66,6 +102,7 @@ export function purposeFilter(
   const agent = iri(clientId);
   return (fact) =>
     fact.categories.length > 0 &&
+    evaluablePolicy(policy) &&
     fact.categories.every(
       (category) =>
         evaluate(
