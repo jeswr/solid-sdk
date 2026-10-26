@@ -328,7 +328,7 @@ export function createSolidBackend(options: SolidBackendOptions): StorageClient 
       return { url: result.url, etag: result.etag, contentType: type, dataset };
     },
 
-    ...solidWrites({ ...options, root }, () => client, listAll),
+    ...solidWrites({ ...options, root }, () => client, listAll, list),
 
     async metadata(url): Promise<Metadata> {
       const described = await client.head(url);

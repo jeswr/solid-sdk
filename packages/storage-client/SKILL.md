@@ -150,8 +150,15 @@ Solid write side (ADR-003 §6, T-022; implementation isolated in `src/solid-writ
   cleanup trusts only its own PUT-response ETag when it is exactly one strong entity-tag (no
   wildcard, weak tag, list or malformed value); follow-up HEAD observations are kept separately
   for successful results. Copies without a usable create-response ETag and their ancestors are preserved,
-  reporting a partial move (conflict with the original cause). Validated containers are removed
-  unconditionally after children. Any source DELETE failure (including 4xx/5xx) throws conflict,
+  reporting a partial move (conflict with the original cause). After handling copied children,
+  container cleanup reads each destination deepest-first with one fresh listing GET, applying the
+  same RDF parsing and body limits as preflight. It removes a container only when the listing is
+  empty, its RDF passes the server-managed allow-list with no member subjects, and that GET has a
+  usable strong ETag; DELETE sends that ETag in If-Match. Failed verification, GET or conditional
+  DELETE preserves the container and its ancestors and reports a partial move. Destination
+  containers are never deleted unconditionally during rollback. Every preflight failure after the
+  first source GET discards its body before it can be handed to the destination PUT.
+  Any source DELETE failure (including 4xx/5xx) throws conflict,
   cause = delete error. Retain acknowledged deleted sources' copies; before removing any other
   copy, HEAD its source without the caller's signal. Remove it only if HEAD succeeds; any HEAD
   failure (404, 5xx, network, scope, etc.) preserves the copy and its ancestor containers.

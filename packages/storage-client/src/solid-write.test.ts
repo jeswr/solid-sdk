@@ -814,6 +814,12 @@ async function treeBackend(
     const copy = COPY + url.slice(SRC.length);
     exchanges[`PUT ${copy}`] = response(201, { etag: `"copy:${url}"` });
     exchanges[`DELETE ${copy}`] = response();
+    if (folder)
+      exchanges[`GET ${copy}`] = response(
+        200,
+        { etag: `"emptied:${url}"`, "content-type": "text/turtle" },
+        "",
+      );
   }
   exchanges[`HEAD ${COPY}`] = response(200, { etag: '"completed-container"' });
   return backend({ ...exchanges, ...overrides }, options);
@@ -945,9 +951,9 @@ describe("emulated move", () => {
     expect(
       calls.filter((c) => c.method === "DELETE").map((c) => [c.url, c.headers.get("if-match")]),
     ).toEqual([
-      [`${COPY}sub/`, null],
+      [`${COPY}sub/`, `"emptied:${SRC}sub/"`],
       [`${COPY}a`, `"copy:${SRC}a"`],
-      [COPY, null],
+      [COPY, `"emptied:${SRC}"`],
     ]);
   });
   test("resource source-delete failure rolls back the copy with its create ETag", async () => {
@@ -1014,7 +1020,8 @@ describe("emulated move", () => {
         { code: "precondition-failed" },
       ]);
       if (phase === "delete") expect(error.message).toContain("partial");
-      expect(calls.at(-1)?.url).toBe(COPY);
+      expect(calls.at(-1)?.url).toBe(`${COPY}a`);
+      expect(calls.some((call) => call.method === "DELETE" && call.url === COPY)).toBe(false);
     }
   });
   test.each([
@@ -1711,6 +1718,223 @@ test.each([
     { status: null },
   );
   expect(calls).toHaveLength(0);
+});
+
+describe("round-6 move rollback and body cleanup regressions", () => {
+  const contains = (container: string, member: string) =>
+    quad(nn(container), nn("http://www.w3.org/ns/ldp#contains"), nn(member));
+
+  test("rollback preserves an empty destination replaced with concurrent RDF", async () => {
+    const replacement = await serializeQuads(
+      [quad(nn(COPY), nn("urn:label"), literal("concurrent replacement"))],
+      "text/turtle",
+    );
+    const fixture = await treeBackend({
+      [`GET ${SRC}`]: response(200, { "content-type": "text/turtle" }, ""),
+      [`PUT ${COPY}`]: response(201, { etag: '"created"' }),
+      [`DELETE ${SRC}`]: () => {
+        fixture.exchanges[`GET ${COPY}`] = response(
+          200,
+          { etag: '"concurrent"', "content-type": "text/turtle" },
+          replacement,
+        );
+        return response(403, {});
+      },
+    });
+    const error = await rejection(
+      fixture.storage.move(SRC, DEST, { ifMatch: '"source"' }),
+      "conflict",
+    );
+    expect(error.message).toContain("partial");
+    expect(error.cause).toMatchObject({ code: "forbidden", status: 403 });
+    expect(fixture.calls.map((call) => [call.method, call.url])).toEqual([
+      ["HEAD", SRC],
+      ["GET", SRC],
+      ["PUT", COPY],
+      ["DELETE", SRC],
+      ["HEAD", SRC],
+      ["GET", COPY],
+    ]);
+    expect(await (await fixture.storage.read(COPY)).text()).toBe(replacement);
+  });
+
+  test("a foreign member preserves its container and ancestors after copied children are removed", async () => {
+    const foreign = `${COPY}sub/foreign`;
+    const body = await serializeQuads([contains(`${COPY}sub/`, foreign)], "text/turtle");
+    const { storage, calls } = await treeBackend({
+      [`DELETE ${SRC}sub/b`]: response(403, {}),
+      [`GET ${COPY}sub/`]: response(
+        200,
+        { etag: '"foreign-member"', "content-type": "text/turtle" },
+        body,
+      ),
+    });
+    const error = await rejection(storage.move(SRC, DEST, { ifMatch: '"source"' }), "conflict");
+    expect(error.message).toContain("partial");
+    expect(error.cause).toMatchObject({ code: "forbidden" });
+    expect(calls.filter((call) => call.method === "DELETE").map((call) => call.url)).toEqual([
+      `${SRC}sub/b`,
+      `${COPY}sub/b`,
+      `${COPY}a`,
+    ]);
+    expect(calls.filter((call) => call.method === "GET" && call.url.startsWith(COPY))).toEqual([
+      expect.objectContaining({ url: `${COPY}sub/`, signal: undefined }),
+    ]);
+    expect(calls.some((call) => call.url === foreign)).toBe(false);
+  });
+
+  test("emptied containers roll back deepest first using each fresh GET's strong ETag", async () => {
+    const remaining = new Set([COPY, `${COPY}a`, `${COPY}sub/`, `${COPY}sub/b`]);
+    const overrides: Record<string, Exchange> = {
+      [`DELETE ${SRC}sub/b`]: response(403, {}),
+    };
+    for (const url of remaining) {
+      overrides[`DELETE ${url}`] = (call) => {
+        expect(call.headers.get("if-match")).toBe(
+          url.endsWith("/") ? `"empty:${url}"` : `"copy:${SRC}${url.slice(COPY.length)}"`,
+        );
+        remaining.delete(url);
+        return response();
+      };
+      if (url.endsWith("/"))
+        overrides[`GET ${url}`] = async () => {
+          expect(
+            [...remaining].filter((member) => member !== url && member.startsWith(url)),
+          ).toEqual([]);
+          return response(
+            200,
+            { etag: `"empty:${url}"`, "content-type": "text/turtle" },
+            await serializeQuads(
+              [
+                quad(
+                  nn(url),
+                  nn("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
+                  nn("http://www.w3.org/ns/ldp#BasicContainer"),
+                ),
+              ],
+              "text/turtle",
+            ),
+          );
+        };
+    }
+    const { storage, calls } = await treeBackend(overrides);
+    const error = await rejection(storage.move(SRC, DEST, { ifMatch: '"source"' }), "conflict");
+    expect(error.message).toBe("Source delete failed; the copy was rolled back");
+    expect(error.cause).toMatchObject({ code: "forbidden" });
+    expect(remaining.size).toBe(0);
+    expect(
+      calls
+        .filter((call) => call.url.startsWith(COPY) && ["GET", "DELETE"].includes(call.method))
+        .map((call) => [call.method, call.url]),
+    ).toEqual([
+      ["DELETE", `${COPY}sub/b`],
+      ["GET", `${COPY}sub/`],
+      ["DELETE", `${COPY}sub/`],
+      ["DELETE", `${COPY}a`],
+      ["GET", COPY],
+      ["DELETE", COPY],
+    ]);
+    for (const call of calls.filter((call) => call.method === "GET" && call.url.startsWith(COPY))) {
+      expect(call.headers.get("accept")).toBe("text/turtle");
+      expect(call.signal).toBeUndefined();
+    }
+  });
+
+  test("a 412 on conditional container cleanup preserves that container and its ancestors", async () => {
+    const { storage, calls } = await treeBackend({
+      [`DELETE ${SRC}sub/b`]: response(403, {}),
+      [`DELETE ${COPY}sub/`]: response(412, { etag: '"concurrent"' }),
+    });
+    const error = await rejection(storage.move(SRC, DEST, { ifMatch: '"source"' }), "conflict");
+    expect(error.message).toContain("partial");
+    expect(error.cause).toBeInstanceOf(AggregateError);
+    expect((error.cause as AggregateError).errors).toMatchObject([
+      { code: "forbidden" },
+      { code: "precondition-failed", status: 412, etag: '"concurrent"' },
+    ]);
+    expect(
+      calls
+        .filter((call) => call.method === "DELETE" && call.url.startsWith(COPY))
+        .map((call) => [call.url, call.headers.get("if-match")]),
+    ).toEqual([
+      [`${COPY}sub/b`, `"copy:${SRC}sub/b"`],
+      [`${COPY}sub/`, `"emptied:${SRC}sub/"`],
+      [`${COPY}a`, `"copy:${SRC}a"`],
+    ]);
+    expect(calls.some((call) => call.method === "GET" && call.url === COPY)).toBe(false);
+  });
+
+  test.each([
+    null,
+    "*",
+    'W/"weak"',
+    '"one", "two"',
+    "malformed",
+  ])("container cleanup preserves an empty representation with unusable GET ETag %s", async (etag) => {
+    const { storage, calls } = await treeBackend({
+      [`DELETE ${SRC}sub/b`]: response(403, {}),
+      [`GET ${COPY}sub/`]: response(
+        200,
+        { ...(etag === null ? {} : { etag }), "content-type": "text/turtle" },
+        "",
+      ),
+    });
+    const error = await rejection(storage.move(SRC, DEST, { ifMatch: '"source"' }), "conflict");
+    expect(error.message).toContain("partial");
+    expect(error.cause).toMatchObject({ code: "forbidden" });
+    expect(
+      calls
+        .filter((call) => call.method === "DELETE" && call.url.startsWith(COPY))
+        .map((call) => call.url),
+    ).toEqual([`${COPY}sub/b`, `${COPY}a`]);
+  });
+
+  test.each([
+    ["HTTP", response(503, {}), "server"],
+    [
+      "transport",
+      () => {
+        throw new Error("listing unavailable");
+      },
+      "network",
+    ],
+    [
+      "RDF",
+      response(200, { etag: '"empty"', "content-type": "text/turtle" }, "invalid RDF!"),
+      "invalid-response",
+    ],
+  ] as const)("a failed rollback listing (%s) preserves its container and ancestors", async (_kind, listing, code) => {
+    const { storage, calls } = await treeBackend({
+      [`DELETE ${SRC}sub/b`]: response(403, {}),
+      [`GET ${COPY}sub/`]: listing,
+    });
+    const error = await rejection(storage.move(SRC, DEST, { ifMatch: '"source"' }), "conflict");
+    expect(error.message).toContain("partial");
+    expect((error.cause as AggregateError).errors).toMatchObject([{ code: "forbidden" }, { code }]);
+    expect(
+      calls
+        .filter((call) => call.method === "DELETE" && call.url.startsWith(COPY))
+        .map((call) => call.url),
+    ).toEqual([`${COPY}sub/b`, `${COPY}a`]);
+  });
+
+  test.each([
+    ["out-of-root ACL", { link: '<https://foreign.example/policy>; rel="acl"' }, TAG, "scope"],
+    ["stale validator", {}, '"stale"', "precondition-failed"],
+    ["unusable validator", { etag: 'W/"weak"' }, TAG, "invalid-response"],
+  ])("preflight cancels the initial source body on %s", async (_kind, headers, ifMatch, code) => {
+    const cancel = vi.fn();
+    const { storage, calls } = backend({
+      [`GET ${URL}`]: {
+        status: 200,
+        headers: { etag: TAG, "content-type": "text/plain", ...headers },
+        body: new ReadableStream<Uint8Array>({ cancel }, { highWaterMark: 0 }),
+      },
+    });
+    await rejection(storage.move(URL, DEST, { ifMatch }), code);
+    expect(cancel).toHaveBeenCalledTimes(1);
+    expect(calls.map((call) => [call.method, call.url])).toEqual([["GET", URL]]);
+  });
 });
 
 describe("round-5 move preflight regressions", () => {
