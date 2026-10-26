@@ -144,14 +144,16 @@ export async function authorizeLoopback(
       if (exchangeConfig.tokenExchange === "public") headers.set("accept", "application/json");
       let requestBody: BodyInit = body;
       if (config.clientSecret) {
-        if (config.tokenRequest === "basic-json") {
+        if (config.tokenRequest === "basic-form" || config.tokenRequest === "basic-json") {
           headers.set(
             "authorization",
             `Basic ${Buffer.from(`${config.clientId}:${config.clientSecret}`).toString("base64")}`,
           );
-          headers.set("content-type", "application/json");
-          body.delete("client_id");
-          requestBody = JSON.stringify(Object.fromEntries(body));
+          if (config.tokenRequest === "basic-json") {
+            headers.set("content-type", "application/json");
+            body.delete("client_id");
+            requestBody = JSON.stringify(Object.fromEntries(body));
+          }
         } else body.set("client_secret", config.clientSecret);
       }
       const response = await safeFetch(input, {

@@ -54,10 +54,11 @@ export interface OAuthAppConfig {
   readonly tokenExchange: "public" | "proxy";
   readonly tokenProxyUrl?: string;
   /**
-   * Direct Node exchange with a local client secret: form fields by default,
-   * or HTTP Basic client authentication and a JSON body. Proxies keep their form contract.
+   * Direct Node exchange with a local client secret: form-post secret by default,
+   * or HTTP Basic client authentication with a form or JSON body.
+   * Proxies keep their form contract.
    */
-  readonly tokenRequest?: "form" | "basic-json";
+  readonly tokenRequest?: "form" | "basic-form" | "basic-json";
   /** Node loopback login requires a fixed, provider-registered callback port. */
   readonly requiresCallbackPort?: boolean;
   /** Extra query params some platforms require on the authorize URL. */

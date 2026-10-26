@@ -6,6 +6,45 @@ import { validatedTypeIndexTarget } from "../pod/type-index-write.js";
 import type { NodeConfig } from "./config.js";
 import { httpsUrl, NodeRuntimeError, object, textValue } from "./errors.js";
 
+/** Buffer a replayable body for nonce retries, observing the effective caller signal. */
+async function readRequestBody(request: Request): Promise<Uint8Array | undefined> {
+  if (!request.body) return undefined;
+  const reader = request.body.getReader();
+  const signal = request.signal;
+  let abort!: () => void;
+  const aborted = new Promise<never>((_resolve, reject) => {
+    abort = () => {
+      reject(signal.reason);
+      // Cancellation may itself stall or fail; neither may delay the caller's rejection.
+      void reader.cancel(signal.reason).catch(() => {});
+    };
+    signal.addEventListener("abort", abort, { once: true });
+    if (signal.aborted) abort();
+  });
+  try {
+    const chunks: Uint8Array[] = [];
+    let size = 0;
+    for (;;) {
+      signal.throwIfAborted();
+      const { done, value } = await Promise.race([reader.read(), aborted]);
+      signal.throwIfAborted();
+      if (done) break;
+      chunks.push(value);
+      size += value.byteLength;
+    }
+    const body = new Uint8Array(size);
+    let offset = 0;
+    for (const chunk of chunks) {
+      body.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    return body;
+  } finally {
+    signal.removeEventListener("abort", abort);
+    reader.releaseLock();
+  }
+}
+
 /** Create an in-memory DPoP client-credentials session on a dedicated Pod transport. */
 export async function createClientCredentialsFetch(
   config: NodeConfig,
@@ -79,7 +118,7 @@ export async function createClientCredentialsFetch(
       assertDestination(request.url);
       const profileRead = request.url === config.profileDocumentUrl && request.method === "GET";
       if (profileRead) selectedIndex = undefined;
-      const body = request.body ? new Uint8Array(await request.arrayBuffer()) : undefined;
+      const body = await readRequestBody(request);
       // solid-dpop's fetch adapter does not forward RequestInit.signal. Capture it in
       // this request's transport so refresh and nonce retries share its cancellation,
       // without letting concurrent requests overwrite one another's signal.

@@ -4,11 +4,13 @@ import { assertWithinPodScope, refuseRedirects } from "@jeswr/guarded-fetch";
 import { NamedNodeAs, NamedNodeFrom, SetFrom } from "@rdfjs/wrapper";
 import { Authorization } from "@solid/object";
 import { DataFactory, Store } from "n3";
+import { readJson } from "../core/budget.js";
 import type { ConnectorState } from "../core/types.js";
 import { writeResource } from "../pod/resource.js";
 import { httpsUrl, NodeRuntimeError, object, textValue } from "./errors.js";
 
 const ACL = "http://www.w3.org/ns/auth/acl#";
+const MAX_CHECKPOINT_BYTES = 1024 * 1024;
 
 class OwnerAuthorization extends Authorization {
   get agents(): Set<string> {
@@ -103,9 +105,9 @@ export function createStateStore(options: {
         }
         if (!response.ok || !response.headers.get("etag"))
           throw new Error("Cannot read checkpoint safely");
-        const body = await response.text();
-        if (body.length > 1024 * 1024) throw new Error("Checkpoint too large");
-        const state = connectorState(JSON.parse(body));
+        const state = connectorState(
+          await readJson(response, options.adapterId, url, MAX_CHECKPOINT_BYTES),
+        );
         etag = response.headers.get("etag") as string;
         exists = true;
         loaded = true;

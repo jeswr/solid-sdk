@@ -324,9 +324,62 @@ describe("source loopback login", () => {
     expect(transport).toHaveBeenCalledTimes(1);
     expect(oauth.tokenExchange).toBe("proxy");
   });
-  it("keeps Notion's form proxy contract without a local secret", async () => {
+  it.each([
+    undefined,
+    "https://proxy.test/token",
+  ])("exchanges Fitbit directly with Basic authentication and a form (proxy: %s)", async (tokenProxyUrl) => {
     const completeCallback = mockLoopbackCallback();
-    const oauth = createRegistry().adapterById("notion")?.oauth;
+    const oauth = createRegistry().adapterById("fitbit")?.oauth;
+    if (!oauth) throw new Error("Missing fixture OAuth configuration");
+    let authorization: URL;
+    const transport = vi.fn(async (url, init) => {
+      expect(url).toBe(oauth.tokenEndpoint);
+      expect(init.redirect).toBe("manual");
+      const headers = new Headers(init.headers);
+      expect(headers.get("accept")).toBe("application/json");
+      expect(headers.get("content-type")).toBe("application/x-www-form-urlencoded");
+      expect(headers.get("authorization")).toBe(
+        `Basic ${Buffer.from("synthetic-client:synthetic-secret").toString("base64")}`,
+      );
+      const body = new URLSearchParams(init.body);
+      expect(Object.fromEntries(body)).toEqual({
+        grant_type: "authorization_code",
+        client_id: "synthetic-client",
+        code: "synthetic-code",
+        redirect_uri: authorization.searchParams.get("redirect_uri"),
+        code_verifier: expect.any(String),
+      });
+      expect(body.has("client_secret")).toBe(false);
+      expect(String(init.body)).not.toContain("synthetic-secret");
+      expect(
+        createHash("sha256")
+          .update(body.get("code_verifier") as string)
+          .digest("base64url"),
+      ).toBe(authorization.searchParams.get("code_challenge"));
+      return Response.json({ access_token: "synthetic-token" });
+    });
+    await expect(
+      authorizeLoopback(
+        "fitbit",
+        { ...oauth, clientId: "synthetic-client", clientSecret: "synthetic-secret", tokenProxyUrl },
+        transport,
+        {
+          openAuthorizationUrl(url) {
+            authorization = answer(url).auth;
+            expect(url).not.toContain("synthetic-secret");
+            completeCallback(url);
+          },
+        },
+      ),
+    ).resolves.toMatchObject({ accessToken: "synthetic-token" });
+    expect(transport).toHaveBeenCalledTimes(1);
+  });
+  it.each([
+    "notion",
+    "fitbit",
+  ])("keeps %s's form proxy contract without a local secret", async (id) => {
+    const completeCallback = mockLoopbackCallback();
+    const oauth = createRegistry().adapterById(id)?.oauth;
     if (!oauth) throw new Error("Missing fixture OAuth configuration");
     const transport = vi.fn(async (url, init) => {
       expect(url).toBe("https://proxy.test/token");
@@ -342,7 +395,7 @@ describe("source loopback login", () => {
     });
     await expect(
       authorizeLoopback(
-        "notion",
+        id,
         { ...oauth, clientId: "synthetic-client", tokenProxyUrl: "https://proxy.test/token" },
         transport,
         {

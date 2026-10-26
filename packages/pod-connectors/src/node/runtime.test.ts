@@ -171,6 +171,72 @@ describe("owner-only checkpoint", () => {
     await expect(second.write(state)).rejects.toMatchObject({ kind: "import" });
   });
   it.each([
+    "declared",
+    "streamed",
+    "understated",
+  ])("cancels an oversized checkpoint while reading (%s)", async (kind) => {
+    const { raw } = fixturePod();
+    const bytes = new TextEncoder().encode(
+      JSON.stringify({ ...state, cursor: "é".repeat(600_000) }),
+    );
+    const chunks = [bytes.subarray(0, 1024 * 1024), bytes.subarray(1024 * 1024)];
+    const cancel = vi.fn();
+    const pull = vi.fn((controller: ReadableStreamDefaultController<Uint8Array>) => {
+      const chunk = chunks.shift();
+      if (chunk) controller.enqueue(chunk);
+      // Stall after the oversized JSON; the reader must reject without reaching EOF.
+    });
+    const response = new Response(new ReadableStream({ pull, cancel }, { highWaterMark: 0 }), {
+      headers: {
+        etag: '"v2"',
+        ...(kind === "declared"
+          ? { "content-length": String(bytes.byteLength) }
+          : kind === "understated"
+            ? { "content-length": "1" }
+            : {}),
+      },
+    });
+    let oversized = false;
+    const checkpoint = store((input, init) =>
+      oversized && !init?.method ? Promise.resolve(response) : raw(input, init),
+    );
+    await checkpoint.read();
+    await checkpoint.write(state);
+    expect(await checkpoint.read()).toEqual(state);
+    oversized = true;
+    await expect(checkpoint.read()).rejects.toMatchObject({
+      kind: "import",
+      message: "Cannot read or protect connector state.",
+    });
+    expect(cancel).toHaveBeenCalledTimes(1);
+    expect(pull).toHaveBeenCalledTimes(kind === "declared" ? 0 : 2);
+    await expect(checkpoint.write(state)).rejects.toMatchObject({ kind: "import" });
+  }, 1000);
+  it("accepts a chunked checkpoint at the byte limit", async () => {
+    const { raw } = fixturePod();
+    const expected = { ...state, cursor: "synthetic-é" };
+    const json = new TextEncoder().encode(JSON.stringify(expected));
+    const bytes = new Uint8Array(1024 * 1024).fill(32);
+    bytes.set(json);
+    const checkpoint = store((input, init) =>
+      !init?.method
+        ? Promise.resolve(
+            new Response(
+              new ReadableStream({
+                start(controller) {
+                  controller.enqueue(bytes.subarray(0, 100));
+                  controller.enqueue(bytes.subarray(100));
+                  controller.close();
+                },
+              }),
+              { headers: { etag: '"v1"', "content-length": String(bytes.byteLength) } },
+            ),
+          )
+        : raw(input, init),
+    );
+    expect(await checkpoint.read()).toEqual(expected);
+  });
+  it.each([
     "missing-link",
     "foreign-link",
     "root-link",
@@ -419,6 +485,116 @@ describe("Pod client credentials", () => {
     await expect(
       authenticated(request, { signal: new AbortController().signal }),
     ).resolves.toMatchObject({ status: 201 });
+  });
+  it.each([
+    "init",
+    "request",
+    "override",
+  ])("cancels stalled PUT body buffering with the effective %s signal", async (kind) => {
+    const { transport } = fixturePod();
+    let now = Date.now();
+    vi.spyOn(Date, "now").mockImplementation(() => now);
+    const fetch = vi.fn(transport);
+    const authenticated = await createClientCredentialsFetch(config, fetch);
+    fetch.mockClear();
+    now += 301_000;
+    const controller = new AbortController();
+    const reason = new Error("synthetic-cancellation");
+    const cancel = vi.fn(() =>
+      kind === "init"
+        ? Promise.reject(new Error("synthetic-cancel-failure"))
+        : new Promise<void>(() => {}),
+    );
+    let ready!: () => void;
+    const stalled = new Promise<void>((resolve) => {
+      ready = resolve;
+    });
+    const body = new ReadableStream<Uint8Array>(
+      {
+        start(stream) {
+          stream.enqueue(new TextEncoder().encode("synthetic-prefix"));
+        },
+        pull() {
+          ready();
+          return new Promise<void>(() => {});
+        },
+        cancel,
+      },
+      { highWaterMark: 0 },
+    );
+    const url = `${TEST_POD_ROOT}integrations/spotify/item.ttl`;
+    const requestInit = {
+      method: "PUT",
+      body,
+      duplex: "half",
+      signal: kind === "override" ? AbortSignal.abort() : controller.signal,
+    };
+    const pending =
+      kind === "init"
+        ? authenticated(url, requestInit)
+        : authenticated(
+            new Request(url, requestInit),
+            kind === "override" ? { signal: controller.signal } : undefined,
+          );
+    const rejected = expect(pending).rejects.toBe(reason);
+    await stalled;
+    controller.abort(reason);
+    await rejected;
+    expect(cancel).toHaveBeenCalledExactlyOnceWith(reason);
+    expect(fetch).not.toHaveBeenCalled();
+  }, 1000);
+  it("replays a buffered multi-chunk PUT body on a nonce challenge", async () => {
+    const { transport } = fixturePod();
+    const cancel = vi.fn();
+    const body = new ReadableStream<Uint8Array>({
+      start(stream) {
+        stream.enqueue(new TextEncoder().encode("synthetic-"));
+        stream.enqueue(new TextEncoder().encode("body"));
+        stream.close();
+      },
+      cancel,
+    });
+    let calls = 0;
+    const authenticated = await createClientCredentialsFetch(config, async (input, init) => {
+      if (String(input) === tokenUrl || String(input).endsWith("openid-configuration"))
+        return transport(input, init);
+      expect(new TextDecoder().decode(init?.body as Uint8Array)).toBe("synthetic-body");
+      calls++;
+      return calls === 1
+        ? new Response(null, { status: 401, headers: { "DPoP-Nonce": "synthetic-nonce" } })
+        : new Response(null, { status: 201 });
+    });
+    await expect(
+      authenticated(`${TEST_POD_ROOT}integrations/spotify/item.ttl`, {
+        method: "PUT",
+        body,
+        duplex: "half",
+      } as RequestInit),
+    ).resolves.toMatchObject({ status: 201 });
+    expect(calls).toBe(2);
+    expect(cancel).not.toHaveBeenCalled();
+    expect(body.locked).toBe(false);
+  });
+  it("propagates request body read failures before resource I/O or refresh", async () => {
+    const { transport } = fixturePod();
+    const fetch = vi.fn(transport);
+    const authenticated = await createClientCredentialsFetch(config, fetch);
+    fetch.mockClear();
+    const reason = new Error("synthetic-body-failure");
+    const body = new ReadableStream<Uint8Array>({
+      start(stream) {
+        stream.error(reason);
+      },
+    });
+    await expect(
+      authenticated(`${TEST_POD_ROOT}integrations/spotify/item.ttl`, {
+        method: "PUT",
+        body,
+        duplex: "half",
+      } as RequestInit),
+    ).rejects.toBe(reason);
+    expect(fetch).not.toHaveBeenCalled();
+    expect(body.locked).toBe(false);
   });
   it.each([
     "resource",

@@ -102,9 +102,9 @@ import. Each `connectors[id]` may also supply `tokenProxyUrl` or an installed-ap
 `clientSecret`. A local source secret selects direct exchange with the adapter's HTTPS token
 endpoint, taking precedence over a token proxy. Without a local secret, the adapter's configured
 proxy mode is preserved. These secrets and all session/source tokens remain in memory.
-Direct exchanges request JSON token responses, including GitHub. Notion's adapter selects
-HTTP Basic client authentication and a JSON request body for a local secret; its proxy flow
-keeps the shared form contract.
+Direct exchanges request JSON token responses, including GitHub. The provider's `tokenRequest`
+selects form-post secrets (the default), HTTP Basic with a form body (Fitbit), or HTTP Basic
+with a JSON body (Notion) for a local secret. Proxy flows keep the shared form contract.
 
 Pod login uses CSS client credentials and DPoP, including bounded nonce retries and an
 in-memory token cache. Source login displays a browser URL, binds only `127.0.0.1` on an
@@ -139,8 +139,11 @@ and `createStateStore` from `./node`. `runCli(args, options)` takes output callb
 run against a stub transport over the memory Pod. Importing `./node` starts no command or listener.
 `authorizeLoopback` accepts the same optional `callbackPort` in its source config.
 The fetch returned by `createClientCredentialsFetch` preserves the effective request signal
-(`init.signal` overrides a Request's signal), including token refresh and DPoP nonce retries.
+(`init.signal` overrides a Request's signal), including request-body buffering, token refresh
+and DPoP nonce retries. Cancellation rejects with the abort reason and cancels the body reader.
 Already-aborted requests reject before any resource request or refresh is sent.
+Checkpoint JSON reads enforce a 1 MiB byte limit using both content-length and streamed chunks,
+and cancel oversized response bodies.
 
 ## Incremental imports and provenance
 
