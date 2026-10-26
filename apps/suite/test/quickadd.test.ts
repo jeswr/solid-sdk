@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { describe, expect, it } from "vitest";
 import {
   parseQuickAdd,
@@ -507,6 +508,87 @@ describe("time zones, DST and determinism", () => {
 });
 
 describe("calendar, offset and reminder regressions", () => {
+  it.each([
+    ["this week Saturday 9am", timed("2026-10-24T09:00:00.000Z", "UTC")],
+    ["this week Saturday", date("2026-10-24")],
+    ["this week Sunday", date("2026-10-18")],
+    ["this week Monday 9am", timed("2026-10-19T09:00:00.000Z", "UTC")],
+    ["this week Tue", date("2026-10-20")],
+    ["this week Wednesday", date("2026-10-21")],
+    ["this week on Thurs. 9am", timed("2026-10-22T09:00:00.000Z", "UTC")],
+    ["THIS WEEK FRIDAY 9AM", timed("2026-10-23T09:00:00.000Z", "UTC")],
+    ["this weeks Sat. at 9am", timed("2026-10-24T09:00:00.000Z", "UTC")],
+    ["this week, Saturday 9am", timed("2026-10-24T09:00:00.000Z", "UTC")],
+    ["this week Saturday at noon", timed("2026-10-24T12:00:00.000Z", "UTC")],
+  ] as const)("keeps the weekday qualifier in %s", (phrase, due) => {
+    for (const locale of ["en-GB", "en-US"] as const) {
+      for (const recurrence of ["", "daily "]) {
+        const input = `Call ${recurrence}${phrase}`;
+        const context = { ...ctx, tz: "UTC", locale };
+        const result = parseQuickAdd(input, context);
+        expect(result.due).toEqual(due);
+        expect(result.title).toBe("Call");
+        expect(result.spans.at(-1)).toEqual({
+          kind: "due",
+          start: 5 + recurrence.length,
+          end: input.length,
+          text: phrase,
+        });
+        expect(parseQuickAdd(input, { ...context, keepDateText: true }).title).toBe(
+          `Call ${phrase}`,
+        );
+      }
+    }
+  });
+
+  it.each([
+    ["2026-11-01T00:30:00Z", "UTC", "this week Saturday 9am", "2026-11-07T09:00:00.000Z"],
+    [
+      "2026-11-01T00:30:00Z",
+      "America/New_York",
+      "this week Saturday 9am",
+      "2026-10-31T13:00:00.000Z",
+    ],
+    [
+      "2026-11-01T00:30:00Z",
+      "Pacific/Kiritimati",
+      "this week Saturday 9am",
+      "2026-11-06T19:00:00.000Z",
+    ],
+    ["2027-01-01T00:30:00Z", "UTC", "this week Monday 9am", "2026-12-28T09:00:00.000Z"],
+    ["2026-10-25T00:30:00Z", "Europe/London", "this week Saturday 9am", "2026-10-31T09:00:00.000Z"],
+    [
+      "2026-11-01T00:30:00Z",
+      "America/New_York",
+      "this week Saturday 9am UTC",
+      "2026-11-07T09:00:00.000Z",
+    ],
+    ["2026-11-01T00:30:00Z", "UTC", "this week Saturday 9am -0400", "2026-10-31T13:00:00.000Z"],
+  ])("resolves qualified weeks in %s / %s / %s", (now, tz, phrase, expected) => {
+    const input = `Call ${phrase} then tomorrow`;
+    const result = parseQuickAdd(input, { now: new Date(now), tz });
+    expect(result.due).toEqual(timed(expected, tz));
+    expect(result.title).toBe("Call then tomorrow");
+    expect(result.spans).toEqual([{ kind: "due", start: 5, end: 5 + phrase.length, text: phrase }]);
+  });
+
+  it.each([
+    "this week next Saturday 9am",
+    "this week last Saturday",
+    "this week past Saturday",
+    "this week weekend 9am",
+    "this week weekday",
+    "this week Saturday 3 November",
+    "this week Saturday Tuesday",
+    "this week Saturday afternoon",
+    "this week (Saturday) 9am",
+  ])("rejects unsupported week qualifier %s with a typed error", (phrase) => {
+    expect(() => parseQuickAdd(`Call ${phrase}`, ctx)).toThrow(RangeError);
+    expect(() => parseQuickAdd(`Call ${phrase}`, ctx)).toThrow(
+      "Unsupported quick-add week qualifier",
+    );
+  });
+
   it.each([
     ["2026-11-01T00:30:00Z", "UTC", "this month", date("2026-11-01")],
     ["2026-11-01T00:30:00Z", "UTC", "this week", date("2026-11-01")],

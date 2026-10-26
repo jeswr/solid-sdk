@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { en } from "chrono-node";
 import { durationPattern, elapsedInstant } from "./elapsed";
 import { parseRecurrence, recurrencePattern, recurrenceStart } from "./recurrence";
@@ -162,8 +163,26 @@ export function parseQuickAdd(text: string, ctx: QuickAddContext): QuickAddResul
           ? new Date(ctx.now.getTime() + Number(start.get("timezoneOffset")) * 60_000)
           : today;
         calendar.setTime(reference.getTime());
-        if (period === "week") calendar.setUTCDate(calendar.getUTCDate() - calendar.getUTCDay());
-        else calendar.setUTCDate(1);
+        if (period === "week") {
+          calendar.setUTCDate(calendar.getUTCDate() - calendar.getUTCDay());
+          // Chrono's merged period result also loses weekday certainty. Reparse the
+          // qualifier and place its weekday within the injected, Sunday-start week.
+          const suffix = match.text.replace(/^this\s+weeks?\b/i, "").trim();
+          for (const qualifier of parser.parse(suffix, { instant: reference, timezone: 0 })) {
+            if (!qualifier.start.isCertain("weekday")) continue;
+            if (
+              qualifier.text !== suffix ||
+              qualifier.end ||
+              qualifier.start.isCertain("day") ||
+              /\b(?:last|past|next|weekend|weekday)\b/i.test(suffix) ||
+              (qualifier.start.tags().has("parser/ENCasualTimeParser") &&
+                !qualifier.start.isCertain("hour"))
+            ) {
+              throw new RangeError("Unsupported quick-add week qualifier");
+            }
+            calendar.setUTCDate(calendar.getUTCDate() + Number(qualifier.start.get("weekday")));
+          }
+        } else calendar.setUTCDate(1);
         if (period === "year") calendar.setUTCMonth(0);
       }
       // A lone time qualifies the recurrence's initial day, rather than changing its weekday.

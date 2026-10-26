@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # Quick add
 
@@ -30,6 +31,13 @@ resource matching, multiline hierarchy and chips belong to the consuming compose
 Calendar dates use the injected zone, never the machine zone. Nonexistent DST wall times remain
 in the title with no due/span; repeated times choose the earlier instant. An explicit numeric or
 named timezone recognised by chrono overrides the injected zone for that phrase's instant.
+
+`this week` uses a Sunday-start week in the injected calendar. A weekday qualifier selects that
+day within the same week, even if it has already passed (`this week Saturday 9am`). Explicit
+time zones select the reference calendar for that phrase. Conflicting or ambiguous merged
+weekday qualifiers (such as `this week next Saturday`, `this week Saturday 3 November`,
+`this week weekend`, or `this week Saturday afternoon`) throw `RangeError` rather than losing
+part of the qualifier.
 
 Anchored offsets (`2 hours before 5pm`, `2 days after Monday`, `5pm +2 hours`) remain literal.
 When an unmasked offset has an anchor, the parser leaves all deadline text in that input unparsed
