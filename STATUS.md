@@ -622,3 +622,63 @@ blocked by the existing network-dependent build. Read the local roborev-review
 skill; `roborev` is unavailable, so automated review remains with the dispatcher.
 No push, PR, branch switch, other checkout mutation or tracker change was
 performed. Open questions: none.
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+## Fix round 7 — reject URL suffixes and scan the root project
+
+Resumed on `lane/sst-z1d` at `c80063d00e33021f749f85c73e9e162e8f64d834`.
+Read the original brief, all six earlier fix briefs, fix7 and the full supplied
+review `solid-sdk-lane-sst-z1d-c80063d00e33.md`. Both findings are addressed exactly
+under the integrator's final design.
+
+Commits:
+
+- `106520db` — `fix: close root agent layer enforcement gaps`: reject any relative,
+  absolute or `file:` specifier containing `?`, `#` or `%`, globally and before
+  lexical path conversion, with a clear diagnostic. Include root `package.json`
+  and top-level source files in the existing scan. Add regressions for every
+  supported load form, uppercase file schemes, valid/malformed percent escapes,
+  cross-project send targets, every root dependency field (including npm aliases),
+  and all eight supported source extensions. Adjust the prior file-URL fixture
+  to avoid a space that would now produce a correctly rejected `%20` escape.
+- The final `docs: record sst-z1d fix7 validation` commit updates this report last.
+
+No URL decoding logic, dependency changes, package code changes or unrelated
+changes were introduced. Existing lexical ownership and agent restrictions remain
+in effect. Missing ordinary lexical targets remain permitted as directed in fix6.
+
+Validation:
+
+- New regressions against the previous checker — **43 failed / 263 passed**,
+  reproducing both review findings.
+- `pnpm exec biome check --write scripts/check-agent-layers.mjs test/agent-layers.test.mjs`
+  — PASS after formatting.
+- `NODE_OPTIONS=--require=/tmp/sst-z1d-network-guard.cjs pnpm exec vitest run`
+  — PASS: **334 tests across four files**, default timeouts.
+- `NODE_OPTIONS=--require=/tmp/sst-z1d-network-guard.cjs pnpm run lint:root`
+  — PASS: Biome, lockfile transport, app workspace, fetch guard and agent layers.
+- `TURBO_SCM_BASE=c80063d00e33021f749f85c73e9e162e8f64d834 pnpm run gate --cache=local:rw --env-mode=loose`
+  — PASS: root lint and all **334 root tests**, **1 successful / 1 total** Turbo
+  task, uncached, 3.047 seconds. Only root scripts/tests changed; package-specific
+  lint/build/typecheck/test gates do not apply.
+- `pnpm run gate:full --cache=local:rw --env-mode=loose` — BLOCKED by unchanged
+  `@jeswr/unstorage-solid#build`: its build attempts to clone fetch-rdf from GitHub,
+  which Git refuses with `fatal: transport 'https' not allowed`. **1 successful /
+  34 total** tasks, one cached, 634ms before failure. This is the same existing
+  network-dependent build limitation recorded in fix6.
+- `git diff --check` — PASS. No dependencies added; `check:packages` not applicable.
+
+Both Turbo commands retained `NODE_OPTIONS=--require=/tmp/sst-z1d-network-guard.cjs`,
+`GIT_ALLOW_PROTOCOL=file`, `TURBO_TELEMETRY_DISABLED=1` and `DO_NOT_TRACK=1`.
+Remote caching was disabled. No remote clone/fetch/merge completed and no live
+provider/pod calls ran. Logs: `/tmp/sst-z1d-fix7-red.log`,
+`/tmp/sst-z1d-fix7-root-tests.log`, `/tmp/sst-z1d-fix7-lint.log`,
+`/tmp/sst-z1d-fix7-gate.log` and `/tmp/sst-z1d-fix7-full.log`.
+
+Requested fixes and regressions are complete. Full-workspace validation remains
+blocked by the existing network-dependent build; no workaround was added. Read
+[the local roborev-review skill](skills/roborev-review/SKILL.md); `roborev` is
+unavailable, so automated review remains with the dispatcher under an allowed
+review environment. No pushes, PRs, branch switches, other checkout mutations or
+tracker changes were performed. Open questions: none.
