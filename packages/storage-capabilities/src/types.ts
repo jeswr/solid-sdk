@@ -39,6 +39,10 @@ export interface StorageDescription {
     type: string;
     controller: string;
     publicKeyJwk: JsonWebKey;
+    /** CID revocation timestamp; verifiers must enforce this when using the method. */
+    revoked?: string;
+    /** CID expiration timestamp; verifiers must enforce this even for cached descriptions. */
+    expires?: string;
   }[];
 }
 
