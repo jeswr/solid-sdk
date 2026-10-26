@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
+// AUTHORED-BY Codex GPT-6
 /**
  * The shared federated **Contacts** model — typed read/write accessors over the
  * SolidOS `vcard:AddressBook` family (an address book, its people/groups index
@@ -479,10 +480,32 @@ export class Contact extends TermWrapper {
 
   /**
    * The contact's WebID, read from the structured `vcard:url [ a vcard:WebId;
-   * vcard:value <webid> ]` form (or a direct `vcard:url <webid>`). Only http(s) IRIs.
+   * vcard:value <webid> ]` form. Explicit WebId nodes take precedence over generic
+   * URLs, including an empty node recording a cleared selection. Without explicit
+   * nodes, accept legacy direct or structured URLs. Only canonical http(s) IRIs.
    */
   get webId(): string | undefined {
-    return readStructuredValues(this, VCARD_URL).find(isHttpIri);
+    let explicit = false;
+    for (const edge of this.dataset.match(
+      this as unknown as Term,
+      this.factory.namedNode(VCARD_URL),
+    )) {
+      if (edge.object.termType !== "BlankNode") continue;
+      if (
+        this.dataset.match(
+          edge.object,
+          this.factory.namedNode(rdf("type")),
+          this.factory.namedNode(VCARD_WEB_ID),
+        ).size === 0
+      ) {
+        continue;
+      }
+      explicit = true;
+      const child = new TermWrapper(edge.object, this.dataset, this.factory);
+      const value = OptionalFrom.subjectPredicate(child, VCARD_VALUE, NamedNodeAs.string);
+      if (isHttpIri(value)) return value;
+    }
+    return explicit ? undefined : readStructuredValues(this, VCARD_URL).find(isHttpIri);
   }
 
   /**
