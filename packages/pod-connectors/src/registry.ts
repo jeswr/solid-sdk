@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * The integrations registry — every app in docs/integrations-catalog.md, all
  * 32 visible, each with its honest status:
@@ -20,6 +21,7 @@ import { githubAdapter } from "./github/adapter.js";
 import { gmailAdapter } from "./gmail/adapter.js";
 import { googleCalendarAdapter } from "./google-calendar/adapter.js";
 import { googleContactsAdapter } from "./google-contacts/adapter.js";
+import { googleDriveAdapter } from "./google-drive/adapter.js";
 import { googlePhotosAdapter } from "./google-photos/adapter.js";
 import { instagramAdapter } from "./instagram/adapter.js";
 import { linkedinAdapter } from "./linkedin/adapter.js";
@@ -67,6 +69,7 @@ export const ADAPTERS: readonly IntegrationAdapter[] = [
 export const TIER_B_ADAPTERS: readonly IntegrationAdapter[] = [
   googleCalendarAdapter,
   googleContactsAdapter,
+  googleDriveAdapter,
   googlePhotosAdapter,
   gmailAdapter,
   youtubeAdapter,
@@ -205,7 +208,7 @@ export const TIER_C: readonly CatalogEntry[] = [
   ),
 ];
 
-/** All 31 catalog entries, A → B → C, in display order. */
+/** All 32 catalog entries, A → B → C, in display order. */
 export function allCatalogEntries(): CatalogEntry[] {
   return [...ADAPTERS.map((a) => ({ ...a.metadata })), ...TIER_B, ...TIER_C];
 }

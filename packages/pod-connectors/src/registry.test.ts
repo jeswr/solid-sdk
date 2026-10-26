@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 import { describe, expect, it } from "vitest";
 import { FILE_ADAPTERS, fileAdapterById } from "./file-adapters.js";
 import {
@@ -49,6 +50,7 @@ describe("integrations registry", () => {
       "gmail",
       "google-calendar",
       "google-contacts",
+      "google-drive",
       "google-photos",
       "instagram",
       "linkedin",

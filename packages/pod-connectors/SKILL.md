@@ -95,3 +95,34 @@ once. Full snapshots reconcile actual canonical person documents via `Container`
 including unindexed writes left by failed runs. Validate `metadata.previousResourceNames`
 with `personId` and conditionally remove former documents and memberships. Keep malformed-person
 skip counting and the synthetic sorted Turtle mapping snapshot covered by fixture tests.
+CON-06 adds `googleDriveAdapter` and `createGoogleDriveAdapter({ maxBytes })` (25 MiB default),
+using the shared Drive OAuth configuration. Keep it Tier B. Files live at
+`drive/files/<pathId(id)>/meta.ttl`; tree membership uses `schema:isPartOf` links to parent
+metadata subjects. Files are `schema:DigitalDocument`, folders only `schema:Collection`;
+register DigitalDocument for `drive/` through `registrationContainer`. Typed Drive accessors
+keep checksum/copy-state glue in `https://jeswr.org/ns/pod-drive#`.
+
+Capture the start token before full listing, stage every changes page before applying it,
+and only fall back once on changes-feed HTTP 404/410. Reconcile absent files after a valid
+full listing; malformed envelopes, missing arrays, or invalid pagination tokens must fail
+before pruning or checkpoint advancement. Use one shared RunBudget for every source request
+and page's item count, passing it to `readJson` for every JSON response so cumulative response
+bytes are bounded too. Retain the budget across an expired-cursor fallback. Owned binaries require
+a known size under the cap; supported Google Workspace exports have capped PDF/text responses. Read with a byte
+cap and cancel oversized responses. Stage create-only `content-<v>[.pdf|.txt]` representations,
+where `<v>` is 24 SHA-256 hex characters of checksum, else modified time, else downloaded bytes
+(the first representation for exports). Without source version fields, download on every import. Commit
+their links through the conditional metadata write before deleting previous versions; on
+failure, best-effort roll back staging without deleting currently linked representations.
+Serialize each file's Pod mutations and cleanup within the runtime. After every store,
+reconcile canonical representation children through an @solid/object Container listing,
+including legacy paths and orphaned exports regardless of previous encoding links.
+For deletions, conditionally rewrite existing metadata first: clear all encoding links, set
+`contentSkipped` to `"pending-deletion"`, and retain the source id and provenance. Remove
+representations next, then re-read metadata to conditionally delete it under the updated ETag.
+Failed cleanup leaves a discoverable tombstone for replay or full reconciliation. Pending
+deletion or missing expected encoding links must force a returning file to download again,
+even when its source version is unchanged.
+A policy omission writes explanatory metadata without incrementing `skipped`.
+Drive tests wrap JSON `fixtureFetch` with synthetic media/export responses; do not broaden
+fixtureFetch or call live Google APIs. True streaming bodies await a future PodWriter port.
