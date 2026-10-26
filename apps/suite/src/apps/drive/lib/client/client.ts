@@ -9,7 +9,7 @@
 
 import { fetchRdf, RdfFetchError } from "@jeswr/fetch-rdf";
 import { Container, Resource } from "@solid/object";
-import { DataFactory } from "n3";
+import { DataFactory, type Store } from "n3";
 
 const IANA_TYPE = /^http:\/\/www\.w3\.org\/ns\/iana\/media-types\/(.+)#Resource$/;
 
@@ -38,6 +38,8 @@ export interface DriveClient {
   /** Metadata for one item (HEAD). */
   stat(url: string): Promise<DriveItem & { etag?: string }>;
   read(url: string): Promise<Blob>;
+  /** Parsed RDF and its validator; `undefined` when the resource does not exist. */
+  readRdf(url: string): Promise<{ dataset: Store; etag?: string } | undefined>;
   write(url: string, body: Blob | string, options: WriteOptions): Promise<{ etag?: string }>;
   createFolder(url: string): Promise<void>;
   /** Copy a file (folders: recursive). Fails with a conflict when `to` exists. */
@@ -174,6 +176,20 @@ export function createSolidDriveClient(options: {
     return response.blob();
   };
 
+  const readRdf: DriveClient["readRdf"] = async (url) => {
+    try {
+      const result = await fetchRdf(url, { fetch: http });
+      return result.etag
+        ? { dataset: result.dataset, etag: result.etag }
+        : { dataset: result.dataset };
+    } catch (error) {
+      if (error instanceof RdfFetchError && error.status === 404) return undefined;
+      if (error instanceof RdfFetchError && error.status !== undefined)
+        throw errorFor(error.status, url);
+      throw error;
+    }
+  };
+
   const write: DriveClient["write"] = async (url, body, opts) => {
     const headers: Record<string, string> = { "content-type": opts.contentType };
     if (opts.ifNoneMatch) headers["if-none-match"] = opts.ifNoneMatch;
@@ -234,5 +250,5 @@ export function createSolidDriveClient(options: {
     return to;
   };
 
-  return { storageUrl, list, stat, read, write, createFolder, copy, move, remove };
+  return { storageUrl, list, stat, read, readRdf, write, createFolder, copy, move, remove };
 }
