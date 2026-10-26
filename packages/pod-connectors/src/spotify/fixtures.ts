@@ -25,6 +25,8 @@ export interface SpotifyTopTracks {
 
 export interface SpotifyPlaylist {
   id: string;
+  owner?: { id?: string | null } | null;
+  collaborative?: boolean | null;
   name?: string | null;
   description?: string | null;
   /** Absent on some live playlist items — the source of the live `.total` crash. */
@@ -70,6 +72,7 @@ export const PLAYLISTS: SpotifyPlaylists = {
   items: [
     {
       id: "37i9dQZF1DXcBWIGoYBM5M",
+      owner: { id: "fixture-user" },
       name: "Focus Flow",
       description: "Instrumentals to keep you in the zone.",
       tracks: { total: 74 },
@@ -77,6 +80,8 @@ export const PLAYLISTS: SpotifyPlaylists = {
     },
     {
       id: "5ABHKGoOzxkaa28ttQV9sE",
+      owner: { id: "fixture-other-user" },
+      collaborative: true,
       name: "Sunday Morning",
       description: "Slow starts and coffee.",
       tracks: { total: 41 },
@@ -86,6 +91,7 @@ export const PLAYLISTS: SpotifyPlaylists = {
 };
 
 export const SPOTIFY_FIXTURES: readonly FixtureRoute[] = [
+  { url: "https://api.spotify.com/v1/me", json: { id: "fixture-user" } },
   { url: "https://api.spotify.com/v1/me/top/tracks", json: TOP_TRACKS },
   { url: "https://api.spotify.com/v1/me/playlists", json: PLAYLISTS },
   {

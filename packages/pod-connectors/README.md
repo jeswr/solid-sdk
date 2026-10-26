@@ -147,8 +147,9 @@ const sourceAuth = createSpotifySourceAuth({
 Only `api.spotify.com` receives bearer credentials. Refresh goes to Spotify's fixed token
 endpoint without a client secret or API bearer header; redirects are refused. Concurrent
 401s share one refresh. GET retries are limited to one refresh per request. API 429s wait
-for `Retry-After` (seconds or HTTP date), with at most three retries; other failures reach
-the host without advancing its checkpoint. Unusable or oversized delays surface as
+for `Retry-After` (seconds or HTTP date), with at most three retries. Playlist item 403/404
+responses retain the playlist metadata and count its inaccessible contents once in `skipped`;
+other failures reach the host without advancing its checkpoint. Unusable or oversized delays surface as
 `RateLimitedError` for the host to schedule later.
 
 The opaque successful cursor is `after:<epoch-ms>` of the newest imported play. Hosts may
@@ -163,5 +164,7 @@ The listener is the implicit Pod owner; no listening duration is inferred from t
 All demos remain fixture-backed. Public environment-variable configuration belongs to the
 host application. Playlist item requests use Spotify's current `/playlists/{id}/items`
 endpoint and accept both `item` and legacy `track` payloads, including podcast episodes
-as `media:PodcastEpisode` plus `schema:PodcastEpisode`. Availability and permission
-errors (including playlists inaccessible to the registered client) are surfaced to the host.
+as `media:PodcastEpisode` plus `schema:PodcastEpisode`. Items are requested only for playlists
+owned by the current user or marked collaborative. Other playlists retain their metadata
+without items and count once in `skipped`. Inaccessible contents do not prevent the remaining
+resources and recently-played history from importing or the successful cursor from advancing.

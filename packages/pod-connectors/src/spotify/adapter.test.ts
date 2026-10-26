@@ -99,11 +99,18 @@ describe("spotify adapter contract", () => {
             // The exact live shape: no `tracks` object at all.
             {
               id: "pl1",
+              owner: { id: "fixture-user" },
               name: "No Tracks Object",
               external_urls: { spotify: "https://open.spotify.com/playlist/pl1" },
             },
             // tracks present but total null.
-            { id: "pl2", name: "Null Total", description: null, tracks: { total: null } },
+            {
+              id: "pl2",
+              collaborative: true,
+              name: "Null Total",
+              description: null,
+              tracks: { total: null },
+            },
             null, // null playlist entry (lost collaborative access)
           ],
         },

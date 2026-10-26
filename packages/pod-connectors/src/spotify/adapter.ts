@@ -4,7 +4,7 @@ import { IntegrationSyncError } from "../core/errors.js";
 import { arr, optionalDate, optionalNumber, optionalText, SkipCounter } from "../core/safe.js";
 import type { ImportContext, ImportOutcome, IntegrationAdapter } from "../core/types.js";
 import { CLASSES, MusicPlaylist, MusicRecording } from "../core/vocab.js";
-import { API, pages } from "./api.js";
+import { API, pages, spotifyJson } from "./api.js";
 import { SPOTIFY_FIXTURES, type SpotifyPlaylist, type SpotifyTrack } from "./fixtures.js";
 import { MEDIA, MediaThing, SCHEMA, TIME } from "./vocab.js";
 import { vocabMap } from "./vocab-map.js";
@@ -153,6 +153,8 @@ export const spotifyAdapter: IntegrationAdapter = {
     await artists("music/followed-artists.ttl", "/me/following?type=artist&limit=50", true);
 
     ctx.progress({ label: "Fetching playlists and items…", done: 2, total: 4 });
+    const user = await spotifyJson<{ id?: string }>(ctx.api, `${API}/me`);
+    const userId = optionalText(user?.id);
     const slug = "music/playlists.ttl";
     const ds = new Store();
     for await (const page of pages<SpotifyPlaylist>(ctx, `${API}/me/playlists?limit=50`)) {
@@ -162,11 +164,8 @@ export const spotifyAdapter: IntegrationAdapter = {
           skipped.skip();
           continue;
         }
-        const playlist = new MusicPlaylist(
-          `${ctx.resolve(slug)}#playlist-${encodeURIComponent(id)}`,
-          ds,
-          DataFactory,
-        ).mark();
+        const playlistIri = `${ctx.resolve(slug)}#playlist-${encodeURIComponent(id)}`;
+        const playlist = new MusicPlaylist(playlistIri, ds, DataFactory).mark();
         playlist.name = optionalText(value.name);
         playlist.identifier = id;
         playlist.description = optionalText(value.description);
@@ -174,30 +173,44 @@ export const spotifyAdapter: IntegrationAdapter = {
         playlist.sourceUrl =
           optionalText(value.external_urls?.spotify) ??
           `https://open.spotify.com/playlist/${encodeURIComponent(id)}`;
-        const media = new MediaThing(
-          `${ctx.resolve(slug)}#playlist-${encodeURIComponent(id)}`,
-          ds,
-          DataFactory,
-        );
+        const media = new MediaThing(playlistIri, ds, DataFactory);
         media.title = playlist.name;
+        if (value.collaborative !== true && (!userId || optionalText(value.owner?.id) !== userId)) {
+          skipped.skip();
+          continue;
+        }
+        // Publish contents only after all pages succeed; access can be lost mid-pagination.
+        const contents = new Store();
+        const collection = new MediaThing(playlistIri, contents, DataFactory);
         // Keep repeated tracks and their order as named ListItems; snapshots remove deleted entries.
         let position = 0;
-        for await (const items of pages<TrackItem>(
-          ctx,
-          `${API}/playlists/${encodeURIComponent(id)}/items?limit=50`,
-        )) {
-          for (const item of arr(items.items)) {
-            position++;
-            const work = track(item?.item ?? item?.track, slug, ds);
-            if (!work) continue;
-            const iri = `${ctx.resolve(slug)}#playlist-${encodeURIComponent(id)}-item-${position}`;
-            const entry = new MediaThing(iri, ds, DataFactory);
-            entry.types.add(`${SCHEMA}ListItem`);
-            entry.item = work;
-            entry.position = position;
-            media.entries.add(iri);
+        try {
+          for await (const items of pages<TrackItem>(
+            ctx,
+            `${API}/playlists/${encodeURIComponent(id)}/items?limit=50`,
+          )) {
+            for (const item of arr(items.items)) {
+              position++;
+              const work = track(item?.item ?? item?.track, slug, contents);
+              if (!work) continue;
+              const iri = `${ctx.resolve(slug)}#playlist-${encodeURIComponent(id)}-item-${position}`;
+              const entry = new MediaThing(iri, contents, DataFactory);
+              entry.types.add(`${SCHEMA}ListItem`);
+              entry.item = work;
+              entry.position = position;
+              collection.entries.add(iri);
+            }
           }
+        } catch (error) {
+          if (
+            !(error instanceof IntegrationSyncError) ||
+            (error.status !== 403 && error.status !== 404)
+          )
+            throw error;
+          skipped.skip();
+          continue;
         }
+        ds.addQuads([...contents]);
       }
     }
     await write(slug, ds, CLASSES.MusicPlaylist);

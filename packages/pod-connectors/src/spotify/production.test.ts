@@ -9,6 +9,7 @@ import { buildAuthorizationUrl } from "../core/oauth.js";
 import { createFetchPodWriter } from "../core/pod-writer.js";
 import { createMemoryPod, TEST_POD_ROOT, TEST_PROFILE_DOC, TEST_WEBID } from "../core/testing.js";
 import type { ConnectorState, ImportContext, NormalisedDoc } from "../core/types.js";
+import { MusicPlaylist } from "../core/vocab.js";
 import { spotifyAdapter } from "./adapter.js";
 import { API, pages, spotifyJson } from "./api.js";
 import { SPOTIFY_FIXTURES, TOP_TRACKS } from "./fixtures.js";
@@ -101,7 +102,8 @@ describe("Spotify production import", () => {
         next: second ? null : next.href,
       };
       if (path === "/v1/me/tracks") return json({ ...page, items: [{ track: page.items[0] }] });
-      if (path === "/v1/me/playlists") return json(page);
+      if (path === "/v1/me/playlists")
+        return json({ ...page, items: [{ ...page.items[0], owner: { id: "fixture-user" } }] });
       if (path.endsWith("/items"))
         return json({ ...page, items: [{ item: TOP_TRACKS.items?.[0] }] });
       if (path === "/v1/me/following") return json({ artists: page });
@@ -138,7 +140,7 @@ describe("Spotify production import", () => {
   it("retains podcast playlist items and reports unavailable/local/unknown items", async () => {
     const api = source((url) => {
       if (url.pathname === "/v1/me/playlists")
-        return json({ items: [{ id: "mixed", name: "Mixed" }] });
+        return json({ items: [{ id: "mixed", name: "Mixed", collaborative: true }] });
       if (url.pathname === "/v1/playlists/mixed/items")
         return json({
           items: [
@@ -174,6 +176,184 @@ describe("Spotify production import", () => {
     ).toHaveLength(1);
     expect(ds.getQuads(null, nn(`${SCHEMA}itemListElement`), null, null)).toHaveLength(2);
     expect(report.skipped).toBe(3);
+  });
+
+  it("retains followed playlist metadata and fetches only owned or collaborative contents", async () => {
+    const api = source((url) => {
+      if (url.pathname === "/v1/me/playlists")
+        return json({
+          items: [
+            {
+              id: "followed",
+              name: "Synthetic followed playlist",
+              description: "Metadata remains available",
+              owner: { id: "fixture-other-user" },
+              collaborative: false,
+              items: { total: 12 },
+            },
+            { id: "owned", owner: { id: "fixture-user" }, collaborative: false },
+            { id: "collaborative", owner: { id: "fixture-other-user" }, collaborative: true },
+            { id: "unknown-owner" },
+          ],
+        });
+      if (url.pathname.startsWith("/v1/playlists/"))
+        return json({ items: [{ item: { id: "synthetic-track", type: "track" } }] });
+      return undefined;
+    });
+    const { pod, report } = await imported(api, "after:1000");
+    const playlistUrl = `${ROOT}music/playlists.ttl`;
+    const ds = pod.dataset(playlistUrl);
+    const followed = new MusicPlaylist(`${playlistUrl}#playlist-followed`, ds, DataFactory);
+    expect(followed.name).toBe("Synthetic followed playlist");
+    expect(followed.description).toBe("Metadata remains available");
+    expect(followed.numTracks).toBe(12);
+    expect(followed.sourceUrl).toBe("https://open.spotify.com/playlist/followed");
+    expect(
+      ds.getQuads(
+        nn(`${playlistUrl}#playlist-followed`),
+        nn(`${SCHEMA}itemListElement`),
+        null,
+        null,
+      ),
+    ).toHaveLength(0);
+    expect(ds.getQuads(null, nn(`${SCHEMA}itemListElement`), null, null)).toHaveLength(2);
+    expect(
+      api.mock.calls
+        .map(([input]) => new URL(String(input)).pathname)
+        .filter((path) => path.startsWith("/v1/playlists/")),
+    ).toEqual(["/v1/playlists/owned/items", "/v1/playlists/collaborative/items"]);
+    expect(report.skipped).toBe(2);
+    expect(report.written).toHaveLength(10);
+    expect(report.cursor).toBe(`after:${Date.parse("2026-10-25T12:00:00Z")}`);
+    expect(report.state).toMatchObject({
+      cursor: report.cursor,
+      lastOutcome: "success",
+      counts: { documents: 10, skipped: 2 },
+    });
+    expect(
+      pod
+        .dataset(`${ROOT}music/recently-played.ttl`)
+        .getQuads(null, TYPE, nn(`${MEDIA}PlaybackEvent`), null),
+    ).toHaveLength(1);
+  });
+
+  it("requires a known current user id before treating a playlist as owned", async () => {
+    const api = source((url) => {
+      if (url.pathname === "/v1/me") return json({});
+      if (url.pathname === "/v1/me/playlists")
+        return json({
+          items: [{ id: "unknown-owner" }, { id: "owned", owner: { id: "fixture-user" } }],
+        });
+      return undefined;
+    });
+    const { report } = await imported(api);
+    expect(report.skipped).toBe(2);
+    expect(
+      api.mock.calls.some(([input]) =>
+        new URL(String(input)).pathname.startsWith("/v1/playlists/"),
+      ),
+    ).toBe(false);
+  });
+
+  it.each([
+    [403, false],
+    [404, false],
+    [403, true],
+    [404, true],
+  ])("retains metadata and continues after item status %s (later page: %s)", async (status, laterPage) => {
+    const api = source((url) => {
+      if (url.pathname === "/v1/me/playlists")
+        return json({
+          items: [
+            {
+              id: "inaccessible",
+              name: "Synthetic restricted playlist",
+              owner: { id: "fixture-user" },
+              items: { total: 7 },
+            },
+            { id: "available", collaborative: true },
+          ],
+        });
+      if (url.pathname === "/v1/playlists/inaccessible/items") {
+        if (laterPage && !url.searchParams.has("offset")) {
+          const next = new URL(url);
+          next.searchParams.set("offset", "1");
+          return json({
+            items: [{ item: { id: "partial-work", type: "track" } }],
+            next: next.href,
+          });
+        }
+        return json({}, status);
+      }
+      if (url.pathname === "/v1/playlists/available/items")
+        return json({ items: [{ item: { id: "available-work", type: "track" } }] });
+      return undefined;
+    });
+    const { pod, report } = await imported(api, "after:1000");
+    const playlistUrl = `${ROOT}music/playlists.ttl`;
+    const ds = pod.dataset(playlistUrl);
+    const playlist = new MusicPlaylist(`${playlistUrl}#playlist-inaccessible`, ds, DataFactory);
+    expect(playlist.name).toBe("Synthetic restricted playlist");
+    expect(playlist.numTracks).toBe(7);
+    expect(
+      ds.getQuads(
+        nn(`${playlistUrl}#playlist-inaccessible`),
+        nn(`${SCHEMA}itemListElement`),
+        null,
+        null,
+      ),
+    ).toHaveLength(0);
+    expect(ds.getQuads(nn(`${playlistUrl}#track-partial-work`), null, null, null)).toHaveLength(0);
+    expect(
+      ds.getQuads(
+        nn(`${playlistUrl}#playlist-available`),
+        nn(`${SCHEMA}itemListElement`),
+        null,
+        null,
+      ),
+    ).toHaveLength(1);
+    expect(report.skipped).toBe(1);
+    expect(report.written).toHaveLength(10);
+    expect(report.cursor).toBe(`after:${Date.parse("2026-10-25T12:00:00Z")}`);
+    expect(report.state).toMatchObject({
+      cursor: report.cursor,
+      lastOutcome: "success",
+      counts: { skipped: 1 },
+    });
+    expect(
+      pod
+        .dataset(`${ROOT}music/recently-played.ttl`)
+        .getQuads(null, TYPE, nn(`${MEDIA}PlaybackEvent`), null),
+    ).toHaveLength(1);
+  });
+
+  it.each([
+    401, 429, 500, 503,
+  ])("surfaces playlist item status %s and retains the checkpoint", async (status) => {
+    const api = source((url) => (url.pathname.endsWith("/items") ? json({}, status) : undefined));
+    const state: ConnectorState = {
+      connectedAt: "2026-10-25T11:00:00Z",
+      cursor: "after:1000",
+      lastOutcome: "success",
+      counts: { documents: 10, items: 1, skipped: 0 },
+    };
+    const onState = vi.fn();
+    await expect(
+      runImport({
+        adapter: spotifyAdapter,
+        mode: "live",
+        podWriter: writer(),
+        sourceAuth: { fetch: api },
+        state,
+        onState,
+      }),
+    ).rejects.toMatchObject({ status });
+    expect(onState).toHaveBeenCalledWith(
+      expect.objectContaining({ cursor: state.cursor, lastOutcome: "error" }),
+    );
+    expect(
+      api.mock.calls.some(([input]) => new URL(String(input)).pathname.endsWith("recently-played")),
+    ).toBe(false);
   });
 
   it("follows recently-played before pagination, persists after, and merges increments without duplication", async () => {
