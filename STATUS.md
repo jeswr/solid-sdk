@@ -236,3 +236,53 @@ dependencies. Full-workspace green and roborev review remain unavailable as reco
 above. No screenshots apply to this model-only fix. No push, PR, branch switch, remote
 fetch/merge, or changes outside this checkout. The full gate left no untracked generated
 files in the checkout.
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+## Fix round 5 — integrate main
+
+Merged authoritative main `67abf7f1d67285756c2e31e6b2ab801d93cea95a` from
+`origin`, which points to the local source clone `/home/runner/work/solid-sdk`.
+No network git fetch/merge, push, PR, branch switch, or other-checkout edits.
+
+- `8f3c2f18` — `chore: integrate main into contacts lane`: resolve the suite manifest
+  and Vitest conflicts using main's configuration, retaining the lane's existing
+  task-model/DAV workspace edges and contacts model coverage. Regenerate the suite
+  importer from main's lockfile and retain main's unrelated resolutions. Keep
+  `@rdfjs/types` solely in devDependencies. No new dependencies.
+- `8f311cae` — `fix: use workspace RDF context policy for contacts`: remove the
+  unsupported `accept` option and blanket JSON-LD rejection. Rely on workspace
+  fetch-rdf's fixed Accept header and default remote-context refusal. Tests prove
+  inline contexts parse, remote contexts fail, and no context request reaches either
+  the injected transport or global fetch.
+- `10e1557c` — `fix: isolate new contact blank node identifiers`: use UUID labels for
+  newly minted contact value/selection nodes. Main's app pins N3 2.0.3 while shared
+  parsing uses N3 2.1.1; their independent automatic counters can collide when copying
+  desired nodes into parsed RDF. The collision merged an added phone with a retained
+  node, hiding its second value. Preserve the original expectation and metadata;
+  add a deterministic collision regression. Narrow test objects to blank nodes and
+  reconstruct N3 terms from their labels for Store.match, without `any` or casts.
+- Final documentation commit — this report, written and committed last.
+
+| Command / check | Result |
+| --- | --- |
+| `PATH="$PWD/node_modules/.bin:$PATH" pnpm --filter '@jeswr/app-suite^...' run build` | PASS; all seven workspace dependencies built. Explicit root binary path resolves the dependency-only invocation's missing `tsc`. |
+| Deterministic collision regression against the old factory behavior | FAIL as expected: added email, phone and WebID disappear. Passes with the fix. |
+| `pnpm --filter @jeswr/app-suite exec vitest run test/contacts-data.test.ts test/contacts-transport.test.ts --coverage.enabled=false` | PASS; 36 tests. |
+| Focused contacts tests with coverage restricted to `src/apps/contacts/lib/model/**/*.ts` | PASS; 91 tests; 100% statements, branches, functions and lines. |
+| `pnpm --filter @jeswr/app-suite run typecheck` | PASS. |
+| `pnpm exec biome check apps/suite/src/apps/contacts/lib/model apps/suite/test/contacts-*.test.ts apps/suite/package.json apps/suite/vitest.config.ts` | PASS. |
+| `pnpm run gate` | FAIL outside lane scope after 309 successful tasks: `@jeswr/federation-trust#test`, `test/characterization.test.ts:196`, expects serialized JWK key order `crv,x,kty`; actual order is `kty,crv,x`. Root lint/guards pass. |
+| `pnpm run gate:full` | FAIL on the same federation-trust snapshot after 309 successful tasks (184 cached). |
+| `pnpm --filter @jeswr/federation-trust exec vitest run test/characterization.test.ts` | Reproduces the same snapshot failure in isolation; 19 tests pass, 1 fails. No snapshot changed. |
+| `git diff --exit-code origin/main -- packages/federation-trust` | PASS; the failing package is identical to main. |
+| `TURBO_SCM_BASE=origin/main pnpm run gate` | PASS; 13/13 tasks, production Next.js build, typecheck, all 125 app test files / 6,504 tests, and all 9 root test files / 745 tests. App coverage thresholds pass. |
+| `git diff origin/main --check` | PASS. |
+| `roborev status` | Unavailable: `roborev: command not found`. No installation/configuration changes. |
+
+All supplied implementation findings are addressed. Conservative scope: fix blank-node
+minting locally and preserve main's package versions and shared-reader behavior. The
+accepted follow-up CON-00H (`sst-imb.6`) remains outside this round and untouched.
+No open questions. Full-workspace green and automated review remain unavailable for
+the reasons above. Removed only the untracked callback/client-ID files produced by
+workspace builds; no generated assets are committed.
