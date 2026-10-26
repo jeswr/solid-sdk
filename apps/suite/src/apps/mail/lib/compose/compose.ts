@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import {
   base64Lines,
   crlf,
@@ -36,8 +37,18 @@ function attachmentPart(value: Attachment): string {
   );
   // Multipart/message content needs its own transfer rules; only leaf media types are supported.
   requireInput(!/^(multipart|message)\//i.test(value.contentType), "contentType");
+  let contentType = value.contentType;
+  if (value.charset !== undefined) {
+    requireInput(
+      /^text\//i.test(contentType) &&
+        typeof value.charset === "string" &&
+        /^[!#$%&'*+\-.^_`{|}~a-z0-9]+$/i.test(value.charset),
+      "attachment.charset",
+    );
+    contentType += `; charset=${value.charset}`;
+  }
   requireInput(value.data instanceof Uint8Array, "attachment.data");
-  return `Content-Type: ${value.contentType}\r\nContent-Disposition: attachment;\r\n ${filenameParameter(value.filename)}\r\nContent-Transfer-Encoding: base64\r\n\r\n${base64Lines(value.data)}`;
+  return `Content-Type: ${contentType}\r\nContent-Disposition: attachment;\r\n ${filenameParameter(value.filename)}\r\nContent-Transfer-Encoding: base64\r\n\r\n${base64Lines(value.data)}`;
 }
 function multipart(parts: string[], subtype: string, boundary: string): string {
   return `Content-Type: multipart/${subtype};\r\n boundary="${boundary}"\r\n\r\n${parts.map((part) => `--${boundary}\r\n${part}\r\n`).join("")}--${boundary}--`;

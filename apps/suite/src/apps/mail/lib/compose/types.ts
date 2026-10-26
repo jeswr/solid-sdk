@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 export interface MailAddress {
   email: string;
   name?: string;
@@ -6,6 +7,8 @@ export interface MailAddress {
 export interface Attachment {
   filename: string;
   contentType: string;
+  /** Optional MIME charset token for text/*; data must already use this encoding. */
+  charset?: string;
   data: Uint8Array;
 }
 export interface ComposeInput {

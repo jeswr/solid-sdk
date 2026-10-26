@@ -303,6 +303,22 @@ describe("RFC 5322 composition", () => {
     expect(result.raw.split("\r\n").some((line) => /^[A-Za-z0-9+/]{76}$/.test(line))).toBe(true);
   });
 
+  it.each([
+    { contentType: "text/plain", charset: "utf-8", data: Buffer.from("café", "utf8") },
+    { contentType: "TEXT/HTML", charset: "ISO-8859-1", data: Buffer.from("café", "latin1") },
+  ])("round trips text attachment bytes with declared $charset", ({
+    contentType,
+    charset,
+    data,
+  }) => {
+    const result = build({ attachments: [{ filename: "note.txt", contentType, charset, data }] });
+    const part = mime(result.raw).parts?.[1];
+    expect(part?.contentType).toBe(`${contentType}; charset=${charset}`);
+    expect(part?.bytes).toEqual(data);
+    const declared = /; charset=([^;\s]+)/i.exec(part?.contentType as string)?.[1] as string;
+    expect(new TextDecoder(declared, { fatal: true }).decode(part?.bytes)).toBe("café");
+  });
+
   it("folds long indivisible addresses and preserves local-part case in the envelope", () => {
     const email = `${"a".repeat(64)}@${"b".repeat(60)}.example.org`;
     const raw = build({
@@ -407,6 +423,47 @@ describe("fail-closed validation", () => {
     { filename: "a", contentType: null, data: new Uint8Array() },
   ])("rejects invalid attachment records %j", (attachment) =>
     rejects(() => build({ attachments: [attachment] } as unknown as Partial<ComposeInput>)));
+  it.each([
+    "",
+    null,
+    1,
+    "utf 8",
+    '"utf-8"',
+    "utf-8; secret=value",
+    "utf-8\r\nsecret: value",
+    "utf-8\n",
+    "utf-8\t",
+    "utf-8\u0000",
+    "utf-8\u007f",
+    "utf-é",
+    "utf/8",
+    "x".repeat(1000),
+  ])("rejects unsafe attachment charset %j", (charset) =>
+    rejects(() =>
+      build({
+        attachments: [
+          {
+            filename: "note.txt",
+            contentType: "text/plain",
+            charset: charset as string,
+            data: new Uint8Array(),
+          },
+        ],
+      }),
+    ));
+  it("rejects a charset on a non-text attachment", () =>
+    rejects(() =>
+      build({
+        attachments: [
+          {
+            filename: "note.bin",
+            contentType: "application/octet-stream",
+            charset: "utf-8",
+            data: new Uint8Array(),
+          },
+        ],
+      }),
+    ));
   it.each([
     "",
     "../secret.txt",

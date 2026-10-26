@@ -13,7 +13,7 @@ const message = composeMessage(
     subject: "Hello",
     text: "A plain text version.",
     html: "<p>A rich text version.</p>",
-    attachments: [{ filename: "note.txt", contentType: "text/plain", data: bytes }],
+    attachments: [{ filename: "note.txt", contentType: "text/plain", charset: "utf-8", data: bytes }],
   },
   { clock: () => new Date(), randomBytes, messageIdDomain: "example.org" },
 );
@@ -64,7 +64,11 @@ Message-ID inputs and generated IDs use the same dot-atom/DNS subset (≤254 cha
 angle brackets); excessively long generation domains are rejected rather than emitting an ID
 that the reply helpers could not accept.
 Empty supplied Reply-To is rejected. Attachment media types must be bare leaf `type/subtype`
-(no parameters, multipart or message types). Filenames must be nonempty, ≤180 UTF-8 bytes, and
+(no inline parameters, multipart or message types). Text attachments accept an optional `charset`
+containing a nonempty ASCII MIME token, serialized as a Content-Type parameter. Callers must
+encode `data` in that charset; attachment bytes are preserved without transcoding or newline
+conversion. No charset is inferred when omitted; set `charset: "utf-8"` for UTF-8 text bytes.
+Charsets on non-text attachments are rejected. Filenames must be nonempty, ≤180 UTF-8 bytes, and
 contain neither control characters nor path separators. Dates and byte-source results outside
 the documented contract are rejected. Error fields never include user content.
 
