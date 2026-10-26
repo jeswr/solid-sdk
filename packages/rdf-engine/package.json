@@ -3,7 +3,7 @@
   "name": "@jeswr/rdf-engine",
   "version": "0.1.0",
   "private": true,
-  "description": "Lazy RDF engine facade for local query and validation. Experimental, AI-agent-generated scaffold.",
+  "description": "Lazy RDF engine facade for parsing, serialization, SHACL and canonicalization.",
   "type": "module",
   "sideEffects": false,
   "securityCritical": false,
@@ -27,6 +27,7 @@
   },
   "files": [
     "dist",
+    "scripts",
     "README.md",
     "SKILL.md"
   ],
@@ -37,12 +38,20 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "biome check .",
-    "test": "vitest run"
+    "test": "vitest run",
+    "copy:wasm": "node scripts/copy-wasm.mjs",
+    "bench:bundle": "node scripts/measure-bundle.mjs"
   },
   "license": "MIT",
   "devDependencies": {
     "@biomejs/biome": "^2.5.1",
+    "@types/n3": "1.26.1",
     "typescript": "^6.0.3",
     "vitest": "^4.1.9"
+  },
+  "dependencies": {
+    "@rdfjs/types": "2.0.1",
+    "@sparq-org/sparq": "0.1.5",
+    "n3": "2.0.3"
   }
 }
