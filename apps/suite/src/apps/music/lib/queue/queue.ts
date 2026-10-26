@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { MusicQueueError } from "./errors";
 
 export interface QueueEntry {
@@ -48,7 +49,7 @@ function validate<T extends QueueEntry>(state: PlayQueue<T>): void {
     (!Array.isArray(order) ||
       order.length !== ids.length ||
       new Set(order).size !== ids.length ||
-      order.some((id) => !ids.includes(id)))
+      Array.from(order).some((id) => !ids.includes(id)))
   ) {
     throw new MusicQueueError("invalid-queue");
   }
@@ -70,7 +71,7 @@ export function reducePlayQueue<T extends QueueEntry>(
 ): PlayQueue<T> {
   validate(state);
   if (!action || typeof action !== "object") throw new MusicQueueError("invalid-action");
-  const entries = [...state.entries];
+  let entries = [...state.entries];
   const current = entries.findIndex((entry) => entry.id === state.currentId);
   switch (action.type) {
     case "play-next":
@@ -80,15 +81,12 @@ export function reducePlayQueue<T extends QueueEntry>(
         throw new MusicQueueError("invalid-entry");
       }
       const next = action.type === "play-next";
-      entries.splice(next ? current + 1 : entries.length, 0, ...action.entries);
+      const index = next ? current + 1 : entries.length;
+      entries = [...entries.slice(0, index), ...action.entries, ...entries.slice(index)];
       let order = state.unshuffledOrder;
       if (order !== null) {
-        order = [...order];
-        order.splice(
-          next ? order.indexOf(state.currentId as string) + 1 : order.length,
-          0,
-          ...added,
-        );
+        const index = next ? order.indexOf(state.currentId as string) + 1 : order.length;
+        order = [...order.slice(0, index), ...added, ...order.slice(index)];
       }
       return { ...state, entries, unshuffledOrder: order };
     }

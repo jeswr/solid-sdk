@@ -1,4 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
+import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { MusicQueueError } from "../src/apps/music/lib/queue/errors";
 import type { PlayQueue, QueueAction } from "../src/apps/music/lib/queue/queue";
@@ -135,6 +137,34 @@ describe("seeded Fisher-Yates shuffle", () => {
     reducePlayQueue(queue, { type: "shuffle", enabled: true, seed });
   const restore = (queue: PlayQueue) =>
     reducePlayQueue(queue, { type: "shuffle", enabled: false, seed: 0 });
+  it("preserves membership, current position and reversibility across arbitrary seeds and queues", () => {
+    fc.assert(
+      fc.property(
+        fc.array(fc.integer(), { maxLength: 40 }),
+        fc.integer({ min: 0, max: 0xffffffff }),
+        fc.integer({ min: -1, max: 40 }),
+        (trackIds, seed, currentIndex) => {
+          const entries = trackIds.map((trackId, i) =>
+            Object.freeze({ id: `entry-${i}`, trackId }),
+          );
+          const queue = {
+            ...createPlayQueue(Object.freeze(entries)),
+            currentId: entries[currentIndex]?.id ?? null,
+          };
+          const result = shuffle(queue, seed);
+          expect([...ids(result)].sort()).toEqual([...ids(queue)].sort());
+          expect(result.currentId).toBe(queue.currentId);
+          expect(ids(result).indexOf(queue.currentId as string)).toBe(
+            ids(queue).indexOf(queue.currentId as string),
+          );
+          expect(restore(result)).toEqual(queue);
+          expect(shuffle(queue, seed)).toEqual(result);
+          expect(ids(queue)).toEqual(entries.map((entry) => entry.id));
+        },
+      ),
+      { seed: 261026, numRuns: 200 },
+    );
+  });
   it("has a fixed known permutation, pins current at any index and restores order after navigation", () => {
     const queue = { ...initial(), currentId: "c" };
     const shuffled = shuffle(queue);
@@ -195,6 +225,7 @@ describe("typed input rejection", () => {
       { ...initial(), currentId: "missing" },
       { ...initial(), unshuffledOrder: {} },
       { ...initial(), unshuffledOrder: [] },
+      { ...createPlayQueue([{ id: "a" }]), unshuffledOrder: new Array(1) },
       { ...initial(), unshuffledOrder: ["a", "a", "b", "c", "d"] },
       { ...initial(), unshuffledOrder: ["a", "b", "c", "d", "unknown"] },
     ]) {

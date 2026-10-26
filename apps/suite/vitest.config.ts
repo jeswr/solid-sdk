@@ -9,6 +9,7 @@ export default defineConfig({
       provider: "v8",
       include: [
         "src/apps/photos/lib/exif/**/*.ts",
+        "src/apps/music/lib/queue/**/*.ts",
         "src/apps/photos/lib/library/**/*.ts",
         "src/apps/notes/lib/**/*.ts",
         "src/lib/order/**/*.ts",
