@@ -66,6 +66,39 @@ const details: TaskDetails = {
 };
 
 describe("RDF model interoperability", () => {
+  it.each([
+    "Label",
+    "Section",
+  ] as const)("preserves %s identities across colliding names", async (kind) => {
+    const { tracker, dataset } = createTracker(project, "Home", storage, [], now);
+    const original = tracker.defineCategory(kind, "A+B", 1, "amber");
+    const task = new TaskItem(
+      `${taskUrl}#it`,
+      createTask(taskUrl, {
+        ...details,
+        categoryTypes: [original.id],
+      }),
+      DataFactory,
+    );
+    const second = tracker.defineCategory(kind, "A B", 2, "blue");
+    const third = tracker.defineCategory(kind, "A-B", 3, "green");
+    expect(second.id).toBe(`${original.id}-2`);
+    expect(third.id).toBe(`${original.id}-3`);
+    const restored = new TaskTracker(
+      `${project}#this`,
+      await parse(project, await serialize(dataset)),
+      DataFactory,
+    );
+    const categories = kind === "Label" ? restored.labels : restored.sections;
+    expect(categories).toEqual([original, second, third]);
+    expect(task.types.has(original.id)).toBe(true);
+    const updated = restored.defineCategory(kind, "A B", 4, "red");
+    expect(updated.id).toBe(second.id);
+    expect(kind === "Label" ? restored.labels : restored.sections).toHaveLength(3);
+    // Also reserve IRIs occupied by foreign metadata, regardless of category type.
+    node(`${original.id}-4`, restored.dataset).setText(`${NS.DCT}title`, "Foreign");
+    expect(restored.defineCategory(kind, "A/B").id).toBe(`${original.id}-5`);
+  });
   it("round-trips the complete §5.2 and §5.3 graphs byte-equivalently through n3", async () => {
     for (const [url, text] of [
       [project, fixture],
@@ -204,6 +237,44 @@ describe("RDF model interoperability", () => {
   });
 });
 describe("validation and pure helpers", () => {
+  it("rejects every Turtle IRIREF-forbidden byte before constructing extension terms", () => {
+    const unsafeCharacters = Array.from({ length: 33 }, (_, code) =>
+      String.fromCharCode(code),
+    ).concat(["<", ">", '"', "{", "}", "|", "^", "`", "\\"]);
+    const { tracker } = createTracker(project, "Home", storage, [], now);
+    for (const character of unsafeCharacters) {
+      const unsafe = `${storage}bad${character}iri`;
+      expect(() => requireHttp(unsafe)).toThrow("HTTP");
+      expect(() => tracker.setGroupMembers([unsafe])).toThrow("HTTP");
+      expect(() => createTask(taskUrl, { ...details, categoryTypes: [unsafe] })).toThrow("HTTP");
+      expect(() => createTracker(project, "Home", unsafe, [], now)).toThrow("HTTP");
+      expect(() =>
+        createTask(taskUrl, { ...details, reminders: [{ id: unsafe, offset: "PT0S" }] }),
+      ).toThrow("HTTP");
+    }
+    const lexical = "https://POD.test:443/a/../b%20c#me";
+    expect(requireHttp(lexical)).toBe(lexical);
+    expect(() => requireHttp("https:pod.test")).toThrow("HTTP");
+    expect(() => requireHttp("https:///pod.test")).toThrow("HTTP");
+  });
+  it("refuses unsafe terms at serialization without changing foreign RDF identities", async () => {
+    for (const position of ["subject", "predicate", "object", "datatype"]) {
+      const unsafe = `${storage}bad>iri`;
+      const dataset = new Store();
+      const subject = node(position === "subject" ? unsafe : taskUrl, dataset);
+      const predicate = position === "predicate" ? unsafe : `${NS.DCT}source`;
+      if (position === "datatype") subject.setTyped(predicate, "value", unsafe);
+      else subject.setIri(predicate, position === "object" ? unsafe : "urn:source");
+      expect(() => serialize(dataset)).toThrow("Unsafe RDF IRI");
+    }
+    const dataset = new Store();
+    const lexical = "https://POD.test:443/a/../b%20c#me";
+    node(taskUrl, dataset).setIri(`${NS.DCT}source`, lexical);
+    node(taskUrl, dataset).setIri(`${NS.DCT}relation`, "urn:source");
+    const parsed = await parse(taskUrl, await serialize(dataset));
+    expect(node(taskUrl, parsed).iri(`${NS.DCT}source`)).toBe(lexical);
+    expect(node(taskUrl, parsed).iri(`${NS.DCT}relation`)).toBe("urn:source");
+  });
   it("normalizes slugs and uses deterministic collision suffixes", () => {
     expect(slug("  Café: Home !!! ")).toBe("cafe-home");
     expect(slug("💚")).toBe("project");

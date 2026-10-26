@@ -1,5 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { parseRdf } from "@jeswr/fetch-rdf";
+import { escapeIri, isHttpIri } from "@jeswr/rdf-serialize";
 import { NS } from "@jeswr/suite-vocab";
 import type { DatasetCore } from "@rdfjs/types";
 import {
@@ -98,6 +100,14 @@ export async function parse(
   return new Store([...(await parseRdf(body, contentType, { baseIRI: url }))]);
 }
 export function serialize(dataset: DatasetCore): Promise<string> {
+  // Accessors and foreign datasets can bypass field validation. Reject unsafe lexical
+  // IRIs without silently changing RDF identities during persistence.
+  for (const quad of dataset)
+    for (const term of [quad.subject, quad.predicate, quad.object, quad.graph]) {
+      const iri = term.termType === "Literal" ? term.datatype : term;
+      if (iri.termType === "NamedNode" && escapeIri(iri.value) !== iri.value)
+        throw new TypeError("Unsafe RDF IRI.");
+    }
   const writer = new Writer({
     prefixes: {
       wf: NS.WF,
@@ -143,9 +153,9 @@ export function requireDate(value: Date): void {
   if (!Number.isFinite(value.getTime())) throw new TypeError("Invalid date.");
 }
 export function requireHttp(value: string): string {
+  if (!isHttpIri(value)) throw new TypeError("Expected a safe HTTP(S) URL.");
   const url = new URL(value);
-  if (!["https:", "http:"].includes(url.protocol) || url.username || url.password)
-    throw new TypeError("Expected an HTTP(S) URL.");
+  if (url.username || url.password) throw new TypeError("Expected an HTTP(S) URL.");
   return value;
 }
 export function documentUrl(value: string): string {

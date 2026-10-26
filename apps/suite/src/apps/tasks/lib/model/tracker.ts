@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { buildTracker, Tracker, trackerSubject } from "@jeswr/solid-task-model/tracker";
 import { DataFactory, NS, node, requireHttp, requireTitle, SCHEMA, type Store, slug } from "./rdf";
 
@@ -93,7 +94,12 @@ export class TaskTracker extends Tracker {
     const root = node(parent, this.dataset);
     root.types.add(`${NS.RDFS}Class`);
     root.setText(`${NS.RDFS}label`, kind);
-    const id = `${this.base}#${kind.toLowerCase()}-${slug(name)}`;
+    // Repeating a name edits that category; distinct names must never share an IRI.
+    const existing = this.readCategories(kind).find((category) => category.name === name);
+    const base = `${this.base}#${kind.toLowerCase()}-${slug(name)}`;
+    let id = existing?.id ?? base;
+    for (let suffix = 2; !existing && this.dataset.match(DataFactory.namedNode(id)).size; suffix++)
+      id = `${base}-${suffix}`;
     const item = node(id, this.dataset);
     item.types.add(`${NS.RDFS}Class`);
     item.iris(`${NS.RDFS}subClassOf`).add(parent);

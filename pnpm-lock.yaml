@@ -2009,6 +2009,9 @@ importers:
       '@jeswr/fetch-rdf':
         specifier: ^0.1.0
         version: 0.1.0
+      '@jeswr/rdf-serialize':
+        specifier: workspace:*
+        version: link:../../packages/rdf-serialize
       '@jeswr/solid-task-model':
         specifier: workspace:*
         version: link:../../packages/solid-task-model

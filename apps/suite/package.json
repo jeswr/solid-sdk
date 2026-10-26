@@ -19,6 +19,7 @@
     "react": "19.2.7",
     "react-dom": "19.2.7",
     "@jeswr/solid-task-model": "workspace:*",
+    "@jeswr/rdf-serialize": "workspace:*",
     "@jeswr/suite-vocab": "workspace:*",
     "@jeswr/fetch-rdf": "^0.1.0",
     "@rdfjs/wrapper": "^0.34.0",
