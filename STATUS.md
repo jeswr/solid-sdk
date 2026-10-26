@@ -2,6 +2,56 @@
 
 # sst-9skv — SKL-01 lane report
 
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+## Fix round 4 — integrate main and follow the relocated skill
+
+Fetched and merged `origin/main` from the prescribed **local** source clone
+(`/home/runner/work/solid-sdk`), at `ac840ff3`. The merge had no conflicts;
+`pnpm-lock.yaml` is identical to main, so lockfile conflict regeneration was unnecessary.
+Main remains authoritative outside this lane's scope.
+
+The merge carried this lane's detailed fetch-rdf guidance and corrected pod-scope recipe
+onto [packages/fetch-rdf/SKILL.md](packages/fetch-rdf/SKILL.md). The pod-scope recipe is
+byte-identical to its pre-merge version; the old top-level directory is absent.
+The recipe-test loader, README skill discovery note, data-modeler persona, Type Index
+cross-link, and this report now identify the package-local destination. A repository
+search found no additional stale SKL-01 index/catalog or lint/check-script paths.
+
+Commits for this round:
+
+- `396471ac` — `chore: integrate local main into skill lane` (merge).
+- `b281b6e4` — `fix: use package-local fetch-rdf skill references`.
+- Final commit (this report) — `docs: record relocated skill validation`.
+
+| Command / check | Result |
+| --- | --- |
+| `pnpm run lint:root` | PASS: Biome and all root guards, including tokens, contrast, SDK layers, and agent layers. |
+| `pnpm run test:root` | PASS: 8 files / 706 tests, including the exported pod-scope API and escaping-write-target recipe regression. |
+| `GIT_ALLOW_PROTOCOL=file TURBO_SCM_BASE=origin/main pnpm run gate` | FAIL: `@jeswr/fetch-rdf#build`; 5 successful / 11 total tasks. Its imported package has no `node_modules`, so TypeScript cannot resolve `@rdfjs/types`, `content-type`, `jsonld-streaming-parser`, or `n3`; dependent implicit-any diagnostics follow. |
+| `GIT_ALLOW_PROTOCOL=file pnpm run gate:full` | FAIL: the same missing-dependency build; 24 successful / 58 total tasks, 5 cached. |
+| Skill Creator `quick_validate.py` on `packages/fetch-rdf` and `skills/solid-type-index` | PASS: both skills. |
+| Local Markdown link audit | PASS: 14 links across the README, Type Index skill, and fetch-rdf skill resolve. |
+| `git diff --check` | PASS. |
+
+The explicit Turbo base uses the fetched main because this dedicated checkout has no
+local `main` branch. `GIT_ALLOW_PROTOCOL=file` prevents inherited build helpers from
+cloning or fetching network Git remotes. No dependencies were added or installed,
+no package implementation was changed, and no push or PR operation was performed.
+`roborev` remains unavailable in this sandbox; automated per-commit review could not run.
+
+Conservative scope interpretation: `apps/issues/skills-lock.json` records the path in its
+external `jeswr/solid-ai-coding` source, rather than an SKL-01 workspace destination.
+That provenance record and its vendored app skill are preserved. Historical source names
+in the checklist below also remain source names; their destination links are updated.
+No open questions or requested content changes remain for round 4. Full-workspace
+verification remains incomplete because the imported package dependencies are absent.
+`STATUS.md` is edited and committed last.
+
+## Earlier lane report (historical)
+
+The remainder records the original consolidation and its original validation environment.
+
 Consolidated the requested 14 existing + 6 additional skills under `skills/`.
 The 14 package-local skills remain unchanged. Detailed source guidance and companion
 examples are preserved; the existing condensed text appears in `## Quick reference`.
@@ -208,23 +258,23 @@ counterpart in the snapshots, so their complete existing content is retained the
 - [x] Gotchas → [skills/solid-conformance/SKILL.md](skills/solid-conformance/SKILL.md).
 - [x] See also → [skills/solid-conformance/SKILL.md](skills/solid-conformance/SKILL.md).
 
-### `skills/solid-fetch-rdf/SKILL.md`
+### `packages/fetch-rdf/SKILL.md`
 
-- [x] Read RDF with `@jeswr/fetch-rdf` → [skills/solid-fetch-rdf/SKILL.md](skills/solid-fetch-rdf/SKILL.md).
-- [x] Rules → [skills/solid-fetch-rdf/SKILL.md](skills/solid-fetch-rdf/SKILL.md).
-- [x] Agent persona → [skills/solid-fetch-rdf/SKILL.md](skills/solid-fetch-rdf/SKILL.md).
+- [x] Read RDF with `@jeswr/fetch-rdf` → [packages/fetch-rdf/SKILL.md](packages/fetch-rdf/SKILL.md).
+- [x] Rules → [packages/fetch-rdf/SKILL.md](packages/fetch-rdf/SKILL.md).
+- [x] Agent persona → [packages/fetch-rdf/SKILL.md](packages/fetch-rdf/SKILL.md).
 
 ### `solid-ai-coding/solid-fetch-rdf/SKILL.md`
 
-- [x] @jeswr/fetch-rdf — fetch + parse Solid RDF → [skills/solid-fetch-rdf/SKILL.md](skills/solid-fetch-rdf/SKILL.md).
-- [x] API surface (complete, v0.1.0) → [skills/solid-fetch-rdf/SKILL.md](skills/solid-fetch-rdf/SKILL.md).
-- [x] Usage → [skills/solid-fetch-rdf/SKILL.md](skills/solid-fetch-rdf/SKILL.md).
-- [x] What this package does NOT do → [skills/solid-fetch-rdf/SKILL.md](skills/solid-fetch-rdf/SKILL.md).
-- [x] Writing to a pod location safely — the scope guard comes from a library, not a re-derivation → [skills/solid-fetch-rdf/SKILL.md](skills/solid-fetch-rdf/SKILL.md).
-- [x] Gotchas → [skills/solid-fetch-rdf/SKILL.md](skills/solid-fetch-rdf/SKILL.md).
-- [x] Receiver-side: parsing AS2 LDN notifications safely → [skills/solid-fetch-rdf/SKILL.md](skills/solid-fetch-rdf/SKILL.md).
-- [x] Receiver-side: trusting cross-pod claims (provenance) → [skills/solid-fetch-rdf/SKILL.md](skills/solid-fetch-rdf/SKILL.md).
-- [x] Consuming an external Hydra / TPF search index safely → [skills/solid-fetch-rdf/SKILL.md](skills/solid-fetch-rdf/SKILL.md).
+- [x] @jeswr/fetch-rdf — fetch + parse Solid RDF → [packages/fetch-rdf/SKILL.md](packages/fetch-rdf/SKILL.md).
+- [x] API surface (complete, v0.1.0) → [packages/fetch-rdf/SKILL.md](packages/fetch-rdf/SKILL.md).
+- [x] Usage → [packages/fetch-rdf/SKILL.md](packages/fetch-rdf/SKILL.md).
+- [x] What this package does NOT do → [packages/fetch-rdf/SKILL.md](packages/fetch-rdf/SKILL.md).
+- [x] Writing to a pod location safely — the scope guard comes from a library, not a re-derivation → [packages/fetch-rdf/SKILL.md](packages/fetch-rdf/SKILL.md).
+- [x] Gotchas → [packages/fetch-rdf/SKILL.md](packages/fetch-rdf/SKILL.md).
+- [x] Receiver-side: parsing AS2 LDN notifications safely → [packages/fetch-rdf/SKILL.md](packages/fetch-rdf/SKILL.md).
+- [x] Receiver-side: trusting cross-pod claims (provenance) → [packages/fetch-rdf/SKILL.md](packages/fetch-rdf/SKILL.md).
+- [x] Consuming an external Hydra / TPF search index safely → [packages/fetch-rdf/SKILL.md](packages/fetch-rdf/SKILL.md).
 
 ### `skills/solid-notifications/SKILL.md`
 
