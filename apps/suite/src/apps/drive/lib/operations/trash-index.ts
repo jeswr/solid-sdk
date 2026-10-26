@@ -45,6 +45,10 @@ export interface TrashEntry {
 }
 
 export class TrashRecord extends TermWrapper {
+  /** Source URL/ETag tuples captured before the pending intent is persisted. */
+  get sourceVersions(): Set<string> {
+    return SetFrom.subjectPredicate(this, `${DCT}identifier`, LiteralAs.string, LiteralFrom.string);
+  }
   get status(): string | undefined {
     return OptionalFrom.subjectPredicate(this, `${DCT}description`, LiteralAs.string);
   }

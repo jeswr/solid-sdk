@@ -48,6 +48,257 @@ function setup(
 afterEach(() => vi.restoreAllMocks());
 
 describe("Drive data-safety regressions", () => {
+  it.each([
+    false,
+    true,
+  ])("completed trash remains discoverable beside a reused URL (receipt fails: %s)", async (failReceipt) => {
+    let writes = 0;
+    const { pod, client } = setup(async (url, init) => {
+      if (url === INDEX && init?.method === "PUT" && ++writes > 1)
+        return new Response(null, { status: 500 });
+      if (failReceipt && url.endsWith("/partial.ttl") && init?.method === "PUT")
+        return new Response(null, { status: 500 });
+      return undefined;
+    });
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const result = await trashItems(client, DRIVE, [await client.stat(`${FROM}a`)]);
+    const entry = result.done[0];
+    if (!entry) throw new Error("Missing completed move");
+    expect(result.warnings).toHaveLength(1);
+    const receipt = new URL("partial.ttl", entry.url).href;
+    expect(pod.has(receipt)).toBe(!failReceipt);
+    await client.write(`${FROM}a`, "unrelated replacement", {
+      contentType: "text/plain",
+      ifNoneMatch: "*",
+    });
+    const listed = await listTrash(client, DRIVE);
+    expect(listed).toHaveLength(1);
+    if (failReceipt) {
+      // Refuse to drain recovery until a durable status/receipt can be saved.
+      expect((await restoreItems(client, DRIVE, listed)).failed[0]?.error).toMatchObject({
+        status: 500,
+      });
+      expect(await (await client.read(entry.url)).text()).toBe("A");
+    } else {
+      const restored = await restoreItems(client, DRIVE, listed);
+      expect(restored.failed).toEqual([]);
+      expect(restored.done[0]).toMatchObject({ url: `${FROM}a%20(restored)`, renamed: true });
+      expect(await (await client.read(`${FROM}a%20(restored)`)).text()).toBe("A");
+      expect(pod.has(receipt)).toBe(false);
+    }
+    expect(await (await client.read(`${FROM}a`)).text()).toBe("unrelated replacement");
+  });
+
+  it.each([
+    "file",
+    "nested",
+  ])("pending recovery checks the identity of every %s occupant", async (kind) => {
+    const { client } = setup();
+    await client.write(`${FROM}nested/note`, "original", {
+      contentType: "text/plain",
+      ifNoneMatch: "*",
+    });
+    const copy = client.copy.bind(client);
+    vi.spyOn(client, "move").mockImplementation(async (from, to) => {
+      await copy(from, to);
+      throw new Error("interrupted before deletion");
+    });
+    await trashItems(client, DRIVE, [await client.stat(kind === "file" ? `${FROM}a` : FROM)]);
+    expect(await listTrash(client, DRIVE)).toEqual([]);
+    const changed = kind === "file" ? `${FROM}a` : `${FROM}nested/note`;
+    await client.write(changed, "unrelated replacement", {
+      contentType: "text/plain",
+      ifMatch: (await client.stat(changed)).etag as string,
+    });
+    expect(await listTrash(client, DRIVE)).toMatchObject([{ status: "partial" }]);
+  });
+
+  it("partial restore finishes with unchanged survivors and clears the recovery slot", async () => {
+    const { pod, client } = setup(async (url, init) =>
+      url === `${FROM}b` && init?.method === "DELETE"
+        ? new Response(null, { status: 403 })
+        : undefined,
+    );
+    await trashItems(client, DRIVE, [await client.stat(FROM)]);
+    const entries = await listTrash(client, DRIVE);
+    const entry = entries[0];
+    if (!entry) throw new Error("Missing recovery entry");
+    const survivor = await client.stat(`${FROM}b`);
+    const result = await restoreItems(client, DRIVE, entries);
+    expect(result.failed).toEqual([]);
+    expect(result.done).toHaveLength(1);
+    expect(await (await client.read(`${FROM}a`)).text()).toBe("A");
+    expect(await client.stat(`${FROM}b`)).toEqual(survivor);
+    expect(await listTrash(client, DRIVE)).toEqual([]);
+    expect(pod.has(new URL("..", entry.url).href)).toBe(false);
+  });
+
+  it("confirmed deletion can clear partial recovery without touching surviving originals", async () => {
+    const { pod, client } = setup(async (url, init) =>
+      url === `${FROM}b` && init?.method === "DELETE"
+        ? new Response(null, { status: 403 })
+        : undefined,
+    );
+    await trashItems(client, DRIVE, [await client.stat(FROM)]);
+    const entries = await listTrash(client, DRIVE);
+    expect(entries).toHaveLength(1);
+    expect((await deleteForever(client, DRIVE, entries)).failed).toEqual([]);
+    expect(await listTrash(client, DRIVE)).toEqual([]);
+    expect(pod.has(entries[0]?.url as string)).toBe(false);
+    expect(await (await client.read(`${FROM}b`)).text()).toBe("B");
+  });
+
+  it.each([
+    "legacy",
+    "missing-etag",
+    "weak-etag",
+    "matching-etag",
+  ])("compares pending recovery bytes when source identity is unavailable (%s)", async (mode) => {
+    const { client } = setup();
+    const source = `${FROM}a`;
+    const initial = await client.stat(source);
+    const copy = client.copy.bind(client);
+    vi.spyOn(client, "move").mockImplementation(async (from, to) => {
+      await copy(from, to);
+      throw new Error("interrupted");
+    });
+    const stat = client.stat.bind(client);
+    vi.spyOn(client, "stat").mockImplementation(async (url) => {
+      const current = await stat(url);
+      if (mode === "missing-etag") {
+        const { etag: _, ...withoutEtag } = current;
+        return withoutEtag;
+      }
+      if (mode === "weak-etag") return { ...current, etag: 'W/"version"' };
+      if (mode === "matching-etag" && url.includes(".trash/"))
+        return { ...current, etag: initial.etag as string };
+      return current;
+    });
+    await trashItems(client, DRIVE, [initial]);
+    const current = await client.readRdf(INDEX);
+    if (!current) throw new Error("Missing intent");
+    const index = trashIndexFrom(current.dataset);
+    const record = index.records[0];
+    if (!record) throw new Error("Missing record");
+    if (mode === "legacy" || mode === "matching-etag") {
+      expect(record.sourceVersions.size).toBe(1);
+      record.sourceVersions.clear();
+      await client.write(INDEX, await serializeTrashIndex(index), {
+        contentType: "text/turtle",
+        ifMatch: current.etag as string,
+      });
+    }
+    expect(await listTrash(client, DRIVE)).toEqual([]);
+    // Same byte length forces actual byte comparison, rather than just size checks.
+    await client.write(source, "X", {
+      contentType: "text/plain",
+      ifMatch: (await stat(source)).etag as string,
+    });
+    expect(await listTrash(client, DRIVE)).toMatchObject([{ status: "partial" }]);
+  });
+
+  it.each([
+    new Error("offline"),
+    new DriveError("forbidden", 403, FROM),
+  ])("does not move anything when source identity cannot be captured (%s)", async (error) => {
+    const { pod, client } = setup();
+    const initial = await client.stat(`${FROM}a`);
+    vi.spyOn(client, "stat").mockRejectedValue(error);
+    const move = vi.spyOn(client, "move");
+    const result = await trashItems(client, DRIVE, [initial]);
+    expect(result).toMatchObject({ done: [], failed: [{ url: initial.url, error }] });
+    expect(move).not.toHaveBeenCalled();
+    expect(pod.has(initial.url)).toBe(true);
+  });
+
+  it("automatic expiry preserves partial recovery until a user confirms deletion", async () => {
+    const { client } = setup(async (url, init) =>
+      url === `${FROM}b` && init?.method === "DELETE"
+        ? new Response(null, { status: 403 })
+        : undefined,
+    );
+    await trashItems(client, DRIVE, [await client.stat(FROM)], { now: new Date(0) });
+    expect(await purgeExpired(client, DRIVE, { now: NOW })).toEqual({ done: [], failed: [] });
+    const entries = await listTrash(client, DRIVE);
+    expect(entries).toHaveLength(1);
+    expect((await deleteForever(client, DRIVE, entries)).done).toEqual(entries);
+  });
+
+  it("confirmed deletion removes a completion receipt while preserving foreign slot resources", async () => {
+    let writes = 0;
+    const { pod, client } = setup(async (url, init) =>
+      url === INDEX && init?.method === "PUT" && ++writes === 2
+        ? new Response(null, { status: 500 })
+        : undefined,
+    );
+    const {
+      done: [entry],
+    } = await trashItems(client, DRIVE, [await client.stat(`${FROM}a`)]);
+    if (!entry) throw new Error("Missing completed entry");
+    const receipt = new URL("partial.ttl", entry.url).href;
+    const foreign = new URL("foreign", entry.url).href;
+    await pod.fetch(foreign, { method: "PUT", body: "another writer's data" });
+    expect(pod.has(receipt)).toBe(true);
+    expect((await deleteForever(client, DRIVE, [entry])).failed).toEqual([]);
+    expect(pod.has(receipt)).toBe(false);
+    expect(pod.has(entry.url)).toBe(false);
+    expect(await (await client.read(foreign)).text()).toBe("another writer's data");
+  });
+
+  it("partial restore drains unchanged survivors while preserving foreign slot resources", async () => {
+    const { pod, client } = setup(async (url, init) =>
+      url === `${FROM}b` && init?.method === "DELETE"
+        ? new Response(null, { status: 403 })
+        : undefined,
+    );
+    await trashItems(client, DRIVE, [await client.stat(FROM)]);
+    const entries = await listTrash(client, DRIVE);
+    const entry = entries[0];
+    if (!entry) throw new Error("Missing partial entry");
+    const foreign = new URL("../foreign", entry.url).href;
+    await pod.fetch(foreign, { method: "PUT", body: "another writer's data" });
+    expect((await restoreItems(client, DRIVE, entries)).failed).toEqual([]);
+    expect(pod.has(entry.url)).toBe(false);
+    expect(await (await client.read(foreign)).text()).toBe("another writer's data");
+    expect(await listTrash(client, DRIVE)).toEqual([]);
+  });
+
+  it.each([
+    "status",
+    "original",
+    "date",
+    "missing-date",
+  ])("does not trust a receipt with a mismatched %s", async (field) => {
+    let writes = 0;
+    const { pod, client } = setup(async (url, init) =>
+      url === INDEX && init?.method === "PUT" && ++writes === 2
+        ? new Response(null, { status: 500 })
+        : undefined,
+    );
+    const {
+      done: [entry],
+    } = await trashItems(client, DRIVE, [await client.stat(`${FROM}a`)]);
+    if (!entry) throw new Error("Missing completed entry");
+    const receipt = new URL("partial.ttl", entry.url).href;
+    const current = await client.readRdf(receipt);
+    if (!current) throw new Error("Missing completion receipt");
+    const index = trashIndexFrom(current.dataset);
+    const record = index.record(entry.url);
+    if (field === "status") record.status = "pending";
+    else if (field === "original") record.originalLocation = `${FROM}b`;
+    else record.trashedAt = field === "date" ? new Date(0) : undefined;
+    await client.write(receipt, await serializeTrashIndex(index), {
+      contentType: "text/turtle",
+      ifMatch: current.etag as string,
+    });
+    const entries = await listTrash(client, DRIVE);
+    expect(entries).toMatchObject([{ status: "partial" }]);
+    expect((await restoreItems(client, DRIVE, entries)).failed).toEqual([]);
+    expect(await (await client.read(entry.original)).text()).toBe("A");
+    // Invalid receipts are treated like foreign slot resources.
+    expect(pod.has(receipt)).toBe(true);
+  });
+
   it("partial restore retains the only recovery copy when an original URL is occupied", async () => {
     const { pod, client } = setup(async (url, init) =>
       url === `${FROM}b` && init?.method === "DELETE"
@@ -64,7 +315,7 @@ describe("Drive data-safety regressions", () => {
     const result = await restoreItems(client, DRIVE, [entry]);
     expect(result.done).toEqual([]);
     expect(result.failed[0]?.error).toMatchObject({
-      message: "2 items could not be restored because their location is in use",
+      message: "1 items could not be restored because their location is in use",
     });
     expect(await (await client.read(`${entry.url}a`)).text()).toBe("A");
     expect(await (await client.read(`${FROM}a`)).text()).toBe("unrelated replacement");
@@ -93,11 +344,10 @@ describe("Drive data-safety regressions", () => {
     const result = await restoreItems(client, DRIVE, [entry]);
     expect(result.failed[0]?.error).not.toMatchObject({ kind: "trash-moving" });
     expect(await (await client.read(`${FROM}a`)).text()).toBe("A");
-    expect(await (await client.read(`${entry.url}b`)).text()).toBe("B");
-    expect((await listTrash(client, DRIVE))[0]).toMatchObject({
-      status: "partial",
-      remaining: [`${entry.url}b`],
-    });
+    expect(result.failed).toEqual([]);
+    expect(result.done).toHaveLength(1);
+    expect(await (await client.read(`${FROM}b`)).text()).toBe("B");
+    expect(await listTrash(client, DRIVE)).toEqual([]);
   });
 
   it.each([
@@ -182,7 +432,7 @@ describe("Drive data-safety regressions", () => {
     // Keep the durable intent pending and force its first promotion to fail.
     vi.spyOn(client, "write").mockRejectedValueOnce(new DriveError("failed", 500, INDEX));
     vi.spyOn(console, "warn").mockImplementation(() => undefined);
-    expect((await listTrash(client, DRIVE))[0]).toMatchObject({ status: "partial" });
+    expect(await listTrash(client, DRIVE)).toEqual([entry]);
     const slot = new URL(".", entry.url).href;
     expect(pod.has(`${slot}partial.ttl`)).toBe(true);
     const remove = client.remove.bind(client);
@@ -212,7 +462,7 @@ describe("Drive data-safety regressions", () => {
     } = await trashItems(client, DRIVE, [await client.stat(`${FROM}partial.ttl`)]);
     if (!entry) throw new Error("Missing entry");
     vi.spyOn(console, "warn").mockImplementation(() => undefined);
-    expect((await listTrash(client, DRIVE))[0]).toMatchObject({ status: "partial" });
+    expect(await listTrash(client, DRIVE)).toEqual([entry]);
     expect(await (await client.read(entry.url)).text()).toBe("unique recovery bytes");
     expect((await restoreItems(client, DRIVE, [entry])).done).toHaveLength(1);
     expect(await (await client.read(entry.original)).text()).toBe("unique recovery bytes");
@@ -293,10 +543,6 @@ describe("Drive data-safety regressions", () => {
     const [entry] = await listTrash(client, DRIVE);
     expect(entry).toMatchObject({ status: "partial", original: FROM });
     if (!entry) throw new Error("Missing partial recovery copy");
-    const { status: _, ...staleEntry } = entry;
-    expect((await deleteForever(client, DRIVE, [staleEntry])).failed[0]?.error).toMatchObject({
-      kind: "trash-partial",
-    });
     await pod.fetch(`${FROM}b`, { method: "PUT", body: "new B" });
     await pod.fetch(`${FROM}nested/new`, { method: "PUT", body: "new child" });
     const foreign = new URL("../foreign", entry.url).href;
@@ -504,10 +750,9 @@ describe("Drive data-safety regressions", () => {
     const result = await trashItems(client, DRIVE, [await client.stat(`${FROM}a`)]);
     const entry = result.done[0];
     if (!entry) throw new Error("Missing moved entry");
+    // Legacy completed transfers may have no slot-local completion receipt.
+    await client.remove(new URL("partial.ttl", entry.url).href);
     expect(await listTrash(client, DRIVE)).toMatchObject([{ ...entry, status: "partial" }]);
-    expect((await deleteForever(client, DRIVE, [entry])).failed[0]?.error).toMatchObject({
-      kind: "trash-partial",
-    });
     expect((await restoreItems(client, DRIVE, [entry])).done).toHaveLength(1);
   });
 
@@ -526,6 +771,7 @@ describe("Drive data-safety regressions", () => {
       done: [entry],
     } = await trashItems(client, DRIVE, [await client.stat(`${FROM}a`)]);
     if (!entry) throw new Error("Missing moved entry");
+    await client.remove(new URL("partial.ttl", entry.url).href);
     const read = client.readRdf.bind(client);
     let reads = 0;
     vi.spyOn(client, "readRdf").mockImplementation(async (url) => {
@@ -886,9 +1132,7 @@ describe("Drive data-safety regressions", () => {
     expect(result.failed).toEqual([]);
     expect(result.warnings).toMatchObject([{ kind: "trash-index-persistence", cause: { status } }]);
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
-    expect(await listTrash(client, DRIVE)).toMatchObject([
-      { ...result.done[0], status: "partial" },
-    ]);
+    expect(await listTrash(client, DRIVE)).toEqual(result.done);
     expect(warn).toHaveBeenCalledWith(expect.objectContaining({ kind: "trash-index-persistence" }));
     expect(pod.has(`${FROM}a`)).toBe(false);
   });

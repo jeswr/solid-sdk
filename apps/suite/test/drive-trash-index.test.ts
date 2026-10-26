@@ -27,6 +27,23 @@ const entry: TrashEntry = {
 afterEach(() => vi.restoreAllMocks());
 
 describe("PROV trash index", () => {
+  it("round-trips the pending intent's source version identities through typed accessors", async () => {
+    const index = emptyTrashIndex();
+    addTrashRecord(index, entry);
+    const versions = [
+      JSON.stringify([entry.original, '"source"']),
+      JSON.stringify([`${entry.original}/nested`, '"child"']),
+    ];
+    for (const version of versions) index.record(entry.url).sourceVersions.add(version);
+    const restored = trashIndexFrom(
+      new Store(new Parser().parse(await serializeTrashIndex(index))),
+    );
+    expect([...restored.record(entry.url).sourceVersions]).toEqual(versions);
+    // Replacing a record also discards the previous intent's identities.
+    addTrashRecord(restored, entry);
+    expect(restored.record(entry.url).sourceVersions.size).toBe(0);
+  });
+
   it("round-trips partial recovery state through typed accessors and Turtle", async () => {
     const index = emptyTrashIndex();
     const partial = { ...entry, status: "partial" as const };

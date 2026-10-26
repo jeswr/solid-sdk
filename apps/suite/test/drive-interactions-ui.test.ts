@@ -225,6 +225,106 @@ it.each([
   operation.mockRestore();
 });
 
+it.each([
+  new TypeError("Network failed"),
+  new DriveError("failed", 500, ROOT),
+])("Trash retains recovery actions after a current refresh fails (%s) and retries", async (error) => {
+  const entry = {
+    url: `${ROOT}.trash/slot/A.txt`,
+    original: `${ROOT}A.txt`,
+    name: "A.txt",
+    trashedAt: new Date(),
+  };
+  const listing = vi.spyOn(operations, "listTrash").mockResolvedValue([entry]);
+  const view = await mount(h(DriveUiProvider, null, h(Probe), h(TrashView)));
+  listing.mockRejectedValueOnce(error);
+  await act(async () => drive.changes.subscribeSubtree.mock.calls.at(-1)?.[1]());
+  expect(view.host.textContent).toContain("A.txt");
+  expect(view.host.textContent).not.toContain("Trash is empty");
+  expect(view.host.querySelector('[aria-label="Restore: A.txt"]')).not.toBeNull();
+  const alert = view.host.querySelector('.drv-content [role="alert"]');
+  expect(alert?.textContent).toContain("Couldn't refresh Trash");
+  const retry = [...(alert?.querySelectorAll("button") ?? [])].find(
+    (button) => button.textContent === "Retry",
+  );
+  if (!retry) throw new Error("Missing Retry");
+  await act(async () => retry.focus());
+  expect(document.activeElement).toBe(retry);
+  listing.mockResolvedValue([]);
+  await click(retry);
+  expect(view.host.textContent).toContain("Trash is empty");
+  expect(view.host.textContent).not.toContain("Couldn't refresh Trash");
+  await view.unmount();
+});
+
+it("an initial Trash listing failure shows Retry without an empty state", async () => {
+  vi.spyOn(operations, "listTrash").mockRejectedValue(new Error("Offline"));
+  const view = await mount(h(DriveUiProvider, null, h(Probe), h(TrashView)));
+  expect(view.host.textContent).not.toContain("Trash is empty");
+  expect(view.host.textContent).not.toContain("Loading…");
+  expect(view.host.querySelector('.drv-content [role="alert"]')?.textContent).toContain("Retry");
+  await view.unmount();
+});
+
+it.each([
+  "delete-forever",
+  "empty-trash",
+] as const)("%s clears partial recovery only after confirmation", async (kind) => {
+  const pod = createDemoPod({
+    root: drive.session.storageUrl,
+    seed: [
+      { path: "drive/Folder/a", body: "A", contentType: "text/plain" },
+      { path: "drive/Folder/b", body: "B", contentType: "text/plain" },
+    ],
+  });
+  const client = createSolidDriveClient({
+    storageUrl: drive.session.storageUrl,
+    fetch: async (url, init) =>
+      String(url) === `${ROOT}Folder/b` && init?.method === "DELETE"
+        ? new Response(null, { status: 403 })
+        : pod.fetch(url, init),
+  });
+  drive.client = client;
+  await operations.trashItems(client, ROOT, [await client.stat(`${ROOT}Folder/`)]);
+  const entries = await operations.listTrash(client, ROOT);
+  const view = await mount(h(DriveUiProvider, null, h(Probe), h(TrashView), h(DriveDialogs)));
+  const remove = vi.spyOn(operations, "deleteForever");
+  const open =
+    kind === "empty-trash"
+      ? [...view.host.querySelectorAll("button")].find(
+          (button) => button.textContent === "Empty trash",
+        )
+      : view.host.querySelector('[aria-label="Delete for ever: Folder"]');
+  if (!open) throw new Error("Missing deletion action");
+  await click(open);
+  expect(document.querySelector('[role="alertdialog"]')).not.toBeNull();
+  expect(remove).not.toHaveBeenCalled();
+  const confirm = [...document.querySelectorAll('[role="alertdialog"] button')].find(
+    (button) => button.textContent === (kind === "empty-trash" ? "Empty trash" : "Delete for ever"),
+  );
+  if (!confirm) throw new Error("Missing confirmation");
+  await click(confirm);
+  expect(remove).toHaveBeenCalledTimes(1);
+  expect(await operations.listTrash(client, ROOT)).toEqual([]);
+  expect(pod.has(entries[0]?.url as string)).toBe(false);
+  expect(await (await client.read(`${ROOT}Folder/b`)).text()).toBe("B");
+  await view.unmount();
+});
+
+it("a failed refresh of a previously empty Trash shows an error until Retry succeeds", async () => {
+  const listing = vi.spyOn(operations, "listTrash").mockResolvedValue([]);
+  const view = await mount(h(DriveUiProvider, null, h(Probe), h(TrashView)));
+  expect(view.host.textContent).toContain("Trash is empty");
+  listing.mockRejectedValueOnce(new Error("Offline"));
+  await act(async () => drive.changes.subscribeSubtree.mock.calls.at(-1)?.[1]());
+  expect(view.host.textContent).not.toContain("Trash is empty");
+  const retry = view.host.querySelector<HTMLButtonElement>('.drv-content [role="alert"] button');
+  if (!retry) throw new Error("Missing Retry");
+  await click(retry);
+  expect(view.host.textContent).toContain("Trash is empty");
+  await view.unmount();
+});
+
 it("Trash keeps the latest refresh when an older listing resolves empty", async () => {
   const earlier = deferred<Awaited<ReturnType<typeof operations.listTrash>>>();
   const entry = {
