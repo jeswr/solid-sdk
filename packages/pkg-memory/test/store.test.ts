@@ -453,6 +453,95 @@ it.each([
   else await expect(store.put(value)).rejects.toMatchObject({ status: 412 });
 });
 
+it.each([
+  "blank-node",
+  "default",
+  "named",
+])("rejects a duplicate resource with an extra quad in a %s graph", async (kind) => {
+  const { store, memory } = setup();
+  const value = await build("complete-dataset-conflict");
+  const url = store.url(value.nanopubs[0]!.id);
+  await store.put(value);
+  const retained = await store.get(value.nanopubs[0]!.id);
+  const extra = new Store();
+  new RdfNode(DataFactory.blankNode("extra"), extra).text(`${NS.schema}name`, "extra");
+  if (kind === "default") for (const quad of extra) retained.dataset.add(quad);
+  else if (kind === "named") putGraph(retained.dataset as Store, pkgId("extra"), extra);
+  else {
+    const graphName = DataFactory.blankNode("extra");
+    for (const quad of extra)
+      retained.dataset.add(DataFactory.quad(quad.subject, quad.predicate, quad.object, graphName));
+  }
+  const bytes = encode(await serializeNanopublications(retained));
+  await memory.write(url, bytes, "application/trig", {});
+  await expect(store.put(value)).rejects.toMatchObject({ status: 412 });
+  expect((await memory.read(url)).body).toEqual(bytes);
+});
+
+it("accepts a byte-different duplicate with reordered quads and renamed blank nodes", async () => {
+  const { store, memory } = setup();
+  const value = await sharedBlankBatchGraphs("rdf-identical-retry", ["one"]);
+  const url = store.url(value.nanopubs[0]!.id);
+  await store.put(value);
+  const before = await memory.read(url);
+  const retained = await store.get(value.nanopubs[0]!.id);
+  const renamed = (term: Term) =>
+    term.termType === "BlankNode" ? DataFactory.blankNode(`renamed-${term.value}`) : term;
+  const dataset = new Store();
+  for (const name of new Set([...retained.dataset].map((quad) => quad.graph.value)).values()) {
+    const contents = new Store();
+    for (const quad of [...graph(retained.dataset, name)].reverse())
+      new RdfNode(renamed(quad.subject), contents).add(quad.predicate.value, renamed(quad.object));
+    putGraph(dataset, name, contents);
+  }
+  retained.dataset = dataset;
+  const bytes = encode(await serializeNanopublications(retained));
+  expect(bytes).not.toEqual(before.body);
+  expect(isomorphic([...dataset], [...value.dataset])).toBe(true);
+  await memory.write(url, bytes, "application/trig", {});
+  await expect(store.put(value)).resolves.toEqual([url]);
+  expect((await memory.read(url)).body).toEqual(bytes);
+});
+
+it.each([
+  "urn:uuid:aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/path",
+  "urn:uuid:../../outside",
+  "urn:uuid:aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/../../outside",
+  "urn:uuid:aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa%2f..%2foutside",
+  "urn:uuid:%2e%2e%2foutside",
+  "urn:uuid:aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa?query",
+  "urn:uuid:aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa#fragment",
+  "https://example.org/foreign",
+  "urn:uuid:AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA",
+])("rejects a noncanonical shared graph before any writes: %s", async (invalid) => {
+  const { store, write } = setup();
+  const value = await sharedBlankBatchGraphs("unsafe-graph", ["one", "two"]);
+  const old = value.nanopubs[1]!.assertionId;
+  const renamed = (term: Term) =>
+    term.termType === "NamedNode" && term.value === old ? DataFactory.namedNode(invalid) : term;
+  const dataset = new Store();
+  for (const name of new Set([...value.dataset].map((quad) => quad.graph.value))) {
+    const contents = new Store();
+    for (const quad of graph(value.dataset, name))
+      new RdfNode(renamed(quad.subject), contents).add(quad.predicate.value, renamed(quad.object));
+    putGraph(dataset, name === old ? invalid : name, contents);
+  }
+  value.dataset = dataset;
+  await expect(store.put(value)).rejects.toThrow("UUID");
+  expect(write).not.toHaveBeenCalled();
+});
+
+it("rejects a normalized destination outside its exact container before any writes", async () => {
+  const { store, write } = setup();
+  // Exercise the final URL invariant even if an untyped caller changes the
+  // readonly container after construction.
+  Object.defineProperty(store, "container", { value: `${store.container}../` });
+  await expect(store.put(await build())).rejects.toThrow(
+    "directly in the nanopublication container",
+  );
+  expect(write).not.toHaveBeenCalled();
+});
+
 it.each([403, 412])("fails closed after a container creation error (%s)", async (status) => {
   const { store, memory, write } = setup();
   write.mockImplementation((url, bytes, type, cond) =>

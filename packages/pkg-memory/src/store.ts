@@ -67,9 +67,19 @@ export class NanopubStore {
 
   /** Resolve only UUID nanopub identities to the fixed storage container. */
   url(id: string): string {
+    return this.resourceUrl(id, false);
+  }
+
+  private resourceUrl(id: string, reservation: boolean): string {
     const match = uuid.exec(id);
     if (!match) throw new Error("Expected a nanopublication UUID IRI");
-    return `${this.container}${match[1]}.trig`;
+    const filename = reservation ? `shared-${match[1]}.reservation` : `${match[1]}.trig`;
+    const url = new URL(filename, this.container).href;
+    // A UUID-only filename has no path segments or URL delimiters. Exact equality
+    // also asserts the normalized URL retains the container prefix and this leaf.
+    if (url !== `${this.container}${filename}`)
+      throw new Error("Expected a resource directly in the nanopublication container");
+    return url;
   }
 
   /** Persist each nanopub separately, create-only; graph metadata is parsed before any write. */
@@ -81,6 +91,9 @@ export class NanopubStore {
         pkgId("batch", np.batch, "sources"),
         pkgId("batch", np.batch, "entities"),
       ];
+      // Validate every shared identity before initialization can write any ACLs,
+      // containers, reservations or nanopubs, including earlier parts of a batch.
+      for (const name of sharedGraphs) this.resourceUrl(name, true);
       const dataset = new Store();
       for (const name of [np.id, np.provenanceId, np.pubinfoId, ...sharedGraphs])
         putGraph(dataset, name, graph(parsed.dataset, name));
@@ -351,7 +364,7 @@ export class NanopubStore {
       required.length === 1
         ? (required[0] as string)
         : pkgId("store", "joint-reservation", ...required);
-    const url = `${this.container}shared-${name.slice("urn:uuid:".length)}.reservation`;
+    const url = this.resourceUrl(name, true);
     const contents = new Store();
     const labels = sharedGraphLabels(dataset, new Set(names)).labels;
     const canonical = (term: Term) =>
@@ -431,12 +444,7 @@ export class NanopubStore {
       if (mediaType !== "application/trig" && mediaType !== "application/octet-stream") throw error;
       const incoming = await parseNanopublications(decode(bytes));
       const retained = await parseNanopublications(decode(stored.body));
-      const names = new Set([...incoming.dataset].map((quad) => quad.graph.value));
-      for (const quad of retained.dataset) names.add(quad.graph.value);
-      if (
-        sharedGraphLabels(incoming.dataset, names, new Set()).id !==
-        sharedGraphLabels(retained.dataset, names, new Set()).id
-      )
+      if (datasetFingerprint(incoming.dataset) !== datasetFingerprint(retained.dataset))
         throw error;
       return false;
     }
@@ -453,6 +461,40 @@ export class NanopubStore {
 
 function graphDefault(dataset: DatasetCore): Store {
   return new Store([...dataset.match(null, null, null, df.defaultGraph())]);
+}
+
+/** Include every graph term in canonicalization, retaining joint blank-node identity. */
+function datasetFingerprint(dataset: DatasetCore): string {
+  const encoded = new Store();
+  // Keep input blank nodes disjoint from statement nodes, even if caller labels
+  // resemble our internal labels. One remapping spans subject, object and graph.
+  const term = (value: Term) =>
+    value.termType === "BlankNode" ? df.blankNode(`term-${value.value}`) : value;
+  let index = 0;
+  for (const quad of dataset) {
+    if (quad.graph.termType === "BlankNode") {
+      // Reify these quads so graph labels participate in the same correspondence
+      // as subject/object labels. Statement predicates are disjoint from the UUID
+      // predicates below, preventing input terms from impersonating statements.
+      new RdfNode(df.blankNode(`quad-${index++}`), encoded)
+        .add(`${NS.rdf}subject`, term(quad.subject))
+        .add(`${NS.rdf}predicate`, quad.predicate)
+        .add(`${NS.rdf}object`, term(quad.object))
+        .add(`${NS.pkg}graph`, term(quad.graph));
+    } else {
+      // Constant graph terms need no statement nodes. JSON preserves tuple
+      // boundaries even when an input IRI contains pkgId's pipe delimiter.
+      new RdfNode(term(quad.subject), encoded).add(
+        pkgId(
+          "store",
+          "dataset-predicate",
+          JSON.stringify([quad.graph.termType, quad.graph.value, quad.predicate.value]),
+        ),
+        term(quad.object),
+      );
+    }
+  }
+  return canonicalizeGraphWithLabels(encoded).id;
 }
 
 function validateSharedCopies(

@@ -36,12 +36,6 @@ export function classifyNanopublications(value: Nanopublications): ClassifiedNan
       targets.length > 0
         ? targets.flatMap((target) => byId.get(target.value) ?? [])
         : np.supersedes.flatMap((target) => byAssertion.get(target) ?? []);
-    for (const other of previous) {
-      if (other.id === np.id) continue;
-      const next = replacements.get(other.id) ?? new Set<string>();
-      next.add(np.id);
-      replacements.set(other.id, next);
-    }
     if (
       past.has(np.validity) ||
       [...new RdfNode(np.assertionId, provenance).terms(`${NS.prov}invalidatedAtTime`)].some(
@@ -58,14 +52,30 @@ export function classifyNanopublications(value: Nanopublications): ClassifiedNan
       )
     )
       inactive.add(np.id);
+    for (const other of previous) {
+      if (
+        np.epistemic === "Mentioned" ||
+        // Explicit withdrawals retire their targets even though the withdrawal
+        // itself is past. Other past claims cannot supply belief revisions.
+        (inactive.has(np.id) && np.validity !== "Retracted") ||
+        other.id === np.id
+      )
+        continue;
+      const next = replacements.get(other.id) ?? new Set<string>();
+      next.add(np.id);
+      replacements.set(other.id, next);
+    }
   }
   for (const id of replacements.keys()) inactive.add(id);
   const liveAssertions = new Set(
-    nanopubs.filter((np) => !inactive.has(np.id)).map((np) => np.assertionId),
+    nanopubs
+      .filter((np) => np.epistemic !== "Mentioned" && !inactive.has(np.id))
+      .map((np) => np.assertionId),
   );
   const contradictedByLive = new Set<string>();
   for (const np of nanopubs)
-    if (!inactive.has(np.id)) for (const target of np.contradicts) contradictedByLive.add(target);
+    if (np.epistemic !== "Mentioned" && !inactive.has(np.id))
+      for (const target of np.contradicts) contradictedByLive.add(target);
   return nanopubs.map((np) => {
     const conflict =
       np.contradicts.some((target) => !byAssertion.has(target) || liveAssertions.has(target)) ||

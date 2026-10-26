@@ -210,6 +210,72 @@ describe("KG §4.1 belief view", () => {
     ).toBe("might");
   });
 
+  it.each([
+    "Mentioned",
+    "SelfReportedExplicit",
+  ] as const)("%s contributes contradictions only when it asserts a belief, in either link direction", async (epistemic) => {
+    for (const outgoing of [false, true]) {
+      const value = await build([
+        {
+          id: "fact",
+          epistemic: "SelfReportedExplicit",
+          assertion: assertion("fact"),
+          contradicts: outgoing ? ["other"] : [],
+        },
+        {
+          id: "other",
+          epistemic,
+          assertion: assertion("other"),
+          contradicts: outgoing ? [] : ["fact"],
+        },
+      ]);
+      for (const nanopubs of [value.nanopubs, [...value.nanopubs].reverse()]) {
+        const result = classifyNanopublications({ ...value, nanopubs });
+        expect(result.find((np) => np.identifier === "belief/fact")).toMatchObject({
+          belief: epistemic === "Mentioned" ? "definitely" : "might",
+          replacedBy: [],
+        });
+        expect(result.find((np) => np.identifier === "belief/other")!.belief).toBe(
+          epistemic === "Mentioned" ? "mentioned" : "might",
+        );
+      }
+    }
+  });
+
+  it.each([
+    "Mentioned",
+    "SelfReportedExplicit",
+  ] as const)("%s contributes revisions only when it asserts a belief, for assertion and envelope targets", async (epistemic) => {
+    for (const target of ["assertion", "envelope"]) {
+      for (const original of ["SelfReportedExplicit", "Documented"] as const) {
+        const value = await build([
+          { id: "old", epistemic: original, assertion: assertion("old") },
+          {
+            id: "new",
+            epistemic,
+            assertion: assertion("new"),
+            supersedes: target === "assertion" ? ["old"] : [],
+          },
+        ]);
+        const old = value.nanopubs.find((np) => np.identifier === "belief/old")!;
+        const newer = value.nanopubs.find((np) => np.identifier === "belief/new")!;
+        if (target === "envelope") {
+          const provenance = graph(value.dataset, newer.provenanceId);
+          new RdfNode(newer.id, provenance).link(`${NS.prov}wasRevisionOf`, old.id);
+          putGraph(value.dataset, newer.provenanceId, provenance);
+        }
+        const parsed = await parseNanopublications(await serializeNanopublications(value));
+        for (const nanopubs of [parsed.nanopubs, [...parsed.nanopubs].reverse()]) {
+          const result = classifyNanopublications({ ...parsed, nanopubs });
+          expect(result.find((np) => np.id === old.id)).toMatchObject({
+            belief: epistemic === "Mentioned" ? "definitely" : "past",
+            replacedBy: epistemic === "Mentioned" ? [] : [newer.id],
+          });
+        }
+      }
+    }
+  });
+
   it("tracks later revisions even when the old validity remains Current", async () => {
     const value = await build([
       { id: "old", epistemic: "SelfReportedExplicit", assertion: assertion("old") },
@@ -233,6 +299,47 @@ describe("KG §4.1 belief view", () => {
     expect(
       classifyNanopublications(value).find((np) => np.identifier === "belief/old")!.belief,
     ).toBe("past");
+  });
+
+  it.each([
+    "Historical",
+    "Superseded",
+    "invalidated",
+  ] as const)("excludes %s claims from contradiction and revision inputs", async (state) => {
+    const value = await build([
+      {
+        id: "old",
+        epistemic: "SelfReportedExplicit",
+        assertion: assertion("old"),
+        contradicts: ["other"],
+      },
+      {
+        id: "other",
+        epistemic: "SelfReportedExplicit",
+        validity: state === "invalidated" ? "Current" : state,
+        assertion: assertion("other"),
+        supersedes: ["old"],
+        contradicts: ["old"],
+      },
+    ]);
+    const other = value.nanopubs.find((np) => np.identifier === "belief/other")!;
+    if (state === "invalidated") {
+      const provenance = graph(value.dataset, other.provenanceId);
+      new RdfNode(other.assertionId, provenance).text(
+        `${NS.prov}invalidatedAtTime`,
+        options.generatedAt,
+        `${NS.xsd}dateTime`,
+      );
+      putGraph(value.dataset, other.provenanceId, provenance);
+    }
+    for (const nanopubs of [value.nanopubs, [...value.nanopubs].reverse()]) {
+      const result = classifyNanopublications({ ...value, nanopubs });
+      expect(result.find((np) => np.identifier === "belief/old")).toMatchObject({
+        belief: "definitely",
+        replacedBy: [],
+      });
+      expect(result.find((np) => np.id === other.id)!.belief).toBe("past");
+    }
   });
 
   it("does not treat retired contradictions as unresolved", async () => {

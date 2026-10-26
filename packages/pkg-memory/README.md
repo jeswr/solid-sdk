@@ -109,7 +109,9 @@ explicit revisions take precedence regardless of extraction/publication order.
 Current Documented facts are definite; current
 explicit/summary facts need no unresolved contradiction in either direction.
 Other live claims are `might`, except `Mentioned`. Retired contradictory claims
-do not block current explicit facts. The source dataset is never modified.
+do not block current explicit facts. Mentioned claims never contribute contradictions
+or revisions, and other past claims cannot revise facts; explicit withdrawals remain
+effective. The source dataset is never modified.
 Consumers acting on a fact must additionally require `validity === "Current"`.
 
 `purposeFilter(policy, purpose, clientId)` returns an array-filter predicate over
@@ -168,12 +170,15 @@ a strong ETag.
 Before publishing any nanopub, `put` conditionally creates immutable
 `shared-*.reservation` resources for its assertion, sources and entities graphs
 and their possible overlaps. Reservations hold canonical blank-node labels and shared graph context;
-an existing reservation must agree on graph contents and joint blank-node identity.
+every shared graph identity must be an exact lowercase `urn:uuid` IRI. All identities
+and destination URLs are validated before any write, including ACLs.
+An existing reservation must agree on graph contents and joint blank-node identity.
 Concurrent conflicting puts therefore cannot publish conflicting graph copies.
 Reservations have owner-only ACLs, use the same TriG/octet-stream storage rules,
 and are ignored by `list`. A crash leaving only reservations is safe, and matching
 retries can continue. Identical nanopub retries succeed after verifying the entire
-stored RDF dataset; different contents still reject. Collections created before
+stored RDF dataset, including default and blank-node-named graphs; different contents
+still reject. Collections created before
 reservations remain readable and are checked against new puts before any write.
 
 The store tries `application/trig` and reads the representation back. An HTTP 415
