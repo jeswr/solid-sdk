@@ -1,4 +1,6 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
+import { NS } from "@jeswr/suite-vocab";
 import { DataFactory } from "n3";
 import { describe, expect, it } from "vitest";
 import { emptyHealthDocument, parseHealth } from "../../src/apps/health/lib/model/io.js";
@@ -95,6 +97,25 @@ describe("metrics", () => {
     expect(measurements(doc, "heartRate", range).map((item) => item.value)).toEqual([80, 60]);
     addMeasurement(doc, sample(70, "heartRate", "https://pod.example/health/obs#0"));
     expect(measurements(doc, "heartRate", range).map((item) => item.value)).toEqual([80, 70, 60]);
+  });
+  it.each([
+    "dateTimeStamp",
+    "dateTime",
+    "date",
+  ])("skips invalid xsd:%s timestamps before aggregation", async (datatype) => {
+    const doc = await parseHealth(
+      `
+      <#invalidObservation> a <${NS.HEALTH}HeartRateObservation>;
+        <${NS.HEALTH}effectiveTime> <#time>; <${NS.HEALTH}value> 80;
+        <${NS.HEALTH}hasUnit> <${NS.UNIT}BEAT-PER-MIN>; <${NS.HEALTH}unitCode> "/min".
+      <#time> <http://www.w3.org/2006/time#inXSDDateTimeStamp> "invalid"^^<${NS.XSD}${datatype}>.
+    `,
+      "https://pod.example/health/obs",
+    );
+    addMeasurement(doc, sample());
+    const entries = measurements(doc, "heartRate", range);
+    expect(entries).toEqual([sample()]);
+    expect(aggregateMetric(entries, "daily")).toEqual([{ key: "2025-01-01", value: 60, count: 1 }]);
   });
   it("aggregates UTC days and ISO Monday weeks across year/month boundaries", () => {
     const entries = [

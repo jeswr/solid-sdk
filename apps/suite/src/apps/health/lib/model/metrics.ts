@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { safeHttpIri } from "@jeswr/rdf-serialize";
 import { NS } from "@jeswr/suite-vocab";
@@ -153,6 +154,7 @@ export function measurements(
     const value = observation.measuredValue;
     if (
       at === undefined ||
+      !Number.isFinite(at.getTime()) ||
       value === undefined ||
       !Number.isFinite(value) ||
       at < range.start ||
