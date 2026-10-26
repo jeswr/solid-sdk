@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -188,6 +189,64 @@ describe("AppLauncher", () => {
     });
     await accessible();
   });
+  it("preserves hidden saved pins through checkbox, keyboard and drag edits", async () => {
+    vi.stubEnv("NEXT_PUBLIC_SHOW_BACKLOG_APPS", "0");
+    const { rerender } = render(<Harness initial={["home", "calendar", "drive", "docs"]} />);
+    const user = await open();
+    await user.click(screen.getByRole("button", { name: "Customise rail" }));
+    expect(screen.queryByRole("checkbox", { name: "Calendar" })).toBeNull();
+    await user.click(screen.getByRole("checkbox", { name: "Docs" }));
+    expect(update).toHaveBeenLastCalledWith({ pinned: ["home", "calendar", "drive"] });
+    await user.click(screen.getByRole("checkbox", { name: "Tasks" }));
+    expect(update).toHaveBeenLastCalledWith({
+      pinned: ["home", "calendar", "drive", "tasks"],
+    });
+    await user.click(screen.getByRole("button", { name: "Move Home down" }));
+    expect(update).toHaveBeenLastCalledWith({
+      pinned: ["calendar", "drive", "home", "tasks"],
+    });
+    await user.click(screen.getByRole("button", { name: "Move Home up" }));
+    expect(update).toHaveBeenLastCalledWith({
+      pinned: ["calendar", "home", "drive", "tasks"],
+    });
+    const home = screen.getByRole("checkbox", { name: "Home" }).closest("li");
+    fireEvent.drop(home as HTMLElement, { dataTransfer: { getData: () => "tasks" } });
+    expect(update).toHaveBeenLastCalledWith({
+      pinned: ["calendar", "tasks", "home", "drive"],
+    });
+    fireEvent.drop(home as HTMLElement, { dataTransfer: { getData: () => "docs" } });
+    expect(update).toHaveBeenLastCalledWith({
+      pinned: ["calendar", "tasks", "docs", "home", "drive"],
+    });
+    vi.stubEnv("NEXT_PUBLIC_SHOW_BACKLOG_APPS", "1");
+    rerender(<Harness />);
+    expect((screen.getByRole("checkbox", { name: "Calendar" }) as HTMLInputElement).checked).toBe(
+      true,
+    );
+  });
+  it("counts hidden pins toward the checkbox and drag pin limit", async () => {
+    vi.stubEnv("NEXT_PUBLIC_SHOW_BACKLOG_APPS", "0");
+    render(<Harness initial={["home", "calendar", "drive", "docs", "tasks", "contacts"]} />);
+    const user = await open();
+    await user.click(screen.getByRole("button", { name: "Customise rail" }));
+    expect(screen.getByText("6 of 6 apps pinned")).toBeTruthy();
+    const permissions = screen.getByRole("checkbox", { name: "Permissions" }) as HTMLInputElement;
+    expect(permissions.disabled).toBe(true);
+    await user.click(permissions);
+    const home = screen.getByRole("checkbox", { name: "Home" }).closest("li");
+    fireEvent.drop(home as HTMLElement, { dataTransfer: { getData: () => "permissions" } });
+    expect(update).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("checkbox", { name: "Docs" }));
+    expect(permissions.disabled).toBe(false);
+    fireEvent.drop(home as HTMLElement, { dataTransfer: { getData: () => "permissions" } });
+    expect(update).toHaveBeenLastCalledWith({
+      pinned: ["permissions", "home", "calendar", "drive", "tasks", "contacts"],
+    });
+    expect(permissions.disabled).toBe(false);
+    expect((screen.getByRole("checkbox", { name: "Docs" }) as HTMLInputElement).disabled).toBe(
+      true,
+    );
+  });
   it.each([
     "loading",
     "refreshing",
@@ -263,5 +322,33 @@ describe("AppRail and BottomTabBar", () => {
     await accessible();
     await user.keyboard("{Escape}");
     expect(document.activeElement).toBe(screen.getByRole("button", { name: "More apps" }));
+  });
+  it.each([
+    undefined,
+    "0",
+    "true",
+    "1",
+  ])("filters backlog mobile links with flag %s while preserving fixed app slots", async (flag) => {
+    vi.stubEnv("NEXT_PUBLIC_SHOW_BACKLOG_APPS", flag);
+    render(
+      <Harness>
+        <BottomTabBar
+          currentApp="docs"
+          apps={suiteApps
+            .filter((app) => app.slug !== "tasks")
+            .map((app) => (app.slug === "docs" ? { ...app, status: "backlog" } : app))}
+        />
+      </Harness>,
+    );
+    expect(screen.getAllByRole("link").map((link) => link.textContent)).toEqual(
+      flag === "1" ? ["Home", "Drive", "Docs"] : ["Home", "Drive"],
+    );
+    if (flag === "1") {
+      const docs = screen.getByRole("link", { name: "Docs" });
+      expect(docs.getAttribute("href")).toBe("/docs");
+      expect(docs.getAttribute("aria-current")).toBe("page");
+    }
+    expect(screen.getByRole("button", { name: "More apps" })).toBeTruthy();
+    await accessible();
   });
 });

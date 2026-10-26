@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 "use client";
 
 import { ArrowDown, ArrowUp, GripVertical } from "lucide-react";
@@ -9,9 +10,8 @@ import { usePreferences } from "./preferences.js";
 export function CustomiseRail({ apps }: { apps: readonly NavigationApp[] }) {
   const preferences = usePreferences("rail");
   const description = useId();
-  const pinned = [...new Set(preferences.value.pinned)]
-    .filter((slug) => apps.some((app) => app.slug === slug))
-    .slice(0, 6);
+  const saved = [...new Set(preferences.value.pinned)];
+  const pinned = saved.filter((slug) => apps.some((app) => app.slug === slug)).slice(0, 6);
   const ordered = [
     ...pinned
       .map((slug) => apps.find((app) => app.slug === slug))
@@ -19,16 +19,19 @@ export function CustomiseRail({ apps }: { apps: readonly NavigationApp[] }) {
     ...apps.filter((app) => !pinned.includes(app.slug)),
   ];
   function pin(slug: AppSlug, checked: boolean) {
-    if (checked && pinned.length >= 6) return;
+    if (checked && saved.length >= 6) return;
     preferences.update({
-      pinned: checked ? [...pinned, slug] : pinned.filter((item) => item !== slug),
+      pinned: checked ? [...saved, slug] : saved.filter((item) => item !== slug),
     });
   }
   function move(slug: AppSlug, target: number) {
     if (pinned.indexOf(slug) === target) return;
-    const next = pinned.filter((item) => item !== slug);
-    if (!pinned.includes(slug) && pinned.length >= 6) return;
-    next.splice(target, 0, slug);
+    const next = saved.filter((item) => item !== slug);
+    if (!saved.includes(slug) && saved.length >= 6) return;
+    const targetSlug = pinned[target];
+    // Translate the visible position into the saved list so hidden pins survive edits.
+    const targetIndex = targetSlug === undefined ? saved.length : saved.indexOf(targetSlug);
+    next.splice(targetIndex, 0, slug);
     preferences.update({ pinned: next });
   }
   return (
@@ -37,7 +40,7 @@ export function CustomiseRail({ apps }: { apps: readonly NavigationApp[] }) {
         Pin up to 6 apps. Drag to reorder, or use the checkboxes and Move up/down buttons.
       </p>
       <p role="status">
-        {pinned.length} of 6 apps pinned{preferences.status === "saving" ? " · Saving…" : ""}
+        {saved.length} of 6 apps pinned{preferences.status === "saving" ? " · Saving…" : ""}
       </p>
       <ul aria-describedby={description}>
         {ordered.map((app) => {
@@ -72,7 +75,7 @@ export function CustomiseRail({ apps }: { apps: readonly NavigationApp[] }) {
                 <input
                   type="checkbox"
                   checked={index >= 0}
-                  disabled={index < 0 && pinned.length >= 6}
+                  disabled={index < 0 && saved.length >= 6}
                   onChange={(event) => pin(app.slug, event.target.checked)}
                 />
                 {app.name}
