@@ -102,6 +102,8 @@ export interface FileBrowserProps {
 
 const DRAG_TYPE = "application/x-solid-drive-items";
 const PLACEHOLDERS = Array.from({ length: 10 }, (_, n) => `placeholder-${n}`);
+const SHORTCUT_CONTROLS =
+  "button[aria-haspopup], button[aria-expanded], [data-slot='dropdown-menu-trigger'], [data-slot='menu-trigger'], [data-slot$='menu-sub-trigger'], menu, [role='menu'], [role^='menuitem'], input, select, textarea, [contenteditable]:not([contenteditable='false'])";
 
 function locationLabel(folder: string | undefined, driveRoot: string | undefined): string {
   if (!folder) return "—";
@@ -273,7 +275,7 @@ export function FileBrowser(props: FileBrowserProps) {
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     const target = event.target as HTMLElement;
-    if (target.closest("input, textarea, [role='menu']")) return;
+    if (event.defaultPrevented || target.closest(SHORTCUT_CONTROLS)) return;
     const focusUrl = target.closest<HTMLElement>("[data-url]")?.dataset.url;
     const focused = visible.find((item) => item.url === focusUrl);
     const index = focused ? visible.indexOf(focused) : -1;
@@ -345,9 +347,6 @@ export function FileBrowser(props: FileBrowserProps) {
           router.push(parent === driveRoot ? "/drive/my" : `/drive/f/${encodeRef(parent)}`);
         return;
       }
-      case event.key === "F10" && event.shiftKey && Boolean(focused):
-        event.preventDefault();
-        return setMenuFor(focused?.url);
     }
   };
 
@@ -880,6 +879,7 @@ function ItemShell({
           className="drv-more"
           aria-label={`More actions for ${item.name}`}
           tabIndex={-1}
+          onKeyDown={(event) => event.stopPropagation()}
           onClick={(event) => event.stopPropagation()}
           onDoubleClick={(event) => event.stopPropagation()}
         >

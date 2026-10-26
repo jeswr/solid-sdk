@@ -121,6 +121,83 @@ afterEach(() => {
   drive.session.fetch.mockReset();
 });
 
+it("More actions Enter reopens the dismissed menu without opening a preview", async () => {
+  const view = await mount(tree(items));
+  const trigger = row(view.host).querySelector<HTMLButtonElement>(".drv-more");
+  if (!trigger) throw new Error("Missing menu trigger");
+  await act(async () => {
+    trigger.focus();
+    trigger.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0 }));
+  });
+  expect(document.querySelectorAll('[role="menu"]')).toHaveLength(1);
+  await key(document.querySelector('[role="menu"]') as Element, "Escape");
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+  expect(document.activeElement).toBe(trigger);
+  await key(trigger, "Enter");
+  expect(document.querySelectorAll('[role="menu"]')).toHaveLength(1);
+  expect(ui.preview).toBeUndefined();
+  await view.unmount();
+});
+
+it.each(["F10", "ContextMenu"])("row %s opens only its context menu", async (pressed) => {
+  const view = await mount(tree(items));
+  const target = row(view.host);
+  await act(async () => target.focus());
+  await key(target, pressed, pressed === "F10");
+  expect(document.querySelectorAll('[role="menu"]')).toHaveLength(1);
+  expect(document.querySelector('[data-slot="context-menu-content"]')).not.toBeNull();
+  expect(document.querySelector('[data-slot="dropdown-menu-content"]')).toBeNull();
+  await key(document.querySelector('[role="menu"]') as Element, "Escape");
+  expect(document.querySelectorAll('[role="menu"]')).toHaveLength(0);
+  await view.unmount();
+});
+
+it.each(["F10", "ContextMenu"])("More actions keeps its native %s behavior", async (pressed) => {
+  const view = await mount(tree(items));
+  const trigger = row(view.host).querySelector<HTMLButtonElement>(".drv-more");
+  if (!trigger) throw new Error("Missing menu trigger");
+  await act(async () => trigger.focus());
+  await key(trigger, pressed, pressed === "F10");
+  expect(document.querySelectorAll('[role="menu"]')).toHaveLength(0);
+  expect(ui.preview).toBeUndefined();
+  await view.unmount();
+});
+
+it.each([
+  ["button", "aria-haspopup", "menu"],
+  ["button", "aria-expanded", "false"],
+  ["div", "data-slot", "menu-trigger"],
+  ["div", "role", "menu"],
+  ["div", "role", "menuitem"],
+  ["input", "type", "text"],
+  ["select", "aria-label", "Choose"],
+  ["textarea", "aria-label", "Edit"],
+  ["div", "contenteditable", "true"],
+])("listing ignores Enter inside %s[%s=%s]", async (tag, attribute, value) => {
+  const view = await mount(tree(items));
+  const control = document.createElement(tag);
+  control.setAttribute(attribute, value);
+  row(view.host).querySelector("td")?.append(control);
+  // Include nested event targets for controls that can contain children.
+  const target = ["button", "div"].includes(tag) ? document.createElement("span") : control;
+  if (target !== control) control.append(target);
+  await key(target, "Enter");
+  expect(ui.preview).toBeUndefined();
+  control.remove();
+  await view.unmount();
+});
+
+it("listing ignores a key whose default was already prevented", async () => {
+  const view = await mount(tree(items));
+  const target = row(view.host);
+  target.addEventListener("keydown", (event) => event.preventDefault());
+  await key(target, "Enter");
+  expect(ui.preview).toBeUndefined();
+  await view.unmount();
+});
+
 it("folder Undo refuses unrelated nested replacements despite an unchanged root and direct-child set", async () => {
   const pod = createDemoPod({
     root: drive.session.storageUrl,
@@ -308,6 +385,63 @@ it.each([
   expect(await operations.listTrash(client, ROOT)).toEqual([]);
   expect(pod.has(entries[0]?.url as string)).toBe(false);
   expect(await (await client.read(`${ROOT}Folder/b`)).text()).toBe("B");
+  await view.unmount();
+});
+
+it("Empty trash keeps partial recovery visible after two descendant deletion races", async () => {
+  const pod = createDemoPod({
+    root: drive.session.storageUrl,
+    seed: ["a", "b", "c"].map((name) => ({
+      path: `drive/Folder/${name}`,
+      body: name,
+      contentType: "text/plain",
+    })),
+  });
+  let recovery: string | undefined;
+  let vanished = 0;
+  const client = createSolidDriveClient({
+    storageUrl: drive.session.storageUrl,
+    fetch: async (input, init) => {
+      const url = String(input);
+      if (url === `${ROOT}Folder/b` && init?.method === "DELETE")
+        return new Response(null, { status: 403 });
+      if (
+        recovery &&
+        url !== recovery &&
+        url.startsWith(recovery) &&
+        init?.method === "HEAD" &&
+        vanished < 2
+      ) {
+        vanished += 1;
+        await pod.fetch(url, { method: "DELETE" });
+      }
+      return pod.fetch(input, init);
+    },
+  });
+  drive.client = client;
+  await operations.trashItems(client, ROOT, [await client.stat(`${ROOT}Folder/`)]);
+  const entries = await operations.listTrash(client, ROOT);
+  const entry = entries[0];
+  if (!entry) throw new Error("Missing partial entry");
+  const view = await mount(h(DriveUiProvider, null, h(Probe), h(TrashView), h(DriveDialogs)));
+  const open = [...view.host.querySelectorAll("button")].find(
+    (button) => button.textContent === "Empty trash",
+  );
+  if (!open) throw new Error("Missing Empty trash");
+  await click(open);
+  recovery = entry.url;
+  const confirm = [...document.querySelectorAll('[role="alertdialog"] button')].find(
+    (button) => button.textContent === "Empty trash",
+  );
+  if (!confirm) throw new Error("Missing confirmation");
+  await click(confirm);
+  recovery = undefined;
+  expect(vanished).toBe(2);
+  expect(await (await client.read(`${entry.url}c`)).text()).toBe("c");
+  expect(await operations.listTrash(client, ROOT)).toHaveLength(1);
+  expect(view.host.textContent).toContain("Folder");
+  expect(view.host.textContent).not.toContain("Trash is empty");
+  expect(mocks.toast.error).toHaveBeenCalled();
   await view.unmount();
 });
 

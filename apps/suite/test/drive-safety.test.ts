@@ -122,6 +122,166 @@ describe("Drive data-safety regressions", () => {
     expect(fetch.mock.calls.filter(([, init]) => init?.method === "DELETE")).toEqual([]);
   });
 
+  it("partial restore compares bytes when different URLs issue equal ETags", async () => {
+    let collide = false;
+    const { pod, client } = setup(async (url, init) => {
+      if (url === `${FROM}b` && init?.method === "DELETE")
+        return new Response(null, { status: 403 });
+      if (collide && url.endsWith("/b")) {
+        // Model resource-local tags, including the server accepting its own tag.
+        const headers = new Headers(init?.headers);
+        if (headers.get("if-match") === '"resource-local-revision"') {
+          const actual = await pod.fetch(url, { method: "HEAD" });
+          headers.set("if-match", actual.headers.get("etag") as string);
+        }
+        const response = await pod.fetch(url, { ...init, headers });
+        response.headers.set("etag", '"resource-local-revision"');
+        return response;
+      }
+      return undefined;
+    });
+    await trashItems(client, DRIVE, [await client.stat(FROM)]);
+    const entries = await listTrash(client, DRIVE);
+    const entry = entries[0];
+    if (!entry) throw new Error("Missing partial entry");
+    await pod.fetch(`${FROM}b`, { method: "PUT", body: "X" });
+    collide = true;
+    const result = await restoreItems(client, DRIVE, entries);
+    expect(result.done).toEqual([]);
+    expect(result.failed[0]?.error).toMatchObject({ kind: "trash-restore-partial" });
+    expect(await (await client.read(`${entry.url}b`)).text()).toBe("B");
+    expect(await (await client.read(`${FROM}b`)).text()).toBe("X");
+    expect(await listTrash(client, DRIVE)).toHaveLength(1);
+  });
+
+  it.each([
+    "changed",
+    "missing-etag",
+    "weak-etag",
+  ])("partial restore preserves a recovery version it cannot conditionally delete (%s)", async (mode) => {
+    let recovery: string | undefined;
+    let comparedEtag: string | null = null;
+    const { pod, client, fetch } = setup(async (url, init) => {
+      if (url === `${FROM}b` && init?.method === "DELETE")
+        return new Response(null, { status: 403 });
+      if (url === recovery && (!init?.method || init.method === "GET")) {
+        const response = await pod.fetch(url, init);
+        comparedEtag = response.headers.get("etag");
+        if (mode === "changed")
+          await pod.fetch(url, { method: "PUT", body: "unique new recovery contents" });
+        else if (mode === "missing-etag") response.headers.delete("etag");
+        else response.headers.set("etag", 'W/"weak"');
+        return response;
+      }
+      return undefined;
+    });
+    await trashItems(client, DRIVE, [await client.stat(FROM)]);
+    const entries = await listTrash(client, DRIVE);
+    const entry = entries[0];
+    if (!entry) throw new Error("Missing partial entry");
+    recovery = `${entry.url}b`;
+    fetch.mockClear();
+    const result = await restoreItems(client, DRIVE, entries);
+    recovery = undefined;
+    expect(result.done).toEqual([]);
+    expect(result.failed[0]?.error).toMatchObject({
+      kind: "trash-restore-partial",
+      remaining: [
+        {
+          url: `${entry.url}b`,
+          error: { kind: mode === "changed" ? "conflict" : "missing-validator" },
+        },
+      ],
+    });
+    const deletes = fetch.mock.calls.filter(
+      ([url, init]) => url === `${entry.url}b` && init?.method === "DELETE",
+    );
+    if (mode === "changed") {
+      expect(deletes).toHaveLength(1);
+      expect(new Headers(deletes[0]?.[1]?.headers).get("if-match")).toBe(comparedEtag);
+    } else expect(deletes).toEqual([]);
+    expect(await (await client.read(`${entry.url}b`)).text()).toBe(
+      mode === "changed" ? "unique new recovery contents" : "B",
+    );
+    expect(await (await client.read(`${FROM}b`)).text()).toBe("B");
+    expect(await listTrash(client, DRIVE)).toHaveLength(1);
+  });
+
+  it.each([
+    false,
+    true,
+  ])("permanent deletion retries a vanished descendant and retains unfinished records (second race: %s)", async (twice) => {
+    let recovery: string | undefined;
+    let vanished = 0;
+    const { pod, client } = setup(async (url, init) => {
+      if (url === `${FROM}b` && init?.method === "DELETE")
+        return new Response(null, { status: 403 });
+      if (
+        recovery &&
+        url !== recovery &&
+        url.startsWith(recovery) &&
+        init?.method === "HEAD" &&
+        vanished < (twice ? 2 : 1)
+      ) {
+        vanished += 1;
+        await pod.fetch(url, { method: "DELETE" });
+      }
+      return undefined;
+    });
+    await client.write(`${FROM}c`, "C", { contentType: "text/plain", ifNoneMatch: "*" });
+    await trashItems(client, DRIVE, [await client.stat(FROM)]);
+    const entries = await listTrash(client, DRIVE);
+    const entry = entries[0];
+    if (!entry) throw new Error("Missing partial entry");
+    recovery = entry.url;
+    const remove = vi.spyOn(client, "remove");
+    const result = await deleteForever(client, DRIVE, entries);
+    recovery = undefined;
+    expect(remove.mock.calls.filter(([url]) => url === entry.url)).toHaveLength(2);
+    if (twice) {
+      expect(result.done).toEqual([]);
+      expect(result.failed).toHaveLength(1);
+      expect(await (await client.read(`${entry.url}c`)).text()).toBe("C");
+      expect(await listTrash(client, DRIVE)).toHaveLength(1);
+    } else {
+      expect(result).toEqual({ done: entries, failed: [] });
+      expect(pod.has(entry.url)).toBe(false);
+      expect(await listTrash(client, DRIVE)).toEqual([]);
+    }
+  });
+
+  it("permanent deletion retries a descendant 404 wrapped by partial deletion", async () => {
+    let recovery: string | undefined;
+    const { pod, client } = setup(async (url, init) => {
+      if (recovery && url === `${recovery}b` && init?.method === "DELETE") {
+        recovery = undefined;
+        await pod.fetch(url, { method: "DELETE" });
+        return new Response(null, { status: 404 });
+      }
+      return undefined;
+    });
+    const { done: entries } = await trashItems(client, DRIVE, [await client.stat(FROM)]);
+    const entry = entries[0];
+    if (!entry) throw new Error("Missing entry");
+    recovery = entry.url;
+    const remove = vi.spyOn(client, "remove");
+    expect(await deleteForever(client, DRIVE, entries)).toEqual({ done: entries, failed: [] });
+    expect(remove.mock.calls.filter(([url]) => url === entry.url)).toHaveLength(2);
+    expect(pod.has(entry.url)).toBe(false);
+    expect(await listTrash(client, DRIVE)).toEqual([]);
+  });
+
+  it("permanent deletion keeps the record when removal leaves the entry URL present", async () => {
+    const { client } = setup();
+    const { done: entries } = await trashItems(client, DRIVE, [await client.stat(`${FROM}a`)]);
+    vi.spyOn(client, "remove").mockResolvedValue(undefined);
+    expect(await deleteForever(client, DRIVE, entries)).toMatchObject({
+      done: [],
+      failed: [{ url: entries[0]?.url, error: { kind: "conflict" } }],
+    });
+    expect(await listTrash(client, DRIVE)).toEqual(entries);
+  });
+
   it.each([
     false,
     true,

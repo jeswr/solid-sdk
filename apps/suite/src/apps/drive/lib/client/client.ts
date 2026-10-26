@@ -55,6 +55,8 @@ export interface DriveClient {
   /** Metadata for one item (HEAD). */
   stat(url: string): Promise<DriveItem & { etag?: string }>;
   read(url: string): Promise<Blob>;
+  /** Bytes and validator from the same GET, for subsequent conditional deletion. */
+  readVersion(url: string): Promise<{ body: Blob; etag?: string }>;
   /** Parsed RDF and its validator; `undefined` when the resource does not exist. */
   readRdf(url: string): Promise<{ dataset: Store; etag?: string } | undefined>;
   write(url: string, body: Blob | string, options: WriteOptions): Promise<{ etag?: string }>;
@@ -67,7 +69,8 @@ export interface DriveClient {
     to: string,
     options?: { beforeDelete?: () => Promise<void> },
   ): Promise<MoveResult>;
-  remove(url: string, options?: { recursive?: boolean }): Promise<void>;
+  /** Non-recursive `ifMatch` deletes exactly that version without refreshing its validator. */
+  remove(url: string, options?: { recursive?: boolean; ifMatch?: string }): Promise<void>;
 }
 
 export type DriveErrorKind =
@@ -265,10 +268,14 @@ export function createSolidDriveClient(options: {
     };
   };
 
-  const read: DriveClient["read"] = async (url) => {
+  const readVersion: DriveClient["readVersion"] = async (url) => {
     const response = await ensureOk(await http(url), url);
-    return response.blob();
+    const body = await response.blob();
+    const etag = response.headers.get("etag");
+    return etag ? { body, etag } : { body };
   };
+
+  const read: DriveClient["read"] = async (url) => (await readVersion(url)).body;
 
   const readRdf: DriveClient["readRdf"] = async (url) => {
     try {
@@ -531,10 +538,21 @@ export function createSolidDriveClient(options: {
         throw error;
       }
     } else {
-      const item = await stat(url);
-      await deleteVersion(url, item.etag);
+      await deleteVersion(url, opts.ifMatch ?? (await stat(url)).etag);
     }
   };
 
-  return { storageUrl, list, stat, read, readRdf, write, createFolder, copy, move, remove };
+  return {
+    storageUrl,
+    list,
+    stat,
+    read,
+    readVersion,
+    readRdf,
+    write,
+    createFolder,
+    copy,
+    move,
+    remove,
+  };
 }
