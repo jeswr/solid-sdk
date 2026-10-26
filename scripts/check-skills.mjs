@@ -44,6 +44,15 @@ function lineNumber(text, offset) {
   return text.slice(0, offset).split("\n").length;
 }
 
+function scanSecrets(text, report) {
+  for (const [category, pattern] of secretPatterns) {
+    for (const match of text.matchAll(pattern)) {
+      if (match[1] && isPlaceholder(match[1])) continue;
+      report(category, match.index);
+    }
+  }
+}
+
 function decodeCharacterReferences(text) {
   // Decode once: &amp;copy; denotes the literal filename &copy;, not ©.
   return text.replace(
@@ -110,12 +119,18 @@ function htmlLinksIn(html) {
 
 function linksIn(text) {
   const tokens = marked.lexer(text);
-  const links = Object.values(tokens.links).map((link) => link.href);
+  const links = Object.values(tokens.links).map((link) => decodeCharacterReferences(link.href));
   marked.walkTokens(tokens, (token) => {
-    if (token.type === "link" || token.type === "image") links.push(token.href);
-    if (token.type === "html") links.push(...htmlLinksIn(token.text));
+    if (token.type === "link" || token.type === "image")
+      links.push(decodeCharacterReferences(token.href));
+    if (token.type === "html") {
+      for (const href of htmlLinksIn(token.text)) {
+        // HTML URL attributes allow surrounding ASCII whitespace, including encoded whitespace.
+        links.push(decodeCharacterReferences(href).replace(/^[\t\n\f\r ]+|[\t\n\f\r ]+$/g, ""));
+      }
+    }
   });
-  return [...new Set(links.map(decodeCharacterReferences))];
+  return [...new Set(links)];
 }
 
 function escapeCell(text) {
@@ -198,6 +213,13 @@ export function checkSkills(root, { write = false } = {}) {
       continue;
     }
     const { name, description } = data;
+    // These decoded fields are emitted into the index; YAML escapes/folding can hide secrets.
+    for (const value of [name, description]) {
+      if (typeof value !== "string") continue;
+      scanSecrets(value, (category) => {
+        report(path, `decoded metadata: possible ${category} (value omitted)`);
+      });
+    }
     if (typeof name !== "string" || !name || name !== basename(skillDir)) {
       report(path, "name must equal the containing directory name");
     }
@@ -221,12 +243,9 @@ export function checkSkills(root, { write = false } = {}) {
     for (const match of text.matchAll(/\/Users\//g)) {
       report(path, `line ${lineNumber(text, match.index)}: absolute user path is forbidden`);
     }
-    for (const [category, pattern] of secretPatterns) {
-      for (const match of text.matchAll(pattern)) {
-        if (match[1] && isPlaceholder(match[1])) continue;
-        report(path, `line ${lineNumber(text, match.index)}: possible ${category} (value omitted)`);
-      }
-    }
+    scanSecrets(text, (category, offset) => {
+      report(path, `line ${lineNumber(text, offset)}: possible ${category} (value omitted)`);
+    });
     if (!path.endsWith(".md")) continue;
     // Frontmatter is metadata, not Markdown; fenced/inline code is ignored by the lexer.
     const markdown = text.replace(/^(?:\uFEFF)?---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/, "");

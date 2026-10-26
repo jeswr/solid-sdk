@@ -265,6 +265,48 @@ describe("skill validation", () => {
   });
 
   it.each([
+    '<a href=" references/guide.md ">guide</a>',
+    "<img src=' \t\nreferences/guide.md\r\f '>",
+    '<a href=" https://example.invalid/missing.md ">external</a>',
+    "<img src=' \t//example.invalid/missing.png\n '>",
+    '<a href=" &#32;references/gu&#105;de.md&#9; ">guide</a>',
+    '<a href="&#10;https&#58;//example.invalid/missing.md&#13;">external</a>',
+    '<a href=" #section ">anchor</a>',
+    '<a href=" ?view=1 ">query</a>',
+    '<a href=" /docs ">root</a>',
+    '<a href=" \t\n ">empty</a>',
+  ])("normalizes surrounding whitespace in HTML URLs: %s", (body) => {
+    const root = fixture();
+    put(root, "skills/alpha/SKILL.md", skill({ body }));
+    expect(checkSkills(root, { write: true }).errors).toEqual([]);
+  });
+
+  it("preserves internal and percent-encoded spaces in HTML filenames", () => {
+    const root = fixture();
+    put(root, "skills/alpha/references/space name.md", "# Guide\n");
+    put(root, "skills/alpha/references/ guide .md", "# Guide\n");
+    put(
+      root,
+      "skills/alpha/SKILL.md",
+      skill({
+        body: '<a href=" references/space name.md ">guide</a> <img src=" references/%20guide%20.md ">',
+      }),
+    );
+    expect(checkSkills(root, { write: true }).errors).toEqual([]);
+  });
+
+  it.each([
+    '<a href=" missing.md ">broken</a>',
+    "<img src='&#32;missing.png&#32;'>",
+  ])("still rejects unresolved HTML URLs after trimming: %s", (body) => {
+    const root = fixture();
+    put(root, "skills/alpha/SKILL.md", skill({ body }));
+    expect(checkSkills(root, { write: true }).errors).toEqual([
+      "skills/alpha/SKILL.md: relative link does not resolve (target omitted)",
+    ]);
+  });
+
+  it.each([
     "skills/alpha/references/guide.md",
     "packages/widget/references/nested/guide.md",
   ])("checks links in companion Markdown %s", (path) => {
@@ -322,6 +364,66 @@ describe("skill validation", () => {
     expect(result.stderr).not.toContain(value);
     expect(result.stdout).toBe("");
     expect(existsSync(join(root, "skills/INDEX.md"))).toBe(false);
+  });
+
+  it.each(
+    secrets,
+  )("rejects YAML-escaped %s before creating or replacing the index", (category, value) => {
+    const root = fixture();
+    const indexPath = join(root, "skills/INDEX.md");
+    const escaped = [...value]
+      .map((character) => `\\u${character.codePointAt(0).toString(16).padStart(4, "0")}`)
+      .join("");
+    // A decoded newline also exercises line-anchored environment-secret detection.
+    const text = skill({ description: `"Use when checking metadata.\\n${escaped}"` });
+    put(root, "skills/alpha/SKILL.md", text);
+    for (const previousIndex of [undefined, "Previously generated index\n"]) {
+      if (previousIndex !== undefined) put(root, "skills/INDEX.md", previousIndex);
+      for (const args of [[], ["--write"]]) {
+        const result = cli(root, ...args);
+        expect(result.status).toBe(1);
+        expect(result.stderr).toContain(`decoded metadata: possible ${category} (value omitted)`);
+        expect(result.stderr).not.toContain(value);
+        expect(result.stderr).not.toContain(escaped);
+        expect(result.stdout).toBe("");
+        if (previousIndex === undefined) expect(existsSync(indexPath)).toBe(false);
+        else expect(readFileSync(indexPath, "utf8")).toBe(previousIndex);
+      }
+    }
+  });
+
+  it("scans YAML-folded descriptions after decoding", () => {
+    const root = fixture();
+    put(
+      root,
+      "skills/alpha/SKILL.md",
+      skill({ description: ">-\n  Use when Authorization:\n  Bearer fixture-credential-value" }),
+    );
+    expect(checkSkills(root, { write: true }).errors).toContain(
+      "skills/alpha/SKILL.md: decoded metadata: possible Authorization header (value omitted)",
+    );
+    expect(existsSync(join(root, "skills/INDEX.md"))).toBe(false);
+  });
+
+  it("scans decoded names without exposing their values", () => {
+    const root = fixture();
+    const value = `sk-${"a".repeat(24)}`;
+    put(root, "skills/alpha/SKILL.md", skill({ name: `"\\x73k-${"a".repeat(24)}"` }));
+    const result = cli(root, "--write");
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("decoded metadata: possible API key (value omitted)");
+    expect(result.stderr).not.toContain(value);
+    expect(existsSync(join(root, "skills/INDEX.md"))).toBe(false);
+  });
+
+  it("allows decoded metadata containing explicit credential templates", () => {
+    const root = fixture();
+    put(
+      root,
+      "skills/alpha/SKILL.md",
+      skill({ description: '"Use when Authorization: Bearer <token>\\nTOKEN=your-token"' }),
+    );
+    expect(checkSkills(root, { write: true }).errors).toEqual([]);
   });
 
   it("does not echo malformed frontmatter or link targets", () => {
