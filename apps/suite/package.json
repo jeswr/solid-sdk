@@ -13,7 +13,8 @@
     "test:e2e": "pnpm --filter @jeswr/suite-ui run build && playwright test",
     "measure:univer": "node test/univer-spike.measure.mjs",
     "test:mime": "vitest run test/mime.test.ts --coverage",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "coverage:music": "vitest run --coverage"
   },
   "dependencies": {
     "@jeswr/suite-ui": "workspace:*",
@@ -37,7 +38,10 @@
     "jsonld-streaming-serializer": "^4.0.0",
     "@jeswr/suite-vocab": "workspace:*",
     "saxes": "6.0.0",
-    "lucide-react": "0.544.0"
+    "lucide-react": "1.24.0",
+    "react-hook-form": "7.81.0",
+    "zod": "4.4.3",
+    "@hookform/resolvers": "5.4.0"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.11.1",
