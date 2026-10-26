@@ -3,7 +3,7 @@
 import { LEGACY_NAMESPACES, NS } from "@jeswr/suite-vocab";
 import { AclResource } from "@solid/object";
 import { DataFactory } from "n3";
-import { assert, expect, it } from "vitest";
+import { assert, expect, it, vi } from "vitest";
 import {
   createHealthStore,
   emptyHealthDocument,
@@ -20,6 +20,104 @@ const make = () => {
 };
 const input = { kind: "steps" as const, at: new Date("2025-01-01Z"), value: 100, source: "Watch" };
 const range = { start: new Date("2024-12-01Z"), end: new Date("2025-03-01Z") };
+it.each([
+  { "@context": "https://foreign.example/context" },
+  { "@context": `${BASE}context.jsonld` },
+  { "@context": "../context.jsonld" },
+  { "@context": [null, { h: NS.HEALTH }, "https://foreign.example/context"] },
+  { "@graph": [{ "@context": "https://foreign.example/context" }] },
+  { "@context": { "@import": "https://foreign.example/context" } },
+  {
+    "@context": { nested: { "@id": "urn:nested", "@context": "https://foreign.example/context" } },
+  },
+])("rejects external JSON-LD contexts before any parser network access: %j", async (json) => {
+  const { store, put, calls } = make();
+  put("remote.jsonld", JSON.stringify(json), "application/ld+json; charset=utf-8");
+  const globalFetch = vi
+    .spyOn(globalThis, "fetch")
+    .mockRejectedValue(new Error("Unexpected fetch"));
+  try {
+    await expect(store.read("remote.jsonld")).rejects.toThrow("External JSON-LD contexts");
+    expect(globalFetch).not.toHaveBeenCalled();
+    expect(calls.map((call) => call.url)).toEqual([`${BASE}remote.jsonld`]);
+  } finally {
+    globalFetch.mockRestore();
+  }
+});
+it.each([
+  "container",
+  "target",
+])("rejects external contexts in %s ACL reads before writes", async (target) => {
+  const { store, put, calls } = make();
+  const acl = target === "container" ? ".acl" : "new.ttl.acl";
+  put(
+    acl,
+    JSON.stringify({ "@context": { "@import": "https://foreign.example/context" } }),
+    "application/ld+json",
+  );
+  const globalFetch = vi
+    .spyOn(globalThis, "fetch")
+    .mockRejectedValue(new Error("Unexpected fetch"));
+  try {
+    const operation =
+      target === "container"
+        ? store.initialize()
+        : store.write("new.ttl", emptyHealthDocument(), { create: true });
+    await expect(operation).rejects.toThrow("External JSON-LD contexts");
+    expect(globalFetch).not.toHaveBeenCalled();
+    expect(calls.some((call) => call.method === "PUT" && call.url.endsWith("new.ttl"))).toBe(false);
+  } finally {
+    globalFetch.mockRestore();
+  }
+});
+it("reads inline JSON-LD contexts and ACLs while preserving validators and relative identities", async () => {
+  const { store, put, calls } = make();
+  put(
+    "inline.jsonld",
+    JSON.stringify({
+      "@context": [null, { h: NS.HEALTH, value: { "@id": "h:value", "@type": `${NS.XSD}double` } }],
+      "@id": "#it",
+      "@type": "h:Observation",
+      value: 72,
+    }),
+    "application/ld+json",
+  );
+  const result = await store.read("inline.jsonld");
+  expect(result.url).toBe(`${BASE}inline.jsonld`);
+  expect(result.etag).toMatch(/^"/);
+  expect(result.document.observation(`${BASE}inline.jsonld#it`).measuredValue).toBe(72);
+  put(
+    "new.ttl.acl",
+    JSON.stringify({
+      "@context": { acl: NS.ACL },
+      "@id": "#owner",
+      "@type": "acl:Authorization",
+      "acl:accessTo": { "@id": `${BASE}new.ttl` },
+      "acl:agent": { "@id": OWNER },
+      "acl:mode": ["Read", "Write", "Control"].map((mode) => ({ "@id": `acl:${mode}` })),
+    }),
+    "application/ld+json",
+  );
+  await store.write("new.ttl", emptyHealthDocument(), { create: true });
+  expect(calls.at(-1)?.method).toBe("PUT");
+});
+it("parses the validated JSON object when context keys are duplicated", async () => {
+  const { store, put } = make();
+  put(
+    "duplicate.jsonld",
+    `{"@context":"https://foreign.example/context","@context":{},"@id":"#it"}`,
+    "application/ld+json",
+  );
+  const globalFetch = vi
+    .spyOn(globalThis, "fetch")
+    .mockRejectedValue(new Error("Unexpected fetch"));
+  try {
+    await store.read("duplicate.jsonld");
+    expect(globalFetch).not.toHaveBeenCalled();
+  } finally {
+    globalFetch.mockRestore();
+  }
+});
 it("creates and verifies owner-private ACLs and inherited defaults on every container", async () => {
   const { store, resources, calls } = make();
   await store.initialize();

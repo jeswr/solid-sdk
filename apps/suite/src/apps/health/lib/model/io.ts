@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
 
-import { fetchRdf, parseRdf, RdfFetchError } from "@jeswr/fetch-rdf";
+import { extractMediaType, fetchRdf, parseRdf, RdfFetchError } from "@jeswr/fetch-rdf";
 import {
   assertWithinPodScope,
   createPodScopedFetch,
@@ -60,13 +60,40 @@ function id(value: string): string {
     throw new TypeError("Invalid health resource ID");
   return value;
 }
+/** Inline contexts are safe; remote contexts and imports would use the parser's global fetch. */
+function assertInlineContexts(value: unknown, context = false): void {
+  if (context && typeof value === "string")
+    throw new TypeError("External JSON-LD contexts are not allowed");
+  if (Array.isArray(value)) {
+    for (const entry of value) assertInlineContexts(entry, context);
+  } else if (value !== null && typeof value === "object") {
+    for (const [key, entry] of Object.entries(value))
+      assertInlineContexts(entry, key === "@context" || key === "@import");
+  }
+}
 /** Explicit pod scope + injected authenticated fetch; never uses a global transport. */
 export function createHealthStore(fetch: typeof globalThis.fetch, storage: string, owner: string) {
   if (safeHttpIri(owner) !== owner) throw new TypeError("Invalid owner IRI");
   const base = assertWithinPodScope(normalizePodBase(storage), "health/");
   const transport = createPodScopedFetch(base, { fetch: refuseRedirects(fetch) });
   const resolve = (path: string) => assertWithinPodScope(base, path);
-  const readRaw = (path: string) => fetchRdf(resolve(path), { fetch: transport });
+  const rdfTransport: typeof globalThis.fetch = async (input, init) => {
+    const response = await transport(input, init);
+    if (
+      !response.ok ||
+      extractMediaType(response.headers.get("content-type")) !== "application/ld+json"
+    )
+      return response;
+    const json: unknown = await response.json();
+    assertInlineContexts(json);
+    // Parse exactly the validated object, including when the input had duplicate JSON keys.
+    return new Response(JSON.stringify(json), {
+      status: response.status,
+      headers: response.headers,
+    });
+  };
+  const readRdf = (url: string) => fetchRdf(url, { fetch: rdfTransport });
+  const readRaw = (path: string) => readRdf(resolve(path));
   async function read(path: string) {
     const result = await readRaw(path);
     return {
@@ -114,7 +141,7 @@ export function createHealthStore(fetch: typeof globalThis.fetch, storage: strin
     // Retry after a partial creation must never mistake inherited public access
     // for successful privacy setup. Verify existing ACLs, or create a missing one.
     try {
-      const existing = await fetchRdf(aclUrl, { fetch: transport });
+      const existing = await readRdf(aclUrl);
       verifyOwnerAcl(existing.dataset, url, true);
       return;
     } catch (error) {
@@ -179,7 +206,7 @@ export function createHealthStore(fetch: typeof globalThis.fetch, storage: strin
     if (metadata.status !== 404 || inherited) checked(metadata, "inspect privacy");
     const aclUrl = aclLink(metadata, url);
     try {
-      const acl = await fetchRdf(aclUrl, { fetch: transport });
+      const acl = await readRdf(aclUrl);
       verifyOwnerAcl(acl.dataset, url, inherited);
     } catch (error) {
       if (!(error instanceof RdfFetchError && error.status === 404)) throw error;
