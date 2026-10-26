@@ -3,8 +3,8 @@ import { NamedNodeAs, NamedNodeFrom, SetFrom, TermWrapper } from "@rdfjs/wrapper
 import { DataFactory, Parser } from "n3";
 import { ReactiveAuthenticationError } from "./ReactiveAuthenticationError.js";
 import { SimpleDataset } from "./SimpleDataset.js";
-import { type HttpOptions, secureFetch } from "./transport.js";
-import { parseHttpUrl, withoutFragment } from "./url.js";
+import { type HttpOptions, secureDocumentFetch } from "./transport.js";
+import { parseHttpUrl } from "./url.js";
 
 const solid = "http://www.w3.org/ns/solid/terms#";
 const pim = "http://www.w3.org/ns/pim/space#";
@@ -20,22 +20,20 @@ export class WebIdAgent extends TermWrapper {
   }
 }
 
-/** Fetches and parses a Turtle document with the non-reactive transport. */
+/** Fetches Turtle with bounded, scheme-checked redirects and parses against the final document URL. */
 export async function fetchTurtle(
   url: URL,
   signal: AbortSignal | undefined,
   http?: HttpOptions,
 ): Promise<{ quads: Quad[]; base: string }> {
-  const init: RequestInit = { headers: { accept: "text/turtle" } };
-  if (signal !== undefined) init.signal = signal;
-  const response = await secureFetch(new URL(withoutFragment(url)), init, http);
+  const { response, url: finalUrl } = await secureDocumentFetch(url, "text/turtle", signal, http);
   if (!response.ok) {
     throw new ReactiveAuthenticationError(
       `${url.href} could not be retrieved (${response.status})`,
     );
   }
 
-  const base = response.url || url.href; // Base is from response if redirected, from request otherwise
+  const base = finalUrl.href;
   try {
     return { quads: new Parser({ baseIRI: base }).parse(await response.text()), base };
   } catch (error) {
@@ -53,6 +51,7 @@ export async function issuersFromWebId(
   http?: HttpOptions,
 ): Promise<URL[]> {
   const { quads } = await fetchTurtle(webId, signal, http);
+  // Redirects locate the document; trust statements must still describe the original WebID.
   const agent = new WebIdAgent(webId.href, new SimpleDataset(quads), DataFactory);
   return [...agent.oidcIssuers];
 }

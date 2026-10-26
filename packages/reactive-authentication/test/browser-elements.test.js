@@ -329,7 +329,7 @@ test("issuer picker reads a slotted WebID and restores controls after profile er
 });
 
 for (const end of ["cancel", "abort", "confirm"]) {
-  for (const stage of ["webid", "profile", "profile-error"]) {
+  for (const stage of ["webid", "profile", "profile-body", "profile-error"]) {
     test(`issuer picker ignores stale ${stage} completion after ${end}`, async () => {
       vi.stubGlobal("navigator", { locks: browserLocks });
       const picker = new IdpPicker();
@@ -348,6 +348,15 @@ for (const end of ["cancel", "abort", "confirm"]) {
       picker.http = {
         fetch: async (url, init) => {
           profiles.push({ url: url.href, signal: init.signal });
+          if (profiles.length === 1 && stage === "profile-body") {
+            // The profile response arrives in time; only its body completes after the request ends.
+            const pull = async (body) => {
+              profileStarted.resolve();
+              body.enqueue(new TextEncoder().encode(await oldProfile.promise));
+              body.close();
+            };
+            return new Response(new ReadableStream({ pull }, { highWaterMark: 0 }));
+          }
           if (profiles.length === 1 && stage !== "webid") {
             profileStarted.resolve();
             return await oldProfile.promise;
@@ -407,7 +416,11 @@ for (const end of ["cancel", "abort", "confirm"]) {
       assert.equal(button.disabled, true);
       if (stage === "webid") oldWebId.resolve(new URL("https://old.example/#me"));
       else if (stage === "profile-error") oldProfile.reject(new Error("late profile failure"));
-      else {
+      else if (stage === "profile-body") {
+        oldProfile.resolve(
+          "<https://old.example/#me> <http://www.w3.org/ns/solid/terms#oidcIssuer> <https://old-issuer.example/> .",
+        );
+      } else {
         oldProfile.resolve(
           new Response(
             "<https://old.example/#me> <http://www.w3.org/ns/solid/terms#oidcIssuer> <https://old-issuer.example/> .",

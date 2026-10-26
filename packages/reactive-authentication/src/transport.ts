@@ -86,3 +86,48 @@ export async function secureFetch(
     redirect: init.redirect === "manual" ? "manual" : "error",
   });
 }
+
+/**
+ * Retrieves a public document with GET, omitting credentials and following at most five redirects.
+ * Every hop passes through secureFetch's scheme check. The returned URL is the final document base,
+ * tracked explicitly because injected transports may return responses without a URL.
+ */
+export async function secureDocumentFetch(
+  url: URL,
+  accept: string,
+  signal: AbortSignal | undefined,
+  http: HttpOptions | undefined,
+): Promise<{ response: Response; url: URL }> {
+  let current = new URL(url);
+  const init: RequestInit = {
+    method: "GET",
+    headers: { accept },
+    redirect: "manual",
+    credentials: "omit",
+  };
+  if (signal !== undefined) init.signal = signal;
+
+  for (let redirects = 0; ; redirects++) {
+    signal?.throwIfAborted();
+    current.hash = "";
+    const response = await secureFetch(current, init, http);
+    signal?.throwIfAborted();
+    if (response.type === "opaqueredirect") {
+      // Browsers hide manual redirect targets. Let the platform follow them (Fetch blocks insecure
+      // hops from secure contexts as mixed content) and still validate the final document URL.
+      const followed = await transportOf(http)(current, { ...init, redirect: "follow" });
+      signal?.throwIfAborted();
+      const final = followed.url === "" ? current : new URL(followed.url);
+      assertSecureUrl(final, http);
+      return { response: followed, url: final };
+    }
+    const location = response.headers.get("location");
+    if (![301, 302, 303, 307, 308].includes(response.status) || location === null) {
+      return { response, url: current };
+    }
+
+    await response.body?.cancel();
+    if (redirects === 5) throw new TypeError(`Too many redirects retrieving ${url.href}`);
+    current = new URL(location, current);
+  }
+}
