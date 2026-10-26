@@ -26,7 +26,13 @@ import {
   StoreTokenProvider,
   tokenFileProviders,
 } from "../src/index.js";
-import { accessToken, grantBindingProblem, helperExchange, logout } from "../src/operations.js";
+import {
+  accessToken,
+  calendars,
+  grantBindingProblem,
+  helperExchange,
+  logout,
+} from "../src/operations.js";
 import { noTransport } from "../src/providers.js";
 import { provisionValue } from "../src/provision.js";
 import type { Grant, Profile, TokenFile } from "../src/store.js";
@@ -316,6 +322,58 @@ it.each([
     problem: "the requested credential binding does not match this profile",
   });
   expect(answer.stdout).toBeUndefined();
+  expect(grantRead).not.toHaveBeenCalled();
+  expect(transport).not.toHaveBeenCalled();
+});
+it.each([
+  { provider: "microsoft" as const },
+  { connectionId: "other" },
+  { purpose: "send" as const, resource: "mail" as const },
+  { resource: "mail" as const },
+])("binds inventory issuance to the validated profile when it changes: %j", async (change) => {
+  const selected = profile({ resource: "calendar", inventory: true });
+  store.putProfile(selected);
+  const microsoftClientId = "11111111-1111-4111-8111-111111111111";
+  const tenantId = "22222222-2222-4222-8222-222222222222";
+  const objectId = "33333333-3333-4333-8333-333333333333";
+  store.putClient({
+    version: 1,
+    provider: "microsoft",
+    clientId: microsoftClientId,
+    addedAt: now.toISOString(),
+  });
+  const replacement = {
+    ...selected,
+    ...change,
+    microsoft: {
+      accountType: "work-or-school" as const,
+      tenant: tenantId,
+      expectedIdentity: { tenantId, objectId },
+    },
+  };
+  const replacementGrant = grant(replacement, {
+    clientId: replacement.provider === "microsoft" ? microsoftClientId : clientId,
+    account:
+      replacement.provider === "microsoft"
+        ? { username: replacement.account, tenant: tenantId, subject: objectId }
+        : { username: replacement.account, subject: "fixture-sub" },
+    grantedScopes: [...new Set([...requiredScopes(selected), ...requiredScopes(replacement)])],
+  });
+  const read = store.profile.bind(store);
+  vi.spyOn(store, "profile").mockImplementationOnce((name) => {
+    const result = read(name);
+    store.putProfile(replacement);
+    store.putGrant(replacementGrant);
+    return result;
+  });
+  const grantRead = vi.spyOn(store, "grant");
+  const transport = vi.fn(async () => new Response(JSON.stringify({ items: [], value: [] })));
+  await expect(
+    calendars({ store, transport, now: () => now }, selected.name),
+  ).rejects.toMatchObject({
+    code: "refused",
+    message: "the requested credential binding does not match this profile",
+  });
   expect(grantRead).not.toHaveBeenCalled();
   expect(transport).not.toHaveBeenCalled();
 });

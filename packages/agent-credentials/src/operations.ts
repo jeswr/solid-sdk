@@ -534,7 +534,12 @@ export async function calendars(deps: Deps, name: string) {
       "scope",
       "this Google profile does not request the calendar-list scope (create a profile with --calendar-inventory and log in)",
     );
-  const t = await accessToken(deps, name);
+  const t = await accessToken(deps, name, {
+    provider: p.provider,
+    connectionId: p.connectionId,
+    purpose: p.purpose,
+    resource: p.resource,
+  });
   return listCalendars(deps.transport, p, t.token);
 }
 
