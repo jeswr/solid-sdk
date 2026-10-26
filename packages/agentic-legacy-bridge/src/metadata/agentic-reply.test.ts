@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Fable 5
+// AUTHORED-BY Codex GPT-6
 import { Store } from "n3";
 import { describe, expect, it } from "vitest";
 import { addInterpretation } from "../reliability.js";
@@ -104,6 +105,21 @@ describe("extractAgenticReplyStructural (unverified — never auto-run)", () => 
     expect(out.patterns).toEqual([{ iri: "https://ok.example/p" }]); // hash dropped, IRI kept
   });
 
+  it("preserves self-reported Message envelopes without promoting them to verified actions", async () => {
+    const root = JSON.parse(ACCEPT_BLOCK);
+    root.credentialSubject.type = "Message";
+    const blocks = [JSON.stringify(root)];
+    const structural = extractAgenticReplyStructural(blocks, CTX);
+    expect(structural.interpretations.find((i) => i.predicate === SCHEMA_DATE_SENT)).toMatchObject({
+      calibration: "SelfReported",
+    });
+    expect(await extractAgenticReply(blocks, CTX, { verify: () => ({ verified: true }) })).toEqual({
+      interpretations: [],
+      patterns: [],
+      verified: false,
+    });
+  });
+
   it("ignores non-AgenticReply blocks and malformed JSON", () => {
     const out = extractAgenticReplyStructural(
       ["{broken", JSON.stringify({ "@type": "Event" }), "[]"],
@@ -132,6 +148,51 @@ describe("extractAgenticReply (the injectable verifier seam)", () => {
     const attributed = out.interpretations.find((i) => i.predicate === PROV_WAS_ATTRIBUTED_TO);
     expect(attributed?.object).toEqual({ kind: "iri", value: "https://jeswr.org/agent" });
     expect(attributed?.calibration).toBe("Verified");
+  });
+
+  it.each([
+    { type: ["AcceptAction", "RejectAction"] },
+    { type: ["RejectAction", "AcceptAction"] },
+    { type: ["schema:AcceptAction", "https://schema.org/AcceptAction"] },
+    { type: ["https://schema.org/AcceptAction", "schema:AcceptAction"] },
+    { type: ["AcceptAction", "AcceptAction"] },
+    { "@type": "AcceptAction", type: "RejectAction" },
+    { type: "AcceptAction", "@type": "RejectAction" },
+    { type: "AcceptAction", "@type": "AcceptAction" },
+    { type: [...Array(8).fill("Other"), "AcceptAction", "RejectAction"] },
+    { type: "UnknownAction" },
+  ])("rejects ambiguous or unsupported action types independent of ordering (%j)", async (types) => {
+    const root = JSON.parse(ACCEPT_BLOCK);
+    root.credentialSubject = { ...root.credentialSubject, ...types };
+    const blocks = [JSON.stringify(root)];
+    const out = await extractAgenticReply(blocks, CTX, {
+      verify: () => ({ verified: true, issuer: "https://jeswr.org/agent" }),
+    });
+    expect(out).toEqual({ interpretations: [], patterns: [], verified: false });
+    if (types.type !== "UnknownAction")
+      expect(extractAgenticReplyStructural(blocks, CTX).interpretations).toEqual([]);
+  });
+
+  it.each([
+    "AcceptAction",
+    "schema:AcceptAction",
+    "https://schema.org/AcceptAction",
+  ])("accepts exactly one supported action spelled %s with unrelated types in either order", async (type) => {
+    for (const types of [
+      ["Action", type],
+      [type, "Action"],
+    ]) {
+      const root = JSON.parse(ACCEPT_BLOCK);
+      root.credentialSubject.type = types;
+      const out = await extractAgenticReply([JSON.stringify(root)], CTX, {
+        verify: () => ({ verified: true }),
+      });
+      expect(out.verified).toBe(true);
+      expect(out.interpretations.find((i) => i.predicate === RDF_TYPE)?.object).toEqual({
+        kind: "iri",
+        value: SCHEMA_ACCEPT_ACTION,
+      });
+    }
   });
 
   it("a failed / throwing / absent verifier fails closed to unverified", async () => {
