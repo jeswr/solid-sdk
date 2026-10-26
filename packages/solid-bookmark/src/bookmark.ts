@@ -103,6 +103,7 @@ export class Bookmark extends TermWrapper {
 
   /** Stamp this subject as a `book:Bookmark`. Idempotent; returns `this` for chaining. */
   mark(): this {
+    this.types.delete(`${LEGACY_BOOK_NS}Bookmark`);
     this.types.add(BOOKMARK_CLASS);
     return this;
   }

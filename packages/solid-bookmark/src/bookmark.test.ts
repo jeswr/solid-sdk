@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
+import { parseRdf } from "@jeswr/fetch-rdf";
 import { DataFactory, Parser, Store } from "n3";
 import { describe, expect, it } from "vitest";
 import {
@@ -11,6 +12,7 @@ import {
   parseBookmark,
   parseBookmarkTtl,
   serializeBookmark,
+  storeToTurtle,
 } from "./bookmark.js";
 import {
   BOOK,
@@ -200,6 +202,27 @@ describe("round-trip (serialize with n3.Writer → parse back)", () => {
 });
 
 describe("legacy namespace compatibility", () => {
+  it.each([
+    false,
+    true,
+  ])("re-marks legacy bookmarks canonically (mixed types: %s)", async (mixed) => {
+    const store = await parseRdf(
+      `<${SUBJ}> a <${LEGACY_BOOK_NS}Bookmark>, <urn:other-class>
+        ${mixed ? `, <${BOOKMARK_CLASS}>` : ""} ; <${SCHEMA_URL}> <${URL_}> .`,
+      "text/turtle",
+      {},
+    );
+    const doc = new Bookmark(SUBJ, store, DataFactory);
+    expect(doc.isBookmark).toBe(true);
+    expect(doc.mark()).toBe(doc);
+    doc.mark();
+    const turtle = await storeToTurtle(new Store([...store]));
+    expect(turtle).not.toContain(LEGACY_BOOK_NS);
+    const serialized = new Bookmark(SUBJ, await parseRdf(turtle, "text/turtle", {}), DataFactory);
+    expect([...serialized.types].sort()).toEqual([BOOKMARK_CLASS, "urn:other-class"].sort());
+    expect(serialized.url).toBe(URL_);
+  });
+
   it("reads a legacy fixture with the same result as canonical Turtle", async () => {
     const legacy = `
       @prefix book: <https://w3id.org/jeswr/bookmark#> .
