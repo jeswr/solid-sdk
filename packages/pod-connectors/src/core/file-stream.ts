@@ -1,5 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { parseCsv } from "./csv.js";
+import { MAX_CSV_HEADER_CHARS, parseCsv, parseCsvRows } from "./csv.js";
 import { type ImportFile, MAX_FILE_BYTES } from "./file-import.js";
 
 /** Prefer File.stream(); text-only host implementations remain compatible. */
@@ -45,6 +45,7 @@ export async function* csvRecords(chunks: AsyncIterable<string>): AsyncGenerator
   let record = "";
   let quoted = false;
   let cr = false;
+  let header = true;
   for await (const chunk of chunks) {
     for (const char of chunk) {
       if (cr && char === "\n") {
@@ -54,22 +55,37 @@ export async function* csvRecords(chunks: AsyncIterable<string>): AsyncGenerator
       cr = false;
       if (char === '"') quoted = !quoted;
       if (!quoted && (char === "\n" || char === "\r")) {
-        if (record.trim()) yield record;
+        if (record.trim()) {
+          yield record;
+          header = false;
+        }
         record = "";
         cr = char === "\r";
-      } else record += char;
+      } else {
+        record += char;
+        if (header && record.length > MAX_CSV_HEADER_CHARS)
+          throw new Error("CSV header exceeds the 64 KiB character import limit.");
+      }
     }
   }
   if (record.trim()) yield record;
 }
 
 export async function* csvRows(file: ImportFile): AsyncGenerator<Record<string, string>> {
-  let header: string | undefined;
-  for await (const record of csvRecords(fileText(file))) {
-    if (header === undefined) header = record;
+  yield* csvRowsFromChunks(fileText(file));
+}
+
+/** Shared by sniffed bank files and ordinary CSV exports; parse headers once. */
+export async function* csvRowsFromChunks(
+  chunks: AsyncIterable<string>,
+): AsyncGenerator<Record<string, string>> {
+  let headers: readonly string[] | undefined;
+  for await (const record of csvRecords(chunks)) {
+    if (headers === undefined) headers = parseCsv(record).headers;
     else {
-      const row = parseCsv(`${header}\n${record}`).rows[0];
-      if (row) yield { ...row };
+      const cells = parseCsvRows(record)[0];
+      if (cells)
+        yield Object.fromEntries(headers.map((header, i) => [header, (cells[i] ?? "").trim()]));
     }
   }
 }

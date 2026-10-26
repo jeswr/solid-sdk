@@ -19,7 +19,7 @@
 import { DataFactory, Store } from "n3";
 import { parseCsv } from "../core/csv.js";
 import type { FileImportAdapter, FileImportContext, ImportFile } from "../core/file-import.js";
-import { csvRecords, fileText } from "../core/file-stream.js";
+import { csvRowsFromChunks, fileText } from "../core/file-stream.js";
 import { recordFragment } from "../core/slug.js";
 import type { IntegrationMetadata } from "../core/types.js";
 import { CLASSES, Invoice } from "../core/vocab.js";
@@ -98,10 +98,11 @@ async function* streamBankTransactions(file: ImportFile): AsyncGenerator<Transac
     const isOfx =
       /\.(ofx|qfx)$/i.test(file.name) || /^\s*(?:OFXHEADER|<OFX|<\?xml|<STMTTRN>)/i.test(prefix);
     if (!isOfx) {
-      let header: string | undefined;
-      for await (const record of csvRecords(chunks())) {
-        if (header === undefined) header = record;
-        else yield* parseBankCsv(`${header}\n${record}`);
+      let parseRow: ReturnType<typeof bankRowParser> | undefined;
+      for await (const row of csvRowsFromChunks(chunks())) {
+        parseRow ??= bankRowParser(Object.keys(row));
+        const txn = parseRow(row);
+        if (txn) yield txn;
       }
       return;
     }
@@ -145,6 +146,18 @@ const CREDIT_HEADERS = ["credit", "deposit", "paid in", "money in"];
 /** Parse a generic bank CSV, detecting the relevant columns by header. */
 export function parseBankCsv(text: string, limit = Number.POSITIVE_INFINITY): Transaction[] {
   const { headers, rows } = parseCsv(text);
+  const parseRow = bankRowParser(headers);
+  const out: Transaction[] = [];
+  for (const row of rows) {
+    if (out.length >= limit) break;
+    const txn = parseRow(row);
+    if (txn) out.push(txn);
+  }
+  return out;
+}
+
+/** Detect and normalise column aliases once per file, for both parsing paths. */
+function bankRowParser(headers: readonly string[]) {
   const lower = headers.map((h) => h.toLowerCase());
   const find = (cands: string[]) => {
     const i = lower.findIndex((h) => cands.includes(h));
@@ -156,18 +169,15 @@ export function parseBankCsv(text: string, limit = Number.POSITIVE_INFINITY): Tr
   const debitCol = find(DEBIT_HEADERS);
   const creditCol = find(CREDIT_HEADERS);
 
-  const out: Transaction[] = [];
-  for (const row of rows) {
-    if (out.length >= limit) break;
+  return (row: Record<string, string>): Transaction | undefined => {
     const amount = resolveAmount(row, amountCol, debitCol, creditCol);
-    if (amount === undefined) continue;
-    out.push({
+    if (amount === undefined) return undefined;
+    return {
       date: dateCol ? parseFlexibleDate(row[dateCol]) : undefined,
       description: (descCol ? row[descCol] : "") || "Transaction",
       amount,
-    });
-  }
-  return out;
+    };
+  };
 }
 
 function resolveAmount(

@@ -1,10 +1,12 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { describe, expect, it, vi } from "vitest";
+import { bankStatementsFileAdapter } from "../bank-statements/file-adapter.js";
+import * as csv from "./csv.js";
 import { type ImportFile, MAX_FILE_BYTES } from "./file-import.js";
 import { jsonEntries } from "./file-json.js";
 import { csvRows, fileText, textLines, xmlTags } from "./file-stream.js";
 import { sourceItemUrl } from "./slug.js";
-import { memoryFile } from "./testing.js";
+import { fileImport, memoryFile } from "./testing.js";
 
 async function collect<T>(source: AsyncIterable<T>): Promise<T[]> {
   const out: T[] = [];
@@ -29,6 +31,50 @@ function chunksFile(text: string): ImportFile {
 }
 
 describe("bounded file readers", () => {
+  it.each(["shared", "bank"])("parses the %s CSV header once for many records", async (path) => {
+    const header = ' Date , Description , Amount ,"Synthetic, extra"';
+    const records = Array.from({ length: 32 }, (_, i) => `2026-01-01,Item ${i},-${i + 1}`);
+    const parse = vi.spyOn(csv, "parseCsv");
+    try {
+      const file = chunksFile(`${header}\r\n${records.join("\r\n")}`);
+      if (path === "bank") {
+        const { report } = await fileImport(bankStatementsFileAdapter, file);
+        expect(report.written).toHaveLength(1);
+      } else {
+        const rows = await collect(csvRows(file));
+        expect(rows).toHaveLength(records.length);
+        expect(rows[0]).toEqual({
+          Date: "2026-01-01",
+          Description: "Item 0",
+          Amount: "-1",
+          "Synthetic, extra": "",
+        });
+      }
+      expect(parse).toHaveBeenCalledExactlyOnceWith(header);
+    } finally {
+      parse.mockRestore();
+    }
+  });
+
+  it.each([
+    "x".repeat(csv.MAX_CSV_HEADER_CHARS + 1),
+    `"${"x".repeat(csv.MAX_CSV_HEADER_CHARS)}`,
+    Array.from({ length: csv.MAX_CSV_COLUMNS + 1 }, (_, i) => `Column ${i}`).join(","),
+  ])("rejects oversized headers before processing rows (%#)", async (header) => {
+    const file = memoryFile("statement.csv", `${header}\n2026-01-01,Synthetic,-1`);
+    await expect(collect(csvRows(file))).rejects.toThrow("CSV header exceeds");
+    await expect(fileImport(bankStatementsFileAdapter, file)).rejects.toThrow("CSV header exceeds");
+  });
+
+  it("preserves header trimming, empty cells, duplicate columns and row padding", async () => {
+    const text = '\uFEFF A , B , A ,C\nfirst," second ",last\nonly\n1,2,3,4,ignored';
+    expect(await collect(csvRows(chunksFile(text)))).toEqual(csv.parseCsv(text).rows);
+  });
+
+  it.each(["", " \r\n", "Date,Description,Amount"])("handles empty CSV data %j", async (text) => {
+    expect(await collect(csvRows(chunksFile(text)))).toEqual([]);
+  });
+
   it("decodes UTF-8 split across bytes and preserves a final unterminated line", async () => {
     expect(await collect(textLines(fileText(chunksFile("café 🌍\r\nlast\rnext\n"))))).toEqual([
       "café 🌍",
