@@ -6,7 +6,7 @@ import { DataFactory, Store } from "n3";
 import { DriveResource } from "./model.js";
 import { iri, quadsToTurtle } from "./serialize.js";
 import { buildDriveRootMarker, buildDriveRootRegistration, findDriveRoots } from "./type-index.js";
-import { LDP, RDF, SOLID } from "./vocab.js";
+import { LDP, SOLID } from "./vocab.js";
 
 export class DriveWriteError extends Error {
   constructor(
@@ -15,6 +15,18 @@ export class DriveWriteError extends Error {
   ) {
     super(`Drive write failed (${status})`);
     this.name = "DriveWriteError";
+  }
+}
+
+/** A confirmed creation whose marker initialization can be retried without deleting it. */
+export class DriveRootInitializationError extends Error {
+  constructor(
+    cause: unknown,
+    /** Retains this call's scoped fetch and root. Keep the error to retry in this session. */
+    readonly resume: () => Promise<string>,
+  ) {
+    super("Drive root initialization failed. Call resume() to retry.", { cause });
+    this.name = "DriveRootInitializationError";
   }
 }
 
@@ -28,7 +40,8 @@ export interface DriveRootOptions {
  * Injected-fetch Solid RDF bootstrap, independent of the future SDK façade.
  * Creation and registration are conditional; marker insertion only appends metadata.
  * Concurrent callers converge through server preconditions and bounded marker re-reads;
- * no module-global account state or rejected-promise cache is retained.
+ * initialization failures preserve the container and expose a caller-held resume handle.
+ * No module-global account state or rejected-promise cache is retained.
  */
 export async function ensureDriveRoot(
   fetch: typeof globalThis.fetch,
@@ -53,11 +66,11 @@ export async function ensureDriveRoot(
     },
     body: "",
   });
-  if (created.ok) {
-    let current: FetchedRdf | undefined;
+  async function initialize(): Promise<void> {
     try {
       // CSS ignores container PUT bodies. Discover and PATCH its description instead.
-      current = await fetchRdf(rootUrl, { fetch: scopedFetch });
+      const current = await fetchRdf(rootUrl, { fetch: scopedFetch });
+      if (new DriveResource(rootUrl, current.dataset, DataFactory).isDriveRoot) return;
       let metadataUrl: string | undefined;
       const links = current.response.headers.get("Link") ?? "";
       for (const link of links.matchAll(/<([^>]*)>((?:[^",]|"[^"]*")*)/g)) {
@@ -82,42 +95,20 @@ export async function ensureDriveRoot(
         throw new TypeError("The drive root marker was not persisted.");
       }
     } catch (error) {
-      try {
-        // A failed first GET still needs a snapshot before cleanup. Keep recovery
-        // bounded and preserve the original failure if this read also fails.
-        current ??= await fetchRdf(rootUrl, { fetch: scopedFetch });
-        const initialTypes = current.dataset.match(
-          iri(rootUrl),
-          iri(RDF.type),
-          null,
-          DataFactory.defaultGraph(),
-        );
-        // Only bare LDP typing demonstrates initial state. Any other metadata,
-        // including edits made before the first GET, makes rollback unsafe.
-        // Prefer the creation validator so even a changed bare container cannot
-        // be deleted; otherwise use the inspected snapshot's strong validator.
-        const etag = created.headers.get("ETag") ?? current.etag;
-        if (
-          etag !== null &&
-          !etag.startsWith("W/") &&
-          current.dataset.size > 0 &&
-          initialTypes.size === current.dataset.size &&
-          [...initialTypes].every(({ object }) =>
-            [LDP.BasicContainer, LDP.Container, LDP.Resource, LDP.RDFSource].some((type) =>
-              object.equals(iri(type)),
-            ),
-          )
-        ) {
-          await scopedFetch(rootUrl, {
-            method: "DELETE",
-            headers: { "If-Match": etag },
-          });
-        }
-      } catch {
-        // Cleanup is best effort; preserve the discovery/marker/verification failure.
-      }
-      throw error;
+      // A container validator cannot cover independently edited auxiliary resources.
+      // Preserve everything, and only let the creator explicitly resume its own work.
+      throw new DriveRootInitializationError(error, resume);
     }
+  }
+
+  async function resume(): Promise<string> {
+    await initialize();
+    await register(true);
+    return rootUrl;
+  }
+
+  if (created.ok) {
+    await initialize();
   } else if (created.status === 409 || created.status === 412) {
     // Another initializer may still be PATCHing its newly created container.
     // Only adopt a marked container; never mark or overwrite an occupied path.
