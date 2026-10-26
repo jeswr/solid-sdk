@@ -7,6 +7,7 @@
 import { IntegrationSyncError, RateLimitedError } from "./errors.js";
 import { matchingFixtureRoute } from "./fixture-route.js";
 import type { FixtureRoute } from "./types.js";
+import { readJson } from "./budget.js";
 
 /** Build a `fetch`-shaped function answering from fixture routes.
  * Repeated method/prefix keys replay in array order and fail when exhausted.
@@ -53,7 +54,10 @@ export function fixtureFetch(adapterId: string, routes: readonly FixtureRoute[])
   return impl as typeof fetch;
 }
 
-/** `GET`/parse JSON with adapter-grade error mapping (429 → RateLimitedError). */
+/**
+ * `GET`/parse JSON with adapter-grade error mapping (429 → RateLimitedError); the body is
+ * read through the `MAX_JSON_BYTES` cap.
+ */
 export async function getJson<T>(
   adapterId: string,
   api: typeof fetch,
@@ -75,7 +79,7 @@ export async function getJson<T>(
       status: res.status,
     });
   }
-  return (await res.json()) as T;
+  return (await readJson(res, adapterId, url)) as T;
 }
 
 /** `POST` JSON and parse the JSON answer, with the same error mapping. */
