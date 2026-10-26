@@ -3,7 +3,7 @@
 import { readFile } from "node:fs/promises";
 import { assertWithinPodScope } from "@jeswr/guarded-fetch";
 import { DataFactory, Store } from "n3";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { Attachment } from "../../src/apps/mail/lib/model/attachment.js";
 import {
   archiveMessage,
@@ -16,7 +16,12 @@ import { htmlToText } from "../../src/apps/mail/lib/model/htmlText.js";
 import { importMbox, parseEmail, splitMbox } from "../../src/apps/mail/lib/model/importer.js";
 import { parseMailbox } from "../../src/apps/mail/lib/model/io.js";
 import { MailboxDataset } from "../../src/apps/mail/lib/model/mailbox.js";
-import { attachmentUrl, mailDocument, mailRoot } from "../../src/apps/mail/lib/model/paths.js";
+import {
+  attachmentUrl,
+  mailDocument,
+  mailRoot,
+  systemFolderDocument,
+} from "../../src/apps/mail/lib/model/paths.js";
 import { serialiseToTurtle } from "../../src/apps/mail/lib/model/serialise.js";
 
 const storage = "https://pod.example/alice/";
@@ -75,7 +80,7 @@ describe("streaming mbox and Gmail Takeout", () => {
       ["Work", 50, 25],
       ["Starred", 25, 0],
     ]);
-    const inbox = `${mailDocument(root, "folders", "inbox")}#it`;
+    const inbox = `${systemFolderDocument(root, "inbox")}#it`;
     const page = pageThreads(mailbox, inbox, 0, 3);
     expect(page.total).toBe(10);
     expect(page.next).toBe(3);
@@ -103,6 +108,88 @@ describe("streaming mbox and Gmail Takeout", () => {
     await expect(collect(splitMbox(chunks(bytes("From a\nlong\n")), 3))).rejects.toThrow("limit");
     await expect(collect(splitMbox(chunks(bytes("From a\nlong")), 3))).rejects.toThrow("limit");
     await expect(collect(splitMbox(chunks(bytes("")), 0))).rejects.toThrow("limit");
+  });
+  it("bounds allocations for messages containing hundreds of thousands of short lines", async () => {
+    const content = "\n".repeat(256 * 1024);
+    const input = bytes(`From sender\n${content}`);
+    const allocations: number[] = [];
+    const OriginalBytes = Uint8Array;
+    const originalSlice = Uint8Array.prototype.slice;
+    const slice = vi.spyOn(Uint8Array.prototype, "slice").mockImplementation(function (
+      this: Uint8Array,
+      start,
+      end,
+    ) {
+      const result = originalSlice.call(this, start, end);
+      allocations.push(result.byteLength);
+      return result;
+    });
+    vi.stubGlobal(
+      "Uint8Array",
+      new Proxy(OriginalBytes, {
+        construct(target, args) {
+          const result = Reflect.construct(target, args) as Uint8Array;
+          allocations.push(result.byteLength);
+          return result;
+        },
+      }),
+    );
+    let result: unknown[];
+    try {
+      result = await collect(splitMbox(chunks(input, input.length), content.length));
+    } finally {
+      vi.unstubAllGlobals();
+      slice.mockRestore();
+    }
+    expect(result).toEqual([bytes(content)]);
+    expect(allocations.length).toBeLessThan(32);
+    expect(allocations.reduce((sum, length) => sum + length, 0)).toBeLessThanOrEqual(
+      2 * content.length,
+    );
+  });
+  it("enforces the decoded message limit independently of separator chunk boundaries", async () => {
+    const input = bytes(
+      "From sender\nabc\nFrom another sender with a long envelope\nxyz\nFrom last",
+    );
+    for (let size = 1; size <= input.length; size++) {
+      const result = await collect(splitMbox(chunks(input, size), 4));
+      expect(result).toEqual([bytes("abc\n"), bytes("xyz\n")]);
+    }
+    // An incomplete separator candidate must still count if it becomes content or ends at EOF.
+    for (const tail of ["F", "Fr", "Fro", "From", "FromX", "Fx\n"]) {
+      await expect(
+        collect(splitMbox(chunks(bytes(`From sender\nabc\n${tail}`), 1), 4)),
+      ).rejects.toThrow("limit");
+    }
+    await expect(collect(splitMbox(chunks(bytes("From"), 1)))).rejects.toThrow("separator");
+    await expect(collect(splitMbox(chunks(bytes(">From sender\n"), 1)))).rejects.toThrow(
+      "separator",
+    );
+  });
+  it("unquotes complete leading quote runs on terminated and unterminated lines", async () => {
+    for (const ending of ["\r\n", ""]) {
+      const quoted = ">".repeat(1024);
+      const content = `Subject: Quotes\n\n${quoted}From body${ending}`;
+      const expected = bytes(`Subject: Quotes\n\n${quoted.slice(1)}From body${ending}`);
+      const input = bytes(`From sender\n${content}`);
+      for (const size of [1, 127, input.length]) {
+        const result = await collect(splitMbox(chunks(input, size), expected.length));
+        expect(result).toEqual([expected]);
+        const item = await parseEmail(result[0] as Uint8Array, storage, "personal", "quoted");
+        expect(item.raw).toEqual(expected);
+        expect(item.mailbox.message(item.message).body?.trim()).toBe(`${quoted.slice(1)}From body`);
+      }
+    }
+    for (const content of [">".repeat(20), `${">".repeat(20)}Fro`, `${">".repeat(20)}FromX\n`]) {
+      expect(await collect(splitMbox(chunks(bytes(`From sender\n${content}`), 1)))).toEqual([
+        bytes(content),
+      ]);
+    }
+    for (const content of [">".repeat(6), ">".repeat(7), ">From x", ">>From "]) {
+      await expect(
+        collect(splitMbox(chunks(bytes(`From sender\n${content}`), 1), 5)),
+      ).rejects.toThrow("limit");
+    }
   });
   it("handles absent fields, grouped addresses, status flags, MIME filenames and fallback identifiers", async () => {
     const empty = await parseEmail(bytes("Subject: Blank\n\n"), storage, "personal", "fallback");

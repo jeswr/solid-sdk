@@ -9,7 +9,7 @@ import {
 } from "./helpers.js";
 import { type LoadedMail, MailError, type MailStore } from "./io.js";
 import { MailboxDataset } from "./mailbox.js";
-import { mailDocument } from "./paths.js";
+import { systemFolderDocument } from "./paths.js";
 
 /** Load folders and their messages to produce counts for a consistent loaded snapshot. */
 export async function loadFolders(store: MailStore, root: string) {
@@ -28,7 +28,15 @@ export async function loadThreads(store: MailStore, folderIri: string, offset = 
   const threads = await store.snapshot(
     [...messages.messages].flatMap((m) => (m.partOfThread ? [documentOf(m.partOfThread)] : [])),
   );
-  return pageThreads(combine([folder.mailbox, messages, threads]), folderIri, offset, limit);
+  const members = await store.snapshot(
+    [...threads.threads].flatMap((t) => [...t.messageIris].map(documentOf)),
+  );
+  return pageThreads(
+    combine([folder.mailbox, messages, threads, members]),
+    folderIri,
+    offset,
+    limit,
+  );
 }
 export async function loadThread(store: MailStore, threadIri: string) {
   const thread = await store.load(documentOf(threadIri));
@@ -78,7 +86,7 @@ export async function setStarred(
   messageIri: string,
   starred: boolean,
 ): Promise<void> {
-  const url = mailDocument(root, "folders", "starred");
+  const url = systemFolderDocument(root, "starred");
   const folder = await store.load(url, true);
   if (!folder.exists) {
     folder.mailbox.createFolder(`${url}#it`).title = "Starred";
@@ -87,8 +95,8 @@ export async function setStarred(
   await setLabel(store, messageIri, `${url}#it`, starred);
 }
 export async function archive(store: MailStore, root: string, messageIri: string): Promise<void> {
-  const inbox = `${mailDocument(root, "folders", "inbox")}#it`;
-  const target = `${mailDocument(root, "folders", "archive")}#it`;
+  const inbox = `${systemFolderDocument(root, "inbox")}#it`;
+  const target = `${systemFolderDocument(root, "archive")}#it`;
   const docs = [await store.load(documentOf(messageIri))];
   for (const [iri, title] of [
     [inbox, "Inbox"],

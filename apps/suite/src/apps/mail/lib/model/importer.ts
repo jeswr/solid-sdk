@@ -5,7 +5,7 @@ import { Attachment } from "./attachment.js";
 import { htmlToText } from "./htmlText.js";
 import type { MailStore } from "./io.js";
 import { MailboxDataset } from "./mailbox.js";
-import { attachmentUrl, mailDocument, mailRoot } from "./paths.js";
+import { attachmentUrl, mailDocument, mailRoot, systemFolderDocument } from "./paths.js";
 import { SCHEMA } from "./vocab.js";
 
 /** One message at a time; the enclosing mailbox is never buffered. Input is RFC 4155 mboxrd. */
@@ -15,54 +15,89 @@ export async function* splitMbox(
 ): AsyncGenerator<Uint8Array> {
   if (!Number.isSafeInteger(maxMessageBytes) || maxMessageBytes < 1)
     throw new TypeError("Invalid message limit");
-  let pending = new Uint8Array(0);
-  let lines: Uint8Array[] = [];
+  // At most one block per 64 KiB, rather than one allocation per source line.
+  let blocks: Uint8Array[] = [];
+  let block = new Uint8Array(0);
+  let used = 0;
   let size = 0;
   let started = false;
-  const decoder = new TextDecoder("ascii");
-  function append(line: Uint8Array): void {
-    size += line.length;
-    if (size > maxMessageBytes) throw new RangeError("Mail message exceeds import limit");
-    lines.push(line);
+  let mode: "prefix" | "content" | "separator" = "prefix";
+  const marker = [70, 114, 111, 109, 32]; // From (including its trailing space)
+  let matched = 0;
+  let quotes = 0;
+  function append(byte: number, count = 1): void {
+    if (size + count > maxMessageBytes) throw new RangeError("Mail message exceeds import limit");
+    while (count > 0) {
+      if (used === block.length) {
+        block = new Uint8Array(Math.min(64 * 1024, maxMessageBytes - size));
+        blocks.push(block);
+        used = 0;
+      }
+      const length = Math.min(count, block.length - used);
+      block.fill(byte, used, used + length);
+      used += length;
+      size += length;
+      count -= length;
+    }
+  }
+  function flushPrefix(unquote: boolean): void {
+    append(62, quotes - (unquote ? 1 : 0));
+    for (const byte of marker.slice(0, matched)) append(byte);
+    quotes = 0;
+    matched = 0;
   }
   function bytes(): Uint8Array {
     const out = new Uint8Array(size);
     let offset = 0;
-    for (const line of lines) {
-      out.set(line, offset);
-      offset += line.length;
+    for (const block of blocks) {
+      out.set(block.subarray(0, Math.min(block.length, size - offset)), offset);
+      offset += block.length;
     }
     return out;
   }
   for await (const chunk of source) {
-    const joined = new Uint8Array(pending.length + chunk.length);
-    joined.set(pending);
-    joined.set(chunk, pending.length);
-    let start = 0;
-    for (let i = 0; i < joined.length; i++) {
-      if (joined[i] !== 10) continue;
-      const line = joined.slice(start, i + 1);
-      start = i + 1;
-      const prefix = decoder.decode(line.subarray(0, 128));
-      if (prefix.startsWith("From ")) {
-        if (started && size) yield bytes();
-        started = true;
-        lines = [];
-        size = 0;
+    for (const byte of chunk) {
+      if (mode === "separator") {
+        if (byte === 10) mode = "prefix";
+      } else if (mode === "content") {
+        append(byte);
+        if (byte === 10) mode = "prefix";
+      } else if (matched === 0 && byte === 62) {
+        if (!started) throw new TypeError("Expected mbox From separator");
+        quotes++;
+        // One quote may be removed once the complete From marker is known.
+        if (size + quotes - 1 > maxMessageBytes)
+          throw new RangeError("Mail message exceeds import limit");
+      } else if (byte === marker[matched]) {
+        matched++;
+        if (quotes && size + quotes - 1 + matched > maxMessageBytes)
+          throw new RangeError("Mail message exceeds import limit");
+        if (matched === marker.length) {
+          if (quotes) {
+            flushPrefix(true);
+            mode = "content";
+          } else {
+            if (started && size) yield bytes();
+            started = true;
+            blocks = [];
+            block = new Uint8Array(0);
+            used = 0;
+            size = 0;
+            matched = 0;
+            mode = "separator";
+          }
+        }
       } else {
         if (!started) throw new TypeError("Expected mbox From separator");
-        // mboxrd quotes body lines beginning with From (including already quoted lines).
-        append(/^>+From /.test(prefix) ? line.slice(1) : line);
+        flushPrefix(false);
+        append(byte);
+        mode = byte === 10 ? "prefix" : "content";
       }
     }
-    pending = joined.slice(start);
-    if (size + pending.length > maxMessageBytes)
-      throw new RangeError("Mail message exceeds import limit");
   }
-  if (pending.length) {
+  if (quotes || matched) {
     if (!started) throw new TypeError("Expected mbox From separator");
-    const prefix = decoder.decode(pending.subarray(0, 128));
-    append(/^>+From /.test(prefix) ? pending.slice(1) : pending);
+    flushPrefix(false);
   }
   if (size) yield bytes();
 }
@@ -141,7 +176,11 @@ export async function parseEmail(
   if (labels.delete("Archived")) labels.add("Archive");
   const folders = [...labels].map((title) => ({
     title,
-    iri: `${mailDocument(root, "folders", ["Inbox", "Sent", "Drafts", "Trash", "Archive", "Starred"].includes(title) ? title.toLowerCase() : title)}#it`,
+    iri: `${
+      ["Inbox", "Sent", "Drafts", "Trash", "Archive", "Starred"].includes(title)
+        ? systemFolderDocument(root, title.toLowerCase())
+        : mailDocument(root, "folders", title)
+    }#it`,
   }));
   for (const folder of folders) message.folderIris.add(folder.iri);
   const attachments = email.attachments.map((a, index) => ({

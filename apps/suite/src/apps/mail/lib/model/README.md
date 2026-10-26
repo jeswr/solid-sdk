@@ -13,8 +13,10 @@ Inline JSON-LD contexts are supported; remote contexts and `@import` are rejecte
 because the RDF parser cannot apply the scoped transport to its context loader.
 
 `loadFolders`, `loadThreads` and `loadThread` return hook-free data. Pure `folderCounts`,
-`pageThreads` and `threadMessages` also work on cached snapshots. Paging is stable over the
-loaded snapshot; it does not imply server paging. `setRead`, `setLabel`, `setStarred` and
+`pageThreads` and `threadMessages` also work on cached snapshots. Folder paging loads every
+referenced message in the candidate threads, including replies in other folders, before sorting.
+Paging is stable over the loaded snapshot; it does not imply server paging.
+`setRead`, `setLabel`, `setStarred` and
 `archive` persist conditional mutations. Stars are collection membership; read state is
 `schema:dateRead`. Membership is maintained as folder `schema:hasPart` and message
 `sioc:has_container`, preserving other labels. Cross-document writes are sequential.
@@ -26,8 +28,13 @@ bytes and attachment binaries. RFC 822 source is preserved after mboxrd unquotin
 retains decoded HTML as inert `bodyHtml` (`schema:articleBody`); `body` prefers plain text and
 otherwise contains a readable HTML-to-text fallback. HTML must be sanitised before rendering.
 Generated identifiers use reversible tilde escaping, avoiding encoded path delimiters while
-retaining original Message-IDs and folder titles as metadata.
-Each message is bounded to 25 MiB; MIME is buffered per message, never per mailbox. `mintId` supplies IDs
+retaining original Message-IDs and folder titles as metadata. System folders use reserved
+`folders/system:<id>.ttl` documents (for example `system:inbox`); custom label keys retain their
+case and escape colons, so even a custom `system:inbox` label stays distinct. Archive and star
+mutations use the same reserved system documents.
+The splitter accumulates fixed blocks of at most 64 KiB and classifies separator/quote prefixes
+across chunk boundaries without buffering whole lines. Each message is bounded to 25 MiB;
+MIME is buffered per message, never per mailbox. `mintId` supplies IDs
 for mail lacking Message-ID. Subject similarity alone never merges threads. References is
 preferred for out-of-order mail; In-Reply-To-only chains resolve through previously seen mail.
 ZIP extraction belongs to the file connector.

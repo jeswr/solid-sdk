@@ -28,6 +28,10 @@ export function mailDocument(
   if (!id.trim()) throw new TypeError("Empty mail identifier");
   return new URL(`${kind}/${pathId(id)}.ttl`, root).href;
 }
+/** A literal colon reserves system keys; custom label colons are escaped by pathId. */
+export function systemFolderDocument(root: string, id: string): string {
+  return new URL(`folders/system:${pathId(id)}.ttl`, root).href;
+}
 export function attachmentUrl(storage: string, account: string, id: string, index: number): string {
   // Names from MIME are metadata, never paths.
   return new URL(

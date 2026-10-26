@@ -2,6 +2,7 @@
 // biome-ignore-all lint/style/noNonNullAssertion: Assertions establish fixture entries before use.
 import { DataFactory, Store } from "n3";
 import { describe, expect, it, vi } from "vitest";
+import { pageThreads } from "../../src/apps/mail/lib/model/helpers.js";
 import { parseEmail, persistImportedMail } from "../../src/apps/mail/lib/model/importer.js";
 import { MailError, MailStore } from "../../src/apps/mail/lib/model/io.js";
 import { MailboxDataset } from "../../src/apps/mail/lib/model/mailbox.js";
@@ -15,7 +16,11 @@ import {
   setRead,
   setStarred,
 } from "../../src/apps/mail/lib/model/operations.js";
-import { mailDocument, mailRoot } from "../../src/apps/mail/lib/model/paths.js";
+import {
+  mailDocument,
+  mailRoot,
+  systemFolderDocument,
+} from "../../src/apps/mail/lib/model/paths.js";
 import { serialiseToTurtle } from "../../src/apps/mail/lib/model/serialise.js";
 import { TypeIndexDataset } from "../../src/apps/mail/lib/model/typeIndex.js";
 import { Classes } from "../../src/apps/mail/lib/model/vocab.js";
@@ -24,8 +29,8 @@ const storage = "https://pod.example/alice/";
 const root = mailRoot(storage, "personal");
 const message = `${mailDocument(root, "messages", "m")}#it`;
 const thread = `${mailDocument(root, "threads", "t")}#it`;
-const inbox = `${mailDocument(root, "folders", "inbox")}#it`;
-const archived = `${mailDocument(root, "folders", "archive")}#it`;
+const inbox = `${systemFolderDocument(root, "inbox")}#it`;
+const archived = `${systemFolderDocument(root, "archive")}#it`;
 /** Real RDF over a fetch seam. Reject writes whose validator no longer matches. */
 function server() {
   const files = new Map<string, { body: string; etag: string }>();
@@ -224,6 +229,91 @@ describe("injected pod I/O", () => {
     expect(await s.store.list(`${root}empty/`)).toEqual([]);
     const snapshot = await s.store.snapshot([documentOf(message), documentOf(message)]);
     expect([...snapshot.messages]).toHaveLength(1);
+  });
+  it("loads complete candidate conversations before sorting and paging a folder", async () => {
+    const s = server();
+    const complete = new MailboxDataset(new Store(), DataFactory);
+    const folder = complete.createFolder(inbox);
+    const sent = complete.createFolder(`${systemFolderDocument(root, "sent")}#it`);
+    for (const [id, date, conversation, collection] of [
+      ["old-inbox", "2026-01-01", "reply-thread", folder],
+      ["new-sent", "2026-01-03", "reply-thread", sent],
+      ["middle-inbox", "2026-01-02", "other-thread", folder],
+    ] as const) {
+      const m = complete.createMessage(`${mailDocument(root, "messages", id)}#it`);
+      const t = complete.createThread(`${mailDocument(root, "threads", conversation)}#it`);
+      m.dateSent = new Date(date);
+      m.partOfThread = t.value;
+      m.folderIris.add(collection.value);
+      collection.addMessage(m.value);
+      t.addMessage(m.value);
+    }
+    // Persist every subject separately, so the folder cannot provide Sent message metadata.
+    for (const subject of [...complete.messages, ...complete.threads, ...complete.folders]) {
+      s.seed(
+        subject.value,
+        new MailboxDataset(
+          new Store([...complete].filter((q) => q.subject.value === subject.value)),
+          DataFactory,
+        ),
+      );
+    }
+    const values = (page: ReturnType<typeof pageThreads>) => ({
+      ...page,
+      items: page.items.map((row) => ({
+        thread: row.thread.value,
+        messages: row.messages.map((m) => ({ iri: m.value, sent: m.dateSent })),
+      })),
+    });
+    for (const offset of [0, 1, 2]) {
+      const actual = await loadThreads(s.store, inbox, offset, 1);
+      const expected = pageThreads(complete, inbox, offset, 1);
+      expect(values(actual)).toEqual(values(expected));
+    }
+    const page = await loadThreads(s.store, inbox, 0, 1);
+    expect(page.items[0]!.messages.map((m) => m.value)).toEqual([
+      `${mailDocument(root, "messages", "old-inbox")}#it`,
+      `${mailDocument(root, "messages", "new-sent")}#it`,
+    ]);
+    expect(page.next).toBe(1);
+    expect(page.total).toBe(2);
+  });
+  it("keeps imported custom labels separate from system folders during archive and star mutations", async () => {
+    const s = server();
+    const labels = ["Inbox", "inbox", "Archive", "archive", "Starred", "starred", "system:inbox"];
+    const imported = [];
+    for (const [index, label] of labels.entries()) {
+      const item = await parseEmail(
+        new TextEncoder().encode(`Message-ID: <label-${index}>\nX-Gmail-Labels: ${label}\n\nHello`),
+        storage,
+        "personal",
+        "fallback",
+      );
+      imported.push(item);
+      await persistImportedMail(s.store, item);
+    }
+    expect(new Set(imported.map((item) => item.folders[0]!.iri)).size).toBe(labels.length);
+    const custom = imported[1]!;
+    await archive(s.store, root, custom.message);
+    await setStarred(s.store, root, custom.message, true);
+    await setStarred(s.store, root, custom.message, false);
+    for (const [index, item] of imported.entries()) {
+      const f = item.folders[0]!;
+      const folder = (await s.store.load(documentOf(f.iri))).mailbox.folder(f.iri);
+      expect(folder.title).toBe(labels[index]);
+      expect(folder.has(item.message)).toBe(true);
+      if (![1, 2].includes(index)) expect(folder.has(custom.message)).toBe(false);
+    }
+    const snapshot = await s.store.load(documentOf(custom.message));
+    expect([...snapshot.mailbox.message(custom.message).folderIris]).toEqual([
+      `${mailDocument(root, "folders", "inbox")}#it`,
+      archived,
+    ]);
+    s.files.set(`${root}folders/`, {
+      body: `@prefix ldp: <http://www.w3.org/ns/ldp#>. <> a ldp:Container; ldp:contains ${imported.map((item) => `<${documentOf(item.folders[0]!.iri)}>`).join(", ")}.`,
+      etag: '"folders"',
+    });
+    expect((await loadFolders(s.store, root)).map((row) => row.folder.title)).toEqual(labels);
   });
   it("conditionally mutates read, label, star and archive while keeping unrelated RDF", async () => {
     const s = server();
