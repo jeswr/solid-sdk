@@ -14,6 +14,7 @@ import { DataFactory, Store } from "n3";
 import { RunBudget, type RunLimits } from "../core/budget.js";
 import { IntegrationSyncError } from "../core/errors.js";
 import { getJson } from "../core/fixture-fetch.js";
+import { copyDataset } from "../core/incremental.js";
 import { arr, optionalDate, optionalText, SkipCounter } from "../core/safe.js";
 import type { ImportContext, ImportOutcome, IntegrationAdapter } from "../core/types.js";
 import { CLASSES, OnlineAccount, SoftwareSourceCode } from "../core/vocab.js";
@@ -121,6 +122,53 @@ export function createGithubAdapter(limits?: RunLimits): IntegrationAdapter {
       }
 
       const reposDoc = ctx.resolve("work/repositories.ttl");
+      const previous = copyDataset(await ctx.read("work/repositories.ttl"));
+      // A deletion can shift an unseen repository into a numbered page already read.
+      // Verify omissions before replacing the snapshot; only a 404 confirms removal.
+      for (const subject of previous.getSubjects(null, null, null)) {
+        if (subject.termType !== "NamedNode") continue;
+        const previousRepo = new SoftwareSourceCode(subject.value, previous, DataFactory);
+        if (!previousRepo.types.has(CLASSES.SoftwareSourceCode)) continue;
+        const identifier = previousRepo.identifier;
+        if (!identifier || !/^\d+$/.test(identifier)) continue;
+        const id = Number(identifier);
+        if (!Number.isSafeInteger(id) || seen.has(id)) continue;
+        seen.add(id);
+        const url = `${API}/repositories/${id}`;
+        budget.request();
+        let repo: GitHubRepo | null;
+        try {
+          repo = await getJson<GitHubRepo | null>(
+            ID,
+            async (input, init) => {
+              const response = await ctx.api(input, init);
+              // getJson maps errors (including 429); verification requires exactly 200.
+              if (response.ok && response.status !== 200) {
+                throw new IntegrationSyncError(
+                  ID,
+                  `The platform answered ${response.status} for ${url}.`,
+                  { url, status: response.status },
+                );
+              }
+              return response;
+            },
+            url,
+            undefined,
+            budget,
+          );
+        } catch (error) {
+          if (error instanceof IntegrationSyncError && error.status === 404) continue;
+          throw error;
+        }
+        budget.items(1);
+        if (!repo || repo.id !== id) {
+          throw new IntegrationSyncError(ID, "The platform returned an invalid repository.", {
+            url,
+          });
+        }
+        repos.push(repo);
+      }
+
       const dataset = new Store();
       for (const r of repos) {
         // A repo with no id has no stable fragment IRI — skip it.

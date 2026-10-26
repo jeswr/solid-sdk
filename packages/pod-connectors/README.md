@@ -513,6 +513,14 @@ posts newest-first to the last saved fullname and snapshots subscribed communiti
 Both use framework subject replacement for incremental writes. A cursor-free import
 replaces these collections, including items removed at the source.
 
+Before replacing a GitHub repository snapshot, each previously imported ID absent from the
+listing is checked with `GET /repositories/{id}`. A 200 keeps the repository and updates its
+metadata through the same mapping as listed repositories; a 404 removes it. Any other status
+fails the import, retaining the repository snapshot and checkpoint. These verification requests,
+returned items and JSON bytes share the import's run budget. Numbered pagination can miss a
+surviving repository when an earlier entry is deleted between requests; an omission alone
+never removes previously imported metadata.
+
 GitHub, Strava and Reddit create one shared-core `RunBudget` per import. Hosts can inject
 `{ maxRequests, maxItems, maxBytes? }` through `createGithubAdapter(limits)`,
 `createStravaAdapter(limits)` or `createRedditAdapter(limits)` from their adapter entry points;

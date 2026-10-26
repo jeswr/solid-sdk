@@ -189,7 +189,11 @@ describe("Tier A pagination and checkpoints", () => {
     expect(initial.report.state.counts.items).toBe(102); // profile plus 101 repos
     const second = await replay(
       githubAdapter,
-      [...githubAdapter.fixtures().filter((r) => r.url !== url), { url, json: [] }],
+      [
+        ...githubAdapter.fixtures().filter((r) => r.url !== url),
+        { url, json: [] },
+        { url: "https://api.github.com/repositories", status: 404, json: null },
+      ],
       { pod: initial.pod },
     );
     expect(second.pod.get(`${root(githubAdapter)}work/repositories.ttl`)).not.toContain(
