@@ -9,27 +9,36 @@ import {
   generateState,
 } from "../core/oauth.js";
 import type { OAuthAppConfig, TokenSet } from "../core/types.js";
-import { httpsUrl, NodeRuntimeError, object, textValue } from "./errors.js";
+import { httpsUrl, NodeRuntimeError, object, textValue, validateCallbackPort } from "./errors.js";
 
 /** Node source login supports installed-app secrets without persisting any token. */
 export interface NodeOAuthConfig extends OAuthAppConfig {
   readonly clientSecret?: string;
+  /** Fixed registered callback port; omitted selects an ephemeral port when supported. */
+  readonly callbackPort?: number;
 }
 
-/** The host displays/opens the authorization URL; the listener address cannot be overridden. */
+/** The host displays/opens the authorization URL; listener host and path cannot be overridden. */
 export interface LoopbackLoginOptions {
   readonly openAuthorizationUrl: (url: string) => void | Promise<void>;
   readonly signal?: AbortSignal;
   readonly timeoutMs?: number;
 }
 
-/** Source OAuth code + S256 PKCE, using an ephemeral IPv4 loopback listener only. */
+/** Source OAuth code + S256 PKCE, using an IPv4 loopback listener only. */
 export async function authorizeLoopback(
   adapterId: string,
   config: NodeOAuthConfig,
   sourceFetch: typeof fetch,
   options: LoopbackLoginOptions,
 ): Promise<TokenSet> {
+  const callbackPort =
+    config.callbackPort === undefined ? undefined : validateCallbackPort(config.callbackPort);
+  if (config.requiresCallbackPort && callbackPort === undefined)
+    throw new NodeRuntimeError(
+      "config",
+      "This source requires callbackPort (1024-65535) and a matching registered redirect URI: http://127.0.0.1:<callbackPort>/oauth-callback.",
+    );
   const controller = new AbortController();
   const abort = () => controller.abort();
   const timer = setTimeout(abort, options.timeoutMs ?? 120_000);
@@ -62,7 +71,7 @@ export async function authorizeLoopback(
     const state = generateState();
     await new Promise<void>((resolve, reject) => {
       server.once("error", reject);
-      server.listen({ host: "127.0.0.1", port: 0, exclusive: true }, resolve);
+      server.listen({ host: "127.0.0.1", port: callbackPort ?? 0, exclusive: true }, resolve);
     });
     const address = server.address();
     if (!address || typeof address === "string" || address.address !== "127.0.0.1")

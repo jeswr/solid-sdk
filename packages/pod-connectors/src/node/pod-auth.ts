@@ -31,7 +31,7 @@ export async function createClientCredentialsFetch(
   const authTransport: FetchLike = async (url, init) => {
     if (url === discovery) {
       if (!tokenEndpoint) {
-        const response = await fetchSafe(url);
+        const response = await fetchSafe(url, init as RequestInit);
         if (!response.ok) throw new Error("Discovery failed");
         const metadata = object(await response.json());
         if (metadata.issuer !== config.oidcIssuer) throw new Error("Issuer mismatch");
@@ -73,13 +73,28 @@ export async function createClientCredentialsFetch(
       url === discovery || url === tokenEndpoint
         ? authTransport(url, init)
         : podTransport(url, init);
-    const authenticated = rdfFetchFor(session, credentials, combined);
     return async (input, init) => {
       const request = new Request(input, init);
+      request.signal.throwIfAborted();
       assertDestination(request.url);
       const profileRead = request.url === config.profileDocumentUrl && request.method === "GET";
       if (profileRead) selectedIndex = undefined;
       const body = request.body ? new Uint8Array(await request.arrayBuffer()) : undefined;
+      // solid-dpop's fetch adapter does not forward RequestInit.signal. Capture it in
+      // this request's transport so refresh and nonce retries share its cancellation,
+      // without letting concurrent requests overwrite one another's signal.
+      const requestTransport: FetchLike = (url, init) => {
+        const internalSignal = (init as RequestInit | undefined)?.signal;
+        const requestInit = {
+          ...init,
+          signal: internalSignal
+            ? AbortSignal.any([request.signal, internalSignal])
+            : request.signal,
+        };
+        requestInit.signal.throwIfAborted();
+        return combined(url, requestInit);
+      };
+      const authenticated = rdfFetchFor(session, credentials, requestTransport);
       const response = await authenticated(request.url, {
         method: request.method,
         headers: request.headers,

@@ -85,7 +85,12 @@ CON-03 uses these camelCase fields pending confirmation in root `QUESTIONS.md`:
   "clientSecret": "<CSS account token secret>",
   "readOnly": false,
   "connectors": {
-    "spotify": { "clientId": "<registered public source client id>" }
+    "spotify": { "clientId": "<registered public source client id>" },
+    "twitch": {
+      "clientId": "<registered Twitch client id>",
+      "tokenProxyUrl": "https://proxy.example/twitch/token",
+      "callbackPort": 49152
+    }
   }
 }
 ```
@@ -103,8 +108,14 @@ keeps the shared form contract.
 
 Pod login uses CSS client credentials and DPoP, including bounded nonce retries and an
 in-memory token cache. Source login displays a browser URL, binds only `127.0.0.1` on an
-OS-assigned port, and uses state plus S256 PKCE. The callback path is `/oauth-callback`;
-the flow times out after two minutes. Pod and source transports never share credentials;
+OS-assigned port by default, and uses state plus S256 PKCE. Set `connectors[id].callbackPort`
+to an integer from **1024 to 65535** for a fixed loopback callback. Twitch requires this
+setting with either a local secret or a token proxy; omitting it fails with a configuration
+error before opening the browser. Register the exact URI
+`http://127.0.0.1:<callbackPort>/oauth-callback` with the provider (for the example above,
+`http://127.0.0.1:49152/oauth-callback`). The host and path cannot be configured, and a busy
+port fails login without falling back to another port. The flow times out after two minutes.
+Pod and source transports never share credentials;
 all authenticated transports refuse redirects. SIGINT/SIGTERM cancel the CLI.
 Profile-selected Type Index documents must also use HTTPS, even in another advertised storage.
 
@@ -126,6 +137,10 @@ and `createStateStore` from `./node`. `runCli(args, options)` takes output callb
 `openAuthorizationUrl` callback. For headless tests pass fixture-backed
 `sourceAuth: { fetch }` (including a fixture recorder); Pod client-credentials exchange can
 run against a stub transport over the memory Pod. Importing `./node` starts no command or listener.
+`authorizeLoopback` accepts the same optional `callbackPort` in its source config.
+The fetch returned by `createClientCredentialsFetch` preserves the effective request signal
+(`init.signal` overrides a Request's signal), including token refresh and DPoP nonce retries.
+Already-aborted requests reject before any resource request or refresh is sent.
 
 ## Incremental imports and provenance
 

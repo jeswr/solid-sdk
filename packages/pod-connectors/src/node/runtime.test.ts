@@ -370,6 +370,193 @@ describe("Pod client credentials", () => {
     expect((await authenticated(TEST_PROFILE_DOC)).ok).toBe(true);
     expect(fetch.mock.calls.filter(([input]) => String(input) === tokenUrl)).toHaveLength(2);
   });
+  it.each([
+    "init",
+    "request",
+    "override",
+  ])("refuses an already-aborted PUT signal from %s before resource I/O or refresh", async (kind) => {
+    const { transport } = fixturePod();
+    let now = Date.now();
+    vi.spyOn(Date, "now").mockImplementation(() => now);
+    const fetch = vi.fn(transport);
+    const authenticated = await createClientCredentialsFetch(config, fetch);
+    fetch.mockClear();
+    now += 301_000;
+    const controller = new AbortController();
+    const reason = new Error("synthetic-cancellation");
+    controller.abort(reason);
+    const url = `${TEST_POD_ROOT}integrations/spotify/item.ttl`;
+    const input =
+      kind === "init"
+        ? url
+        : new Request(url, {
+            method: "PUT",
+            body: "synthetic-body",
+            ...(kind === "request" ? { signal: controller.signal } : {}),
+          });
+    await expect(
+      authenticated(
+        input,
+        kind === "request"
+          ? undefined
+          : {
+              method: "PUT",
+              body: "synthetic-body",
+              signal: controller.signal,
+            },
+      ),
+    ).rejects.toBe(reason);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+  it("lets init.signal override an aborted Request signal", async () => {
+    const { transport } = fixturePod();
+    const authenticated = await createClientCredentialsFetch(config, transport);
+    const request = new Request(`${TEST_POD_ROOT}integrations/spotify/item.ttl`, {
+      method: "PUT",
+      body: "synthetic-body",
+      signal: AbortSignal.abort(),
+    });
+    await expect(
+      authenticated(request, { signal: new AbortController().signal }),
+    ).resolves.toMatchObject({ status: 201 });
+  });
+  it.each([
+    "resource",
+    "resource-nonce",
+    "refresh",
+    "refresh-nonce",
+  ])("cancels a pending %s request with the caller's signal", async (stage) => {
+    const { transport } = fixturePod();
+    let now = Date.now();
+    vi.spyOn(Date, "now").mockImplementation(() => now);
+    const controller = new AbortController();
+    const reason = new Error("synthetic-cancellation");
+    let ready!: (signal: AbortSignal | null | undefined) => void;
+    const started = new Promise<AbortSignal | null | undefined>((resolve) => {
+      ready = resolve;
+    });
+    let configured = false;
+    let resourceCalls = 0,
+      refreshCalls = 0;
+    const signals: (AbortSignal | null | undefined)[] = [];
+    const authenticated = await createClientCredentialsFetch(config, async (input, init) => {
+      if (!configured) return transport(input, init);
+      signals.push(init?.signal);
+      if (String(input) === tokenUrl) {
+        refreshCalls++;
+        if (stage === "refresh-nonce" && refreshCalls === 1)
+          return Response.json(
+            { error: "use_dpop_nonce" },
+            { status: 400, headers: { "DPoP-Nonce": "synthetic-as-nonce" } },
+          );
+      } else {
+        resourceCalls++;
+        expect(init?.method).toBe("PUT");
+        expect(new TextDecoder().decode(init?.body as Uint8Array)).toBe("synthetic-body");
+        if (stage === "resource-nonce" && resourceCalls === 1)
+          return new Response(null, {
+            status: 401,
+            headers: { "DPoP-Nonce": "synthetic-resource-nonce" },
+          });
+      }
+      ready(init?.signal);
+      const signal = init?.signal ?? controller.signal;
+      return new Promise<Response>((_resolve, reject) => {
+        signal.throwIfAborted();
+        signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+      });
+    });
+    configured = true;
+    if (stage.startsWith("refresh")) now += 301_000;
+    const pending = authenticated(
+      new Request(`${TEST_POD_ROOT}integrations/spotify/item.ttl`, {
+        method: "PUT",
+        body: "synthetic-body",
+        signal: controller.signal,
+      }),
+    );
+    const rejected = expect(pending).rejects.toBe(reason);
+    const signal = await started;
+    controller.abort(reason);
+    await rejected;
+    expect(signal).toBeDefined();
+    expect(signals.every((signal) => signal?.aborted && signal.reason === reason)).toBe(true);
+    expect(resourceCalls).toBe(
+      stage.startsWith("refresh") ? 0 : stage === "resource-nonce" ? 2 : 1,
+    );
+    expect(refreshCalls).toBe(stage === "refresh-nonce" ? 2 : stage === "refresh" ? 1 : 0);
+  });
+  it.each(["resource", "refresh"])("stops %s nonce retries after cancellation", async (stage) => {
+    const { transport } = fixturePod();
+    let now = Date.now();
+    vi.spyOn(Date, "now").mockImplementation(() => now);
+    const controller = new AbortController();
+    const reason = new Error("synthetic-cancellation");
+    let configured = false;
+    const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
+      if (!configured) return transport(input, init);
+      controller.abort(reason);
+      return new Response(null, {
+        status: stage === "refresh" ? 400 : 401,
+        headers: { "DPoP-Nonce": "synthetic-nonce" },
+      });
+    });
+    const authenticated = await createClientCredentialsFetch(config, fetch);
+    fetch.mockClear();
+    configured = true;
+    if (stage === "refresh") now += 301_000;
+    await expect(
+      authenticated(`${TEST_POD_ROOT}integrations/spotify/item.ttl`, {
+        method: "PUT",
+        body: "synthetic-body",
+        signal: controller.signal,
+      }),
+    ).rejects.toBe(reason);
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+  it.each([
+    "caller",
+    "internal",
+  ])("composes %s cancellation with an internal transport signal", async (kind) => {
+    const { transport } = fixturePod();
+    const caller = new AbortController(),
+      internal = new AbortController();
+    const reason = new Error("synthetic-cancellation");
+    let received!: AbortSignal;
+    let ready!: () => void;
+    const started = new Promise<void>((resolve) => {
+      ready = resolve;
+    });
+    vi.spyOn(dpop, "rdfFetchFor").mockImplementation(
+      (_session, _credentials, fetchImpl) => async (input) => {
+        if (!fetchImpl) throw new Error("Missing fixture transport");
+        const init = { method: "GET", signal: internal.signal };
+        return fetchImpl(String(input), init);
+      },
+    );
+    let configured = false;
+    const authenticated = await createClientCredentialsFetch(config, async (input, init) => {
+      if (!configured) return transport(input, init);
+      if (!init?.signal) throw new Error("Missing request signal");
+      received = init.signal;
+      ready();
+      return new Promise<Response>((_resolve, reject) => {
+        received.addEventListener("abort", () => reject(received.reason), { once: true });
+      });
+    });
+    configured = true;
+    const rejected = expect(
+      authenticated(`${TEST_POD_ROOT}integrations/spotify/item.ttl`, {
+        signal: caller.signal,
+      }),
+    ).rejects.toBe(reason);
+    await started;
+    (kind === "caller" ? caller : internal).abort(reason);
+    await rejected;
+    expect(received.aborted).toBe(true);
+    expect(caller.signal.aborted).toBe(kind === "caller");
+    expect(internal.signal.aborted).toBe(kind === "internal");
+  });
   it("rejects unsafe explicit endpoints and unexpected auth-library destinations", async () => {
     const fetch = vi.fn();
     await expect(
@@ -492,6 +679,35 @@ describe("Pod client credentials", () => {
 });
 
 describe("CLI import", () => {
+  it("reports missing Twitch callbackPort as a configuration error before opening the browser", async () => {
+    const path = await configPath();
+    await writeFile(
+      path,
+      JSON.stringify({
+        ...config,
+        connectors: {
+          twitch: { clientId: "synthetic-source", clientSecret: "synthetic-source-secret" },
+        },
+      }),
+    );
+    const { transport } = fixturePod();
+    const stderr = vi.fn(),
+      openAuthorizationUrl = vi.fn(),
+      sourceTransport = vi.fn();
+    expect(
+      await runCli(["import", "twitch"], {
+        configPath: path,
+        podTransport: transport,
+        sourceTransport,
+        stdout: vi.fn(),
+        stderr,
+        openAuthorizationUrl,
+      }),
+    ).toBe(2);
+    expect(stderr).toHaveBeenCalledWith(expect.stringContaining("callbackPort"));
+    expect(openAuthorizationUrl).not.toHaveBeenCalled();
+    expect(sourceTransport).not.toHaveBeenCalled();
+  });
   it.each([
     "deadline",
     "host",

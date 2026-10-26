@@ -47,6 +47,7 @@ export const twitchAdapter: IntegrationAdapter = {
     scopes: SCOPES,
     tokenExchange: "proxy",
     tokenProxyUrl: undefined,
+    requiresCallbackPort: true,
   },
   // Helix rejects calls without the app's Client-Id header.
   apiHeaders: { "client-id": "" },

@@ -58,6 +58,8 @@ export interface OAuthAppConfig {
    * or HTTP Basic client authentication and a JSON body. Proxies keep their form contract.
    */
   readonly tokenRequest?: "form" | "basic-json";
+  /** Node loopback login requires a fixed, provider-registered callback port. */
+  readonly requiresCallbackPort?: boolean;
   /** Extra query params some platforms require on the authorize URL. */
   readonly extraAuthParams?: Readonly<Record<string, string>>;
   /**

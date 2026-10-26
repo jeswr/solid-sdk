@@ -54,6 +54,33 @@ describe("MCP configuration file", () => {
     expect(cfg.clientId).toBe(settings.clientId);
     expect(cfg.connectors.spotify?.clientId).toBe("public-source");
   });
+  it.each([1024, 49152, 65535])("loads fixed source callback port %i", async (callbackPort) => {
+    const cfg = await readNodeConfig(
+      await config({
+        ...settings,
+        connectors: { twitch: { clientId: "synthetic-source", callbackPort } },
+      }),
+    );
+    expect(cfg.connectors.twitch).toMatchObject({ callbackPort });
+  });
+  it.each([
+    null,
+    true,
+    "49152",
+    0,
+    1023,
+    65536,
+    49152.5,
+  ])("refuses invalid source callback port %s", async (callbackPort) => {
+    await expect(
+      readNodeConfig(
+        await config({
+          ...settings,
+          connectors: { twitch: { clientId: "synthetic-source", callbackPort } },
+        }),
+      ),
+    ).rejects.toMatchObject({ kind: "config" });
+  });
   it.each([
     0o644, 0o640, 0o400, 0o700, 0o1600,
   ])("refuses mode %o without returning config content", async (mode) => {

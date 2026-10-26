@@ -4,7 +4,7 @@ import { request, Server } from "node:http";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { OAuthAppConfig } from "../core/types.js";
 import { createRegistry } from "../registry.js";
-import { authorizeLoopback } from "./loopback.js";
+import { authorizeLoopback, type NodeOAuthConfig } from "./loopback.js";
 
 const cfg: OAuthAppConfig = {
   clientId: "synthetic-source-client",
@@ -138,6 +138,110 @@ describe("source loopback login", () => {
     await expect(callback(redirect!.href)).rejects.toThrow();
   });
   it.each([
+    "secret",
+    "proxy",
+  ])("requires Twitch's registered callback port before opening the browser (%s)", async (mode) => {
+    const oauth = createRegistry().adapterById("twitch")?.oauth;
+    if (!oauth) throw new Error("Missing fixture OAuth configuration");
+    const open = vi.fn();
+    const listen = vi.spyOn(Server.prototype, "listen");
+    const exchange = vi.fn();
+    await expect(
+      authorizeLoopback(
+        "twitch",
+        {
+          ...oauth,
+          clientId: "synthetic-client",
+          ...(mode === "secret"
+            ? { clientSecret: "synthetic-secret" }
+            : { tokenProxyUrl: "https://proxy.test/token" }),
+        },
+        exchange,
+        { openAuthorizationUrl: open },
+      ),
+    ).rejects.toMatchObject({ kind: "config", message: expect.stringContaining("callbackPort") });
+    expect(listen).not.toHaveBeenCalled();
+    expect(open).not.toHaveBeenCalled();
+    expect(exchange).not.toHaveBeenCalled();
+  });
+  it.each([
+    null,
+    true,
+    "49152",
+    0,
+    1023,
+    65536,
+    49152.5,
+    Number.NaN,
+    Number.POSITIVE_INFINITY,
+  ])("rejects invalid programmatic callback port %s before listening", async (callbackPort) => {
+    const listen = vi.spyOn(Server.prototype, "listen");
+    const open = vi.fn();
+    await expect(
+      authorizeLoopback("source", { ...cfg, callbackPort } as NodeOAuthConfig, vi.fn(), {
+        openAuthorizationUrl: open,
+      }),
+    ).rejects.toMatchObject({ kind: "config" });
+    expect(listen).not.toHaveBeenCalled();
+    expect(open).not.toHaveBeenCalled();
+  });
+  it.each([
+    "secret",
+    "proxy",
+  ])("uses the configured Twitch port for binding, authorization and %s exchange", async (mode) => {
+    const completeCallback = mockLoopbackCallback();
+    const callbackPort = 49152;
+    const oauth = createRegistry().adapterById("twitch")?.oauth;
+    if (!oauth) throw new Error("Missing fixture OAuth configuration");
+    const config = {
+      ...oauth,
+      clientId: "synthetic-client",
+      ...(mode === "secret"
+        ? { clientSecret: "synthetic-secret" }
+        : { tokenProxyUrl: "https://proxy.test/token" }),
+      callbackPort,
+    };
+    const exchange = vi.fn(async (input, init) => {
+      expect(input).toBe(mode === "secret" ? oauth.tokenEndpoint : config.tokenProxyUrl);
+      expect(new URLSearchParams(init.body).get("redirect_uri")).toBe(
+        `http://127.0.0.1:${callbackPort}/oauth-callback`,
+      );
+      return Response.json({ access_token: "synthetic-token" });
+    });
+    await expect(
+      authorizeLoopback("twitch", config, exchange, {
+        openAuthorizationUrl(url) {
+          expect(answer(url).auth.searchParams.get("redirect_uri")).toBe(
+            `http://127.0.0.1:${callbackPort}/oauth-callback`,
+          );
+          completeCallback(url);
+        },
+      }),
+    ).resolves.toMatchObject({ accessToken: "synthetic-token" });
+    expect(Server.prototype.listen).toHaveBeenCalledWith(
+      { host: "127.0.0.1", port: callbackPort, exclusive: true },
+      expect.any(Function),
+    );
+    expect(exchange).toHaveBeenCalledTimes(1);
+  });
+  it("refuses a busy fixed callback port before opening the browser", async () => {
+    vi.spyOn(Server.prototype, "listen").mockImplementation(function (this: Server) {
+      queueMicrotask(() =>
+        this.emit("error", Object.assign(new Error("Port in use"), { code: "EADDRINUSE" })),
+      );
+      return this;
+    });
+    const open = vi.fn(),
+      exchange = vi.fn();
+    await expect(
+      authorizeLoopback("source", { ...cfg, callbackPort: 49152 }, exchange, {
+        openAuthorizationUrl: open,
+      }),
+    ).rejects.toMatchObject({ kind: "auth" });
+    expect(open).not.toHaveBeenCalled();
+    expect(exchange).not.toHaveBeenCalled();
+  });
+  it.each([
     "github",
     "strava",
     "twitch",
@@ -155,7 +259,13 @@ describe("source loopback login", () => {
       });
       const token = await authorizeLoopback(
         id,
-        { ...oauth, clientId: "synthetic-client", clientSecret: "synthetic-secret", tokenProxyUrl },
+        {
+          ...oauth,
+          clientId: "synthetic-client",
+          clientSecret: "synthetic-secret",
+          tokenProxyUrl,
+          callbackPort: 49152,
+        },
         transport,
         {
           openAuthorizationUrl(url) {

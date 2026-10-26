@@ -4,13 +4,15 @@ import { open } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { getuid } from "node:process";
-import { httpsUrl, NodeRuntimeError, object, textValue } from "./errors.js";
+import { httpsUrl, NodeRuntimeError, object, textValue, validateCallbackPort } from "./errors.js";
 
 /** Node-only source settings; desktop client secrets remain in memory. */
 export interface NodeConnectorConfig {
   readonly clientId: string;
   readonly clientSecret?: string;
   readonly tokenProxyUrl?: string;
+  /** Fixed loopback port for a registered source redirect URI. */
+  readonly callbackPort?: number;
 }
 
 /** Shared MCP client-credentials settings with a connector-specific OAuth section. */
@@ -77,6 +79,9 @@ function parseNodeConfig(value: unknown): NodeConfig {
       ...(source.tokenProxyUrl === undefined
         ? {}
         : { tokenProxyUrl: httpsUrl(source.tokenProxyUrl) }),
+      ...(source.callbackPort === undefined
+        ? {}
+        : { callbackPort: validateCallbackPort(source.callbackPort) }),
     };
   }
   return {

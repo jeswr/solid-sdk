@@ -11,6 +11,13 @@ export class NodeRuntimeError extends Error {
   }
 }
 
+/** Validate file and programmatic source settings with the same unprivileged port range. */
+export function validateCallbackPort(value: unknown): number {
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 1024 || value > 65535)
+    throw new NodeRuntimeError("config", "callbackPort must be an integer from 1024 to 65535.");
+  return value;
+}
+
 /** Validate a configured HTTPS URL without accepting embedded credentials. */
 export function httpsUrl(value: unknown, allowFragment = false): string {
   if (typeof value !== "string" || !value.trim()) throw new Error("Invalid URL");
