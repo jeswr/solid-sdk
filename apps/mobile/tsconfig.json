@@ -1,8 +1,9 @@
 {
-  "$comment": "AUTHORED-BY Claude Opus 5.5",
+  "$comment": "AUTHORED-BY Claude Opus 5.5; GPT-5.6 Codex",
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "noEmit": true,
+    "allowJs": true,
     "types": ["node"],
     "allowImportingTsExtensions": true
   },
