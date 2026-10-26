@@ -136,6 +136,7 @@ export function FileGrid<T>({
                         selection.select(key, keys, {
                           range: event.shiftKey,
                           toggle: event.ctrlKey || event.metaKey,
+                          additive: event.ctrlKey || event.metaKey,
                         })
                       }
                     >

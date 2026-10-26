@@ -23,14 +23,25 @@ const columns: DataColumn<Item>[] = [
 ];
 const onOpen = vi.fn();
 const onDetails = vi.fn();
+let viewportWidth = 800;
+const resizeCallbacks = new Set<() => void>();
 
 beforeAll(() => {
   vi.stubGlobal(
     "ResizeObserver",
     class {
+      callback: () => void;
+      constructor(callback: () => void) {
+        this.callback = callback;
+        resizeCallbacks.add(callback);
+      }
       observe() {}
-      unobserve() {}
-      disconnect() {}
+      unobserve() {
+        resizeCallbacks.delete(this.callback);
+      }
+      disconnect() {
+        resizeCallbacks.delete(this.callback);
+      }
     },
   );
   vi.stubGlobal("matchMedia", () => ({
@@ -39,10 +50,10 @@ beforeAll(() => {
     removeEventListener() {},
   }));
   Object.defineProperties(HTMLElement.prototype, {
-    clientWidth: { configurable: true, get: () => 800 },
+    clientWidth: { configurable: true, get: () => viewportWidth },
     clientHeight: { configurable: true, get: () => 440 },
     scrollHeight: { configurable: true, get: () => 500000 },
-    scrollWidth: { configurable: true, get: () => 800 },
+    scrollWidth: { configurable: true, get: () => viewportWidth },
     scrollTo: {
       configurable: true,
       value(options: ScrollToOptions) {
@@ -55,6 +66,7 @@ beforeAll(() => {
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  viewportWidth = 800;
 });
 
 function Fixture({
@@ -171,6 +183,9 @@ for (const kind of ["table", "grid"] as const) {
         "unknown",
       ];
       const states: CollectionState[] = [
+        { status: "ready" },
+        { status: "refreshing" },
+        { status: "offline", cached: true },
         { status: "loading" },
         { status: "offline", cached: false },
         ...errors.map((kind) => ({
@@ -231,3 +246,45 @@ it("sorts numeric values, ranges in sorted order, hides and resizes columns by k
   expect(screen.queryByRole("columnheader", { name: /Resize Size/ })).toBeNull();
   expect(screen.getByRole("grid").getAttribute("aria-colcount")).toBe("2");
 });
+
+it("preserves FileGrid focus when a responsive column change reparents the active card", () => {
+  render(<Fixture kind="grid" />);
+  act(() => screen.getByRole("gridcell", { name: "Charlie" }).focus());
+  act(() => {
+    viewportWidth = 430;
+    for (const callback of resizeCallbacks) callback();
+  });
+  expect(screen.getByRole("grid").getAttribute("aria-colcount")).toBe("2");
+  expect(document.activeElement?.getAttribute("aria-label")).toBe("Charlie");
+  expect(screen.getByRole("gridcell", { name: "Charlie" }).getAttribute("aria-colindex")).toBe("1");
+});
+
+for (const kind of ["table", "grid"] as const) {
+  it(`${kind} clears an accessible filtered empty state`, async () => {
+    const clear = vi.fn();
+    const props = {
+      items: [],
+      getKey,
+      getLabel,
+      label: "Files",
+      onOpen,
+      filterQuery: "missing",
+      onClearFilters: clear,
+    };
+    const { container } = render(
+      <main>
+        <h1>Files</h1>
+        {kind === "table" ? <DataTable {...props} columns={columns} /> : <FileGrid {...props} />}
+      </main>,
+    );
+    expect(screen.getByRole("heading", { name: "No results for 'missing'" })).toBeDefined();
+    fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
+    expect(clear).toHaveBeenCalledOnce();
+    const results = await axe.run(container, { rules: { "color-contrast": { enabled: false } } });
+    expect(
+      results.violations.filter(
+        (entry) => entry.impact === "serious" || entry.impact === "critical",
+      ),
+    ).toEqual([]);
+  });
+}

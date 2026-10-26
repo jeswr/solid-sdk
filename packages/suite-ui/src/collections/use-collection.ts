@@ -2,7 +2,7 @@
 "use client";
 
 import { defaultRangeExtractor } from "@tanstack/react-virtual";
-import { type KeyboardEvent, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { type KeyboardEvent, useLayoutEffect, useRef, useState } from "react";
 import type { SelectionModel } from "./use-selection.js";
 
 /** Read actual inherited density tokens; observe ancestor overrides, resizing and touch changes. */
@@ -76,12 +76,16 @@ export function useCollectionNavigation({
   const pendingFocus = useRef<string | null>(null);
   const hadFocus = useRef(false);
 
-  // If filtering/removal unmounts the focused row, restore focus to the first surviving item.
-  useEffect(() => {
-    if (activeKey !== storedKey && hadFocus.current && activeKey !== undefined) {
+  // Restore focus when filtering/removal or responsive card reparenting unmounts its DOM node.
+  useLayoutEffect(() => {
+    if (!hadFocus.current || activeKey === undefined || columns < 1) return;
+    if (activeKey !== storedKey) {
+      scrollToIndex(0);
+      elements.current.get(activeKey)?.focus({ preventScroll: true });
+    } else if (document.activeElement === document.body) {
       elements.current.get(activeKey)?.focus({ preventScroll: true });
     }
-  }, [activeKey, storedKey]);
+  }, [activeKey, storedKey, columns, scrollToIndex]);
 
   function focus(index: number) {
     const key = keys[Math.max(0, Math.min(keys.length - 1, index))];

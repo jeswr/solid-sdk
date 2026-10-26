@@ -150,8 +150,18 @@ export function DataTable<T>({
     if (metrics.height) virtual.measure();
   }, [virtual, metrics.height]);
   const visible = table.getVisibleLeafColumns();
-  const gridTemplateColumns = `44px ${visible.map((column, index) => (index === 0 ? `minmax(${column.getSize()}px, 1fr)` : `${column.getSize()}px`)).join(" ")}`;
-  const minWidth = 44 + visible.reduce((sum, column) => sum + column.getSize(), 0);
+  // Let the first column fill the viewport while retaining each user resize delta.
+  const otherWidth = visible.slice(1).reduce((sum, column) => sum + column.getSize(), 0);
+  const widths = visible.map((column, index) => {
+    if (index !== 0) return column.getSize();
+    const initial = column.columnDef.size ?? 180;
+    return Math.max(
+      column.columnDef.minSize ?? 100,
+      Math.max(initial, metrics.width - 44 - otherWidth) + column.getSize() - initial,
+    );
+  });
+  const gridTemplateColumns = `44px ${widths.map((width) => `${width}px`).join(" ")}`;
+  const minWidth = 44 + widths.reduce((sum, width) => sum + width, 0);
   const allSelected = keys.length > 0 && keys.every((key) => selection.selectedKeys.has(key));
   const someSelected = keys.some((key) => selection.selectedKeys.has(key));
   const content = hasCollectionContent(surface.state, items.length);
@@ -283,6 +293,7 @@ export function DataTable<T>({
                     selection.select(row.id, keys, {
                       range: event.shiftKey,
                       toggle: event.ctrlKey || event.metaKey,
+                      additive: event.ctrlKey || event.metaKey,
                     })
                   }
                 >
