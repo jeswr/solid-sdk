@@ -121,8 +121,9 @@ export function addMeasurement(document: HealthDocument, input: Measurement): vo
   observation.measuredValue = input.value;
   observation.unit = `${NS.UNIT}${metric.unit}`;
   observation.unitCode = metric.unitCode;
-  observation.effectiveTime = `${input.iri}-time`;
-  document.mintInstant(observation.effectiveTime).dateTime = input.at;
+  const instant = document.mintInstant(`${input.iri}-time`);
+  observation.effectiveTime = instant as Term;
+  instant.dateTime = input.at;
   const details = new Details(input.iri, document, documentFactory);
   details.source = input.source;
   details.note = input.note;
@@ -142,7 +143,8 @@ export function measurements(
   for (const observation of document.observations) {
     const matches =
       (observation.code !== undefined &&
-        (observation.code === `http://loinc.org/rdf/${metric.code}` ||
+        ((observation.code.termType === "NamedNode" &&
+          observation.code.value === `http://loinc.org/rdf/${metric.code}`) ||
           (document.codeableConcept(observation.code).code === metric.code &&
             document.codeableConcept(observation.code).scheme === "http://loinc.org"))) ||
       (metric.kind !== "Observation" && observation.kind === metric.kind);

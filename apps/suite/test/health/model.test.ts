@@ -60,11 +60,11 @@ describe("HealthDocument — reading the conformant instance", () => {
     const hr = obs[0] as Observation;
     expect(hr.kind).toBe("HeartRate");
     expect(hr.patient).toBe("https://carol.example/health/Carol");
-    expect(hr.code).toBe("https://carol.example/health/LoincHeartRate");
+    expect(hr.code?.value).toBe("https://carol.example/health/LoincHeartRate");
     expect(hr.measuredValue).toBe(72);
     expect(hr.unit).toBe(Unit.beatPerMin);
     expect(hr.unitCode).toBe("/min");
-    expect(hr.effectiveTime).toBe("https://carol.example/health/T1");
+    expect(hr.effectiveTime?.value).toBe("https://carol.example/health/T1");
   });
 
   it("resolves the codeable concepts", () => {
@@ -135,11 +135,11 @@ describe("Observation — kind transitions and round-trip", () => {
     obs.effectiveTime = "urn:t1";
 
     expect(obs.patient).toBe("urn:carol");
-    expect(obs.code).toBe("urn:loinc");
+    expect(obs.code?.value).toBe("urn:loinc");
     expect(obs.measuredValue).toBe(72);
     expect(obs.unit).toBe(Unit.beatPerMin);
     expect(obs.unitCode).toBe("/min");
-    expect(obs.effectiveTime).toBe("urn:t1");
+    expect(obs.effectiveTime?.value).toBe("urn:t1");
 
     obs.patient = undefined;
     obs.code = undefined;

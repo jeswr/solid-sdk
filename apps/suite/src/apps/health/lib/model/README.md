@@ -10,7 +10,9 @@ read aliases come from `@jeswr/suite-vocab`. The original deployable is unchange
   named graphs and unsafe IRIs; unknown data, resource identities and literal contents survive.
 - `addMeasurement`, `measurements`, `aggregateMetric`: canonical QUDT/UCUM values for steps,
   heart rate, sleep duration, weight and systolic/diastolic pressure. Clinical codes use
-  `health:CodeableConcept`; effective dates use `time:Instant`. Dates and shard keys use UTC.
+  `health:CodeableConcept`; effective dates use `time:Instant`. Observation code/time links
+  retain RDF terms, including blank nodes; resolution helpers accept terms or IRI strings.
+  Dates and shard keys use UTC.
   Range end is exclusive. Steps and sleep sum; other metrics average. Weeks start Monday.
 - `addRecord`, `records`, `Reminder`: health records, conditions, medications and immunisations,
   with names/notes and `sched:Reminder` timestamps. Reminder delivery belongs to HLT-01.

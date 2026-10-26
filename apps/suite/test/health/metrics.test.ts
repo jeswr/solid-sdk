@@ -1,8 +1,10 @@
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
+
 import { NS } from "@jeswr/suite-vocab";
+import type { Term } from "@rdfjs/types";
 import { DataFactory } from "n3";
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import { emptyHealthDocument, parseHealth } from "../../src/apps/health/lib/model/io.js";
 import {
   addMeasurement,
@@ -80,16 +82,18 @@ describe("metrics", () => {
     const obs = doc.mintObservation("https://pod.example/missing", "HeartRate");
     expect(measurements(doc, "heartRate", range)).toHaveLength(1);
     obs.effectiveTime = "https://pod.example/time";
-    doc.mintInstant(obs.effectiveTime).dateTime = range.start;
+    const time = obs.effectiveTime;
+    assert(time);
+    doc.mintInstant(time).dateTime = range.start;
     expect(measurements(doc, "heartRate", range)).toHaveLength(1);
     obs.measuredValue = Number.NaN;
     expect(measurements(doc, "heartRate", range)).toHaveLength(1);
     obs.measuredValue = 80;
-    doc.instant(obs.effectiveTime).dateTime = new Date("2024-12-31Z");
+    doc.instant(time).dateTime = new Date("2024-12-31Z");
     expect(measurements(doc, "heartRate", range)).toHaveLength(1);
-    doc.instant(obs.effectiveTime).dateTime = range.end;
+    doc.instant(time).dateTime = range.end;
     expect(measurements(doc, "heartRate", range)).toHaveLength(1);
-    doc.instant(obs.effectiveTime).dateTime = range.start;
+    doc.instant(time).dateTime = range.start;
     expect(() => measurements(doc, "heartRate", range)).toThrow("unit");
     obs.unit = doc.observation(sample().iri).unit;
     expect(() => measurements(doc, "heartRate", range)).toThrow("unit");
@@ -155,10 +159,56 @@ it("reads direct LOINC concepts and requires the LOINC scheme on local code node
   const input = sample(70, "weight");
   addMeasurement(doc, input);
   const observation = doc.observation(input.iri);
-  const code = doc.codeableConcept(observation.code as string);
+  const code = doc.codeableConcept(observation.code as Term);
   expect(code.code).toBe("29463-7");
   code.scheme = "https://other.example/scheme";
   expect(measurements(doc, "weight", range)).toEqual([]);
   observation.code = "http://loinc.org/rdf/29463-7";
   expect(measurements(doc, "weight", range)).toEqual([input]);
+});
+it.each([
+  ["NamedNode", "NamedNode"],
+  ["BlankNode", "NamedNode"],
+  ["NamedNode", "BlankNode"],
+  ["BlankNode", "BlankNode"],
+])("reads and round-trips metrics with %s codes and %s instants", async (codeType, timeType) => {
+  const input = sample(70, "weight");
+  const code = codeType === "BlankNode" ? "_:code" : "<#code>";
+  const instant = timeType === "BlankNode" ? "_:instant" : "<#instant>";
+  const document = await parseHealth(
+    `
+    <${input.iri}> a <${NS.HEALTH}Observation>;
+      <${NS.HEALTH}hasCode> ${code}; <${NS.HEALTH}effectiveTime> ${instant};
+      <${NS.HEALTH}value> 70; <${NS.HEALTH}hasUnit> <${NS.UNIT}KiloGM>;
+      <${NS.HEALTH}unitCode> "kg"; <${NS.DCT}source> "Watch".
+    ${code} a <${NS.HEALTH}CodeableConcept>; <${NS.CORE}value> "29463-7";
+      <${NS.CORE}inScheme> <http://loinc.org>.
+    ${instant} <http://www.w3.org/2006/time#inXSDDateTimeStamp>
+      "2025-01-01T12:00:00Z"^^<${NS.XSD}dateTimeStamp>.
+  `,
+    input.iri,
+  );
+  const observation = document.observation(input.iri);
+  expect(observation.code?.termType).toBe(codeType);
+  expect(observation.effectiveTime?.termType).toBe(timeType);
+  expect(measurements(document, "weight", range)).toEqual([input]);
+  const { toTurtle } = await import("../../src/apps/health/lib/model/serialise.js");
+  expect(
+    measurements(await parseHealth(await toTurtle(document), input.iri), "weight", range),
+  ).toEqual([input]);
+});
+it("preserves RDF terms when assigning observation links", () => {
+  const doc = emptyHealthDocument();
+  addMeasurement(doc, sample());
+  const observation = doc.observation(sample().iri);
+  const code = DataFactory.blankNode("code");
+  observation.code = code;
+  observation.effectiveTime = DataFactory.blankNode("time");
+  doc.codeableConcept(code).code = "8867-4";
+  doc.codeableConcept(code).scheme = "http://loinc.org";
+  doc.instant(observation.effectiveTime).dateTime = sample().at;
+  expect(observation.code?.equals(code)).toBe(true);
+  expect(measurements(doc, "heartRate", range)).toEqual([sample()]);
+  observation.code = DataFactory.namedNode("http://loinc.org/rdf/8867-4");
+  expect(measurements(doc, "heartRate", range)).toEqual([sample()]);
 });

@@ -10,7 +10,7 @@
 // string-concatenated Turtle anywhere in this file.
 
 import { NS } from "@jeswr/suite-vocab";
-import type { DataFactory, DatasetCore } from "@rdfjs/types";
+import type { DataFactory, DatasetCore, Term } from "@rdfjs/types";
 import {
   DatasetWrapper,
   LiteralAs,
@@ -20,6 +20,7 @@ import {
   OptionalAs,
   OptionalFrom,
   SetFrom,
+  TermAs,
 } from "@rdfjs/wrapper";
 import { canonicalizeHealthDataset, HealthTerm } from "./canonical-vocab.js";
 import {
@@ -120,12 +121,14 @@ export class Observation extends HealthTerm {
     if (value === "HeartRate") this.types.add(HealthClass.VitalSign);
   }
 
-  /** The clinical code IRI stating WHAT was measured (`health:hasCode`). */
-  get code(): string | undefined {
-    return OptionalFrom.subjectPredicate(this, HealthProp.hasCode, NamedNodeAs.string);
+  /** The clinical code node stating WHAT was measured (`health:hasCode`). */
+  get code(): Term | undefined {
+    return OptionalFrom.subjectPredicate(this, HealthProp.hasCode, TermAs.term);
   }
-  set code(value: string | undefined) {
-    OptionalAs.object(this, HealthProp.hasCode, value, NamedNodeFrom.string);
+  set code(value: string | Term | undefined) {
+    OptionalAs.object(this, HealthProp.hasCode, value, (node, factory) =>
+      typeof node === "string" ? factory.namedNode(node) : node,
+    );
   }
 
   /** The patient (a core:Person) this observation is about (`health:patient`). */
@@ -166,12 +169,14 @@ export class Observation extends HealthTerm {
     OptionalAs.object(this, HealthProp.unitCode, value, LiteralFrom.string);
   }
 
-  /** The effective-time IRI (`health:effectiveTime` → a time:Instant or time:Interval). */
-  get effectiveTime(): string | undefined {
-    return OptionalFrom.subjectPredicate(this, HealthProp.effectiveTime, NamedNodeAs.string);
+  /** The effective-time node (`health:effectiveTime` → a time:Instant or time:Interval). */
+  get effectiveTime(): Term | undefined {
+    return OptionalFrom.subjectPredicate(this, HealthProp.effectiveTime, TermAs.term);
   }
-  set effectiveTime(value: string | undefined) {
-    OptionalAs.object(this, HealthProp.effectiveTime, value, NamedNodeFrom.string);
+  set effectiveTime(value: string | Term | undefined) {
+    OptionalAs.object(this, HealthProp.effectiveTime, value, (node, factory) =>
+      typeof node === "string" ? factory.namedNode(node) : node,
+    );
   }
 
   /** Stamp this node as a `health:Observation` (call once when minting). */
@@ -585,13 +590,13 @@ export class HealthDocument extends DatasetWrapper {
     return new Observation(iri, this, this.factory);
   }
 
-  /** Wrap an existing codeable-concept subject IRI. */
-  codeableConcept(iri: string): CodeableConcept {
+  /** Wrap an existing named or blank codeable-concept subject. */
+  codeableConcept(iri: string | Term): CodeableConcept {
     return new CodeableConcept(iri, this, this.factory);
   }
 
-  /** Wrap an existing instant subject IRI. */
-  instant(iri: string): Instant {
+  /** Wrap an existing named or blank instant subject. */
+  instant(iri: string | Term): Instant {
     return new Instant(iri, this, this.factory);
   }
 
@@ -641,7 +646,7 @@ export class HealthDocument extends DatasetWrapper {
   }
 
   /** Mint a new time:Instant subject. */
-  mintInstant(iri: string): Instant {
+  mintInstant(iri: string | Term): Instant {
     const i = new Instant(iri, this, this.factory);
     i.markInstant();
     return i;
