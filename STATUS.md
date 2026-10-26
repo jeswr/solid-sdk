@@ -101,3 +101,40 @@ the full gate. No dependencies or UI were added, and no tracker state, other che
 branch selection, or remote was changed. The review finding is addressed; no new
 interpretation questions arose. The unrelated full-gate failures and unavailable roborev
 tooling remain the only validation limitations.
+
+## Fix round 2 — bound container expansion
+
+- `7d160a36` — `fix: bound document containers before traversal` checks array length
+  before enumerating keys and object cardinality before inspecting descriptors, using
+  the remaining value budget. Descriptor inspection and array density validation now
+  proceed incrementally with recursive traversal.
+- `12035603` — `test: fail fast on oversized array enumeration` makes the maximum-length
+  sparse-array regression fixture throw if key enumeration is attempted, so a regression
+  fails without performing excessive work.
+- The final documentation commit records these results.
+
+Seven added regression cases cover oversized sparse arrays, array/object cardinality
+after earlier siblings consume values, exact-limit acceptance, and stopping descriptor
+inspection when a nested value exceeds the budget. All four public derivation functions
+are checked for typed rejections.
+
+| Exact command | Result |
+| --- | --- |
+| `pnpm --filter @jeswr/app-suite exec vitest run test/docs-outline.test.ts --coverage.include='src/apps/docs/lib/outline/**/*.ts'` | PASS: 100 tests; outline statements, branches, functions and lines all 100%. |
+| `pnpm --filter @jeswr/app-suite run lint` | PASS: 21 existing Money budget warnings. The final regression-fixture adjustment also passed a focused Biome check. |
+| `pnpm --filter @jeswr/suite-ui run build` | PASS. |
+| `pnpm --filter @jeswr/app-suite run build` | PASS: Next.js production build. |
+| `pnpm --filter @jeswr/app-suite run typecheck` | PASS. |
+| `pnpm --filter @jeswr/app-suite run test` | PASS: 28 files, 1,277 tests; all configured coverage metrics 100%. |
+| `pnpm run lint:root` | PASS: root lint and all guards. |
+| `TURBO_SCM_BASE=dc683d98378750d7524af88c68457af08d3f1947 pnpm run gate` | PASS: 6/6 tasks. |
+| `pnpm run gate:full` | FAIL (exit 1): 208 successful tasks / 289 scheduled; the same two existing `@jeswr/federation-codegen#test` failures detailed above (bookmarks namespace and generated ontology drift). |
+| `git diff --check` | PASS. |
+| `roborev status` | UNAVAILABLE: exit 127, `roborev: command not found`. |
+
+An initial app test run collided with the focused test run's shared coverage directory;
+the sequential rerun passed, as did the affected gate. No full-workspace success is claimed.
+The unrelated federation-codegen files remain unchanged. The review finding is addressed;
+no implementation work or new questions remain. Dispatcher review remains necessary because
+roborev is unavailable. No dependencies, UI, tracker state, remotes, other checkouts or
+branch selection were changed.
