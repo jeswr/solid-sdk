@@ -10,9 +10,10 @@ description: Work on @jeswr/storage-capabilities, the storage description discov
 T-010 implements the ADR-002 vocabulary and type contracts, plus internal Link/probe-header parsers.
 T-011 adds `parseLwsDescription(json, storageUrl, requestUrl)` and `CapabilitiesError` at the root.
 T-012 adds the internal Solid description dataset mapper in `src/solid-description.ts`.
+T-013 implements `resolveStorageDescription` and `probe` at the root and both cache factories.
 The root entry point also exports types; `./vocab` exports vocabulary objects (`LWS.Storage`,
 `SOLID.storageDescription`, and the other ADR-002 IRIs). `./testing` exports the representative
-`sparqLwsCid` example; `./cache` remains reserved.
+`sparqLwsCid` example; `./cache` exports `createMemoryCache`, `createIndexedDbCache` and its options type.
 
 Before implementation, read SDK core ADR-001 D4 and `ADR-002-capabilities.md` in
 `solid-suite-planning/specs/sdk-core/`, alongside this repository's `AGENTS.md`.
@@ -37,7 +38,37 @@ using the description URL as `baseIRI`; remote JSON-LD contexts need an explicit
 The tests supply the notifications context offline. The mapper finds `notify:subscription`
 on any subject, but reads `did:service`, `lws:capability`, and ACQ endpoints only on `rootUrl`.
 HTTP metadata and origin validation remain the resolver's responsibility.
+The resolver passes the internal third argument `notificationsOnly: true` for foreign Solid
+descriptions so generic root services/capabilities cannot masquerade as notifications.
 
+Resolver changes must retain the HEAD/seed-header discovery order, LWS priority, bounded Solid
+ancestor walk, NSS fallback, and same-origin LWS validation before GET. Fresh prefix hits make
+zero requests; expired descriptions make a direct conditional GET. A 304 preserves parsed data
+and a cached probe; replacement bodies discard the probe. 404/410 and root mismatch invalidate
+records. The optional `StorageDescription.evidence` array records the ADR's assumed-origin-root
+and cross-origin-description evidence without changing the DescriptionSource union.
+
+All fetches use the injected transport, manual redirects and optional abort signal. Count body
+bytes while streaming and cap at 1 MiB regardless of Content-Length. The standard W3C notifications
+context is bundled (with the legacy notification/v1 alias); refuse all other remote contexts.
+Foreign Solid descriptions are notification-only and fetched with credentials omitted; guarded
+fetch remains responsible for SSRF and credential destination policy. Do not add a private-IP guard.
+
+`probe(root, fetch, { signal?, now? })` tries OPTIONS, then HEAD on a transport/HTTP failure, and
+records one response through `parseProbeHeaders`. Never invoke it automatically for LWS.
+`deriveFeatures` and `capabilities` remain T-014's work.
+
+Cache factories store the public description and optional probe. Prefix lookup matches the longest
+normalised root with origin/path boundaries; get/set copy metadata. Deleting a record invalidates
+it even though its prefix mapping can remain until rediscovery. A storage has one root:
+`rememberPrefix` drops that storage's other prefixes, and the resolver ignores (and, after a
+refresh, rediscovers past) a record whose root no longer contains the requested URL. IndexedDB uses raw browser APIs,
+lazy opening, transaction completion before resolving writes, and closes each connection after
+its transaction. fake-indexeddb is a policy-approved development dependency for the shared contract
+and persistence/error tests. Keep the package's configured 100% coverage thresholds unchanged.
+
+Only the five recognised `notify:` channel classes become notification service types; any other
+`notify:channelType` value stays in `extra` so it cannot pose as another service class.
 Extras use expanded predicate keys. IRIs and literal lexical values are strings; singleton
 values are scalars and repeated values are arrays. Notification features are always arrays.
 Nested blank nodes become property objects with an `@id` matching later references;
