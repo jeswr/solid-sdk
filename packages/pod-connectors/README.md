@@ -54,7 +54,7 @@ Entry points:
 
 - `.`: contracts, runners, catalog, config factory, fetch-backed writer, errors.
 - `./oauth`: browser PKCE helpers and popup flow (only `authorize` touches `window`).
-- `./node`: host-neutral runtime primitives; CLI implementation belongs to CON-03.
+- `./node`: Node CLI, client-credentials Pod fetch, loopback source PKCE and state store.
 - `./testing`: recorded fixture fetch, memory Pod and import helpers; fail-closed fixture recorder.
 - `./adapters/<id>`: each source's existing adapter (OAuth or export-file).
 - `./core/*`, `./pod/*`, `./<id>/*`, `./registry`, `./types`, `./file-adapters`:
@@ -62,6 +62,64 @@ Entry points:
 
 `pnpm --filter @jeswr/pod-connectors build` builds ESM and declarations. `test` runs all
 moved fixture tests and the environment-read regression test without production traffic.
+
+## Node CLI
+
+Build the package and run `pod-connectors import spotify`, or
+`node packages/pod-connectors/dist/node/bin.js import spotify` from the workspace.
+`import netflix --file ./NetflixViewingHistory.csv` uses the file runner. Add the bare
+`--since` flag to an API import to resume its stored cursor; omission starts a full import.
+File imports reject `--since`. `--help` prints usage.
+
+The CLI reads `~/.config/solid-mcp/config.json` (W9 MCP-12's location). It refuses symlinks,
+non-regular files, another user's files, and any mode other than **0600**, including 0400.
+Set `chmod 600 ~/.config/solid-mcp/config.json`. The current MCP-12 spec has no JSON schema;
+CON-03 uses these camelCase fields pending confirmation in root `QUESTIONS.md`:
+
+```json
+{
+  "podRoot": "https://pod.example/alice/",
+  "webId": "https://pod.example/alice/profile/card#me",
+  "oidcIssuer": "https://issuer.example/",
+  "clientId": "<CSS account token id>",
+  "clientSecret": "<CSS account token secret>",
+  "readOnly": false,
+  "connectors": {
+    "spotify": { "clientId": "<registered public source client id>" }
+  }
+}
+```
+
+Optional `tokenUrl` pins the Pod token endpoint instead of discovering it. Optional
+`profileDocumentUrl` pins the canonical profile document; otherwise the WebID without its
+fragment is used and any redirect is refused. URLs use HTTPS. `readOnly: true` refuses the
+import. Each `connectors[id]` may also supply `tokenProxyUrl` or an installed-app
+`clientSecret`. These secrets and all session/source tokens remain in memory.
+
+Pod login uses CSS client credentials and DPoP, including bounded nonce retries and an
+in-memory token cache. Source login displays a browser URL, binds only `127.0.0.1` on an
+OS-assigned port, and uses state plus S256 PKCE. The callback path is `/oauth-callback`;
+the flow times out after two minutes. Pod and source transports never share credentials;
+all authenticated transports refuse redirects. SIGINT/SIGTERM cancel the CLI.
+
+The CLI stores `<podRoot>integrations/<id>/state.json`, including failed outcomes while
+retaining the last successful checkpoint. Before accessing JSON, it discovers the resource's
+`rel="acl"` link and writes a WAC ACL granting only the owner WebID Read, Write and Control.
+The ACL must be in the same connector container. Missing ACL discovery or rejected ACL
+writes fail closed; ACP/LWS state protection belongs to later storage integration.
+Conditional JSON PUTs reject stale ETags and concurrent creates. State persistence failures
+fail the command even if import documents were already written; deterministic slugs allow retry.
+
+Exit codes: **0** success/help, **1** import/state failure, **2** usage/config/file error,
+**3** Pod/source login failure, **130** cancellation. Error output uses constant messages
+and excludes server responses, tokens, and arbitrary exception text.
+
+Programmatic hosts can import `runCli`, `authorizeLoopback`, `createClientCredentialsFetch`,
+and `createStateStore` from `./node`. `runCli(args, options)` takes output callbacks,
+`configPath`, independent `podTransport`/`sourceTransport`, an abort signal and an optional
+`openAuthorizationUrl` callback. For headless tests pass fixture-backed
+`sourceAuth: { fetch }` (including a fixture recorder); Pod client-credentials exchange can
+run against a stub transport over the memory Pod. Importing `./node` starts no command or listener.
 
 ## Incremental imports and provenance
 

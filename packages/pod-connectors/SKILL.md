@@ -29,4 +29,20 @@ CON-02 adds the shared incremental write pipeline, host-owned ConnectorState, PR
 recording and per-adapter vocab-map.ts hooks. Preserve ETags on automatic merges and never
 advance checkpoints on failure. The fixture recorder exposes only allowlisted non-personal JSON
 fields under configured public route prefixes; it never saves headers or dynamic URLs. Detailed
-adapter mappings and Node CLI remain owned by their follow-on connector tasks.
+adapter mappings remain owned by their follow-on connector tasks.
+
+CON-03 implements `./node` and the `pod-connectors` bin. Keep its imports separate from
+browser entry points. Read `src/node/config.ts` and the README's Node CLI section before
+changing the provisional MCP JSON schema. Never read process environment in this package;
+use the 0600 owner-held config descriptor, with no symlink following. Reuse solid-dpop for
+Pod client credentials and preserve its guarded discovery, transport separation, nonce
+retries, memory-only cache, and redirect refusal. CON-12 owns the later pod-auth migration.
+
+Source login binds an unconfigurable `127.0.0.1:0` listener and validates Host, path, state,
+and code before S256 exchange. Reserved OAuth parameters cannot be overridden. Always
+close the listener on completion, timeout, cancellation, and errors. Never persist tokens.
+The state store requires an advertised in-container WAC ACL and installs owner-only grants
+before accessing JSON. Keep ETags and create-only writes; a failed import retains its prior
+successful cursor/counts/time, and failed state persistence must produce a nonzero exit.
+CLI tests use fixture source transports and a memory Pod; only callback tests open loopback
+sockets. Never include arbitrary server/exception text in CLI diagnostics.
