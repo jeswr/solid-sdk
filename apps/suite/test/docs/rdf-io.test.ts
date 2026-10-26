@@ -1,9 +1,14 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 // Ported Pod Docs regression tests.
 import { RdfFetchError } from "@jeswr/fetch-rdf";
 import { Store } from "n3";
 import { describe, expect, it } from "vitest";
-import { ResourceDeleteError, ResourceWriteError } from "../../src/apps/docs/lib/model/errors.js";
+import {
+  ConcurrencyValidatorError,
+  ResourceDeleteError,
+  ResourceWriteError,
+} from "../../src/apps/docs/lib/model/errors.js";
 import {
   deleteRdf,
   nameFromUrl,
@@ -90,12 +95,12 @@ describe("writeRdf", () => {
   it("PUTs Turtle with an explicit content-type and returns the new etag", async () => {
     const { fetch, calls } = mockFetch({ [`PUT ${URL_X}`]: { status: 201, etag: 'W/"new"' } });
     const store = turtleToStore(`<#it> <http://example/p> "v" .`, URL_X);
-    const { etag } = await writeRdf(URL_X, store, { fetchImpl: fetch });
+    const { etag } = await writeRdf(URL_X, store, { createOnly: true, fetchImpl: fetch });
     expect(etag).toBe('W/"new"');
     expect(calls[0]?.method).toBe("PUT");
     expect(calls[0]?.headers["content-type"]).toBe("text/turtle");
     expect(calls[0]?.headers["if-match"]).toBeUndefined();
-    expect(calls[0]?.headers["if-none-match"]).toBeUndefined();
+    expect(calls[0]?.headers["if-none-match"]).toBe("*");
   });
 
   it("sends If-Match when an etag is supplied", async () => {
@@ -104,10 +109,41 @@ describe("writeRdf", () => {
     expect(calls[0]?.headers["if-match"]).toBe('"old"');
   });
 
-  it("uses the existence fallback for a weak validator", async () => {
+  it.each([
+    undefined,
+    null,
+    "",
+    "*",
+    'W/"old"',
+    'w/"old"',
+    "old",
+    '"old", "other"',
+    ' "old"',
+    '"old" ',
+    '"old"\n',
+    '"old"\r\n',
+    '"has space"',
+    '"has\u007fcontrol"',
+    '"\u0100"',
+  ])("rejects an unusable replacement validator (%j) before any I/O", async (etag) => {
     const { fetch, calls } = mockFetch({ [`PUT ${URL_X}`]: { status: 205 } });
-    await writeRdf(URL_X, new Store(), { etag: 'W/"old"', fetchImpl: fetch });
-    expect(calls[0]?.headers["if-match"]).toBe("*");
+    const error = await writeRdf(URL_X, new Store(), { etag, fetchImpl: fetch }).catch((e) => e);
+    expect(error).toBeInstanceOf(ConcurrencyValidatorError);
+    expect(error.url).toBe(URL_X);
+    expect(calls).toEqual([]);
+  });
+
+  it.each([
+    '""',
+    '"old"',
+    '"W/old"',
+    '"opaque,tag\\value"',
+    '"\u0080\u00ff"',
+  ])("preserves a single strong validator exactly (%s)", async (etag) => {
+    const { fetch, calls } = mockFetch({ [`PUT ${URL_X}`]: { status: 205 } });
+    await writeRdf(URL_X, new Store(), { etag, fetchImpl: fetch });
+    expect(calls[0]?.headers["if-match"]).toBe(etag);
+    expect(calls[0]?.headers["if-none-match"]).toBeUndefined();
   });
 
   it("keeps weak validators out of create-only writes", async () => {
@@ -125,7 +161,9 @@ describe("writeRdf", () => {
 
   it("throws ResourceWriteError with the status on a non-2xx", async () => {
     const { fetch } = mockFetch({ [`PUT ${URL_X}`]: { status: 412 } });
-    const err = await writeRdf(URL_X, new Store(), { fetchImpl: fetch }).catch((e) => e);
+    const err = await writeRdf(URL_X, new Store(), { etag: '"old"', fetchImpl: fetch }).catch(
+      (e) => e,
+    );
     expect(err).toBeInstanceOf(ResourceWriteError);
     expect(err.status).toBe(412);
   });
