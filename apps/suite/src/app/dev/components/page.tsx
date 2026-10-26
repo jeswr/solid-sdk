@@ -7,6 +7,11 @@ export default function ComponentsPage() {
       <p>Tokens and foundations for the suite.</p>
       <nav aria-label="Component fixtures">
         <a href="/dev/components/tokens">Tokens, typography and density</a>
+        <a href="/dev/components/toolbar">Toolbar</a>
+        <a href="/dev/components/filter-chips">Filter chips</a>
+        <a href="/dev/components/breadcrumbs">Breadcrumbs</a>
+        <a href="/dev/components/editable-text">Editable text</a>
+        <a href="/dev/components/tag-input">Tag input</a>
       </nav>
     </main>
   );

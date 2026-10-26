@@ -3,6 +3,7 @@
 @import "@jeswr/suite-ui/styles/tokens.css";
 @import "@jeswr/suite-ui/styles/theme.css";
 @import "@jeswr/suite-ui/styles/density.css";
+@import "@jeswr/suite-ui/styles/components.css";
 
 * {
   box-sizing: border-box;
@@ -265,4 +266,29 @@ button {
     transition: none;
     scroll-behavior: auto;
   }
+}
+
+.ds07-stack {
+  display: grid;
+  gap: var(--space-4);
+}
+.ds07-stack h2 {
+  margin-bottom: 0;
+}
+.ds07-stack > .suite-button {
+  justify-self: start;
+}
+.fixture-page > nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+}
+.ds07-page section {
+  min-width: 0;
+}
+
+.ds07-narrow {
+  width: 100%;
+  max-width: 320px;
+  min-width: 0;
 }
