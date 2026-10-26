@@ -73,7 +73,7 @@ async function seedPod(
   owner: ReturnType<typeof account>, peerWebId: string, ccId: string, ccSecret: string,
 ) {
   // This workspace export is import-only; Playwright loads this config as CJS.
-  const { fetchRdf } = await import("@jeswr/fetch-rdf");
+  const { fetchRdf, RdfFetchError } = await import("@jeswr/fetch-rdf");
   const { publicKey, privateKey } = await generateKeyPair("ES256");
   const jwk = await exportJWK(publicKey);
   jwk.alg = "ES256";
@@ -133,6 +133,12 @@ async function seedPod(
   const aclLink = /<([^>]+)>;\s*rel="?acl"?/i.exec(head.headers.get("link") ?? "");
   if (!head.ok || !aclLink) throw new Error("Local CSS inbox did not advertise its ACL.");
   const aclUrl = new URL(aclLink[1], owner.inboxUrl).href;
+  let aclEtag: string | null = null;
+  try {
+    aclEtag = (await fetchRdf(aclUrl, { fetch: authenticatedFetch })).etag;
+  } catch (error) {
+    if (!(error instanceof RdfFetchError) || error.status !== 404) throw error;
+  }
   const acl = new Store();
   const ownerGrant = new Authorization(`${aclUrl}#owner`, acl, DataFactory);
   ownerGrant.type.add("http://www.w3.org/ns/auth/acl#Authorization");
@@ -149,7 +155,7 @@ async function seedPod(
   peerGrant.accessTo = owner.inboxUrl;
   peerGrant.agent.add(peerWebId);
   peerGrant.canAppend = true;
-  await putDataset(aclUrl, acl, { "if-none-match": "*" });
+  await putDataset(aclUrl, acl, aclEtag ? { "if-match": aclEtag } : { "if-none-match": "*" });
   const anonymous = await fetch(owner.inboxUrl);
   if (anonymous.status !== 401 && anonymous.status !== 403) {
     throw new Error(`Seeded inbox must be private (anonymous HTTP ${anonymous.status}).`);
