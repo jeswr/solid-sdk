@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { parseRdf } from "@jeswr/fetch-rdf";
 import {
   type DataIntegrityProof,
@@ -7,7 +8,7 @@ import {
   type WebIdKeyResolver,
 } from "@jeswr/solid-vc";
 import { Store } from "n3";
-import { node, RDF_TYPE, SEC, turtle } from "./rdf.js";
+import { matchesProofConfiguration, node, RDF_TYPE, SEC, turtle, writeProof } from "./rdf.js";
 import { AGENT } from "./types.js";
 
 /** Exact terms an owner signs in the browser. */
@@ -66,15 +67,7 @@ export async function issueApproval(approval: Approval, key: KeyPair, now: Date)
     proofPurpose: "assertionMethod",
     created: now,
   });
-  const proofId = `${approval.id}/proof`;
-  a.setIri(`${SEC}proof`, proofId);
-  const p = node(store, proofId);
-  p.setIri(RDF_TYPE, `${SEC}DataIntegrityProof`);
-  p.setText(`${SEC}cryptosuite`, proof.cryptosuite);
-  p.setIri(`${SEC}verificationMethod`, proof.verificationMethod);
-  p.setIri(`${SEC}proofPurpose`, `${SEC}assertionMethod`);
-  p.setText(`${SEC}proofValue`, proof.proofValue);
-  p.setText("http://purl.org/dc/terms/created", proof.created as string);
+  writeProof(store, approval.id, proof);
   return turtle(store);
 }
 /** Verify an approval against an owner's authoritative WebID assertionMethod and exact proposal terms. */
@@ -124,6 +117,7 @@ export async function verifyApproval(
       (q) => !p.equals(q.subject) && !(a.equals(q.subject) && q.predicate.value === `${SEC}proof`),
     );
     if (
+      !(await matchesProofConfiguration(store, p, proof)) ||
       !(await new DataIntegritySuite("ecdsa-rdfc-2019").verify(claims, proof, {
         resolveKey: () => key,
       }))

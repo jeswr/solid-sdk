@@ -1,7 +1,9 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { parseRdf } from "@jeswr/fetch-rdf";
 import {
   credentialToRdf,
+  type DataIntegrityProof,
   digestQuads,
   readValidCredential,
   STATUS,
@@ -12,7 +14,7 @@ import {
 import { Store } from "n3";
 import { decodeLimit, decodePolicy, decodeProhibitions } from "./codec.js";
 import { mandateCredential } from "./mandate.js";
-import { node, RDF_TYPE, SEC, turtle } from "./rdf.js";
+import { matchesProofConfiguration, node, RDF_TYPE, SEC, turtle, writeProof } from "./rdf.js";
 import { AGENT, ODRL } from "./types.js";
 
 /** Serialize a single-proof mandate credential as Turtle for agent/mandates/<id>.ttl. */
@@ -22,15 +24,7 @@ export async function mandateToTurtle(vc: VerifiableCredential): Promise<string>
     throw new Error("Expected a named single-proof mandate");
   const proof = proofs[0];
   const store = new Store(credentialToRdf(vc));
-  const a = node(store, vc.id);
-  const p = node(store, `${vc.id}/proof`);
-  a.setIri(`${SEC}proof`, p.value);
-  p.setIri(RDF_TYPE, `${SEC}DataIntegrityProof`);
-  p.setText(`${SEC}cryptosuite`, proof.cryptosuite);
-  p.setIri(`${SEC}verificationMethod`, proof.verificationMethod);
-  p.setIri(`${SEC}proofPurpose`, `${SEC}${proof.proofPurpose}`);
-  p.setText(`${SEC}proofValue`, proof.proofValue);
-  p.setText("http://purl.org/dc/terms/created", proof.created);
+  writeProof(store, vc.id, proof);
   return turtle(store);
 }
 /** Parse this package's mandate Turtle. This is structural parsing; always pass its result to the verifier. */
@@ -75,20 +69,22 @@ export async function parseMandateCredential(
     };
     // Reconstruction preserves the complete package-issued signed graph. Foreign/extra claims
     // cannot be laundered: the verifier checks the signature over this reconstructed graph.
+    const proof: DataIntegrityProof = {
+      type: "DataIntegrityProof",
+      cryptosuite: p.text(`${SEC}cryptosuite`),
+      verificationMethod: p.iri(`${SEC}verificationMethod`),
+      proofPurpose: "assertionMethod",
+      created: p.text("http://purl.org/dc/terms/created"),
+      proofValue: p.text(`${SEC}proofValue`),
+    };
+    if (!(await matchesProofConfiguration(store, p, proof))) return undefined;
     const parsed: VerifiableCredential = {
       ...mandateCredential(m, {
         statusListCredential: status.iri(`${STATUS}statusListCredential`),
         statusListIndex: status.text(`${STATUS}statusListIndex`),
         ...(status.termType === "NamedNode" ? { id: status.value } : {}),
       }),
-      proof: {
-        type: "DataIntegrityProof",
-        cryptosuite: p.text(`${SEC}cryptosuite`),
-        verificationMethod: p.iri(`${SEC}verificationMethod`),
-        proofPurpose: "assertionMethod",
-        created: p.text("http://purl.org/dc/terms/created"),
-        proofValue: p.text(`${SEC}proofValue`),
-      },
+      proof,
     };
     const raw = [...store].filter(
       (q) =>

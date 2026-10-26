@@ -1,11 +1,21 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 
 import { parseRdf } from "@jeswr/fetch-rdf";
 import type { KeyPair, WebIdKeyResolver } from "@jeswr/solid-vc";
 import { beforeAll, expect, it } from "vitest";
 import { type Approval, issueApproval, verifyApproval } from "../src/approval.js";
 import { node, SEC, turtle } from "../src/rdf.js";
-import { approvalKey, clock, edKey, NOW, OWNER, profileResolver } from "./helpers.js";
+import {
+  alterProofOptions,
+  approvalKey,
+  clock,
+  edKey,
+  NOW,
+  OWNER,
+  profileResolver,
+  verifyExportedRdf,
+} from "./helpers.js";
 
 let key: KeyPair;
 let resolver: WebIdKeyResolver;
@@ -37,6 +47,26 @@ it("verifies real P-256 signatures using a fixture WebID assertionMethod", async
       approval: { ...a, decision },
     });
   }
+});
+it("verifies the exported approval proof configuration independently with WebCrypto", async () => {
+  const document = await issueApproval(a, key, NOW);
+  expect(await verifyExportedRdf(document, a.id, key.publicKey)).toBe(true);
+  const store = await parseRdf(document, "text/turtle");
+  const proof = node(store, a.id).one(`${SEC}proof`);
+  expect(proof.termType).toBe("BlankNode");
+  const created = proof.one("http://purl.org/dc/terms/created");
+  expect((created as unknown as { datatype: { value: string } }).datatype.value).toBe(
+    "http://www.w3.org/2001/XMLSchema#dateTime",
+  );
+});
+it.each([
+  "named",
+  "datatype",
+  "extra",
+] as const)("rejects altered approval proof configuration: %s", async (change) => {
+  const document = await alterProofOptions(await issueApproval(a, key, NOW), a.id, change);
+  expect(await verifyExportedRdf(document, a.id, key.publicKey)).toBe(false);
+  expect(await verifyApproval(document, options())).toEqual({ valid: false, reason: "signature" });
 });
 it("rejects a non-P256 signing key", async () => {
   await expect(issueApproval(a, await edKey(), NOW)).rejects.toThrow("P-256");

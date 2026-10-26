@@ -1,11 +1,23 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { parseRdf } from "@jeswr/fetch-rdf";
 import type { KeyPair, VerifiableCredential } from "@jeswr/solid-vc";
 import { beforeAll, expect, it } from "vitest";
 import { mandateToTurtle, parseMandateCredential } from "../src/document.js";
 import { createVcMandateVerifier, issueMandate } from "../src/mandate.js";
 import { node, RDF_TYPE, SEC, turtle } from "../src/rdf.js";
-import { ACTOR, clock, edKey, ID, mandate, OWNER, profileResolver, STATUS } from "./helpers.js";
+import {
+  ACTOR,
+  alterProofOptions,
+  clock,
+  edKey,
+  ID,
+  mandate,
+  OWNER,
+  profileResolver,
+  STATUS,
+  verifyExportedRdf,
+} from "./helpers.js";
 
 let vc: VerifiableCredential;
 let key: KeyPair;
@@ -35,6 +47,26 @@ it("round-trips signed mandate Turtle without changing its verified graph", asyn
     }).load();
     expect(loaded?.id).toBe(ID);
   }
+});
+it("verifies the exported mandate proof configuration independently with WebCrypto", async () => {
+  const document = await mandateToTurtle(vc);
+  expect(await verifyExportedRdf(document, ID, key.publicKey)).toBe(true);
+  const store = await parseRdf(document, "text/turtle");
+  const proof = node(store, ID).one(`${SEC}proof`);
+  expect(proof.termType).toBe("BlankNode");
+  const created = proof.one("http://purl.org/dc/terms/created");
+  expect((created as unknown as { datatype: { value: string } }).datatype.value).toBe(
+    "http://www.w3.org/2001/XMLSchema#dateTime",
+  );
+});
+it.each([
+  "named",
+  "datatype",
+  "extra",
+] as const)("rejects altered mandate proof configuration: %s", async (change) => {
+  const document = await alterProofOptions(await mandateToTurtle(vc), ID, change);
+  expect(await verifyExportedRdf(document, ID, key.publicKey)).toBe(false);
+  expect(await parseMandateCredential(document)).toBeUndefined();
 });
 it("refuses anonymous, multiple-proof and dateless proof serializations", async () => {
   for (const bad of [
