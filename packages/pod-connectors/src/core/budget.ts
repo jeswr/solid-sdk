@@ -14,13 +14,23 @@ export interface RunLimits {
   readonly maxRequests: number;
   /** Source items (records, entries, pages' elements) one run may buffer. */
   readonly maxItems: number;
+  /**
+   * Response bytes one run may read in total: a bound on what an adapter that stages a whole
+   * run in memory can retain. Optional so hosts can pass the request and item limits alone.
+   */
+  readonly maxBytes?: number;
 }
 
-export const DEFAULT_RUN_LIMITS: RunLimits = { maxRequests: 20_000, maxItems: 2_000_000 };
+export const DEFAULT_RUN_LIMITS: RunLimits = {
+  maxRequests: 20_000,
+  maxItems: 2_000_000,
+  maxBytes: 512 * 1024 * 1024,
+};
 
 export class RunBudget {
   private requests = 0;
   private itemCount = 0;
+  private byteCount = 0;
   constructor(
     private readonly adapterId: string,
     private readonly limits: RunLimits = DEFAULT_RUN_LIMITS,
@@ -38,14 +48,26 @@ export class RunBudget {
     if (this.itemCount > this.limits.maxItems)
       throw new IntegrationSyncError(this.adapterId, "The import exceeded its item budget.");
   }
+
+  /** Count `n` response bytes read; throws once the run exceeds its byte budget. */
+  bytes(n: number): void {
+    this.byteCount += n;
+    const max = this.limits.maxBytes ?? DEFAULT_RUN_LIMITS.maxBytes ?? Number.POSITIVE_INFINITY;
+    if (this.byteCount > max)
+      throw new IntegrationSyncError(this.adapterId, "The import exceeded its data budget.");
+  }
 }
 
-/** Read and parse a JSON body without buffering more than `maxBytes`. */
+/**
+ * Read and parse a JSON body without buffering more than `maxBytes`; with a `budget`, the
+ * bytes also count towards the run's data budget as they arrive.
+ */
 export async function readJson(
   res: Response,
   adapterId: string,
   url: string,
   maxBytes = MAX_JSON_BYTES,
+  budget?: RunBudget,
 ): Promise<unknown> {
   const tooLarge = () =>
     new IntegrationSyncError(adapterId, `The platform's answer for ${url} is too large.`, { url });
@@ -62,6 +84,12 @@ export async function readJson(
       const { done, value } = await reader.read();
       if (done) break;
       size += value.byteLength;
+      try {
+        budget?.bytes(value.byteLength);
+      } catch (error) {
+        await reader.cancel();
+        throw error;
+      }
       if (size > maxBytes) {
         await reader.cancel();
         throw tooLarge();
