@@ -48,6 +48,80 @@ function setup(
 afterEach(() => vi.restoreAllMocks());
 
 describe("Drive data-safety regressions", () => {
+  it("bounds independent trash and restore moves while keeping every intent durable before deletion", async () => {
+    let deleting = false;
+    const { pod, client } = setup(async (url, init) => {
+      if (deleting && url.startsWith(FROM) && init?.method === "DELETE") {
+        const durable = await client.readRdf(INDEX);
+        const records = durable && trashIndexFrom(durable.dataset).records;
+        expect(records).toHaveLength(9);
+        expect(records?.every((record) => record.status === "pending")).toBe(true);
+        expect(new Headers(init.headers).get("if-match")).toBeTruthy();
+      }
+      return undefined;
+    });
+    for (let index = 0; index < 7; index++)
+      await client.write(`${FROM}extra-${index}`, "extra", {
+        contentType: "text/plain",
+        ifNoneMatch: "*",
+      });
+    let active = 0;
+    let peak = 0;
+    const move = client.move.bind(client);
+    vi.spyOn(client, "move").mockImplementation(async (...args) => {
+      peak = Math.max(peak, ++active);
+      try {
+        return await move(...args);
+      } finally {
+        active--;
+      }
+    });
+    const items = await client.list(FROM);
+    deleting = true;
+    const trashed = await trashItems(client, DRIVE, items);
+    deleting = false;
+    expect(trashed.failed).toEqual([]);
+    expect(trashed.done.map((entry) => entry.original)).toEqual(items.map((item) => item.url));
+    expect(peak).toBe(8);
+    expect(active).toBe(0);
+    peak = 0;
+    const restored = await restoreItems(client, DRIVE, trashed.done);
+    expect(restored.failed).toEqual([]);
+    expect(restored.done.map((entry) => entry.url)).toEqual(items.map((item) => item.url));
+    expect(peak).toBe(8);
+    expect(active).toBe(0);
+    expect(items.every(({ url }) => pod.has(url))).toBe(true);
+  });
+
+  it("drains concurrent destination checks before retaining copies after a failed verification", async () => {
+    let release: (() => void) | undefined;
+    let entered: (() => void) | undefined;
+    const checking = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const { pod, fetch, client } = setup(async (url, init) => {
+      if (init?.method !== "HEAD") return undefined;
+      if (url === `${TO}a`) return new Response(null, { status: 503 });
+      if (url === `${TO}b`) {
+        entered?.();
+        await new Promise<void>((resolve) => {
+          release = resolve;
+        });
+      }
+      return undefined;
+    });
+    const moving = client.move(FROM, TO);
+    const settled = vi.fn();
+    void moving.catch(settled);
+    await checking;
+    expect(settled).not.toHaveBeenCalled();
+    expect(fetch.mock.calls.filter(([, init]) => init?.method === "DELETE")).toEqual([]);
+    release?.();
+    await expect(moving).rejects.toMatchObject({ kind: "partial-failure" });
+    expect([`${FROM}a`, `${FROM}b`, `${TO}a`, `${TO}b`].every((url) => pod.has(url))).toBe(true);
+    expect(fetch.mock.calls.filter(([, init]) => init?.method === "DELETE")).toEqual([]);
+  });
+
   it.each([
     false,
     true,

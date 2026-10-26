@@ -9,6 +9,7 @@ import {
 } from "../../drive/lib/operations/operations";
 import type { TrashEntry } from "../../drive/lib/operations/trash-index";
 import { docContainerUrls, isDirectChild } from "../lib/model";
+import { compactDocumentLog } from "./compact";
 
 function clientFor(session: PodSession) {
   return createSolidDriveClient({
@@ -36,12 +37,20 @@ function assertRecords(entries: readonly TrashEntry[], session: PodSession) {
 export async function deleteDocument(url: string, session: PodSession) {
   const layout = assertDocument(url, session);
   const client = clientFor(session);
-  const items = [await client.stat(url)];
-  try {
-    items.push(await client.stat(layout.container));
-  } catch (error) {
-    if (!(error instanceof DriveError && error.kind === "not-found")) throw error;
-  }
+  const [document, companion] = await Promise.all([
+    client.stat(url),
+    client.stat(layout.container).catch((error: unknown) => {
+      if (error instanceof DriveError && error.kind === "not-found") return undefined;
+      throw error;
+    }),
+  ]);
+  const items = companion ? [document, companion] : [document];
+  if (items.length > 1)
+    await compactDocumentLog(
+      client,
+      layout.updateLog,
+      createPodScopedFetch(session.storageUrl, { fetch: session.fetch }),
+    );
   return trashItems(client, driveRoot(session), items, { webId: session.webId, now: new Date() });
 }
 /** Undo uses the exact Drive records returned by the delete batch. */

@@ -1,9 +1,10 @@
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex
 /**
- * Browser demo storage. Every mutation reads the latest durable pod and commits
+ * Browser demo storage. Requests arriving together share a snapshot commit,
  * with a revision compare-and-set in one IndexedDB transaction. A stale tab
- * retries against the winner instead of replacing its files with an old view.
+ * replays the batch against the winner, including HTTP preconditions. Responses
+ * and notifications are released only after the commit is durable.
  */
 
 import { createDemoPod, type DemoPod, type DemoPodSnapshot } from "./pod";
@@ -85,16 +86,13 @@ export function getDemoPod(): Promise<DemoPod> {
     const db = await openDb();
     let stored = db ? await readStored(db) : undefined;
     const seed = stored ? undefined : await buildDemoSeed(Date.now());
-    const fresh = () => createDemoPod({ root: DEMO_ROOT, ...(seed ? { seed } : {}), latency: 60 });
-    let view = stored
-      ? createDemoPod({ root: DEMO_ROOT, snapshot: stored.snapshot, latency: 60 })
-      : fresh();
+    const fresh = () => createDemoPod({ root: DEMO_ROOT, ...(seed ? { seed } : {}) });
+    let view = stored ? createDemoPod({ root: DEMO_ROOT, snapshot: stored.snapshot }) : fresh();
     if (!db) return offline(view);
     if (!stored) {
       if (!(await commit(db, undefined, view.snapshot()))) {
         stored = await readStored(db);
-        if (stored)
-          view = createDemoPod({ root: DEMO_ROOT, snapshot: stored.snapshot, latency: 60 });
+        if (stored) view = createDemoPod({ root: DEMO_ROOT, snapshot: stored.snapshot });
       }
     }
 
@@ -114,8 +112,8 @@ export function getDemoPod(): Promise<DemoPod> {
     const reload = async () => {
       const latest = await readStored(db);
       view = latest
-        ? createDemoPod({ root: DEMO_ROOT, snapshot: latest.snapshot, latency: 60 })
-        : createDemoPod({ root: DEMO_ROOT, seed: await buildDemoSeed(Date.now()), latency: 60 });
+        ? createDemoPod({ root: DEMO_ROOT, snapshot: latest.snapshot })
+        : createDemoPod({ root: DEMO_ROOT, seed: await buildDemoSeed(Date.now()) });
     };
     if (channel)
       channel.onmessage = (event: MessageEvent<unknown>) => {
@@ -132,49 +130,78 @@ export function getDemoPod(): Promise<DemoPod> {
       db.close();
     };
 
+    interface PendingRequest {
+      request: Request;
+      mutation: boolean;
+      body: Uint8Array<ArrayBuffer> | undefined;
+      resolve: (response: Response) => void;
+      reject: (error: unknown) => void;
+    }
+    let pending: PendingRequest[] = [];
+    const flush = () => {
+      const batch = pending;
+      pending = [];
+      void serial(async () => {
+        if (!active) throw new Error("Demo pod session was reset");
+        const mutating = batch.some(({ mutation }) => mutation);
+        for (;;) {
+          // Read-only batches use the view refreshed by BroadcastChannel. A
+          // mutating batch always starts from the latest durable revision.
+          const latest = mutating ? await readStored(db) : undefined;
+          const trial = !mutating
+            ? view
+            : latest
+              ? createDemoPod({ root: DEMO_ROOT, snapshot: latest.snapshot })
+              : createDemoPod({ root: DEMO_ROOT, seed: await buildDemoSeed(Date.now()) });
+          const changed: string[] = [];
+          const unsubscribe = trial.subscribe((url) => changed.push(url));
+          const responses: Response[] = [];
+          let dirty = false;
+          try {
+            for (const { request, body, mutation } of batch) {
+              const response = await trial.fetch(request.url, {
+                method: request.method,
+                headers: request.headers,
+                signal: request.signal,
+                ...(body ? { body } : {}),
+              });
+              responses.push(response);
+              dirty ||= mutation && response.ok;
+            }
+          } finally {
+            unsubscribe();
+          }
+          if (!active) throw new Error("Demo pod session was reset");
+          if (dirty && !(await commit(db, latest?.revision, trial.snapshot()))) continue;
+          view = trial;
+          for (const url of new Set(changed)) {
+            notify(url);
+            channel?.postMessage(url);
+          }
+          batch.forEach(({ resolve }, index) => {
+            resolve(responses[index] as Response);
+          });
+          return;
+        }
+      }).catch((error: unknown) => {
+        for (const { reject } of batch) reject(error);
+      });
+    };
     const fetch: typeof globalThis.fetch = async (input, init) => {
       // Materialise once so retries also work for Requests and streaming bodies.
       const request = new Request(input, init);
-      const method = request.method;
-      const mutation = !["GET", "HEAD", "OPTIONS"].includes(method);
       const body = request.body ? new Uint8Array(await request.arrayBuffer()) : undefined;
-      return serial(async () => {
-        if (!active) throw new Error("Demo pod session was reset");
-        // Reads use this tab's view, which other tabs' commits refresh over the channel.
-        if (!mutation)
-          return view.fetch(request.url, {
-            method,
-            headers: request.headers,
-            signal: request.signal,
-          });
-        for (;;) {
-          const latest = await readStored(db);
-          const trial = latest
-            ? createDemoPod({ root: DEMO_ROOT, snapshot: latest.snapshot, latency: 60 })
-            : createDemoPod({
-                root: DEMO_ROOT,
-                seed: await buildDemoSeed(Date.now()),
-                latency: 60,
-              });
-          const changed: string[] = [];
-          trial.subscribe((url) => changed.push(url));
-          const response = await trial.fetch(request.url, {
-            method,
-            headers: request.headers,
-            signal: request.signal,
-            ...(body ? { body } : {}),
-          });
-          if (!active) throw new Error("Demo pod session was reset");
-          if (mutation && response.ok && !(await commit(db, latest?.revision, trial.snapshot())))
-            continue;
-          view = trial;
-          if (mutation && response.ok)
-            for (const url of changed) {
-              notify(url);
-              channel?.postMessage(url);
-            }
-          return response;
-        }
+      // Simulated network latency belongs outside the storage queue. Concurrent
+      // requests travel together and share a commit, including conditional edits.
+      return new Promise<Response>((resolve, reject) => {
+        if (!pending.length) setTimeout(flush, 60);
+        pending.push({
+          request,
+          body,
+          mutation: !["GET", "HEAD", "OPTIONS"].includes(request.method),
+          resolve,
+          reject,
+        });
       });
     };
     return offline({

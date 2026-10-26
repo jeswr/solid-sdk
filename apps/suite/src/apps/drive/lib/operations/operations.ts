@@ -7,6 +7,7 @@
  * they return `{ done, failed }` so the UI can report partial results.
  */
 
+import { mapConcurrent } from "../../../../lib/parallel";
 import {
   type DriveClient,
   DriveError,
@@ -548,7 +549,7 @@ export async function trashItems(
     };
   }
   const partial: TrashEntry[] = [];
-  for (const entry of entries) {
+  const moved = await mapConcurrent(entries, async (entry) => {
     try {
       await client.move(entry.original, entry.url, {
         beforeDelete: async () => {
@@ -556,12 +557,18 @@ export async function trashItems(
           await client.stat(entry.url);
         },
       });
-      result.done.push(entry);
+      return { entry };
     } catch (error) {
+      return { entry, error };
+    }
+  });
+  for (const outcome of moved) {
+    if ("error" in outcome) {
+      const { entry, error } = outcome;
       result.failed.push({ url: entry.original, error });
       if (error instanceof DrivePartialFailureError && error.retainedDestinations.length > 0)
         partial.push(entry);
-    }
+    } else result.done.push(outcome.entry);
   }
   if (result.done.length > 0 || partial.length > 0) {
     try {
@@ -685,7 +692,8 @@ export async function restoreItems(
     done: [],
     failed: [],
   };
-  for (const entry of entries) {
+  const restored = await mapConcurrent(entries, async (entry) => {
+    const outcome: typeof result = { done: [], failed: [] };
     try {
       const slot = slotOf(driveRoot, entry);
       validateOriginal(client, driveRoot, entry);
@@ -696,8 +704,8 @@ export async function restoreItems(
         if (await recoveryStatus(client, driveRoot, entry))
           await client.remove(recoveryMarker(driveRoot, entry));
         await client.remove(slot).catch(() => undefined);
-        result.done.push({ entry, url: entry.original, renamed: false });
-        continue;
+        outcome.done.push({ entry, url: entry.original, renamed: false });
+        return outcome;
       }
       const folder = entry.original.endsWith("/");
       const parent = parentOf(entry.original) as string;
@@ -720,10 +728,15 @@ export async function restoreItems(
         await client.remove(recoveryMarker(driveRoot, entry));
       // The slot may contain another writer's resources; only remove it empty.
       await client.remove(slot).catch(() => undefined);
-      result.done.push({ entry, url, renamed });
+      outcome.done.push({ entry, url, renamed });
     } catch (error) {
-      result.failed.push({ url: entry.url, error });
+      outcome.failed.push({ url: entry.url, error });
     }
+    return outcome;
+  });
+  for (const outcome of restored) {
+    result.done.push(...outcome.done);
+    result.failed.push(...outcome.failed);
   }
   return removeCompletedRecords(
     client,

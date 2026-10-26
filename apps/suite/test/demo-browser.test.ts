@@ -1,8 +1,11 @@
 // AUTHORED-BY Codex
 import { createRequire } from "node:module";
 import { afterEach, expect, it, vi } from "vitest";
+import { Doc } from "yjs";
+import { deleteDocument, restoreDocument } from "../src/apps/docs/editor/operations";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
-import { DEMO_ROOT } from "../src/lib/demo-pod/seed";
+import { buildDemoSeed, DEMO_ROOT } from "../src/lib/demo-pod/seed";
+import type { PodSession } from "../src/lib/session/pod-session";
 
 // Reuse the workspace's installed IndexedDB fixture; no added dependency.
 const { IDBFactory, IDBObjectStore } = createRequire(
@@ -206,4 +209,128 @@ it("falls back to memory when IndexedDB is unavailable", async () => {
   expect(await (await pod.fetch(`${DEMO_ROOT}file`)).text()).toBe("memory");
   await module.resetDemoPod();
   expect((await module.getDemoPod()).has(`${DEMO_ROOT}file`)).toBe(false);
+});
+
+it("shares one durable snapshot commit for concurrent mutations, including their notifications", async () => {
+  storage(true);
+  const pod = await (await tab()).getDemoPod();
+  const put = vi.spyOn(IDBObjectStore.prototype, "put");
+  const notification = vi.fn();
+  pod.subscribe(notification);
+  const responses = await Promise.all(
+    Array.from({ length: 16 }, (_, index) =>
+      pod.fetch(`${DEMO_ROOT}drive/batch-${index}`, { method: "PUT", body: String(index) }),
+    ),
+  );
+  expect(responses.every((response) => response.status === 201)).toBe(true);
+  expect(put).toHaveBeenCalledTimes(1);
+  expect(notification).toHaveBeenCalledTimes(16);
+  const reloaded = await (await tab()).getDemoPod();
+  for (let index = 0; index < 16; index++)
+    expect(reloaded.has(`${DEMO_ROOT}drive/batch-${index}`)).toBe(true);
+});
+
+it("replays batched conditional creates after another tab wins without losing unrelated writes", async () => {
+  storage(true);
+  const a = await (await tab()).getDemoPod();
+  const b = await (await tab()).getDemoPod();
+  const responses = await Promise.all(
+    [a, b].map(async (pod, tabIndex) =>
+      Promise.all([
+        pod.fetch(`${DEMO_ROOT}drive/shared-batch`, {
+          method: "PUT",
+          body: String(tabIndex),
+          headers: { "if-none-match": "*" },
+        }),
+        ...Array.from({ length: 8 }, (_, index) =>
+          pod.fetch(`${DEMO_ROOT}drive/tab-${tabIndex}-${index}`, {
+            method: "PUT",
+            body: String(index),
+          }),
+        ),
+      ]),
+    ),
+  );
+  expect(responses.map((batch) => batch[0]?.status).sort()).toEqual([201, 412]);
+  expect(
+    responses.flatMap((batch) => batch.slice(1)).every((response) => response.status === 201),
+  ).toBe(true);
+  const reloaded = await (await tab()).getDemoPod();
+  for (let tabIndex = 0; tabIndex < 2; tabIndex++)
+    for (let index = 0; index < 8; index++)
+      expect(reloaded.has(`${DEMO_ROOT}drive/tab-${tabIndex}-${index}`)).toBe(true);
+});
+
+it("rejects the entire batch after a failed commit and never exposes or broadcasts trial writes", async () => {
+  storage(true);
+  const pod = await (await tab()).getDemoPod();
+  const other = await (await tab()).getDemoPod();
+  const changed = vi.fn();
+  pod.subscribe(changed);
+  other.subscribe(changed);
+  const put = vi.spyOn(IDBObjectStore.prototype, "put").mockImplementation(function (
+    this: IDBObjectStore,
+  ) {
+    this.transaction.abort();
+    return {} as IDBRequest<IDBValidKey>;
+  });
+  const urls = ["first", "second"].map((name) => `${DEMO_ROOT}drive/failed-${name}`);
+  const results = await Promise.allSettled(
+    urls.map((url) => pod.fetch(url, { method: "PUT", body: "uncommitted" })),
+  );
+  expect(results.every((result) => result.status === "rejected")).toBe(true);
+  expect(changed).not.toHaveBeenCalled();
+  expect(urls.every((url) => !pod.has(url) && !other.has(url))).toBe(true);
+  put.mockRestore();
+  const reloaded = await (await tab()).getDemoPod();
+  expect(urls.every((url) => !reloaded.has(url))).toBe(true);
+  expect((await pod.fetch(urls[0] as string, { method: "PUT", body: "retry" })).status).toBe(201);
+});
+
+it.each([
+  62, 100,
+])("profiles compacted Docs trash and Undo with %i updates against durable browser storage", async (updateCount) => {
+  storage();
+  const doc = new Doc();
+  const updates: Uint8Array[] = [];
+  doc.on("update", (update: Uint8Array) => updates.push(update));
+  for (let index = 0; index < updateCount; index++) doc.getText("body").insert(index, "x");
+  const pod = createDemoPod({
+    root: DEMO_ROOT,
+    seed: [
+      ...(await buildDemoSeed(Date.now())),
+      { path: "docs/plan.ttl", body: "snapshot", contentType: "text/turtle" },
+      ...updates.map((body, index) => ({
+        path: `docs/plan/updates/${index}`,
+        body,
+        contentType: "application/octet-stream",
+      })),
+    ],
+  });
+  await stored({ revision: "profile", snapshot: pod.snapshot() });
+  const browser = await (await tab()).getDemoPod();
+  const commits = vi.spyOn(IDBObjectStore.prototype, "put");
+  const session = {
+    storageUrl: DEMO_ROOT,
+    webId: `${DEMO_ROOT}profile#me`,
+    fetch: browser.fetch,
+  } as PodSession;
+  const start = performance.now();
+  const result = await deleteDocument(`${DEMO_ROOT}docs/plan.ttl`, session);
+  const trashTime = performance.now() - start;
+  const trashCommits = commits.mock.calls.length;
+  expect(result.failed).toEqual([]);
+  commits.mockClear();
+  const undoStart = performance.now();
+  expect((await restoreDocument(result.done, session)).failed).toEqual([]);
+  console.log("Browser Docs profile", {
+    updateCount,
+    trashTime,
+    undoTime: performance.now() - undoStart,
+    trashCommits,
+    undoCommits: commits.mock.calls.length,
+  });
+  expect(trashCommits).toBeLessThanOrEqual(16);
+  expect(commits.mock.calls.length).toBeLessThanOrEqual(11);
+  doc.destroy();
 });

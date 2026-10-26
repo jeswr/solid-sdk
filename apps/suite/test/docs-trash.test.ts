@@ -1,8 +1,9 @@
 // AUTHORED-BY Codex
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { applyUpdate, Doc, encodeStateAsUpdate } from "yjs";
 import { deleteDocument, deleteForever, restoreDocument } from "../src/apps/docs/editor/operations";
 import { createSolidDriveClient } from "../src/apps/drive/lib/client/client";
-import { listTrash, restoreItems } from "../src/apps/drive/lib/operations/operations";
+import { listTrash, restoreItems, trashItems } from "../src/apps/drive/lib/operations/operations";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
 import type { PodSession } from "../src/lib/session/pod-session";
 
@@ -92,11 +93,23 @@ describe("Docs uses Drive trash records", () => {
     expect(result.failed).toMatchObject([{ url: TREE }]);
     const visible = await listTrash(client, DRIVE);
     expect(visible).toHaveLength(2);
-    expect(visible.find((entry) => entry.original === TREE)?.status).toBe("partial");
-    expect((await restoreItems(client, DRIVE, visible)).failed).toEqual([]);
+    const tree = visible.find((entry) => entry.original === TREE);
+    expect(tree).toMatchObject({ status: "partial" });
+    expect(tree?.remaining).toEqual([
+      `${tree?.url}assets/chart.png`,
+      `${tree?.url}updates/one.bin`,
+    ]);
+    const restored = await restoreItems(client, DRIVE, visible);
+    expect(restored.failed).toEqual([]);
+    expect(restored.done.map(({ url, renamed }) => ({ url, renamed }))).toEqual([
+      { url: DOC, renamed: false },
+      { url: TREE, renamed: false },
+    ]);
     expect(await (await pod.fetch(`${TREE}assets/chart.png`)).text()).toBe("image");
     expect(await (await pod.fetch(`${TREE}updates/one.bin`)).text()).toBe("update");
     expect((await pod.fetch(DOC)).ok).toBe(true);
+    expect((await pod.fetch(`${ROOT}docs/plan%20(restored)/`)).status).toBe(404);
+    expect(await listTrash(client, DRIVE)).toEqual([]);
   });
   it("does not remove either source when Drive cannot persist the batch intents", async () => {
     const { session, pod } = fixture();
@@ -115,12 +128,17 @@ describe("Docs uses Drive trash records", () => {
     expect((await pod.fetch(`${TREE}assets/chart.png`)).ok).toBe(true);
   });
   it("surfaces completion warnings and leaves records that Drive can reconcile", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const { session, pod, client } = fixture();
     let writes = 0;
     const unavailable = {
       ...session,
       fetch: (async (input, init) => {
         if (String(input) === `${DRIVE}.trash/index.ttl` && init?.method === "PUT" && ++writes > 1)
+          return new Response(null, { status: 503 });
+        // Also lose the slot-local completion receipts: only the pending
+        // intents survive, so Drive must conservatively reconcile as partial.
+        if (String(input).endsWith("/partial.ttl") && init?.method === "PUT")
           return new Response(null, { status: 503 });
         return pod.fetch(input, init);
       }) as typeof fetch,
@@ -130,8 +148,20 @@ describe("Docs uses Drive trash records", () => {
     expect(result.failed).toEqual([]);
     expect(result.warnings).toMatchObject([{ kind: "trash-index-persistence" }]);
     const reconciled = await listTrash(client, DRIVE);
-    expect(reconciled).toEqual(result.done);
+    expect(reconciled).toEqual(
+      result.done.map((entry) => ({
+        ...entry,
+        status: "partial",
+        remaining:
+          entry.original === DOC
+            ? [entry.url]
+            : [`${entry.url}assets/chart.png`, `${entry.url}updates/one.bin`],
+      })),
+    );
     expect((await restoreDocument(reconciled, session)).failed).toEqual([]);
+    expect(await listTrash(client, DRIVE)).toEqual([]);
+    expect(warn).toHaveBeenCalledTimes(2);
+    warn.mockRestore();
   });
   it("refuses to start a delete when the companion existence check is forbidden", async () => {
     const { session, pod } = fixture();
@@ -158,4 +188,56 @@ describe("Docs uses Drive trash records", () => {
       "Expected a document in Docs",
     );
   });
+});
+
+it("bounds Docs trash and Undo requests by compacting the typed Yjs log without changing CRDT state", async () => {
+  const doc = new Doc();
+  const updates: Uint8Array[] = [];
+  doc.on("update", (update: Uint8Array) => updates.push(update));
+  for (const letter of "A clear plan for the launch. Keep every word in your own pod.")
+    doc.getText("body").insert(doc.getText("body").length, letter);
+  doc.getText("body").delete(0, 2);
+  const seed = updates.map((body, index) => ({
+    path: `docs/plan/updates/${index}`,
+    body,
+    contentType: "application/octet-stream",
+  }));
+  const results = [];
+  for (const compact of [false, true]) {
+    const pod = createDemoPod({
+      root: ROOT,
+      seed: [{ path: "docs/plan.ttl", body: "snapshot", contentType: "text/turtle" }, ...seed],
+    });
+    let requests = 0;
+    let mutations = 0;
+    const http: typeof fetch = (input, init) => {
+      requests++;
+      if (["PUT", "DELETE"].includes(init?.method ?? "GET")) mutations++;
+      return pod.fetch(input, init);
+    };
+    const client = createSolidDriveClient({ storageUrl: ROOT, fetch: http });
+    const session = { storageUrl: ROOT, webId: `${ROOT}profile#me`, fetch: http } as PodSession;
+    const trashed = compact
+      ? await deleteDocument(DOC, session)
+      : await trashItems(client, DRIVE, await Promise.all([client.stat(DOC), client.stat(TREE)]));
+    expect(trashed.failed).toEqual([]);
+    const trash = { requests, mutations };
+    requests = mutations = 0;
+    expect((await restoreDocument(trashed.done, session)).failed).toEqual([]);
+    const undo = { requests, mutations };
+    const replay = new Doc();
+    const log = await client.list(`${TREE}updates/`);
+    for (const { url } of log)
+      applyUpdate(replay, new Uint8Array(await (await client.read(url)).arrayBuffer()));
+    expect(encodeStateAsUpdate(replay)).toEqual(encodeStateAsUpdate(doc));
+    if (compact) expect(log).toHaveLength(1);
+    results.push({ trash, undo });
+    replay.destroy();
+  }
+  doc.destroy();
+  expect(updates).toHaveLength(62);
+  expect(results).toEqual([
+    { trash: { requests: 406, mutations: 132 }, undo: { requests: 343, mutations: 133 } },
+    { trash: { requests: 229, mutations: 73 }, undo: { requests: 38, mutations: 11 } },
+  ]);
 });

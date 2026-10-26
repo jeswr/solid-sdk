@@ -2,7 +2,7 @@
 // AUTHORED-BY Codex
 import { TooltipProvider } from "@jeswr/suite-ui";
 import { act, createElement } from "react";
-import { hydrateRoot } from "react-dom/client";
+import { createRoot, hydrateRoot } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { afterEach, expect, it, vi } from "vitest";
 import { Doc } from "yjs";
@@ -30,12 +30,60 @@ vi.mock("@tiptap/react", async (original) => ({
 }));
 
 import { DocsSidebar } from "../src/apps/docs/components/common";
+import { DeleteDialog } from "../src/apps/docs/components/delete-dialog";
 import { DocumentEditor } from "../src/apps/docs/components/document-editor";
 import { ModifiedTime } from "../src/apps/docs/components/modified-time";
 
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+});
+it("keeps Moving to trash visible and the confirmation disabled until the operation settles", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const host = document.createElement("div");
+  document.body.append(host);
+  const root = createRoot(host);
+  const onConfirm = vi.fn();
+  const onOpenChange = vi.fn();
+  const render = (busy: boolean) =>
+    root.render(
+      createElement(DeleteDialog, {
+        open: true,
+        busy,
+        onConfirm,
+        onOpenChange,
+      }),
+    );
+  try {
+    await act(async () => render(false));
+    const dialog = document.querySelector('[role="alertdialog"]');
+    const confirm = Array.from(dialog?.querySelectorAll("button") ?? []).find(
+      (button) => button.textContent === "Move to trash",
+    );
+    expect(confirm).toBeDefined();
+    expect(dialog?.querySelector('[role="status"]')).toBeNull();
+    await act(async () => confirm?.click());
+    expect(onConfirm).toHaveBeenCalledOnce();
+    expect(onOpenChange).not.toHaveBeenCalled();
+    await act(async () => render(true));
+    expect(dialog?.querySelector('[role="status"]')?.textContent).toBe("Moving to trash…");
+    expect(confirm?.disabled).toBe(true);
+    expect(
+      Array.from(dialog?.querySelectorAll("button") ?? []).every((button) => button.disabled),
+    ).toBe(true);
+    await act(async () => {
+      confirm?.click();
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    });
+    expect(onConfirm).toHaveBeenCalledOnce();
+    expect(onOpenChange).not.toHaveBeenCalled();
+    await act(async () => render(false));
+    expect(dialog?.querySelector('[role="status"]')).toBeNull();
+    expect(confirm?.disabled).toBe(false);
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+  }
 });
 it("hydrates the Docs editor across a minute boundary without changing its initial text", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);

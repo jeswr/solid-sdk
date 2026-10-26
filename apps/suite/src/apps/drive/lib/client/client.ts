@@ -11,6 +11,7 @@
 import { fetchRdf, RdfFetchError } from "@jeswr/fetch-rdf";
 import { Container, Resource } from "@solid/object";
 import { DataFactory, type Store } from "n3";
+import { mapConcurrent } from "../../../../lib/parallel";
 
 const IANA_TYPE = /^http:\/\/www\.w3\.org\/ns\/iana\/media-types\/(.+)#Resource$/;
 
@@ -465,11 +466,16 @@ export function createSolidDriveClient(options: {
           for (const child of node.children ?? []) await capture(child);
         };
         await capture(source);
-        for (const url of sourceUrls(source)) {
-          // Each destination is checked again immediately before its source's
-          // DELETE, since another child deletion may give a concurrent tab time.
-          await verifyDestination({ url });
+        // Independent identities can be checked together. Drain every check
+        // before deleting anything or deciding whether copies can be rolled back.
+        try {
+          await mapConcurrent(sourceUrls(source), (url) => verifyDestination({ url }));
+        } catch (error) {
+          verifyingCopy = true;
+          throw error;
         }
+        // Each destination is checked again immediately before its source's
+        // DELETE, since another child deletion may give a concurrent tab time.
         deleting = true;
         await deleteSnapshot(source, deleted, verifyDestination);
       }

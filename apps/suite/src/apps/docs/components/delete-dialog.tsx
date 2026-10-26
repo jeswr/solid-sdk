@@ -22,7 +22,7 @@ export function DeleteDialog({
   onConfirm: () => void;
 }) {
   return (
-    <AlertDialog open={open} onOpenChange={onOpenChange}>
+    <AlertDialog open={open} onOpenChange={(next) => !busy && onOpenChange(next)}>
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>Move this document to trash?</AlertDialogTitle>
@@ -30,6 +30,7 @@ export function DeleteDialog({
             The document, its versions and images will be kept in Trash and can be restored.
           </AlertDialogDescription>
         </AlertDialogHeader>
+        {busy && <p role="status">Moving to trash…</p>}
         <AlertDialogFooter>
           <AlertDialogCancel disabled={busy}>Cancel</AlertDialogCancel>
           <AlertDialogAction
