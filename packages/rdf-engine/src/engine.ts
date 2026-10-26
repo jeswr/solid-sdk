@@ -4,11 +4,15 @@ import type { BlankNode, Quad, Term } from "@rdfjs/types";
 import type * as Wasm from "@sparq-org/sparq/wasm-node";
 import { DataFactory, Store } from "n3";
 import { createLocalIndex } from "./local-index.js";
+import { evaluatePolicy } from "./policy.js";
 import { decode, formatName, graphDocument, parseN3, writeN3 } from "./rdf.js";
 import type { LocalIndex, RdfEngine, ValidationReport } from "./types.js";
 
 /** Internal common surface of the shipped browser and Node WASM modules. */
-export type Runtime = Pick<typeof Wasm, "Store" | "canonicalizeNQuads">;
+export type Runtime = Pick<typeof Wasm, "Store" | "canonicalizeNQuads"> & {
+  policyEvaluate?: unknown;
+  policyContractVersion?: unknown;
+};
 
 type JsonTerm =
   | {
@@ -93,6 +97,11 @@ export function createEngine(load: () => Promise<Runtime>): RdfEngine {
         check();
         runtime = module;
         features = {
+          policyEvaluate:
+            typeof module.policyEvaluate === "function" &&
+            typeof module.policyContractVersion === "number" &&
+            Number.isFinite(module.policyContractVersion) &&
+            module.policyContractVersion >= 1,
           serialize: typeof module.Store.prototype.serialize === "function",
           parseShaclCompact: typeof module.Store.prototype.parseShaclCompact === "function",
         };
@@ -194,6 +203,29 @@ export function createEngine(load: () => Promise<Runtime>): RdfEngine {
     },
     canonicalize(data) {
       return use((module) => module.canonicalizeNQuads(writeN3(data, "application/n-quads")));
+    },
+    evaluatePolicy(policy, ctx) {
+      // A marker is a prerequisite for a future adapter, not permission to call
+      // today's experimental probe with its incompatible context/semantics.
+      return use(() => evaluatePolicy(policy, ctx));
+    },
+    deriveForm(data, shapes, focus, opts) {
+      return use(({ Store: WasmStore }) =>
+        withStore(WasmStore.load("", "turtle"), (store) => {
+          if (typeof store.deriveForm !== "function") {
+            throw new Error("Sparq bundle lacks deriveForm (requires forms)");
+          }
+          return JSON.parse(
+            store.deriveForm(
+              writeN3(data, "application/n-quads"),
+              writeN3(shapes, "application/n-quads"),
+              focus,
+              "nquads",
+              JSON.stringify(opts),
+            ),
+          ) as unknown;
+        }),
+      );
     },
     createIndex() {
       return use(({ Store: WasmStore }) => {

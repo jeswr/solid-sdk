@@ -65,11 +65,44 @@ deduplication, empty graphs and disposal. Full SPARQL queries, snapshot/restore,
 persistence and LRU eviction remain T-071, as assigned in the original task split.
 
 After `ready()`, `features` reports the detected `serialize` and
-`parseShaclCompact` methods in the installed bundle. A missing serializer throws
+`parseShaclCompact` methods, plus a versioned `policyEvaluate` capability in the installed bundle. A missing serializer throws
 a descriptive error. Compact SHACL parsing is detected for future integration;
 the current `validate` string argument is Turtle. Both methods are present in
 0.1.5. Remote JSON-LD contexts and ODRL are absent from that published build;
-remote context loading, policy evaluation and form derivation are outside T-070.
+remote context loading remains unavailable. Policy evaluation and form derivation
+are provided by T-072 as described below.
+
+`evaluatePolicy(policyDataset, { action, target, assignee?, purpose?, now? })`
+uses `@jeswr/solid-odrl` for both RDF policy projection and the decision. It evaluates
+the first recognized policy, following solid-odrl's selection semantics; it does
+not combine policies. Actions accept ODRL IRIs or solid-odrl short names (including
+its append/control extensions). Unknown actions, missing policies and requests
+with no applicable rule return `{ allow: false, matched: [], unmet: [] }`.
+`assignee` maps to the request agent; `purpose` is an asserted purpose attribute;
+`now` is the evaluator's injected clock. Other request attributes and strict-duty
+options are outside this facade's contract.
+
+`allow` reflects the solid-odrl decision. `matched` contains the IRIs of matched
+permissions followed by matched prohibitions. `unmet` contains active unfulfilled
+duty IRIs; advisory duties do not change an allow decision. Named rule/duty IRIs
+are preserved. Anonymous references use `<policyIri>#rule-<n>` and
+`<policyIri>#duty-<n>`, with separate one-based counters over distinct referenced
+nodes (including named nodes), in dataset iteration order. A dataset carries no
+source locations, so this is its available document order. Inactive duties are
+excluded. Repeated traces from solid-odrl retain their multiplicity. Naming only
+annotates its parsed model; the input RDF and evaluation fields remain unchanged.
+
+The experimental Sparq policy probe is never invoked. `features.policyEvaluate`
+is true only for a callable export with a finite numeric `policyContractVersion`
+>= 1. This is a detection hook for a future compatible adapter; even with that
+marker the current facade keeps solid-odrl authoritative (ADR-007 amendment
+2026-10-26 (2)). There is no WASM policy adapter in this release.
+
+`deriveForm(data, shapes, focus, { mode: "edit" | "view", shape? })` serializes both
+datasets as N-Quads, calls Sparq's `Store.deriveForm`, and returns its parsed
+FormDescription JSON verbatim as `unknown`. It preserves field/group/widget keys,
+passes options unchanged, and releases the temporary store on success or error.
+A bundle without the forms feature throws a descriptive error.
 
 For browsers, copy the installed browser artifact into the app's static directory:
 
@@ -113,7 +146,10 @@ blank-node canonicalization throw the exported `FakeEngineUnsupportedError`.**
 The fake does not perform SHACL validation: `validate` returns an injected report
 or calls an injected `(data, shapes) => report | Promise<report>` function. Its
 default is `{ conforms: true, results: [] }`. Use the real engine in tests that
-need JSON-LD, SHACL semantics or blank-node canonicalization.
+need JSON-LD, SHACL semantics or blank-node canonicalization. Policy evaluation
+uses the same solid-odrl delegate in the fake, without importing Sparq. Form
+derivation throws `FakeEngineUnsupportedError`; test form semantics with the
+real engine.
 
 From the workspace root:
 

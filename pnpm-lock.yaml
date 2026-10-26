@@ -2708,6 +2708,9 @@ importers:
 
   packages/rdf-engine:
     dependencies:
+      '@jeswr/solid-odrl':
+        specifier: workspace:*
+        version: link:../solid-odrl
       '@rdfjs/types':
         specifier: 2.0.1
         version: 2.0.1

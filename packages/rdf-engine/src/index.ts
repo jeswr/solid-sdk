@@ -17,7 +17,13 @@ function initialize(opts: RdfEngineOptions): Promise<Runtime> {
     } else {
       await sparq.init();
     }
-    return wasm;
+    const module: Runtime = wasm;
+    const policy = sparq as { policyEvaluate?: unknown; policyContractVersion?: unknown };
+    return {
+      ...module,
+      policyEvaluate: policy.policyEvaluate ?? module.policyEvaluate,
+      policyContractVersion: policy.policyContractVersion ?? module.policyContractVersion,
+    };
   })().catch((error) => {
     initialization = undefined;
     throw error;

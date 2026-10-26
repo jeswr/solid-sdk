@@ -31,3 +31,16 @@ Keep development tool versions aligned with the root manifest. The pinned pnpm 1
 `ignore-scripts` requires local tool declarations for filtered scripts.
 
 Validate changes with this package's `lint`, `build`, `typecheck`, and `test` scripts.
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+T-072 adds evaluatePolicy and deriveForm. Keep solid-odrl authoritative: the
+experimental Sparq policy probe is not a compatible adapter. Detect a callable
+policyEvaluate only with a finite numeric policyContractVersion >= 1; even then
+retain solid-odrl until an adapter contract is approved. Project matched rule IDs
+and active unfulfilled duty IDs; duties remain advisory. Anonymous IDs use
+one-based dataset document order; naming must never change evaluation inputs.
+The fake uses the same delegate and throws FakeEngineUnsupportedError for forms.
+FormDescription JSON is passed through unchanged and temporary stores are freed
+on every path. bench/parse.bench.ts records materialized-dataset parse timings;
+commit bench/parse.json and document the crossover without changing fetch-rdf's
+default in this package lane.
