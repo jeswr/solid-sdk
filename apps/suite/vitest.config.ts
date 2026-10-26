@@ -20,6 +20,7 @@ export default defineConfig({
         "src/apps/drive/lib/sharing/**/*.ts",
         "src/apps/chat/lib/text/**/*.ts",
         "src/apps/photos/lib/exif/**/*.ts",
+        "src/apps/photos/lib/transform/**/*.ts",
         "src/apps/music/lib/queue/**/*.ts",
         "src/apps/photos/lib/albums/**/*.ts",
         "src/apps/notes/lib/**/*.ts",
