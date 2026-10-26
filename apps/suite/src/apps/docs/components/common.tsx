@@ -51,11 +51,7 @@ export function DocsSidebar({ filter = "all" }: { filter?: string }) {
             Shared with me
           </Button>
         </Hint>
-        <Hint text="Coming soon">
-          <Button variant="ghost" disabled>
-            Trash
-          </Button>
-        </Hint>
+        <Link href="/drive/trash">Trash</Link>
       </nav>
       <p className="docs-sidebar-note">
         Your words.
@@ -65,9 +61,10 @@ export function DocsSidebar({ filter = "all" }: { filter?: string }) {
     </div>
   );
 }
-export function DocumentSkeleton() {
+export function DocumentSkeleton({ message }: { message?: string }) {
   return (
     <div role="status" className="docs-loading" aria-label="Loading document" aria-busy="true">
+      {message && <p>{message}</p>}
       <Skeleton className="h-8 w-2/3" />
       <div className="docs-disabled-toolbar" role="toolbar" aria-label="Formatting">
         <Button disabled>Normal text</Button>

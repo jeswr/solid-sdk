@@ -32,15 +32,15 @@ import type { PodSession } from "@/lib/session/pod-session";
 import { copyDocument } from "../editor/copy";
 import { downloadDocument, rowExportJson } from "../editor/export-document";
 import { importDocument } from "../editor/import-document";
-import { deleteDocument } from "../editor/operations";
 import { useDocsStore } from "../hooks/use-docs-store";
 import { useStarred } from "../hooks/use-starred";
-import { relativeTime } from "../lib/editor/logic";
 import type { DocumentEntry } from "../lib/model";
 import { DocsError, DocsSidebar } from "./common";
 import { DeleteDialog } from "./delete-dialog";
 import { DownloadMenu } from "./download-menu";
 import { ImportDialog } from "./import-dialog";
+import { ModifiedTime } from "./modified-time";
+import { trashDocumentWithUndo } from "./trash-actions";
 export function DocumentList({ session }: { session: PodSession }) {
   const store = useDocsStore(session);
   useEffect(() => {
@@ -207,12 +207,7 @@ export function DocumentList({ session }: { session: PodSession }) {
                   </td>
                   <td className="docs-owner">You</td>
                   <td className="docs-modified">
-                    <time
-                      dateTime={entry.modified}
-                      title={entry.modified ? new Date(entry.modified).toLocaleString() : "Unknown"}
-                    >
-                      {entry.modified ? relativeTime(Date.parse(entry.modified), Date.now()) : "—"}
-                    </time>
+                    <ModifiedTime value={entry.modified} />
                   </td>
                   <td className="docs-row-actions">
                     <DropdownMenu>
@@ -339,9 +334,11 @@ export function DocumentList({ session }: { session: PodSession }) {
           onConfirm={() => {
             if (!deleting) return;
             void act(async () => {
-              await deleteDocument(deleting.url, session);
-              if (starred.includes(deleting.url)) toggle(deleting.url);
-              setDeleting(null);
+              const complete = await trashDocumentWithUndo(deleting.url, session, reload);
+              if (complete) {
+                if (starred.includes(deleting.url)) toggle(deleting.url);
+                setDeleting(null);
+              }
               await reload();
             });
           }}

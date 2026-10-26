@@ -2,7 +2,6 @@
 import { SolidPersistence } from "@jeswr/y-solid";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { applyUpdate, Doc, encodeStateAsUpdate, XmlElement } from "yjs";
-import { deleteDocument, deleteForever, restoreDocument } from "../src/apps/docs/editor/operations";
 import { DocumentPersistence } from "../src/apps/docs/editor/persistence";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
 import { buildDemoSeed, DEMO_NAME, DEMO_ROOT, DEMO_WEBID } from "../src/lib/demo-pod/seed";
@@ -39,7 +38,9 @@ vi.mock("y-indexeddb", () => ({
       mirrors.delete(this.name);
     }
   },
-  storeState: async () => {},
+  storeState: async (mirror: { save(): void }) => {
+    mirror.save();
+  },
   clearDocument: async (name: string) => {
     mirrors.delete(name);
   },
@@ -160,32 +161,6 @@ describe("Docs pod and local mirror lifecycle", () => {
     expect(runtime.title).toBe("Theirs");
     expect(runtime.stored?.data.title).toBe("Theirs");
     expect(runtime.state).toBe("saved");
-  });
-  it("moves the document, revisions, assets and log to restorable Drive trash", async () => {
-    const { runtime, session, pod } = await fixture();
-    runtimes.push(runtime);
-    runtime.change("<p>Delete me</p>", json("Delete me"));
-    await runtime.flush();
-    const stored = runtime.stored;
-    if (!stored) throw new Error("Fixture was not created");
-    await session.fetch(`${stored.data.assets}image.png`, {
-      method: "PUT",
-      body: "binary",
-      headers: { "content-type": "image/png" },
-    });
-    const original = await (await pod.fetch(stored.url)).text();
-    const trashed = await deleteDocument(stored.url, session);
-    const index = await (await pod.fetch(`${DEMO_ROOT}drive/.trash/index.ttl`)).text();
-    expect(index).toContain(stored.url);
-    expect(trashed).toMatch(new RegExp(`${DEMO_ROOT}drive/\\.trash/`));
-    expect(await (await pod.fetch(trashed)).text()).toBe(original);
-    expect((await pod.fetch(stored.url)).status).toBe(404);
-    expect((await pod.fetch(stored.data.updateLog as string)).status).toBe(404);
-    expect((await pod.fetch(`${stored.data.assets}image.png`)).status).toBe(404);
-    await restoreDocument(trashed, session);
-    expect(await (await pod.fetch(stored.url)).text()).toBe(original);
-    expect(await (await pod.fetch(`${stored.data.assets}image.png`)).text()).toBe("binary");
-    expect((await pod.fetch(stored.data.updateLog as string)).ok).toBe(true);
   });
 });
 
@@ -333,6 +308,44 @@ describe("Docs persistence review regressions", () => {
     expect(reopened.provider?.synced).toBe(true);
     expect(await replayText(reopened, session)).toContain("offline");
   });
+  it("finishes initial Yjs reconciliation before exposing a cached document for editing", async () => {
+    const f = await fixture();
+    const { runtime, session, pod } = f;
+    runtimes.push(runtime);
+    await runtime.open();
+    runtime.doc.getXmlFragment("prosemirror").insert(0, [new XmlElement("paragraph")]);
+    runtime.rename("Delayed reconciliation");
+    await runtime.flush();
+    await runtime.destroy();
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let loading = false;
+    f.intercept(async (input, init) => {
+      if (String(input).endsWith("/updates/") && (init?.method ?? "GET") === "GET") {
+        loading = true;
+        await gate;
+      }
+      return pod.fetch(input, init);
+    });
+    const reopened = new DocumentPersistence(session);
+    runtimes.push(reopened);
+    let editable = false;
+    const opening = reopened.open(runtime.stored?.url).then(() => {
+      editable = true;
+    });
+    await vi.waitFor(() => expect(loading).toBe(true));
+    // Drain the cached-open microtasks while the network merge remains gated.
+    for (let i = 0; i < 20; i++) await Promise.resolve();
+    try {
+      expect(editable).toBe(false);
+    } finally {
+      release();
+      await opening;
+    }
+    expect(reopened.provider?.synced).toBe(true);
+  });
   it("aborts an open whose pod read resolves after destruction without leaking mirrors or providers", async () => {
     const { runtime, session } = await fixture();
     runtimes.push(runtime);
@@ -359,23 +372,6 @@ describe("Docs persistence review regressions", () => {
     expect(connections.size).toBe(active);
     expect(opened.provider?.destroyed ?? true).toBe(true);
   });
-});
-
-it("allows Delete forever only for Trash after explicit confirmation", async () => {
-  const { runtime, session, pod } = await fixture();
-  runtimes.push(runtime);
-  runtime.rename("Purge confirmation");
-  await runtime.flush();
-  const url = runtime.stored?.url as string;
-  await expect(deleteForever(url, session, true)).rejects.toThrow("Trash");
-  const trashed = await deleteDocument(url, session);
-  await expect(deleteForever(trashed, session, false)).rejects.toThrow("Confirm");
-  expect((await pod.fetch(trashed)).ok).toBe(true);
-  await deleteForever(trashed, session, true);
-  expect((await pod.fetch(trashed)).status).toBe(404);
-  expect(await (await pod.fetch(`${DEMO_ROOT}drive/.trash/index.ttl`)).text()).not.toContain(
-    trashed,
-  );
 });
 
 it("asks about a mismatched title when resuming legacy pending metadata without a baseline", async () => {

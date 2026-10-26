@@ -5,7 +5,10 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   // Match Next's Yjs singleton when testing the workspace persistence provider.
   resolve: {
-    alias: { yjs: fileURLToPath(new URL("./node_modules/yjs/dist/yjs.mjs", import.meta.url)) },
+    alias: {
+      "@": fileURLToPath(new URL("./src", import.meta.url)),
+      yjs: fileURLToPath(new URL("./node_modules/yjs/dist/yjs.mjs", import.meta.url)),
+    },
   },
   test: {
     environment: "node",

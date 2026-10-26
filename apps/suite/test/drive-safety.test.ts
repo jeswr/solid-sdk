@@ -540,6 +540,13 @@ describe("Drive data-safety regressions", () => {
     `${DRIVE}folder/`,
     `${DRIVE}%2fescape`,
     `${DRIVE}a/../file`,
+    `${ROOT}docs/nested/plan.ttl`,
+    `${ROOT}docs/plan.txt`,
+    `${ROOT}docs/`,
+    `${ROOT}docs/plan.ttl?query`,
+    `${ROOT}docs/%2fplan.ttl`,
+    `${ROOT}docs/plan.ttl#it`,
+    `${ROOT}docs/plan/`,
   ])("rejects unsafe restore destination %s", async (original) => {
     const { client, fetch } = setup();
     const entry = {

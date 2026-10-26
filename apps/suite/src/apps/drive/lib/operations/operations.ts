@@ -320,7 +320,7 @@ export async function listTrash(
   for (const entry of trashEntries(index)) {
     try {
       slotOf(driveRoot, entry);
-      validateOriginal(driveRoot, entry);
+      validateOriginal(client, driveRoot, entry);
     } catch (error) {
       if (options.onInvalid) options.onInvalid(error as DriveError);
       else console.warn(error);
@@ -386,7 +386,7 @@ export async function trashItems(
   if (!entries.length) return result;
   for (const entry of entries) {
     slotOf(driveRoot, entry);
-    validateOriginal(driveRoot, entry);
+    validateOriginal(client, driveRoot, entry);
   }
   // No source may be removed until every intent is durably discoverable.
   try {
@@ -456,14 +456,18 @@ function slotOf(driveRoot: string, entry: Pick<TrashEntry, "url">): string {
   }
 }
 
-function validateOriginal(driveRoot: string, entry: TrashEntry): void {
+function validateOriginal(client: DriveClient, driveRoot: string, entry: TrashEntry): void {
   try {
     const original = new URL(entry.original);
+    // Docs keeps its snapshot and companion tree beside Drive, in the same pod.
+    const docs = new URL("docs/", client.storageUrl).href;
+    const documentPath = entry.original.slice(docs.length);
+    const docsItem = entry.original.startsWith(docs) && /^[^/]+(?:\.ttl|\/)$/.test(documentPath);
     if (
       original.href !== entry.original ||
       original.search ||
       original.hash ||
-      !entry.original.startsWith(driveRoot) ||
+      (!entry.original.startsWith(driveRoot) && !docsItem) ||
       entry.original === driveRoot ||
       entry.original.startsWith(trashFolderOf(driveRoot)) ||
       /%2f|%5c/i.test(original.pathname) ||
@@ -514,7 +518,7 @@ export async function restoreItems(
   for (const entry of entries) {
     try {
       const slot = slotOf(driveRoot, entry);
-      validateOriginal(driveRoot, entry);
+      validateOriginal(client, driveRoot, entry);
       const status = await requireTrashEntry(client, driveRoot, entry);
       if (status === "partial") {
         await restoreMissing(client, entry.url, entry.original);

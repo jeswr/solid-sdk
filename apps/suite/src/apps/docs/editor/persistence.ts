@@ -159,14 +159,9 @@ export class DocumentPersistence {
     }
     if (!this.readOnly && !this.offlineCopy) {
       this.attachProvider(container);
-      if (this.doc.getXmlFragment("prosemirror").length === 0) await this.provider?.whenSynced;
-      else
-        void this.provider?.whenSynced.catch(() => {
-          if (!this.stopped) {
-            this.state = "retrying";
-            this.notify();
-          }
-        });
+      // Keep the editor unmounted until the initial CRDT merge finishes. Replaying
+      // the log must not race the first keyboard selection or a pending local edit.
+      await this.provider?.whenSynced;
       this.assertActive();
       if (this.providerError) throw this.providerError;
     }

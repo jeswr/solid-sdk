@@ -27,10 +27,10 @@ import { copyDocument } from "../editor/copy";
 import { downloadDocument } from "../editor/export-document";
 import { editorExtensions } from "../editor/extensions";
 import { convertImport, uploadImportImage } from "../editor/import-document";
-import { deleteDocument } from "../editor/operations";
 import type { DocumentPersistence } from "../editor/persistence";
 import { podScopedFetch } from "../editor/private-image";
 import { useDocument } from "../hooks/use-document";
+import { useNow } from "../hooks/use-now";
 import { useStarred } from "../hooks/use-starred";
 import {
   editorShortcut,
@@ -53,6 +53,7 @@ import { OutlinePane } from "./outline-pane";
 import { SaveIndicator } from "./save-indicator";
 import { SlashMenu, type SlashPosition } from "./slash-menu";
 import { TableActions } from "./table-actions";
+import { trashDocumentWithUndo } from "./trash-actions";
 export function DocumentEditor({
   session,
   resource,
@@ -88,7 +89,7 @@ export function DocumentEditor({
   if (!runtime)
     return (
       <SuiteFrame app="docs" sidebar={<DocsSidebar />} context="Opening document…">
-        <DocumentSkeleton />
+        <DocumentSkeleton message="Syncing…" />
       </SuiteFrame>
     );
   return <HydratedEditor key={runtime.doc.guid} runtime={runtime} />;
@@ -284,11 +285,12 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
     return false;
   };
   const { starred, toggle } = useStarred();
+  const now = useNow();
   const status = saveStatus(
     runtime.state,
     runtime.online,
     runtime.lastSaved,
-    Date.now(),
+    now ?? runtime.lastSaved,
     runtime.readOnly,
   );
   const commitTitle = () => {
@@ -472,7 +474,7 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
         <div className="docs-page-wrap">
           <article className="docs-page" aria-label="Document page">
             <h1 className="sr-only">{title || "Untitled document"}</h1>
-            {editor ? <EditorContent editor={editor} /> : <DocumentSkeleton />}
+            {editor ? <EditorContent editor={editor} /> : <DocumentSkeleton message="Syncing…" />}
           </article>
         </div>
         {editor && !runtime.readOnly && (
@@ -600,8 +602,12 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
             void act(async () => {
               if (!runtime.stored) return;
               await runtime.flush();
-              await deleteDocument(runtime.stored.url, runtime.session);
-              if (starred.includes(runtime.stored.url)) toggle(runtime.stored.url);
+              const url = runtime.stored.url;
+              const complete = await trashDocumentWithUndo(url, runtime.session, () => {
+                router.push(`/docs/d/${encodeRef(url)}`);
+              });
+              if (!complete) return;
+              if (starred.includes(url)) toggle(url);
               setDeleting(false);
               router.push("/docs");
             })
