@@ -227,6 +227,47 @@ describe("chat link preview metadata", () => {
     ).toMatchObject({ url: PAGE, iconUrl: null });
   });
 
+  it.each([
+    " ",
+    "\t",
+    "\n",
+    "\f",
+    "\r",
+    " \t\n\f\r ",
+  ])("accepts HTML ASCII whitespace between head tags: %j", (space) => {
+    const metadata = `${space}<title>Actual</title>${space}${meta("og:title", "Actual")}${space}`;
+    expect(createLinkPreview(metadata, PAGE).title).toBe("Actual");
+    expect(
+      createLinkPreview(
+        `${space}<html>${space}<head>${metadata}</head>${space}<body></body>${space}</html>${space}`,
+        PAGE,
+      ).title,
+    ).toBe("Actual");
+  });
+
+  it.each([
+    "\u00a0",
+    "\u1680",
+    "\u2003",
+    "\u2028",
+    "\u2029",
+    "\u202f",
+    "\u205f",
+    "\u3000",
+    "\ufeff",
+  ])("rejects Unicode whitespace outside the body: %j", (space) => {
+    const metadata = meta("og:title", "Body");
+    rejects(`<head>${space}${metadata}</head>`);
+    rejects(`<html>${space}<head>${metadata}</head></html>`);
+    rejects(`${space}${metadata}`);
+    rejects(`<title>Actual</title>${space}${metadata}`);
+    rejects(`${metadata}${space}`);
+    expect(
+      createLinkPreview(`<head><title>Actual</title></head><body>${space}${metadata}</body>`, PAGE)
+        .title,
+    ).toBe("Actual");
+  });
+
   it("ignores comment, raw text and body metadata lookalikes", () => {
     const html = `<!-- ${meta("og:title", "Comment")} -->
       <html><head><script>const fake = '${meta("og:title", "Script")}';</script>

@@ -161,7 +161,7 @@ export function readMetadataTags(html: string): MetadataTag[] {
     if (html.charAt(cursor) !== "<") {
       const next = html.indexOf("<", cursor);
       const end = next < 0 ? html.length : next;
-      if (!stack.includes("body") && html.slice(cursor, end).trim()) {
+      if (!stack.includes("body") && /[^\t\n\f\r ]/.test(html.slice(cursor, end))) {
         throw new PreviewError("invalid-html");
       }
       cursor = end;
