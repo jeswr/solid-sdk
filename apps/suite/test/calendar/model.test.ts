@@ -329,6 +329,12 @@ describe("recurrence and reminders", () => {
       2,
     );
     expect(
+      toRRule(
+        { frequency: "DAILY", until: date("2026-03-02T09:00Z") },
+        date("2026-03-01T09:00Z"),
+      ).all(),
+    ).toEqual([date("2026-03-01T09:00Z"), date("2026-03-02T09:00Z")]);
+    expect(
       expandEvent(
         {
           name: "Late",

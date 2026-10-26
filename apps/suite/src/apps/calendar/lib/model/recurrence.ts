@@ -56,9 +56,7 @@ export function toRRule(rule: RecurrenceRule, start: CalendarDate, timeZone = "U
         ? null
         : typeof rule.until === "string"
           ? new Date(+asDate(rule.until) + 86399999)
-          : // Floating cutoffs can run backward during an overlap. Generate a
-            // conservative superset; expandEvent enforces the exact instant below.
-            new Date(+wallClock(asDate(rule.until), timeZone) + 86400000),
+          : wallClock(asDate(rule.until), timeZone),
     byweekday: rule.byDay?.length ? rule.byDay.map((day) => RRule[day]) : null,
     bymonthday: rule.byMonthDay?.length ? rule.byMonthDay : null,
     bymonth: rule.byMonth?.length ? rule.byMonth : null,
@@ -94,7 +92,14 @@ export function expandEvent(
   const dates: { wall: Date; date: Date }[] = [];
   // COUNT applies to valid local times from DTSTART, before EXDATE/range filtering.
   // Let rrule bound the search by the range, and stop once that valid count is met.
-  toRRule({ ...rule, count: undefined }, event.start, zone).between(
+  // An instant cutoff can map behind a valid candidate during rollback. Use
+  // the padded range as the conservative generation bound for instant UNTIL;
+  // the exact cutoff is enforced only after converting candidates to instants.
+  toRRule(
+    { ...rule, count: undefined, until: typeof rule.until === "string" ? rule.until : undefined },
+    event.start,
+    zone,
+  ).between(
     rule.count === undefined ? new Date(+floatingFrom - 86400000) : floatingStart,
     new Date(+floatingTo + 86400000),
     true,
