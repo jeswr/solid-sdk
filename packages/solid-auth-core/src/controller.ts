@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Fable 5
+// AUTHORED-BY Codex GPT-6.1-Sol
 // (Ported from @jeswr/solid-elements `src/auth/index.ts` — the suite's best,
 // adversarially-reviewed login controller (Opus 4.8-authored original; every
 // "roborev finding" comment below refers to that history) — extracted as the
@@ -1978,30 +1979,42 @@ class SolidAuthEngine implements SolidAuth {
    * (never mutates the frozen-by-contract Set) — the provider reads it live via the
    * session getter, so the wider boundary takes effect immediately.
    *
-   * Returns `true` iff there is a live session AND every given origin is now covered
-   * (fail-closed: no session, or any cleartext/unparseable origin dropped → false).
+   * Returns `true` only when there is a live session, every given origin is
+   * admissible, and `options.expectedWebId`, when supplied, matches the live WebID
+   * via `webIdsEqual`. A rejection leaves the entire boundary unchanged. Omit the
+   * expected WebID to target whichever session is live at call time.
    */
-  reArmAllowedOrigins(origins: string[]): boolean {
+  reArmAllowedOrigins(origins: string[], options?: { expectedWebId?: string }): boolean {
     const session = this.#session;
     if (!session) return false; // fail-closed — nothing live to re-arm
+    if (
+      options?.expectedWebId !== undefined &&
+      !webIdsEqual(session.webId, options.expectedWebId)
+    ) {
+      return false;
+    }
     // Admit the additions through the SAME cleartext/loopback guard as the config
     // boundary (drops non-https, non-loopback http, and unparseable entries). We ask
     // ONLY for the explicit list — the WebID/issuer origins are already in the live
     // set — so nothing is double-counted or re-derived.
-    const additions = computeAllowedOrigins({
-      allowedOrigins: origins,
-      includeWebIdOrigin: false,
-      includeIssuerOrigin: false,
-      allowInsecureLoopback: this.#opts.allowInsecureLoopback,
-    });
+    const additions = new Set<string>();
+    for (const origin of origins) {
+      const admitted = computeAllowedOrigins({
+        allowedOrigins: [origin],
+        includeWebIdOrigin: false,
+        includeIssuerOrigin: false,
+        allowInsecureLoopback: this.#opts.allowInsecureLoopback,
+      });
+      // Validate each input before touching the live boundary. Comparing only URL
+      // origins would let a blob:https URL hide behind an admitted HTTPS origin.
+      if (admitted.size === 0) return false;
+      for (const value of admitted) additions.add(value);
+    }
     // UNION onto the live boundary + REASSIGN (never mutate the existing Set, which the
     // arm-time snapshot semantics treat as immutable). The provider reads the live
     // session's `allowedOrigins` on every request, so this re-arm is effective at once.
     session.allowedOrigins = new Set([...session.allowedOrigins, ...additions]);
-    // Coverage: every requested origin must now be admitted. An origin dropped by the
-    // cleartext guard (or an unparseable one) is NOT covered → false → the caller fails
-    // closed (it cannot authenticate that pod), exactly the self-heal decision.
-    return origins.every((origin) => isOriginAllowed(session.allowedOrigins, origin));
+    return true;
   }
 
   /**

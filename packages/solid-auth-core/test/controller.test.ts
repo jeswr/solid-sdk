@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Fable 5
+// AUTHORED-BY Codex GPT-6.1-Sol
 // (Ported from @jeswr/solid-elements test/auth-controller.test.ts — the exhaustive
 // adversarial suite guarding the engine's roborev-hardened invariants; only the
 // import paths + factory name changed in the port.)
@@ -4366,6 +4367,7 @@ describe("createSolidAuth — reArmAllowedOrigins (first-class re-arm-with-origi
       publicFetch: ok200RecordingFetch(),
     });
     expect(controller.reArmAllowedOrigins(["https://storage.example"])).toBe(false);
+    expect(controller.reArmAllowedOrigins([], { expectedWebId: Alice })).toBe(false);
     expect(controller.webId).toBeNull();
     // Nothing was attached anywhere (no session to re-arm).
     expect(await authdHeader(controller, "https://storage.example/x")).toBeNull();
@@ -4409,13 +4411,95 @@ describe("createSolidAuth — reArmAllowedOrigins (first-class re-arm-with-origi
     const controller = await loggedIn();
     expect(controller.reArmAllowedOrigins(["http://pod.example"])).toBe(false);
     expect(await authdHeader(controller, "http://pod.example/x")).toBeNull();
-    // A MIX: the https origin is admitted, but the presence of an inadmissible one
-    // means not-every-origin-covered → overall false (the caller fails closed).
+    // A mixed request fails atomically: even the admissible origin stays denied.
     expect(controller.reArmAllowedOrigins(["https://ok.example", "http://bad.example"])).toBe(
       false,
     );
-    expect(await authdHeader(controller, "https://ok.example/x")).toBe("DPoP access-token");
+    expect(await authdHeader(controller, "https://ok.example/x")).toBeNull();
     expect(await authdHeader(controller, "http://bad.example/x")).toBeNull();
+  });
+
+  it.each([
+    "http://bad.example",
+    "http://localhost:3000",
+    "javascript:alert(1)",
+    "data:text/plain,hello",
+    "blob:https://ok.example/id",
+    "/relative",
+    "::::",
+    "",
+  ])("leaves every existing origin unchanged when a mixed request includes %j", async (bad) => {
+    const controller = await loggedIn();
+    expect(controller.reArmAllowedOrigins(["https://existing.example"])).toBe(true);
+    expect(controller.reArmAllowedOrigins(["https://ok.example", bad])).toBe(false);
+    expect(await authdHeader(controller, "https://ok.example/x")).toBeNull();
+    expect(await authdHeader(controller, "https://existing.example/x")).toBe("DPoP access-token");
+    expect(await authdHeader(controller, "https://alice.pod.example/x")).toBe("DPoP access-token");
+    expect(await authdHeader(controller, "https://idp.example/x")).toBe("DPoP access-token");
+  });
+
+  it("admits every origin in an all-admissible list, including duplicates and paths", async () => {
+    const controller = await loggedIn();
+    expect(
+      controller.reArmAllowedOrigins([
+        "https://a.example/data/",
+        "https://b.example",
+        "https://a.example/other/",
+      ]),
+    ).toBe(true);
+    expect(await authdHeader(controller, "https://a.example/x")).toBe("DPoP access-token");
+    expect(await authdHeader(controller, "https://b.example/x")).toBe("DPoP access-token");
+  });
+
+  it.each([
+    "https://bob.pod.example/profile/card#me",
+    "https://alice.pod.example/profile/other#me",
+    "https://alice.pod.example/profile/card#other",
+    "not a url",
+    "",
+  ])("does not widen when expectedWebId is %j", async (expectedWebId) => {
+    const controller = await loggedIn();
+    expect(controller.reArmAllowedOrigins(["https://storage.example"], { expectedWebId })).toBe(
+      false,
+    );
+    expect(controller.reArmAllowedOrigins([], { expectedWebId })).toBe(false);
+    expect(await authdHeader(controller, "https://storage.example/x")).toBeNull();
+    expect(await authdHeader(controller, "https://alice.pod.example/x")).toBe("DPoP access-token");
+  });
+
+  it.each([
+    Alice,
+    "https://ALICE.pod.example:443/profile/card#me",
+  ])("widens for the matching expectedWebId %j using URL identity equality", async (expectedWebId) => {
+    const controller = await loggedIn();
+    expect(controller.reArmAllowedOrigins(["https://storage.example"], { expectedWebId })).toBe(
+      true,
+    );
+    expect(await authdHeader(controller, "https://storage.example/x")).toBe("DPoP access-token");
+  });
+
+  it("rejects delayed Alice enrichment after an interleaved Bob login", async () => {
+    const controller = await loggedIn();
+    const expectedWebId = controller.webId as string;
+    let finishProfile!: (origins: string[]) => void;
+    const enrichment = new Promise<string[]>((resolve) => {
+      finishProfile = resolve;
+    }).then((origins) => controller.reArmAllowedOrigins(origins, { expectedWebId }));
+
+    const Bob = "https://bob.pod.example/profile/card#me";
+    webIdClaim = Bob;
+    await controller.login(Bob);
+    finishProfile(["https://alice-storage.example"]);
+    expect(await enrichment).toBe(false);
+    expect(controller.webId).toBe(Bob);
+    expect(await authdHeader(controller, "https://alice-storage.example/x")).toBeNull();
+    expect(await authdHeader(controller, "https://bob.pod.example/x")).toBe("DPoP access-token");
+
+    // Existing callers without an expected identity still target the live session.
+    expect(controller.reArmAllowedOrigins(["https://bob-storage.example"], {})).toBe(true);
+    expect(await authdHeader(controller, "https://bob-storage.example/x")).toBe(
+      "DPoP access-token",
+    );
   });
 
   it("admits a LOOPBACK http origin only under allowInsecureLoopback (dev)", async () => {
@@ -4428,6 +4512,8 @@ describe("createSolidAuth — reArmAllowedOrigins (first-class re-arm-with-origi
     expect(await authdHeader(dev, "http://localhost:3000/x")).toBe("DPoP access-token");
     // A non-loopback http origin is STILL dropped even in dev mode.
     expect(dev.reArmAllowedOrigins(["http://pod.example"])).toBe(false);
+    expect(dev.reArmAllowedOrigins(["http://localhost:4000", "http://pod.example"])).toBe(false);
+    expect(await authdHeader(dev, "http://localhost:4000/x")).toBeNull();
   });
 
   it("returns false for an unparseable origin (fail-closed)", async () => {

@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Fable 5
+// AUTHORED-BY Codex GPT-6.1-Sol
 // (Ported from @jeswr/solid-elements `src/login-controller.ts` — the seam types are
 // extracted here so the framework-free auth core has no web-components dependency.)
 //
@@ -279,22 +280,26 @@ export interface SolidAuth extends SolidAuthController {
    *    carry across identities. (Persist origins app-side and pass them via
    *    `allowedOrigins` at construction if you need the next load's restore
    *    pre-seeded.)
-   *  - SAME CLEARTEXT GUARD as {@link SolidAuthConfig.allowedOrigins}: a non-`https:`
-   *    origin is dropped (an `http:` loopback origin only under
-   *    `allowInsecureLoopback`), and an unparseable entry is skipped.
-   *  - RETURNS `true` iff there is a live session AND every given origin is now
-   *    covered by the re-armed boundary; `false` when there is NO live session
-   *    (fail-closed — nothing to re-arm) or ANY given origin could not be admitted
-   *    (cleartext / unparseable). An empty `origins` array with a live session
-   *    returns `true` (a no-op confirmation). Use the boolean to decide whether the
-   *    session can safely serve the pod, or fail closed to the login prompt.
+   *  - ALL-OR-NOTHING: every entry must pass the same scheme guard as
+   *    {@link SolidAuthConfig.allowedOrigins}: HTTPS, or HTTP loopback only under
+   *    `allowInsecureLoopback`. If any entry is inadmissible or unparseable, returns
+   *    `false` and leaves the entire boundary unchanged.
+   *  - OPTIONAL IDENTITY GUARD: when `options.expectedWebId` is supplied, it must
+   *    match the live session's WebID using URL identity equality (`webIdsEqual`),
+   *    else returns `false` without widening. Pass the identity captured before an
+   *    asynchronous profile read to prevent stale enrichment after an account
+   *    switch. Omitting it targets whichever session is live at call time.
+   *  - RETURNS `true` iff there is a live session, the optional identity guard
+   *    passes, AND every given origin is admissible; otherwise `false` with no
+   *    mutation. An empty `origins` array still requires the live session and
+   *    identity guard, then returns `true` (a no-op confirmation).
    *
    * SECURITY: this attaches the user's token to the given origins, so pass ONLY
    * origins you read from the AUTHENTICATED user's own profile (identical trust to
    * the `allowedOrigins` config). It does not itself verify the origins belong to
    * the WebID — that is the caller's responsibility.
    */
-  reArmAllowedOrigins(origins: string[]): boolean;
+  reArmAllowedOrigins(origins: string[], options?: { expectedWebId?: string }): boolean;
 
   /**
    * Subscribe to session changes (a completed login, a completed/attempted

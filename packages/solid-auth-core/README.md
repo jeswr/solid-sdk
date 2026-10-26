@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Codex GPT-5 -->
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 
 # @jeswr/solid-auth-core
 
@@ -49,6 +50,23 @@ Call `logout()` for intentional sign-out or a definitive invalid grant.
 - `authenticatedFetch` and `publicFetch`: explicit credential boundary.
 - `reArmAllowedOrigins`, `rememberAccount`, `dropLiveSession`, `recentAccounts`.
 - React: `SessionProvider` and `useSolidSession` from `@jeswr/solid-auth-core/react`.
+
+After an asynchronous profile read, bind origin enrichment to the identity captured before
+the read:
+
+```ts
+const expectedWebId = auth.webId;
+if (expectedWebId) {
+  const storageOrigins = await readStorageOrigins(expectedWebId);
+  const covered = auth.reArmAllowedOrigins(storageOrigins, { expectedWebId });
+}
+```
+
+`reArmAllowedOrigins(origins, options?)` widens only the live session, without a token grant.
+Every entry must be HTTPS (or HTTP loopback with `allowInsecureLoopback`). Any invalid entry,
+missing session, or `expectedWebId` mismatch returns `false` and leaves the boundary unchanged.
+Successful calls return `true` and add all origins. Omitting `expectedWebId` targets the session
+live at call time; the next login/restore resets additions.
 
 ## Links
 
