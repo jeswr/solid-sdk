@@ -1,3 +1,5 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /**
  * Google Takeout → Documents / Media / Calendar (Tier-C file import).
  *
@@ -24,6 +26,7 @@ import type { FileImportAdapter, FileImportContext, ImportFile } from "../core/f
 import { recordFragment } from "../core/slug.js";
 import type { IntegrationMetadata } from "../core/types.js";
 import { CalendarEvent, CLASSES, TextDocument, WatchAction } from "../core/vocab.js";
+import { vocabMap } from "./vocab-map.js";
 
 const ID = "google-takeout";
 
@@ -46,6 +49,7 @@ export interface Activity {
 }
 
 export const googleTakeoutFileAdapter: FileImportAdapter = {
+  vocabMap,
   metadata,
   accept: ".json,application/json",
   fileHint:

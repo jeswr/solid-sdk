@@ -1,3 +1,5 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /**
  * LinkedIn → Work & education. Your work history (`/v2/positions`) as
  * `schema:Organization` nodes (the employer) carrying the role you held
@@ -13,12 +15,14 @@ import { getJson } from "../core/fixture-fetch.js";
 import type { ImportContext, ImportOutcome, IntegrationAdapter } from "../core/types.js";
 import { CLASSES, WorkPosition } from "../core/vocab.js";
 import { LINKEDIN_FIXTURES, type LiPositionsAnswer, type LiYearMonth } from "./fixtures.js";
+import { vocabMap } from "./vocab-map.js";
 
 const ID = "linkedin";
 const API = "https://api.linkedin.com/v2";
 const SCOPES = ["r_basicprofile", "r_member_social"] as const;
 
 export const linkedinAdapter: IntegrationAdapter = {
+  vocabMap,
   metadata: {
     id: ID,
     name: "LinkedIn",

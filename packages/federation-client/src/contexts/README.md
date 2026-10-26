@@ -9,6 +9,10 @@ mappings are preserved. The source is `context.jsonld` in
 [solid-federation-vocab](https://github.com/jeswr/solid-federation-vocab), under MIT.
 The JSON copies are upstream documents; this file records their provenance.
 
+The loader also accepts `https://jeswr.org/ns/fed`, deriving its canonical namespace
+mappings from the same bundled federation document. The legacy URL keeps its historical
+mappings so old JSON-LD documents remain readable.
+
 Both are imported into the package build; no runtime download occurs. Only those
 exact context URLs are accepted, including for nested context loads. All other
 remote contexts are refused. Context updates require an explicit source change.

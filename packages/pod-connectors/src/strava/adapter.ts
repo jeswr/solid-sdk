@@ -1,3 +1,5 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /**
  * Strava → Health + Mobility. `/athlete/activities`: runs/swims/workouts as
  * `schema:ExerciseAction` (Health), rides/commutes as `schema:TravelAction`
@@ -17,6 +19,7 @@ import { arr, optionalDate, optionalNumber, optionalText, SkipCounter } from "..
 import type { ImportContext, ImportOutcome, IntegrationAdapter } from "../core/types.js";
 import { CLASSES, ExerciseAction, TravelAction } from "../core/vocab.js";
 import { STRAVA_FIXTURES, type StravaActivity } from "./fixtures.js";
+import { vocabMap } from "./vocab-map.js";
 
 const ID = "strava";
 const API = "https://www.strava.com/api/v3";
@@ -25,6 +28,7 @@ const SCOPES = ["read", "activity:read"] as const;
 const RIDE_TYPES = new Set(["Ride", "EBikeRide", "GravelRide", "MountainBikeRide", "Commute"]);
 
 export const stravaAdapter: IntegrationAdapter = {
+  vocabMap,
   metadata: {
     id: ID,
     name: "Strava",
