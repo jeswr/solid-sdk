@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # sst-lkde — DRV-L4 upload planning
 
@@ -81,3 +82,38 @@ library README documents the complete-listing contract, ETag requirement, chunk
 bound, and LWS server-assigned identifier limitation for callers. Bead completion
 and integration remain with the dispatcher; no tracker outside this checkout was
 modified.
+
+## Fix round 1 — truncation normalization
+
+- `a5e57420` — `fix(drive): stabilize capped upload names`: trim and validate
+  the fitted name so truncation cannot leave trailing whitespace or expose a dot
+  segment. Six regression cases cover file/folder idempotence, Unicode whitespace,
+  invalid dot names, path encoding, and existing/pending Keep both collisions.
+- The final `docs: record upload name fix validation` commit records this round.
+- `pnpm --filter @jeswr/app-suite exec vitest run test/drive-upload --coverage.include='src/apps/drive/lib/upload/**/*.ts'`
+  — passed: 133 tests; upload statements 185/185, branches 107/107, functions
+  34/34, lines 171/171, all **100%**. The new regressions were observed failing
+  before the fix.
+- `pnpm --filter @jeswr/app-suite run lint` — passed with the same 21 existing
+  money-budget warnings; no upload warnings.
+- `pnpm --filter @jeswr/suite-ui run build` — passed (workspace dependency output).
+- `pnpm --filter @jeswr/app-suite run build` — passed.
+- `pnpm --filter @jeswr/app-suite run typecheck` — passed.
+- `pnpm --filter @jeswr/app-suite run test` — passed: 31 files, 1,531 tests;
+  configured library coverage 100% in all four metrics.
+- `TURBO_SCM_BASE=184a96e307bedeb426b1f6d4be5b3d218c246d92 pnpm run gate`
+  — passed: 6/6 tasks, including root checks. An initial attempt overlapped the
+  explicit app build and failed on Next.js's concurrent-build lock; the successful
+  run started after that build completed.
+- `pnpm run gate:full` — failed (exit 1): 294 successful / 352 scheduled tasks,
+  5 cached. The same pre-existing `@jeswr/federation-trust#test` snapshot mismatch
+  described above remains at `test/characterization.test.ts:196`: expected
+  serialized JWK order `crv,x,kty`, received `kty,crv,x`. No unrelated code changed.
+- `git diff --check` — passed.
+
+The full gate's generated untracked `callback.html` and `clientid.jsonld` files
+were removed from the eight pod apps. `roborev` remains unavailable in PATH;
+automated per-commit review could not run. No dependencies, UI, remote operations,
+or tracker changes were needed. The review finding is fixed; no new open questions
+or unfinished upload work remain. Full-workspace green remains blocked by the
+unrelated federation-trust snapshot.
