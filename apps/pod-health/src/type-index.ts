@@ -9,6 +9,7 @@
 // apps may share, not a grant. A registration is a hint; a reader must still GET
 // the resource to learn its actual access (the convention-only contract).
 
+import { canonicalize, termsEqual } from "@jeswr/suite-vocab";
 import {
   DatasetWrapper,
   NamedNodeAs,
@@ -37,10 +38,17 @@ export class TypeRegistration extends TermWrapper {
 
   /** The RDF class this entry indexes (`solid:forClass`). */
   get forClass(): string | undefined {
-    return OptionalFrom.subjectPredicate(this, SolidTerm.forClass, NamedNodeAs.string);
+    return OptionalFrom.subjectPredicate(this, SolidTerm.forClass, (term) =>
+      canonicalize(NamedNodeAs.string(term)),
+    );
   }
   set forClass(value: string | undefined) {
-    OptionalAs.object(this, SolidTerm.forClass, value, NamedNodeFrom.string);
+    OptionalAs.object(
+      this,
+      SolidTerm.forClass,
+      value === undefined ? undefined : canonicalize(value),
+      NamedNodeFrom.string,
+    );
   }
 
   /** A single resource holding instances of `forClass` (`solid:instance`). */
@@ -89,7 +97,7 @@ export class TypeIndexDataset extends DatasetWrapper {
   locate(classIri: string): RegistrationLocation[] {
     const out: RegistrationLocation[] = [];
     for (const reg of this.registrations) {
-      if (reg.forClass === classIri) {
+      if (reg.forClass !== undefined && termsEqual(reg.forClass, classIri)) {
         const loc: RegistrationLocation = {};
         if (reg.instance !== undefined) loc.instance = reg.instance;
         if (reg.instanceContainer !== undefined) loc.container = reg.instanceContainer;
@@ -121,7 +129,7 @@ export class TypeIndexDataset extends DatasetWrapper {
   ): TypeRegistration {
     const reg = new TypeRegistration(`${documentUrl}${fragment}`, this, this.factory);
     reg.markRegistration();
-    reg.forClass = classIri;
+    reg.forClass = canonicalize(classIri);
     // Clear BOTH location predicates first: re-registering an existing
     // fixed-fragment entry must not leave a stale solid:instance /
     // solid:instanceContainer behind (a registration carries one, not both).

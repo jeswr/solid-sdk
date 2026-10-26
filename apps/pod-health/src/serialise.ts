@@ -5,7 +5,8 @@
 // n3.Writer with the project prefixes; never hand-concatenates Turtle.
 
 import type { DatasetCore, Quad } from "@rdfjs/types";
-import { Writer } from "n3";
+import { DataFactory, Writer } from "n3";
+import { canonicalizeHealthDataset } from "./canonical-vocab.js";
 import { CORE, DCTERMS, GEO, HEALTH, PH, RDF, SOLID, TIME, UNIT, XSD } from "./vocab.js";
 
 /** The prefixes n3.Writer emits at the head of serialised Turtle. */
@@ -34,7 +35,10 @@ export function toTurtle(dataset: DatasetCore): Promise<string> {
     };
     const writer = new Writer({ prefixes: { ...PREFIXES } });
     try {
-      for (const quad of dataset as Iterable<Quad>) {
+      for (const quad of canonicalizeHealthDataset(dataset, DataFactory) as Iterable<Quad>) {
+        if (quad.graph.termType !== "DefaultGraph") {
+          throw new Error("Turtle serialization requires the default graph");
+        }
         writer.addQuad(quad);
       }
       // n3.Writer's `end` callback yields the serialised Turtle, or an error if

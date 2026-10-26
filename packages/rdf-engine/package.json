@@ -1,0 +1,57 @@
+{
+  "$comment": "AUTHORED-BY Codex GPT-6.1-Sol",
+  "name": "@jeswr/rdf-engine",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Lazy RDF engine facade for parsing, serialization, SHACL and canonicalization.",
+  "type": "module",
+  "sideEffects": false,
+  "securityCritical": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./browser": {
+      "types": "./dist/browser.d.ts",
+      "default": "./dist/browser.js"
+    },
+    "./node": {
+      "types": "./dist/node.d.ts",
+      "default": "./dist/node.js"
+    },
+    "./testing": {
+      "types": "./dist/testing.d.ts",
+      "default": "./dist/testing.js"
+    }
+  },
+  "files": [
+    "dist",
+    "scripts",
+    "README.md",
+    "SKILL.md"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "biome check .",
+    "test": "vitest run",
+    "copy:wasm": "node scripts/copy-wasm.mjs",
+    "bench:bundle": "node scripts/measure-bundle.mjs"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.1",
+    "@types/n3": "1.26.1",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.9"
+  },
+  "dependencies": {
+    "@rdfjs/types": "2.0.1",
+    "@sparq-org/sparq": "0.1.5",
+    "n3": "2.0.3"
+  }
+}

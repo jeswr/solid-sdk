@@ -1,7 +1,8 @@
+# AUTHORED-BY Codex GPT-6.1-Sol
 # AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 #
-@prefix sched:   <https://w3id.org/jeswr/sectors/scheduling#> .
-@prefix core:    <https://w3id.org/jeswr/core#> .
+@prefix sched:   <https://jeswr.org/ns/sectors/scheduling#> .
+@prefix core:    <https://jeswr.org/ns/core#> .
 @prefix owl:     <http://www.w3.org/2002/07/owl#> .
 @prefix rdf:     <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
 @prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
@@ -43,19 +44,19 @@
 # (2) every class roots in a Core class and carries its gUFO meta-type;
 # (3) constrains, never forks; (4) reuses iCalendar/schema.org/OWL-Time in the
 # companion scheduling-alignments.ttl; (5) ships scheduling.shacl.ttl;
-# (6) carries owl:versionInfo "1.0.0" + a version IRI (gUFO re-base = new MAJOR);
+# (6) carries owl:versionInfo "1.1.0" + a version IRI (gUFO re-base = new MAJOR);
 # (7) Core ∪ scheduling is DL-valid + reasoner-consistent (see verification).
 # Open-world by default; the SHACL profile carries the closed-world MUST/SHOULD.
 # =============================================================================
 
-<https://w3id.org/jeswr/sectors/scheduling> a owl:Ontology ;
+<https://jeswr.org/ns/sectors/scheduling> a owl:Ontology ;
     dcterms:title "Solid Scheduling Ontology (gUFO re-base)"@en ;
     rdfs:label "Solid Scheduling Ontology"@en ;
     vann:preferredNamespacePrefix "sched" ;
-    vann:preferredNamespaceUri "https://w3id.org/jeswr/sectors/scheduling#" ;
-    owl:imports <https://w3id.org/jeswr/core> ;
-    owl:versionInfo "1.0.0" ;
-    owl:versionIRI <https://w3id.org/jeswr/sectors/scheduling/1.0.0> ;
+    vann:preferredNamespaceUri "https://jeswr.org/ns/sectors/scheduling#" ;
+    owl:imports <https://jeswr.org/ns/core> ;
+    owl:versionInfo "2.0.0" ;
+    owl:versionIRI <https://jeswr.org/ns/sectors/scheduling/2.0.0> ;
     dcterms:description """Calendars and scheduling (the Calendar app), re-based
         onto the gUFO Core. Roots CalendarEvent in core:Event, Task/ToDo in
         core:Activity, Calendar/RecurrenceRule/Reminder in core:InformationResource
@@ -65,9 +66,9 @@
         hadParticipant). v1.0.0 is a BREAKING re-base of v0 (the meta-types change
         meaning, and the v0 string-role relationship is replaced by a relator), so
         a new MAJOR version. Aligns to iCalendar RFC 5545, schema:Event/Schedule
-        and W3C OWL-Time in the companion alignments file."""@en ;
-    dcterms:modified "2026-06-13"^^xsd:date ;
-    rdfs:comment "Re-based per R11 §4.2."@en .
+        and W3C OWL-Time in the companion alignments file. Version 2.0.0 rebases this ontology from its legacy w3id namespace to https://jeswr.org/ns/ (DECISIONS V1)."""@en ;
+    dcterms:modified "2026-10-25"^^xsd:date ;
+    rdfs:comment "Re-based per R11 §4.2. v1.1.0 allows date or dateTime for entry start/end/due and recurrence until; date values mean all-day. The companion SHACL profile adds schema.org recurrence selectors."@en .
 
 # -----------------------------------------------------------------------------
 # Annotation-property declarations (F5: keep the merged closure unambiguously
@@ -241,20 +242,23 @@ sched:description a owl:DatatypeProperty ;
 # --- Temporal: reuse Core validFrom/validUntil for clock start/end ---
 sched:startTime a owl:DatatypeProperty ;
     rdfs:subPropertyOf core:validFrom ;
-    rdfs:range xsd:dateTime ;
+    rdfs:range [ a rdfs:Datatype ; owl:unionOf ( xsd:date xsd:dateTime ) ] ;
+    skos:scopeNote "an xsd:date value means all-day"@en ;
     rdfs:label "start time"@en ;
     skos:definition "Clock start of an entry. Specialises core:validFrom; aligns to iCalendar DTSTART and schema:startDate. For full interval modelling use core:atTime → time:Interval (OWL-Time)."@en .
 
 sched:endTime a owl:DatatypeProperty ;
     rdfs:subPropertyOf core:validUntil ;
-    rdfs:range xsd:dateTime ;
+    rdfs:range [ a rdfs:Datatype ; owl:unionOf ( xsd:date xsd:dateTime ) ] ;
+    skos:scopeNote "an xsd:date value means all-day"@en ;
     rdfs:label "end time"@en ;
     skos:definition "Clock end of an entry. Specialises core:validUntil; aligns to iCalendar DTEND and schema:endDate."@en .
 
 sched:dueTime a owl:DatatypeProperty ;
     rdfs:subPropertyOf core:validUntil ;
     rdfs:domain sched:Task ;
-    rdfs:range xsd:dateTime ;
+    rdfs:range [ a rdfs:Datatype ; owl:unionOf ( xsd:date xsd:dateTime ) ] ;
+    skos:scopeNote "an xsd:date value means all-day"@en ;
     rdfs:label "due time"@en ;
     skos:definition "When a task is due. Specialises core:validUntil; aligns to iCalendar DUE."@en .
 
@@ -341,7 +345,8 @@ sched:count a owl:DatatypeProperty ;
 
 sched:until a owl:DatatypeProperty ;
     rdfs:domain sched:RecurrenceRule ;
-    rdfs:range xsd:dateTime ;
+    rdfs:range [ a rdfs:Datatype ; owl:unionOf ( xsd:date xsd:dateTime ) ] ;
+    skos:scopeNote "an xsd:date value means all-day"@en ;
     rdfs:label "until"@en ;
     skos:definition "The last date/time at which the recurrence may produce an occurrence. Aligns to iCalendar UNTIL."@en .
 
@@ -380,13 +385,13 @@ sched:triggerOffset a owl:DatatypeProperty ;
 
 # =============================================================================
 # SECTOR MARKER — the IRI an app's fedapp:sector points at to declare it operates
-# in this sector (https://w3id.org/jeswr/fed#sector). A skos:Concept in the
+# in this sector (https://jeswr.org/ns/fed#sector). A skos:Concept in the
 # federation sector register; dereferences to this ontology.
 # =============================================================================
 
-<https://w3id.org/jeswr/sectors/scheduling#sector>
+<https://jeswr.org/ns/sectors/scheduling#sector>
     a <http://www.w3.org/2004/02/skos/core#Concept> ;
     rdfs:label "Scheduling sector"@en ;
     rdfs:comment "The Scheduling data sector. The value an app's fedapp:sector names in its Client Identifier Document to declare it operates over scheduling data. Backed by this sector ontology."@en ;
-    rdfs:isDefinedBy <https://w3id.org/jeswr/sectors/scheduling> ;
+    rdfs:isDefinedBy <https://jeswr.org/ns/sectors/scheduling> ;
     skos:prefLabel "Scheduling"@en .

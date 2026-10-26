@@ -13,6 +13,7 @@
 // @rdfjs/wrapper typed accessors. This is the pod-shaped registration the
 // federation expects: peers read the index to learn where DriveRoot data lives.
 
+import { canonicalize, termsEqual } from "@jeswr/suite-vocab";
 import type { DatasetCore, Quad, Quad_Subject } from "@rdfjs/types";
 import { NamedNodeAs, NamedNodeFrom, SetFrom, TermWrapper } from "@rdfjs/wrapper";
 import { DataFactory } from "n3";
@@ -57,13 +58,13 @@ export function findDriveRoots(
   forClass: string = PODDRIVE.DriveRoot,
 ): string[] {
   const roots = new Set<string>();
-  const klass = namedNode(forClass);
   // Every subject that is `solid:forClass <DriveRoot>` is a registration. Pass
   // the ORIGINAL subject term (not its `.value`) to TypeRegistration so a
   // blank-node registration — common in type-index docs — keeps its term type
   // and matches; reconstructing from `.value` would always mint a NamedNode and
   // silently miss blank-node registrations' solid:instanceContainer values.
-  for (const q of index.match(null, namedNode(SOLID.forClass), klass)) {
+  for (const q of index.match(null, namedNode(SOLID.forClass), null)) {
+    if (q.object.termType !== "NamedNode" || !termsEqual(q.object.value, forClass)) continue;
     const reg = new TypeRegistration(q.subject, index, DataFactory);
     for (const c of reg.instanceContainers) {
       roots.add(c);
@@ -90,7 +91,7 @@ export function buildDriveRootRegistration(
   const subject: Quad_Subject = iri(registrationIri);
   return [
     quad(subject, namedNode(RDF.type), namedNode(SOLID.TypeRegistration)),
-    quad(subject, namedNode(SOLID.forClass), namedNode(forClass)),
+    quad(subject, namedNode(SOLID.forClass), namedNode(canonicalize(forClass))),
     quad(subject, namedNode(SOLID.instanceContainer), namedNode(driveRootContainer)),
   ];
 }

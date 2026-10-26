@@ -63,7 +63,18 @@
     "@jeswr/solid-vc",
     "@jeswr/solid-webauthn-reauth",
     "@jeswr/unstorage-solid",
-    "@jeswr/y-solid"
+    "@jeswr/y-solid",
+    "@jeswr/storage-capabilities",
+    "@jeswr/storage-client",
+    "@jeswr/pod-auth",
+    "@jeswr/pod-notifications",
+    "@jeswr/pod-access",
+    "@jeswr/rdf-engine",
+    "@jeswr/storage-conformance",
+    "@jeswr/pkg-memory",
+    "@jeswr/mcp-oauth",
+    "@jeswr/agent-session-capture",
+    "@jeswr/suite-vocab"
   ],
   "applications": [
     {
@@ -129,6 +140,11 @@
     {
       "slug": "pod-photos",
       "name": "@jeswr/app-pod-photos",
+      "kind": "application"
+    },
+    {
+      "slug": "mcp-server",
+      "name": "@jeswr/app-mcp-server",
       "kind": "application"
     }
   ],
