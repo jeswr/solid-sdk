@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { FileError } from "../src/apps/drive/lib/files/errors";
@@ -58,6 +59,26 @@ describe("Drive resource names", () => {
     expect(() => withSuffix(`x.${"z".repeat(175)}`, 1)).toThrow(
       expect.objectContaining({ code: "name-too-long" }),
     );
+  });
+
+  it.each([
+    " ",
+    "\u00a0",
+    "\u2003",
+  ])("rejects names truncated and trimmed to a dot segment with whitespace %j", (whitespace) => {
+    const name = `.${whitespace.repeat(MAX_RESOURCE_NAME_LENGTH - 1)}x`;
+    for (const operation of [
+      () => uploadFileName(name),
+      () => encodeResourceName(name),
+      () => withSuffix(name, 1),
+      () => renameOnConflict(name, []),
+    ]) {
+      expect(operation).toThrow(
+        expect.objectContaining({ code: "invalid-name", name: "FileError" }),
+      );
+    }
+    const fittedName = `.${whitespace.repeat(MAX_RESOURCE_NAME_LENGTH - 2)}x`;
+    expect(uploadFileName(fittedName)).toBe(fittedName);
   });
 
   it.each([

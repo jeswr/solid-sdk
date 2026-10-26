@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { FileError, validString } from "./errors";
 
 export const MAX_RESOURCE_NAME_LENGTH = 180;
@@ -25,8 +26,9 @@ export function uploadFileName(input: string): string {
     .normalize("NFC")
     .replace(/[/\\:#?%*\p{Cc}]/gu, "-")
     .trim();
-  if (!name || name === "." || name === "..") throw new FileError("invalid-name");
-  return fitName(name, "");
+  const fittedName = fitName(name, "");
+  if (!fittedName || fittedName === "." || fittedName === "..") throw new FileError("invalid-name");
+  return fittedName;
 }
 
 /** One percent-encoded LDP Slug/path segment, with exactly one encoding pass. */
