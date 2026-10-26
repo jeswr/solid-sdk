@@ -482,3 +482,73 @@ existing network-dependent build. Read the local review/test guidance;
 `roborev` remains unavailable, so dispatcher automated review is external.
 No push, PR, branch switch, merge, other checkout mutation or tracker change
 was performed. Open questions: none for this fix round.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+
+## Fix round 5 — parse every source and resolve workspace ownership
+
+Resumed on `lane/sst-z1d` at `ff3f79fe7551ad8f425178eabf88cb5f5acfebea`.
+Read the original and all earlier fix briefs and the complete supplied review at
+`lanes/reviews/solid-sdk-lane-sst-z1d-ff3f79fe7551.md` in the tracker checkout.
+Implemented the integrator's convergence directive for both findings.
+
+Commits:
+
+- `f78a9daf` — `fix: resolve agent layer workspace ownership`: remove the
+  preprocessing prefilter entirely; AST-parse every source file with a checked
+  extension under the existing checked roots. Discover projects from the pnpm
+  workspace globs and their package manifests, resolve relative and workspace-link
+  imports through the filesystem and TypeScript resolver, realpath the targets,
+  and use the longest project-directory prefix for ownership. Apply the existing
+  layer rules using manifest names and module subpaths, including workspace aliases.
+  Reject unresolved targets and targets outside every project. Add regression
+  coverage for scanner omissions, project-root modules, nested app and tool
+  projects, relative and bare workspace links, file symlinks, export subpaths,
+  declaration targets, and escaping/unresolved targets. Existing relative-import
+  fixtures now contain real manifests and target files.
+- The final `docs: record sst-z1d fix5 validation` commit updates this report last.
+
+Conservative interpretation: the pnpm workspace root is also a project, so root
+scripts and tests can resolve their own modules. Installed non-workspace packages
+under `node_modules` do not become owned source of the containing workspace
+project; relative imports into them fail closed. Missing build/generated targets
+also fail closed rather than receiving another bypass or source-layout heuristic.
+The existing source extensions and generated-directory exclusions are unchanged.
+No package code, manifests, dependencies or unrelated files changed.
+
+Validation:
+
+- `pnpm exec vitest run test/agent-layers.test.mjs` — PASS during implementation;
+  the final root test run below includes all **250 layer tests**. The initial new
+  regression run against the old implementation failed **22 tests**, reproducing
+  the supplied boundary gaps.
+- `pnpm exec biome check --write scripts/check-agent-layers.mjs test/agent-layers.test.mjs`
+  — PASS after formatting; final Biome validation also passes in root lint.
+- `NODE_OPTIONS=--require=/tmp/sst-z1d-network-guard.cjs pnpm exec vitest run`
+  — PASS: **278 root tests across four files**, with default timeouts.
+- `TURBO_SCM_BASE=ff3f79fe7551ad8f425178eabf88cb5f5acfebea pnpm run gate --cache=local:rw --env-mode=loose`
+  — BLOCKED in `pnpm run lint:root`: Biome, lockfile transport, app-workspace and
+  fetch checks pass, then the new fail-closed layer scan rejects **490 unresolved
+  import targets** in unchanged projects. Most refer to unbuilt workspace outputs;
+  nine are relative imports, including references to the missing tour-template
+  `content/walkthrough.json` and missing `dist` modules. No affected Turbo tasks
+  start after the root lint failure.
+- `pnpm run gate:full --cache=local:rw --env-mode=loose` — BLOCKED by unchanged
+  `@jeswr/app-pod-manager#build`, whose Google Fonts download fails under the
+  lane's network restriction. **17 successful / 53 total tasks**, no cached tasks,
+  18.212 seconds before failure.
+- `git diff --check` — PASS. No package-specific gates apply because only root
+  scripts/tests changed. No dependency additions; `check:packages` not applicable.
+
+Gate commands retained `NODE_OPTIONS=--require=/tmp/sst-z1d-network-guard.cjs`,
+`GIT_ALLOW_PROTOCOL=file`, `TURBO_TELEMETRY_DISABLED=1` and `DO_NOT_TRACK=1`.
+Remote caching was disabled. No remote fetch/merge or live provider/pod calls ran.
+Logs: `/tmp/sst-z1d-fix5-red.log`, `/tmp/sst-z1d-fix5-root-tests.log`,
+`/tmp/sst-z1d-fix5-gate.log` and `/tmp/sst-z1d-fix5-full.log`.
+
+Both requested guard fixes and their regression coverage are complete. Workspace
+validation remains blocked by the missing existing build/generated targets and
+Pod Manager's network-dependent build; these were left unchanged under the lane's
+scope restriction. The local roborev guidance was read, but `roborev` is unavailable
+and automated review remains with the dispatcher. No push, PR, branch switch,
+other checkout mutation or tracker change was performed. Open questions: none.
