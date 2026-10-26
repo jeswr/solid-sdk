@@ -93,6 +93,8 @@ describe("authorization request checks", () => {
     ["plain PKCE", authUrl({ code_challenge_method: "plain" })],
     ["missing code_challenge_method", authUrl({ code_challenge_method: null })],
     ["fragment response mode", authUrl({ response_mode: "fragment" })],
+    ["conflicting response modes", authUrl({ response_mode: ["query", "form_post"] })],
+    ["repeated query response mode", authUrl({ response_mode: ["query", "query"] })],
     ["missing state", authUrl({ state: null })],
     ["two states", authUrl({ state: ["s1", "s2"] })],
   ])("rejects %s", async (_, url) => {
@@ -112,6 +114,26 @@ describe("authorization request checks", () => {
 
   test("accepts an explicit query response mode", async () => {
     await expect(driver()(authUrl({ response_mode: "query" }), signal())).resolves.toBe("c");
+  });
+
+  test("opens the URL it validated even if the caller mutates it meanwhile", async () => {
+    const fake = plugin(`${REDIRECT}?code=c&state=s1&${ISS}`);
+    const url = authUrl();
+    const validated = url.href;
+    const getCode = createNativeCodeDriver({
+      plugin: fake,
+      redirectUri: REDIRECT,
+      resolveIssuer: async (requested) => {
+        url.href = "https://evil.example/auth?response_type=token";
+        requested.href = "https://evil.example/other";
+        return ISSUER;
+      },
+    });
+    await expect(getCode(url, signal())).resolves.toBe("c");
+    expect(fake.authenticate).toHaveBeenCalledExactlyOnceWith({
+      url: validated,
+      callbackScheme: "org.jeswr.suite",
+    });
   });
 
   test("never opens the browser for a rejected request", async () => {
@@ -302,6 +324,47 @@ describe("session lifecycle", () => {
     controller.abort();
     finish({ url: `${REDIRECT}?code=c&state=s1&${ISS}` });
     await expect(pending).rejects.toMatchObject({ name: "AbortError" });
+  });
+
+  test("abort settles a native session that never settles and frees the slot", async () => {
+    const fake = plugin(() => new Promise(() => undefined));
+    const controller = new AbortController();
+    const getCode = createNativeCodeDriver({ plugin: fake, redirectUri: REDIRECT, resolveIssuer });
+    const pending = getCode(authUrl(), controller.signal);
+    await vi.waitFor(() => expect(fake.authenticate).toHaveBeenCalled());
+    controller.abort();
+    await expect(pending).rejects.toMatchObject({ name: "AbortError" });
+    expect(fake.cancel).toHaveBeenCalledOnce();
+    fake.authenticate.mockImplementation(async () => ({
+      url: `${REDIRECT}?code=d&state=s1&${ISS}`,
+    }));
+    await expect(getCode(authUrl(), signal())).resolves.toBe("d");
+  });
+
+  test("abort settles an issuer lookup that never settles and skips the browser", async () => {
+    let lookups = 0;
+    let finishLookup: (issuer: string) => void = () => undefined;
+    const fake = plugin(`${REDIRECT}?code=c&state=s1&${ISS}`);
+    const controller = new AbortController();
+    const getCode = createNativeCodeDriver({
+      plugin: fake,
+      redirectUri: REDIRECT,
+      resolveIssuer: () => {
+        lookups++;
+        return lookups === 1
+          ? new Promise<string>((resolve) => {
+              finishLookup = resolve;
+            })
+          : ISSUER;
+      },
+    });
+    const pending = getCode(authUrl(), controller.signal);
+    controller.abort();
+    await expect(pending).rejects.toMatchObject({ name: "AbortError" });
+    await expect(getCode(authUrl(), signal())).resolves.toBe("c");
+    finishLookup(ISSUER);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(fake.authenticate).toHaveBeenCalledOnce();
   });
 
   test("maps a dismissed sheet to UserCancelledError", async () => {

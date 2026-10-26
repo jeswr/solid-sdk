@@ -90,7 +90,8 @@ function checkAuthorizationUrl(url: URL, redirect: Redirect, allowLoopback: bool
   if (single(params, "code_challenge_method", bad("needs code_challenge_method")) !== "S256") {
     throw bad("must use PKCE S256")();
   }
-  if (params.has("response_mode") && params.get("response_mode") !== "query") {
+  const modes = params.getAll("response_mode");
+  if (modes.length > 1 || (modes.length === 1 && modes[0] !== "query")) {
     throw bad("must use the query response mode")();
   }
   return single(params, "state", bad("needs one state"));
@@ -154,32 +155,39 @@ export function createNativeCodeDriver(options: NativeCodeDriverOptions): GetCod
   return async (authorizationUrl, signal) => {
     if (signal.aborted) throw abortError();
     if (busy) throw new BusyError("A sign-in is already in progress");
-    const state = checkAuthorizationUrl(authorizationUrl, redirect, allowLoopback);
+    // Validate and open one private copy: the caller's URL object could change while we await.
+    const requested = new URL(authorizationUrl.href);
+    const state = checkAuthorizationUrl(requested, redirect, allowLoopback);
+    const href = requested.href;
     busy = true;
-    let aborted = false;
+    // Abort settles at once, even while the resolver or the plugin never does.
+    let rejectAborted!: (error: DOMException) => void;
+    const aborted = new Promise<never>((_, reject) => {
+      rejectAborted = reject;
+    });
     const onAbort = () => {
-      aborted = true;
+      rejectAborted(abortError());
       void plugin.cancel().catch(() => undefined);
     };
     signal.addEventListener("abort", onAbort, { once: true });
-    try {
-      const issuer = await resolve(authorizationUrl);
-      if (aborted) throw abortError();
+    const work = (async () => {
+      const issuer = await resolve(new URL(href));
+      if (signal.aborted) throw abortError();
       let result: { url: string };
       try {
-        result = await plugin.authenticate({
-          url: authorizationUrl.href,
-          callbackScheme: redirect.scheme,
-        });
+        result = await plugin.authenticate({ url: href, callbackScheme: redirect.scheme });
       } catch (error) {
-        if (aborted) throw abortError();
         if ((error as { code?: unknown } | null)?.code === USER_CANCELLED) {
           throw new UserCancelledError("Sign-in was cancelled");
         }
         throw new NativeAuthError("The system browser sign-in failed");
       }
-      if (aborted) throw abortError();
       return checkCallback(String(result?.url), redirect, state, issuer);
+    })();
+    // A result that arrives after an abort is dropped.
+    work.catch(() => undefined);
+    try {
+      return await Promise.race([work, aborted]);
     } finally {
       busy = false;
       signal.removeEventListener("abort", onAbort);
