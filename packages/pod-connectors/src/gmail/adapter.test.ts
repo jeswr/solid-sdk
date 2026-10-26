@@ -510,6 +510,30 @@ describe("Gmail full resync", () => {
     expect(pod.get(LUNCH_1)).toBeDefined();
   });
 
+  it("skips a message over the size cap and keeps its stored copy", async () => {
+    const { pod, podWriter, run } = setup();
+    await run(GMAIL_FIXTURES).result;
+    const routes = fixtureFetch("gmail", [
+      ...base,
+      { url: `${GMAIL_API}/messages`, json: { messages: [MESSAGES.m1] } },
+    ]);
+    // A declared length past the cap is refused before the body is read.
+    const api = vi.fn<typeof globalThis.fetch>(async (input, init) =>
+      String(input).startsWith(`${GMAIL_API}/messages/m1`)
+        ? new Response("{}", { headers: { "content-length": String(64 * 1024 * 1024) } })
+        : routes(input, init),
+    );
+    const report = await runImport({
+      adapter: gmailAdapter,
+      mode: "live",
+      sourceAuth: { fetch: api },
+      podWriter,
+    });
+    expect(report.skipped).toBe(1);
+    expect(pod.get(LUNCH_1)).toBeDefined();
+    expect(pod.bytes(LUNCH_1.replace(/\.ttl$/, ".eml"))).toBeDefined();
+  });
+
   it("keeps listed messages whose raw payload cannot be re-read", async () => {
     const { pod, run } = setup();
     await run(GMAIL_FIXTURES).result;

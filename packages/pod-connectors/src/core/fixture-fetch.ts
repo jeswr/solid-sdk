@@ -66,6 +66,7 @@ export async function getJson<T>(
   url: string,
   init?: RequestInit,
   budget?: RunBudget,
+  maxBytes?: number,
 ): Promise<T> {
   const res = await api(url, init);
   if (res.status === 429) {
@@ -82,7 +83,7 @@ export async function getJson<T>(
       status: res.status,
     });
   }
-  return (await readJson(res, adapterId, url, undefined, budget)) as T;
+  return (await readJson(res, adapterId, url, maxBytes, budget)) as T;
 }
 
 /** `POST` JSON and parse the JSON answer, with the same error mapping. */

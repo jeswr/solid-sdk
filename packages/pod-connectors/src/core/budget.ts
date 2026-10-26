@@ -7,6 +7,14 @@
 import { IntegrationSyncError } from "./errors.js";
 
 /** Largest JSON response any adapter parses. */
+/** A response body exceeded its byte cap; adapters may skip the item instead of failing. */
+export class ResponseTooLargeError extends IntegrationSyncError {
+  constructor(adapterId: string, url: string) {
+    super(adapterId, `The platform's answer for ${url} is too large.`, { url });
+    this.name = "ResponseTooLargeError";
+  }
+}
+
 export const MAX_JSON_BYTES = 32 * 1024 * 1024;
 
 export interface RunLimits {
@@ -69,8 +77,7 @@ export async function readJson(
   maxBytes = MAX_JSON_BYTES,
   budget?: RunBudget,
 ): Promise<unknown> {
-  const tooLarge = () =>
-    new IntegrationSyncError(adapterId, `The platform's answer for ${url} is too large.`, { url });
+  const tooLarge = () => new ResponseTooLargeError(adapterId, url);
   const declared = Number(res.headers.get("content-length"));
   if (Number.isFinite(declared) && declared > maxBytes) {
     await res.body?.cancel();

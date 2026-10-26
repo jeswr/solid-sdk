@@ -91,16 +91,23 @@ Message-ID remains message metadata. In-Reply-To links use actual document ids f
 added during the run or Gmail thread metadata (fetched at most once per thread per run);
 unresolved parents are omitted. History deletions resolve
 the message path directly; full syncs sweep vanished Gmail messages by listing `messages/`.
-No separate source index is stored.
+No separate source index is stored. A `format=raw` answer larger than the message cap (base64 of
+`MAX_RAW_BYTES` plus framing) is skipped without reading its body, and any stored copy is kept.
 
 `./mail` exports `createMailWriter(ctx, account)`, shared with the Takeout mbox path: `add()` stores
 one raw message, then `flush()` writes accumulated thread and folder membership once per run.
 File imports retain Message-ID document keys with collision fallback and References/In-Reply-To
-thread ancestry. An explicit `documentId` bypasses Message-ID keying. Additions commit RDF before
-bytes and collections; `removeMessage()` immediately removes collection memberships, then
-attachments and `.eml`, and deletes RDF last. An interrupted deletion retains its cleanup inventory
-in that RDF for replay; a missing document is a no-op. Attachment media types from mail are
-untrusted: RDF and malformed types are stored as `application/octet-stream`.
+thread ancestry. An explicit `documentId` bypasses Message-ID keying; `resolveParent(messageId)`
+can supply the parent's document id. Without an explicit document id, unresolved replies keep
+the Message-ID-derived link used by file imports. Additions commit RDF before
+bytes and collections; thread moves remove the old membership conditionally before replacing RDF.
+`removeMessage()` queues deletions in batches of 100, with the remainder processed by `flush()`
+before reconciliation, so a caller that only deletes must still call `flush()`. Each batch reads and conditionally updates each affected collection once,
+then deletes attachments and `.eml`, and deletes each message's RDF last. Flush rereads the
+collections it reconciles so each dataset uses the ETag from its own read. An interrupted deletion
+retains its cleanup inventory in that RDF for replay; a missing document is a no-op. Attachment
+media types from mail are untrusted: RDF and malformed types are stored as `application/octet-stream`.
+
 ## Node CLI
 
 Build the package and run `pod-connectors import spotify`, or
@@ -218,16 +225,6 @@ left by a failed run. Unchanged people survive
 increments, and `people.ttl` is replaced once per successful run. A missing local membership
 index forces a full sync. Synthetic fixtures, memory Pods and the sorted Turtle mapping
 snapshot exercise these paths without contacting Google.
-thread ancestry. An explicit `documentId` bypasses Message-ID keying; `resolveParent(messageId)`
-can supply the parent's document id. Without an explicit document id, unresolved replies keep
-the Message-ID-derived link used by file imports. Additions commit RDF before
-bytes and collections; thread moves remove the old membership conditionally before replacing RDF.
-`removeMessage()` queues deletions in batches of 100, with the remainder processed by `flush()`
-before reconciliation. Each batch reads and conditionally updates each affected collection once,
-then deletes attachments and `.eml`, and deletes each message's RDF last. Flush rereads the
-collections it reconciles so each dataset uses the ETag from its own read. An interrupted deletion
-retains its cleanup inventory in that RDF for replay; a missing document is a no-op. Attachment
-media types from mail are untrusted: RDF and malformed types are stored as `application/octet-stream`.
 
 ## Incremental imports and provenance
 

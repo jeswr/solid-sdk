@@ -10,6 +10,7 @@
 import { Container } from "@solid/object";
 import { DataFactory } from "n3";
 import { createGoogleOAuthConfig, GOOGLE_SCOPES } from "../adapters/google/oauth.js";
+import { ResponseTooLargeError } from "../core/budget.js";
 import { IntegrationSyncError } from "../core/errors.js";
 import { getJson } from "../core/fixture-fetch.js";
 import type { ImportContext, ImportOutcome, IntegrationAdapter } from "../core/types.js";
@@ -35,6 +36,8 @@ import {
 const ID = "gmail";
 /** Gmail's own per-message cap; larger raw payloads are skipped, never buffered. */
 export const MAX_RAW_BYTES = 36 * 1024 * 1024;
+/** The `format=raw` JSON answer: base64url of a message at the cap, plus JSON framing. */
+const MAX_MESSAGE_JSON_BYTES = Math.ceil((MAX_RAW_BYTES * 4) / 3) + 64 * 1024;
 
 /** System labels with a pod-mail folder; other system labels (categories, IMPORTANT) are dropped. */
 const SYSTEM_LABELS: Readonly<Record<string, string>> = {
@@ -211,10 +214,19 @@ class Sync {
         ID,
         this.ctx.api,
         `${GMAIL_API}/messages/${id}?format=raw`,
+        undefined,
+        undefined,
+        MAX_MESSAGE_JSON_BYTES,
       );
     } catch (error) {
       // Deleted between listing and fetching: a deletion, not a failure.
       if (error instanceof IntegrationSyncError && error.status === 404) return this.remove(id);
+      if (error instanceof ResponseTooLargeError) {
+        // Over the message cap: keep any stored copy (not swept) and skip it.
+        this.seen.add(messageSlug(this.account, `gmail-${id}`));
+        this.skipped++;
+        return;
+      }
       throw error;
     }
     const labelIds = Array.isArray(message?.labelIds) ? message.labelIds : [];
