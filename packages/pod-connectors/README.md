@@ -441,3 +441,62 @@ Downloads accumulate at most the configured byte cap and cancel/abort oversized 
 `PodWriter.writeBinary` currently takes `Uint8Array`; true streaming request bodies require a
 future writer port. JSON-only demo fixtures show metadata; sync tests wrap `fixtureFetch`
 with synthetic byte responses for media/export routes, without changing its public behavior.
+## Spotify Web API
+
+The Spotify adapter imports saved tracks, playlists with ordered items, followed artists,
+short/medium/long-term top tracks and artists, and recently-played history. The existing
+`music/top-tracks.ttl` remains the medium-term snapshot. Other top ranges use explicit
+range suffixes. Library collections replace snapshots; playback events merge by track id
+and played-at timestamp in `music/recently-played.ttl`.
+
+Spotify validates every page before importing its items and uses the shared 32 MiB JSON
+response cap and per-run budget (20,000 source requests, including rate-limit retries, and
+2,000,000 page items, including skipped entries, plus 512 MiB of cumulative response bytes
+counted as they stream). `createSpotifyAdapter(limits)` from
+`./adapters/spotify` accepts custom `RunLimits`. Collections are written only after all
+source fetching succeeds; malformed responses and exceeded limits retain existing snapshots
+and the previous checkpoint. Larger imports fail for the host to handle; this adapter does
+not shard collections.
+
+For live PKCE sessions, inject the public client id into `createRegistry` and use the
+Spotify-specific source transport so an expired token can refresh once after a 401:
+
+```ts
+import { createSpotifySourceAuth } from '@jeswr/pod-connectors/adapters/spotify';
+
+const sourceAuth = createSpotifySourceAuth({
+  clientId,
+  token, // from authorize(); memory only
+  fetch: pristineSourceFetch,
+  onToken: updated => { token = updated; }, // optional in-memory host update
+});
+// Pass sourceAuth and the configured Spotify adapter to runImport in live mode.
+```
+
+Only `api.spotify.com` receives bearer credentials. Refresh goes to Spotify's fixed token
+endpoint without a client secret or API bearer header; redirects are refused. Concurrent
+401s share one refresh. Refresh responses are capped at 64 KiB; oversized or invalid responses
+fail with an authentication error without updating the in-memory token. GET retries are
+limited to one refresh per request. API 429s wait
+for `Retry-After` (seconds or HTTP date), with at most three retries. Playlist item 403/404
+responses retain the playlist metadata and count its inaccessible contents once in `skipped`;
+other failures reach the host without advancing its checkpoint. Unusable or oversized delays
+surface as `RateLimitedError` for the host to schedule later.
+
+The opaque successful cursor is `after:<epoch-ms>` of the newest imported play. Hosts may
+supply `before:<epoch-ms>` for an explicit older-history import. Pagination follows the
+API's same-resource `next` URLs. Persist `report.state` only on success; history absent
+from subsequent API windows is retained. Spotify only exposes its available recent history,
+so this cannot reconstruct a full lifetime listening export. Events use the federation media
+contract incorporating solid-listening's shape: `media:PlaybackEvent` (+ `schema:ListenAction`),
+`media:playedWork` → Track, `core:atTime` → `time:Instant` → `time:inXSDDateTime`.
+The listener is the implicit Pod owner; no listening duration is inferred from track length.
+
+All demos remain fixture-backed. Public environment-variable configuration belongs to the
+host application. Playlist item requests use Spotify's current `/playlists/{id}/items`
+endpoint with `additional_types=track,episode` and accept both `item` and legacy `track`
+payloads, including podcast episodes
+as `media:PodcastEpisode` plus `schema:PodcastEpisode`. Items are requested only for playlists
+owned by the current user or marked collaborative. Other playlists retain their metadata
+without items and count once in `skipped`. Inaccessible contents do not prevent the remaining
+resources and recently-played history from importing or the successful cursor from advancing.
