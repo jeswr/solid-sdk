@@ -216,3 +216,42 @@ No dependencies, UI, screenshots or other packages changed. No network Git opera
 switches, pushes, PRs or edits to other checkouts occurred. No new open questions or unfinished
 implementation work remain. Verification limitations are the unavailable roborev executable
 and the prohibited full-workspace bootstrap.
+
+## Fix round 4 — review of f989a3fcde03
+
+Implemented the single finding in `solid-sdk-lane-sst-bi8j-f989a3fcde03.md`:
+
+- `9ac70407` — `fix: reconcile arriving mail provisional threads`: include the arriving
+  message's existing cached thread among References merge candidates. Existing reconciliation
+  updates descendant cache mappings and carries the provisional thread to persistence, which
+  conditionally moves its saved members into the resolved thread and clears old membership.
+  Add two cache regression cases (References alone and References with In-Reply-To) and one
+  persistence regression for a reply arriving before its parent with a different References root.
+- This final documentation commit — `docs: record fourth mail fix validation`.
+
+Regression assertions cover later descendants, an independent conversation, both persisted
+membership directions, preserved bodies, an emptied provisional thread, and one complete
+conversation returned by folder paging. All three new cases failed against the original source
+before the fix and pass with it.
+
+Verification before the final commit (all inside this checkout):
+
+| Command | Result |
+| --- | --- |
+| `pnpm --filter @jeswr/guarded-fetch run build && pnpm --filter @jeswr/suite-ui run build` | PASS; existing dependency output only, uncommitted |
+| `pnpm --filter @jeswr/app-suite exec vitest run test/mail/importer.test.ts test/mail/io.test.ts -t 'arriving message\|missing parent arrives' --reporter=verbose` | Expected FAIL before the source fix; all three new regression cases failed |
+| `pnpm --filter @jeswr/app-suite run lint && pnpm --filter @jeswr/app-suite run build && pnpm --filter @jeswr/app-suite run typecheck && pnpm --filter @jeswr/app-suite run test` | PASS; lint, Next production build, strict tsc, 9 test files / 88 tests |
+| `pnpm --filter @jeswr/app-suite run test:coverage` | PASS; 100% statements (528/528), branches (281/281), functions (157/157), lines (469/469) |
+| `pnpm run lint:root` | PASS; workspace/transport/fetch/token checks and 74 contrast pairs |
+| `TURBO_SCM_BASE=75079ec3e72e8388d368cc17e6c4211764010467 pnpm run gate` | PASS; 8/8 tasks, 0 cached |
+| `git diff --check` | PASS |
+| `command -v roborev` | Exit 1; executable unavailable, so no automated review verdict obtained |
+| `pnpm run gate:full` | Not run: the existing unstorage-solid bootstrap invokes a network `git clone`, prohibited by this lane; prior full-gate failures remain documented above |
+
+The first app lint run reported formatting in the parameterized regression; formatting was
+corrected before the passing package and affected-workspace gates.
+
+The supplied finding is addressed. No new open questions or unfinished implementation work
+remain. No dependencies, UI, screenshots or other packages changed. No network Git operations,
+branch switches, pushes, PRs or edits to other checkouts occurred. Remaining verification
+limitations are the unavailable roborev executable and the prohibited full-workspace bootstrap.
