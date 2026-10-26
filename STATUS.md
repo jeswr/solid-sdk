@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # DS-03 / sst-93m.4 lane status
 
@@ -123,3 +124,43 @@ The four discrepancies and conservative choices are recorded in QUESTIONS.md:
 missing DS-02 support, unavailable SDK preferences, fixed mobile app order and the
 mockup's backlog visibility. None blocks reviewing the UI implementation; production
 SDK integration and dispatcher browser/visual verification remain pending.
+
+## Fix round 1 (2026-10-26)
+
+Base: `bb44474d05e3910ba7bbd26a473d1c2da356deb6`. Scope is the two supplied review
+findings only.
+
+- `edd60459 fix(suite-ui): preserve hidden pins and filter mobile tabs` — checkbox,
+  move-button and drag edits now update the complete saved pin list. Hidden pins
+  survive edits and count toward the six-pin limit, including its status and disabled
+  checkboxes. Visible reorder positions map into the saved list. BottomTabBar checks
+  each registered app's status and the exact backlog flag value `1`, retaining the
+  fixed mobile slots and More trigger. Six regression cases cover hidden-pin edits,
+  flag restoration, checkbox/drag limits, missing mobile apps and flag values.
+- Final `docs(suite): record navigation fix validation` commit — this validation record.
+
+Validation used `export PATH="$PWD/node_modules/.bin:$PATH"` for Turbo as above:
+
+- Before the fix, `pnpm --filter @jeswr/suite-ui run test -- test/navigation.test.tsx`
+  reproduced five failures in the new cases: hidden-pin deletion, incorrect pin count,
+  and mobile backlog links rendered for unset, `0`, and `true` flag values.
+- `pnpm --filter @jeswr/suite-ui run lint && pnpm --filter @jeswr/suite-ui run build && pnpm --filter @jeswr/suite-ui run typecheck && pnpm --filter @jeswr/suite-ui run test`
+  — PASS: 2 files, 32 tests, including the regression cases and axe checks.
+- `pnpm run lint:root` — PASS.
+- `TURBO_SCM_BASE=bb44474d05e3910ba7bbd26a473d1c2da356deb6 pnpm run gate`
+  — PASS: 13/13 tasks, 0 cached, 50.958s. The consuming app's build, lint,
+  typecheck and 5,825 tests passed; its existing 54 lint warnings remain.
+- `pnpm run gate:full` — FAIL (exit 1): 282 successful / 346 total tasks,
+  12 cached, 1m48.161s. The same pre-existing federation-trust snapshot failure
+  recorded above remains at `test/characterization.test.ts:196`: delegation-key
+  JSON expects property order `crv,x,kty`, while the runtime emits `kty,crv,x`.
+  That package passed 53/54 tests; root tests passed 745/745. Its code and snapshot
+  were left untouched. Only the generated, untracked callback/client-id files in
+  eight pod app public directories were removed after this build.
+
+No dependencies, manifests, lockfile, fixtures or browser specs changed. The existing
+browser specs already cover pin persistence, move controls and backlog filtering;
+Playwright execution and screenshots remain with the dispatcher per the brief.
+`roborev status` remains unavailable (`command not found`, exit 127); no installation
+or configuration change was made. Both requested findings are fixed, with no new open
+questions. No push, PR, branch switch, remote fetch or merge was performed.
