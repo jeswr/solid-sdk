@@ -144,11 +144,11 @@ Rules the memory backend enforces, and the real backends must match:
   accepted (`bad-request` otherwise).
 - Every serialisation escapes IRIREF-forbidden characters in IRIs and prefix namespaces
   (`escapeIri`), relabels unsafe blank-node labels and refuses malformed language tags and prefix
-  names (exact Turtle `PN_PREFIX`), so crafted terms can never forge triples. Prefixes are only
+  names (exact Turtle `PN_PREFIX`), so crafted terms can never forge triples. Every term is rebuilt with n3's DataFactory from its
+  RDF/JS fields only (a foreign term's own `id` is never written; non-string fields are a TypeError). Prefixes are only
   cosmetic: a dotted prefix name, one that some IRI starts with (`name:`), or a namespace containing
   `[` (IPv6 hosts) is silently dropped.
-  Rebuild every term with n3's DataFactory from validated string RDF/JS fields (direction may be
-  absent), ignoring caller-supplied `id` properties and preserving variables and literal language/base direction.
+  Variables (N3 Patch only) are rebuilt the same way.
   Moving a resource rewrites metadata anchors on that resource and its fragments only. `listAll` stops between entries once aborted.
 - A stale ETag gives `precondition-failed` (412) with the current `etag`. ETags change on every write,
   and a container's ETag changes only on membership changes.
