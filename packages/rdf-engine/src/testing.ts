@@ -2,10 +2,16 @@
 // AUTHORED-BY Codex GPT-6
 
 import { createLocalIndex } from "./local-index.js";
+import { evaluatePolicy } from "./policy.js";
 import { decode, formatName, groundCanonical, hasBlankNode, parseN3, writeN3 } from "./rdf.js";
 import { resultStream } from "./result-stream.js";
 import type { LocalIndex, QuadSource, RdfEngine, ValidationReport } from "./types.js";
 
+export {
+  FormGraphUnsupportedError,
+  PolicyIdentifierCollisionError,
+  PolicySubjectUnsupportedError,
+} from "./errors.js";
 export type * from "./types.js";
 
 /** A capability intentionally excluded from the small, WASM-free test engine. */
@@ -53,7 +59,7 @@ export function createFakeRdfEngine(opts: FakeRdfEngineOptions = {}): RdfEngine 
       return loaded;
     },
     get features() {
-      return loaded ? { serialize: false, parseShaclCompact: false } : null;
+      return loaded ? { serialize: false, parseShaclCompact: false, policyEvaluate: false } : null;
     },
     async parse(input, mediaType, options) {
       await ready();
@@ -83,6 +89,16 @@ export function createFakeRdfEngine(opts: FakeRdfEngineOptions = {}): RdfEngine 
         throw new FakeEngineUnsupportedError("blank-node canonicalization");
       }
       return groundCanonical(quads);
+    },
+    async evaluatePolicy(policy, ctx) {
+      await ready();
+      check();
+      return evaluatePolicy(policy, ctx);
+    },
+    async deriveForm() {
+      await ready();
+      check();
+      throw new FakeEngineUnsupportedError("form derivation");
     },
     async createIndex(options) {
       await ready();
