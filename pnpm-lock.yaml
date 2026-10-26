@@ -2147,7 +2147,35 @@ importers:
         version: 4.1.10(vitest@4.1.10)
 
   packages/agent-mandate:
+    dependencies:
+      '@jeswr/agent-authz-verifier':
+        specifier: workspace:*
+        version: link:../agent-authz-verifier
+      '@jeswr/fetch-rdf':
+        specifier: workspace:*
+        version: link:../fetch-rdf
+      '@jeswr/solid-odrl':
+        specifier: workspace:*
+        version: link:../solid-odrl
+      '@jeswr/solid-vc':
+        specifier: workspace:*
+        version: link:../solid-vc
+      '@rdfjs/wrapper':
+        specifier: ^0.34.0
+        version: 0.34.0
+      jose:
+        specifier: ^6.0.0
+        version: 6.2.3
+      n3:
+        specifier: ^2.0.3
+        version: 2.1.1
     devDependencies:
+      '@rdfjs/types':
+        specifier: ^2.0.1
+        version: 2.0.1
+      '@types/n3':
+        specifier: ^1.16.0
+        version: 1.26.1
       '@vitest/coverage-v8':
         specifier: ^4.1.10
         version: 4.1.10(vitest@4.1.10)
