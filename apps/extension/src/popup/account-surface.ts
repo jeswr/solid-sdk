@@ -25,6 +25,7 @@
 import type { LoginDetail, SessionChangeDetail } from '@jeswr/solid-elements';
 import type { SessionState } from '../shared/messages';
 import { MessageBridgeLoginController } from './message-bridge-controller';
+import { mountProfileSwitcher } from './profile-switcher';
 
 /** The `<jeswr-login-panel>` element surface this module drives (see popup.ts notes). */
 export interface LoginPanelElement extends HTMLElement {
@@ -181,7 +182,8 @@ export function mountAccountSurface(els: AccountSurfaceElements): MountedAccount
 
   // Track every detach so cleanup() removes ALL listeners this mount added (the long-lived
   // side panel relies on this; the ephemeral popup may ignore it).
-  const detachers: Array<() => void> = [];
+  const profiles = mountProfileSwitcher(signedIn.parentElement!);
+  const detachers: Array<() => void> = [profiles.cleanup];
 
   // The panel drives login via the bridge (chrome.identity flow in the worker).
   const onLogin = (e: Event): void => {
@@ -214,7 +216,10 @@ export function mountAccountSurface(els: AccountSurfaceElements): MountedAccount
   // listener: the side panel persists across navigation, so a remount without cleanup would
   // accumulate duplicate onMessage listeners (and duplicate refresh() calls).
   const onRuntimeMessage = (message: { type?: string }): void => {
-    if (message?.type === 'SOLID_STATE_CHANGED') void refresh();
+    if (message?.type === 'SOLID_STATE_CHANGED') {
+      void refresh();
+      void profiles.controller.refresh();
+    }
   };
   chrome.runtime.onMessage.addListener(onRuntimeMessage);
   detachers.push(() => chrome.runtime?.onMessage?.removeListener?.(onRuntimeMessage));

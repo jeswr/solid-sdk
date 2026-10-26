@@ -7,35 +7,43 @@
  */
 
 :root {
-  --background: oklch(0.992 0.003 210);
-  --foreground: oklch(0.21 0.022 235);
-  --border: oklch(0.91 0.012 220);
-  --muted-foreground: oklch(0.5 0.018 230);
-  --primary: oklch(0.52 0.094 205);
-  --primary-foreground: oklch(0.99 0.005 200);
+  --background: oklch(0.985 0.004 85);
+  --foreground: oklch(0.20 0.02 240);
+  --border: oklch(0.90 0.008 85);
+  --muted-foreground: var(--foreground-muted);
+  --primary: oklch(0.46 0.085 205);
+  --primary-foreground: oklch(0.99 0.004 200);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.21 0.022 235);
-  --destructive: oklch(0.55 0.2 27);
-  --accent: oklch(0.94 0.03 195);
-  --accent-foreground: oklch(0.31 0.05 215);
-  --ring: oklch(0.52 0.094 205);
-  --radius: 0.7rem;
+  --popover-foreground: oklch(0.20 0.02 240);
+  --destructive: oklch(0.52 0.19 27);
+  --accent: oklch(0.94 0.03 200);
+  --accent-foreground: oklch(0.30 0.06 210);
+  --ring: oklch(0.60 0.12 205);
+  --radius: 6px;
+  --surface: oklch(1 0 0);
+  --surface-2: oklch(0.965 0.006 85);
+  --foreground-muted: oklch(0.47 0.018 240);
+  --input: oklch(0.63 0.012 240);
   color-scheme: light;
 }
 
 html.dark {
-  --background: oklch(0.18 0.02 240);
-  --foreground: oklch(0.95 0.01 220);
-  --border: oklch(0.32 0.02 235);
-  --muted-foreground: oklch(0.68 0.02 230);
-  --primary: oklch(0.7 0.12 200);
-  --primary-foreground: oklch(0.16 0.02 240);
-  --popover: oklch(0.22 0.02 240);
-  --popover-foreground: oklch(0.95 0.01 220);
-  --destructive: oklch(0.62 0.2 27);
-  --accent: oklch(0.3 0.04 215);
-  --accent-foreground: oklch(0.9 0.03 200);
-  --ring: oklch(0.7 0.12 200);
+  --background: oklch(0.16 0.012 240);
+  --foreground: oklch(0.95 0.008 90);
+  --border: oklch(1 0 0 / 12%);
+  --muted-foreground: var(--foreground-muted);
+  --primary: oklch(0.78 0.10 200);
+  --primary-foreground: oklch(0.16 0.03 235);
+  --popover: oklch(0.20 0.014 240);
+  --popover-foreground: oklch(0.95 0.008 90);
+  --destructive: oklch(0.72 0.17 22);
+  --accent: oklch(0.30 0.045 205);
+  --accent-foreground: oklch(0.92 0.03 200);
+  --ring: oklch(0.80 0.11 200);
+  --surface: oklch(0.20 0.014 240);
+  --surface-2: oklch(0.24 0.016 240);
+  --foreground-muted: oklch(0.72 0.014 240);
+  --input: oklch(1 0 0 / 36%);
   color-scheme: dark;
 }
 
@@ -81,6 +89,7 @@ body {
 }
 
 .brand-name {
+  margin: 0;
   font-weight: 600;
   font-size: 15px;
 }

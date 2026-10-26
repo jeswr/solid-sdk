@@ -36,10 +36,13 @@ export async function grantTestSite(context: BrowserContext, page: Page): Promis
  * `chrome.identity.launchWebAuthFlow` opened. CSS auto-redirects to the password page,
  * then to consent; both have JS-enabled submit buttons we wait on.
  */
-export async function completeOidcLogin(loginPage: Page): Promise<void> {
+export async function completeOidcLogin(
+  loginPage: Page,
+  email = 'test@example.com',
+): Promise<void> {
   await loginPage.waitForLoadState('networkidle');
   await loginPage.waitForSelector('button[type="submit"]:not([disabled])', { timeout: 10_000 });
-  await loginPage.fill('#email', 'test@example.com');
+  await loginPage.fill('#email', email);
   await loginPage.fill('#password', 'test-password-123');
   await loginPage.click('button[type="submit"]');
 

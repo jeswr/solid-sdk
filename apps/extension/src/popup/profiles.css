@@ -1,0 +1,36 @@
+/* AUTHORED-BY GPT-6.1-Sol (Codex) — shared Solid Suite account controls. */
+[hidden] { display: none !important; }
+:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.skip-link { position: absolute; top: -100px; color: var(--primary); background: var(--surface); padding: 8px; z-index: 10; }
+.skip-link:focus { top: 4px; }
+#profiles { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border); }
+.profiles-heading { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+#profiles h2 { font-size: 18px; line-height: 26px; font-weight: 600; margin: 0; }
+#profiles h3 { font-size: 14px; line-height: 22px; margin: 0 0 8px; overflow-wrap: anywhere; }
+#profiles-count, .profile-hint, #profile-status { color: var(--foreground-muted); font-size: 13px; line-height: 20px; }
+.profile-hint { margin: 4px 0 12px; }
+#profile-list { list-style: none; padding: 0; margin: 0 0 12px; max-height: 352px; overflow-y: auto; scrollbar-gutter: stable; }
+#profile-list li { border: 1px solid var(--border); border-radius: 10px; background: var(--surface); padding: 12px; margin-bottom: 8px; }
+.profile-identity { display: flex; align-items: flex-start; gap: 8px; }
+.profile-avatar { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 50%; flex: none; overflow: hidden; color: var(--accent-foreground); background: var(--accent); font-size: 13px; font-weight: 600; }
+.profile-avatar img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.profile-text { min-width: 0; }
+.profile-text strong { display: block; font-size: 14px; line-height: 22px; overflow-wrap: anywhere; }
+.profile-text small { display: block; color: var(--foreground-muted); font-size: 12px; line-height: 16px; overflow-wrap: anywhere; }
+.profile-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+#profiles button, #profiles input { font: inherit; min-height: 36px; border-radius: 6px; padding: 6px 8px; }
+#profiles button { border: 1px solid var(--input); color: var(--foreground); background: var(--surface); cursor: pointer; }
+#profiles button:hover { background: var(--surface-2); }
+#profiles button[aria-pressed="true"] { background: var(--accent); color: var(--accent-foreground); }
+#profiles button:disabled, #profiles button[aria-disabled="true"] { opacity: 0.6; cursor: default; }
+#profiles .profile-destructive { color: var(--destructive); }
+#profile-editor { border: 1px solid var(--border); background: var(--surface-2); border-radius: 10px; padding: 12px; margin-top: 12px; }
+#profile-input-label { display: block; margin-bottom: 4px; }
+#profile-input { width: 100%; border: 1px solid var(--input); background: var(--surface); color: var(--foreground); }
+#profile-error { color: var(--destructive); font-size: 13px; line-height: 20px; overflow-wrap: anywhere; }
+#profile-error:empty, #profile-status:empty { margin: 0; }
+#profiles button, #profiles input { scroll-margin: 8px; }
+@media (pointer: coarse) { #profiles button, #profiles input { min-height: 44px; } }
+@media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }
+
+.profile-text .profile-id { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

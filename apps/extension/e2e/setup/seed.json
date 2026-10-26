@@ -10,5 +10,17 @@
         }
       }
     ]
+  },
+  {
+    "email": "work@example.com",
+    "password": "test-password-123",
+    "pods": [
+      {
+        "name": "work-pod",
+        "settings": {
+          "name": "Morgan Chen"
+        }
+      }
+    ]
   }
 ]

@@ -1618,8 +1618,10 @@ describe('ProfileStore runtime API and adversarial isolation', () => {
     });
     vi.spyOn(caches, 'open').mockResolvedValue(cache);
 
+    const broadcast = vi.spyOn(chrome.runtime, 'sendMessage');
     const result = await profileMessage('SOLID_PROFILE_REMOVE', { profileId: '1' });
     expect(result.error).toBe('fixture cache deletion failed');
+    expect(broadcast).toHaveBeenLastCalledWith({ type: 'SOLID_STATE_CHANGED', webId: null });
     expect(profileDb.state.defaultProfileId).toBe('1');
     expect(profileDb.state.records[0]).toMatchObject({
       profile: { sessionState: 'removing' },

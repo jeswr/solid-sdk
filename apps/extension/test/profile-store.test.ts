@@ -301,6 +301,32 @@ describe('ProfileStore lifecycle and adversarial isolation', () => {
     expect((await store.list()).profiles).toEqual([]);
   });
 
+  it.each([
+    'retry',
+    'restart',
+  ])('preserves pending removal through logout and finishes on %s', async (recovery) => {
+    const a = await login();
+    const b = await login('bob');
+    db.state.migrated = true;
+    purge.mockRejectedValue(new Error('cache unavailable'));
+    await expect(store.remove(a.profile.id)).rejects.toThrow('cache unavailable');
+    await expect(store.signOut(a.profile.id)).rejects.toThrow('cache unavailable');
+    expect((await store.get(a.profile.id)).profile.sessionState).toBe('removing');
+    expect(await store.session(a.profile.id)).toBeNull();
+
+    purge.mockResolvedValue(undefined);
+    await store.signOut(a.profile.id);
+    expect((await store.get(a.profile.id)).profile.sessionState).toBe('removing');
+    await expect(store.login(a.session, a.keyPair, a.display)).rejects.toThrow('removal pending');
+    if (recovery === 'retry') await store.remove(a.profile.id);
+    else await new ProfileStore(db, purge).initialise(noLegacy, async () => {});
+    expect(await store.list()).toMatchObject({
+      profiles: [b.profile],
+      defaultProfileId: b.profile.id,
+    });
+    expect((await store.session(b.profile.id))?.session).toEqual(b.session);
+  });
+
   it('signs out one profile and purges before re-login while retaining its display entry', async () => {
     const a = await login();
     const b = await login('bob');

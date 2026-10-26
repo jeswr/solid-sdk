@@ -200,7 +200,9 @@ export class ProfileStore {
     return this.locked(async () => {
       const state = await this.persistence.read();
       const record = this.find(state, id);
-      record.profile = { ...record.profile, sessionState: 'signed-out' };
+      // Logout must not cancel the durable intent to finish a partially committed removal.
+      if (record.profile.sessionState !== 'removing')
+        record.profile = { ...record.profile, sessionState: 'signed-out' };
       record.session = null;
       record.keyPair = null;
       record.grantedOrigins = [];

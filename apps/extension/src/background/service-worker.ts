@@ -820,6 +820,10 @@ async function handleProfiles(
     await updateDefaultIconAndBroadcast();
     return { ok: true, ...(await store.list()) };
   } catch (err) {
+    // Removal persists revocation before purging bytes. Both account surfaces must re-read
+    // that state even when cleanup fails; a repaint failure must not hide the original error.
+    if (message.type === 'SOLID_PROFILE_REMOVE')
+      await updateDefaultIconAndBroadcast().catch(() => {});
     return { error: err instanceof Error ? err.message : 'Profile operation failed' };
   }
 }

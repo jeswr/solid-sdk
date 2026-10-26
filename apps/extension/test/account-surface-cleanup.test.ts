@@ -20,6 +20,7 @@ import {
   mountAccountSurface,
   resolveAccountSurfaceElements,
 } from '../src/popup/account-surface';
+import type { Profile } from '../src/shared/messages';
 
 let onMessageListeners: Array<(message: { type?: string }) => void>;
 
@@ -94,6 +95,70 @@ afterEach(() => {
 });
 
 describe('mountAccountSurface — listener lifecycle (long-lived side panel)', () => {
+  it('refreshes both account surfaces and profile lists after a partially committed removal', async () => {
+    let profile: Profile = {
+      id: '1',
+      webId: 'https://fixture.invalid/me',
+      issuer: 'https://fixture.invalid/',
+      label: 'Personal',
+      sessionState: 'active',
+      dpopKeyRef: '1',
+    };
+    vi.stubGlobal('chrome', {
+      runtime: {
+        ...chrome.runtime,
+        sendMessage: (message: { type: string }, callback: (response: unknown) => void) => {
+          if (message.type === 'SOLID_PROFILES_LIST') {
+            callback({ ok: true, profiles: [profile], defaultProfileId: '1' });
+          } else if (message.type === 'SOLID_GET_STATE') {
+            const active = profile.sessionState === 'active';
+            callback({
+              isActive: active,
+              webId: active ? profile.webId : null,
+              name: active ? profile.label : null,
+              photoUrl: null,
+              recentAccounts: [],
+            });
+          } else if (message.type === 'SOLID_PROFILE_REMOVE') {
+            profile = { ...profile, sessionState: 'removing' };
+            // The worker broadcasts the persisted revocation even when its purge fails.
+            for (const listener of onMessageListeners) listener({ type: 'SOLID_STATE_CHANGED' });
+            callback({ error: 'Cache unavailable.' });
+          } else callback({ ok: true });
+        },
+      },
+    });
+    const panel = document.implementation.createHTMLDocument();
+    panel.body.innerHTML = document.body.innerHTML;
+    mount();
+    liveMounts.push(mountAccountSurface(resolveAccountSurfaceElements(panel)));
+    await vi.waitFor(() => {
+      for (const doc of [document, panel]) {
+        expect(doc.getElementById('signed-in')?.hidden).toBe(false);
+        expect(doc.getElementById('profile-list')?.textContent).toContain('Signed in');
+      }
+    });
+
+    document.querySelector<HTMLButtonElement>('[data-focus="remove:1"]')!.click();
+    document
+      .getElementById('profile-editor')!
+      .dispatchEvent(new Event('submit', { cancelable: true }));
+    await vi.waitFor(() => {
+      for (const doc of [document, panel]) {
+        expect(doc.getElementById('signed-in')?.hidden).toBe(true);
+        expect(doc.getElementById('signed-out')?.hidden).toBe(false);
+        expect(doc.getElementById('profile-list')?.textContent).toContain('Removal pending');
+        expect(doc.querySelector<HTMLButtonElement>('[data-focus="default:1"]')?.disabled).toBe(
+          true,
+        );
+        expect(doc.querySelector<HTMLButtonElement>('[data-focus="remove:1"]')?.disabled).toBe(
+          false,
+        );
+      }
+      expect(document.getElementById('profile-error')?.textContent).toBe('Cache unavailable.');
+    });
+  });
+
   it('registers exactly one onMessage listener on mount', () => {
     mount();
     expect(onMessageListeners).toHaveLength(1);

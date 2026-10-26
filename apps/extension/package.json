@@ -29,6 +29,7 @@
     "n3": "^2.0.3"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.14.0",
     "@biomejs/biome": "^2.5.0",
     "@playwright/test": "^1.49.0",
     "@solid/community-server": "^7.1.3",

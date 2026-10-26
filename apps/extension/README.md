@@ -132,8 +132,14 @@ Explicit `solid.fetch` calls retain the worker's denial response.
   Interrupted removal resumes on worker wake. Logout signs out only the default profile, retaining its display entry; other
   profiles keep their own sessions. One default exists whenever the store is nonempty.
 
-The popup/side-panel profile switcher is a separate UI task. Its worker API accepts the
-following messages **only from browser-attested extension contexts**, returning display-only
+The popup and side panel share a profile switcher: list accounts with photos or initials,
+add an account through sign-in, rename, remove with confirmation, and choose the default.
+Adding keeps the existing default. Signed-out entries offer re-login; all eight slots stay
+visible at capacity. Native controls support Tab, Enter and Space; arrows move between the
+same action on adjacent profiles, Escape cancels edits, and results/errors are announced.
+Removal revokes that profile's app access and clears its local replica while keeping its pod.
+
+The worker API accepts the following messages **only from browser-attested extension contexts**, returning display-only
 `{ ok, profiles, defaultProfileId }` or `{ error }` (never tokens or key objects):
 
 | Message | Fields |
@@ -185,7 +191,7 @@ the extension also ships an MV3 **side panel** (`sidepanel/sidepanel.html`). It 
 **identical** signed-in/signed-out surface as the popup — the SAME `@jeswr/solid-elements`
 components driven by the SAME token-free `MessageBridgeLoginController` seam — via the shared
 `mountAccountSurface()` (`src/popup/account-surface.ts`), so there is exactly one copy of the
-view-switching + auth-bridge logic. The popup is unchanged. **Open it** by right-clicking the
+view-switching + auth-bridge logic. Both surfaces also share the profile controls. **Open it** by right-clicking the
 toolbar icon → **"Open Solid side panel"** (a left-click still opens the quick popup; Chrome
 ignores open-on-action-click while a `default_popup` is set, so both surfaces coexist via the
 context-menu entry).
@@ -280,7 +286,9 @@ The unit suite stubs `fetch` / `chrome.*` and needs no server. The Playwright e2
 boots a **local** Community Solid Server (`e2e/setup`) and a local test site — **never** the
 live deploy — and drives the real extension in headless Chromium. CI uses Node.js 24 and
 runs the gate before the local-server e2e suite. See [e2e/README.md](e2e/README.md) for
-setup and runner troubleshooting.
+setup and runner troubleshooting. The profile-switcher scenario uses two
+seeded CSS accounts, keyboard controls, axe WCAG checks and screenshots of both surfaces
+in light/dark themes.
 
 ## License
 
