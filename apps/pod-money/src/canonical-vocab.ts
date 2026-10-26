@@ -11,7 +11,7 @@ function moneyTerm(iri: string): string {
     : iri;
 }
 
-function categoryClass(iri: string): string {
+export function categoryClass(iri: string): string {
   const resolved = moneyTerm(iri);
   return resolved === `${NS.POD_MONEY}Category` ? `${NS.FINANCE}BudgetCategory` : resolved;
 }
