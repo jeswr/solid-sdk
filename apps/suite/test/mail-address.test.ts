@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { domainToASCII as nativeASCII, domainToUnicode as nativeUnicode } from "node:url";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
@@ -78,6 +79,21 @@ describe("RFC 5322 address lists", () => {
     ]);
   });
 
+  it.each([
+    ["\t", "Mira Lane", '"mira\tlane"@example.org'],
+    ["\r\n\t", "Mira Lane", '"mira\tlane"@example.org'],
+    ["\r\n \t", "Mira  Lane", '"mira \tlane"@example.org'],
+  ])("normalises display-name whitespace separately from quoted locals: %j", (space, name, email) => {
+    const parsed = parseAddressList(
+      `"Mira${space}Lane" <"mira${space}lane"@example.org>, "Mira${space}Lane": noa@example.org;`,
+    );
+    expect(parsed).toEqual([
+      mailbox(email, name),
+      { kind: "group", name, members: [mailbox("noa@example.org")] },
+    ]);
+    expect(parseAddressList(formatAddressList(parsed))).toEqual(parsed);
+  });
+
   it("preserves whitespace and escaped punctuation in quoted locals, including @", () => {
     expect(normaliseAddress('"a @ b"@Example.org')).toBe('"a @ b"@example.org');
     expect(normaliseAddress('"a\\\\b\\"c"@example.org')).toBe('"a\\\\b\\"c"@example.org');
@@ -152,6 +168,9 @@ describe("RFC 5322 address lists", () => {
     "a\rb@example.org",
     "a\r\nb@example.org",
     "a@example.org\r\nBcc: noa@example.org",
+    '"Mira\nLane" <mira@example.org>',
+    '"Mira\rLane" <mira@example.org>',
+    '"Mira\r\nLane" <mira@example.org>',
     "\0",
     "\u007f",
     "\u200d",
@@ -407,6 +426,22 @@ describe("recipient autocomplete", () => {
       expect(rankRecipients(prefix, contacts, [])).toEqual([]);
     }
     expect(rankRecipients("", [], [])).toEqual([]);
+  });
+
+  it.each([
+    "ΟΣΑ",
+    "οσα",
+    "οςα",
+    "ΟΣ",
+    "οσ",
+    "ος",
+  ])("keeps sigma prefixes searchable regardless of word position: %s", (name) => {
+    const contact = { email: "mira@example.org", name };
+    const recent = { ...contact, frequency: 1, lastUsed: 0 };
+    for (const prefix of ["Ο", "ο", "ΟΣ", "οσ", "ος"]) {
+      expect(rankRecipients(prefix, [contact], []).map((entry) => entry.name)).toEqual([name]);
+      expect(rankRecipients(prefix, [], [recent]).map((entry) => entry.name)).toEqual([name]);
+    }
   });
 
   it("ranks frequency, then recency, then canonical address, with explicit limits", () => {

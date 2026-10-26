@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { domainToASCII } from "./domain";
 import { displayName, requireAddress, text } from "./errors";
 import type { Address, MailboxAddress } from "./types";
@@ -91,7 +92,11 @@ class Parser {
       words.length > 0 && words.every((token) => token.kind !== "symbol"),
       "invalid-syntax",
     );
-    const name = words.map((token) => token.value).join(" ");
+    // Tabs are legal display-name whitespace; quoted local parts retain their original whitespace.
+    const name = words
+      .map((token) => token.value)
+      .join(" ")
+      .replace(/\t/g, " ");
     displayName(name);
     this.cursor = until;
     return name;

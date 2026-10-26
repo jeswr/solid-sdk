@@ -1,10 +1,15 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { requireAddress, text } from "./errors";
 import { recipient, unicodeEmail } from "./format";
 import type { RecentRecipient, Recipient, RecipientSuggestion } from "./types";
 
 function searchKey(value: string): string {
-  return value.normalize("NFC").toLowerCase();
+  // Fold final sigma to sigma so casing is independent of the prefix's word boundary.
+  return value
+    .normalize("NFC")
+    .toLowerCase()
+    .replace(/\u03c2/g, "\u03c3");
 }
 
 /** Prefix filter, then frequency descending, last-used descending, canonical email ascending. */
