@@ -326,6 +326,128 @@ describe("ensureDriveRoot", () => {
     expect(m.indexWrites).toBe(1);
   });
 
+  it.each([
+    409, 412,
+  ] as const)("recovers after a single failed initial GET with %s existing-container responses", async (status) => {
+    const m = memory(status);
+    let reads = 0;
+    m.setBefore((url, method) =>
+      url === root && method === "GET" && ++reads === 1
+        ? new Response(null, { status: 503 })
+        : undefined,
+    );
+    await expect(ensureDriveRoot(m.fetch, options)).rejects.toMatchObject({
+      name: "RdfFetchError",
+      status: 503,
+    });
+    expect(reads).toBe(2);
+    expect(m.files.has(root)).toBe(false);
+    expect(m.calls.find((call) => call.method === "DELETE")?.headers.get("If-Match")).toBe('"1"');
+    expect(m.indexWrites).toBe(0);
+    expect(await ensureDriveRoot(m.fetch, options)).toBe(root);
+    expect(m.rootCreates).toBe(2);
+    expect(m.indexWrites).toBe(1);
+  });
+
+  it("preserves the initial read failure when the recovery read also fails", async () => {
+    const m = memory();
+    let reads = 0;
+    m.setBefore((url, method) =>
+      url === root && method === "GET"
+        ? new Response(null, { status: ++reads === 1 ? 503 : 403 })
+        : undefined,
+    );
+    await expect(ensureDriveRoot(m.fetch, options)).rejects.toMatchObject({
+      name: "RdfFetchError",
+      status: 503,
+    });
+    expect(reads).toBe(2);
+    expect(m.files.has(root)).toBe(true);
+    expect(m.calls.some((call) => call.method === "DELETE")).toBe(false);
+    expect(m.indexWrites).toBe(0);
+  });
+
+  it.each([
+    false,
+    true,
+  ])("preserves metadata added before a recovery read (creation ETag: %s)", async (creationEtag) => {
+    const m = memory();
+    const added = `<${root}> <https://example.org/title> "Keep me".`;
+    let reads = 0;
+    m.setBefore((url, method) => {
+      if (url === root && method === "GET") {
+        if (++reads === 1) return new Response(null, { status: 503 });
+        m.files.set(root, { body: `${containerBody}\n${added}`, version: 2 });
+      }
+      return undefined;
+    });
+    const fetch: typeof globalThis.fetch = async (input, init) => {
+      const response = await m.fetch(input, init);
+      if (creationEtag && String(input) === root && init?.method === "PUT")
+        response.headers.set("ETag", '"1"');
+      return response;
+    };
+    await expect(ensureDriveRoot(fetch, options)).rejects.toMatchObject({ status: 503 });
+    expect(m.files.get(root)?.body).toContain(added);
+    expect(m.calls.some((call) => call.method === "DELETE")).toBe(false);
+    expect(m.indexWrites).toBe(0);
+  });
+
+  it("uses the creation ETag after the initial GET fails", async () => {
+    const m = memory();
+    let reads = 0;
+    m.setBefore((url, method) =>
+      url === root && method === "GET" && ++reads === 1
+        ? new Response(null, { status: 503 })
+        : undefined,
+    );
+    const fetch: typeof globalThis.fetch = async (input, init) => {
+      const response = await m.fetch(input, init);
+      if (String(input) === root && init?.method === "PUT") response.headers.set("ETag", '"1"');
+      return response;
+    };
+    await expect(ensureDriveRoot(fetch, options)).rejects.toMatchObject({ status: 503 });
+    expect(m.files.has(root)).toBe(false);
+    expect(m.calls.find((call) => call.method === "DELETE")?.headers.get("If-Match")).toBe('"1"');
+    expect(await ensureDriveRoot(fetch, options)).toBe(root);
+  });
+
+  it("ties rollback to the creation validator even when only LDP typing remains", async () => {
+    const m = memory();
+    m.setBefore((url, method) => {
+      if (url === root && method === "GET") m.files.set(root, { body: containerBody, version: 2 });
+      return url === metadata && method === "PATCH"
+        ? new Response(null, { status: 500 })
+        : undefined;
+    });
+    const fetch: typeof globalThis.fetch = async (input, init) => {
+      const response = await m.fetch(input, init);
+      if (String(input) === root && init?.method === "PUT") response.headers.set("ETag", '"1"');
+      return response;
+    };
+    await expect(ensureDriveRoot(fetch, options)).rejects.toMatchObject({ status: 500 });
+    expect(m.files.has(root)).toBe(true);
+    expect(m.calls.find((call) => call.method === "DELETE")).toMatchObject({ status: 412 });
+    expect(m.calls.find((call) => call.method === "DELETE")?.headers.get("If-Match")).toBe('"1"');
+  });
+
+  it("allows rollback with only the initial LDP types", async () => {
+    const m = memory();
+    m.setBefore((url, method) => {
+      if (url === root && method === "GET") {
+        m.files.set(root, {
+          body: `<${root}> a <${LDP.BasicContainer}>, <${LDP.Container}>, <${LDP.Resource}>, <${LDP.RDFSource}>.`,
+          version: 1,
+        });
+      }
+      return url === metadata && method === "PATCH"
+        ? new Response(null, { status: 500 })
+        : undefined;
+    });
+    await expect(ensureDriveRoot(m.fetch, options)).rejects.toMatchObject({ status: 500 });
+    expect(m.files.has(root)).toBe(false);
+  });
+
   it("rolls back after a rejected PATCH transport and preserves the original error", async () => {
     const m = memory();
     const failure = new TypeError("Disconnected");
@@ -422,15 +544,26 @@ describe("ensureDriveRoot", () => {
   it.each([
     "child",
     "marker",
-  ])("skips rollback when the first snapshot already has a %s", async (change) => {
+    "metadata",
+    "foreign subject",
+    "unknown type",
+    "literal type",
+    "empty dataset",
+  ])("skips rollback when the first snapshot contains %s", async (change) => {
     const m = memory();
-    const added =
-      change === "child"
-        ? `<${root}> <${LDP.contains}> <${root}file.txt>.`
-        : `<${root}> a <${PODDRIVE.DriveRoot}>.`;
+    const additions: Record<string, string> = {
+      child: `<${root}> <${LDP.contains}> <${root}file.txt>.`,
+      marker: `<${root}> a <${PODDRIVE.DriveRoot}>.`,
+      metadata: `<${root}> <https://example.org/title> "Keep me".`,
+      "foreign subject": `<${root}#other> a <${LDP.BasicContainer}>.`,
+      "unknown type": `<${root}> a <https://example.org/Other>.`,
+      "literal type": `<${root}> a "${LDP.BasicContainer}".`,
+      "empty dataset": "",
+    };
+    const added = additions[change];
+    const body = change === "empty dataset" ? "" : `${containerBody}\n${added}`;
     m.setBefore((url, method) => {
-      if (url === root && method === "GET")
-        m.files.set(root, { body: `${containerBody}\n${added}`, version: 2 });
+      if (url === root && method === "GET") m.files.set(root, { body, version: 2 });
       return url === metadata && method === "PATCH"
         ? new Response(null, { status: 500 })
         : undefined;
@@ -439,7 +572,7 @@ describe("ensureDriveRoot", () => {
       status: 500,
       url: metadata,
     });
-    expect(m.files.get(root)?.body).toContain(added);
+    expect(m.files.get(root)?.body).toBe(body);
     expect(m.calls.some((call) => call.method === "DELETE")).toBe(false);
   });
 
@@ -510,13 +643,16 @@ describe("ensureDriveRoot", () => {
     const m = memory();
     m.setBefore((url, method) => {
       if (url !== root || method !== "GET") return undefined;
-      const headers = new Headers({ "Content-Type": "text/turtle" });
+      const headers = new Headers({ "Content-Type": "text/turtle", ETag: '"1"' });
       if (link !== null) headers.set("Link", link);
       return new Response(containerBody, { headers });
     });
     await expect(ensureDriveRoot(m.fetch, options)).rejects.toThrow("needs a describedby link");
     expect(m.calls.some((call) => call.method === "PATCH")).toBe(false);
     expect(m.indexWrites).toBe(0);
+    expect(m.files.has(root)).toBe(false);
+    m.setBefore(undefined);
+    expect(await ensureDriveRoot(m.fetch, options)).toBe(root);
   });
 
   it("finds relative metadata links among other links and multi-valued relations", async () => {
@@ -543,6 +679,7 @@ describe("ensureDriveRoot", () => {
             headers: {
               "Content-Type": "text/turtle",
               Link: "<https://evil.example/meta>; rel=describedby",
+              ETag: '"1"',
             },
           })
         : undefined,
@@ -550,6 +687,9 @@ describe("ensureDriveRoot", () => {
     await expect(ensureDriveRoot(m.fetch, options)).rejects.toThrow();
     expect(m.calls.some((call) => call.method === "PATCH")).toBe(false);
     expect(m.indexWrites).toBe(0);
+    expect(m.files.has(root)).toBe(false);
+    m.setBefore(undefined);
+    expect(await ensureDriveRoot(m.fetch, options)).toBe(root);
   });
 
   it("allows the winning caller time to persist its marker after a 409", async () => {

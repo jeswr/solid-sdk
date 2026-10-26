@@ -3,10 +3,10 @@ import { type FetchedRdf, fetchRdf, RdfFetchError } from "@jeswr/fetch-rdf";
 import { assertWithinPodScope, createPodScopedFetch, normalizePodBase } from "@jeswr/guarded-fetch";
 import { serialize } from "@jeswr/rdf-serialize";
 import { DataFactory, Store } from "n3";
-import { DriveResource, readContainer } from "./model.js";
+import { DriveResource } from "./model.js";
 import { iri, quadsToTurtle } from "./serialize.js";
 import { buildDriveRootMarker, buildDriveRootRegistration, findDriveRoots } from "./type-index.js";
-import { LDP, SOLID } from "./vocab.js";
+import { LDP, RDF, SOLID } from "./vocab.js";
 
 export class DriveWriteError extends Error {
   constructor(
@@ -54,20 +54,22 @@ export async function ensureDriveRoot(
     body: "",
   });
   if (created.ok) {
-    // CSS ignores container PUT bodies. Discover and PATCH its description instead.
-    const current = await fetchRdf(rootUrl, { fetch: scopedFetch });
-    let metadataUrl: string | undefined;
-    const links = current.response.headers.get("Link") ?? "";
-    for (const link of links.matchAll(/<([^>]*)>((?:[^",]|"[^"]*")*)/g)) {
-      // Both capture groups are mandatory, even when their strings are empty.
-      const rel = /(?:^|;)\s*rel\s*=\s*(?:"([^"]*)"|([^;\s]+))/i.exec(link[2] as string);
-      if ((rel?.[1] ?? rel?.[2] ?? "").split(/\s+/).includes("describedby")) {
-        metadataUrl = assertWithinPodScope(storage, new URL(link[1] as string, rootUrl).href);
-        break;
-      }
-    }
-    if (metadataUrl === undefined) throw new TypeError("The drive root needs a describedby link.");
+    let current: FetchedRdf | undefined;
     try {
+      // CSS ignores container PUT bodies. Discover and PATCH its description instead.
+      current = await fetchRdf(rootUrl, { fetch: scopedFetch });
+      let metadataUrl: string | undefined;
+      const links = current.response.headers.get("Link") ?? "";
+      for (const link of links.matchAll(/<([^>]*)>((?:[^",]|"[^"]*")*)/g)) {
+        // Both capture groups are mandatory, even when their strings are empty.
+        const rel = /(?:^|;)\s*rel\s*=\s*(?:"([^"]*)"|([^;\s]+))/i.exec(link[2] as string);
+        if ((rel?.[1] ?? rel?.[2] ?? "").split(/\s+/).includes("describedby")) {
+          metadataUrl = assertWithinPodScope(storage, new URL(link[1] as string, rootUrl).href);
+          break;
+        }
+      }
+      if (metadataUrl === undefined)
+        throw new TypeError("The drive root needs a describedby link.");
       const patched = await scopedFetch(metadataUrl, {
         method: "PATCH",
         headers: { "Content-Type": "text/n3" },
@@ -80,24 +82,39 @@ export async function ensureDriveRoot(
         throw new TypeError("The drive root marker was not persisted.");
       }
     } catch (error) {
-      // Only roll back our new, initially empty and unmarked container. Use the
-      // pre-PATCH snapshot's strong ETag: a concurrent edit (including a PATCH
-      // that succeeded despite a lost response) must prevent deletion. The
-      // server also refuses DELETE if children have since been added.
-      if (
-        current.etag !== null &&
-        !current.etag.startsWith("W/") &&
-        readContainer(rootUrl, current.dataset).contains.size === 0 &&
-        !new DriveResource(rootUrl, current.dataset, DataFactory).isDriveRoot
-      ) {
-        try {
+      try {
+        // A failed first GET still needs a snapshot before cleanup. Keep recovery
+        // bounded and preserve the original failure if this read also fails.
+        current ??= await fetchRdf(rootUrl, { fetch: scopedFetch });
+        const initialTypes = current.dataset.match(
+          iri(rootUrl),
+          iri(RDF.type),
+          null,
+          DataFactory.defaultGraph(),
+        );
+        // Only bare LDP typing demonstrates initial state. Any other metadata,
+        // including edits made before the first GET, makes rollback unsafe.
+        // Prefer the creation validator so even a changed bare container cannot
+        // be deleted; otherwise use the inspected snapshot's strong validator.
+        const etag = created.headers.get("ETag") ?? current.etag;
+        if (
+          etag !== null &&
+          !etag.startsWith("W/") &&
+          current.dataset.size > 0 &&
+          initialTypes.size === current.dataset.size &&
+          [...initialTypes].every(({ object }) =>
+            [LDP.BasicContainer, LDP.Container, LDP.Resource, LDP.RDFSource].some((type) =>
+              object.equals(iri(type)),
+            ),
+          )
+        ) {
           await scopedFetch(rootUrl, {
             method: "DELETE",
-            headers: { "If-Match": current.etag },
+            headers: { "If-Match": etag },
           });
-        } catch {
-          // Cleanup is best effort; preserve the marker/verification failure.
         }
+      } catch {
+        // Cleanup is best effort; preserve the discovery/marker/verification failure.
       }
       throw error;
     }
