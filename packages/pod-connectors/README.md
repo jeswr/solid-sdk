@@ -95,10 +95,12 @@ No separate source index is stored.
 one raw message, then `flush()` writes accumulated thread and folder membership once per run.
 File imports retain Message-ID document keys with collision fallback and References/In-Reply-To
 thread ancestry. An explicit `documentId` bypasses Message-ID keying. Additions commit RDF before
-bytes and collections; `removeMessage()` immediately removes collection memberships, then
-attachments and `.eml`, and deletes RDF last. An interrupted deletion retains its cleanup inventory
-in that RDF for replay; a missing document is a no-op. Attachment media types from mail are
-untrusted: RDF and malformed types are stored as `application/octet-stream`.
+bytes and collections; thread moves remove the old membership conditionally before replacing RDF.
+`removeMessage()` queues deletions in batches of 100, with the remainder processed by `flush()`
+before reconciliation. Each batch reads and conditionally updates each affected collection once,
+then deletes attachments and `.eml`, and deletes each message's RDF last. An interrupted deletion
+retains its cleanup inventory in that RDF for replay; a missing document is a no-op. Attachment
+media types from mail are untrusted: RDF and malformed types are stored as `application/octet-stream`.
 
 ## Incremental imports and provenance
 

@@ -241,13 +241,138 @@ describe("MailWriter", () => {
     expect(membersOf(pod, folderSlug(ME, "Inbox"))).toEqual([`${url(slug)}#it`]);
     await withWriter(async (mail) => {
       await mail.removeMessage(slug);
+      await mail.flush();
       expect(membersOf(pod, folderSlug(ME, "Inbox"))).toEqual([]);
-      // Even an interruption before flush leaves no deferred membership cleanup.
+      // A completed batch leaves no deferred membership cleanup.
       throw new Error("crash");
     }, pod).catch(() => undefined);
     expect(pod.get(url(slug))).toBeUndefined();
     expect(pod.bytes(url(emlSlug(ME, "<delete@x.test>")))).toBeUndefined();
     await withWriter(async (mail) => mail.removeMessage(slug), pod);
+  });
+
+  it.each([
+    37, 100, 205,
+  ])("reads and updates each collection once per deletion batch (%s messages)", async (count) => {
+    const pod = createMemoryPod();
+    const folders = [
+      INBOX,
+      SENT,
+      { key: "Label_1", title: "Work" },
+      { key: "Label_2", title: "Home" },
+    ];
+    const item = (id: string, group: number) => ({
+      raw: raw(id),
+      folders,
+      read: true,
+      fallbackId: id,
+      documentId: id,
+      threadKey: `group-${group}`,
+    });
+    await withWriter(async (mail) => {
+      for (let i = 0; i < 3; i++) await mail.add(item(`keep-${i}`, i));
+      for (let i = 0; i < count; i++) await mail.add(item(`delete-${i}`, i % 3));
+    }, pod);
+    const collections = [
+      ...folders.map(({ key }) => folderSlug(ME, key)),
+      ...Array.from({ length: 3 }, (_, i) => threadSlug(ME, `group-${i}`)),
+    ];
+    const calls = new Map<string, number>();
+    const transport: typeof fetch = (input, init) => {
+      const target = String(input);
+      const method = init?.method ?? "GET";
+      const key = `${method} ${target}`;
+      calls.set(key, (calls.get(key) ?? 0) + 1);
+      if (method === "PUT" && collections.some((slug) => url(slug) === target))
+        expect(new Headers(init?.headers).get("if-match")).toBeTruthy();
+      if (method === "DELETE" && target.endsWith(".ttl") && target.includes("/messages/")) {
+        expect(new Headers(init?.headers).get("if-match")).toBeTruthy();
+        for (const slug of collections) expect(membersOf(pod, slug)).not.toContain(`${target}#it`);
+      }
+      return pod.fetch(input, init);
+    };
+    await withWriter(
+      async (mail) => {
+        for (let i = 0; i < count; i++) {
+          await mail.removeMessage(messageSlug(ME, `delete-${i}`));
+          if (i === 98) expect(calls.size).toBe(0);
+          if (i === 99) expect(pod.get(url(messageSlug(ME, "delete-0")))).toBeUndefined();
+        }
+      },
+      pod,
+      folders,
+      transport,
+    );
+    const batches = Math.ceil(count / 100);
+    expect(calls.get(`GET ${url(folderSlug(ME, "Inbox")).replace(/[^/]+$/, "")}`)).toBe(batches);
+    for (const slug of collections) {
+      expect(calls.get(`GET ${url(slug)}`), slug).toBe(batches);
+      expect(calls.get(`PUT ${url(slug)}`), slug).toBe(batches);
+      expect(calls.get(`DELETE ${url(slug)}`), slug).toBeUndefined();
+    }
+    for (let i = 0; i < count; i++) {
+      const slug = messageSlug(ME, `delete-${i}`);
+      expect(calls.get(`GET ${url(slug)}`)).toBe(1);
+      expect(pod.get(url(slug))).toBeUndefined();
+      expect(pod.bytes(url(emlSlug(ME, `delete-${i}`)))).toBeUndefined();
+    }
+    for (const { key } of folders)
+      expect(membersOf(pod, folderSlug(ME, key))).toEqual(
+        Array.from({ length: 3 }, (_, i) => `${url(messageSlug(ME, `keep-${i}`))}#it`),
+      );
+  });
+
+  it("retains every queued document until all batch membership writes succeed", async () => {
+    const pod = createMemoryPod();
+    const ids = ["batch-a", "batch-b"];
+    const label = { key: "Label_1", title: "Work" };
+    await withWriter(async (mail) => {
+      for (const id of ids)
+        await mail.add({ raw: raw(id), folders: [INBOX, label], read: true, fallbackId: id });
+    }, pod);
+    const inbox = url(folderSlug(ME, "Inbox"));
+    const removedMessages: string[] = [];
+    const failing: typeof fetch = (input, init) => {
+      const target = String(input);
+      if (init?.method === "DELETE" && target.includes("/messages/")) removedMessages.push(target);
+      return target === inbox && init?.method === "PUT"
+        ? Promise.resolve(new Response(null, { status: 412 }))
+        : pod.fetch(input, init);
+    };
+    const remove = async (mail: MailWriter) => {
+      for (const id of ids) await mail.removeMessage(messageSlug(ME, `<${id}@x.test>`));
+    };
+    await expect(withWriter(remove, pod, undefined, failing)).rejects.toThrow();
+    expect(removedMessages).toEqual([]);
+    for (const id of ids) {
+      expect(pod.get(url(messageSlug(ME, `<${id}@x.test>`)))).toBeDefined();
+      expect(pod.bytes(url(emlSlug(ME, `<${id}@x.test>`)))).toBeDefined();
+    }
+    await withWriter(remove, pod);
+    expect(membersOf(pod, folderSlug(ME, "Inbox"))).toEqual([]);
+    expect(pod.get(url(folderSlug(ME, label.key)))).toBeUndefined();
+    for (const id of ids) {
+      expect(pod.get(url(messageSlug(ME, `<${id}@x.test>`)))).toBeUndefined();
+      expect(pod.get(url(threadSlug(ME, `<${id}@x.test>`)))).toBeUndefined();
+    }
+  });
+
+  it("deduplicates queued deletions and honours a later add before flush", async () => {
+    const pod = createMemoryPod();
+    const item = { raw: raw("queue"), folders: [INBOX], read: true, fallbackId: "queue" };
+    await withWriter(async (mail) => {
+      const { slug } = await mail.add(item);
+      for (let i = 0; i < 101; i++) await mail.removeMessage(slug);
+      expect(pod.get(url(slug))).toBeDefined();
+      await mail.add(item);
+      const removed = await mail.add({ ...item, documentId: "removed" });
+      await mail.removeMessage(removed.slug);
+      await mail.removeMessage(messageSlug(ME, "missing"));
+    }, pod);
+    const kept = messageSlug(ME, "<queue@x.test>");
+    expect(membersOf(pod, folderSlug(ME, "Inbox"))).toEqual([`${url(kept)}#it`]);
+    expect(membersOf(pod, threadSlug(ME, "<queue@x.test>"))).toEqual([`${url(kept)}#it`]);
+    expect(pod.get(url(messageSlug(ME, "removed")))).toBeUndefined();
   });
 
   it("repairs folder and thread membership when a run is replayed after a crash", async () => {
@@ -270,6 +395,87 @@ describe("MailWriter", () => {
     await withWriter(async (mail) => void (await mail.add(item([SENT]))), pod, [INBOX, SENT]);
     expect(membersOf(pod, folderSlug(ME, "Inbox"))).toEqual([]);
     expect(membersOf(pod, folderSlug(ME, "Sent"))).toEqual([`${url(slug)}#it`]);
+  });
+
+  it.each([
+    false,
+    true,
+  ])("retires an old thread before an interrupted move (other member: %s)", async (otherMember) => {
+    const pod = createMemoryPod();
+    const item = {
+      raw: raw("move"),
+      folders: [INBOX],
+      read: true,
+      fallbackId: "move",
+      documentId: "move",
+      threadKey: "old",
+    };
+    const oldThread = threadSlug(ME, "old");
+    const peer = messageSlug(ME, "peer");
+    await withWriter(async (mail) => {
+      await mail.add(item);
+      if (otherMember) await mail.add({ ...item, documentId: "peer" });
+    }, pod);
+    const slug = messageSlug(ME, "move");
+    const remaining = otherMember ? [`${url(peer)}#it`] : [];
+    let removed = false;
+    const transport: typeof fetch = async (input, init) => {
+      if (String(input) === url(oldThread) && ["PUT", "DELETE"].includes(init?.method ?? "")) {
+        expect(new Headers(init?.headers).get("if-match")).toBeTruthy();
+        removed = true;
+      }
+      if (String(input) === url(slug) && init?.method === "PUT") {
+        expect(removed).toBe(true);
+        expect(membersOf(pod, oldThread)).toEqual(remaining);
+      }
+      return pod.fetch(input, init);
+    };
+    await expect(
+      withWriter(
+        async (mail) => {
+          await mail.add({ ...item, threadKey: "new" });
+          throw new Error("crash before flush");
+        },
+        pod,
+        undefined,
+        transport,
+      ),
+    ).rejects.toThrow("crash before flush");
+    await withWriter(async (mail) => void (await mail.add({ ...item, threadKey: "new" })), pod);
+    await withWriter(async (mail) => mail.removeMessage(slug), pod);
+    expect(membersOf(pod, oldThread)).toEqual(remaining);
+    expect(pod.get(url(threadSlug(ME, "new")))).toBeUndefined();
+    expect(pod.get(url(slug))).toBeUndefined();
+  });
+
+  it("keeps the old thread inventory when a move's conditional removal fails", async () => {
+    const pod = createMemoryPod();
+    const item = {
+      raw: raw("move-conflict"),
+      folders: [INBOX],
+      read: true,
+      fallbackId: "move-conflict",
+      threadKey: "old",
+    };
+    await withWriter(async (mail) => void (await mail.add(item)), pod);
+    const oldThread = url(threadSlug(ME, "old"));
+    const failing: typeof fetch = (input, init) =>
+      String(input) === oldThread && init?.method === "DELETE"
+        ? Promise.resolve(new Response(null, { status: 412 }))
+        : pod.fetch(input, init);
+    await expect(
+      withWriter(
+        async (mail) => void (await mail.add({ ...item, threadKey: "new" })),
+        pod,
+        undefined,
+        failing,
+      ),
+    ).rejects.toThrow();
+    const slug = messageSlug(ME, "<move-conflict@x.test>");
+    expect(
+      new MailMessage(`${url(slug)}#it`, pod.dataset(url(slug)), DataFactory).partOfThread,
+    ).toBe(`${oldThread}#it`);
+    expect(membersOf(pod, threadSlug(ME, "old"))).toEqual([`${url(slug)}#it`]);
   });
 
   it("drops thread members whose documents are gone, and renames folders", async () => {

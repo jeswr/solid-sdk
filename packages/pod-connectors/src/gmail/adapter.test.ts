@@ -207,6 +207,46 @@ describe("Gmail full import", () => {
 });
 
 describe("Gmail full resync", () => {
+  it("reads and updates each collection once when sweeping a mailbox batch", async () => {
+    const { pod, run, transport } = setup();
+    const messages = Array.from({ length: 53 }, (_, i) => ({
+      ...(MESSAGES.m1 as GmailMessage),
+      id: `sweep-${i}`,
+      threadId: `sweep-${i % 3}`,
+      labelIds: ["INBOX", "STARRED", "Label_1"],
+    }));
+    await run([
+      ...base,
+      { url: `${GMAIL_API}/messages`, json: { messages } },
+      ...messages.map(fetched),
+    ]).result;
+    const collections = pod
+      .urls()
+      .filter((url) =>
+        ["folders/", "threads/"].some((kind) => url.startsWith(`${ACCOUNT}${kind}`)),
+      );
+    const reads = new Map<string, number>();
+    const writes = new Map<string, number>();
+    transport((input, init) => {
+      const target = String(input);
+      const method = init?.method ?? "GET";
+      const counts = method === "GET" ? reads : writes;
+      counts.set(target, (counts.get(target) ?? 0) + 1);
+      return pod.fetch(input, init);
+    });
+    await run([...base, { url: `${GMAIL_API}/messages`, json: { messages: [] } }]).result;
+    expect(reads.get(`${ACCOUNT}folders/`)).toBe(1);
+    for (const url of collections) {
+      expect(reads.get(url), url).toBe(1);
+      expect(writes.get(url) ?? 0, url).toBeLessThanOrEqual(1);
+    }
+    expect(pod.urls().filter((url) => url.startsWith(`${ACCOUNT}messages/`))).toEqual([]);
+    expect(pod.urls().filter((url) => url.startsWith(`${ACCOUNT}threads/`))).toEqual([]);
+    expect(pod.get(folder("Label_1"))).toBeUndefined();
+    expect(members(pod, folder("system:inbox"))).toEqual([]);
+    expect(members(pod, folder("system:starred"))).toEqual([]);
+  });
+
   it("sweeps Gmail messages while ignoring non-message members and subcontainers", async () => {
     const { pod, podWriter, run } = setup();
     await run(GMAIL_FIXTURES).result;
@@ -541,13 +581,15 @@ describe("Gmail deletion replay", () => {
       expect(members(pod, url)).toEqual([]);
   };
 
-  it("finishes memberships before a deletion crashes ahead of flush, then replays", async () => {
+  it("retains queued deletion inventory when a run crashes before flush, then replays", async () => {
     const { pod, run } = setup();
     const { state } = await run(full([receipt])).result;
     await expect(
       run([...history([receipt.id], [failNext]), failRoute], state).result,
     ).rejects.toMatchObject({ status: 500 });
-    noMail(pod);
+    expect(pod.get(RECEIPT)).toBeDefined();
+    expect(pod.bytes(RECEIPT.replace(/\.ttl$/, ".eml"))).toBeDefined();
+    expect(members(pod, `${ACCOUNT}threads/gmail-t3.ttl`)).toEqual([`${RECEIPT}#it`]);
     const report = await run(history([receipt.id]), state).result;
     expect(report.cursor).toBe("2000");
     noMail(pod);
@@ -595,7 +637,8 @@ describe("Gmail deletion replay", () => {
     await expect(
       run([...history([receipt.id], [copy, failNext]), failRoute], state).result,
     ).rejects.toMatchObject({ status: 500 });
-    expect(pod.get(RECEIPT)).toBeUndefined();
+    // This deletion is still queued when the subsequent source request fails.
+    expect(pod.get(RECEIPT)).toBeDefined();
     expect(pod.get(msg("gmail-m7"))).toBeDefined();
     expect(pod.bytes(msg("gmail-m7").replace(/\.ttl$/, ".eml"))).toBeDefined();
     if (keep) {
