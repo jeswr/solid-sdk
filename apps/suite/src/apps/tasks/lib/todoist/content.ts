@@ -6,12 +6,34 @@ export function splitContent(content: string): { title: string; labels: string[]
   const label = /@[\p{L}\p{N}_-]+/uy;
   let cursor = 0;
   let code = 0;
+  let fence = 0;
   let brackets = 0;
   let parentheses = 0;
   let angle = false;
   for (let i = 0; i < content.length; i++) {
     const char = content[i];
-    if (char === "\\") {
+    if ((i === 0 || content[i - 1] === "\n") && !code) {
+      const newline = content.indexOf("\n", i);
+      const end = newline < 0 ? content.length : newline;
+      const sourceLine = content.slice(i, end);
+      const marker = /^ {0,3}(~{3,})(.*)$/.exec(sourceLine);
+      if (fence) {
+        if (marker && (marker[1] as string).length >= fence && (marker[2] as string).trim() === "")
+          fence = 0;
+        i = end;
+        continue;
+      }
+      if (marker) {
+        fence = (marker[1] as string).length;
+        i = end;
+        continue;
+      }
+      if (/^(?: {4}|\t)/.test(sourceLine)) {
+        i = end;
+        continue;
+      }
+    }
+    if (char === "\\" && !code) {
       i++;
       continue;
     }

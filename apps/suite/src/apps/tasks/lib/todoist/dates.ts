@@ -68,7 +68,7 @@ export function parseDue(
     );
   if (!match || match[0] !== value) {
     // Unsupported ISO/basic/week/ordinal dates must not become natural-language dates.
-    if (/^[+-]?\d{4}/.test(value)) throw new TodoistImportError("INVALID_DATE", line);
+    if (/^[+-]?\d{4}(?:$|[-+T\d])/.test(value)) throw new TodoistImportError("INVALID_DATE", line);
     return undefined;
   }
   const date = match[1] as string;

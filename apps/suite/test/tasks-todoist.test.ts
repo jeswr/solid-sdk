@@ -230,6 +230,13 @@ describe("content and labels", () => {
     ["Keep \\` @label", "Keep \\`", ["label"]],
     ["@label\tTitle", "Title", ["label"]],
     ["Plan (@label) @home", "Plan (@label)", ["home"]],
+    ["Title `path\\` @label", "Title `path\\`", ["label"]],
+    ["Title\n~~~ts\n@code\n~~~\n@yes", "Title\n~~~ts\n@code\n~~~", ["yes"]],
+    ["Title\n~~~~\n~~~\n@code\n~~~~\n@yes", "Title\n~~~~\n~~~\n@code\n~~~~", ["yes"]],
+    ["Title\n~~~\n~~~more\n@code\n~~~\n@yes", "Title\n~~~\n~~~more\n@code\n~~~", ["yes"]],
+    ["Title\n~~~\n\n@code", "Title\n~~~\n\n@code", []],
+    ["Title\n    @code\n\t@code\n@yes", "Title\n    @code\n\t@code", ["yes"]],
+    ["Title\n```\n~~~~\n@code\n```\n@yes", "Title\n```\n~~~~\n@code\n```", ["yes"]],
   ])("splits labels while preserving markup: %s", (content, title, labels) => {
     const result = parseTodoistCsv(csv([task({ CONTENT: content as string })]), options).tasks[0]!;
     expect(result.title).toBe((title as string).trim());
@@ -271,6 +278,7 @@ describe("dates and time zones", () => {
         task({ DATE: "every monday", DATE_LANG: "en" }),
         task({ DATE: " demain ", DATE_LANG: "fr", TIMEZONE: "Europe/Paris" }),
         task({ DATE: "every\nmonday" }),
+        task({ DATE: "2026 Christmas" }),
         task(),
       ]),
       options,
@@ -279,12 +287,14 @@ describe("dates and time zones", () => {
       ["every monday", undefined],
       [" demain ", undefined],
       ["every\nmonday", undefined],
+      ["2026 Christmas", undefined],
       [undefined, undefined],
     ]);
     expect(result.warnings).toEqual([
       { code: "UNPARSED_DATE", line: 2 },
       { code: "UNPARSED_DATE", line: 3 },
       { code: "UNPARSED_DATE", line: 4 },
+      { code: "UNPARSED_DATE", line: 6 },
     ]);
   });
 
