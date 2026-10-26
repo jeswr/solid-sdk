@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 import type { Quad } from "@rdfjs/types";
 import { Parser } from "n3";
@@ -13,9 +14,11 @@ import {
 } from "./scene.js";
 import {
   DCT_TITLE_IRI,
+  DRAW,
   DRAW_SCENE_DOCUMENT_IRI,
   DRAW_SCENE_IRI,
   DRAW_SCHEMA_VERSION_IRI,
+  LEGACY_DRAW_NS,
   RDF_TYPE_IRI,
 } from "./vocab.js";
 
@@ -81,6 +84,8 @@ describe("serializeScene — n3.Writer output", () => {
     expect(ttl).toContain("draw:Scene");
     expect(ttl).toContain("draw:sceneDocument");
     expect(ttl).toContain("diagram.excalidraw");
+    expect(ttl).toContain(`<${DRAW}>`);
+    expect(ttl).not.toContain(LEGACY_DRAW_NS);
   });
 });
 
@@ -114,6 +119,90 @@ describe("round-trip — serialize (n3.Writer) → parse (@jeswr/fetch-rdf) → 
     const parsed = await parseSceneTtl(URL_, jsonld, "application/ld+json");
     expect(parsed?.sceneDocument).toBe(CANVAS);
     expect(parsed?.title).toBe("System architecture");
+  });
+});
+
+describe("legacy namespace compatibility", () => {
+  it("reads every field in a legacy fixture with the same result as canonical Turtle", async () => {
+    const legacy = `
+      @prefix draw: <https://w3id.org/jeswr/drawing#> .
+      @prefix dct: <http://purl.org/dc/terms/> .
+      @prefix schema: <http://schema.org/> .
+      @prefix prov: <http://www.w3.org/ns/prov#> .
+      @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+      <#it> a draw:Scene ; draw:sceneDocument <${CANVAS}> ;
+        dct:title "System architecture" ;
+        dct:created "2026-06-21T10:00:00.000Z"^^xsd:dateTime ;
+        dct:modified "2026-06-21T11:30:00.000Z"^^xsd:dateTime ;
+        draw:schemaVersion "2" ; draw:viewBackgroundColor "#ffffff" ;
+        draw:thumbnail <${THUMB}> ; schema:about <${ABOUT}> ;
+        prov:wasGeneratedBy <${ACTIVITY}> .
+    `;
+    expect(await parseSceneTtl(URL_, legacy)).toEqual(FULL);
+    expect(await parseSceneTtl(URL_, await serializeScene(URL_, FULL))).toEqual(FULL);
+  });
+
+  it.each([
+    [DRAW, LEGACY_DRAW_NS],
+    [LEGACY_DRAW_NS, DRAW],
+  ])("reads a %s class with %s predicates", async (typeNs, predicateNs) => {
+    const ttl = `
+      <#it> a <${typeNs}Scene> ; <${predicateNs}sceneDocument> <${CANVAS}> ;
+        <${predicateNs}schemaVersion> "2" ;
+        <${predicateNs}viewBackgroundColor> "#ffffff" ;
+        <${predicateNs}thumbnail> <${THUMB}> .
+    `;
+    expect(await parseSceneTtl(URL_, ttl)).toEqual({
+      sceneDocument: CANVAS,
+      schemaVersion: "2",
+      viewBackgroundColor: "#ffffff",
+      thumbnail: THUMB,
+    });
+  });
+
+  it("accepts identical values under both aliases", async () => {
+    const ttl = `
+      <#it> a <${DRAW}Scene>, <${LEGACY_DRAW_NS}Scene> ;
+        <${DRAW}sceneDocument> <${CANVAS}> ;
+        <${LEGACY_DRAW_NS}sceneDocument> <${CANVAS}> ;
+        <${DRAW}schemaVersion> "2" ; <${LEGACY_DRAW_NS}schemaVersion> "2" .
+    `;
+    expect(await parseSceneTtl(URL_, ttl)).toEqual({ sceneDocument: CANVAS, schemaVersion: "2" });
+  });
+
+  it.each([
+    `<${THUMB}>`,
+    '"not-an-iri"',
+  ])("rejects conflicting canvas links across aliases (%s)", async (legacyObject) => {
+    const ttl = `
+        <#it> a <${DRAW}Scene> ; <${DRAW}sceneDocument> <${CANVAS}> ;
+          <${LEGACY_DRAW_NS}sceneDocument> ${legacyObject} .
+      `;
+    expect(await parseSceneTtl(URL_, ttl)).toBeUndefined();
+  });
+
+  it.each([
+    "schemaVersion",
+    "viewBackgroundColor",
+    "thumbnail",
+  ])("drops conflicting %s values across aliases", async (local) => {
+    const object = local === "thumbnail" ? `<${THUMB}>` : '"canonical"';
+    const ttl = `
+        <#it> a <${DRAW}Scene> ; <${DRAW}sceneDocument> <${CANVAS}> ;
+          <${DRAW}${local}> ${object} ; <${LEGACY_DRAW_NS}${local}> "legacy" .
+      `;
+    expect(await parseSceneTtl(URL_, ttl)).toEqual({ sceneDocument: CANVAS });
+  });
+
+  it("keeps the legacy node-kind and cardinality checks", async () => {
+    const ttl = `
+      <#it> a <${LEGACY_DRAW_NS}Scene> ;
+        <${LEGACY_DRAW_NS}sceneDocument> <${CANVAS}> ;
+        <${LEGACY_DRAW_NS}thumbnail> "not-an-iri" ;
+        <${LEGACY_DRAW_NS}schemaVersion> "1", "2" ;
+        <${LEGACY_DRAW_NS}viewBackgroundColor> <${THUMB}> .
+    `;
+    expect(await parseSceneTtl(URL_, ttl)).toEqual({ sceneDocument: CANVAS });
   });
 });
 
@@ -170,7 +259,7 @@ describe("parseScene — optional fields enforce the SHACL contract (roborev fin
 
   it('drops a dct:created that is NOT an xsd:dateTime (e.g. "yesterday")', async () => {
     const ttl = `
-      @prefix draw: <https://w3id.org/jeswr/drawing#> .
+      @prefix draw: <https://jeswr.org/ns/drawing#> .
       @prefix dct:  <http://purl.org/dc/terms/> .
       <#it> a draw:Scene ;
         draw:sceneDocument <${CANVAS}> ;
@@ -183,7 +272,7 @@ describe("parseScene — optional fields enforce the SHACL contract (roborev fin
 
   it("keeps a dct:created that IS an xsd:dateTime", async () => {
     const ttl = `
-      @prefix draw: <https://w3id.org/jeswr/drawing#> .
+      @prefix draw: <https://jeswr.org/ns/drawing#> .
       @prefix dct:  <http://purl.org/dc/terms/> .
       @prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
       <#it> a draw:Scene ;
@@ -196,7 +285,7 @@ describe("parseScene — optional fields enforce the SHACL contract (roborev fin
 
   it("drops a DUPLICATED optional field (maxCount 1) — two dct:title literals", async () => {
     const ttl = `
-      @prefix draw: <https://w3id.org/jeswr/drawing#> .
+      @prefix draw: <https://jeswr.org/ns/drawing#> .
       @prefix dct:  <http://purl.org/dc/terms/> .
       <#it> a draw:Scene ;
         draw:sceneDocument <${CANVAS}> ;
@@ -209,7 +298,7 @@ describe("parseScene — optional fields enforce the SHACL contract (roborev fin
 
   it("keeps a plain (xsd:string) dct:title", async () => {
     const ttl = `
-      @prefix draw: <https://w3id.org/jeswr/drawing#> .
+      @prefix draw: <https://jeswr.org/ns/drawing#> .
       @prefix dct:  <http://purl.org/dc/terms/> .
       <#it> a draw:Scene ;
         draw:sceneDocument <${CANVAS}> ;
@@ -221,7 +310,7 @@ describe("parseScene — optional fields enforce the SHACL contract (roborev fin
 
   it("drops a LANGUAGE-TAGGED dct:title (rdf:langString, not xsd:string per the shape)", async () => {
     const ttl = `
-      @prefix draw: <https://w3id.org/jeswr/drawing#> .
+      @prefix draw: <https://jeswr.org/ns/drawing#> .
       @prefix dct:  <http://purl.org/dc/terms/> .
       <#it> a draw:Scene ;
         draw:sceneDocument <${CANVAS}> ;
@@ -234,7 +323,7 @@ describe("parseScene — optional fields enforce the SHACL contract (roborev fin
 
   it("drops a NON-STRING-datatype dct:title (e.g. xsd:integer)", async () => {
     const ttl = `
-      @prefix draw: <https://w3id.org/jeswr/drawing#> .
+      @prefix draw: <https://jeswr.org/ns/drawing#> .
       @prefix dct:  <http://purl.org/dc/terms/> .
       @prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
       <#it> a draw:Scene ;
@@ -248,7 +337,7 @@ describe("parseScene — optional fields enforce the SHACL contract (roborev fin
 
   it("drops TWO draw:thumbnail IRIs (maxCount 1), keeping the rest", async () => {
     const ttl = `
-      @prefix draw: <https://w3id.org/jeswr/drawing#> .
+      @prefix draw: <https://jeswr.org/ns/drawing#> .
       <#it> a draw:Scene ;
         draw:sceneDocument <${CANVAS}> ;
         draw:thumbnail <http://h/a.png> , <http://h/b.png> .
@@ -260,7 +349,7 @@ describe("parseScene — optional fields enforce the SHACL contract (roborev fin
 
   it("drops a draw:thumbnail that is a literal (must be an IRI)", async () => {
     const ttl = `
-      @prefix draw: <https://w3id.org/jeswr/drawing#> .
+      @prefix draw: <https://jeswr.org/ns/drawing#> .
       <#it> a draw:Scene ;
         draw:sceneDocument <${CANVAS}> ;
         draw:thumbnail "preview.png" .
@@ -272,7 +361,7 @@ describe("parseScene — optional fields enforce the SHACL contract (roborev fin
 
   it("drops a schema:about that is a literal (must be an IRI)", async () => {
     const ttl = `
-      @prefix draw:   <https://w3id.org/jeswr/drawing#> .
+      @prefix draw:   <https://jeswr.org/ns/drawing#> .
       @prefix schema: <http://schema.org/> .
       <#it> a draw:Scene ;
         draw:sceneDocument <${CANVAS}> ;
@@ -327,7 +416,7 @@ describe("IRI-injection hardening (n3.Writer does NOT escape IRIs)", () => {
     expect(quads.filter((q) => q.subject.value === InjectedSubject)).toHaveLength(0);
     expect(quads.every((q) => q.subject.value === `${URL_}#it`)).toBe(true);
     const docQuad = quads.find(
-      (q) => q.predicate.value === "https://w3id.org/jeswr/drawing#sceneDocument",
+      (q) => q.predicate.value === "https://jeswr.org/ns/drawing#sceneDocument",
     );
     expect(docQuad?.object.value).not.toMatch(/[<>" ]/);
   });
