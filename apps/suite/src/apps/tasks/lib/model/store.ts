@@ -7,6 +7,15 @@ import { DataFactory, documentUrl, NS, node, requireTitle, Store, uniqueSlug } f
 import { createTask, type TaskDetails, TaskItem, taskDetails, validateTask } from "./task";
 import { createTracker, TaskTracker } from "./tracker";
 import { type PrivateIndexAccess, TypeIndex } from "./type-index";
+
+const initializationState = `${NS.SCHEDULING}initializationState`;
+interface ProjectCleanup {
+  resource: Resource;
+  container: Resource | undefined;
+  deleting: boolean;
+  title: string;
+  inbox: boolean;
+}
 export interface StoredTask extends Resource {
   task: TaskItem;
 }
@@ -31,7 +40,7 @@ export class TaskStore {
   private readonly index: TypeIndex;
   private readonly now: () => Date;
   private readonly uuid: () => string;
-  private readonly pendingCleanup = new Map<string, Resource>();
+  private readonly pendingCleanup = new Map<string, ProjectCleanup>();
   constructor(private readonly options: StoreOptions) {
     this.projects = new URL("tasks/projects/", options.storage).href;
     this.io = new RdfIO(options.fetch);
@@ -75,6 +84,7 @@ export class TaskStore {
     ]);
   }
   async bootstrapInbox(): Promise<StoredProject> {
+    await this.retryCleanup("Inbox", true);
     const url = `${this.projects}inbox.ttl`;
     for (let attempt = 0; ; attempt++) {
       try {
@@ -83,11 +93,10 @@ export class TaskStore {
           const project = await this.readProject(url);
           const stateStore = project.tracker.stateStore;
           if (!stateStore) throw new TypeError("Inbox has no stateStore.");
-          // Claim before repair so the creator's original validator cannot remove
-          // this tracker. Claim the container too in case tracker cleanup already won.
+          // The tracker coordinates adoption and cleanup; existing LDP containers
+          // cannot be replaced with PUT on Community Solid Server.
           let resource = await this.claimResource(project, project.tracker.id);
           await this.io.container(stateStore);
-          await this.claimResource(await this.io.read(stateStore), stateStore);
           await this.register(stateStore);
           resource = await this.claimResource(resource, project.tracker.id);
           return {
@@ -104,8 +113,8 @@ export class TaskStore {
   }
   async createProject(title: string, inbox = false): Promise<StoredProject> {
     requireTitle(title);
-    // If compensation previously failed, finish it before reserving another identity.
-    for (const resource of this.pendingCleanup.values()) await this.cleanupProject(resource);
+    // Retry recoverable failures only for this project, never block unrelated titles.
+    await this.retryCleanup(title, inbox);
     await this.io.container(new URL("tasks/", this.options.storage).href);
     await this.io.container(this.projects);
     const used = (await this.io.list(this.projects)).map((url) => {
@@ -128,21 +137,14 @@ export class TaskStore {
       let container: Resource | undefined;
       try {
         container = await this.io.container(stateStore);
-        const claimed = await this.claimResource(
-          container ?? (await this.io.read(stateStore)),
-          stateStore,
-        );
-        if (container) container = claimed;
         await this.register(stateStore);
         // Finalize only while this attempt still owns its tracker revision.
         resource = await this.claimResource(resource, `${url}#this`);
       } catch (error) {
-        this.pendingCleanup.set(resource.url, resource);
-        // Only delete a task container reserved by this attempt, using its validator.
-        if (container) this.pendingCleanup.set(container.url, container);
+        const cleanup = { resource, container, deleting: false, title, inbox };
+        this.pendingCleanup.set(resource.url, cleanup);
         try {
-          await this.cleanupProject(resource);
-          if (container) await this.cleanupProject(container);
+          await this.cleanupProject(cleanup);
         } catch (cleanupError) {
           throw new AggregateError([error, cleanupError], "Project creation and cleanup failed.");
         }
@@ -159,17 +161,43 @@ export class TaskStore {
   private async claimResource(resource: Resource, subject: string): Promise<Resource> {
     const dataset = new Store([...resource.dataset]);
     const value = node(subject, dataset);
+    if (value.text(initializationState) === "cleanup")
+      throw new ModelError(412, resource.url, resource.etag);
     const previous = value.date(`${NS.DCT}modified`)?.getTime() ?? -Infinity;
     value.setDate(`${NS.DCT}modified`, new Date(Math.max(this.now().getTime(), previous + 1)));
     return this.io.write(resource.url, dataset, { etag: resource.etag });
   }
-  private async cleanupProject(resource: Resource): Promise<void> {
+  private async retryCleanup(title: string, inbox: boolean): Promise<void> {
+    for (const cleanup of this.pendingCleanup.values())
+      if (cleanup.title === title && cleanup.inbox === inbox) await this.cleanupProject(cleanup);
+  }
+  private async cleanupProject(cleanup: ProjectCleanup): Promise<void> {
     try {
-      await this.io.remove(resource.url, resource.etag);
+      if (!cleanup.deleting) {
+        const dataset = new Store([...cleanup.resource.dataset]);
+        node(`${cleanup.resource.url}#this`, dataset).setText(initializationState, "cleanup");
+        // Fence adoption before touching the container, keeping the tracker until
+        // container deletion finishes. A stale creator cannot acquire this fence.
+        cleanup.resource = await this.io.write(cleanup.resource.url, dataset, {
+          etag: cleanup.resource.etag,
+        });
+        cleanup.deleting = true;
+      }
+      if (cleanup.container) {
+        try {
+          await this.io.remove(cleanup.container.url, cleanup.container.etag);
+        } catch (error) {
+          if (!(error instanceof ModelError && [404, 412].includes(error.status))) throw error;
+        }
+        cleanup.container = undefined;
+      }
+      await this.io.remove(cleanup.resource.url, cleanup.resource.etag);
     } catch (error) {
-      if (!(error instanceof ModelError && error.status === 404)) throw error;
+      // Ownership loss is terminal. Retrying with an obsolete validator can never
+      // succeed and must never remove an adopted project or its container.
+      if (!(error instanceof ModelError && [404, 412].includes(error.status))) throw error;
     }
-    this.pendingCleanup.delete(resource.url);
+    this.pendingCleanup.delete(cleanup.resource.url);
   }
   async updateProject(
     project: StoredProject,

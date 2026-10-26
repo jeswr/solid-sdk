@@ -47,7 +47,20 @@ export class RdfIO {
       headers,
       body: await serialize(dataset),
     });
-    return { url, dataset: new Store([...dataset]), etag: response.headers.get("ETag") };
+    const resource = { url, dataset: new Store([...dataset]), etag: response.headers.get("ETag") };
+    if (resource.etag) return resource;
+    // A transformed PUT may omit validators. Never attach a read validator to
+    // different data: that could authorize overwriting or deleting another writer.
+    const current = await this.read(url);
+    const isContainer = node(url, resource.dataset).types.has(`${NS.LDP}BasicContainer`);
+    if (
+      isContainer
+        ? !current.dataset.contains(resource.dataset) ||
+          node(current.url, current.dataset).iris(`${NS.LDP}contains`).size > 0
+        : !current.dataset.equals(resource.dataset)
+    )
+      throw new ModelError(412, url, current.etag);
+    return current;
   }
   async remove(url: string, etag: string | null): Promise<void> {
     await this.request(url, { method: "DELETE", headers: { "If-Match": requireEtag(etag) } });
@@ -64,18 +77,27 @@ export class RdfIO {
     return response;
   }
   async container(url: string): Promise<Resource | undefined> {
+    // CSS can reject PUT to an existing container before checking If-None-Match.
+    const existing = await this.optional(url);
+    if (existing) {
+      this.requireContainer(existing);
+      return;
+    }
     const dataset = new Store();
-    const value = node(url, dataset);
-    value.types.add(`${NS.LDP}BasicContainer`);
+    node(url, dataset).types.add(`${NS.LDP}BasicContainer`);
     try {
       return await this.write(url, dataset, { create: true });
     } catch (error) {
-      if (!(error instanceof ModelError && error.status === 412)) throw error;
-      const existing = await this.read(url);
-      const types = node(existing.url, existing.dataset).types;
-      if (!types.has(`${NS.LDP}BasicContainer`) && !types.has(`${NS.LDP}Container`))
-        throw new TypeError("Expected an LDP container.");
+      if (!(error instanceof ModelError && [409, 412].includes(error.status))) throw error;
+      const raced = await this.optional(url);
+      if (!raced) throw error;
+      this.requireContainer(raced);
     }
+  }
+  private requireContainer(resource: Resource): void {
+    const types = node(resource.url, resource.dataset).types;
+    if (!types.has(`${NS.LDP}BasicContainer`) && !types.has(`${NS.LDP}Container`))
+      throw new TypeError("Expected an LDP container.");
   }
   async list(url: string): Promise<string[]> {
     const resource = await this.optional(url);

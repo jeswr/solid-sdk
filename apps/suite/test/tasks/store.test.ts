@@ -45,14 +45,14 @@ describe("project discovery and first use", () => {
       pod.requests
         .find((request) => request.method === "DELETE" && request.url === url)
         ?.headers.get("If-Match"),
-    ).toBe('"1"');
+    ).toBe('"2"');
     pod.intercept = undefined;
     // A new model instance also reuses the identity after compensation.
     expect((await store(pod).createProject("Home")).url).toBe(url);
     expect((await tasks.listProjects()).map((project) => project.url)).toEqual([url]);
     expect(await new RdfIO(pod.fetch).list(`${projects}home/`)).toEqual([]);
   });
-  it("blocks a new reservation until failed compensation succeeds", async () => {
+  it("blocks the same project reservation until recoverable compensation succeeds", async () => {
     const pod = new Pod();
     const tasks = store(pod, { typeIndex: false });
     const url = `${projects}home.ttl`;
@@ -73,9 +73,14 @@ describe("project discovery and first use", () => {
         );
     await expect(tasks.createProject("Home")).rejects.toMatchObject({ status: 503 });
     expect(reservations()).toHaveLength(1);
+    expect((await tasks.createProject("Unrelated")).tracker.title).toBe("Unrelated");
     pod.intercept = undefined;
     expect((await tasks.createProject("Home")).url).toBe(url);
-    expect(reservations().map((request) => request.url)).toEqual([url, url]);
+    expect(reservations().map((request) => request.url)).toEqual([
+      url,
+      `${projects}unrelated.ttl`,
+      url,
+    ]);
   });
   it("does not compensate over concurrent edits and accepts an already removed tracker", async () => {
     const pod = new Pod();
@@ -88,9 +93,12 @@ describe("project discovery and first use", () => {
       }
       return undefined;
     };
-    await expect(tasks.createProject("Home")).rejects.toThrow(AggregateError);
+    await expect(tasks.createProject("Home")).rejects.toMatchObject({ status: 503 });
     expect((await tasks.readProject(url)).tracker.title).toBe("Concurrent");
-    await expect(tasks.createProject("Home")).rejects.toMatchObject({ status: 412 });
+    pod.intercept = undefined;
+    expect((await tasks.createProject("Another")).tracker.title).toBe("Another");
+    expect((await tasks.createProject("Home")).url).toBe(`${projects}home-2.ttl`);
+    expect((await tasks.readProject(url)).tracker.title).toBe("Concurrent");
     pod.intercept = (request) =>
       request.method === "DELETE" ? new Response(null, { status: 404 }) : undefined;
     pod.files.delete(url);
@@ -99,7 +107,6 @@ describe("project discovery and first use", () => {
   it.each([
     "registration",
     "finalization",
-    "container cleanup",
   ])("preserves an Inbox adopted during the creator's failed %s", async (phase) => {
     const pod = new Pod();
     const url = `${projects}inbox.ttl`;
@@ -113,24 +120,28 @@ describe("project discovery and first use", () => {
     const entered = Promise.withResolvers<void>();
     const released = Promise.withResolvers<void>();
     let blocked = false;
+    let failRegistration = phase === "registration";
     const creatorFetch: typeof fetch = async (input, init) => {
       const target = String(input);
       if (init?.method === "PUT" && target === indexUrl) {
-        if (phase !== "container cleanup" && !blocked) {
+        if (!blocked) {
           blocked = true;
           entered.resolve();
           await released.promise;
         }
-        if (phase !== "finalization") return new Response(null, { status: 503 });
-      }
-      if (phase === "container cleanup" && init?.method === "DELETE" && target === container) {
-        entered.resolve();
-        await released.promise;
+        if (failRegistration) {
+          failRegistration = false;
+          return new Response(null, { status: 503 });
+        }
       }
       return pod.fetch(input, init);
     };
     const creator = store(pod, { fetch: creatorFetch });
-    const failed = expect(creator.bootstrapInbox()).rejects.toThrow(AggregateError);
+    const creation = creator.bootstrapInbox();
+    const failed =
+      phase === "registration"
+        ? expect(creation).rejects.toMatchObject({ status: 503 })
+        : expect(creation).resolves.toMatchObject({ url });
     await entered.promise;
     const previousTracker = pod.files.get(url)?.body;
     const previousContainer = pod.files.get(container)?.body;
@@ -140,19 +151,19 @@ describe("project discovery and first use", () => {
       adopted = await adopter.bootstrapInbox();
       expect(adopted.tracker.title).toBe("Inbox");
       expect(pod.files.get(url)?.body).not.toBe(previousTracker);
-      expect(pod.files.get(container)?.body).not.toBe(previousContainer);
+      expect(pod.files.get(container)?.body).toBe(previousContainer);
     } finally {
       released.resolve();
     }
     await failed;
     expect(pod.files.has(url)).toBe(true);
     expect(pod.files.has(container)).toBe(true);
-    expect((await adopter.readProject(url)).etag).toBe(adopted.etag);
+    expect((await adopter.readProject(url)).tracker.title).toBe(adopted.tracker.title);
     expect(
       (await adopter.createTask(adopted, { title: "Survives", state: "open" })).task.title,
     ).toBe("Survives");
-    // Retained compensation also cannot remove the adopted resource on a later call.
-    await expect(creator.createProject("Another")).rejects.toMatchObject({ status: 412 });
+    // Stale compensation is retired and cannot block another project.
+    expect((await creator.createProject("Another")).tracker.title).toBe("Another");
     expect(pod.files.has(url)).toBe(true);
     expect(pod.files.has(container)).toBe(true);
   });
@@ -185,16 +196,134 @@ describe("project discovery and first use", () => {
     );
     expect(pod.mutations().some((request) => request.method === "DELETE")).toBe(false);
   });
-  it("compensates a reserved container when claiming it fails", async () => {
+  it("fences Inbox adoption while delayed container cleanup is in progress", async () => {
     const pod = new Pod();
-    const container = `${projects}home/`;
+    const url = `${projects}inbox.ttl`;
+    const container = `${projects}inbox/`;
+    const entered = Promise.withResolvers<void>();
+    const released = Promise.withResolvers<void>();
+    const creator = store(pod, {
+      fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
+        if (init?.method === "PUT" && String(input) === indexUrl)
+          return new Response(null, { status: 503 });
+        if (init?.method === "DELETE" && String(input) === container) {
+          entered.resolve();
+          await released.promise;
+        }
+        return pod.fetch(input, init);
+      },
+    });
+    const failed = expect(creator.bootstrapInbox()).rejects.toMatchObject({ status: 503 });
+    await entered.promise;
+    const adopter = store(pod);
+    try {
+      await expect(adopter.bootstrapInbox()).rejects.toMatchObject({ status: 412 });
+      expect(pod.files.has(url)).toBe(true);
+    } finally {
+      released.resolve();
+    }
+    await failed;
+    expect(pod.files.has(url)).toBe(false);
+    expect(pod.files.has(container)).toBe(false);
+    const adopted = await adopter.bootstrapInbox();
+    expect((await adopter.createTask(adopted, { title: "Safe", state: "open" })).task.title).toBe(
+      "Safe",
+    );
+  });
+  it("adopts an existing Inbox without a modification timestamp", async () => {
+    const pod = new Pod();
+    const url = `${projects}inbox.ttl`;
+    const tasks = store(pod, { typeIndex: false });
+    await tasks.bootstrapInbox();
+    const dataset = await pod.dataset(url);
+    node(`${url}#this`, dataset).clear(`${NS.DCT}modified`);
+    pod.seed(url, await serialize(dataset));
+    expect((await tasks.bootstrapInbox()).tracker.modified).toEqual(new Date(now.getTime() + 1));
+  });
+  it("creates and adopts projects when all successful PUTs omit ETags", async () => {
+    const pod = new Pod();
+    pod.omitPutEtags = true;
+    const tasks = store(pod);
+    const project = await tasks.createProject("Home");
+    expect(project.etag).toBeTruthy();
+    const inbox = await tasks.bootstrapInbox();
+    const adopted = await store(pod).bootstrapInbox();
+    expect(adopted.tracker.id).toBe(inbox.tracker.id);
+    expect((await tasks.createTask(project, { title: "Works", state: "open" })).etag).toBeTruthy();
+    expect(
+      pod
+        .mutations()
+        .filter((request) => request.url.endsWith("/") && request.headers.has("If-Match")),
+    ).toEqual([]);
+    expect(await new RdfIO(pod.fetch).list(project.tracker.stateStore as string)).toHaveLength(1);
+  });
+  it("compensates with read-back validators when successful PUTs omit ETags", async () => {
+    const pod = new Pod();
+    pod.omitPutEtags = true;
+    const tasks = store(pod);
     pod.intercept = (request) =>
-      request.url === container && request.method === "PUT" && request.headers.has("If-Match")
+      request.method === "PUT" && request.url === indexUrl
         ? new Response(null, { status: 503 })
         : undefined;
-    await expect(store(pod).createProject("Home")).rejects.toMatchObject({ status: 503 });
+    await expect(tasks.createProject("Home")).rejects.toMatchObject({ status: 503 });
     expect(pod.files.has(`${projects}home.ttl`)).toBe(false);
-    expect(pod.files.has(container)).toBe(false);
+    expect(pod.files.has(`${projects}home/`)).toBe(false);
+    pod.intercept = undefined;
+    expect((await tasks.createProject("Home")).url).toBe(`${projects}home.ttl`);
+  });
+  it.each([
+    404, 412, 503,
+  ])("handles container cleanup %s without deleting an edited container", async (status) => {
+    const pod = new Pod();
+    const tasks = store(pod);
+    const url = `${projects}home.ttl`;
+    const container = `${projects}home/`;
+    let deleteCount = 0;
+    pod.intercept = (request) => {
+      if (request.method === "PUT" && request.url === indexUrl)
+        return new Response(null, { status: 503 });
+      if (request.method === "DELETE" && request.url === container) {
+        deleteCount++;
+        if (status === 404) pod.files.delete(container);
+        if (status === 412)
+          pod.seed(
+            container,
+            `<${container}> a <${NS.LDP}BasicContainer>; <${NS.DCT}title> "Edited".`,
+          );
+        return new Response(null, { status });
+      }
+      return undefined;
+    };
+    const failed = tasks.createProject("Home");
+    if (status === 503) await expect(failed).rejects.toThrow(AggregateError);
+    else await expect(failed).rejects.toMatchObject({ status: 503 });
+    expect(pod.files.has(url)).toBe(status === 503);
+    pod.intercept = undefined;
+    expect((await tasks.createProject("Home")).tracker.title).toBe("Home");
+    expect(deleteCount).toBe(1);
+    if (status === 412)
+      expect(node(container, await pod.dataset(container)).text(`${NS.DCT}title`)).toBe("Edited");
+  });
+  it("retires stale tracker deletion after compensation has acquired its cleanup fence", async () => {
+    const pod = new Pod();
+    const tasks = store(pod);
+    const url = `${projects}home.ttl`;
+    let deletions = 0;
+    pod.intercept = (request) => {
+      if (request.method === "PUT" && request.url === indexUrl)
+        return new Response(null, { status: 503 });
+      if (request.method === "DELETE" && request.url === url) {
+        deletions++;
+        pod.seed(url, `<#this> a <${NS.WF}Tracker>; <${NS.DCT}title> "Adopted".`);
+      }
+      return undefined;
+    };
+    await expect(tasks.createProject("Home")).rejects.toMatchObject({ status: 503 });
+    pod.intercept = undefined;
+    expect((await tasks.createProject("Another")).tracker.title).toBe("Another");
+    expect((await tasks.createProject("Home")).url).toBe(`${projects}home-2.ttl`);
+    expect(deletions).toBe(1);
+    expect((await tasks.readProject(url)).tracker.title).toBe("Adopted");
   });
   it("creates the Inbox, its hierarchy and private Type Index registrations idempotently", async () => {
     const pod = new Pod();
@@ -839,8 +968,11 @@ describe("transport failures and typed classification", () => {
     expect(await io.optional(`${storage}missing.ttl`)).toBeUndefined();
     pod.intercept = () => new Response(null, { status: 403 });
     await expect(io.optional(storage)).rejects.toMatchObject({ status: 403 });
-    pod.intercept = () => new Response(null, { status: 201 });
-    expect((await io.write(`${storage}new.ttl`, new Store(), { create: true })).etag).toBeNull();
+    pod.omitPutEtags = true;
+    pod.intercept = undefined;
+    expect((await io.write(`${storage}new.ttl`, new Store(), { create: true })).etag).toBe('"1"');
+    pod.files.set(`${storage}no-etag.ttl`, { body: "", version: 1, etag: null });
+    expect((await io.read(`${storage}no-etag.ttl`)).etag).toBeNull();
     pod.intercept = undefined;
     expect((await io.container(`${storage}new/`))?.url).toBe(`${storage}new/`);
     pod.seed(`${storage}file/`, `<${storage}file/> <${NS.DCT}title> "Not a container".`);
@@ -866,6 +998,61 @@ describe("transport failures and typed classification", () => {
     await expect(new RdfIO(async () => invalidResponse).read(storage)).rejects.toThrow(
       "Unexpected response failure",
     );
+  });
+  it.each([
+    409, 412,
+  ])("accepts a container created concurrently before a %s response", async (status) => {
+    const pod = new Pod();
+    const url = `${storage}raced/`;
+    pod.intercept = async (request) => {
+      if (request.method === "PUT" && request.url === url) {
+        await pod.emptyContainer(url);
+        return new Response(null, { status });
+      }
+      return undefined;
+    };
+    expect(await new RdfIO(pod.fetch).container(url)).toBeUndefined();
+    expect(pod.files.has(url)).toBe(true);
+  });
+  it("preserves a missing-parent conflict and rejects a raced non-container", async () => {
+    const pod = new Pod();
+    const io = new RdfIO(pod.fetch);
+    await expect(io.container(`${storage}missing/child/`)).rejects.toMatchObject({ status: 409 });
+    pod.intercept = (request) => {
+      if (request.method === "PUT") {
+        pod.seed(request.url, `<${request.url}> <${NS.DCT}title> "Other".`);
+        return new Response(null, { status: 412 });
+      }
+      return undefined;
+    };
+    await expect(io.container(`${storage}raced/`)).rejects.toThrow("LDP container");
+  });
+  it.each([
+    "document",
+    "container",
+    "nonempty container",
+  ])("rejects ownership loss during validator read-back for a %s", async (kind) => {
+    const pod = new Pod();
+    pod.omitPutEtags = true;
+    const url = `${storage}${kind === "document" ? "owned.ttl" : "owned/"}`;
+    pod.intercept = async (request) => {
+      if (request.method === "GET" && request.url === url) {
+        if (kind === "document") pod.seed(url, `<${url}> <${NS.DCT}title> "Other writer".`);
+        else if (kind === "container") pod.seed(url, `<${url}> <${NS.DCT}title> "Replaced".`);
+        else pod.seed(`${url}other.ttl`, `<#it> a <${NS.WF}Task>.`);
+      }
+      return undefined;
+    };
+    const io = new RdfIO(pod.fetch);
+    const dataset = new Store();
+    if (kind !== "document") node(url, dataset).types.add(`${NS.LDP}BasicContainer`);
+    const creation = io.write(url, dataset, { create: true });
+    await expect(creation).rejects.toMatchObject({ status: 412 });
+    expect(
+      pod
+        .mutations()
+        .some((request) => request.method === "DELETE" || request.headers.has("If-Match")),
+    ).toBe(false);
   });
   it("propagates serializer errors", async () => {
     vi.spyOn(Writer.prototype, "end").mockImplementationOnce((callback) => {

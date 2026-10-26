@@ -15,6 +15,7 @@ export class Pod {
   readonly files = new Map<string, { body: string; version: number; etag?: string | null }>();
   readonly requests: RequestRecord[] = [];
   readonly privatePolicies = new Set<string>();
+  omitPutEtags = false;
   readonly ensurePrivateIndexAccess = async (url: string, owner: string) => {
     if (owner !== webId) throw new Error("Unexpected owner");
     this.privatePolicies.add(url);
@@ -71,6 +72,8 @@ export class Pod {
     if (method !== "PUT" && method !== "DELETE") throw new Error(`Unexpected method ${method}`);
     if (!request.headers.has("If-Match") && request.headers.get("If-None-Match") !== "*")
       throw new Error("Unconditional mutation");
+    // CSS rejects existing-container PUTs before evaluating write preconditions.
+    if (method === "PUT" && file && url.endsWith("/")) return new Response(null, { status: 409 });
     if (
       (request.headers.get("If-None-Match") === "*" && file) ||
       (request.headers.has("If-Match") && request.headers.get("If-Match") !== etag)
@@ -86,7 +89,7 @@ export class Pod {
     this.seed(url, request.body);
     return new Response(null, {
       status: 201,
-      headers: { ETag: `"${this.files.get(url)?.version}"` },
+      headers: this.omitPutEtags ? {} : { ETag: `"${this.files.get(url)?.version}"` },
     });
   };
   async dataset(url: string) {
