@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { LiteralFrom, NamedNodeAs, NamedNodeFrom, OptionalAs, SetFrom } from "@rdfjs/wrapper";
 import type { Store } from "n3";
 import { MusicNode } from "./rdf";
@@ -122,7 +123,16 @@ export class Track extends Recording {
     const checked = value === undefined ? undefined : nonNegative(value);
     for (const p of [`${S}duration`, `${M}durationSeconds`, `${MO}duration`]) this.clear(p);
     this.writeString(`${S}duration`, checked === undefined ? undefined : `PT${checked}S`);
-    OptionalAs.object(this, `${M}durationSeconds`, checked, LiteralFrom.double);
+    OptionalAs.object(this, `${M}durationSeconds`, checked, (seconds, factory) =>
+      // xsd:decimal has no exponent notation, even for very small/large numbers.
+      LiteralFrom.datatypeTuple(
+        [
+          `${NS.XSD}decimal`,
+          seconds.toLocaleString("en-US", { useGrouping: false, maximumSignificantDigits: 21 }),
+        ],
+        factory,
+      ),
+    );
   }
   get loved(): boolean {
     return this.strings(`${M}loved`).some((value) => value === "true" || value === "1");

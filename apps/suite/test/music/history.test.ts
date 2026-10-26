@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { describe, expect, it } from "vitest";
 import {
   Artist,
@@ -90,6 +91,91 @@ describe("playback model", () => {
     expect(event.objects(`${NS.CORE}atTime`, `${S}startTime`)).toEqual([]);
     expect(readHistory(dataset)).toEqual([]);
     expect(instant.strings(`${S}description`)).toEqual(["Imported metadata"]);
+  });
+
+  it.each([
+    "<#instant>",
+    "<#play-instant>",
+    "_:instant",
+  ])("detaches an edited playback from shared instant %s without changing other events", async (reference) => {
+    const dataset = await parseMusic(
+      `
+        @prefix media: <${M}>. @prefix core: <${NS.CORE}>.
+        @prefix time: <${NS.TIME}>. @prefix s: <${S}>.
+        <#play> a media:PlaybackEvent; media:playedWork <${trackIri}>; core:atTime ${reference}.
+        <#other> a media:PlaybackEvent; media:playedWork <${trackIri}>; core:atTime ${reference}.
+        ${reference} a time:Instant; time:inXSDDateTime "2026-10-25T12:00:00Z";
+          s:description "Shared metadata".
+      `,
+      base,
+    );
+    const event = new PlaybackEvent(`${base}#play`, dataset);
+    const other = new PlaybackEvent(`${base}#other`, dataset);
+    const original = dataset.getQuads(other.value, `${NS.CORE}atTime`, null, null)[0]?.object;
+    if (!original) throw new Error("Missing shared instant");
+    const originalQuads = dataset.getQuads(original, null, null, null);
+    const next = new Date("2026-10-25T13:00:00Z");
+    event.startTime = next;
+    expect(event.startTime).toEqual(next);
+    expect(other.startTime).toEqual(now);
+    expect(event.objects(`${NS.CORE}atTime`)[0]?.equals(original)).toBe(false);
+    expect(dataset.getQuads(original, null, null, null)).toEqual(originalQuads);
+    const size = dataset.size;
+    const privateInstant = event.iris(`${NS.CORE}atTime`);
+    event.startTime = now;
+    event.startTime = next;
+    expect(event.iris(`${NS.CORE}atTime`)).toEqual(privateInstant);
+    expect(dataset.size).toBe(size);
+    const roundTrip = await parseMusic(await serializeMusic(dataset), base);
+    expect(new PlaybackEvent(event.value, roundTrip).startTime).toEqual(next);
+    expect(new PlaybackEvent(other.value, roundTrip).startTime).toEqual(now);
+    event.startTime = undefined;
+    expect(other.startTime).toEqual(now);
+    expect(dataset.getQuads(original, null, null, null)).toEqual(originalQuads);
+  });
+
+  it("avoids existing resources when allocating a private instant", async () => {
+    const dataset = await parseMusic(
+      `
+      @prefix core: <${NS.CORE}>. @prefix time: <${NS.TIME}>. @prefix s: <${S}>.
+      <#play> core:atTime <#instant>.
+      <#other> core:atTime <#instant>; s:about <#play-instant-1>.
+      <#instant> time:inXSDDateTime "2026-10-25T12:00:00Z".
+      <#play-instant> s:description "Unrelated resource".
+    `,
+      base,
+    );
+    const event = new PlaybackEvent(`${base}#play`, dataset);
+    event.startTime = now;
+    expect(event.iris(`${NS.CORE}atTime`)).toEqual([`${base}#play-instant-2`]);
+    expect(new MusicNode(`${base}#play-instant`, dataset).strings(`${S}description`)).toEqual([
+      "Unrelated resource",
+    ]);
+    expect(
+      new MusicNode(`${base}#play-instant-1`, dataset).objects(`${NS.TIME}inXSDDateTime`),
+    ).toEqual([]);
+  });
+
+  it("writes integer milliseconds and rejects invalid edits before mutation", async () => {
+    const dataset = new Store();
+    const event = new PlaybackEvent(`${base}#play`, dataset).stampType();
+    for (const value of [0, 1, 213_000, 1e21, Number.MAX_VALUE]) {
+      event.msPlayed = value;
+      const literal = event.objects(`${M}msPlayed`)[0];
+      expect(literal?.datatype.value).toBe(`${NS.XSD}integer`);
+      expect(literal?.value).toMatch(/^\d+$/);
+      const parsed = await parseMusic(await serializeMusic(dataset), base);
+      expect(new PlaybackEvent(event.value, parsed).msPlayed).toBe(value);
+    }
+    const before = [...dataset];
+    for (const value of [-1, 1.5, Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(() => {
+        event.msPlayed = value;
+      }).toThrow(InvalidMusicError);
+      expect([...dataset]).toEqual(before);
+    }
+    event.msPlayed = undefined;
+    expect(event.objects(`${M}msPlayed`)).toEqual([]);
   });
 
   it("skips malformed instant values and reads blank-linked instants", async () => {

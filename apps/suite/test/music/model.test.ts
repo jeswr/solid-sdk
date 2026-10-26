@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 import {
@@ -151,6 +152,21 @@ describe("three-model reads", () => {
 });
 
 describe("canonical typed writes", () => {
+  it("writes decimal durations without exponent notation and round-trips their values", async () => {
+    const dataset = new Store();
+    const track = new Track(trackIri, dataset).stampType();
+    for (const value of [0, 213.5, 1e-7, 1e21, Number.MIN_VALUE, Number.MAX_VALUE]) {
+      track.durationSeconds = value;
+      const literal = track.objects(`${M}durationSeconds`)[0];
+      expect(literal?.datatype.value).toBe(`${NS.XSD}decimal`);
+      expect(literal?.value).toMatch(/^\d+(?:\.\d+)?$/);
+      const parsed = await parseMusic(await serializeMusic(dataset), base);
+      expect(new Track(trackIri, parsed).durationSeconds).toBe(value);
+    }
+    track.durationSeconds = undefined;
+    expect(track.objects(`${M}durationSeconds`)).toEqual([]);
+  });
+
   it("rejects unsafe subjects before mutation and preserves safe lexical identities", async () => {
     const dataset = new Store();
     const safe = "https://POD.test:443/music/../track%3E%20one#it";

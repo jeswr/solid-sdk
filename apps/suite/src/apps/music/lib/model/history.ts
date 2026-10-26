@@ -1,10 +1,11 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { normalizePodBase } from "@jeswr/guarded-fetch";
 import { LiteralFrom, OptionalAs, SetFrom, TermAs, TermFrom } from "@rdfjs/wrapper";
 import type { Store } from "n3";
 import type { Track } from "./entities";
-import { MusicNode } from "./rdf";
-import { httpIri, nonNegative, validDate } from "./validation";
+import { DataFactory, MusicNode } from "./rdf";
+import { httpIri, InvalidMusicError, nonNegative, validDate } from "./validation";
 import { M, NS, S } from "./vocab";
 
 export interface Playback {
@@ -45,11 +46,25 @@ export class PlaybackEvent extends MusicNode {
   set startTime(value: Date | undefined) {
     if (value !== undefined) validDate(value);
     this.assertWritableSubject();
-    // Reuse imported instant IRIs; new events get a stable, event-specific IRI.
-    const instant = new MusicNode(
-      this.iris(`${NS.CORE}atTime`)[0] ?? `${this.value}-instant`,
-      this.dataset as Store,
-    );
+    // Reuse private imported instants, but never change another resource's time.
+    const dataset = this.dataset as Store;
+    let instantIri = this.iris(`${NS.CORE}atTime`)[0] ?? `${this.value}-instant`;
+    if (
+      dataset
+        .getQuads(null, null, DataFactory.namedNode(instantIri), null)
+        .some((quad) => !this.equals(quad.subject))
+    ) {
+      instantIri = `${this.value}-instant`;
+      let suffix = 0;
+      while (
+        dataset.countQuads(DataFactory.namedNode(instantIri), null, null, null) > 0 ||
+        dataset.countQuads(null, null, DataFactory.namedNode(instantIri), null) > 0
+      ) {
+        suffix += 1;
+        instantIri = `${this.value}-instant-${suffix}`;
+      }
+    }
+    const instant = new MusicNode(instantIri, dataset);
     if (value !== undefined) {
       instant.stamp(`${NS.TIME}Instant`);
       instant.clear(`${NS.TIME}inXSDDateTime`);
@@ -89,8 +104,13 @@ export class PlaybackEvent extends MusicNode {
   }
   set msPlayed(value: number | undefined) {
     const checked = value === undefined ? undefined : nonNegative(value);
+    if (checked !== undefined && !Number.isInteger(checked)) {
+      throw new InvalidMusicError("Milliseconds played must be an integer");
+    }
     this.clear(`${M}msPlayed`);
-    OptionalAs.object(this, `${M}msPlayed`, checked, LiteralFrom.double);
+    OptionalAs.object(this, `${M}msPlayed`, checked, (milliseconds, factory) =>
+      LiteralFrom.datatypeTuple([`${NS.XSD}integer`, BigInt(milliseconds).toString()], factory),
+    );
   }
   private date(node: MusicNode, ...predicates: string[]): Date | undefined {
     for (const text of node.strings(...predicates)) {
