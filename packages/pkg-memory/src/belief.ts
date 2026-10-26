@@ -1,4 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+
+import { compareDateTimes } from "./chronology.js";
 import type { Nanopublication, Nanopublications } from "./model.js";
 import { graph, NS, RdfNode } from "./rdf.js";
 
@@ -20,7 +22,7 @@ export function classifyNanopublications(value: Nanopublications): ClassifiedNan
       (other) =>
         other.id !== np.id &&
         other.supersedes.includes(np.assertionId) &&
-        Date.parse(other.generatedAt) >= Date.parse(np.generatedAt),
+        compareDateTimes(other.generatedAt, np.generatedAt) >= 0,
     );
   const inactive = (np: Nanopublication) =>
     past.has(np.validity) ||

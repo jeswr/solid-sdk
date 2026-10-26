@@ -26,3 +26,11 @@ requires an ODRL permit for every category and denies uncategorized data and
 outstanding duties. `isSpecialCategory` uses a local list; it does not fetch DPV
 or infer arbitrary subclasses. The two purpose tokens are ServiceProvision and
 Personalisation. Never expose rejected values in a denial message.
+
+Use `NanopubStore` for one-resource-per-nanopub persistence over the structural
+PodPort seam. Its default-policy writer preserves owner edits. ACL writes must
+succeed before any private data is written; no public ACL fallback is allowed.
+TriG rejection (HTTP 415) or rewriting permits only the same bytes stored as
+octet-stream. Strong ETags are required for replacements. Never use a Turtle or
+flattened-graph fallback. Retraction appends a revising nanopub; it does not edit
+or delete the original. Use the exported memory PodPort for offline tests.

@@ -140,6 +140,27 @@ describe("KG §4.1 belief view", () => {
     ).toBe("definitely");
   });
 
+  it("orders revisions at microsecond precision across timezone offsets", async () => {
+    const value = await build([
+      { id: "one", epistemic: "SelfReportedExplicit", assertion: assertion("one") },
+      {
+        id: "two",
+        epistemic: "SelfReportedExplicit",
+        assertion: assertion("two"),
+        supersedes: ["one"],
+      },
+    ]);
+    const one = value.nanopubs.find((np) => np.identifier === "belief/one")!;
+    const two = value.nanopubs.find((np) => np.identifier === "belief/two")!;
+    one.generatedAt = "2026-10-25T12:00:00.000500+00:00";
+    two.generatedAt = "2026-10-25T13:00:00.000400+01:00";
+    expect(classifyNanopublications(value).find((np) => np.id === one.id)!.belief).toBe(
+      "definitely",
+    );
+    two.generatedAt = "2026-10-25T13:00:00.000600+01:00";
+    expect(classifyNanopublications(value).find((np) => np.id === one.id)!.belief).toBe("past");
+  });
+
   it("uses only the nanopub's own invalidation provenance", async () => {
     const value = await build([
       { id: "one", epistemic: "SelfReportedExplicit", assertion: assertion("shared") },

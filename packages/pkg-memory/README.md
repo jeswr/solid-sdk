@@ -127,3 +127,32 @@ plain-string literals (RDF/JS merges plain strings and explicit `xsd:string`).
 Belief tests cover the KG §4.1 status matrix and the independent synthetic builder
 oracle. The supplied snapshot omits `pipeline/queries/*.rq` and the private pilot;
 exact query/pilot parity has not been verified.
+
+`new NanopubStore(pod)` accepts the structural MCP `PodPort` interface without a
+runtime dependency on the MCP server. `put(result)` splits batches into one
+`/private/pkg/mcp/<uuid>.trig` resource per nanopub, retaining its four graphs and
+shared batch source/entity graphs. Writes are create-only; malformed input is
+rejected before mutations. Owner-only WAC ACLs are written before the private
+containers and data. The adapter must support the spec's `.acl` convention;
+ACL failures stop the operation. Existing ACL replacement needs a strong ETag.
+
+The store tries `application/trig` and reads the representation back. An HTTP 415
+or changed bytes/media type triggers the sole fallback, `application/octet-stream`,
+with exactly the original TriG bytes. Replacing rewritten TriG needs its strong
+read-back ETag; a failed byte-preservation check is an error. Authentication,
+conflict and other failures do not trigger fallback. These behaviors are covered
+by simulated server responses on the memory PodPort; live CSS/sparq validation
+has not been run in this fixture-only lane.
+
+`get(id)` verifies the stored media type and nanopub identity. `list()` loads only
+immediate UUID resources and ignores nested or off-container listing entries.
+`retract(id, { batchId, clientId, generatedAt? })` appends a new Retracted nanopub
+with `prov:wasRevisionOf` and `prov:invalidatedAtTime`; original bytes remain
+unchanged. Later classification recognizes the withdrawal across resources.
+`writeDefaultPolicy()` writes `/private/pkg/mcp-policy.ttl` only if absent and
+preserves owner edits, including concurrent first-run creation. Consumers apply
+the purpose predicate to their reads and own the special-category read audit.
+
+For offline storage tests, `@jeswr/pkg-memory/testing` exports
+`createMemoryPodPort({ root, webId })` with byte copies, ETags, and conditional
+write/delete behavior.

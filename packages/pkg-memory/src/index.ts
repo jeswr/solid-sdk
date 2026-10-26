@@ -1,5 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-/** PKG nanopublication model, belief and purpose policy. */
+/** PKG nanopublication model, belief, purpose policy and pod storage. */
 export type { Belief, ClassifiedNanopublication } from "./belief.js";
 export { classifyNanopublications } from "./belief.js";
 export {
@@ -29,6 +29,7 @@ export {
   serializeNanopublications,
   VALIDITY_STATUSES,
 } from "./model.js";
+export type { PodConditions, PodPort } from "./pod-port.js";
 export type { MemoryPurpose } from "./purpose.js";
 export {
   createDefaultPolicy,
@@ -36,5 +37,7 @@ export {
   MEMORY_PURPOSES,
   purposeFilter,
 } from "./purpose.js";
+export type { RetractionOptions } from "./store.js";
+export { NanopubStore } from "./store.js";
 export type { Fact, TemporalValue } from "./templates.js";
 export { createFactAssertion } from "./templates.js";
