@@ -263,3 +263,65 @@ No dist output, tracker state, unrelated fixes, network Git fetches, branch
 switches, pushes, or PRs. Integration is complete; the workspace gate failure
 and unavailable review remain the validation limitations. No new open questions
 or conservative design interpretations were needed.
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+## Fix round 4 — Pod Chat offline client registration
+
+- `5f72ed63` — `chore: merge main into vocabulary lane`: fetch from the local
+  source clone and merge authoritative `origin/main` at
+  `93217230`. Resolve the chat interop manifest conflict by retaining main's
+  existing `@solid/object` dependency and the lane's suite-vocab dependency.
+  Start `pnpm-lock.yaml` from main and regenerate it with pnpm; no hand-merged
+  lockfile entries or new dependencies.
+- `3f2d1257` — `fix: validate canonical pod chat registration offline`: retain
+  the canonical federation context and qualify access values as `acl:Read`,
+  `acl:Write`, and `acl:Append` so verification accepts actual ACL mode IRIs.
+  Update only Pod Chat's offline extraction expectations to the canonical social
+  sector and ChatRoom IRIs. Assert valid verification, no issues, the unchanged
+  access modes, and consumed types through both body and fetch entry points.
+- Final `docs:` commit — update this report last.
+
+Lockfile regeneration and frozen offline installation both passed:
+
+```sh
+GIT_ALLOW_PROTOCOL=file pnpm --filter @jeswr/suite-vocab --filter @jeswr/app-pod-chat --filter @jeswr/app-pod-money --filter @jeswr/solid-chat-interop install --lockfile-only --ignore-scripts --offline --config.dedupe-peer-dependents=false
+GIT_ALLOW_PROTOCOL=file pnpm install --frozen-lockfile --ignore-scripts --offline
+```
+
+Validation ran with `PATH="$PWD/node_modules/.bin:$PATH"`:
+
+```sh
+GIT_ALLOW_PROTOCOL=file pnpm exec turbo run build --filter=@jeswr/federation-client... --env-mode=loose --concurrency=4
+GIT_ALLOW_PROTOCOL=file pnpm --filter @jeswr/federation-client exec vitest run test/offline-contexts.test.ts
+GIT_ALLOW_PROTOCOL=file pnpm exec turbo run lint typecheck test --filter=@jeswr/federation-client --filter=@jeswr/app-pod-chat --env-mode=loose --concurrency=4
+GIT_ALLOW_PROTOCOL=file TURBO_SCM_BASE=origin/main pnpm run gate --env-mode=loose
+GIT_ALLOW_PROTOCOL=file pnpm run gate:full --env-mode=loose
+```
+
+- Dependency build: **PASS**, 5/5 tasks. Before building the workspace
+  prerequisite, the package test script refused to run because fetch-rdf had no
+  dist; building it locally resolved that prerequisite without a remote clone.
+- Reproduction before the fix: the offline test **FAILS** on exactly the stale
+  sector and ChatRoom expectations (17 passed, 1 failed).
+- Focused lint, typecheck, and tests after the fix: **PASS**, 14/14 tasks,
+  including all 239 federation-client tests and 228 Pod Chat tests. Both offline
+  entry points verify the shipped registration successfully without global fetch.
+- Root lint and guards: **PASS**. Root tests: **PASS**, 745 tests in 9 files.
+- Affected gate: **FAIL / exit 1**, 285 successful tasks of 345 scheduled.
+- Full gate, rerun sequentially: **FAIL / exit 1**, 220 successful tasks of 359
+  scheduled. An initial overlapping full-gate attempt encountered Next.js's
+  concurrent-build lock; the sequential rerun resolves that invocation issue.
+- Both final gate runs stop at unchanged `@jeswr/federation-trust#test`,
+  `test/characterization.test.ts:196`: the delegation credential snapshot expects
+  JWK fields in `crv,x,kty` order and receives `kty,crv,x`. The package is identical
+  to main and remains outside this brief.
+- `roborev` is unavailable, so no new automated per-commit review is claimed.
+  The supplied review's personal-agent / agentic-legacy-bridge findings remain
+  with A-002F / sst-kvnf as directed; both packages are identical to main.
+
+Remove all 16 web-build-generated callback/client metadata files before the last
+report edit. No dist, tracker state, dependency additions, network remote fetches,
+branch switches, pushes, or PRs. The requested CI regression is fixed; validation
+remains limited by the unrelated federation-trust snapshot failure and unavailable
+roborev. No open questions or additional design changes.
