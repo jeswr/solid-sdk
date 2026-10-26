@@ -1,3 +1,5 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /**
  * Dropbox → Documents. File **metadata** (name, path, size, modified — never
  * the file bytes) as `schema:DigitalDocument`.
@@ -13,12 +15,14 @@ import { postJson } from "../core/fixture-fetch.js";
 import type { ImportContext, ImportOutcome, IntegrationAdapter } from "../core/types.js";
 import { CLASSES, DigitalDocument } from "../core/vocab.js";
 import { DROPBOX_FIXTURES, type DropboxListFolderAnswer } from "./fixtures.js";
+import { vocabMap } from "./vocab-map.js";
 
 const ID = "dropbox";
 const API = "https://api.dropboxapi.com/2";
 const SCOPES = ["files.metadata.read", "account_info.read"] as const;
 
 export const dropboxAdapter: IntegrationAdapter = {
+  vocabMap,
   metadata: {
     id: ID,
     name: "Dropbox",

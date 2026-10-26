@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-5
+// AUTHORED-BY Codex GPT-6.1-Sol — HTTP entry point
 /**
  * build-dist — produce the committed, self-contained `dist/` for GitHub-branch
  * installs under `ignore-scripts=true`.
@@ -21,8 +22,9 @@
  *       `jsonld-streaming-parser` + `content-type` (all npm-published; we add the
  *       latter two to our `dependencies` so the consumer resolves them).
  *
- * TWO entry points:
+ * THREE entry points:
  *   - `src/index.ts`  -> `dist/index.js`  (the library public API)
+ *   - `src/http.ts`   -> `dist/http.js`   (Node + Web HTTP handlers)
  *   - `src/cli.ts`    -> `dist/cli.js`    (the `solid-mcp` bin; gets a `#!/usr/bin/env node`
  *                                          shebang banner + is made executable)
  *
@@ -45,6 +47,7 @@ const outdir = join(root, "dist");
  * this list. fetch-rdf's own runtime deps stay external (npm-published).
  */
 const EXTERNAL = [
+  "@jeswr/solid-chat-interop",
   "@jeswr/rdf-serialize",
   "@modelcontextprotocol/sdk",
   "zod",
@@ -69,11 +72,15 @@ async function main(buildDir = outdir) {
     stdio: ["ignore", "ignore", "inherit"],
   });
 
-  // 2. Clean target then bundle the runtime JS for BOTH entry points. esbuild
+  // 2. Clean target then bundle the runtime JS for all entry points. esbuild
   //    owns dist/index.js + dist/cli.js; only the cli gets the Node shebang.
   rmSync(buildDir, { recursive: true, force: true });
   await build({
-    entryPoints: [join(root, "src", "index.ts"), join(root, "src", "cli.ts")],
+    entryPoints: [
+      join(root, "src", "index.ts"),
+      join(root, "src", "cli.ts"),
+      join(root, "src", "http.ts"),
+    ],
     outdir: buildDir,
     bundle: true,
     format: "esm",

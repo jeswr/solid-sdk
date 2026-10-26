@@ -1,4 +1,13 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
+/** The blank-node label cannot be emitted as a Turtle/TriG BLANK_NODE_LABEL. */
+export class UnsupportedBlankNodeLabelError extends TypeError {
+  constructor() {
+    super("Unsupported blank-node label");
+    this.name = "UnsupportedBlankNodeLabelError";
+  }
+}
+
 /** The literal's datatype is outside the supported RDFlib parity contract. */
 export class UnsupportedLiteralDatatypeError extends TypeError {
   constructor(readonly datatype: string) {
