@@ -52,7 +52,11 @@ describe("mobileConfig", () => {
         webContentsDebuggingEnabled: false,
         useLegacyBridge: false,
       },
-      ios: { limitsNavigationsToAppBoundDomains: true, webContentsDebuggingEnabled: false },
+      ios: {
+        includePlugins: ["@capacitor/app"],
+        limitsNavigationsToAppBoundDomains: true,
+        webContentsDebuggingEnabled: false,
+      },
     });
   });
 

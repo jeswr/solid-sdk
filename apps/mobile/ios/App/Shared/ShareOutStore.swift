@@ -8,6 +8,10 @@ final class ShareOutStore {
     static let maxFiles = 20
     static let maxChunkBytes = 512 * 1024
     static let maxAge: TimeInterval = 24 * 60 * 60
+    /// Present until commit, so an upload a killed process left behind never counts as committed.
+    /// Staged names never start with ".", so it cannot collide with a file.
+    static let uploadingMarker = ".uploading"
+
     enum Failure: Error { case invalid, busy, notFound }
 
     private struct Upload {
@@ -20,8 +24,9 @@ final class ShareOutStore {
     private var uploads = [String: Upload]()
 
     init(root: URL = FileManager.default.temporaryDirectory.appendingPathComponent("share-out", isDirectory: true)) throws {
+        // Normalise only once the directory exists: /private/var spelling depends on existence.
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         self.root = root.resolvingSymlinksInPath().standardizedFileURL
-        try fm.createDirectory(at: self.root, withIntermediateDirectories: true)
     }
 
     static func isId(_ id: String) -> Bool {
@@ -62,7 +67,8 @@ final class ShareOutStore {
         try fm.createDirectory(at: dir, withIntermediateDirectories: false)
         do {
             let file = dir.appendingPathComponent(Self.safeName(name))
-            guard fm.createFile(atPath: file.path, contents: Data()) else { throw Failure.invalid }
+            guard fm.createFile(atPath: dir.appendingPathComponent(Self.uploadingMarker).path, contents: Data()),
+                  fm.createFile(atPath: file.path, contents: Data()) else { throw Failure.invalid }
             try fm.setAttributes([.modificationDate: now], ofItemAtPath: dir.path)
             uploads[id] = Upload(file: file, size: size)
             return id
@@ -89,7 +95,9 @@ final class ShareOutStore {
             try evict(now: now)
             let entry = try upload(id)
             guard entry.written == entry.size else { throw Failure.invalid }
-            try fm.setAttributes([.modificationDate: now], ofItemAtPath: entry.file.deletingLastPathComponent().path)
+            let dir = entry.file.deletingLastPathComponent()
+            try fm.removeItem(at: dir.appendingPathComponent(Self.uploadingMarker))
+            try fm.setAttributes([.modificationDate: now], ofItemAtPath: dir.path)
             uploads.removeValue(forKey: id)
             // @capacitor/share 8.0.3 passes URL(string:) directly to UIActivityViewController.
             return entry.file
@@ -104,8 +112,10 @@ final class ShareOutStore {
     }
 
     func evict(now: Date = Date()) throws {
-        for dir in try directories() where now.timeIntervalSince(try modified(dir)) > Self.maxAge {
-            try abort(dir.lastPathComponent)
+        for dir in try directories() {
+            let id = dir.lastPathComponent
+            let abandoned = uploads[id] == nil && fm.fileExists(atPath: dir.appendingPathComponent(Self.uploadingMarker).path)
+            if abandoned || now.timeIntervalSince(try modified(dir)) > Self.maxAge { try abort(id) }
         }
         let dirs = try directories().sorted { (try modified($0)) < (try modified($1)) }
         var total: Int64 = 0
@@ -127,7 +137,9 @@ final class ShareOutStore {
         let file = url.standardizedFileURL
         let dir = file.deletingLastPathComponent()
         let id = dir.lastPathComponent
-        guard dir.deletingLastPathComponent().path == root.path, Self.isId(id), uploads[id] == nil,
+        guard dir.deletingLastPathComponent().resolvingSymlinksInPath().standardizedFileURL.path == root.path,
+              Self.isId(id), uploads[id] == nil, file.lastPathComponent != Self.uploadingMarker,
+              !fm.fileExists(atPath: dir.appendingPathComponent(Self.uploadingMarker).path),
               (try? safe(dir)) == true, (try? safe(file)) == true, (try? regularSize(file)) != nil else { return nil }
         return file
     }

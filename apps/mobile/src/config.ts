@@ -53,6 +53,9 @@ export function mobileConfig(env: MobileEnv): CapacitorConfig {
       useLegacyBridge: false,
     },
     ios: {
+      // @capacitor/share stays out of the iOS binary: Capacitor instantiates any linked plugin class a
+      // page names, which would let it replace SuiteSharePlugin's staged-files-only "Share".
+      includePlugins: ["@capacitor/app"],
       limitsNavigationsToAppBoundDomains: true,
       webContentsDebuggingEnabled: debug,
       contentInset: "automatic",

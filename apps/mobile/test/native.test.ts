@@ -107,6 +107,11 @@ describe("iOS project", () => {
     expect(source).toContain('jsName = "Share"');
     expect(source).toContain("committed: SuiteShareStagingPlugin.committedFile");
     expect(source).toContain('parsed.scheme == "https"');
+    // Capacitor falls back to NSClassFromString for unknown plugin ids, so the upstream class must
+    // not be linked at all.
+    const spm = read("ios/App/CapApp-SPM/Package.swift");
+    expect(spm).toContain("CapacitorApp");
+    expect(spm).not.toContain("CapacitorShare");
   });
 
   test("embeds a Share Extension that shares the App Group with the app", () => {

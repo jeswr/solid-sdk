@@ -34,6 +34,7 @@
 		6E1FEF325ABDB3C2D6FDE130 /* SuiteShareStagingPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73F75F2B869217CCDB2E1C09 /* SuiteShareStagingPlugin.swift */; };
 		C8EC118C0D45E7603829900B /* ShareOutStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03854134D908D75711A671CB /* ShareOutStore.swift */; };
 		237A340C9DA2749F39F58A68 /* SuiteSharePlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2751FA75371AA06F59E3AB8 /* SuiteSharePlugin.swift */; };
+		6BD8BE4938FA4D25F66382B0 /* ShareOutStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A17615AC1EB8B69123E36E6B /* ShareOutStoreTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -99,6 +100,7 @@
 		03854134D908D75711A671CB /* ShareOutStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareOutStore.swift; sourceTree = "<group>"; };
 		F1C4DD9DB0AC40043749312B /* AppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		B2751FA75371AA06F59E3AB8 /* SuiteSharePlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SuiteSharePlugin.swift; sourceTree = "<group>"; };
+		A17615AC1EB8B69123E36E6B /* ShareOutStoreTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ShareOutStoreTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -133,6 +135,7 @@
 			children = (
 				BD909227DF8A840931F93E70 /* BridgeOriginGuardTests.swift */,
 				E49663052956C61D153D8547 /* ShareStoreTests.swift */,
+				A17615AC1EB8B69123E36E6B /* ShareOutStoreTests.swift */,
 				B281A69F43BED62127E362EA /* SuiteAuthSessionPluginTests.swift */,
 				972ED7D72093E17922DEAB5B /* SuiteOriginTests.swift */,
 			);
@@ -378,6 +381,7 @@
 			files = (
 				E890CA71FA6841FC7F4CD237 /* BridgeOriginGuardTests.swift in Sources */,
 				720FAEA3B67F7C24651F8D9B /* ShareStoreTests.swift in Sources */,
+				6BD8BE4938FA4D25F66382B0 /* ShareOutStoreTests.swift in Sources */,
 				2EA93A5EBDAEC9295A53DC9C /* SuiteAuthSessionPluginTests.swift in Sources */,
 				13BFB63FC7789FC67E2029A8 /* SuiteOriginTests.swift in Sources */,
 			);
