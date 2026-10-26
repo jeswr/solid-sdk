@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { readFileSync } from "node:fs";
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { describe, expect, test, vi } from "vitest";
@@ -267,6 +268,26 @@ describe("entry merging and compatibility", () => {
       `<> did:service [ a ssd:SolidNotificationService ; did:serviceEndpoint <notifications> ; ssd:channelType notify:StreamingHTTPChannel2023 ] .`,
     );
     expect(deriveFeatures(legacy).liveUpdates.detail.channels).toEqual(["sse"]);
+  });
+
+  test.each([
+    '"invalid"',
+    '"http://www.w3.org/ns/solid/notifications#WebSocketChannel2023"',
+    "[]",
+  ])("malformed normative channel %s never activates the legacy fallback", async (channel) => {
+    for (const link of ["did:service", "notify:subscription"]) {
+      const d = await solid(`
+        <> ${link} <notifications> .
+        <notifications> a ssd:SolidNotificationService ; did:serviceEndpoint <notifications> ;
+          notify:channelType ${channel} ; ssd:channelType notify:WebSocketChannel2023 .
+      `);
+      expect(deriveFeatures(d).liveUpdates).toMatchObject({
+        state: "unavailable",
+        detail: { channels: [] },
+      });
+      expect(d.services[0]?.type).toEqual([SSD.SolidNotificationService]);
+      expect(d.services[0]?.extra[NOTIFY.channelType]).toEqual([]);
+    }
   });
 
   test("root ACQ supplies its profile and merges with the listed query service", async () => {

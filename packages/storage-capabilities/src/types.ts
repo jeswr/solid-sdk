@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 export type Protocol = "solid" | "lws";
 
 export interface ServiceEntry {
@@ -30,7 +31,7 @@ export interface StorageDescription {
   services: readonly ServiceEntry[];
   capabilities: readonly CapabilityEntry[];
   sources: readonly DescriptionSource[];
-  /** Resolver evidence for an assumed root or a notification-only foreign description. */
+  /** Resolver evidence for an assumed root; legacy foreign-description evidence stays readable. */
   evidence?: readonly string[];
   fetchedAt: number; // Date.now()
   etag: string | null;

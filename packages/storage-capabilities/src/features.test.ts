@@ -1,5 +1,6 @@
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import fc from "fast-check";
 import { describe, expect, test } from "vitest";
 import { deriveFeatures } from "./features.js";
@@ -522,20 +523,51 @@ describe("deriveFeatures: one case per ADR-002 mapping row", () => {
 });
 
 describe("deriveFeatures trust and robustness", () => {
-  test("a cross-origin Solid description only contributes notifications", () => {
+  test.each([
+    { source: "text/turtle" },
+    { source: "text/turtle", target: [] },
+    { source: ["text/turtle", "application/n-triples"], target: "application/ld+json" },
+    { source: ["text/turtle", null], target: "application/ld+json" },
+    { source: "text/turtle", target: "application/ld+json;profile=example" },
+    { source: "text/turtle", target: ["application/ld+json", "invalid"] },
+    { source: "text/turtle", target: ["application/ld+json", null] },
+    { source: "text/turtle", target: `application/${"x".repeat(128)}` },
+    { source: "text/turtle;charset=utf-8", target: "application/ld+json" },
+    { target: "application/ld+json" },
+  ])("invalid ContentNegotiation declarations contribute no formats: %j", (extra) => {
+    const invalid = { type: [SSD.ContentNegotiation], extra };
+    expect(deriveFeatures(lws([], [invalid])).rdfConneg).toMatchObject({
+      state: "unknown",
+      detail: { formats: [] },
+    });
+    const valid = {
+      type: [SSD.ContentNegotiation],
+      extra: { source: "APPLICATION/RDF+XML", target: ["Text/Turtle", "text/turtle"] },
+    };
+    expect(deriveFeatures(lws([], [invalid, valid])).rdfConneg).toMatchObject({
+      state: "available",
+      detail: { formats: ["application/rdf+xml", "text/turtle"] },
+    });
+  });
+  test.each([
+    "cross-origin-description",
+    "assumed-origin-root",
+  ])("a Solid description with %s cannot authorize root entries", (evidence) => {
     const d = solid(
       [
         notify(NOTIFY.WebSocketChannel2023),
         { type: [SSD.SparqlQueryService], endpoint: "https://evil.example/q", extra: {} },
+        { type: [SSD.RecursiveDeleteService], endpoint: `${SOLID_ROOT}delete`, extra: {} },
       ],
       [{ type: [SSD.AccessControl], extra: { [`${SSD_NS}model`]: `${SSD_NS}WAC` } }],
-      { evidence: ["cross-origin-description"] },
+      { evidence: [evidence] },
     );
     const features = deriveFeatures(d);
     expect(features.liveUpdates.state).toBe("available");
     expect(features.serverSearch.state).toBe("unknown");
     expect(features.accessControl.state).toBe("unknown");
     expect(features.versioning.state).toBe("unknown");
+    expect(features.recursiveDelete.state).toBe("unknown");
   });
 
   test("legacy-ws is never read from description content", () => {

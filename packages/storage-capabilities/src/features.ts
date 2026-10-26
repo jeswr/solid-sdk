@@ -1,5 +1,6 @@
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import type {
   CapabilityEntry,
   Feature,
@@ -96,8 +97,12 @@ export function deriveFeatures(d: StorageDescription, probe?: ProbeResult): Feat
   const lws = d.protocol === "lws";
   /** A description document was read (not only headers). */
   const described = d.descriptionUrl !== null && source !== "probe";
-  /** Non-notification entries are trusted: same-origin description (foreign ones are notify-only). */
-  const authoritative = described && !(d.evidence ?? []).includes("cross-origin-description");
+  /** Root entries need a verified root; also distrust legacy cached foreign descriptions. */
+  const authoritative =
+    described &&
+    !(d.evidence ?? []).some((evidence) =>
+      ["cross-origin-description", "assumed-origin-root"].includes(evidence),
+    );
   const typed = (entry: { type?: readonly string[] }, ...iris: string[]) =>
     Array.isArray(entry.type) && entry.type.some((type) => iris.includes(type));
   // ADR-008 §8: endpoints must share the storage's origin. Only Solid notification
@@ -383,9 +388,20 @@ export function deriveFeatures(d: StorageDescription, probe?: ProbeResult): Feat
     for (const entry of authoritative ? capabilities : []) {
       if (!Array.isArray(entry.type) || !entry.type.includes(SSD.ContentNegotiation)) continue;
       const extra = entry.extra ?? {};
-      const sources = strings(extra, "source").map((type) => type.toLowerCase());
-      if (!sources.some((type) => RDF_MEDIA_TYPES.has(type))) continue;
-      for (const type of [...sources, ...strings(extra, "target")]) {
+      const sources = values(extra, "source");
+      const targets = values(extra, "target");
+      const source = sources[0];
+      // SSD-CAP-CONNEG-1 and SSD-DM-12: reject the entire malformed declaration.
+      if (
+        sources.length !== 1 ||
+        typeof source !== "string" ||
+        !MEDIA_TYPE.test(source) ||
+        !RDF_MEDIA_TYPES.has(source.toLowerCase()) ||
+        targets.length === 0 ||
+        !targets.every((type): type is string => typeof type === "string" && MEDIA_TYPE.test(type))
+      )
+        continue;
+      for (const type of [source, ...targets]) {
         formats.add(type.toLowerCase());
       }
     }

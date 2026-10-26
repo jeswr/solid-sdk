@@ -96,16 +96,18 @@ function isNamedNode(term: Term): boolean {
 }
 
 function notificationExtra(node: DescriptionNode, visited: Set<string>): Record<string, unknown> {
+  const normativePresent = node.objects(NOTIFY.channelType).length > 0;
   let channels = node.iris(NOTIFY.channelType);
   // Read-only fallback for sparq's pre-draft property (sparq-org/sparq#7234).
   // The draft's notify:channelType takes precedence whenever present.
-  if (channels.length === 0) channels = node.iris("https://jeswr.org/ns/solid-sd#channelType");
+  if (!normativePresent) channels = node.iris("https://jeswr.org/ns/solid-sd#channelType");
   return {
     ...node.extra(
       [RDF_TYPE, DID.serviceEndpoint, DCT.conformsTo, NOTIFY.channelType, NOTIFY.feature],
       visited,
     ),
-    ...(channels.length > 0
+    // An empty array records invalid normative presence and blocks later legacy fallback.
+    ...(normativePresent || channels.length > 0
       ? { [NOTIFY.channelType]: channels.length === 1 ? channels[0] : channels }
       : {}),
     [NOTIFY.feature]: node.iris(NOTIFY.feature),

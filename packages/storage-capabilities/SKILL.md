@@ -51,23 +51,30 @@ Root ACQ endpoints imply `ACQ.profile` and merge with listed query services at t
 `ssd:patchType` values, one capability per source. Preserve raw extras and union derived formats.
 Read-only sparq fallbacks: `ssd:channelType` (sparq-org/sparq#7234), nested `ssd:format`,
 CID `format` maps and `mediaType` entries. Normative fields win; malformed flat entries cannot
-fall back. `ssd:RecursiveDeleteService` is a service endpoint for POST `{container}`;
+fall back. The channel fallback applies only when `notify:channelType` is absent, not when
+its values are literals or blank nodes. Invalid normative presence is represented by an empty
+channel array, preventing downstream fallback. `ssd:RecursiveDeleteService` is a service endpoint for POST `{container}`;
 deprecated `ssd:RecursiveDelete` capability data leaves the feature unknown.
-The resolver passes the internal third argument `notificationsOnly: true` for foreign Solid
-descriptions so generic root services/capabilities cannot masquerade as notifications.
+The resolver passes the internal third argument `notificationsOnly: true` when evidence
+includes `assumed-origin-root`, suppressing root `did:service`, `lws:capability`, and ACQ
+entries while retaining `notify:subscription` entries (SSD-CLI-16).
 
 Resolver changes must retain the HEAD/seed-header discovery order, LWS priority, bounded Solid
-ancestor walk, NSS fallback, and same-origin LWS validation before GET. Fresh prefix hits make
+ancestor walk, NSS fallback, and same-origin description validation for both protocols before GET
+(SSD-CLI-18). Reject and invalidate cached foreign descriptions before reuse or refresh.
+Fresh prefix hits make
 zero requests; expired descriptions make a direct conditional GET. A 304 preserves parsed data
 and a cached probe; replacement bodies discard the probe. 404/410 and root mismatch invalidate
-records. The optional `StorageDescription.evidence` array records the ADR's assumed-origin-root
-and cross-origin-description evidence without changing the DescriptionSource union.
+records. The optional `StorageDescription.evidence` array records `assumed-origin-root` without
+changing the DescriptionSource union. Feature derivation also distrusts root entries carrying
+that evidence or the old `cross-origin-description` evidence.
 
 All fetches use the injected transport, manual redirects and optional abort signal. Count body
 bytes while streaming and cap at 1 MiB regardless of Content-Length. The standard W3C notifications
-context is bundled (with the legacy notification/v1 alias); refuse all other remote contexts.
-Foreign Solid descriptions are notification-only and fetched with credentials omitted; guarded
-fetch remains responsible for SSRF and credential destination policy. Do not add a private-IP guard.
+context is bundled (with the legacy notification/v1 alias), as are the draft's trusted CID, LWS,
+and SSD snapshots in `src/contexts/` with source headers. Accept only these exact context URLs,
+clone the bundled data for each load, and never fetch contexts at run time (SSD-CLI-15).
+Guarded fetch remains responsible for SSRF and credential destination policy. Do not add a private-IP guard.
 
 `probe(root, fetch, { signal?, now? })` tries OPTIONS, then HEAD on a transport/HTTP failure, and
 records one response through `parseProbeHeaders`. Never invoke it automatically for LWS.
@@ -116,9 +123,10 @@ the state: `<source>:<TypeLocalName>[:<endpoint>]`, `<source>:absent:<TypeLocalN
 | `patch` | `formats` maps a resource media type to patch media types. LWS always includes JSON Patch for `application/json` and linksets. Solid uses the `ssd:PatchSupport` capability, else Accept-Patch, else N3 Patch. |
 | `resumableUploads` / `recursiveDelete` | `ssd:ResumableUploads` with the tus upload profile / `ssd:RecursiveDeleteService` endpoint. |
 | `pagination` | Always on LWS; on Solid, available with `ssd:Pagination`, otherwise unknown. |
-| `rdfConneg` | Always on Solid (Turtle, JSON-LD). On LWS only with a `ContentNegotiation` capability whose source is RDF. |
+| `rdfConneg` | Always on Solid (Turtle, JSON-LD). On LWS only with a valid `ContentNegotiation` capability whose source is RDF. |
 
-Trust: only notification entries are read from a cross-origin Solid description. `legacy-ws` comes
+Trust: foreign descriptions are rejected before retrieval. With an assumed Solid root, only
+`notify:subscription` entries are read. `legacy-ws` comes
 only from the resolver's own `Updates-Via` mapping. An unrecognised `notify:channelType` never
 becomes a service type. Unknown types are ignored, and `deriveFeatures` never throws (fast-check
 property test). Without a description document (NSS), rows that depend on the description are
@@ -148,5 +156,7 @@ the next call rather than written non-atomically. PatchSupport parsing is linear
 resolves the mapper's `{ "@id" }` references to a format node expanded elsewhere; each format node
 is read once however often it is referenced. The Solid mapper expands named `ssd:format` nodes
 (other named objects stay IRI strings). An `application/rdf+xml` ContentNegotiation source counts
-as RDF.
+as RDF. ContentNegotiation requires exactly one source and at least one target, all parameter-free
+media types (SSD-CAP-CONNEG-1 / SSD-DM-12). Read raw values before checking cardinality/types;
+discard the entire malformed declaration so neither invalid sources nor targets enter formats.
 

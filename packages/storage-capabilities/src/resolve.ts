@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { createMemoryCache } from "./cache.js";
 import { CapabilitiesError } from "./errors.js";
@@ -75,11 +76,12 @@ async function fetchDescription(
 ): Promise<StorageDescription> {
   const destination = httpUrl(descriptionUrl);
   const foreign = destination.origin !== httpUrl(resourceUrl).origin;
-  if (base.protocol === "lws" && foreign) {
+  // SSD-CLI-18 applies to both protocols, including direct cached refreshes.
+  if (foreign) {
     throw new CapabilitiesError(
       "root-mismatch",
       descriptionUrl,
-      "LWS description has a foreign origin",
+      "Storage description has a foreign origin",
     );
   }
   const headers = new Headers({
@@ -92,7 +94,6 @@ async function fetchDescription(
   const response = await request(destination.href, options, {
     method: "GET",
     headers,
-    ...(foreign ? { credentials: "omit" as const } : {}),
   });
   if (response.status === 304 && refreshing) {
     await discardBody(response);
@@ -124,10 +125,12 @@ async function fetchDescription(
       });
       parsed = {
         ...base,
-        ...parseSolidDescription(dataset, base.root, foreign),
-        ...(foreign
-          ? { evidence: [...new Set([...(base.evidence ?? []), "cross-origin-description"])] }
-          : {}),
+        // SSD-CLI-16: an assumed origin root cannot authorize root-scoped entries.
+        ...parseSolidDescription(
+          dataset,
+          base.root,
+          base.evidence?.includes("assumed-origin-root") ?? false,
+        ),
       };
     }
   } catch (error) {
@@ -165,8 +168,7 @@ export async function resolveStorageDescription(
     if (cached) {
       if (
         httpUrl(cached.description.root).origin !== httpUrl(resource).origin ||
-        (cached.description.protocol === "lws" &&
-          cached.description.descriptionUrl !== null &&
+        (cached.description.descriptionUrl !== null &&
           httpUrl(cached.description.descriptionUrl).origin !== httpUrl(resource).origin)
       ) {
         throw new CapabilitiesError(
