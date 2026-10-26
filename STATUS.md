@@ -85,3 +85,48 @@ Full-workspace validation remains limited by the unrelated build failure above.
 checkout, so automated per-commit review could not run. No review tooling or bead
 database was installed; tracker lifecycle remains with the dispatcher because this
 is a dedicated lane worktree. No push, PR, branch switch or merge was performed.
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+## Fix round 1 — MIME selection review
+
+Review baseline: `2c4150e91d0054cf803eba202161873c1fcae336`.
+
+- `f802d180` — `fix: select MIME roots and preferred alternatives`: select related
+  roots by immediate-child Content-ID (`start`, case-sensitive), preserving other
+  text/HTML leaves as attachment resources with their decoded bytes and metadata.
+  Select the last available plain and HTML alternatives independently, including
+  nested alternatives and empty preferred bodies. Keep selected related resources
+  once when both representations share them. Add two synthetic `.eml` fixtures,
+  ten regression cases and documentation of the pinned parser-tree adapter.
+- This report commit — `docs: record MIME selection fix validation`.
+
+Both review findings are addressed. Selection reuses the decoded tree and
+attachment collector of the existing, exact-pinned `postal-mime` 4.1.4 dependency;
+this internal interface is isolated in `select.ts` and covered through real parser
+calls. No dependencies, public API, UI or unrelated implementation changed.
+
+Validation after the fix and before this final report commit:
+
+| Exact command | Result |
+| --- | --- |
+| `pnpm --filter @jeswr/suite-ui run build` | PASS; build the app's existing workspace dependency |
+| `pnpm --filter @jeswr/app-suite run test:mime` | PASS; 39 MIME tests, 100% statements/branches/functions/lines across the directory |
+| `pnpm --filter @jeswr/app-suite run lint && pnpm --filter @jeswr/app-suite run build && pnpm --filter @jeswr/app-suite run typecheck && pnpm --filter @jeswr/app-suite run test` | PASS; lint, production build, typecheck, 40 tests in 2 files; MIME coverage 100% (51 statements, 76 branches, 17 functions, 43 lines) |
+| `pnpm run lint:root` | PASS; workspace/transport/fetch/token guards and 74 contrast pairs |
+| `TURBO_SCM_BASE=2c4150e91d0054cf803eba202161873c1fcae336 pnpm run gate` | PASS; 6/6 Turbo tasks |
+| `GIT_ALLOW_PROTOCOL=file pnpm run gate:full --env-mode=loose` | FAIL (exit 1); 19 successful tasks, 145 scheduled. Unchanged `@jeswr/unstorage-solid#build` tries to clone `https://github.com/jeswr/fetch-rdf.git`; Git rejects HTTPS transport under the lane's no-remote-fetch guard. Loose environment mode passes the guard to child tasks. No remote clone/fetch occurred. |
+| `git diff --check` | PASS |
+
+The ten new cases were also run with only `parse.ts` temporarily restored to the
+review baseline: all ten failed, while the original 29 tests passed. The fixed
+adapter was restored immediately afterward. An initial direct typecheck required
+building suite-ui first, as in the original lane; all subsequent checks passed.
+
+No policy checks or screenshots were needed because no dependencies or UI were
+added. The conservative fallback for an unresolved related `start` is the first
+child, documented and tested. No open questions or unfinished implementation
+remain. Full-workspace validation is limited by the unrelated dependency bootstrap
+above. `roborev` is still unavailable in this checkout, so no automated commit
+review ran. Tracker lifecycle remains with the dispatcher. No push, PR, branch
+switch, merge or other checkout change was performed.
