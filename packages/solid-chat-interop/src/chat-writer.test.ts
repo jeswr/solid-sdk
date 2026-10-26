@@ -21,6 +21,10 @@ class MemoryPod implements ChatPodPort {
   resources = new Map<string, { body: Uint8Array; contentType: string }>();
   writes: { url: string; body: Uint8Array; cond: { ifMatch?: string; ifNoneMatch?: "*" } }[] = [];
   reads: string[] = [];
+  aclLinks = new Map<string, string>();
+  async discoverAcl(url: string) {
+    return this.aclLinks.get(url) ?? `${url}.acl`;
+  }
   failUrl?: string;
   failStatus = 403;
   poison: { url: string; isContainer: boolean }[] = [];
@@ -161,6 +165,43 @@ describe("ChatWriter", () => {
     expect([...pod.resources.keys()].some((url) => url.endsWith(".ttl"))).toBe(false);
   });
 
+  it("uses the discovered ACL resource rather than a constructed suffix", async () => {
+    const pod = new MemoryPod();
+    const base = `${ROOT}private/chats/`;
+    const acl = `${ROOT}permissions/chats.ttl`;
+    pod.aclLinks.set(base, acl);
+    await new ChatWriter(pod).save(conversation());
+    expect(pod.writes[0]?.url).toBe(acl);
+    expect(pod.resources.has(`${base}.acl`)).toBe(false);
+    const dataset = await parseRdf(decoder.decode((await pod.read(acl)).body), "text/turtle");
+    const auth = [...new AclResource(dataset, DataFactory).authorizations][0];
+    expect(auth?.accessTo).toBe(base);
+    expect(auth?.default).toBe(base);
+  });
+
+  it("refuses an unsupported existing ACL representation before writing", async () => {
+    const pod = new MemoryPod();
+    pod.resources.set(`${ROOT}private/chats/.acl`, {
+      body: new TextEncoder().encode(
+        "<> a <http://www.w3.org/ns/solid/acp#AccessControlResource> .",
+      ),
+      contentType: "text/turtle",
+    });
+    await expect(new ChatWriter(pod).save(conversation())).rejects.toThrow(/access-control model/);
+    expect(pod.writes).toEqual([]);
+  });
+
+  it("stops before content if the ACL association changes after container creation", async () => {
+    const pod = new MemoryPod();
+    let calls = 0;
+    pod.discoverAcl = async (url) => `${url}${calls++ === 0 ? ".acl" : "other.acl"}`;
+    await expect(new ChatWriter(pod).save(conversation())).rejects.toThrow(/association changed/);
+    expect(pod.writes.map((w) => w.url)).toEqual([
+      `${ROOT}private/chats/.acl`,
+      `${ROOT}private/chats/`,
+    ]);
+  });
+
   it("recovers a partial save by retrying only missing message IDs", async () => {
     const pod = new MemoryPod();
     pod.failUrl = `${ROOT}private/chats/claude/thread-1/m-msg-2.ttl`;
@@ -210,6 +251,56 @@ describe("ChatWriter", () => {
     await expect(writer.get("claude", "missing")).rejects.toMatchObject({ status: 404 });
   });
 
+  it("skips interrupted saves with missing metadata before applying pagination", async () => {
+    const pod = new MemoryPod();
+    const writer = new ChatWriter(pod);
+    for (const id of ["a", "c", "e"]) await writer.save(conversation({ conversationId: id }));
+    for (const id of ["0", "b", "d", "f"]) {
+      pod.failUrl = `${ROOT}private/chats/claude/${id}/_conversation.ttl`;
+      await expect(writer.save(conversation({ conversationId: id }))).rejects.toMatchObject({
+        status: 403,
+      });
+    }
+    pod.failUrl = undefined;
+    const first = await writer.list({ provider: "claude", limit: 2, since: DAY1 });
+    expect(first.conversations.map((c) => c.conversationId)).toEqual(["a", "c"]);
+    expect(first.nextCursor).toBe(`${ROOT}private/chats/claude/c/`);
+    const second = await writer.list({
+      provider: "claude",
+      limit: 2,
+      since: DAY1,
+      cursor: first.nextCursor,
+    });
+    expect(second.conversations.map((c) => c.conversationId)).toEqual(["e"]);
+    expect(second.nextCursor).toBeUndefined();
+    await expect(writer.get("claude", "b")).rejects.toMatchObject({ status: 404 });
+  });
+
+  it.each([401, 403, 500, "offline"])("preserves metadata read failures (%s)", async (failure) => {
+    const pod = new MemoryPod();
+    const writer = new ChatWriter(pod);
+    await writer.save(conversation());
+    const read = pod.read.bind(pod);
+    const error = typeof failure === "number" ? httpError(failure) : new Error(failure);
+    pod.read = async (url) => {
+      if (url.endsWith("_conversation.ttl")) throw error;
+      return read(url);
+    };
+    await expect(writer.list()).rejects.toBe(error);
+  });
+
+  it("preserves a 404 from a listed message rather than skipping its conversation", async () => {
+    const pod = new MemoryPod();
+    const writer = new ChatWriter(pod);
+    await writer.save(conversation());
+    const read = pod.read.bind(pod);
+    pod.read = async (url) => {
+      if (url.endsWith("m-msg-1.ttl")) throw httpError(404);
+      return read(url);
+    };
+    await expect(writer.list()).rejects.toMatchObject({ status: 404 });
+  });
+
   it("ignores poisoned listings and sorts messages by time", async () => {
     const pod = new MemoryPod();
     const writer = new ChatWriter(pod);
@@ -223,9 +314,11 @@ describe("ChatWriter", () => {
     expect((await writer.list()).conversations).toHaveLength(1);
     const got = await writer.get("claude", "thread-1");
     expect(got.messages.map((m) => m.id)).toEqual(["msg-1", "msg-2"]);
-    expect(pod.reads.every((url) => url.startsWith(`${ROOT}private/chats/claude/thread-1/`))).toBe(
-      true,
-    );
+    expect(
+      pod.reads
+        .filter((url) => !url.endsWith(".acl"))
+        .every((url) => url.startsWith(`${ROOT}private/chats/claude/thread-1/`)),
+    ).toBe(true);
   });
 
   it.each([

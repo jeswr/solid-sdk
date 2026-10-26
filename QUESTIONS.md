@@ -21,7 +21,8 @@
    create-only metadata. Chosen: first saved title wins, message IDs are immutable;
    ACLs grant only the owner Read/Write/Control with inherited defaults, written
    before chat container/content writes. The enclosing `private/` ACL is untouched. Failure to write an ACL aborts the save.
-   The port/server must support writing the conventional `.acl` before content;
+   The port/server must advertise a unique WAC ACL Link (even for a not-yet-created
+   container) and support writing that discovered ACL before content;
    no permissive fallback. Provider IDs are `claude`, `chatgpt`, `codex`.
 5. **Writes (DESIGN §4, existing server config).** Options: allow chat_save by
    default or preserve the existing read-only default. Chosen: chat_save requires

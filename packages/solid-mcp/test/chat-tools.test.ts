@@ -37,6 +37,7 @@ function fakePod() {
   const requests: { url: string; method: string; headers: Headers }[] = [];
   const failures = new Map<string, number>();
   const redirects = new Map<string, string>();
+  const aclLinks = new Map<string, string>();
   const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
     const method = init?.method ?? "GET";
@@ -45,6 +46,11 @@ function fakePod() {
     if (failures.has(url)) return new Response(null, { status: failures.get(url) });
     if (redirects.has(url))
       return new Response(null, { status: 302, headers: { location: redirects.get(url) ?? "" } });
+    if (method === "HEAD")
+      return new Response(null, {
+        status: resources.has(url) ? 200 : 404,
+        headers: { link: aclLinks.get(url) ?? `<${url}.acl>; rel="acl"` },
+      });
     if (method === "PUT") {
       if (headers.get("if-none-match") === "*" && resources.has(url))
         return new Response(null, { status: 412 });
@@ -76,7 +82,7 @@ function fakePod() {
     }
     return new Response(resource.body, { headers: { "content-type": resource.contentType } });
   }) as unknown as typeof globalThis.fetch;
-  return { fetch, resources, requests, failures, redirects };
+  return { fetch, resources, requests, failures, redirects, aclLinks };
 }
 async function connect(config: SolidMcpConfig) {
   const server = createSolidMcpServer(config);
@@ -198,7 +204,7 @@ describe("MCP chat tools over the scoped fetch port", () => {
     });
     try {
       expect((await client.callTool({ name: "chat_save", arguments: input })).isError).toBe(true);
-      expect(pod.requests.filter((r) => r.method === "PUT")).toHaveLength(1);
+      expect(pod.requests.filter((r) => r.method === "PUT")).toHaveLength(0);
       expect(
         (
           await client.callTool({
@@ -305,5 +311,113 @@ describe("MCP chat tools over the scoped fetch port", () => {
         {},
       ),
     ).rejects.toThrow(/read-only/);
+  });
+
+  it("discovers relative nonstandard ACL links on absent and existing containers", async () => {
+    const pod = fakePod();
+    const target = `${ROOT}private/chats/`;
+    pod.aclLinks.set(target, '<owner-permissions>; title="private, owner"; rel="acl"');
+    const client = await connect({
+      fetch: pod.fetch,
+      podRoot: ROOT,
+      webId: OWNER,
+      readOnly: false,
+    });
+    try {
+      const saved = await client.callTool({ name: "chat_save", arguments: input });
+      expect(saved.isError).toBeFalsy();
+      expect(pod.requests.find((r) => r.method === "PUT")?.url).toBe(`${target}owner-permissions`);
+      expect(pod.resources.has(`${target}.acl`)).toBe(false);
+      expect(pod.requests.filter((r) => r.method === "HEAD" && r.url === target)).toHaveLength(2);
+    } finally {
+      await client.close();
+    }
+  });
+
+  it.each([
+    "",
+    '<.acr>; rel="http://www.w3.org/ns/solid/acp#accessControl"',
+    '<.acl>; rel="acl", <.acr>; rel="http://www.w3.org/ns/solid/acp#accessControl"',
+    '<one>; rel="acl", <two>; rel="acl"',
+    '<.acl>; rel="acl"; anchor="/elsewhere"',
+    '<.acl>; rel="acl"; rel="type"',
+    '<https://evil.example/acl>; rel="acl"',
+    `<${ROOT}>; rel="acl"`,
+    `<${ROOT.slice(0, -1)}>; rel="acl"`,
+    '<./>; rel="acl"',
+    '<.acl#owner>; rel="acl"',
+    '<.acl?query>; rel="acl"',
+    '<.acl>; rel="acl',
+  ])("refuses unusable ACL discovery before any PUT: %s", async (link) => {
+    const pod = fakePod();
+    pod.aclLinks.set(`${ROOT}private/chats/`, link);
+    const client = await connect({
+      fetch: pod.fetch,
+      podRoot: ROOT,
+      webId: OWNER,
+      readOnly: false,
+    });
+    try {
+      expect((await client.callTool({ name: "chat_save", arguments: input })).isError).toBe(true);
+      expect(pod.requests.map((r) => r.method)).toEqual(["HEAD"]);
+      expect(pod.resources.size).toBe(0);
+    } finally {
+      await client.close();
+    }
+  });
+
+  it.each([401, 403, 500, 302])("preserves ACL discovery failures (%s)", async (status) => {
+    const fetch = vi.fn(
+      async () =>
+        new Response(null, {
+          status,
+          headers: { link: '<.acl>; rel="acl"', location: `${ROOT}other/` },
+        }),
+    );
+    const port = createChatPodPort({ fetch, podRoot: ROOT, webId: OWNER, readOnly: false });
+    await expect(port.discoverAcl(`${ROOT}private/chats/`)).rejects.toMatchObject({ status });
+    expect(fetch).toHaveBeenCalledExactlyOnceWith(`${ROOT}private/chats/`, {
+      method: "HEAD",
+      redirect: "manual",
+    });
+  });
+
+  it.each([
+    301, 302, 303, 307, 308,
+  ])("refuses every chat PUT redirect (%s) without a second request", async (status) => {
+    for (const location of [ROOT, ROOT.slice(0, -1), `${ROOT}other`, "https://evil.example/x"]) {
+      const fetch = vi.fn(async () => new Response(null, { status, headers: { location } }));
+      const port = createChatPodPort({ fetch, podRoot: ROOT, webId: OWNER, readOnly: false });
+      const target = `${ROOT}private/chats/.acl`;
+      await expect(port.write(target, new Uint8Array(), "text/turtle", {})).rejects.toThrow(
+        /redirect/,
+      );
+      expect(fetch).toHaveBeenCalledTimes(1);
+      expect(fetch.mock.calls[0]).toEqual([
+        target,
+        expect.objectContaining({ method: "PUT", redirect: "manual" }),
+      ]);
+    }
+  });
+
+  it("reports a redirected ACL write as a failed save without writing chat content", async () => {
+    const pod = fakePod();
+    const fetch: typeof globalThis.fetch = async (input, init) => {
+      if (init?.method === "PUT")
+        return new Response(null, { status: 303, headers: { location: ROOT } });
+      return pod.fetch(input, init);
+    };
+    const client = await connect({ fetch, podRoot: ROOT, webId: OWNER, readOnly: false });
+    try {
+      const saved = await client.callTool({ name: "chat_save", arguments: input });
+      expect(saved.isError).toBe(true);
+      expect(saved.content).toEqual([
+        expect.objectContaining({ text: expect.stringMatching(/redirect/) }),
+      ]);
+      expect(pod.resources.size).toBe(0);
+      expect(pod.requests.some((r) => r.url === ROOT)).toBe(false);
+    } finally {
+      await client.close();
+    }
   });
 });

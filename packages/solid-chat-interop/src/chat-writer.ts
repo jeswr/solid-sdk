@@ -10,7 +10,7 @@ import {
   SetFrom,
   TermWrapper,
 } from "@rdfjs/wrapper";
-import { Authorization } from "@solid/object";
+import { AclResource, Authorization } from "@solid/object";
 import { DataFactory, Store } from "n3";
 import { buildAs2Message, parseAs2Message } from "./as2.js";
 import { safeHttpIri, sanitizeText } from "./iri.js";
@@ -23,6 +23,9 @@ export interface ChatPodPort {
   webId: string;
   read(url: string): Promise<{ body: Uint8Array; contentType: string; etag?: string }>;
   list(container: string): Promise<{ url: string; isContainer: boolean }[]>;
+  /** Discover a unique, pod-scoped WAC ACL from the target's Link header, even on 404.
+   * Reject unsupported models, unsafe targets, redirects and discovery failures. */
+  discoverAcl(url: string): Promise<string>;
   /** Reject failed requests with an error carrying numeric `status` (notably 404/412). */
   write(
     url: string,
@@ -159,8 +162,20 @@ export class ChatWriter {
     }
   }
   private async protect(container: string): Promise<void> {
+    const acl = await this.pod.discoverAcl(container);
+    // Existing documents must be recognizable WAC, never ACP or another model.
+    try {
+      const existing = await this.dataset(acl);
+      if (
+        existing.size > 0 &&
+        [...new AclResource(existing, DataFactory).authorizations].length === 0
+      )
+        throw new Error("Unsupported chat access-control model");
+    } catch (error) {
+      if (chatPortStatus(error) !== 404) throw error;
+    }
     const store = new Store();
-    const auth = new Authorization(`${container}.acl#owner`, store, DataFactory);
+    const auth = new Authorization(`${acl}#owner`, store, DataFactory);
     auth.type.add("http://www.w3.org/ns/auth/acl#Authorization");
     auth.accessTo = container;
     auth.default = container;
@@ -170,17 +185,14 @@ export class ChatWriter {
     auth.canReadWriteAcl = true;
     // No content is written until the owner-only ACL PUT succeeds. In particular,
     // never swallow ACL errors or fall back to inherited/public permissions.
-    await this.pod.write(
-      `${container}.acl`,
-      encoder.encode(await storeToTurtle(store)),
-      "text/turtle",
-      {},
-    );
+    await this.pod.write(acl, encoder.encode(await storeToTurtle(store)), "text/turtle", {});
     const containerStore = new Store();
     new ChatDoc(container, containerStore, DataFactory).types.add(
       "http://www.w3.org/ns/ldp#BasicContainer",
     );
     await this.create(container, await storeToTurtle(containerStore));
+    if ((await this.pod.discoverAcl(container)) !== acl)
+      throw new Error("Chat ACL association changed after container creation");
   }
   async save(
     conversation: ChatConversation,
@@ -250,6 +262,10 @@ export class ChatWriter {
     const url = this.conversationUrl(provider, conversationId);
     const metadataUrl = `${url}_conversation.ttl`;
     const room = new ChatDoc(`${metadataUrl}#it`, await this.dataset(metadataUrl), DataFactory);
+    return this.readConversation(provider, conversationId, room);
+  }
+  private async readConversation(provider: ChatProvider, conversationId: string, room: ChatDoc) {
+    const url = this.conversationUrl(provider, conversationId);
     if (
       !room.types.has(AS_COLLECTION) ||
       room.identifier !== conversationId ||
@@ -311,7 +327,21 @@ export class ChatWriter {
     candidates.sort((a, b) => (a.url < b.url ? -1 : a.url > b.url ? 1 : 0));
     const conversations: ChatSummary[] = [];
     for (const candidate of candidates) {
-      const conversation = await this.get(candidate.provider, candidate.id);
+      const metadataUrl = `${candidate.url}_conversation.ttl`;
+      let metadata: Awaited<ReturnType<ChatWriter["dataset"]>>;
+      try {
+        metadata = await this.dataset(metadataUrl);
+      } catch (error) {
+        // A container may remain after an interrupted save. Only absent metadata
+        // marks it incomplete; permissions, transport and missing messages still fail.
+        if (chatPortStatus(error) === 404) continue;
+        throw error;
+      }
+      const conversation = await this.readConversation(
+        candidate.provider,
+        candidate.id,
+        new ChatDoc(`${metadataUrl}#it`, metadata, DataFactory),
+      );
       const updatedAt = conversation.messages.at(-1)?.createdAt;
       if (since !== undefined && (updatedAt === undefined || updatedAt <= since)) continue;
       if (conversations.length === limit)

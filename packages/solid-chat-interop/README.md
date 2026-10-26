@@ -71,12 +71,15 @@ const conversation = await chats.get("codex", "session-123");
 ```
 
 Each conversation lives under `<pod.root>private/chats/<provider>/<conversationId>/`.
-The writer installs owner-only WAC `.acl` documents on the chats, provider and
+The writer discovers and installs owner-only WAC ACL documents on the chats, provider and
 conversation containers before creating their content. It leaves the enclosing
 `private/` namespace's ACL alone. ACL failures abort; servers must support the
-ACL-before-content sequence. The caller's port must enforce pod scope and redirect
-safety and reject HTTP failures with a numeric `status` property. There is no live
-server discovery or permissive ACL fallback.
+ACL-before-content sequence and advertise the ACL association even before container
+creation. The port's `discoverAcl` must obtain a unique WAC `rel="acl"` Link from
+the exact target and reject unsupported models and unsafe targets. The association
+is checked again after container creation; existing non-WAC ACL documents abort the
+save. The caller's port must enforce pod scope, refuse write redirects, and reject
+HTTP failures with a numeric `status` property. There is no permissive ACL fallback.
 
 Messages are canonical AS2 `as:Note` resources (`m-<id>.ttl#it`) with Dublin Core
 identifier/role metadata; conversation metadata is an AS2 collection. User messages
@@ -93,6 +96,8 @@ is exclusive against the latest message's `createdAt`, applied before paging;
 empty conversations are excluded when `since` is present. Limit is 1–100 (default
 20). Dates require an explicit timezone. Listing scans conversation resources
 without a mutable shared index; it is intended for small chat collections.
+Containers with missing conversation metadata are skipped as incomplete saves;
+permission, transport and message-read errors still propagate.
 
 ## Links
 

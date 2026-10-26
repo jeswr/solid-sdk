@@ -70,6 +70,11 @@ are deterministic hashes; capture callers should supply source IDs to distinguis
 otherwise identical events. The fetch adapter retains pod-scope and redirect checks
 and accepts only Turtle/N3-family RDF for chats, preventing remote JSON-LD context
 loads. Servers must support the ACL-before-content sequence; errors fail closed.
+ACL discovery uses HEAD and a unique WAC `rel="acl"` Link, including on 404 for
+containers not yet created. Missing/ambiguous ACL links, ACP and unsafe ACL URLs
+abort saves; ACL associations are rechecked after container creation. Writes refuse
+all redirects. Listing skips containers whose conversation metadata returns 404,
+while preserving permission, transport and message-read errors.
 
 This base lacks MCP-01's shared PodPort and registry. The chat-only fetch adapter
 uses the specified structural port and existing server registration; the legacy
