@@ -2,6 +2,7 @@
 import { DataFactory, Store } from "n3";
 import PostalMime, { type Address, decodeWords } from "postal-mime";
 import { Attachment } from "./attachment.js";
+import { htmlToText } from "./htmlText.js";
 import type { MailStore } from "./io.js";
 import { MailboxDataset } from "./mailbox.js";
 import { attachmentUrl, mailDocument, mailRoot } from "./paths.js";
@@ -102,7 +103,8 @@ export async function parseEmail(
   const message = mailbox.createMessage(`${url}#it`);
   message.identifier = id;
   message.subjectLine = email.subject;
-  message.body = email.text;
+  message.bodyHtml = email.html;
+  message.body = email.text ?? (email.html === undefined ? undefined : htmlToText(email.html));
   message.sender = addresses(email.from ? [email.from] : [])[0];
   for (const iri of addresses(email.to ?? [])) message.to.add(iri);
   for (const iri of addresses(email.cc ?? [])) message.cc.add(iri);
@@ -143,7 +145,7 @@ export async function parseEmail(
   }));
   for (const folder of folders) message.folderIris.add(folder.iri);
   const attachments = email.attachments.map((a, index) => ({
-    url: attachmentUrl(storage, id, index),
+    url: attachmentUrl(storage, account, id, index),
     name: a.filename || "attachment",
     contentType: a.mimeType,
     content: a.content as ArrayBuffer,

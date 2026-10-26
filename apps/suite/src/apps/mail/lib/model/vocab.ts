@@ -46,6 +46,7 @@ export const Predicates = {
   subject: `${SCHEMA}about`,
   headline: `${SCHEMA}headline`,
   text: `${SCHEMA}text`,
+  articleBody: `${SCHEMA}articleBody`,
   dateSent: `${SCHEMA}dateSent`,
   dateReceived: `${SCHEMA}dateReceived`,
   dateRead: `${SCHEMA}dateRead`,

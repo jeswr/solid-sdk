@@ -1,5 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { fetchRdf, parseRdf, RdfFetchError } from "@jeswr/fetch-rdf";
+import { extractMediaType, fetchRdf, parseRdf, RdfFetchError } from "@jeswr/fetch-rdf";
 import { assertWithinPodScope, createPodScopedFetch } from "@jeswr/guarded-fetch";
 import type { DatasetCore } from "@rdfjs/types";
 import { ContainerDataset } from "@solid/object";
@@ -38,6 +38,17 @@ function failure(status: number): MailError {
     status,
   );
 }
+/** fetch-rdf cannot inject its transport into JSON-LD's context loader. */
+function assertLocalContexts(value: unknown, context = false): void {
+  if (context && typeof value === "string")
+    throw new TypeError("Remote JSON-LD contexts are not allowed");
+  if (Array.isArray(value)) {
+    for (const item of value) assertLocalContexts(item, context);
+  } else if (value !== null && typeof value === "object") {
+    for (const [key, item] of Object.entries(value))
+      assertLocalContexts(item, key === "@context" || key === "@import");
+  }
+}
 /** Every credentialed request, including redirects and RDF-derived URLs, stays in the selected pod. */
 export class MailStore {
   readonly fetch: typeof globalThis.fetch;
@@ -46,7 +57,16 @@ export class MailStore {
     fetch: typeof globalThis.fetch,
     private readonly storage: string,
   ) {
-    this.fetch = createPodScopedFetch(storage, { fetch });
+    const scopedFetch = createPodScopedFetch(storage, { fetch });
+    this.fetch = async (input, init) => {
+      const response = await scopedFetch(input, init);
+      if (
+        response.ok &&
+        extractMediaType(response.headers.get("content-type")) === "application/ld+json"
+      )
+        assertLocalContexts(JSON.parse(await response.clone().text()));
+      return response;
+    };
     this.writeFetch = createPodScopedFetch(storage, { fetch, maxRedirects: 0 });
   }
   async load(url: string, create = false): Promise<LoadedMail> {

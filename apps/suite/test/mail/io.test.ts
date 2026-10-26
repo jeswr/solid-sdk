@@ -148,6 +148,60 @@ describe("injected pod I/O", () => {
     expect(fetch).toHaveBeenCalledTimes(1);
     await expect(store.register(`${storage}index.ttl`, "https://evil.example/")).rejects.toThrow();
   });
+  it.each([
+    { "@context": "https://evil.example/context" },
+    { "@context": "/other-pod/context" },
+    { "@context": [null, { name: "http://schema.org/name" }, `${root}context`] },
+    {
+      "@graph": [
+        { "@context": { term: { "@id": "http://schema.org/name", "@context": "./context" } } },
+      ],
+    },
+    { "@context": { "@import": "https://evil.example/context" } },
+  ])("rejects remote JSON-LD contexts before any loader request: %j", async (body) => {
+    const globalFetch = vi
+      .spyOn(globalThis, "fetch")
+      .mockRejectedValue(new Error("Unexpected global request"));
+    try {
+      const fetch = vi.fn(
+        async () =>
+          new Response(JSON.stringify(body), {
+            headers: { "content-type": "application/ld+json; charset=utf-8" },
+          }),
+      );
+      const store = new MailStore(fetch, storage);
+      await expect(store.load(`${root}message`)).rejects.toThrow("Remote JSON-LD contexts");
+      await expect(store.list(`${root}folders/`)).rejects.toThrow("Remote JSON-LD contexts");
+      expect(fetch).toHaveBeenCalledTimes(2);
+      expect(globalFetch).not.toHaveBeenCalled();
+    } finally {
+      globalFetch.mockRestore();
+    }
+  });
+  it("accepts inline JSON-LD for messages and containers without losing ETags", async () => {
+    const fetch = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            "@context": [null, { schema: "http://schema.org/", ldp: "http://www.w3.org/ns/ldp#" }],
+            "@graph": [
+              { "@id": message, "@type": "schema:EmailMessage", "schema:headline": "Inline" },
+              {
+                "@id": `${root}folders/`,
+                "@type": "ldp:Container",
+                "ldp:contains": { "@id": documentOf(inbox) },
+              },
+            ],
+          }),
+          { headers: { "content-type": "application/ld+json", etag: '"jsonld"' } },
+        ),
+    );
+    const store = new MailStore(fetch, storage);
+    const loaded = await store.load(documentOf(message));
+    expect(loaded.mailbox.message(message).subjectLine).toBe("Inline");
+    expect(loaded.etag).toBe('"jsonld"');
+    expect(await store.list(`${root}folders/`)).toEqual([documentOf(inbox)]);
+  });
   it("enumerates typed containers and combines documents without duplicating them", async () => {
     const s = server();
     seedMailbox(s);
@@ -225,6 +279,16 @@ describe("injected pod I/O", () => {
       new TextDecoder().decode(item.raw),
     );
     expect(s.files.get(item.attachments[0]!.url)!.body).toContain("Attached");
+    const secondAccount = await parseEmail(item.raw, storage, "work", "fallback");
+    expect(secondAccount.attachments[0]!.url).not.toBe(item.attachments[0]!.url);
+    await persistImportedMail(s.store, secondAccount);
+    for (const imported of [item, secondAccount]) {
+      const loaded = await s.store.load(documentOf(imported.message));
+      expect([...loaded.mailbox.message(imported.message).attachments]).toEqual([
+        imported.attachments[0]!.url,
+      ]);
+      expect(s.files.get(imported.attachments[0]!.url)!.body).toContain("Attached");
+    }
     const follow = await parseEmail(
       new TextEncoder().encode("Message-ID: <two>\nIn-Reply-To: <one>\nSubject: Re: Hi\n\nReply"),
       storage,
@@ -234,6 +298,26 @@ describe("injected pod I/O", () => {
     await persistImportedMail(s.store, follow);
     expect((await s.store.load(documentOf(item.thread))).mailbox.thread(item.thread).size).toBe(2);
     await expect(persistImportedMail(s.store, item)).rejects.toMatchObject({ code: "conflict" });
+  });
+  it("persists nested labels and delimiter-bearing message identifiers and accounts", async () => {
+    const s = server();
+    const item = await parseEmail(
+      new TextEncoder().encode(
+        "Message-ID: <project/2026@example.org>\nX-Gmail-Labels: Projects/2026, Projects%2F2026, Projects~2F2026\n\nHello",
+      ),
+      storage,
+      "team/work",
+      "fallback",
+    );
+    await persistImportedMail(s.store, item);
+    const loaded = await s.store.load(documentOf(item.message));
+    expect(loaded.mailbox.message(item.message).identifier).toBe("<project/2026@example.org>");
+    expect(new Set(item.folders.map((f) => f.iri)).size).toBe(3);
+    for (const folder of item.folders) {
+      const saved = (await s.store.load(documentOf(folder.iri))).mailbox.folder(folder.iri);
+      expect(saved.title).toBe(folder.title);
+      expect(saved.has(item.message)).toBe(true);
+    }
   });
 });
 

@@ -53,6 +53,14 @@ export class Message extends TermWrapper {
     OptionalAs.object(this, Predicates.text, value, LiteralFrom.string);
   }
 
+  /** Decoded HTML retained as inert data; readers must sanitise before rendering as HTML. */
+  get bodyHtml(): string | undefined {
+    return OptionalFrom.subjectPredicate(this, Predicates.articleBody, LiteralAs.string);
+  }
+  set bodyHtml(value: string | undefined) {
+    OptionalAs.object(this, Predicates.articleBody, value, LiteralFrom.string);
+  }
+
   /** Sender — a contact/WebID IRI. */
   get sender(): string | undefined {
     return OptionalFrom.subjectPredicate(this, Predicates.sender, NamedNodeAs.string);

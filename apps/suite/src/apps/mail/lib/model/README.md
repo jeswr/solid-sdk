@@ -9,6 +9,8 @@ Construct `new MailStore(authenticatedFetch, storageRoot)`. All I/O takes this i
 transport, checks pod scope (including redirects), and preserves validators. Existing writes
 require a strong ETag; creates use `If-None-Match: *`. `MailError` exposes `code` and `status`.
 Network/parser errors retain their original cause. After any conflict or partial write, reload.
+Inline JSON-LD contexts are supported; remote contexts and `@import` are rejected before parsing
+because the RDF parser cannot apply the scoped transport to its context loader.
 
 `loadFolders`, `loadThreads` and `loadThread` return hook-free data. Pure `folderCounts`,
 `pageThreads` and `threadMessages` also work on cached snapshots. Paging is stable over the
@@ -21,12 +23,16 @@ loaded snapshot; it does not imply server paging. `setRead`, `setLabel`, `setSta
 including extracted Gmail Takeout mbox files. It decodes MIME with postal-mime, honors
 References/In-Reply-To, handles Gmail labels/status, and yields one message plus raw `.eml`
 bytes and attachment binaries. RFC 822 source is preserved after mboxrd unquoting. Each message
-is bounded to 25 MiB; MIME is buffered per message, never per mailbox. `mintId` supplies IDs
+retains decoded HTML as inert `bodyHtml` (`schema:articleBody`); `body` prefers plain text and
+otherwise contains a readable HTML-to-text fallback. HTML must be sanitised before rendering.
+Generated identifiers use reversible tilde escaping, avoiding encoded path delimiters while
+retaining original Message-IDs and folder titles as metadata.
+Each message is bounded to 25 MiB; MIME is buffered per message, never per mailbox. `mintId` supplies IDs
 for mail lacking Message-ID. Subject similarity alone never merges threads. References is
 preferred for out-of-order mail; In-Reply-To-only chains resolve through previously seen mail.
 ZIP extraction belongs to the file connector.
 
-`persistImportedMail` writes attachments under `mail/attachments/`, `.eml` beside each message,
+`persistImportedMail` writes attachments under `mail/attachments/<account>/`, `.eml` beside each message,
 then metadata, thread and folder membership. It rejects collisions rather than overwriting
 existing content. A failed multi-document import can leave partial resources; it does not
 roll back or automatically retry. The caller reports the failure and can reload/clean up.

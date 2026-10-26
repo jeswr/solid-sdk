@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // biome-ignore-all lint/style/noNonNullAssertion: Assertions establish fixture entries before use.
 import { readFile } from "node:fs/promises";
+import { assertWithinPodScope } from "@jeswr/guarded-fetch";
 import { DataFactory, Store } from "n3";
 import { describe, expect, it } from "vitest";
 import { Attachment } from "../../src/apps/mail/lib/model/attachment.js";
@@ -11,6 +12,7 @@ import {
   setMembership,
   threadMessages,
 } from "../../src/apps/mail/lib/model/helpers.js";
+import { htmlToText } from "../../src/apps/mail/lib/model/htmlText.js";
 import { importMbox, parseEmail, splitMbox } from "../../src/apps/mail/lib/model/importer.js";
 import { parseMailbox } from "../../src/apps/mail/lib/model/io.js";
 import { MailboxDataset } from "../../src/apps/mail/lib/model/mailbox.js";
@@ -47,7 +49,9 @@ describe("streaming mbox and Gmail Takeout", () => {
       if (count === 1) {
         expect(item.attachments).toHaveLength(1);
         expect([...new Uint8Array(item.attachments[0]!.content)]).toEqual([0, 1, 2, 255]);
-        expect(item.attachments[0]!.url).toBe(attachmentUrl(storage, "<m0@example.org>", 0));
+        expect(item.attachments[0]!.url).toBe(
+          attachmentUrl(storage, "personal", "<m0@example.org>", 0),
+        );
         expect(item.attachments[0]!.name).toBe("../../secret.bin");
         expect(new TextDecoder().decode(item.raw)).toContain("\nFrom quoted body");
         const m = item.mailbox.message(item.message);
@@ -118,7 +122,7 @@ describe("streaming mbox and Gmail Takeout", () => {
     expect(m.cc.size).toBe(1);
     expect(m.bcc.size).toBe(1);
     expect(m.isRead).toBe(true);
-    expect(item.thread).toContain("root");
+    expect(item.thread).toBe(`${mailDocument(root, "threads", "<root>")}#it`);
     const unread = await parseEmail(
       bytes("X-Gmail-Labels: Unread, Archive\n\nHi"),
       storage,
@@ -138,7 +142,7 @@ describe("streaming mbox and Gmail Takeout", () => {
 
 it("validates paths and keeps source-controlled identifiers inside their namespaces", () => {
   expect(mailRoot("https://pod.example/alice", "a/b")).toBe(
-    "https://pod.example/alice/mail/a%2Fb/",
+    "https://pod.example/alice/mail/a~2Fb/",
   );
   for (const storage of [
     "file:///tmp/",
@@ -149,10 +153,67 @@ it("validates paths and keeps source-controlled identifiers inside their namespa
     expect(() => mailRoot(storage, "a")).toThrow();
   for (const account of ["", " ", ".", ".."]) expect(() => mailRoot(storage, account)).toThrow();
   expect(() => mailDocument(root, "messages", " ")).toThrow();
-  expect(mailDocument(root, "threads", "../#?")).toContain("threads/..%2F%23%3F.ttl");
-  expect(attachmentUrl("https://pod.example", "a", 0)).toBe(
-    "https://pod.example/mail/attachments/a-0",
+  expect(mailDocument(root, "threads", "../#?")).toContain("threads/..~2F~23~3F.ttl");
+  expect(attachmentUrl("https://pod.example", "personal", "a", 0)).toBe(
+    "https://pod.example/mail/attachments/personal/a-0",
   );
+  const ids = ["a/b", "a%2Fb", "a~2Fb", "a\\b", "a%5Cb", "a~5Cb", "../#?", "café", "😀"];
+  const accounts = ids.map((id) => mailRoot(storage, id));
+  const documents = ids.map((id) => mailDocument(root, "messages", id));
+  const attachments = ids.map((id) => attachmentUrl(storage, "personal", id, 0));
+  for (const urls of [accounts, documents, attachments]) {
+    expect(new Set(urls).size).toBe(ids.length);
+    for (const url of urls) expect(assertWithinPodScope(storage, url)).toBe(url);
+  }
+  expect(attachmentUrl(storage, "personal", "a", 0)).not.toBe(
+    attachmentUrl(storage, "personal", "a", 1),
+  );
+});
+
+it("preserves decoded HTML and round-trips a readable text fallback", async () => {
+  const html =
+    "<html><head><style>hidden</style></head><body><p>Hello &amp; café</p><p>Next<br>line &#x1F600;</p><script>alert(1)</script></body></html>";
+  const item = await parseEmail(
+    bytes(
+      `Content-Type: text/html; charset=utf-8\nContent-Transfer-Encoding: base64\n\n${Buffer.from(html).toString("base64")}`,
+    ),
+    storage,
+    "personal",
+    "html-only",
+  );
+  const m = item.mailbox.message(item.message);
+  expect(m.bodyHtml).toBe(html);
+  expect(m.body).toBe("Hello & café\n\nNext\nline 😀");
+  const restored = await parseMailbox(
+    serialiseToTurtle(item.mailbox),
+    item.message.replace(/#.*$/, ""),
+  );
+  expect(restored.message(item.message).bodyHtml).toBe(html);
+  expect(restored.message(item.message).body).toBe(m.body);
+  m.bodyHtml = undefined;
+  expect(m.bodyHtml).toBeUndefined();
+  const alternative = await parseEmail(
+    bytes(
+      "Content-Type: multipart/alternative; boundary=x\n\n--x\nContent-Type: text/plain\n\nOriginal text\n--x\nContent-Type: text/html\n\n<p>HTML alternative</p>\n--x--\n",
+    ),
+    storage,
+    "personal",
+    "alternative",
+  );
+  const both = alternative.mailbox.message(alternative.message);
+  expect(both.body).toContain("Original text");
+  expect(both.body).not.toContain("HTML alternative");
+  expect(both.bodyHtml).toContain("<p>HTML alternative</p>");
+});
+
+it("reduces HTML to inert text with common entities, boundaries and invalid-codepoint handling", () => {
+  expect(htmlToText("")).toBe("");
+  expect(
+    htmlToText(
+      "<!--comment--><div> A\t <b>B</b> </div><br><p>&lt;x&gt; &quot;q&quot; &apos;y&apos;&nbsp;&#39; &#65; &#X42; &unknown;</p>",
+    ),
+  ).toBe(`A B\n\n<x> "q" 'y' ' A B &unknown;`);
+  expect(htmlToText("&#0; &#55296; &#56319; &#1114112;")).toBe("� � � �");
 });
 it("counts both membership directions, keeps stable ordering and validates mutations and pages", () => {
   const mb = new MailboxDataset(new Store(), DataFactory);
