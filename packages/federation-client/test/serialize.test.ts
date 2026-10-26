@@ -6,7 +6,7 @@ describe("serialize", () => {
   it("serialises quads to Turtle by default", async () => {
     const { quads } = selfDescribe({
       id: "https://app.example/id",
-      sectors: ["https://w3id.org/jeswr/sectors/media"],
+      sectors: ["https://jeswr.org/ns/sectors/media"],
       access: ["Read"],
     });
     const turtle = await serialize(quads);
@@ -28,7 +28,7 @@ describe("serialize", () => {
     const out = await serialize([]);
     expect(out).not.toBe("");
     expect(out).toBe(
-      "@prefix fedapp: <https://w3id.org/jeswr/fed#>.\n" +
+      "@prefix fedapp: <https://jeswr.org/ns/fed#>.\n" +
         "@prefix acl: <http://www.w3.org/ns/auth/acl#>.\n" +
         "@prefix sh: <http://www.w3.org/ns/shacl#>.\n" +
         "@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>.\n\n",

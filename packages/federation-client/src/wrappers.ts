@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+// AUTHORED-BY Codex GPT-6.1-Sol
 //
 // Typed @rdfjs/wrapper accessors over an fedapp:App registration graph. This is
 // the ONLY place RDF terms are read/written for the federation vocab: the SDK
@@ -28,8 +29,27 @@ import {
   FEDAPP_SECTOR,
   FEDAPP_SECTOR_USE,
   FEDAPP_SECTOR_USE_CLASS,
+  legacyIri,
   RDF_TYPE,
 } from "./vocab.js";
+
+/** Prefer canonical properties, falling back to the legacy predicate per field. */
+function readObjects<T>(predicate: string, read: (iri: string) => Set<T>): Set<T> {
+  const canonical = read(predicate);
+  return canonical.size > 0 ? canonical : read(legacyIri(predicate));
+}
+
+/** Keep canonical subjects first and count a dual-typed RDF node only once. */
+function uniqueNodes<T extends TermWrapper>(...groups: Iterable<T>[]): T[] {
+  const nodes = new Map<string, T>();
+  for (const group of groups) {
+    for (const node of group) {
+      const key = `${node.termType}:${node.value}`;
+      if (!nodes.has(key)) nodes.set(key, node);
+    }
+  }
+  return [...nodes.values()];
+}
 
 /**
  * Read an IRI-valued property as a Set of the OBJECT TERMS themselves (not their
@@ -44,7 +64,9 @@ import {
  * issue. The factory is shared so term identity / Set de-duplication hold.
  */
 function iriTerms(node: TermWrapper, predicate: string): Set<TermWrapperType> {
-  return SetFrom.subjectPredicate(node, predicate, TermAs.instance(TermWrapper), TermFrom.instance);
+  return readObjects(predicate, (iri) =>
+    SetFrom.subjectPredicate(node, iri, TermAs.instance(TermWrapper), TermFrom.instance),
+  );
 }
 
 /**
@@ -106,11 +128,8 @@ export class AppNode extends TermWrapper {
    * `NamedNodeFrom.string` would silently mis-wrap as IRIs.
    */
   get sectorUses(): Set<SectorUseNode> {
-    return SetFrom.subjectPredicate(
-      this,
-      FEDAPP_SECTOR_USE,
-      TermAs.instance(SectorUseNode),
-      TermFrom.instance,
+    return readObjects(FEDAPP_SECTOR_USE, (iri) =>
+      SetFrom.subjectPredicate(this, iri, TermAs.instance(SectorUseNode), TermFrom.instance),
     );
   }
 }
@@ -122,7 +141,10 @@ export class AppNode extends TermWrapper {
 export class FederationDataset extends DatasetWrapper {
   /** Every `fedapp:App` subject in the dataset. */
   apps(): AppNode[] {
-    return [...this.instancesOf(FEDAPP_APP, AppNode)];
+    return uniqueNodes(
+      this.instancesOf(FEDAPP_APP, AppNode),
+      this.instancesOf(legacyIri(FEDAPP_APP), AppNode),
+    );
   }
 
   /** A typed view of a single app subject. */
