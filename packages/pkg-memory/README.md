@@ -152,6 +152,10 @@ unchanged. Later classification recognizes the withdrawal across resources.
 `writeDefaultPolicy()` writes `/private/pkg/mcp-policy.ttl` only if absent and
 preserves owner edits, including concurrent first-run creation. Consumers apply
 the purpose predicate to their reads and own the special-category read audit.
+Existing policies must use the evaluator's supported core ODRL terms. The store
+rejects unsupported fields (including profiles and delegation), malformed duties
+or constraints, ambiguous scalar fields, and additional policy graphs before
+returning a policy for authorization. Restrictions are never silently discarded.
 
 For offline storage tests, `@jeswr/pkg-memory/testing` exports
 `createMemoryPodPort({ root, webId })` with byte copies, ETags, and conditional

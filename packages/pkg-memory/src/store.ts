@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { safeHttpIri, serialize } from "@jeswr/rdf-serialize";
-import { type OdrlPolicy, parsePolicy, policyToTurtle } from "@jeswr/solid-odrl";
+import { type OdrlPolicy, policyToTurtle } from "@jeswr/solid-odrl";
 import { compareDateTimes } from "./chronology.js";
 import { pkgId } from "./ids.js";
 import {
@@ -10,6 +10,7 @@ import {
   serializeNanopublications,
 } from "./model.js";
 import { type PodConditions, type PodPort, podStatus } from "./pod-port.js";
+import { readMemoryPolicy } from "./policy.js";
 import { createDefaultPolicy } from "./purpose.js";
 import { dateTime, graph, NS, putGraph, RdfNode, ReferenceStore as Store } from "./rdf.js";
 
@@ -169,9 +170,7 @@ export class NanopubStore {
   }
 
   private async readPolicy(bytes: Uint8Array): Promise<OdrlPolicy> {
-    const policy = await parsePolicy(decode(bytes), "text/turtle", this.policyUrl);
-    if (!policy) throw new Error("No memory policy in policy document");
-    return policy;
+    return readMemoryPolicy(decode(bytes), this.policyUrl);
   }
   private async readOptional(url: string) {
     try {
