@@ -124,3 +124,30 @@ Validation used `export PATH="$PWD/node_modules/.bin:$PATH"`, as in the earlier 
 Model coverage remains **100% statements (186/186), branches (102/102), functions (46/46), lines (167/167)**, including 100% for `root.ts`.
 
 Conservative recovery choice: only bare LDP typing demonstrates initial state; additional metadata, including server-generated properties, prevents deletion. Missing/weak validators, failed recovery reads and rejected cleanup also preserve the container and original error. No persistent ownership schema or shared account state was added. The full-workspace gate remains unrun: inspection reconfirmed that the unrelated `packages/unstorage-solid/scripts/build-deps.mjs` invokes a network clone, prohibited in this lane. Required app and affected repository gates passed before the final commit. No scoped work is unfinished and this round adds no open questions. No dependencies, UI, screenshots, tracker state, or unrelated code changed; nothing was pushed and no PR was opened.
+
+## Fix round 4 — preserve auxiliary state and resume initialization
+
+Review baseline: `847f70ab3bf65bb34e5dbe2dd1c9c5bec2b04aba`. Read the complete review and all earlier lane briefs.
+
+- `8bda1c53` — `fix(drive): preserve resumable root initialization`: address the sole medium finding by removing rollback deletion. A container ETag does not cover independently edited auxiliary resources. After confirmed creation, discovery, marker-write or verification failures now preserve the container and throw `DriveRootInitializationError`, retaining the original failure in `cause` and an explicit `resume()` function. Resuming re-reads the root, appends the marker only when absent, verifies persistence and conditionally registers against a fresh Type Index snapshot. Fresh callers still refuse unmarked occupied paths.
+- Final documentation commit — `docs(drive): record auxiliary safety validation` (this subsection, committed last).
+
+Regression tests model cascading deletion of associated ACL/description resources. Both independent auxiliary-edit cases fail against the reviewed implementation because it deletes the container despite an unchanged container ETag. They pass with the fix and also verify preservation after resuming. Replace obsolete deletion-specific assertions with coverage for initial discovery failures, repeated failures, rejected/ineffective PATCHes, transport failures, lost PATCH responses, verification failures, missing/foreign metadata links, concurrent metadata/children, absent/weak validators, idempotent resume and refusal by unrelated callers.
+
+Validation used `export PATH="$PWD/node_modules/.bin:$PATH"`, as in the earlier rounds:
+
+| Command | Result |
+| --- | --- |
+| `pnpm exec turbo run build --filter='@jeswr/app-suite^...'` | PASS; all 4 workspace dependency builds. |
+| `pnpm --filter @jeswr/app-suite exec vitest run test/drive/root.test.ts -t 'preserves independently changed'` against the reviewed `root.ts`, restored immediately afterward | Expected FAIL; both ACL and description regressions detect deleted state. |
+| `pnpm --filter @jeswr/app-suite run lint && pnpm --filter @jeswr/app-suite run build && pnpm --filter @jeswr/app-suite run typecheck && pnpm --filter @jeswr/app-suite run test` | PASS; production Next build, lint, strict typecheck, 9 test files / 173 tests. |
+| `pnpm run lint:root` | PASS; workspace, transport, fetch, token and contrast checks (74 pairs, 0 failures). |
+| `TURBO_SCM_BASE=55f55af19dadeb9f99388dc891b7aa6a8debed5b pnpm run gate` | PASS; 10/10 tasks, 4 cached, including 41 root tests and all 173 app tests. |
+| `git diff --check` | PASS. |
+| `command -v roborev` | Unavailable; automated per-commit review could not run. |
+
+Model coverage remains **100% statements (187/187), branches (95/95), functions (47/47), lines (167/167)**, including 100% for `root.ts`.
+
+Conservative choice and API limitation: retry state is held by the caller in the returned error, bound to the creator's scoped fetch and root. Callers must retain that error and invoke `resume()` in the same session; losing it does not grant a new caller permission to mark an unmarked existing path. No persistent ownership vocabulary or shared account state was introduced. The original failure is now available through `cause` for initialization errors; creation/conflict and registration errors retain their existing behavior.
+
+The full-workspace gate remains unrun because the unrelated `packages/unstorage-solid/scripts/build-deps.mjs` invokes a network clone, prohibited by this lane. Required app and affected repository gates passed before the final commit. No scoped implementation work is unfinished and there are no open questions. No dependencies were added, so dependency policy checks were inapplicable. No UI or screenshots, tracker state, or unrelated code changed; nothing was pushed and no PR was opened.
