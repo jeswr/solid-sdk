@@ -7,8 +7,10 @@
 <https://pod.test/alice/integrations/uber/finance/uber-fares.ttl#fare-testville-8514f04b-activity> a <https://jeswr.org/ns/core#Activity>.
 <https://pod.test/alice/integrations/uber/finance/uber-fares.ttl#fare-testville-8514f04b> a <https://jeswr.org/ns/sectors/finance#TransactionRecord>, <https://schema.org/Invoice>;
     <https://jeswr.org/ns/core#about> <https://pod.test/alice/integrations/uber/finance/uber-fares.ttl#fare-testville-8514f04b-activity>;
+    <https://jeswr.org/ns/core#subject> <https://pod.test/alice/profile/card#me>;
     <https://schema.org/dateCreated> "2026-01-01T12:00:00.000Z"^^<http://www.w3.org/2001/XMLSchema#dateTime>;
     <https://schema.org/name> "in Testville";
     <https://schema.org/priceCurrency> "GBP";
     <https://schema.org/provider> "Uber";
     <https://schema.org/totalPaymentDue> "8.25".
+<https://pod.test/alice/profile/card#me> a <https://jeswr.org/ns/core#Agent>.

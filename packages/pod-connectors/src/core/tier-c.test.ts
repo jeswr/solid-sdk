@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { readFileSync } from "node:fs";
-import type { DatasetCore } from "@rdfjs/types";
+import type { DatasetCore, Term } from "@rdfjs/types";
 import { DataFactory, Parser, Store, Writer } from "n3";
 import { describe, expect, it, vi } from "vitest";
 import { amazonOrdersFileAdapter } from "../amazon-orders/file-adapter.js";
@@ -12,55 +12,86 @@ import { netflixFileAdapter } from "../netflix/file-adapter.js";
 import { steamFileAdapter } from "../steam/file-adapter.js";
 import { uberFileAdapter } from "../uber/file-adapter.js";
 import { whatsappFileAdapter } from "../whatsapp/file-adapter.js";
-import { FEDERATION } from "./federation-vocab.js";
-import type { FileImportAdapter, ImportFile } from "./file-import.js";
+import { FEDERATION, FEDERATION_PROPERTIES } from "./federation-vocab.js";
+import { type FileImportAdapter, type ImportFile, runFileImport } from "./file-import.js";
+import { SectorThing } from "./file-vocab-map.js";
+import { createFetchPodWriter } from "./pod-writer.js";
 import { PROV, Provenance } from "./provenance.js";
-import { fileImport, TEST_POD_ROOT } from "./testing.js";
+import {
+  createMemoryPod,
+  fileImport,
+  TEST_POD_ROOT,
+  TEST_PROFILE_DOC,
+  TEST_WEBID,
+} from "./testing.js";
 import { CLASSES, PodThing, SCHEMA } from "./vocab.js";
 
 const SH = "http://www.w3.org/ns/shacl#";
 const RDF_TYPE = DataFactory.namedNode("http://www.w3.org/1999/02/22-rdf-syntax-ns#type");
-const sectorShapes = new Store(
-  ["media", "finance", "health", "social"].flatMap((sector) =>
-    new Parser().parse(
-      readFileSync(
-        new URL(
-          `../../../solid-federation-vocab/sectors/${sector}/${sector}.shacl.ttl`,
-          import.meta.url,
-        ),
-        "utf8",
+const RDFS_SUBCLASS = "http://www.w3.org/2000/01/rdf-schema#subClassOf";
+const sectors = ["media", "finance", "health", "social"];
+function loadVocabulary(sector: string, extension: string) {
+  return new Parser().parse(
+    readFileSync(
+      new URL(
+        `../../../solid-federation-vocab/sectors/${sector}/${sector}.${extension}`,
+        import.meta.url,
       ),
+      "utf8",
     ),
-  ),
-);
+  );
+}
+const sectorShapes = new Store(sectors.flatMap((sector) => loadVocabulary(sector, "shacl.ttl")));
+const profiles = new Store([
+  ...sectorShapes,
+  ...loadVocabulary("core", "shacl.ttl"),
+  ...["core", ...sectors].flatMap((sector) => loadVocabulary(sector, "ttl")),
+]);
 
-/** No shared SHACL helper is exported by the suite. Assert the required direct
- * predicates, cardinalities, datatypes and linked classes from the source shapes.
+function isSubclassOf(type: Term, target: Term, seen = new Set<string>()): boolean {
+  if (type.equals(target)) return true;
+  if (seen.has(type.value)) return false;
+  seen.add(type.value);
+  return profiles
+    .getObjects(type, RDFS_SUBCLASS, null)
+    .some((parent) => parent.termType === "NamedNode" && isSubclassOf(parent, target, seen));
+}
+
+function isInstanceOf(dataset: DatasetCore, subject: Term, target: Term): boolean {
+  return [...dataset.match(subject, RDF_TYPE)].some((quad) => isSubclassOf(quad.object, target));
+}
+
+/** No shared SHACL helper is exported by the suite. Assert required predicates,
+ * cardinalities, datatypes and linked classes, including inherited core shapes.
  * Warning/Info constraints are advisory; this is not a general SHACL engine.
  */
-function expectRequiredSectorProperties(dataset: DatasetCore): void {
-  for (const target of sectorShapes.getQuads(null, `${SH}targetClass`, null, null)) {
-    const nodes = [...dataset.match(null, RDF_TYPE, target.object)];
-    for (const property of sectorShapes.getObjects(target.subject, `${SH}property`, null)) {
-      if (!sectorShapes.countQuads(property, `${SH}severity`, `${SH}Violation`, null)) continue;
-      const path = required(sectorShapes.getObjects(property, `${SH}path`, null)[0]);
-      for (const { subject } of nodes) {
+function expectRequiredProfileProperties(dataset: DatasetCore, shapes = profiles): void {
+  const subjects = [
+    ...new Map([...dataset].map((quad) => [quad.subject.value, quad.subject])).values(),
+  ];
+  for (const target of shapes.getQuads(null, `${SH}targetClass`, null, null)) {
+    const nodes = subjects.filter((subject) => isInstanceOf(dataset, subject, target.object));
+    for (const property of profiles.getObjects(target.subject, `${SH}property`, null)) {
+      const severity = profiles.getObjects(property, `${SH}severity`, null)[0];
+      if (severity && severity.value !== `${SH}Violation`) continue;
+      const path = required(profiles.getObjects(property, `${SH}path`, null)[0]);
+      for (const subject of nodes) {
         const values = [...dataset.match(subject, path)].map((quad) => quad.object);
         const context = `${subject.value}: ${path.value}`;
-        const min = sectorShapes.getObjects(property, `${SH}minCount`, null)[0];
-        const max = sectorShapes.getObjects(property, `${SH}maxCount`, null)[0];
+        const min = profiles.getObjects(property, `${SH}minCount`, null)[0];
+        const max = profiles.getObjects(property, `${SH}maxCount`, null)[0];
         if (min) expect(values.length, context).toBeGreaterThanOrEqual(Number(min.value));
         if (max) expect(values.length, context).toBeLessThanOrEqual(Number(max.value));
         for (const value of values) {
-          const datatype = sectorShapes.getObjects(property, `${SH}datatype`, null)[0];
+          const datatype = profiles.getObjects(property, `${SH}datatype`, null)[0];
           if (datatype) {
             expect(value.termType, context).toBe("Literal");
             if (value.termType === "Literal") expect(value.datatype.value).toBe(datatype.value);
           }
-          const linkedClass = sectorShapes.getObjects(property, `${SH}class`, null)[0];
+          const linkedClass = profiles.getObjects(property, `${SH}class`, null)[0];
           if (linkedClass) {
             expect(value.termType, context).toBe("NamedNode");
-            expect([...dataset.match(value, RDF_TYPE, linkedClass)].length, context).toBe(1);
+            expect(isInstanceOf(dataset, value, linkedClass), context).toBe(true);
           }
         }
       }
@@ -95,7 +126,7 @@ const fixtures: {
     adapter: amazonOrdersFileAdapter,
     name: "orders.csv",
     text: 'Order ID,Product Name,Total Owed,Currency\nsynthetic-1,"Synthetic lamp",12.50,GBP\n',
-    types: [CLASSES.Invoice, FEDERATION.TransactionRecord, FEDERATION.Activity],
+    types: [CLASSES.Invoice, FEDERATION.TransactionRecord, FEDERATION.Activity, FEDERATION.Agent],
     value: "12.50",
   },
   {
@@ -108,6 +139,7 @@ const fixtures: {
       CLASSES.Invoice,
       FEDERATION.TransactionRecord,
       FEDERATION.Activity,
+      FEDERATION.Agent,
     ],
     value: "8.25",
   },
@@ -167,14 +199,14 @@ const fixtures: {
     adapter: bankStatementsFileAdapter,
     name: "bank.csv",
     text: "Date,Description,Amount\n2026-01-20,Synthetic groceries,-12.50",
-    types: [CLASSES.Invoice, FEDERATION.TransactionRecord, FEDERATION.Activity],
+    types: [CLASSES.Invoice, FEDERATION.TransactionRecord, FEDERATION.Activity, FEDERATION.Agent],
     value: "-12.50",
   },
   {
     adapter: bankStatementsFileAdapter,
     name: "bank.ofx",
     text: "OFXHEADER:100\r\n<OFX><CURDEF>GBP\r\n<STMTTRN><DTPOSTED>20260120<TRNAMT>-12.50<NAME>Synthetic groceries</STMTTRN></OFX>",
-    types: [CLASSES.Invoice, FEDERATION.TransactionRecord, FEDERATION.Activity],
+    types: [CLASSES.Invoice, FEDERATION.TransactionRecord, FEDERATION.Activity, FEDERATION.Agent],
     value: "GBP",
   },
 ];
@@ -222,7 +254,21 @@ for (const fixture of fixtures) {
       const mappings: string[] = [];
       for (const written of report.written) {
         const dataset = pod.dataset(written.url);
-        expectRequiredSectorProperties(dataset);
+        // Apply the combined core/sector profile to financial fixtures. Other
+        // importers retain sector coverage; core account modelling is separate.
+        expectRequiredProfileProperties(
+          dataset,
+          fixture.types.includes(FEDERATION.TransactionRecord) ? profiles : sectorShapes,
+        );
+        for (const quad of dataset.match(
+          null,
+          RDF_TYPE,
+          DataFactory.namedNode(FEDERATION.TransactionRecord),
+        )) {
+          expect(new SectorThing(quad.subject.value, dataset, DataFactory).dataSubject).toBe(
+            TEST_WEBID,
+          );
+        }
         if (chunkSize === 7) {
           const quads = [...dataset].filter((q) => !q.predicate.value.startsWith(PROV));
           quads.sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
@@ -283,6 +329,92 @@ for (const fixture of fixtures) {
     });
   });
 }
+
+const financialFixtures = fixtures.filter((fixture) =>
+  fixture.types.includes(FEDERATION.TransactionRecord),
+);
+
+it.each(
+  financialFixtures,
+)("validates inherited core constraints for $adapter.metadata.id ($name)", async (fixture) => {
+  const { pod, report } = await fileImport(
+    fixture.adapter,
+    streamedFile(fixture.name, fixture.text),
+  );
+  const written = required(report.written.find((doc) => doc.category === "finance"));
+  const dataset = pod.dataset(written.url);
+  const recordType = DataFactory.namedNode(FEDERATION.TransactionRecord);
+  const record = new SectorThing(
+    required([...dataset.match(null, RDF_TYPE, recordType)][0]).subject.value,
+    dataset,
+    DataFactory,
+  );
+  expectRequiredProfileProperties(dataset);
+
+  // A sector instance must satisfy core:RecordShape without an explicit core:Record type.
+  record.dataSubject = undefined;
+  expect(() => expectRequiredProfileProperties(dataset)).toThrow(FEDERATION_PROPERTIES.subject);
+  record.dataSubject = TEST_WEBID;
+
+  // Linked-class checks must also follow the core:Person -> core:Agent hierarchy.
+  const agent = new PodThing(TEST_WEBID, dataset, DataFactory);
+  agent.types.delete(FEDERATION.Agent);
+  expect(() => expectRequiredProfileProperties(dataset)).toThrow(FEDERATION_PROPERTIES.subject);
+  agent.types.add(FEDERATION.Person);
+  expectRequiredProfileProperties(dataset);
+});
+
+it.each(
+  financialFixtures,
+)("uses the host's WebID for $adapter.metadata.id ($name)", async (fixture) => {
+  const pod = createMemoryPod();
+  const webId = "https://identity.test/synthetic-holder#me";
+  const writer = createFetchPodWriter({
+    adapterId: fixture.adapter.metadata.id,
+    webId: TEST_WEBID,
+    profileDocumentUrl: TEST_PROFILE_DOC,
+    podRoot: TEST_POD_ROOT,
+    fetch: pod.fetch,
+  });
+  expect(writer.webId).toBe(TEST_WEBID);
+  const report = await runFileImport({
+    adapter: fixture.adapter,
+    file: streamedFile(fixture.name, fixture.text),
+    podWriter: { ...writer, webId },
+  });
+  const dataset = pod.dataset(
+    required(report.written.find((doc) => doc.category === "finance")).url,
+  );
+  const records = [
+    ...dataset.match(null, RDF_TYPE, DataFactory.namedNode(FEDERATION.TransactionRecord)),
+  ];
+  expect(records).not.toHaveLength(0);
+  for (const record of records)
+    expect(new SectorThing(record.subject.value, dataset, DataFactory).dataSubject).toBe(webId);
+  expect(new PodThing(webId, dataset, DataFactory).types.has(FEDERATION.Agent)).toBe(true);
+  expectRequiredProfileProperties(dataset);
+});
+
+it.each([
+  undefined,
+  "",
+  "relative/holder",
+  "https://identity.test/invalid holder",
+])("refuses financial records without a usable host WebID (%#)", async (webId) => {
+  const pod = createMemoryPod();
+  const writer = createFetchPodWriter({
+    adapterId: bankStatementsFileAdapter.metadata.id,
+    webId: TEST_WEBID,
+    profileDocumentUrl: TEST_PROFILE_DOC,
+    podRoot: TEST_POD_ROOT,
+    fetch: pod.fetch,
+  });
+  const file = streamedFile("bank.csv", "Date,Description,Amount\n2026-01-01,Synthetic entry,1");
+  await expect(
+    runFileImport({ adapter: bankStatementsFileAdapter, file, podWriter: { ...writer, webId } }),
+  ).rejects.toThrow("WebID");
+  expect(pod.urls().some((url) => url.endsWith("bank-transactions.ttl"))).toBe(false);
+});
 
 it.each([
   {

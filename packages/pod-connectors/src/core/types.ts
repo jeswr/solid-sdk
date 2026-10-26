@@ -169,7 +169,7 @@ export interface FixtureRoute {
 
 /** The adapter: metadata + auth config + the import implementation. */
 /** Per-adapter vocabulary seam; preserves legacy types for older readers. */
-export type VocabMap = (doc: NormalisedDoc) => NormalisedDoc;
+export type VocabMap = (doc: NormalisedDoc, context?: { readonly webId?: string }) => NormalisedDoc;
 
 /** Host-persisted state. Dates are ISO strings; counts describe the latest successful run. */
 export interface ConnectorState {
@@ -212,6 +212,8 @@ export interface TypeRegistrationRequest {
 
 /** Host-owned storage port, bound to one connector's document container. */
 export interface PodWriter {
+  /** Importing user's WebID; required by financial file mappings for core:subject. */
+  readonly webId?: string;
   /** Resolve an adapter-relative slug within its container. */
   resolve(slug: string): string;
   /** Read existing RDF and its ETag; undefined only for a missing document. */

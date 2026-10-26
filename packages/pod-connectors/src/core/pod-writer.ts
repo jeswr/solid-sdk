@@ -37,6 +37,7 @@ export function createFetchPodWriter(options: FetchPodWriterOptions): PodWriter 
     }
   };
   return {
+    webId,
     resolve,
     async read(slug) {
       const url = resolve(slug);

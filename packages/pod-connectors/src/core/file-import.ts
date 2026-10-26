@@ -57,12 +57,16 @@ export interface ImportFile {
 
 /** What a file-import adapter hands the runner to write (mirrors the OAuth ctx). */
 export interface FileImportContext {
+  /** Importing user's WebID, supplied by the host's PodWriter. */
+  readonly webId?: string;
   /** Resolve a slug to the absolute pod URL it will be written at (for fragment IRIs). */
   resolve(slug: string): string;
   /** Serialise + PUT a normalised document into the pod. */
   write(doc: NormalisedDoc, conditions?: WriteConditions): Promise<WrittenDoc>;
   /** Report progress to the UI. */
   progress(p: ImportProgress): void;
+  /** Count a malformed or oversized source record omitted by the adapter. */
+  skip(): void;
   /** Shared row cap so adapters bound their own loops consistently. */
   readonly maxRows: number;
 }
@@ -127,11 +131,14 @@ export async function runFileImport(opts: RunFileImportOptions): Promise<ImportR
     opts,
     adapter.vocabMap,
   );
+  let skipped = 0;
   try {
     await adapter.importFile(file, {
+      webId: opts.podWriter.webId,
       maxRows: MAX_ROWS,
       resolve: (slug) => opts.podWriter.resolve(slug),
       progress: (p) => opts.onProgress?.(p),
+      skip: () => skipped++,
       write: session.write,
     });
     if (session.written.length === 0) {
@@ -142,7 +149,7 @@ export async function runFileImport(opts: RunFileImportOptions): Promise<ImportR
     }
     const { indexUrl } = await opts.podWriter.registerType(session.registrations());
     await session.finish();
-    const state = session.state({});
+    const state = session.state({ skipped });
     opts.onState?.(state);
     return {
       adapterId: id,
@@ -150,6 +157,7 @@ export async function runFileImport(opts: RunFileImportOptions): Promise<ImportR
       written: session.written,
       categories: [...new Set(session.written.map((w) => w.category))],
       indexUrl,
+      skipped: skipped || undefined,
       state,
     };
   } catch (error) {

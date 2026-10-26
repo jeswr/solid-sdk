@@ -23,6 +23,7 @@ import { csvRowsFromChunks, fileText } from "../core/file-stream.js";
 import { recordFragment } from "../core/slug.js";
 import type { IntegrationMetadata } from "../core/types.js";
 import { CLASSES, Invoice } from "../core/vocab.js";
+import { ofxTransactions } from "./ofx-stream.js";
 import { vocabMap } from "./vocab-map.js";
 
 const ID = "bank-statements";
@@ -59,7 +60,7 @@ export const bankStatementsFileAdapter: FileImportAdapter = {
     const doc = ctx.resolve("finance/bank-transactions.ttl");
     const store = new Store();
     let i = 0;
-    for await (const txn of streamBankTransactions(file)) {
+    for await (const txn of streamBankTransactions(file, () => ctx.skip())) {
       if (i >= ctx.maxRows) break;
       const key = `${i}|${txn.date?.toISOString() ?? ""}|${txn.amount}|${txn.description}`;
       const frag = recordFragment(txn.description || "transaction", key);
@@ -82,7 +83,10 @@ export const bankStatementsFileAdapter: FileImportAdapter = {
 };
 
 /** Sniff a bounded prefix, then parse one CSV row or OFX transaction at a time. */
-async function* streamBankTransactions(file: ImportFile): AsyncGenerator<Transaction> {
+async function* streamBankTransactions(
+  file: ImportFile,
+  skip: () => void,
+): AsyncGenerator<Transaction> {
   const source = fileText(file);
   let prefix = "";
   try {
@@ -106,23 +110,8 @@ async function* streamBankTransactions(file: ImportFile): AsyncGenerator<Transac
       }
       return;
     }
-    let buffer = "";
-    let currency: string | undefined;
-    for await (const chunk of chunks()) {
-      buffer += chunk;
-      currency ??= buffer.match(/<CURDEF>([^<\r\n]+)(?=[<\r\n])/i)?.[1]?.trim();
-      while (true) {
-        const start = buffer.search(/<STMTTRN>/i);
-        if (start === -1) {
-          buffer = buffer.slice(-64);
-          break;
-        }
-        buffer = buffer.slice(start);
-        const end = buffer.search(/<\/STMTTRN>/i);
-        if (end === -1) break;
-        for (const txn of parseOfx(buffer.slice(0, end + 10))) yield { ...txn, currency };
-        buffer = buffer.slice(end + 10);
-      }
+    for await (const { block, currency } of ofxTransactions(chunks(), skip)) {
+      for (const txn of parseOfx(block)) yield { ...txn, currency };
     }
   } finally {
     await source.return(undefined);

@@ -15,6 +15,7 @@ export const FEDERATION = {
   TransactionRecord: "https://jeswr.org/ns/sectors/finance#TransactionRecord",
   Note: "https://jeswr.org/ns/sectors/social#Note",
   Person: "https://jeswr.org/ns/core#Person",
+  Agent: "https://jeswr.org/ns/core#Agent",
   Activity: "https://jeswr.org/ns/core#Activity",
 } as const;
 

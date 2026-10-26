@@ -44,7 +44,7 @@ export class SectorThing extends PodThing {
 /** Complete the sector types added by Tier C without changing source fields. */
 export function createFileVocabMap(types: Readonly<Record<string, string>>): VocabMap {
   const mapTypes = createVocabMap(types);
-  return (doc) => {
+  return (doc, context) => {
     const mapped = mapTypes(doc);
     const dataset = mapped.dataset;
     const subjects = new Set(
@@ -58,6 +58,13 @@ export function createFileVocabMap(types: Readonly<Record<string, string>>): Voc
       if (item.types.has(FEDERATION.Note))
         item.content = new Message(subject, dataset, DataFactory).text ?? "";
       if (item.types.has(FEDERATION.TransactionRecord)) {
+        const webId = context?.webId;
+        if (!webId || !safeIri(webId) || !URL.canParse(webId))
+          throw new Error(
+            "Financial file imports require the importing user's WebID on PodWriter.",
+          );
+        item.dataSubject = webId;
+        new PodThing(webId, dataset, DataFactory).types.add(FEDERATION.Agent);
         // A statement line documents an activity distinct from the record. The
         // source may omit currency, amount or posting time, so do not assert the
         // more specific fin:Transaction contract or invent those missing facts.

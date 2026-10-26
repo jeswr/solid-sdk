@@ -106,6 +106,9 @@ checked against actual bytes read. Existing deterministic documents and the
 100,000-record cap are preserved: RDF snapshots remain in memory up to that cap.
 CSV headers are parsed and normalised once per file, including bank column
 aliases, and are limited to 1,024 columns and 65,536 characters.
+OFX transactions use an incremental delimiter scanner and are limited to 64 KiB
+of UTF-8 text. Oversized or unfinished transactions are skipped and counted in
+`report.skipped` and `report.state.counts.skipped`.
 Select the extracted export file, rather than the ZIP archive.
 
 Per-importer vocab maps retain legacy schema.org/FOAF types and source fields,
@@ -120,7 +123,11 @@ root `QUESTIONS.md` for conservative mappings where the spec leaves terms open.
 Sector mappings also carry the required shape properties: creative works have
 `dcterms:title`, notes have `social:content`, transaction records link through
 `core:about` to distinct local activities, and health records name an unnamed
-local `core:Person` through `core:subject`. Financial activities retain the broad
+local `core:Person` through `core:subject`. Financial records use the importing
+user's WebID as `core:subject`, typed `core:Agent`. The fetch-backed writer exposes
+its configured WebID; custom `PodWriter` implementations must supply `webId` for
+financial file imports. Imports fail before writing a financial document when
+that identity is missing or invalid. Financial activities retain the broad
 `core:Activity` type because exports may omit the currency or posting time needed
 by the `fin:Transaction` shape; missing source facts are not inferred.
 Goodreads books, Steam items/accounts and conversations with a ChatGPT id carry
@@ -131,7 +138,9 @@ conversation parser for each streamed conversation.
 Synthetic fixture tests cover every importer with one-byte, seven-byte and
 single-chunk input, sorted Turtle mapping snapshots, provenance and stable
 re-import. They assert the required predicates, cardinalities, datatypes and
-linked classes from the checked-in sector shapes without adding a SHACL dependency.
+linked classes from the checked-in sector shapes, following the class hierarchy
+in the core and sector ontologies. Financial fixtures also validate inherited
+core constraints. These checks add no SHACL dependency.
 The Apple Health streaming test lazily generates over 50 MiB of
 `export.xml` and retains only workouts. Tests make no production requests.
 

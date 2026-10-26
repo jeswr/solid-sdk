@@ -55,7 +55,9 @@ export function createImportSession(
         .filter((q) => q.subject.termType === "NamedNode")
         .map((q) => q.subject.value),
     );
-    const doc = vocabMap ? vocabMap({ ...input, dataset: copyDataset(input.dataset) }) : input;
+    const doc = vocabMap
+      ? vocabMap({ ...input, dataset: copyDataset(input.dataset) }, { webId: writer.webId })
+      : input;
     const incoming = copyDataset(doc.dataset);
     const subjects = new Set(
       [...incoming].filter((q) => q.subject.termType === "NamedNode").map((q) => q.subject.value),
