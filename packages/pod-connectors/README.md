@@ -143,10 +143,18 @@ preconditions still apply.
 
 Events retain `schema:Event` alongside the defined `sched:CalendarEvent` class.
 All-day start/end values use `xsd:date`, preserving Google's exclusive end date;
-timed values use `xsd:dateTime`. Recurrence rules use VOC-01's structured fields
+timed values use `xsd:dateTime`. Offsetless timestamps use the event's IANA time zone,
+falling back to the calendar's list-response time zone; with neither zone they remain
+floating. Repeated daylight-saving times select the first occurrence; nonexistent local
+times or invalid zones fail before writing or advancing the checkpoint.
+Recurrence rules use VOC-01's structured fields
 and deterministic linked nodes, with `schema:Schedule` as an additional type and
-`schema:scheduleTimezone` for the source time zone. Cancelled or moved instances
-supply exception dates and keep their deterministic identities across later master
-updates. RFC 5545 constructs outside VOC-01's shape fail before the document write
+`schema:scheduleTimezone` for the source time zone. Interval and count use
+`xsd:positiveInteger`; month-day selectors support `1`–`31` and `-1` (last day).
+Cancelled items remove their event descriptions and recurrence nodes. Cancelled
+instances add `schema:exceptDate` to the master's recurrence without creating an event
+record. Recurrence exception dates survive later master updates; moved instances keep
+their deterministic event identities. Deleted-series cleanup runs after every page has
+been processed. RFC 5545 constructs outside VOC-01's shape fail before the document write
 or checkpoint advance (see root `QUESTIONS.md`). Fixtures and sorted Turtle mapping
 snapshots cover these paths without Google accounts or production traffic.

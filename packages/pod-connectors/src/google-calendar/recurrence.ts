@@ -20,8 +20,8 @@ export function recurrenceError(): never {
   );
 }
 
-/** Preserve the lexical date or dateTime; never turn an all-day date into midnight. */
-export function calendarDate(value: string): string {
+/** Preserve dates and explicit offsets; resolve floating dateTimes only when a zone is known. */
+export function calendarDate(value: string, timeZone?: string): string {
   if (!/^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})?)?$/.test(value))
     recurrenceError();
   const day = value.slice(0, 10);
@@ -35,7 +35,55 @@ export function calendarDate(value: string): string {
     )
   )
     recurrenceError();
-  return value;
+  if (!timeZone || !value.includes("T") || /(?:Z|[+-]\d{2}:\d{2})$/.test(value)) return value;
+  return localDateTime(value, timeZone);
+}
+
+/** Resolve wall time with Intl's IANA data, independently of the host's local zone. */
+function localDateTime(value: string, timeZone: string): string {
+  try {
+    const formatter = new Intl.DateTimeFormat("en-GB", {
+      timeZone,
+      calendar: "iso8601",
+      numberingSystem: "latn",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hourCycle: "h23",
+    });
+    const wallTime = (instant: number): string => {
+      const parts = Object.fromEntries(
+        formatter.formatToParts(instant).map(({ type, value }) => [type, value]),
+      );
+      if (!parts.year) throw new RangeError("Missing calendar year");
+      return `${parts.year.padStart(4, "0")}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}:${parts.second}`;
+    };
+    const local = value.slice(0, 19);
+    const nominal = Date.parse(`${local}Z`);
+    // Probe both sides of a zone transition, then verify each candidate in that zone.
+    const candidates = [-86400000, 0, 86400000]
+      .map((delta) => {
+        const probe = nominal + delta;
+        const offset = Date.parse(`${wallTime(probe)}Z`) - probe;
+        return nominal - offset;
+      })
+      .filter((instant) => wallTime(instant) === local);
+    // Repeated fall-back times select the first occurrence. Gaps cannot identify an instant.
+    if (candidates.length) {
+      return new Date(Math.min(...candidates))
+        .toISOString()
+        .replace(".000Z", `${value.slice(19)}Z`);
+    }
+  } catch {
+    // Unknown IANA zones fail before the document or checkpoint is written.
+  }
+  throw new IntegrationSyncError(
+    "google-calendar",
+    "Unresolvable Calendar time zone or local time; checkpoint unchanged.",
+  );
 }
 
 function icalDate(value: string): string {
@@ -108,7 +156,7 @@ export function parseRecurrence(lines: readonly string[], timeZone?: string): Ca
             recurrenceError();
           break;
         case "BYMONTHDAY":
-          rule.byMonthDay = field.split(",").map((day) => integer(day, -31, 31));
+          rule.byMonthDay = field.split(",").map((day) => integer(day, -1, 31));
           break;
         case "BYMONTH":
           rule.byMonth = field.split(",").map((month) => integer(month, 1, 12));

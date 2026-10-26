@@ -14,7 +14,7 @@ import type { ConnectorState, FixtureRoute } from "../core/types.js";
 import { CalendarEvent } from "../core/vocab.js";
 import { googleCalendarAdapter } from "./adapter.js";
 import { EVENTS } from "./fixtures.js";
-import { GoogleCalendarEvent, RecurrenceRule } from "./vocab-map.js";
+import { GoogleCalendarEvent, RecurrenceRule, SCHED } from "./vocab-map.js";
 
 const API = "https://www.googleapis.com/calendar/v3/calendars/primary/events";
 const DOC = `${TEST_POD_ROOT}integrations/google-calendar/calendar/events.ttl`;
@@ -46,6 +46,58 @@ function setup() {
 }
 
 describe("Google Calendar synchronization", () => {
+  it("uses event zones before the calendar zone, including metadata on a later page", async () => {
+    const { pod, run } = setup();
+    const item = (id: string, timeZone?: string) => ({
+      ...EVENTS.items[1],
+      id,
+      start: { dateTime: "2026-06-12T14:30:00", timeZone },
+      end: { dateTime: "2026-06-12T15:00:00", timeZone },
+    });
+    await run([
+      route({ items: [item("calendar-zone")], nextPageToken: "more" }),
+      route({
+        timeZone: "America/New_York",
+        items: [item("event-zone", "Europe/London")],
+        nextSyncToken: "zoned",
+      }),
+    ]).result;
+    for (const [id, start, end] of [
+      ["calendar-zone", "2026-06-12T18:30:00Z", "2026-06-12T19:00:00Z"],
+      ["event-zone", "2026-06-12T13:30:00Z", "2026-06-12T14:00:00Z"],
+    ]) {
+      for (const [predicate, expected] of [
+        ["startTime", start],
+        ["endTime", end],
+      ]) {
+        expect(
+          pod
+            .dataset(DOC)
+            .getQuads(
+              DataFactory.namedNode(`${DOC}#event-${id}`),
+              DataFactory.namedNode(`${SCHED}${predicate}`),
+              null,
+              null,
+            )[0]?.object.value,
+        ).toBe(expected);
+      }
+    }
+  });
+
+  it("preserves floating timestamps when neither event nor calendar supplies a zone", async () => {
+    const { pod, run } = setup();
+    await run([
+      route({
+        items: [{ ...EVENTS.items[1], start: { dateTime: "2026-06-12T14:30:00" } }],
+        nextSyncToken: "floating",
+      }),
+    ]).result;
+    expect(
+      pod.dataset(DOC).getQuads(null, DataFactory.namedNode(`${SCHED}startTime`), null, null)[0]
+        ?.object.value,
+    ).toBe("2026-06-12T14:30:00");
+  });
+
   it("continues full and incremental pages using the final sync token", async () => {
     const { pod, run } = setup();
     const first = run([
@@ -201,6 +253,12 @@ describe("Google Calendar synchronization", () => {
     expect(exceptions()).toEqual(
       expect.arrayContaining(["2026-06-15T09:00:00+01:00", "2026-06-16T09:00:00+01:00"]),
     );
+    expect(initial.state.counts.skipped).toBe(0);
+    expect(
+      [...pod.dataset(DOC)].some((q) =>
+        q.subject.value.startsWith(`${DOC}#event-cancelled-instance`),
+      ),
+    ).toBe(false);
     expect(
       new CalendarEvent(
         `${DOC}#event-moved-instance`,
@@ -219,6 +277,116 @@ describe("Google Calendar synchronization", () => {
       [route({ items: [{ id: master.id, status: "cancelled" }], nextSyncToken: "deleted" })],
       updated.state,
     ).result;
+    expect([...pod.dataset(DOC)].filter((q) => q.subject.value.includes("#event-"))).toHaveLength(
+      0,
+    );
+  });
+
+  it("removes a cancelled instance and its recurrence while retaining the master's exception", async () => {
+    const { pod, run } = setup();
+    const master = EVENTS.items[0];
+    const child = {
+      ...master,
+      id: "cancelled-child",
+      recurringEventId: master.id,
+      originalStartTime: { dateTime: "2026-06-15T09:00:00", timeZone: "Europe/London" },
+    };
+    const initial = await run([route({ items: [master, child], nextSyncToken: "initial" })]).result;
+    const result = await run(
+      [
+        route({
+          items: [
+            {
+              id: child.id,
+              status: "cancelled",
+              recurringEventId: master.id,
+              originalStartTime: child.originalStartTime,
+            },
+          ],
+          nextSyncToken: "deleted",
+        }),
+      ],
+      initial.state,
+    ).result;
+    const data = pod.dataset(DOC);
+    expect([...data].some((q) => q.subject.value.startsWith(`${DOC}#event-${child.id}`))).toBe(
+      false,
+    );
+    expect(new CalendarEvent(`${DOC}#event-${master.id}`, data, DataFactory).name).toBe(
+      master.summary,
+    );
+    expect([
+      ...new RecurrenceRule(`${DOC}#event-${master.id}/recurrence-0`, data, DataFactory).exceptions,
+    ]).toContain("2026-06-15T08:00:00Z");
+    expect(result.state.counts.skipped).toBe(0);
+  });
+
+  it("keeps the document and checkpoint when a zoned local timestamp cannot be resolved", async () => {
+    const { pod, podWriter, run } = setup();
+    const initial = await run([route(EVENTS)]).result;
+    const before = pod.get(DOC);
+    const onState = vi.fn();
+    await expect(
+      runImport({
+        adapter: googleCalendarAdapter,
+        mode: "live",
+        podWriter,
+        state: initial.state,
+        onState,
+        sourceAuth: {
+          fetch: fixtureFetch("google-calendar", [
+            route({
+              items: [
+                {
+                  ...EVENTS.items[1],
+                  start: { dateTime: "2026-03-08T02:30:00", timeZone: "America/New_York" },
+                },
+              ],
+              nextSyncToken: "unused",
+            }),
+          ]),
+        },
+      }),
+    ).rejects.toThrow(/time zone/);
+    expect(pod.get(DOC)).toBe(before);
+    expect(onState.mock.calls[0][0].cursor).toBe(initial.cursor);
+  });
+
+  it.each([
+    [false, false],
+    [true, false],
+    [false, true],
+    [true, true],
+  ])("cleans deleted series after every item (reverse=%s, paginated=%s)", async (reverse, paginated) => {
+    const { pod, run } = setup();
+    const master = EVENTS.items[0];
+    const child = {
+      ...EVENTS.items[1],
+      id: "series-child",
+      recurringEventId: master.id,
+      originalStartTime: { dateTime: "2026-06-12T09:00:00+01:00" },
+      recurrence: ["RRULE:FREQ=DAILY;COUNT=2"],
+    };
+    const initial = await run([route({ items: [master, child], nextSyncToken: "initial" })]).result;
+    const items = [
+      { id: master.id, status: "cancelled" },
+      {
+        id: child.id,
+        status: "cancelled",
+        recurringEventId: master.id,
+        originalStartTime: child.originalStartTime,
+      },
+      { ...child, id: "late-moved-child" },
+    ];
+    if (reverse) items.reverse();
+    const routes = paginated
+      ? [
+          route({ items: items.slice(0, 1), nextPageToken: "last" }),
+          route({ items: items.slice(1), nextSyncToken: "deleted" }),
+        ]
+      : [route({ items, nextSyncToken: "deleted" })];
+    const result = await run(routes, initial.state).result;
+    expect(result.state.counts.skipped).toBe(0);
     expect([...pod.dataset(DOC)].filter((q) => q.subject.value.includes("#event-"))).toHaveLength(
       0,
     );
@@ -296,7 +464,11 @@ describe("Google Calendar synchronization", () => {
     expect(item.dateCreated).toBeUndefined();
   });
 
-  it("keeps the previous document and cursor when an unsupported recurrence arrives", async () => {
+  it.each([
+    "BYDAY=2MO",
+    "BYMONTHDAY=-2",
+    "BYMONTHDAY=-31",
+  ])("keeps the previous document and cursor for unsupported %s", async (selector) => {
     const { pod, run } = setup();
     const initial = await run([route(EVENTS)]).result;
     const before = pod.get(DOC);
@@ -304,7 +476,7 @@ describe("Google Calendar synchronization", () => {
       run(
         [
           route({
-            items: [{ ...EVENTS.items[0], recurrence: ["RRULE:FREQ=MONTHLY;BYDAY=2MO"] }],
+            items: [{ ...EVENTS.items[0], recurrence: [`RRULE:FREQ=MONTHLY;${selector}`] }],
             nextSyncToken: "unused",
           }),
         ],

@@ -33,6 +33,7 @@ export interface GCalEvent {
 
 export interface GCalEventsList {
   items: GCalEvent[];
+  timeZone?: string;
   nextPageToken?: string;
   nextSyncToken?: string;
 }
