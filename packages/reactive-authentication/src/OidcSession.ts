@@ -200,8 +200,8 @@ export class OidcSession {
     expectedGeneration?: number,
   ): Promise<DPoPTokenCacheEntry | undefined> {
     const fence = this.#fence;
-    const combined = AbortSignal.any([signal, fence.signal]);
     const generation = expectedGeneration ?? (await fence.generation());
+    const combined = AbortSignal.any([signal, fence.signalFor(generation)]);
     const key = await this.#key(as.issuer, context);
     const store = this.#options.sessionStore;
 

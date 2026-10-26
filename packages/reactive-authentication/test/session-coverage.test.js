@@ -7,12 +7,14 @@ import { contextKey } from "../src/locks.js";
 import {
   accessTokenUsable,
   ClientCredentialsTokenProvider,
+  CredentialBoundary,
   DPoPTokenProvider,
   DynamicRegistrationClientProvider,
   idTokenUsable,
   LwsTokenProvider,
   OidcIdTokenSource,
   OidcSession,
+  ReactiveFetchManager,
   SelfIssuedJwtSource,
   SessionFence,
   XASProvider,
@@ -32,6 +34,78 @@ afterAll(async () => {
   await op.close();
 });
 afterEach(() => vi.unstubAllGlobals());
+
+for (const method of ["upgrade", "restore", "fetch"]) {
+  test(`DPoP ${method} survives a delayed logout broadcast after capturing the new generation`, async () => {
+    const channels = [];
+    class Channel {
+      constructor() {
+        channels.push(this);
+      }
+      postMessage(value) {
+        this.value = value;
+      }
+      close() {}
+    }
+    vi.stubGlobal("BroadcastChannel", Channel);
+    const namespace = `delayed-${method}-${crypto.randomUUID()}`;
+    const store = createMemoryStore();
+    const fence = new SessionFence(namespace, { store });
+    const peer = new SessionFence(namespace, { store });
+    const gate = deferred();
+    const started = deferred();
+    let paused = false;
+    let discoveryRequest;
+    const as = new XASProvider({ getIssuer: async () => new URL(op.issuer) }, insecure);
+    const code = automaticCodeProvider();
+    const provider = new DPoPTokenProvider(
+      callback,
+      code,
+      {
+        getAuthorizationServer: async (request, challenge) => {
+          if (paused) {
+            discoveryRequest = request;
+            started.resolve();
+            await gate.promise;
+          }
+          return await as.getAuthorizationServer(request, challenge);
+        },
+      },
+      new DynamicRegistrationClientProvider(insecure),
+      undefined,
+      { fence, http: insecure, context: () => "fixed" },
+    );
+    const request = new Request(`${rs.url}/alice/delayed-${method}`);
+    const manager = new ReactiveFetchManager({
+      providers: [provider],
+      fence,
+      boundary: new CredentialBoundary([`${rs.url}/alice/`], { allowInsecureHttp: true }),
+      fetch: transport,
+    });
+    try {
+      await provider.upgrade(request);
+      await peer.supersede();
+      // Restore a session created in the new generation, with the broadcast still queued.
+      if (method === "restore") await provider.upgrade(request);
+      paused = true;
+      const pending = method === "fetch" ? manager.fetch(request) : provider[method](request);
+      await started.promise;
+      channels[0].onmessage({ data: channels[1].value });
+      gate.resolve();
+      const result = await pending;
+      assert.equal(discoveryRequest.signal.aborted, false);
+      if (method === "upgrade") assert.equal((await transport(result)).status, 200);
+      else if (method === "fetch") assert.equal(result.status, 200);
+      else assert.equal(result.issuer, op.issuer);
+      assert.equal(code.calls, 2, "one login per generation");
+    } finally {
+      gate.resolve();
+      await provider.forget();
+      fence.close();
+      peer.close();
+    }
+  });
+}
 
 for (const method of ["upgrade", "restore"]) {
   for (const stage of ["issuer", "context"]) {

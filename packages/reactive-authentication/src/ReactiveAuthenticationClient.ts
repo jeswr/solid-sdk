@@ -102,15 +102,18 @@ export class ReactiveAuthenticationClient {
     // streams pass through natively; candidates are buffered in case discovery authorizes them.
     if (!this.#eligible(request.url)) return await this.#fetch(request);
 
-    const session = this.#session(request.signal);
     const generation = await this.#fence?.generation();
+    const session = this.#session(request.signal, generation);
     const body = await bufferBody(request, session.signal, this.#maxReplayBodyBytes);
     return await this.#run(new Attempt(request, body), { generation, signal: session.signal }, 0);
   }
 
-  #session(signal: AbortSignal): { signal: AbortSignal } {
+  #session(signal: AbortSignal, generation = 0): { signal: AbortSignal } {
     return {
-      signal: this.#fence === undefined ? signal : AbortSignal.any([signal, this.#fence.signal]),
+      signal:
+        this.#fence === undefined
+          ? signal
+          : AbortSignal.any([signal, this.#fence.signalFor(generation)]),
     };
   }
 

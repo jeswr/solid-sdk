@@ -33,6 +33,7 @@ export class SessionFence {
   readonly #namespace: string;
   readonly #store: KeyValueStore<number>;
   readonly #channel: BroadcastChannel | undefined;
+  #generation = 0;
   #controller = new AbortController();
 
   constructor(namespace: string, options: SessionFenceOptions = {}) {
@@ -43,7 +44,7 @@ export class SessionFence {
     if (options.broadcast !== false && typeof BroadcastChannel === "function") {
       this.#channel = new BroadcastChannel(`reactive-authentication:${namespace}:fence`);
       this.#channel.onmessage = (event: MessageEvent<FenceMessage>) => {
-        if (event.data?.type === "superseded") this.#abortLocal();
+        if (event.data?.type === "superseded") this.#advance(event.data.generation);
       };
       // Do not keep Node.js processes alive just to listen for logout.
       (this.#channel as { unref?: () => void }).unref?.();
@@ -59,8 +60,20 @@ export class SessionFence {
     return this.#controller.signal;
   }
 
+  /** Cancellation for a captured generation, already aborted if that generation was superseded. */
+  signalFor(generation: number): AbortSignal {
+    return generation === this.#generation
+      ? this.#controller.signal
+      : AbortSignal.abort(new SessionSupersededError());
+  }
+
+  /** Observes durable logout and advances local cancellation; pair the result with {@link signalFor}. */
   async generation(): Promise<number> {
-    return (await this.#store.getItem("generation")) ?? 0;
+    // Preserve notifications for memory-only peers, but never rebase a pending older read after logout.
+    const known = this.#generation;
+    const generation = Math.max(known, (await this.#store.getItem("generation")) ?? 0);
+    this.#advance(generation);
+    return generation;
   }
 
   /** Throws {@link SessionSupersededError} if the generation moved on since `expected` was read. */
@@ -86,9 +99,9 @@ export class SessionFence {
    */
   async supersede(clear: () => Promise<void> = async () => {}): Promise<void> {
     await withLock(this.#lockName, async () => {
-      const next = (await this.generation()) + 1;
+      const next = Math.max(await this.generation(), this.#generation) + 1;
       await this.#store.setItem("generation", next);
-      this.#abortLocal();
+      this.#advance(next);
       this.#channel?.postMessage({ type: "superseded", generation: next } satisfies FenceMessage);
       await clear();
     });
@@ -102,8 +115,13 @@ export class SessionFence {
     return `reactive-authentication:${this.#namespace}:fence`;
   }
 
-  #abortLocal() {
-    this.#controller.abort(new SessionSupersededError());
-    this.#controller = new AbortController();
+  #advance(generation: number) {
+    // A durable read may observe logout before its broadcast arrives. Only work captured under an
+    // earlier generation is cancelled; duplicate or delayed notifications leave the new signal live.
+    if (generation > this.#generation) {
+      this.#generation = generation;
+      this.#controller.abort(new SessionSupersededError());
+      this.#controller = new AbortController();
+    }
   }
 }
