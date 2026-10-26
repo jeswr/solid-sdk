@@ -335,11 +335,11 @@ rules, learned building the Pod Manager global pod search
    document** — an attacker who can write a triple in the profile or index can
    point them at a foreign origin. Before attaching the user's DPoP token,
    confirm each URL falls under one of the user's own `pim:storage` roots
-   (the `isUnderStorage` segment-boundary check in `solid-fetch-rdf`); **drop —
+   (the `isUnderStorage` segment-boundary check in `fetch-rdf`); **drop —
    never fetch — any off-storage URL** (attaching your DPoP token to a foreign
    origin leaks it). Re-validate the registered `instance`/`instanceContainer`
    locations too, not just the index URL — both come off attacker-writable
-   documents. (This is the own-pod-discovery mirror of `solid-fetch-rdf`'s
+   documents. (This is the own-pod-discovery mirror of `fetch-rdf`'s
    cross-pod-claim / external-index provenance rules; same primitive.)
 
 3. **Bound the scan so a large pod cannot hang the UI.** Cap on **three** axes
@@ -351,19 +351,19 @@ rules, learned building the Pod Manager global pod search
 
 4. **Render no raw RDF value as a link.** Result titles/URLs are pod data; a
    `javascript:`/`data:` IRI in an `<a href>`/`<img src>` is an injection vector
-   — scheme-filter to `http(s):` before rendering (same rule as `solid-fetch-rdf`
+   — scheme-filter to `http(s):` before rendering (same rule as `fetch-rdf`
    §"Consuming an external Hydra / TPF search index safely").
 
 Keep the URL-validation and scheme checks in **pure predicates** (no fetch) so
 the search filter is exhaustively unit-testable without a live pod — the same
-testability discipline as the cross-pod provenance predicate in `solid-fetch-rdf`.
+testability discipline as the cross-pod provenance predicate in `fetch-rdf`.
 
 ## Cross-references
 
 - `AGENTS.md` §Writing data — read-modify-write, ETags, explicit Content-Type,
   trailing-slash rule (containers end in `/`). This skill **closes** that
   section's type-index deferral.
-- [Package-local `solid-fetch-rdf` skill](../../packages/fetch-rdf/SKILL.md) — `isUnderStorage` own-storage containment check, the
+- [Package-local `fetch-rdf` skill](../../packages/fetch-rdf/SKILL.md) — `isUnderStorage` own-storage containment check, the
   cross-pod-claim provenance tiers, and the external-index SSRF/scheme rules the
   pod-search section above reuses.
 - `solid-rdf` skill — Turtle/JSON-LD parse + serialise, the "never hand-build

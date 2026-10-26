@@ -4,8 +4,9 @@
 
 import {
   existsSync,
-  globSync,
+  lstatSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
   realpathSync,
   writeFileSync,
@@ -30,12 +31,15 @@ const secretPatterns = [
   ],
   [
     "environment secret",
-    /^[\t ]*(?:export[\t ]+)?(?=[A-Z0-9_]*(?:TOKEN|SECRET|PASSWORD|KEY))[A-Z_][A-Z0-9_]*[\t ]*=[\t ]*["']?([^\s"'`#]+)/gm,
+    /\b(?=[A-Z0-9_]*(?:TOKEN|SECRET|PASSWORD|KEY))[A-Z_][A-Z0-9_]*[\t ]*=[\t ]*["']?([^\s"'`#]+)/g,
   ],
 ];
 
 function isPlaceholder(value) {
-  return /^(?:\$|<|\{|\[|\.\.\.|…|(?:your|example|placeholder|redacted|dummy|test)(?:[-_]|$))/i.test(
+  // Existing recipes use a public localStorage identifier and a generated test password.
+  // Exempt these exact examples rather than all storage keys or arbitrary expressions.
+  if (value === "solid:recent-accounts" || /^randomUUID\(\);?$/.test(value)) return true;
+  return /^(?:\$|<|\{|\[|\.\.\.|…|(?:your|example|placeholder|redacted|dummy|test)(?:[-_]|$)|(?:changeme|xxx)$)/i.test(
     value,
   );
 }
@@ -216,25 +220,49 @@ export function checkSkills(root, { write = false } = {}) {
   const names = new Map();
   const files = new Set();
   const report = (path, rule) => errors.push(`${path}: ${rule}`);
-  const paths = globSync(["skills/*/SKILL.md", "packages/*/SKILL.md"], { cwd: root }).sort();
+  const paths = [];
 
-  // A shared skill directory must contain its entry point; other files at skills/ are docs.
-  for (const dir of globSync("skills/*", { cwd: root, withFileTypes: true })) {
-    if (dir.isDirectory() && !existsSync(join(root, "skills", dir.name, "SKILL.md"))) {
-      report(`skills/${dir.name}/SKILL.md`, "missing SKILL.md");
+  function inspect(path) {
+    const entry = lstatSync(join(root, path), { throwIfNoEntry: false });
+    if (entry?.isSymbolicLink()) report(path, "symbolic links are forbidden (target omitted)");
+    return entry;
+  }
+
+  function children(path) {
+    if (!inspect(path)?.isDirectory()) return [];
+    return readdirSync(join(root, path))
+      .sort()
+      .map((name) => join(path, name));
+  }
+
+  function collectFiles(path) {
+    const entry = inspect(path);
+    if (entry?.isFile()) files.add(path);
+    else if (entry?.isDirectory()) {
+      for (const name of readdirSync(join(root, path)).sort()) collectFiles(join(path, name));
     }
   }
 
-  for (const path of paths) {
-    files.add(path);
-    const skillDir = dirname(path);
-    const patterns = path.startsWith("skills/")
-      ? [`${skillDir}/**/*`]
-      : [`${skillDir}/references/**/*`];
-    for (const companion of globSync(patterns, { cwd: root, withFileTypes: true })) {
-      if (companion.isFile()) files.add(relative(root, join(companion.parentPath, companion.name)));
+  // Walk explicitly: glob defaults omit hidden companions. lstat refuses symlinks
+  // at every level, including entry points and the roots of the scanned directories.
+  for (const scope of ["packages", "skills"]) {
+    for (const skillDir of children(scope)) {
+      if (!inspect(skillDir)?.isDirectory()) continue;
+      const path = join(skillDir, "SKILL.md");
+      const entry = inspect(path);
+      // Other files at skills/ are docs; each shared directory needs an entry point.
+      if (!entry && scope === "skills") report(path, "missing SKILL.md");
+      if (entry && !entry.isFile() && !entry.isSymbolicLink())
+        report(path, "SKILL.md must be a regular file");
+      if (!entry?.isFile()) continue;
+      paths.push(path);
+      files.add(path);
+      collectFiles(scope === "skills" ? skillDir : join(skillDir, "references"));
     }
+  }
 
+  for (const path of paths.sort()) {
+    const skillDir = dirname(path);
     const text = readFileSync(join(root, path), "utf8").replaceAll("\r\n", "\n");
     const frontmatter = /^(?:\uFEFF)?---\n([\s\S]*?)\n---(?:\n|$)/.exec(text);
     if (!frontmatter) {

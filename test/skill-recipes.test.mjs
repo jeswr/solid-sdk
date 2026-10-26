@@ -22,7 +22,7 @@ const jose = await import(fixtureRequire.resolve("jose"));
 const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor;
 
 function blocks(skill, language, section = "", file = "SKILL.md") {
-  const directory = skill === "solid-fetch-rdf" ? "packages/fetch-rdf" : `skills/${skill}`;
+  const directory = skill === "fetch-rdf" ? "packages/fetch-rdf" : `skills/${skill}`;
   const markdown = readFileSync(new URL(`../${directory}/${file}`, import.meta.url), "utf8");
   const start = section ? markdown.indexOf(section) : 0;
   if (start < 0) throw new Error(`Missing section: ${section}`);
@@ -184,7 +184,7 @@ describe("Solid skill recipes", () => {
   });
 
   it("uses the exported pod-scope APIs and refuses escaping write targets before fetch", async () => {
-    const code = blocks("solid-fetch-rdf", "ts", "### Writing to a pod location safely")[0];
+    const code = blocks("fetch-rdf", "ts", "### Writing to a pod location safely")[0];
     const authenticatedFetch = vi.fn(async () => new Response(null, { status: 204 }));
     const bindings = {
       podBase: "https://pod.example/alice/",

@@ -11,6 +11,7 @@ import {
   openSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -130,6 +131,19 @@ describe("skill validation", () => {
     mkdirSync(join(root, "skills/empty"));
     mkdirSync(join(root, "packages/no-skill"));
     expect(checkSkills(root).errors).toEqual(["skills/empty/SKILL.md: missing SKILL.md"]);
+  });
+
+  it.each([
+    "skills/alpha/SKILL.md",
+    "packages/widget/SKILL.md",
+  ])("rejects an entry point that is a directory: %s", (path) => {
+    const root = fixture();
+    rmSync(join(root, path));
+    mkdirSync(join(root, path));
+    expect(checkSkills(root, { write: true }).errors).toEqual([
+      `${path}: SKILL.md must be a regular file`,
+    ]);
+    expect(existsSync(join(root, "skills/INDEX.md"))).toBe(false);
   });
 
   it("rejects duplicate names across shared and package skills", () => {
@@ -476,6 +490,69 @@ describe("skill validation", () => {
     );
   });
 
+  it.each([
+    ["shared hidden file", "skills/alpha/.env", "skills/alpha"],
+    ["shared hidden directory", "skills/alpha/.private/guide.md", "skills/alpha"],
+    ["package hidden file", "packages/widget/references/.env", "packages/widget"],
+    ["package hidden directory", "packages/widget/references/.private/guide.md", "packages/widget"],
+  ])("scans secrets and local paths in a %s", (_label, path, skillDir) => {
+    const root = fixture();
+    const companion = path.slice(skillDir.length + 1);
+    put(
+      root,
+      `${skillDir}/SKILL.md`,
+      skill({ name: skillDir.split("/").at(-1), body: `[companion](${companion})` }),
+    );
+    for (const [value, rule] of [
+      ["TOKEN=fixture-credential-value", "possible environment secret (value omitted)"],
+      ["/home/someone/private", "absolute user path is forbidden"],
+    ]) {
+      put(root, path, value);
+      const result = cli(root, "--write");
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain(`line 1: ${rule}`);
+      expect(result.stderr.includes(value)).toBe(false);
+      expect(result.stdout).toBe("");
+      expect(existsSync(join(root, "skills/INDEX.md"))).toBe(false);
+    }
+  });
+
+  it.each([
+    ["shared file", "skills/alpha/.linked.md", "file"],
+    ["shared directory", "skills/alpha/.linked", "directory"],
+    ["package file", "packages/widget/references/.linked.md", "file"],
+    ["package directory", "packages/widget/references/.linked", "directory"],
+    ["package references", "packages/widget/references", "directory"],
+    ["skill entry point", "skills/alpha/SKILL.md", "file"],
+    ["shared skill directory", "skills/alpha", "directory"],
+    ["package directory", "packages/widget", "directory"],
+    ["shared root", "skills", "directory"],
+    ["package root", "packages", "directory"],
+    ["dangling companion", "skills/alpha/.linked.md", "missing"],
+  ])("refuses a symlink at a %s without reading its target", (_label, path, type) => {
+    const root = fixture();
+    put(root, "skills/alpha/SKILL.md", skill());
+    const target = join(root, "unscanned", "target");
+    if (type === "file") put(root, "unscanned/target", "TOKEN=fixture-credential-value");
+    if (type === "directory")
+      put(root, "unscanned/target/SKILL.md", "TOKEN=fixture-credential-value");
+    rmSync(join(root, path), { recursive: true, force: true });
+    mkdirSync(dirname(join(root, path)), { recursive: true });
+    symlinkSync(target, join(root, path));
+    const result = cli(root, "--write");
+    expect(result.status).toBe(1);
+    expect(result.stderr).toBe(`${path}: symbolic links are forbidden (target omitted)\n`);
+    expect(result.stderr.includes(target)).toBe(false);
+    expect(result.stdout).toBe("");
+    expect(existsSync(join(root, "skills/INDEX.md"))).toBe(false);
+  });
+
+  it("keeps package source files outside the companion scanning scope", () => {
+    const root = fixture();
+    put(root, "packages/widget/src/.env", "TOKEN=fixture-credential-value");
+    expect(checkSkills(root, { write: true }).errors).toEqual([]);
+  });
+
   const localPaths = [
     "/Users/someone/private",
     "/home/someone/private",
@@ -560,8 +637,8 @@ describe("skill validation", () => {
     const escaped = [...value]
       .map((character) => `\\u${character.codePointAt(0).toString(16).padStart(4, "0")}`)
       .join("");
-    // A decoded newline also exercises line-anchored environment-secret detection.
-    const text = skill({ description: `"Use when checking metadata.\\n${escaped}"` });
+    // Escaped assignments must also be caught inline in the decoded description.
+    const text = skill({ description: `"Use when checking metadata. ${escaped}"` });
     put(root, "skills/alpha/SKILL.md", text);
     for (const previousIndex of [undefined, "Previously generated index\n"]) {
       if (previousIndex !== undefined) put(root, "skills/INDEX.md", previousIndex);
@@ -608,6 +685,98 @@ describe("skill validation", () => {
       root,
       "skills/alpha/SKILL.md",
       skill({ description: '"Use when Authorization: Bearer <token>\\nTOKEN=your-token"' }),
+    );
+    expect(checkSkills(root, { write: true }).errors).toEqual([]);
+  });
+
+  const inlineAssignments = [
+    ["prose", "setting PASSWORD=fixture-credential-value for a command."],
+    ["inline code", "setting `API_KEY=fixture-credential-value` for a command."],
+    ["export", "running export API_TOKEN=fixture-credential-value"],
+    ["command prefix", "running FOO_SECRET=fixture-credential-value cmd"],
+    ["quoted value", "setting API_TOKEN = 'fixture-credential-value'"],
+    ["multiple assignments", "running TOKEN=<token> SECRET=fixture-credential-value cmd"],
+    ["changeme lookalike", "setting TOKEN=changeme-credential-value"],
+    ["xxx lookalike", "setting SECRET=xxx-credential-value"],
+    ["generator lookalike", "setting PASSWORD=randomUUID()credential-value"],
+  ];
+
+  it.each(inlineAssignments)("rejects inline credentials in metadata: %s", (_label, text) => {
+    const root = fixture();
+    put(root, "skills/alpha/SKILL.md", skill({ description: `Use when ${text}` }));
+    const indexPath = join(root, "skills/INDEX.md");
+    for (const previousIndex of [undefined, "Previously generated index\n"]) {
+      if (previousIndex !== undefined) put(root, "skills/INDEX.md", previousIndex);
+      const result = cli(root, "--write");
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain(
+        "decoded metadata: possible environment secret (value omitted)",
+      );
+      expect(result.stderr.includes("fixture-credential-value")).toBe(false);
+      expect(result.stderr.includes(text)).toBe(false);
+      expect(result.stdout).toBe("");
+      if (previousIndex === undefined) expect(existsSync(indexPath)).toBe(false);
+      else expect(readFileSync(indexPath, "utf8")).toBe(previousIndex);
+    }
+  });
+
+  it.each(inlineAssignments)("rejects inline credentials in the body: %s", (_label, text) => {
+    const root = fixture();
+    put(root, "skills/alpha/SKILL.md", skill({ body: `Example: ${text}\n` }));
+    const result = cli(root, "--write");
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("line 5: possible environment secret (value omitted)");
+    expect(result.stderr.includes("fixture-credential-value")).toBe(false);
+    expect(result.stderr.includes(text)).toBe(false);
+    expect(result.stdout).toBe("");
+    expect(existsSync(join(root, "skills/INDEX.md"))).toBe(false);
+  });
+
+  it.each([
+    ["angle brackets", "<token>"],
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: literal documentation template
+    ["braced variable", "${API_TOKEN}"],
+    ["variable", "$API_TOKEN"],
+    ["braces", "{token}"],
+    ["redaction", "[REDACTED]"],
+    ["ellipsis", "..."],
+    ["Unicode ellipsis", "…"],
+    ["your prefix", "your-api-token"],
+    ["example", "example"],
+    ["example prefix", "example_token"],
+    ["placeholder prefix", "placeholder-token"],
+    ["dummy prefix", "dummy-token"],
+    ["test prefix", "test-token"],
+    ["changeme", "changeme"],
+    ["xxx", "xxx"],
+    ["public storage identifier", "solid:recent-accounts"],
+    ["generated test password", "randomUUID()"],
+    ["empty double quotes", '""'],
+    ["empty single quotes", "''"],
+    ["empty", ""],
+  ])("allows inline placeholder assignments in metadata and body: %s", (_label, value) => {
+    const root = fixture();
+    put(
+      root,
+      "skills/alpha/SKILL.md",
+      skill({
+        description: `Use when setting \`API_TOKEN=${value}\` for a command.`,
+        body: `Run \`export PASSWORD=${value}\` or \`FOO_SECRET=${value}\` cmd.\n`,
+      }),
+    );
+    expect(checkSkills(root, { write: true }).errors).toEqual([]);
+    expect(existsSync(join(root, "skills/INDEX.md"))).toBe(true);
+  });
+
+  it("requires an environment variable name boundary and ignores non-secret assignments", () => {
+    const root = fixture();
+    put(
+      root,
+      "skills/alpha/SKILL.md",
+      skill({
+        description: "Use when setting PORT=3000 or ISSUER=https://example.invalid.",
+        body: "These are other identifiers: lowerTOKEN=value 1PASSWORD=value.\n",
+      }),
     );
     expect(checkSkills(root, { write: true }).errors).toEqual([]);
   });
