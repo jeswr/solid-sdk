@@ -4,7 +4,7 @@ export interface WorkBudget {
 }
 export type Edit = "equal" | "insert" | "delete";
 
-function spend(budget: WorkBudget, amount = 1): void {
+export function spend(budget: WorkBudget, amount = 1): void {
   budget.remaining -= amount;
   if (budget.remaining < 0) throw new RangeError("Document diff work limit exceeded");
 }

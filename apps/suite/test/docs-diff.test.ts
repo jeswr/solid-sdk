@@ -432,6 +432,28 @@ describe("bounded untrusted documents", () => {
     ).toHaveLength(1);
     expect(Object.isFrozen(DIFF_LIMITS)).toBe(true);
   });
+  it("charges repeated long-attribute mark deltas against the shared work budget", () => {
+    const before = { type: "paragraph", content: [text("abcd", [link("x".repeat(350_000))])] };
+    const after = {
+      type: "paragraph",
+      content: [text("a"), text("b", [bold]), text("c", [italic]), text("d", [bold])],
+    };
+    expect(() => modified(before, after)).toThrow(/work limit/);
+  });
+  it("coalesces long marked text without charging its attributes per character", () => {
+    const value = "a".repeat(99_999);
+    const href = `https://example.org/${"x".repeat(50_000)}`;
+    const p = (target: string) => ({ type: "paragraph", content: [text(value, [link(target)])] });
+    expect(modified(p(href), p(`${href}b`)).inline).toEqual([
+      {
+        kind: "marks",
+        before: range(1, 100_000),
+        after: range(1, 100_000),
+        removed: [link(href)],
+        added: [link(`${href}b`)],
+      },
+    ]);
+  });
 });
 
 describe("Myers edit script invariants", () => {

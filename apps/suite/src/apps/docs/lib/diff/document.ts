@@ -1,5 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { myers, type WorkBudget } from "./myers";
+import { myers, spend, type WorkBudget } from "./myers";
 import type { BlockChange, DocumentMark, DocumentNode, MarkChange, TextChange } from "./types";
 
 /** Per document; all limits are fixed so untrusted callers cannot disable them. */
@@ -105,6 +105,7 @@ interface Token {
   to: number;
   text: string;
   marks: readonly DocumentMark[];
+  markSignatures: readonly string[];
   markKey: number;
 }
 function tokens(block: DocumentNode, markKeys: Map<string, number>): Token[] {
@@ -112,7 +113,8 @@ function tokens(block: DocumentNode, markKeys: Map<string, number>): Token[] {
   let position = 0;
   function visit(node: DocumentNode): void {
     if (node.type === "text") {
-      const signature = stable(node.marks);
+      const markSignatures = (node.marks as readonly DocumentMark[]).map((mark) => stable(mark));
+      const signature = `[${markSignatures.join(",")}]`;
       let markKey = markKeys.get(signature);
       if (markKey === undefined) {
         markKey = markKeys.size;
@@ -125,6 +127,7 @@ function tokens(block: DocumentNode, markKeys: Map<string, number>): Token[] {
           from: position,
           to: position + text.length,
           marks: node.marks as readonly DocumentMark[],
+          markSignatures,
           markKey,
         });
         position += text.length;
@@ -136,6 +139,7 @@ function tokens(block: DocumentNode, markKeys: Map<string, number>): Token[] {
         from: position,
         to: ++position,
         marks: [],
+        markSignatures: [],
         markKey: -1,
       });
     } else {
@@ -145,6 +149,7 @@ function tokens(block: DocumentNode, markKeys: Map<string, number>): Token[] {
         from: position,
         to: ++position,
         marks: [],
+        markSignatures: [],
         markKey: -1,
       });
       for (const child of node.content as readonly DocumentNode[]) visit(child);
@@ -154,6 +159,7 @@ function tokens(block: DocumentNode, markKeys: Map<string, number>): Token[] {
         from: position,
         to: ++position,
         marks: [],
+        markSignatures: [],
         markKey: -1,
       });
     }
@@ -198,14 +204,20 @@ function inlineDiff(
           previous.before.to = a.to;
           previous.after.to = b.to;
         } else {
-          const oldKeys = new Set(a.marks.map((mark) => stable(mark)));
-          const newKeys = new Set(b.marks.map((mark) => stable(mark)));
+          // Charge string hashing/comparison before building sets or scanning the marks.
+          spend(
+            budget,
+            a.markSignatures.reduce((cost, key) => cost + key.length, 0) +
+              b.markSignatures.reduce((cost, key) => cost + key.length, 0),
+          );
+          const oldKeys = new Set(a.markSignatures);
+          const newKeys = new Set(b.markSignatures);
           changes.push({
             kind: "marks",
             before: { from: a.from, to: a.to },
             after: { from: b.from, to: b.to },
-            removed: a.marks.filter((mark) => !newKeys.has(stable(mark))),
-            added: b.marks.filter((mark) => !oldKeys.has(stable(mark))),
+            removed: a.marks.filter((_, i) => !newKeys.has(a.markSignatures[i] as string)),
+            added: b.marks.filter((_, i) => !oldKeys.has(b.markSignatures[i] as string)),
           });
         }
         lastBeforeMarks = a.markKey;
