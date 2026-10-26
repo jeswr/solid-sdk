@@ -81,6 +81,19 @@ function actionType(subject: unknown): string | null | undefined {
   return actions.length > 1 ? null : actions[0];
 }
 
+/** Supported non-action envelopes; the caller rejects ambiguous types via actionType first. */
+function isMessageEnvelope(subject: unknown): boolean {
+  const raw = firstProp(subject, ["@type", "type"]);
+  const types = typeof raw === "string" ? [raw] : Array.isArray(raw) ? raw : [];
+  return (
+    types.filter(
+      (type) =>
+        typeof type === "string" &&
+        ["Message", "schema:Message", "https://schema.org/Message"].includes(type.trim()),
+    ).length === 1
+  );
+}
+
 /** The verdict an injected verifier returns. Anything but `verified: true` fails closed. */
 export interface AgenticReplyVerification {
   /** True ONLY when the Data Integrity proof verified over the canonical graph. */
@@ -162,7 +175,7 @@ function mapReplyBlock(
     return { interpretations, patterns };
   }
   const actionIri = actionType(subject);
-  if (actionIri === null || (verified && actionIri === undefined))
+  if (actionIri === null || (verified && actionIri === undefined && !isMessageEnvelope(subject)))
     return { interpretations, patterns };
 
   // Unverified structure is still extracted, but SELF-REPORTED — never auto-run.
@@ -301,7 +314,8 @@ export async function extractAgenticReply(
 
   for (const [i, root] of roots.entries()) {
     // Reject the entire ambiguous block before it can be marked verified or mapped.
-    const action = actionType(prop(root, "credentialSubject"));
+    const subject = prop(root, "credentialSubject");
+    const action = actionType(subject);
     if (action === null) continue;
     let verified = false;
     let issuer: string | undefined;
@@ -309,7 +323,7 @@ export async function extractAgenticReply(
       try {
         const verdict = await options.verify(root);
         if (verdict.verified === true) {
-          if (action === undefined) continue;
+          if (action === undefined && !isMessageEnvelope(subject)) continue;
           verified = true;
           issuer = safeHttpIri(verdict.issuer);
         }
