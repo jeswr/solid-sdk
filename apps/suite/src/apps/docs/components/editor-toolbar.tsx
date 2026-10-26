@@ -103,6 +103,21 @@ export function EditorToolbar({
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const activeControl = useRef<HTMLElement | null>(null);
+  // A command chosen from the More menu returns the caret to the document, rather than
+  // the menu handing focus back to its trigger, so typing continues where it applied.
+  const chose = useRef(false);
+  const choose = (run: () => unknown) => () => {
+    chose.current = true;
+    run();
+  };
+  const returnToDocument = (event: Event) => {
+    if (!chose.current) return;
+    chose.current = false;
+    // A command that opened a dialog keeps focus there.
+    if (document.querySelector('[role="dialog"], [role="alertdialog"]')) return;
+    event.preventDefault();
+    editor.commands.focus();
+  };
   const controls = () =>
     Array.from(ref.current?.querySelectorAll<HTMLElement>("button, select") ?? []).filter(
       (control) =>
@@ -227,9 +242,9 @@ export function EditorToolbar({
               </TooltipTrigger>
               <TooltipContent>Text alignment</TooltipContent>
             </Tooltip>
-            <DropdownMenuContent>
+            <DropdownMenuContent onCloseAutoFocus={returnToDocument}>
               {align.map((action) => (
-                <DropdownMenuItem key={action.label} onSelect={action.run}>
+                <DropdownMenuItem key={action.label} onSelect={choose(action.run)}>
                   {action.label}
                   <Kbd>{keyboardLabel(action.keys, mac)}</Kbd>
                 </DropdownMenuItem>
@@ -250,7 +265,11 @@ export function EditorToolbar({
           </TooltipTrigger>
           <TooltipContent>More formatting</TooltipContent>
         </Tooltip>
-        <DropdownMenuContent align="end" className="docs-more-menu">
+        <DropdownMenuContent
+          align="end"
+          className="docs-more-menu"
+          onCloseAutoFocus={returnToDocument}
+        >
           <DropdownMenuLabel>Formatting</DropdownMenuLabel>
           {actions
             .filter((action) => !shown.has(action.label))
@@ -260,7 +279,7 @@ export function EditorToolbar({
                 <DropdownMenuItem
                   key={action.label}
                   disabled={!online && action.label === "Insert image"}
-                  onSelect={action.run}
+                  onSelect={choose(action.run)}
                 >
                   <Icon aria-hidden="true" />
                   {action.label}
@@ -273,7 +292,7 @@ export function EditorToolbar({
               <DropdownMenuSeparator />
               <DropdownMenuLabel>Table</DropdownMenuLabel>
               {tableCommands(editor).map(([label, run]) => (
-                <DropdownMenuItem key={label} onSelect={run}>
+                <DropdownMenuItem key={label} onSelect={choose(run)}>
                   {label}
                 </DropdownMenuItem>
               ))}
@@ -285,20 +304,22 @@ export function EditorToolbar({
               {[25, 50, 75, 100].map((width) => (
                 <DropdownMenuItem
                   key={width}
-                  onSelect={() =>
+                  onSelect={choose(() =>
                     editor
                       .chain()
                       .focus()
                       .updateAttributes("image", {
                         width: Math.round((editor.view.dom.clientWidth * width) / 100),
                       })
-                      .run()
-                  }
+                      .run(),
+                  )}
                 >
                   Image width {width}%
                 </DropdownMenuItem>
               ))}
-              <DropdownMenuItem onSelect={() => editor.chain().focus().deleteSelection().run()}>
+              <DropdownMenuItem
+                onSelect={choose(() => editor.chain().focus().deleteSelection().run())}
+              >
                 Remove image
               </DropdownMenuItem>
             </>

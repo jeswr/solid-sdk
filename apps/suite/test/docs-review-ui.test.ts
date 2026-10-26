@@ -79,6 +79,64 @@ describe("Docs keyboard review regressions", () => {
     expect(controls.filter((control) => control.tabIndex === 0)).toEqual([controls.at(-1)]);
   });
   it.each([
+    false,
+    true,
+  ])("returns focus to the document after a More formatting command (opens a dialog: %s)", async (dialog) => {
+    const focus = vi.fn();
+    const editor = { isActive: () => false, commands: { focus } } as unknown as Editor;
+    const run = vi.fn(() => {
+      if (!dialog) return;
+      const opened = document.createElement("div");
+      opened.setAttribute("role", "dialog");
+      document.body.append(opened);
+    });
+    const actions = [
+      "Undo",
+      "Redo",
+      "Bold",
+      "Italic",
+      "Underline",
+      "Strikethrough",
+      "Checklist",
+    ].map((label) => ({
+      label,
+      icon: Bold,
+      keys: "",
+      run: label === "Checklist" ? run : vi.fn(),
+    }));
+    await act(async () =>
+      root.render(
+        createElement(
+          TooltipProvider,
+          null,
+          createElement(EditorToolbar, { editor, actions, mac: false, online: true }),
+        ),
+      ),
+    );
+    const more = host.querySelector('[aria-label="More formatting"]') as HTMLButtonElement;
+    await act(async () => {
+      more.focus();
+      more.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    });
+    const item = await vi.waitFor(() => {
+      const found = Array.from(document.querySelectorAll('[role="menuitem"]')).find((menuitem) =>
+        menuitem.textContent?.includes("Checklist"),
+      );
+      if (!found) throw new Error("Checklist is not in the More menu");
+      return found as HTMLElement;
+    });
+    await act(async () => item.click());
+    expect(run).toHaveBeenCalledOnce();
+    await vi.waitFor(() => expect(document.querySelector('[role="menu"]')).toBeNull());
+    if (dialog) {
+      expect(focus).not.toHaveBeenCalled();
+      document.querySelector('[role="dialog"]')?.remove();
+    } else {
+      expect(focus).toHaveBeenCalledOnce();
+      expect(document.activeElement).not.toBe(more);
+    }
+  });
+  it.each([
     "Cancel",
     "Escape",
   ])("restores keyboard-opened Upload focus after %s", async (method) => {
