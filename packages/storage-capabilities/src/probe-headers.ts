@@ -1,5 +1,4 @@
-// AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
+// AUTHORED-BY GPT-6.1-Sol
 import { parseLinkHeaders } from "./link.js";
 import type { ProbeResult, WacMode } from "./types.js";
 import { ACP } from "./vocab.js";

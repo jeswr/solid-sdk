@@ -1,5 +1,6 @@
-<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY GPT-6.1-Sol -->
 <!-- AUTHORED-BY Codex GPT-6 -->
+<!-- AUTHORED-BY Claude Opus 5.5 -->
 
 # @jeswr/storage-capabilities
 
@@ -45,7 +46,9 @@ It is not a recorded server response.
 resolves from any resource through HEAD and its advertised Link target. LWS takes priority;
 Solid root discovery walks at most eight ancestors by default. `seedHeaders` skips the initial
 HEAD. NSS `Updates-Via` headers and legacy update links produce a probe-only Solid description.
-The optional `evidence` array records `assumed-origin-root` and `cross-origin-description`.
+When ancestor discovery is exhausted, `evidence` records `assumed-origin-root`. This placeholder
+does not authorize `did:service`, `lws:capability`, or root ACQ statements; only
+`notify:subscription` entries are mapped until a root is verified (SSD-CLI-16).
 
 ```ts
 import { resolveStorageDescription, probe } from '@jeswr/storage-capabilities';
@@ -55,7 +58,7 @@ const cache = createMemoryCache(); // Or createIndexedDbCache({ dbName: 'my-publ
 const description = await resolveStorageDescription(resourceUrl, { fetch: authFetch, cache });
 if (description.protocol === 'solid') {
   const observations = await probe(description.root, authFetch);
-  await cache.set(description.id, { description, probe: observations });
+  await cache.attachProbe?.(description.id, description, observations);
 }
 ```
 
@@ -68,6 +71,7 @@ errors reject the operation. `cache.delete(id)` invalidates the record; retained
 cannot serve a deleted record. Callers should invalidate session metadata on logout.
 
 Fresh descriptions resolve without fetching, including sibling URLs beneath a known root.
+Assumed roots never establish cached prefixes; later lookups repeat discovery.
 TTL comes from `Cache-Control: max-age`, otherwise one hour. On expiry, the resolver GETs the
 known description directly with `If-None-Match` when an ETag exists. A 304 retains the description
 and cached probe, bumps `fetchedAt`, and updates cache headers when supplied. A replacement body
@@ -75,19 +79,20 @@ discards an old probe. Description 404/410 and root mismatch invalidate the cach
 Expired legacy descriptions repeat discovery because there is no description resource to GET.
 
 Every network request uses the injected fetch, `redirect: 'manual'`, and the supplied signal.
-Pass a guarded authenticated fetch for SSRF protection. LWS descriptions and roots must share
-the requested resource's origin. Foreign Solid descriptions contribute only `notify:subscription`
-entries and use `credentials: 'omit'`; the injected transport must also enforce its credential
-destination policy. All description bodies are capped at 1 MiB of streamed bytes, even with a
+Pass a guarded authenticated fetch for SSRF protection. Descriptions for both protocols and their
+roots must share the requested resource's origin. Foreign descriptions are rejected with
+`root-mismatch` before GET, including cached records and refreshes (SSD-CLI-18).
+All description bodies are capped at 1 MiB of streamed bytes, even with a
 missing or dishonest Content-Length. Parsing uses `parseRdf` and the description URL as base.
-The standard W3C notifications context (and its legacy notification/v1 alias) is bundled for
-CSS JSON-LD; other remote contexts are refused without a network request.
+The standard W3C notifications context (and its legacy notification/v1 alias) and trusted
+snapshots of the draft's CID, LWS, and SSD contexts are bundled for JSON-LD. The draft copies
+include source headers in `src/contexts/`. Contexts are never fetched at run time;
+unrecognised context URLs are refused (SSD-CLI-15).
 
 `probe(root, fetch, { signal?, now? })` uses OPTIONS, then HEAD if OPTIONS fails or is unsupported.
 It returns parsed Accept-Patch, Accept-Post, WAC-Allow, ACL/ACP links and Allow with raw header
 evidence. Denied HEAD responses can still supply observations. Run it only for Solid; LWS
-descriptions are authoritative. Feature derivation and the `capabilities()` convenience API
-belong to T-014.
+descriptions are authoritative. See "Feature flags" below for `deriveFeatures` and `capabilities()`.
 
 Internal helpers:
 
@@ -123,7 +128,27 @@ Internal helpers:
   Parse bytes first with `@jeswr/fetch-rdf`'s `parseRdf` and the description URL as `baseIRI`.
   The mapper does no fetching, origin validation, HTTP metadata handling, or dataset mutation.
 
-Feature derivation and other server fixtures arrive in later tasks.
+The parsers and existing `deriveFeatures` follow the merged
+[Solid Storage Service Description draft](https://jeswr.github.io/solid-specs/specs/service-description/)
+where it supersedes ADR-002. `ssd:` means `https://jeswr.org/ns/solid-sd#`.
+Listed `ssd:SolidNotificationService` entries read `notify:channelType` and merge with
+`notify:subscription` services having the same endpoint and channel (SSD-CLI-6), retaining
+profiles and combining notification features. Root `solid-sparql:endpoint` statements imply
+the ACQ profile and merge with listed `ssd:SparqlQueryService` entries at that endpoint
+(SSD-CLI-7). Flat `ssd:PatchSupport` capabilities have exactly one `ssd:source` and one or more
+`ssd:patchType` values, one capability per resource media type; their formats are unioned.
+`ssd:RecursiveDeleteService` advertises an endpoint for `POST {container}`. The deprecated
+`ssd:RecursiveDelete` capability is preserved as data and leaves that feature `unknown`.
+
+Read-only sparq compatibility remains for `ssd:channelType` (sparq-org/sparq#7234), nested
+`ssd:format` nodes, and CID `format` maps / `mediaType` members. Normative channel and flat
+patch fields take precedence. A malformed flat patch entry cannot fall back to legacy fields.
+The legacy channel predicate is used only when `notify:channelType` is absent; a present
+literal or blank-node channel value cannot activate the fallback.
+The CID parser expands the draft's fixed compact type/subscription terms and scoped
+`channelType`/`model` values without fetching contexts; unknown terms and extras survive.
+The copied draft examples live in `src/fixtures/{css.ttl,sparq-solid.ttl,sparq-lws.jsonld}`
+with source headers, alongside the existing synthetic server exchanges.
 
 From the workspace root:
 
@@ -143,3 +168,44 @@ functions, lines, and statements.
 Resolver tests use injected fetch and clocks for request counts, TTL/ETag/304 refresh,
 ancestor limits, NSS discovery, HTTP/parse errors, redirect/origin refusal, and streaming
 body limits. Both caches share a contract suite; IndexedDB is tested with fake-indexeddb.
+
+## Feature flags
+
+`deriveFeatures(description, probe?)` is pure and deterministic and implements the ADR-002 mapping
+table with the draft's absence and profile rules. `capabilities(url, options)` resolves the storage, probes a Solid root (OPTIONS, then HEAD)
+only when the description leaves `accessControl` or `patch` unknown, caches the probe with the
+description, and returns `Features`. LWS storages are never probed. A failed probe leaves those
+features `unknown` and is retried on the next call.
+
+The public signatures and `FeatureState` union stay unchanged. A missing entry means `unknown`,
+even in a fetched description (SSD-CLI-10); applications must check `state === 'available'`
+before using a feature. An unsupported required profile also leaves the feature `unknown`.
+Query services require the ACQ profile, CRDT sync requires `ssd:y-protocol-v1`, and access
+request/grant services require `lws:AccessProfile`. Any one implemented profile in the list
+suffices (SSD-CLI-5/20). LWS service types work on both protocols; old SSD access aliases
+remain read-only compatibility forms. Resumable uploads require the tus profile
+`https://tus.io/protocols/resumable-upload`. Unknown type IRIs do not acquire semantics by
+sharing a recognised local name. Additional draft constants are exported through `./vocab`;
+`SSD.RecursiveDelete` is deprecated in favour of `SSD.RecursiveDeleteService`.
+
+Protocol guarantees and client fallbacks remain: Solid client type indexes, copy/delete move,
+and RDF negotiation; LWS JSON Patch baseline and pagination. Solid pagination is `unknown`
+without a `ssd:Pagination` entry. Missing LWS move, access grants/control, or RDF negotiation
+entries are `unknown`. A listed notification service with only channels this client cannot
+consume remains `unavailable`; this describes client usability, not a complete server inventory.
+On LWS, an RDF `ContentNegotiation` declaration is usable only with exactly one source and at
+least one target, all parameter-free `type/subtype` media types. Malformed declarations
+contribute no formats; valid declarations are unioned.
+
+```ts
+import { capabilities } from '@jeswr/storage-capabilities';
+
+const features = await capabilities(resourceUrl, { fetch: authFetch });
+if (features.liveUpdates.state === 'available') subscribe(features.liveUpdates.detail);
+```
+
+`@jeswr/storage-capabilities/testing` also exports four synthetic server fixtures (`cssStorage`,
+`sparqLwsStorage`, `essStorage`, `nssStorage`, plus `storageFixtures`) and `fixtureFetch(fixture)`,
+a replaying fake `fetch` that records each request as `"<METHOD> <URL>"`. The fixtures follow each
+server's public behaviour. They are not captured responses.
+

@@ -1,8 +1,9 @@
-// AUTHORED-BY Codex GPT-6.1-Sol
-import { longestPrefix, type Prefix, prefixUrl } from "./prefix.js";
+// AUTHORED-BY GPT-6.1-Sol
+import { longestPrefix, type Prefix, prefixUrl, sameDescription } from "./prefix.js";
 import type { DescriptionCache } from "./types.js";
 
 type CacheRecord = NonNullable<Awaited<ReturnType<DescriptionCache["get"]>>>;
+
 /** Create an isolated in-memory cache. Reads and writes copy public metadata. */
 export function createMemoryCache(): DescriptionCache {
   const descriptions = new Map<string, CacheRecord>();
@@ -16,6 +17,19 @@ export function createMemoryCache(): DescriptionCache {
     },
     async delete(storageId) {
       descriptions.delete(storageId);
+    },
+    async attachProbe(storageId, description, probe) {
+      // Synchronous check-and-set: no other cache operation can interleave.
+      const current = descriptions.get(storageId);
+      if (
+        !current ||
+        current.probe !== undefined ||
+        !sameDescription(current.description, description)
+      ) {
+        return false;
+      }
+      descriptions.set(storageId, structuredClone({ ...current, probe }));
+      return true;
     },
     async rememberPrefix(root, storageId) {
       const normalised = prefixUrl(root).href;
@@ -87,6 +101,26 @@ export function createIndexedDbCache({
     },
     async delete(storageId) {
       await transact("descriptions", "readwrite", (store) => store.delete(storageId));
+    },
+    async attachProbe(storageId, description, probe) {
+      let attached = false;
+      // One readwrite transaction: the get and the put cannot be split by another writer.
+      await transact("descriptions", "readwrite", (store) => {
+        const request = store.get(storageId);
+        request.onsuccess = () => {
+          const current = request.result as CacheRecord | undefined;
+          if (
+            current &&
+            current.probe === undefined &&
+            sameDescription(current.description, description)
+          ) {
+            store.put({ ...current, probe }, storageId);
+            attached = true;
+          }
+        };
+        return request;
+      });
+      return attached;
     },
     async rememberPrefix(root, storageId) {
       const normalised = prefixUrl(root).href;

@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 
 import { describe, expect, it } from "vitest";
@@ -32,7 +33,7 @@ describe("Symptom round-trip (parse∘build == identity)", () => {
 
   it("rejects a Symptom with NO onset time (never coerces to the 1970 epoch)", async () => {
     const ttl = `
-      @prefix diet: <https://w3id.org/jeswr/sectors/health/diet#> .
+      @prefix diet: <https://jeswr.org/ns/sectors/health/diet#> .
       <${URL_}#it> a diet:Symptom ; diet:symptomType diet:bloating .
     `;
     expect(await parseSymptomTtl(URL_, ttl)).toBeUndefined();
@@ -90,7 +91,7 @@ describe("Symptom severity is an ordinal 0–10 (enforced in code)", () => {
 
   it("parseSymptom DROPS an out-of-range severity from an untrusted document", async () => {
     const ttl = `
-      @prefix diet: <https://w3id.org/jeswr/sectors/health/diet#> .
+      @prefix diet: <https://jeswr.org/ns/sectors/health/diet#> .
       @prefix schema: <http://schema.org/> .
       @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
       <${URL_}#it> a diet:Symptom ;

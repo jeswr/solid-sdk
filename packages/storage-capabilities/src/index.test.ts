@@ -1,4 +1,4 @@
-// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY GPT-6.1-Sol
 import { expect, test } from "vitest";
 import * as cache from "./cache.js";
 import * as api from "./index.js";
@@ -7,12 +7,22 @@ import * as testing from "./testing.js";
 test("public parser, errors, fixture and cache entry points load", () => {
   expect(Object.keys(api).sort()).toEqual([
     "CapabilitiesError",
+    "capabilities",
+    "deriveFeatures",
     "parseLwsDescription",
     "probe",
     "resolveStorageDescription",
   ]);
   expect(Object.keys(cache).sort()).toEqual(["createIndexedDbCache", "createMemoryCache"]);
-  expect(Object.keys(testing)).toEqual(["sparqLwsCid"]);
+  expect(Object.keys(testing).sort()).toEqual([
+    "cssStorage",
+    "essStorage",
+    "fixtureFetch",
+    "nssStorage",
+    "sparqLwsCid",
+    "sparqLwsStorage",
+    "storageFixtures",
+  ]);
   expect(testing.sparqLwsCid.type).toEqual(["Storage"]);
 });
 
