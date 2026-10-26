@@ -1476,6 +1476,25 @@ describe('ProfileStore runtime API and adversarial isolation', () => {
     expect(profileDb.state.defaultProfileId).toBe('2');
   });
 
+  it('serves the cached body when a revalidation returns 304 with an empty body stream', async () => {
+    await twoProfiles();
+    await loadWorker();
+    fetchImpl = async (_input, init) => {
+      if (new Headers(init?.headers).get('if-none-match') === 'fixture-etag') {
+        // Chrome's 304 carries a non-null, empty body stream.
+        const notModified = new Response(null, { status: 304 });
+        Object.defineProperty(notModified, 'body', { value: new ReadableStream() });
+        return notModified;
+      }
+      return new Response('fixture bytes', { headers: { etag: 'fixture-etag' } });
+    };
+    expect((await profileFetch()).body).toBe('fixture bytes');
+    const revalidated = await profileFetch();
+    expect(revalidated.error).toBeUndefined();
+    expect(revalidated.status).toBe(200);
+    expect(revalidated.body).toBe('fixture bytes');
+  });
+
   it('cancels in-flight reads and purges only the removed profile', async () => {
     const { a, b } = await twoProfiles();
     await loadWorker();

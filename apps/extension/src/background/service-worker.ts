@@ -390,6 +390,9 @@ async function ensureSession(profileId?: string): Promise<SessionContext | null>
   return ctx ? { ...ctx, profileId: id } : null;
 }
 
+/** Statuses whose Response must have a null body (Fetch standard). */
+const NULL_BODY_STATUSES = new Set([101, 103, 204, 205, 304]);
+
 async function teardownSession(sender?: MessageSender, stamp?: string): Promise<void> {
   const store = await getProfiles();
   const origin = resolveRequestingOrigin(sender, stamp);
@@ -636,9 +639,12 @@ async function handleProfileFetch(
             }),
         });
         // Consume network bodies outside the lifecycle queue, including cache.put's body.
-        const responseBody = result.response.body
-          ? await cancellable(signal, () => result.response.arrayBuffer())
-          : null;
+        // Chrome exposes an empty body stream on a 304 revalidation, but the Response
+        // constructor rejects any body for null-body statuses.
+        const responseBody =
+          result.response.body && !NULL_BODY_STATUSES.has(result.response.status)
+            ? await cancellable(signal, () => result.response.arrayBuffer())
+            : null;
         const response = new Response(responseBody, {
           status: result.response.status,
           statusText: result.response.statusText,
