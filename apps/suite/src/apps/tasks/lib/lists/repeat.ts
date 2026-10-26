@@ -4,6 +4,7 @@ import {
   DAY,
   dayOf,
   dueLocal,
+  instant,
   localTime,
   range,
   readContext,
@@ -122,10 +123,14 @@ export function nextOccurrence(
       ? localTime(now, format)
       : dueLocal(due, format);
   const local = nextLocal(allDay ? dayOf(range(base)) : range(base), rule);
-  // Bound calendar occurrences before resolving wall times: an exhausted rule
-  // must not fail because an out-of-range occurrence falls in a DST gap/fold.
-  if (rule.until !== undefined && local > dueLocal(rule.until, format)) return undefined;
-  return allDay
-    ? { kind: "all-day", date: new Date(local).toISOString().slice(0, 10) }
-    : { kind: "timed", at: new Date(resolveLocal(local, format)).toISOString() };
+  if (allDay) {
+    if (rule.until !== undefined && local > dueLocal(rule.until, format)) return undefined;
+    return { kind: "all-day", date: new Date(local).toISOString().slice(0, 10) };
+  }
+  const at = resolveLocal(
+    local,
+    format,
+    rule.until?.kind === "timed" ? instant(rule.until.at) : undefined,
+  );
+  return at === undefined ? undefined : { kind: "timed", at: new Date(at).toISOString() };
 }

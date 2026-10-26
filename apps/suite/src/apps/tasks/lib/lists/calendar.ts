@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { type DueDate, type ListContext, TaskListError } from "./types";
 
 export const DAY = 86_400_000;
@@ -121,8 +122,12 @@ export function dayOf(time: number): number {
   return Math.floor(time / DAY) * DAY;
 }
 
-/** Resolve only unique wall times. Never guess a DST offset or shift a gap. */
-export function resolveLocal(local: number, format: Intl.DateTimeFormat): number {
+/** Resolve unique wall times, or exhaust until. Never guess an offset or shift a gap. */
+export function resolveLocal(
+  local: number,
+  format: Intl.DateTimeFormat,
+  until?: number,
+): number | undefined {
   range(local);
   const offsets = new Set<number>();
   // All supported post-1970 IANA transitions are isolated by more than six hours.
@@ -135,6 +140,15 @@ export function resolveLocal(local: number, format: Intl.DateTimeFormat): number
     .filter(
       (candidate) => candidate >= MIN && candidate <= MAX && localTime(candidate, format) === local,
     );
+  // A fold is exhausted only if both possible instants exceed the inclusive cutoff.
+  // A gap has no instants; retain the civil-time bound before rejecting it.
+  if (
+    until !== undefined &&
+    (matches.length > 0
+      ? matches.every((candidate) => candidate > until)
+      : local > localTime(until, format))
+  )
+    return undefined;
   if (matches.length !== 1) {
     throw new TaskListError(
       "unresolvable-local-time",

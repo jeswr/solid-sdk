@@ -352,6 +352,30 @@ describe("recurrence arithmetic", () => {
       "unresolvable-local-time",
     );
   });
+  it.each([
+    "2026-10-25T00:45:00Z",
+    "2026-10-25T01:30:00Z",
+    "2026-10-25T01:45:00Z",
+  ])("rejects a fold when either possible instant is within until %s", (until) => {
+    const recurrence = rule("DAILY", { until: timed(until) });
+    const original = task("fold", {
+      due: timed("2026-10-24T00:45:00Z"),
+      recurrence,
+    });
+    const before = structuredClone(original);
+    fails(() => nextOccurrence(original.due, recurrence, context()), "unresolvable-local-time");
+    fails(() => completeTask(original, context()), "unresolvable-local-time");
+    expect(original).toEqual(before);
+  });
+  it("exhausts a fold only when both possible instants exceed until", () => {
+    expect(
+      nextOccurrence(
+        timed("2026-10-24T00:45:00Z"),
+        rule("DAILY", { until: timed("2026-10-25T00:44:59.999Z") }),
+        context(),
+      ),
+    ).toBeUndefined();
+  });
   it("fails closed on impossible calendar cycles and date overflow", () => {
     fails(
       () =>
