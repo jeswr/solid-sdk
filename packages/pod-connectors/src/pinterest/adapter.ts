@@ -1,3 +1,5 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /**
  * Pinterest → Media + Social. Your boards (`/v5/boards`) name the collections;
  * your pins (`/v5/pins`) are saved two ways — the pinned image as
@@ -14,12 +16,14 @@ import { getJson } from "../core/fixture-fetch.js";
 import type { ImportContext, ImportOutcome, IntegrationAdapter } from "../core/types.js";
 import { CLASSES, MediaItem, SocialMediaPosting } from "../core/vocab.js";
 import { type BoardsAnswer, PINTEREST_FIXTURES, type PinsAnswer } from "./fixtures.js";
+import { vocabMap } from "./vocab-map.js";
 
 const ID = "pinterest";
 const API = "https://api.pinterest.com/v5";
 const SCOPES = ["boards:read", "pins:read"] as const;
 
 export const pinterestAdapter: IntegrationAdapter = {
+  vocabMap,
   metadata: {
     id: ID,
     name: "Pinterest",
