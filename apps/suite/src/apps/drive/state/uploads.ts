@@ -10,6 +10,7 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import type { DriveClient } from "../lib/client/client";
 import { DriveError } from "../lib/client/client";
 import { type ConflictChoice, uploadFile } from "../lib/operations/operations";
+import { normalizeUploadName } from "../lib/upload";
 
 export type UploadStatus = "queued" | "uploading" | "done" | "conflict" | "failed" | "skipped";
 
@@ -33,6 +34,18 @@ export interface UploadQueue {
 }
 
 const CONCURRENCY = 3;
+
+/**
+ * Folder uploads keep their structure: `a/b/c.txt` lands in `<folder>a/b/`.
+ * Solid servers create the intermediate containers on the file's PUT.
+ */
+export function targetFolder(folder: string, file: File): string {
+  const segments = (file.webkitRelativePath || "").split("/").slice(0, -1);
+  return segments.reduce(
+    (url, segment) => `${url}${encodeURIComponent(normalizeUploadName(segment, "folder"))}/`,
+    folder,
+  );
+}
 
 interface Job {
   task: UploadTask;
@@ -107,10 +120,25 @@ export function useUploadQueue(
       blanket.current = undefined;
       for (const file of files) {
         const id = crypto.randomUUID();
+        let target: string | undefined;
+        try {
+          target = targetFolder(folder, file);
+        } catch {
+          target = undefined;
+        }
         jobs.current.set(id, {
           file,
           policy: "fail",
-          task: { id, name: file.name, folder, size: file.size, status: "queued" },
+          task: target
+            ? { id, name: file.name, folder: target, size: file.size, status: "queued" }
+            : {
+                id,
+                name: file.name,
+                folder,
+                size: file.size,
+                status: "failed",
+                error: "This name can't be uploaded",
+              },
         });
       }
       publish();
