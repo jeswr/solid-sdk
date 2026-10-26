@@ -146,3 +146,99 @@ describe("anonymous WebID profile redirects", () => {
     expect(authenticated).toContain(index);
   });
 });
+
+describe("in-pod WebID profile redirects", () => {
+  it.each([
+    301, 302, 303, 307, 308,
+  ])("discovers Type Index hints through a %i redirect with a fresh proof for each hop", async (status) => {
+    const css = mockCss();
+    const webId = `${POD}profile#me`;
+    const card = `${POD}profile/card`;
+    const index = `${POD}type-index`;
+    const instance = `${POD}favorite.ttl`;
+    const solid = "http://www.w3.org/ns/solid/terms#";
+    const pod = makeFakePod({
+      [POD]: { contentType: "text/turtle", body: containerTurtle(POD, []) },
+      [webId]: {
+        contentType: "text/turtle",
+        body: "",
+        redirectTo: "profile/card",
+        redirectStatus: status,
+      },
+      [card]: {
+        contentType: "text/turtle",
+        body: `<${webId}> <${solid}publicTypeIndex> <${index}> .`,
+      },
+      [index]: {
+        contentType: "text/turtle",
+        body: `<#registration> <${solid}instance> <${instance}> .`,
+      },
+    });
+    const urls: string[] = [];
+    const proofs: string[] = [];
+    const fetch = await createCliFetch(config, async (input, init) => {
+      const request = new Request(input, init);
+      if (request.url.startsWith(ISSUER)) return css.fetch(input, init);
+      expect(request.headers.get("authorization")).toBe("DPoP fixture-token-1");
+      expect(request.redirect).toBe("manual");
+      expect(request.credentials).toBe("omit");
+      proofs.push(proofOf(request, "fixture-token-1").jti);
+      urls.push(request.url);
+      return pod.fetch(input, init);
+    });
+    expect(await search({ ...config, fetch, webId }, "favorite")).toEqual([
+      { url: instance, name: "favorite.ttl", snippet: "type-index instance" },
+    ]);
+    expect(urls).toEqual([webId, card, index, POD]);
+    expect(new Set(proofs).size).toBe(urls.length);
+    expect(css.stats.tokens).toBe(1);
+  });
+
+  it.each([
+    "https://foreign.example/card",
+    "https://pod.example/other/card",
+  ])("refuses a profile redirect to %s and preserves the fallback scan", async (location) => {
+    const css = mockCss();
+    const webId = `${POD}profile#me`;
+    const card = `${POD}profile/card`;
+    const urls: string[] = [];
+    const pod = makeFakePod({
+      [POD]: {
+        contentType: "text/turtle",
+        body: containerTurtle(POD, [{ name: "favorite.txt" }]),
+      },
+      [webId]: { contentType: "text/turtle", body: "", redirectTo: "profile/card" },
+      [card]: { contentType: "text/turtle", body: "", redirectTo: location },
+    });
+    const fetch = await createCliFetch(config, async (input, init) => {
+      const request = new Request(input, init);
+      if (request.url.startsWith(ISSUER)) return css.fetch(input, init);
+      urls.push(request.url);
+      return pod.fetch(input, init);
+    });
+    expect(await search({ ...config, fetch, webId }, "favorite")).toEqual([
+      { url: `${POD}favorite.txt`, name: "favorite.txt", snippet: "name/url match" },
+    ]);
+    expect(urls).toEqual([webId, card, POD]);
+  });
+
+  it("bounds an in-pod profile redirect chain and falls back to the pod scan", async () => {
+    const css = mockCss();
+    const webId = `${POD}profile#me`;
+    const pod = makeFakePod({
+      [POD]: { contentType: "text/turtle", body: containerTurtle(POD, []) },
+    });
+    let redirects = 0;
+    const fetch = await createCliFetch(config, async (input, init) => {
+      const request = new Request(input, init);
+      if (request.url.startsWith(ISSUER)) return css.fetch(input, init);
+      if (request.url === POD) return pod.fetch(input, init);
+      return new Response(null, {
+        status: 302,
+        headers: { location: `${POD}profile-${++redirects}` },
+      });
+    });
+    expect(await search({ ...config, fetch, webId }, "favorite")).toEqual([]);
+    expect(redirects).toBe(11);
+  });
+});

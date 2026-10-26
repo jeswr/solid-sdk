@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-5
+// AUTHORED-BY Codex GPT-6
 /**
  * Pod operations over the injected authenticated `fetch`, all pod-scope-guarded.
  *
@@ -467,7 +468,9 @@ async function typeIndexContainers(config: SolidMcpConfig): Promise<string[]> {
   if (!webId) return [];
   const solidNs = "http://www.w3.org/ns/solid/terms#";
   const out = new Set<string>();
-  const { dataset: profile } = await fetchRdf(webId, { fetch: config.fetch });
+  // In-pod profiles need the same scope-checked redirect handling as pod data.
+  const profileFetch = podScopedUrlOrUndefined(config, webId) ? scopedFetch(config) : config.fetch;
+  const { dataset: profile } = await fetchRdf(webId, { fetch: profileFetch });
   const indexes = new Set<string>();
   for (const p of [`${solidNs}publicTypeIndex`, `${solidNs}privateTypeIndex`]) {
     for (const quad of profile.getQuads(null, DataFactory.namedNode(p), null, null)) {
