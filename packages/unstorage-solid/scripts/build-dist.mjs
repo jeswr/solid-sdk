@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 /**
  * build-dist — produce the committed, self-contained `dist/` for GitHub-branch
@@ -49,6 +50,8 @@ const outdir = join(root, "dist");
  * `unstorage` stays external because it is a PEER dependency.
  */
 const EXTERNAL = [
+  // Keep the public error alias identical to the shared guard constructor.
+  "@jeswr/guarded-fetch",
   "n3",
   "@solid/object",
   "@rdfjs/wrapper",

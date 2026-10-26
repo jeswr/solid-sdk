@@ -53,7 +53,10 @@ memories are excluded from search unless `includeForgotten: true` is requested.
 - Focused entries: `@jeswr/solid-memory/memory`, `/store`, and `/search`.
 
 Pass an authenticated fetch and protect the memory container with an owner-only policy by default.
-The library does not manage credentials or access control.
+The library does not manage credentials or access control. Scope checks delegate to
+`@jeswr/guarded-fetch` and reject encoded path delimiters (`%2F` / `%5C`). The exported
+`assertWithinBase` is deprecated; it retains absolute-target and strict-resource defaults
+for compatibility. New callers may use `assertWithinPodScope` with `{ allowRoot: false }`.
 
 ## Links
 

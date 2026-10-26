@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Fable 5
 /**
  * refuse-redirects — the first-class, dependency-free REDIRECT-REFUSAL wrapper for a
@@ -31,9 +32,10 @@
  *   - Browser `fetch` with `redirect:"manual"` returns an OPAQUE-REDIRECT filtered response
  *     (`type === "opaqueredirect"`, `status === 0`, empty headers, `Location` unreadable) →
  *     detected by `res.type`.
- * A `304 Not Modified` / `300 Multiple Choices` is NOT a "moved" redirect (not one of the
- * 301/302/303/307/308 set) and passes through untouched — a conditional / content-negotiation
- * response is never refused.
+ * A `304 Not Modified` always passes through. Other 3xx responses carrying a
+ * `Location` header are also refused, including nonstandard statuses and empty
+ * headers: legacy credentialed clients already refused these ambiguous responses.
+ * A non-moved 3xx without `Location` (e.g. 300 Multiple Choices) passes through.
  *
  * COMPOSITION. `refuseRedirects` wraps ANY fetch:
  *   - `refuseRedirects(authedFetch)` — a DPoP/Bearer fetch that refuses any redirect (the common
@@ -86,7 +88,8 @@ export class RedirectRefusedError extends Error {
  * Wrap `fetch` so it REFUSES (throws {@link RedirectRefusedError}) instead of following any
  * redirect. The returned function forces `redirect:"manual"` on every request (overriding a
  * caller-supplied `redirect` mode), and throws when the response is a redirect (a 3xx moved
- * status on Node, or a browser opaque-redirect). A non-redirect response is returned unchanged,
+ * status on Node, any other non-304 3xx with `Location`, or a browser opaque-redirect).
+ * A non-redirect response is returned unchanged,
  * with its body untouched.
  *
  * Pass an AUTHENTICATED fetch as the argument to guard a credentialed call
@@ -120,7 +123,11 @@ export function refuseRedirects(
     const res = await fetch(input, { ...(init ?? {}), redirect: "manual" });
 
     const opaqueRedirect = res.type === "opaqueredirect";
-    if (opaqueRedirect || isRedirect(res.status)) {
+    // Preserve the legacy clients' broader refusal as well as standard moved
+    // statuses without Location. Never loosen a credentialed client's boundary.
+    const locatedRedirect =
+      res.status >= 300 && res.status < 400 && res.status !== 304 && res.headers.has("location");
+    if (opaqueRedirect || isRedirect(res.status) || locatedRedirect) {
       const location = opaqueRedirect ? undefined : (res.headers.get("location") ?? undefined);
       // Drain the refused redirect's body so a streamed body is not left dangling.
       try {

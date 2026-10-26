@@ -14,7 +14,7 @@ export const AS = "https://www.w3.org/ns/activitystreams#";
 // @public
 export const as: (local: string) => string;
 
-// @public
+// @public @deprecated
 export function assertWithinBase(container: string, url: string, opts?: {
     allowRoot?: boolean;
 }): void;

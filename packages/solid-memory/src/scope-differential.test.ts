@@ -65,6 +65,9 @@ const bases = [
   "https://pod.example/",
   "https://pod.example/alice",
   "https://pod.example/alice//",
+  "https://fixture-user:fixture-pass@pod.example/alice/",
+  "https://pod.example/alice%2fprivate/",
+  "https://pod.example/alice%5Cprivate/",
 ];
 
 function corpus(base: string): string[] {
@@ -171,4 +174,14 @@ it.each([
   for (const base of bases.slice(0, 5)) {
     expect(() => assertWithinBase(base, base + suffix)).not.toThrow();
   }
+});
+
+it.each([
+  "not a base",
+  "file:///alice/",
+  "https://fixture-user:fixture-pass@pod.example/alice/",
+  "https://pod.example/alice%2fprivate/",
+  "https://pod.example/alice%5Cprivate/",
+])("rejects invalid or ambiguous scope configuration: %s", (base) => {
+  expect(() => assertWithinBase(base, `${base}item`)).toThrow();
 });

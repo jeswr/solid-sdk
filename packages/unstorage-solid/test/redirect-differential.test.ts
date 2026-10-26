@@ -89,6 +89,19 @@ for (const [name, factory] of Object.entries(factories).filter(([name]) => name 
       expect(inner).toHaveBeenCalledOnce();
     });
 
+    it("snapshots mutable URL inputs before an authenticated fetch can await", async () => {
+      const target = new URL(TARGET);
+      const inner = vi.fn(async (input: RequestInfo | URL) => {
+        await Promise.resolve();
+        expect(input).toBe(TARGET);
+        return new Response(null, { status: 204 });
+      });
+      const pending = factory(inner)(target);
+      target.href = "https://evil.example/steal";
+      await pending;
+      expect(inner).toHaveBeenCalledOnce();
+    });
+
     it("still refuses opaque browser redirects", async () => {
       const inner = vi.fn(async () => ({ type: "opaqueredirect", status: 0 }) as Response);
       await expect(factory(inner)(TARGET)).rejects.toBeInstanceOf(SolidRedirectError);
@@ -97,6 +110,10 @@ for (const [name, factory] of Object.entries(factories).filter(([name]) => name 
 
     it.each([
       "https://evil.example/alice/item",
+      "https://fixture-user:fixture-pass@pod.example/alice/item",
+      "https://pod.example/alice/..%2fsecret",
+      "https://pod.example/alice/..%5Csecret",
+      "file:///alice/item",
       "item",
       "http://",
     ])("rejects an invalid or foreign target before fetching: %s", async (url) => {
