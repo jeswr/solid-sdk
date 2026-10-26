@@ -362,10 +362,26 @@ test("LocalIndex rejects malformed and mismatched query forms without changing t
   expect(await empty.next()).toEqual({ done: true, value: undefined });
 });
 
-test("SELECT accepts case-insensitive prologues and comments and rejects malformed declarations", async () => {
+test.each(["\n", "\r\n", "\r"])("SELECT accepts comments terminated by %j", async (ending) => {
+  const index = await engine.createIndex();
+  const query = `# comment${ending}SELECT * {}`;
+  expect(await index.select(query)).toHaveLength(1);
+  const rows = [];
+  for await (const row of await index.selectStream(query)) rows.push(row);
+  expect(rows).toEqual(await index.select(query));
+});
+
+test.each([
+  "\n",
+  "\r\n",
+  "\r",
+])("SELECT accepts prologue comments terminated by %j and rejects malformed declarations", async (ending) => {
   const index = await engine.createIndex();
   const query =
-    "# comment\n bAse # base\n <https://example/#base>\n PREFIX # prefix\n ex: # iri\n <https://example/#>\n select ?x { VALUES ?x { ex:s } }";
+    "# comment\n bAse # base\n <https://example/#base>\n PREFIX # prefix\n ex: # iri\n <https://example/#>\n select ?x { VALUES ?x { ex:s } }".replaceAll(
+      "\n",
+      ending,
+    );
   expect((await index.select(query))[0]?.get("x")?.value).toBe("https://example/#s");
   const stream = await index.selectStream(query);
   expect((await stream.next()).value?.get("x")?.value).toBe("https://example/#s");
@@ -378,14 +394,76 @@ test("SELECT accepts case-insensitive prologues and comments and rejects malform
     await expect(index.selectStream(invalid)).rejects.toThrow("SELECT");
 });
 
+test.each([
+  "empty",
+  "populated",
+])("LocalIndex synchronizes %s graph membership on put, replacement and remove", async (kind) => {
+  const index = await engine.createIndex();
+  const data = await engine.parse("<urn:s> <urn:p> <urn:o> .", "text/turtle");
+  const ask = "ASK { GRAPH <urn:g> {} }";
+  const query = "SELECT ?g { GRAPH ?g {} }";
+  await index.put("urn:g", kind === "empty" ? [] : data);
+  expect(index.has("urn:g")).toBe(true);
+  expect(await index.ask(ask)).toBe(true);
+  expect((await index.select(query)).map((row) => row.get("g")?.value)).toEqual(index.list());
+  await index.put("urn:g", []);
+  expect(index.size()).toBe(0);
+  expect(index.has("urn:g")).toBe(true);
+  expect(await index.ask(ask)).toBe(true);
+  await index.remove("urn:g");
+  expect(index.has("urn:g")).toBe(false);
+  expect(await index.ask(ask)).toBe(false);
+  expect(await index.select(query)).toEqual([]);
+  await index.remove("urn:g");
+  await index.put("urn:g", data);
+  expect(await index.ask(ask)).toBe(true);
+  expect(index.size()).toBe(1);
+});
+
+test.each([
+  1, 2,
+])("restore rebuilds graph membership and applies the %i-quad cap", async (maxQuads) => {
+  const source = await engine.createIndex();
+  const data = await engine.parse("<urn:s> <urn:p> <urn:o> .", "text/turtle");
+  await source.put("urn:shared", data);
+  await source.put("urn:new", data);
+  const index = await engine.createIndex({ maxQuads });
+  await index.put("urn:stale", data);
+  await index.put("urn:empty", []);
+  await index.put("urn:shared", []);
+  await index.restore(await source.snapshot());
+  const expected = maxQuads === 1 ? ["urn:new"] : ["urn:new", "urn:shared"];
+  expect(index.list().sort()).toEqual(expected);
+  expect(index.size()).toBe(maxQuads);
+  expect(
+    (await index.select("SELECT ?g { GRAPH ?g {} }")).map((row) => row.get("g")?.value).sort(),
+  ).toEqual(expected);
+  for (const graph of ["urn:stale", "urn:empty", "urn:shared", "urn:new"]) {
+    expect(await index.ask(`ASK { GRAPH <${graph}> {} }`)).toBe(index.has(graph));
+  }
+  expect(await index.select("SELECT * { GRAPH ?g { ?s ?p ?o } }")).toHaveLength(maxQuads);
+  const empty = await engine.createIndex();
+  await index.restore(await empty.snapshot());
+  expect(index.list()).toEqual([]);
+  expect(index.size()).toBe(0);
+  expect(await index.ask("ASK { GRAPH ?g {} }")).toBe(false);
+});
+
 test("eviction and removal delete actual WASM graph quads, including blank nodes", async () => {
   const index = await engine.createIndex({ maxQuads: 1 });
   const data = await engine.parse("_:a <https://example/p> _:a .", "text/turtle");
+  await index.put("https://example/empty", []);
   await index.put("https://example/a", data);
   expect(await index.ask("ASK { GRAPH <https://example/a> { ?s ?p ?o } }")).toBe(true);
   await index.put("https://example/b", data);
+  expect(index.has("https://example/empty")).toBe(false);
+  expect(index.has("https://example/a")).toBe(false);
+  expect(await index.ask("ASK { GRAPH <https://example/empty> {} }")).toBe(false);
+  expect(await index.ask("ASK { GRAPH <https://example/a> {} }")).toBe(false);
+  expect(await index.ask("ASK { GRAPH <https://example/b> {} }")).toBe(true);
   expect(await index.ask("ASK { GRAPH <https://example/a> { ?s ?p ?o } }")).toBe(false);
   expect(await index.select("SELECT * { GRAPH ?g { ?s ?p ?o } }")).toHaveLength(1);
   await index.remove("https://example/b");
+  expect(await index.ask("ASK { GRAPH ?g {} }")).toBe(false);
   expect(await index.ask("ASK { GRAPH ?g { ?s ?p ?o } }")).toBe(false);
 });

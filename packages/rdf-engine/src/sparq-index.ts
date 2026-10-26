@@ -30,7 +30,7 @@ function term(value: JsonTerm): Term {
 function assertSelect(sparql: string) {
   let rest = sparql;
   const skip = () => {
-    rest = rest.replace(/^(?:\s+|#[^\r\n]*(?:\r?\n|$))*/, "");
+    rest = rest.replace(/^(?:\s+|#[^\r\n]*(?:\r\n?|\n|$))*/, "");
   };
   skip();
   while (/^(?:BASE|PREFIX)\b/i.test(rest)) {
@@ -55,7 +55,11 @@ function assertSelect(sparql: string) {
 export function sparqIndexBackend(
   store: Store,
   release: () => void,
-  { Bindings, decompress }: Pick<typeof import("@sparq-org/sparq"), "Bindings" | "decompress">,
+  {
+    Bindings,
+    decompress,
+    termToNT,
+  }: Pick<typeof import("@sparq-org/sparq"), "Bindings" | "decompress" | "termToNT">,
 ): IndexBackend {
   function rows(json: string): Bindings[] {
     const result = JSON.parse(json) as { results?: { bindings: Record<string, JsonTerm>[] } };
@@ -68,11 +72,17 @@ export function sparqIndexBackend(
     );
   }
   return {
-    delta(inserts, deletes) {
+    delta(inserts, deletes, creates, drops) {
       store.applyDelta(
         writeN3(inserts, "application/n-quads"),
         writeN3(deletes, "application/n-quads"),
       );
+      // Quad deletion retains graph names, and quad insertion cannot create empty graphs.
+      const updates = [
+        ...drops.map((iri) => `DROP SILENT GRAPH ${termToNT(DataFactory.namedNode(iri))}`),
+        ...creates.map((iri) => `CREATE SILENT GRAPH ${termToNT(DataFactory.namedNode(iri))}`),
+      ];
+      if (updates.length) store.updateInPlace(updates.join("; "));
     },
     release() {
       store.free();

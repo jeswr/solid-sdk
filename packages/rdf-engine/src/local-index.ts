@@ -8,7 +8,7 @@ import { resultStream } from "./result-stream.js";
 import type { Bindings, IndexOptions, LocalIndex, ResultStream } from "./types.js";
 
 export interface IndexBackend {
-  delta(inserts: Quad[], deletes: Quad[]): void;
+  delta(inserts: Quad[], deletes: Quad[], creates: string[], drops: string[]): void;
   release(): void;
   select: LocalIndex["select"];
   selectStream: LocalIndex["selectStream"];
@@ -77,7 +77,12 @@ export async function createLocalIndex(
       if (next.get(iri) !== data) for (const quad of data) deletes.push(quad);
     for (const [iri, data] of next)
       if (graphs.get(iri) !== data) for (const quad of data) inserts.push(quad);
-    backend.delta(inserts, deletes);
+    backend.delta(
+      inserts,
+      deletes,
+      [...next.keys()].filter((iri) => !graphs.has(iri)),
+      [...graphs.keys()].filter((iri) => !next.has(iri)),
+    );
     graphs.clear();
     for (const [iri, data] of next) graphs.set(iri, data);
     size = count;
@@ -121,7 +126,7 @@ export async function createLocalIndex(
     remove(graphIri) {
       return enqueue(async () => {
         const previous = graphs.get(graphIri) ?? [];
-        backend.delta([], previous);
+        backend.delta([], previous, [], graphs.has(graphIri) ? [graphIri] : []);
         graphs.delete(graphIri);
         size -= previous.length;
         await save();
