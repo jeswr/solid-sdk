@@ -115,3 +115,51 @@ It failed because this npm-only checker cannot find the unpublished workspace pa
 Full-workspace verification was attempted with `pnpm run gate:full`, then **stopped (exit 130)** after its unrelated `@jeswr/unstorage-solid` dependency-build script started a remote clone into a temporary directory. Continuing that build would conflict with this lane's prohibition on remote fetches. Generated, untracked client-ID/callback assets from the broader build were removed; no unrelated source changes are retained. An affected-gate attempt that included those generated files was stopped and rerun after cleanup; the final affected result above is green. The full-workspace gate is not claimed to pass.
 
 `roborev` remains unavailable (`command -v roborev` found no executable), so no per-commit automated verdicts could be read. The supplied review findings were addressed with regression tests. No requested fix remains unfinished, and there are no new open questions. The conservative IRI policy rejects forbidden lexical characters instead of silently changing RDF identities. Failed cleanup retains its original validator in the current store instance and surfaces an error if concurrent changes prevent deletion. No UI or screenshots apply to this round.
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+## Fix round 3 — review of `b204bde55298`
+
+Read the complete supplied review at `/home/runner/work/solid-suite-tracker/lanes/reviews/solid-sdk-lane-sst-ef15-b204bde55298.md`, the original lane brief, and both earlier fix briefs. This round addresses exactly its four findings:
+
+- `5375f96d` — `fix: construct monthly recurrence targets directly`: construct the final monthly date with the anchor's wall time in one operation, then check month overflow and DST gaps. Sydney regressions cover September and October 2028 anchors, a genuine October 1 gap, count semantics, next occurrence, and recurring completion.
+- `9ad17afe` — `fix: preserve linked scheduling metadata`: clear only recognized reminder/recurrence fields and their owned type. Retain named/blank node identities and foreign annotations when editing exclusive nodes; copy shared nodes before editing and preserve their original data on unlink. Regression tests cover both node kinds, trigger/rule replacement, foreign types and predicates, and shared references.
+- `d27c1b53` — `fix: require verified private type index access`: require an injected `ensurePrivateIndexAccess(url, owner)` ACL/ACP verifier for registration. Verify the empty index before linking it, verify raced and already-linked indexes before registration, and reject missing, negative, or failed verification. Tests assert ordering, anonymous denial in the injected policy fixture, policy changes, create races, unreadable policies, and that `solid:UnlistedDocument` alone permits no link or registration.
+- `86c5f9a7` — `fix: coordinate inbox adoption and compensation`: conditionally change tracker/container representations when claiming initialization, then conditionally finalize the tracker after registration. Advance modification times even under a frozen clock so content-based validators must change. Tests interleave two stores across failed registration, stale creator finalization, and delayed container cleanup after tracker deletion; successful adopters retain a usable Inbox. Additional regressions cover claim/finalization conflicts and failed container claims.
+- Final documentation commit — `docs: record tasks fix round three verification`: this report, committed last.
+
+### Verification for this round
+
+Passed in this checkout:
+
+```sh
+export PATH="$PWD/node_modules/.bin:$PATH"
+pnpm --filter @jeswr/app-suite... run build
+pnpm --filter @jeswr/app-suite run lint && pnpm --filter @jeswr/app-suite run build && pnpm --filter @jeswr/app-suite run typecheck && pnpm --filter @jeswr/app-suite run test
+pnpm run lint:root
+TURBO_SCM_BASE=061de204d40239031fa73c2d42f281b0fad59803 pnpm run gate
+git diff --check
+```
+
+- App lint, Next.js production build, strict typecheck, and **120 tests across four files** passed.
+- Model coverage remains **100% statements (702/702), branches (480/480), functions (150/150), and lines (606/606)**. No thresholds or exclusions changed.
+- Root lint and workspace guards passed, including **74 contrast pairs, zero failures**.
+- Affected gate passed: **10 successful tasks / 10 total**, zero cached.
+- No dependency, manifest, lockfile, UI, or unrelated source changes were made. No dependency-policy check or screenshots were needed.
+
+Full-workspace verification was attempted with remote Git transports disabled and npm offline to respect this lane's prohibition on remote fetches:
+
+```sh
+export PATH="$PWD/node_modules/.bin:$PATH"
+GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=protocol.allow GIT_CONFIG_VALUE_0=never npm_config_offline=true pnpm run gate:full --env-mode=loose
+```
+
+**Failed outside this lane** at `@jeswr/unstorage-solid#build` (exit 1): its existing dependency-build script invokes an HTTPS clone, which Git rejected locally with `fatal: transport 'https' not allowed`. No remote fetch occurred. Turbo reported **13 successful tasks / 53 total** before stopping. The full-workspace gate is not green; no unrelated generated source changes remain.
+
+`roborev` is still unavailable (`command -v roborev` found no executable), so automated per-commit verdicts could not be read. No review tooling was installed.
+
+### Conservative boundary and remaining work
+
+Access-control evaluation remains at the caller's injected boundary: `ensurePrivateIndexAccess` must establish or verify effective owner-only ACL/ACP access, including inherited policy, and return true only after confirmation. Missing/unsupported/unreadable protection fails closed. The model does not select a server policy dialect or assume that an unlisted document is confidential. This is the conservative interpretation of finding 1 within the model-only scope.
+
+All four requested fixes and their regressions are complete. External verification limitations are the unrelated full-workspace build and unavailable roborev above. No open questions, new dependencies, UI work, pushes, PRs, branch switches, or remote fetches apply to this round.
