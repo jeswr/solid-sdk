@@ -154,6 +154,103 @@ test("UMA renews a rejected RPT only in its issuing context when two contexts sh
   }
 });
 
+test("concurrent UMA nonce retries retain their issuing context at the same URL", async () => {
+  const nonced = await startUma(op, { resourceNonce: true });
+  const started = Promise.withResolvers();
+  const gate = Promise.withResolvers();
+  const attempts = [];
+  let paused = false;
+  let contexts = 0;
+  const { manager, provider, code } = umaClient(nonced, {
+    context: (request, challenge) => {
+      assert.equal(challenge.challenges[0].scheme, "uma");
+      contexts++;
+      return request.headers.get("x-context");
+    },
+    fetch: async (request) => {
+      attempts.push(request.clone());
+      if (
+        request.headers.get("x-context") === "first" &&
+        request.headers.has("authorization") &&
+        !paused
+      ) {
+        paused = true;
+        started.resolve();
+        await gate.promise;
+      }
+      return await transport(request);
+    },
+  });
+  const url = `${nonced.url}/uma/concurrent-nonce`;
+  let pending;
+  try {
+    pending = manager.fetch(url, {
+      method: "PUT",
+      headers: { "x-context": "first" },
+      body: "first body",
+    });
+    await started.promise;
+    assert.equal(
+      (
+        await manager.fetch(url, {
+          method: "PUT",
+          headers: { "x-context": "second" },
+          body: "second body",
+        })
+      ).status,
+      200,
+    );
+    gate.resolve();
+    assert.equal((await pending).status, 200);
+    const tokens = [];
+    const seen = new Set();
+    for (const context of ["first", "second"]) {
+      const requests = attempts.filter((request) => request.headers.get("x-context") === context);
+      assert.equal(requests.length, 3, "anonymous, RPT, then one nonce retry");
+      assert.equal(requests[0].headers.has("authorization"), false);
+      const [, initial, retried] = requests;
+      assert.equal(
+        retried.headers.get("authorization"),
+        initial.headers.get("authorization"),
+        "a nonce retry must retain its own context's RPT",
+      );
+      const token = initial.headers.get("authorization").slice(5);
+      tokens.push(token);
+      const jkt = await verifyDPoP(initial.headers.get("dpop"), {
+        method: "PUT",
+        url,
+        accessToken: token,
+        seen,
+      });
+      assert.equal(
+        await verifyDPoP(retried.headers.get("dpop"), {
+          method: "PUT",
+          url,
+          accessToken: token,
+          nonce: "uma-resource-nonce",
+          seen,
+        }),
+        jkt,
+      );
+      assert.deepEqual(await Promise.all(requests.map((request) => request.text())), [
+        `${context} body`,
+        `${context} body`,
+        `${context} body`,
+      ]);
+    }
+    assert.notEqual(tokens[0], tokens[1], "the contexts have distinct RPTs");
+    assert.equal(nonced.stats.exchanges.length, 2);
+    assert.equal(nonced.stats.resourceNonceChallenges, 2);
+    assert.equal(contexts, 2, "nonce retries never resolve a new context");
+    assert.equal(code.calls, 1, "both contexts reuse the ID-token session");
+  } finally {
+    gate.resolve();
+    await pending?.catch(() => undefined);
+    await provider.forget();
+    await nonced.close();
+  }
+});
+
 for (const expiresIn of [1, 10, 300]) {
   test(`UMA retains the verified RPT context for a resource-server nonce retry (${expiresIn}s RPT)`, async () => {
     await withMockedDate(async () => {
@@ -242,6 +339,12 @@ test("UMA nonce retries stay on the verified resource and reject invalidated or 
   const exchanges = uma.stats.exchanges.length;
   try {
     const upgraded = await provider.upgrade(request, challengeContext(await transport(request)));
+    await assert.rejects(provider.upgrade(request, nonce), /RPT context/);
+    nonce.request = upgraded;
+    await assert.rejects(
+      provider.upgrade(request, { ...nonce, request: upgraded.clone() }),
+      /RPT context/,
+    );
     const retried = await provider.upgrade(request, nonce);
     assert.equal(retried.headers.get("authorization"), upgraded.headers.get("authorization"));
     assert.equal(decodeJwt(retried.headers.get("dpop")).nonce, "resource-nonce");
@@ -285,6 +388,7 @@ test("UMA nonce retries accept an RPT until actual expiry and reject it at or af
           headers: { "www-authenticate": 'DPoP error="use_dpop_nonce"', "dpop-nonce": "nonce" },
         }),
       );
+      nonce.request = original;
       advance(299_999);
       const retried = await provider.upgrade(request, nonce);
       assert.equal(retried.headers.get("authorization"), original.headers.get("authorization"));
@@ -327,7 +431,7 @@ test("UMA nonce retries remain fenced when a peer logs out during the RPT read",
   });
   const request = new Request(`${uma.url}/uma/peer-nonce`);
   try {
-    await provider.upgrade(request, challengeContext(await transport(request)));
+    const original = await provider.upgrade(request, challengeContext(await transport(request)));
     const exchanges = uma.stats.exchanges.length;
     const nonce = challengeContext(
       new Response(null, {
@@ -335,6 +439,7 @@ test("UMA nonce retries remain fenced when a peer logs out during the RPT read",
         headers: { "www-authenticate": 'DPoP error="use_dpop_nonce"', "dpop-nonce": "nonce" },
       }),
     );
+    nonce.request = original;
     pauseRead = true;
     const pending = provider.upgrade(request, nonce);
     const rejected = assert.rejects(pending, { name: "SessionSupersededError" });

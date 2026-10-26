@@ -177,9 +177,9 @@ for (const tokenType of ["DPoP", "Bearer"]) {
           headers: { "www-authenticate": 'DPoP error="use_dpop_nonce"', "dpop-nonce": "nonce" },
         }),
       );
-      if (tokenType === "Bearer") await assert.rejects(p.upgrade(request, nonce), /RPT context/);
+      if (tokenType === "Bearer") await assert.rejects(p.upgrade(original, nonce), /RPT context/);
       else {
-        const retried = await p.upgrade(request, nonce);
+        const retried = await p.upgrade(original, nonce);
         assert.equal(retried.headers.get("authorization"), original.headers.get("authorization"));
         assert.notEqual(retried.headers.get("dpop"), original.headers.get("dpop"));
       }
