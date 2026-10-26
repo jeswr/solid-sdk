@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { createHash } from "node:crypto";
 import * as fs from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -88,12 +89,36 @@ describe("authenticated session vault", () => {
   it("fails closed on concurrent writes and store outages", async () => {
     const store = new MemoryVaultStore();
     const vault = createSessionVault({ key: KEY, store });
-    vi.spyOn(store, "compareAndSwap").mockResolvedValue(false);
+    vi.spyOn(store, "compareAndSwap").mockResolvedValueOnce(false).mockResolvedValueOnce(false);
     await expect(vault.put("id", secret)).rejects.toThrow("conflict");
-    await expect(vault.delete("id")).rejects.toThrow("conflict");
     expect(await vault.compareAndSwap("id", undefined, secret)).toBe(false);
     vi.spyOn(store, "get").mockRejectedValue(new Error("offline"));
     await expect(vault.get("id")).rejects.toThrow("offline");
+    await expect(vault.delete("id")).rejects.toThrow("offline");
+  });
+  it("retries retirement across credential updates and concurrent retirement", async () => {
+    for (const competingRetirement of [false, true]) {
+      const store = new MemoryVaultStore();
+      const vault = createSessionVault({ key: KEY, store });
+      const other = createSessionVault({ key: KEY, store });
+      await vault.put("id", secret);
+      const swap = store.compareAndSwap.bind(store);
+      let conflicts = 0;
+      vi.spyOn(store, "compareAndSwap").mockImplementation(async (id, expected, value) => {
+        if (value === "deleted" && conflicts < 2) {
+          conflicts++;
+          if (competingRetirement) await other.delete(id);
+          else await other.put(id, Buffer.from(`rotated-${conflicts}`));
+        }
+        return swap(id, expected, value);
+      });
+      await vault.delete("id");
+      expect(conflicts).toBe(2);
+      expect(await store.get("id")).toBe("deleted");
+      expect(await other.get("id")).toBeUndefined();
+      expect(await other.compareAndSwap("id", undefined, secret)).toBe(false);
+      await expect(other.put("id", secret)).rejects.toThrow("conflict");
+    }
   });
 });
 

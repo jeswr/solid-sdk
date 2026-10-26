@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { describe, expect, it, vi } from "vitest";
 import { fixture, RESOURCE } from "../test/fixtures.js";
 import {
@@ -436,7 +437,7 @@ describe("MCP grant to pod session boundary", () => {
       f.op.captured.every((r) => !r.headers.get("authorization")?.includes(tokens.access_token)),
     ).toBe(true);
   });
-  it("retires the upstream session on MCP code and refresh replay", async () => {
+  it("retires all sibling grants on MCP replay despite concurrent credential updates", async () => {
     for (const type of ["code", "refresh"]) {
       const f = brokerFixture();
       const { session } = await f.login();
@@ -447,13 +448,34 @@ describe("MCP grant to pod session boundary", () => {
         "code",
       ) as string;
       const tokens = await (await oauth.exchange(id, code)).json();
+      const siblingResponse = await oauth.server.authorize(oauth.authRequest(id), session);
+      const siblingCode = new URL(
+        siblingResponse.headers.get("location") as string,
+      ).searchParams.get("code") as string;
+      const sibling = await (await oauth.exchange(id, siblingCode)).json();
+      const swap = f.store.compareAndSwap.bind(f.store);
+      let conflicted = false;
+      vi.spyOn(f.store, "compareAndSwap").mockImplementation(async (key, expected, value) => {
+        if (key === `session:${session.id}` && value === "deleted" && !conflicted) {
+          conflicted = true;
+          const bytes = (await f.vault.get(key)) as Uint8Array;
+          const record = JSON.parse(Buffer.from(bytes).toString());
+          await f.vault.put(key, Buffer.from(JSON.stringify({ ...record, refreshing: true })));
+        }
+        return swap(key, expected, value);
+      });
       if (type === "code") expect((await oauth.exchange(id, code)).status).toBe(400);
       else {
         expect((await oauth.refresh(id, tokens.refresh_token)).status).toBe(200);
         expect((await oauth.refresh(id, tokens.refresh_token)).status).toBe(400);
       }
+      expect(conflicted).toBe(true);
       expect(await f.provider.isActive(session.id)).toBe(false);
       await expect(oauth.server.verifyAccessToken(tokens.access_token, RESOURCE)).rejects.toThrow();
+      await expect(
+        oauth.server.verifyAccessToken(sibling.access_token, RESOURCE),
+      ).rejects.toThrow();
+      expect((await oauth.refresh(id, sibling.refresh_token)).status).toBe(400);
     }
   });
 });

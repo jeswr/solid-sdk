@@ -1,5 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
+import { setTimeout as delay } from "node:timers/promises";
 import { KvVaultStore, type VaultStore } from "./vault-stores.js";
 
 /** Server-only secret vault. Deleted identifiers are permanently retired. */
@@ -74,10 +76,13 @@ export function createSessionVault(options: SessionVaultOptions = {}): SessionVa
         throw new Error("Vault write conflict");
     },
     async delete(id) {
-      const current = await store.get(id);
-      if (current === "deleted") return;
-      if (!(await store.compareAndSwap(id, current, "deleted")))
-        throw new Error("Vault write conflict");
+      // Retirement must survive credential updates and transient file-lock contention.
+      // Keep retrying until this worker or a competing retiree has made it irreversible.
+      for (;;) {
+        const current = await store.get(id);
+        if (current === "deleted" || (await store.compareAndSwap(id, current, "deleted"))) return;
+        await delay(10);
+      }
     },
   };
 }
