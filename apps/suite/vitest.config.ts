@@ -81,6 +81,7 @@ export default defineConfig({
         "src/apps/drive/lib/list/**/*.ts",
         "src/apps/drive/lib/model/**/*.ts",
         "src/apps/mail/lib/threading/**/*.ts",
+        "src/apps/mail/lib/quotes/**/*.ts",
       ],
       reporter: ["text", "json-summary"],
       thresholds: {
