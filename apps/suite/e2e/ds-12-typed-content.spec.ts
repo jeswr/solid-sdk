@@ -69,8 +69,9 @@ test("Advanced is required for raw data; every type stays readable and keyboard 
   );
   await page.keyboard.press("Enter");
   await expect(page.locator(".suite-raw-data").first()).toHaveAttribute("open", "");
-  for (const summary of await page.locator(".suite-raw-data:not([open]) summary").all())
-    await summary.click();
+  // Re-query each time: opening one shifts the positions of the closed ones.
+  const closed = page.locator(".suite-raw-data:not([open]) summary");
+  while ((await closed.count()) > 0) await closed.first().click();
   expect(await page.locator(".suite-raw-data pre").first().innerText()).toContain("http");
   expect(
     await page.getByRole("main").evaluate((main) => {

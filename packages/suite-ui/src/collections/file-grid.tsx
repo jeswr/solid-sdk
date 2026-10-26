@@ -4,7 +4,7 @@
 
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { File } from "lucide-react";
-import { type ReactNode, useEffect, useMemo } from "react";
+import { type ReactNode, useEffect, useId, useMemo } from "react";
 import {
   CollectionPlaceholder,
   CollectionStatus,
@@ -46,6 +46,7 @@ export function FileGrid<T>({
 }: FileGridProps<T>) {
   const local = useSelection();
   const selection = supplied ?? local;
+  const idBase = useId();
   const metrics = useCollectionMetrics("grid");
   const columns = Math.max(1, Math.floor((metrics.width + 16) / 216));
   const keys = useMemo(() => items.map(getKey), [items, getKey]);
@@ -123,6 +124,7 @@ export function FileGrid<T>({
                 .slice(virtualRow.index * columns, (virtualRow.index + 1) * columns)
                 .map((item, index) => {
                   const key = getKey(item);
+                  const metadataId = `${idBase}-meta-${virtualRow.index * columns + index}`;
                   return (
                     // biome-ignore lint/a11y/useSemanticElements: Virtual card grid cell.
                     <div
@@ -134,6 +136,8 @@ export function FileGrid<T>({
                       onKeyDown={navigation.itemProps(key).onKeyDown}
                       data-collection-item="true"
                       aria-label={getLabel(item)}
+                      // Metadata describes the card; the file name alone is its visible label.
+                      aria-describedby={renderMetadata ? metadataId : undefined}
                       aria-selected={selection.selectedKeys.has(key)}
                       className="suite-file-card"
                       style={{ height: metrics.height }}
@@ -175,7 +179,9 @@ export function FileGrid<T>({
                         </button>
                       </div>
                       {renderMetadata && (
-                        <div className="suite-card-metadata">{renderMetadata(item)}</div>
+                        <div id={metadataId} className="suite-card-metadata">
+                          {renderMetadata(item)}
+                        </div>
                       )}
                     </div>
                   );

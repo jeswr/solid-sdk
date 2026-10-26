@@ -79,6 +79,8 @@ ul {
 .fixture-page {
   padding: var(--space-4);
   display: grid;
+  /* One shrinkable track: wide tables scroll inside their own frame at 320px. */
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-8);
   min-width: 0;
 }

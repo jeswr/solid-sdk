@@ -5,6 +5,10 @@ import { fileURLToPath } from "node:url";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, test } from "@playwright/test";
 
+/** The component's alert, not Next's always-present route announcer (also role="alert"). */
+function appAlert(page: Page) {
+  return page.getByRole("alert").and(page.locator(":not(#__next-route-announcer__)"));
+}
 const directory = fileURLToPath(new URL("../../../artifacts/screens/DS-11/", import.meta.url));
 const errors = [
   "reauth",
@@ -88,7 +92,7 @@ for (const kind of ["image", "pdf", "video", "audio", "text", "markdown", "typed
       await expect(page.getByTitle(/^PDF preview:/)).toHaveAttribute("src", /^blob:/);
     if (kind === "text") await expect(page.getByRole("button", { name: "Show raw" })).toBeVisible();
     if (kind === "markdown")
-      await expect(page.getByRole("heading", { name: "Meeting notes" })).toBeVisible();
+      await expect(page.getByRole("heading", { name: "Meeting notes", exact: true })).toBeVisible();
     await screenshot(page, `preview-${kind}`, info.project.name);
   });
 }
@@ -126,7 +130,7 @@ test("keyboard upload queue, image zoom/pan, and rendered/raw preview", async ({
   await expect(page.locator("pre")).toContainText("**yours**");
   await screenshot(page, "preview-markdown-raw", info.project.name);
   await page.keyboard.press("Enter");
-  await expect(page.getByRole("heading", { name: "Meeting notes" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Meeting notes", exact: true })).toBeVisible();
 });
 test("native drag-drop of two files plus a folder with nested and empty entries", async ({
   page,
@@ -217,14 +221,14 @@ test("failed file reads show a retryable error", async ({ page }, info) => {
   await page
     .getByLabel("Choose files")
     .setInputFiles({ name: "failure.txt", mimeType: "text/plain", buffer: Buffer.from("fixture") });
-  await expect(page.getByRole("alert")).toContainText("Can't read these files");
+  await expect(appAlert(page)).toContainText("Can't read these files");
   await screenshot(page, "drop-read-error", info.project.name);
 });
 test("preview load failure keeps the download action", async ({ page }, info) => {
   await page.goto("/dev/components/preview-pane?kind=image");
   await expect(page.getByRole("img")).toBeVisible();
   await page.getByRole("img").dispatchEvent("error");
-  await expect(page.getByRole("alert")).toContainText("Can't preview this file");
+  await expect(appAlert(page)).toContainText("Can't preview this file");
   await expect(page.getByRole("link", { name: /^Download / })).toBeVisible();
   await screenshot(page, "preview-load-error", info.project.name);
 });
