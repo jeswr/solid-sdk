@@ -36,6 +36,11 @@ channel bindings. `read('owner')` selects exactly one read profile for connectio
 also bind purpose and resource, so copying a file or adding overlapping scopes cannot bypass
 separation. Unmarked legacy grants require consent again.
 
+Per-profile locks recover only confirmed dead local owners. A short exclusive `.lock.guard`
+serializes acquisition, recovery and release; it is absent during provider calls. If a process
+crashes while holding this guard, callers time out without removing it. An operator must stop
+all helpers using that store before removing an abandoned guard; age alone cannot prove safety.
+
 Google mail read requests `gmail.readonly`; send requests `gmail.send`. Calendar read requests
 `calendar.readonly` on a separate profile (optional calendar-list inventory scope). Microsoft
 mail read/send use `Mail.Read` / `Mail.Send`; Teams read uses `Chat.Read` and

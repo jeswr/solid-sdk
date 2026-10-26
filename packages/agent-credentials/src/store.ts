@@ -9,6 +9,7 @@
  *     profiles/<name>.json      which account a profile is for (no secrets)
  *     grants/<name>.json        the account grant: refresh token, cached access token
  *     locks/<name>.lock         per-profile refresh/login lock (O_EXCL)
+ *     locks/<name>.lock.guard   serializes lock acquisition, recovery and release (O_EXCL)
  *
  * Every file is 0600. Reads refuse symlinks (O_NOFOLLOW), other owners and group/world access;
  * writes go to a fresh O_EXCL temporary file, are fsynced and renamed over the target, so a crash
@@ -207,6 +208,12 @@ function ensureDir(path: string): void {
     if (code !== "EEXIST") throw error;
   }
   checkOwnerOnly(path, "directory");
+}
+
+async function waitForLock(deadline: number): Promise<void> {
+  if (Date.now() > deadline)
+    throw new HelperError("unavailable", "another helper process holds this profile's lock");
+  await sleep(20 + Math.floor(Math.random() * 30));
 }
 
 /** Construct the platform default without opening or creating any directory. */
@@ -455,6 +462,40 @@ export class CredentialStore {
   }
 
   /**
+   * All changes to a profile lock use this guard, including dead-owner recovery. Never
+   * recover the guard itself: a crash here must fail closed, not reintroduce a check/unlink race.
+   * The guarded callback is synchronous and never includes provider calls or token refresh.
+   */
+  private async withLockGuard<T>(path: string, deadline: number, fn: () => T): Promise<T> {
+    const guard = `${path}.guard`;
+    for (;;) {
+      let fd: number;
+      try {
+        fd = openSync(
+          guard,
+          constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW,
+          0o600,
+        );
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+        try {
+          checkOwnerOnly(guard, "file");
+        } catch (guardError) {
+          if ((guardError as NodeJS.ErrnoException).code !== "ENOENT") throw guardError;
+        }
+        await waitForLock(deadline);
+        continue;
+      }
+      try {
+        return fn();
+      } finally {
+        closeSync(fd);
+        unlinkSync(guard);
+      }
+    }
+  }
+
+  /**
    * Run `fn` holding the profile's exclusive lock (across processes). Recover only a
    * confirmed dead owner on this host; age never revokes ownership. Waiting is bounded.
    */
@@ -470,53 +511,58 @@ export class CredentialStore {
     if (!NAME.test(name)) throw new HelperError("invalid", `invalid name “${name}”`);
     const path = join(this.dir, "locks", `${name}.lock`);
     this.guard(path);
-    const deadline = Date.now() + (opts.waitMs ?? 20_000);
+    const waitMs = opts.waitMs ?? 20_000;
+    const deadline = Date.now() + waitMs;
     const owner = {
       token: randomBytes(32).toString("hex"),
       pid: process.pid,
       hostname: hostname(),
     };
     for (;;) {
-      try {
-        const fd = openSync(
-          path,
-          constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW,
-          0o600,
-        );
+      const acquired = await this.withLockGuard(path, deadline, () => {
         try {
-          writeFully(fd, `${JSON.stringify(owner)}\n`);
-        } catch (error) {
-          closeSync(fd);
-          unlinkSync(path); // never leave a lock we do not hold
-          throw error;
-        }
-        closeSync(fd);
-        break;
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-        try {
-          const held = this.lockOwner(path);
-          if (held && held.hostname === owner.hostname) {
-            try {
-              process.kill(held.pid, 0);
-            } catch (probeError) {
-              if ((probeError as NodeJS.ErrnoException).code === "ESRCH")
-                this.releaseLock(path, held.token);
-            }
+          const fd = openSync(
+            path,
+            constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW,
+            0o600,
+          );
+          try {
+            writeFully(fd, `${JSON.stringify(owner)}\n`);
+          } catch (error) {
+            closeSync(fd);
+            unlinkSync(path); // never leave a lock we do not hold
+            throw error;
           }
-        } catch (lockError) {
-          if ((lockError as NodeJS.ErrnoException).code !== "ENOENT") throw lockError;
+          closeSync(fd);
+          return true;
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+          try {
+            const held = this.lockOwner(path);
+            if (held && held.hostname === owner.hostname) {
+              try {
+                process.kill(held.pid, 0);
+              } catch (probeError) {
+                if ((probeError as NodeJS.ErrnoException).code === "ESRCH")
+                  this.releaseLock(path, held.token);
+              }
+            }
+          } catch (lockError) {
+            if ((lockError as NodeJS.ErrnoException).code !== "ENOENT") throw lockError;
+          }
+          return false;
         }
-        if (Date.now() > deadline)
-          throw new HelperError("unavailable", "another helper process holds this profile's lock");
-        await sleep(20 + Math.floor(Math.random() * 30));
-      }
+      });
+      if (acquired) break;
+      await waitForLock(deadline);
     }
     try {
       return await fn();
     } finally {
       try {
-        this.releaseLock(path, owner.token);
+        await this.withLockGuard(path, Date.now() + waitMs, () =>
+          this.releaseLock(path, owner.token),
+        );
       } catch {
         // Already gone, replaced or unreadable: never remove another owner's lock.
       }

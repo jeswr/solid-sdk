@@ -313,6 +313,103 @@ it("recovers a confirmed dead local pid without relying on lock age", async () =
   expect(fs.existsSync(path)).toBe(false);
 });
 
+it("blocks another process between the final dead-owner check and deletion", async () => {
+  const child = spawnSync(process.execPath, ["-e", ""], { stdio: "ignore" });
+  expect(child.status).toBe(0);
+  const path = join(dir, "locks/fixture.lock");
+  fs.writeFileSync(
+    path,
+    JSON.stringify({ token: "a".repeat(64), pid: child.pid, hostname: hostname() }),
+    { mode: 0o600 },
+  );
+  const unlink = fixtureValue(vi.mocked(fs.unlinkSync).getMockImplementation());
+  // This is precisely the old compare/unlink gap. A second real process must not
+  // recover and acquire the lock while the first process is about to delete it.
+  vi.mocked(fs.unlinkSync).mockImplementationOnce((target) => {
+    expect(target).toBe(path);
+    const contender = spawnSync(
+      process.execPath,
+      [
+        "--input-type=module",
+        "-e",
+        `import { CredentialStore } from ${JSON.stringify(new URL("../dist/store.js", import.meta.url).href)};
+         try {
+           await new CredentialStore(process.argv[1]).withLock('fixture', async () => {}, { waitMs: 100 });
+           process.exitCode = 2;
+         } catch (error) {
+           if (error.code !== 'unavailable') throw error;
+         }`,
+        dir,
+      ],
+      { encoding: "utf8", timeout: 5000 },
+    );
+    expect(contender.stderr).toBe("");
+    expect(contender.status).toBe(0);
+    return unlink(target);
+  });
+  await expect(store.withLock("fixture", async () => "recovered")).resolves.toBe("recovered");
+  expect(fs.readdirSync(join(dir, "locks"))).toEqual([]);
+});
+
+it("times out on an abandoned guard without acquiring or recovering its profile lock", async () => {
+  const path = join(dir, "locks/fixture.lock");
+  const guard = `${path}.guard`;
+  fs.writeFileSync(guard, "", { mode: 0o600 });
+  fs.utimesSync(guard, new Date(0), new Date(0));
+  const run = vi.fn(async () => 1);
+  const probe = vi.spyOn(process, "kill");
+  await expect(store.withLock("fixture", run, { waitMs: -1 })).rejects.toMatchObject({
+    code: "unavailable",
+  });
+  expect(fs.existsSync(path)).toBe(false);
+  const record = { token: "a".repeat(64), pid: process.pid, hostname: hostname() };
+  fs.writeFileSync(path, JSON.stringify(record), { mode: 0o600 });
+  await expect(store.withLock("fixture", run, { waitMs: -1 })).rejects.toMatchObject({
+    code: "unavailable",
+  });
+  expect(JSON.parse(fs.readFileSync(path, "utf8"))).toEqual(record);
+  expect(fs.existsSync(guard)).toBe(true);
+  expect(run).not.toHaveBeenCalled();
+  expect(probe).not.toHaveBeenCalled();
+  // Guards are per profile and do not cover the asynchronous work itself.
+  expect(
+    await store.withLock("other", async () => {
+      expect(fs.existsSync(join(dir, "locks/other.lock.guard"))).toBe(false);
+      return "independent";
+    }),
+  ).toBe("independent");
+});
+
+it("waits for a guard to be released and refuses insecure guards", async () => {
+  const guard = join(dir, "locks/fixture.lock.guard");
+  const open = fixtureValue(vi.mocked(fs.openSync).getMockImplementation());
+  // Another process can remove its guard just after our exclusive open fails.
+  vi.mocked(fs.openSync).mockImplementationOnce(() => {
+    throw errno("EEXIST");
+  });
+  expect(await store.withLock("fixture", async () => 1)).toBe(1);
+  fs.writeFileSync(guard, "", { mode: 0o600 });
+  const pending = store.withLock("fixture", async () => 2);
+  fs.unlinkSync(guard);
+  expect(await pending).toBe(2);
+  fs.writeFileSync(guard, "", { mode: 0o644 });
+  const run = vi.fn(async () => 3);
+  await expect(store.withLock("fixture", run)).rejects.toThrow(/chmod 600/);
+  fs.unlinkSync(guard);
+  fs.symlinkSync(join(base, "missing"), guard);
+  await expect(store.withLock("fixture", run)).rejects.toThrow(/symbolic link/);
+  expect(run).not.toHaveBeenCalled();
+  fs.unlinkSync(guard);
+  // A failure opening the profile lock must still release its guard.
+  vi.mocked(fs.openSync)
+    .mockImplementationOnce(open)
+    .mockImplementationOnce(() => {
+      throw errno("EACCES");
+    });
+  await expect(store.withLock("fixture", run)).rejects.toThrow(/test-io/);
+  expect(fs.existsSync(guard)).toBe(false);
+});
+
 it("waits for foreign hosts, unverifiable pids, and malformed owner records", async () => {
   const path = join(dir, "locks/fixture.lock");
   const probe = vi.spyOn(process, "kill").mockImplementation(() => {
