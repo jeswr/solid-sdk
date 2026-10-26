@@ -1,3 +1,5 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /**
  * Reddit → Social & interests. Saved posts (`/user/{name}/saved`) as
  * `schema:SocialMediaPosting` and subscribed subreddits
@@ -20,12 +22,14 @@ import {
   type RedditSavedPost,
   type RedditSubreddit,
 } from "./fixtures.js";
+import { vocabMap } from "./vocab-map.js";
 
 const ID = "reddit";
 const API = "https://oauth.reddit.com";
 const SCOPES = ["identity", "history", "mysubreddits"] as const;
 
 export const redditAdapter: IntegrationAdapter = {
+  vocabMap,
   metadata: {
     id: ID,
     name: "Reddit",

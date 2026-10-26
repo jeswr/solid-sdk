@@ -1,0 +1,379 @@
+{
+  "$comment": "AUTHORED-BY Codex GPT-6.1-Sol; generated using RDFlib 7.1.4",
+  "cases": [
+    {
+      "name": "local-seconds",
+      "datatype": "dateTime",
+      "values": ["2026-01-01T12:00:00"],
+      "normalized": "2026-01-01T12:00:00",
+      "id": "urn:uuid:3b5ed774-11b2-5b9b-a099-f19eed0f27d1",
+      "graph": "<https://example.org/residence> <https://schema.org/validFrom> \"2026-01-01T12:00:00\"^^<http://www.w3.org/2001/XMLSchema#dateTime> .\n"
+    },
+    {
+      "name": "utc-seconds",
+      "datatype": "dateTime",
+      "values": ["2026-01-01T12:00:00Z", "2026-01-01T12:00:00+00:00", "2026-01-01T12:00:00-00:00"],
+      "normalized": "2026-01-01T12:00:00+00:00",
+      "id": "urn:uuid:bad8048c-883e-569f-b9e7-c2e7af875bc1",
+      "graph": "<https://example.org/residence> <https://schema.org/validFrom> \"2026-01-01T12:00:00+00:00\"^^<http://www.w3.org/2001/XMLSchema#dateTime> .\n"
+    },
+    {
+      "name": "local-short-fraction",
+      "datatype": "dateTime",
+      "values": ["2026-01-01T12:00:00.1", "2026-01-01T12:00:00.100000"],
+      "normalized": "2026-01-01T12:00:00.100000",
+      "id": "urn:uuid:bace6533-2003-5f81-8ef4-a735fcbf226d",
+      "graph": "<https://example.org/residence> <https://schema.org/validFrom> \"2026-01-01T12:00:00.100000\"^^<http://www.w3.org/2001/XMLSchema#dateTime> .\n"
+    },
+    {
+      "name": "utc-short-fraction",
+      "datatype": "dateTime",
+      "values": [
+        "2026-01-01T12:00:00.1Z",
+        "2026-01-01T12:00:00.1+00:00",
+        "2026-01-01T12:00:00.1-00:00",
+        "2026-01-01T12:00:00.100000+00:00"
+      ],
+      "normalized": "2026-01-01T12:00:00.100000+00:00",
+      "id": "urn:uuid:69681deb-54af-595d-b600-2fbc424db007",
+      "graph": "<https://example.org/residence> <https://schema.org/validFrom> \"2026-01-01T12:00:00.100000+00:00\"^^<http://www.w3.org/2001/XMLSchema#dateTime> .\n"
+    },
+    {
+      "name": "local-zero-fraction",
+      "datatype": "dateTime",
+      "values": ["2026-01-01T12:00:00.000000", "2026-01-01T12:00:00"],
+      "normalized": "2026-01-01T12:00:00",
+      "id": "urn:uuid:3b5ed774-11b2-5b9b-a099-f19eed0f27d1",
+      "graph": "<https://example.org/residence> <https://schema.org/validFrom> \"2026-01-01T12:00:00\"^^<http://www.w3.org/2001/XMLSchema#dateTime> .\n"
+    },
+    {
+      "name": "utc-zero-fraction",
+      "datatype": "dateTime",
+      "values": [
+        "2026-01-01T12:00:00.000000Z",
+        "2026-01-01T12:00:00.000000+00:00",
+        "2026-01-01T12:00:00.000000-00:00",
+        "2026-01-01T12:00:00+00:00"
+      ],
+      "normalized": "2026-01-01T12:00:00+00:00",
+      "id": "urn:uuid:bad8048c-883e-569f-b9e7-c2e7af875bc1",
+      "graph": "<https://example.org/residence> <https://schema.org/validFrom> \"2026-01-01T12:00:00+00:00\"^^<http://www.w3.org/2001/XMLSchema#dateTime> .\n"
+    },
+    {
+      "name": "local-truncated-zero",
+      "datatype": "dateTime",
+      "values": ["2026-01-01T12:00:00.0000009", "2026-01-01T12:00:00"],
+      "normalized": "2026-01-01T12:00:00",
+      "id": "urn:uuid:3b5ed774-11b2-5b9b-a099-f19eed0f27d1",
+      "graph": "<https://example.org/residence> <https://schema.org/validFrom> \"2026-01-01T12:00:00\"^^<http://www.w3.org/2001/XMLSchema#dateTime> .\n"
+    },
+    {
+      "name": "utc-truncated-zero",
+      "datatype": "dateTime",
+      "values": [
+        "2026-01-01T12:00:00.0000009Z",
+        "2026-01-01T12:00:00.0000009+00:00",
+        "2026-01-01T12:00:00.0000009-00:00",
+        "2026-01-01T12:00:00+00:00"
+      ],
+      "normalized": "2026-01-01T12:00:00+00:00",
+      "id": "urn:uuid:bad8048c-883e-569f-b9e7-c2e7af875bc1",
+      "graph": "<https://example.org/residence> <https://schema.org/validFrom> \"2026-01-01T12:00:00+00:00\"^^<http://www.w3.org/2001/XMLSchema#dateTime> .\n"
+    },
+    {
+      "name": "local-truncated-fraction",
+      "datatype": "dateTime",
+      "values": ["2026-01-01T12:00:00.123456789", "2026-01-01T12:00:00.123456"],
+      "normalized": "2026-01-01T12:00:00.123456",
+      "id": "urn:uuid:a4461fcc-76bd-59e9-add4-02bb5ecb2437",
+      "graph": "<https://example.org/residence> <https://schema.org/validFrom> \"2026-01-01T12:00:00.123456\"^^<http://www.w3.org/2001/XMLSchema#dateTime> .\n"
+    },
+    {
+      "name": "utc-truncated-fraction",
+      "datatype": "dateTime",
+      "values": [
+        "2026-01-01T12:00:00.123456789Z",
+        "2026-01-01T12:00:00.123456789+00:00",
+        "2026-01-01T12:00:00.123456789-00:00",
+        "2026-01-01T12:00:00.123456+00:00"
+      ],
+      "normalized": "2026-01-01T12:00:00.123456+00:00",
+      "id": "urn:uuid:3508ec83-f6eb-5b46-ae70-6131eff29531",
+      "graph": "<https://example.org/residence> <https://schema.org/validFrom> \"2026-01-01T12:00:00.123456+00:00\"^^<http://www.w3.org/2001/XMLSchema#dateTime> .\n"
+    },
+    {
+      "name": "local-microsecond",
+      "datatype": "dateTime",
+      "values": ["2026-01-01T12:00:00.000001"],
+      "normalized": "2026-01-01T12:00:00.000001",
+      "id": "urn:uuid:b278c58a-b507-5fb6-a5f3-4b6c7f999c66",
+      "graph": "<https://example.org/residence> <https://schema.org/validFrom> \"2026-01-01T12:00:00.000001\"^^<http://www.w3.org/2001/XMLSchema#dateTime> .\n"
+    },
+    {
+      "name": "utc-microsecond",
+      "datatype": "dateTime",
+      "values": [
+        "2026-01-01T12:00:00.000001Z",
+        "2026-01-01T12:00:00.000001+00:00",
+        "2026-01-01T12:00:00.000001-00:00"
+      ],
+      "normalized": "2026-01-01T12:00:00.000001+00:00",
+      "id": "urn:uuid:c507ea45-7b79-5141-ac80-e327f393acc5",
+      "graph": "<https://example.org/residence> <https://schema.org/validFrom> \"2026-01-01T12:00:00.000001+00:00\"^^<http://www.w3.org/2001/XMLSchema#dateTime> .\n"
+    },
+    {
+      "name": "offset-+05:30",
+      "datatype": "dateTime",
+      "values": ["2026-01-01T12:00:00.1+05:30", "2026-01-01T12:00:00.1000009+05:30"],
+      "normalized": "2026-01-01T12:00:00.100000+05:30",
+      "id": "urn:uuid:6f6f1e7f-d3d2-5c55-b262-4617ada10622",
+      "graph": "<https://example.org/residence> <https://schema.org/validFrom> \"2026-01-01T12:00:00.100000+05:30\"^^<http://www.w3.org/2001/XMLSchema#dateTime> .\n"
+    },
+    {
+      "name": "offset--03:30",
+      "datatype": "dateTime",
+      "values": ["2026-01-01T12:00:00.1-03:30", "2026-01-01T12:00:00.1000009-03:30"],
+      "normalized": "2026-01-01T12:00:00.100000-03:30",
+      "id": "urn:uuid:36cc120b-083b-519e-b2fc-7a212ecfc905",
+      "graph": "<https://example.org/residence> <https://schema.org/validFrom> \"2026-01-01T12:00:00.100000-03:30\"^^<http://www.w3.org/2001/XMLSchema#dateTime> .\n"
+    },
+    {
+      "name": "offset-+14:00",
+      "datatype": "dateTime",
+      "values": ["2026-01-01T12:00:00.1+14:00", "2026-01-01T12:00:00.1000009+14:00"],
+      "normalized": "2026-01-01T12:00:00.100000+14:00",
+      "id": "urn:uuid:bc1a3dc6-0425-5668-a34f-9b5e665974f0",
+      "graph": "<https://example.org/residence> <https://schema.org/validFrom> \"2026-01-01T12:00:00.100000+14:00\"^^<http://www.w3.org/2001/XMLSchema#dateTime> .\n"
+    },
+    {
+      "name": "offset--14:00",
+      "datatype": "dateTime",
+      "values": ["2026-01-01T12:00:00.1-14:00", "2026-01-01T12:00:00.1000009-14:00"],
+      "normalized": "2026-01-01T12:00:00.100000-14:00",
+      "id": "urn:uuid:0da38b85-b1e1-5810-b352-888e75a8ad9c",
+      "graph": "<https://example.org/residence> <https://schema.org/validFrom> \"2026-01-01T12:00:00.100000-14:00\"^^<http://www.w3.org/2001/XMLSchema#dateTime> .\n"
+    },
+    {
+      "name": "early-dateTime",
+      "datatype": "dateTime",
+      "values": ["0001-01-01T00:00:00.1Z", "0001-01-01T00:00:00.100000+00:00"],
+      "normalized": "0001-01-01T00:00:00.100000+00:00",
+      "id": "urn:uuid:90aaf859-c701-5288-a438-dbb05fbe03a0",
+      "graph": "<https://example.org/residence> <https://schema.org/validFrom> \"0001-01-01T00:00:00.100000+00:00\"^^<http://www.w3.org/2001/XMLSchema#dateTime> .\n"
+    },
+    {
+      "name": "date-zones",
+      "datatype": "date",
+      "values": [
+        "2026-01-01",
+        "2026-01-01Z",
+        "2026-01-01z",
+        "2026-01-01+00:00",
+        "2026-01-01-00:00",
+        "2026-01-01+05:30",
+        "2026-01-01-03:30",
+        "2026-01-01+14:00",
+        "2026-01-01-14:00"
+      ],
+      "normalized": "2026-01-01",
+      "id": "urn:uuid:65338917-fecb-53a5-8d7f-aae43ad792a1",
+      "graph": "<https://example.org/residence> <https://schema.org/validFrom> \"2026-01-01\"^^<http://www.w3.org/2001/XMLSchema#date> .\n"
+    },
+    {
+      "name": "date-early-year",
+      "datatype": "date",
+      "values": ["0001-01-01", "0001-01-01Z"],
+      "normalized": "0001-01-01",
+      "id": "urn:uuid:5fd09ede-bcbf-57c4-861d-ce6eb53aa895",
+      "graph": "<https://example.org/residence> <https://schema.org/validFrom> \"0001-01-01\"^^<http://www.w3.org/2001/XMLSchema#date> .\n"
+    },
+    {
+      "name": "gYear-zones",
+      "datatype": "gYear",
+      "values": [
+        "2026",
+        "2026Z",
+        "2026z",
+        "2026+00:00",
+        "2026-00:00",
+        "2026+05:30",
+        "2026-03:30",
+        "2026+14:00",
+        "2026-14:00"
+      ],
+      "normalized": "2026",
+      "id": "urn:uuid:5f1657b0-8348-5203-8413-7c4818bb8211",
+      "graph": "<https://example.org/residence> <https://schema.org/validFrom> \"2026\"^^<http://www.w3.org/2001/XMLSchema#gYear> .\n"
+    },
+    {
+      "name": "gYear-early-year",
+      "datatype": "gYear",
+      "values": ["0001", "0001Z"],
+      "normalized": "0001",
+      "id": "urn:uuid:0e41e2d1-4c70-5b5e-9861-a04a56841bd3",
+      "graph": "<https://example.org/residence> <https://schema.org/validFrom> \"0001\"^^<http://www.w3.org/2001/XMLSchema#gYear> .\n"
+    },
+    {
+      "name": "gYearMonth-zones",
+      "datatype": "gYearMonth",
+      "values": [
+        "2026-01",
+        "2026-01Z",
+        "2026-01z",
+        "2026-01+00:00",
+        "2026-01-00:00",
+        "2026-01+05:30",
+        "2026-01-03:30",
+        "2026-01+14:00",
+        "2026-01-14:00"
+      ],
+      "normalized": "2026-01",
+      "id": "urn:uuid:0a568585-477f-5a22-b4cd-53a9cc2406e3",
+      "graph": "<https://example.org/residence> <https://schema.org/validFrom> \"2026-01\"^^<http://www.w3.org/2001/XMLSchema#gYearMonth> .\n"
+    },
+    {
+      "name": "gYearMonth-early-year",
+      "datatype": "gYearMonth",
+      "values": ["0001-01", "0001-01Z"],
+      "normalized": "0001-01",
+      "id": "urn:uuid:c749d69b-6c13-5894-a146-fb4536c07bb1",
+      "graph": "<https://example.org/residence> <https://schema.org/validFrom> \"0001-01\"^^<http://www.w3.org/2001/XMLSchema#gYearMonth> .\n"
+    },
+    {
+      "name": "gYear-leading-zeroes",
+      "datatype": "gYear",
+      "values": ["02026Z", "+2026+05:30", "2026"],
+      "normalized": "2026",
+      "id": "urn:uuid:5f1657b0-8348-5203-8413-7c4818bb8211",
+      "graph": "<https://example.org/residence> <https://schema.org/validFrom> \"2026\"^^<http://www.w3.org/2001/XMLSchema#gYear> .\n"
+    },
+    {
+      "name": "gYearMonth-leading-zeroes",
+      "datatype": "gYearMonth",
+      "values": ["02026-001Z", "+2026-01-03:30", "2026-01"],
+      "normalized": "2026-01",
+      "id": "urn:uuid:0a568585-477f-5a22-b4cd-53a9cc2406e3",
+      "graph": "<https://example.org/residence> <https://schema.org/validFrom> \"2026-01\"^^<http://www.w3.org/2001/XMLSchema#gYearMonth> .\n"
+    },
+    {
+      "name": "date-leap-day",
+      "datatype": "date",
+      "values": ["2000-02-29", "2000-02-29-14:00"],
+      "normalized": "2000-02-29",
+      "id": "urn:uuid:1ca9abbd-f658-5fa9-b7a6-1f9db184dbee",
+      "graph": "<https://example.org/residence> <https://schema.org/validFrom> \"2000-02-29\"^^<http://www.w3.org/2001/XMLSchema#date> .\n"
+    },
+    {
+      "name": "dateTime-unparsed-0",
+      "datatype": "dateTime",
+      "values": ["0000-01-01T00:00:00.1Z"],
+      "normalized": "0000-01-01T00:00:00.1Z",
+      "id": "urn:uuid:270c915f-33ab-5ee5-a918-f9a7466e3702",
+      "graph": "<https://example.org/residence> <https://schema.org/validFrom> \"0000-01-01T00:00:00.1Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime> .\n"
+    },
+    {
+      "name": "dateTime-unparsed-1",
+      "datatype": "dateTime",
+      "values": ["2026-01-31T24:00:00Z"],
+      "normalized": "2026-01-31T24:00:00Z",
+      "id": "urn:uuid:21577e02-d44d-525f-b61b-43f6395762e9",
+      "graph": "<https://example.org/residence> <https://schema.org/validFrom> \"2026-01-31T24:00:00Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime> .\n"
+    },
+    {
+      "name": "dateTime-unparsed-2",
+      "datatype": "dateTime",
+      "values": ["2026-01-31T24:00:00.000Z"],
+      "normalized": "2026-01-31T24:00:00.000Z",
+      "id": "urn:uuid:c3da1573-27ff-5a75-8e01-b03de550554f",
+      "graph": "<https://example.org/residence> <https://schema.org/validFrom> \"2026-01-31T24:00:00.000Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime> .\n"
+    },
+    {
+      "name": "dateTime-unparsed-3",
+      "datatype": "dateTime",
+      "values": ["2026-01-31T24:00:00.000"],
+      "normalized": "2026-01-31T24:00:00.000",
+      "id": "urn:uuid:46c98adb-bdb6-5d7a-a985-19ddac8be10a",
+      "graph": "<https://example.org/residence> <https://schema.org/validFrom> \"2026-01-31T24:00:00.000\"^^<http://www.w3.org/2001/XMLSchema#dateTime> .\n"
+    },
+    {
+      "name": "date-unparsed-0",
+      "datatype": "date",
+      "values": ["0000-02-29Z"],
+      "normalized": "0000-02-29Z",
+      "id": "urn:uuid:be3ac843-3bc9-5466-8b2b-64d8cc5b8762",
+      "graph": "<https://example.org/residence> <https://schema.org/validFrom> \"0000-02-29Z\"^^<http://www.w3.org/2001/XMLSchema#date> .\n"
+    },
+    {
+      "name": "date-unparsed-1",
+      "datatype": "date",
+      "values": ["2026-02-30Z"],
+      "normalized": "2026-02-30Z",
+      "id": "urn:uuid:de279ec7-4507-59b1-8359-c1428b824eb5",
+      "graph": "<https://example.org/residence> <https://schema.org/validFrom> \"2026-02-30Z\"^^<http://www.w3.org/2001/XMLSchema#date> .\n"
+    },
+    {
+      "name": "date-unparsed-2",
+      "datatype": "date",
+      "values": ["-2026-01-01Z"],
+      "normalized": "-2026-01-01Z",
+      "id": "urn:uuid:b5437607-652a-598a-8c0a-621efeb31afc",
+      "graph": "<https://example.org/residence> <https://schema.org/validFrom> \"-2026-01-01Z\"^^<http://www.w3.org/2001/XMLSchema#date> .\n"
+    },
+    {
+      "name": "gYear-unparsed-0",
+      "datatype": "gYear",
+      "values": ["0000Z"],
+      "normalized": "0000Z",
+      "id": "urn:uuid:e91ae66a-4451-5942-82cd-bda49eeb7b9c",
+      "graph": "<https://example.org/residence> <https://schema.org/validFrom> \"0000Z\"^^<http://www.w3.org/2001/XMLSchema#gYear> .\n"
+    },
+    {
+      "name": "gYear-unparsed-1",
+      "datatype": "gYear",
+      "values": ["12026Z"],
+      "normalized": "12026Z",
+      "id": "urn:uuid:51bc949c-5ce0-5361-9642-8e6dc9bd9658",
+      "graph": "<https://example.org/residence> <https://schema.org/validFrom> \"12026Z\"^^<http://www.w3.org/2001/XMLSchema#gYear> .\n"
+    },
+    {
+      "name": "gYear-unparsed-2",
+      "datatype": "gYear",
+      "values": ["-2026Z"],
+      "normalized": "-2026Z",
+      "id": "urn:uuid:f00200d4-c011-5ae3-aadf-504b709a4297",
+      "graph": "<https://example.org/residence> <https://schema.org/validFrom> \"-2026Z\"^^<http://www.w3.org/2001/XMLSchema#gYear> .\n"
+    },
+    {
+      "name": "gYearMonth-unparsed-0",
+      "datatype": "gYearMonth",
+      "values": ["0000-01Z"],
+      "normalized": "0000-01Z",
+      "id": "urn:uuid:495e142b-0513-59ea-8d59-062db1f6b3c7",
+      "graph": "<https://example.org/residence> <https://schema.org/validFrom> \"0000-01Z\"^^<http://www.w3.org/2001/XMLSchema#gYearMonth> .\n"
+    },
+    {
+      "name": "gYearMonth-unparsed-1",
+      "datatype": "gYearMonth",
+      "values": ["12026-01Z"],
+      "normalized": "12026-01Z",
+      "id": "urn:uuid:a4772d2a-a72e-5f03-91fa-f907948975ca",
+      "graph": "<https://example.org/residence> <https://schema.org/validFrom> \"12026-01Z\"^^<http://www.w3.org/2001/XMLSchema#gYearMonth> .\n"
+    },
+    {
+      "name": "gYearMonth-unparsed-2",
+      "datatype": "gYearMonth",
+      "values": ["2026-13Z"],
+      "normalized": "2026-13Z",
+      "id": "urn:uuid:7b27fade-f19e-59e7-80bb-5085611266da",
+      "graph": "<https://example.org/residence> <https://schema.org/validFrom> \"2026-13Z\"^^<http://www.w3.org/2001/XMLSchema#gYearMonth> .\n"
+    },
+    {
+      "name": "gYearMonth-unparsed-3",
+      "datatype": "gYearMonth",
+      "values": ["-2026-01Z"],
+      "normalized": "-2026-01Z",
+      "id": "urn:uuid:14998d33-d4bd-51ee-aad8-fcb2e84d2b37",
+      "graph": "<https://example.org/residence> <https://schema.org/validFrom> \"-2026-01Z\"^^<http://www.w3.org/2001/XMLSchema#gYearMonth> .\n"
+    }
+  ]
+}
