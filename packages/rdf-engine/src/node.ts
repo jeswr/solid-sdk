@@ -1,3 +1,12 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-/** Reserved node entry point for @jeswr/rdf-engine; implementation follows T-001. */
-export {};
+// AUTHORED-BY Codex GPT-6
+import { createEngine } from "./engine.js";
+import type { RdfEngine } from "./types.js";
+
+export { FormGraphUnsupportedError, PolicyIdentifierCollisionError } from "./errors.js";
+export type * from "./types.js";
+
+/** Use the prebuilt Node WASM module; its synchronous initialization occurs lazily. */
+export function createRdfEngine(): RdfEngine {
+  return createEngine(() => import("@sparq-org/sparq/wasm-node"));
+}

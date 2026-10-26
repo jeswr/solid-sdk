@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
 // MoneyStore — the pod-shaped read / write / list layer. Wires:
@@ -35,7 +36,11 @@ export const LEDGER_RESOURCE = "ledger.ttl" as const;
 export const PUBLIC_TYPE_INDEX_PATH = "settings/publicTypeIndex.ttl" as const;
 
 /** The narrow shape of `@jeswr/fetch-rdf`'s `fetchRdf` the store depends on. */
-export type FetchRdf = typeof defaultFetchRdf;
+export type FetchRdf = (url: string) => Promise<{
+  dataset: DatasetCore;
+  etag: string | null;
+  url: string;
+}>;
 
 export interface MoneyStoreOptions {
   /** The pod root URL (must end in `/`), e.g. "https://alice.pod.example/". */
