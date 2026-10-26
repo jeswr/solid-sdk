@@ -65,6 +65,10 @@
   color: var(--primary-foreground);
   border-color: var(--primary);
 }
+/* Keep validation above adapter defaults, including checked checkbox borders. */
+[data-slot][aria-invalid="true"] {
+  border-color: var(--destructive);
+}
 [data-slot="switch"] {
   min-height: 24px;
   padding: 1px;
