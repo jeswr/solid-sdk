@@ -3,6 +3,37 @@
 
 # sst-qucd / CAL-00 lane report
 
+## Fix round 3 — 2026-10-26
+
+Resumed on `lane/sst-qucd` at `005732b4fee4fc5009bdac6ba42d324c0d20e9f2`. Read the original brief, all earlier fix briefs, and the complete round-three review. All five supplied findings are addressed; implementation changes are confined to the calendar model and its regression tests/API documentation.
+
+- `6a129231` — `fix: skip cancelled ICS events`: skip cancelled standalone events and recurring series with an explicit warning; retain unrelated active events and aligned timezone contexts.
+- `ad9702d4` — `fix: require persistent ICS identities`: require an explicit UID or source URL, using the complete URL as the fallback instead of a content hash. Tests cover same-title/time events with distinct locations, descriptions and recurrence, stable source identities, explicit UID precedence, re-export, and absence of input mutation.
+- `1f87e99f` — `fix: load calendar subjects at final URLs`: use fetchRdf's final URL for parsing and returned items, retaining ETags and document-scope validation. Tests cover relative event/calendar subjects after redirects and normalized requests whose injected responses omit a URL.
+- `282e95f4` — `fix: reject subsecond ICS event values`: reject subsecond starts, ends, recurrence cutoffs, exceptions and absolute reminders rather than silently truncating them. Generated DTSTAMP metadata explicitly uses second precision. A whole-second event still round-trips.
+- `79901b90` — `fix: interpret explicit ICS gap dates`: resolve explicit gap times using the pre-transition offset, with London, New York and Lord Howe regressions plus floating dates, end dates and exceptions. Generated recurrence gap times remain skipped without consuming COUNT; existing overlap tests remain green. Also correct the identity test fixture's optional-URL typing found by the app typecheck.
+- The final documentation commit records this round's validation in STATUS.md.
+
+Conservative choices expressly permitted by the review: skip cancellations with warnings instead of extending the event model; require persistent identity instead of mutating events to retain generated random UIDs; reject unsupported subsecond modeled dates instead of choosing a lossy conversion. There are no new design questions or unfinished implementation changes.
+
+All pnpm commands used `export PATH="$PWD/node_modules/.bin:$PATH"`. Git network transport was disabled for builds/gates with `GIT_ALLOW_PROTOCOL=file`; Turbo used `--env-mode=loose` to pass that restriction to child tasks.
+
+| Exact command | Result |
+| --- | --- |
+| `GIT_ALLOW_PROTOCOL=file pnpm exec turbo run build --filter '@jeswr/app-suite^...' --env-mode=loose` | PASS: four workspace build dependencies prepared. The first targeted test attempt before preparation could not resolve unbuilt rdf-serialize output; it passed after preparation. |
+| `pnpm --filter @jeswr/app-suite run lint` | PASS: 24 files checked. |
+| `pnpm --filter @jeswr/app-suite run build` | PASS: production Next.js build. |
+| `pnpm --filter @jeswr/app-suite run typecheck` | PASS after correcting the identity test fixture's explicit optional URL; initial strict typecheck caught that test-only issue. The final affected gate also passed the app typecheck. |
+| `pnpm --filter @jeswr/app-suite run test` | PASS: 111 tests across four files, including all 20 ICS fixture round-trips. |
+| `pnpm --filter @jeswr/app-suite run test:coverage` | PASS on the final source/tests: 111 tests; model statements 605/605, branches 407/407, functions 153/153, lines 524/524 — all 100%. |
+| `pnpm run lint:root` | PASS: root Biome and transport/workspace/fetch/token/contrast guards. |
+| `GIT_ALLOW_PROTOCOL=file TURBO_SCM_BASE=74e38dd9847413b18c41e6ed0b35525de62a0bc8 pnpm run gate --env-mode=loose` | PASS: 10/10 tasks successful, including final app lint/build/typecheck/test. |
+| `GIT_ALLOW_PROTOCOL=file pnpm run gate:full --env-mode=loose` | BLOCKED outside this lane: existing unstorage-solid build invokes a remote clone to prepare fetch-rdf. Git refused HTTPS transport before any remote clone/fetch/merge could complete. Turbo stopped with `@jeswr/unstorage-solid#build` failed, 23 tasks successful. This is the same full-workspace blocker documented in round two. |
+| `git diff 005732b4fee4fc5009bdac6ba42d324c0d20e9f2 --check` | PASS before this documentation commit. |
+| `roborev status` | UNAVAILABLE (exit 127): `roborev: command not found`; automated per-commit review could not run. |
+
+No dependencies, manifests, lockfiles, UI or screenshots changed. No dependency policy checks or installs were needed. No pushes, PRs, branch switches, completed remote Git operations, or changes to other checkouts. Remaining verification limits are the unrelated full-workspace gate blocker and unavailable roborev; no open questions.
+
 ## Fix round 2 — 2026-10-26
 
 Based on `74e38dd9847413b18c41e6ed0b35525de62a0bc8`, on `lane/sst-qucd`. All eight supplied review findings are addressed, with changes confined to the calendar model, its existing tests/documentation, and this report.
