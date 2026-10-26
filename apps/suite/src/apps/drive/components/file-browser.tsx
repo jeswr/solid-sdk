@@ -273,8 +273,10 @@ export function FileBrowser(props: FileBrowserProps) {
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     const target = event.target as HTMLElement;
-    // Only the roving item owns listing shortcuts; descendants keep their native keys.
-    if (event.defaultPrevented || !target.matches("[data-url]")) return;
+    // The roving item (or the listing itself, once its last item is gone) owns listing
+    // shortcuts; descendants such as menus and inputs keep their native keys.
+    if (event.defaultPrevented || (target !== event.currentTarget && !target.matches("[data-url]")))
+      return;
     const focusUrl = target.dataset.url;
     const focused = visible.find((item) => item.url === focusUrl);
     const index = focused ? visible.indexOf(focused) : -1;
@@ -303,6 +305,12 @@ export function FileBrowser(props: FileBrowserProps) {
         return step(-visible.length);
       case event.key === "End":
         return step(visible.length);
+      case event.key === "v" && !mod && !event.altKey:
+        event.preventDefault();
+        return updatePrefs((current) => ({
+          ...current,
+          view: current.view === "list" ? "grid" : "list",
+        }));
       case mod && event.key.toLowerCase() === "a":
         event.preventDefault();
         return dispatch({ type: "select-all" });

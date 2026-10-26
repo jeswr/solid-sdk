@@ -750,6 +750,52 @@ it.each([
   trash.mockRestore();
 });
 
+it("navigates up from an empty listing once its last focused item is gone", async () => {
+  const view = await mount(
+    h(
+      DriveUiProvider,
+      null,
+      h(FileBrowser, {
+        title: "Work",
+        items: [],
+        folder: `${ROOT}Work/`,
+        columns: [],
+        empty: { title: "Empty", icon: null },
+      }),
+    ),
+  );
+  const listing = view.host.querySelector<HTMLElement>("[data-drive-listing]") as HTMLElement;
+  await act(async () => listing.focus());
+  await key(listing, "Backspace");
+  expect(mocks.router.push).toHaveBeenCalledWith("/drive/my");
+  mocks.router.push.mockClear();
+  await act(async () => {
+    listing.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "ArrowUp", altKey: true, bubbles: true }),
+    );
+  });
+  expect(mocks.router.push).toHaveBeenCalledWith("/drive/my");
+  await view.unmount();
+});
+
+it("toggles list and grid with v from a focused row but not with a modifier", async () => {
+  const view = await mount(tree(items));
+  const focused = row(view.host);
+  await act(async () => focused.focus());
+  await key(focused, "v");
+  expect(drive.updatePrefs).toHaveBeenCalledTimes(1);
+  const update = drive.updatePrefs.mock.calls[0]?.[0] as (prefs: typeof drive.prefs) => {
+    view: string;
+  };
+  expect(update({ ...drive.prefs, view: "list" }).view).toBe("grid");
+  expect(update({ ...drive.prefs, view: "grid" }).view).toBe("list");
+  await act(async () => {
+    focused.dispatchEvent(new KeyboardEvent("keydown", { key: "v", ctrlKey: true, bubbles: true }));
+  });
+  expect(drive.updatePrefs).toHaveBeenCalledTimes(1);
+  await view.unmount();
+});
+
 it.each([
   false,
   true,

@@ -126,11 +126,14 @@ export function getDemoPod(): Promise<DemoPod> {
       const request = new Request(input, init);
       const method = request.method;
       const mutation = !["GET", "HEAD", "OPTIONS"].includes(method);
+      // A conditional read is a precondition check, so it must see the durable pod
+      // rather than this tab's view, which another tab's commit may not have refreshed yet.
+      const conditional = request.headers.has("if-match") || request.headers.has("if-none-match");
       const body = request.body ? new Uint8Array(await request.arrayBuffer()) : undefined;
       return serial(async () => {
         if (!active) throw new Error("Demo pod session was reset");
         // Reads use this tab's view, which other tabs' commits refresh over the channel.
-        if (!mutation)
+        if (!mutation && !conditional)
           return view.fetch(request.url, {
             method,
             headers: request.headers,
