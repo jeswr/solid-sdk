@@ -61,6 +61,7 @@ export function createImportSession(
       const item = new Provenance(subject, incoming, DataFactory);
       const origin = item.sourceUrl ?? fallback;
       item.derivedFrom.add(origin);
+      document.derivedFrom.add(origin);
       item.generatedBy.clear();
       item.generatedBy.add(activityUrl);
       used.add(origin);

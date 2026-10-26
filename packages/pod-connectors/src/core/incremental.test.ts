@@ -194,6 +194,86 @@ describe("CON-02 incremental writes", () => {
     }
   });
 
+  it("merges on servers without ETags and honours an explicit source-document fallback", async () => {
+    const base = writer();
+    const original = new Store();
+    song(original, `${base.resolve("items.ttl")}#old`, "old", "Kept");
+    await base.write({
+      slug: "items.ttl",
+      category: "media",
+      forClass: CLASSES.MusicRecording,
+      dataset: original,
+    });
+    const conditions: unknown[] = [];
+    const port: PodWriter = {
+      ...base,
+      async read(slug) {
+        const existing = await base.read(slug);
+        return existing ? { ...existing, etag: null } : undefined;
+      },
+      async write(doc, condition) {
+        conditions.push(condition);
+        return base.write(doc, condition);
+      },
+    };
+    const source = adapter(async (ctx) => {
+      const dataset = new Store();
+      const item = new MusicRecording(
+        `${ctx.resolve("items.ttl")}#new`,
+        dataset,
+        DataFactory,
+      ).mark();
+      item.identifier = "new";
+      item.name = "No individual URL";
+      await ctx.write({
+        slug: "items.ttl",
+        category: "media",
+        forClass: CLASSES.MusicRecording,
+        dataset,
+        sourceUrl: "https://source.test/export",
+      });
+      return {};
+    });
+    await runImport({ adapter: source, podWriter: port, mode: "demo" });
+    expect(conditions[0]).toBeUndefined();
+    const result = await base.read("items.ttl");
+    const item = new Provenance(
+      `${port.resolve("items.ttl")}#new`,
+      result?.dataset ?? new Store(),
+      DataFactory,
+    );
+    expect(item.derivedFrom.has("https://source.test/export")).toBe(true);
+    expect(
+      new MusicRecording(
+        `${port.resolve("items.ttl")}#old`,
+        result?.dataset ?? new Store(),
+        DataFactory,
+      ).name,
+    ).toBe("Kept");
+  });
+
+  it("reports a first-run failure without persisting source error text or a checkpoint", async () => {
+    const states: ConnectorState[] = [];
+    const source = adapter(async () => {
+      throw new Error("synthetic-private-source-detail");
+    });
+    await expect(
+      runImport({
+        adapter: source,
+        podWriter: writer(),
+        mode: "demo",
+        onState: (state) => states.push(state),
+      }),
+    ).rejects.toThrow("synthetic-private-source-detail");
+    expect(states[0]).toMatchObject({
+      lastOutcome: "error",
+      counts: { documents: 0, items: 0, skipped: 0 },
+    });
+    expect(states[0]?.lastSync).toBeUndefined();
+    expect(states[0]?.cursor).toBeUndefined();
+    expect(JSON.stringify(states)).not.toContain("synthetic-private-source-detail");
+  });
+
   it("reserves the activity document, including query and fragment aliases", async () => {
     for (const slug of ["_provenance.ttl", "_provenance.ttl#alias", "_provenance.ttl?alias"]) {
       const port = writer();
@@ -258,6 +338,9 @@ it("records one complete PROV activity per run and each source-item derivation",
     for (const subject of items) {
       const item = new Provenance(subject, ds, DataFactory);
       expect(item.derivedFrom.has(item.sourceUrl ?? "")).toBe(true);
+      expect(new Provenance(doc.url, ds, DataFactory).derivedFrom.has(item.sourceUrl ?? "")).toBe(
+        true,
+      );
       expect(item.generatedBy.has(activityUrl)).toBe(true);
       if (item.types.has(CLASSES.MusicRecording))
         expect(item.types.has(FEDERATION.MusicRecording)).toBe(true);
