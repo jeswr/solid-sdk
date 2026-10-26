@@ -34,6 +34,10 @@ const units = [
   ["seconds?|sec|s", 1000],
 ] as const;
 
+// Shared with reminder masking so worded and compound durations stay intact.
+const durationUnit = `${amount}\\s*(?:${units.map(([unit]) => unit).join("|")})\\b`;
+export const durationPattern = `${durationUnit}(?:\\s*,?\\s*(?:and\\s*)?${durationUnit})*`;
+
 /** Resolve chrono-recognised elapsed phrases without host-local Date setters. */
 export function elapsedInstant(text: string, now: Date): Date {
   const negative = /^(?:last|past|-)|\b(?:ago|before|earlier)\b/i.test(text);

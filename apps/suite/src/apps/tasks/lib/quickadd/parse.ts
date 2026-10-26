@@ -1,14 +1,22 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { en } from "chrono-node";
-import { elapsedInstant } from "./elapsed";
+import { durationPattern, elapsedInstant } from "./elapsed";
 import { parseRecurrence, recurrencePattern, recurrenceStart } from "./recurrence";
 import { localCalendar, toInstant } from "./time";
 import type { Due, QuickAddContext, QuickAddResult, QuickAddSpan, RecurrenceRule } from "./types";
+
+const reminderTime =
+  "(?:\\d{1,2}(?::\\d{2}(?::\\d{2})?)?\\s*[ap]m|\\d{1,2}:\\d{2}(?::\\d{2})?|noon|midnight|now)\\b";
+const reminderPrefix = new RegExp(
+  `^(?:(?:(?:in|within|for)\\s*)?${durationPattern}(?:\\s+(?:before|ago|later|from now))?(?:\\s+(?:at\\s+)?${reminderTime})?|(?:at\\s+)?${reminderTime})`,
+  "i",
+);
 
 /** Pure English quick-add parser. See README.md for conflict and DST policies. */
 export function parseQuickAdd(text: string, ctx: QuickAddContext): QuickAddResult {
   if (!Number.isFinite(ctx.now.getTime())) throw new RangeError("Invalid quick-add clock");
   const today = localCalendar(ctx.now, ctx.tz);
+  const parser = ctx.locale === "en-US" ? en.casual : en.GB;
   const spans: QuickAddSpan[] = [];
   let working = text;
   const mask = (start: number, length: number) => {
@@ -43,10 +51,19 @@ export function parseQuickAdd(text: string, ctx: QuickAddContext): QuickAddResul
     addSpan("priority", match.index, match[0].length);
   }
   // The L1 output excludes reminders and resource resolution. Preserve these in the title.
-  for (const match of working.matchAll(
-    /\S*[@#]\S*|https?:\/\/\S+|!\s*(?:(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|an?)\s*(?:[mhd]|minutes?|hours?|days?)\s+before|\d{1,2}(?::\d{2})?\s*[ap]m|\d{1,2}:\d{2}(?::\d{2})?)\b/giu,
-  )) {
+  for (const match of working.matchAll(/\S*[@#]\S*|https?:\/\/\S+/giu)) {
     mask(match.index, match[0].length);
+  }
+  for (const marker of working.matchAll(/!\s*/g)) {
+    const remaining = working.slice(marker.index + marker[0].length);
+    // Bound time-first reminders before chrono can merge them with the following deadline.
+    // Calendar-first reminders can include their own date and time as one complete phrase.
+    const reminder =
+      reminderPrefix.exec(remaining)?.[0] ??
+      parser
+        .parse(remaining, { instant: today, timezone: 0 }, { forwardDate: true })
+        .find((candidate) => candidate.index === 0)?.text;
+    if (reminder) mask(marker.index, marker[0].length + reminder.length);
   }
   let recurrence: RecurrenceRule | undefined;
   for (const match of working.matchAll(recurrencePattern)) {
@@ -58,7 +75,6 @@ export function parseQuickAdd(text: string, ctx: QuickAddContext): QuickAddResul
     addSpan("recurrence", match.index, match[0].length);
   }
   if (recurrence) result.recurrence = recurrence;
-  const parser = ctx.locale === "en-US" ? en.casual : en.GB;
   // A UTC surrogate supplies the injected zone's wall clock to chrono, independent of host TZ.
   const matches = parser
     .parse(working, { instant: today, timezone: 0 }, { forwardDate: true })
