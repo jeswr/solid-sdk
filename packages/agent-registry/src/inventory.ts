@@ -68,6 +68,16 @@ export interface RegistrySnapshot {
   }[];
   workflowPolicy: Settings["workflowPolicy"];
 }
+function credentialReference(value: unknown): string {
+  const ref = string(value, 500);
+  // Opaque strings may be tokens. Accept only explicit, unresolved references.
+  if (
+    !/^op:\/\/[^\s/?#]+\/[^\s/?#]+\/[^\s?#]+$/.test(ref) &&
+    !/^profile:[a-z0-9][a-z0-9_-]{0,63}$/.test(ref)
+  )
+    invalid();
+  return ref;
+}
 function account(value: unknown): RegistryAccount {
   const a = object(value);
   keys(a, [
@@ -104,14 +114,7 @@ function account(value: unknown): RegistryAccount {
   const refs = [a.credential_ref, c.credential_ref]
     .filter((v) => v !== undefined)
     .flatMap((v) => (Array.isArray(v) ? strings(v, 10) : [string(v, 500)]));
-  for (const ref of refs) {
-    // Only explicit references; an opaque string can be a token, not an unambiguous profile name.
-    if (
-      !/^op:\/\/[^\s/?#]+\/[^\s/?#]+\/[^\s?#]+$/.test(ref) &&
-      !/^profile:[a-z0-9][a-z0-9_-]{0,63}$/.test(ref)
-    )
-      invalid();
-  }
+  for (const ref of refs) credentialReference(ref);
   return {
     id,
     channel: token(a.channel),
@@ -285,9 +288,11 @@ export function inventorySettings(snapshot: RegistrySnapshot, salt: Uint8Array):
             handleHashes: [hashHandle(e.identifier, salt)],
           });
       }
-      for (const ref of a.refs)
+      for (const ref of a.refs) {
+        credentialReference(ref);
         if (rawHandles.some((h) => normaliseHandle(ref).includes(h)))
           throw new Error("Credential reference contains a private identifier");
+      }
       return {
         id: accountId(a.id, salt),
         channel: safe(a.channel),

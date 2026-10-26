@@ -138,6 +138,13 @@ describe("privacy and settings model", () => {
       parseRegistryYaml(fixture.replace("identifier: odi-mail@example.com", 'identifier: ""')),
     ).toThrow();
   });
+  it("refuses credential values passed directly to the public settings builder", () => {
+    const snap = parseRegistryYaml(fixture);
+    const first = snap.accounts[0];
+    if (!first) throw new Error("Fixture account absent");
+    first.refs = ["test-token-0123456789"];
+    expect(() => inventorySettings(snap, salt)).toThrow("Invalid registry schema");
+  });
   it("rejects private identifiers in credential references even across Unicode normalisation", () => {
     const snap = parseRegistryYaml(fixture);
     const first = snap.accounts[0];
