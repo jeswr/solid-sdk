@@ -21,6 +21,9 @@ const dates = [
   ["next week", "2026-10-30"],
   ["in 2 days", "2026-10-25"],
   ["in 3 weeks", "2026-11-13"],
+  ["in a month", "2026-11-23"],
+  ["next month", "2026-11-23"],
+  ["in 2 years", "2028-10-23"],
   ["Monday", "2026-10-26"],
   ["Tue", "2026-10-27"],
   ["Wednesday", "2026-10-28"],
@@ -53,6 +56,7 @@ describe("English date phrases", () => {
     ["today at noon", "2026-10-23T11:00:00.000Z"],
     ["tomorrow at midnight", "2026-10-23T23:00:00.000Z"],
     ["5pm", "2026-10-23T16:00:00.000Z"],
+    ["next month at 5pm", "2026-11-23T17:00:00.000Z"],
     ["9am", "2026-10-24T08:00:00.000Z"],
     ["Monday 8:15am", "2026-10-26T08:15:00.000Z"],
     ["tomorrow 5pm UTC", "2026-10-24T17:00:00.000Z"],
@@ -156,6 +160,23 @@ describe("recurrence before dates", () => {
     expect(parseQuickAdd("Water plants 5pm every Monday", ctx).due).toEqual(
       timed("2026-10-26T17:00:00.000Z"),
     );
+  });
+  it.each([
+    ["in 2 years", date("2028-10-23")],
+    ["next year at 5pm", timed("2027-10-23T16:00:00.000Z")],
+    ["in a month", date("2026-11-23")],
+    ["next month at 5pm", timed("2026-11-23T17:00:00.000Z")],
+  ])("preserves calendar-relative deadline %s with recurrence", (phrase, due) => {
+    const input = `Review daily ${phrase}`;
+    expect(parseQuickAdd(input, ctx)).toMatchObject({
+      title: "Review",
+      recurrence: { freq: "DAILY", interval: 1 },
+      due,
+      spans: [
+        { kind: "recurrence", start: 7, end: 12, text: "daily" },
+        { kind: "due", start: 13, end: input.length, text: phrase },
+      ],
+    });
   });
   it("skips weekends", () => {
     expect(

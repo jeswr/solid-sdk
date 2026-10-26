@@ -80,7 +80,10 @@ export function parseQuickAdd(text: string, ctx: QuickAddContext): QuickAddResul
     });
   const match = matches.find(
     (candidate) =>
-      !candidate.end && !(candidate.start.isCertain("month") && !candidate.start.isCertain("day")),
+      !candidate.end &&
+      !(
+        candidate.start.tags().has("parser/ENMonthNameParser") && !candidate.start.isCertain("day")
+      ),
   );
   let due: Due | undefined;
   if (match) {
@@ -89,7 +92,11 @@ export function parseQuickAdd(text: string, ctx: QuickAddContext): QuickAddResul
       Date.UTC(Number(start.get("year")), Number(start.get("month")) - 1, Number(start.get("day"))),
     );
     // A lone time qualifies the recurrence's initial day, rather than changing its weekday.
-    if (recurrence && !start.isCertain("day") && !start.isCertain("weekday")) {
+    if (
+      recurrence &&
+      start.isCertain("hour") &&
+      !(["day", "weekday", "month", "year"] as const).some((part) => start.isCertain(part))
+    ) {
       calendar.setTime(recurrenceStart(recurrence, today).getTime());
     }
     if (start.isCertain("hour")) {
