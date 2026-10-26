@@ -66,7 +66,7 @@ function temporal(node: RdfNode, predicate: string, bound: TemporalValue): void 
     throw new Error("Invalid temporal bound");
   node.text(
     predicate,
-    bound.datatype === "dateTime" ? dateTime(bound.value) : bound.value,
+    bound.datatype === "dateTime" ? dateTime(bound.value, false) : bound.value,
     NS.xsd + bound.datatype,
   );
 }

@@ -101,13 +101,17 @@ export function putGraph(dataset: Store, name: string, contents: DatasetCore): v
     dataset.addQuad(df.quad(q.subject, q.predicate, q.object, df.namedNode(name)));
 }
 
-export function dateTime(value: string): string {
+export function dateTime(value: string, requireTimezone = true): string {
+  const hasTimezone = /(?:Z|[+-]\d\d:\d\d)$/.test(value);
   if (
-    !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?(?:Z|[+-]\d\d:\d\d)$/.test(value) ||
+    !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?(?:Z|[+-]\d\d:\d\d)?$/.test(value) ||
+    (requireTimezone && !hasTimezone) ||
     Number.isNaN(Date.parse(value))
   ) {
     throw new Error("Invalid dateTime");
   }
+  // Assertion literals describe local calendar values, not necessarily instants.
+  if (!hasTimezone) return value;
   // RDFlib normalizes UTC offsets and microsecond precision on parsing.
   return value.replace(/Z$/, "+00:00").replace(/\.(\d+)(?=[+-])/, (_, digits: string) => {
     const micros = digits.padEnd(6, "0").slice(0, 6);
@@ -117,7 +121,7 @@ export function dateTime(value: string): string {
 
 export function normalizeLiteral(term: Literal): Literal {
   if (term.datatype.value === `${NS.xsd}dateTime`)
-    return df.literal(dateTime(term.value), term.datatype);
+    return df.literal(dateTime(term.value, false), term.datatype);
   const datatype = term.datatype.value.replace(NS.xsd, "");
   const value = term.value.trim();
   if (

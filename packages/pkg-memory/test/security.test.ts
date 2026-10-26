@@ -304,11 +304,42 @@ describe("malformed batch rejection", () => {
   it.each([
     "not-a-time",
     "2026-99-99T00:00:00Z",
+    "2026-01-01T12:00:00",
   ])("rejects invalid publication time %j", async (generatedAt) => {
     await expect(buildNanopublications(batch(), { ...options, generatedAt })).rejects.toThrow(
       "dateTime",
     );
   });
+});
+
+it("requires timezones on evidence, worker and source timestamps", async () => {
+  const value = "2026-01-01T12:00:00";
+  for (const field of ["started", "finished"] as const) {
+    const input = batch();
+    input.worker[field] = value;
+    await expect(buildNanopublications(input, options)).rejects.toThrow("dateTime");
+  }
+  for (const message of [false, true]) {
+    const input = batch();
+    input.claims[0]!.evidence = [
+      {
+        source: "doc",
+        timestamp: value,
+        ...(message ? { message_id: "fictional-message" } : {}),
+      },
+    ];
+    await expect(buildNanopublications(input, options)).rejects.toThrow("dateTime");
+  }
+  const input = batch();
+  input.sources = [
+    {
+      id: "doc",
+      kind: "codex-thread",
+      thread_id: "12345678-1234-4234-8234-123456789abc",
+      created: value,
+    },
+  ];
+  await expect(buildNanopublications(input, options)).rejects.toThrow("dateTime");
 });
 
 async function altered(
@@ -499,6 +530,7 @@ it("rejects non-dateTime publication timestamps and datatype IRI injection", asy
     df.namedNode("https://example.org/time"),
     df.literal("not a time"),
     df.literal("invalid", df.namedNode(`${NS.xsd}dateTime`)),
+    df.literal("2026-01-01T12:00:00", df.namedNode(`${NS.xsd}dateTime`)),
   ]) {
     const trig = await altered((ds, id) => {
       ds.removeQuads(

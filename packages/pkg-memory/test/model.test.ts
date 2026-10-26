@@ -2,6 +2,7 @@
 /** biome-ignore-all lint/style/noNonNullAssertion: fixtures guarantee the referenced entries. */
 import { readFile } from "node:fs/promises";
 import { parseRdf } from "@jeswr/fetch-rdf";
+import { DataFactory as df, Store } from "n3";
 import { isomorphic } from "rdf-isomorphic";
 import { describe, expect, it } from "vitest";
 import {
@@ -321,4 +322,54 @@ it("expands the owner shorthand without embedding a personal default", async () 
   const input = batch();
   input.claims[0]!.attributed_to = "me";
   expect((await buildNanopublications(input, options)).nanopubs[0]!.attributedTo).toEqual([owner]);
+});
+
+it.each([
+  "2026-01-01T12:00:00",
+  "2026-01-01T12:00:00.1",
+  "2026-01-01T12:00:00.000000",
+  "2026-01-01T12:00:00.123456789",
+  "2024-02-29T23:59:59",
+])("preserves timezone-less assertion dateTime %s through raw/Turtle builds and TriG", async (value) => {
+  const raw = new Store([
+    df.quad(
+      df.namedNode(owner),
+      df.namedNode(`${NS.schema}startDate`),
+      df.literal(value, df.namedNode(`${NS.xsd}dateTime`)),
+    ),
+  ]);
+  const assertions = [raw, `<${owner}> schema:startDate "${value}"^^xsd:dateTime .`];
+  for (const assertion of assertions) {
+    const input = batch();
+    input.claims[0]!.assertion = assertion;
+    const built = await buildNanopublications(input, options);
+    const parsed = await parseNanopublications(await serializeNanopublications(built));
+    for (const result of [built, parsed]) {
+      const values = graph(result.dataset, result.nanopubs[0]!.assertionId);
+      expect([...values].map((q) => q.object)).toEqual([
+        df.literal(value, df.namedNode(`${NS.xsd}dateTime`)),
+      ]);
+    }
+  }
+});
+
+it("preserves timezone-less dateTime template bounds", async () => {
+  const value = "2026-01-01T12:00:00.1";
+  const input = batch();
+  input.claims[0]!.assertion = createFactAssertion(owner, {
+    template: "relationship",
+    value: {
+      id: "https://example.org/role",
+      person: "https://example.org/people/morgan#me",
+      roleName: "friend",
+      startDate: { value, datatype: "dateTime" },
+    },
+  });
+  const built = await buildNanopublications(input, options);
+  const parsed = await parseNanopublications(await serializeNanopublications(built));
+  expect(
+    [...graph(parsed.dataset, parsed.nanopubs[0]!.assertionId)].find(
+      (q) => q.predicate.value === `${NS.schema}startDate`,
+    )!.object.value,
+  ).toBe(value);
 });
