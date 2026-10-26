@@ -133,8 +133,12 @@ export function importOfx(text: string): ImportedTransaction[] {
       )
         throw new Error("OFX transaction corrections are unsupported");
       const name = field(node, "NAME");
+      const payees = node.children.filter((child) => child.name === "PAYEE");
+      if (payees.length > 1 || payees.some((payee) => payee.text.trim()))
+        throw new Error("Invalid OFX payee");
+      const payeeName = payees[0] ? field(payees[0], "NAME") : "";
       const memo = field(node, "MEMO");
-      const description = name || memo;
+      const description = name || payeeName || memo;
       if (!description) throw new Error("Missing transaction description");
       const externalId = field(node, "FITID");
       transactions.push({

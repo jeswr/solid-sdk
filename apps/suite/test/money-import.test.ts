@@ -252,6 +252,65 @@ describe("CSV parsing, sniffing and mapping", () => {
 });
 
 describe("OFX/QFX SGML and XML", () => {
+  describe.each([
+    ["XML", record],
+    [
+      "SGML",
+      (body: string) =>
+        `OFXHEADER:100\n${record(body)
+          .replace(/<\/(?:DTPOSTED|TRNAMT|MEMO|ADDR1|CITY|STATE|POSTALCODE|PHONE)>/g, "")
+          .replace(/<NAME>([^<]*)<\/NAME>/g, "<NAME>$1")}`,
+    ],
+  ] as const)("PAYEE descriptions in %s", (_format, statement) => {
+    const amounts = "<DTPOSTED>20261024</DTPOSTED><TRNAMT>-12.50</TRNAMT>";
+    const payee =
+      "<PAYEE><NAME> Example Market, North </NAME><ADDR1>1 Example Road</ADDR1><CITY>Exampleville</CITY><STATE>EX</STATE><POSTALCODE>00000</POSTALCODE><PHONE>0000000000</PHONE></PAYEE>";
+    it.each([
+      "",
+      "<MEMO>Receipt at https://example.org/receipt/1</MEMO>",
+    ])("uses PAYEE/NAME with optional memo: %s", (memo) => {
+      const imported = importOfx(statement(`${amounts}${payee}${memo}`));
+      expect(imported).toEqual([
+        {
+          ...transaction,
+          ...(memo ? { memo: "Receipt at https://example.org/receipt/1" } : {}),
+        },
+      ]);
+      expect(detectDuplicates(imported, [transaction]).duplicates).toEqual(imported);
+      expect(
+        categoriseTransactions(imported, [
+          { category: "Groceries", description: { match: "contains", value: "Market" } },
+        ])[0]?.category,
+      ).toBe("Groceries");
+    });
+    it("preserves direct NAME precedence", () => {
+      const otherPayee = payee.replace("Example Market, North", "Other Example Merchant");
+      expect(importOfx(statement(`${fields}${otherPayee}<MEMO>Receipt</MEMO>`))).toEqual([
+        { ...transaction, memo: "Receipt" },
+      ]);
+    });
+    it.each([
+      "<PAYEE/>",
+      "<PAYEE><NAME> </NAME></PAYEE>",
+    ])("falls back to MEMO for an empty payee name: %s", (emptyPayee) => {
+      expect(importOfx(statement(`${amounts}${emptyPayee}<MEMO>Example receipt</MEMO>`))).toEqual([
+        { ...transaction, description: "Example receipt", memo: "Example receipt" },
+      ]);
+      expect(() => importOfx(statement(`${amounts}${emptyPayee}`))).toThrow(
+        "Missing transaction description",
+      );
+    });
+    it.each([
+      "<PAYEE><NAME>Example</NAME></PAYEE><PAYEE><NAME>Duplicate</NAME></PAYEE>",
+      "<PAYEE><NAME>Example</NAME><NAME>Duplicate</NAME></PAYEE>",
+      "<PAYEE><NAME><X>Nested</X></NAME></PAYEE>",
+      "<PAYEE>Invalid text</PAYEE>",
+    ])("rejects malformed payees even when MEMO is present: %s", (invalidPayee) => {
+      expect(() =>
+        importOfx(statement(`${amounts}${invalidPayee}<MEMO>Example receipt</MEMO>`)),
+      ).toThrow();
+    });
+  });
   it.each([
     ["-12,500", "-12.5"],
     ["+0012,5000", "12.5"],
