@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 import type * as oauth from "oauth4webapi";
 import type { ClientProvider } from "../ClientProvider.js";
 import type { CodeProvider } from "../CodeProvider.js";
@@ -60,7 +61,14 @@ export class OidcIdTokenSource implements CredentialSource {
   async getCredential(request: CredentialRequest): Promise<SubjectCredential> {
     // The ID token identifies the user to any authorization server (aud is chosen by the provider), so one
     // session serves every realm; access tokens are then realm-bound by the exchange.
-    const entry = (await this.#session.get(this.#issuer, "", request.signal, idTokenUsable))!;
+    const entry = (await this.#session.get(
+      this.#issuer,
+      "",
+      request.signal,
+      idTokenUsable,
+      true,
+      request.expectedGeneration,
+    ))!;
     const idToken = entry.tokenResult.id_token!;
     const identity = entry.identity;
     // Claims were validated by oauth4webapi when the token response was processed.

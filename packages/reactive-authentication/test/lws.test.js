@@ -1,5 +1,7 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 import assert from "node:assert/strict";
 import { generateKeyPairSync } from "node:crypto";
+import { createMemoryStore } from "@key-value-kit/storage/memory";
 import { decodeJwt, decodeProtectedHeader } from "jose";
 import { afterAll as after, beforeAll as before, test } from "vitest";
 import { SignedXml } from "xml-crypto";
@@ -14,6 +16,7 @@ import {
   ReactiveFetchManager,
   SamlAssertionSource,
   SelfIssuedJwtSource,
+  SessionFence,
   TokenType,
   trustAuthorizationServers,
   trustBindings,
@@ -138,6 +141,108 @@ test("LWS OpenID suite: ID token from the OpenID provider exchanged for a realm-
   assert.equal((await manager.fetch(`${lws.url}/root/other`)).status, 200);
   assert.equal(lws.stats.exchanges.length, exchanges);
   assert.equal(code.calls, 1);
+});
+
+test("LWS preserves its captured generation when a peer logs out before OIDC credential acquisition", async () => {
+  const namespace = `lws-generation-${crypto.randomUUID()}`;
+  const generations = createMemoryStore();
+  const started = Promise.withResolvers();
+  const gate = Promise.withResolvers();
+  let pauseRead = false;
+  const fence = new SessionFence(namespace, {
+    broadcast: false,
+    store: {
+      ...generations,
+      getItem: async (key) => {
+        const value = await generations.getItem(key);
+        if (pauseRead) {
+          pauseRead = false;
+          started.resolve();
+          await gate.promise; // Let validation return its pre-logout generation.
+        }
+        return value;
+      },
+    },
+  });
+  const peer = new SessionFence(namespace, { store: generations, broadcast: false });
+  const memory = createMemoryStore();
+  const durable = createMemoryStore();
+  const metadata = createMemoryStore();
+  const writes = [];
+  const persisted = [];
+  const code = automaticCodeProvider();
+  const openIdProvider = await new XASProvider(
+    { getIssuer: async () => new URL(op.issuer) },
+    insecure,
+  ).getAuthorizationServer(new Request("https://unused.example/"));
+  const source = new OidcIdTokenSource(
+    openIdProvider,
+    callback,
+    code,
+    new DynamicRegistrationClientProvider(insecure),
+    {
+      http: insecure,
+      namespace,
+      fence,
+      cache: {
+        ...memory,
+        setItem: async (key, value) => {
+          writes.push(value);
+          await memory.setItem(key, value);
+        },
+      },
+      sessionStore: {
+        ...durable,
+        setItem: async (key, value) => {
+          persisted.push(value);
+          await durable.setItem(key, value);
+        },
+      },
+    },
+  );
+  const { manager } = lwsManager(source, {
+    namespace,
+    fence,
+    metadataStore: {
+      ...metadata,
+      setItem: async (key, value) => {
+        await metadata.setItem(key, value);
+        pauseRead = true; // Pause validation immediately before the credential-source call.
+      },
+    },
+  });
+  const exchanges = lws.stats.exchanges.length;
+  const grants = op.stats.token.length;
+  const pending = manager.fetch(`${lws.url}/root/peer-logout`);
+  const rejected = assert.rejects(pending, { name: "SessionSupersededError" });
+  try {
+    await started.promise;
+    await peer.supersede();
+    assert.equal(fence.signal.aborted, false, "no broadcast masks the generation race");
+    gate.resolve();
+    await rejected;
+    assert.deepEqual(
+      {
+        logins: code.calls,
+        grants: op.stats.token.length - grants,
+        exchanges: lws.stats.exchanges.length - exchanges,
+        cacheGenerations: writes.map((entry) => entry.generation),
+        durableGenerations: persisted.map((entry) => entry.generation),
+      },
+      { logins: 0, grants: 0, exchanges: 0, cacheGenerations: [], durableGenerations: [] },
+      "the superseded exchange cannot authorize, disclose claims or commit credentials",
+    );
+    assert.equal(await source.identity(), undefined);
+    assert.equal((await manager.fetch(`${lws.url}/root/peer-logout`)).status, 200);
+    assert.equal(code.calls, 1, "a fresh LWS operation can log in after logout");
+    assert.equal(writes.at(-1).generation, 1);
+    assert.equal(persisted.at(-1).generation, 1);
+  } finally {
+    gate.resolve();
+    await Promise.allSettled([pending, rejected]);
+    fence.close();
+    peer.close();
+  }
 });
 
 test("LWS controlled-identifier suite: self-issued JWT whose kid selects the published verification method", async () => {

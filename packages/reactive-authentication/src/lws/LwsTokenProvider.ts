@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 import type { KeyValueStore } from "@key-value-kit/core";
 import { createMemoryStore } from "@key-value-kit/storage/memory";
 import type * as oauth from "oauth4webapi";
@@ -195,6 +196,7 @@ export class LwsTokenProvider implements TokenProvider {
       authorizationServer: as,
       resource: realm,
       signal: ticket.signal,
+      expectedGeneration: ticket.generation,
     });
     await this.#tokens.assertCurrent(ticket);
     const result = await exchangeToken(
