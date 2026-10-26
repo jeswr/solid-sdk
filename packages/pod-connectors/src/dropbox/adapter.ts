@@ -10,9 +10,8 @@
  * a client id.
  */
 import { DataFactory, Store } from "n3";
-import { asStore } from "../core/dataset.js";
 import { postJson } from "../core/fixture-fetch.js";
-import { mergeItems } from "../core/incremental.js";
+import { copyDataset } from "../core/incremental.js";
 import { Pagination } from "../core/pagination.js";
 import { arr, optionalDate, optionalNumber, optionalText, SkipCounter } from "../core/safe.js";
 import type { ImportContext, ImportOutcome, IntegrationAdapter } from "../core/types.js";
@@ -63,7 +62,8 @@ export const dropboxAdapter: IntegrationAdapter = {
         });
 
     const doc = ctx.resolve("documents/files.ttl");
-    let dataset = ctx.cursor ? asStore(await ctx.read("documents/files.ttl")) : new Store();
+    const dataset = ctx.cursor ? copyDataset(await ctx.read("documents/files.ttl")) : new Store();
+    const files = new FileIndex(dataset);
     const pagination = new Pagination(ID);
     if (ctx.cursor) pagination.next(ctx.cursor);
 
@@ -80,7 +80,11 @@ export const dropboxAdapter: IntegrationAdapter = {
             skipped.skip();
             continue;
           }
-          removePath(dataset, path);
+          files.removePath(path);
+          continue;
+        }
+        if (entry[".tag"] === "folder") {
+          if (path) files.removePath(path, false);
           continue;
         }
         if (entry[".tag"] !== "file") continue;
@@ -89,21 +93,18 @@ export const dropboxAdapter: IntegrationAdapter = {
           skipped.skip();
           continue;
         }
-        const incoming = new Store();
-        const file = new DigitalDocument(
-          `${doc}#file-${fragmentSafe(id)}`,
-          incoming,
-          DataFactory,
-        ).mark();
+        // A file replaces the whole former folder subtree, as well as its old id/path.
+        if (path) files.removePath(path);
+        const subject = `${doc}#file-${fragmentSafe(id)}`;
+        files.removeSubject(subject);
+        const file = new DigitalDocument(subject, dataset, DataFactory).mark();
         file.name = optionalText(entry.name);
         file.identifier = id;
         file.description = optionalText(entry.path_display) ?? path;
         const size = optionalNumber(entry.size);
         file.contentSize = size !== undefined ? humanSize(size) : undefined;
         file.dateModified = optionalDate(entry.server_modified);
-        // Reconcile path reuse (another id at the same path) and replace all old fields.
-        if (path) removePath(dataset, path, false);
-        dataset = mergeItems(dataset, incoming);
+        files.addSubject(subject, path);
       }
       if (!answer.has_more) break;
       pagination.next(answer.cursor);
@@ -137,16 +138,62 @@ function humanSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-/** Dropbox deletion tombstones identify paths, including whole deleted folders. */
-function removePath(dataset: Store, path: string, descendants = true): void {
-  const target = path.toLowerCase();
-  const subjects = new Set([...dataset].map((q) => q.subject.value));
-  for (const subject of subjects) {
-    const file = new DigitalDocument(subject, dataset, DataFactory);
-    const current = file.description?.toLowerCase();
-    if (current === target || (descendants && current?.startsWith(`${target}/`))) {
-      for (const quad of [...dataset.match(DataFactory.namedNode(subject), null, null)])
-        dataset.delete(quad);
+/** Index once, then update only affected subjects and path ancestors on one mutable store. */
+class FileIndex {
+  private readonly subjects = new Map<string, string | undefined>();
+  private readonly paths = new Map<string, { exact: Set<string>; subtree: Set<string> }>();
+
+  constructor(private readonly dataset: Store) {
+    for (const subject of dataset.getSubjects(null, null, null)) {
+      if (subject.termType !== "NamedNode") continue;
+      const file = new DigitalDocument(subject.value, dataset, DataFactory);
+      this.addSubject(subject.value, file.description);
     }
   }
+
+  addSubject(subject: string, path?: string): void {
+    const target = path?.toLowerCase();
+    this.subjects.set(subject, target);
+    if (!target) return;
+    for (const ancestor of pathAncestors(target)) {
+      let node = this.paths.get(ancestor);
+      if (!node) {
+        node = { exact: new Set(), subtree: new Set() };
+        this.paths.set(ancestor, node);
+      }
+      node.subtree.add(subject);
+      if (ancestor === target) node.exact.add(subject);
+    }
+  }
+
+  removeSubject(subject: string): void {
+    if (!this.subjects.has(subject)) return;
+    const path = this.subjects.get(subject);
+    if (path) {
+      for (const ancestor of pathAncestors(path)) {
+        const node = this.paths.get(ancestor);
+        if (!node) continue;
+        node.exact.delete(subject);
+        node.subtree.delete(subject);
+        if (node.subtree.size === 0) this.paths.delete(ancestor);
+      }
+    }
+    this.subjects.delete(subject);
+    this.dataset.removeQuads(
+      this.dataset.getQuads(DataFactory.namedNode(subject), null, null, null),
+    );
+  }
+
+  /** Folders keep their descendants; files and tombstones remove the entire subtree. */
+  removePath(path: string, descendants = true): void {
+    const node = this.paths.get(path.toLowerCase());
+    if (!node) return;
+    // Removing the current Set member is safe during iteration.
+    for (const subject of descendants ? node.subtree : node.exact) this.removeSubject(subject);
+  }
+}
+
+function* pathAncestors(path: string): Generator<string> {
+  for (let end = path.length; end > 0; end = path.lastIndexOf("/", end - 1))
+    yield path.slice(0, end);
 }
