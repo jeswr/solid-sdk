@@ -549,6 +549,30 @@ describe("DropZoneOverlay", () => {
     await waitFor(() => expect(zone.getAttribute("aria-busy")).toBe("false"));
   });
 });
+describe("DropZoneOverlay nested drop targets", () => {
+  it("leaves a drop claimed by a descendant to that descendant", async () => {
+    const onFiles = vi.fn();
+    const onCrumbDrop = vi.fn((event: React.DragEvent) => event.preventDefault());
+    render(
+      <DropZoneOverlay folderName="Projects" onFiles={onFiles}>
+        <button type="button" onDrop={onCrumbDrop}>
+          Parent
+        </button>
+      </DropZoneOverlay>,
+    );
+    const file = new File(["a"], "one.txt");
+    fireEvent.drop(screen.getByRole("button", { name: "Parent" }), {
+      dataTransfer: {
+        types: ["Files"],
+        items: [{ kind: "file", getAsFile: () => file }],
+        files: [file],
+      },
+    });
+    expect(onCrumbDrop).toHaveBeenCalledTimes(1);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(onFiles).not.toHaveBeenCalled();
+  });
+});
 describe("PreviewPane", () => {
   it("forces PDF MIME on the iframe blob rather than embedding HTML", async () => {
     render(

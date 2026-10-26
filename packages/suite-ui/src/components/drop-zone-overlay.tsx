@@ -115,6 +115,11 @@ export function DropZoneOverlay({
         if (depth.current === 0) reset();
       }}
       onDrop={(event) => {
+        // A descendant drop target (e.g. a breadcrumb) that claimed the drop owns it.
+        if (event.defaultPrevented) {
+          reset();
+          return;
+        }
         if (disabled || !event.dataTransfer.types.includes("Files")) return;
         event.preventDefault();
         reset();
