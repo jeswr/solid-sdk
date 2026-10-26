@@ -114,3 +114,42 @@ roborev review remain unavailable for the reasons above. No open questions, depe
 additions, UI changes or screenshots. The full gate's generated pod-app callback/client-ID
 files were removed; only contacts model/tests and this report are committed. No push, PR,
 branch switch, or remote fetch/merge was performed.
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+## Fix round 2
+
+Review base: `d1909525ae4395fd3e91a1502bc6913537772cdc`.
+Both supplied findings are addressed. Changes are confined to the contacts model, its
+regression tests, and this report; no dependencies or shared package sources changed.
+
+- `b29e549e` — `fix: preserve contact value metadata on updates`: reconcile email,
+  telephone and WebID values against existing nodes. Retain unchanged nodes, including
+  duplicate nodes for a value, their types, preferences and other metadata. Use the
+  shared typed setters for additions and remove obsolete nodes only when no remaining
+  edge references them. Regression tests cover renaming parsed data, mixed additions
+  and removals, direct values, formatted phones, shared nodes and clearing fields.
+- `208d0f3e` — `fix: preflight contacts RDF write limits`: validate every outgoing
+  dataset against the existing 10,000-quad and 512-KiB read limits, counting serialized
+  UTF-8 bytes, before the first write. Tests cover oversized creates and replacements
+  later in a batch, multibyte text, and successful write/read round trips at both limits.
+- Final documentation commit — this fix-round verification report.
+
+| Exact command | Result |
+| --- | --- |
+| `pnpm --filter @jeswr/app-suite exec vitest run test/contacts-data.test.ts test/contacts-crud.test.ts` | Initial invocation could not resolve unbuilt workspace dependencies; no tests ran. Resolved by the dependency build below; the full app test and coverage runs subsequently passed. |
+| `pnpm --filter '@jeswr/app-suite^...' run build` | PASS; build all five workspace dependencies before app checks. |
+| `pnpm --filter @jeswr/app-suite run lint && pnpm --filter @jeswr/app-suite run build && pnpm --filter @jeswr/app-suite run typecheck && pnpm --filter @jeswr/app-suite run test` | PASS; production Next.js build, 5 test files, 71 tests. |
+| `pnpm --filter @jeswr/app-suite run test:coverage` | PASS; 100% statements (417/417), branches (205/205), functions (81/81), lines (370/370). |
+| `pnpm run lint:root` | PASS; repository guards and all 74 contrast pairs pass. |
+| `TURBO_SCM_BASE=d1909525ae4395fd3e91a1502bc6913537772cdc pnpm run gate` | PASS; 10/10 tasks, all 71 app tests pass. |
+| `npm_config_cache=/tmp/sst-hd1k-npm-cache pnpm run gate:full --env-mode=loose` | FAIL outside lane scope after 173 successful tasks: existing `@jeswr/federation-trust#test` delegation credential snapshot at `test/characterization.test.ts:196` expects JWK order `crv,x,kty`, while actual order is `kty,crv,x`. Used the previously documented writable-cache workaround. |
+| `pnpm --filter @jeswr/federation-trust exec vitest run test/characterization.test.ts` | Reproduces the same unrelated snapshot mismatch in isolation: 19 tests pass, 1 fails. No snapshot updated. |
+| `git diff --exit-code d1909525ae4395fd3e91a1502bc6913537772cdc -- packages/federation-trust` | PASS; the failing package is unchanged by this round. |
+| `git diff d1909525ae4395fd3e91a1502bc6913537772cdc --check` | PASS. |
+| `roborev status` | Unavailable: `roborev: command not found`. No tool installation or configuration changes made. |
+
+No implementation work remains for the two supplied findings, and there are no open
+questions. Full-workspace green and roborev review remain unavailable for the reasons
+above. No UI changes, screenshots, push, PR, branch switch or lane fetch/merge. The full
+gate left no untracked generated files in this checkout.
