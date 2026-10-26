@@ -5,12 +5,17 @@
 import { XIcon } from "lucide-react";
 import { Dialog as DialogPrimitive } from "radix-ui";
 import type * as React from "react";
+import { DensityProvider, useDensity } from "../../lib/density.js";
 import { cn } from "../../lib/utils.js";
 import { Button } from "./button.js";
 import { IconButton } from "./icon-button.js";
 
 function Dialog({ ...props }: React.ComponentProps<typeof DialogPrimitive.Root>) {
-  return <DialogPrimitive.Root data-slot="dialog" {...props} />;
+  return (
+    <DensityProvider>
+      <DialogPrimitive.Root data-slot="dialog" {...props} />
+    </DensityProvider>
+  );
 }
 
 function DialogTrigger({ ...props }: React.ComponentProps<typeof DialogPrimitive.Trigger>) {
@@ -51,6 +56,7 @@ function DialogContent({
       <DialogOverlay />
       <DialogPrimitive.Content
         data-slot="dialog-content"
+        data-density={useDensity()}
         className={cn(
           "fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-lg border bg-background p-6          sm:max-w-lg",
           className,

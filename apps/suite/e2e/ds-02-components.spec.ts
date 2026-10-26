@@ -2,7 +2,7 @@
 import { mkdir } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import AxeBuilder from "@axe-core/playwright";
-import { expect, type Page, type TestInfo, test } from "@playwright/test";
+import { expect, type Locator, type Page, type TestInfo, test } from "@playwright/test";
 import { fixtureNames } from "../src/app/dev/components/fixture-names";
 
 async function accessible(page: Page) {
@@ -22,6 +22,17 @@ async function reflow(page: Page) {
   await page.setViewportSize({ width: 320, height: 900 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320);
   await accessible(page);
+}
+async function invalidBorder(control: Locator) {
+  const expected = await control.evaluate(() => {
+    const probe = document.createElement("span");
+    probe.style.borderColor = "var(--destructive)";
+    document.body.append(probe);
+    const color = getComputedStyle(probe).borderTopColor;
+    probe.remove();
+    return color;
+  });
+  await expect(control).toHaveCSS("border-top-color", expected);
 }
 // Individual routes plus the two complete catalogs include every default/disabled state,
 // both densities, all 15 apps at 32/40/48, every file row, and the async reference strip.
@@ -56,6 +67,17 @@ for (const density of ["comfortable", "compact"] as const) {
       await trigger.focus();
       await page.keyboard.press("Enter");
       await expect(page.getByRole(role)).toBeVisible();
+      await expect(page.getByRole(role)).toHaveAttribute("data-density", density);
+      if (name === "dialog" || name === "popover")
+        await expect(page.getByRole(role).getByRole("textbox")).toHaveCSS(
+          "height",
+          density === "compact" ? "32px" : "36px",
+        );
+      if (name === "dialog")
+        await expect(page.getByRole(role).getByRole("button", { name: "Save name" })).toHaveCSS(
+          "height",
+          density === "compact" ? "32px" : "36px",
+        );
       await capture(page, info, `${name}-${density}-open`);
       await reflow(page);
       await page.keyboard.press("Escape");
@@ -68,6 +90,7 @@ for (const density of ["comfortable", "compact"] as const) {
     await trigger.focus();
     await page.keyboard.press("Shift+F10");
     await expect(page.getByRole("menu")).toBeVisible();
+    await expect(page.getByRole("menu")).toHaveAttribute("data-density", density);
     await capture(page, info, `context-menu-${density}-keyboard`);
     await page.keyboard.press("Escape");
     await trigger.click({ button: "right" });
@@ -89,6 +112,7 @@ for (const density of ["comfortable", "compact"] as const) {
           : region.getByRole("button", { name: triggerName, exact: true });
       await trigger.hover();
       await expect(page.locator(`[data-slot="${slot}"]`)).toBeVisible();
+      await expect(page.locator(`[data-slot="${slot}"]`)).toHaveAttribute("data-density", density);
       await capture(page, info, `${name}-${density}-hover`);
       if (name !== "hover-card") {
         await page.mouse.move(0, 0);
@@ -103,6 +127,7 @@ for (const density of ["comfortable", "compact"] as const) {
     const form = page.locator(`[data-density="${density}"] form`);
     await form.getByRole("button", { name: "Save title" }).click();
     await expect(form.getByRole("alert")).toHaveText("Enter a title");
+    await invalidBorder(form.getByRole("textbox", { name: "Document title" }));
     await capture(page, info, `form-${density}-error`);
     await form.getByRole("textbox", { name: "Document title" }).fill("Launch plan");
     await form.getByRole("button", { name: "Save title" }).click();
@@ -111,6 +136,25 @@ for (const density of ["comfortable", "compact"] as const) {
     await reflow(page);
   });
 }
+for (const [name, slot] of [
+  ["input", "input"],
+  ["textarea", "textarea"],
+  ["select", "select-trigger"],
+  ["checkbox", "checkbox"],
+] as const)
+  test(`${name}: invalid borders override adapter defaults`, async ({ page }, info) => {
+    await page.goto(`/dev/components/${name}`);
+    for (const density of ["comfortable", "compact"]) {
+      const controls = page.locator(`[data-density="${density}"] [data-slot="${slot}"]`);
+      await expect(controls.first()).toBeVisible();
+      // Includes unchecked, checked and indeterminate checkbox states.
+      for (const control of await controls.all()) {
+        await control.evaluate((element) => element.setAttribute("aria-invalid", "true"));
+        await invalidBorder(control);
+      }
+    }
+    await capture(page, info, `${name}-invalid`);
+  });
 for (const [label, suffix] of [
   ["Show success toast", "success"],
   ["Show undo toast", "undo"],

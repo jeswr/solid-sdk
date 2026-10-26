@@ -5,11 +5,16 @@
 import { XIcon } from "lucide-react";
 import { Dialog as SheetPrimitive } from "radix-ui";
 import type * as React from "react";
+import { DensityProvider, useDensity } from "../../lib/density.js";
 import { cn } from "../../lib/utils.js";
 import { IconButton } from "./icon-button.js";
 
 function Sheet({ ...props }: React.ComponentProps<typeof SheetPrimitive.Root>) {
-  return <SheetPrimitive.Root data-slot="sheet" {...props} />;
+  return (
+    <DensityProvider>
+      <SheetPrimitive.Root data-slot="sheet" {...props} />
+    </DensityProvider>
+  );
 }
 
 function SheetTrigger({ ...props }: React.ComponentProps<typeof SheetPrimitive.Trigger>) {
@@ -52,6 +57,7 @@ function SheetContent({
       <SheetOverlay />
       <SheetPrimitive.Content
         data-slot="sheet-content"
+        data-density={useDensity()}
         className={cn(
           "fixed z-50 flex flex-col gap-4 bg-background  transition     ",
           side === "right" && "inset-y-0 right-0 h-full w-3/4 border-l   sm:max-w-sm",

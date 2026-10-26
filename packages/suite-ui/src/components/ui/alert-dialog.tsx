@@ -4,12 +4,17 @@
 
 import { AlertDialog as AlertDialogPrimitive } from "radix-ui";
 import type * as React from "react";
+import { DensityProvider, useDensity } from "../../lib/density.js";
 import { cn } from "../../lib/utils.js";
 
 import { Button } from "./button.js";
 
 function AlertDialog({ ...props }: React.ComponentProps<typeof AlertDialogPrimitive.Root>) {
-  return <AlertDialogPrimitive.Root data-slot="alert-dialog" {...props} />;
+  return (
+    <DensityProvider>
+      <AlertDialogPrimitive.Root data-slot="alert-dialog" {...props} />
+    </DensityProvider>
+  );
 }
 
 function AlertDialogTrigger({
@@ -47,6 +52,7 @@ function AlertDialogContent({
       <AlertDialogOverlay />
       <AlertDialogPrimitive.Content
         data-slot="alert-dialog-content"
+        data-density={useDensity()}
         data-size={size}
         className={cn(
           "group/alert-dialog-content fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-lg border bg-background p-6   data-[size=sm]:max-w-xs       data-[size=default]:sm:max-w-lg",

@@ -4,10 +4,15 @@
 
 import { Popover as PopoverPrimitive } from "radix-ui";
 import type * as React from "react";
+import { DensityProvider, useDensity } from "../../lib/density.js";
 import { cn } from "../../lib/utils.js";
 
 function Popover({ ...props }: React.ComponentProps<typeof PopoverPrimitive.Root>) {
-  return <PopoverPrimitive.Root data-slot="popover" {...props} />;
+  return (
+    <DensityProvider>
+      <PopoverPrimitive.Root data-slot="popover" {...props} />
+    </DensityProvider>
+  );
 }
 
 function PopoverTrigger({ ...props }: React.ComponentProps<typeof PopoverPrimitive.Trigger>) {
@@ -24,6 +29,7 @@ function PopoverContent({
     <PopoverPrimitive.Portal>
       <PopoverPrimitive.Content
         data-slot="popover-content"
+        data-density={useDensity()}
         align={align}
         sideOffset={sideOffset}
         className={cn(

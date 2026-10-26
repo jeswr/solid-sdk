@@ -4,10 +4,15 @@
 
 import { HoverCard as HoverCardPrimitive } from "radix-ui";
 import type * as React from "react";
+import { DensityProvider, useDensity } from "../../lib/density.js";
 import { cn } from "../../lib/utils.js";
 
 function HoverCard({ ...props }: React.ComponentProps<typeof HoverCardPrimitive.Root>) {
-  return <HoverCardPrimitive.Root data-slot="hover-card" {...props} />;
+  return (
+    <DensityProvider>
+      <HoverCardPrimitive.Root data-slot="hover-card" {...props} />
+    </DensityProvider>
+  );
 }
 
 function HoverCardTrigger({ ...props }: React.ComponentProps<typeof HoverCardPrimitive.Trigger>) {
@@ -24,6 +29,7 @@ function HoverCardContent({
     <HoverCardPrimitive.Portal data-slot="hover-card-portal">
       <HoverCardPrimitive.Content
         data-slot="hover-card-content"
+        data-density={useDensity()}
         align={align}
         sideOffset={sideOffset}
         className={cn(
