@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 /**
  * RDF parsing dispatch — body in, dataset out.
  *
@@ -8,12 +9,11 @@
  * parser directly. N-Triples and N-Quads are routed through n3 too,
  * since the n3 parser handles them natively.
  *
- * Both n3's `StreamParser` and `jsonld-streaming-parser` are Node
- * `Transform` streams, so we feed body chunks in as they arrive and
- * push each emitted quad straight into an `N3.Store`. The full body
- * is never materialised as a single string and the quads are never
- * collected into an intermediate array — important for large
- * resources.
+ * Stream bodies feed n3's `StreamParser` or `jsonld-streaming-parser`
+ * as chunks arrive, pushing each quad straight into an `N3.Store`
+ * without buffering the response. Already-buffered N3-family strings
+ * use n3's synchronous `Parser`, preserving the published API's
+ * completion timing for promise-based UI consumers.
  *
  * @packageDocumentation
  */
@@ -21,7 +21,7 @@
 import type { Quad } from "@rdfjs/types";
 import contentType from "content-type";
 import { JsonLdParser } from "jsonld-streaming-parser";
-import { Store, StreamParser } from "n3";
+import { Parser, Store, StreamParser } from "n3";
 import { refusingDocumentLoader } from "./document-loader.js";
 import { RdfFetchError } from "./errors.js";
 import type { ParseRdfOptions } from "./types.js";
@@ -75,10 +75,10 @@ interface QuadTransform {
  * Parse a Turtle / N-Triples / N-Quads / TriG / JSON-LD body into a
  * fresh in-memory N3 {@link Store}.
  *
- * The body is consumed incrementally: each chunk is written straight
- * into the relevant streaming parser, and each emitted quad is added
- * straight to the store. No intermediate array of quads, no buffered
- * string copy of the body.
+ * Stream bodies are consumed incrementally: each chunk is written
+ * straight into the relevant streaming parser, and each emitted quad
+ * is added straight to the store. N3-family strings already in memory
+ * are parsed synchronously, without waiting for stream lifecycle events.
  *
  * @param body - Either the body as a string (when already in memory)
  *   or a web `ReadableStream<Uint8Array>` (typically `Response.body`).
@@ -111,6 +111,20 @@ export async function parseRdf(
 
   let parser: QuadTransform;
   if (N3_FAMILY.has(mediaType)) {
+    if (typeof body === "string") {
+      try {
+        // A stream's `end` event needs a later event-loop turn in Node/jsdom.
+        // Buffered input previously settled during a consumer's microtask flush.
+        return new Store(
+          new Parser({ format: mediaType, ...(baseIRI !== undefined && { baseIRI }) }).parse(body),
+        );
+      } catch (cause) {
+        throw new RdfFetchError(
+          `Failed to parse ${mediaType} body${baseIRI ? ` at ${baseIRI}` : ""}.`,
+          { cause, contentType: rawHeader, ...(baseIRI !== undefined && { url: baseIRI }) },
+        );
+      }
+    }
     parser = new StreamParser({
       format: mediaType,
       ...(baseIRI !== undefined && { baseIRI }),

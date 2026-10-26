@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 > Experimental — AI-agent-generated. Maintained in `jeswr/solid-sdk`; the standalone repository is a read-only build mirror.
 
@@ -7,8 +8,10 @@
 Canonical fetch + parse helpers for Solid RDF resources.
 
 Two functions, one error class. `parseRdf` dispatches a body
-(string or `ReadableStream<Uint8Array>`) on its `Content-Type`,
-streaming chunks straight into an `N3.Store`. `fetchRdf` orchestrates
+(string or `ReadableStream<Uint8Array>`) on its `Content-Type`.
+Stream bodies feed chunks straight into an `N3.Store`; already-buffered
+Turtle, N-Triples, N-Quads and TriG strings use n3's synchronous parser
+and settle without waiting for stream lifecycle events. `fetchRdf` orchestrates
 an HTTP GET + parse and returns the dataset alongside the response
 headers.
 
