@@ -36,53 +36,78 @@ function stringField(value: unknown, field: string): string {
   return value;
 }
 
-/**
- * The term an RDF/JS object denotes, rebuilt with n3's DataFactory from its termType, value,
- * language, direction and datatype only. n3 (Writer and Store) identifies its own term instances
- * by a private `id`, so a caller's object, or any other property of it, must never be used.
- * Non-string fields, malformed language tags and base directions are a TypeError.
- */
-function rebuild(value: Term): Term {
-  const { namedNode, blankNode, variable, literal, defaultGraph } = DataFactory;
-  const lexical = stringField(value.value, "value");
-  switch (value.termType) {
-    case "NamedNode":
-      return namedNode(lexical);
-    case "BlankNode":
-      return blankNode(lexical);
-    case "Variable":
-      return variable(lexical);
-    case "Literal": {
-      const language = stringField(value.language, "language");
-      const baseDirection = (value as { direction?: unknown }).direction;
-      // RDF/JS 1.1 literals have no direction field; some factories use null for none.
-      const direction = stringField(
-        baseDirection === undefined || baseDirection === null ? "" : baseDirection,
-        "direction",
-      );
-      const datatype = stringField(value.datatype?.value, "datatype.value");
-      if (language) {
-        if (!LANGUAGE.test(language)) {
-          throw new TypeError(`Invalid language tag: ${JSON.stringify(language)}`);
-        }
-        if (direction && direction !== "ltr" && direction !== "rtl") {
-          throw new TypeError(`Invalid base direction: ${JSON.stringify(direction)}`);
-        }
-        return literal(lexical, direction ? `${language}--${direction}` : language);
-      }
-      return literal(lexical, namedNode(datatype));
-    }
-    case "DefaultGraph":
-      return defaultGraph();
-    default:
-      throw new TypeError(`${String(value.termType)} terms are not RDF/JS terms`);
-  }
+/** An absolute IRI starts with a scheme; n3 would read `_:`, `?` or `"` ids as other terms. */
+const SCHEME = /^[A-Za-z][A-Za-z0-9+.-]*:/;
+
+function iriField(value: unknown, field: string): string {
+  const iri = stringField(value, field);
+  if (!SCHEME.test(iri)) throw new TypeError(`RDF term ${field} must be an absolute IRI`);
+  return iri;
 }
 
-/** `quads` rebuilt term by term (see `rebuild`). */
+/**
+ * Rebuild quads with n3's DataFactory from each term's termType, value, language, direction and
+ * datatype only. n3 (Writer and Store) identifies its own term instances by a private string
+ * `id` and re-derives term fields from it, so a caller's object, or any other property of it,
+ * must never be used, and every field must be one n3 can encode faithfully: named-node and
+ * datatype IRIs must be absolute, datatype IRIs are escaped (a `"` in one would end the literal
+ * inside n3's id), language tags and base directions must be well formed, and every empty
+ * blank-node label maps to one fresh label shared across `quads`. Anything else is a TypeError.
+ */
 export function rebuildQuads(quads: readonly Quad[]): Quad[] {
+  const { namedNode, blankNode, variable, literal, defaultGraph, quad } = DataFactory;
+  let empty: Term | undefined;
+  const rebuild = (value: Term): Term => {
+    const lexical = stringField(value.value, "value");
+    switch (value.termType) {
+      case "NamedNode":
+        return namedNode(iriField(lexical, "value"));
+      case "BlankNode":
+        if (lexical !== "") return blankNode(lexical);
+        // n3 mints a new node for every blankNode(""); one empty label is one node, under a
+        // label no other blank node in `quads` uses.
+        if (empty === undefined) {
+          const used = new Set(
+            quads
+              .flatMap((q) => [q.subject, q.object, q.graph])
+              .filter((t) => t.termType === "BlankNode")
+              .map((t) => t.value),
+          );
+          let index = 0;
+          while (used.has(`empty${index}`)) index++;
+          empty = blankNode(`empty${index}`);
+        }
+        return empty;
+      case "Variable":
+        return variable(lexical);
+      case "Literal": {
+        const language = stringField(value.language, "language");
+        const baseDirection = (value as { direction?: unknown }).direction;
+        // RDF/JS 1.1 literals have no direction field; some factories use null for none.
+        const direction = stringField(
+          baseDirection === undefined || baseDirection === null ? "" : baseDirection,
+          "direction",
+        );
+        const datatype = escapeIri(iriField(value.datatype?.value, "datatype.value"));
+        if (language) {
+          if (!LANGUAGE.test(language)) {
+            throw new TypeError(`Invalid language tag: ${JSON.stringify(language)}`);
+          }
+          if (direction && direction !== "ltr" && direction !== "rtl") {
+            throw new TypeError(`Invalid base direction: ${JSON.stringify(direction)}`);
+          }
+          return literal(lexical, direction ? `${language}--${direction}` : language);
+        }
+        return literal(lexical, namedNode(datatype));
+      }
+      case "DefaultGraph":
+        return defaultGraph();
+      default:
+        throw new TypeError(`${String(value.termType)} terms are not RDF/JS terms`);
+    }
+  };
   return quads.map((q) =>
-    DataFactory.quad(
+    quad(
       rebuild(q.subject) as Quad["subject"],
       rebuild(q.predicate) as Quad["predicate"],
       rebuild(q.object) as Quad["object"],
