@@ -8,5 +8,10 @@ export const FEDERATION = {
   MusicRecording: "https://jeswr.org/ns/sectors/media#MusicRecording",
   Playlist: "https://jeswr.org/ns/sectors/media#Playlist",
   CalendarEvent: "https://jeswr.org/ns/sectors/scheduling#CalendarEvent",
+  CreativeWork: "https://jeswr.org/ns/sectors/media#CreativeWork",
+  ListeningActivity: "https://jeswr.org/ns/sectors/media#ListeningActivity",
+  MediaAccount: "https://jeswr.org/ns/sectors/media#MediaAccount",
+  HealthRecord: "https://jeswr.org/ns/sectors/health#HealthRecord",
+  TransactionRecord: "https://jeswr.org/ns/sectors/finance#TransactionRecord",
   Note: "https://jeswr.org/ns/sectors/social#Note",
 } as const;

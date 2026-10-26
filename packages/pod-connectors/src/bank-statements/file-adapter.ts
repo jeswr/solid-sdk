@@ -19,6 +19,7 @@
 import { DataFactory, Store } from "n3";
 import { parseCsv } from "../core/csv.js";
 import type { FileImportAdapter, FileImportContext, ImportFile } from "../core/file-import.js";
+import { csvRecords, fileText } from "../core/file-stream.js";
 import { recordFragment } from "../core/slug.js";
 import type { IntegrationMetadata } from "../core/types.js";
 import { CLASSES, Invoice } from "../core/vocab.js";
@@ -54,14 +55,12 @@ export const bankStatementsFileAdapter: FileImportAdapter = {
 
   async importFile(file: ImportFile, ctx: FileImportContext): Promise<void> {
     ctx.progress({ label: "Reading your statement…", done: 0, total: 1 });
-    const text = await file.text();
-    const isOfx = /\.(ofx|qfx)$/i.test(file.name) || /<STMTTRN>/i.test(text);
-    const txns = isOfx ? parseOfx(text, ctx.maxRows) : parseBankCsv(text, ctx.maxRows);
 
     const doc = ctx.resolve("finance/bank-transactions.ttl");
     const store = new Store();
     let i = 0;
-    for (const txn of txns) {
+    for await (const txn of streamBankTransactions(file)) {
+      if (i >= ctx.maxRows) break;
       const key = `${i}|${txn.date?.toISOString() ?? ""}|${txn.amount}|${txn.description}`;
       const frag = recordFragment(txn.description || "transaction", key);
       const inv = new Invoice(`${doc}#txn-${frag}`, store, DataFactory).mark();
@@ -81,6 +80,53 @@ export const bankStatementsFileAdapter: FileImportAdapter = {
     });
   },
 };
+
+/** Sniff a bounded prefix, then parse one CSV row or OFX transaction at a time. */
+async function* streamBankTransactions(file: ImportFile): AsyncGenerator<Transaction> {
+  const source = fileText(file);
+  let prefix = "";
+  try {
+    while (prefix.length < 256) {
+      const next = await source.next();
+      if (next.done) break;
+      prefix += next.value;
+    }
+    async function* chunks(): AsyncGenerator<string> {
+      yield prefix;
+      yield* source;
+    }
+    const isOfx =
+      /\.(ofx|qfx)$/i.test(file.name) || /^\s*(?:OFXHEADER|<OFX|<\?xml|<STMTTRN>)/i.test(prefix);
+    if (!isOfx) {
+      let header: string | undefined;
+      for await (const record of csvRecords(chunks())) {
+        if (header === undefined) header = record;
+        else yield* parseBankCsv(`${header}\n${record}`);
+      }
+      return;
+    }
+    let buffer = "";
+    let currency: string | undefined;
+    for await (const chunk of chunks()) {
+      buffer += chunk;
+      currency ??= buffer.match(/<CURDEF>([^<\r\n]+)(?=[<\r\n])/i)?.[1]?.trim();
+      while (true) {
+        const start = buffer.search(/<STMTTRN>/i);
+        if (start === -1) {
+          buffer = buffer.slice(-64);
+          break;
+        }
+        buffer = buffer.slice(start);
+        const end = buffer.search(/<\/STMTTRN>/i);
+        if (end === -1) break;
+        for (const txn of parseOfx(buffer.slice(0, end + 10))) yield { ...txn, currency };
+        buffer = buffer.slice(end + 10);
+      }
+    }
+  } finally {
+    await source.return(undefined);
+  }
+}
 
 const DATE_HEADERS = ["date", "transaction date", "posting date", "posted date", "value date"];
 const DESC_HEADERS = [

@@ -20,6 +20,7 @@
 import { DataFactory, Store } from "n3";
 import { isoDurationFromMinutes } from "../core/duration.js";
 import type { FileImportAdapter, FileImportContext, ImportFile } from "../core/file-import.js";
+import { jsonEntries } from "../core/file-json.js";
 import { recordFragment } from "../core/slug.js";
 import type { IntegrationMetadata } from "../core/types.js";
 import { CLASSES, OnlineAccount, VideoGame } from "../core/vocab.js";
@@ -54,11 +55,24 @@ export const steamFileAdapter: FileImportAdapter = {
 
   async importFile(file: ImportFile, ctx: FileImportContext): Promise<void> {
     ctx.progress({ label: "Reading your games…", done: 0, total: 1 });
-    const parsed = parseSteamExport(await file.text(), ctx.maxRows);
+    const account: { steamid?: string; personaname?: string } = {};
 
     const gamesDoc = ctx.resolve("media/steam-games.ttl");
     const games = new Store();
-    for (const g of parsed.games) {
+    let count = 0;
+    for await (const entry of jsonEntries(
+      file,
+      ["", "games", "response.games"],
+      ["steamid", "personaname"],
+    )) {
+      if (entry.path === "steamid" || entry.path === "personaname") {
+        if (typeof entry.value === "string") account[entry.path] = entry.value;
+        continue;
+      }
+      if (count >= ctx.maxRows) continue;
+      const g = parseSteamExport(JSON.stringify([entry.value]), 1).games[0];
+      if (!g) continue;
+      count++;
       const key = `${g.appid ?? ""}|${g.name}`;
       const frag = recordFragment(g.name, key);
       const game = new VideoGame(`${gamesDoc}#game-${frag}`, games, DataFactory).mark();
@@ -82,16 +96,16 @@ export const steamFileAdapter: FileImportAdapter = {
       });
     }
 
-    if (parsed.account) {
+    if (account.steamid || account.personaname) {
       const acctDoc = ctx.resolve("social/steam-account.ttl");
       const accounts = new Store();
       const acct = new OnlineAccount(`${acctDoc}#account`, accounts, DataFactory).mark();
-      acct.name = parsed.account.personaname ?? "Steam account";
-      acct.accountName = parsed.account.personaname ?? parsed.account.steamid;
+      acct.name = account.personaname ?? "Steam account";
+      acct.accountName = account.personaname ?? account.steamid;
       acct.accountServiceHomepage = "https://store.steampowered.com/";
-      if (parsed.account.steamid) {
-        acct.identifier = parsed.account.steamid;
-        acct.sourceUrl = `https://steamcommunity.com/profiles/${parsed.account.steamid}`;
+      if (account.steamid) {
+        acct.identifier = account.steamid;
+        acct.sourceUrl = `https://steamcommunity.com/profiles/${account.steamid}`;
       }
       await ctx.write({
         slug: "social/steam-account.ttl",

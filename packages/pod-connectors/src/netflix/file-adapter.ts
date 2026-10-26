@@ -14,8 +14,8 @@
  * date, never guessing.
  */
 import { DataFactory, Store } from "n3";
-import { parseCsv } from "../core/csv.js";
 import type { FileImportAdapter, FileImportContext, ImportFile } from "../core/file-import.js";
+import { csvRows } from "../core/file-stream.js";
 import { recordFragment } from "../core/slug.js";
 import type { IntegrationMetadata } from "../core/types.js";
 import { CLASSES, WatchAction } from "../core/vocab.js";
@@ -44,12 +44,11 @@ export const netflixFileAdapter: FileImportAdapter = {
 
   async importFile(file: ImportFile, ctx: FileImportContext): Promise<void> {
     ctx.progress({ label: "Reading your viewing history…", done: 0, total: 1 });
-    const { rows } = parseCsv(await file.text());
 
     const doc = ctx.resolve("media/viewing-history.ttl");
     const store = new Store();
     let count = 0;
-    for (const row of rows) {
+    for await (const row of csvRows(file)) {
       if (count >= ctx.maxRows) break;
       const title = row.Title ?? row.title;
       if (!title) continue;

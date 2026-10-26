@@ -13,8 +13,8 @@
  * Parsed natively (no dependency).
  */
 import { DataFactory, Store } from "n3";
-import { parseCsv } from "../core/csv.js";
 import type { FileImportAdapter, FileImportContext, ImportFile } from "../core/file-import.js";
+import { csvRows } from "../core/file-stream.js";
 import { recordFragment } from "../core/slug.js";
 import type { IntegrationMetadata } from "../core/types.js";
 import { Book, CLASSES } from "../core/vocab.js";
@@ -43,12 +43,11 @@ export const goodreadsFileAdapter: FileImportAdapter = {
 
   async importFile(file: ImportFile, ctx: FileImportContext): Promise<void> {
     ctx.progress({ label: "Reading your library…", done: 0, total: 1 });
-    const { rows } = parseCsv(await file.text());
 
     const doc = ctx.resolve("documents/goodreads-library.ttl");
     const store = new Store();
     let count = 0;
-    for (const row of rows) {
+    for await (const row of csvRows(file)) {
       if (count >= ctx.maxRows) break;
       const title = row.Title?.trim();
       if (!title) continue;
@@ -56,7 +55,10 @@ export const goodreadsFileAdapter: FileImportAdapter = {
       const frag = recordFragment(title, bookId || `${title}|${row.Author ?? ""}`);
       const book = new Book(`${doc}#book-${frag}`, store, DataFactory).mark();
       book.name = title;
-      if (bookId) book.identifier = bookId;
+      if (bookId) {
+        book.identifier = bookId;
+        book.sourceUrl = `https://www.goodreads.com/book/show/${encodeURIComponent(bookId)}`;
+      }
       const author = row.Author?.trim();
       if (author) book.author = author;
       const isbn = cleanIsbn(row.ISBN13) || cleanIsbn(row.ISBN);

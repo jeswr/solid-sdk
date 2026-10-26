@@ -94,6 +94,37 @@ types. Detailed adapter field mappings remain with their later connector tasks. 
 package currently has no runtime API, so its exact term IRIs are isolated in
 `core/federation-vocab.ts` for the subsequent constants switch (see root `QUESTIONS.md`).
 
+## Streaming file imports
+
+Apple Health, Netflix, Amazon orders, Uber, WhatsApp, Goodreads, Steam, ChatGPT
+and bank statements prefer the native `File.stream()` byte reader. Text-only
+`ImportFile` implementations remain compatible. CSV rows (including quoted
+newlines), XML start tags, OFX transactions, multiline chat messages and selected
+JSON array members are parsed incrementally. UTF-8 decoding spans chunks; readers
+are released or cancelled when parsing ends or fails. The 64 MiB limit is also
+checked against actual bytes read. Existing deterministic documents and the
+100,000-record cap are preserved: RDF snapshots remain in memory up to that cap.
+Select the extracted export file, rather than the ZIP archive.
+
+Per-importer vocab maps retain legacy schema.org/FOAF types and source fields,
+adding federation health, finance, media and social types where the ontology has
+an appropriate term. The Apple Health document is a `health:HealthRecord`;
+workouts remain `schema:ExerciseAction` because the sector has no workout event
+class. Financial lines are `fin:TransactionRecord`, viewing events are
+`media:ListeningActivity`, books/games/conversation documents are
+`media:CreativeWork`, and WhatsApp messages are `social:Note`. Uber journey types
+and all existing category/Type Index registration classes are preserved. See
+root `QUESTIONS.md` for conservative mappings where the spec leaves terms open.
+Goodreads books, Steam items/accounts and conversations with a ChatGPT id carry
+their source item URL for provenance; other records use the connector export URN.
+No MCP-16 parser is present in this checkout, so ChatGPT reuses its existing
+conversation parser for each streamed conversation.
+
+Synthetic fixture tests cover every importer with one-byte, seven-byte and
+single-chunk input, sorted Turtle mapping snapshots, provenance and stable
+re-import. The Apple Health streaming test lazily generates over 50 MiB of
+`export.xml` and retains only workouts. Tests make no production requests.
+
 ## Recording fixtures
 
 ```ts

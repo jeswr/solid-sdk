@@ -1,6 +1,9 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
+import { FEDERATION } from "../core/federation-vocab.js";
+import { CLASSES } from "../core/vocab.js";
 import { createVocabMap } from "../core/vocab-map.js";
 
-/** Adapter-local sector mapping seam; retain schema.org/FOAF types. */
-export const vocabMap = createVocabMap({});
+/** Sector classes supplement the legacy types; source fields retain their meaning. */
+export const vocabMap = createVocabMap({
+  [CLASSES.Book]: FEDERATION.CreativeWork,
+});
