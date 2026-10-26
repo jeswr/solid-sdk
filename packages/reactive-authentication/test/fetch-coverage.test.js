@@ -144,21 +144,44 @@ test("natively redirected 401s never replay writes and enforce the safe-method h
   await assert.rejects(client.fetch("https://pod.example/a"), /Too many redirects/);
 });
 
-test("credentialed redirects reject missing targets and enforce hop limits", async () => {
-  for (const [maxRedirects, headers, pattern] of [
-    [0, { location: "/target" }, /Too many redirects/],
-    [20, {}, /without Location/],
-  ]) {
-    const client = new ReactiveAuthenticationClient({
-      boundary,
-      providers: [provider],
-      maxRedirects,
-      fetch: async (request) =>
-        request.headers.has("authorization")
-          ? new Response(null, { status: 302, headers })
-          : new Response(null, { status: 401 }),
-    });
-    await assert.rejects(client.fetch("https://pod.example/a"), pattern);
+test("credentialed redirects enforce hop limits", async () => {
+  const client = new ReactiveAuthenticationClient({
+    boundary,
+    providers: [provider],
+    maxRedirects: 0,
+    fetch: async (request) =>
+      request.headers.has("authorization")
+        ? new Response(null, { status: 302, headers: { location: "/target" } })
+        : new Response(null, { status: 401 }),
+  });
+  await assert.rejects(client.fetch("https://pod.example/a"), /Too many redirects/);
+});
+
+test("credentialed redirects without Location preserve the response and body", async () => {
+  for (const status of [301, 302, 303, 307, 308]) {
+    for (const maxRedirects of [0, 20]) {
+      const response = new Response("redirect response body", {
+        status,
+        headers: { "x-response": "preserved" },
+      });
+      const fetch = vi.fn(async (request) =>
+        request.headers.has("authorization") ? response : new Response(null, { status: 401 }),
+      );
+      const client = new ReactiveAuthenticationClient({
+        boundary,
+        providers: [provider],
+        maxRedirects,
+        fetch,
+      });
+      const result = await client.fetch("https://pod.example/a", { method: "POST", body: "once" });
+      assert.equal(result, response);
+      assert.equal(result.status, status);
+      assert.equal(result.headers.get("x-response"), "preserved");
+      assert.equal(result.bodyUsed, false);
+      assert.equal(await result.text(), "redirect response body");
+      assert.equal(fetch.mock.calls.length, 2, "the authenticated write is never repeated");
+      assert.equal(fetch.mock.calls[1][0].redirect, "manual");
+    }
   }
 });
 
