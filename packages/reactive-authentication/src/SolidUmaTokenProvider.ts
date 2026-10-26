@@ -104,6 +104,7 @@ export class SolidUmaTokenProvider implements TokenProvider {
   readonly #metadata: KeyValueStore<oauth.AuthorizationServer>;
   readonly #context: ContextKey;
   readonly #issued = new Map<string, string>();
+  readonly #contexts = new Map<string, string>();
   readonly #callbackUri: string;
 
   constructor(
@@ -154,6 +155,28 @@ export class SolidUmaTokenProvider implements TokenProvider {
 
   async upgrade(request: Request, challenge?: ChallengeContext): Promise<Request> {
     const params = findChallenge(challenge, ["as_uri", "ticket"], "uma")?.params;
+    const nonce = challenge?.response.headers.get("DPoP-Nonce") ?? undefined;
+    if (
+      params === undefined &&
+      nonce !== undefined &&
+      findChallenge(challenge, [], "dpop")?.params["error"] === "use_dpop_nonce"
+    ) {
+      const response = challenge!.response;
+      if (response.url !== "" && new URL(response.url).origin !== new URL(request.url).origin)
+        throw new ReactiveAuthenticationError("DPoP nonce came from a different resource origin");
+      const ticket = await this.#rpts.ticket(request.signal);
+      // A nonce challenge has no UMA ticket or AS binding. Reuse only the context already verified
+      // for this exact resource, and never acquire new credentials from this challenge alone.
+      const key = this.#contexts.get(request.url);
+      const rpt = key === undefined ? undefined : await this.#rpts.read(key, ticket);
+      if (
+        rpt === undefined ||
+        rpt.tokenType !== "dpop" ||
+        (rpt.expiresAt !== undefined && Date.now() >= rpt.expiresAt - 10_000)
+      )
+        throw new ReactiveAuthenticationError("No usable verified UMA RPT context for nonce retry");
+      return await this.#present(request, rpt, key!, ticket, nonce);
+    }
     const asUri = params?.["as_uri"];
     const as = parseHttpUrl(asUri ?? "");
     const permissionTicket = params?.["ticket"];
@@ -201,11 +224,20 @@ export class SolidUmaTokenProvider implements TokenProvider {
       );
     });
 
+    return await this.#present(request, rpt, key, ticket, nonce);
+  }
+
+  async #present(
+    request: Request,
+    rpt: UmaRpt,
+    key: string,
+    ticket: FenceTicket,
+    nonce: string | undefined,
+  ): Promise<Request> {
     const headers = new Headers(request.headers);
     if (rpt.tokenType === "dpop") {
       const htu = new URL(request.url);
       htu.search = htu.hash = "";
-      const nonce = challenge?.response.headers.get("DPoP-Nonce") ?? undefined;
       headers.set(
         "DPoP",
         await DPoP.generateProof(rpt.dpopKey, htu.href, request.method, nonce, rpt.accessToken),
@@ -213,6 +245,7 @@ export class SolidUmaTokenProvider implements TokenProvider {
     }
     await this.#rpts.assertCurrent(ticket);
     this.#issued.set(rpt.accessToken, key);
+    this.#contexts.set(request.url, key);
     headers.set(
       "Authorization",
       `${rpt.tokenType === "dpop" ? "DPoP" : "Bearer"} ${rpt.accessToken}`,
@@ -228,6 +261,7 @@ export class SolidUmaTokenProvider implements TokenProvider {
 
   async forget(): Promise<void> {
     this.#issued.clear();
+    this.#contexts.clear();
     await this.#rpts.forget();
     await this.#session.forget();
   }
