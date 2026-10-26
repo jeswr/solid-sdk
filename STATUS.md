@@ -711,3 +711,82 @@ Both requested findings are fixed and tested. No implementation work is unfinish
 there are no open questions. `roborev status` failed with exit 127 (`roborev: command not found`), so
 fresh automated per-commit verdicts could not be obtained locally. Dispatcher/security review remains
 outstanding; this security-critical package has not been merged.
+
+## Fix round 10 — review `b7274db9dc1d`
+
+Completed the single finding in `solid-sdk-lane-sst-8xm.28-b7274db9dc1d.md`.
+Only `packages/reactive-authentication` and this report changed. No dependencies were added.
+
+| Commit | Change |
+| --- | --- |
+| `99665513` | Adapt browser-hidden authenticated redirects before answering service-worker fetches. Add four worker unit regressions and eight Chromium cases covering 303/307 POST responses in default, follow, manual and error modes. Document the response contract. |
+| Final documentation commit (this commit) | Record round-10 verification and the review-tool limitation. |
+
+The brief leaves the worker response shape open. The conservative choice is a synthetic `300`, with
+`Cache-Control: no-store`, no `Location`, and a plain-text explanation that the target is hidden and
+the write may have succeeded. Default and explicit `follow` fetches resolve with this observable,
+non-success response. The worker never repeats the write or follows its hidden target. Explicit
+`manual` preserves the opaque response; `error` retains its rejection. The core algorithm is unchanged.
+
+### Round-10 verification
+
+PASS required package gate and root checks, run before the final documentation commit:
+
+```sh
+pnpm --filter @jeswr/reactive-authentication run lint && pnpm --filter @jeswr/reactive-authentication run build && pnpm --filter @jeswr/reactive-authentication run typecheck && pnpm --filter @jeswr/reactive-authentication run test
+pnpm run lint:root
+git diff --check
+```
+
+- Package lint: zero errors; **63 warnings** and **22 informational diagnostics**, unchanged from round 9.
+- Build and typecheck: pass, including the SDK type-contract checks.
+- Tests: **312/312** pass in **29/29** files, with no skips.
+- Enforced coverage: statements **2079/2079**, branches **1538/1538**, functions **468/468**,
+  lines **1874/1874** — **100% in every metric**. Coverage configuration and thresholds are unchanged.
+- Root lint: Biome, lockfile transport, app workspace and raw-fetch guards pass.
+- Whitespace validation: pass.
+
+Regression sensitivity was checked before the implementation fix:
+
+```sh
+pnpm --filter @jeswr/reactive-authentication exec vitest run test/worker-coverage.test.js --coverage.enabled=false '--testNamePattern=worker hidden redirects'
+PLAYWRIGHT_BROWSERS_PATH=/tmp/sst-8xm28-browsers pnpm --filter @jeswr/reactive-authentication run test:browser
+```
+
+Expected baseline failures: both default/follow unit cases returned the incompatible opaque response;
+all four default/follow browser cases rejected with `TypeError` after one authenticated write. The
+manual/error cases already passed. Every case passes with the fix. Focused worker verification passes
+**11/11** tests:
+
+```sh
+pnpm --filter @jeswr/reactive-authentication exec vitest run test/worker-coverage.test.js --coverage.enabled=false
+```
+
+PASS final Chromium smoke suite against the freshly built output:
+
+```sh
+PLAYWRIGHT_BROWSERS_PATH=/tmp/sst-8xm28-browsers pnpm --filter @jeswr/reactive-authentication exec node test/browser/run.js
+```
+
+Chromium `156.0.8078.4` passes all existing checks and all **8/8** new worker redirect cases. Each
+case verifies one authenticated POST with its original body and zero requests to the hidden target,
+using local OpenID/storage fixtures that validate the token and DPoP proof. The installed browser was
+reused; no browser or dependency download was needed.
+
+Validation used Node `24.22.1` and pnpm `10.4.1`. No `check:packages` run was needed because no dependency
+was added. The dependant dry run selected only this package, so no dependant gate applies:
+
+```sh
+pnpm exec turbo run build typecheck test --filter=...@jeswr/reactive-authentication --dry=json
+```
+
+Per the lane brief, no whole-workspace gate or `gate:full` ran. No push, PR, branch switch, network Git
+operation or edits to another checkout were performed. The working tree is clean after this final
+report commit.
+
+### Round-10 remaining work and questions
+
+The requested finding is fixed and tested. No implementation work is unfinished or blocked;
+there are no open questions. `roborev status` failed with exit 127 (`roborev: command not found`), so
+fresh automated per-commit verdicts could not be obtained locally. Dispatcher/security review remains
+outstanding; this security-critical package has not been merged.
