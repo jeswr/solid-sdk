@@ -94,10 +94,12 @@ export function createDirectSend(
       }
     },
     async lookup(wire) {
-      const message = await verified(assertWire(wire));
+      const snapshot = { ...wire };
+      const message = await verified(assertWire(snapshot));
       const entry = mailbox.accepted.get(message.id);
-      if (entry?.bytes === wire.bytes) return { outcome: "found", providerRef: entry.providerRef };
-      if ([...pending].some((attempt) => attempt.bytes === wire.bytes))
+      if (entry?.bytes === snapshot.bytes)
+        return { outcome: "found", providerRef: entry.providerRef };
+      if ([...pending].some((attempt) => attempt.bytes === snapshot.bytes))
         return { outcome: "unknown", detail: "direct send is pending" };
       return { outcome: "absent" };
     },

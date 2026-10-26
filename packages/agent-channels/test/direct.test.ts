@@ -250,6 +250,70 @@ describe("direct loopback", () => {
   });
 
   it.each([
+    "accepted",
+    "verification",
+    "credentials",
+  ] as const)("snapshots lookup wire before verification for %s evidence", async (state) => {
+    const config = options();
+    const verify = vi.fn(verifyMessage);
+    const send = vi.fn(config.tokens.send.bind(config.tokens));
+    const tokens = { read: config.tokens.read.bind(config.tokens), send };
+    const binding = createInMemoryDirectBinding({ ...config, verify, tokens });
+    const original = await binding.send.render(signed(), DIRECT);
+    const replacement = await binding.send.render(
+      signed({ ...message, body: { want: ["different"] } }),
+      DIRECT,
+    );
+    const io = { account, tokens, dryRun: false };
+    const sendStarted = deferred<void>();
+    const sendResume = deferred<void>();
+    if (state === "verification")
+      verify.mockImplementationOnce(async (jws) => {
+        sendStarted.resolve();
+        await sendResume.promise;
+        return verifyMessage(jws);
+      });
+    else if (state === "credentials")
+      send.mockImplementationOnce(async (ref) => {
+        sendStarted.resolve();
+        await sendResume.promise;
+        return config.tokens.send(ref);
+      });
+
+    const result = { outcome: "accepted", providerRef: `direct:${original.digest}` };
+    const pending = binding.send.transmit(original, io);
+    if (state === "accepted") expect(await pending).toEqual(result);
+    else await sendStarted.promise;
+
+    const lookupStarted = deferred<void>();
+    const lookupResume = deferred<void>();
+    verify.mockImplementationOnce(async (jws) => {
+      lookupStarted.resolve();
+      await lookupResume.promise;
+      return verifyMessage(jws);
+    });
+    const wire = { ...original };
+    const lookup = binding.send.lookup?.(wire);
+    await lookupStarted.promise;
+    Object.assign(wire, replacement);
+    lookupResume.resolve();
+    if (state === "accepted")
+      expect(await lookup).toEqual({ outcome: "found", providerRef: result.providerRef });
+    else expect(await lookup).toMatchObject({ outcome: "unknown" });
+    expect(await binding.send.lookup?.(replacement)).toEqual({ outcome: "absent" });
+
+    sendResume.resolve();
+    expect(await pending).toEqual(result);
+    expect(await binding.send.lookup?.(original)).toEqual({
+      outcome: "found",
+      providerRef: result.providerRef,
+    });
+    expect((await binding.ingest.list(account, undefined, limits)).items).toEqual([
+      { id: message.id, raw: original.bytes },
+    ]);
+  });
+
+  it.each([
     { label: "just before expiry", at: Date.parse(message.expiresAt) - 1, accepted: true },
     { label: "at expiry", at: Date.parse(message.expiresAt), accepted: false },
     { label: "after expiry", at: Date.parse(message.expiresAt) + 1, accepted: false },
