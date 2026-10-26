@@ -259,8 +259,13 @@ describe("bounded, fail-closed expansion", () => {
         window,
       ),
     ).toHaveLength(1);
-    const longWindow = { start: window.start, end: Date.parse("2054-01-01T00:00:00Z") };
-    rejects({ ...base, rrule: "FREQ=DAILY" }, "limit-exceeded", longWindow);
+    // Explicit UTC instants exercise the default cap without 10,000 Intl searches.
+    const rdates = Array.from({ length: MAX_OCCURRENCES }, (_, i) =>
+      new Date(Date.parse(`${base.start}Z`) + i * 1000).toISOString().replace(".000Z", "Z"),
+    );
+    expect(expandRecurrence({ ...base, rdates }, window)).toHaveLength(MAX_OCCURRENCES);
+    // DTSTART is one more distinct visible start; no partial result is returned.
+    rejects({ ...base, start: "2026-01-02T09:00:00", rdates }, "limit-exceeded");
   });
 
   it("limits explicit date input lengths and scans of sparse rules", () => {
