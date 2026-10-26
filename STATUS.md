@@ -80,3 +80,34 @@ rather than silently reporting complete access or widening permissions.
 
 Screenshots: none; this is a pure library with no rendered components or states.
 Playwright was not launched. No push, PR, branch switch, or merge was performed.
+
+## Fix round 1 — 2026-10-26
+
+Starting head: `fb1a57c24f102d59fecc8f6c49084ea4fea671b1` on `lane/sst-age2`.
+Both findings from the supplied Codex review are addressed:
+
+- `3a9cf6af` — `fix: validate ACP management permissions`: validate ACR grants
+  independently of resource rows. Conservatively reject nonempty management-only,
+  partial and anonymous ACR permissions in both projection and diff planning. Full
+  named resource/ACR Read+Write remains an immutable owner, including split grants;
+  empty management policies confer no access. Update the sharing-core documentation.
+- `3a6d008d` — `fix: ignore empty inherited sharing grants`: only inherited grants
+  with modes block changes. Regression tests cover explicit Viewer creation and
+  revocation alongside empty ancestor policies for named and anonymous principals.
+  Both new cases failed before the fix and passed afterwards; existing nonempty
+  inherited-grant immutability tests still pass.
+- Closing commit — `docs: record sst-age2 fix verification` (this section).
+
+| Command | Result |
+| --- | --- |
+| `pnpm --filter @jeswr/suite-ui run build` | PASS; prepare existing workspace dependency. |
+| `pnpm --filter @jeswr/app-suite run lint && pnpm --filter @jeswr/app-suite run build && pnpm --filter @jeswr/app-suite run typecheck && pnpm --filter @jeswr/app-suite run test` | PASS; 106 tests, including 105 sharing tests. Sharing coverage: 100% statements (215/215), branches (205/205), functions (45/45) and lines (178/178). |
+| `pnpm run lint:root` | PASS; all workspace, lockfile, fetch, token and contrast guards. |
+| `TURBO_SCM_BASE=fb1a57c24f102d59fecc8f6c49084ea4fea671b1 pnpm run gate` | PASS; 6/6 tasks, none cached. |
+| `PATH="/tmp/sst-age2-gate-bin:$PATH" pnpm run gate:full` | BLOCKED in unchanged `@jeswr/unstorage-solid#build` after 23 successful tasks. A temporary Git wrapper blocked its attempted remote `git clone https://github.com/jeswr/fetch-rdf.git`, honoring the lane restrictions; no remote Git operation ran. |
+| `git diff --check` | PASS. |
+
+No dependencies added. No UI, screenshots, tracker updates or changes outside this
+checkout. No new open questions or unfinished implementation. Full-workspace
+verification remains blocked as above; `roborev` is still unavailable, so automated
+per-commit reviews could not run. No push, PR, branch switch, fetch or merge performed.
