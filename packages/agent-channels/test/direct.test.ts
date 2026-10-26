@@ -202,6 +202,51 @@ describe("direct loopback", () => {
     }
   });
 
+  it.each([
+    { label: "just before expiry", at: Date.parse(message.expiresAt) - 1, accepted: true },
+    { label: "at expiry", at: Date.parse(message.expiresAt), accepted: false },
+    { label: "after expiry", at: Date.parse(message.expiresAt) + 1, accepted: false },
+    { label: "after clock rollback", at: Date.parse(message.createdAt) - 1, accepted: false },
+    { label: "with an invalid clock", at: NaN, accepted: false },
+  ])("rechecks freshness $label after pending credentials", async ({ at, accepted }) => {
+    const config = options();
+    let clock = config.now();
+    const binding = createInMemoryDirectBinding({ ...config, now: () => clock });
+    const wire = await binding.send.render(signed(), DIRECT);
+    const started = deferred<void>();
+    const grant = deferred<SendGrant>();
+    const tokens: TokenProvider = {
+      read: config.tokens.read.bind(config.tokens),
+      send: () => {
+        started.resolve();
+        return grant.promise;
+      },
+    };
+    const pending = binding.send.transmit(wire, { account, tokens, dryRun: false });
+    await started.promise;
+    expect(await binding.send.lookup?.(wire)).toMatchObject({ outcome: "unknown" });
+    expect((await binding.ingest.list(account, undefined, limits)).items).toEqual([]);
+    clock = at;
+    if (accepted) {
+      grant.resolve(await config.tokens.send(account));
+      const result = { outcome: "accepted", providerRef: `direct:${wire.digest}` };
+      expect(await pending).toEqual(result);
+      expect(await binding.send.lookup?.(wire)).toEqual({
+        outcome: "found",
+        providerRef: result.providerRef,
+      });
+      expect((await binding.ingest.list(account, undefined, limits)).items).toEqual([
+        { id: message.id, raw: wire.bytes },
+      ]);
+    } else {
+      const rejected = expect(pending).rejects.toThrow("expired or not yet valid");
+      grant.resolve(await config.tokens.send(account));
+      await rejected;
+      expect(await binding.send.lookup?.(wire)).toEqual({ outcome: "absent" });
+      expect((await binding.ingest.list(account, undefined, limits)).items).toEqual([]);
+    }
+  });
+
   it("tracks overlapping attempts separately and keeps accepted bytes as positive evidence", async () => {
     const config = options();
     const binding = createInMemoryDirectBinding(config);

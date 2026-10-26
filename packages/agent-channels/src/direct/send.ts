@@ -71,6 +71,7 @@ export function createDirectSend(
         const message = await verified(compactJws);
         assertCurrent(message);
         assertGrant(await io.tokens.send(io.account), "send");
+        assertCurrent(message);
         const previous = mailbox.accepted.get(message.id);
         if (previous) {
           if (previous.bytes !== snapshot.bytes || previous.account !== account)
