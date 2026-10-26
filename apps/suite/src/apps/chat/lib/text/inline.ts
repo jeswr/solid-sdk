@@ -12,13 +12,22 @@ function scan(pattern: RegExp, source: string, budget: ParseBudget): RegExpExecA
   return match;
 }
 
-/** Find a matching delimiter without closing inside code, escapes, or nested emphasis. */
+function scanMention(source: string, budget: ParseBudget) {
+  const explicit = source.startsWith("@[")
+    ? scan(/^@\[([^\]\n]*)\]\(([^\s)]*)\)/, source, budget)
+    : null;
+  const handle = explicit ? null : scan(/^@([A-Za-z0-9_]+(?:[.-][A-Za-z0-9_]+)*)/, source, budget);
+  return { explicit, handle };
+}
+
+/** Find a matching delimiter without closing inside opaque tokens or nested emphasis. */
 function emphasisEnd(
   source: string,
   start: number,
   delimiter: string,
   depth: number,
   budget: ParseBudget,
+  closingRun = delimiter.length,
 ): number {
   if (depth >= 16) return -1;
   for (let offset = start; offset < source.length; offset += 1) {
@@ -32,6 +41,25 @@ function emphasisEnd(
     if (code) {
       offset += code[0].length - 1;
       continue;
+    }
+    if (
+      source.charAt(offset) === "@" &&
+      (offset === start || !/[\w@]/.test(source.charAt(offset - 1)))
+    ) {
+      const { explicit, handle } = scanMention(source.slice(offset), budget);
+      const mention = explicit ?? handle;
+      if (mention) {
+        let length = mention[0].length;
+        // A terminal underscore delimiter belongs to the enclosing span. Keep all
+        // leading/internal handle underscores (and every explicit-label marker) opaque.
+        if (handle && delimiter.charAt(0) === "_" && mention[0].endsWith(delimiter)) {
+          let suffix = delimiter.length;
+          while (suffix < closingRun && mention[0].charAt(length - suffix - 1) === "_") suffix += 1;
+          length -= suffix;
+        }
+        offset += length - 1;
+        continue;
+      }
     }
     const marker = /^(\*\*|__|\*|_)/.exec(source.slice(offset))?.[0];
     if (!marker) continue;
@@ -57,7 +85,14 @@ function emphasisEnd(
       (!/[\w@]/.test(previous) || previous === marker.charAt(0)) &&
       !/\s/.test(source.charAt(offset + marker.length))
     ) {
-      const end = emphasisEnd(source, offset + marker.length, marker, depth + 1, budget);
+      const end = emphasisEnd(
+        source,
+        offset + marker.length,
+        marker,
+        depth + 1,
+        budget,
+        marker.charAt(0) === delimiter.charAt(0) ? closingRun + marker.length : marker.length,
+      );
       if (end > offset + marker.length) {
         offset = end + marker.length - 1;
         continue;
@@ -108,9 +143,8 @@ function inline(
     }
     const boundary = offset === 0 || !/[\w@]/.test(source.charAt(offset - 1));
     if (boundary) {
-      const explicit = rest.startsWith("@[")
-        ? scan(/^@\[([^\]\n]*)\]\(([^\s)]*)\)/, rest, budget)
-        : null;
+      const { explicit, handle: mention } =
+        rest.charAt(0) === "@" ? scanMention(rest, budget) : { explicit: null, handle: null };
       if (explicit) {
         const link = parseAutolink(explicit[2] as string);
         if (link && explicit[1]) {
@@ -119,10 +153,6 @@ function inline(
         offset += explicit[0].length;
         continue;
       }
-      const mention =
-        rest.charAt(0) === "@"
-          ? scan(/^@([A-Za-z0-9_]+(?:[.-][A-Za-z0-9_]+)*)/, rest, budget)
-          : null;
       if (mention) {
         const handle = mention[1] as string;
         const target = options.mentions;

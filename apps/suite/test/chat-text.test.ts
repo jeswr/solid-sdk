@@ -92,6 +92,52 @@ describe("Markdown-lite inline AST", () => {
     ]);
   });
 
+  it.each(["_", "__", "*", "**"])("keeps mention tokens opaque inside %s", (marker) => {
+    const type = marker.length === 2 ? "bold" : "italic";
+    for (const handle of [
+      "_mira",
+      "__mira",
+      "_mira_sage",
+      "_mira.sage",
+      "_mira-sage",
+      "__proto__",
+    ]) {
+      expect(parseInline(`${marker}@${handle}${marker}`, { mentions: { [handle]: mira } })).toEqual(
+        [{ type, children: [{ type: "mention", label: handle, webId: mira }] }],
+      );
+    }
+    for (const label of ["_Mira_", "**Mira**", "Mira * Sage", "Mira ` Sage", "Mira \\* Sage"]) {
+      expect(parseInline(`${marker}@[${label}](${mira})${marker}`)).toEqual([
+        { type, children: [{ type: "mention", label, webId: mira }] },
+      ]);
+    }
+    const invalid = "@[_Mira_](javascript:alert)";
+    expect(parseInline(`${marker}${invalid}${marker}`)).toEqual([
+      { type, children: [text(invalid)] },
+    ]);
+  });
+
+  it("reserves nested closing runs after underscore handles", () => {
+    const handle = "_mira";
+    const mention = { type: "mention", label: handle, webId: mira };
+    const mapped = { mentions: { [handle]: mira } };
+    expect(parseInline("___@_mira___", mapped)).toEqual([
+      { type: "bold", children: [{ type: "italic", children: [mention] }] },
+    ]);
+    expect(parseInline("_one __@_mira___", mapped)).toEqual([
+      { type: "italic", children: [text("one "), { type: "bold", children: [mention] }] },
+    ]);
+    expect(parseInline("_one __@_mira__ two_", mapped)).toEqual([
+      {
+        type: "italic",
+        children: [text("one "), { type: "bold", children: [mention] }, text(" two")],
+      },
+    ]);
+    expect(parseInline("**_@_mira_**", mapped)).toEqual([
+      { type: "bold", children: [{ type: "italic", children: [mention] }] },
+    ]);
+  });
+
   it("falls back to intact literal input when scans exceed the shared work budget", () => {
     for (const suffix of [
       "@[".repeat(10_000),
@@ -355,6 +401,28 @@ describe("Markdown-lite blocks", () => {
     expect(parseMessageText("0. zero")).toEqual([
       { type: "list", ordered: true, start: 0, items: [[text("zero")]] },
     ]);
+  });
+
+  it("scans long failed list bodies without retrying whitespace splits", () => {
+    for (const marker of ["-", "+", "*", "123456789.", "0)"]) {
+      for (const separator of ["\u2028", "\u2029"]) {
+        const source = `${marker}${" \t".repeat(50_000)}body${separator}tail`;
+        expect(parseMessageText(source)).toEqual([paragraph(source)]);
+        expect(parseMessageText(`intro\n${source}`)).toEqual([paragraph(`intro\n${source}`)]);
+      }
+    }
+  });
+
+  it("retains list indentation, whitespace, marker limits and empty bodies", () => {
+    expect(parseMessageText("   - \t\u2028\u2029body\n+ \t\n*\tbody")).toEqual([
+      { type: "list", ordered: false, start: 1, items: [[text("body")], [], [text("body")]] },
+    ]);
+    expect(parseMessageText("123456789) item\n000000000. \t")).toEqual([
+      { type: "list", ordered: true, start: 123456789, items: [[text("item")], []] },
+    ]);
+    for (const source of ["    - body", "\t- body", "1234567890. body", "-body", "1.body"]) {
+      expect(parseMessageText(source)).toEqual([paragraph(source)]);
+    }
   });
 
   it("parses fenced code with optional language and no inline processing", () => {
