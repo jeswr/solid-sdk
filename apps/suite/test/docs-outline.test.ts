@@ -556,7 +556,9 @@ describe("fail-closed document validation", () => {
   });
 
   it("rejects oversized sparse arrays before enumerating their keys", () => {
-    const ownKeys = vi.fn(Reflect.ownKeys);
+    const ownKeys = vi.fn(() => {
+      throw new Error("Oversized array must be rejected before enumerating keys");
+    });
     const getOwnPropertyDescriptor = vi.fn(Reflect.getOwnPropertyDescriptor);
     const many = new Proxy(Array(2 ** 32 - 1), { ownKeys, getOwnPropertyDescriptor });
     expectError({ type: "doc", attrs: { many } }, "limit-exceeded");
