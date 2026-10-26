@@ -64,6 +64,13 @@ jobs:
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
+      # Capacitor 8 needs Xcode 26 or later; pick the newest installed one, never the image default.
+      - name: Select Xcode 26+
+        run: |
+          xcode="$(ls -d /Applications/Xcode_2[6-9]*.app 2>/dev/null | sort -V | tail -1)"
+          test -n "$xcode" || { echo "No Xcode 26+ on this runner"; ls /Applications; exit 1; }
+          sudo xcode-select -s "$xcode"
+          xcodebuild -version
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
