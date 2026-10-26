@@ -1,69 +1,67 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
-# sst-c871 — SH-L2 client-side search index
+# sst-c871 — Unicode tokenization fix round 1
 
-Implemented on `lane/sst-c871`, based on
-`8c73e21f266896914a67b6434814b8bb567e1ba7`.
+Implemented on `lane/sst-c871`, starting at
+`ffc49f992332e732e50874875a7b7a077019b00a`. Addresses the single Unicode
+tokenization finding in the supplied review.
 
 ## Commits
 
-- `50e4e0e0` — `feat(suite): add client search index`: pure TypeScript inverted
-  index, Unicode tokenization/folding, title/body weighting, last-term prefix
-  matching, BM25 ranking, strict atomic add/update, idempotent remove, versioned
-  JSON serialization/restore, grapheme-safe snippets and UTF-16 highlight ranges.
-  Includes the barrel, 80 synthetic-fixture search tests, the search coverage glob,
-  and conservative defaults in `QUESTIONS.md`.
-- `docs(suite): record search lane validation` — this final status-only commit.
+- `50e4e0e0` — original search index implementation (previous round).
+- `ffc49f99` — original lane validation report (previous round).
+- `2acfffa0` — `fix(suite): segment normalized search text`: fold source graphemes,
+  map normalized UTF-16 units to original grapheme bounds, then segment normalized
+  words. Supports compatibility expansions and mark removal that change word
+  boundaries. Updates the earlier rejection policy in `QUESTIONS.md` and adds
+  regression coverage for token offsets, matching, add/update/restore and snippets.
+- `docs(suite): record Unicode fix validation` — this final report commit.
 
 ## Validation
 
-All commands ran inside this checkout. No new dependencies or manifest/lockfile
-changes; `check:packages` is therefore not applicable. No UI was built, and no
-Playwright runs or screenshots were required or taken.
+All commands ran in this checkout. No manifest/lockfile changes or dependencies
+were added, so `check:packages` is not applicable. This is a pure library fix; no
+UI changes, Playwright runs or screenshots were required.
 
 | Exact command | Result |
 | --- | --- |
-| `pnpm --filter @jeswr/suite-ui run build` | PASS; builds the existing dependency's declarations and CSS output. |
-| `pnpm --filter @jeswr/app-suite run lint && pnpm --filter @jeswr/app-suite run build && pnpm --filter @jeswr/app-suite run typecheck && pnpm --filter @jeswr/app-suite run test` | PASS; Next.js production build, strict typecheck, lint and all 332 tests across 11 files. |
-| `pnpm run lint:root` | PASS; workspace/layer/transport guards, fetch check, token check, all 74 contrast pairs. |
-| `TURBO_SCM_BASE=8c73e21f266896914a67b6434814b8bb567e1ba7 pnpm run gate` | PASS; 7/7 tasks, no cache hits. |
-| `pnpm run gate:full` | FAIL; 33 successful tasks before the unrelated `@jeswr/unstorage-solid#build` failure; remaining workspace checks did not finish. |
-| `git diff --check` | PASS before the implementation commit and final status commit. |
+| `pnpm --filter @jeswr/suite-ui run build` | PASS; build the existing workspace dependency first. |
+| `pnpm --filter @jeswr/app-suite run lint && pnpm --filter @jeswr/app-suite run build && pnpm --filter @jeswr/app-suite run typecheck && pnpm --filter @jeswr/app-suite run test` | PASS; lint, Next.js production build, strict typecheck, 350 tests across 11 files. |
+| `pnpm run lint:root` | PASS; workspace/layer/transport guards, fetch check, tokens and all 74 contrast pairs. |
+| `TURBO_SCM_BASE=ffc49f992332e732e50874875a7b7a077019b00a pnpm run gate` | PASS; 7/7 tasks, no cache hits. |
+| `GIT_ALLOW_PROTOCOL=file pnpm run gate:full` | INTERRUPTED (exit 130); Turbo's strict environment filtered the protocol guard; see incident below. |
+| `GIT_ALLOW_PROTOCOL=file pnpm run gate:full --env-mode=loose` | FAIL; 176 successful tasks out of 251 before the unrelated `@jeswr/federation-codegen#test` failure. |
+| `git diff --check` | PASS before both fix-round commits. |
 
-The search directory has **100% statements, branches, functions and lines**, with
-per-file thresholds enforced by the normal app test command. The barrel contains
-only re-exports and no executable statements. Tests include numeric BM25 oracles,
-Unicode expansions and scripts, normalization rejection, malformed runtime inputs,
-atomic updates, detached outputs, prefix matching, snippets, corrupt snapshots, and
-50 deterministic generated mutation sequences compared with fresh rebuilds.
+The search directory retains **100% statements, branches, functions and lines**
+for executable code, enforced by the existing per-file thresholds. The barrel
+contains only re-exports. There are now 98 search tests (18 more than the previous
+round). Regression fixtures include `Use ½ cup milk`, Thai `สำหรับ`, Japanese
+`がっこう` / `かっこう`, Arabic phrase ligatures, square kilogram, expansions
+inside words, combining marks and supplementary letters. Tests check equivalence
+with normalized queries and exact UTF-16 offsets into original snippet text.
 
-Additionally, the case-fold algorithm was compared against the
-[Unicode 17 full/default case-fold data](https://www.unicode.org/Public/17.0.0/ucd/CaseFolding.txt)
-for all 1,114,112 code points after the documented normalization pipeline, with
-zero differences on Node 24.22.1 (Unicode 17.0). This was a temporary validation
-outside the committed tests; no downloaded Unicode data or runtime dependencies
-were added.
+## Gate limitation and review
 
-An early typecheck before building workspace dependencies failed on missing
-`@jeswr/suite-ui` declarations; the dependency-first validation above resolved it.
+The full gate's two federation-codegen failures concern existing namespace drift:
+the bookmarks shape and regenerated ontology use `https://jeswr.org/ns/...`,
+while test expectations and committed generated fixtures use
+`https://w3id.org/jeswr/...`. These paths are outside the requested fix and were
+not changed. Remaining full-workspace tasks did not complete.
 
-## Unfinished / blocked
+The first full-gate attempt unintentionally invoked the existing unstorage-solid
+build script's remote clone before I noticed that Turbo had filtered
+`GIT_ALLOW_PROTOCOL`. This violated the lane's remote-clone restriction. I stopped
+that run and removed its temporary clone at `/tmp/fetch-rdf-build-SW4Ve2`.
+The retry used `--env-mode=loose` to preserve the protocol guard for child tasks.
 
-- Full-workspace gate: the existing unstorage-solid build-deps script clones the
-  lockfile-pinned fetch-rdf source, then invokes
-  `npm install --no-audit --no-fund --ignore-scripts --prefer-offline` in its
-  temporary build. npm failed with `EROFS` opening its cache under
-  `/home/runner/.npm/_cacache/tmp/`. No source in that package was changed. A retry
-  would repeat the network clone outside this lane's restrictions, so it was not
-  attempted. The lane-specific app and affected gates are green.
-- Automated per-commit review: `command -v roborev` found no CLI, and this checkout
-  has no active post-commit review hook. No roborev verdict was available; the
-  dispatcher still needs to run/read review. No review tooling was installed.
+`roborev` remains unavailable (`command -v roborev` found no CLI), so automated
+per-commit review must be run by the dispatcher. No review tooling was installed.
 
-## Open questions / conservative readings
+## Unfinished / open questions
 
-See `QUESTIONS.md` for the unspecified constants, query combination, snippet
-conventions, locale and future façade integration. Defaults are implemented and
-reviewable; none blocks the pure library. Compatibility folds that change word
-boundaries are explicitly rejected with a typed error. No SDK hook/UI/network or
-persistence integration was added, as required by SH-L2's pure-library scope.
+The requested Unicode finding is fixed. No new open questions. The conservative
+offset policy covers complete original graphemes; words expanded from one source
+grapheme can share or overlap source ranges. Existing unrelated defaults remain
+documented in `QUESTIONS.md`.
