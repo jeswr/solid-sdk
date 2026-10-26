@@ -14,13 +14,14 @@
 
 @prefix sh:     <http://www.w3.org/ns/shacl#> .
 @prefix book:   <https://jeswr.org/ns/bookmark#> .
+@prefix legacy: <https://w3id.org/jeswr/bookmark#> .
 @prefix schema: <http://schema.org/> .
 @prefix dct:    <http://purl.org/dc/terms/> .
 @prefix xsd:    <http://www.w3.org/2001/XMLSchema#> .
 
 # --- A bookmark (book:Bookmark) ---
 [] a sh:NodeShape ;
-  sh:targetClass book:Bookmark ;
+  sh:targetClass book:Bookmark, legacy:Bookmark ;
 
   # URL — required, exactly one http(s) IRI. The one field every bookmark must
   # have. sh:nodeKind sh:IRI rejects a literal; sh:pattern "^https?://" rejects a
@@ -44,15 +45,17 @@
     sh:datatype xsd:string ; sh:maxCount 1 ;
   ] ;
 
-  # Notes (the user's markdown body) — at most one string.
+  # Aliases share one constraint: identical values count once; conflicting
+  # values across the two predicates violate maxCount instead of hiding data.
+  # Notes (the user's markdown body) — at most one string across both aliases.
   sh:property [
-    sh:path book:notes ; sh:name "notes" ;
+    sh:path [ sh:alternativePath ( book:notes legacy:notes ) ] ; sh:name "notes" ;
     sh:datatype xsd:string ; sh:maxCount 1 ;
   ] ;
 
-  # Archived flag — at most one xsd:boolean.
+  # Archived flag — at most one xsd:boolean across both aliases.
   sh:property [
-    sh:path book:archived ; sh:name "archived" ;
+    sh:path [ sh:alternativePath ( book:archived legacy:archived ) ] ; sh:name "archived" ;
     sh:datatype xsd:boolean ; sh:maxCount 1 ;
   ] ;
 
