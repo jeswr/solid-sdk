@@ -1335,6 +1335,17 @@ describe("review round 2 regressions", () => {
     expect((await storage.readRdf(astral.url)).dataset.size).toBe(1);
   });
 
+  test("a namespace with unescaped regex metacharacters (IPv6) is dropped, not corrupting", async () => {
+    const storage = solid();
+    const { url } = await storage.writeRdf(
+      `${ROOT}ip.ttl`,
+      [quad(namedNode("urn:s"), namedNode("urn:p"), namedNode("http://localhost"))],
+      { ifMatch: "*", prefixes: { ip: "http://[::1]/" } },
+    );
+    const { dataset } = await storage.readRdf(url);
+    expect([...dataset].map((q) => q.object.value)).toEqual(["http://localhost"]);
+  });
+
   test("a dotted prefix cannot act as a regex wildcard in the writer", async () => {
     const storage = solid();
     // `a-b:` is a valid scheme, and matches the unescaped pattern `a.b:` n3 would build.
