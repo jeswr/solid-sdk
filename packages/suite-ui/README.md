@@ -48,11 +48,18 @@ checks axe, keyboard interaction, focus, density, touch targets and 320px reflow
 full-page screenshots under repo-root `artifacts/screens/DS-02/`. Chromium execution and
 visual comparison belong to the dispatcher. Unit axe checks run in jsdom; contrast is
 covered by the token gate and the browser tests.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Claude Opus 5.5 -->
+## DS-04 shell layout
+
 Shell components live in `@jeswr/suite-ui/shell`; also import `styles/shell.css`.
 `ShellFrame` accepts TopBar slots, a `SidebarNav` model, optional `DetailsPane`
 content, and rail/tab-bar slots. It owns the single visible page `h1`, the
 `main-content` skip target, the main scroll area and the document title
-(`shellDocumentTitle(page, app)`: `page · App · Solid Suite`). Content should start
+(`shellDocumentTitle(page, app)`: `page · App · Solid Suite`). Next.js routes should
+also export `metadata.title` built with `shellDocumentTitle`, because the layout's
+metadata title replaces a title set on mount. Content should start
 at `h2`. Set `skipLink={false}` when the root layout already provides that link.
 
 `preferences` / `onPreferencesChange` connect to the consuming app's preferences
@@ -64,7 +71,8 @@ fields, modified/composing events and unrelated dialogs. Sheets trap focus and
 restore it to the corresponding TopBar control on close.
 
 Sidebar width is 264px; details width is 360px. Below 1024 both use modal side
-sheets. At 768 the rail remains visible; below 768 the tab-bar slot replaces it
-and the TopBar is 48px. The detail breakpoint follows the DS-04 brief / shell §2;
-see the lane's root `QUESTIONS.md` for the design-system table discrepancy.
+sheets and at most one is open: when saved preferences open both, the sidebar sheet
+shows, the details toggle reports collapsed, and any change writes back one region. At 768 the rail remains visible; below 768 the tab-bar slot replaces it
+and the TopBar is 48px. The details breakpoint follows the DS-04 task and 02-§2 (sheet below
+1024), not the ≥1280 persistent pane in 01-§4 and the mockups.
 Dev routes: `/dev/components/{shell,top-bar,sidebar-nav,details-pane}` in apps/suite.
