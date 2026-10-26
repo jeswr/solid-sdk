@@ -42,11 +42,18 @@ function inline(tokens: Token[], marks: DocsMark[], depth: number): DocsNode[] {
         case "link": {
           // GFM bare-URL linkification is outside CommonMark. Retain those URLs as plain text.
           if (!/^[[<]/.test(token.raw)) return text(token.raw, marks);
-          if (/\\&/.test(token.raw)) fail("Escaped link character references are unsupported");
-          const href = decode(token.href);
+          const destination = token.raw.indexOf("](");
+          if (destination >= 0 && /\\&/.test(token.raw.slice(destination))) {
+            fail("Escaped link character references are unsupported");
+          }
+          const autolink = token.raw.startsWith("<");
+          const href = autolink ? token.href : decode(token.href);
           safeLink(href);
           const attrs = { href, ...(token.title ? { title: decode(token.title) } : {}) };
-          return inline(token.tokens, sortedMarks([...marks, { type: "link", attrs }]), depth + 1);
+          const linkedMarks = sortedMarks([...marks, { type: "link", attrs }]);
+          // CommonMark does not interpret character references inside angle autolinks.
+          if (autolink) return text(token.text, linkedMarks);
+          return inline(token.tokens, linkedMarks, depth + 1);
         }
         default:
           return fail(`Unsupported inline Markdown: ${token.type}`);

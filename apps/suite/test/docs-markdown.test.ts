@@ -98,6 +98,8 @@ describe("DOC-L4 Markdown and Docs JSON", () => {
     "[**Mira** _Rowan_ `code`](https://example.org/)",
     "<https://example.org/> and <mira@example.org>",
     "[Mail](mailto:mira@example.org)",
+    "[A \\&amp;](https://example.org/)",
+    "[A \\&amp;][ref]\n\n[ref]: https://example.org/",
     "[Secure](HTTPS://example.org/)",
     '[Reference][ref]\n\n[ref]: https://example.org/ "Synthetic"',
     "[Unused]: https://example.org/\n\nText",
@@ -136,6 +138,10 @@ describe("DOC-L4 Markdown and Docs JSON", () => {
       ),
     );
     expect(markdownToDocs(docsToMarkdown(value))).toEqual(value);
+  });
+  it("keeps character references literal inside angle autolinks", () => {
+    const href = "https://example.org/&amp;&#65;&copy;";
+    expect(roundTrip(`<${href}>`)).toEqual(doc(p(t(href, [{ type: "link", attrs: { href } }]))));
   });
   it("normalizes CRLF, lone CR, empty input and Markdown spelling", () => {
     expect(markdownToDocs("\r\n\r")).toEqual(doc(p()));

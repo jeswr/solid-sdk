@@ -35,7 +35,7 @@ Links must be syntactically valid absolute http(s) or mailto URLs without whites
 characters, angle brackets, or backslashes. Bare GFM URL/email linkification stays plain text.
 Code fence info supports a single language identifier (`[\w+-]+`). Character references support
 `amp`, `lt`, `gt`, `quot`, `apos`, and numeric Unicode scalar values except control ranges.
-Other named references and escaped ampersands inside link syntax/definitions are unsupported;
+Other named references and escaped ampersands inside link destinations, titles, or definitions are unsupported;
 these are rejected rather than decoded incorrectly. Code content is never entity-decoded.
 
 `markdownToDocs(source, { unsupported: "reject" })` is the default. Recognized unsupported
