@@ -1,6 +1,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { assertWithinPodScope, refuseRedirects } from "@jeswr/guarded-fetch";
 import { createSession, discoveryUrl, type FetchLike, rdfFetchFor } from "@jeswr/solid-dpop";
+import { freshRdf } from "../pod/rdf-read.js";
+import { validatedTypeIndexTarget } from "../pod/type-index-write.js";
 import type { NodeConfig } from "./config.js";
 import { httpsUrl, NodeRuntimeError, object, textValue } from "./errors.js";
 
@@ -56,12 +58,17 @@ export async function createClientCredentialsFetch(
   };
   try {
     const session = await createSession(credentials, authTransport);
+    let selectedIndex: string | undefined;
+    const assertDestination = (url: string) => {
+      if (url !== config.profileDocumentUrl && url !== selectedIndex)
+        assertWithinPodScope(config.podRoot, url);
+    };
     const podTransport: FetchLike = async (url, init) => {
-      if (url !== config.profileDocumentUrl) assertWithinPodScope(config.podRoot, url);
+      assertDestination(url);
       return fetchSafe(url, init as RequestInit);
     };
     // Token refresh uses the same guarded discovery/exchange path, while resource I/O
-    // stays inside the explicit Pod scope (plus the canonical profile document).
+    // stays inside the explicit Pod scope, canonical profile and validated index document.
     const combined: FetchLike = (url, init) =>
       url === discovery || url === tokenEndpoint
         ? authTransport(url, init)
@@ -69,14 +76,22 @@ export async function createClientCredentialsFetch(
     const authenticated = rdfFetchFor(session, credentials, combined);
     return async (input, init) => {
       const request = new Request(input, init);
-      if (request.url !== config.profileDocumentUrl)
-        assertWithinPodScope(config.podRoot, request.url);
+      assertDestination(request.url);
+      const profileRead = request.url === config.profileDocumentUrl && request.method === "GET";
+      if (profileRead) selectedIndex = undefined;
       const body = request.body ? new Uint8Array(await request.arrayBuffer()) : undefined;
-      return authenticated(request.url, {
+      const response = await authenticated(request.url, {
         method: request.method,
         headers: request.headers,
         body: body as BodyInit | undefined,
       });
+      if (profileRead && response.ok) {
+        // Parse the authenticated response without another network request. Share the
+        // writer's selection and storage validation, granting only this one document.
+        const { dataset } = await freshRdf(request.url, async () => response.clone());
+        selectedIndex = validatedTypeIndexTarget(config.webId, dataset, config.podRoot).indexUrl;
+      }
+      return response;
     };
   } catch {
     throw new NodeRuntimeError("auth", "Pod client-credentials login failed.");

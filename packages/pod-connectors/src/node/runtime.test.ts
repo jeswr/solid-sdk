@@ -7,10 +7,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { stderr as nodeStderr, stdout as nodeStdout } from "node:process";
 import * as dpop from "@jeswr/solid-dpop";
-import { AclResource } from "@solid/object";
+import { AclResource, Agent } from "@solid/object";
 import { DataFactory } from "n3";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as importRunner from "../core/import-runner.js";
+import { createFetchPodWriter } from "../core/pod-writer.js";
 import {
   createMemoryPod,
   fixtureFetch,
@@ -19,6 +20,8 @@ import {
   TEST_WEBID,
 } from "../core/testing.js";
 import type { ConnectorState } from "../core/types.js";
+import { writeResource } from "../pod/resource.js";
+import { ProfileTypeIndexAnchor, TypeIndexDataset } from "../pod/type-index.js";
 import * as registryModule from "../registry.js";
 import { spotifyAdapter } from "../spotify/adapter.js";
 import { parseImportArgs, runCli } from "./cli.js";
@@ -240,6 +243,105 @@ describe("owner-only checkpoint", () => {
 });
 
 describe("Pod client credentials", () => {
+  it.each([
+    "https://second.test/alice/",
+    "https://pod.test/second/",
+  ])("allows only the validated index across storage roots when importing into %s", async (podRoot) => {
+    const { pod, transport, requests } = fixturePod();
+    const firstWriter = createFetchPodWriter({ ...config, adapterId: "spotify", fetch: pod.fetch });
+    const { indexUrl } = await firstWriter.registerType([]);
+    const profile = pod.dataset(TEST_PROFILE_DOC);
+    new Agent(TEST_WEBID, profile, DataFactory).storageUrls.add(podRoot);
+    await writeResource(TEST_PROFILE_DOC, profile, { fetchImpl: pod.fetch });
+    const authenticated = await createClientCredentialsFetch({ ...config, podRoot }, transport);
+    await expect(authenticated(indexUrl)).rejects.toThrow();
+    const port = createFetchPodWriter({
+      ...config,
+      podRoot,
+      adapterId: "spotify",
+      fetch: authenticated,
+    });
+    const container = port.resolve("media/");
+    expect(
+      await port.registerType([{ forClass: "https://schema.org/MusicRecording", container }]),
+    ).toMatchObject({ indexUrl, added: 1 });
+    expect(
+      new TypeIndexDataset(pod.dataset(indexUrl), DataFactory).locate(
+        "https://schema.org/MusicRecording",
+      ),
+    ).toEqual([{ forClass: "https://schema.org/MusicRecording", instance: undefined, container }]);
+    const indexRequests = requests.filter((request) => request.url === indexUrl);
+    expect(indexRequests.map((request) => request.method)).toEqual(["GET", "PUT"]);
+    expect(indexRequests[1]?.headers.get("if-match")).toBe('"v1"');
+    for (const url of [
+      TEST_POD_ROOT,
+      `${indexUrl}.acl`,
+      `${indexUrl}/child`,
+      `${indexUrl}?other`,
+      `${TEST_POD_ROOT}private.ttl`,
+    ])
+      await expect(authenticated(url)).rejects.toThrow();
+    const path = await configPath();
+    await writeFile(path, JSON.stringify({ ...config, podRoot }));
+    expect(
+      await runCli(["import", "spotify"], {
+        configPath: path,
+        podTransport: transport,
+        sourceAuth: { fetch: fixtureFetch("spotify", spotifyAdapter.fixtures()) },
+        stdout: vi.fn(),
+        stderr: vi.fn(),
+      }),
+    ).toBe(0);
+    expect(pod.get(`${podRoot}integrations/spotify/state.json`)).toContain(
+      '"lastOutcome":"success"',
+    );
+    const count = requests.length;
+    const anchor = new ProfileTypeIndexAnchor(TEST_WEBID, profile, DataFactory);
+    anchor.privateIndex = `${TEST_POD_ROOT}settings/replacement.ttl`;
+    await writeResource(TEST_PROFILE_DOC, profile, { fetchImpl: pod.fetch });
+    await authenticated(TEST_PROFILE_DOC);
+    await expect(authenticated(indexUrl)).rejects.toThrow();
+    expect(requests).toHaveLength(count + 1);
+  });
+  it.each([
+    "https://outside.test/index.ttl",
+    "https://pod.test/alice-sibling/index.ttl",
+  ])("never grants a profile-linked index outside advertised storage: %s", async (indexUrl) => {
+    const { pod, transport, requests } = fixturePod();
+    const profile = pod.dataset(TEST_PROFILE_DOC);
+    new ProfileTypeIndexAnchor(TEST_WEBID, profile, DataFactory).privateIndex = indexUrl;
+    await writeResource(TEST_PROFILE_DOC, profile, { fetchImpl: pod.fetch });
+    const authenticated = await createClientCredentialsFetch(config, transport);
+    await expect(authenticated(TEST_PROFILE_DOC)).rejects.toThrow();
+    await expect(authenticated(indexUrl)).rejects.toThrow();
+    expect(requests.map((request) => request.url)).toEqual([TEST_PROFILE_DOC]);
+  });
+  it("refuses redirects from a validated cross-storage index", async () => {
+    const { pod, transport } = fixturePod();
+    const podRoot = "https://second.test/alice/";
+    const indexUrl = `${TEST_POD_ROOT}settings/index.ttl`;
+    const profile = pod.dataset(TEST_PROFILE_DOC);
+    new Agent(TEST_WEBID, profile, DataFactory).storageUrls.add(podRoot);
+    new ProfileTypeIndexAnchor(TEST_WEBID, profile, DataFactory).privateIndex = indexUrl;
+    await writeResource(TEST_PROFILE_DOC, profile, { fetchImpl: pod.fetch });
+    const redirected = vi.fn<typeof fetch>(async (input, init) =>
+      String(input) === indexUrl
+        ? new Response(null, { status: 302, headers: { location: `${indexUrl}.other` } })
+        : transport(input, init),
+    );
+    const authenticated = await createClientCredentialsFetch({ ...config, podRoot }, redirected);
+    const port = createFetchPodWriter({
+      ...config,
+      podRoot,
+      adapterId: "spotify",
+      fetch: authenticated,
+    });
+    await expect(port.registerType([])).rejects.toThrow();
+    expect(redirected.mock.calls.filter(([input]) => String(input) === indexUrl)).toHaveLength(1);
+    expect(redirected.mock.calls.some(([input]) => String(input) === `${indexUrl}.other`)).toBe(
+      false,
+    );
+  });
   it("refreshes expired tokens in memory through the guarded authorization transport", async () => {
     const { transport } = fixturePod();
     let now = Date.now();
