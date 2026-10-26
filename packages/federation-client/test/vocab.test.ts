@@ -11,7 +11,7 @@ import {
 
 describe("vocab helpers", () => {
   it("exposes the fedapp namespace", () => {
-    expect(FEDAPP).toBe("https://w3id.org/jeswr/fed#");
+    expect(FEDAPP).toBe("https://jeswr.org/ns/fed#");
   });
 
   it("maps the four acl modes to IRIs", () => {
@@ -28,7 +28,7 @@ describe("vocab helpers", () => {
   });
 
   it("builds sector IRIs from known slugs", () => {
-    expect(sectorIri("identity")).toBe("https://w3id.org/jeswr/sectors/identity");
+    expect(sectorIri("identity")).toBe("https://jeswr.org/ns/sectors/identity");
     expect(KNOWN_SECTOR_SLUGS).toContain("health");
   });
 });

@@ -1,0 +1,85 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`parses the sparq LWS CID into the expected StorageDescription 1`] = `
+{
+  "capabilities": [],
+  "descriptionUrl": "https://lws.example/.well-known/storage",
+  "etag": null,
+  "fetchedAt": 1793000000000,
+  "id": "https://lws.example/.well-known/storage",
+  "maxAgeMs": 3600000,
+  "protocol": "lws",
+  "root": "https://lws.example/",
+  "services": [
+    {
+      "endpoint": "https://lws.example/",
+      "extra": {},
+      "id": "https://lws.example/.well-known/storage#root",
+      "type": [
+        "https://www.w3.org/ns/lws#StorageRoot",
+      ],
+    },
+    {
+      "endpoint": "https://lws.example/notifications/",
+      "extra": {
+        "subscriptionType": [
+          "https://www.w3.org/ns/lws#WebhookSubscription",
+        ],
+      },
+      "id": "https://lws.example/.well-known/storage#notifications",
+      "type": [
+        "https://www.w3.org/ns/lws#NotificationService",
+      ],
+    },
+    {
+      "endpoint": "https://lws.example/type-index/",
+      "extra": {},
+      "type": [
+        "https://www.w3.org/ns/lws#TypeIndexService",
+      ],
+    },
+    {
+      "endpoint": "https://lws.example/type-search/",
+      "extra": {},
+      "type": [
+        "https://www.w3.org/ns/lws#TypeSearchService",
+      ],
+    },
+    {
+      "conformsTo": [
+        "https://www.w3.org/ns/lws#AccessProfile",
+      ],
+      "endpoint": "https://lws.example/access-requests/",
+      "extra": {},
+      "type": [
+        "https://www.w3.org/ns/lws#AccessRequestService",
+      ],
+    },
+    {
+      "conformsTo": [
+        "https://www.w3.org/ns/lws#AccessProfile",
+      ],
+      "endpoint": "https://lws.example/access-grants/",
+      "extra": {},
+      "type": [
+        "https://www.w3.org/ns/lws#AccessGrantService",
+      ],
+    },
+  ],
+  "sources": [
+    "lws-cid",
+  ],
+  "verificationMethods": [
+    {
+      "controller": "https://lws.example/.well-known/storage",
+      "id": "https://lws.example/.well-known/storage#webhook-key",
+      "publicKeyJwk": {
+        "crv": "Ed25519",
+        "kty": "OKP",
+        "x": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      },
+      "type": "JsonWebKey2020",
+    },
+  ],
+}
+`;

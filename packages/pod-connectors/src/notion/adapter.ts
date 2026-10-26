@@ -1,3 +1,5 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /**
  * Notion → Documents. `POST /v1/search` lists everything the integration can
  * see: pages become `schema:TextDigitalDocument`, databases become
@@ -14,11 +16,13 @@ import { arr, optionalDate, optionalText, SkipCounter } from "../core/safe.js";
 import type { ImportContext, ImportOutcome, IntegrationAdapter } from "../core/types.js";
 import { CLASSES, DataCollection, DigitalDocument } from "../core/vocab.js";
 import { NOTION_FIXTURES, type NotionPage, type NotionSearchAnswer } from "./fixtures.js";
+import { vocabMap } from "./vocab-map.js";
 
 const ID = "notion";
 const API = "https://api.notion.com/v1";
 
 export const notionAdapter: IntegrationAdapter = {
+  vocabMap,
   metadata: {
     id: ID,
     name: "Notion",

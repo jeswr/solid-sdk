@@ -119,12 +119,10 @@ describe("selfDescribe end-to-end", () => {
       declaresShape: ["did:web:shapes.example:Profile"],
     };
     const quads = new Parser().parse(await selfDescribe(app).toString());
-    const consumes = quads.find((q) => q.predicate.value === "https://w3id.org/jeswr/fed#consumes");
+    const consumes = quads.find((q) => q.predicate.value === "https://jeswr.org/ns/fed#consumes");
     expect(consumes?.object.termType).toBe("NamedNode");
     expect(consumes?.object.value).toBe("urn:example:shape/Contact");
-    const shape = quads.find(
-      (q) => q.predicate.value === "https://w3id.org/jeswr/fed#declaresShape",
-    );
+    const shape = quads.find((q) => q.predicate.value === "https://jeswr.org/ns/fed#declaresShape");
     expect(shape?.object.termType).toBe("NamedNode");
     expect(shape?.object.value).toBe("did:web:shapes.example:Profile");
   });
@@ -135,7 +133,7 @@ describe("selfDescribe end-to-end", () => {
       consumes: ["https://Example.COM:443/Shapes/Contact"],
     };
     const quads = new Parser().parse(await selfDescribe(app).toString());
-    const consumes = quads.find((q) => q.predicate.value === "https://w3id.org/jeswr/fed#consumes");
+    const consumes = quads.find((q) => q.predicate.value === "https://jeswr.org/ns/fed#consumes");
     // Exact lexical form the caller supplied — NOT canonicalised to
     // https://example.com/Shapes/Contact (which would break IRI matching).
     expect(consumes?.object.value).toBe("https://Example.COM:443/Shapes/Contact");
@@ -150,9 +148,7 @@ describe("selfDescribe end-to-end", () => {
     // A raw `{ } \ | ^ ` `` in a `<…>` is invalid IRIREF; the guard must keep the
     // graph parseable (this throws if the residual pass missed a char).
     const quads = new Parser().parse(turtle);
-    const consumes = quads.filter(
-      (q) => q.predicate.value === "https://w3id.org/jeswr/fed#consumes",
-    );
+    const consumes = quads.filter((q) => q.predicate.value === "https://jeswr.org/ns/fed#consumes");
     expect(consumes).toHaveLength(1);
     expectNoForbidden(consumes[0]?.object.value ?? "");
     expect(quads.some((q) => q.subject.value.startsWith("https://evil"))).toBe(false);

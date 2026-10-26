@@ -61,6 +61,13 @@ function allowedModuleSpecifier(specifier) {
   );
 }
 
+function testExemptPath(path) {
+  // Include extensionless/directory imports without probing for source or build output.
+  return /(?:^|\/)(?:test|tests|__fixtures__)(?:\/|$)|\.(?:test|spec)(?:\.[cm]?[jt]sx?)?$|(?:^|\/)vitest\.config(?:\.[cm]?[jt]s)?$/.test(
+    path,
+  );
+}
+
 function context(root, file, projects) {
   const path = relative(root, file).replaceAll("\\", "/");
   const parts = path.split("/");
@@ -76,9 +83,7 @@ function context(root, file, projects) {
     ownTest:
       /^packages\/agent-channels\/(?:src|test)\//.test(path) &&
       /\.(?:test|spec)\.[cm]?[jt]sx?$/.test(path),
-    test: /(?:^|\/)(?:test|tests)\/|\.(?:test|spec)\.[cm]?[jt]sx?$|(?:^|\/)vitest\.config\.[cm]?[jt]s$/.test(
-      path,
-    ),
+    test: testExemptPath(path),
     ui: /^apps\/suite\/(?:src\/)?apps\/agent\//.test(path),
   };
 }
@@ -137,7 +142,7 @@ function projectTarget(project, path) {
   return `${project.manifest.name}${subpath ? `/${subpath}` : ""}`;
 }
 
-function importTargets(projects, file, specifier) {
+function importTargets(root, projects, file, specifier) {
   if ((specifier.startsWith(".") || isAbsolute(specifier)) && /[^A-Za-z0-9@._/-]/.test(specifier))
     return {
       error: "relative and absolute module specifiers must match ^[A-Za-z0-9@._/-]+$",
@@ -164,11 +169,22 @@ function importTargets(projects, file, specifier) {
     const project = projects.find(({ manifest }) => manifest.name === name);
     return {
       targets: [project ? `${project.manifest.name}${specifier.slice(name.length)}` : specifier],
+      testExempt: project
+        ? testExemptPath(
+            relative(root, resolve(project.directory, specifier.slice(name.length + 1))).replaceAll(
+              "\\",
+              "/",
+            ),
+          )
+        : false,
     };
   }
   const project = owningProject(projects, target);
   if (!project) return { error: "import target is outside every workspace project" };
-  return { targets: [projectTarget(project, target)] };
+  return {
+    targets: [projectTarget(project, target)],
+    testExempt: testExemptPath(relative(root, target).replaceAll("\\", "/")),
+  };
 }
 
 function importFailures(ctx, target, typeOnly = false, manifest = false) {
@@ -285,11 +301,13 @@ function sourceFailures(root, file, projects) {
     if (agentSource && !allowedModuleSpecifier(value)) {
       report(node, `agent module specifier must be a bare package name or relative path: ${value}`);
     }
-    const { targets, error } = importTargets(projects, file, value);
+    const { targets, testExempt, error } = importTargets(root, projects, file, value);
     if (error) {
       report(node, `${error}: ${value}`);
       return;
     }
+    if (!ctx.test && testExempt)
+      report(node, `non-test source must not import a test-exempt module: ${value}`);
     for (const target of targets)
       for (const failure of importFailures(ctx, target, typeOnly))
         report(node, `${failure}: ${value}`);
@@ -345,13 +363,7 @@ function sourceFailures(root, file, projects) {
 export function checkAgentLayers(root = repoRoot) {
   const failures = [];
   const projects = workspaceProjects(root);
-  const files = readdirSync(root, { withFileTypes: true })
-    .filter((entry) => entry.isFile())
-    .map((entry) => join(root, entry.name));
-  for (const base of ["packages", "apps", "tools", "scripts", "test"]) {
-    files.push(...walk(join(root, base)));
-  }
-  for (const file of files) {
+  for (const file of walk(root)) {
     if (sourceExtensions.has(extname(file))) failures.push(...sourceFailures(root, file, projects));
     if (file.endsWith("/package.json")) {
       const manifest = JSON.parse(readFileSync(file, "utf8"));

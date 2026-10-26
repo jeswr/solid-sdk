@@ -1,3 +1,5 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /**
  * Uber → Mobility + Finance (Tier-C file import).
  *
@@ -20,6 +22,7 @@ import type { FileImportAdapter, FileImportContext, ImportFile } from "../core/f
 import { recordFragment } from "../core/slug.js";
 import type { IntegrationMetadata } from "../core/types.js";
 import { CLASSES, Invoice, TravelAction } from "../core/vocab.js";
+import { vocabMap } from "./vocab-map.js";
 
 const ID = "uber";
 
@@ -55,6 +58,7 @@ function pick(row: Record<string, string>, names: readonly string[]): string | u
 }
 
 export const uberFileAdapter: FileImportAdapter = {
+  vocabMap,
   metadata,
   accept: ".csv,text/csv",
   fileHint:

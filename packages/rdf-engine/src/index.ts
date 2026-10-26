@@ -3,6 +3,11 @@
 import { createEngine, type Runtime } from "./engine.js";
 import type { RdfEngine, RdfEngineOptions } from "./types.js";
 
+export {
+  FormGraphUnsupportedError,
+  PolicyIdentifierCollisionError,
+  PolicySubjectUnsupportedError,
+} from "./errors.js";
 export type * from "./types.js";
 
 // The web binding owns module-global WASM memory, so both initialization paths must share it.
@@ -17,7 +22,13 @@ function initialize(opts: RdfEngineOptions): Promise<Runtime> {
     } else {
       await sparq.init();
     }
-    return wasm;
+    const module: Runtime = wasm;
+    const policy = sparq as { policyEvaluate?: unknown; policyContractVersion?: unknown };
+    return {
+      ...module,
+      policyEvaluate: policy.policyEvaluate ?? module.policyEvaluate,
+      policyContractVersion: policy.policyContractVersion ?? module.policyContractVersion,
+    };
   })().catch((error) => {
     initialization = undefined;
     throw error;
