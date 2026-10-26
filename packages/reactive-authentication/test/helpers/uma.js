@@ -14,11 +14,13 @@ export const PROFILE = "http://openid.net/specs/openid-connect-core-1_0.html#IDT
  * @param {object} [options]
  * @param {boolean} [options.nonce] demand a DPoP nonce at the token endpoint first
  * @param {boolean} [options.resourceNonce] demand a resource nonce without repeating the UMA challenge
+ * @param {number} [options.expiresIn] RPT lifetime in seconds (default 300)
  * @param {boolean} [options.needInfo] answer need_info with a claims interaction hint
  * @param {(base: string) => string} [options.asUri] as_uri the resource server announces
  */
 export async function startUma(op, options = {}) {
   const keys = await generateKeyPair("ES256");
+  const expiresIn = options.expiresIn ?? 300;
   const tickets = new Set();
   const revoked = new Set();
   const seen = new Set();
@@ -92,10 +94,10 @@ export async function startUma(op, options = {}) {
           .setAudience(base)
           .setSubject(payload.webid)
           .setIssuedAt(now)
-          .setExpirationTime(now + 300)
+          .setExpirationTime(now + expiresIn)
           .setJti(randomUUID())
           .sign(keys.privateKey);
-        return json({ access_token: rpt, token_type: "DPoP", expires_in: 300 });
+        return json({ access_token: rpt, token_type: "DPoP", expires_in: expiresIn });
       } catch (e) {
         stats.rejected.push(e.message);
         return json({ error: "invalid_grant", error_description: e.message }, 400);
