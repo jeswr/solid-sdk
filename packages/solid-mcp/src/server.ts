@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 /**
@@ -17,6 +18,7 @@
 import { isContainerUrl } from "@jeswr/guarded-fetch";
 import { McpServer, ResourceTemplate } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { normalizePodRoot, requirePodScopedUrl, type SolidMcpConfig } from "./auth.js";
+import { registerChatTools } from "./chat-tools.js";
 import { listContainer, RDF_MEDIA_TYPES, readRdf, readResource } from "./pod.js";
 import { createFetchPodPort, type PodPort } from "./pod-port.js";
 import { createPodToolRegistry, registerPodTools } from "./tools.js";
@@ -113,5 +115,7 @@ export function createSolidMcpServer(config: SolidMcpServerConfig): McpServer {
   );
 
   registerPodTools(server, createPodToolRegistry(pod, config.readOnly !== false));
+  // Chat ACL discovery requires the original authenticated fetch capability.
+  if (!("pod" in config)) registerChatTools(server, { ...config, podRoot });
   return server;
 }

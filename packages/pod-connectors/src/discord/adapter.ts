@@ -1,3 +1,5 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /**
  * Discord → Social & interests. `/users/@me` as `foaf:OnlineAccount` and
  * `/users/@me/guilds` as `foaf:Group`. Discord supports secretless PKCE for
@@ -9,12 +11,14 @@ import { arr, optionalNumber, optionalText, SkipCounter } from "../core/safe.js"
 import type { ImportContext, ImportOutcome, IntegrationAdapter } from "../core/types.js";
 import { CLASSES, Group, OnlineAccount } from "../core/vocab.js";
 import { DISCORD_FIXTURES, type DiscordGuild, type DiscordUser } from "./fixtures.js";
+import { vocabMap } from "./vocab-map.js";
 
 const ID = "discord";
 const API = "https://discord.com/api/v10";
 const SCOPES = ["identify", "guilds"] as const;
 
 export const discordAdapter: IntegrationAdapter = {
+  vocabMap,
   metadata: {
     id: ID,
     name: "Discord",

@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # @jeswr/pkg-memory
 
@@ -41,6 +42,8 @@ supply a default-graph RDF/JS dataset or a Turtle assertion body using the refer
 prefixes (`me:` resolves to the required owner WebID). Turtle bodies are RDF syntax;
 use typed templates for untrusted structured tool values. Source hashes are supplied
 by the caller; the model performs no filesystem reads or network requests.
+Document and email source dates use the same RDFlib date-literal normalization
+as assertions, including dropping timezone suffixes without shifting the date.
 
 `claims: []` is valid: the builder returns an empty `nanopubs` list alongside the
 batch's worker, activity, source, entity and `skipped_sensitive` audit graphs.
@@ -76,13 +79,21 @@ applies to raw RDF/JS assertions, Turtle parsing, templates, batch metadata, Tri
 parsing and serialization, including caller-modified datasets. Serialization also
 checks every subject, predicate, object, graph name and literal datatype against
 the builder's IRI and language-tag guards before invoking the Writer.
+Blank-node labels must satisfy Turtle/TriG's `BLANK_NODE_LABEL` grammar;
+unsupported labels throw the exported `UnsupportedBlankNodeLabelError`
+(`TypeError`) before assertion hashing, building or serialization. Labels are
+validated without rewriting references, including blank-node graph names in
+caller-modified datasets.
 
 Nanopub, activity, message-fallback and annotation IDs use the reference UUIDv5
 namespace and name construction. Assertion IDs hash RDFlib 7's canonical N-Triples;
 its blank-node labels differ from RDFC-1.0. Language-tag spelling is preserved
 through hashing, graph storage and TriG parsing: `EN-US`, `en-US` and `en-us`
-produce the reference's distinct assertion IDs. Generation time is injectable. Parsing
-keeps each nanopub's provenance separate, even when assertions are shared, and
+produce the reference's distinct assertion IDs when used individually.
+Within each graph, otherwise identical language statements deduplicate ignoring
+tag case, retaining the first statement's spelling and reference assertion ID.
+Generation time is injectable. Parsing keeps each nanopub's provenance separate,
+even when assertions are shared, and
 rejects malformed skeletons, missing graphs, duplicate scalar fields and unknown
 statuses. It returns graph identifiers, statuses, evidence, attribution, categories,
 revision links and a complete dataset; it does not infer template inputs from RDF.
