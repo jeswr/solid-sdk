@@ -1,61 +1,87 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # T-073 lane report — sst-8xm.61
 
-Date: 2026-10-26. Branch: `lane/sst-8xm.61`. Base: `6ad0939808c3c1c438415d45409a5a4c30e281bd`.
+Date: 2026-10-26. Branch: `lane/sst-8xm.61`.
+Round 2 resumed from `b339a41c`; integrated main at
+`809c3c12b59847444c2b83be757b4813c4865579`.
 Environment: Node v24.22.1, pnpm 10.4.1; lifecycle scripts remain disabled.
 
 ## Commits
 
+Existing implementation and review fix, retained unchanged:
+
 - `290e9101` — `feat(fetch-rdf): add an optional RDF engine`.
-  Adds `engine?: RdfEngine` to both options interfaces. The default streaming
-  parsers and N3 Store types are preserved; engine input streams are buffered and
-  the exact engine dataset is returned as DatasetCore. Engine failures retain
-  their cause and resource metadata through RdfFetchError. Shared parse/fetch
-  tests run against both the default and real Node WASM engines; declaration
-  tests cover default Store, engine DatasetCore, and optional options arguments.
-  README and package skill document lifecycle and JSON-LD limitations.
+  Preserves default streaming parsing and N3 Store overloads; opted-in engine
+  parsing buffers streams and returns DatasetCore. Includes real Node WASM
+  parity tests, error wrapping, declarations, README and engine-option docs.
 - `770414c0` — `test(models): validate shapes with the RDF engine`.
   Migrates task, tracker, contacts, bookmark, drawing, health diary and chat
-  shape tests to real Node WASM validation, retaining negative, warning and
-  genetic-safety assertions. Removes the unused legacy validator/factory dev
-  dependencies. Adds real validation tests for solid-memory's existing body
-  contract. Updates validator usage comments and the lockfile.
-- Final report commit (this file) — `docs: record T-073 lane validation`.
+  validation tests to the real engine. Adds test-only validation of memory's
+  existing body contract; removes unused legacy validator dev dependencies.
+- `b339a41c` — `fix(fetch-rdf): decouple parser types from private engine`.
+  Exposes structural RdfParser types and keeps rdf-engine test-only. Includes
+  standalone declaration and mirror-manifest regression tests. This supersedes
+  the original report's production type dependency description.
 
-## Scope and conservative interpretation
+Round 2:
 
-solid-memory had no existing SHACL validator or published SHACL artifact. Its
-new test-only shape projects the existing MemoryData contract (one required
-string body), with minimal/full valid fixtures and missing/IRI/multiple-body
-negative fixtures. No new public shape or model API is introduced.
+- `bacda031` — `chore: integrate main into T-073 lane`.
+  Merge commit with parents `b339a41c` and `809c3c12`. Keeps main authoritative
+  outside this lane. Resolves packages/fetch-rdf/SKILL.md by retaining main's
+  complete consolidated skill and inserting the lane's engine-option paragraph.
+  Retains main's complete mirror-publish test suite and adds the lane's existing
+  no-private-engine-pin regression test. Regenerates pnpm-lock.yaml with pnpm.
+- Final documentation commit — `docs: record T-073 integration validation`.
+  Updates this report last.
 
-The engine's existing Sparq 0.1.5 JSON-LD limitations apply to opted-in parsing:
-remote contexts are refused. `documentLoader` continues to configure only the
-default JSON-LD parser. Engine ownership/disposal stays with the caller.
+## Scope and lockfile
 
-## Installation and supply-chain checks
+`git fetch origin` used the prescribed local source clone,
+`/home/runner/work/solid-sdk`; no network git remotes were fetched or merged.
+`git merge --no-commit origin/main` exposed exactly the two documented conflicts.
+All lane implementation and test files other than those resolutions remain
+byte-for-byte identical to their pre-merge versions. The diff against main stays
+within the original lane paths, the lockfile and this report.
 
-`pnpm install --offline` — PASS after manifest changes. Lockfile is consistent;
-existing peer warnings remain. Only `@jeswr/rdf-engine: workspace:*` edges were
-added (production type dependency in fetch-rdf, dev dependency in model packages).
+The final lockfile was generated from main's lockfile using:
 
-`check:packages`: not applicable; no third-party dependency was added. No lifecycle
-scripts were enabled and no dependency versions were changed.
+```sh
+pnpm install --offline --ignore-scripts
+```
 
-## Required package gate
+PASS. Existing package versions and git pins are preserved; pnpm also regenerated
+ESLint peer snapshot references. No lockfile conflicts were hand-merged and no
+new third-party dependencies were added. Earlier lockfile-only attempts required
+missing registry metadata and refreshed unrelated floating git pins; those
+outputs were discarded before the final offline regeneration. No lifecycle
+scripts were enabled. Existing peer warnings remain.
 
-Exact command:
+## Validation after integration
+
+A fresh checkout lacked rdf-engine dist output. The first direct fetch-rdf
+check therefore failed to resolve @jeswr/rdf-engine/node. A dependency-first
+Turbo build attempt then exposed the cycle described below. Built prerequisites
+with the packages' own scripts instead:
+
+```sh
+pnpm --filter @jeswr/rdf-serialize run build
+pnpm --filter @jeswr/solid-odrl run build
+pnpm --filter @jeswr/rdf-engine run build
+```
+
+PASS. Then ran the required checks for every touched package:
 
 ```sh
 for pkg in fetch-rdf solid-task-model solid-bookmark solid-drawing solid-health-diary solid-memory solid-chat-interop; do pnpm --filter "@jeswr/$pkg" run lint && pnpm --filter "@jeswr/$pkg" run build && pnpm --filter "@jeswr/$pkg" run typecheck && pnpm --filter "@jeswr/$pkg" run test || exit $?; done
 ```
 
-PASS for every package (827 tests total):
+All lint/build/typecheck/test scripts PASS, with 828 passing tests:
 
-| Package | Tests | lint / build / typecheck / test |
+| Package | Tests | Result |
 | --- | ---: | --- |
-| @jeswr/fetch-rdf | 109 | PASS |
+| @jeswr/fetch-rdf | 110 | PASS |
 | @jeswr/solid-task-model | 140 | PASS |
 | @jeswr/solid-bookmark | 42 | PASS |
 | @jeswr/solid-drawing | 76 | PASS |
@@ -63,68 +89,35 @@ PASS for every package (827 tests total):
 | @jeswr/solid-memory | 117 | PASS |
 | @jeswr/solid-chat-interop | 91 | PASS |
 
-The fetch-rdf lint/build/typecheck/test sequence was repeated after the final
-optional-options overload refinement: PASS, 109 tests. Model lint was repeated
-after wrapping documentation comments: PASS.
+`pnpm run lint:root` — PASS, including all workspace, dependency-layer,
+lockfile-transport, fetch, token, contrast and agent-layer guards.
 
-`pnpm --filter @jeswr/fetch-rdf run test:coverage` — PASS, 109 tests;
-statements 96.20%, branches 95.53%, functions 91.66%, lines 98.56%.
-All configured 90% thresholds pass. The six model packages do not configure
-coverage thresholds or coverage scripts.
+`pnpm run test:root` — PASS: 9 files, 746 tests, including main's mirror-publish
+suite and the retained fetch-rdf mirror regression.
 
-`pnpm run lint:root` — PASS, including workspace, layer, lockfile transport,
-fetch, token, contrast and agent-layer guards.
+`pnpm run gate:full` — FAIL before task execution: Turbo detects the build cycle
+`fetch-rdf → rdf-engine → solid-odrl → fetch-rdf`. The first edge is fetch-rdf's
+test-only engine dependency; solid-odrl's fetch-rdf edge is also a dev dependency.
+Individual required package checks and both root checks pass as recorded above.
+No dependency or Turbo design changes were made under the behavior-preserving
+integration brief. Resolving the cycle remains necessary for a green full gate.
 
-## Required dependants gate
+`git diff origin/main --check` for the lane's conflict resolutions and lockfile —
+PASS. The merge's complete staged diff also reports pre-existing whitespace in
+main's imported federation API reports, personal-agent docs and pkg-memory
+fixture; those authoritative main files were retained unchanged.
 
-Exact initial command:
+## Review and remaining work
 
-```sh
-pnpm exec turbo run build typecheck test --filter=...@jeswr/fetch-rdf --filter=...@jeswr/solid-task-model --filter=...@jeswr/solid-bookmark --filter=...@jeswr/solid-drawing --filter=...@jeswr/solid-health-diary --filter=...@jeswr/solid-memory --filter=...@jeswr/solid-chat-interop
-```
+The brief reports that the lane passed Codex review before this integration.
+`roborev` remains unavailable in this environment, so new per-commit automated
+verdicts could not be obtained. No review tooling was installed.
 
-FAIL: suite-vocab could not find `tsc` (it has no local node_modules). Retried
-with root tooling on PATH, without changing any manifests:
+Integration and required focused checks are complete. Remaining limitations are
+the full-gate dependency cycle and unavailable roborev. Conservative choice:
+retain the existing dependency structure and all behavior/tests rather than
+expand this integration into a build-graph change. Open questions: none.
 
-```sh
-PATH="$PWD/node_modules/.bin:$PATH" pnpm exec turbo run build typecheck test --filter=...@jeswr/fetch-rdf --filter=...@jeswr/solid-task-model --filter=...@jeswr/solid-bookmark --filter=...@jeswr/solid-drawing --filter=...@jeswr/solid-health-diary --filter=...@jeswr/solid-memory --filter=...@jeswr/solid-chat-interop
-```
-
-FAIL: stopped on federation-trust's delegation-credential snapshot mismatch
-(JWK JSON property ordering). Retried with continuation to complete independent
-checks:
-
-```sh
-PATH="$PWD/node_modules/.bin:$PATH" pnpm exec turbo run build typecheck test --continue=always --concurrency=4 --filter=...@jeswr/fetch-rdf --filter=...@jeswr/solid-task-model --filter=...@jeswr/solid-bookmark --filter=...@jeswr/solid-drawing --filter=...@jeswr/solid-health-diary --filter=...@jeswr/solid-memory --filter=...@jeswr/solid-chat-interop
-```
-
-Result: **164/167 tasks passed** (10 cached). All builds and typechecks passed.
-Three downstream test tasks failed outside the modified packages:
-
-- `@jeswr/federation-trust`: delegation snapshot expects JWK property order
-  `crv,x,kty`; Node emits `kty,crv,x`. No source changes in this package.
-- `@jeswr/solid-components`: all 204 tests passed, but Vitest reported an
-  unhandled `setFormValue is not a function` rejection from @ro-kit/ui-widgets
-  during `test/shacl-form-edit.test.ts` under jsdom. No source changes here.
-- `create-solid-demo`: packed-bin tests could not write npm's cache on the
-  read-only filesystem. Resolved for the isolated rerun with a temporary cache:
-
-```sh
-npm_config_cache=/tmp/sst-8xm.61-npm-cache npm_config_ignore_scripts=true PATH="$PWD/node_modules/.bin:$PATH" pnpm --filter create-solid-demo run test
-```
-
-PASS: 32 tests passed, 1 existing skipped test. The two remaining downstream
-failures were left outside this lane's scope; no snapshots were updated and no
-assertions or failures were suppressed. No whole-workspace gate or gate:full ran.
-
-## Review, cleanup and remaining work
-
-`roborev` is unavailable in this environment and no executable post-commit hook
-is installed; automated per-commit verdicts could not be obtained.
-
-`git diff --check` — PASS. Generated clientid.jsonld/callback.html files under
-eight apps' web/public directories were removed. No dist files were committed.
-No pushes, PRs, branch switches, remote fetches, merges or other checkouts used.
-
-Implementation is complete. Remaining validation limitations: the two downstream
-test failures above and unavailable roborev. Open questions: none.
+No pushes, PRs, branch switches, other checkout modifications, generated dist
+commits, snapshot updates or suppressed test failures. STATUS.md is committed
+last; the lane finishes with a clean working tree.
