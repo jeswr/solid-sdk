@@ -195,6 +195,22 @@ describe("createShareInbox", () => {
     expect(handler).toHaveBeenCalledOnce();
   });
 
+  test("a live batch is not handed out again by takePending, nor twice by it", async () => {
+    const { plugin, emit } = fakePlugin();
+    const shared = batch([{ kind: "text", text: "hi" }]);
+    plugin.getPending.mockResolvedValue({ batches: [shared, shared] });
+    const inbox = createShareInbox(plugin);
+    const handler = vi.fn();
+    await inbox.onReceived(handler);
+    emit(shared);
+    await flush();
+    expect(handler).toHaveBeenCalledOnce();
+    await expect(inbox.takePending()).resolves.toEqual([]);
+    const other = createShareInbox(plugin);
+    await expect(other.takePending()).resolves.toHaveLength(1);
+    await expect(other.takePending()).resolves.toEqual([]);
+  });
+
   test("acknowledges a batch", async () => {
     const { plugin } = fakePlugin();
     await createShareInbox(plugin).acknowledge(validateShareBatch(batch([file()])));

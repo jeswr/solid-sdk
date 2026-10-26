@@ -166,11 +166,14 @@ export interface ShareInboxOptions {
 }
 
 export interface ShareInbox {
-  /** Validated batches that arrived before anyone was listening. They stay until acknowledged. */
+  /**
+   * Validated batches that arrived before anyone was listening and that this inbox has not handed
+   * out yet. They stay on the device until acknowledged.
+   */
   takePending(): Promise<ShareBatch[]>;
   /**
-   * Subscribes to new batches; returns an unsubscribe function. A batch already handed out by this
-   * inbox (here or by `takePending`) is not delivered again until it is acknowledged.
+   * Subscribes to new batches; returns an unsubscribe function. Each batch is handed out once per
+   * inbox, by this or by `takePending`, until it is acknowledged.
    */
   onReceived(handler: (batch: ShareBatch) => void): Promise<() => Promise<void>>;
   /** Reads file item `index` of `batch` into a Blob, enforcing the declared size. */
@@ -185,8 +188,13 @@ export function createShareInbox(
   options: ShareInboxOptions = {},
 ): ShareInbox {
   const limits = options.limits ?? DEFAULT_SHARE_LIMITS;
-  // iOS announces pending batches on every resume, so a live event can repeat a pending batch.
+  // iOS announces pending batches on every resume, so live events and pending reads overlap.
   const handedOut = new Set<string>();
+  const claim = (batch: ShareBatch | undefined): batch is ShareBatch => {
+    if (batch === undefined || handedOut.has(batch.id)) return false;
+    handedOut.add(batch.id);
+    return true;
+  };
   const accept = async (raw: unknown): Promise<ShareBatch | undefined> => {
     try {
       return validateShareBatch(raw, limits);
@@ -205,17 +213,13 @@ export function createShareInbox(
       const { batches } = await plugin.getPending();
       if (!Array.isArray(batches)) return [];
       const accepted = await Promise.all(batches.map(accept));
-      const valid = accepted.filter((batch): batch is ShareBatch => batch !== undefined);
-      for (const batch of valid) handedOut.add(batch.id);
-      return valid;
+      return accepted.filter(claim);
     },
 
     async onReceived(handler) {
       const listener = await plugin.addListener("shareReceived", (raw) => {
         void accept(raw).then((batch) => {
-          if (batch === undefined || handedOut.has(batch.id)) return;
-          handedOut.add(batch.id);
-          handler(batch);
+          if (claim(batch)) handler(batch);
         });
       });
       return () => listener.remove();
