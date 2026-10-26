@@ -1,3 +1,5 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /**
  * The integration adapter contract (docs/integrations-catalog.md §"The common
  * adapter shape"). An adapter pulls a user's data from a platform API,
@@ -82,6 +84,8 @@ export interface NormalisedDoc {
   readonly forClass: string;
   /** The document content, built via the typed vocab wrappers. */
   readonly dataset: DatasetCore;
+  /** Source document for items without their own schema:url (e.g. file exports). */
+  readonly sourceUrl?: string;
   /**
    * Skip Type-Index registration for this doc's class (default false). Used
    * for companion documents that ride along in an already-registered
@@ -156,7 +160,26 @@ export interface FixtureRoute {
 }
 
 /** The adapter: metadata + auth config + the import implementation. */
+/** Per-adapter vocabulary seam; preserves legacy types for older readers. */
+export type VocabMap = (doc: NormalisedDoc) => NormalisedDoc;
+
+/** Host-persisted state. Dates are ISO strings; counts describe the latest successful run. */
+export interface ConnectorState {
+  readonly connectedAt: string;
+  readonly lastSync?: string;
+  readonly cursor?: string;
+  readonly lastOutcome: "success" | "error";
+  readonly counts: { readonly documents: number; readonly items: number; readonly skipped: number };
+}
+
+export interface ConnectorStateOptions {
+  readonly state?: ConnectorState;
+  /** Called after completion or failure; failures retain the previous checkpoint. */
+  readonly onState?: (state: ConnectorState) => void;
+}
+
 export interface IntegrationAdapter {
+  readonly vocabMap?: VocabMap;
   readonly metadata: IntegrationMetadata;
   /** Present iff `authKind === "oauth-pkce"`. */
   readonly oauth?: OAuthAppConfig;

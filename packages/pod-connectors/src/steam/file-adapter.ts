@@ -1,3 +1,5 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /**
  * Steam → Media + Social (Tier-C file import).
  *
@@ -21,6 +23,7 @@ import type { FileImportAdapter, FileImportContext, ImportFile } from "../core/f
 import { recordFragment } from "../core/slug.js";
 import type { IntegrationMetadata } from "../core/types.js";
 import { CLASSES, OnlineAccount, VideoGame } from "../core/vocab.js";
+import { vocabMap } from "./vocab-map.js";
 
 const ID = "steam";
 
@@ -42,6 +45,7 @@ export interface SteamGame {
 }
 
 export const steamFileAdapter: FileImportAdapter = {
+  vocabMap,
   metadata,
   accept: ".json,application/json",
   fileHint:
