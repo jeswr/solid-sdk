@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 /**
  * `diet:ToleranceConclusion` (DESIGN §2.2 entity 7) + `diet:DietPlan` (entity 9).
@@ -22,19 +23,11 @@
  */
 
 import type { DatasetCore, Literal, DataFactory as RdfDataFactory } from "@rdfjs/types";
-import {
-  LiteralAs,
-  LiteralFrom,
-  NamedNodeAs,
-  NamedNodeFrom,
-  OptionalAs,
-  OptionalFrom,
-  SetFrom,
-  TermWrapper,
-} from "@rdfjs/wrapper";
+import { LiteralAs, LiteralFrom, NamedNodeAs, NamedNodeFrom, TermWrapper } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
 import { confidenceCodec, verdictCodec } from "./concepts.js";
 import { httpIriOrUndefined, isHttpIri } from "./iri.js";
+import { AliasOptionalAs, AliasOptionalFrom, AliasSetFrom, hasType } from "./legacy.js";
 import { assertSubjectSingletons } from "./rdfGuards.js";
 import { parseBody, storeToTurtle } from "./serialize.js";
 import { setIfDefined, tryRead, validDateOrUndefined } from "./util.js";
@@ -136,24 +129,29 @@ export class ToleranceConclusion extends TermWrapper {
     return this.value;
   }
   get types(): Set<string> {
-    return SetFrom.subjectPredicate(this, rdf("type"), NamedNodeAs.string, NamedNodeFrom.string);
+    return AliasSetFrom.subjectPredicate(
+      this,
+      rdf("type"),
+      NamedNodeAs.string,
+      NamedNodeFrom.string,
+    );
   }
   mark(): this {
     this.types.add(DIET_TOLERANCE_CONCLUSION);
     return this;
   }
   get isConclusion(): boolean {
-    return this.types.has(DIET_TOLERANCE_CONCLUSION);
+    return hasType(this, DIET_TOLERANCE_CONCLUSION);
   }
 
   /** `diet:aboutTrigger` → `diet:{slug}`; read back as the slug. */
   get aboutTrigger(): TriggerSlug | undefined {
     return triggerSlugFromIri(
-      OptionalFrom.subjectPredicate(this, diet("aboutTrigger"), NamedNodeAs.string) ?? "",
+      AliasOptionalFrom.subjectPredicate(this, diet("aboutTrigger"), NamedNodeAs.string) ?? "",
     );
   }
   set aboutTrigger(value: TriggerSlug | undefined) {
-    OptionalAs.object(
+    AliasOptionalAs.object(
       this,
       diet("aboutTrigger"),
       value ? triggerIri(value) : undefined,
@@ -164,11 +162,11 @@ export class ToleranceConclusion extends TermWrapper {
   /** `diet:verdict` → `diet:{concept}`; read back as the friendly token. */
   get verdict(): Verdict | undefined {
     return verdictCodec.fromIri(
-      OptionalFrom.subjectPredicate(this, diet("verdict"), NamedNodeAs.string),
+      AliasOptionalFrom.subjectPredicate(this, diet("verdict"), NamedNodeAs.string),
     );
   }
   set verdict(value: Verdict | undefined) {
-    OptionalAs.object(
+    AliasOptionalAs.object(
       this,
       diet("verdict"),
       value ? verdictCodec.toIri(value) : undefined,
@@ -179,11 +177,11 @@ export class ToleranceConclusion extends TermWrapper {
   /** `diet:confidence` → `diet:{concept}`; read back as the friendly token. */
   get confidence(): Confidence | undefined {
     return confidenceCodec.fromIri(
-      OptionalFrom.subjectPredicate(this, diet("confidence"), NamedNodeAs.string),
+      AliasOptionalFrom.subjectPredicate(this, diet("confidence"), NamedNodeAs.string),
     );
   }
   set confidence(value: Confidence | undefined) {
-    OptionalAs.object(
+    AliasOptionalAs.object(
       this,
       diet("confidence"),
       value ? confidenceCodec.toIri(value) : undefined,
@@ -192,25 +190,25 @@ export class ToleranceConclusion extends TermWrapper {
   }
 
   get note(): string | undefined {
-    return OptionalFrom.subjectPredicate(this, diet("note"), LiteralAs.string);
+    return AliasOptionalFrom.subjectPredicate(this, diet("note"), LiteralAs.string);
   }
   set note(value: string | undefined) {
-    OptionalAs.object(this, diet("note"), value, LiteralFrom.string);
+    AliasOptionalAs.object(this, diet("note"), value, LiteralFrom.string);
   }
 
   /** `diet:reviewAfter` — an `xsd:date`. */
   get reviewAfter(): Date | undefined {
-    return OptionalFrom.subjectPredicate(this, diet("reviewAfter"), LiteralAs.date);
+    return AliasOptionalFrom.subjectPredicate(this, diet("reviewAfter"), LiteralAs.date);
   }
   set reviewAfter(value: Date | undefined) {
     // Date-only xsd:date lexical (YYYY-MM-DD) — NOT LiteralFrom.date, which emits
     // an invalid full-timestamp lexical for the xsd:date datatype.
-    OptionalAs.object(this, diet("reviewAfter"), value, xsdDateFrom);
+    AliasOptionalAs.object(this, diet("reviewAfter"), value, xsdDateFrom);
   }
 
   /** `diet:derivedFrom` — the evidence IRIs (live set; ⊑ `prov:wasDerivedFrom`). */
   get derivedFrom(): Set<string> {
-    return SetFrom.subjectPredicate(
+    return AliasSetFrom.subjectPredicate(
       this,
       DIET_DERIVED_FROM,
       NamedNodeAs.string,
@@ -220,17 +218,17 @@ export class ToleranceConclusion extends TermWrapper {
 
   /** `health:patient` — the pod-owner Patient/Person WebID. */
   get patient(): string | undefined {
-    return OptionalFrom.subjectPredicate(this, HEALTH_PATIENT_PROP, NamedNodeAs.string);
+    return AliasOptionalFrom.subjectPredicate(this, HEALTH_PATIENT_PROP, NamedNodeAs.string);
   }
   set patient(value: string | undefined) {
-    OptionalAs.object(this, HEALTH_PATIENT_PROP, value, NamedNodeFrom.string);
+    AliasOptionalAs.object(this, HEALTH_PATIENT_PROP, value, NamedNodeFrom.string);
   }
 
   get created(): Date | undefined {
-    return OptionalFrom.subjectPredicate(this, dct("created"), LiteralAs.date);
+    return AliasOptionalFrom.subjectPredicate(this, dct("created"), LiteralAs.date);
   }
   set created(value: Date | undefined) {
-    OptionalAs.object(this, dct("created"), value, LiteralFrom.dateTime);
+    AliasOptionalAs.object(this, dct("created"), value, LiteralFrom.dateTime);
   }
 }
 
@@ -357,19 +355,24 @@ export class DietPlan extends TermWrapper {
     return this.value;
   }
   get types(): Set<string> {
-    return SetFrom.subjectPredicate(this, rdf("type"), NamedNodeAs.string, NamedNodeFrom.string);
+    return AliasSetFrom.subjectPredicate(
+      this,
+      rdf("type"),
+      NamedNodeAs.string,
+      NamedNodeFrom.string,
+    );
   }
   mark(): this {
     this.types.add(DIET_DIET_PLAN);
     return this;
   }
   get isDietPlan(): boolean {
-    return this.types.has(DIET_DIET_PLAN);
+    return hasType(this, DIET_DIET_PLAN);
   }
 
   /** `diet:excludes` → the excluded TriggerClass IRIs (live set). */
   get excludes(): Set<string> {
-    return SetFrom.subjectPredicate(
+    return AliasSetFrom.subjectPredicate(
       this,
       diet("excludes"),
       NamedNodeAs.string,
@@ -379,22 +382,27 @@ export class DietPlan extends TermWrapper {
 
   /** `diet:restsOn` → the ToleranceConclusion IRIs (live set; ⊑ `prov:wasDerivedFrom`). */
   get restsOn(): Set<string> {
-    return SetFrom.subjectPredicate(this, DIET_RESTS_ON, NamedNodeAs.string, NamedNodeFrom.string);
+    return AliasSetFrom.subjectPredicate(
+      this,
+      DIET_RESTS_ON,
+      NamedNodeAs.string,
+      NamedNodeFrom.string,
+    );
   }
 
   /** `health:patient` — the pod-owner Patient/Person WebID. */
   get patient(): string | undefined {
-    return OptionalFrom.subjectPredicate(this, HEALTH_PATIENT_PROP, NamedNodeAs.string);
+    return AliasOptionalFrom.subjectPredicate(this, HEALTH_PATIENT_PROP, NamedNodeAs.string);
   }
   set patient(value: string | undefined) {
-    OptionalAs.object(this, HEALTH_PATIENT_PROP, value, NamedNodeFrom.string);
+    AliasOptionalAs.object(this, HEALTH_PATIENT_PROP, value, NamedNodeFrom.string);
   }
 
   get created(): Date | undefined {
-    return OptionalFrom.subjectPredicate(this, dct("created"), LiteralAs.date);
+    return AliasOptionalFrom.subjectPredicate(this, dct("created"), LiteralAs.date);
   }
   set created(value: Date | undefined) {
-    OptionalAs.object(this, dct("created"), value, LiteralFrom.dateTime);
+    AliasOptionalAs.object(this, dct("created"), value, LiteralFrom.dateTime);
   }
 }
 
@@ -418,13 +426,13 @@ function parseDietPlanImpl(url: string, dataset: DatasetCore): DietPlanData | un
   // an unknown/hostile `diet:excludes` IRI and returning a PLAN WITH FEWER EXCLUSIONS
   // is dangerous (under-restriction). If any excludes triple exists but does not map
   // to a known TriggerClass, reject the whole plan rather than under-apply it.
-  const rawExcludes = [...doc.excludes];
-  const excludes = rawExcludes
-    .map((iri) => triggerSlugFromIri(iri))
-    .filter((s): s is TriggerSlug => s !== undefined)
-    .sort();
-  if (excludes.length !== rawExcludes.length) return undefined;
-  data.excludes = excludes;
+  const excludes = new Set<TriggerSlug>();
+  for (const iri of doc.excludes) {
+    const slug = triggerSlugFromIri(iri);
+    if (slug === undefined) return undefined;
+    excludes.add(slug);
+  }
+  data.excludes = [...excludes].sort();
   const restsOn = sortedStrings(doc.restsOn).filter(isHttpIri);
   if (restsOn.length) data.restsOn = restsOn;
   return data;

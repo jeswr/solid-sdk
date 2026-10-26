@@ -2,10 +2,12 @@
 // AUTHORED-BY Codex GPT-6
 import type { DatasetCore } from "@rdfjs/types";
 import { DataFactory } from "n3";
+import { IntegrationSyncError } from "./errors.js";
 import { copyDataset, mergeItems } from "./incremental.js";
 import { registrationsFor } from "./pod-writer.js";
 import { PROV, Provenance } from "./provenance.js";
 import type {
+  BinaryDoc,
   ConnectorState,
   ConnectorStateOptions,
   ImportOutcome,
@@ -14,11 +16,14 @@ import type {
   TypeRegistrationRequest,
   VocabMap,
   WriteConditions,
+  WrittenBinary,
   WrittenDoc,
 } from "./types.js";
 import { safeIri } from "./vocab.js";
 
 const RUNS = "_provenance.ttl";
+/** Connector containers with a run in progress in this process. */
+const active = new Set<string>();
 /** Shared write pipeline for API and file runners; host owns state persistence. */
 export function createImportSession(
   writer: PodWriter,
@@ -27,8 +32,15 @@ export function createImportSession(
   options: ConnectorStateOptions,
   vocabMap?: VocabMap,
 ) {
+  // One run per connector container at a time: imports reconcile against their own reads
+  // (source inventories, collection documents), which an overlapping run would invalidate.
+  const claim = writer.resolve(RUNS);
+  if (active.has(claim))
+    throw new IntegrationSyncError(id, "An import for this connector is already running.");
+  active.add(claim);
   const started = new Date();
   const activityUrl = `${writer.resolve(RUNS)}#run-${crypto.randomUUID()}`;
+  const connectorRoot = new URL(".", writer.resolve(RUNS)).href;
   const connector = `urn:solid:connector:${encodeURIComponent(id)}`;
   const reads = new Map<string, Awaited<ReturnType<PodWriter["read"]>>>();
   const used = new Set<string>([source]);
@@ -50,7 +62,14 @@ export function createImportSession(
       throw new Error("Reserved connector provenance slug.");
     if (!reads.has(url)) await read(input.slug);
     const previous = reads.get(url);
-    const doc = vocabMap ? vocabMap({ ...input, dataset: copyDataset(input.dataset) }) : input;
+    const sourceSubjects = new Set(
+      [...input.dataset]
+        .filter((q) => q.subject.termType === "NamedNode")
+        .map((q) => q.subject.value),
+    );
+    const doc = vocabMap
+      ? vocabMap({ ...input, dataset: copyDataset(input.dataset) }, { webId: writer.webId })
+      : input;
     const incoming = copyDataset(doc.dataset);
     const subjects = new Set(
       [...incoming].filter((q) => q.subject.termType === "NamedNode").map((q) => q.subject.value),
@@ -63,6 +82,8 @@ export function createImportSession(
     document.generatedBy.clear();
     document.generatedBy.add(activityUrl);
     for (const subject of subjects) {
+      // Linked identities keep their typing, but were not created by this import.
+      if (!subject.startsWith(connectorRoot)) continue;
       const item = new Provenance(subject, dataset, DataFactory);
       const origin = item.sourceUrl ?? fallback;
       item.derivedFrom.add(origin);
@@ -70,22 +91,59 @@ export function createImportSession(
       item.generatedBy.clear();
       item.generatedBy.add(activityUrl);
       used.add(origin);
-      if (subject !== url) itemKeys.add(JSON.stringify([url, subject]));
+      // Sector maps can add linked people/activities. Counts describe the
+      // adapter's local source items; local mapped resources also get provenance.
+      if (subject !== url && sourceSubjects.has(subject))
+        itemKeys.add(JSON.stringify([url, subject]));
     }
     const result = await writer.write({ ...doc, dataset }, conditions ?? conditionFor(previous));
-    for (const request of registrationsFor([result])) {
+    let registered = result;
+    if (doc.registrationContainer !== undefined) {
+      const container = writer.resolve(doc.registrationContainer);
+      if (!container.endsWith("/") || !result.url.startsWith(container))
+        throw new IntegrationSyncError(id, "Registration container must contain the document.");
+      registered = { ...result, registrationContainer: container };
+    }
+    for (const request of registrationsFor([registered])) {
       registrations.set(JSON.stringify([request.forClass, request.container]), request);
     }
     reads.delete(url);
     const index = written.findIndex((w) => w.url === result.url);
-    if (index === -1) written.push(result);
-    else written[index] = result;
+    if (index === -1) written.push(registered);
+    else written[index] = registered;
     return result;
+  }
+  /** Binary resources carry no RDF; their metadata documents link to them. */
+  async function writeBinary(doc: BinaryDoc): Promise<WrittenBinary> {
+    if (!writer.writeBinary)
+      throw new IntegrationSyncError(id, "This host cannot store binary resources.");
+    const url = writer.resolve(doc.slug);
+    if (url.split(/[?#]/, 1)[0] === writer.resolve(RUNS))
+      throw new Error("Reserved connector provenance slug.");
+    return writer.writeBinary(doc);
+  }
+  async function remove(slug: string): Promise<void> {
+    if (!writer.remove) throw new IntegrationSyncError(id, "This host cannot delete resources.");
+    const url = writer.resolve(slug);
+    if (url.split(/[?#]/, 1)[0] === writer.resolve(RUNS))
+      throw new Error("Reserved connector provenance slug.");
+    const previous = reads.get(url);
+    reads.delete(url);
+    await writer.remove(slug, previous?.etag ? { ifMatch: previous.etag } : undefined);
+    const index = written.findIndex((w) => w.url === url);
+    if (index !== -1) written.splice(index, 1);
   }
   let finalized = false;
   async function finish() {
     if (finalized) return;
     finalized = true;
+    try {
+      await recordRun();
+    } finally {
+      active.delete(claim);
+    }
+  }
+  async function recordRun() {
     const previous = await writer.read(RUNS);
     const dataset = copyDataset(previous?.dataset);
     const activity = new Provenance(activityUrl, dataset, DataFactory);
@@ -117,5 +175,14 @@ export function createImportSession(
         : (options.state?.counts ?? { documents: 0, items: 0, skipped: 0 }),
     };
   }
-  return { read, write, written, registrations: () => [...registrations.values()], finish, state };
+  return {
+    read,
+    write,
+    writeBinary,
+    remove,
+    written,
+    registrations: () => [...registrations.values()],
+    finish,
+    state,
+  };
 }

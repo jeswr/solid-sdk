@@ -1,0 +1,10 @@
+{
+  "$schema": "https://turborepo.dev/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    "build": {
+      "env": ["APP_ORIGIN", "VERCEL"],
+      "inputs": ["$TURBO_DEFAULT$", ".env*"]
+    }
+  }
+}
