@@ -125,3 +125,45 @@ context, including in-pod references, since fetch-rdf cannot inject a scoped con
 keep HTML inert and use a small text reduction rather than introduce a dependency. The text
 fallback is not an HTML sanitiser. No new open questions or unfinished implementation work.
 Verification limitations remain the unavailable roborev executable and the unrelated full gate.
+
+## Fix round 2 — review of 75079ec3e72e
+
+Implemented exactly the five supplied findings on `lane/sst-bi8j`, based on
+`75079ec3e72e8388d368cc17e6c4211764010467`:
+
+- `c2f7dcb5` — `fix: bound mail import and complete thread paging`: replace retained
+  per-line arrays with blocks of at most 64 KiB. Classify separator candidates before charging
+  message bytes, discard envelope bytes as they stream, and scan complete leading quote runs
+  for mboxrd unquoting, including unterminated final lines. Reserve literal `system:` folder
+  keys for imports and archive/star operations while preserving custom label identifiers and
+  case. Load the candidate threads' referenced message documents before sorting and paging.
+  Add regression tests for allocation bounds with 262,144 short lines, separator chunk splits
+  at the exact message limit, long quoted/unquoted prefixes, folder membership/title isolation,
+  and complete cross-folder conversations with newest-reply ordering and page boundaries.
+- This final documentation commit — `docs: record second mail fix validation`.
+
+Verification before the final commit (all inside this checkout):
+
+| Command | Result |
+| --- | --- |
+| `pnpm --filter @jeswr/guarded-fetch run build && pnpm --filter @jeswr/suite-ui run build` | PASS; existing dependency output only, uncommitted |
+| `pnpm --filter @jeswr/app-suite run lint && pnpm --filter @jeswr/app-suite run build && pnpm --filter @jeswr/app-suite run typecheck && pnpm --filter @jeswr/app-suite run test` | PASS; lint, Next production build, strict tsc, 9 test files / 78 tests |
+| `pnpm --filter @jeswr/app-suite run test:coverage` | PASS; 100% statements (488/488), branches (259/259), functions (156/156), lines (437/437) |
+| `pnpm run lint:root` | PASS; workspace/transport/fetch/token checks and 74 contrast pairs |
+| `TURBO_SCM_BASE=75079ec3e72e8388d368cc17e6c4211764010467 pnpm run gate` | PASS; 7/7 tasks, 0 cached |
+| `git diff --check` | PASS |
+| `command -v roborev` | Exit 1; executable unavailable, so no automated review verdict obtained |
+| `pnpm run gate:full` | Not run: the existing unstorage-solid bootstrap invokes a network `git clone`, prohibited by this lane; prior full-gate failures remain documented above |
+
+The first new paging assertion compared internal RDF store representations; it was corrected
+before the passing coverage run to compare returned thread/message values and dates. The first
+package gate found a missing `this` type annotation in allocation-test instrumentation; this
+was corrected before the successful full package and affected-workspace gates.
+
+All five findings are addressed; no implementation work or new questions remain. The conservative
+namespace choice keeps system folders and custom labels in the same existing folder container,
+so discovery still lists them directly. A custom `system:inbox` label escapes its colon and cannot
+collide with the reserved system document. No migration of previously imported data was requested.
+No dependencies, UI, screenshots, or other packages were changed. No network Git operations,
+branch switches, pushes, PRs, or changes to other checkouts were performed. Remaining verification
+limitations are the unavailable roborev executable and the prohibited full-workspace bootstrap.
