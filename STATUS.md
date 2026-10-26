@@ -76,3 +76,27 @@ Validation used `export PATH="$PWD/node_modules/.bin:$PATH"`, as in the original
 Model coverage remains **100% statements (176/176), branches (93/93), functions (44/44), lines (156/156)**, including 100% for `root.ts`.
 
 The full-workspace gate was not rerun in this fix round: the original lane already identified the unrelated `unstorage-solid` dependency bootstrap failure, and its build script clones a network remote, which this lane expressly prohibits. The required package gate and affected repository gate pass. No scoped implementation work is unfinished, and this fix round adds no open questions. Conservative choices: require an advertised metadata URL, bound concurrent marker waits, and never adopt or mark an unmarked occupied path. No dependencies, UI, screenshots, tracker state, or unrelated code changed; nothing was pushed and no PR was opened.
+
+## Fix round 2 — marker failure recovery and N3 Patch
+
+Review baseline: `55f55af19dadeb9f99388dc891b7aa6a8debed5b`.
+
+- `738e54aa` — `fix(drive): recover failed root marker writes`: address both medium findings. Send the marker as a `text/n3` insert-only `solid:InsertDeletePatch`. If marker writing or verification fails, attempt to delete only this call's newly created, initially empty, unmarked container with `If-Match` using its pre-PATCH strong ETag. Concurrent edits and successfully persisted markers with lost responses fail that precondition; a newly nonempty container also prevents server-side deletion. Preserve the original failure even if cleanup fails. Existing unmarked paths are never patched or deleted.
+- Final documentation commit — `docs(drive): record marker recovery validation` (this subsection).
+
+Regression tests use an N3-only mock server that parses and applies the insertion formula and enforces conditional DELETE and nonempty-container rejection. They cover recovery on a later bootstrap call after rejected or ineffective PATCHes, transport rejection, lost PATCH responses, verification-read failure, concurrent metadata/child writes, already populated/marked snapshots, absent/weak ETags, and HTTP/transport cleanup failures.
+
+Validation used `export PATH="$PWD/node_modules/.bin:$PATH"`, as in the earlier rounds:
+
+| Command | Result |
+| --- | --- |
+| `pnpm exec turbo run build --filter='@jeswr/app-suite^...'` | PASS; all 4 workspace dependency builds. |
+| `pnpm --filter @jeswr/app-suite run lint && pnpm --filter @jeswr/app-suite run build && pnpm --filter @jeswr/app-suite run typecheck && pnpm --filter @jeswr/app-suite run test` | PASS; production Next build, lint, typecheck, 9 test files / 174 tests. An earlier standalone typecheck found a test-table literal widening error, fixed with a const tuple before this gate. |
+| `pnpm run lint:root` | PASS; workspace, transport, fetch, token and contrast checks (74 pairs, 0 failures). |
+| `TURBO_SCM_BASE=55f55af19dadeb9f99388dc891b7aa6a8debed5b pnpm run gate` | PASS; 9/9 tasks, 4 cached. |
+| `git diff --check` | PASS. |
+| `command -v roborev` | Unavailable; automated per-commit review could not run. |
+
+Model coverage remains **100% statements (181/181), branches (99/99), functions (44/44), lines (161/161)**, including 100% for `root.ts`.
+
+Conservative recovery choice: rollback requires a strong container ETag and a successful conditional DELETE. With no strong ETag, concurrent changes, a nonempty container, or rejected cleanup, preserve the container and the original error rather than risk data loss. No persistent ownership schema or shared account state was introduced. The full-workspace gate remains unrun for the previously documented unrelated `unstorage-solid` bootstrap: inspection reconfirmed its network clone, prohibited in this lane. No scoped work is unfinished and this round adds no open questions. No dependencies, UI, screenshots, tracker state, or unrelated code changed; nothing was pushed and no PR was opened.
