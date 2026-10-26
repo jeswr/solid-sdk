@@ -45,7 +45,7 @@ function umaClient(server, options = {}) {
   const manager = new ReactiveFetchManager({
     providers: options.providers?.(provider) ?? [provider],
     boundary: new CredentialBoundary([`${server.url}/uma/`], { allowInsecureHttp: true }),
-    fetch: transport,
+    fetch: options.fetch ?? transport,
   });
   return { code, provider, manager };
 }
@@ -85,6 +85,72 @@ test("a rejected RPT is exchanged again once with the new ticket; a DPoP nonce i
     assert.equal(nonced.stats.nonceChallenges, 1);
   } finally {
     await nonced.close();
+  }
+});
+
+test("UMA renews a rejected RPT only in its issuing context when two contexts share its value", async () => {
+  const namespace = `uma-reused-${crypto.randomUUID()}`;
+  const fence = new SessionFence(namespace, { broadcast: false });
+  const rpts = createMemoryStore();
+  const writes = [];
+  let sharedToken;
+  let exchanges = 0;
+  const started = Promise.withResolvers();
+  const gate = Promise.withResolvers();
+  const first = `${uma.url}/uma/shared-first`;
+  const second = `${uma.url}/uma/shared-second`;
+  let paused = false;
+  const { manager, provider, code } = umaClient(uma, {
+    namespace,
+    fence,
+    context: (request) => request.url,
+    fetch: async (request) => {
+      if (request.url === first && request.headers.has("authorization") && !paused) {
+        paused = true;
+        started.resolve();
+        await gate.promise;
+      }
+      return await transport(request);
+    },
+    rptStore: {
+      ...rpts,
+      setItem: async (key, value) => {
+        writes.push({ key, value });
+        await rpts.setItem(key, value);
+      },
+    },
+    http: {
+      ...insecure,
+      fetch: async (url, init) => {
+        const response = await transport(url, init);
+        if (String(url) !== `${uma.url}/token`) return response;
+        const body = await response.json();
+        if (++exchanges === 1) sharedToken = body.access_token;
+        if (exchanges === 2) body.access_token = sharedToken;
+        return Response.json(body);
+      },
+    },
+  });
+  try {
+    const pending = manager.fetch(first);
+    await started.promise;
+    assert.equal((await manager.fetch(second)).status, 200);
+    assert.equal(writes.length, 2);
+    assert.notEqual(writes[0].key, writes[1].key);
+    assert.equal(writes[0].value.value.accessToken, sharedToken);
+    assert.equal(writes[1].value.value.accessToken, sharedToken);
+    uma.revoke(sharedToken);
+    gate.resolve();
+
+    assert.equal((await pending).status, 200, "the first context renews once");
+    assert.equal(exchanges, 3);
+    assert.notEqual((await rpts.getItem(writes[0].key)).value.accessToken, sharedToken);
+    assert.deepEqual(await rpts.getItem(writes[1].key), writes[1].value);
+    assert.equal(code.calls, 1, "RPT renewal reuses the ID-token session");
+  } finally {
+    gate.resolve();
+    await provider.forget();
+    fence.close();
   }
 });
 

@@ -103,7 +103,7 @@ export class SolidUmaTokenProvider implements TokenProvider {
   readonly #rpts: FencedCache<UmaRpt>;
   readonly #metadata: KeyValueStore<oauth.AuthorizationServer>;
   readonly #context: ContextKey;
-  readonly #issued = new Map<string, string>();
+  #requests = new WeakMap<Request, string>();
   readonly #contexts = new Map<string, string>();
   readonly #callbackUri: string;
 
@@ -245,23 +245,27 @@ export class SolidUmaTokenProvider implements TokenProvider {
       );
     }
     await this.#rpts.assertCurrent(ticket);
-    this.#issued.set(rpt.accessToken, key);
     this.#contexts.set(request.url, key);
     headers.set(
       "Authorization",
       `${rpt.tokenType === "dpop" ? "DPoP" : "Bearer"} ${rpt.accessToken}`,
     );
-    return new Request(request, { headers });
+    const upgraded = new Request(request, { headers });
+    this.#requests.set(upgraded, key);
+    return upgraded;
   }
 
   async invalidate(upgraded: Request): Promise<void> {
     const rejected = upgraded.headers.get("Authorization")?.replace(/^(DPoP|Bearer) /, "");
-    const key = rejected === undefined ? undefined : this.#issued.get(rejected);
-    if (key !== undefined) await this.#rpts.removeIf(key, (rpt) => rpt.accessToken === rejected);
+    // Request copies retain their verified resource context; originals keep the precise issuing
+    // context even when another request to that URL used a different context in the meantime.
+    const key = this.#requests.get(upgraded) ?? this.#contexts.get(upgraded.url);
+    if (key !== undefined && rejected !== undefined)
+      await this.#rpts.removeIf(key, (rpt) => rpt.accessToken === rejected);
   }
 
   async forget(): Promise<void> {
-    this.#issued.clear();
+    this.#requests = new WeakMap();
     this.#contexts.clear();
     await this.#rpts.forget();
     await this.#session.forget();

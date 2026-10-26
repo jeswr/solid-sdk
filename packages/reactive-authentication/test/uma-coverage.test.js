@@ -91,6 +91,62 @@ test("UMA accepts Bearer RPTs without an expiry and surfaces unrecognised exchan
 });
 
 for (const tokenType of ["DPoP", "Bearer"]) {
+  test(`UMA invalidation retains each request's context when an RPT is reused (${tokenType})`, async () => {
+    let context = "first";
+    let sharedToken;
+    let exchanges = 0;
+    const p = provider(
+      async (url, init) => {
+        const response = await transport(url, init);
+        if (String(url) !== `${uma.url}/token`) return response;
+        const body = await response.json();
+        body.token_type = tokenType;
+        if (++exchanges === 1) sharedToken = body.access_token;
+        if (exchanges === 2) body.access_token = sharedToken;
+        return Response.json(body);
+      },
+      { context: () => context },
+    );
+    const request = new Request(`${uma.url}/uma/changing-context`);
+    const upgrade = async () =>
+      await p.upgrade(request, challengeContext(await transport(request)));
+    try {
+      const first = await upgrade();
+      context = "second";
+      const second = await upgrade();
+      assert.equal(first.headers.get("authorization"), second.headers.get("authorization"));
+      await p.invalidate(first);
+      context = "first";
+      const renewed = await upgrade();
+      assert.notEqual(renewed.headers.get("authorization"), first.headers.get("authorization"));
+      assert.equal(exchanges, 3);
+      await p.invalidate(first);
+      assert.equal(
+        (await upgrade()).headers.get("authorization"),
+        renewed.headers.get("authorization"),
+      );
+      context = "second";
+      assert.equal(
+        (await upgrade()).headers.get("authorization"),
+        second.headers.get("authorization"),
+      );
+      assert.equal(exchanges, 3, "the other context and the replacement remain cached");
+      await p.invalidate(second.clone());
+      assert.notEqual(
+        (await upgrade()).headers.get("authorization"),
+        second.headers.get("authorization"),
+      );
+      assert.equal(exchanges, 4, "copies use the verified resource context");
+      await p.invalidate(request);
+      await p.invalidate(new Request(`${uma.url}/uma/unknown`));
+      assert.equal(exchanges, 4);
+    } finally {
+      await p.forget();
+    }
+  });
+}
+
+for (const tokenType of ["DPoP", "Bearer"]) {
   test(`UMA nonce retries require a DPoP RPT and a complete nonce challenge (${tokenType})`, async () => {
     const p = provider(async (url, init) => {
       const response = await transport(url, init);
