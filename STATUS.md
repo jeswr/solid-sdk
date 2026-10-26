@@ -124,3 +124,48 @@ git operations ran. The full workspace gate was not rerun: the unchanged
 `packages/unstorage-solid/scripts/build-deps.mjs` invokes a remote `git clone`,
 which this lane explicitly forbids. `roborev` remains unavailable, so per-commit
 automated reviews could not run. No fixes remain unfinished; no open questions.
+
+## Fix round 3
+
+Addressed exactly the four findings in
+`solid-sdk-lane-sst-uxd8-9f7771e9ea61.md`, starting from `9f7771e9ea61`:
+
+- `c1ecdc32 fix: avoid collisions for every new playback instant`: apply the
+  allocation collision checks whenever there is no reusable private named instant.
+  Regression tests cover absent, literal and blank timestamp links, subject-only
+  collisions, incoming references, preserved timestamps/metadata and repeated edits.
+- `afcfa881 fix: synchronize artist album and playlist labels`: add entity-specific
+  title setters for schema names plus artist `foaf:name` and album/playlist
+  `dcterms:title`. Test creation, imported labels, repeated renames, legacy schema
+  aliases, invalid edits, preserved metadata and serialization.
+- `ded0160c fix: reject named graphs before music Turtle writes`: choose the review's
+  conservative option of rejecting named graphs with `InvalidMusicError`, keeping
+  the existing Turtle write contract. Test JSON-LD named and blank graph names,
+  unchanged datasets and refusal before any PUT; default-graph writes still pass.
+- `e70a9355 fix: deduplicate aliased playlist entries`: deduplicate ListItem terms
+  before reading positions, retaining distinct entries for the same track. Test
+  named and blank aliased entries through reorder, append and round trips. Extend
+  the rename regression setup to include a previous schema-only edit.
+- Final documentation commit (`docs: record music fix round three validation`):
+  this report, committed last.
+
+Validation used `export PATH="$PWD/node_modules/.bin:$PATH"`:
+
+| Exact command | Result |
+| --- | --- |
+| `pnpm --filter '@jeswr/app-suite^...' run build` | PASS; built the four workspace dependencies. |
+| `pnpm --filter @jeswr/app-suite exec vitest run test/music/history.test.ts` | PASS; 23 tests. New collision tests failed before the fix. |
+| `pnpm --filter @jeswr/app-suite exec vitest run test/music/model.test.ts` | PASS; 23 tests. New label and alias tests failed before their fixes. |
+| `pnpm --filter @jeswr/app-suite exec vitest run test/music/io.test.ts` | PASS; 16 tests. Both new named-graph tests failed before the fix. |
+| `pnpm --filter @jeswr/app-suite run lint && pnpm --filter @jeswr/app-suite run build && pnpm --filter @jeswr/app-suite run typecheck && pnpm --filter @jeswr/app-suite run test` | PASS; 4 test files, 63 tests. |
+| `pnpm --filter @jeswr/app-suite run coverage:music` | PASS; 100% statements (421/421), branches (242/242), functions (120/120) and lines (368/368), with per-file thresholds. |
+| `pnpm run lint:root` | PASS; all workspace, transport, fetch, token and contrast guards; 74 contrast pairs, 0 failures. |
+| `TURBO_SCM_BASE=36a5d720c16092434e92f07bc73f14e4784f65ce pnpm run gate` | PASS; 9/9 tasks. Log: `/tmp/sst-uxd8-fix-round-3-gate.log`. |
+| `git diff --check` | PASS. |
+
+No dependencies, configuration, UI or unrelated implementation changed. No remote
+git operations ran. As previously recorded, `gate:full` was not rerun because the
+unchanged unstorage-solid dependency build invokes a remote `git clone`, which
+conflicts with this lane's restrictions. `roborev` remains unavailable
+(`command -v roborev` returned no executable), so no per-commit automated verdicts
+were available. All four requested fixes are complete; no open questions.
