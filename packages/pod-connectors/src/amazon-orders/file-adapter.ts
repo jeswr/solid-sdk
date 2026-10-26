@@ -67,7 +67,7 @@ export const amazonOrdersFileAdapter: FileImportAdapter = {
     const doc = ctx.resolve("finance/amazon-orders.ttl");
     const store = new Store();
     let count = 0;
-    for await (const row of csvRows(file)) {
+    for await (const row of csvRows(file, ctx.skip)) {
       if (count >= ctx.maxRows) break;
       const product = pick(row, FIELD.product);
       const orderId = pick(row, FIELD.orderId);

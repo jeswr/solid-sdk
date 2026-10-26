@@ -273,6 +273,15 @@ JSON array members are parsed incrementally. UTF-8 decoding spans chunks; reader
 are released or cancelled when parsing ends or fails. The 64 MiB limit is also
 checked against actual bytes read. Existing deterministic documents and the
 100,000-record cap are preserved: RDF snapshots remain in memory up to that cap.
+Non-JSON readers retain chunk slices with independent UTF-8 byte limits:
+64 KiB per XML tag, 1 MiB per XML text node or text line, and 4 MiB per
+CSV data record (including quotes and embedded newlines). XML character data,
+comments and CDATA retain no text. Apple Health retains only `Workout` tags;
+ignored tag attributes are scanned without buffering. Oversized tags, text nodes, lines and CSV
+records are discarded through the next safe boundary and counted in
+`report.skipped` and `report.state.counts.skipped`. Unterminated XML markup or
+quoted CSV records fail with an explicit error. A skipped WhatsApp line also
+discards the pending message and continuations until the next timestamp.
 CSV headers are parsed and normalised once per file, including bank column
 aliases, and are limited to 1,024 columns and 65,536 characters.
 OFX transactions use an incremental delimiter scanner and are limited to 64 KiB
@@ -306,9 +315,9 @@ that identity is missing or invalid. Financial activities retain the broad
 by the `fin:Transaction` shape; missing source facts are not inferred.
 The pinned core and finance ontologies provide no Record → Activity relation:
 `core:about` has the range `gufo:Endurant`, disjoint with an activity's `gufo:Event`.
-Financial activities remain separately typed without that link. For required
-`core:about` cardinality, `core:subject` supplies the data subject through its
-declared subproperty relation.
+Financial activities remain separately typed without that link. Financial records
+emit a direct `core:about` link to the same typed WebID used by `core:subject`; `core:Agent` inherits `gufo:Endurant`, satisfying the
+range. SHACL does not materialise the subproperty entailment.
 Goodreads books, Steam items/accounts and conversations with a ChatGPT id carry
 their source item URL for provenance; other records use the connector export URN.
 No MCP-16 parser is present in this checkout, so ChatGPT reuses its existing
@@ -316,10 +325,12 @@ conversation parser for each streamed conversation.
 
 Synthetic fixture tests cover every importer with one-byte, seven-byte and
 single-chunk input, sorted Turtle mapping snapshots, provenance and stable
-re-import. They assert the required predicates, cardinalities, datatypes and
-linked classes from the checked-in sector shapes, following the class hierarchy
-in the core and sector ontologies. Every Tier C fixture snapshot also validates inherited
-core constraints. These checks add no SHACL dependency.
+re-import. Every Tier C fixture snapshot is validated with the pinned
+`rdf-validate-shacl` against the checked-in core and sector shapes. The pinned ontology class
+hierarchy enables inherited targets and linked-class checks; property
+entailments are not materialised for validation. Warning/Info results remain
+advisory; every Violation fails the test. Negative tests remove required links
+and typing to verify that the validator detects them.
 Domain/range consistency checks also follow named superclass and subproperty
 chains over the pinned ontology import closure, including gUFO disjointness.
 The Apple Health streaming test lazily generates over 50 MiB of

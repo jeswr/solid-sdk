@@ -350,6 +350,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.1",
+    "rdf-validate-shacl": "^0.6.5",
     "@rdfjs/types": "^2.0.1",
     "@types/n3": "^1.26.1",
     "typescript": "^6.0.3",
