@@ -345,6 +345,11 @@
     min-height: 44px;
     min-width: 44px;
   }
+  /* Match the base rule's specificity so the touch target wins. */
+  .suite-collection .suite-column-resize {
+    min-height: 44px;
+    min-width: 44px;
+  }
   .suite-table-viewport th {
     height: 44px;
   }

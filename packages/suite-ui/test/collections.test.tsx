@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 // @vitest-environment jsdom
+import { readFileSync } from "node:fs";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import axe from "axe-core";
@@ -264,6 +265,9 @@ it("sorts numeric values, ranges in sorted order, hides and resizes columns by k
   expect(screen.getByRole("status", { name: "Selection" }).textContent).toBe("a,c,b");
   const resize = screen.getByRole("button", { name: "Resize Size column" });
   const before = screen.getByRole("row", { name: "Alpha" }).style.gridTemplateColumns;
+  for (const modifier of ["altKey", "ctrlKey", "metaKey"])
+    expect(fireEvent.keyDown(resize, { key: "ArrowLeft", [modifier]: true })).toBe(true);
+  expect(screen.getByRole("row", { name: "Alpha" }).style.gridTemplateColumns).toBe(before);
   fireEvent.keyDown(resize, { key: "ArrowRight" });
   expect(screen.getByRole("row", { name: "Alpha" }).style.gridTemplateColumns).not.toBe(before);
   fireEvent.click(screen.getByText("Columns", { selector: "summary" }));
@@ -483,6 +487,10 @@ for (const kind of ["table", "grid"] as const) {
           <div data-row-interactive>
             <span>Custom interactive area</span>
           </div>
+          <label>
+            <input type="checkbox" />
+            <span>Custom label</span>
+          </label>
         </>
       );
     const props = { items, getKey, getLabel, label: "Files", onOpen };
@@ -509,6 +517,7 @@ for (const kind of ["table", "grid"] as const) {
       screen.getByRole("menuitem", { name: "Custom menu item" }),
       screen.getByText("Custom editor"),
       screen.getByText("Custom interactive area"),
+      screen.getByText("Custom label"),
     ]) {
       await user.click(control);
       for (const name of ["Alpha", "Beta"])
@@ -658,3 +667,16 @@ for (const kind of ["table", "grid"] as const) {
     ).toBe("false");
   });
 }
+
+it("gives column resize handles a 44px touch target on coarse pointers", () => {
+  const css = readFileSync("src/styles/collections.css", "utf8");
+  const base = css.indexOf(".suite-collection .suite-column-resize {\n  justify-content");
+  const coarse = css.indexOf("@media (pointer: coarse)");
+  const override = css.indexOf(".suite-collection .suite-column-resize {", coarse);
+  // Same selector, later in the file, inside the coarse-pointer block: it wins the cascade.
+  expect(base).toBeGreaterThan(-1);
+  expect(override).toBeGreaterThan(Math.max(base, coarse));
+  expect(css.slice(override, css.indexOf("}", override))).toMatch(
+    /min-height: 44px;\s+min-width: 44px;/,
+  );
+});

@@ -14,7 +14,7 @@ export function isInteractiveDescendant(event: {
   const control =
     event.target instanceof Element
       ? event.target.closest(
-          'button, a, input, select, textarea, summary, details > summary, [role="menuitem"], [contenteditable], [data-row-interactive], [role="button"], [role="link"], [role="combobox"], [tabindex]',
+          'button, a, input, label, select, textarea, summary, details > summary, [role="menuitem"], [contenteditable], [data-row-interactive], [role="button"], [role="link"], [role="combobox"], [tabindex]',
         )
       : null;
   return control !== null && control !== event.currentTarget;

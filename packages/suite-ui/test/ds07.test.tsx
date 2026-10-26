@@ -140,6 +140,17 @@ describe("Toolbar", () => {
     await user.keyboard("{Escape}");
     expect(document.activeElement).toBe(screen.getByRole("button", { name: "More" }));
   });
+  it("leaves modified arrow keys to the browser", () => {
+    available = 900;
+    render(<Toolbar label="Files" actions={actions} />);
+    const upload = screen.getByRole("button", { name: "Upload" });
+    upload.focus();
+    for (const modifier of ["altKey", "ctrlKey", "metaKey"]) {
+      const allowed = fireEvent.keyDown(upload, { key: "ArrowRight", [modifier]: true });
+      expect(allowed).toBe(true);
+      expect(document.activeElement).toBe(upload);
+    }
+  });
   it("can overflow every action and disconnects measurement on unmount", () => {
     available = 60;
     const { unmount } = render(<Toolbar label="Files" actions={actions} />);

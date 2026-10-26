@@ -109,6 +109,9 @@ export function Toolbar({ label, actions }: ToolbarProps) {
           if (
             event.target instanceof HTMLElement &&
             event.currentTarget.contains(event.target) &&
+            !event.altKey &&
+            !event.ctrlKey &&
+            !event.metaKey &&
             ["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)
           ) {
             const buttons = Array.from(

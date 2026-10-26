@@ -273,6 +273,8 @@ export function DataTable<T>({
                       onTouchStart={header.getResizeHandler()}
                       onKeyDown={(event) => {
                         if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+                        // Leave modified arrows (e.g. Alt+Left for Back) to the browser.
+                        if (event.altKey || event.ctrlKey || event.metaKey) return;
                         event.preventDefault();
                         const size = Math.max(
                           header.column.columnDef.minSize ?? 100,
