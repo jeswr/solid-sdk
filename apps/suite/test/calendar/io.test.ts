@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { describe, expect, it, vi } from "vitest";
 import {
   buildCalendar,
@@ -25,6 +26,52 @@ const mock = (handler: (url: string, init: RequestInit) => Response | Promise<Re
   vi.fn<typeof fetch>(async (input, init) => handler(String(input), init ?? {}));
 
 describe("injected calendar I/O", () => {
+  it("loads relative event and calendar subjects using their final redirect URLs", async () => {
+    const finalEvent = `${container}new.ttl`;
+    const finalCalendar = `${root}calendar/new.ttl`;
+    const fetch = mock((target) => {
+      if (target === url || target === calendar)
+        return new Response(null, { status: 302, headers: { location: "new.ttl" } });
+      const response = rdf(
+        target === finalEvent
+          ? `<#it> a <${NS.SCHEMA}Event>; <${NS.SCHEMA}name> "Redirected"; <${NS.SCHEMA}startDate> "2026-03-01T09:00:00Z"^^<${NS.XSD}dateTime>.`
+          : `<#it> a <${NS.SCHEDULING}Calendar>; <${NS.DCT}title> "Redirected calendar".`,
+        '"redirected"',
+      );
+      // A native fetch response carries the final URL, including with manual redirects.
+      Object.defineProperty(response, "url", { value: target });
+      return response;
+    });
+    const io = calendarIO(fetch, root);
+    expect(await io.loadEvent(url)).toMatchObject({
+      url: finalEvent,
+      etag: '"redirected"',
+      data: { name: "Redirected", start: event.start },
+    });
+    expect(await io.loadCalendar(calendar)).toMatchObject({
+      url: finalCalendar,
+      etag: '"redirected"',
+      data: { title: "Redirected calendar" },
+    });
+    expect(fetch.mock.calls.map(([target]) => target)).toEqual([
+      url,
+      finalEvent,
+      calendar,
+      finalCalendar,
+    ]);
+  });
+  it("uses normalized request URLs when a fetch response has no URL", async () => {
+    const fetch = mock(() =>
+      rdf(
+        `<#it> a <${NS.SCHEMA}Event>; <${NS.SCHEMA}name> "Test"; <${NS.SCHEMA}startDate> "2026-03-01T09:00:00Z"^^<${NS.XSD}dateTime>.`,
+      ),
+    );
+    const loaded = await calendarIO(fetch, root).loadEvent(
+      "https://POD.example:443/calendar/work/./e.ttl",
+    );
+    expect(loaded).toMatchObject({ url, etag: '"v1"', data: event });
+    expect(fetch.mock.calls[0]?.[0]).toBe(url);
+  });
   it("loads typed calendars/events and carries ETags", async () => {
     const fetch = mock(async (target) =>
       rdf(

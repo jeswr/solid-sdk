@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { fetchRdf } from "@jeswr/fetch-rdf";
 import { assertWithinPodScope, createPodScopedFetch } from "@jeswr/guarded-fetch";
 import { canonicalize, NS } from "@jeswr/suite-vocab";
@@ -40,12 +41,17 @@ export function calendarIO(fetch: typeof globalThis.fetch, podRoot: string) {
     url: string,
     parse: (url: string, ds: DatasetCore) => T | undefined,
   ): Promise<StoredItem<T> | undefined> {
-    const { dataset, etag } = await fetchRdf(document(url), {
+    const {
+      dataset,
+      etag,
+      url: finalUrl,
+    } = await fetchRdf(document(url), {
       fetch: scoped,
       headers: { "Cache-Control": "no-cache" },
     });
-    const data = parse(url, dataset);
-    return data === undefined ? undefined : { url, etag, data };
+    document(finalUrl);
+    const data = parse(finalUrl, dataset);
+    return data === undefined ? undefined : { url: finalUrl, etag, data };
   }
   async function put(
     url: string,
