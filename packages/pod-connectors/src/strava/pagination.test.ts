@@ -43,7 +43,7 @@ describe("Strava timestamp windows", () => {
       { url, json: first },
       { url, json: [first[1], { ...first[1], id: 3, name: "Timestamp tie" }] },
       { url, json: [{ id: 4, name: "Older", start_date: "2026-06-04T00:00:00Z" }] },
-      { url, json: [] },
+      { url, json: [{ id: 4, name: "Older", start_date: "2026-06-04T00:00:00Z" }] },
     ]);
     expect(report.state?.counts.items).toBe(4);
     expect(report.cursor).toBe(String(Date.parse(first[0].start_date) / 1000));
@@ -54,52 +54,84 @@ describe("Strava timestamp windows", () => {
     expect(new ExerciseAction(`${doc}#activity-4`, dataset, DataFactory).name).toBe("Older");
   });
 
-  it("fetches the 101st activity despite deletion between requests and never checkpoints past an unresolved overlap", async () => {
+  it("imports every remaining activity despite deletion between requests and checkpoints the newest imported activity", async () => {
     const activities = Array.from({ length: 101 }, (_, i) => ({
       id: i + 1,
       start_date: new Date(Date.UTC(2026, 5, 6, 0, 0, 101 - i)).toISOString(),
     }));
     const pod = createMemoryPod();
+    const newest = String(Date.parse(activities[0].start_date) / 1000);
     const requests: URL[] = [];
     const returned: number[][] = [];
     let state: ConnectorState | undefined;
-    await expect(
-      runImport({
-        adapter: stravaAdapter,
-        mode: "live",
-        podWriter: writer(pod),
-        state: previous,
-        onState: (value) => {
-          state = value;
+    const report = await runImport({
+      adapter: stravaAdapter,
+      mode: "live",
+      podWriter: writer(pod),
+      state: previous,
+      onState: (value) => {
+        state = value;
+      },
+      sourceAuth: {
+        fetch: async (input) => {
+          const request = new URL(String(input));
+          requests.push(request);
+          if (requests.length === 2) activities.shift(); // Delete an activity from the first response.
+          const before = Number(request.searchParams.get("before") ?? Number.POSITIVE_INFINITY);
+          const after = Number(request.searchParams.get("after") ?? 0);
+          const page = Number(request.searchParams.get("page") ?? 1);
+          const batch = activities
+            .filter((a) => {
+              const epoch = Date.parse(a.start_date) / 1000;
+              return epoch < before && epoch > after;
+            })
+            .slice((page - 1) * 100, page * 100);
+          returned.push(batch.map((a) => a.id));
+          return Response.json(batch);
         },
-        sourceAuth: {
-          fetch: async (input) => {
-            const request = new URL(String(input));
-            requests.push(request);
-            if (requests.length === 2) activities.shift(); // Delete an activity from the first response.
-            const before = Number(request.searchParams.get("before") ?? Number.POSITIVE_INFINITY);
-            const after = Number(request.searchParams.get("after") ?? 0);
-            const page = Number(request.searchParams.get("page") ?? 1);
-            const batch = activities
-              .filter((a) => {
-                const epoch = Date.parse(a.start_date) / 1000;
-                return epoch < before && epoch > after;
-              })
-              .slice((page - 1) * 100, page * 100);
-            returned.push(batch.map((a) => a.id));
-            return Response.json(batch);
-          },
-        },
-      }),
-    ).rejects.toThrow("non-advancing activity window");
+      },
+    });
     expect(returned[0]).toHaveLength(100);
     expect(returned[1]).toEqual([100, 101]);
+    expect(returned[2]).toEqual([101]);
+    expect(requests).toHaveLength(3);
     expect(requests[1].searchParams.get("before")).toBe(
       String(Date.parse(activities[98].start_date) / 1000 + 1),
     );
     expect(requests.every((request) => !request.searchParams.has("page"))).toBe(true);
-    expect(state).toEqual({ ...previous, lastOutcome: "error" });
-    expect(pod.get(doc)).toBeUndefined();
+    expect(report.cursor).toBe(newest);
+    expect(state).toEqual({
+      ...previous,
+      lastSync: expect.any(String),
+      cursor: newest,
+      counts: { documents: 2, items: 101, skipped: 0 },
+    });
+    expect(Date.parse(state?.lastSync ?? "")).toBeGreaterThan(Date.parse(previous.lastSync ?? ""));
+    const dataset = pod.dataset(doc);
+    for (const activity of activities) {
+      expect(
+        new ExerciseAction(`${doc}#activity-${activity.id}`, dataset, DataFactory).identifier,
+      ).toBe(String(activity.id));
+    }
+  });
+
+  it("ends normally on an overlap-only window without another source request", async () => {
+    const pod = createMemoryPod();
+    let page = 0;
+    const fetch = vi.fn<typeof globalThis.fetch>(async () =>
+      Response.json(page++ === 0 ? first : [first[1]]),
+    );
+    const report = await runImport({
+      adapter: createStravaAdapter({ maxRequests: 2, maxItems: 3 }),
+      mode: "live",
+      podWriter: writer(pod),
+      state: previous,
+      sourceAuth: { fetch },
+    });
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(report.state?.lastOutcome).toBe("success");
+    expect(report.state?.counts.items).toBe(2);
+    expect(report.cursor).toBe(String(Date.parse(first[0].start_date) / 1000));
   });
 
   it.each([
@@ -116,10 +148,27 @@ describe("Strava timestamp windows", () => {
       requests: 2,
     },
     { limits: undefined, second: first, error: "non-advancing activity window", requests: 2 },
-    { limits: undefined, second: [first[1]], error: "non-advancing activity window", requests: 2 },
+    {
+      limits: undefined,
+      second: [{ id: 3, start_date: "2026-06-05T00:00:01Z" }],
+      error: "non-advancing activity window",
+      requests: 2,
+    },
     {
       limits: undefined,
       second: [{ id: 3, start_date: "2026-06-07T00:00:00Z" }],
+      error: "non-advancing activity window",
+      requests: 2,
+    },
+    {
+      limits: undefined,
+      second: [first[1], { id: 3, start_date: "2026-06-07T00:00:00Z" }],
+      error: "non-advancing activity window",
+      requests: 2,
+    },
+    {
+      limits: undefined,
+      second: [{ ...first[1], start_date: "2026-06-07T00:00:00Z" }],
       error: "non-advancing activity window",
       requests: 2,
     },
@@ -160,10 +209,10 @@ describe("Strava timestamp windows", () => {
     expect(second.report.state?.counts.items).toBe(3);
   });
 
-  it("still skips a malformed record before an empty window", async () => {
+  it("ends normally when a window has no identifiable activities", async () => {
     const { report } = await sparseImport(stravaAdapter, [
       { url, json: [null] },
-      { url, json: [] },
+      { url, status: 500, json: {} },
     ]);
     expect(report.skipped).toBe(1);
     expect(report.cursor).toBeUndefined();

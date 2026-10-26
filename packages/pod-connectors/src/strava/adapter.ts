@@ -81,37 +81,35 @@ export function createStravaAdapter(limits?: RunLimits): IntegrationAdapter {
         // offsets so deletion of an already-read activity cannot shift an unseen one past us.
         if (batch.length === 0) break;
         const previousSize = seen.size;
-        let identified = 0;
         let oldest = Number.POSITIVE_INFINITY;
         for (const activity of batch) {
           if (!activity || activity.id === undefined || activity.id === null) {
             skipped.skip();
             continue;
           }
-          identified += 1;
           const epoch = activityEpoch(activity);
-          if (epoch !== undefined) oldest = Math.min(oldest, epoch);
+          if (epoch !== undefined) {
+            // Check every timestamp before deduplication or accepting a terminal window.
+            if (before !== undefined && epoch >= before) {
+              throw new IntegrationSyncError(
+                ID,
+                "The platform returned a non-advancing activity window.",
+              );
+            }
+            oldest = Math.min(oldest, epoch);
+          }
           if (seen.has(activity.id)) continue;
           seen.add(activity.id);
           list.push(activity);
         }
-        if (identified > 0 && seen.size === previousSize) {
-          throw new IntegrationSyncError(
-            ID,
-            "The platform returned a non-advancing activity window.",
-          );
-        }
+        // An overlap-only window ends normally; every continuing window adds a new id.
+        if (seen.size === previousSize) break;
         if (ctx.cursor && oldest <= Number(ctx.cursor)) break;
         if (Number.isFinite(oldest)) {
           // Re-read the oldest second to include timestamp ties, deduplicating by id.
-          const nextBefore = oldest + 1;
-          if (before !== undefined && nextBefore > before) {
-            throw new IntegrationSyncError(
-              ID,
-              "The platform returned a non-advancing activity window.",
-            );
-          }
-          before = nextBefore;
+          // More than one window (100) of activities sharing a start second can end
+          // traversal early when the overlap contains no unseen ids.
+          before = oldest + 1;
         }
       }
 

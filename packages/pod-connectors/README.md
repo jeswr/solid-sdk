@@ -136,10 +136,10 @@ GitHub and Strava create one shared-core `RunBudget` per import. Hosts can injec
 `createStravaAdapter(limits)` from their adapter entry points; the existing singleton exports
 use the shared defaults. GitHub's profile and repository requests share the same budget.
 Items are counted before buffering, including overlaps and malformed entries. Exceeding a
-budget or receiving a page/window whose valid IDs have all been seen fails without advancing the
-checkpoint. Strava also rejects windows that move forward in time. Under this conservative
-no-progress rule, a terminal overlap-only Strava window fails too; only an empty response
-or reaching the previous checkpoint ends traversal successfully.
+budget fails without advancing the checkpoint. GitHub also rejects a page whose valid IDs have
+all been seen. Strava rejects any activity at or after the requested `before` timestamp;
+a window with no new activity IDs ends traversal successfully, including an overlap-only
+terminal window. More than 100 activities sharing a start second can end traversal early.
 
 Dropbox drains `list_folder/continue` before returning its delta cursor. File metadata
 updates replace old descriptions, including removed optional fields; deleted path tombstones
