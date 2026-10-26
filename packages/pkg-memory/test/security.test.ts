@@ -80,6 +80,15 @@ it.each([
   b.claims[0]!.assertion = assertion;
   expect(() => canonicalizeAssertion(assertion)).toThrow("Invalid language tag");
   await expect(buildNanopublications(b, options)).rejects.toThrow("Invalid language tag");
+  const built = await buildNanopublications(batch(), options);
+  for (const q of assertion)
+    built.dataset.addQuad(
+      q.subject,
+      q.predicate,
+      q.object,
+      df.namedNode("https://example.org/audit"),
+    );
+  await expect(serializeNanopublications(built)).rejects.toThrow("Invalid language tag");
 });
 
 it.each([
@@ -119,6 +128,45 @@ it("rejects rdf:langString literals without a language tag", async () => {
   input.claims[0]!.assertion = assertion;
   expect(() => canonicalizeAssertion(assertion)).toThrow("Invalid language tag");
   await expect(buildNanopublications(input, options)).rejects.toThrow("Invalid language tag");
+  const built = await buildNanopublications(batch(), options);
+  for (const q of assertion) built.dataset.addQuad(q);
+  await expect(serializeNanopublications(built)).rejects.toThrow("Invalid language tag");
+});
+
+it.each([
+  "subject",
+  "predicate",
+  "object",
+  "graph",
+  "datatype",
+] as const)("checks mutable dataset %s IRIs at serialization", async (position) => {
+  for (const value of [
+    "https://example.org/>injection",
+    "https://example.org/embedded\ncontrol",
+    "https://example.org/trailing\n",
+    "javascript:alert(1)",
+    "/relative",
+  ]) {
+    const built = await buildNanopublications(batch(), options);
+    const terms = {
+      subject: df.namedNode("https://example.org/audit"),
+      predicate: df.namedNode(`${NS.schema}name`),
+      object: df.literal("Synthetic"),
+      graph: df.namedNode("https://example.org/metadata"),
+    };
+    const unsafe = df.namedNode(value);
+    built.dataset.addQuad(
+      position === "subject" ? unsafe : terms.subject,
+      position === "predicate" ? unsafe : terms.predicate,
+      position === "object"
+        ? unsafe
+        : position === "datatype"
+          ? df.literal("Synthetic", unsafe)
+          : terms.object,
+      position === "graph" ? unsafe : terms.graph,
+    );
+    await expect(serializeNanopublications(built)).rejects.toThrow(/IRI/);
+  }
 });
 
 it("escapes IRIREF delimiters at all builder IRI boundaries without adding statements", async () => {

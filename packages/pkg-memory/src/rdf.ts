@@ -55,6 +55,21 @@ export function validateLiterals(dataset: DatasetCore): void {
   for (const q of dataset) if (q.object.termType === "Literal") validateLiteral(q.object);
 }
 
+/** Reject unsafe caller-owned terms without changing their RDF identity. */
+export function validateTermSafety(term: Term): void {
+  if (term.termType === "NamedNode" && iri(term.value) !== term.value)
+    throw new Error("Unsafe assertion IRI");
+  if (term.termType === "Literal") {
+    validateTermSafety(term.datatype);
+    // Turtle LANGTAG syntax; the end assertion excludes a trailing newline.
+    if (
+      (term.language || term.datatype.value === `${NS.rdf}langString`) &&
+      !/^[a-z]+(?:-[a-z0-9]+)*(?![\s\S])/i.test(term.language)
+    )
+      throw new Error("Invalid language tag");
+  }
+}
+
 export function iri(value: string): string {
   const safe = safeIri(value);
   if (safe === undefined || !/^(https?:|urn:|mailto:|tel:|file:)/i.test(safe)) {

@@ -5,7 +5,17 @@ import { safeHttpIri, serialize } from "@jeswr/rdf-serialize";
 import type { DatasetCore, Term } from "@rdfjs/types";
 import { DataFactory as df, Store } from "n3";
 import { canonicalizeAssertion, messageId, pkgId } from "./ids.js";
-import { dateTime, expand, graph, iri, NS, putGraph, RdfNode, validateLiterals } from "./rdf.js";
+import {
+  dateTime,
+  expand,
+  graph,
+  iri,
+  NS,
+  putGraph,
+  RdfNode,
+  validateLiterals,
+  validateTermSafety,
+} from "./rdf.js";
 
 /** How a claim entered the graph, orthogonal to validity. */
 export const EPISTEMIC_STATUSES = [
@@ -460,6 +470,8 @@ function readNanopublications(dataset: Store): Nanopublications {
 }
 /** Serialize all named graphs as TriG through the suite Writer. */
 export async function serializeNanopublications(value: Nanopublications): Promise<string> {
+  for (const q of value.dataset)
+    for (const term of [q.subject, q.predicate, q.object, q.graph]) validateTermSafety(term);
   validateLiterals(value.dataset);
   return serialize([...value.dataset], { format: "application/trig", prefixes: { ...NS } });
 }

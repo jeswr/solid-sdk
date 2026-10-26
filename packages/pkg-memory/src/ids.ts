@@ -2,7 +2,7 @@
 import { createHash } from "node:crypto";
 import type { DatasetCore, Term } from "@rdfjs/types";
 import { DataFactory as df, Store } from "n3";
-import { iri, NS, normalizeLiteral } from "./rdf.js";
+import { NS, normalizeLiteral, validateTermSafety } from "./rdf.js";
 
 function uuid(namespace: string, name: string): string {
   const hash = createHash("sha1")
@@ -168,22 +168,7 @@ export function canonicalizeAssertion(
   for (const q of dataset) {
     if (q.graph.termType !== "DefaultGraph")
       throw new Error("Assertion must be a single default graph");
-    for (const t of [
-      q.subject,
-      q.predicate,
-      q.object,
-      ...(q.object.termType === "Literal" ? [q.object.datatype] : []),
-    ]) {
-      if (t.termType === "NamedNode" && iri(t.value) !== t.value)
-        throw new Error("Unsafe assertion IRI");
-    }
-    // Turtle LANGTAG syntax; the end assertion also excludes a trailing newline.
-    if (
-      q.object.termType === "Literal" &&
-      (q.object.language || q.object.datatype.value === `${NS.rdf}langString`) &&
-      !/^[a-z]+(?:-[a-z0-9]+)*(?![\s\S])/i.test(q.object.language)
-    )
-      throw new Error("Invalid language tag");
+    for (const t of [q.subject, q.predicate, q.object]) validateTermSafety(t);
     normalized.addQuad(
       df.quad(
         q.subject,
