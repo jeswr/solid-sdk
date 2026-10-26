@@ -6,7 +6,16 @@ import { DataFactory } from "n3";
 import type { CapabilityEntry, ServiceEntry, StorageDescription } from "./types.js";
 import { ACQ, DCT, DID, LWS, NOTIFY, SSD } from "./vocab.js";
 
+const SSD_FORMAT = "https://jeswr.org/ns/solid-sd#format";
+
 const RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
+const CHANNEL_TYPES: ReadonlySet<string> = new Set([
+  NOTIFY.WebSocketChannel2023,
+  NOTIFY.StreamingHTTPChannel2023,
+  NOTIFY.WebhookChannel2023,
+  NOTIFY.LDNChannel2023,
+  NOTIFY.WebPushChannel2023,
+]);
 
 /** Small RDF view shared by subscription, service, and capability nodes. */
 class DescriptionNode extends TermWrapper {
@@ -48,16 +57,25 @@ class DescriptionNode extends TermWrapper {
     for (const quad of this.dataset.match(this as unknown as Term)) {
       if (!excluded.includes(quad.predicate.value)) predicates.add(quad.predicate.value);
     }
-    visited.add(this.value);
     return Object.fromEntries(
       [...predicates].map((predicate) => {
         const values = this.objects(predicate).map((term): unknown => {
-          if (term.termType !== "BlankNode") return term.value;
-          // Expand each blank node once, bounding both depth and shared-subgraph growth.
-          if (visited.has(term.value) || depth >= 31) return { "@id": `_:${term.value}` };
+          // ADR-008 format nodes may be named (`ssd:format <#turtle>`): expand those too, so
+          // their ssd:source/ssd:patchType survive. Other named objects stay IRI strings.
+          // Nodes already expanded anywhere in this mapping become references (checked first,
+          // so a shared node costs one expansion and no repeated dataset lookups).
+          const blank = term.termType === "BlankNode";
+          const named = predicate === SSD_FORMAT && term.termType === "NamedNode";
+          if (!blank && !named) return term.value;
+          const id = blank ? `_:${term.value}` : term.value;
+          if (visited.has(term.value) || depth >= 31) return { "@id": id };
+          if (named && this.dataset.match(term as Term).size === 0) return term.value;
+          // Only nested expansions are recorded: entry roots stay expandable where nested, so a
+          // reference always has a definition inside some service or capability extra.
+          visited.add(term.value);
           // Keep the definition identifiable so later references can resolve to it.
           return {
-            "@id": `_:${term.value}`,
+            "@id": id,
             ...new DescriptionNode(term, this.dataset, this.factory).extra([], visited, depth + 1),
           };
         });
@@ -86,8 +104,11 @@ function isNamedNode(term: Term): boolean {
 export function parseSolidDescription(
   dataset: DatasetCore,
   rootUrl: string,
+  notificationsOnly = false,
 ): Pick<StorageDescription, "services" | "capabilities"> {
   const root = new DescriptionNode(rootUrl, dataset, DataFactory);
+  // One expansion per node across the whole mapping; deriveFeatures resolves `{ "@id" }` refs.
+  const visited = new Set<string>();
   const services: ServiceEntry[] = [];
   const subscriptions = new DescriptionDataset(dataset, DataFactory).subscriptions;
   const seen = new Set<string>();
@@ -96,10 +117,12 @@ export function parseSolidDescription(
     seen.add(subscription.value);
     const channels = subscription.iris(NOTIFY.channelType);
     services.push({
-      type: [SSD.SolidNotificationService, ...channels],
+      // Only recognised channel types become service types; others stay in `extra` so a
+      // description cannot pose as another service class through notify:channelType.
+      type: [SSD.SolidNotificationService, ...channels.filter((type) => CHANNEL_TYPES.has(type))],
       endpoint: subscription.value,
       extra: {
-        ...subscription.extra([RDF_TYPE, NOTIFY.channelType, NOTIFY.feature]),
+        ...subscription.extra([RDF_TYPE, NOTIFY.channelType, NOTIFY.feature], visited),
         ...(channels.length > 0
           ? { [NOTIFY.channelType]: channels.length === 1 ? channels[0] : channels }
           : {}),
@@ -107,6 +130,7 @@ export function parseSolidDescription(
       },
     });
   }
+  if (notificationsOnly) return { services, capabilities: [] };
   for (const service of root.nodes(DID.service)) {
     const endpoint = service.iris(DID.serviceEndpoint)[0];
     if (endpoint === undefined) continue;
@@ -116,7 +140,7 @@ export function parseSolidDescription(
       endpoint,
       ...service.identity,
       ...(conformsTo.length > 0 ? { conformsTo } : {}),
-      extra: service.extra([RDF_TYPE, DID.serviceEndpoint, DCT.conformsTo]),
+      extra: service.extra([RDF_TYPE, DID.serviceEndpoint, DCT.conformsTo], visited),
     });
   }
   for (const endpoint of root.iris(ACQ.endpoint)) {
@@ -125,7 +149,7 @@ export function parseSolidDescription(
   const capabilities: CapabilityEntry[] = root.nodes(LWS.capability).map((capability) => ({
     type: capability.types,
     ...capability.identity,
-    extra: capability.extra([RDF_TYPE]),
+    extra: capability.extra([RDF_TYPE], visited),
   }));
   return { services, capabilities };
 }

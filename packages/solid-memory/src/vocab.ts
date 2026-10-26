@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 /**
  * Vocabulary IRIs for the typed RDF agent-memory model.
@@ -10,7 +11,7 @@
  * memory-adapter ecosystem — mem0 / OpenClaw / LangChain / Letta — that maps TO
  * this model), so the data is portable, not siloed.
  *
- * Minted (under `mem:` — `https://w3id.org/jeswr/memory#`):
+ * Minted (under `mem:` — `https://jeswr.org/ns/memory#`):
  * - **`mem:MemoryItem`** — the class every memory is stamped + Type-Index-registered
  *   with (so other apps/agents can DISCOVER where memories live in a pod).
  * - **`mem:embeddingRef`** — an OPTIONAL object-property pointing at a sidecar
@@ -32,7 +33,7 @@
  *   an AS2.0 `as:Note` or a pod-chat `pc:ChatRoom`; this is the not-siloed
  *   memory↔chat link).
  * - **`as:` — ActivityStreams 2.0** (`https://www.w3.org/ns/activitystreams#`) and
- *   **`pc:` — pod-chat** (`https://w3id.org/jeswr/pod-chat#`): the target classes of
+ *   **`pc:` — pod-chat** (`https://jeswr.org/ns/pod-chat#`): the target classes of
  *   `prov:wasGeneratedBy`. The `pc:` IRI is the EXACT one `@jeswr/pod-chat` already
  *   defines (`pc:ChatRoom` is an `as:Collection`), so a memory generated from a
  *   pod-chat room links to a real, readable chat — verified in `pod-chat/src/vocab.ts`.
@@ -51,8 +52,9 @@
  * orthogonal field: `schema:keywords` string literals.
  */
 
-/** Minted memory vocabulary — `mem:MemoryItem`, `mem:embeddingRef`. (w3id redirect is needs:user.) */
-export const MEM = "https://w3id.org/jeswr/memory#";
+/** Minted memory vocabulary — `mem:MemoryItem`, `mem:embeddingRef`. */
+// Source: @jeswr/suite-vocab NS.MEMORY.
+export const MEM = "https://jeswr.org/ns/memory#";
 /** schema.org (canonical http scheme) — `schema:text`, `schema:keywords`, `schema:about`. */
 export const SCHEMA = "http://schema.org/";
 /** Dublin Core Terms — `dct:created`, `dct:modified`, `dct:subject` (the single `about` topic). */
@@ -71,9 +73,10 @@ export const AS = "https://www.w3.org/ns/activitystreams#";
  * pod-chat application vocabulary — `pc:ChatRoom` (an `as:Collection`), the room a
  * memory was generated in. EXACT IRI from `@jeswr/pod-chat` (verified in
  * `pod-chat/src/vocab.ts`); reused here so the memory↔chat link dereferences to a
- * real chat room rather than a bespoke namespace. (w3id redirect is needs:user.)
+ * real chat room rather than a bespoke namespace.
  */
-export const PC = "https://w3id.org/jeswr/pod-chat#";
+// Source: @jeswr/suite-vocab NS.POD_CHAT.
+export const PC = "https://jeswr.org/ns/pod-chat#";
 /** XSD datatypes (referenced via the wrapper value mappers). */
 export const XSD = "http://www.w3.org/2001/XMLSchema#";
 
@@ -114,3 +117,7 @@ export const PREFIXES = {
   pc: PC,
   xsd: XSD,
 } as const;
+
+/** Read-only legacy aliases; writers use MEM and PC. */
+export const LEGACY_MEMORY_NS = "https://w3id.org/jeswr/memory#";
+export const LEGACY_POD_CHAT_NS = "https://w3id.org/jeswr/pod-chat#";

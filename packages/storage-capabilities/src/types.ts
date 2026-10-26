@@ -30,6 +30,8 @@ export interface StorageDescription {
   services: readonly ServiceEntry[];
   capabilities: readonly CapabilityEntry[];
   sources: readonly DescriptionSource[];
+  /** Resolver evidence for an assumed root or a notification-only foreign description. */
+  evidence?: readonly string[];
   fetchedAt: number; // Date.now()
   etag: string | null;
   maxAgeMs: number; // from Cache-Control max-age, else DEFAULT_TTL_MS (3_600_000)
@@ -112,6 +114,16 @@ export interface DescriptionCache {
   /** Maps resource URL prefix → storageId so the next lookup for a sibling needs no network. */
   rememberPrefix(root: string, storageId: string): Promise<void>;
   lookupPrefix(url: string): Promise<string | undefined>;
+  /**
+   * Optional atomic compare-and-set used by `capabilities()`: store `probe` with the record only
+   * if the record still holds exactly `description` (not deleted or replaced meanwhile).
+   * Resolves whether the probe was attached. Without it, a best-effort get/compare/set is used.
+   */
+  attachProbe?(
+    storageId: string,
+    description: StorageDescription,
+    probe: ProbeResult,
+  ): Promise<boolean>;
 }
 
 /** Access modes reported by WAC-Allow. */

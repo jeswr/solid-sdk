@@ -2,6 +2,7 @@
 // AUTHORED-BY Codex GPT-6
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { describe, expect, test, vi } from "vitest";
+import { deriveFeatures } from "./features.js";
 import { parseSolidDescription } from "./solid-description.js";
 import { LWS, NOTIFY, SSD } from "./vocab.js";
 
@@ -239,7 +240,7 @@ describe("parseSolidDescription", () => {
           },
         },
         {
-          type: [SSD.SolidNotificationService, "urn:channel:unknown"],
+          type: [SSD.SolidNotificationService],
           endpoint: `${ROOT}unknown`,
           extra: { [NOTIFY.channelType]: "urn:channel:unknown", [NOTIFY.feature]: [] },
         },
@@ -253,6 +254,23 @@ describe("parseSolidDescription", () => {
     });
   });
 
+  test("an unrecognised channel type cannot give a subscription another service type", async () => {
+    const dataset = await turtle(`
+      <description> notify:subscription <spoof> .
+      <spoof> notify:channelType <${SSD.CrdtSyncService}>, notify:WebhookChannel2023 .
+    `);
+    expect(parseSolidDescription(dataset, ROOT).services).toEqual([
+      {
+        type: [SSD.SolidNotificationService, NOTIFY.WebhookChannel2023],
+        endpoint: `${ROOT}spoof`,
+        extra: {
+          [NOTIFY.channelType]: [SSD.CrdtSyncService, NOTIFY.WebhookChannel2023],
+          [NOTIFY.feature]: [],
+        },
+      },
+    ]);
+  });
+
   test("keeps cyclic blank-node extras finite", async () => {
     const dataset = await turtle(`
       <> lws:capability _:cap .
@@ -264,7 +282,12 @@ describe("parseSolidDescription", () => {
       [`${SSD_NS}format`]: {
         "@id": expect.stringMatching(/^_:/),
         [`${SSD_NS}source`]: "text/turtle",
-        [`${SSD_NS}back`]: { "@id": expect.stringMatching(/^_:/) },
+        // The entry root is expanded once where nested; the cycle then ends in a reference.
+        [`${SSD_NS}back`]: {
+          "@id": expect.stringMatching(/^_:/),
+          "http://www.w3.org/1999/02/22-rdf-syntax-ns#type": SSD.PatchSupport,
+          [`${SSD_NS}format`]: { "@id": expect.stringMatching(/^_:/) },
+        },
       },
     });
     expect(() => JSON.stringify(result)).not.toThrow();
@@ -312,6 +335,96 @@ describe("parseSolidDescription", () => {
       [`${SSD_NS}source`]: "text/turtle",
       [`${SSD_NS}patchType`]: ["text/n3", "application/sparql-update"],
     });
+  });
+
+  test("expands named ssd:format nodes end to end (other named objects stay IRIs)", async () => {
+    const dataset = await turtle(`
+      <> lws:capability [ a ssd:PatchSupport ; ssd:format <#turtle>, <#empty> ; <urn:see> <#turtle> ] .
+      <#turtle> ssd:source "text/turtle" ; ssd:patchType "application/sparql-update" .
+    `);
+    const result = parseSolidDescription(dataset, ROOT);
+    const extra = result.capabilities[0]?.extra ?? {};
+    expect(extra["urn:see"]).toBe(`${ROOT}#turtle`);
+    expect(extra[`${SSD_NS}format`]).toEqual([
+      {
+        "@id": `${ROOT}#turtle`,
+        [`${SSD_NS}source`]: "text/turtle",
+        [`${SSD_NS}patchType`]: "application/sparql-update",
+      },
+      `${ROOT}#empty`,
+    ]);
+    const features = deriveFeatures({
+      protocol: "solid",
+      id: ROOT,
+      root: ROOT,
+      descriptionUrl: `${ROOT}.well-known/solid`,
+      sources: ["solid-description"],
+      fetchedAt: 0,
+      etag: null,
+      maxAgeMs: 0,
+      verificationMethods: [],
+      ...result,
+    });
+    expect(features.patch.detail.formats).toEqual({ "text/turtle": ["application/sparql-update"] });
+  });
+
+  test("a format node shared by many capabilities is expanded once (linear output)", async () => {
+    const n = 400;
+    const types = Array.from({ length: n }, (_, i) => `"application/x-p${i}"`).join(", ");
+    const caps = Array.from(
+      { length: n },
+      (_, i) =>
+        `<> lws:capability <#cap${i}> . <#cap${i}> a ssd:PatchSupport ; ssd:format <#shared> .`,
+    ).join("\n");
+    const dataset = await turtle(`${caps}
+      <#shared> ssd:source "text/turtle" ; ssd:patchType ${types} .`);
+    const started = performance.now();
+    const result = parseSolidDescription(dataset, ROOT);
+    expect(JSON.stringify(result).length).toBeLessThan(200_000);
+    const features = deriveFeatures({
+      protocol: "solid",
+      id: ROOT,
+      root: ROOT,
+      descriptionUrl: `${ROOT}.well-known/solid`,
+      sources: ["solid-description"],
+      fetchedAt: 0,
+      etag: null,
+      maxAgeMs: 0,
+      verificationMethods: [],
+      ...result,
+    });
+    expect(features.patch.detail.formats["text/turtle"]).toHaveLength(n);
+    expect(performance.now() - started).toBeLessThan(3000);
+  });
+
+  test.each([
+    [
+      "the format node is also a capability",
+      "<#fmt> a ssd:PatchSupport ; ssd:format <#fmt> . <> lws:capability <#fmt> .",
+    ],
+    [
+      "the format node is a blank capability first",
+      "<> lws:capability _:f . _:f a ssd:PatchSupport ; ssd:format _:f .",
+    ],
+  ])("format references always resolve when %s", async (_name, body) => {
+    const node = body.includes("_:f") ? "_:f" : "<#fmt>";
+    const dataset = await turtle(`${body}
+      <> lws:capability [ a ssd:PatchSupport ; ssd:format ${node} ] .
+      ${node} ssd:source "text/turtle" ; ssd:patchType "application/sparql-update" .`);
+    const result = parseSolidDescription(dataset, ROOT);
+    const features = deriveFeatures({
+      protocol: "solid",
+      id: ROOT,
+      root: ROOT,
+      descriptionUrl: `${ROOT}.well-known/solid`,
+      sources: ["solid-description"],
+      fetchedAt: 0,
+      etag: null,
+      maxAgeMs: 0,
+      verificationMethods: [],
+      ...result,
+    });
+    expect(features.patch.detail.formats["text/turtle"]).toEqual(["application/sparql-update"]);
   });
 
   test("expands shared blank-node extensions once rather than multiplying their contents", async () => {
