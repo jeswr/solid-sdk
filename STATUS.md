@@ -146,3 +146,50 @@ Conservative compatibility choice: servers must advertise an unambiguous WAC
 ACL even before container creation and support the ACL-first write sequence;
 otherwise saving fails closed. No new open questions. The earlier shared
 PodPort/registry coordination question is unchanged.
+
+## Fix round 2 — review at 08e8edf3e9ee
+
+- `2bd7ea4c` — `fix: protect chat content resource ACLs`: resolves the high
+  finding about resource-specific grants. Metadata and messages now use the
+  same ACL-first create path as containers: discover the exact resource's WAC
+  ACL, reject unsupported documents, replace grants with owner-only access,
+  attempt the conditional content write, and recheck the ACL association.
+  Existing resources skipped with 412 receive the same protection. Only
+  container ACLs set inherited defaults. Regression tests cover public grants
+  on new and existing metadata/messages, custom ACL locations, immutable
+  content, discovery/read/write failures, unsupported models, and changed
+  associations. The package README documents these guarantees.
+- Final documentation commit — `docs: record resource ACL fix validation`.
+
+Final validation commands (all tests use fixtures/in-memory pods):
+
+```sh
+PATH=/tmp/sst-fv0j-no-remote-git:$PATH bash -c 'pnpm --filter @jeswr/solid-chat-interop run lint && pnpm --filter @jeswr/solid-chat-interop run build && pnpm --filter @jeswr/solid-chat-interop run typecheck && pnpm --filter @jeswr/solid-chat-interop run test'
+# PASS: lint/build/typecheck; 128 tests in 7 files (42 writer tests).
+
+PATH=/tmp/sst-fv0j-no-remote-git:$PATH TURBO_SCM_BASE=08e8edf3e9eefafe1bbd38312d74b787e88ca184 pnpm run gate
+# PASS: lint:root and all guards; 25/25 Turbo tasks, including 115 MCP tests.
+
+PATH=/tmp/sst-fv0j-no-remote-git:$PATH pnpm run gate:full
+# FAIL: unchanged @jeswr/federation-trust#test; 163/226 tasks completed.
+```
+
+The full gate again stops at the existing “delegation credential structure is
+stable” snapshot mismatch in
+`packages/federation-trust/test/characterization.test.ts:196`: delegateKey JSON
+expects key order `crv,x,kty`, but receives `kty,crv,x`. No changes were made to
+that package; remaining full-workspace tasks did not finish.
+
+Workspace dependency output was built first with
+`PATH=/tmp/sst-fv0j-no-remote-git:$PATH pnpm exec turbo run build --filter='@jeswr/solid-chat-interop^...'`.
+The exact-pinned fetch-rdf dist artifact described above was restored into this
+checkout's node_modules. No remote Git operations, lifecycle scripts, dependency
+changes or lockfile edits were needed; check:packages is not applicable.
+Roborev remains unavailable, so no automated review verdict could be obtained.
+Logs: `/tmp/sst-fv0j-fix2-{deps,interop-gate,gate,gate-full}.log`.
+
+No requested implementation remains unfinished and there are no new open
+questions. Conservatively, ACL-before-content support and an unchanged WAC ACL
+association are required for every content resource, including existing ones;
+unsupported servers fail closed. The earlier shared PodPort/registry
+coordination question is unchanged.
