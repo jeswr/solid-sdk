@@ -347,32 +347,69 @@ describe("reviewed recipe failure boundaries", () => {
     }
   });
 
-  it("keeps newer field generations even when priority returns to the same value", async () => {
+  it.each([
+    [1, 2],
+    [2, 1],
+  ])("restores the confirmed baseline when edits fail in order %s, %s", async (first, second) => {
     const code = blocks("solid-app-shell", "ts", "### Trap 2")[0];
-    const { claimMutation, revertIfCurrent, fieldOwners } = await execute(
+    const { enqueueMutation, settleMutation, visibleValue } = await execute(
       code,
       {},
       {},
-      "({ claimMutation, revertIfCurrent, fieldOwners })",
+      "({ enqueueMutation, settleMutation, visibleValue })",
     );
-    const original = { id: "one", priority: 0, status: "todo", state: "open", title: "Original" };
-    const first = claimMutation("one", { kind: "priority" });
-    claimMutation("one", { kind: "priority" }); // 1 -> 2 succeeds
-    claimMutation("one", { kind: "priority" }); // 2 -> 1 succeeds
-    const current = [{ ...original, priority: 1, title: "Newer title" }];
-    expect(revertIfCurrent(current, original, first)).toBe(current);
+    const baseline = { id: "one", priority: 0, status: "todo", state: "open", title: "Original" };
+    let state = { baseline, pending: [] };
+    state = enqueueMutation(state, 1, { priority: 1 });
+    state = enqueueMutation(state, 2, { priority: 2 });
+    state = enqueueMutation(state, 3, { title: "Newer title" });
+    const beforeFailure = structuredClone(state);
+    const afterFirst = settleMutation(state, first, false);
+    expect(state).toEqual(beforeFailure); // React may replay the updater
+    expect(settleMutation(state, first, false)).toEqual(afterFirst);
+    expect(visibleValue(afterFirst).priority).toBe(first === 1 ? 2 : 1);
+    state = settleMutation(afterFirst, second, false);
+    expect(visibleValue(state)).toEqual({ ...baseline, title: "Newer title" });
+    state = settleMutation(state, 3, true);
+    expect(state).toEqual({ baseline: { ...baseline, title: "Newer title" }, pending: [] });
+    const replacement = { baseline, pending: [] };
+    expect(settleMutation(replacement, first, false)).toBe(replacement);
+  });
 
-    const status = claimMutation("one", { kind: "status" });
-    claimMutation("one", { kind: "priority" }); // unrelated field must not block rollback
-    const moved = [{ ...current[0], status: "done", state: "closed", priority: 3 }];
-    expect(revertIfCurrent(moved, original, status)).toEqual([{ ...current[0], priority: 3 }]);
-    // React may replay a state updater; rollback must not consume ownership.
-    expect(revertIfCurrent(moved, original, status)).toEqual([{ ...current[0], priority: 3 }]);
-    const other = claimMutation("two", { kind: "priority" });
-    expect(revertIfCurrent(current, { ...original, id: "two" }, other)).toBe(current);
-    // Removing/replacing a record invalidates its ownership before the ID is reused.
-    fieldOwners.delete("one");
-    expect(revertIfCurrent(moved, original, status)).toBe(moved);
+  it.each([
+    [1, 2, 3],
+    [3, 2, 1],
+    [2, 1, 3],
+    [2, 3, 1],
+    [1, 3, 2],
+    [3, 1, 2],
+  ])("keeps newer successful edits when outcomes arrive %s, %s, %s", async (...order) => {
+    const code = blocks("solid-app-shell", "ts", "### Trap 2")[0];
+    const { enqueueMutation, settleMutation, visibleValue } = await execute(
+      code,
+      {},
+      {},
+      "({ enqueueMutation, settleMutation, visibleValue })",
+    );
+    const baseline = { id: "one", priority: 0, status: "todo", state: "open", title: "Original" };
+    let state = { baseline, pending: [] };
+    for (const [generation, priority] of [
+      [1, 1],
+      [2, 2],
+      [3, 1],
+    ]) {
+      state = enqueueMutation(state, generation, { priority });
+    }
+    for (const generation of order) {
+      state = settleMutation(state, generation, generation !== 1);
+      expect(visibleValue(state).priority).toBe(1);
+    }
+    expect(state).toEqual({ baseline: { ...baseline, priority: 1 }, pending: [] });
+    state = enqueueMutation(state, 4, { status: "done", state: "closed" });
+    state = enqueueMutation(state, 5, { priority: 3 });
+    state = settleMutation(state, 5, true);
+    state = settleMutation(state, 4, false);
+    expect(visibleValue(state)).toEqual({ ...baseline, priority: 3 });
   });
 
   it("treats storage acquisition and read errors as misses without weakening identity checks", async () => {

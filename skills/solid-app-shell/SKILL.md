@@ -6,7 +6,7 @@ description: Use when making Solid app mutations optimistic, fixing stale rollba
 ## Quick reference
 
 Update local UI state immediately, persist asynchronously, and reconcile in the background.
-Revert only the failed mutation's fields, and only while its mutation generation still owns each field.
+Keep a confirmed baseline and an ordered queue of field-scoped mutations; after failure, recompute the visible value from the baseline plus the remaining queue.
 Flush pending debounced writes on page teardown, respecting the keepalive body cap and retaining failed writes for retry.
 For shared React chrome APIs, read [the package skill](../../packages/app-shell/SKILL.md); this skill keeps application patterns.
 
@@ -42,88 +42,89 @@ answers. Instead, make mutations **optimistic**:
    correctness lives — see below.
 
 ```ts
-// optimistic write — local first, persist in the background, revert on failure
-// optimisticMove returns three things: the new item LIST, the pre-move record,
-// and the optimistically-moved record. Ownership uses generations, not value equality
-// (see Trap 2); keep the generation registry stable across renders.
-const { items: next, original } = optimisticMove(items, id, move /* … */);
-if (!original) return;          // no-op (already in that state) — don't show "Saving…"
-const mutation = claimMutation(id, move); // claim each changed field before publishing
-setItemsLocal(() => next);      // UI updates instantly
-persist((repo) => repo.applyWrite(id, move)).catch(() => {
-  setItemsLocal((cur) => revertIfCurrent(cur, original, mutation));
-});
+// Keep nextGeneration and this record's edit state in the store across renders.
+const patch = moveToPatch(move); // only the fields changed by this move
+if (isNoOp(visibleValue(edits), patch)) return;
+const generation = ++nextGeneration;
+setEdits((cur) => enqueueMutation(cur, generation, patch)); // UI updates instantly
+persist((repo) => repo.applyWrite(id, move)).then(
+  () => setEdits((cur) => settleMutation(cur, generation, true)),
+  () => {
+    showSaveError();
+    setEdits((cur) => settleMutation(cur, generation, false));
+  },
+);
 ```
 
 ## Revert correctly — the two traps (both real review findings)
 
-A naïve revert ("on error, put the old record back") is wrong in two ways that bite in practice.
-
 ### Trap 1 — reverting the WHOLE record clobbers concurrent edits to other fields
 
-While the failed write was in flight, the user may have edited a **different** field of the same
-item (changed the title, added a comment, reassigned it). Replacing the whole record with the stale
-`original` throws those edits away.
-
-**Fix: revert only the field(s) the failed write changed, onto the CURRENT record.** A status move
-rolls back `status`/`state` only; a priority move rolls back `priority` only — both spread over the
-*current* record so every unrelated field is preserved:
-
-```ts
-const reverted =
-  move.kind === "status"
-    ? { ...current, status: original.status, state: original.state }
-    : { ...current, priority: original.priority };
-```
+While a failed write was in flight, the user may have edited a **different** field of the same
+item. Keep each mutation as a field-scoped patch: a status move changes `status`/`state`, a
+priority move changes `priority`. Recompute from the confirmed baseline and the remaining
+patches so unrelated edits survive.
 
 ### Trap 2 — a stale failed write clobbers a NEWER mutation of the same item
 
-If the user moves the **same** card again while the first write is still in flight, the first
-write's later failure must **not** roll the card back to where the *first* move started — the second
-move now owns the card's state. A blind revert resurrects stale state and undoes the user's newer
-action.
-
-**Fix: claim a monotonically increasing generation per item and changed field.**
 Value equality cannot establish ownership: with priority `0 → 1 → 2 → 1`, a late failure
-of the first write sees `1` again but must not undo the newer successful edits.
-Capture each write's generation before publishing the optimistic state; roll back only
-fields whose current generation still belongs to that write:
+of the first write must not undo the newer successful edits. Generations identify mutations,
+but a generation fence alone is insufficient: with `0 → 1 → 2` and **both writes failing**,
+the second write's captured original is the unconfirmed `1`. Restoring it resurrects a failed
+edit, regardless of which failure arrives first.
+
+**Keep a confirmed baseline plus an ordered queue of mutations.** The visible record is the
+baseline with the queue's patches applied in local intent order. On failure, remove that
+mutation and recompute; never restore its captured original. On success, mark it confirmed
+and fold only the confirmed prefix into the baseline. A successful newer mutation stays in
+the queue while an older one is unresolved, so it remains visible without letting a late older
+success overwrite it.
 
 ```ts
-// Keep this registry for the store's lifetime, not inside a render or mutation callback.
-let nextGeneration = 0;
-const fieldOwners = new Map(); // item ID -> Map(field, generation)
+type Fields = { priority: number; status: string; state: string; title: string };
+type Item = Fields & { id: string };
+type Mutation = { generation: number; patch: Partial<Fields>; confirmed: boolean };
+type EditState = { baseline: Item; pending: Mutation[] };
 
-function claimMutation(id, move) {
-  const fields = move.kind === "status" ? ["status", "state"] : ["priority"];
-  const generation = ++nextGeneration;
-  const owners = fieldOwners.get(id) ?? new Map();
-  for (const field of fields) owners.set(field, generation);
-  fieldOwners.set(id, owners);
-  return { generation, fields };
+// Store lifetime counter; never reuse a generation after deletion/replacement/account switch.
+let nextGeneration = 0;
+
+function visibleValue(state: EditState): Item {
+  return state.pending.reduce((item, mutation) => ({ ...item, ...mutation.patch }), state.baseline);
 }
 
-function revertIfCurrent(items, original, mutation) {
-  const current = items.find((i) => i.id === original.id);
-  if (!current) return items;                 // deleted/archived — nothing to revert
-  const owners = fieldOwners.get(original.id);
-  const ownedFields = mutation.fields.filter(
-    (field) => owners?.get(field) === mutation.generation,
-  );
-  if (!ownedFields.length) return items;      // a newer write owns these fields
-  const reverted = { ...current };           // preserve unrelated edits (Trap 1)
-  for (const field of ownedFields) {
-    reverted[field] = original[field];
+function enqueueMutation(state: EditState, generation: number, patch: Partial<Fields>): EditState {
+  return {
+    ...state,
+    pending: [...state.pending, { generation, patch: { ...patch }, confirmed: false }],
+  };
+}
+
+function settleMutation(state: EditState, generation: number, success: boolean): EditState {
+  if (!state.pending.some((mutation) => mutation.generation === generation)) return state;
+  let pending = success
+    ? state.pending.map((mutation) =>
+        mutation.generation === generation ? { ...mutation, confirmed: true } : mutation,
+      )
+    : state.pending.filter((mutation) => mutation.generation !== generation);
+  let baseline = state.baseline;
+  while (pending[0]?.confirmed) {
+    const [first, ...rest] = pending;
+    baseline = { ...baseline, ...first.patch };
+    pending = rest;
   }
-  return items.map((i) => (i.id === original.id ? reverted : i));
+  return { baseline, pending };
 }
 ```
 
-Keep ownership per **field**, not just per item: editing priority must not prevent rollback
-of a failed status write. Every local writer must claim its changed fields. Keep the latest
-generations after success so older failures stay fenced out; invalidate ownership on deletion,
-record replacement, or account switch. Never restore an older generation during rollback. Keep the rollback updater pure: React
-may evaluate it more than once, so it must not mutate the ownership registry.
+Initialize one `EditState` per record from its confirmed server value with `pending: []`.
+All local writers enqueue field-scoped patches. A confirmed entry waiting behind an unresolved
+one remains in `pending` until it can join the baseline. These reducers are pure: React may
+replay an updater without consuming a mutation. Drop the queue on deletion, record replacement,
+or account switch; callbacks for generations absent from the new state do nothing.
+Serialize pod writes per record or use conditional writes with conflict reconciliation to
+preserve server ordering; this queue governs local visibility. Generation-fence background
+refreshes, and do not replace the baseline with a stale refresh while mutations remain.
 
 ## Flush a debounced write on tab teardown — don't lose the last edit
 
@@ -167,7 +168,7 @@ flush + the 64 KB cap fallback, hardened over roborev's fetch/unload rounds.)
 ## Indicator, no-ops, and reconciliation
 
 - **A move that doesn't change anything is a no-op** — a drop onto the card's *current* column must
-  not fire a write or show "Saving…". `optimisticMove` returns no `original` in that case; bail.
+  not fire a write or show "Saving…". Compare the patch with `visibleValue(edits)` and bail.
 - **Keep the optimistic state in the durable cache too** (see `solid-offline`), so a reopen
   mid-write paints the optimistic state rather than the pre-write one.
 - **Reconcile in the background after a successful persist** (a non-blocking refresh), so a change
@@ -207,9 +208,9 @@ Building a list/browser view over a pod container surfaced three patterns worth 
 | Forbidden container shows "empty" | A store `list()` swallowing 401/403→`[]` hides access-denied — wrap in a UI facade that surfaces a typed AccessDenied; clear stale list on a reload that 403s |
 | View fetches an attacker's URL | Don't fetch every `ldp:contains` IRI — require http(s) + same-origin (parsed `origin`) + a real descendant `pathname` before fetching a child |
 | A producer app's data shows under "Other" | A consumer must map EVERY producer's Type-Index `solid:forClass` IRI into its own category/view map (both `https`/`http` schema.org forms) — an unmapped class is still discovered but mis-bucketed into the fallback (cited: pod-docs' `pd:Document`); add the mapping + a regression test when you add a producer app |
-| Concurrent edits lost on revert | Trap 1 — revert only the failed write's field(s) onto the **current** record, never replace the whole record with `original` |
-| Newer move undone by an older failure | Trap 2 — require the failed mutation's generation to own each field; repeated values do not prove ownership |
-| Spurious "Saving…" on a no-op drop | A move to the current column changes nothing — detect it (no `original`) and skip the write |
+| Concurrent edits lost on revert | Trap 1 — enqueue field-scoped patches and recompute from the confirmed baseline plus remaining mutations |
+| Newer move undone by an older failure | Trap 2 — remove only the failed generation from the queue; retain newer edits and never restore an unconfirmed original |
+| Spurious "Saving…" on a no-op drop | Compare the patch with the visible value and skip the write when nothing changes |
 | Indicator clutters the UI | Hide when idle; auto-clear "Saved" back to idle after ~1.5 s; fixed-corner pill, `aria-live="polite"`, not a modal |
 | Coupled server change missing after persist | Background-reconcile on success — the server may have changed a field your write didn't set |
 | Last edit lost when the tab is closed mid-debounce | A debounced pod write whose timer hasn't fired is lost on tab-close/navigate/background. Flush on `pagehide` **and** `visibilitychange→hidden` (mobile-reliable) with `fetch(url,{keepalive:true})` so the request outlives the page; clear the pending marker only AFTER it resolves (keep it for retry) |
