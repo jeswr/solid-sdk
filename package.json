@@ -2,7 +2,7 @@
   "name": "@jeswr/solid-sdk-workspace",
   "private": true,
   "version": "0.0.0",
-  "description": "The @jeswr Solid suite workspace \u2014 reusable SDK packages and private deployable applications",
+  "description": "The @jeswr Solid suite workspace — reusable SDK packages and private deployable applications",
   "type": "module",
   "license": "MIT",
   "author": "Jesse Wright <63333554+jeswr@users.noreply.github.com>",
@@ -16,7 +16,8 @@
   },
   "scripts": {
     "lint": "pnpm run lint:root && turbo run lint --affected --concurrency=4",
-    "lint:root": "biome check scripts test guardrails skills package.json turbo.json vitest.config.ts && pnpm run check:lockfile-transport && pnpm run check:app-workspace && pnpm run check:sdk-layers && pnpm run check:fetch && pnpm check:tokens && pnpm check:contrast && pnpm run check:agent-layers",
+    "lint:root": "pnpm run check:skills && biome check scripts test guardrails skills package.json turbo.json vitest.config.ts && pnpm run check:lockfile-transport && pnpm run check:app-workspace && pnpm run check:sdk-layers && pnpm run check:fetch && pnpm check:tokens && pnpm check:contrast && pnpm run check:agent-layers",
+    "check:skills": "node scripts/check-skills.mjs",
     "check:agent-layers": "node scripts/check-agent-layers.mjs",
     "lint:fix": "biome check --write .",
     "check:lockfile-transport": "node scripts/check-lockfile-transport.mjs",
@@ -37,6 +38,8 @@
   "devDependencies": {
     "@biomejs/biome": "^2.5.1",
     "@types/node": "^25.9.2",
+    "js-yaml": "4.3.0",
+    "marked": "17.0.6",
     "turbo": "^2.10.4",
     "typescript": "^6.0.3",
     "vitest": "^4.1.9"
