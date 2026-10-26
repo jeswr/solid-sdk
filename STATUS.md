@@ -55,3 +55,48 @@ See the repository's mandated workflow in `skills/roborev-review/SKILL.md`.
 Scope choices/open questions are recorded in `QUESTIONS.md`: timed API only (date-only,
 floating and nominal-duration inputs rejected), and a handwritten subset rather than adding
 `rrule`. No implementation work is blocked on these conservative choices.
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+## Fix round 1 — out-of-window generated ends
+
+Generated RRULE starts at or after the exclusive window end are skipped before validating
+their interval ends. COUNT accounting remains before window filtering. Explicit DTSTART
+and RDATE validation remains unconditional, and overlapping intervals still validate their ends.
+No dependencies, API, or design changes.
+
+Regression tests reproduce the reviewed year-9999 overflow and the exact window-end boundary.
+Both failed with `invalid-date` before the fix. Additional assertions retain rejection of
+overflowing visible occurrences and out-of-window explicit DTSTART/RDATE intervals.
+
+Validation for this round:
+
+- `pnpm --filter @jeswr/app-suite exec vitest run test/calendar-recurrence.test.ts test/calendar-recurrence-validation.test.ts test/calendar-recurrence-busy.test.ts --coverage.include='src/apps/calendar/lib/recurrence/**/*.ts'`
+  — PASS: 120 tests; recurrence coverage 100% statements, branches, functions, and lines.
+- `pnpm --filter @jeswr/suite-ui run build` — PASS (existing app prerequisite).
+- `pnpm --filter @jeswr/app-suite run lint && pnpm --filter @jeswr/app-suite run build && pnpm --filter @jeswr/app-suite run typecheck && pnpm --filter @jeswr/app-suite run test`
+  — PASS: 30 files / 1,297 tests, all configured coverage metrics 100%. Lint retains 21
+  existing Money warnings. An initial lint attempt found formatting in the new test;
+  formatting was corrected before this successful chain.
+- `pnpm run lint:root` — PASS.
+- `TURBO_SCM_BASE=30bc4d852089c868cdfad8c6d3b06ddf0e86f3b6 pnpm run gate`
+  — PASS: 6/6 Turbo tasks, 0 cached.
+- `pnpm run gate:full` — initial attempt stopped after 37/200 tasks on an unrelated
+  5-second timeout in `test/agent-layers.test.mjs:509` (the export-star path-character case).
+- `pnpm exec turbo run test:root` — isolated retry PASS: 7 files / 686 tests.
+- `pnpm run gate:full` — retry FAIL after 279 successful / 348 planned tasks (39 cached),
+  in 4m24s, at the same two pre-existing `@jeswr/federation-codegen#test` failures recorded
+  above: `test/generator.test.ts:81` expects the old bookmarks namespace, and line 126
+  detects `ontology.ttl` drift. No changes relative to `30bc4d852089` in
+  `tools/federation-codegen` or `packages/solid-federation-vocab`. Remaining tasks were
+  aborted; unrelated repairs are outside this fix round. Generated, untracked
+  `apps/pod-*/web/public/{callback.html,clientid.jsonld}` build outputs were removed.
+- `git diff --check` — PASS.
+
+Commits for this round:
+
+- `0a8e3fd4` — `fix(calendar): skip generated starts beyond the window` (fix and regression tests).
+- Final `docs(calendar): record boundary fix validation` commit — this report.
+
+`roborev status` remains unavailable (exit 127); the dispatcher must provide automated review.
+No unfinished implementation work or new open questions. No UI/screenshots apply.
