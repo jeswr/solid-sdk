@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY GPT-5.6 Codex
 import { readFileSync } from "node:fs";
 import { describe, expect, test } from "vitest";
 import { DEFAULT_SUITE_URL } from "../src/config.ts";
@@ -109,6 +110,37 @@ describe("iOS project", () => {
     const info = read("ios/App/ShareExtension/Info.plist");
     expect(info).toContain("<string>com.apple.share-services</string>");
     expect(info).not.toContain("TRUEPREDICATE");
+  });
+
+  test("the shared App scheme runs the hosted XCTest bundle", () => {
+    const target = pbxproj.match(
+      /([A-F0-9]{24}) \/\* AppTests \*\/ = \{\s*isa = PBXNativeTarget;[\s\S]*?productType = "com\.apple\.product-type\.bundle\.unit-test";\s*\};/,
+    );
+    expect(target).not.toBeNull();
+    expect(pbxproj).toContain("PRODUCT_BUNDLE_IDENTIFIER = org.jeswr.suite.tests;");
+    expect(pbxproj).toContain('BUNDLE_LOADER = "$(TEST_HOST)";');
+    expect(pbxproj).toContain(
+      'TEST_HOST = "$(BUILT_PRODUCTS_DIR)/App.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/App";',
+    );
+    for (const file of [
+      "SuiteOriginTests.swift",
+      "SuiteAuthSessionPluginTests.swift",
+      "BridgeOriginGuardTests.swift",
+      "ShareStoreTests.swift",
+    ]) {
+      expect(pbxproj).toContain(`${file} in Sources */,`);
+      expect(read(`ios/App/AppTests/${file}`)).toContain("@testable import App");
+    }
+    const scheme = read("ios/App/App.xcodeproj/xcshareddata/xcschemes/App.xcscheme");
+    const testAction = scheme.match(/<TestAction\b[\s\S]*?<\/TestAction>/)?.[0];
+    expect(testAction).toMatch(/<TestableReference\s+skipped = "NO"/);
+    expect(testAction).toContain(`BlueprintIdentifier = "${target?.[1]}"`);
+    expect(testAction).toContain('BuildableName = "AppTests.xctest"');
+    for (const action of ["BuildAction", "LaunchAction"]) {
+      expect(scheme.match(new RegExp(`<${action}\\b[\\s\\S]*?</${action}>`))?.[0]).toContain(
+        'BuildableName = "App.app"',
+      );
+    }
   });
 
   test("boots through the guarded view controller", () => {

@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY GPT-5.6 Codex
 import WebKit
 
 /// Wraps Capacitor's `bridge` script-message handler: Capacitor does not check which frame sent a
@@ -12,9 +13,14 @@ final class BridgeOriginGuard: NSObject, WKScriptMessageHandler {
         self.allowed = allowed
     }
 
+    /// Shared by the plugin and prompt channels; testable without constructing a WKWebView.
+    static func allows(isMainFrame: Bool, origin: SuiteOrigin?, allowed: SuiteOrigin) -> Bool {
+        return isMainFrame && origin == allowed
+    }
+
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
-        guard message.frameInfo.isMainFrame,
-              SuiteOrigin(securityOrigin: message.frameInfo.securityOrigin) == allowed else {
+        guard Self.allows(isMainFrame: message.frameInfo.isMainFrame,
+                          origin: SuiteOrigin(securityOrigin: message.frameInfo.securityOrigin), allowed: allowed) else {
             NSLog("Solid Suite: dropped a bridge message from a frame outside the suite origin")
             return
         }
@@ -45,7 +51,8 @@ final class UIDelegateOriginGuard: NSObject, WKUIDelegate {
     func webView(_ webView: WKWebView, runJavaScriptTextInputPanelWithPrompt prompt: String,
                  defaultText: String?, initiatedByFrame frame: WKFrameInfo,
                  completionHandler: @escaping (String?) -> Void) {
-        guard frame.isMainFrame, SuiteOrigin(securityOrigin: frame.securityOrigin) == allowed,
+        guard BridgeOriginGuard.allows(isMainFrame: frame.isMainFrame,
+                                      origin: SuiteOrigin(securityOrigin: frame.securityOrigin), allowed: allowed),
               let inner = inner else {
             completionHandler(nil)
             return

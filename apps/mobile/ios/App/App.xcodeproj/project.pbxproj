@@ -7,8 +7,11 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		13BFB63FC7789FC67E2029A8 /* SuiteOriginTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 972ED7D72093E17922DEAB5B /* SuiteOriginTests.swift */; };
+		14E03E00A3139E5EE2B85FD8 /* CapApp-SPM in Frameworks */ = {isa = PBXBuildFile; productRef = 9F8EFB09D532889909E021C3 /* CapApp-SPM */; };
 		186DFAEB4660B57133868B0A /* SuiteOrigin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FDC852D88EB015D4D001F2A /* SuiteOrigin.swift */; };
 		1DDC1CD42450C91A74B05BE7 /* SuiteNavigationPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6E7C6F804CE98F2E210DFB9 /* SuiteNavigationPlugin.swift */; };
+		2EA93A5EBDAEC9295A53DC9C /* SuiteAuthSessionPluginTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B281A69F43BED62127E362EA /* SuiteAuthSessionPluginTests.swift */; };
 		2FAD9763203C412B000D30F8 /* config.xml in Resources */ = {isa = PBXBuildFile; fileRef = 2FAD9762203C412B000D30F8 /* config.xml */; };
 		4D22ABE92AF431CB00220026 /* CapApp-SPM in Frameworks */ = {isa = PBXBuildFile; productRef = 4D22ABE82AF431CB00220026 /* CapApp-SPM */; };
 		50379B232058CBB4000EE86E /* capacitor.config.json in Resources */ = {isa = PBXBuildFile; fileRef = 50379B222058CBB4000EE86E /* capacitor.config.json */; };
@@ -18,6 +21,7 @@
 		504EC3121FED79650016851F /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 504EC3101FED79650016851F /* LaunchScreen.storyboard */; };
 		50B271D11FEDC1A000F3C39B /* public in Resources */ = {isa = PBXBuildFile; fileRef = 50B271D01FEDC1A000F3C39B /* public */; };
 		606BC23CE5C6B1A8DBF10B14 /* BridgeOriginGuard.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE94728392B7C1FD68FE7AC0 /* BridgeOriginGuard.swift */; };
+		720FAEA3B67F7C24651F8D9B /* ShareStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E49663052956C61D153D8547 /* ShareStoreTests.swift */; };
 		7652880DB5DA161429CFF54A /* ShareStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 456C42C6348DCCE2ABC80904 /* ShareStore.swift */; };
 		893AD332353FE6DBA483E06A /* ShareStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 456C42C6348DCCE2ABC80904 /* ShareStore.swift */; };
 		9582B6832FE993A70072D4E8 /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9582B6822FE993A50072D4E8 /* SceneDelegate.swift */; };
@@ -25,6 +29,7 @@
 		AA399F4EA6B1E600E74A36ED /* SuiteAuthSessionPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A2319185F3B90F139C05EFD /* SuiteAuthSessionPlugin.swift */; };
 		C4FB9110CBA07C628BFD8FB9 /* SuiteShareIntakePlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3531ECFDEC29FDB44678B88B /* SuiteShareIntakePlugin.swift */; };
 		E88CFBAAA914CEAD4FA72993 /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = D75ABD7DB68A5B5509A9EE98 /* ShareViewController.swift */; };
+		E890CA71FA6841FC7F4CD237 /* BridgeOriginGuardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD909227DF8A840931F93E70 /* BridgeOriginGuardTests.swift */; };
 		FCC925B160BB4ACCC138F1F3 /* MainViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 86715AC00533AB53B5552859 /* MainViewController.swift */; };
 		6E1FEF325ABDB3C2D6FDE130 /* SuiteShareStagingPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73F75F2B869217CCDB2E1C09 /* SuiteShareStagingPlugin.swift */; };
 		C8EC118C0D45E7603829900B /* ShareOutStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03854134D908D75711A671CB /* ShareOutStore.swift */; };
@@ -37,6 +42,13 @@
 			proxyType = 1;
 			remoteGlobalIDString = D55819AF599D3C2A5A585EEB;
 			remoteInfo = ShareExtension;
+		};
+		C7431423E13DFB98C7058F25 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 504EC2FC1FED79650016851F /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 504EC3031FED79650016851F;
+			remoteInfo = App;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -72,14 +84,19 @@
 		8F663C331DB1675E0B53A98E /* ShareExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		9582B6822FE993A50072D4E8 /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
 		958DCC722DB07C7200EA8C5F /* debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = debug.xcconfig; path = ../debug.xcconfig; sourceTree = SOURCE_ROOT; };
+		972ED7D72093E17922DEAB5B /* SuiteOriginTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SuiteOriginTests.swift; sourceTree = "<group>"; };
 		AF4BF16769184CC8BBB912E8 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		B281A69F43BED62127E362EA /* SuiteAuthSessionPluginTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SuiteAuthSessionPluginTests.swift; sourceTree = "<group>"; };
+		BD909227DF8A840931F93E70 /* BridgeOriginGuardTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BridgeOriginGuardTests.swift; sourceTree = "<group>"; };
 		CCD7E236FFFCB95FD6571C6A /* ShareExtension.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = ShareExtension.entitlements; sourceTree = "<group>"; };
 		CE94728392B7C1FD68FE7AC0 /* BridgeOriginGuard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BridgeOriginGuard.swift; sourceTree = "<group>"; };
 		D75ABD7DB68A5B5509A9EE98 /* ShareViewController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ShareViewController.swift; sourceTree = "<group>"; };
+		E49663052956C61D153D8547 /* ShareStoreTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ShareStoreTests.swift; sourceTree = "<group>"; };
 		E6E7C6F804CE98F2E210DFB9 /* SuiteNavigationPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SuiteNavigationPlugin.swift; sourceTree = "<group>"; };
 		E79D38B5A0EDD8CF09BFFA26 /* App.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = App.entitlements; sourceTree = "<group>"; };
 		73F75F2B869217CCDB2E1C09 /* SuiteShareStagingPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SuiteShareStagingPlugin.swift; sourceTree = "<group>"; };
 		03854134D908D75711A671CB /* ShareOutStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareOutStore.swift; sourceTree = "<group>"; };
+		F1C4DD9DB0AC40043749312B /* AppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -88,6 +105,14 @@
 			buildActionMask = 2147483647;
 			files = (
 				4D22ABE92AF431CB00220026 /* CapApp-SPM in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AFD96C1B07B73B5D536A2B1F /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				14E03E00A3139E5EE2B85FD8 /* CapApp-SPM in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -101,6 +126,18 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		24014B0E73567F85608FBCBD /* AppTests */ = {
+			isa = PBXGroup;
+			children = (
+				BD909227DF8A840931F93E70 /* BridgeOriginGuardTests.swift */,
+				E49663052956C61D153D8547 /* ShareStoreTests.swift */,
+				B281A69F43BED62127E362EA /* SuiteAuthSessionPluginTests.swift */,
+				972ED7D72093E17922DEAB5B /* SuiteOriginTests.swift */,
+			);
+			name = AppTests;
+			path = AppTests;
+			sourceTree = "<group>";
+		};
 		504EC2FB1FED79650016851F = {
 			isa = PBXGroup;
 			children = (
@@ -109,6 +146,7 @@
 				504EC3051FED79650016851F /* Products */,
 				BF109B77B86A17403705D09B /* Shared */,
 				FB9A8B6D4B6DA108717BA6A3 /* ShareExtension */,
+				24014B0E73567F85608FBCBD /* AppTests */,
 			);
 			sourceTree = "<group>";
 		};
@@ -117,6 +155,7 @@
 			children = (
 				504EC3041FED79650016851F /* App.app */,
 				8F663C331DB1675E0B53A98E /* ShareExtension.appex */,
+				F1C4DD9DB0AC40043749312B /* AppTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -191,6 +230,27 @@
 			productReference = 504EC3041FED79650016851F /* App.app */;
 			productType = "com.apple.product-type.application";
 		};
+		A313D2A1F05F598B3487551D /* AppTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 6338CBD121D8B5C9AD1CA2F9 /* Build configuration list for PBXNativeTarget "AppTests" */;
+			buildPhases = (
+				9BD353B04D1AF808D3D99950 /* Sources */,
+				AFD96C1B07B73B5D536A2B1F /* Frameworks */,
+				7EFDEFF38DBD5EEBFF597B54 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				978012840A18B6E2F037B899 /* PBXTargetDependency */,
+			);
+			name = AppTests;
+			packageProductDependencies = (
+				9F8EFB09D532889909E021C3 /* CapApp-SPM */,
+			);
+			productName = AppTests;
+			productReference = F1C4DD9DB0AC40043749312B /* AppTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 		D55819AF599D3C2A5A585EEB /* ShareExtension */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = CD4ABC422239429D3C90607C /* Build configuration list for PBXNativeTarget "ShareExtension" */;
@@ -222,6 +282,9 @@
 						LastSwiftMigration = 1100;
 						ProvisioningStyle = Automatic;
 					};
+					A313D2A1F05F598B3487551D = {
+						TestTargetID = 504EC3031FED79650016851F;
+					};
 				};
 			};
 			buildConfigurationList = 504EC2FF1FED79650016851F /* Build configuration list for PBXProject "App" */;
@@ -242,6 +305,7 @@
 			targets = (
 				504EC3031FED79650016851F /* App */,
 				D55819AF599D3C2A5A585EEB /* ShareExtension */,
+				A313D2A1F05F598B3487551D /* AppTests */,
 			);
 		};
 /* End PBXProject section */
@@ -261,6 +325,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		590922E8E7CDA192405FF63A /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		7EFDEFF38DBD5EEBFF597B54 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -297,6 +368,17 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		9BD353B04D1AF808D3D99950 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E890CA71FA6841FC7F4CD237 /* BridgeOriginGuardTests.swift in Sources */,
+				720FAEA3B67F7C24651F8D9B /* ShareStoreTests.swift in Sources */,
+				2EA93A5EBDAEC9295A53DC9C /* SuiteAuthSessionPluginTests.swift in Sources */,
+				13BFB63FC7789FC67E2029A8 /* SuiteOriginTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -305,6 +387,12 @@
 			name = ShareExtension;
 			target = D55819AF599D3C2A5A585EEB /* ShareExtension */;
 			targetProxy = 18D5213E89CF1D53D21A44A3 /* PBXContainerItemProxy */;
+		};
+		978012840A18B6E2F037B899 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = App;
+			target = 504EC3031FED79650016851F /* App */;
+			targetProxy = C7431423E13DFB98C7058F25 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -534,6 +622,51 @@
 			};
 			name = Release;
 		};
+		DF11B87DD16979206BC430BF /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = org.jeswr.suite.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/App.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/App";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		DFA283D9FBA8C79C21428E1C /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = org.jeswr.suite.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/App.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/App";
+			};
+			name = Debug;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -551,6 +684,15 @@
 			buildConfigurations = (
 				504EC3171FED79650016851F /* Debug */,
 				504EC3181FED79650016851F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		6338CBD121D8B5C9AD1CA2F9 /* Build configuration list for PBXNativeTarget "AppTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				DF11B87DD16979206BC430BF /* Release */,
+				DFA283D9FBA8C79C21428E1C /* Debug */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
@@ -575,6 +717,11 @@
 
 /* Begin XCSwiftPackageProductDependency section */
 		4D22ABE82AF431CB00220026 /* CapApp-SPM */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D4C12C0A2AAA248700AAC8A2 /* XCLocalSwiftPackageReference "CapApp-SPM" */;
+			productName = "CapApp-SPM";
+		};
+		9F8EFB09D532889909E021C3 /* CapApp-SPM */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = D4C12C0A2AAA248700AAC8A2 /* XCLocalSwiftPackageReference "CapApp-SPM" */;
 			productName = "CapApp-SPM";

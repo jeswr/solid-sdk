@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY GPT-5.6 Codex
 import Foundation
 
 /// Pending share batches in the App Group container (DESIGN D7): share/<uuid>/{batch.json, item-N}.
@@ -66,7 +67,7 @@ struct ShareStore {
     }
 
     private static let mimePattern = try! NSRegularExpression(
-        pattern: "^[a-z0-9][a-z0-9!#$&^_.+-]*/[a-z0-9][a-z0-9!#$&^_.+-]*$")
+        pattern: "^[a-z0-9][a-z0-9!#$&^_.+-]*/[a-z0-9][a-z0-9!#$&^_.+-]*\\z")
 
     static func sanitiseMime(_ raw: String?) -> String {
         let lower = (raw ?? "").lowercased()
@@ -86,7 +87,7 @@ struct ShareStore {
     }
 
     private static let idPattern = try! NSRegularExpression(
-        pattern: "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
+        pattern: "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\z")
 
     static func isBatchId(_ id: String?) -> Bool {
         guard let id = id else { return false }
