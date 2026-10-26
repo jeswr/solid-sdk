@@ -19,6 +19,7 @@ import {
   pkce,
   randomToken,
   refresh,
+  requestedScopes,
   requiredScopes,
   revokeGoogle,
   sameSecret,
@@ -232,7 +233,8 @@ export async function login(
       before,
       deps.now(),
     );
-    const granted = normaliseScopes(p.provider, answer.scope);
+    // RFC 6749 §5.1: omitted scope means the scopes requested at authorization.
+    const granted = normaliseScopes(p.provider, answer.scope ?? requestedScopes(p).join(" "));
     const lacking = missing(granted, requiredScopes(p));
     if (lacking.length > 0)
       throw new HelperError(
@@ -424,7 +426,12 @@ export async function accessToken(
       }
       throw error;
     }
-    const granted = normaliseScopes(p.provider, answer.scope);
+    // Microsoft explicitly requests scopes on refresh. Google omits that request field,
+    // retaining the stored grant's scopes (RFC 6749 §6); never infer broader permissions.
+    const granted = normaliseScopes(
+      p.provider,
+      answer.scope ?? (p.provider === "microsoft" ? requestedScopes(p) : g.grantedScopes).join(" "),
+    );
     const lacking = missing(granted, requiredScopes(p));
     const now = deps.now();
     if (lacking.length > 0) {

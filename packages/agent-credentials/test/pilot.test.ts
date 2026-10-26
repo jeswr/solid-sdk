@@ -29,7 +29,14 @@ import { main } from "../src/cli.js";
 import { accessToken, helperExchange, login } from "../src/operations.js";
 import { loadProviderConfig } from "../src/providers/credentials.js";
 import { googleFreeBusy } from "../src/providers/google.js";
-import { GOOGLE, MICROSOFT, type Transport, verifyIdentity } from "../src/providers.js";
+import {
+  GOOGLE,
+  MICROSOFT,
+  normaliseScopes,
+  requestedScopes,
+  type Transport,
+  verifyIdentity,
+} from "../src/providers.js";
 import { CredentialStore, type Grant, HelperError, writeFully } from "../src/store.js";
 
 const NOW0 = Date.parse("2026-10-19T08:00:00Z");
@@ -66,7 +73,8 @@ class FakeProvider {
     email_verified: true,
     hd: "example.org",
   };
-  grantScope = `openid ${GOOGLE.CALENDAR_READ} https://www.googleapis.com/auth/userinfo.email`;
+  grantScope: string | undefined =
+    `openid ${GOOGLE.CALENDAR_READ} https://www.googleapis.com/auth/userinfo.email`;
   issueRefresh = true;
   signWith: "right" | "other" = "right";
   audience: string | undefined;
@@ -503,6 +511,33 @@ describe("Google login (installed-app loopback + PKCE + OIDC)", () => {
     await expect((await browserLogin(fake)).result).rejects.toMatchObject({ code: "scope" });
     expect(() => lstatSync(grantFile())).toThrow();
   });
+  it("uses the authorization request scopes when the code response omits scope", async () => {
+    const fake = await setupGoogle(true);
+    fake.grantScope = undefined;
+    const { result } = await browserLogin(fake);
+    const expected = ["email", "openid", GOOGLE.CALENDARLIST, GOOGLE.CALENDAR_READ].sort();
+    await expect(result).resolves.toMatchObject({ grantedScopes: expected, extraScopes: [] });
+    expect(readGrant().grantedScopes).toEqual(expected);
+    const exchange = fake.requests.find((r) => r.body.includes("authorization_code"));
+    expect(new URLSearchParams(exchange?.body).has("scope")).toBe(false);
+  });
+  it("preserves the stored grant scopes when a Google refresh omits scope", async () => {
+    const fake = await setupGoogle();
+    fake.grantScope = `${GOOGLE.CALENDAR_READ} ${GOOGLE.FREEBUSY}`;
+    await (await browserLogin(fake)).result;
+    const before = readGrant();
+    fake.grantScope = undefined;
+    clock += 3600000;
+    const refreshed = await accessToken(
+      { store: new CredentialStore(dir), transport: fake.transport, now },
+      "personal",
+    );
+    expect(refreshed.scopes).toEqual(before.grantedScopes);
+    expect(readGrant().grantedScopes).toEqual(before.grantedScopes);
+    expect(refreshed.token).not.toBe(before.access?.token);
+    const request = fake.requests.find((r) => r.body.includes("grant_type=refresh_token"));
+    expect(new URLSearchParams(request?.body).has("scope")).toBe(false);
+  });
 });
 // ------------------------------------------------------------------ token mode
 describe("helper token mode (the action contract)", () => {
@@ -706,6 +741,54 @@ describe("Microsoft (public client, PKCE, tenant/account constraints)", () => {
     const cals = await run(fake, "calendars", "--profile", "personal");
     expect(cals.out.join("")).toMatch(/AAMkFixture\tCalendar/);
     expect(cals.all()).not.toContain(g2.access?.token as string);
+  });
+  it("uses explicitly requested scopes when Microsoft code and refresh responses omit scope", async () => {
+    const fake = await setupMicrosoft("personal");
+    fake.grantScope = undefined;
+    const store = new CredentialStore(dir);
+    const p = store.profile("personal");
+    if (!p) throw new Error("missing fixture profile");
+    const expected = normaliseScopes("microsoft", requestedScopes(p).join(" "));
+    await expect((await browserLogin(fake)).result).resolves.toMatchObject({
+      grantedScopes: expected,
+      extraScopes: [],
+    });
+    const before = readGrant();
+    expect(before.grantedScopes).toEqual(expected);
+    store.putGrant({ ...before, grantedScopes: [...expected, "Mail.Send"] });
+    clock += 3600000;
+    const refreshed = await accessToken({ store, transport: fake.transport, now }, "personal");
+    expect(refreshed.scopes).toEqual(expected);
+    expect(readGrant().grantedScopes).toEqual(expected);
+    expect(refreshed.token).not.toBe(before.access?.token);
+    expect(readGrant().refreshToken).not.toBe(before.refreshToken);
+    const requests = fake.requests.filter((r) => r.body.includes("grant_type="));
+    expect(requests).toHaveLength(2);
+    for (const r of requests)
+      expect(new URLSearchParams(r.body).get("scope")).toBe(requestedScopes(p).join(" "));
+  });
+  it.each([
+    "",
+    "openid",
+  ])("refuses explicit Microsoft scopes lacking permission: %j", async (scope) => {
+    const fake = await setupMicrosoft("personal");
+    const permitted = fake.grantScope;
+    fake.grantScope = scope;
+    await expect((await browserLogin(fake)).result).rejects.toMatchObject({ code: "scope" });
+    const store = new CredentialStore(dir);
+    expect(store.grant("personal")).toBeUndefined();
+    fake.grantScope = permitted;
+    await (await browserLogin(fake)).result;
+    fake.grantScope = scope;
+    clock += 3600000;
+    await expect(
+      accessToken({ store, transport: fake.transport, now }, "personal"),
+    ).rejects.toMatchObject({ code: "scope" });
+    expect(store.grant("personal")).toMatchObject({
+      state: "needs-reconsent",
+      grantedScopes: scope ? [scope] : [],
+    });
+    expect(store.grant("personal")?.access).toBeUndefined();
   });
   it("an account from another tenant or account type is refused", async () => {
     const fake = await setupMicrosoft("work-or-school", MS_WORK_TID);

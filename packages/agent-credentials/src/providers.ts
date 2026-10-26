@@ -253,7 +253,7 @@ const tokenAnswer = z.object({
     .string()
     .regex(/^[\x21-\x7e]{8,8192}$/)
     .optional(),
-  scope: z.string().max(4000),
+  scope: z.string().max(4000).optional(),
   token_type: z.string().regex(/^bearer$/i),
   id_token: z.string().max(16_384).optional(),
 });

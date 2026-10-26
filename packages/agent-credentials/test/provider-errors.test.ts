@@ -138,6 +138,27 @@ it("rejects every invalid mandatory ID-token claim before it can become an accou
   ] as const)
     expect(idTokenClaimProblem(claims as JWTPayload, client.clientId, instant)).toContain(message);
 });
+it.each([
+  null,
+  7,
+  ["openid"],
+  "x".repeat(4001),
+])("refuses malformed scope fields instead of applying omitted-scope defaults: %j", async (scope) => {
+  await expect(
+    refresh(
+      async () =>
+        json({
+          access_token: "test-token-0123456789",
+          expires_in: 3600,
+          token_type: "Bearer",
+          scope,
+        }),
+      p,
+      client,
+      "test-refresh-0123456789",
+    ),
+  ).rejects.toThrow(/unexpected token answer shape/);
+});
 it("refuses missing or malformed ID tokens and missing signing keys", async () => {
   for (const jwt of [undefined, "not-a-jwt"])
     await expect(
