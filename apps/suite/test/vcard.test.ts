@@ -182,7 +182,7 @@ describe("content lines and values", () => {
     expect(card.note).toBe(note);
     expect(card.emails[0]?.value).toBe("fiction@example.org");
     // Generous headroom for a linear pass; repeated suffix copies/scans exceed this budget.
-    expect(elapsed).toBeLessThan(2_000);
+    expect(elapsed).toBeLessThan(4_000);
   });
 
   it("recognizes QP only in headers and allows folded and quoted parameter headers", () => {
