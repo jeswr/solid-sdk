@@ -37,11 +37,6 @@ for (const component of ["data-table", "file-grid"]) {
     // j/k follow linear reading order at every responsive card column count.
     await page.keyboard.press("Shift+J");
     await page.keyboard.press("Shift+J");
-    // Browser reports uppercase J with Shift; arrows avoid a case-dependent shortcut.
-    if (!(await page.getByTestId("selected-keys").textContent())?.includes("Q3 budget.xlsx")) {
-      await page.keyboard.press("Shift+ArrowRight");
-      await page.keyboard.press("Shift+ArrowRight");
-    }
     await expect(page.getByTestId("selected-keys")).toHaveText(
       "Projects, Holiday photos, Q3 budget.xlsx",
     );
@@ -134,6 +129,10 @@ for (const component of ["data-table", "file-grid"]) {
       const result = await session.send("Performance.getMetrics");
       return result.metrics.find((metric) => metric.name === "TaskDuration")?.value ?? 0;
     };
+    const initialLast = await page
+      .locator("[data-collection-item]")
+      .last()
+      .getAttribute("aria-label");
     const samples: number[] = [];
     for (let frame = 0; frame < 40; frame++) {
       const before = await duration();
@@ -148,7 +147,7 @@ for (const component of ["data-table", "file-grid"]) {
     }
     expect(await page.locator("[data-collection-item]").count()).toBeLessThan(100);
     expect(await page.locator("[data-collection-item]").last().getAttribute("aria-label")).not.toBe(
-      "Projects",
+      initialLast,
     );
     await info.attach(`${component}-frame-work-ms`, {
       body: JSON.stringify(samples),

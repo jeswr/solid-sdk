@@ -110,15 +110,15 @@ export function useCollectionNavigation({
       selection.selectAll(keys);
       return;
     }
-    if (event.ctrlKey || event.metaKey) return;
+    if (event.ctrlKey || event.metaKey || (event.altKey && event.key !== "Enter")) return;
     const delta =
       event.key === "ArrowDown"
         ? columns
         : event.key === "ArrowUp"
           ? -columns
-          : event.key === "j" || event.key === "ArrowRight"
+          : event.key.toLowerCase() === "j" || event.key === "ArrowRight"
             ? 1
-            : event.key === "k" || event.key === "ArrowLeft"
+            : event.key.toLowerCase() === "k" || event.key === "ArrowLeft"
               ? -1
               : 0;
     if (delta || event.key === "Home" || event.key === "End") {

@@ -106,7 +106,7 @@ for (const kind of ["table", "grid"] as const) {
       const alpha = screen.getByRole(itemRole, { name: "Alpha" });
       act(() => alpha.focus());
       fireEvent.keyDown(alpha, { key: " " });
-      fireEvent.keyDown(alpha, { key: "j", shiftKey: true });
+      fireEvent.keyDown(alpha, { key: "J", shiftKey: true });
       fireEvent.keyDown(document.activeElement as Element, { key: "j", shiftKey: true });
       expect(screen.getAllByRole("status")[0]?.textContent).toContain("3 selected");
       expect(screen.getByRole("status", { name: "Selection" }).textContent).toBe("a,b,c");
