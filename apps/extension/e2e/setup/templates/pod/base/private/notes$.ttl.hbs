@@ -1,6 +1,8 @@
+# AUTHORED-BY Codex GPT-6.1-Sol
 @prefix schema: <http://schema.org/>.
 
 <#note1>
     a schema:TextDigitalDocument;
     schema:name "Private Note";
-    schema:text "This is a private note only visible to the pod owner.".
+    schema:creator <{{webId}}>;
+    schema:text "{{privateNote}}".
