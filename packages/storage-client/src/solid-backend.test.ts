@@ -556,6 +556,39 @@ describe("review round 1 regressions", () => {
     }
   });
 
+  test("a backslash-authority root never echoes its credentials", () => {
+    let thrown: unknown;
+    try {
+      createSolidBackend({
+        root: String.raw`https:\\user:secret@css.example/alice/`,
+        fetch: async () => new Response(),
+      });
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toBeInstanceOf(StorageError);
+    const error = thrown as StorageError;
+    expect(error.message).not.toContain("secret");
+    expect(error.url).not.toContain("secret");
+    expect(String((error.cause as Error).message)).not.toContain("secret");
+  });
+
+  test("a query on the listed container keeps its direct members", async () => {
+    const storage = createSolidBackend({
+      root: CSS_ROOT,
+      fetch: async () =>
+        new Response("<> <http://www.w3.org/ns/ldp#contains> <a>, <b/c>.", {
+          headers: {
+            "content-type": "text/turtle",
+            link: '<http://www.w3.org/ns/ldp#BasicContainer>; rel="type"',
+          },
+        }),
+    });
+    expect((await storage.list(`${CSS_ROOT}?x=1`)).items.map((item) => item.url)).toEqual([
+      `${CSS_ROOT}a`,
+    ]);
+  });
+
   test("root aliases with a query or fragment stay the root", async () => {
     const fetched: string[] = [];
     const storage = createSolidBackend({

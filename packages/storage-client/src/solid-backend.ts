@@ -258,10 +258,14 @@ export function createSolidBackend(options: SolidBackendOptions): StorageClient 
       }
       const { dataset } = await rdfBody(result, "invalid-response");
       const listed = new Container(container, dataset, DataFactory);
+      // Containment is by path: a query or fragment on the listed URL does not change the parent.
+      const parent = new URL(container);
+      parent.search = "";
+      parent.hash = "";
       const items: Entry[] = [];
       // `contains` is a set of distinct members, so URLs are unique.
       for (const resource of listed.contains) {
-        const entry = entryOf(new Member(resource.id, dataset, DataFactory), container);
+        const entry = entryOf(new Member(resource.id, dataset, DataFactory), parent.href);
         if (entry) items.push(entry);
       }
       items.sort((a, b) => (a.url < b.url ? -1 : 1));

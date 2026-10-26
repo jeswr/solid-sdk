@@ -8,6 +8,15 @@ import { throwIfAborted } from "./internal.js";
 import type { AuthFetch, LinkTarget, ReadResult, ResourceKind } from "./types.js";
 
 /**
+ * `value` with any userinfo removed. Parse first so every authority spelling (backslashes, mixed
+ * slashes) is normalised to `//` before redaction; unparseable text has its backslashes folded.
+ */
+function redacted(value: unknown): string {
+  const text = String(value);
+  return redactUserinfo(URL.canParse(text) ? new URL(text).href : text.replaceAll("\\", "/"));
+}
+
+/**
  * Fail closed before any request: `url` must lie within the storage `root` (guarded-fetch
  * pod-scope rules: same origin, path boundary, no credentials, no encoded delimiters).
  * Returns the canonical URL, which is the one fetched.
@@ -25,17 +34,13 @@ export function scoped(root: string, method: string, url: string): string {
     parsed.hash = "";
     return `${parsed.href}/` === root ? `${root}${search}${hash}` : canonical;
   } catch (cause) {
-    // Never echo embedded credentials (guarded-fetch redacts its own messages too). Parse first
-    // so every authority spelling (backslashes, mixed slashes) is normalised to `//` before redaction.
-    const text = String(url);
-    const shown = redactUserinfo(
-      URL.canParse(text) ? new URL(text).href : text.replaceAll("\\", "/"),
-    );
+    // Never echo embedded credentials (guarded-fetch redacts its own messages too).
+    const shown = redacted(url);
     throw new StorageError("scope", {
       method,
       url: shown,
       cause,
-      message: `${method} ${shown} is outside the storage ${redactUserinfo(root)}`,
+      message: `${method} ${shown} is outside the storage ${redacted(root)}`,
     });
   }
 }
