@@ -1,0 +1,132 @@
+# AUTHORED-BY Claude Opus 5.5
+# AUTHORED-BY GPT-5.6 Codex
+# Cloud builds of the iOS and Android shells (solid-suite-planning specs/mobile/DESIGN.md D8).
+# Unsigned builds; iOS policy tests exercise Debug and Release configurations.
+name: mobile
+
+on:
+  pull_request:
+    paths:
+      - "apps/mobile/**"
+      - "packages/suite-native/**"
+      - ".github/workflows/mobile.yml"
+      - "pnpm-lock.yaml"
+  push:
+    branches: [main]
+    paths:
+      - "apps/mobile/**"
+      - "packages/suite-native/**"
+      - ".github/workflows/mobile.yml"
+      - "pnpm-lock.yaml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mobile-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @jeswr/app-mobile run sync:android
+      - name: Gradle lint, unit tests, debug APK
+        working-directory: apps/mobile/android
+        run: ./gradlew --no-daemon --stacktrace lint testDebugUnitTest assembleDebug
+      - uses: actions/upload-artifact@v4
+        with:
+          name: solid-suite-debug-apk
+          path: apps/mobile/android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 14
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-reports
+          path: |
+            apps/mobile/android/app/build/reports/
+            apps/mobile/android/app/build/test-results/
+          retention-days: 7
+
+  ios:
+    runs-on: macos-15
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      # Capacitor 8 needs Xcode 26 or later; pick the newest installed one, never the image default.
+      - name: Select Xcode 26+
+        run: |
+          xcode="$(ls -d /Applications/Xcode_2[6-9]*.app 2>/dev/null | sort -V | tail -1)"
+          test -n "$xcode" || { echo "No Xcode 26+ on this runner"; ls /Applications; exit 1; }
+          sudo xcode-select -s "$xcode"
+          xcodebuild -version
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @jeswr/app-mobile run sync:ios
+      - name: Simulator compile (no signing)
+        working-directory: apps/mobile/ios/App
+        run: >
+          xcodebuild -project App.xcodeproj -scheme App -configuration Debug
+          -sdk iphonesimulator -destination "generic/platform=iOS Simulator"
+          CODE_SIGNING_ALLOWED=NO build
+      - name: Select an available iPhone simulator
+        id: simulator
+        run: |
+          xcrun simctl list devices available -j > "$RUNNER_TEMP/suite-simulators.json"
+          python3 <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          devices = json.loads((Path(os.environ["RUNNER_TEMP"]) / "suite-simulators.json").read_text())["devices"]
+          candidates = []
+          for runtime, entries in devices.items():
+              if not runtime.startswith("com.apple.CoreSimulator.SimRuntime.iOS-"):
+                  continue
+              version = tuple(int(part) for part in runtime.split("iOS-", 1)[1].split("-"))
+              for device in entries:
+                  is_phone = device.get("deviceTypeIdentifier", "").startswith("com.apple.CoreSimulator.SimDeviceType.iPhone")
+                  if version >= (16,) and device.get("isAvailable") and is_phone:
+                      candidates.append((version, device["udid"]))
+          if not candidates:
+              raise SystemExit("No available iPhone simulator with iOS 16 or later")
+          _, udid = max(candidates)
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              print(f"destination=platform=iOS Simulator,id={udid}", file=output)
+          PY
+      - name: XCTest policies (Debug and Release, no signing)
+        working-directory: apps/mobile/ios/App
+        env:
+          TEST_DESTINATION: ${{ steps.simulator.outputs.destination }}
+        run: |
+          for configuration in Debug Release; do
+            xcodebuild -project App.xcodeproj -scheme App -configuration "$configuration" \
+              -sdk iphonesimulator -destination "$TEST_DESTINATION" \
+              -parallel-testing-enabled NO -only-testing:AppTests \
+              -resultBundlePath "$RUNNER_TEMP/AppTests-$configuration.xcresult" \
+              ENABLE_TESTABILITY=YES CODE_SIGNING_ALLOWED=NO test
+          done
+      - name: XCTest results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-test-results
+          path: ${{ runner.temp }}/AppTests-*.xcresult
+          if-no-files-found: ignore
+          retention-days: 7

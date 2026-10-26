@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -685,7 +686,7 @@ describe("type-index registration", () => {
     const { fetchImpl } = makePod();
     const s = new MemoryStore({ container: CONTAINER, fetch: fetchImpl });
     expect(s.typeIndexRegistration()).toEqual({
-      forClass: "https://w3id.org/jeswr/memory#MemoryItem",
+      forClass: "https://jeswr.org/ns/memory#MemoryItem",
       instanceContainer: CONTAINER,
     });
   });

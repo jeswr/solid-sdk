@@ -1,0 +1,10 @@
+{
+  "$schema": "https://turborepo.dev/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    "build": {
+      "env": ["APP_ORIGIN", "VITE_CLIENT_ID"],
+      "inputs": ["$TURBO_DEFAULT$", ".env*"]
+    }
+  }
+}

@@ -1,8 +1,13 @@
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- AUTHORED-BY Codex GPT-5 -->
 
 # @jeswr/solid-memory
 
 A typed RDF memory model, Solid-pod store, and client-side search layer for portable agent memory.
+
+Writers use `https://jeswr.org/ns/memory#` and the canonical pod-chat namespace
+`https://jeswr.org/ns/pod-chat#`. Readers also accept the read-only legacy memory namespace
+exported as `LEGACY_MEMORY_NS`; `LEGACY_POD_CHAT_NS` identifies the legacy chat vocabulary.
 
 ## Install
 

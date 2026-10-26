@@ -13,7 +13,8 @@ import { PIM, SOLID, SSD } from "./vocab.js";
 
 const DEFAULT_TTL_MS = 3_600_000;
 const LWS_STORAGE = "https://www.w3.org/ns/lws#storage";
-const defaultCache = createMemoryCache();
+/** Shared module default so `capabilities()` and the resolver see the same records. */
+export const defaultCache = createMemoryCache();
 
 function linksFor(url: string, headers: Headers) {
   return parseLinkHeaders(headers.get("link"), url).filter((link) => link.context === url);
