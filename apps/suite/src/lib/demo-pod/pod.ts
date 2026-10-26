@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6
 /**
  * An in-browser demo pod: a `fetch` implementation that behaves like a small
  * Solid (LDP) server over an in-memory resource map, so the suite's real data
@@ -18,7 +19,15 @@
  * Listings are serialised with `n3.Writer` the way a server would emit them.
  */
 
-import { DataFactory, Writer } from "n3";
+import {
+  LiteralFrom,
+  NamedNodeAs,
+  NamedNodeFrom,
+  RequiredAs,
+  SetFrom,
+  TermWrapper,
+} from "@rdfjs/wrapper";
+import { DataFactory, Store, Writer } from "n3";
 
 const LDP = "http://www.w3.org/ns/ldp#";
 const POSIX = "http://www.w3.org/ns/posix/stat#";
@@ -27,6 +36,29 @@ const XSD = "http://www.w3.org/2001/XMLSchema#";
 const RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
 const IANA = "http://www.w3.org/ns/iana/media-types/";
 const PIM_STORAGE = "http://www.w3.org/ns/pim/space#Storage";
+
+class ListedResource extends TermWrapper {
+  get types(): Set<string> {
+    return SetFrom.subjectPredicate(this, RDF_TYPE, NamedNodeAs.string, NamedNodeFrom.string);
+  }
+  get members(): Set<string> {
+    return SetFrom.subjectPredicate(
+      this,
+      `${LDP}contains`,
+      NamedNodeAs.string,
+      NamedNodeFrom.string,
+    );
+  }
+  set size(value: number) {
+    RequiredAs.object(this, `${POSIX}size`, value, LiteralFrom.integer);
+  }
+  set mtime(value: number) {
+    RequiredAs.object(this, `${POSIX}mtime`, value, LiteralFrom.integer);
+  }
+  set modified(value: Date) {
+    RequiredAs.object(this, `${DCT}modified`, value, LiteralFrom.dateTime);
+  }
+}
 
 /** One stored resource (containers carry no body; their listing is generated). */
 export interface DemoResource {
@@ -42,7 +74,9 @@ export interface DemoPodSnapshot {
   readonly version: 1;
   readonly etagSeq: number;
   readonly resources: ReadonlyArray<readonly [string, DemoResource]>;
-  readonly containers: ReadonlyArray<readonly [string, { modified: number; created: number }]>;
+  readonly containers: ReadonlyArray<
+    readonly [string, { modified: number; created: number; etag?: string }]
+  >;
 }
 
 /** A resource to place in a fresh pod. Paths are relative to the pod root. */
@@ -131,13 +165,20 @@ export function createDemoPod(options: DemoPodOptions): DemoPod {
   const now = options.now ?? (() => Date.now());
   const latency = options.latency ?? 0;
   const resources = new Map<string, DemoResource>();
-  const containers = new Map<string, { modified: number; created: number }>();
+  const containers = new Map<string, { modified: number; created: number; etag?: string }>();
   const listeners = new Set<DemoPodListener>();
   let etagSeq = 0;
 
   const touch = (container: string, at: number) => {
     const meta = containers.get(container);
-    if (meta) containers.set(container, { ...meta, modified: at });
+    if (meta) {
+      etagSeq += 1;
+      containers.set(container, {
+        ...meta,
+        modified: at,
+        etag: `"demo-c-${etagSeq.toString(36)}"`,
+      });
+    }
   };
 
   const ensureContainer = (url: string, at: number) => {
@@ -148,7 +189,12 @@ export function createDemoPod(options: DemoPodOptions): DemoPod {
       current = parentOf(current);
     }
     for (const container of missing.reverse()) {
-      containers.set(container, { modified: at, created: at });
+      etagSeq += 1;
+      containers.set(container, {
+        modified: at,
+        created: at,
+        etag: `"demo-c-${etagSeq.toString(36)}"`,
+      });
       const parent = parentOf(container);
       if (parent) touch(parent, at);
     }
@@ -198,65 +244,46 @@ export function createDemoPod(options: DemoPodOptions): DemoPod {
   };
 
   const containerEtag = (container: string): string => {
-    const meta = containers.get(container) as { modified: number };
-    return `"demo-c-${meta.modified.toString(36)}-${children(container).length}"`;
+    const meta = containers.get(container) as { modified: number; etag?: string };
+    return meta.etag ?? `"demo-c-${meta.modified.toString(36)}-${children(container).length}"`;
   };
 
   const listing = (container: string): Promise<string> => {
-    const { namedNode, literal, quad } = DataFactory;
+    const dataset = new Store();
     const writer = new Writer({
       format: "text/turtle",
       prefixes: { ldp: LDP, posix: POSIX, dct: DCT, xsd: XSD },
     });
-    const self = namedNode(container);
-    const type = namedNode(RDF_TYPE);
+    const self = new ListedResource(container, dataset, DataFactory);
     const describe = (url: string, modified: number, resource: DemoResource | undefined) => {
-      const subject = namedNode(url);
+      const subject = new ListedResource(url, dataset, DataFactory);
       const size = resource?.body.byteLength;
-      if (isContainerUrl(url)) {
-        writer.addQuad(quad(subject, type, namedNode(`${LDP}Container`)));
-        writer.addQuad(quad(subject, type, namedNode(`${LDP}BasicContainer`)));
-      } else if (resource) {
+      if (resource === undefined) {
+        subject.types.add(`${LDP}Container`);
+        subject.types.add(`${LDP}BasicContainer`);
+      } else {
         // CSS advertises the stored media type as an IANA media-type class.
-        const essence = resource.contentType.split(";")[0]?.trim().toLowerCase() ?? "";
+        // Splitting a string always yields at least one segment, including for "".
+        const essence = (resource.contentType.split(";")[0] as string).trim().toLowerCase();
         if (/^[\w.+-]+\/[\w.+-]+$/.test(essence)) {
-          writer.addQuad(quad(subject, type, namedNode(`${IANA}${essence}#Resource`)));
+          subject.types.add(`${IANA}${essence}#Resource`);
         }
       }
-      writer.addQuad(quad(subject, type, namedNode(`${LDP}Resource`)));
-      if (size !== undefined) {
-        writer.addQuad(
-          quad(
-            subject,
-            namedNode(`${POSIX}size`),
-            literal(String(size), namedNode(`${XSD}integer`)),
-          ),
-        );
-      }
-      writer.addQuad(
-        quad(
-          subject,
-          namedNode(`${POSIX}mtime`),
-          literal(String(Math.floor(modified / 1000)), namedNode(`${XSD}integer`)),
-        ),
-      );
-      writer.addQuad(
-        quad(
-          subject,
-          namedNode(`${DCT}modified`),
-          literal(new Date(modified).toISOString(), namedNode(`${XSD}dateTime`)),
-        ),
-      );
+      subject.types.add(`${LDP}Resource`);
+      if (size !== undefined) subject.size = size;
+      subject.mtime = Math.floor(modified / 1000);
+      subject.modified = new Date(modified);
     };
     const meta = containers.get(container) as { modified: number };
     describe(container, meta.modified, undefined);
-    if (container === root) writer.addQuad(quad(self, type, namedNode(PIM_STORAGE)));
+    if (container === root) self.types.add(PIM_STORAGE);
     for (const child of children(container)) {
-      writer.addQuad(quad(self, namedNode(`${LDP}contains`), namedNode(child)));
+      self.members.add(child);
       const resource = resources.get(child);
       const childMeta = resource ?? (containers.get(child) as { modified: number });
       describe(child, childMeta.modified, resource);
     }
+    writer.addQuads([...dataset]);
     return new Promise((resolve, reject) => {
       writer.end((error, result) => (error ? reject(error) : resolve(result)));
     });
@@ -325,7 +352,14 @@ export function createDemoPod(options: DemoPodOptions): DemoPod {
   };
 
   const write = async (url: string, init: RequestInit, headers: Headers): Promise<Response> => {
+    // All asynchronous body work precedes the precondition and mutation. No
+    // await is allowed in the critical section below (including notifications).
+    const body = await bodyBytes(init.body);
     if (preconditionFails(url, headers)) return respond(412);
+    // A path through an existing file cannot become a container.
+    for (let parent = parentOf(url); parent; parent = parentOf(parent)) {
+      if (resources.has(parent.slice(0, -1))) return respond(409);
+    }
     const at = now();
     if (isContainerUrl(url)) {
       if (containers.has(url)) return respond(205);
@@ -335,19 +369,16 @@ export function createDemoPod(options: DemoPodOptions): DemoPod {
       return respond(201, { location: url, etag: containerEtag(url) });
     }
     if (containers.has(`${url}/`)) return respond(409);
-    // A path through an existing file cannot become a container.
-    for (let parent = parentOf(url); parent; parent = parentOf(parent)) {
-      if (resources.has(parent.slice(0, -1))) return respond(409);
-    }
     const existed = resources.has(url);
     const contentType = headers.get("content-type") ?? "application/octet-stream";
-    putResource(url, await bodyBytes(init.body), contentType, at);
+    putResource(url, body, contentType, at);
     notify(url);
     const etag = (resources.get(url) as DemoResource).etag;
     return respond(existed ? 205 : 201, { location: url, etag });
   };
 
   const post = async (url: string, init: RequestInit, headers: Headers): Promise<Response> => {
+    const body = await bodyBytes(init.body);
     if (!containers.has(url)) return respond(404);
     const asContainer = /BasicContainer|ldp#Container/.test(headers.get("link") ?? "");
     const slug = (headers.get("slug") ?? "").replace(/[/\\]/g, "-").trim();
@@ -357,9 +388,14 @@ export function createDemoPod(options: DemoPodOptions): DemoPod {
       candidate = `${url}${base}-${n}${asContainer ? "/" : ""}`;
     }
     const childHeaders = new Headers();
+    childHeaders.set("if-none-match", "*");
     const contentType = headers.get("content-type");
     if (contentType) childHeaders.set("content-type", contentType);
-    return write(candidate, init, childHeaders);
+    const response = await write(candidate, { ...init, body: new Uint8Array(body) }, childHeaders);
+    // A concurrent POST can claim the same slug while write materialises its body.
+    return response.status === 412
+      ? post(url, { ...init, body: new Uint8Array(body) }, headers)
+      : response;
   };
 
   const remove = (url: string): Response => {
@@ -400,6 +436,7 @@ export function createDemoPod(options: DemoPodOptions): DemoPod {
       case "POST":
         return post(url, effectiveInit, headers);
       case "DELETE":
+        if (preconditionFails(url, headers)) return respond(412);
         return remove(url);
       case "OPTIONS":
         return respond(204, { allow: "GET, HEAD, PUT, POST, DELETE, OPTIONS" });

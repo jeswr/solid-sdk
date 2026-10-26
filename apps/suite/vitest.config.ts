@@ -88,6 +88,11 @@ export default defineConfig({
         "src/apps/drive/lib/list/**/*.ts",
         "src/apps/drive/lib/model/**/*.ts",
         "src/apps/mail/lib/threading/**/*.ts",
+        "src/lib/demo-pod/{pod,seed,binaries}.ts",
+        "src/lib/refs.ts",
+        "src/apps/drive/lib/client/client.ts",
+        "src/apps/drive/lib/operations/**/*.ts",
+        "src/apps/drive/lib/view/**/*.ts",
       ],
       reporter: ["text", "json-summary"],
       thresholds: {

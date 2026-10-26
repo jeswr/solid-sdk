@@ -180,6 +180,16 @@
   background: var(--surface);
   overflow-y: auto;
 }
+/* AUTHORED-BY Codex */
+.ish-details-sheet {
+  max-height: 100dvh;
+  overflow-y: auto;
+}
+@media (max-width: 639px) {
+  .ish-details-sheet {
+    max-height: 85dvh;
+  }
+}
 .ish-tabbar {
   display: none;
 }
