@@ -258,6 +258,139 @@ describe("ensureDriveRoot", () => {
     expect(m.indexWrites).toBe(1);
   });
 
+  it.each([1, 2])("retries creation after %s PUT failures before committing", async (failures) => {
+    const m = memory();
+    const cause = new TypeError("Disconnected before creation");
+    const puts: Headers[] = [];
+    const fetch: typeof globalThis.fetch = async (input, init) => {
+      if (String(input) === root && init?.method === "PUT") {
+        puts.push(new Headers(init.headers));
+        if (puts.length <= failures) throw cause;
+      }
+      return m.fetch(input, init);
+    };
+    let failure = await initializationFailure(ensureDriveRoot(fetch, options));
+    for (let attempt = 1; attempt < failures; attempt++) {
+      failure = await initializationFailure(failure.resume());
+    }
+    expect(failure.cause).toBe(cause);
+    expect(m.files.has(root)).toBe(false);
+    expect(m.indexWrites).toBe(0);
+    expect(await failure.resume()).toBe(root);
+    expect(puts).toHaveLength(failures + 1);
+    expect(puts.every((headers) => headers.get("If-None-Match") === "*")).toBe(true);
+    expect(m.calls.filter((call) => call.url === root && call.status === 404)).toHaveLength(
+      failures,
+    );
+    expect(m.rootCreates).toBe(1);
+    expect(m.indexWrites).toBe(1);
+    expect(await failure.resume()).toBe(root);
+    expect(puts).toHaveLength(failures + 1);
+  });
+
+  it.each([403, 500])("keeps a failed creation retry (%s) resumable", async (status) => {
+    const m = memory();
+    let disconnected = true;
+    const fetch: typeof globalThis.fetch = async (input, init) => {
+      if (String(input) === root && init?.method === "PUT" && disconnected) {
+        disconnected = false;
+        throw new TypeError("Disconnected before creation");
+      }
+      return m.fetch(input, init);
+    };
+    const failure = await initializationFailure(ensureDriveRoot(fetch, options));
+    m.setBefore((url, method) =>
+      url === root && method === "PUT" ? new Response(null, { status }) : undefined,
+    );
+    const retried = await initializationFailure(failure.resume());
+    expect(retried.cause).toMatchObject({ name: "DriveWriteError", status, url: root });
+    expect(m.files.has(root)).toBe(false);
+    expect(m.calls.filter((call) => call.url === root && call.method === "PUT")).toHaveLength(1);
+    expect(m.indexWrites).toBe(0);
+    m.setBefore(undefined);
+    expect(await retried.resume()).toBe(root);
+    expect(m.rootCreates).toBe(1);
+    expect(m.indexWrites).toBe(1);
+  });
+
+  it.each([
+    409, 412,
+  ] as const)("revalidates containers created concurrently with a retry (%s)", async (status) => {
+    for (const populated of [false, true]) {
+      const m = memory(status);
+      m.setBefore((url, method) =>
+        url === metadata && method === "PATCH" ? new Response(null, { status: 503 }) : undefined,
+      );
+      const failure = await initializationFailure(ensureDriveRoot(m.fetch, options));
+      m.files.delete(root);
+      const body = populated
+        ? `${containerBody}\n<${root}> <${LDP.contains}> <${root}other.txt>.`
+        : containerBody;
+      m.setBefore((url, method) => {
+        if (url === root && method === "PUT") {
+          // A different container may reuse our deleted container's ETag.
+          m.files.set(root, { body, version: 1 });
+          return new Response(null, { status });
+        }
+        return undefined;
+      });
+      if (populated) {
+        const rejected = await initializationFailure(failure.resume());
+        expect(rejected.cause).toMatchObject({ name: "DriveWriteError", status: 409, url: root });
+        expect(m.files.get(root)).toEqual({ body, version: 1 });
+        expect(m.calls.filter((call) => call.method === "PATCH")).toHaveLength(1);
+        expect(m.indexWrites).toBe(0);
+      } else {
+        expect(await failure.resume()).toBe(root);
+        expect(m.indexWrites).toBe(1);
+      }
+      const puts = m.calls.filter((call) => call.url === root && call.method === "PUT");
+      expect(puts.map((call) => call.status)).toEqual([201, status]);
+      expect(puts.every((call) => call.headers.get("If-None-Match") === "*")).toBe(true);
+      expect(m.calls.some((call) => call.method === "DELETE")).toBe(false);
+    }
+  });
+
+  it("bounds recreation when the following read still reports absence", async () => {
+    const m = memory();
+    m.setBefore((url, method) =>
+      url === metadata && method === "PATCH" ? new Response(null, { status: 503 }) : undefined,
+    );
+    const failure = await initializationFailure(ensureDriveRoot(m.fetch, options));
+    m.files.delete(root);
+    m.setBefore((url, method) =>
+      url === root && method === "GET" ? new Response(null, { status: 404 }) : undefined,
+    );
+    const retried = await initializationFailure(failure.resume());
+    expect(retried.cause).toMatchObject({ name: "RdfFetchError", status: 404, url: root });
+    expect(m.calls.filter((call) => call.url === root && call.method === "PUT")).toHaveLength(2);
+    expect(m.calls.filter((call) => call.url === root && call.status === 404)).toHaveLength(2);
+    expect(m.indexWrites).toBe(0);
+    m.setBefore(undefined);
+    expect(await retried.resume()).toBe(root);
+    expect(m.rootCreates).toBe(2);
+    expect(m.indexWrites).toBe(1);
+  });
+
+  it("does not retry creation when reading the container fails in transport", async () => {
+    const m = memory();
+    const cause = new TypeError("Disconnected while reading");
+    let disconnected = true;
+    const fetch: typeof globalThis.fetch = async (input, init) => {
+      if (String(input) === root && init?.method !== "PUT" && disconnected) throw cause;
+      return m.fetch(input, init);
+    };
+    const failure = await initializationFailure(ensureDriveRoot(fetch, options));
+    const retried = await initializationFailure(failure.resume());
+    expect(retried.cause).toMatchObject({ name: "RdfFetchError", cause, url: root });
+    expect(m.calls.filter((call) => call.url === root && call.method === "PUT")).toHaveLength(1);
+    expect(m.indexWrites).toBe(0);
+    disconnected = false;
+    expect(await retried.resume()).toBe(root);
+    expect(m.rootCreates).toBe(1);
+    expect(m.indexWrites).toBe(1);
+  });
+
   it.each([
     409, 412,
   ] as const)("adopts an existing empty, unmarked container (%s)", async (status) => {
@@ -724,7 +857,10 @@ describe("ensureDriveRoot", () => {
     expect(m.rootCreates).toBe(1);
   });
 
-  it.each(["metadata", "child"])("preserves concurrent %s while resuming", async (change) => {
+  it.each([
+    "metadata",
+    "child",
+  ])("checks ownership after a concurrent %s change", async (change) => {
     const m = memory();
     const added =
       change === "metadata"
@@ -732,7 +868,7 @@ describe("ensureDriveRoot", () => {
         : `<${root}> <${LDP.contains}> <${root}file.txt>.`;
     m.setBefore((url, method) => {
       if (url === metadata && method === "PATCH") {
-        m.files.set(root, { body: `${containerBody}\n${added}`, version: 1 });
+        m.files.set(root, { body: `${containerBody}\n${added}`, version: 2 });
         return new Response(null, { status: 500 });
       }
       return undefined;
@@ -741,7 +877,16 @@ describe("ensureDriveRoot", () => {
     expect(m.files.get(root)?.body).toContain(added);
     expect(m.calls.some((call) => call.method === "DELETE")).toBe(false);
     m.setBefore(undefined);
-    expect(await failure.resume()).toBe(root);
+    if (change === "child") {
+      const rejected = await initializationFailure(failure.resume());
+      expect(rejected.cause).toMatchObject({ name: "DriveWriteError", status: 409, url: root });
+      expect(m.calls.filter((call) => call.method === "PATCH")).toHaveLength(1);
+      expect(m.files.get(root)?.version).toBe(2);
+      expect(m.indexWrites).toBe(0);
+    } else {
+      expect(await failure.resume()).toBe(root);
+      expect(m.indexWrites).toBe(1);
+    }
     const dataset = turtle(m.files.get(root)?.body ?? "");
     expect([...turtle(added)].every((quad) => dataset.has(quad))).toBe(true);
   });

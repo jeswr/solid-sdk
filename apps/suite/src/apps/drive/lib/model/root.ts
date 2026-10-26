@@ -2,13 +2,13 @@
 // AUTHORED-BY Codex GPT-6
 import { type FetchedRdf, fetchRdf, RdfFetchError } from "@jeswr/fetch-rdf";
 import { assertWithinPodScope, createPodScopedFetch, normalizePodBase } from "@jeswr/guarded-fetch";
-import { serialize } from "@jeswr/rdf-serialize";
 import { SetFrom, TermAs, TermFrom } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
 import { DriveContainer, DriveResource } from "./model.js";
+import { driveRootPatch } from "./patch.js";
 import { iri, quadsToTurtle } from "./serialize.js";
-import { buildDriveRootMarker, buildDriveRootRegistration, findDriveRoots } from "./type-index.js";
-import { LDP, RDF, SOLID } from "./vocab.js";
+import { buildDriveRootRegistration, findDriveRoots } from "./type-index.js";
+import { LDP, RDF } from "./vocab.js";
 
 function strongEtag(etag: string | null): string | undefined {
   return etag !== null && /^"[\x21\x23-\x7e\x80-\xff]*"$/.test(etag) ? etag : undefined;
@@ -18,30 +18,6 @@ function indexEtag(etag: string | null): string {
   const validator = strongEtag(etag);
   if (validator === undefined) throw new TypeError("The private Type Index needs a strong ETag.");
   return validator;
-}
-
-async function driveRootPatch(rootUrl: string): Promise<string> {
-  const { blankNode, defaultGraph, namedNode, quad } = DataFactory;
-  const patch = blankNode("patch");
-  const where = blankNode("where");
-  const inserts = blankNode("inserts");
-  const dataset = new Store([
-    quad(patch, namedNode(RDF.type), namedNode(`${SOLID.ns}InsertDeletePatch`)),
-    quad(patch, namedNode(`${SOLID.ns}where`), where),
-    quad(patch, namedNode(`${SOLID.ns}inserts`), inserts),
-    ...buildDriveRootMarker(rootUrl).map((q) => quad(q.subject, q.predicate, q.object, inserts)),
-  ]);
-  // n3.Writer emits labelled graphs as TriG, even with format text/n3. Serialize
-  // every triple with Writer (via serialize), then inline the two formula graphs
-  // at their fixed blank-node references. No RDF terms or patch triples are text-built.
-  let document = await serialize(dataset.getQuads(null, null, null, defaultGraph()));
-  for (const graph of [where, inserts]) {
-    const formula = await serialize(
-      dataset.getQuads(null, null, null, graph).map((q) => quad(q.subject, q.predicate, q.object)),
-    );
-    document = document.replaceAll(`_:${graph.value}`, () => ["{", formula, "}"].join("\n"));
-  }
-  return document;
 }
 
 export class DriveWriteError extends Error {
@@ -96,7 +72,14 @@ export async function ensureDriveRoot(
   let rootEtag: string | undefined;
   let created: Response;
   try {
-    created = await scopedFetch(rootUrl, {
+    created = await createRoot();
+  } catch (error) {
+    // The server may have committed the PUT before the connection failed.
+    throw new DriveRootInitializationError(error, resume);
+  }
+
+  async function createRoot(): Promise<Response> {
+    return scopedFetch(rootUrl, {
       method: "PUT",
       headers: {
         "Content-Type": "text/turtle",
@@ -105,9 +88,26 @@ export async function ensureDriveRoot(
       },
       body: "",
     });
-  } catch (error) {
-    // The server may have committed the PUT before the connection failed.
-    throw new DriveRootInitializationError(error, resume);
+  }
+
+  async function readRoot(): Promise<FetchedRdf> {
+    try {
+      return await fetchRdf(rootUrl, { fetch: scopedFetch });
+    } catch (error) {
+      if (!(error instanceof RdfFetchError && error.status === 404)) throw error;
+    }
+    // A failed PUT may never have committed. Confirm absence before retrying
+    // creation, and discard any validator belonging to a now-missing root.
+    rootEtag = undefined;
+    const recreated = await createRoot();
+    if (recreated.ok) {
+      rootEtag = strongEtag(recreated.headers.get("ETag"));
+    } else if (recreated.status !== 409 && recreated.status !== 412) {
+      throw new DriveWriteError(recreated.status, rootUrl);
+    }
+    // A concurrent creator must still pass validateRoot's adoption checks.
+    // Read only once: another 404 leaves a resumable failure, not a retry loop.
+    return fetchRdf(rootUrl, { fetch: scopedFetch });
   }
 
   function validateRoot(current: FetchedRdf, status = 409): DriveResource {
@@ -135,7 +135,7 @@ export async function ensureDriveRoot(
     try {
       for (let attempt = 0; ; attempt++) {
         // CSS ignores container PUT bodies. Discover and PATCH its description instead.
-        current ??= await fetchRdf(rootUrl, { fetch: scopedFetch });
+        current ??= await readRoot();
         if (validateRoot(current).isDriveRoot) return;
         rootEtag = strongEtag(current.etag);
         let metadataUrl: string | undefined;
