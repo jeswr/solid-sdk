@@ -1795,6 +1795,157 @@ describe('ProfileStore runtime API and adversarial isolation', () => {
     expect(idbMeta.size).toBe(0);
   });
 
+  it.each([
+    'SOLID_LOGOUT',
+    'SOLID_PROFILE_REMOVE',
+  ])('publishes sign-out after %s cleanup fails and retries the purge on wake', async (type) => {
+    const { a, b } = await twoProfiles();
+    installIconCanvas();
+    const icon = vi.spyOn(chrome.action, 'setIcon');
+    const badge = vi.spyOn(chrome.action, 'setBadgeText');
+    const title = vi.spyOn(chrome.action, 'setTitle');
+    await loadWorker();
+    expect((await profileFetch()).status).toBe(200);
+    expect(icon.mock.lastCall?.[0]).toHaveProperty('imageData');
+    expect(title).toHaveBeenLastCalledWith({ title: 'Signed in as alice' });
+    const metadata = [...idbMeta.values()];
+    const bytes = [...cacheStore.keys()];
+    const survivor = structuredClone(profileDb.state.records[1]);
+    const cache = await caches.open('solid-ext-replica-bytes');
+    const remove = cache.delete.bind(cache);
+    let fail = true;
+    vi.spyOn(cache, 'delete').mockImplementation(async (entry, options) => {
+      if (fail) throw new Error('fixture cache deletion failed');
+      return remove(entry, options);
+    });
+    vi.spyOn(caches, 'open').mockResolvedValue(cache);
+    chrome.tabs.query = vi.fn().mockResolvedValue([
+      { id: 1, url: PROFILE_APP_A.url },
+      { id: 2, url: PROFILE_APP_B.url },
+      { id: 3, url: 'https://ungranted.example/app' },
+    ]);
+    const tabBroadcast = vi.spyOn(chrome.tabs, 'sendMessage');
+    const broadcast = vi.spyOn(chrome.runtime, 'sendMessage');
+
+    const result = await profileMessage(type, { profileId: '1' });
+    expect(result).toEqual({
+      error:
+        type === 'SOLID_LOGOUT'
+          ? 'Error: fixture cache deletion failed'
+          : 'fixture cache deletion failed',
+    });
+    expect(icon).toHaveBeenLastCalledWith({
+      path: {
+        16: 'icons/icon16.png',
+        32: 'icons/icon32.png',
+        48: 'icons/icon48.png',
+        128: 'icons/icon128.png',
+      },
+    });
+    expect(badge).toHaveBeenLastCalledWith({ text: '' });
+    expect(title).toHaveBeenLastCalledWith({ title: 'Sign in to Solid' });
+    expect(broadcast).toHaveBeenLastCalledWith({ type: 'SOLID_STATE_CHANGED', webId: null });
+    expect(tabBroadcast.mock.calls).toEqual([
+      [
+        1,
+        { type: 'SOLID_STATE_CHANGED', origin: PROFILE_APP_A.origin, webId: null },
+        { frameId: 0 },
+      ],
+      [
+        2,
+        { type: 'SOLID_STATE_CHANGED', origin: PROFILE_APP_B.origin, webId: b.session.webId },
+        { frameId: 0 },
+      ],
+      [
+        3,
+        { type: 'SOLID_STATE_CHANGED', origin: 'https://ungranted.example', webId: null },
+        { frameId: 0 },
+      ],
+    ]);
+    expect(profileDb.state.records[0]).toMatchObject({
+      profile: { sessionState: type === 'SOLID_LOGOUT' ? 'signed-out' : 'removing' },
+      session: null,
+      keyPair: null,
+      grantedOrigins: [],
+      classGrants: [],
+    });
+    expect(storage.get('solid:origin-grants')).toEqual([
+      expect.objectContaining({ origin: PROFILE_APP_B.origin, profileId: '2' }),
+    ]);
+    expect(profileDb.state.records[1]).toEqual(survivor);
+    expect([...idbMeta.values()]).toEqual(metadata);
+    expect([...cacheStore.keys()]).toEqual(bytes);
+
+    fail = false;
+    await loadWorker();
+    expect(cacheStore.size).toBe(0);
+    expect(idbMeta.size).toBe(0);
+    expect(profileDb.state.records.some((r) => r.profile.sessionState === 'removing')).toBe(false);
+    expect(profileDb.state.records.find((r) => r.profile.id === '2')).toEqual(survivor);
+    if (type === 'SOLID_LOGOUT') {
+      expect((await profileMessage('SOLID_GET_STATE')).webId).toBeNull();
+      expect(profileDb.state.records[0].profile.webId).toBe(a.session.webId);
+    } else {
+      expect((await profileMessage('SOLID_GET_STATE')).webId).toBe(b.session.webId);
+    }
+  });
+
+  it.each([
+    'SOLID_LOGOUT',
+    'SOLID_PROFILE_REMOVE',
+  ])('preserves the %s cleanup error when state publication also rejects', async (type) => {
+    await twoProfiles();
+    await loadWorker();
+    expect((await profileFetch()).status).toBe(200);
+    const cache = await caches.open('solid-ext-replica-bytes');
+    vi.spyOn(cache, 'delete').mockRejectedValue(new Error('fixture cache deletion failed'));
+    vi.spyOn(caches, 'open').mockResolvedValue(cache);
+    const repaint = vi
+      .spyOn(chrome.tabs, 'query')
+      .mockRejectedValue(new Error('fixture repaint failed'));
+
+    const result = await profileMessage(type, { profileId: '1' });
+    expect(result.error).toBe(
+      type === 'SOLID_LOGOUT'
+        ? 'Error: fixture cache deletion failed'
+        : 'fixture cache deletion failed',
+    );
+    expect(repaint).toHaveBeenCalled();
+    expect(profileDb.state.records[0].profile.sessionState).toBe(
+      type === 'SOLID_LOGOUT' ? 'signed-out' : 'removing',
+    );
+  });
+
+  it.each([
+    'SOLID_LOGOUT',
+    'SOLID_PROFILE_REMOVE',
+  ])('reports and retries a %s publication failure after successful cleanup', async (type) => {
+    await twoProfiles();
+    await loadWorker();
+    expect((await profileFetch()).status).toBe(200);
+    const tabs = [
+      { id: 1, url: PROFILE_APP_A.url },
+      { id: 2, url: PROFILE_APP_B.url },
+    ];
+    const query = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('fixture repaint failed'))
+      .mockResolvedValue(tabs);
+    chrome.tabs.query = query;
+    const tabBroadcast = vi.spyOn(chrome.tabs, 'sendMessage');
+
+    const result = await profileMessage(type, { profileId: '1' });
+    expect(result.error).toMatch(/fixture repaint failed/);
+    // The rejected publication was followed by a successful retry that reached the tabs.
+    expect(query.mock.calls.length).toBeGreaterThanOrEqual(2);
+    expect(tabBroadcast).toHaveBeenCalledWith(
+      1,
+      { type: 'SOLID_STATE_CHANGED', origin: PROFILE_APP_A.origin, webId: null },
+      { frameId: 0 },
+    );
+    expect(profileDb.state.records.find((r) => r.profile.id === '1')?.session ?? null).toBeNull();
+  });
+
   it('keeps failed removal retryable until replica bytes are deleted on wake', async () => {
     const { a, b } = await twoProfiles();
     await loadWorker();

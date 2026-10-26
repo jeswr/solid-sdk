@@ -403,17 +403,40 @@ async function teardownSession(sender?: MessageSender, stamp?: string): Promise<
     : grant
       ? await store.get(grant.profileId)
       : null;
-  if (record)
-    await withProfileLifecycle(record.profile.id, async () => {
-      try {
-        await store.signOut(record.profile.id);
-      } finally {
-        await syncOriginGrants();
-      }
-    });
-  else if ((await store.list()).profiles.length === 0) {
-    const [cache, db] = await Promise.all([getReplicaCache(), getReplicaDb()]);
-    await purgeReplica(cache, db, null);
+  await revokeThenPublish(async () => {
+    if (record)
+      await withProfileLifecycle(record.profile.id, async () => {
+        try {
+          await store.signOut(record.profile.id);
+        } finally {
+          await syncOriginGrants();
+        }
+      });
+    else if ((await store.list()).profiles.length === 0) {
+      const [cache, db] = await Promise.all([getReplicaCache(), getReplicaDb()]);
+      await purgeReplica(cache, db, null);
+    }
+  });
+}
+
+/**
+ * Revocation is persisted before cleanup, so the revoked state is published even when a purge
+ * fails and needs a wake-time retry. A cleanup error wins over a publication error. When cleanup
+ * succeeded, a failed publication is retried once and still reported, so the caller never sees
+ * success while open pages may hold a revoked identity.
+ */
+async function revokeThenPublish(cleanup: () => Promise<void>): Promise<void> {
+  try {
+    await cleanup();
+  } catch (err) {
+    await updateDefaultIconAndBroadcast().catch(() => {});
+    throw err;
+  }
+  try {
+    await updateDefaultIconAndBroadcast();
+  } catch (err) {
+    await updateDefaultIconAndBroadcast().catch(() => {});
+    throw err;
   }
 }
 
@@ -924,14 +947,17 @@ async function handleProfiles(
         await store.rename(message.profileId, message.label);
         break;
       case 'SOLID_PROFILE_REMOVE':
-        await withProfileLifecycle(message.profileId, async () => {
-          try {
-            await store.remove(message.profileId);
-          } finally {
-            await syncOriginGrants();
-          }
-        });
-        break;
+        // Keeps the removing marker/error if cleanup failed, but clears the displayed identity.
+        await revokeThenPublish(() =>
+          withProfileLifecycle(message.profileId, async () => {
+            try {
+              await store.remove(message.profileId);
+            } finally {
+              await syncOriginGrants();
+            }
+          }),
+        );
+        return { ok: true, ...(await store.list()) };
       case 'SOLID_PROFILE_SET_DEFAULT':
         await store.setDefault(message.profileId);
         break;
@@ -941,10 +967,7 @@ async function handleProfiles(
     await updateDefaultIconAndBroadcast();
     return { ok: true, ...(await store.list()) };
   } catch (err) {
-    // Removal persists revocation before purging bytes. Both account surfaces must re-read
-    // that state even when cleanup fails; a repaint failure must not hide the original error.
-    if (message.type === 'SOLID_PROFILE_REMOVE')
-      await updateDefaultIconAndBroadcast().catch(() => {});
+    // A failed SOLID_PROFILE_REMOVE has already published through revokeThenPublish.
     return { error: err instanceof Error ? err.message : 'Profile operation failed' };
   }
 }
@@ -1633,7 +1656,6 @@ chrome.runtime.onMessage.addListener(
         return true;
       case 'SOLID_LOGOUT':
         teardownSession(sender, message.stampedOrigin)
-          .then(() => updateDefaultIconAndBroadcast())
           .then(() => sendResponse({ ok: true }))
           .catch((err) => sendResponse({ error: String(err) }));
         return true;
