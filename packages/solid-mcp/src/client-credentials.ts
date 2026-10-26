@@ -12,6 +12,8 @@ import {
 import { podScopedUrlOrUndefined } from "./auth.js";
 import type { CliConfig } from "./cli-config.js";
 
+const MAX_PROFILE_REDIRECTS = 5;
+
 /** CSS login with a process-local token/key cache shared by every stdio tool. */
 export async function createCliFetch(
   config: CliConfig,
@@ -106,7 +108,30 @@ export async function createCliFetch(
       const headers = new Headers(request.headers);
       headers.delete("authorization");
       headers.delete("dpop");
-      return fetchImpl(request, { headers, redirect: "manual", credentials: "omit" });
+      const follow = request.redirect === "follow" && ["GET", "HEAD"].includes(request.method);
+      let anonymousRequest = request;
+      for (let hop = 0; ; hop++) {
+        const response = await fetchImpl(anonymousRequest, {
+          headers,
+          redirect: "manual",
+          credentials: "omit",
+        });
+        const location = response.headers.get("location");
+        if (!follow || ![301, 302, 303, 307, 308].includes(response.status) || !location)
+          return response;
+        await response.body?.cancel();
+        if (hop === MAX_PROFILE_REDIRECTS) throw new Error("Too many anonymous profile redirects.");
+        let target: URL;
+        try {
+          target = new URL(location, anonymousRequest.url);
+          if (!["https:", "http:"].includes(target.protocol) || target.username || target.password)
+            throw new Error();
+        } catch {
+          throw new Error("Invalid anonymous profile redirect.");
+        }
+        // Stay anonymous even when a profile redirects back into the pod.
+        anonymousRequest = new Request(target, anonymousRequest);
+      }
     }
     const state = await currentSession();
     const headers = Object.fromEntries(request.headers);
