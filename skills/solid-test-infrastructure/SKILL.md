@@ -331,6 +331,60 @@ the alerts survive the merge unchanged. To clear a backlog without waiting on up
 (Learned in the `jeswr/elk` fork upstream-sync, 2026-07-02 — each fix verified per-alert against
 the regenerated lockfile.)
 
+## Pitfalls
+
+### Minimal live round-trip proof
+
+> In the NOTES broker/RS fixture, use `https://localhost:3000` for requests when that is the
+> configured public URL, TLS hostname, and `PSS_TOKEN_AUDIENCE`. Route TCP to IPv4 separately.
+> DPoP `htu` covers the target URI without query/fragment; it is not the TCP bind address.
+
+For an explicitly authorized local/disposable integration environment, separate a **minimal
+live round-trip proof** from the **full UI smoke test**. The minimal proof avoids popup/COOP
+coupling, but does not test the app's login UI:
+
+1. Register a test client from Node if the local broker supports dynamic registration.
+2. Navigate the browser's main page to the authorization endpoint using PKCE, state and nonce.
+3. Complete the local identity-provider login and broker consent on that page.
+4. Wait for the exact callback origin/path and validate the returned state before taking the code.
+5. Exchange the code from Node for a DPoP-bound token with the same key/PKCE verifier and
+   validate the token response.
+6. PUT, GET and DELETE a unique app-owned test resource, asserting statuses and round-trip data.
+   Confirm anonymous access is denied so success proves authentication.
+
+Keep the popup-driven test as full UI coverage. For work restricted to fixtures/mocks, exercise
+the same protocol steps over stub transports; this pattern does not authorize a live service run.
+
+### Broker consent and COOP
+
+Inspect the broker's rendered form rather than guessing consent fields. In the NOTES broker,
+`POST /interaction/confirm` uses `decision=accept`; `accept=true` re-presents consent despite
+an HTTP success. Preserve the form's action and hidden/CSRF fields. This is a deployment detail,
+not a standard OIDC consent form contract.
+If a popup returns to the callback with no `window.opener`, inspect broker
+`Cross-Origin-Opener-Policy: same-origin`; the reported symptom was a `login_required` callback,
+no second popup, and a hung flow. Prefer the main-page proof above for protocol diagnosis.
+The source's Chromium flags disabling web security/COOP are not a production fix and do not
+prove normal browser login works. Test any alternative callback transport (such as
+BroadcastChannel) with the same origin/state protections; do not weaken broker headers globally.
+
+### Self-signed TLS in Node workers
+
+Node's built-in fetch uses Undici; `https.Agent` passed as `agent` does not configure it.
+For local test certificates, prefer trusting the test CA. Where an isolated disposable test
+requires a bypass, scope it to that local request using an explicitly installed `undici` fetch
+and `Agent` dispatcher, and close the dispatcher afterward. Node bundling Undici internally
+does not make `import "undici"` available without declaring the dependency.
+The source's `NODE_TLS_REJECT_UNAUTHORIZED=0` disables verification process-wide; do not copy
+it into application configuration or production. It is unnecessary for fixture/mock-only tests.
+
+### Strip-only Node scripts
+
+A module-type/reparse warning from running a TypeScript smoke script without `"type": "module"`
+is non-blocking. For an ESM test entrypoint in an otherwise CommonJS project use `.mts`, rather
+than changing the whole app's module mode merely to silence it. Keep explicit interop for CJS
+dependencies; their presence alone does not require the entire project to be CommonJS.
+
 ## Gotchas
 
 | Gotcha | Detail |

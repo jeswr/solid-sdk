@@ -1,3 +1,5 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /**
  * YouTube → Media. Your liked videos (`/youtube/v3/videos?myRating=like`) as
  * `schema:VideoObject`, and your playlists (`/youtube/v3/playlists?mine=true`)
@@ -18,12 +20,14 @@ import { getJson } from "../core/fixture-fetch.js";
 import type { ImportContext, ImportOutcome, IntegrationAdapter } from "../core/types.js";
 import { CLASSES, MediaItem, MusicPlaylist } from "../core/vocab.js";
 import { YOUTUBE_FIXTURES, type YTPlaylistsList, type YTVideosList } from "./fixtures.js";
+import { vocabMap } from "./vocab-map.js";
 
 const ID = "youtube";
 const API = "https://www.googleapis.com/youtube/v3";
 const SCOPES = ["https://www.googleapis.com/auth/youtube.readonly"] as const;
 
 export const youtubeAdapter: IntegrationAdapter = {
+  vocabMap,
   metadata: {
     id: ID,
     name: "YouTube",

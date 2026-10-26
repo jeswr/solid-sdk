@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { pathToFileURL } from "node:url";
 import { safeHttpIri, serialize } from "@jeswr/rdf-serialize";
 import type { DatasetCore, Term } from "@rdfjs/types";
@@ -10,6 +11,7 @@ import {
   graph,
   iri,
   NS,
+  normalizeLiteral,
   parseReferenceRdf,
   putGraph,
   RdfNode,
@@ -221,7 +223,11 @@ export async function buildNanopublications(
       if (s.title) document.text(`${NS.schema}name`, s.title);
       if (s.sha256) document.text(`${NS.schema}sha256`, s.sha256);
       if (s.author) document.link(`${NS.schema}author`, expand(s.author, owner));
-      if (s.date) document.text(`${NS.schema}dateCreated`, s.date, `${NS.xsd}date`);
+      if (s.date)
+        document.add(
+          `${NS.schema}dateCreated`,
+          normalizeLiteral(df.literal(s.date, df.namedNode(`${NS.xsd}date`))),
+        );
       for (const parent of s.derived_from ?? []) document.link(`${NS.prov}wasDerivedFrom`, parent);
     } else throw new Error("Unknown source kind");
     sourceIds.set(s.id, source);

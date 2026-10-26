@@ -1,3 +1,5 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /**
  * Goodreads → Documents (Tier-C file import).
  *
@@ -16,6 +18,7 @@ import type { FileImportAdapter, FileImportContext, ImportFile } from "../core/f
 import { recordFragment } from "../core/slug.js";
 import type { IntegrationMetadata } from "../core/types.js";
 import { Book, CLASSES } from "../core/vocab.js";
+import { vocabMap } from "./vocab-map.js";
 
 const ID = "goodreads";
 
@@ -31,6 +34,7 @@ const metadata: IntegrationMetadata = {
 };
 
 export const goodreadsFileAdapter: FileImportAdapter = {
+  vocabMap,
   metadata,
   accept: ".csv,text/csv",
   fileHint:
