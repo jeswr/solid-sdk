@@ -1,0 +1,114 @@
+[
+  {
+    "project": "solid-suite",
+    "rootDirectory": "apps/suite",
+    "package": "@jeswr/app-suite",
+    "framework": "next",
+    "clientIdDocument": false,
+    "originEnv": "APP_ORIGIN",
+    "vercelIgnore": "node ../../scripts/vercel-ignore-build.mjs @jeswr/app-suite"
+  },
+  {
+    "project": "solid-pod-drive",
+    "rootDirectory": "apps/pod-drive/web",
+    "package": "@jeswr/pod-drive-web",
+    "framework": "vite",
+    "originEnv": "APP_ORIGIN",
+    "vercelIgnore": "node ../../../scripts/vercel-ignore-build.mjs @jeswr/pod-drive-web"
+  },
+  {
+    "project": "solid-pod-docs",
+    "rootDirectory": "apps/pod-docs/web",
+    "package": "@jeswr/pod-docs-web",
+    "framework": "vite",
+    "originEnv": "APP_ORIGIN",
+    "vercelIgnore": "node ../../../scripts/vercel-ignore-build.mjs @jeswr/pod-docs-web"
+  },
+  {
+    "project": "solid-pod-chat",
+    "rootDirectory": "apps/pod-chat/web",
+    "package": "@jeswr/pod-chat-web",
+    "framework": "vite",
+    "originEnv": "APP_ORIGIN",
+    "vercelIgnore": "node ../../../scripts/vercel-ignore-build.mjs @jeswr/pod-chat-web"
+  },
+  {
+    "project": "solid-pod-mail",
+    "rootDirectory": "apps/pod-mail/web",
+    "package": "@jeswr/pod-mail-web",
+    "framework": "vite",
+    "originEnv": "APP_ORIGIN",
+    "vercelIgnore": "node ../../../scripts/vercel-ignore-build.mjs @jeswr/pod-mail-web"
+  },
+  {
+    "project": "solid-pod-photos",
+    "rootDirectory": "apps/pod-photos/web",
+    "package": "@jeswr/pod-photos-web",
+    "framework": "vite",
+    "originEnv": "APP_ORIGIN",
+    "vercelIgnore": "node ../../../scripts/vercel-ignore-build.mjs @jeswr/pod-photos-web"
+  },
+  {
+    "project": "solid-pod-music",
+    "rootDirectory": "apps/pod-music/web",
+    "package": "@jeswr/pod-music-web",
+    "framework": "vite",
+    "originEnv": "APP_ORIGIN",
+    "vercelIgnore": "node ../../../scripts/vercel-ignore-build.mjs @jeswr/pod-music-web"
+  },
+  {
+    "project": "solid-pod-money",
+    "rootDirectory": "apps/pod-money/web",
+    "package": "@jeswr/pod-money-web",
+    "framework": "vite",
+    "originEnv": "APP_ORIGIN",
+    "vercelIgnore": "node ../../../scripts/vercel-ignore-build.mjs @jeswr/pod-money-web"
+  },
+  {
+    "project": "solid-pod-health",
+    "rootDirectory": "apps/pod-health/web",
+    "package": "@jeswr/pod-health-web",
+    "framework": "vite",
+    "originEnv": "APP_ORIGIN",
+    "vercelIgnore": "node ../../../scripts/vercel-ignore-build.mjs @jeswr/pod-health-web"
+  },
+  {
+    "project": "solid-app-store",
+    "rootDirectory": "apps/app-store/web",
+    "package": "@jeswr/solid-app-store-web",
+    "framework": "vite",
+    "originEnv": "APP_ORIGIN",
+    "vercelIgnore": "node ../../../scripts/vercel-ignore-build.mjs @jeswr/solid-app-store-web"
+  },
+  {
+    "project": "solid-pod-manager",
+    "rootDirectory": "apps/pod-manager",
+    "package": "@jeswr/app-pod-manager",
+    "framework": "next",
+    "originEnv": "NEXT_PUBLIC_APP_ORIGIN",
+    "vercelIgnore": "node ../../scripts/vercel-ignore-build.mjs @jeswr/app-pod-manager"
+  },
+  {
+    "project": "solid-sdk-access-manager",
+    "rootDirectory": "apps/access-manager",
+    "package": "@jeswr/app-access-manager",
+    "framework": "vite",
+    "originEnv": "APP_ORIGIN",
+    "vercelIgnore": "node ../../scripts/vercel-ignore-build.mjs @jeswr/app-access-manager"
+  },
+  {
+    "project": "solid-sdk-issues",
+    "rootDirectory": "apps/issues",
+    "package": "@jeswr/app-issues",
+    "framework": "next",
+    "originEnv": "APP_ORIGIN",
+    "vercelIgnore": "node ../../scripts/vercel-ignore-build.mjs @jeswr/app-issues"
+  },
+  {
+    "project": "solid-sdk-coeliac",
+    "rootDirectory": "apps/coeliac",
+    "package": "@jeswr/app-coeliac",
+    "framework": "next",
+    "vercelIgnore": "node ../../scripts/vercel-ignore-build.mjs @jeswr/app-coeliac"
+  }
+]

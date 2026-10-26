@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 //
 // SHACL conformance against the LANDED diet: profile (vendored verbatim from
@@ -138,7 +139,7 @@ describe("SHACL — the build* outputs produce NO violation", () => {
 describe("SHACL — malformed data yields a violation", () => {
   it("a Meal with NO ingestion time violates the MUST", async () => {
     const ttl = `
-      @prefix diet: <https://w3id.org/jeswr/sectors/health/diet#> .
+      @prefix diet: <https://jeswr.org/ns/sectors/health/diet#> .
       @prefix schema: <http://schema.org/> .
       <${URL_}#it> a diet:Meal ; diet:hasItem <${URL_}#item-0> .
       <${URL_}#item-0> a diet:FoodItem ; schema:name "x" .
@@ -149,7 +150,7 @@ describe("SHACL — malformed data yields a violation", () => {
 
   it("a GeneticSummary with NO interpretation violates the MUST", async () => {
     const ttl = `
-      @prefix diet: <https://w3id.org/jeswr/sectors/health/diet#> .
+      @prefix diet: <https://jeswr.org/ns/sectors/health/diet#> .
       <${URL_}#it> a diet:GeneticSummary .
     `;
     const v = await violations(new Parser().parse(ttl));
@@ -158,7 +159,7 @@ describe("SHACL — malformed data yields a violation", () => {
 
   it("a GeneticSummary with NO consent violates the MUST (consent MUST be true)", async () => {
     const ttl = `
-      @prefix diet: <https://w3id.org/jeswr/sectors/health/diet#> .
+      @prefix diet: <https://jeswr.org/ns/sectors/health/diet#> .
       <${URL_}#it> a diet:GeneticSummary ;
         diet:geneticInterpretation "Cannot diagnose; negative-predictive only." .
     `;
@@ -168,7 +169,7 @@ describe("SHACL — malformed data yields a violation", () => {
 
   it("a GeneticSummary with consentGiven=false violates the MUST (sh:hasValue true)", async () => {
     const ttl = `
-      @prefix diet: <https://w3id.org/jeswr/sectors/health/diet#> .
+      @prefix diet: <https://jeswr.org/ns/sectors/health/diet#> .
       @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
       <${URL_}#it> a diet:GeneticSummary ;
         diet:geneticInterpretation "Cannot diagnose; negative-predictive only." ;
@@ -180,7 +181,7 @@ describe("SHACL — malformed data yields a violation", () => {
 
   it("a GeneticSummary claiming risk-haplotype-absent WITHOUT coverageComplete=true violates the MUST", async () => {
     const ttl = `
-      @prefix diet: <https://w3id.org/jeswr/sectors/health/diet#> .
+      @prefix diet: <https://jeswr.org/ns/sectors/health/diet#> .
       <${URL_}#it> a diet:GeneticSummary ;
         diet:geneticInterpretation "Cannot diagnose; negative-predictive only." ;
         diet:consentGiven true ;
@@ -215,7 +216,7 @@ describe("SHACL — genetic-data defense-in-depth safety invariants", () => {
   // risk-haplotype-absent rollup slip past. The cardinality is now sh:Violation.
   it("a GeneticSummary asserting BOTH coverageComplete true AND false violates the MUST (contradictory pair)", async () => {
     const ttl = `
-      @prefix diet: <https://w3id.org/jeswr/sectors/health/diet#> .
+      @prefix diet: <https://jeswr.org/ns/sectors/health/diet#> .
       @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
       <${URL_}#it> a diet:GeneticSummary ;
         diet:geneticInterpretation "Cannot diagnose; negative-predictive only." ;
@@ -235,7 +236,7 @@ describe("SHACL — genetic-data defense-in-depth safety invariants", () => {
   // is complete, so this is NOT the coverage invariant — it is the consistency one.
   it("a GeneticSummary claiming risk-haplotype-absent alongside a PRESENT DQ2.5 risk marker violates the consistency MUST", async () => {
     const ttl = `
-      @prefix diet: <https://w3id.org/jeswr/sectors/health/diet#> .
+      @prefix diet: <https://jeswr.org/ns/sectors/health/diet#> .
       <${URL_}#it> a diet:GeneticSummary ;
         diet:geneticInterpretation "Cannot diagnose; negative-predictive only; coverage complete." ;
         diet:consentGiven true ;

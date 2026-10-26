@@ -62,6 +62,7 @@ export default defineConfig({
       { find: "@jeswr/pod-music", replacement: podMusicSrc("index.ts") },
       { find: "@jeswr/fetch-rdf", replacement: hostModule("@jeswr/fetch-rdf") },
       { find: "@solid/object", replacement: hostModule("@solid/object") },
+      { find: "@jeswr/suite-vocab", replacement: hostModule("@jeswr/suite-vocab") },
       { find: "@rdfjs/wrapper", replacement: hostModule("@rdfjs/wrapper") },
       { find: "n3", replacement: hostModule("n3") },
       // The library declares React as an OPTIONAL peer dep; bundling its source
@@ -104,7 +105,9 @@ export default defineConfig({
   server: { fs: { allow: [fileURLToPath(new URL("..", import.meta.url))] } },
   // `base: "./"` makes the built asset URLs relative, so the static bundle works
   // when served from a domain root (the per-subdomain deploy) without rewriting.
-  base: "./",
+  // Vercel builds use "/" instead: vercel.json rewrites nested paths to
+  // index.html, where relative asset URLs would resolve under the nested path.
+  base: process.env.VERCEL === "1" ? "/" : "./",
   build: {
     outDir: "dist",
     // Surface oversized bundles in CI without failing the build.

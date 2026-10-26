@@ -6,6 +6,9 @@
   "description": "Source connectors and injected Pod import runners extracted from Pod Manager.",
   "license": "MIT",
   "sideEffects": false,
+  "bin": {
+    "pod-connectors": "./dist/node/bin.js"
+  },
   "securityCritical": true,
   "engines": {
     "node": ">=24"
@@ -135,6 +138,26 @@
       "types": "./dist/goodreads/*.d.ts",
       "default": "./dist/goodreads/*.js"
     },
+    "./adapters/google/oauth": {
+      "types": "./dist/adapters/google/oauth.d.ts",
+      "default": "./dist/adapters/google/oauth.js"
+    },
+    "./adapters/gmail": {
+      "types": "./dist/gmail/adapter.d.ts",
+      "default": "./dist/gmail/adapter.js"
+    },
+    "./gmail/*": {
+      "types": "./dist/gmail/*.d.ts",
+      "default": "./dist/gmail/*.js"
+    },
+    "./mail": {
+      "types": "./dist/mail/writer.d.ts",
+      "default": "./dist/mail/writer.js"
+    },
+    "./mail/*": {
+      "types": "./dist/mail/*.d.ts",
+      "default": "./dist/mail/*.js"
+    },
     "./adapters/google-calendar": {
       "types": "./dist/google-calendar/adapter.d.ts",
       "default": "./dist/google-calendar/adapter.js"
@@ -142,6 +165,22 @@
     "./google-calendar/*": {
       "types": "./dist/google-calendar/*.d.ts",
       "default": "./dist/google-calendar/*.js"
+    },
+    "./adapters/google-contacts": {
+      "types": "./dist/google-contacts/adapter.d.ts",
+      "default": "./dist/google-contacts/adapter.js"
+    },
+    "./google-contacts/*": {
+      "types": "./dist/google-contacts/*.d.ts",
+      "default": "./dist/google-contacts/*.js"
+    },
+    "./adapters/google-drive": {
+      "types": "./dist/google-drive/adapter.d.ts",
+      "default": "./dist/google-drive/adapter.js"
+    },
+    "./google-drive/*": {
+      "types": "./dist/google-drive/*.d.ts",
+      "default": "./dist/google-drive/*.js"
     },
     "./adapters/google-photos": {
       "types": "./dist/google-photos/adapter.d.ts",
@@ -302,15 +341,18 @@
   "dependencies": {
     "@jeswr/fetch-rdf": "workspace:*",
     "@jeswr/guarded-fetch": "workspace:*",
+    "@jeswr/solid-dpop": "workspace:*",
     "@rdfjs/wrapper": "^0.34.0",
     "@solid/object": "^0.6.0",
     "jsonld-streaming-parser": "^5.0.0",
-    "n3": "^2.0.3"
+    "n3": "^2.0.3",
+    "postal-mime": "4.1.4"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.5.1",
+    "rdf-validate-shacl": "^0.6.5",
     "@rdfjs/types": "^2.0.1",
     "@types/n3": "^1.26.1",
-    "@biomejs/biome": "^2.5.1",
     "typescript": "^6.0.3",
     "vitest": "^4.1.9"
   }

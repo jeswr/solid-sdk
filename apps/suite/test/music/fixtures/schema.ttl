@@ -1,0 +1,9 @@
+# AUTHORED-BY Codex GPT-6.1-Sol
+# PM Spotify connector: HTTP schema aliases, literal artist/album, ISO duration.
+@prefix s: <http://schema.org/> .
+@prefix media: <https://jeswr.org/ns/sectors/media#> .
+<https://pod.test/music/tracks/a.ttl#it> a s:MusicRecording; s:name "Song"; s:byArtist "Artist"; s:inAlbum "Album"; s:duration "PT3M33S"; s:url <https://open.spotify.com/track/123>; s:image "https://images.test/cover.jpg"; media:isrc "GB123"; media:loved true .
+<https://pod.test/music/artists/a.ttl#it> a s:MusicGroup; s:name "Artist" .
+<https://pod.test/music/albums/a.ttl#it> a s:MusicAlbum; s:name "Album"; s:track <https://pod.test/music/tracks/a.ttl#it> .
+<https://pod.test/music/playlists/a.ttl#it> a s:MusicPlaylist; s:name "Playlist"; s:itemListElement [ a s:ListItem; s:position 1; s:item <https://pod.test/music/tracks/a.ttl#it> ] .
+<https://pod.test/music/history/2026-10.ttl#play> a s:ListenAction; s:object <https://pod.test/music/tracks/a.ttl#it>; s:startTime "2026-10-25T12:00:00Z" .

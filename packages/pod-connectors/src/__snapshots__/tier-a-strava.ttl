@@ -1,0 +1,29 @@
+# AUTHORED-BY Codex GPT-6.1-Sol
+<https://pod.test/alice/integrations/strava/fitness/activities.ttl> <http://www.w3.org/ns/prov#wasDerivedFrom> <https://www.strava.com/activities/11223344>, <https://www.strava.com/activities/11223346>, <https://www.strava.com/api/v3/athlete/activities>.
+<https://pod.test/alice/integrations/strava/fitness/activities.ttl#activity-11223344> a <https://schema.org/ExerciseAction>;
+    <http://www.w3.org/ns/prov#wasDerivedFrom> <https://www.strava.com/activities/11223344>;
+    <https://schema.org/distance> "5.2 km";
+    <https://schema.org/duration> "PT27M2S";
+    <https://schema.org/exerciseType> "Run";
+    <https://schema.org/identifier> "11223344";
+    <https://schema.org/name> "Morning Run";
+    <https://schema.org/startTime> "2026-06-05T06:31:00.000Z"^^<http://www.w3.org/2001/XMLSchema#dateTime>;
+    <https://schema.org/url> <https://www.strava.com/activities/11223344>.
+<https://pod.test/alice/integrations/strava/fitness/activities.ttl#activity-11223346> a <https://schema.org/ExerciseAction>;
+    <http://www.w3.org/ns/prov#wasDerivedFrom> <https://www.strava.com/activities/11223346>;
+    <https://schema.org/distance> "1.0 km";
+    <https://schema.org/duration> "PT30M45S";
+    <https://schema.org/exerciseType> "Swim";
+    <https://schema.org/identifier> "11223346";
+    <https://schema.org/name> "Lunch swim";
+    <https://schema.org/startTime> "2026-06-02T12:10:00.000Z"^^<http://www.w3.org/2001/XMLSchema#dateTime>;
+    <https://schema.org/url> <https://www.strava.com/activities/11223346>.
+<https://pod.test/alice/integrations/strava/travel/rides.ttl> <http://www.w3.org/ns/prov#wasDerivedFrom> <https://www.strava.com/activities/11223345>, <https://www.strava.com/api/v3/athlete/activities>.
+<https://pod.test/alice/integrations/strava/travel/rides.ttl#activity-11223345> a <https://schema.org/TravelAction>;
+    <http://www.w3.org/ns/prov#wasDerivedFrom> <https://www.strava.com/activities/11223345>;
+    <https://schema.org/distance> "8.3 km";
+    <https://schema.org/duration> "PT23M30S";
+    <https://schema.org/identifier> "11223345";
+    <https://schema.org/name> "Commute to work";
+    <https://schema.org/startTime> "2026-06-04T07:58:00.000Z"^^<http://www.w3.org/2001/XMLSchema#dateTime>;
+    <https://schema.org/url> <https://www.strava.com/activities/11223345>.

@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * Deterministic, URI-safe fragment ids for imported records.
  *
@@ -38,4 +39,14 @@ export function recordFragment(label: string, key: string = label): string {
   const base = slugify(label);
   const hash = fnv1a(key);
   return base ? `${base}-${hash}` : hash;
+}
+
+/** Link a source id under a trusted static base; malformed Unicode has no URL. */
+export function sourceItemUrl(base: string, id: string | undefined): string | undefined {
+  if (!id) return undefined;
+  try {
+    return `${base}${encodeURIComponent(id)}`;
+  } catch {
+    return undefined;
+  }
 }
