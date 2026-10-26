@@ -49,6 +49,177 @@ afterEach(() => vi.restoreAllMocks());
 
 describe("Drive data-safety regressions", () => {
   it.each([
+    "changed",
+    "missing",
+    "no-etag",
+    "weak-etag",
+    "ignored-condition",
+  ])("keeps the source when the destination copy cannot be verified (%s)", async (failure) => {
+    const destination = `${TO}a`;
+    const { pod, client, fetch } = setup(async (url, init) => {
+      if (url === destination && init?.method === "PUT") {
+        const response = await pod.fetch(url, init);
+        if (failure === "no-etag") response.headers.delete("etag");
+        else if (failure === "weak-etag") response.headers.set("etag", 'W/"copy"');
+        else if (failure === "missing") await pod.fetch(url, { method: "DELETE" });
+        else await pod.fetch(url, { method: "PUT", body: "unrelated" });
+        return response;
+      }
+      if (failure === "ignored-condition" && url === destination && init?.method === "HEAD")
+        return pod.fetch(url, { method: "HEAD" });
+      return undefined;
+    });
+    await expect(client.move(`${FROM}a`, destination)).rejects.toMatchObject({
+      kind: "partial-failure",
+      deletedSources: [],
+    });
+    expect(await (await client.read(`${FROM}a`)).text()).toBe("A");
+    expect(
+      fetch.mock.calls.some(([url, init]) => url === `${FROM}a` && init?.method === "DELETE"),
+    ).toBe(false);
+  });
+
+  it("verifies each recursive destination again before deleting its source child", async () => {
+    const { pod, client } = setup(async (url, init) => {
+      if (url === `${FROM}a` && init?.method === "DELETE")
+        await pod.fetch(`${TO}b`, { method: "PUT", body: "unrelated" });
+      return undefined;
+    });
+    await expect(client.move(FROM, TO)).rejects.toMatchObject({ kind: "partial-failure" });
+    expect(await (await client.read(`${FROM}b`)).text()).toBe("B");
+    expect(await (await client.read(`${TO}a`)).text()).toBe("A");
+  });
+
+  it.each([
+    "extra",
+    "renamed",
+  ])("keeps every source when the copied folder's membership changes (%s)", async (change) => {
+    const { pod, client } = setup(async (url, init) => {
+      if (url === `${TO}b` && init?.method === "PUT") {
+        const response = await pod.fetch(url, init);
+        if (change === "renamed") await pod.fetch(`${TO}a`, { method: "DELETE" });
+        await pod.fetch(`${TO}foreign`, { method: "PUT", body: "foreign" });
+        return response;
+      }
+      return undefined;
+    });
+    await expect(client.move(FROM, TO)).rejects.toMatchObject({
+      kind: "partial-failure",
+      deletedSources: [],
+    });
+    expect(await (await client.read(`${FROM}a`)).text()).toBe("A");
+    expect(await (await client.read(`${FROM}b`)).text()).toBe("B");
+  });
+
+  it("lists partial folder trash and restores only missing children without overwriting survivors", async () => {
+    const { pod, client, fetch } = setup(async (url, init) =>
+      url === `${FROM}b` && init?.method === "DELETE"
+        ? new Response(null, { status: 403 })
+        : undefined,
+    );
+    const result = await trashItems(client, DRIVE, [await client.stat(FROM)]);
+    expect(result.failed).toHaveLength(1);
+    expect(pod.has(`${FROM}a`)).toBe(false);
+    const [entry] = await listTrash(client, DRIVE);
+    expect(entry).toMatchObject({ status: "partial", original: FROM });
+    if (!entry) throw new Error("Missing partial recovery copy");
+    const { status: _, ...staleEntry } = entry;
+    expect((await deleteForever(client, DRIVE, [staleEntry])).failed[0]?.error).toMatchObject({
+      kind: "trash-partial",
+    });
+    await pod.fetch(`${FROM}b`, { method: "PUT", body: "new B" });
+    await pod.fetch(`${FROM}nested/new`, { method: "PUT", body: "new child" });
+    const foreign = new URL("../foreign", entry.url).href;
+    await pod.fetch(foreign, { method: "PUT", body: "foreign slot child" });
+    const restored = await restoreItems(client, DRIVE, [entry]);
+    expect(restored.failed).toEqual([]);
+    expect(restored.done).toMatchObject([{ url: FROM, renamed: false }]);
+    expect(await (await client.read(`${FROM}a`)).text()).toBe("A");
+    expect(await (await client.read(`${FROM}b`)).text()).toBe("new B");
+    expect(await (await client.read(`${FROM}nested/new`)).text()).toBe("new child");
+    const write = fetch.mock.calls.find(
+      ([url, init]) => url === `${FROM}a` && init?.method === "PUT",
+    );
+    expect(new Headers(write?.[1]?.headers).get("if-none-match")).toBe("*");
+    expect(await listTrash(client, DRIVE)).toEqual([]);
+    expect(await (await client.read(foreign)).text()).toBe("foreign slot child");
+  });
+
+  it.each([
+    "folder-race",
+    "file-race",
+    "folder-error",
+    "file-error",
+    "offline",
+  ])("restores partial trees safely through %s and keeps recovery on failure", async (failure) => {
+    let restoring = false;
+    let intervened = false;
+    const { pod, client } = setup(async (url, init) => {
+      if (!restoring && url === `${FROM}b` && init?.method === "DELETE")
+        return new Response(null, { status: 403 });
+      if (
+        restoring &&
+        !intervened &&
+        init?.method === "PUT" &&
+        url === (failure.startsWith("folder") ? FROM : `${FROM}a`)
+      ) {
+        intervened = true;
+        if (failure === "offline") throw new Error("offline");
+        if (failure.endsWith("error")) return new Response(null, { status: 403 });
+        await pod.fetch(url, {
+          method: "PUT",
+          body: failure === "file-race" ? "concurrent" : "",
+          headers: { "content-type": failure === "file-race" ? "text/plain" : "text/turtle" },
+        });
+      }
+      return undefined;
+    });
+    await client.write(`${FROM}nested/note`, "nested", {
+      contentType: "text/plain",
+      ifNoneMatch: "*",
+    });
+    await trashItems(client, DRIVE, [await client.stat(FROM)]);
+    const [entry] = await listTrash(client, DRIVE);
+    if (!entry) throw new Error("Missing recovery copy");
+    restoring = true;
+    await client.remove(FROM, { recursive: true });
+    const result = await restoreItems(client, DRIVE, [entry]);
+    expect(intervened).toBe(true);
+    if (failure.endsWith("race")) {
+      expect(result.failed).toEqual([]);
+      expect(await (await client.read(`${FROM}a`)).text()).toBe(
+        failure === "file-race" ? "concurrent" : "A",
+      );
+      expect(await (await client.read(`${FROM}nested/note`)).text()).toBe("nested");
+      expect(await listTrash(client, DRIVE)).toEqual([]);
+    } else {
+      expect(result.done).toEqual([]);
+      expect(result.failed).toHaveLength(1);
+      expect(await (await client.read(`${entry.url}a`)).text()).toBe("A");
+      expect((await listTrash(client, DRIVE))[0]).toMatchObject({ status: "partial" });
+    }
+  });
+
+  it.each([
+    "GET",
+    "PUT",
+  ])("returns every target failed with a typed warning for initial index %s failure", async (method) => {
+    const { pod, client } = setup(async (url, init) =>
+      url === INDEX && (init?.method ?? "GET") === method
+        ? new Response(null, { status: 500 })
+        : undefined,
+    );
+    const items = await Promise.all([client.stat(`${FROM}a`), client.stat(`${FROM}b`)]);
+    await expect(trashItems(client, DRIVE, items)).resolves.toMatchObject({
+      done: [],
+      failed: items.map(({ url }) => ({ url, error: expect.objectContaining({ status: 500 }) })),
+      warnings: [{ kind: "trash-index-persistence" }],
+    });
+    expect(pod.has(`${FROM}a`)).toBe(true);
+    expect(pod.has(`${FROM}b`)).toBe(true);
+  });
+
+  it.each([
     "restore",
     "delete",
     "purge",
@@ -513,9 +684,13 @@ describe("Drive data-safety regressions", () => {
     const { pod, client } = setup(async (url, init) =>
       url === INDEX && init?.method === "PUT" ? new Response(null, { status }) : undefined,
     );
-    await expect(trashItems(client, DRIVE, [await client.stat(`${FROM}a`)])).rejects.toMatchObject({
-      status,
-    });
+    await expect(trashItems(client, DRIVE, [await client.stat(`${FROM}a`)])).resolves.toMatchObject(
+      {
+        done: [],
+        failed: [{ url: `${FROM}a`, error: { status } }],
+        warnings: [{ kind: "trash-index-persistence" }],
+      },
+    );
     expect(pod.has(`${FROM}a`)).toBe(true);
     expect(pod.snapshot().resources.some(([url]) => url.includes(".trash/") && url !== INDEX)).toBe(
       false,
@@ -524,7 +699,7 @@ describe("Drive data-safety regressions", () => {
 
   it.each([
     500, 412,
-  ])("keeps a discoverable pending record and an Undo result if finalizing the index fails with %i", async (status) => {
+  ])("keeps a discoverable pending record and warns if finalizing the index fails with %i", async (status) => {
     let writes = 0;
     const { pod, client } = setup(async (url, init) => {
       if (url === INDEX && init?.method === "PUT" && ++writes > 1)
@@ -533,7 +708,8 @@ describe("Drive data-safety regressions", () => {
     });
     const result = await trashItems(client, DRIVE, [await client.stat(`${FROM}a`)]);
     expect(result.done).toHaveLength(1);
-    expect(result.failed).toEqual([{ url: INDEX, error: expect.objectContaining({ status }) }]);
+    expect(result.failed).toEqual([]);
+    expect(result.warnings).toMatchObject([{ kind: "trash-index-persistence", cause: { status } }]);
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     expect(await listTrash(client, DRIVE)).toEqual([]);
     expect(warn).toHaveBeenCalledWith(expect.objectContaining({ kind: "trash-index-persistence" }));

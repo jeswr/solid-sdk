@@ -38,9 +38,17 @@ export interface TrashEntry {
   readonly name: string;
   readonly contentType?: string;
   readonly size?: number;
+  /** Recovery copy from an interrupted transfer; restore merges missing files. */
+  readonly status?: "partial";
 }
 
 export class TrashRecord extends TermWrapper {
+  get status(): string | undefined {
+    return OptionalFrom.subjectPredicate(this, `${DCT}description`, LiteralAs.string);
+  }
+  set status(value: string) {
+    OptionalAs.object(this, `${DCT}description`, value, LiteralFrom.string);
+  }
   get types(): Set<string> {
     return SetFrom.subjectPredicate(this, RDF_TYPE, NamedNodeAs.string, NamedNodeFrom.string);
   }
@@ -124,6 +132,7 @@ export function trashEntries(index: TrashIndex): TrashEntry[] {
         ...(by ? { trashedBy: by } : {}),
         ...(format ? { contentType: format } : {}),
         ...(size !== undefined ? { size } : {}),
+        ...(record.status === "partial" ? { status: "partial" as const } : {}),
       });
     } catch {
       // A wrong-typed literal makes one record unreadable, never the whole trash.
@@ -145,6 +154,7 @@ export function addTrashRecord(
   record.title = entry.name;
   record.format = entry.contentType;
   record.size = entry.size;
+  if (entry.status) record.status = entry.status;
 }
 
 export function removeTrashRecord(index: TrashIndex, url: string): void {

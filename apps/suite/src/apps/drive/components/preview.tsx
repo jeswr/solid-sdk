@@ -30,7 +30,7 @@ import {
 } from "react";
 import { encodeRef } from "@/lib/refs";
 import type { DriveClient, DriveItem } from "../lib/client/client";
-import { parseCsv, previewKind } from "../lib/view/view";
+import { parseCsvPreview, previewKind } from "../lib/view/view";
 import { useDrive } from "../state/drive-context";
 import { useDriveActions, useDriveUi } from "../state/ui";
 import { DetailsPane } from "./details";
@@ -204,7 +204,8 @@ export function PreviewBody({ item }: { item: DriveItem }) {
       <p className="drv-preview-note">Showing the first 1 MB.</p>
     ) : null;
     if (kind === "csv") {
-      const [header, ...rows] = parseCsv(loaded.text);
+      const parsed = parseCsvPreview(loaded.text);
+      const [header, ...rows] = parsed.rows;
       return (
         <div className="drv-preview-scroll">
           <table className="drv-csv">
@@ -233,6 +234,11 @@ export function PreviewBody({ item }: { item: DriveItem }) {
             </tbody>
           </table>
           {note}
+          {parsed.truncated ? (
+            <p className="drv-preview-note">
+              CSV preview truncated (up to 200 rows, 100 columns and 10,000 cells).
+            </p>
+          ) : null}
         </div>
       );
     }
@@ -345,10 +351,10 @@ export function PreviewDialog() {
         onCloseAutoFocus={(event) => {
           // Return focus to the previewed file's row so list shortcuts keep working.
           const row = document.querySelector<HTMLElement>(`[data-url="${CSS.escape(item.url)}"]`);
-          if (row) {
-            event.preventDefault();
-            row.focus();
-          }
+          event.preventDefault();
+          const listing = document.querySelector<HTMLElement>("[data-drive-listing]");
+          (row ?? listing)?.focus();
+          if (row && document.activeElement !== row) listing?.focus();
         }}
       >
         <DialogTitle className="sr-only">{item.name}</DialogTitle>

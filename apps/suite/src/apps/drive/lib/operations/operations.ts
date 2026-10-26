@@ -7,9 +7,15 @@
  * they return `{ done, failed }` so the UI can report partial results.
  */
 
-import { LiteralAs, LiteralFrom, OptionalAs, OptionalFrom } from "@rdfjs/wrapper";
-import { DataFactory } from "n3";
-import { type DriveClient, DriveError, type DriveItem, nameOf, parentOf } from "../client/client";
+import {
+  type DriveClient,
+  DriveError,
+  type DriveItem,
+  DrivePartialFailureError,
+  type MoveResult,
+  nameOf,
+  parentOf,
+} from "../client/client";
 import { guessContentType } from "../files";
 import { keepBothName, normalizeUploadName } from "../upload";
 import {
@@ -18,33 +24,18 @@ import {
   removeTrashRecord,
   serializeTrashIndex,
   type TrashEntry,
-  TrashRecord,
   trashEntries,
   trashIndexFrom,
 } from "./trash-index";
 
-/** A durable intent remains discoverable even if completion cannot be saved. */
-class TransferRecord extends TrashRecord {
-  get status(): string | undefined {
-    return OptionalFrom.subjectPredicate(
-      this,
-      "http://purl.org/dc/terms/description",
-      LiteralAs.string,
-    );
-  }
-  set status(value: string) {
-    OptionalAs.object(this, "http://purl.org/dc/terms/description", value, LiteralFrom.string);
-  }
-}
-
-function transferRecord(index: ReturnType<typeof emptyTrashIndex>, url: string): TransferRecord {
-  return new TransferRecord(url, index, DataFactory);
+function transferRecord(index: ReturnType<typeof emptyTrashIndex>, url: string) {
+  return index.record(url);
 }
 
 export interface BatchResult<T> {
   readonly done: T[];
   readonly failed: { url: string; error: unknown }[];
-  /** Side effects completed, but the index needs reconciliation on next load. */
+  /** Index access failed; completed side effects may need reconciliation. */
   readonly warnings?: TrashIndexWarning[];
 }
 
@@ -55,9 +46,19 @@ export class TrashIndexWarning extends Error {
     override readonly cause: unknown,
   ) {
     super(
-      "Trash changes completed, but the index could not be saved. It will be reconciled when Trash is next loaded.",
+      "The Trash index could not be read or saved. Open Trash to reconcile any completed changes.",
     );
     this.name = "TrashIndexWarning";
+  }
+}
+
+export class TrashPartialError extends Error {
+  readonly kind = "trash-partial";
+  constructor() {
+    super(
+      "This folder only partly moved to Trash. Restore its missing items before deleting it for ever.",
+    );
+    this.name = "TrashPartialError";
   }
 }
 
@@ -184,15 +185,18 @@ export async function renameItem(
   const parent = parentOf(item.url);
   if (!parent || newName.trim() === item.name) return item.url;
   const name = normalizeUploadName(newName, item.kind === "folder" ? "folder" : "file");
-  return client.move(item.url, childUrl(parent, name, item.kind === "folder"));
+  return (await client.move(item.url, childUrl(parent, name, item.kind === "folder"))).url;
 }
 
 export async function moveItems(
   client: DriveClient,
   urls: readonly string[],
   targetFolder: string,
-): Promise<BatchResult<{ from: string; to: string }>> {
-  const result: BatchResult<{ from: string; to: string }> = { done: [], failed: [] };
+): Promise<BatchResult<{ from: string; to: string; identity: MoveResult }>> {
+  const result: BatchResult<{ from: string; to: string; identity: MoveResult }> = {
+    done: [],
+    failed: [],
+  };
   for (const url of urls) {
     try {
       if (parentOf(url) === targetFolder) continue;
@@ -200,7 +204,8 @@ export async function moveItems(
         throw new DriveError("conflict", 409, targetFolder);
       }
       const to = childUrl(targetFolder, nameOf(url), url.endsWith("/"));
-      result.done.push({ from: url, to: await client.move(url, to) });
+      const identity = await client.move(url, to);
+      result.done.push({ from: url, to: identity.url, identity });
     } catch (error) {
       result.failed.push({ url, error });
     }
@@ -270,7 +275,7 @@ async function requireTrashEntry(
   driveRoot: string,
   entry: TrashEntry,
   pending = false,
-): Promise<void> {
+): Promise<string | undefined> {
   const current = await client.readRdf(indexUrlOf(driveRoot));
   const index = current ? trashIndexFrom(current.dataset) : emptyTrashIndex();
   const record = transferRecord(index, entry.url);
@@ -281,6 +286,7 @@ async function requireTrashEntry(
     (pending && record.status !== "pending")
   )
     throw new DriveError("invalid-trash-record", 409, entry.url);
+  return record.status;
 }
 
 /** Preserve batch outcomes even when the bookkeeping write fails afterwards. */
@@ -383,12 +389,21 @@ export async function trashItems(
     validateOriginal(driveRoot, entry);
   }
   // No source may be removed until every intent is durably discoverable.
-  await updateIndex(client, driveRoot, (index) => {
-    for (const entry of entries) {
-      addTrashRecord(index, entry);
-      transferRecord(index, entry.url).status = "pending";
-    }
-  });
+  try {
+    await updateIndex(client, driveRoot, (index) => {
+      for (const entry of entries) {
+        addTrashRecord(index, entry);
+        transferRecord(index, entry.url).status = "pending";
+      }
+    });
+  } catch (error) {
+    return {
+      done: [],
+      failed: items.map(({ url }) => ({ url, error })),
+      warnings: [new TrashIndexWarning(indexUrlOf(driveRoot), error)],
+    };
+  }
+  const partial: TrashEntry[] = [];
   for (const entry of entries) {
     try {
       await client.move(entry.original, entry.url, {
@@ -400,18 +415,20 @@ export async function trashItems(
       result.done.push(entry);
     } catch (error) {
       result.failed.push({ url: entry.original, error });
+      if (error instanceof DrivePartialFailureError && error.retainedDestinations.length > 0)
+        partial.push(entry);
     }
   }
-  if (result.done.length > 0) {
+  if (result.done.length > 0 || partial.length > 0) {
     try {
       await updateIndex(client, driveRoot, (index) => {
         for (const entry of result.done) transferRecord(index, entry.url).status = "complete";
+        for (const entry of partial) transferRecord(index, entry.url).status = "partial";
       });
     } catch (error) {
-      // Keep successful items in done so callers can offer Undo. Pending
-      // records remain hidden until listTrash can confirm source removal and
-      // persist completion.
-      result.failed.push({ url: indexUrlOf(driveRoot), error });
+      // Preserve the completed side effects, but callers must withhold Undo
+      // until the index has durably recorded completion.
+      return { ...result, warnings: [new TrashIndexWarning(indexUrlOf(driveRoot), error)] };
     }
   }
   return result;
@@ -463,6 +480,28 @@ function restoredName(name: string): string {
   return dot > 0 ? `${name.slice(0, dot)} (restored)${name.slice(dot)}` : `${name} (restored)`;
 }
 
+/** Merge recovery copies into their original tree, never replacing survivors. */
+async function restoreMissing(client: DriveClient, from: string, to: string): Promise<void> {
+  if (from.endsWith("/")) {
+    if (!(await exists(client, to))) {
+      try {
+        await client.createFolder(to);
+      } catch (error) {
+        if (!(error instanceof DriveError && error.kind === "conflict")) throw error;
+      }
+    }
+    for (const child of await client.list(from))
+      await restoreMissing(client, child.url, `${to}${child.url.slice(from.length)}`);
+  } else if (!(await exists(client, to))) {
+    try {
+      await client.move(from, to);
+    } catch (error) {
+      // A concurrent writer filled the gap. Its version takes precedence.
+      if (!(error instanceof DriveError && error.kind === "conflict")) throw error;
+    }
+  }
+}
+
 export async function restoreItems(
   client: DriveClient,
   driveRoot: string,
@@ -476,7 +515,14 @@ export async function restoreItems(
     try {
       const slot = slotOf(driveRoot, entry);
       validateOriginal(driveRoot, entry);
-      await requireTrashEntry(client, driveRoot, entry);
+      const status = await requireTrashEntry(client, driveRoot, entry);
+      if (status === "partial") {
+        await restoreMissing(client, entry.url, entry.original);
+        await client.remove(entry.url, { recursive: true });
+        await client.remove(slot).catch(() => undefined);
+        result.done.push({ entry, url: entry.original, renamed: false });
+        continue;
+      }
       const folder = entry.original.endsWith("/");
       const parent = parentOf(entry.original) as string;
       let target = entry.original;
@@ -493,7 +539,7 @@ export async function restoreItems(
         renamed = true;
       }
       // Moving recreates missing parent folders (PUT creates intermediate containers).
-      const url = await client.move(entry.url, target);
+      const { url } = await client.move(entry.url, target);
       // The slot may contain another writer's resources; only remove it empty.
       await client.remove(slot).catch(() => undefined);
       result.done.push({ entry, url, renamed });
@@ -518,7 +564,8 @@ export async function deleteForever(
   for (const entry of entries) {
     try {
       slotOf(driveRoot, entry);
-      await requireTrashEntry(client, driveRoot, entry);
+      if ((await requireTrashEntry(client, driveRoot, entry)) === "partial")
+        throw new TrashPartialError();
       await client.remove(entry.url, { recursive: true });
       await client.remove(slotOf(driveRoot, entry)).catch(() => undefined);
       result.done.push(entry);

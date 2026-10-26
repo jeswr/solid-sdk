@@ -333,9 +333,9 @@ export function FileBrowser(props: FileBrowserProps) {
       case mod && event.shiftKey && event.key.toLowerCase() === "c" && targets.length === 1:
         event.preventDefault();
         return void actions.copyLink(targets[0] as DriveItem);
-      case (event.key === "Delete" || event.key === "Backspace") && targets.length > 0:
+      case (event.key === "Delete" || event.key === "Backspace") && selected.length > 0:
         event.preventDefault();
-        return void actions.trash(targets);
+        return void actions.trash(selected);
       case (event.key === "Backspace" || (event.key === "ArrowUp" && event.altKey)) &&
         Boolean(folder) &&
         folder !== driveRoot: {

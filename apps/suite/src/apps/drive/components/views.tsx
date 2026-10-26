@@ -455,6 +455,12 @@ export function TrashView() {
                           decorative
                         />
                         <span className="drv-name">{entry.name}</span>
+                        {entry.status === "partial" ? (
+                          <span role="note">
+                            Partly moved to Trash. Restore to recover missing items; existing files
+                            will be kept.
+                          </span>
+                        ) : null}
                       </div>
                     </td>
                     <td className="drv-col-location">{originalLabel(entry.original, driveRoot)}</td>

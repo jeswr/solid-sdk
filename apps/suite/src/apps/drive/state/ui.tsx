@@ -20,7 +20,7 @@ import {
   useState,
 } from "react";
 import { encodeRef } from "@/lib/refs";
-import { type DriveClient, DriveError, type DriveItem, nameOf } from "../lib/client/client";
+import { DriveError, type DriveItem, nameOf } from "../lib/client/client";
 import {
   copyItem,
   createFolder,
@@ -29,6 +29,7 @@ import {
   renameItem,
   restoreItems,
   TrashMovingError,
+  TrashPartialError,
   trashItems,
 } from "../lib/operations/operations";
 import type { TrashEntry } from "../lib/operations/trash-index";
@@ -153,7 +154,7 @@ export function useDriveUi(): DriveUiValue {
 
 /** User-facing message for a failed operation. */
 export function errorMessage(error: unknown, fallback = "Something went wrong"): string {
-  if (error instanceof TrashMovingError) return error.message;
+  if (error instanceof TrashMovingError || error instanceof TrashPartialError) return error.message;
   if (error instanceof DriveError) {
     switch (error.kind) {
       case "conflict":
@@ -261,35 +262,8 @@ export function useDriveActions() {
       const pending = toast.loading(
         items.length === 1 ? `Moving ${items[0]?.name}…` : `Moving ${items.length} items…`,
       );
-      // Capture each validator before moving the next item in a potentially slow
-      // batch. URL equality does not establish which resource now occupies it.
-      const validators = new Map<
-        string,
-        { etag: string | undefined; children?: readonly string[] } | undefined
-      >();
-      const movingClient: DriveClient = undoable
-        ? {
-            ...client,
-            move: async (from, to) => {
-              const url = await client.move(from, to);
-              validators.set(
-                url,
-                await (async () => {
-                  const item = await client.stat(url);
-                  return {
-                    etag: item.etag,
-                    ...(url.endsWith("/")
-                      ? { children: (await client.list(url)).map((child) => child.url) }
-                      : {}),
-                  };
-                })().catch(() => undefined),
-              );
-              return url;
-            },
-          }
-        : client;
       const result = await moveItems(
-        movingClient,
+        client,
         items.map((item) => item.url),
         target,
       );
@@ -307,7 +281,15 @@ export function useDriveActions() {
       }
       if (result.done.length === 0) return result;
       // An unreadable/absent validator makes Undo fail closed for that item.
-      const undo = result.done.map((entry) => ({ ...entry, identity: validators.get(entry.to) }));
+      const undo = result.done;
+      const canUndo =
+        undoable &&
+        undo.every(
+          ({ identity }) =>
+            identity.etag &&
+            !identity.etag.startsWith("W/") &&
+            (!identity.url.endsWith("/") || identity.children !== undefined),
+        );
       const label = folderLabel(target, driveRoot);
       const first = result.done[0];
       const message =
@@ -315,7 +297,7 @@ export function useDriveActions() {
           ? `Moved ${nameOf(first.from)} to ${label}`
           : `Moved ${result.done.length} items to ${label}`;
       toast.success(message, {
-        ...(undoable
+        ...(canUndo
           ? {
               action: {
                 label: "Undo",
@@ -427,25 +409,32 @@ export function useDriveActions() {
   const trash = useCallback(
     async (items: readonly DriveItem[]) => {
       if (!driveRoot || items.length === 0) return;
-      const result = await trashItems(client, driveRoot, items, { webId: session.webId });
-      for (const entry of result.done) {
-        invalidate(entry.original);
-        invalidate(entry.url);
+      try {
+        const result = await trashItems(client, driveRoot, items, { webId: session.webId });
+        for (const warning of result.warnings ?? []) toast.error(warning.message);
+        for (const entry of result.done) {
+          invalidate(entry.original);
+          invalidate(entry.url);
+        }
+        if (result.failed.length > 0) {
+          toast.error(errorMessage(result.failed[0]?.error, "Couldn't move to trash"));
+        }
+        const first = result.done[0];
+        if (!first) return;
+        toast(
+          result.done.length === 1
+            ? `Moved ${first.name} to trash`
+            : `Moved ${result.done.length} items to trash`,
+          {
+            duration: 8000,
+            ...(!result.warnings?.length
+              ? { action: { label: "Undo", onClick: () => void restore(result.done) } }
+              : {}),
+          },
+        );
+      } catch (error) {
+        toast.error(errorMessage(error, "Couldn't move to trash"));
       }
-      if (result.failed.length > 0) {
-        toast.error(errorMessage(result.failed[0]?.error, "Couldn't move to trash"));
-      }
-      const first = result.done[0];
-      if (!first) return;
-      toast(
-        result.done.length === 1
-          ? `Moved ${first.name} to trash`
-          : `Moved ${result.done.length} items to trash`,
-        {
-          duration: 8000,
-          action: { label: "Undo", onClick: () => void restore(result.done) },
-        },
-      );
     },
     [client, driveRoot, invalidate, restore, session.webId],
   );

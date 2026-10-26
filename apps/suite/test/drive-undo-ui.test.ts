@@ -24,9 +24,9 @@ function transport(
     const current = files.get(url);
     const ifMatch = headers.get("if-match");
     if (ifMatch && current?.etag !== ifMatch) return new Response(null, { status: 412 });
-    if (method === "GET")
+    if (method === "GET" || method === "HEAD")
       return current
-        ? new Response(current.body, {
+        ? new Response(method === "HEAD" ? null : current.body, {
             headers: { etag: current.etag, "content-type": "text/plain" },
           })
         : new Response(null, { status: 404 });
@@ -95,7 +95,7 @@ it("Undo rolls back only its own copy when the source changes mid-move", async (
   expect(files.get(SOURCE)?.body).toBe("other");
   expect(files.has(TARGET)).toBe(false);
 });
-it("Undo preserves its copy if the server omits the rollback validator", async () => {
+it("Undo keeps the source and recovery copy when the destination PUT omits its validator", async () => {
   const { files, fetch } = transport({
     omitCreatedEtag: true,
     beforeDelete: (resources) => resources.set(SOURCE, { etag: '"replacement"', body: "other" }),
@@ -103,7 +103,7 @@ it("Undo preserves its copy if the server omits the rollback validator", async (
   await expect(
     moveWithValidator({ storageUrl: ROOT, fetch }, SOURCE, TARGET, '"moved"'),
   ).rejects.toThrow();
-  expect(files.get(SOURCE)?.body).toBe("other");
+  expect(files.get(SOURCE)?.body).toBe("original");
   expect(files.get(TARGET)?.body).toBe("original");
   expect(
     fetch.mock.calls.some(([url, init]) => String(url) === TARGET && init?.method === "DELETE"),

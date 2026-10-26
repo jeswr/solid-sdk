@@ -8,6 +8,7 @@ import {
   inModifiedRange,
   MODIFIED_FILTERS,
   parseCsv,
+  parseCsvPreview,
   previewKind,
   TYPE_FILTER_LABELS,
   toListEntry,
@@ -227,6 +228,29 @@ describe("friendly types and preview dispatch", () => {
 });
 
 describe("CSV preview", () => {
+  it("reports truncation precisely at row, column and total-cell limits", () => {
+    expect(parseCsvPreview("a,b\nc,d\n", 200, 100, 2)).toEqual({
+      rows: [["a", "b"]],
+      truncated: true,
+    });
+    expect(parseCsvPreview("a\n", 1)).toEqual({ rows: [["a"]], truncated: false });
+    expect(parseCsvPreview("a,b", 200, 1)).toEqual({ rows: [["a"]], truncated: true });
+    expect(parseCsvPreview("a,b,c", 200, 100, 2)).toEqual({ rows: [["a", "b"]], truncated: true });
+    expect(parseCsvPreview("a,b", 200, 100, 2)).toEqual({ rows: [["a", "b"]], truncated: false });
+    for (const limits of [
+      [0, 100, 10000],
+      [200, 0, 10000],
+      [200, 100, 0],
+    ] as const) {
+      expect(parseCsvPreview("a", ...limits)).toEqual({ rows: [], truncated: true });
+      expect(parseCsvPreview("", ...limits)).toEqual({ rows: [], truncated: false });
+    }
+  });
+  it("bounds columns and total collected cells inside the parser", () => {
+    expect(parseCsv(",".repeat(1024 * 1024))[0]).toHaveLength(100);
+    const rows = parseCsv(`${"cell,".repeat(99)}cell\n`.repeat(200));
+    expect(rows.reduce((sum, row) => sum + row.length, 0)).toBeLessThanOrEqual(10_000);
+  });
   it.each([
     ["", []],
     ["a,b", [["a", "b"]]],

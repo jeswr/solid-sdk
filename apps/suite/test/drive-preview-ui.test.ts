@@ -40,6 +40,43 @@ const item: DriveItem = {
 };
 const create = vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:preview");
 const revoke = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+
+it("preview close focuses the listing when the previewed row has disappeared", async () => {
+  client.read.mockResolvedValue(new Blob(["%PDF-1.7"]));
+  function Viewer({ hasRow }: { hasRow: boolean }) {
+    const [preview, setPreview] = useState<{ items: DriveItem[]; index: number } | undefined>({
+      items: [item],
+      index: 0,
+    });
+    ui.mockReturnValue({ preview, setPreview });
+    return h(
+      "div",
+      null,
+      h(
+        "div",
+        { "data-drive-listing": "", tabIndex: 0 },
+        hasRow ? h("div", { "data-url": item.url, tabIndex: -1 }, item.name) : null,
+      ),
+      h(PreviewDialog),
+    );
+  }
+  const view = await mount(h(Viewer, { hasRow: true }));
+  await view.render(h(Viewer, { hasRow: false }));
+  await click(document.querySelector('[aria-label="Close"]') as Element);
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+  expect(document.activeElement).toBe(view.host.querySelector("[data-drive-listing]"));
+  await view.unmount();
+});
+
+it("renders a bounded CSV preview with a truncation notice for a comma-only megabyte", async () => {
+  client.read.mockResolvedValue(new Blob([",".repeat(1024 * 1024)], { type: "text/csv" }));
+  const view = await mount(h(PreviewBody, { item: { ...item, contentType: "text/csv" } }));
+  expect(view.host.querySelectorAll("th").length).toBeLessThanOrEqual(100);
+  expect(view.host.textContent).toMatch(/truncated/i);
+  await view.unmount();
+});
 afterEach(() => {
   vi.clearAllMocks();
   client.read.mockReset();

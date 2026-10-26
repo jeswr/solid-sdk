@@ -27,6 +27,16 @@ const entry: TrashEntry = {
 afterEach(() => vi.restoreAllMocks());
 
 describe("PROV trash index", () => {
+  it("round-trips partial recovery state through typed accessors and Turtle", async () => {
+    const index = emptyTrashIndex();
+    const partial = { ...entry, status: "partial" as const };
+    addTrashRecord(index, partial);
+    const restored = trashIndexFrom(
+      new Store(new Parser().parse(await serializeTrashIndex(index))),
+    );
+    expect(trashEntries(restored)).toEqual([partial]);
+  });
+
   it("round-trips every accessor through Turtle and sorts newest first", async () => {
     const index = emptyTrashIndex();
     expect(index.records).toEqual([]);

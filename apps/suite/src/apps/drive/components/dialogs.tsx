@@ -494,6 +494,7 @@ function UploadConflictDialog() {
   const [current] = conflicts;
   const [applyAll, setApplyAll] = useState(false);
   const checkboxId = useId();
+  const previousFocus = useRef<HTMLElement | null>(null);
   if (!current) return null;
   const choose = (choice: "keep-both" | "replace" | "skip") => {
     uploads.resolve(current.id, choice, applyAll);
@@ -501,7 +502,20 @@ function UploadConflictDialog() {
   };
   return (
     <Dialog open onOpenChange={(open) => !open && choose("skip")}>
-      <DialogContent className="drv-dialog-sm">
+      <DialogContent
+        className="drv-dialog-sm"
+        onOpenAutoFocus={() => {
+          previousFocus.current =
+            document.activeElement instanceof HTMLElement ? document.activeElement : null;
+        }}
+        onCloseAutoFocus={(event) => {
+          event.preventDefault();
+          const listing = document.querySelector<HTMLElement>("[data-drive-listing]");
+          const target = previousFocus.current?.isConnected ? previousFocus.current : listing;
+          target?.focus();
+          if (document.activeElement !== target) listing?.focus();
+        }}
+      >
         <DialogHeader>
           <DialogTitle>Upload options</DialogTitle>
           <DialogDescription>A file named "{current.name}" already exists</DialogDescription>

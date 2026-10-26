@@ -260,14 +260,30 @@ describe("Drive writes against the demo pod", () => {
       expect(result.failed).toEqual([
         { url: `${DRIVE}Work/`, error: new DriveError("conflict", 409, target) },
       ]);
-      expect(result.done).toEqual([{ from: NOTES, to: `${target}notes.md` }]);
+      expect(result.done).toEqual([
+        {
+          from: NOTES,
+          to: `${target}notes.md`,
+          identity: { url: `${target}notes.md`, etag: expect.any(String) },
+        },
+      ]);
       expect(pod.has(NOTES)).toBe(false);
       expect(pod.has(`${target}notes.md`)).toBe(true);
       await client.move(`${target}notes.md`, NOTES);
     }
     const moved = await moveItems(client, [`${DRIVE}Photos/`], `${DRIVE}Archive/`);
     expect(moved).toEqual({
-      done: [{ from: `${DRIVE}Photos/`, to: `${DRIVE}Archive/Photos/` }],
+      done: [
+        {
+          from: `${DRIVE}Photos/`,
+          to: `${DRIVE}Archive/Photos/`,
+          identity: {
+            url: `${DRIVE}Archive/Photos/`,
+            etag: expect.any(String),
+            children: [`${DRIVE}Archive/Photos/hills.png`, `${DRIVE}Archive/Photos/sunset.png`],
+          },
+        },
+      ],
       failed: [],
     });
     expect(pod.has(`${DRIVE}Archive/Photos/sunset.png`)).toBe(true);
@@ -571,7 +587,11 @@ describe("app-managed trash against the demo pod", () => {
     const client = createSolidDriveClient({ storageUrl: DEMO_ROOT, fetch });
     const operation = trashItems(client, DRIVE, [await item(client)], { now: new Date(NOW) });
     if (twice)
-      await expect(operation).rejects.toMatchObject({ kind: "conflict", status: 412, url: INDEX });
+      await expect(operation).resolves.toMatchObject({
+        done: [],
+        failed: [{ url: NOTES, error: { kind: "conflict", status: 412, url: INDEX } }],
+        warnings: [{ kind: "trash-index-persistence" }],
+      });
     else {
       const result = await operation;
       expect(await listTrash(client, DRIVE)).toEqual([result.done[0], concurrent]);
@@ -584,7 +604,11 @@ describe("app-managed trash against the demo pod", () => {
     const { client } = await setup();
     const error = new Error("offline index");
     const write = vi.spyOn(client, "write").mockRejectedValue(error);
-    await expect(trashItems(client, DRIVE, [await item(client)])).rejects.toBe(error);
+    await expect(trashItems(client, DRIVE, [await item(client)])).resolves.toMatchObject({
+      done: [],
+      failed: [{ url: NOTES, error }],
+      warnings: [{ kind: "trash-index-persistence" }],
+    });
     expect(write).toHaveBeenCalledTimes(1);
   });
 });

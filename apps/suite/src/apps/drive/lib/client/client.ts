@@ -32,6 +32,13 @@ export interface WriteOptions {
   readonly ifMatch?: string;
 }
 
+export interface MoveResult {
+  readonly url: string;
+  /** Identity of the copied version, captured inside the move. */
+  readonly etag?: string;
+  readonly children?: readonly string[];
+}
+
 export interface DriveClient {
   readonly storageUrl: string;
   /** Children of a folder (hidden dot-names included; the UI filters them). */
@@ -45,8 +52,12 @@ export interface DriveClient {
   createFolder(url: string): Promise<void>;
   /** Copy a file (folders: recursive). Fails with a conflict when `to` exists. */
   copy(from: string, to: string): Promise<void>;
-  /** Move = copy + delete (no native move on Solid); returns the new URL. */
-  move(from: string, to: string, options?: { beforeDelete?: () => Promise<void> }): Promise<string>;
+  /** Move = copy + verified, conditional delete; returns the copied identity. */
+  move(
+    from: string,
+    to: string,
+    options?: { beforeDelete?: () => Promise<void> },
+  ): Promise<MoveResult>;
   remove(url: string, options?: { recursive?: boolean }): Promise<void>;
 }
 
@@ -333,15 +344,21 @@ export function createSolidDriveClient(options: {
     );
   };
 
-  const deleteSnapshot = async (source: SourceSnapshot, deleted: string[]) => {
+  const deleteSnapshot = async (
+    source: SourceSnapshot,
+    deleted: string[],
+    verifyCopy?: (source: SourceSnapshot) => Promise<void>,
+  ) => {
+    await verifyCopy?.(source);
     let etag = source.etag;
     if (source.children?.length) {
-      for (const child of source.children) await deleteSnapshot(child, deleted);
+      for (const child of source.children) await deleteSnapshot(child, deleted, verifyCopy);
       // Our own child deletions change a container's ETag. Read its new empty
       // representation, then conditionally delete it. Never walk new members.
       const current = await listing(source.url);
       if (current.items.length) throw new DriveError("conflict", 409, source.url);
       etag = current.etag;
+      await verifyCopy?.(source);
     }
     await deleteVersion(source.url, etag);
     deleted.push(source.url);
@@ -393,16 +410,61 @@ export function createSolidDriveClient(options: {
     const created: CreatedResource[] = [];
     const deleted: string[] = [];
     let deleting = false;
+    let verifyingCopy = false;
+    const destinations = new Map<string, CreatedResource>();
+    const verifyDestination = async (source: Pick<SourceSnapshot, "url">) => {
+      const destination = destinations.get(source.url) as CreatedResource;
+      verifyingCopy = true;
+      const etag = validator(destination.url, destination.etag);
+      const response = await ensureOk(
+        await http(destination.url, { method: "HEAD", headers: { "if-match": etag } }),
+        destination.url,
+      );
+      // Also check servers that ignore HEAD preconditions.
+      if (response.headers.get("etag") !== etag)
+        throw new DriveError("conflict", 412, destination.url);
+      verifyingCopy = false;
+    };
     try {
       await copySnapshot(source, to, created);
       if (moving) {
         await beforeDelete?.();
+        verifyingCopy = true;
+        const capture = async (node: SourceSnapshot) => {
+          const url = `${to}${node.url.slice(from.length)}`;
+          const copied = created.find((resource) => resource.url === url) as CreatedResource;
+          // A later HEAD must never invent an identity missing from the PUT.
+          validator(url, copied.etag);
+          if (node.children?.length) {
+            // Populating a container changes its creation validator. Bind its
+            // final listing to the expected children, whose PUT identities are
+            // independently checked before any source deletion.
+            const current = await listing(url);
+            const expected = new Set(
+              node.children.map((child) => `${url}${child.url.slice(node.url.length)}`),
+            );
+            if (
+              current.items.length !== expected.size ||
+              current.items.some((item) => !expected.has(item.url))
+            )
+              throw new DriveError("conflict", 409, url);
+            destinations.set(node.url, { url, etag: current.etag });
+          } else destinations.set(node.url, copied);
+          for (const child of node.children ?? []) await capture(child);
+        };
+        await capture(source);
+        for (const url of sourceUrls(source)) {
+          // Each destination is checked again immediately before its source's
+          // DELETE, since another child deletion may give a concurrent tab time.
+          await verifyDestination({ url });
+        }
         deleting = true;
-        await deleteSnapshot(source, deleted);
+        await deleteSnapshot(source, deleted, verifyDestination);
       }
     } catch (error) {
       // A network failure during DELETE is ambiguous: keep the recovery copy.
       const retained =
+        verifyingCopy ||
         deleted.length ||
         (deleting &&
           (!(error instanceof DriveError) || error.kind === "not-found" || error.status >= 500))
@@ -412,13 +474,22 @@ export function createSolidDriveClient(options: {
       const unverified = sourceUrls(source).filter((url) => !deleted.includes(url));
       throw new DrivePartialFailureError(from, deleted, unverified, retained, error);
     }
+    const etag = destinations.get(from)?.etag;
+    return {
+      url: to,
+      ...(etag ? { etag } : {}),
+      ...(source.children
+        ? { children: source.children.map((child) => `${to}${child.url.slice(from.length)}`) }
+        : {}),
+    };
   };
 
-  const copy: DriveClient["copy"] = (from, to) => transfer(from, to, false);
+  const copy: DriveClient["copy"] = async (from, to) => {
+    await transfer(from, to, false);
+  };
 
   const move: DriveClient["move"] = async (from, to, opts) => {
-    await transfer(from, to, true, opts?.beforeDelete);
-    return to;
+    return transfer(from, to, true, opts?.beforeDelete);
   };
 
   const remove: DriveClient["remove"] = async (url, opts = {}) => {

@@ -182,12 +182,22 @@ export function previewKind(contentType: string | undefined): PreviewKind {
   return "none";
 }
 
-/** Minimal RFC 4180 CSV parse for the preview table (first `maxRows` rows). */
-export function parseCsv(text: string, maxRows = 200): string[][] {
+/** Minimal RFC 4180 preview parser. Stop scanning as soon as any bound is hit. */
+export function parseCsvPreview(
+  text: string,
+  maxRows = 200,
+  maxColumns = 100,
+  maxCells = 10_000,
+): {
+  rows: string[][];
+  truncated: boolean;
+} {
   const rows: string[][] = [];
+  if (maxRows <= 0 || maxColumns <= 0 || maxCells <= 0) return { rows, truncated: text.length > 0 };
   let row: string[] = [];
   let field = "";
   let quoted = false;
+  let cells = 0;
   for (let i = 0; i < text.length; i += 1) {
     const char = text[i];
     if (quoted) {
@@ -199,19 +209,31 @@ export function parseCsv(text: string, maxRows = 200): string[][] {
     } else if (char === '"') quoted = true;
     else if (char === ",") {
       row.push(field);
+      cells += 1;
+      if (row.length >= maxColumns || cells >= maxCells) {
+        rows.push(row);
+        return { rows, truncated: true };
+      }
       field = "";
     } else if (char === "\n" || char === "\r") {
       if (char === "\r" && text[i + 1] === "\n") i += 1;
       row.push(field);
+      cells += 1;
       rows.push(row);
       row = [];
       field = "";
-      if (rows.length >= maxRows) return rows;
+      if (rows.length >= maxRows || cells >= maxCells)
+        return { rows, truncated: i + 1 < text.length };
     } else field += char;
   }
   if (field !== "" || row.length > 0 || text.endsWith('"')) {
     row.push(field);
     rows.push(row);
   }
-  return rows;
+  return { rows, truncated: false };
+}
+
+/** Array-only convenience for callers that do not display truncation metadata. */
+export function parseCsv(text: string, maxRows = 200): string[][] {
+  return parseCsvPreview(text, maxRows).rows;
 }

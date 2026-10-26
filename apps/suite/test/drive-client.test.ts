@@ -221,7 +221,10 @@ describe("Drive client against a seeded demo pod", () => {
     const source = `${DRIVE}notes.md`;
     const target = `${DRIVE}renamed.md`;
     const original = await (await client.read(source)).text();
-    expect(await client.move(source, target)).toBe(target);
+    expect(await client.move(source, target)).toEqual({
+      url: target,
+      etag: (await client.stat(target)).etag,
+    });
     expect(pod.has(source)).toBe(false);
     expect(await (await client.read(target)).text()).toBe(original);
     await expect(client.move(`${DRIVE}Work/`, `${DRIVE}Work/Nested/`)).rejects.toEqual(
@@ -231,7 +234,11 @@ describe("Drive client against a seeded demo pod", () => {
       kind: "conflict",
       status: 409,
     });
-    expect(await client.move(`${DRIVE}Work/`, `${DRIVE}Moved/`)).toBe(`${DRIVE}Moved/`);
+    expect(await client.move(`${DRIVE}Work/`, `${DRIVE}Moved/`)).toEqual({
+      url: `${DRIVE}Moved/`,
+      etag: (await client.stat(`${DRIVE}Moved/`)).etag,
+      children: [`${DRIVE}Moved/Budget%202026.csv`, `${DRIVE}Moved/Report.pdf`],
+    });
     expect(pod.has(`${DRIVE}Work/`)).toBe(false);
     await expect(client.remove(`${DRIVE}Moved/`)).rejects.toMatchObject({
       kind: "conflict",
