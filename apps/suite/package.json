@@ -36,7 +36,11 @@
     "@jeswr/rdf-serialize": "workspace:*",
     "jsonld-streaming-serializer": "^4.0.0",
     "@jeswr/suite-vocab": "workspace:*",
-    "saxes": "6.0.0"
+    "saxes": "6.0.0",
+    "lucide-react": "1.24.0",
+    "react-hook-form": "7.81.0",
+    "zod": "4.4.3",
+    "@hookform/resolvers": "5.4.0"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.11.1",
