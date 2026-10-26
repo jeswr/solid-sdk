@@ -8,6 +8,7 @@ import {
   parseInline,
   parseMessageText,
 } from "../src/apps/chat/lib/text";
+import { trimLinkEnd } from "../src/apps/chat/lib/text/links";
 
 const text = (value: string) => ({ type: "text", value });
 const paragraph = (value: string) => ({ type: "paragraph", children: [text(value)] });
@@ -55,6 +56,68 @@ describe("Markdown-lite inline AST", () => {
         ],
       },
     ]);
+  });
+
+  it.each(["*", "_"])("closes nested %s runs before later spans", (marker) => {
+    expect(
+      parseInline(
+        `${marker.repeat(3)}one${marker.repeat(3)} ${marker.repeat(2)}two${marker.repeat(2)}`,
+      ),
+    ).toEqual([
+      { type: "bold", children: [{ type: "italic", children: [text("one")] }] },
+      text(" "),
+      { type: "bold", children: [text("two")] },
+    ]);
+    expect(
+      parseInline(`${marker}one ${marker.repeat(2)}two${marker.repeat(3)} ${marker}three${marker}`),
+    ).toEqual([
+      { type: "italic", children: [text("one "), { type: "bold", children: [text("two")] }] },
+      text(" "),
+      { type: "italic", children: [text("three")] },
+    ]);
+  });
+
+  it.each(["_", "__", "*", "**"])("preserves intraword underscores inside %s", (marker) => {
+    const value = "hello snake_case snake__case snake___case";
+    expect(parseInline(`${marker}${value}${marker}`)).toEqual([
+      { type: marker.length === 2 ? "bold" : "italic", children: [text(value)] },
+    ]);
+    expect(
+      parseInline(`${marker}hello @mira_sage${marker}`, { mentions: { mira_sage: mira } }),
+    ).toEqual([
+      {
+        type: marker.length === 2 ? "bold" : "italic",
+        children: [text("hello "), { type: "mention", label: "mira_sage", webId: mira }],
+      },
+    ]);
+  });
+
+  it("falls back to intact literal input when scans exceed the shared work budget", () => {
+    for (const suffix of [
+      "@[".repeat(10_000),
+      `${"@[".repeat(10_000)}](https://example.org/`,
+      "*a ".repeat(10_000),
+      `${"**open ".repeat(16)}${"@[".repeat(10_000)}`,
+    ]) {
+      const source = `**formatted** ${suffix}`;
+      expect(parseInline(source)).toEqual([text(source)]);
+    }
+  });
+
+  it("continues formatting long ordinary inputs within the work budget", () => {
+    const body = "ordinary text ".repeat(10_000).trimEnd();
+    expect(parseInline(`**${body}**`)).toEqual([{ type: "bold", children: [text(body)] }]);
+    const source = "@mira :smile: `code` ".repeat(100);
+    expect(parseInline(source, options)).toEqual(
+      Array.from({ length: 100 }, () => [
+        { type: "mention", label: "mira", webId: mira },
+        text(" "),
+        { type: "emoji", shortcode: "smile", value: EMOJI_SHORTCODES.smile },
+        text(" "),
+        { type: "code", value: "code" },
+        text(" "),
+      ]).flat(),
+    );
   });
 
   it("keeps inline code opaque and handles escapes", () => {
@@ -159,6 +222,17 @@ describe("HTTP(S) and WebID autolinking", () => {
       text(" "),
       { type: "link", href: "https://example.org/a%7Bb%7D", label: "https://example.org/a%7Bb%7D" },
     ]);
+  });
+
+  it("trims long unmatched bracket suffixes while retaining balanced brackets", () => {
+    const suffix = ")].!};".repeat(10_000);
+    expect(parseInline(`https://example.org/a_(b)${suffix}`)).toEqual([
+      { type: "link", href: "https://example.org/a_(b)", label: "https://example.org/a_(b)" },
+      text(suffix),
+    ]);
+    expect(trimLinkEnd("([{}])")).toBe("([{}])");
+    expect(trimLinkEnd(")).]}!;")).toBe("");
+    expect(trimLinkEnd("")).toBe("");
   });
 
   it("preserves invalid URL candidates and avoids linking inside words or email", () => {
