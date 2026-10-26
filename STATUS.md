@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # sst-tr79 — MAI-L3 message composition
 
@@ -82,3 +83,43 @@ Additional interoperability check (no new dependency):
   Review remains for the integrator; no review tooling was installed or reconfigured.
 - Full-workspace gate failures are outside the mail lane's authorized scope; they remain for
   integration. No unrelated source/test files were changed.
+
+## Fix round 2 — attachment charset review
+
+Base: `602e0141eb82fc3197ed01a8027b37db78c47707`; branch remains `lane/sst-tr79`.
+
+- `4dd5f4a1` — `fix(mail): declare text attachment charsets`: add an optional structured
+  `Attachment.charset` for text media types, validate it as a nonempty ASCII MIME token,
+  and serialize it in Content-Type. Preserve supplied bytes and omitted-charset behavior.
+  Document the option; test UTF-8 `café`, ISO-8859-1, malformed/injected values, non-text
+  misuse and the existing MIME line-length limit. This takes the review's conservative
+  structured-option alternative; free-form MIME parameters remain unsupported.
+- Final `docs:` commit — record this round's validation results.
+
+Commands/results, run before the final commit:
+
+1. `pnpm --filter @jeswr/app-suite exec vitest run test/mail-compose.test.ts --coverage.include='src/apps/mail/lib/compose/**/*.ts'`
+   — PASS: 134 tests; compose coverage 100% statements (204/204), branches (127/127),
+   functions (46/46), lines (178/178).
+2. `pnpm --filter @jeswr/app-suite run lint && pnpm --filter @jeswr/suite-ui run build && pnpm --filter @jeswr/app-suite run build && pnpm --filter @jeswr/app-suite run typecheck && pnpm --filter @jeswr/app-suite run test`
+   — PASS: lint, dependency build, production app build, typecheck, 28 test files and
+   1,311 tests; app coverage remains 100% in all metrics. Lint retains the same 21 existing
+   Money warnings. Log: `/tmp/sst-tr79-round2-app-gate.log`.
+3. `pnpm run lint:root` — PASS. Log: `/tmp/sst-tr79-round2-lint-root.log`.
+4. `TURBO_SCM_BASE=602e0141eb82fc3197ed01a8027b37db78c47707 pnpm run gate`
+   — PASS: 6/6 tasks successful, 0 cached. Log: `/tmp/sst-tr79-round2-gate.log`.
+5. `pnpm run gate:full` — FAIL: 230 successful tasks / 295 total before stopping at
+   the same two unchanged federation-codegen tests recorded above (bookmarks shape and
+   generated-output reproducibility; `https://w3id.org/jeswr/...` versus
+   `https://jeswr.org/ns/...`). No changes made to these files.
+   Log: `/tmp/sst-tr79-round2-gate-full.log`.
+6. `pnpm --filter @jeswr/app-suite exec esbuild src/apps/mail/lib/compose/index.ts --bundle --platform=node --format=esm --outfile=/tmp/sst-tr79-round2-compose.mjs`
+   — PASS. A temporary Node script generated `/tmp/sst-tr79-round2.eml` using the new
+   charset option; Python's standard-library `email.parser.BytesParser` independently
+   confirmed `utf-8`, the exact attachment bytes, decoded text `café`, and no MIME defects.
+7. `git diff --check 602e0141eb82fc3197ed01a8027b37db78c47707` — PASS.
+
+No dependencies, lockfile changes, UI changes or screenshots. No pushes, PRs, branch switches,
+remote operations or changes outside this checkout. `roborev` is still unavailable, so automated
+per-commit review remains for integration. The requested finding is fixed; only the pre-existing
+full-workspace failures and unavailable review tooling remain. No open implementation questions.
