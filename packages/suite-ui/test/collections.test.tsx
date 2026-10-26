@@ -492,6 +492,7 @@ for (const kind of ["table", "grid"] as const) {
             <span>Custom label</span>
           </label>
           <div role="listbox" aria-label="Custom suggestions">
+            {/* biome-ignore lint/a11y/useFocusableInteractive: aria-activedescendant options, like TagInput's, are not focusable themselves. */}
             <div role="option" aria-selected="false">
               <span>Custom option</span>
             </div>
