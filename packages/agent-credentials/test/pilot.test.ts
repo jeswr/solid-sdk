@@ -1238,6 +1238,8 @@ describe("review corrections: ID-token claims, stored times, grant binding, comp
     const fake = await setupGoogle();
     await (await browserLogin(fake)).result;
     const before = readFileSync(grantFile(), "utf8");
+    // Directory permissions do not stop root, so this half needs an unprivileged user (as in CI).
+    if (process.getuid?.() === 0) return;
     chmodSync(join(dir, "grants"), 0o500); // the temporary file cannot be created
     try {
       expect(() =>
