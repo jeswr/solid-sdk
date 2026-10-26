@@ -21,7 +21,7 @@ import { runActorOnce } from "./actor/run.js";
 import { defaultAutonomyPolicy, withAutonomousScheduling } from "./mandate/default-mandate.js";
 import type { LoadedMandate, MandateVerifier } from "./mandate/types.js";
 import { confirmProposal } from "./outbox/confirm.js";
-import { runOutboxOnce } from "./outbox/executor.js";
+import { ReceiptPersistenceError, runOutboxOnce } from "./outbox/executor.js";
 import { RecordingSender } from "./outbox/sender.js";
 import { writeConfirmation } from "./pod/confirmation-store.js";
 import { createProposal, listProposals } from "./pod/proposal-store.js";
@@ -576,6 +576,62 @@ describe("personal-agent end-to-end (Reader → Actor → ODRL-enforced outbox)"
     const rerun = await runOutboxOnce(outboxConfig(pod, scriptedVerifier(loosePolicy), recorder));
     expect(rerun.sent).toBe(0);
     expect(recorder.sent.length).toBe(1);
+  });
+
+  it.each([
+    "http",
+    "network",
+  ])("reports %s receipt persistence failure without losing the send result", async (failure) => {
+    const { pod } = await seededPod();
+    const recorder = new RecordingSender(() => FIXED);
+    const config = outboxConfig(pod, scriptedVerifier(loosePolicy), recorder);
+    const finalizations: string[] = [];
+    const writeFetch: typeof fetch = async (input, init) => {
+      if (
+        String(input).startsWith(OUTBOX) &&
+        String(input).endsWith(".ttl") &&
+        init?.method === "PUT" &&
+        !new Headers(init.headers).has("if-none-match")
+      ) {
+        finalizations.push(String(init.body));
+        if (failure === "network") throw new Error("synthetic write failure");
+        return new Response(null, { status: 503 });
+      }
+      return pod.fetch(input, init);
+    };
+    const error = await runOutboxOnce({ ...config, writeFetch }).catch((cause: unknown) => cause);
+    expect(error).toBeInstanceOf(ReceiptPersistenceError);
+    expect(error).toMatchObject({
+      proposalId: (await listProposals(pod.fetch, PROPOSALS))[0]?.proposal.id,
+      receipt: { channelMessageId: "recorded-1", sentAt: FIXED.toISOString() },
+      cause: expect.any(Error),
+    });
+    expect(recorder.sent).toHaveLength(1);
+    expect(finalizations).toHaveLength(1);
+    expect(finalizations[0]).toContain('"sent"');
+    expect(finalizations[0]).toContain("recorded-1");
+    expect(receiptBody(pod)).toContain('"claimed"');
+    expect(receiptBody(pod)).not.toContain('"failed"');
+    expect(await runOutboxOnce(config)).toMatchObject({ sent: 0, failed: 0, skipped: 1 });
+    expect(recorder.sent).toHaveLength(1);
+  });
+
+  it("records a transmission failure as failed after the claim", async () => {
+    const { pod } = await seededPod();
+    const config = outboxConfig(
+      pod,
+      scriptedVerifier(loosePolicy),
+      new RecordingSender(() => FIXED),
+    );
+    const send = vi.fn(async () => {
+      throw new Error("synthetic transport failure");
+    });
+    expect(await runOutboxOnce({ ...config, senders: { email: send } })).toMatchObject({
+      sent: 0,
+      failed: 1,
+    });
+    expect(receiptBody(pod)).toContain('"failed"');
+    expect(send).toHaveBeenCalledTimes(1);
   });
 
   it("FAIL-CLOSED: a tampered / unverifiable mandate makes the executor refuse ALL actions", async () => {

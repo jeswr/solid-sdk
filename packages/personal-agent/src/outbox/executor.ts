@@ -39,7 +39,7 @@ import type { ActionProposal } from "../pod/proposals.js";
 import { putResource, refuseRedirect, throwIfNotWritten } from "../pod/write.js";
 import { provenanceRequiresConfirmation } from "./provenance.js";
 import { type ReceiptOutcome, type SendReceiptInput, serializeSendReceipt } from "./receipt.js";
-import type { ChannelSender, OutboundMessage } from "./sender.js";
+import type { ChannelSender, OutboundMessage, SendReceipt } from "./sender.js";
 
 /** Config for {@link runOutboxOnce}. */
 export interface ExecutorConfig {
@@ -83,6 +83,18 @@ export interface ExecutorResult {
   readonly failed: number;
   /** Number of proposals skipped (already have a receipt, or lost the claim race). */
   readonly skipped: number;
+}
+
+/** Transmission succeeded, but finalization failed. The claim remains; do not resend. */
+export class ReceiptPersistenceError extends Error {
+  constructor(
+    readonly proposalId: string,
+    readonly receipt: SendReceipt,
+    cause: unknown,
+  ) {
+    super("sent receipt could not be persisted; send remains claimed", { cause });
+    this.name = "ReceiptPersistenceError";
+  }
 }
 
 const EMPTY_RESULT: ExecutorResult = {
@@ -345,22 +357,11 @@ export async function runOutboxOnce(config: ExecutorConfig): Promise<ExecutorRes
       continue;
     }
 
+    let receipt: SendReceipt;
     try {
       const carrier = await buildCarrier(proposal, executedAt, config);
       const message = assembleMessage(proposal, carrier);
-      const receipt = await sender(message); // the actual transmit — the token lives here
-      await putReceipt(
-        config,
-        proposal,
-        url,
-        executedAt,
-        "sent",
-        basis,
-        receipt.channelMessageId ? { channelMessageId: receipt.channelMessageId } : {},
-        false,
-        mandate.credentialId,
-      );
-      sent += 1;
+      receipt = await sender(message); // the actual transmit — the token lives here
     } catch {
       await putReceipt(
         config,
@@ -374,7 +375,27 @@ export async function runOutboxOnce(config: ExecutorConfig): Promise<ExecutorRes
         mandate.credentialId,
       );
       failed += 1;
+      continue;
     }
+
+    try {
+      await putReceipt(
+        config,
+        proposal,
+        url,
+        executedAt,
+        "sent",
+        basis,
+        receipt.channelMessageId ? { channelMessageId: receipt.channelMessageId } : {},
+        false,
+        mandate.credentialId,
+      );
+    } catch (cause) {
+      // A persistence failure must fail the run without overwriting a successful send
+      // with "failed". Retain the claim and the channel receipt for operator recovery.
+      throw new ReceiptPersistenceError(proposal.id, receipt, cause);
+    }
+    sent += 1;
   }
 
   return { mandateLoaded: true, sent, queuedForConfirmation, prohibited, failed, skipped };

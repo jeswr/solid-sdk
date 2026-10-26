@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 /**
  * `@jeswr/personal-agent` — the maintainer's personal agent (NOW), the works-today
@@ -45,6 +46,7 @@ export {
   confirmProposal,
   type ExecutorConfig,
   type ExecutorResult,
+  ReceiptPersistenceError,
   RecordingSender,
   runOutboxOnce,
 } from "./outbox/index.js";
