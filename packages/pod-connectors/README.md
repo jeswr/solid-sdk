@@ -129,6 +129,14 @@ short/medium/long-term top tracks and artists, and recently-played history. The 
 range suffixes. Library collections replace snapshots; playback events merge by track id
 and played-at timestamp in `music/recently-played.ttl`.
 
+Spotify validates every page before importing its items and uses the shared 32 MiB JSON
+response cap and per-run budget (20,000 source requests, including rate-limit retries, and
+2,000,000 page items, including skipped entries). `createSpotifyAdapter(limits)` from
+`./adapters/spotify` accepts custom `RunLimits`. Collections are written only after all
+source fetching succeeds; malformed responses and exceeded limits retain existing snapshots
+and the previous checkpoint. Larger imports fail for the host to handle; this adapter does
+not shard collections.
+
 For live PKCE sessions, inject the public client id into `createRegistry` and use the
 Spotify-specific source transport so an expired token can refresh once after a 401:
 

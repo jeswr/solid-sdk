@@ -182,6 +182,67 @@ describe("Spotify production import", () => {
     expect(report.skipped).toBe(3);
   });
 
+  it.each(
+    [
+      null,
+      [],
+      "invalid",
+      {},
+      { items: null },
+      { items: {} },
+      { items: "invalid" },
+      { items: [], next: 1 },
+      { items: [], next: {} },
+    ].map((body) => ({ body })),
+  )("keeps saved tracks and the checkpoint when a page is malformed: $body", async ({ body }) => {
+    const { pod, report } = await imported(
+      source((url) =>
+        url.pathname === "/v1/me/tracks"
+          ? json({ items: [{ track: { id: "existing-saved" } }] })
+          : undefined,
+      ),
+    );
+    const savedUrl = `${ROOT}music/saved-tracks.ttl`;
+    const saved = pod.get(savedUrl);
+    expect(saved).toContain("existing-saved");
+    const onState = vi.fn();
+    for (const laterPage of [false, true]) {
+      const api = source((url) => {
+        if (url.pathname !== "/v1/me/tracks") return undefined;
+        if (laterPage && !url.searchParams.has("offset"))
+          return json({
+            items: [{ track: { id: "replacement" } }],
+            next: `${API}/me/tracks?limit=50&offset=1`,
+          });
+        return json(body);
+      });
+      await expect(
+        runImport({
+          adapter: spotifyAdapter,
+          mode: "live",
+          podWriter: writer(pod),
+          sourceAuth: { fetch: api },
+          state: report.state,
+          onState,
+        }),
+      ).rejects.toBeInstanceOf(IntegrationSyncError);
+      expect(api).toHaveBeenCalledTimes(laterPage ? 2 : 1);
+      expect(pod.get(savedUrl)).toBe(saved);
+      expect(onState).toHaveBeenLastCalledWith({ ...report.state, lastOutcome: "error" });
+    }
+  });
+
+  it.each([
+    null,
+    {},
+    { artists: null },
+    { artists: { next: null } },
+  ])("rejects malformed followed-artist envelopes: %j", async (body) => {
+    await expect(
+      imported(source((url) => (url.pathname === "/v1/me/following" ? json(body) : undefined))),
+    ).rejects.toBeInstanceOf(IntegrationSyncError);
+  });
+
   it("retains followed playlist metadata and fetches only owned or collaborative contents", async () => {
     const api = source((url) => {
       if (url.pathname === "/v1/me/playlists")

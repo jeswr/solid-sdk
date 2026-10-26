@@ -1,17 +1,23 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+import { RunBudget, readJson } from "../core/budget.js";
 import { IntegrationSyncError, RateLimitedError } from "../core/errors.js";
 import type { ImportContext } from "../core/types.js";
 
 export const API = "https://api.spotify.com/v1";
 export interface Page<T> {
-  items?: (T | null)[] | null;
+  items: (T | null)[];
   next?: string | null;
   cursors?: { before?: string; after?: string };
 }
 
 /** Bound retries; never retry forbidden or failed requests using another identity. */
-export async function spotifyJson<T>(api: typeof fetch, url: string): Promise<T> {
+export async function spotifyJson<T>(
+  api: typeof fetch,
+  url: string,
+  budget = new RunBudget("spotify"),
+): Promise<T> {
   for (let attempt = 0; ; attempt++) {
+    budget.request();
     const res = await api(url, { redirect: "error" });
     if (res.status === 429) {
       const header = res.headers.get("retry-after");
@@ -33,7 +39,7 @@ export async function spotifyJson<T>(api: typeof fetch, url: string): Promise<T>
         url,
         status: res.status,
       });
-    return (await res.json()) as T;
+    return (await readJson(res, "spotify", url)) as T;
   }
 }
 
@@ -41,7 +47,8 @@ export async function spotifyJson<T>(api: typeof fetch, url: string): Promise<T>
 export async function* pages<T>(
   ctx: ImportContext,
   initial: string,
-  unwrap: (json: Page<T> & { artists?: Page<T> }) => Page<T> = (json) => json,
+  budget = new RunBudget("spotify"),
+  unwrap: (json: Page<T> & { artists?: Page<T> }) => Page<T> | undefined = (json) => json,
 ): AsyncGenerator<Page<T>> {
   let next: string | undefined = initial;
   const root = new URL(initial);
@@ -58,13 +65,18 @@ export async function* pages<T>(
     )
       throw new IntegrationSyncError("spotify", "Unsafe or repeated Spotify pagination link.");
     seen.add(url.href);
-    const page = unwrap(await spotifyJson(ctx.api, url.href));
+    const json = await spotifyJson<Page<T> & { artists?: Page<T> }>(ctx.api, url.href, budget);
+    if (!json || typeof json !== "object")
+      throw new IntegrationSyncError("spotify", "Invalid Spotify page.");
+    const page = unwrap(json);
     if (
       !page ||
       typeof page !== "object" ||
+      !Array.isArray(page.items) ||
       (page.next !== undefined && page.next !== null && typeof page.next !== "string")
     )
       throw new IntegrationSyncError("spotify", "Invalid Spotify page.");
+    budget.items(page.items.length);
     yield page;
     next = page.next ?? undefined;
   }
