@@ -48,6 +48,36 @@ checks axe, keyboard interaction, focus, density, touch targets and 320px reflow
 full-page screenshots under repo-root `artifacts/screens/DS-02/`. Chromium execution and
 visual comparison belong to the dispatcher. Unit axe checks run in jsdom; contrast is
 covered by the token gate and the browser tests.
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+## App navigation (DS-03)
+
+Import `@jeswr/suite-ui/styles/navigation.css` after the token, theme and density styles.
+`AppRail`, `AppLauncher`, and `BottomTabBar` take `currentApp` and an optional `apps`
+registry. Each registry entry supplies its native navigation path and optional Create actions.
+The desktop rail is 56px from 768px; the mobile bar uses Home, Drive, Docs, Tasks and More.
+Bell, offline and account controls are named slots on `AppRail`; the account menu itself
+belongs to the shell lane.
+
+Wrap navigation in `RailPreferencesProvider` with the active account's preference value,
+update callback, loading/save state, classified error and retry callback. Components consume
+that binding through `usePreferences('rail')`. This UI adapter does not implement pod storage:
+SDK-APP-11 owns persistence, account isolation, cache and offline writes. The dev fixtures use
+an explicitly fixture-only browser key to exercise persistence until that SDK is present.
+
+The launcher grid renders the DS-02 `AppIcon`; `AppSlug` is the same id set as `AppId`.
+While preferences are loading or failed, the Customise rail panel is read-only.
+
+The launcher uses a Radix popover with a native search input and an ARIA layout grid of
+native links. Tab enters the grid; arrows move between apps; Home/End move within a row
+(Ctrl moves to the first/last app); typing filters; Enter follows the link; Escape closes
+and restores trigger focus. Checkboxes and Move up/down controls provide alternatives to
+pinning/reordering by drag. Backlog apps are excluded unless
+`NEXT_PUBLIC_SHOW_BACKLOG_APPS=1`, then appear in a collapsed Coming soon group.
+
+Fixtures: `/dev/components/app-rail`, `/dev/components/app-launcher`, and
+`/dev/components/bottom-tab-bar`. The DS-03 browser spec writes full-page screenshots to
+`artifacts/screens/DS-03/` for all configured widths/themes, with axe and 320px reflow checks.
+Run it again with `NEXT_PUBLIC_SHOW_BACKLOG_APPS=1` to capture the flagged backlog states.
 
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- AUTHORED-BY Claude Opus 5.5 -->

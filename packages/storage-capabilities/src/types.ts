@@ -30,6 +30,8 @@ export interface StorageDescription {
   services: readonly ServiceEntry[];
   capabilities: readonly CapabilityEntry[];
   sources: readonly DescriptionSource[];
+  /** Resolver evidence for an assumed root or a notification-only foreign description. */
+  evidence?: readonly string[];
   fetchedAt: number; // Date.now()
   etag: string | null;
   maxAgeMs: number; // from Cache-Control max-age, else DEFAULT_TTL_MS (3_600_000)
