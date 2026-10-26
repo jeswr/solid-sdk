@@ -463,8 +463,9 @@ export class OidcSession {
       signal.throwIfAborted();
       this.#keys.add(key);
       const record = refreshRecordOf(entry, generation);
-      if (this.#options.sessionStore !== undefined && record !== null) {
-        await this.#options.sessionStore.setItem(key, record);
+      if (this.#options.sessionStore !== undefined) {
+        if (record === null) await this.#options.sessionStore.removeItem(key);
+        else await this.#options.sessionStore.setItem(key, record);
       }
       await this.#cache.setItem(key, entry);
       return entry;

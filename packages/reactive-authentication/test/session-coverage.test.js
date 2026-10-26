@@ -366,6 +366,94 @@ test("ID-token sources reauthorize when refresh returns no ID token, and reject 
   }
 });
 
+for (const failRemoval of [false, true]) {
+  test(`reauthorization without a refresh token ${failRemoval ? "fails closed if durable removal fails" : "removes the superseded durable record"}`, async () => {
+    await withMockedDate(async (advance) => {
+      const namespace = `refresh-removal-${crypto.randomUUID()}`;
+      const fence = new SessionFence(namespace, { broadcast: false });
+      const cache = createMemoryStore();
+      const durable = createMemoryStore();
+      const code = automaticCodeProvider();
+      let omitRefresh = false;
+      let removals = 0;
+      let authorizedToken;
+      const sessionStore = {
+        ...durable,
+        removeItem: async (key) => {
+          if (++removals === 2 && failRemoval) throw new Error("durable removal failed");
+          await durable.removeItem(key);
+        },
+      };
+      const http = {
+        ...insecure,
+        fetch: async (url, init) => {
+          const response = await transport(url, init);
+          if (
+            omitRefresh &&
+            new URL(url).pathname === "/token" &&
+            new URLSearchParams(init.body).get("grant_type") === "authorization_code"
+          ) {
+            const body = await response.json();
+            authorizedToken = body.access_token;
+            delete body.refresh_token;
+            return Response.json(body);
+          }
+          return response;
+        },
+      };
+      const session = new OidcSession(
+        callback,
+        code,
+        new DynamicRegistrationClientProvider(insecure),
+        { namespace, cache, sessionStore, fence, http, revokeOnForget: false },
+      );
+      const metadata = await (
+        await transport(`${op.issuer}.well-known/openid-configuration`)
+      ).json();
+      const signal = new AbortController().signal;
+      const key = await contextKey("oidc", [
+        namespace,
+        "default",
+        op.issuer,
+        callback,
+        "openid webid",
+        "fixed",
+      ]);
+      try {
+        await session.get(metadata, "fixed", signal, idTokenUsable);
+        const original = await durable.getItem(key);
+        assert.ok(original.refreshToken);
+        const refreshes = op.stats.refresh;
+        omitRefresh = true;
+        advance(400_000);
+        // The refresh commits a rotated durable record but has no ID token. A new code grant
+        // supplies the ID token without offline credentials and must replace both stores.
+        const pending = session.get(metadata, "fixed", signal, idTokenUsable);
+        if (failRemoval) {
+          await assert.rejects(pending, /durable removal failed/);
+          assert.notEqual((await cache.getItem(key)).tokenResult.access_token, authorizedToken);
+          assert.equal(idTokenUsable(await cache.getItem(key)), false);
+        } else {
+          const fresh = await pending;
+          assert.equal(fresh.tokenResult.access_token, authorizedToken);
+          assert.equal(fresh.tokenResult.refresh_token, undefined);
+          assert.equal(await durable.getItem(key), null);
+          await cache.clear(); // A reload cannot restore the superseded refresh credentials.
+          assert.equal(
+            await session.get(metadata, "fixed", signal, idTokenUsable, false),
+            undefined,
+          );
+        }
+        assert.equal(removals, 2);
+        assert.equal(code.calls, 2);
+        assert.equal(op.stats.refresh, refreshes + 1);
+      } finally {
+        fence.close();
+      }
+    });
+  });
+}
+
 test("unstamped refresh records use generation zero and missing cache records do not block logout", async () => {
   const cache = createMemoryStore();
   const fence = new SessionFence("legacy", { broadcast: false });
