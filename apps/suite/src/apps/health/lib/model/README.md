@@ -25,7 +25,9 @@ read aliases come from `@jeswr/suite-vocab`. The original deployable is unchange
   for byte streams. Consumers can add samples to month documents and persist each shard. Keep
   chunk sizes bounded; backpressure occurs between chunks. A late XML error may follow yielded
   samples, so callers choose preview/staging versus partial-import reporting.
-- `createHealthStore(fetch, storageRoot, owner)`: pod-scoped, redirect-refusing I/O. Use
+- `createHealthStore(fetch, storageRoot, owner)`: pod-scoped, redirect-refusing I/O.
+  Inline JSON-LD contexts are supported; external contexts/imports are rejected on resource
+  and ACL reads. Use
   `initialize()` to create the fixed layout; mutations also initialize it. WAC ACL links are
   required; existing ACLs must be owner-private. A failed privacy setup blocks sensitive writes,
   including on retry. Each mutation uses `If-None-Match: *` or a strong ETag. Conflicts surface as
@@ -34,7 +36,10 @@ read aliases come from `@jeswr/suite-vocab`. The original deployable is unchange
   existing paths and caller-batched documents; initialize containers before creating documents.
 - Store operations: `addObservation(id, sample)`, `metric(kind, range)`,
   `saveRecord(id, input, precondition)`, `loadRecords(kind)`, `importGpx(id, xml)`,
-  `loadWorkouts()`, `read(path)`, `write(path, document, precondition)`, `migrate(path)`.
+  `loadWorkouts(connectorPaths?)`, `read(path)`, `write(path, document, precondition)`, `migrate(path)`.
+  Workout reads merge native indexes with `health/workouts.ttl` (Apple Health) and
+  `health/activities.ttl` (Garmin/Fitbit), or explicitly supplied in-scope connector paths.
+  Missing connector files are empty; other read errors propagate. Results are unique by subject IRI.
   `migrate` rewrites vocabulary in an explicitly supplied existing resource once; repeat calls
   perform no PUT. Discovery of resources to migrate stays with the caller.
 

@@ -28,7 +28,7 @@ import {
 import { HealthDocument } from "./model.js";
 import { addRecord, type RecordInput, type RecordKind, records } from "./records.js";
 import { toTurtle } from "./serialise.js";
-import { WorkoutFile, workouts } from "./workouts.js";
+import { WorkoutFile, type WorkoutSummary, workouts } from "./workouts.js";
 
 export type Precondition = { etag: string } | { create: true };
 export class HealthIoError extends Error {
@@ -308,19 +308,27 @@ export function createHealthStore(fetch: typeof globalThis.fetch, storage: strin
     await write(`${path}index.ttl`, document, { create: true });
     return workout;
   }
-  async function loadWorkouts() {
-    const result = [];
+  async function loadWorkouts(
+    connectorPaths: readonly string[] = ["workouts.ttl", "activities.ttl"],
+  ) {
+    const result = new Map<string, WorkoutSummary>();
+    const paths = new Map<string, boolean>();
     for (const url of await listing("workouts/")) {
       const path = url.endsWith("/") ? `${url}index.ttl` : url;
+      paths.set(path, url.endsWith("/"));
+    }
+    for (const path of connectorPaths) paths.set(resolve(path), true);
+    for (const [path, optional] of paths) {
       try {
-        result.push(...workouts((await read(path)).document));
+        for (const workout of workouts((await read(path)).document)) {
+          if (!result.has(workout.iri)) result.set(workout.iri, workout);
+        }
       } catch (error) {
-        // A directory can remain after the route upload but before its index exists.
-        if (!(url.endsWith("/") && error instanceof RdfFetchError && error.status === 404))
-          throw error;
+        // Connector files and indexes of interrupted imports may not exist yet.
+        if (!(optional && error instanceof RdfFetchError && error.status === 404)) throw error;
       }
     }
-    return result;
+    return [...result.values()];
   }
   /** Explicit one-shot persistence. Canonical documents cause no PUT on repeat. */
   async function migrate(path: string): Promise<boolean> {

@@ -192,17 +192,72 @@ it("persists GPX plus typed index and reads legacy connector files alongside wor
     type: "application/gpx+xml",
   });
   put(
-    "workouts/legacy.ttl",
-    `@prefix s: <${NS.SCHEMA}>. <#it> a s:ExerciseAction; s:name "Legacy ride".`,
+    "workouts.ttl",
+    `@prefix s: <${NS.SCHEMA}>. <#apple> a s:ExerciseAction; s:name "Apple run".`,
+  );
+  put(
+    "activities.ttl",
+    `@prefix s: <${NS.SCHEMA}>. <#garmin> a s:ExerciseAction; s:name "Garmin ride".
+    <#fitbit> a s:ExerciseAction; s:name "Fitbit walk".`,
   );
   const entries = await store.loadWorkouts();
-  expect(entries).toHaveLength(2);
+  expect(entries).toHaveLength(4);
   expect(entries.find((entry) => entry.activity === "Run")).toMatchObject({
     gpx: `${BASE}workouts/run/route.gpx`,
     source: "GPX",
   });
-  expect(entries.some((entry) => entry.name === "Legacy ride")).toBe(true);
+  expect(entries.map((entry) => entry.name)).toEqual(
+    expect.arrayContaining(["Apple run", "Garmin ride", "Fitbit walk"]),
+  );
   await expect(store.importGpx("run", SAMPLE_GPX)).rejects.toMatchObject({ status: 412 });
+});
+it("loads connector files without a native workout container", async () => {
+  const { store, put } = make();
+  put(
+    "workouts.ttl",
+    `@prefix s: <${NS.SCHEMA}>. <#apple> a s:ExerciseAction; s:name "Apple run".`,
+  );
+  expect(await store.loadWorkouts()).toMatchObject([
+    { iri: `${BASE}workouts.ttl#apple`, name: "Apple run" },
+  ]);
+});
+it("merges explicitly supplied in-scope connector files with native indexes without duplicates", async () => {
+  const { store, put, calls } = make();
+  await store.importGpx("run", SAMPLE_GPX);
+  put(
+    "custom.ttl",
+    `@prefix s: <${NS.SCHEMA}>. <#custom> a s:ExerciseAction; s:name "Custom run".
+    <${BASE}workouts/run/index.ttl#it> a s:ExerciseAction; s:name "Duplicate".`,
+  );
+  calls.length = 0;
+  const entries = await store.loadWorkouts([
+    "custom.ttl",
+    `${BASE}custom.ttl`,
+    "workouts/run/index.ttl",
+  ]);
+  expect(entries).toHaveLength(2);
+  expect(entries.filter((entry) => entry.activity === "Run")).toHaveLength(1);
+  expect(entries.find((entry) => entry.name === "Custom run")?.iri).toBe(
+    `${BASE}custom.ttl#custom`,
+  );
+  expect(calls.filter((call) => call.url === `${BASE}custom.ttl`)).toHaveLength(1);
+  expect(calls.filter((call) => call.url === `${BASE}workouts/run/index.ttl`)).toHaveLength(1);
+  await expect(store.loadWorkouts(["https://foreign.example/workouts.ttl"])).rejects.toThrow();
+  expect(calls.some((call) => call.url.includes("foreign"))).toBe(false);
+});
+it.each([
+  "workouts.ttl",
+  "activities.ttl",
+  "custom.ttl",
+])("propagates connector read failures for %s", async (path) => {
+  const { store, faults } = make();
+  faults.set(`GET ${BASE}${path}`, () => new Response(null, { status: 403 }));
+  await expect(store.loadWorkouts([path])).rejects.toMatchObject({ status: 403 });
+  faults.set(
+    `GET ${BASE}${path}`,
+    () => new Response("not turtle", { headers: { "content-type": "text/turtle" } }),
+  );
+  await expect(store.loadWorkouts([path])).rejects.toThrow();
 });
 it.each(
   Object.entries(LEGACY_NAMESPACES).filter(([, canonical]) => canonical === NS.HEALTH),
