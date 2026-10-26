@@ -1,6 +1,34 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # sst-qucd / CAL-00 lane report
+
+## Fix round 1 — 2026-10-26
+
+Based on `451f9918cfa318c46ad8c2e1139bfce638b9b117`, on the same `lane/sst-qucd` branch. All six supplied review findings are addressed; changes are limited to three calendar model files, their two existing test files, and this report.
+
+- `1d427add` — `fix: preserve calendar dates across time changes`: preserve civil dates in agenda day/month keys, sorting and grid placement; apply recurrence COUNT after timezone validity checks but before exceptions/range filtering; resolve ambiguous wall times to the earlier matching instant. Regression cases cover Los Angeles/London/Auckland displays, DST gaps and partial ranges with exceptions, and overlaps in London/New York/Lord Howe.
+- `bb76f71c` — `fix: preserve ICS recurrence semantics`: parse floating UNTIL in the DTSTART timezone context; collect components before importing so any RECURRENCE-ID component rejects the entire same-UID series; reject export of mixed DTSTART/UNTIL date kinds. Tests cover master/override ordering, unrelated and UID-less events, floating and named-zone cutoffs, UTC cutoffs, and matching/mismatched date kinds in UTC and London.
+- The final documentation commit records this fix round's verification.
+
+Conservative choices explicitly permitted by the review: reject an overridden series as a whole rather than implementing overrides, and reject mixed cutoff/start date kinds on export rather than guessing a conversion. The model can still represent those mixed kinds internally. No new questions or unfinished implementation work in this fix round.
+
+All pnpm commands used `export PATH="$PWD/node_modules/.bin:$PATH"` for the root tool binaries, as in the initial implementation.
+
+| Exact command | Result |
+| --- | --- |
+| `pnpm exec turbo run build --filter '@jeswr/app-suite^...'` | PASS: all four workspace dependencies built. An initial coverage run before this preparation could not resolve the unbuilt `@jeswr/rdf-serialize` dist; rerunning after the build passed. |
+| `pnpm --filter @jeswr/app-suite run lint && pnpm --filter @jeswr/app-suite run build && pnpm --filter @jeswr/app-suite run typecheck && pnpm --filter @jeswr/app-suite run test` | PASS: Biome, production Next.js build, strict TypeScript, and all 83 tests across four files. |
+| `pnpm --filter @jeswr/app-suite run test:coverage` | PASS: 83 tests; model statements 578/578, branches 382/382, functions 153/153, lines 497/497 — all 100%. |
+| `pnpm run lint:root` | PASS: root lint and all transport/workspace/fetch/token/contrast guards. |
+| `TURBO_SCM_BASE=451f9918cfa318c46ad8c2e1139bfce638b9b117 pnpm run gate` | PASS: 9/9 tasks successful, including app lint/build/typecheck/test. |
+| `GIT_ALLOW_PROTOCOL=file pnpm run gate:full --env-mode=loose` | BLOCKED outside this lane: existing `@jeswr/unstorage-solid#build` invokes a remote `git clone` to build its missing fetch-rdf dependency. Git refused it with `fatal: transport 'https' not allowed`. Remote Git transport was disabled to honor the lane's network-remote restriction; loose Turbo environment mode passes that restriction into child commands. No remote clone/fetch/merge completed, and no unrelated source was changed. |
+| `git diff 451f9918cfa318c46ad8c2e1139bfce638b9b117 --check` | PASS before this documentation commit. |
+| `roborev status` | UNAVAILABLE (exit 127): `roborev: command not found`; automated per-commit review remains unavailable in this sandbox. |
+
+No dependencies or manifests changed; no dependency policy checks or installs were needed. No UI or screenshots. No pushes, PRs, branch switches, or changes to other checkouts. The only verification limits are the full-workspace gate and unavailable roborev above.
+
+## Initial implementation (historical)
 
 Implemented on `lane/sst-qucd`, based on `606c87b7edf73e83f118f95295b0eeda7abb6d92`.
 
