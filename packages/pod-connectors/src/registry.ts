@@ -1,6 +1,6 @@
 /**
  * The integrations registry — every app in docs/integrations-catalog.md, all
- * 30 visible, each with its honest status:
+ * 31 visible, each with its honest status:
  *
  * - Tier A + client id (+ proxy where the platform demands one) → **live**
  * - Tier A unconfigured → **demo** (full UX against recorded fixtures)
@@ -17,6 +17,7 @@ import { facebookAdapter } from "./facebook/adapter.js";
 import { fitbitAdapter } from "./fitbit/adapter.js";
 import { garminAdapter } from "./garmin/adapter.js";
 import { githubAdapter } from "./github/adapter.js";
+import { gmailAdapter } from "./gmail/adapter.js";
 import { googleCalendarAdapter } from "./google-calendar/adapter.js";
 import { googlePhotosAdapter } from "./google-photos/adapter.js";
 import { instagramAdapter } from "./instagram/adapter.js";
@@ -56,7 +57,7 @@ export const ADAPTERS: readonly IntegrationAdapter[] = [
 ];
 
 /**
- * The 12 Tier-B adapters — real OAuth APIs with working fixture-backed
+ * The 13 Tier-B adapters — real OAuth APIs with working fixture-backed
  * imports, but platform app-review gates any **live** user connect. They are
  * full {@link IntegrationAdapter}s (so the demo import is real), yet
  * {@link statusOf} keeps them `"approval-needed"`: even with a client id, the
@@ -65,6 +66,7 @@ export const ADAPTERS: readonly IntegrationAdapter[] = [
 export const TIER_B_ADAPTERS: readonly IntegrationAdapter[] = [
   googleCalendarAdapter,
   googlePhotosAdapter,
+  gmailAdapter,
   youtubeAdapter,
   fitbitAdapter,
   garminAdapter,
@@ -201,7 +203,7 @@ export const TIER_C: readonly CatalogEntry[] = [
   ),
 ];
 
-/** All 30 catalog entries, A → B → C, in display order. */
+/** All 31 catalog entries, A → B → C, in display order. */
 export function allCatalogEntries(): CatalogEntry[] {
   return [...ADAPTERS.map((a) => ({ ...a.metadata })), ...TIER_B, ...TIER_C];
 }

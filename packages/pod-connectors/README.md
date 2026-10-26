@@ -73,6 +73,23 @@ the connector container exactly like RDF writes and refuses RDF media types (tho
 reads the current ETag and sends `If-Match`, refusing resources without a strong ETag. Hosts
 whose `PodWriter` has no `writeBinary` make the call fail with `IntegrationSyncError`.
 
+## Mail (Gmail and the shared MailWriter)
+
+`./adapters/gmail` imports a mailbox through the Gmail API: a full sync lists every message
+(`format=raw`), later runs replay `users.history.list` from the persisted `historyId` (an expired
+id, HTTP 404, falls back to a full sync). Messages land in the pod-mail layout used by the Mail app
+(apps MAI-01), inside the connector container: `mail/<account>/messages/<Message-ID>.ttl` with the
+RFC 822 source beside it as `.eml`, `threads/gmail-<threadId>.ttl`, `folders/system:inbox.ttl` etc.
+for system labels and `folders/<label>.ttl` for user labels, attachments under
+`mail/attachments/<account>/`. Messages without INBOX, SENT, DRAFT or TRASH go to Archive; UNREAD
+clears `schema:dateRead`; SPAM and deleted messages are removed together with their source and
+attachments. `schema:EmailMessage` is registered for the account root (`registrationContainer`).
+
+`./mail` exports `createMailWriter(ctx, account)`, shared with the Takeout mbox path: `add()` stores
+one raw message (Message-ID as document id, source-native or In-Reply-To thread key), and `flush()`
+writes the accumulated thread and folder membership once per run. Attachment media types from mail
+are untrusted: RDF and malformed types are stored as `application/octet-stream`.
+
 ## Incremental imports and provenance
 
 Pass host-owned `state: ConnectorState` into `runImport` (or `runFileImport`) and persist
