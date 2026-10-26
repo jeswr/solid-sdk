@@ -42,9 +42,9 @@ advanceReadMarker(marker, { roomId, lastRead: message.timestamp });
   interpreted. Identity strings are opaque, nonblank and compared literally, with
   no trimming, URL rewriting, Unicode normalisation or case folding.
 - Counts describe only the supplied live snapshot. Full-room totals require the
-  full list. Input order is irrelevant. Duplicate message IDs, revision logs and
-  mixed-room inputs are rejected; the caller removes tombstones and resolves
-  revisions before calling. Edits retain the original creation timestamp and do
+  full list. Input order is irrelevant. Duplicate message IDs and mixed-room inputs
+  are rejected; the caller removes tombstones and resolves revision logs before
+  calling. Edits retain the original creation timestamp and do
   not add unread messages. Current mention recipients determine mention counts.
 - Notification rule order: edits → own messages → already-read messages → mention
   override → mute → ordinary message. The first three always suppress. Mentions
