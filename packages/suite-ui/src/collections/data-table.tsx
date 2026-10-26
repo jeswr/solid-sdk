@@ -3,6 +3,7 @@
 
 import {
   type ColumnDef,
+  type ColumnSizingState,
   getCoreRowModel,
   getSortedRowModel,
   type SortingState,
@@ -93,6 +94,29 @@ export function DataTable<T>({
   const selection = supplied ?? local;
   const [sorting, setSorting] = useState<SortingState>([]);
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
+  const metrics = useCollectionMetrics("table");
+  const [columnSizing, setColumnSizing] = useState<ColumnSizingState>({});
+  const visibleDefinitions = columns.filter((column) => columnVisibility[column.id] !== false);
+  const first = visibleDefinitions[0];
+  const otherWidth = visibleDefinitions
+    .slice(1)
+    .reduce(
+      (sum, column) =>
+        sum +
+        Math.max(
+          column.minSize ?? 100,
+          Math.min(column.maxSize ?? 640, columnSizing[column.id] ?? column.size ?? 180),
+        ),
+      0,
+    );
+  // TanStack and the rendered grid share the same width, including automatic viewport fill.
+  const effectiveSizing = { ...columnSizing };
+  if (first && effectiveSizing[first.id] === undefined) {
+    effectiveSizing[first.id] = Math.max(
+      first.minSize ?? 100,
+      Math.min(first.maxSize ?? 640, Math.max(first.size ?? 180, metrics.width - 44 - otherWidth)),
+    );
+  }
   const definitions = useMemo<ColumnDef<T>[]>(
     () =>
       columns.map((column) => ({
@@ -110,7 +134,9 @@ export function DataTable<T>({
   const table = useReactTable({
     data: items,
     columns: definitions,
-    state: { sorting, columnVisibility },
+    state: { sorting, columnVisibility, columnSizing: effectiveSizing },
+    onColumnSizingChange: (updater) =>
+      setColumnSizing(typeof updater === "function" ? updater(effectiveSizing) : updater),
     onSortingChange: setSorting,
     onColumnVisibilityChange: setColumnVisibility,
     getCoreRowModel: getCoreRowModel(),
@@ -121,7 +147,6 @@ export function DataTable<T>({
   const rows = table.getRowModel().rows;
   const keys = useMemo(() => rows.map((row) => row.id), [rows]);
   const byKey = useMemo(() => new Map(items.map((item) => [getKey(item), item])), [items, getKey]);
-  const metrics = useCollectionMetrics("table");
   const navigation = useCollectionNavigation({
     keys,
     selection,
@@ -150,16 +175,7 @@ export function DataTable<T>({
     if (metrics.height) virtual.measure();
   }, [virtual, metrics.height]);
   const visible = table.getVisibleLeafColumns();
-  // Let the first column fill the viewport while retaining each user resize delta.
-  const otherWidth = visible.slice(1).reduce((sum, column) => sum + column.getSize(), 0);
-  const widths = visible.map((column, index) => {
-    if (index !== 0) return column.getSize();
-    const initial = column.columnDef.size ?? 180;
-    return Math.max(
-      column.columnDef.minSize ?? 100,
-      Math.max(initial, metrics.width - 44 - otherWidth) + column.getSize() - initial,
-    );
-  });
+  const widths = visible.map((column) => column.getSize());
   const gridTemplateColumns = `44px ${widths.map((width) => `${width}px`).join(" ")}`;
   const minWidth = 44 + widths.reduce((sum, width) => sum + width, 0);
   const allSelected = keys.length > 0 && keys.every((key) => selection.selectedKeys.has(key));

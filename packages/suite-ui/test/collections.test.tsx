@@ -31,9 +31,9 @@ beforeAll(() => {
     "ResizeObserver",
     class {
       callback: () => void;
-      constructor(callback: () => void) {
-        this.callback = callback;
-        resizeCallbacks.add(callback);
+      constructor(callback: ResizeObserverCallback) {
+        this.callback = () => callback([], this);
+        resizeCallbacks.add(this.callback);
       }
       observe() {}
       unobserve() {
@@ -52,6 +52,8 @@ beforeAll(() => {
   Object.defineProperties(HTMLElement.prototype, {
     clientWidth: { configurable: true, get: () => viewportWidth },
     clientHeight: { configurable: true, get: () => 440 },
+    offsetWidth: { configurable: true, get: () => viewportWidth },
+    offsetHeight: { configurable: true, get: () => 440 },
     scrollHeight: { configurable: true, get: () => 500000 },
     scrollWidth: { configurable: true, get: () => viewportWidth },
     scrollTo: {
@@ -288,3 +290,32 @@ for (const kind of ["table", "grid"] as const) {
     ).toEqual([]);
   });
 }
+
+it("resizes the first column from its rendered fill width within its real limits", () => {
+  render(<Fixture kind="table" />);
+  const resize = screen.getByRole("button", { name: "Resize Name column" });
+  const width = () =>
+    Number.parseFloat(
+      screen.getByRole("row", { name: "Alpha" }).style.gridTemplateColumns.split(" ")[1] ?? "0",
+    );
+  expect(width()).toBe(576);
+  fireEvent.keyDown(resize, { key: "ArrowLeft" });
+  expect(width()).toBe(560);
+  for (let i = 0; i < 40; i++) fireEvent.keyDown(resize, { key: "ArrowLeft" });
+  expect(width()).toBe(100);
+  for (let i = 0; i < 40; i++) fireEvent.keyDown(resize, { key: "ArrowRight" });
+  expect(width()).toBe(640);
+  fireEvent.keyDown(resize, { key: "ArrowLeft" });
+  expect(width()).toBe(624);
+});
+
+it("uses the rendered first-column width as the pointer resize origin", () => {
+  render(<Fixture kind="table" />);
+  const resize = screen.getByRole("button", { name: "Resize Name column" });
+  fireEvent.mouseDown(resize, { clientX: 576, button: 0 });
+  fireEvent.mouseMove(document, { clientX: 496 });
+  fireEvent.mouseUp(document, { clientX: 496 });
+  expect(screen.getByRole("row", { name: "Alpha" }).style.gridTemplateColumns).toBe(
+    "44px 496px 180px",
+  );
+});
