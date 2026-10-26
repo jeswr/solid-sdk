@@ -7,6 +7,7 @@ import { LWS_STORAGE_REL, TOKEN_EXCHANGE_GRANT, TokenType } from "../src/lws/con
 import {
   CredentialBoundary,
   LwsTokenProvider,
+  OAuthBearerTokenProvider,
   ReactiveFetchManager,
   SessionFence,
   trustAuthorizationServers,
@@ -99,6 +100,67 @@ function fixture({ respond, header, link = storageLink, allowInsecureRequests } 
       return { provider, manager };
     },
   };
+}
+
+test("ordinary OAuth resource_metadata challenges reach the OAuth provider after LWS declines", async () => {
+  const f = fixture({ link: null });
+  const { provider: lws } = f.client();
+  const source = {
+    id: "oauth-api",
+    getAccessToken: vi.fn(async () => ({ token: "oauth-access" })),
+  };
+  const oauth = new OAuthBearerTokenProvider(source, { resources: [`${origin}/root/`] });
+  const manager = new ReactiveFetchManager({
+    providers: [lws, oauth],
+    boundary: new CredentialBoundary([`${origin}/root/`]),
+    fetch: f.http.fetch,
+  });
+
+  assert.equal(await (await manager.fetch(resource)).text(), "protected");
+  assert.equal(source.getAccessToken.mock.calls.length, 1);
+  assert.equal(f.source.getCredential.mock.calls.length, 0);
+  assert.deepEqual(f.accepted, ["Bearer oauth-access"]);
+  assert.deepEqual(f.exchanges, []);
+  assert.deepEqual(
+    f.requests.map((request) => request.url),
+    [resource, resource],
+    "no LWS discovery is attempted",
+  );
+});
+
+for (const [name, link, matches] of [
+  ["missing storage Link", null, false],
+  ["wrong storage relation", `<${storage}>; rel="storage"`, false],
+  ["malformed Link", "not a Link", false],
+  ["LWS storage Link", storageLink, true],
+  [
+    "relative target and multiple relations",
+    `</storage_1>; rel="alternate ${LWS_STORAGE_REL}"`,
+    true,
+  ],
+  ["matching anchor", `${storageLink}; anchor="${resource}#section"`, true],
+  ["foreign anchor", `${storageLink}; anchor="${origin}/root/other"`, false],
+]) {
+  test(`resource_metadata matching requires LWS evidence: ${name}`, async () => {
+    const f = fixture({ link });
+    const { provider, manager } = f.client();
+    const request = new Request(resource);
+    const challenge = challengeContext(await f.http.fetch(request));
+    assert.equal(await provider.matches(request, challenge), matches);
+    if (!matches) {
+      await assert.rejects(
+        provider.upgrade(request, challenge),
+        /challenge lacks valid as_uri\/realm/,
+      );
+      assert.equal((await manager.fetch(resource)).status, 401);
+      assert.ok(
+        f.requests.every((r) => r.url === resource),
+        "no discovery without LWS evidence",
+      );
+    }
+    assert.equal(f.source.getCredential.mock.calls.length, 0);
+    assert.equal(f.exchanges.length, 0);
+  });
 }
 
 test("RFC 9728 validates discovery before exchange, presents Bearer, caches, renews and forgets", async () => {
@@ -333,8 +395,6 @@ const invalidDiscovery = [
     { respond: at(metadataUrl, () => prm({ authorization_servers: ["http://issuer.example/"] })) },
     /non-HTTPS/,
   ],
-  ["missing storage Link", { link: null }, /StorageRoot/],
-  ["wrong storage relation", { link: `<${storage}>; rel="storage"` }, /StorageRoot/],
   ["ambiguous storage Link", { link: `${storageLink}, ${storageLink}` }, /StorageRoot/],
   [
     "cross-origin storage Link",
@@ -527,6 +587,46 @@ test("resource_metadata takes precedence within a Bearer challenge and across se
     "invalid PRM cannot fall back to legacy",
   );
   assert.equal(f.exchanges.length, 0);
+});
+
+test("without an LWS storage Link, resource_metadata leaves legacy matching and upgrades in control", async () => {
+  const legacy = `Bearer as_uri="${origin}/", realm="${origin}/root/"`;
+  for (const header of [
+    `${legacy}, resource_metadata="https://evil.example/prm"`,
+    `${legacy}, Bearer resource_metadata="https://evil.example/prm"`,
+  ]) {
+    for (const legacyLwsChallenge of [true, false]) {
+      const f = fixture({
+        header,
+        link: null,
+        respond: at(`${origin}/.well-known/lws-configuration`, () =>
+          Response.json({ issuer: `${origin}/`, token_endpoint: tokenEndpoint }),
+        ),
+      });
+      const { provider, manager } = f.client({ legacyLwsChallenge });
+      const request = new Request(resource);
+      const challenge = challengeContext(await f.http.fetch(request));
+      assert.equal(await provider.matches(request, challenge), legacyLwsChallenge);
+      if (legacyLwsChallenge) {
+        assert.equal((await manager.fetch(resource)).status, 200);
+        assert.equal(f.source.getCredential.mock.calls.length, 1);
+        assert.equal(f.exchanges[0].resource, `${origin}/root/`);
+      } else {
+        await assert.rejects(
+          provider.upgrade(request, challenge),
+          /challenge lacks valid as_uri\/realm/,
+        );
+        assert.equal((await manager.fetch(resource)).status, 401);
+        assert.equal(f.source.getCredential.mock.calls.length, 0);
+        assert.equal(f.exchanges.length, 0);
+      }
+      assert.equal(
+        f.requests.some((r) => r.url.includes(prefix) || r.url.includes("evil.example")),
+        false,
+        "resource_metadata is ignored without LWS evidence",
+      );
+    }
+  }
 });
 
 test("logout during RFC 9728 discovery or exchange fences late results", async () => {

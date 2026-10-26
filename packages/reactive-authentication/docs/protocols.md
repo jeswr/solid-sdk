@@ -42,16 +42,23 @@ from the signed reference) and multiformats/@noble/curves, independently of the 
 
 - **Challenges.** `WWW-Authenticate` is parsed per RFC 9110; challenges with duplicated parameters are dropped
   and parsing stops at malformed input. oauth4webapi has an equivalent parser but does not export it.
-- **LWS RFC 9728.** A `Bearer resource_metadata="M"` challenge selects `LwsTokenProvider`.
+- **LWS RFC 9728.** A `Bearer resource_metadata="M"` challenge selects `LwsTokenProvider` only when
+  the same 401 carries `Link: <S>; rel="https://www.w3.org/ns/lws#storage"` for the requested resource
+  (Link anchors are respected). `resource_metadata` alone is general OAuth evidence, so other providers
+  can answer it.
   M must be HTTPS (HTTP only with `http.allowInsecureRequests`) and have the request's origin.
   PRM is retrieved with `credentials: "omit"`, `redirect: "manual"` using non-reactive secure transport;
   non-success, non-JSON, any 3xx, followed or opaque redirects fail closed. Its `resource` is compared
   string-for-string to the WHATWG-serialized `Request.url` after stripping its fragment; query and
   percent-encoding are kept. The returned string is not normalized. This is the requested-resource
   rule in LWS Discovery Validation 2 and RFC 9728 §3.3 for challenge-supplied metadata.
-  The 401 must carry `Link: <S>; rel="https://www.w3.org/ns/lws#storage"`.
-  Existing `resolveStorageContext` verifies S's description and a containing, same-origin StorageRoot
+  Existing `resolveStorageContext` verifies S's same-origin description and a containing, same-origin StorageRoot
   whose HEAD response links back to S; an exact-URL fallback is insufficient for authentication.
+  Requiring the description itself to share the request's origin follows suite ADR-002 Security:
+  "Description URL and StorageRoot must be same scheme+authority as the resource". This deliberately
+  exceeds LWS §5.2.3, which constrains only `StorageRoot.serviceEndpoint`. Cross-origin descriptions
+  are accepted only through the legacy path with an explicit `trustBindings` policy; that policy
+  cannot relax the RFC 9728 description-origin check.
   `authorization_servers` must be an array with a usable issuer. Select the first entry passing
   `trustAuthorizationServer` (including policies from `trustAuthorizationServers` or `trustBindings`);
   its `ChallengeBinding.realm` is S and `resource` is the requested URL. The default trusts any listed AS
@@ -67,7 +74,8 @@ from the signed reference) and multiformats/@noble/curves, independently of the 
   resource's origin; other bindings need `trustAuthorizationServers` (same-origin realm) or `trustBindings`
   (explicit AS/realm pairs). Only then is containment checked: by path, or under a `StorageRoot` of the
   realm's description that itself links back to that storage. RFC 9728 takes precedence when both
-  forms occur, even in separate Bearer challenges; a failed RFC 9728 validation never falls back.
+  forms occur with an LWS storage Link, even in separate Bearer challenges; a failed RFC 9728 validation
+  never falls back. Without that Link, an enabled legacy challenge still applies.
   UMA challenges go to `SolidUmaTokenProvider`.
 - **Solid.** Issuers come from the application (picker, hint, fixed) or the WebID (`solid:oidcIssuer`, the
   RDF body is canonical). With `verifyWebId`, the reported WebID must list the issuer (exact identifier

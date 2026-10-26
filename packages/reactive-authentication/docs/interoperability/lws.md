@@ -20,10 +20,17 @@ the adapter's mechanics offline (`test/interop-live-config.test.js`); that is no
 | `lws-did-key` | self-signed, did:key | self-issued JWT (`DidKeySource`) | the key's did:key granted access in the storage |
 
 The storage can answer 401 with `WWW-Authenticate: Bearer resource_metadata="M"` and
-`Link: <S>; rel="https://www.w3.org/ns/lws#storage"`. Before acquiring any credential, the provider fetches
+`Link: <S>; rel="https://www.w3.org/ns/lws#storage"`. The provider claims this RFC 9728 challenge only
+with that LWS storage Link for the requested resource (respecting Link anchors); ordinary OAuth
+`resource_metadata` challenges without it remain available to other providers.
+Before acquiring any credential, the provider fetches
 same-origin PRM without credentials or redirects, requires `resource` to equal the serialized
 `Request.url` with fragment stripped and query kept (no normalization of the returned string), and uses
-its own `StorageContext` discovery to verify S's same-origin, containing StorageRoot and backlink.
+its own `StorageContext` discovery to verify S's same-origin description, containing StorageRoot and backlink.
+Suite ADR-002 Security requires "Description URL and StorageRoot must be same scheme+authority as the
+resource": requiring the description itself to be same-origin deliberately exceeds LWS §5.2.3, which
+constrains only `StorageRoot.serviceEndpoint`. Cross-origin descriptions are accepted only through the
+legacy path with an explicit `trustBindings` policy, which cannot relax this RFC 9728 check.
 It chooses the first `authorization_servers` entry accepted by `trustAuthorizationServer` (default: any
 listed issuer after validation). Metadata discovery disallows redirects and requires the selected issuer,
 with RFC 8414 path insertion for issuers with paths. Exchange uses `resource=S`, then replays with Bearer.
@@ -34,8 +41,9 @@ supports RFC 9728, legacy and both challenge forms in `test/lws.test.js`.
 Legacy `WWW-Authenticate: Bearer as_uri="…", realm="…"` remains enabled by default; the library checks the binding
 against its trust policy (same origin as the storage by default, or `RA_INTEROP_<P>_AUTHORIZATION_SERVER`),
 checks realm containment, exchanges the credential (RFC 8693, `resource` = realm) and replays with `Bearer`.
-Set `legacyLwsChallenge: false` on `LwsTokenProvider` to ignore this form. When both forms occur,
-`resource_metadata` takes precedence and validation failure cannot fall back to legacy.
+Set `legacyLwsChallenge: false` on `LwsTokenProvider` to ignore this form. When both forms occur with an
+LWS storage Link, `resource_metadata` takes precedence and validation failure cannot fall back to legacy.
+Without that Link, an enabled legacy challenge still applies.
 
 ## Scenarios
 
@@ -139,8 +147,9 @@ node interop/run.js --suite live --target lws-did-key --exercise-unverified   # 
 
 - Never run against a real deployment: every LWS result so far is from the offline mock (adapter self-test,
   including `lws.boundary-automatic`, the 201-only ownership rule and the SAML cancellation path).
-- Automatic discovery accepts only same-origin storage descriptions (library limitation); deployments that
-  describe storage on another origin need the explicit boundary (`lws.boundary`).
+- RFC 9728 and automatic discovery require same-origin storage descriptions under suite ADR-002.
+  Deployments with cross-origin descriptions need the legacy path, an explicit `trustBindings` policy
+  and a static credential boundary (`lws.boundary`).
 - LWS drafts are unofficial and moving; discovery supports the 2026-10-23 Working Draft alongside
   the library's pinned legacy commit. External RFC 9728 interoperability remains unverified.
 - The SAML suite's client transports assertions only; validation belongs to the authorization server.

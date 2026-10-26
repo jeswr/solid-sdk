@@ -7,10 +7,11 @@ import type { CredentialSource } from "../credentials/CredentialSource.js";
 import { FencedCache, type FenceTicket, type Stamped } from "../FencedCache.js";
 import { ReactiveAuthenticationError } from "../ReactiveAuthenticationError.js";
 import type { SessionFence } from "../SessionFence.js";
-import { describes, isInRealm, resolveStorageContext } from "../StorageContext.js";
+import { describes, isInRealm, parseLinks, resolveStorageContext } from "../StorageContext.js";
 import type { TokenProvider } from "../TokenProvider.js";
 import { assertSecureUrl, type HttpOptions, secureFetch } from "../transport.js";
 import { parseHttpUrl, withoutFragment } from "../url.js";
+import { LWS_STORAGE_REL } from "./constants.js";
 import { discoverLwsAuthorizationServer, exchangeToken } from "./tokenExchange.js";
 
 /** What a challenge asks the client to do: send a credential to `authorizationServer` for `realm`. */
@@ -128,9 +129,9 @@ export class LwsTokenProvider implements TokenProvider {
     return this.#tokens.fence;
   }
 
-  async matches(_: Request, challenge?: ChallengeContext): Promise<boolean> {
+  async matches(request: Request, challenge?: ChallengeContext): Promise<boolean> {
     return (
-      findChallenge(challenge, ["resource_metadata"], "bearer") !== undefined ||
+      resourceMetadataChallenge(request, challenge) !== undefined ||
       (this.#options.legacyLwsChallenge !== false &&
         findChallenge(challenge, ["as_uri", "realm"], "bearer") !== undefined)
     );
@@ -182,7 +183,7 @@ export class LwsTokenProvider implements TokenProvider {
     challenge: ChallengeContext | undefined,
     signal: AbortSignal,
   ): Promise<{ as: URL; realm: URL; renewalWindow: number }> {
-    const metadata = findChallenge(challenge, ["resource_metadata"], "bearer");
+    const metadata = resourceMetadataChallenge(request, challenge);
     if (metadata !== undefined)
       return await this.#verifiedResourceMetadata(
         request,
@@ -326,6 +327,18 @@ export class LwsTokenProvider implements TokenProvider {
     this.#issued.set(accessToken, key);
     if (this.#issued.size > 100) this.#issued.delete(this.#issued.keys().next().value!);
   }
+}
+
+function resourceMetadataChallenge(request: Request, challenge: ChallengeContext | undefined) {
+  if (challenge === undefined) return undefined;
+  const metadata = findChallenge(challenge, ["resource_metadata"], "bearer");
+  // RFC 9728 also serves ordinary OAuth APIs; the storage Link distinguishes an LWS challenge.
+  return metadata !== undefined &&
+    parseLinks(challenge.response.headers.get("Link"), withoutFragment(request.url)).some(
+      (link) => link.rel === LWS_STORAGE_REL,
+    )
+    ? metadata
+    : undefined;
 }
 
 function usable(token: LwsAccessToken, renewalWindow: number): boolean {
