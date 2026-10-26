@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+import { assertSafeUrl } from "@jeswr/guarded-fetch";
 import {
   acquireToken,
   assertEndpointTransport,
@@ -7,6 +8,7 @@ import {
   createSession,
   discoveryUrl,
   type FetchLike,
+  isLoopbackHost,
   type SolidSessionState,
 } from "@jeswr/solid-dpop";
 import { podScopedUrlOrUndefined } from "./auth.js";
@@ -124,12 +126,18 @@ export async function createCliFetch(
         let target: URL;
         try {
           target = new URL(location, anonymousRequest.url);
-          if (!["https:", "http:"].includes(target.protocol) || target.username || target.password)
+          if (location.trim().startsWith("//") || target.origin !== new URL(request.url).origin)
             throw new Error();
+          // Only operator-configured loopback origins retain the local development allowance.
+          const allowLoopback =
+            isLoopbackHost(target.hostname) &&
+            [config.podRoot, config.webId].some(
+              (url) => url && new URL(url).origin === target.origin,
+            );
+          await assertSafeUrl(target.href, { allowLoopback });
         } catch {
           throw new Error("Invalid anonymous profile redirect.");
         }
-        // Stay anonymous even when a profile redirects back into the pod.
         anonymousRequest = new Request(target, anonymousRequest);
       }
     }
