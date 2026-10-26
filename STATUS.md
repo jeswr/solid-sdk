@@ -3,6 +3,31 @@
 
 # sst-qucd / CAL-00 lane report
 
+## Fix round 4 — 2026-10-26
+
+Resumed on `lane/sst-qucd` at `bd1190f9b00ea37728c763d7120f78e37497a988`. Read the original brief, all earlier fix briefs, and the complete round-four review. The single supplied finding is addressed; changes are confined to ICS import, its regression tests/API documentation, and this report.
+
+- `ff73817c` — `fix: reject recurring ICS gap starts`: detect when a local DTSTART resolves to a different wall time and skip the recurring event with an explicit warning. This takes the conservative rejection option expressly permitted by the review, because the model cannot retain the original wall-clock DTSTART alongside its resolved instant. Standalone explicit gap dates retain pre-transition-offset semantics.
+- Seven new regression cases cover named and floating gap starts in London, New York and Lord Howe, retention of unrelated events and aligned timezone contexts, and valid recurring starts before/after a gap or expressed in UTC. Existing generated-gap, overlap, exception, and 20-fixture round-trip tests remain green.
+- The final documentation commit records this round's validation in STATUS.md.
+
+All pnpm commands used `export PATH="$PWD/node_modules/.bin:$PATH"`. Git network transport was disabled for builds/gates with `GIT_ALLOW_PROTOCOL=file`; Turbo used `--env-mode=loose` to pass that restriction to child tasks.
+
+| Exact command | Result |
+| --- | --- |
+| `GIT_ALLOW_PROTOCOL=file pnpm exec turbo run build --filter '@jeswr/app-suite^...' --env-mode=loose` | PASS: four workspace build dependencies prepared. |
+| `pnpm --filter @jeswr/app-suite run test -- test/calendar/ical.test.ts` | Expected RED before implementation: three new gap-start regressions failed; the remaining 115 tests passed. This script invocation ran all four test files. |
+| `pnpm --filter @jeswr/app-suite run lint` | PASS: 24 files checked. |
+| `GIT_ALLOW_PROTOCOL=file pnpm --filter @jeswr/app-suite run build && pnpm --filter @jeswr/app-suite run typecheck && pnpm --filter @jeswr/app-suite run test` | PASS: production Next.js build, strict TypeScript, and 118 tests across four files. |
+| `pnpm --filter @jeswr/app-suite run test:coverage` | PASS: 118 tests; model statements 607/607, branches 415/415, functions 153/153, lines 526/526 — all 100%. |
+| `pnpm run lint:root` | PASS: root Biome and transport/workspace/fetch/token/contrast guards. |
+| `GIT_ALLOW_PROTOCOL=file TURBO_SCM_BASE=74e38dd9847413b18c41e6ed0b35525de62a0bc8 pnpm run gate --env-mode=loose` | PASS: 10/10 tasks successful, including app lint/build/typecheck/test. |
+| `GIT_ALLOW_PROTOCOL=file pnpm run gate:full --env-mode=loose` | BLOCKED outside this lane: existing unstorage-solid build invokes a remote clone to prepare fetch-rdf. Git refused HTTPS transport before any remote clone/fetch/merge could complete. Turbo stopped with `@jeswr/unstorage-solid#build` failed, 19 tasks successful. This is the same full-workspace blocker documented in earlier rounds. |
+| `git diff bd1190f9b00ea37728c763d7120f78e37497a988 --check` | PASS before this documentation commit. |
+| `roborev status` | UNAVAILABLE (exit 127): `roborev: command not found`; automated per-commit review could not run. |
+
+No dependencies, manifests, lockfiles, UI or screenshots changed. No dependency policy checks or installs were needed. No pushes, PRs, branch switches, completed remote Git operations, or changes to other checkouts. Remaining verification limits are the unrelated full-workspace gate blocker and unavailable roborev. No unfinished implementation changes or open questions.
+
 ## Fix round 3 — 2026-10-26
 
 Resumed on `lane/sst-qucd` at `005732b4fee4fc5009bdac6ba42d324c0d20e9f2`. Read the original brief, all earlier fix briefs, and the complete round-three review. All five supplied findings are addressed; implementation changes are confined to the calendar model and its regression tests/API documentation.
