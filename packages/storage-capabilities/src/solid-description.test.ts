@@ -1,10 +1,9 @@
-// AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
+// AUTHORED-BY GPT-6.1-Sol
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { describe, expect, test, vi } from "vitest";
 import { deriveFeatures } from "./features.js";
 import { parseSolidDescription } from "./solid-description.js";
-import { LWS, NOTIFY, SSD } from "./vocab.js";
+import { ACQ, LWS, NOTIFY, SSD } from "./vocab.js";
 
 const ROOT = "https://pod.example/";
 const SSD_NS = "https://jeswr.org/ns/solid-sd#";
@@ -115,9 +114,13 @@ describe("parseSolidDescription", () => {
       services: [
         { type: [LWS.StorageRoot], endpoint: ROOT, extra: {} },
         {
-          type: [SSD.SolidNotificationService],
+          type: [SSD.SolidNotificationService, NOTIFY.WebSocketChannel2023],
           endpoint: `${ROOT}.notifications/WebSocketChannel2023/`,
-          extra: { [`${SSD_NS}channelType`]: NOTIFY.WebSocketChannel2023 },
+          extra: {
+            [`${SSD_NS}channelType`]: NOTIFY.WebSocketChannel2023,
+            [NOTIFY.channelType]: NOTIFY.WebSocketChannel2023,
+            [NOTIFY.feature]: [],
+          },
         },
         {
           type: [SSD.SparqlQueryService],
@@ -160,6 +163,7 @@ describe("parseSolidDescription", () => {
       services: ["sparql", "sparql-2"].map((path) => ({
         type: [SSD.SparqlQueryService],
         endpoint: ROOT + path,
+        conformsTo: [ACQ.profile],
         extra: {},
       })),
       capabilities: [],
@@ -227,14 +231,10 @@ describe("parseSolidDescription", () => {
     expect(parseSolidDescription(dataset, ROOT)).toEqual({
       services: [
         {
-          type: [
-            SSD.SolidNotificationService,
-            NOTIFY.WebSocketChannel2023,
-            NOTIFY.StreamingHTTPChannel2023,
-          ],
+          type: [SSD.SolidNotificationService],
           endpoint: `${ROOT}notify`,
           extra: {
-            [NOTIFY.channelType]: [NOTIFY.WebSocketChannel2023, NOTIFY.StreamingHTTPChannel2023],
+            [NOTIFY.channelType]: [],
             [NOTIFY.feature]: [`${NOTIFY_NS}state`],
             "urn:extra:custom": "value",
           },
@@ -247,7 +247,7 @@ describe("parseSolidDescription", () => {
         {
           type: [SSD.SolidNotificationService],
           endpoint: `${ROOT}missing`,
-          extra: { [NOTIFY.feature]: [] },
+          extra: { [NOTIFY.channelType]: [], [NOTIFY.feature]: [] },
         },
       ],
       capabilities: [],
@@ -261,10 +261,10 @@ describe("parseSolidDescription", () => {
     `);
     expect(parseSolidDescription(dataset, ROOT).services).toEqual([
       {
-        type: [SSD.SolidNotificationService, NOTIFY.WebhookChannel2023],
+        type: [SSD.SolidNotificationService],
         endpoint: `${ROOT}spoof`,
         extra: {
-          [NOTIFY.channelType]: [SSD.CrdtSyncService, NOTIFY.WebhookChannel2023],
+          [NOTIFY.channelType]: [],
           [NOTIFY.feature]: [],
         },
       },
