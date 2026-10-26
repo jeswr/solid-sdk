@@ -1,5 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { createSelectors, reanchor } from "../src/apps/docs/lib/anchoring";
 import { findFuzzyRanges } from "../src/apps/docs/lib/anchoring/fuzzy";
 
@@ -102,4 +102,42 @@ it("re-anchors a long, diverse quote without dropping its interior", () => {
   expect(result.range).toEqual({ start: 6, end: 1031 });
   expect(result.confidence).toBe(1 - 2 / 1024);
   expect(result.selectors.quote.exact).toBe(changed.join(""));
+});
+
+it("rejects an over-budget scan before reading pattern contents or building masks", () => {
+  const pattern = Array.from("a".repeat(32768));
+  const entries = vi.spyOn(pattern, "entries").mockImplementation(() => {
+    throw new Error("Over-budget pattern must not be scanned");
+  });
+  expect(findFuzzyRanges(pattern, pattern, 0, 0, 32)).toEqual([]);
+  expect(entries).not.toHaveBeenCalled();
+});
+
+it("budgets cumulative recovery and discards candidates found before exhaustion", () => {
+  const pattern = Array.from(`${"a".repeat(1023)}b`);
+  const short = Array.from("a".repeat(1024));
+  expect(findFuzzyRanges(short, pattern, 0, 4096, 1).length).toBeGreaterThan(0);
+  const long = "a".repeat(6000);
+  expect(findFuzzyRanges(Array.from(long), pattern, 0, 4096, 1)).toEqual([]);
+  expect(
+    reanchor(long, createSelectors(pattern.join(""), { start: 0, end: pattern.length }), {
+      searchRadius: 4096,
+      maxEdits: 1,
+    }),
+  ).toEqual({ status: "orphan", confidence: 0 });
+});
+
+it("orphans an over-budget fuzzy quote while still allowing long position and exact matches", () => {
+  const quote = "a".repeat(32768);
+  const selectors = createSelectors(quote, { start: 0, end: quote.length });
+  expect(reanchor("b".repeat(quote.length), selectors)).toEqual({
+    status: "orphan",
+    confidence: 0,
+  });
+  expect(reanchor(quote, selectors)).toMatchObject({ method: "position", confidence: 1 });
+  expect(reanchor(`x${quote}`, selectors)).toMatchObject({
+    method: "quote",
+    range: { start: 1, end: quote.length + 1 },
+    confidence: 1,
+  });
 });

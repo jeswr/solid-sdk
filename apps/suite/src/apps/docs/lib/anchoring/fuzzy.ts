@@ -5,6 +5,10 @@ export interface FuzzyRange extends TextRange {
   edits: number;
 }
 
+// Per call: pattern setup, Bitap word updates and conservative recovery-cell estimates.
+// Exhaustion discards all candidates so a partial search cannot pick a misleading winner.
+const MAX_WORK = 10_000_000;
+
 // All typed-array indices below are bounded by the allocated row/chunk length.
 const at = (row: Uint32Array | Float64Array, index: number): number => row[index] as number;
 
@@ -50,7 +54,8 @@ function recoverStarts(
  * Carries cross every word boundary, including deletion state, so long quotes
  * are matched as one contiguous pattern rather than independent chunk hits.
  * Search cost O(window length × ceil(quote length / 32) × (maxEdits + 1));
- * only competitive endpoints need bounded edit-distance range recovery.
+ * setup + scan + endpoint recovery share a 10,000,000-unit work budget.
+ * Over-budget searches return no ranges, including any found before exhaustion.
  */
 export function findFuzzyRanges(
   text: readonly string[],
@@ -64,6 +69,11 @@ export function findFuzzyRanges(
   const limit = Math.min(text.length, high + pattern.length + maxEdits);
   const errors = Math.min(maxEdits, pattern.length - 1);
   const words = Math.ceil(pattern.length / 32);
+  // Reserve the entire scan before building masks or allocating matcher state.
+  // The extra scan step covers initial error-level state allocation.
+  const scanWork = pattern.length + (limit - low + 1) * words * (errors + 1);
+  if (scanWork > MAX_WORK) return [];
+  let remainingWork = MAX_WORK - scanWork;
   // Sparse word masks use O(quote length) space even for many distinct code points.
   const masks = new Map<string, Map<number, number>>();
   for (const [index, point] of pattern.entries()) {
@@ -113,6 +123,11 @@ export function findFuzzyRanges(
     state = next;
     for (let error = 0; error <= bestEdits; error++) {
       if ((at(state[error] as Uint32Array, words - 1) & finalBit) !== 0) {
+        // Bound band cells, row initialization and range enumeration before recovery.
+        const recoveryWork =
+          (pattern.length + 1) * (2 * error + 1) + 3 * (pattern.length + error + 1);
+        if (recoveryWork > remainingWork) return [];
+        remainingWork -= recoveryWork;
         const recovered = recoverStarts(text, pattern, index + 1, error, low, high);
         if (recovered.length > 0) {
           if (error < bestEdits) ranges = [];
