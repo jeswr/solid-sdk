@@ -248,3 +248,62 @@ it("requires confirmation for unsupported duties even if context claims fulfillm
     ),
   ).toEqual({ effect: "prohibited" });
 });
+it("never treats malformed constraint context as a disproved prohibition", async () => {
+  const prohibit = (leftOperand: string, rightOperand: string | number): Policy =>
+    policy({
+      prohibitions: [
+        {
+          type: "prohibition",
+          action: "read",
+          constraints: [{ leftOperand, operator: "eq", rightOperand }],
+        },
+      ],
+    });
+  for (const value of [true, [], Number.NaN, Number.POSITIVE_INFINITY])
+    expect(
+      await solidOdrlEngine.evaluate(
+        prohibit("purpose", "urn:prohibited"),
+        intent({ action: "read", attributes: { purpose: value } }),
+      ),
+    ).toEqual({ effect: "indeterminate" });
+  expect(
+    await solidOdrlEngine.evaluate(
+      prohibit("count", 10),
+      intent({ action: "read", attributes: { count: "invalid-number" } }),
+    ),
+  ).toEqual({ effect: "indeterminate" });
+  expect(
+    await solidOdrlEngine.evaluate(
+      prohibit("count", 10),
+      intent({ action: "read", attributes: { count: 1 } }),
+    ),
+  ).toEqual({ effect: "permit" });
+  expect(
+    await solidOdrlEngine.evaluate(
+      prohibit("dateTime", "2026-10-26T12:00:00Z"),
+      intent({ action: "read", at: "invalid" }),
+    ),
+  ).toEqual({ effect: "indeterminate" });
+  expect(
+    await solidOdrlEngine.evaluate(
+      prohibit("dateTime", "2026-10-27T12:00:00Z"),
+      intent({ action: "read" }),
+    ),
+  ).toEqual({ effect: "permit" });
+});
+
+it("requires confirmation for an empty constraint right operand", async () => {
+  expect(
+    await solidOdrlEngine.evaluate(
+      policy({
+        permissions: [
+          {
+            ...permit,
+            constraints: [{ leftOperand: "purpose", operator: "eq", rightOperand: [] }],
+          },
+        ],
+      }),
+      intent({ action: "read", attributes: { purpose: "x" } }),
+    ),
+  ).toEqual({ effect: "indeterminate" });
+});

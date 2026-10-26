@@ -10,6 +10,7 @@ import {
 } from "@jeswr/solid-odrl";
 import {
   AGENT,
+  type Constraint,
   type Decision,
   type Intent,
   LIMIT_OPERANDS,
@@ -56,6 +57,19 @@ export function supportedPolicy(p: Policy): boolean {
   );
 }
 
+function knownOperand(c: Constraint, value: unknown): boolean {
+  if (Array.isArray(c.rightOperand) && c.rightOperand.length === 0) return false;
+  const values = Array.isArray(value) ? value : [value];
+  if (values.length === 0) return false;
+  return values.every((v) => {
+    if (typeof v !== "string" && typeof v !== "number") return false;
+    if (typeof v === "number" && !Number.isFinite(v)) return false;
+    if (c.leftOperand === "dateTime") return Number.isFinite(Date.parse(String(v)));
+    const right = Array.isArray(c.rightOperand) ? c.rightOperand[0] : c.rightOperand;
+    return typeof right !== "number" || typeof v === "number";
+  });
+}
+
 function candidate(r: Rule, p: Policy, q: Intent): boolean {
   return (
     (r.action === q.action || r.action === "use") &&
@@ -69,16 +83,20 @@ export const solidOdrlEngine: PolicyEngine = {
   id: "@jeswr/solid-odrl",
   evaluate(p, q) {
     const supported = supportedPolicy(p);
-    const attributes = { ...q.attributes, dateTime: q.at };
+    const attributes: NonNullable<Intent["attributes"]> = { ...q.attributes, dateTime: q.at };
     const rules = [...(p.permissions ?? []), ...(p.prohibitions ?? [])].filter((r) =>
       candidate(r, p, q),
     );
     const missing = rules.some((r) =>
-      (r.constraints ?? []).some((c) => !Object.hasOwn(attributes, c.leftOperand)),
+      (r.constraints ?? []).some((c) => !knownOperand(c, attributes[c.leftOperand])),
     );
     const lower = (rs: readonly Rule[] = []): OdrlRule[] =>
       rs
-        .filter((r) => candidate(r, p, q))
+        .filter(
+          (r) =>
+            candidate(r, p, q) &&
+            (r.constraints ?? []).every((c) => knownOperand(c, attributes[c.leftOperand])),
+        )
         .map((r) => ({
           ...r,
           action: "use",
