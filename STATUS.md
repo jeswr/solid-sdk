@@ -249,3 +249,85 @@ Roborev remains unavailable, so no automated review verdict could be obtained.
 Logs: `/tmp/sst-fv0j-fix3-{deps,regression-red,interop-gate,root-lint,gate,gate-full}.log`.
 No requested implementation remains unfinished and there are no new open
 questions. The earlier shared PodPort/registry coordination question is unchanged.
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+## Fix round 4 — integrate with main
+
+- `70f4b20a` — `fix: integrate chat tools with main MCP server`: merged
+  `origin/main` at `809c3c12` into `lane/sst-fv0j`. `origin` is the prescribed
+  local source clone (`/home/runner/work/solid-sdk`); the fetch used no network
+  remote and no other checkout was edited. Main remains authoritative outside
+  this lane's scope.
+- Resolved `server.ts`, `server.test.ts`, and the additional README conflict.
+  Main's PodPort-based resources, canonical pod registry and compatibility
+  aliases remain intact. Fetch-configured servers additionally register
+  `chat_save`, `chat_list`, and `chat_get`, retaining the reviewed chat writer,
+  ACL safeguards and client-driven regression suite. Main's canonical/alias
+  server tests remain, with registration expectations covering chat tools too.
+- Conservative integration choice: portable `PodPort` configurations retain
+  main's pod tools only. PodPort has no ACL discovery capability; chat tools
+  require the original authenticated fetch configuration. This limitation is
+  documented rather than changing main's shared interface or weakening ACL
+  requirements.
+- Final documentation commit — `docs: record main integration validation`
+  (this report; STATUS.md was the final file edited).
+
+Validation, with Node `v24.22.1` and pnpm `10.4.1`:
+
+```sh
+pnpm --filter @jeswr/solid-mcp run lint
+pnpm --filter @jeswr/solid-mcp run build
+pnpm --filter @jeswr/solid-mcp run typecheck
+pnpm --filter @jeswr/solid-mcp run test
+# PASS: all four checks; 215 tests in 6 files.
+
+pnpm --filter @jeswr/solid-chat-interop run lint
+pnpm --filter @jeswr/solid-chat-interop run build
+pnpm --filter @jeswr/solid-chat-interop run typecheck
+pnpm --filter @jeswr/solid-chat-interop run test
+# PASS: all four checks; 157 tests in 8 files.
+
+pnpm run lint:root
+pnpm run test:root
+# PASS: all root guards; 745 tests in 9 files.
+
+TURBO_SCM_BASE=origin/main pnpm run gate
+# PASS: 37/37 tasks, including affected packages and dependents.
+
+pnpm run gate:full
+# FAIL: unchanged @jeswr/federation-trust#test; 323/362 tasks completed.
+```
+
+All build/check commands used the existing
+`PATH=/tmp/sst-fv0j-no-remote-git:$PATH` wrapper to refuse Git network operations.
+Dependency-first builds succeeded using main's workspace fetch-rdf package;
+no copied dependency artifacts were needed this round. Tests use fixtures,
+fake fetches and portable pods; no real accounts or production API calls.
+
+Lockfile regeneration from a main-only seed initially refreshed an unrelated
+moving Git pin. That attempt was discarded. The compatible automatic merge seed
+was instead rewritten through pnpm, without hand-editing lockfile entries:
+
+```sh
+pnpm install --merge-git-branch-lockfiles --lockfile-only --frozen-lockfile --offline --ignore-scripts
+pnpm install --frozen-lockfile --offline --ignore-scripts
+# PASS: final lockfile differs from main only by this lane's two importer entries.
+```
+
+No dependencies were added or upgraded by this fix round; lifecycle scripts
+remained disabled. The final lockfile retains main's unrelated resolutions.
+
+The full gate reproduced the previously recorded snapshot mismatch at
+`packages/federation-trust/test/characterization.test.ts:196`,
+“delegation credential structure is stable”: delegateKey JSON expects property
+order `crv,x,kty`, but receives `kty,crv,x`. That package is identical to main;
+remaining full-workspace tasks did not complete. Generated untracked web
+callback/client-ID assets were removed. Logs are under
+`/tmp/sst-fv0j-fix4-*.log`.
+
+Roborev is still unavailable (no executable), so no automated verdict could be
+obtained. No requested implementation remains unfinished. There are no new
+blocking questions; portable chat support still requires an explicit ACL
+discovery capability in a later integration task. No pushes, PRs, branch
+switches, publishing, or edits to other checkouts were performed.
