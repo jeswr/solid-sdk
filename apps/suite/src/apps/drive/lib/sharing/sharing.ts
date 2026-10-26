@@ -193,7 +193,7 @@ function plan(
   const add = MODES.filter((mode) => after.has(mode) && !before.has(mode));
   const remove = MODES.filter((mode) => before.has(mode) && !after.has(mode));
   if (!add.length && !remove.length) return;
-  if (matching.some((grant) => grant.document.inherited))
+  if (matching.some((grant) => grant.document.inherited && grant.modes.size > 0))
     throw new SharingError("Inherited access must be changed at its source");
   const document = context.documents.find((candidate) => !candidate.inherited);
   if (!document) throw new SharingError("An explicit destination document is required for changes");

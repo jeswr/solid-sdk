@@ -430,6 +430,53 @@ describe("ACP policies", () => {
     });
     expect(() => diffSharing(value, restricted)).toThrow("Inherited access");
   });
+  it.each([
+    ALICE,
+    PUBLIC,
+  ])("allows explicit access alongside an empty inherited grant for %s", (principal) => {
+    const own = document("acp");
+    const parent = document("acp", true);
+    policy(parent, principal, []);
+    const value = { access: { resource: FILE, documents: [own, parent] } };
+    expect(readSharing(value)).toEqual({
+      ...restricted,
+      general: { inherited: false, explicit: false, sources: [] },
+    });
+    expect(
+      diffSharing(
+        value,
+        principal === PUBLIC ? { ...restricted, link: "viewer" } : select(principal, "viewer"),
+      ),
+    ).toEqual([
+      {
+        model: "acp",
+        source: own.source,
+        resource: FILE,
+        principal: principal === PUBLIC ? { kind: "public" } : { kind: "webid", webId: principal },
+        add: ["Read"],
+        remove: [],
+        inherited: false,
+      },
+    ]);
+    policy(own, principal, ["Read"]);
+    const state = readSharing(value);
+    expect(principal === PUBLIC ? state.general : state.people[0]).toMatchObject({
+      inherited: false,
+      explicit: true,
+      sources: [own.source],
+    });
+    expect(diffSharing(value, restricted)).toEqual([
+      {
+        model: "acp",
+        source: own.source,
+        resource: FILE,
+        principal: principal === PUBLIC ? { kind: "public" } : { kind: "webid", webId: principal },
+        add: [],
+        remove: ["Read"],
+        inherited: false,
+      },
+    ]);
+  });
   it("intersects allOf agent sets instead of widening them", () => {
     const doc = document("acp");
     const p = policy(doc, ALICE, ["Read"]);
