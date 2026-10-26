@@ -1,0 +1,172 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
+import { LiteralFrom, NamedNodeAs, NamedNodeFrom, OptionalAs, SetFrom } from "@rdfjs/wrapper";
+import type { Store } from "n3";
+import { MusicNode } from "./rdf";
+import { durationSeconds, httpIri, nonEmpty, nonNegative } from "./validation";
+import { M, MO, NS, S } from "./vocab";
+
+export interface MusicReference {
+  iri?: string | undefined;
+  name?: string | undefined;
+}
+
+export class Recording extends MusicNode {
+  get artists(): MusicReference[] {
+    return this.references(`${S}byArtist`, `${M}performedByArtist`, `${MO}performer`);
+  }
+  get album(): MusicReference | undefined {
+    return this.references(`${S}inAlbum`, `${M}inAlbum`, `${MO}record`)[0];
+  }
+
+  private references(...predicates: string[]): MusicReference[] {
+    const refs = this.objects(...predicates)
+      .filter(
+        (term) =>
+          term.termType === "NamedNode" ||
+          term.termType === "BlankNode" ||
+          (term.termType === "Literal" && term.value.trim().length > 0),
+      )
+      .map((term): MusicReference => {
+        if (term.termType === "Literal") return { name: term.value };
+        const node = new MusicNode(term, this.dataset as Store);
+        return {
+          iri: term.termType === "NamedNode" ? term.value : undefined,
+          name: node.strings(`${S}name`, `${NS.FOAF}name`, `${NS.DCT}title`, `${NS.RDFS}label`)[0],
+        };
+      });
+    return refs.filter(
+      (ref, index) =>
+        refs.findIndex((other) => other.iri === ref.iri && other.name === ref.name) === index,
+    );
+  }
+
+  get sourceUrl(): string | undefined {
+    return this.iris(`${S}url`)[0] ?? this.strings(`${S}url`)[0];
+  }
+  set sourceUrl(value: string | undefined) {
+    const checked = value === undefined ? undefined : httpIri(value);
+    this.clear(`${S}url`);
+    this.writeIri(`${S}url`, checked);
+  }
+
+  get imageUrl(): string | undefined {
+    return (
+      this.iris(`${S}image`, `${S}thumbnailUrl`)[0] ??
+      this.strings(`${S}image`, `${S}thumbnailUrl`)[0]
+    );
+  }
+  set imageUrl(value: string | undefined) {
+    const checked = value === undefined ? undefined : httpIri(value);
+    this.clear(`${S}image`);
+    this.clear(`${S}thumbnailUrl`);
+    this.writeIri(`${S}image`, checked);
+  }
+
+  setArtist(iri: string | undefined): void {
+    const checked = iri === undefined ? undefined : httpIri(iri);
+    for (const p of [`${S}byArtist`, `${M}performedByArtist`, `${MO}performer`]) this.clear(p);
+    this.writeIri(`${S}byArtist`, checked);
+    this.writeIri(`${M}performedByArtist`, checked);
+  }
+}
+
+export class Artist extends Recording {
+  stampType(): this {
+    return this.stamp(`${S}MusicGroup`, `${M}Artist`);
+  }
+  override get title(): string {
+    return super.title;
+  }
+  override set title(value: string) {
+    const checked = nonEmpty(value);
+    this.clear(`${S}name`);
+    this.clear(`${NS.FOAF}name`);
+    this.writeString(`${S}name`, checked);
+    this.writeString(`${NS.FOAF}name`, checked);
+  }
+}
+
+export class Album extends Recording {
+  stampType(): this {
+    return this.stamp(`${S}MusicAlbum`, `${M}Album`);
+  }
+  override get title(): string {
+    return super.title;
+  }
+  override set title(value: string) {
+    const checked = nonEmpty(value);
+    this.clear(`${S}name`);
+    this.clear(`${NS.DCT}title`);
+    this.writeString(`${S}name`, checked);
+    this.writeString(`${NS.DCT}title`, checked);
+  }
+  get tracks(): string[] {
+    return [...new Set(this.iris(`${S}track`, `${MO}track`))];
+  }
+  addTrack(iri: string): void {
+    this.assertWritableSubject();
+    SetFrom.subjectPredicate(this, `${S}track`, NamedNodeAs.string, NamedNodeFrom.string).add(
+      httpIri(iri),
+    );
+  }
+}
+
+export class Track extends Recording {
+  stampType(): this {
+    return this.stamp(`${S}MusicRecording`, `${M}Track`);
+  }
+  override get title(): string {
+    return super.title;
+  }
+  override set title(value: string) {
+    const checked = nonEmpty(value);
+    this.clear(`${S}name`);
+    this.clear(`${NS.DCT}title`);
+    this.writeString(`${S}name`, checked);
+    this.writeString(`${NS.DCT}title`, checked);
+  }
+  setAlbum(iri: string | undefined): void {
+    const checked = iri === undefined ? undefined : httpIri(iri);
+    for (const p of [`${S}inAlbum`, `${M}inAlbum`, `${MO}record`]) this.clear(p);
+    this.writeIri(`${S}inAlbum`, checked);
+    this.writeIri(`${M}inAlbum`, checked);
+  }
+  get durationSeconds(): number | undefined {
+    for (const value of this.strings(`${S}duration`, `${M}durationSeconds`, `${MO}duration`)) {
+      const seconds = durationSeconds(value);
+      if (seconds !== undefined) return seconds;
+    }
+    return undefined;
+  }
+  set durationSeconds(value: number | undefined) {
+    const checked = value === undefined ? undefined : nonNegative(value);
+    for (const p of [`${S}duration`, `${M}durationSeconds`, `${MO}duration`]) this.clear(p);
+    this.writeString(`${S}duration`, checked === undefined ? undefined : `PT${checked}S`);
+    OptionalAs.object(this, `${M}durationSeconds`, checked, (seconds, factory) =>
+      // xsd:decimal has no exponent notation, even for very small/large numbers.
+      LiteralFrom.datatypeTuple(
+        [
+          `${NS.XSD}decimal`,
+          seconds.toLocaleString("en-US", { useGrouping: false, maximumSignificantDigits: 21 }),
+        ],
+        factory,
+      ),
+    );
+  }
+  get loved(): boolean {
+    return this.strings(`${M}loved`).some((value) => value === "true" || value === "1");
+  }
+  set loved(value: boolean) {
+    this.clear(`${M}loved`);
+    OptionalAs.object(this, `${M}loved`, value, LiteralFrom.boolean);
+  }
+  get isrc(): string | undefined {
+    return this.strings(`${M}isrc`, `${MO}isrc`)[0];
+  }
+  set isrc(value: string | undefined) {
+    this.clear(`${M}isrc`);
+    this.clear(`${MO}isrc`);
+    this.writeString(`${M}isrc`, value);
+  }
+}

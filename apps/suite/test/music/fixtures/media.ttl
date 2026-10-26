@@ -1,0 +1,15 @@
+# AUTHORED-BY Codex GPT-6.1-Sol
+# solid-listening sector shape, accepting the legacy media and core namespaces.
+@prefix media: <https://w3id.org/jeswr/sectors/media#> .
+@prefix core: <https://w3id.org/jeswr/core#> .
+@prefix s: <https://schema.org/> .
+@prefix foaf: <http://xmlns.com/foaf/0.1/> .
+@prefix dct: <http://purl.org/dc/terms/> .
+@prefix time: <http://www.w3.org/2006/time#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+<https://pod.test/music/tracks/a.ttl#it> a media:Track; dct:title "Song"; media:performedByArtist <https://pod.test/music/artists/a.ttl#it>; media:inAlbum <https://pod.test/music/albums/a.ttl#it>; media:durationSeconds 213; media:isrc "GB123"; media:loved true; s:url <https://open.spotify.com/track/123>; s:thumbnailUrl <https://images.test/cover.jpg> .
+<https://pod.test/music/artists/a.ttl#it> a media:Artist; foaf:name "Artist" .
+<https://pod.test/music/albums/a.ttl#it> a media:Album; dct:title "Album"; s:track <https://pod.test/music/tracks/a.ttl#it> .
+<https://pod.test/music/playlists/a.ttl#it> a media:Playlist; s:name "Playlist"; s:itemListElement [ a s:ListItem; s:position 1; s:item <https://pod.test/music/tracks/a.ttl#it> ] .
+<https://pod.test/music/history/2026-10.ttl#play> a media:PlaybackEvent; media:playedWork <https://pod.test/music/tracks/a.ttl#it>; core:atTime <https://pod.test/music/history/2026-10.ttl#instant> .
+<https://pod.test/music/history/2026-10.ttl#instant> a time:Instant; time:inXSDDateTime "2026-10-25T12:00:00Z"^^xsd:dateTime .
