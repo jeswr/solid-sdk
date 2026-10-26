@@ -32,7 +32,8 @@ if (message) {
 }
 ```
 
-The library transforms RDF in memory and does not perform network requests. Its canonical model
+The RDF conversion helpers transform data in memory. `ChatWriter` persists through an injected
+pod port; it does not acquire credentials or call global fetch. The canonical model
 preserves message content, author, time, replies, edits, deletion, provenance, and task overlays.
 
 ## Key API
@@ -49,6 +50,59 @@ preserves message content, author, time, replies, edits, deletion, provenance, a
 
 IRI-valued fields from untrusted data are restricted to safe HTTP(S) IRIs on both read and write.
 
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+
+## Owner-only conversation storage
+
+```ts
+import { ChatWriter } from "@jeswr/solid-chat-interop";
+
+// pod implements ChatPodPort (a structural subset of the MCP DESIGN §3 PodPort).
+const chats = new ChatWriter(pod);
+await chats.save({
+  provider: "codex", // also "claude" or "chatgpt"
+  conversationId: "session-123",
+  title: "A conversation",
+  messages: [{ id: "event-1", role: "user", text: "Hello", createdAt: "2026-10-25T12:00:00Z" }],
+});
+const page = await chats.list({ provider: "codex", limit: 20, since: "2026-10-01T00:00:00Z" });
+const next = page.nextCursor ? await chats.list({ provider: "codex", limit: 20, cursor: page.nextCursor }) : undefined;
+const conversation = await chats.get("codex", "session-123");
+```
+
+Each conversation lives under `<pod.root>private/chats/<provider>/<conversationId>/`.
+The writer discovers and installs owner-only WAC ACL documents on the chats, provider and
+conversation containers, conversation metadata and each message before creating or
+accepting those resources, including existing resources skipped with a 412. Resource-specific
+grants are replaced; only container ACLs include inherited defaults. It leaves the enclosing
+`private/` namespace's ACL alone. ACL failures abort; servers must support the
+ACL-before-content sequence and advertise the ACL association even before resource
+creation. The port's `discoverAcl` must obtain a unique WAC `rel="acl"` Link from
+the exact target and reject unsupported models and unsafe targets. The association
+is checked again after each create attempt; existing non-WAC ACL documents abort the
+save. Shared ACL documents with `acl:accessTo` or `acl:default` grants for other
+resources are rejected before replacing the ACL or writing the target resource.
+The caller's port must enforce pod scope, refuse write redirects, and reject
+HTTP failures with a numeric `status` property. There is no permissive ACL fallback.
+
+Messages are canonical AS2 `as:Note` resources (`m-<id>.ttl#it`) with Dublin Core
+identifier/role metadata; conversation metadata is an AS2 collection. User messages
+attribute the owner; assistant messages retain their role without claiming a human
+author. IDs use 1–200 ASCII letters, digits, underscores or hyphens. Supply source
+message IDs for reliable capture: omitted IDs use SHA-256 of role, text and normalized
+time, so identical ID-less events collapse. Every message uses `If-None-Match: *`;
+412 skips the existing message. First saved title and message contents win. Failed
+partial saves can be replayed safely.
+
+`list` returns `{conversations, nextCursor?}`, ordered by ascending conversation URL.
+Pass the exclusive URL cursor back with the same provider/since filters. `since`
+is exclusive against the latest message's `createdAt`, applied before paging;
+empty conversations are excluded when `since` is present. Limit is 1–100 (default
+20). Dates require an explicit timezone. Listing scans conversation resources
+without a mutable shared index; it is intended for small chat collections.
+Containers with missing conversation metadata are skipped as incomplete saves;
+permission, transport and message-read errors still propagate.
+
 ## Links
 
 - [Source](https://github.com/jeswr/solid-chat-interop)
@@ -58,3 +112,10 @@ IRI-valued fields from untrusted data are restricted to safe HTTP(S) IRIs on bot
 ## License
 
 [MIT](./LICENSE) © Jesse Wright
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+The `pc:` constants and serializer prefix use `NS.POD_CHAT` from `@jeswr/suite-vocab`
+(`https://jeswr.org/ns/pod-chat#`). Dataset serialization accepts legacy pc: predicates
+and class objects and emits their canonical spellings, preserving resource identities
+and literals. Message parsing is unchanged: messages use ActivityStreams, and a
+containing dataset may carry either canonical or legacy room descriptors.
