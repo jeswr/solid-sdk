@@ -482,13 +482,17 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
     };
   }
 
+  /** `url` is `base` itself, a fragment of it, or (for a container base) a descendant. */
+  const within = (url: string, base: string): boolean =>
+    url === base || url.startsWith(`${base}#`) || (base.endsWith("/") && url.startsWith(base));
+
   function relocate(node: Node, from: string, to: string, parent: string): void {
     for (const moved of subtree(node.url)) {
       nodes.delete(moved.url);
       const url = to + moved.url.slice(from.length);
       moved.parent = moved === node ? parent : to + (moved.parent as string).slice(from.length);
       for (const link of moved.links) {
-        if (link.anchor.startsWith(from)) link.anchor = to + link.anchor.slice(from.length);
+        if (within(link.anchor, from)) link.anchor = to + link.anchor.slice(from.length);
       }
       moved.url = url;
       moved.etag = nextEtag();

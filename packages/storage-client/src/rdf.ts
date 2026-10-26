@@ -22,9 +22,13 @@ const inNamedGraph = (quad: Quad) => quad.graph.termType !== "DefaultGraph";
 
 const BLANK_LABEL = /^[A-Za-z0-9_][A-Za-z0-9_-]*$/;
 const LANGUAGE = /^[A-Za-z]{1,8}(-[A-Za-z0-9]{1,8})*$/;
-/** Turtle PN_PREFIX (empty allowed): a letter first, no trailing dot. */
-const PREFIX =
-  /^(?:\p{L}(?:[\p{L}\p{N}\p{M}_\-.\u00B7\u203F\u2040]*[\p{L}\p{N}\p{M}_\-\u00B7\u203F\u2040])?)?$/u;
+/** Turtle PN_CHARS_BASE, and PN_CHARS (PN_CHARS_BASE plus `_`, `-`, digits and combining marks). */
+const PN_CHARS_BASE =
+  "A-Za-z\\u00C0-\\u00D6\\u00D8-\\u00F6\\u00F8-\\u02FF\\u0370-\\u037D\\u037F-\\u1FFF\\u200C\\u200D\\u2070-\\u218F" +
+  "\\u2C00-\\u2FEF\\u3001-\\uD7FF\\uF900-\\uFDCF\\uFDF0-\\uFFFD\\u{10000}-\\u{EFFFF}";
+const PN_CHARS = `${PN_CHARS_BASE}_\\-0-9\\u00B7\\u0300-\\u036F\\u203F\\u2040`;
+/** Turtle PN_PREFIX, exactly (empty allowed): PN_CHARS_BASE ((PN_CHARS | '.')* PN_CHARS)? */
+const PREFIX = new RegExp(`^(?:[${PN_CHARS_BASE}](?:[${PN_CHARS}.]*[${PN_CHARS}])?)?$`, "u");
 
 /**
  * n3.Writer emits IRIs, blank-node labels and language tags verbatim, so a crafted value could
@@ -95,8 +99,11 @@ export function serializeQuads(
     );
   }
   const safe = injectionSafe(quads);
-  // n3.Writer copies an IRI that already looks like `name:…` for a declared prefix verbatim, so a
-  // prefix is dropped whenever some IRI starts with its name (the output stays correct, unabbreviated).
+  // n3.Writer copies an IRI matching `^(?:name:)[^/]*$` for a declared prefix verbatim, building
+  // that pattern from the unescaped name. So a prefix is dropped (the output stays correct, merely
+  // unabbreviated) whenever some IRI starts with `name:`, and a dotted name is always dropped: its
+  // `.` would act as a regex wildcard (and n3's lexer also rejects `..`). Without dots, every
+  // valid PN_PREFIX character is literal in that pattern, so `startsWith` covers every match.
   const iris = new Set<string>();
   for (const q of safe) {
     for (const t of [q.subject, q.predicate, q.object, q.graph]) {
@@ -107,7 +114,7 @@ export function serializeQuads(
   const safePrefixes: Record<string, string> = {};
   for (const [name, namespace] of Object.entries(prefixes)) {
     if (!PREFIX.test(name)) throw new TypeError(`Invalid prefix name: ${JSON.stringify(name)}`);
-    if ([...iris].some((iri) => iri.startsWith(`${name}:`))) continue;
+    if (name.includes(".") || [...iris].some((iri) => iri.startsWith(`${name}:`))) continue;
     safePrefixes[name] = escapeIri(namespace);
   }
   return serialize(safe, {
