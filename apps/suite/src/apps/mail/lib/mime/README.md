@@ -28,6 +28,10 @@ use the immediate child named by `start` (case-sensitive Content-ID), or the fir
 child when `start` is absent or unresolved, as their root. Non-root related leaves
 remain attachment resources, including text/HTML, with transfer-decoded bytes and
 CID metadata. Mixed parts retain document order in each actual representation.
+Attached multipart groups remain single downloads with their original body bytes,
+including nested boundaries. A selected related root's supported content type
+takes precedence over its disposition. Attachment downloads retain transfer-decoded
+octets for every media type, including calendar line endings and legacy charsets.
 Selection uses a small internal-tree adapter specific to pinned `postal-mime`
 4.1.4; run the regression tests when upgrading it.
 

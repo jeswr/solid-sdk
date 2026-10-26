@@ -192,6 +192,170 @@ describe("RFC 5322 and MIME parsing", () => {
     ]);
   });
 
+  it.each([
+    "\n",
+    "\r\n",
+  ])("preserves an attached multipart group and its wire bytes with %j delimiters", async (newline) => {
+    const body = [
+      "Synthetic preamble",
+      "--attached",
+      "Content-Type: multipart/alternative; boundary=inner",
+      "",
+      "--inner",
+      "Content-Type: text/plain; charset=windows-1252",
+      "Content-Transfer-Encoding: quoted-printable",
+      "",
+      "Attached caf=E9",
+      "--inner",
+      "Content-Type: text/html",
+      "",
+      "<p>Attached HTML</p>",
+      "--inner--",
+      "--attached",
+      "Content-Type: application/octet-stream",
+      "Content-Transfer-Encoding: base64",
+      "",
+      "AAH/",
+      "--attached--",
+      "Synthetic epilogue",
+    ].join(newline);
+    const input = [
+      "Content-Type: multipart/mixed; boundary=outer",
+      "",
+      "--outer",
+      "Content-Type: text/plain",
+      "",
+      "Reading body",
+      "--outer",
+      "Content-Type: multipart/mixed; boundary=attached",
+      'Content-Disposition: attachment; filename="attached.mime"',
+      "Content-Description: Synthetic group",
+      "Content-ID: <group@example.org>",
+      "",
+      body,
+      "--outer",
+      "Content-Type: text/plain",
+      "",
+      "Reading tail",
+      "--outer--",
+    ].join(newline);
+    const framed = new TextEncoder().encode(`!${input}!`);
+    const message = await parseMimeMessage(framed.subarray(1, -1));
+    expect(message.text).toBe("Reading body\nReading tail");
+    expect(message.html).toBeNull();
+    const content = new TextEncoder().encode(body);
+    expect(message.attachments).toEqual([
+      {
+        filename: "attached.mime",
+        contentType: "multipart/mixed",
+        disposition: "attachment",
+        description: "Synthetic group",
+        contentId: "group@example.org",
+        inline: false,
+        size: content.byteLength,
+        content,
+      },
+    ]);
+  });
+
+  it.each([
+    "--a--",
+    "Unterminated body",
+  ])("keeps a top-level attached multipart through EOF: %s", async (ending) => {
+    const body = `--a\r\nContent-Type: text/plain\r\n\r\nAttached body\r\n${ending}`;
+    const message = await parseMimeMessage(
+      `Content-Type: multipart/alternative; boundary=a\r\nContent-Disposition: attachment; filename=top.mime\r\n\r\n${body}`,
+    );
+    expect(message.text).toBe("");
+    expect(message.html).toBeNull();
+    expect(message.attachments).toHaveLength(1);
+    expect(message.attachments[0]).toMatchObject({
+      filename: "top.mime",
+      contentType: "multipart/alternative",
+      content: new TextEncoder().encode(body),
+    });
+  });
+
+  it.each([
+    ["html", ""],
+    ["plain", ""],
+    ["html", '; start="<root@example.org>"'],
+    ["plain", '; start="<root@example.org>"'],
+  ])("reads the attached related text/%s root with %s", async (type, start) => {
+    const root = `Content-Type: text/${type}\nContent-ID: <root@example.org>\nContent-Disposition: attachment; filename=root.txt\n\nRoot body`;
+    const support =
+      "Content-Type: text/html\nContent-ID: <support@example.org>\nContent-Disposition: attachment; filename=support.html\n\n<p>Support</p>";
+    const children = start ? [support, root] : [root, support];
+    const message = await parseMimeMessage(
+      `Content-Type: multipart/related; boundary=r${start}\n\n--r\n${children.join("\n--r\n")}\n--r--`,
+    );
+    expect(message.text).toBe(type === "plain" ? "Root body" : "");
+    expect(message.html).toBe(type === "html" ? "Root body" : null);
+    expect(message.attachments).toHaveLength(1);
+    expect(message.attachments[0]).toMatchObject({
+      filename: "support.html",
+      disposition: "attachment",
+      inline: true,
+      content: new TextEncoder().encode("<p>Support</p>"),
+    });
+  });
+
+  it("preserves an attached multipart whose header separator is missing", async () => {
+    const body = "--a\nContent-Type: text/plain\n\nAttached body\n--a--";
+    const message = await parseMimeMessage(
+      `Content-Type: multipart/mixed; boundary=a\nContent-Disposition: attachment; filename=recovered.mime\n${body}`,
+    );
+    expect(message.text).toBe("");
+    expect(message.attachments[0]?.content).toEqual(new TextEncoder().encode(body));
+  });
+
+  it("processes an attached multipart related root while retaining an unsupported root as bytes", async () => {
+    const message = await parseMimeMessage(
+      "Content-Type: multipart/related; boundary=r\n\n--r\nContent-Type: multipart/alternative; boundary=a\nContent-Disposition: attachment; filename=root.mime\n\n--a\nContent-Type: text/html\n\n<p>Root</p>\n--a--\n--r--",
+    );
+    expect(message.html).toBe("<p>Root</p>");
+    expect(message.attachments).toEqual([]);
+    const unsupported = await parseMimeMessage(
+      "Content-Type: multipart/related; boundary=r\n\n--r\nContent-Type: application/octet-stream\nContent-Disposition: attachment\n\nRoot bytes\n--r--",
+    );
+    expect(unsupported.text).toBe("");
+    expect(unsupported.html).toBeNull();
+    expect(unsupported.attachments[0]?.content).toEqual(new TextEncoder().encode("Root bytes"));
+  });
+
+  it.each([
+    ["text/calendar", "utf-8", "base64"],
+    ["application/ics", "utf-8", "base64"],
+    ["text/calendar", "windows-1252", "base64"],
+    ["application/ics", "windows-1252", "base64"],
+    ["text/calendar", "windows-1252", "quoted-printable"],
+    ["application/ics", "windows-1252", "quoted-printable"],
+  ])("preserves %s %s %s attachment bytes and metadata", async (type, charset, transfer) => {
+    const calendar = "BEGIN:VCALENDAR\r\nSUMMARY:Fictional café\r\nEND:VCALENDAR\r\n\r\n";
+    const content = Buffer.from(calendar, charset === "utf-8" ? "utf8" : "latin1");
+    const encoded =
+      transfer === "base64"
+        ? content.toString("base64")
+        : [...content].map((byte) => `=${byte.toString(16).padStart(2, "0")}`).join("");
+    const message = await parseMimeMessage(
+      `Content-Type: multipart/mixed; boundary=m\r\n\r\n--m\r\nContent-Type: text/plain\r\n\r\nReading body\r\n--m\r\nContent-Type: ${type}; charset=${charset}; method=PUBLISH\r\nContent-Disposition: attachment; filename=fictional.ics\r\nContent-Description: Synthetic calendar\r\nContent-ID: <calendar@example.org>\r\nContent-Transfer-Encoding: ${transfer}\r\n\r\n${encoded}\r\n--m--`,
+    );
+    expect(message.text).toBe("Reading body");
+    expect(message.html).toBeNull();
+    expect(message.attachments).toEqual([
+      {
+        filename: "fictional.ics",
+        contentType: type,
+        disposition: "attachment",
+        description: "Synthetic calendar",
+        contentId: "calendar@example.org",
+        inline: false,
+        size: content.byteLength,
+        content: new Uint8Array(content),
+      },
+    ]);
+  });
+
   it("returns predictable empty values for an empty message", async () => {
     expect(await parseMimeMessage("")).toEqual({
       headers: [],

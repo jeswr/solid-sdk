@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import PostalMime, { type Address, decodeWords } from "postal-mime";
 import { sanitizeMessageHtml } from "./html";
-import { selectMimeContent } from "./select";
+import { retainMultipartContent, selectMimeContent } from "./select";
 
 export type MimeAddress = Address;
 /** Pass original bytes for messages containing unencoded non-UTF-8 octets. */
@@ -61,8 +61,9 @@ export async function parseMimeMessage(input: MimeInput): Promise<MimeMessage> {
     attachmentEncoding: "arraybuffer",
     forceRfc822Attachments: true,
   });
+  const multipartContent = retainMultipartContent(parser);
   const message = await parser.parse(input);
-  const selected = selectMimeContent(parser);
+  const selected = selectMimeContent(parser, multipartContent);
   return {
     headers: message.headers.map(({ key, value }) => ({
       name: key,

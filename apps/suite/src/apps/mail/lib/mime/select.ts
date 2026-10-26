@@ -11,14 +11,24 @@ interface MimeNode {
     parsed: { value: string; params: Record<string, string> };
   };
   contentId?: string;
+  contentDisposition: { parsed: { value: string } };
   childNodes: MimeNode[];
+  finalizedChildCount: number;
+  state: "header" | "body" | "finished";
   /** Finalized leaf bytes; multipart nodes do not use this field. */
   content: ArrayBuffer;
   getTextContent(): string;
+  feed(line: Uint8Array, lineBreak: Uint8Array): boolean;
+  finalizeChildNodes(boundaryEnded: boolean): Promise<void>;
 }
 
 interface DecodedParser {
   root: MimeNode;
+  currentNode: MimeNode;
+  buf: ArrayBuffer;
+  av: Uint8Array;
+  readPos: number;
+  processLine(line: Uint8Array, lineBreak: Uint8Array, isFinal: boolean): Promise<void>;
   attachments: Attachment[];
   isInlineTextNode(node: MimeNode): boolean;
   collectAttachment(
@@ -37,22 +47,79 @@ interface Selection {
 
 const bareId = (id: string) => id.trim().replace(/^<|>$/g, "");
 
-/** Select real representations before flattening loses multipart semantics. */
-export function selectMimeContent(parser: PostalMime): Selection {
+/** Retain multipart body spans while postal-mime still knows their boundaries. */
+export function retainMultipartContent(parser: PostalMime): (node: MimeNode) => ArrayBuffer {
   const decoded = parser as unknown as DecodedParser;
-  // Reuse postal-mime's attachment metadata/byte handling, including for text
+  const spans = new Map<MimeNode, { start: number; end?: number }>();
+  const processLine = decoded.processLine.bind(decoded);
+  decoded.processLine = async (line, lineBreak, isFinal) => {
+    const node = decoded.currentNode;
+    if (!spans.has(node)) {
+      const span = { start: decoded.av.length };
+      spans.set(node, span);
+      const feed = node.feed.bind(node);
+      node.feed = (bytes, ending) => {
+        const wasHeader = node.state === "header";
+        const repeat = feed(bytes, ending);
+        if (wasHeader && node.state !== "header") {
+          span.start = repeat ? bytes.byteOffset : decoded.readPos;
+        }
+        return repeat;
+      };
+      const finalizeChildren = node.finalizeChildNodes.bind(node);
+      node.finalizeChildNodes = async (boundaryEnded) => {
+        if (boundaryEnded) {
+          // The preceding CRLF belongs to the delimiter, not the child entity.
+          const end = lineOffset - (decoded.av[lineOffset - 2] === 13 ? 2 : 1);
+          for (const child of node.childNodes.slice(node.finalizedChildCount)) {
+            const childSpan = spans.get(child) as { start: number; end?: number };
+            childSpan.end = Math.max(childSpan.start, end);
+          }
+        }
+        await finalizeChildren(boundaryEnded);
+      };
+    }
+    lineOffset = line.byteOffset;
+    await processLine(line, lineBreak, isFinal);
+  };
+  let lineOffset = 0;
+  return (node) => {
+    const span = spans.get(node) as { start: number; end?: number };
+    return decoded.buf.slice(span.start, span.end);
+  };
+}
+
+/** Select real representations before flattening loses multipart semantics. */
+export function selectMimeContent(
+  parser: PostalMime,
+  multipartContent: (node: MimeNode) => ArrayBuffer,
+): Selection {
+  const decoded = parser as unknown as DecodedParser;
+  // Reuse postal-mime's attachment metadata, including for text
   // resources that its default collector incorrectly treated as body content.
   decoded.attachments = [];
 
-  const select = (node: MimeNode, resource = false, related = false): Selection => {
-    if (!node.contentType.multipart) {
-      if (!resource && decoded.isInlineTextNode(node)) {
+  const select = (
+    node: MimeNode,
+    resource = false,
+    related = false,
+    relatedRoot = false,
+  ): Selection => {
+    const attached = node.contentDisposition.parsed.value === "attachment" && !relatedRoot;
+    if (!node.contentType.multipart || attached) {
+      const supported = ["text/plain", "text/html"].includes(node.contentType.parsed.value);
+      if (!resource && supported && (relatedRoot || decoded.isInlineTextNode(node))) {
         const type = node.contentType.parsed.value === "text/html" ? "html" : "plain";
         return { [type]: node.getTextContent(), attachments: [] };
       }
       const start = decoded.attachments.length;
-      decoded.collectAttachment(node, node.content, related, false);
-      return { attachments: decoded.attachments.slice(start) };
+      const content = node.contentType.multipart ? multipartContent(node) : node.content;
+      decoded.collectAttachment(node, content, related, false);
+      const attachments = decoded.attachments.slice(start);
+      // The collector transcodes calendars and normalizes line endings. Downloads
+      // must instead retain the original transfer-decoded bytes for every type.
+      for (const attachment of attachments) attachment.content = content;
+      return { attachments };
     }
 
     const subtype = node.contentType.multipart;
@@ -67,6 +134,7 @@ export function selectMimeContent(parser: PostalMime): Selection {
         child,
         resource || (subtype === "related" && child !== root),
         related || subtype === "related",
+        subtype === "related" && child === root,
       ),
     );
 
