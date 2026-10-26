@@ -1,10 +1,11 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { RdfFetchError } from "@jeswr/fetch-rdf";
 import { DataFactory } from "n3";
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import {
   BOOK_CLASS,
   CONTACT_CLASS,
+  Contact,
   discoverContacts,
   GROUP_CLASS,
   importVcards,
@@ -219,4 +220,92 @@ test("discovery caps results within a single document and supports cancellation 
     discoverContacts(model, INDEX, 200, AbortSignal.abort(new Error("cancelled"))),
   ).rejects.toThrow("cancelled");
   expect(pod.requests).toHaveLength(before);
+});
+
+test("discovery stops before materializing out-of-limit contact fields or fetching later sources", async () => {
+  const { model, pod } = await setup();
+  pod.seed(
+    INDEX,
+    `${prefixes}
+    <#a> a solid:TypeRegistration; solid:forClass vcard:Individual; solid:instance <${PM}> .
+    <#b> a solid:TypeRegistration; solid:forClass vcard:AddressBook; solid:instance <${BOOK}> .`,
+  );
+  pod.seed(PM, `${fixture("pm")} <#second> a vcard:Individual; vcard:fn "Other" .`);
+  const names = vi.spyOn(Contact.prototype, "name", "get");
+  try {
+    const before = pod.requests.length;
+    const result = await discoverContacts(model, INDEX, 1);
+    expect(result.flat).toHaveLength(1);
+    expect(result.incomplete).toBe(true);
+    expect(names).toHaveBeenCalledTimes(1);
+    expect(pod.requests.slice(before).map((request) => request.url)).toEqual([INDEX, PM]);
+  } finally {
+    names.mockRestore();
+  }
+});
+
+test("caps reads even when earlier sources contain no results", async () => {
+  const { model, pod } = await setup();
+  pod.seed(PM, "");
+  pod.seed(
+    INDEX,
+    `${prefixes}
+    <#a> a solid:TypeRegistration; solid:forClass vcard:Individual; solid:instance <${PM}> .
+    <#b> a solid:TypeRegistration; solid:forClass vcard:AddressBook; solid:instance <${BOOK}> .`,
+  );
+  const before = pod.requests.length;
+  expect(await discoverContacts(model, INDEX, 1)).toEqual({
+    books: [],
+    flat: [],
+    incomplete: true,
+  });
+  expect(pod.requests.slice(before).map((request) => request.url)).toEqual([INDEX, PM]);
+});
+
+test.each([1, 2, 3])("stops container traversal at the source or result cap: %s", async (limit) => {
+  const { model, pod } = await setup();
+  const container = `${ROOT}contacts/`;
+  pod.seed(
+    INDEX,
+    `${prefixes} <#a> a solid:TypeRegistration; solid:forClass vcard:Individual; solid:instanceContainer <${container}> .`,
+  );
+  pod.seed(
+    container,
+    `<${container}> <http://www.w3.org/ns/ldp#contains> <${PM}>, <${BOOK}>, <${ALICE}> .`,
+  );
+  const before = pod.requests.length;
+  const result = await discoverContacts(model, INDEX, limit);
+  expect(result.incomplete).toBe(true);
+  expect(pod.requests.length - before).toBeLessThanOrEqual(limit + 1);
+  expect(pod.requests.slice(before).some((request) => request.url === ALICE)).toBe(false);
+});
+
+test("stops before a registration's container once its instance fills the result cap", async () => {
+  const { model, pod } = await setup();
+  pod.seed(
+    INDEX,
+    `${prefixes} <#a> a solid:TypeRegistration; solid:forClass vcard:Individual; solid:instance <${PM}>; solid:instanceContainer <${ROOT}contacts/> .`,
+  );
+  const before = pod.requests.length;
+  expect((await discoverContacts(model, INDEX, 1)).incomplete).toBe(true);
+  expect(pod.requests.slice(before).map((request) => request.url)).toEqual([INDEX, PM]);
+});
+
+test("deduplicates subjects repeated in distinct source documents", async () => {
+  const { model, pod } = await setup();
+  pod.seed(
+    INDEX,
+    `${prefixes}
+    <#a> a solid:TypeRegistration; solid:forClass vcard:Individual; solid:instance <${PM}> .
+    <#b> a solid:TypeRegistration; solid:forClass vcard:Individual; solid:instance <${ALICE}> .`,
+  );
+  const body = `${prefixes} <${PM}#it> a vcard:Individual; vcard:fn "Pat" . <${BOOK}#this> a vcard:AddressBook .`;
+  pod.seed(PM, body);
+  pod.seed(ALICE, body);
+  const result = await discoverContacts(model, INDEX, 3);
+  expect(result).toMatchObject({
+    books: [`${BOOK}#this`],
+    flat: [{ id: `${PM}#it` }],
+    incomplete: false,
+  });
 });

@@ -12,7 +12,14 @@ import {
 import { Container } from "@solid/object";
 import { DataFactory, Store } from "n3";
 import type { ContactsModel } from "./book";
-import { BOOK_CLASS, CONTACT_CLASS, ContactsDataset, flatContacts, GROUP_CLASS } from "./data";
+import {
+  BOOK_CLASS,
+  CONTACT_CLASS,
+  ContactsDataset,
+  contactData,
+  GROUP_CLASS,
+  iterateFlatContacts,
+} from "./data";
 import { replacement } from "./transport";
 
 const SOLID = "http://www.w3.org/ns/solid/terms#";
@@ -139,26 +146,51 @@ export async function discoverContacts(
       throw error;
     }
   };
+  const full = () => books.size + flat.size >= limit;
   const collect = async (url: string) => {
     const snapshot = await read(url);
     if (!snapshot) return;
     for (const book of new ContactsDataset(snapshot.dataset, DataFactory).books) {
-      if (books.size + flat.size >= limit && !books.has(book.id)) incomplete = true;
-      else books.add(book.id);
+      signal.throwIfAborted();
+      if (books.has(book.id)) continue;
+      if (full()) {
+        incomplete = true;
+        return;
+      }
+      books.add(book.id);
     }
-    for (const contact of flatContacts(snapshot.dataset)) {
-      if (books.size + flat.size >= limit && !flat.has(contact.id)) incomplete = true;
-      else flat.set(contact.id, contact);
+    for (const contact of iterateFlatContacts(snapshot.dataset)) {
+      signal.throwIfAborted();
+      if (flat.has(contact.id)) continue;
+      if (full()) {
+        incomplete = true;
+        return;
+      }
+      flat.set(contact.id, { id: contact.id, data: contactData(contact) });
     }
   };
   for (const registration of index.data.registrations) {
     if (!registration.classes.has(BOOK_CLASS) && !registration.classes.has(CONTACT_CLASS)) continue;
+    signal.throwIfAborted();
+    if (full()) {
+      incomplete = true;
+      break;
+    }
     if (registration.instance) await collect(registration.instance);
     if (registration.container) {
+      if (full()) {
+        incomplete = true;
+        break;
+      }
       const listing = await read(registration.container);
       if (!listing) continue;
       const container = new Container(listing.url, listing.dataset, DataFactory);
       for (const child of container.contains) {
+        signal.throwIfAborted();
+        if (full() || remaining === 0) {
+          incomplete = true;
+          break;
+        }
         if (!child.value.endsWith("/")) await collect(child.value);
       }
     }
