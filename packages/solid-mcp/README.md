@@ -143,7 +143,11 @@ The SDK transport runs in stateless mode with JSON responses and no session IDs.
 are capped at 1 MiB, including chunked bodies; GET, DELETE and other methods return 405 after
 authentication. Invalid JSON/UTF-8 returns 400, oversized bodies return 413, and failures to
 authenticate return 401 with the protected-resource metadata challenge. The application serves
-that metadata separately at `<resourceUrl>/.well-known/oauth-protected-resource`.
+that metadata separately, by default at the RFC 9728 §3.1 location returned by
+`protectedResourceMetadataUrl(resourceUrl)` (for `https://mcp.example/mcp`:
+`https://mcp.example/.well-known/oauth-protected-resource/mcp`, where `@jeswr/mcp-oauth` serves
+it). Pass `resourceMetadataUrl` to advertise another URL, for example
+`oauth.protectedResourceMetadataUrl()` from the composed authorization server.
 
 Host must exactly match the public URL's authority, including any port. Forwarding headers do
 not override this check. A Web Request without an explicit Host is checked using its URL;
