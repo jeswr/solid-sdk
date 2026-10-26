@@ -3,6 +3,59 @@
 
 # sst-vuhh — CON-02 lane report
 
+## Fix round 2 — 2026-10-26
+
+Starting revision: `482fd9214b3876c5791ecdbb64f72286c69654e9` on `lane/sst-vuhh`.
+Only the two supplied review findings were addressed.
+
+- `42780c8f` — `fix: retain registrations across repeated connector writes`: accumulate
+  successful class/container requests independently from the document report, retaining every
+  requested class while deduplicating registrations and reported URLs. API and file regression
+  tests merge recordings and playlists into one document, repeat a class, then skip a companion
+  registration; both classes remain discoverable and the document count stays one.
+- `77ab46de` — `fix: match fixture routes by consistent specificity`: recording and replay
+  share longest-prefix selection with the same origin and complete path boundaries. Tests cover
+  both route configuration orders, ordinary-before-special recording, route-specific redaction,
+  replay in a different order, method queues, exhaustion without broad-route fallback, and
+  rejected sibling paths/origins. Package documentation describes the matching rule.
+- Final `docs: record second connector fix results` commit — this round's lane report.
+
+Validation on the final source revision:
+
+```sh
+pnpm --filter @jeswr/pod-connectors^... run build
+pnpm --filter @jeswr/pod-connectors run lint && pnpm --filter @jeswr/pod-connectors run build && pnpm --filter @jeswr/pod-connectors run typecheck && pnpm --filter @jeswr/pod-connectors run test
+GIT_ALLOW_PROTOCOL=file TURBO_SCM_BASE=482fd9214b3876c5791ecdbb64f72286c69654e9 pnpm run gate --env-mode=loose
+GIT_ALLOW_PROTOCOL=file pnpm run gate:full --env-mode=loose
+```
+
+- New regressions reproduced the findings before their fixes. The first incremental-test run
+  could not resolve guarded-fetch's absent dist; building workspace dependencies resolved it.
+- Workspace dependency build: exit 0.
+- Package gate: exit 0; lint reports the same 36 existing warnings; build and typecheck pass;
+  **44 files and 315 tests pass**.
+- Affected workspace gate: exit 0, **10/10 tasks**. Root lint/guards pass; Pod Manager's
+  build/typecheck/tests pass (**68 files, 930 passed, 1 skipped**).
+- Full workspace gate: exit 1, **34/190 tasks** completed. The unchanged
+  `packages/unstorage-solid/scripts/build-deps.mjs` requires a fetch-rdf network clone when its
+  dist is absent. `GIT_ALLOW_PROTOCOL=file`, inherited through `--env-mode=loose`, blocked that
+  operation with `fatal: transport 'https' not allowed` before network access. No workaround or
+  unrelated source change was made. Root tests passed in that run (**7 files, 686 tests**).
+  Full-workspace verification remains incomplete.
+- `git diff --check`: passed.
+
+No dependencies, manifests or lockfile changed; `check:packages` is not applicable. Lifecycle
+scripts were never enabled. Tests use fixtures and memory Pods. No remote fetch/merge, push,
+PR, branch switch, publishing or changes to another checkout. `roborev` is not installed, so
+asynchronous review remains unavailable; it was not installed or reconfigured.
+
+Both requested fixes are complete. No new open questions or unfinished implementation.
+The conservative prefix rule preserves the recorder's existing origin/path boundaries and
+applies longest-prefix specificity consistently to recording and replay. Verification and review
+limitations are recorded above; earlier reports below remain historical context.
+
+---
+
 ## Fix round 1 — 2026-10-26
 
 Starting revision: `a102f825919ca24abf07a0633e2121b0044f8242` on `lane/sst-vuhh`.
