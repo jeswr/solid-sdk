@@ -71,3 +71,26 @@ Loading uses skeletons, refreshing retains content, offline without cached items
 and zero items use first-use or `filterQuery` empty states (`emptyAction` / `onClearFilters`).
 Hosts render their refresh progress in TopBar and can supply session/conflict dialogs as error actions.
 Fixtures: `/dev/components/data-table` and `/dev/components/file-grid` in `apps/suite`.
+DS-07 exports `Toolbar`, `FilterChips`, `Breadcrumbs`, `EditableText`, and `TagInput`.
+Import `@jeswr/suite-ui/styles/components.css` after the token styles. Components use
+React 19, Radix dropdown menus, and Lucide icons. Consumers supply controlled values,
+unique item IDs, and synchronous callbacks; persistence and remote fetching stay in the app.
+
+- `Toolbar`: ordered `actions` (`id`, `label`, `onSelect`, optional `icon`, `primary`, `disabled`);
+  measures intrinsic widths with ResizeObserver and preserves order in More. Left/Right/Home/End
+  move focus, with one tab stop. Supply decorative Lucide icons when needed.
+- `FilterChips`: `options`, selected `value` IDs, `onChange`, and `resultCount`; announces the
+  result count politely. Clear removes every selection.
+- `Breadcrumbs`: `items` with `id`, `label`, `href`, optional `onDrop`; preserves first/current
+  segments and collapses middle segments when they do not fit. Supply a keyboard move action in
+  the consuming app alongside drag and drop. Links remain native anchors, including in the menu.
+- `EditableText`: `label`, `value`, `onCommit`, optional `validate` returning an error string,
+  optional `disabled`. Click/F2 edits, Enter validates and commits, Escape cancels. Blur leaves
+  the draft open; IME composition does not commit.
+- `TagInput`: `label`, local `options`, selected `value` IDs, `onChange`, optional `disabled`;
+  filters available options, arrows/Enter select, Escape closes, and an empty-input Backspace
+  removes the last tag. Each chip also has a labelled removal button. No free-form creation.
+
+Interactive fixtures live in `apps/suite` at `/dev/components/<component>` (kebab-case).
+The component tests use Vitest, jsdom, Testing Library and axe-core; Playwright runs real
+layout, contrast, keyboard, and screenshot checks across the six viewport/theme projects.

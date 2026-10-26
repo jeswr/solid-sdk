@@ -360,4 +360,28 @@ nav[aria-label="Component fixtures"] {
   display: grid;
   justify-items: start;
   gap: var(--space-2);
+
+.ds07-stack {
+  display: grid;
+  gap: var(--space-4);
+}
+.ds07-stack h2 {
+  margin-bottom: 0;
+}
+.ds07-stack > .suite-button {
+  justify-self: start;
+}
+.fixture-page > nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+}
+.ds07-page section {
+  min-width: 0;
+}
+
+.ds07-narrow {
+  width: 100%;
+  max-width: 320px;
+  min-width: 0;
 }

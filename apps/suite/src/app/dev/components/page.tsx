@@ -15,6 +15,11 @@ export default function ComponentsPage() {
         ))}
         <a href="/dev/components/data-table">DataTable</a>
         <a href="/dev/components/file-grid">FileGrid</a>
+        <a href="/dev/components/toolbar">Toolbar</a>
+        <a href="/dev/components/filter-chips">Filter chips</a>
+        <a href="/dev/components/breadcrumbs">Breadcrumbs</a>
+        <a href="/dev/components/editable-text">Editable text</a>
+        <a href="/dev/components/tag-input">Tag input</a>
       </nav>
     </main>
   );
