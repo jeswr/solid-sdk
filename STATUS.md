@@ -94,3 +94,56 @@ supply titles; capped RDF has empty text with a truncation flag; named RDF graph
 are presented as a Turtle union view; search defaults remain depth 4 / 500
 resources with a new 5000 ms deadline. MCP-01 integration remains a dependency
 gap for the program lead to resolve when combining lanes.
+
+## Fix round 1 — review of `f23018734c15`
+
+- `eb7d98dc fix: normalize JSON-LD and preserve RDF response bases` addresses
+  all three review findings. JSON-LD is parsed only from the normalized object
+  checked for remote contexts and `@import`; bounded search responses preserve
+  the effective response URL; fetched RDF resolves against `response.url || target`.
+  The conservative parser-boundary choice uses the existing parser API without
+  adding dependencies or expanding its options.
+- `docs: record review fix validation` records this round's results.
+
+Eight new fixture regressions failed before the fix and passed afterward:
+remote-context / `@import` values hidden by duplicate context keys in fetch and
+search discovery, redirected Turtle / JSON-LD identifiers, redirected container
+children, and relative Type Index discovery after a profile redirect. The full
+package suite now has **158 passing tests across 5 files**.
+
+Exact successful package gate commands (exit 0 each), run with
+`NODE_OPTIONS=--require=/tmp/sst-9s2-network-guard.cjs` and
+`GIT_ALLOW_PROTOCOL=file` exported:
+
+```sh
+pnpm --filter @jeswr/solid-mcp run lint
+pnpm --filter @jeswr/solid-mcp run build
+pnpm --filter @jeswr/solid-mcp run typecheck
+pnpm --filter @jeswr/solid-mcp run test
+```
+
+Affected repository gate (exit 0; **7/7 Turbo tasks successful**, including root
+lint):
+
+```sh
+NODE_OPTIONS=--require=/tmp/sst-9s2-network-guard.cjs GIT_ALLOW_PROTOCOL=file TURBO_SCM_BASE=f23018734c15cc8c9aa824efdea078e8e884d93a pnpm run gate
+```
+
+Full-workspace gate (exit 1; 52 successful tasks out of 184 planned):
+
+```sh
+NODE_OPTIONS=--require=/tmp/sst-9s2-network-guard.cjs GIT_ALLOW_PROTOCOL=file pnpm run gate:full
+```
+
+The unchanged `@jeswr/app-pod-manager#build` fails because `next/font` attempts
+an Inter download from Google Fonts, blocked by the existing temporary network
+guard. No unrelated fixes were made. `roborev status` exits 127 because roborev
+is unavailable, so automated review remains unavailable. `git diff --check`
+passes. No dependencies or manifests changed; `check:packages` is not applicable.
+The existing local prebuilt fetch-rdf artifact was restored into the checkout's
+ignored dependency directory as in the original round; no remote Git fetch or
+merge was performed.
+
+All three requested findings are fixed. No open questions for this fix round;
+full-workspace validation and automated review retain the environmental
+limitations above.
