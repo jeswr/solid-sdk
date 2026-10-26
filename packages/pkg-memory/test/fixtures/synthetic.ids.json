@@ -1,0 +1,32 @@
+[
+  {
+    "id": "urn:uuid:7960979f-f765-5cfb-8541-c97b573d43cc",
+    "assertionId": "urn:uuid:a5300125-0955-5bf3-ad10-0b987eea38d3",
+    "provenanceId": "urn:uuid:7960979f-f765-5cfb-8541-c97b573d43cc#provenance",
+    "pubinfoId": "urn:uuid:7960979f-f765-5cfb-8541-c97b573d43cc#pubinfo"
+  },
+  {
+    "id": "urn:uuid:a08f2781-997a-5e86-8e9a-05ca44f5c302",
+    "assertionId": "urn:uuid:9914c2ab-b828-5b3f-aa37-7b7d293b7dce",
+    "provenanceId": "urn:uuid:a08f2781-997a-5e86-8e9a-05ca44f5c302#provenance",
+    "pubinfoId": "urn:uuid:a08f2781-997a-5e86-8e9a-05ca44f5c302#pubinfo"
+  },
+  {
+    "id": "urn:uuid:add20f37-1477-50eb-9485-dcb1ad142f40",
+    "assertionId": "urn:uuid:66a7b2d0-dd0c-5347-8d2c-e95b28d7637c",
+    "provenanceId": "urn:uuid:add20f37-1477-50eb-9485-dcb1ad142f40#provenance",
+    "pubinfoId": "urn:uuid:add20f37-1477-50eb-9485-dcb1ad142f40#pubinfo"
+  },
+  {
+    "id": "urn:uuid:d0a4edff-8a5b-5cef-be9f-5ffac2e611cb",
+    "assertionId": "urn:uuid:752a9f7a-2f0e-557b-83fd-e3a177a74888",
+    "provenanceId": "urn:uuid:d0a4edff-8a5b-5cef-be9f-5ffac2e611cb#provenance",
+    "pubinfoId": "urn:uuid:d0a4edff-8a5b-5cef-be9f-5ffac2e611cb#pubinfo"
+  },
+  {
+    "id": "urn:uuid:d7335b9c-8201-58d5-b967-e270a5bb9923",
+    "assertionId": "urn:uuid:d99f83bf-2042-5daa-a812-9b85bba443d7",
+    "provenanceId": "urn:uuid:d7335b9c-8201-58d5-b967-e270a5bb9923#provenance",
+    "pubinfoId": "urn:uuid:d7335b9c-8201-58d5-b967-e270a5bb9923#pubinfo"
+  }
+]

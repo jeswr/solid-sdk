@@ -19,6 +19,36 @@ import {
 
 const FULL_SHA = "a".repeat(40);
 
+// AUTHORED-BY Codex GPT-6.1-Sol
+describe("agent history imports", () => {
+  it.each([
+    "personal-agent",
+    "agentic-legacy-bridge",
+  ])("registers %s and requires mirror pins for every workspace dependency", (slug) => {
+    const manifest = JSON.parse(
+      readFileSync(new URL(`../packages/${slug}/package.json`, import.meta.url), "utf8"),
+    );
+    const suite = JSON.parse(readFileSync(new URL("../suite.json", import.meta.url), "utf8"));
+    expect(suite.packages).toContain(manifest.name);
+    assertDirMatchesName(slug, manifest.name);
+    expect(manifest.mirrorPublish).toEqual({ inlined: [] });
+    expect(() => rewriteManifest(manifest)).toThrow(/neither declared inlined .+ nor pinned/);
+    const workspaceNames = Object.entries(manifest.dependencies)
+      .filter(([, range]) => range === "workspace:*")
+      .map(([name]) => name);
+    const pins = new Map(workspaceNames.map((name) => [name, FULL_SHA]));
+    const mirror = rewriteManifest(manifest, pins);
+    for (const name of workspaceNames) {
+      expect(mirror.dependencies[name]).toBe(`github:${mirrorRepoFor(name)}#${FULL_SHA}`);
+      const missingPin = new Map(pins);
+      missingPin.delete(name);
+      expect(() => rewriteManifest(manifest, missingPin)).toThrow(/nor pinned/);
+    }
+    expect(mirror.dependencies["@jeswr/fetch-rdf"]).toBe("^0.1.0");
+    expect(mirror.exports).toEqual(manifest.exports);
+  });
+});
+
 describe("parseCliArgs", () => {
   it("defaults to dry-run", () => {
     const args = parseCliArgs(["solid-dpop"]);
