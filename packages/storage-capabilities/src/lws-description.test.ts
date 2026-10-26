@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { afterEach, expect, test, vi } from "vitest";
 import { CapabilitiesError, parseLwsDescription } from "./index.js";
 import { sparqLwsCid } from "./testing.js";
@@ -207,7 +208,6 @@ const publicKeys = [
   { kty: "OKP", crv: "Ed25519", x: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" },
   { kty: "EC", crv: "P-256", x: "AQID", y: "BAUG" },
   { kty: "RSA", n: "AQID", e: "AQAB" },
-  { kty: "oct", k: "AQID" },
 ];
 
 function withKey(publicKeyJwk: unknown): Record<string, unknown> {
@@ -237,30 +237,13 @@ test.each([
   {},
   { kty: "unknown" },
   { kty: "__proto__" },
-])("rejects unknown or missing key types: %j", (key) => {
+  { kty: "oct" },
+  { kty: "oct", k: "AQID" },
+])("rejects symmetric, unknown or missing key types: %j", (key) => {
   failure(withKey(key));
 });
 
-const jwkStringMembers = [
-  "alg",
-  "crv",
-  "d",
-  "dp",
-  "dq",
-  "e",
-  "k",
-  "n",
-  "p",
-  "q",
-  "qi",
-  "use",
-  "x",
-  "y",
-  "kid",
-  "x5u",
-  "x5t",
-  "x5t#S256",
-];
+const jwkStringMembers = ["alg", "crv", "e", "n", "use", "x", "y", "kid", "x5u", "x5t", "x5t#S256"];
 
 test.each(jwkStringMembers)("rejects non-string JWK %s members", (field) => {
   for (const value of [null, 4, false, {}, []]) {
@@ -276,7 +259,6 @@ test("preserves well-typed optional JWK members and unknown extensions", () => {
     ext: false,
     key_ops: ["verify"],
     x5c: ["AQID"],
-    oth: [{ r: "AQID", d: "AQID", t: "AQID" }],
     "example:extension": { arbitrary: true },
   };
   const body = withKey(key);
@@ -287,7 +269,7 @@ test("preserves well-typed optional JWK members and unknown extensions", () => {
   expect(body).toEqual(before);
   expect(
     parseLwsDescription(
-      withKey({ ...key, ext: true, key_ops: [], x5c: [], oth: [] }),
+      withKey({ ...key, ext: true, key_ops: [], x5c: [] }),
       storageUrl,
       requestUrl,
     ).verificationMethods[0]?.publicKeyJwk.ext,
@@ -305,16 +287,43 @@ test.each(["key_ops", "x5c"])("requires a string array for JWK %s", (field) => {
 });
 
 test.each([
-  null,
-  {},
-  "prime",
-  [null],
-  [[]],
-  [{}],
-  [{ r: "AQID", d: "AQID" }],
-  [{ r: "AQID", d: 4, t: "AQID" }],
-])("rejects malformed RSA other-prime members: %j", (oth) => {
-  failure(withKey({ ...publicKeys[2], oth }));
+  "d",
+  "p",
+  "q",
+  "dp",
+  "dq",
+  "qi",
+  "oth",
+  "k",
+  "priv",
+])("rejects private or secret JWK %s members on every supported public key type", (field) => {
+  for (const key of publicKeys) {
+    for (const value of [
+      undefined,
+      null,
+      "",
+      "AQID",
+      {},
+      [],
+      [{ r: "AQID", d: "AQID", t: "AQID" }],
+    ]) {
+      const body = withKey({ ...key, [field]: value });
+      const before = structuredClone(body);
+      failure(body);
+      expect(body).toEqual(before);
+    }
+  }
+});
+
+test("rejects a private key before exposing any verification methods", () => {
+  failure(
+    minimal({
+      verificationMethod: [
+        sparqLwsCid.verificationMethod[0],
+        { ...sparqLwsCid.verificationMethod[0], publicKeyJwk: { ...publicKeys[0], d: "AQID" } },
+      ],
+    }),
+  );
 });
 
 test.each([

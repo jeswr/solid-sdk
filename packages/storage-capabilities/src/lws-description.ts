@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { CapabilitiesError } from "./errors.js";
 import type { CapabilityEntry, ServiceEntry, StorageDescription } from "./types.js";
 import { LWS } from "./vocab.js";
@@ -68,6 +69,11 @@ export function parseLwsDescription(
 
   function jwk(value: unknown): JsonWebKey {
     const key = record(value, "publicKeyJwk");
+    // CID public keys must not contain any JOSE private or secret key parameters,
+    // even when the parameter belongs to a different key type.
+    for (const field of ["d", "p", "q", "dp", "dq", "qi", "oth", "k", "priv"]) {
+      if (field in key) invalid(`publicKeyJwk must not contain private or secret ${field}`);
+    }
     const kty = string(key.kty, "publicKeyJwk kty");
     let required: readonly string[];
     switch (kty) {
@@ -80,27 +86,17 @@ export function parseLwsDescription(
       case "OKP":
         required = ["crv", "x"];
         break;
-      case "oct":
-        required = ["k"];
-        break;
       default:
         return invalid("publicKeyJwk kty is unsupported");
     }
     for (const field of required) string(key[field], `publicKeyJwk ${field}`);
-    // Check all Web Crypto JsonWebKey members, plus the standard JOSE metadata.
+    // Check public Web Crypto JsonWebKey members, plus the standard JOSE metadata.
     // Unknown extension members remain data; cryptographic usability is checked at key import.
     for (const field of [
       "alg",
       "crv",
-      "d",
-      "dp",
-      "dq",
       "e",
-      "k",
       "n",
-      "p",
-      "q",
-      "qi",
       "use",
       "x",
       "y",
@@ -120,10 +116,6 @@ export function parseLwsDescription(
       for (const item of array(key[field], `publicKeyJwk ${field}`)) {
         string(item, `publicKeyJwk ${field} member`);
       }
-    }
-    for (const item of array(key.oth, "publicKeyJwk oth")) {
-      const prime = record(item, "publicKeyJwk oth member");
-      for (const field of ["r", "d", "t"]) string(prime[field], `publicKeyJwk oth ${field}`);
     }
     return key;
   }
