@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol — ported from apps/pod-health/src/gpx.ts
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
@@ -5,17 +6,11 @@
 // ordered ph:RoutePoint route, written through the @rdfjs/wrapper model (never
 // hand-built triples).
 //
-// GPX is an XML format (NOT RDF), so this module extracts the narrow GPX track
-// structure with a small, self-contained, exhaustively-tested scanner and then
-// maps it onto the typed accessors. We deliberately do NOT pull in a general XML
-// library: the only GPX shape we need is <trk>/<trkseg>/<trkpt> with lat/lon
-// attributes and optional <ele>/<time> children, and the published fast-xml-parser
-// 5.x tree carries several low-reputation transitive deps (a supply-chain risk).
-// This scanner is for the XML envelope only — all RDF still flows through the
-// sanctioned @rdfjs/wrapper accessors, so the "never a bespoke RDF parser" rule
-// holds.
+// GPX is XML rather than RDF. Use the existing saxes dependency to resolve
+// element namespaces and decode XML text before mapping through typed accessors.
 
 import { DataFactory, Store } from "n3";
+import { SaxesParser } from "saxes";
 import type { ActivityType, RoutePoint, Workout } from "./model.js";
 import { HealthDocument } from "./model.js";
 
@@ -59,30 +54,6 @@ export interface ParsedGpxWorkout {
   trackPoints: GpxTrackPoint[];
 }
 
-/** Decode the five standard XML entities that may appear in GPX text content. */
-function decodeXmlEntities(text: string): string {
-  return text
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&apos;/g, "'")
-    .replace(/&amp;/g, "&");
-}
-
-/** Read a numeric attribute (`name="value"` or `name='value'`) from a tag's text. */
-function attr(tag: string, name: string): string | undefined {
-  const m = tag.match(new RegExp(`\\b${name}\\s*=\\s*"([^"]*)"|\\b${name}\\s*=\\s*'([^']*)'`));
-  if (!m) return undefined;
-  return m[1] ?? m[2];
-}
-
-/** Read a child element's text content (`<name>text</name>`) within a fragment. */
-function childText(fragment: string, name: string): string | undefined {
-  const m = fragment.match(new RegExp(`<${name}\\b[^>]*>([\\s\\S]*?)</${name}>`));
-  if (!m || m[1] === undefined) return undefined;
-  return decodeXmlEntities(m[1].trim());
-}
-
 /** Coerce a string to a finite number, or undefined. */
 function toNumber(value: string | undefined): number | undefined {
   if (value === undefined || value.trim() === "") return undefined;
@@ -91,36 +62,17 @@ function toNumber(value: string | undefined): number | undefined {
 }
 
 /** Coerce an ISO-8601 string to a Date, or undefined if absent/invalid. */
-function toDate(value: string | undefined): Date | undefined {
-  if (value === undefined || value.trim() === "") return undefined;
+function toDate(value: string): Date | undefined {
+  if (value.trim() === "") return undefined;
   const d = new Date(value);
   return Number.isNaN(d.getTime()) ? undefined : d;
 }
 
-/** Extract the track points from a single XML fragment, in order. */
-function extractTrackPoints(fragment: string): GpxTrackPoint[] {
-  const out: GpxTrackPoint[] = [];
-  // Match both self-closing `<trkpt .../>` and `<trkpt ...>...</trkpt>` forms.
-  const trkptRe = /<trkpt\b([^>]*?)(?:\/>|>([\s\S]*?)<\/trkpt>)/gi;
-  let match: RegExpExecArray | null = trkptRe.exec(fragment);
-  while (match !== null) {
-    // Group 1 (attributes) is always present; group 2 (body) is absent for the
-    // self-closing `<trkpt .../>` form, in which case there is no <ele>/<time>.
-    const attrs = match[1] as string;
-    const body = match[2] ?? "";
-    const lat = toNumber(attr(attrs, "lat"));
-    const long = toNumber(attr(attrs, "lon"));
-    if (lat !== undefined && long !== undefined) {
-      const point: GpxTrackPoint = { lat, long };
-      const ele = toNumber(childText(body, "ele"));
-      if (ele !== undefined) point.elevation = ele;
-      const time = toDate(childText(body, "time"));
-      if (time !== undefined) point.time = time;
-      out.push(point);
-    }
-    match = trkptRe.exec(fragment);
-  }
-  return out;
+interface GpxFrame {
+  name: string;
+  text: string;
+  point?: GpxTrackPoint;
+  segment?: GpxTrackPoint[];
 }
 
 /**
@@ -134,23 +86,61 @@ function extractTrackPoints(fragment: string): GpxTrackPoint[] {
  * single segment.
  */
 export function parseGpxSegments(gpx: string): GpxTrackPoint[][] {
-  if (!/<gpx\b/i.test(gpx)) {
-    throw new Error("Not a GPX document: missing root <gpx> element.");
-  }
-
+  const parser = new SaxesParser({ xmlns: true });
+  const stack: GpxFrame[] = [];
   const segments: GpxTrackPoint[][] = [];
-  const segRe = /<trkseg\b[^>]*>([\s\S]*?)<\/trkseg>/gi;
-  let match: RegExpExecArray | null = segRe.exec(gpx);
-  while (match !== null) {
-    segments.push(extractTrackPoints(match[1] as string));
-    match = segRe.exec(gpx);
-  }
-
-  if (segments.length === 0) {
-    // No <trkseg> wrappers — treat any loose track points as one segment.
-    const loose = extractTrackPoints(gpx);
-    if (loose.length > 0) segments.push(loose);
-  }
+  const loose: GpxTrackPoint[] = [];
+  let namespace: string;
+  parser.on("opentag", (tag) => {
+    if (stack.length === 0) {
+      if (
+        tag.local !== "gpx" ||
+        !["", "http://www.topografix.com/GPX/1/0", "http://www.topografix.com/GPX/1/1"].includes(
+          tag.uri,
+        )
+      )
+        throw new Error("Not a GPX document: missing root <gpx> element.");
+      namespace = tag.uri;
+    }
+    const frame: GpxFrame = { name: tag.uri === namespace ? tag.local : "", text: "" };
+    if (frame.name === "trkseg") {
+      frame.segment = [];
+      segments.push(frame.segment);
+    }
+    if (frame.name === "trkpt") {
+      const lat = toNumber(tag.attributes.lat?.value);
+      const long = toNumber(tag.attributes.lon?.value);
+      if (lat !== undefined && long !== undefined) frame.point = { lat, long };
+    }
+    stack.push(frame);
+  });
+  const text = (value: string) => {
+    const frame = stack.at(-1);
+    if (frame !== undefined) frame.text += value;
+  };
+  parser.on("text", text);
+  parser.on("cdata", text);
+  parser.on("closetag", () => {
+    const frame = stack.pop() as GpxFrame;
+    const parent = stack.at(-1);
+    if (frame.point !== undefined) {
+      const segment = stack.findLast((ancestor) => ancestor.segment !== undefined)?.segment;
+      (segment ?? loose).push(frame.point);
+    }
+    if (parent?.point !== undefined) {
+      if (frame.name === "ele") {
+        const elevation = toNumber(frame.text.trim());
+        if (elevation !== undefined) parent.point.elevation = elevation;
+      }
+      if (frame.name === "time") {
+        const time = toDate(frame.text.trim());
+        if (time !== undefined) parent.point.time = time;
+      }
+    }
+  });
+  parser.write(gpx).close();
+  // Preserve support for tracks without explicit segment wrappers.
+  if (segments.length === 0 && loose.length > 0) segments.push(loose);
 
   return segments;
 }

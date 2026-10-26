@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol — ported from apps/pod-health/test/gpx.test.ts
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 
@@ -10,6 +11,57 @@ import {
   routeDistanceMetres,
 } from "../../src/apps/health/lib/model/gpx.js";
 import { MULTI_SEGMENT_GPX, NOT_GPX, PARTIAL_GPX, SAMPLE_GPX, SPARSE_GPX } from "./fixtures.js";
+
+const prefixedGpx = (xml: string) =>
+  xml
+    .replace(
+      'xmlns="http://www.topografix.com/GPX/1/1"',
+      'xmlns:gpx="http://www.topografix.com/GPX/1/1"',
+    )
+    .replace(/<(\/?)(gpx|trk|name|trkseg|trkpt|ele|time)(?=[\s>])/g, "<$1gpx:$2");
+
+it("preserves namespaced GPX routes, elevations, timestamps and segment-aware distance", () => {
+  for (const xml of [SAMPLE_GPX, MULTI_SEGMENT_GPX]) {
+    const prefixed = prefixedGpx(xml);
+    expect(parseGpxSegments(prefixed)).toEqual(parseGpxSegments(xml));
+    const actual = gpxToWorkout(prefixed, { workoutIri: "urn:w" });
+    const expected = gpxToWorkout(xml, { workoutIri: "urn:w" });
+    expect(actual.trackPoints).toEqual(expected.trackPoints);
+    expect(actual.document.orderedPoints(actual.workout).map((point) => point.lat)).toEqual(
+      expected.document.orderedPoints(expected.workout).map((point) => point.lat),
+    );
+    expect(actual.workout.startTime).toEqual(expected.workout.startTime);
+    expect(actual.workout.endTime).toEqual(expected.workout.endTime);
+    expect(actual.workout.distance).toBe(expected.workout.distance);
+  }
+});
+it("resolves GPX namespace aliases and excludes foreign elements and attributes", () => {
+  const xml = `<g:gpx xmlns:g="http://www.topografix.com/GPX/1/1"
+      xmlns:p="http://www.topografix.com/GPX/1/1" xmlns:x="urn:extension">
+    <p:trk><g:trkseg>
+      <!-- <g:trkpt lat="80" lon="90"/> -->
+      <x:trkpt lat="80" lon="90"/>
+      <p:trkpt x:lat="80" lon="90"/>
+      <p:trkpt lat="1" lon="2"><x:ele>99</x:ele><x:time>2020-01-01Z</x:time>
+        <g:ele><![CDATA[12]]></g:ele><p:time>2025-01-01T00:00:00&#90;</p:time>
+      </p:trkpt>
+      <p:trkpt lat="3" lon="4"><x:ele>99</x:ele><x:time>2020-01-01Z</x:time></p:trkpt>
+    </g:trkseg></p:trk>
+  </g:gpx>`;
+  expect(parseGpxSegments(xml)).toEqual([
+    [
+      { lat: 1, long: 2, elevation: 12, time: new Date("2025-01-01Z") },
+      { lat: 3, long: 4 },
+    ],
+  ]);
+});
+it.each([
+  '<gpx xmlns="urn:other"/>',
+  '<gpx><trkpt lat="1" lon="2"></gpx>',
+  "<gpx:gpx/>",
+])("rejects invalid GPX roots or malformed XML: %s", (xml) => {
+  expect(() => parseGpxSegments(xml)).toThrow();
+});
 
 describe("parseGpxTrackPoints", () => {
   it("parses three timed, elevated points in document order", () => {
