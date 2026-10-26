@@ -363,3 +363,44 @@ it("has no serious or critical axe findings for editing, validation, autocomplet
   await user.click(screen.getByRole("button", { name: "More" }));
   await accessible(document.body);
 });
+
+it("closes tag suggestions when disabled and ignores selection until enabled", async () => {
+  const onChange = vi.fn();
+  const { rerender } = render(
+    <TagInput label="Labels" options={tags} value={[]} onChange={onChange} />,
+  );
+  const input = screen.getByRole("combobox");
+  await userEvent.click(input);
+  fireEvent.keyDown(input, { key: "ArrowDown" });
+  expect(screen.getAllByRole("option")).toHaveLength(3);
+  rerender(<TagInput label="Labels" options={tags} value={[]} onChange={onChange} disabled />);
+  expect(screen.queryByRole("listbox")).toBeNull();
+  expect(input.getAttribute("aria-expanded")).toBe("false");
+  expect(input.hasAttribute("aria-activedescendant")).toBe(false);
+  fireEvent.keyDown(input, { key: "Enter" });
+  fireEvent.keyDown(input, { key: "ArrowDown" });
+  fireEvent.focus(input);
+  expect(onChange).not.toHaveBeenCalled();
+  expect(screen.queryByRole("option")).toBeNull();
+  rerender(<TagInput label="Labels" options={tags} value={[]} onChange={onChange} />);
+  expect(screen.queryByRole("option")).toBeNull();
+  await userEvent.click(input);
+  await userEvent.click(screen.getByRole("option", { name: "Work" }));
+  expect(onChange).toHaveBeenCalledWith(["work"]);
+});
+
+it("recovers collapsed breadcrumb focus only in the container that owned it", () => {
+  available = 900;
+  render(
+    <>
+      <Breadcrumbs label="First path" items={crumbs} />
+      <Breadcrumbs label="Second path" items={crumbs} />
+    </>,
+  );
+  const first = screen.getByRole("navigation", { name: "First path" });
+  act(() => within(first).getByRole("link", { name: "Work" }).focus());
+  resize(200);
+  expect(document.activeElement).toBe(
+    within(first).getByRole("button", { name: "Show parent folders" }),
+  );
+});

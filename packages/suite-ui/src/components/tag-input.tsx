@@ -21,7 +21,14 @@ export function TagInput({ label, options, value, onChange, disabled = false }: 
   const id = useId();
   const input = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState("");
-  const [open, setOpen] = useState(false);
+  const [requestedOpen, setOpen] = useState(false);
+  const open = requestedOpen && !disabled;
+  useEffect(() => {
+    if (disabled) {
+      setOpen(false);
+      setActive(undefined);
+    }
+  }, [disabled]);
   const [active, setActive] = useState<string>();
   const [announcement, setAnnouncement] = useState("");
   const matches = options.filter(
@@ -38,6 +45,7 @@ export function TagInput({ label, options, value, onChange, disabled = false }: 
     (tag) => options.find((option) => option.id === tag) ?? { id: tag, label: tag },
   );
   function add(option: TagOption) {
+    if (disabled) return;
     onChange([...value, option.id]);
     setQuery("");
     setActive(undefined);
@@ -46,6 +54,7 @@ export function TagInput({ label, options, value, onChange, disabled = false }: 
     input.current?.focus();
   }
   function remove(tag: TagOption) {
+    if (disabled) return;
     onChange(value.filter((item) => item !== tag.id));
     setAnnouncement(`${tag.label} removed`);
     input.current?.focus();
@@ -95,15 +104,16 @@ export function TagInput({ label, options, value, onChange, disabled = false }: 
           autoComplete="off"
           disabled={disabled}
           value={query}
-          onFocus={() => setOpen(true)}
-          onClick={() => setOpen(true)}
+          onFocus={() => !disabled && setOpen(true)}
+          onClick={() => !disabled && setOpen(true)}
           onChange={(event) => {
+            if (disabled) return;
             setQuery(event.target.value);
             setActive(undefined);
             setOpen(true);
           }}
           onKeyDown={(event) => {
-            if (event.nativeEvent.isComposing) return;
+            if (disabled || event.nativeEvent.isComposing) return;
             if (event.key === "ArrowDown" || event.key === "ArrowUp") {
               event.preventDefault();
               setOpen(true);

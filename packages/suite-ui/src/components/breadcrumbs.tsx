@@ -39,11 +39,15 @@ export function Breadcrumbs({ items, label = "Breadcrumb" }: BreadcrumbsProps) {
         (Number.parseFloat(styles?.paddingRight ?? "0") || 0);
       const next =
         items.length > 2 && measurements.getBoundingClientRect().width + padding > available;
-      const activeId = (document.activeElement as HTMLElement | null)?.dataset.crumbId;
+      const hasFocus = container.contains(document.activeElement);
+      const activeId = hasFocus
+        ? (document.activeElement as HTMLElement | null)?.dataset.crumbId
+        : undefined;
       if (next && activeId && items.slice(1, -1).some((item) => item.id === activeId))
         restoreFocus.current = true;
       if (!next) {
         if (
+          hasFocus &&
           trigger.current &&
           (document.activeElement === trigger.current ||
             trigger.current.getAttribute("aria-expanded") === "true")
