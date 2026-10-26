@@ -156,3 +156,56 @@ merge, publication, tracker mutation, or other-checkout write occurred. `roborev
 unavailable; automated per-commit review could not be run. The requested implementation is
 complete, the full gate remains blocked by the unrelated snapshot failure, and this round
 introduces no open questions.
+
+## Fix round 3 — review of `470e21a2c692`
+
+The single requested finding is fixed on `lane/sst-6sex`, starting from
+`470e21a2c692ae87252bb29953fded214e8ef380`.
+
+- `1266ce01` — `fix(mcp-oauth): validate issuers only during discovery`: limit the adapter's
+  issuer validation to client construction, when discovery occurs. Subsequent authenticated
+  resource fetches return their responses without interpreting discovery-shaped pathnames.
+  Regression tests cover Turtle, JSON without an issuer, and JSON with an unrelated issuer,
+  through both cached clients and restored sessions that refresh. The existing discovery
+  substitution test now checks the adapter's issuer-mismatch error explicitly.
+- The final `docs: record third review fix results` commit records this validation.
+
+All commands ran with `/opt/node24/bin` prepended to PATH: Node `v24.22.1`, pnpm `10.4.1`.
+
+```sh
+pnpm exec turbo run build --filter=@jeswr/mcp-oauth
+pnpm --filter @jeswr/mcp-oauth exec vitest run src/pod-sessions.test.ts --coverage.enabled=false -t 'pod resources with a discovery pathname|checks discovery equality'
+pnpm --filter @jeswr/mcp-oauth run lint && pnpm --filter @jeswr/mcp-oauth run build && pnpm --filter @jeswr/mcp-oauth run typecheck && pnpm --filter @jeswr/mcp-oauth run test
+pnpm run lint:root
+TURBO_SCM_BASE=470e21a2c692ae87252bb29953fded214e8ef380 pnpm run gate
+git diff --check
+```
+
+PASS: dependency-first build, all four focused cases, package gate (241 tests in seven files;
+100% statements, branches, functions and lines), root lint, affected gate (nine tasks, four
+cached), and whitespace checks. The three new resource cases reproduced the reported JSON
+parse/issuer errors before the fix. All tests use offline issuer fixtures; no dependency was
+added, so no package-policy check or lockfile change was needed.
+
+```sh
+pnpm run gate:full
+pnpm exec turbo run test:root
+pnpm run gate:full
+pnpm --filter @jeswr/federation-trust run test
+git diff 470e21a2c692ae87252bb29953fded214e8ef380 -- packages/federation-trust test scripts package.json vitest.config.ts
+```
+
+The first full gate stopped on a five-second timeout in the unchanged root test at
+`test/agent-layers.test.mjs:509` (the `require.resolve(TARGET)` disallowed-path-character case;
+744 tests passed). The isolated root suite passed all 745 tests. The full retry reused that
+passing result, then failed at the previously recorded federation-trust snapshot mismatch at
+`test/characterization.test.ts:196`: serialized JWK keys are expected in `crv,x,kty` order and
+received in `kty,crv,x` order. The isolated federation-trust test reproduced it (53 pass, one
+fail). The full retry completed 295 of 350 tasks, with 56 cached. The comparison against this
+round's base is empty for both failing surfaces; no unrelated source or snapshot was changed.
+
+Removed the 16 generated callback/Client ID files from the eight pod app builds. No dist output
+is committed. `roborev` remains unavailable, so automated per-commit review could not run.
+No push, PR, branch switch, merge, publication, tracker mutation, or other-checkout write
+occurred. The requested fix is complete; the full workspace gate remains blocked by the
+unrelated snapshot failure. This round introduces no open questions.
