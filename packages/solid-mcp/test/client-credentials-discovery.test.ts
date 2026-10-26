@@ -1,7 +1,8 @@
 // AUTHORED-BY Codex GPT-6
 import { lookup } from "node:dns/promises";
+import { Readable } from "node:stream";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createCliFetch } from "../src/client-credentials.js";
+import { createCliFetch as cliFetch } from "../src/client-credentials.js";
 import { search } from "../src/pod.js";
 import { createFetchPodPort } from "../src/pod-port.js";
 import { containerTurtle, makeFakePod } from "./fake-pod.js";
@@ -16,6 +17,44 @@ const config = {
 };
 const profile = "https://profile.example/me";
 
+let profileTransport: typeof fetch;
+const createCliFetch = async (...args: Parameters<typeof cliFetch>) => {
+  profileTransport = args[1] ?? globalThis.fetch;
+  return cliFetch(...args);
+};
+
+// Redirect-policy fixtures replace sockets only. The dedicated pinning suite
+// retains the real connect-time validating lookup.
+vi.mock("@jeswr/guarded-fetch/node", async (importOriginal) => {
+  const original = await importOriginal<typeof import("@jeswr/guarded-fetch/node")>();
+  return {
+    ...original,
+    createPinningDispatcher: vi.fn(() => ({
+      close: async () => {},
+      request: async (options: {
+        origin: string;
+        path: string;
+        method: string;
+        headers: Record<string, string>;
+        signal: AbortSignal;
+      }) => {
+        const response = await profileTransport(new URL(options.path, options.origin), {
+          method: options.method,
+          headers: options.headers,
+          signal: options.signal,
+          credentials: "omit",
+          redirect: "manual",
+        });
+        return {
+          statusCode: response.status,
+          headers: Object.fromEntries(response.headers),
+          body: response.body ? Readable.fromWeb(response.body) : Readable.from([]),
+        };
+      },
+    })),
+  };
+});
+
 vi.mock("node:dns/promises", () => ({ lookup: vi.fn() }));
 beforeEach(() => {
   vi.mocked(lookup)
@@ -24,6 +63,30 @@ beforeEach(() => {
 });
 
 describe("anonymous WebID profile redirects", () => {
+  it.each([
+    ["HEAD", 200],
+    ["GET", 204],
+    ["GET", 205],
+    ["GET", 304],
+  ])("preserves bodyless pinned responses (%s, %s)", async (method, status) => {
+    const css = mockCss();
+    const requests: string[] = [];
+    const fetch = await createCliFetch(config, async (input, init) => {
+      const request = new Request(input, init);
+      if (request.url.startsWith(ISSUER)) return css.fetch(input, init);
+      expect(request.method).toBe(method);
+      requests.push(request.url);
+      return request.url === profile
+        ? new Response(null, { status: 302, headers: { location: "/card" } })
+        : new Response(null, { status, headers: { "x-profile": "fixture" } });
+    });
+    const response = await fetch(profile, { method });
+    expect(response.status).toBe(status);
+    expect(response.body).toBeNull();
+    expect(response.headers.get("x-profile")).toBe("fixture");
+    expect(requests).toEqual([profile, "https://profile.example/card"]);
+  });
+
   it.each([
     301, 302, 303, 307, 308,
   ])("follows %i same-origin redirects anonymously, including relative targets", async (status) => {

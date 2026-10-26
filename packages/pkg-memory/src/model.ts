@@ -424,6 +424,9 @@ function readNanopublications(dataset: Store): Nanopublications {
       if (graph(dataset, name).size === 0) throw new Error("Missing nanopub graph");
     const p = graph(dataset, provenanceId);
     const a = new RdfNode(assertionId, p);
+    iriValues(new RdfNode(id, p), `${NS.prov}wasRevisionOf`);
+    if (a.terms(`${NS.prov}invalidatedAtTime`).size > 0)
+      a.oneDateTime(`${NS.prov}invalidatedAtTime`);
     const info = new RdfNode(id, graph(dataset, pubinfoId));
     const evidence = iriValues(a, `${NS.prov}wasDerivedFrom`).map((annotationId) => {
       const annotation = new RdfNode(annotationId, p);

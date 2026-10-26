@@ -17,6 +17,31 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 describe("CSS client credentials", () => {
+  it("refuses a rebound private DNS answer through the real Node connection dispatcher", async () => {
+    const css = mockCss();
+    const dnsLookup = vi
+      .fn()
+      .mockResolvedValueOnce([{ address: "93.184.216.34", family: 4 }])
+      .mockResolvedValueOnce([{ address: "10.0.0.1", family: 4 }]);
+    const transport = await createCliFetch(
+      config,
+      async (input, init) => {
+        const request = new Request(input, init);
+        if (request.url.startsWith(ISSUER)) return css.fetch(input, init);
+        if (request.url === "https://profile.example/me")
+          return new Response(null, { status: 302, headers: { location: "/card" } });
+        throw new Error("Redirected requests must use the pinned Node transport");
+      },
+      dnsLookup,
+    );
+    const rejection = await transport("https://profile.example/me").catch((error) => error);
+    expect(rejection).toBeInstanceOf(Error);
+    expect(rejection.message).toContain("Invalid anonymous profile redirect");
+    expect(rejection.cause.message).toContain("non-public");
+    expect(dnsLookup).toHaveBeenCalledTimes(2);
+    expect(dnsLookup).toHaveBeenLastCalledWith("profile.example");
+  });
+
   it("reuses one token, signs real DPoP proofs and preserves Request bodies/headers", async () => {
     const css = mockCss();
     const fetch = await createCliFetch(config, css.fetch);

@@ -1,6 +1,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
-import { assertSafeUrl } from "@jeswr/guarded-fetch";
+import { Readable } from "node:stream";
+import { assertSafeUrl, type DnsLookup } from "@jeswr/guarded-fetch";
+import { createPinningDispatcher } from "@jeswr/guarded-fetch/node";
 import {
   acquireToken,
   assertEndpointTransport,
@@ -21,6 +23,7 @@ const MAX_PROFILE_REDIRECTS = 5;
 export async function createCliFetch(
   config: CliConfig,
   fetchImpl: typeof fetch = globalThis.fetch,
+  dnsLookup?: DnsLookup,
 ): Promise<typeof fetch> {
   if (!config.clientId) return fetchImpl;
   const creds = {
@@ -113,12 +116,62 @@ export async function createCliFetch(
       headers.delete("dpop");
       const follow = request.redirect === "follow" && ["GET", "HEAD"].includes(request.method);
       let anonymousRequest = request;
+      let allowLoopback = false;
       for (let hop = 0; ; hop++) {
-        const response = await fetchImpl(anonymousRequest, {
-          headers,
-          redirect: "manual",
-          credentials: "omit",
-        });
+        // The generic Node guard follows redirects itself. Use its pinning
+        // dispatcher here so this loop can enforce same-origin before each hop.
+        const dispatcher =
+          hop > 0
+            ? createPinningDispatcher({
+                allowLoopback,
+                resolveAll: dnsLookup,
+              })
+            : undefined;
+        let response: Response;
+        try {
+          if (dispatcher) {
+            // Use the dispatcher's matching HTTP client: Node's built-in fetch
+            // may use a different major version of the dispatcher protocol.
+            // A fresh dispatcher has no redirect interceptor; this loop follows hops.
+            const target = new URL(anonymousRequest.url);
+            const result = await dispatcher.request({
+              origin: target.origin,
+              path: target.pathname + target.search,
+              method: anonymousRequest.method as "GET" | "HEAD",
+              headers: Object.fromEntries(headers),
+              signal: anonymousRequest.signal,
+            });
+            const responseHeaders = new Headers();
+            for (const [name, values] of Object.entries(result.headers))
+              for (const value of Array.isArray(values)
+                ? values
+                : values === undefined
+                  ? []
+                  : [values])
+                responseHeaders.append(name, value);
+            const noBody =
+              anonymousRequest.method === "HEAD" || [204, 205, 304].includes(result.statusCode);
+            if (noBody) result.body.resume();
+            response = new Response(
+              noBody ? null : (Readable.toWeb(result.body) as ReadableStream<Uint8Array>),
+              {
+                status: result.statusCode,
+                headers: responseHeaders,
+              },
+            );
+          } else {
+            response = await fetchImpl(anonymousRequest, {
+              headers,
+              redirect: "manual",
+              credentials: "omit",
+            });
+          }
+        } catch (error) {
+          if (dispatcher) throw new Error("Invalid anonymous profile redirect.", { cause: error });
+          throw error;
+        } finally {
+          void dispatcher?.close().catch(() => {});
+        }
         const location = response.headers.get("location");
         if (!follow || ![301, 302, 303, 307, 308].includes(response.status) || !location)
           return response;
@@ -130,12 +183,12 @@ export async function createCliFetch(
           if (location.trim().startsWith("//") || target.origin !== new URL(request.url).origin)
             throw new Error();
           // Only operator-configured loopback origins retain the local development allowance.
-          const allowLoopback =
+          allowLoopback =
             isLoopbackHost(target.hostname) &&
             [config.podRoot, config.webId].some(
               (url) => url && new URL(url).origin === target.origin,
             );
-          await assertSafeUrl(target.href, { allowLoopback });
+          await assertSafeUrl(target.href, { allowLoopback, dnsLookup });
         } catch {
           throw new Error("Invalid anonymous profile redirect.");
         }

@@ -79,6 +79,42 @@ export class NanopubStore {
       return { np, dataset, sharedGraphs };
     });
     validateBlankNodeSharing(parsed.dataset, parts);
+    // Stored documents have their own blank-node labels. Every pair must be
+    // alignable using only their common graphs, regardless of listing order.
+    const storedValues: Nanopublications[] = [];
+    for (const id of await this.storedIds()) {
+      const stored = await this.get(id);
+      storedValues.push(stored);
+      const np = stored.nanopubs[0] as Nanopublications["nanopubs"][number];
+      const names = new Set([
+        np.assertionId,
+        pkgId("batch", np.batch, "sources"),
+        pkgId("batch", np.batch, "entities"),
+      ]);
+      for (const part of parts) {
+        const common = new Set(part.sharedGraphs.filter((name) => names.has(name)));
+        for (const name of common) {
+          const incoming = graph(part.dataset, name);
+          const retained = graph(stored.dataset, name);
+          const fingerprint = (contents: DatasetCore) =>
+            contents.size === 0 ? "" : canonicalizeGraphWithLabels(contents).id;
+          if (fingerprint(incoming) !== fingerprint(retained))
+            throw new Error("Conflicting copies of a shared nanopublication graph");
+        }
+        if (
+          sharedGraphLabels(part.dataset, common).id !==
+          sharedGraphLabels(stored.dataset, common).id
+        )
+          throw new Error("Conflicting blank-node references in shared graphs");
+      }
+    }
+    // Also check joint references across the whole collection, including new
+    // graphs that bridge existing resources. Pairwise checks above ensure that
+    // correspondence never depends on which document happens to be listed first.
+    mergeNanopublications([
+      ...storedValues,
+      ...parts.map(({ np, dataset }) => ({ dataset, nanopubs: [np] })),
+    ]);
     const resources = await Promise.all(
       parts.map(async ({ np, dataset }) => ({
         url: this.url(np.id),
@@ -104,61 +140,26 @@ export class NanopubStore {
 
   /** Load immediate UUID resources only; never traverse listing-provided URLs. */
   async list(): Promise<Nanopublications> {
-    const dataset = new Store();
-    const nanopubs: Nanopublications["nanopubs"] = [];
+    const values: Nanopublications[] = [];
+    for (const id of await this.storedIds()) values.push(await this.get(id));
+    return mergeNanopublications(values);
+  }
+
+  private async storedIds(): Promise<Set<string>> {
     const ids = new Set<string>();
-    const shared = new Map<string, string>();
-    for (const entry of await this.pod.list(this.container)) {
+    let entries: Awaited<ReturnType<PodPort["list"]>>;
+    try {
+      entries = await this.pod.list(this.container);
+    } catch (error) {
+      if (podStatus(error) === 404) return ids;
+      throw error;
+    }
+    for (const entry of entries) {
       if (entry.isContainer || !entry.url.startsWith(this.container)) continue;
       const id = `urn:uuid:${entry.url.slice(this.container.length).replace(/\.trig$/, "")}`;
-      if (!uuid.test(id) || this.url(id) !== entry.url || ids.has(id)) continue;
-      ids.add(id);
-      const result = await this.get(id);
-      const np = result.nanopubs[0] as Nanopublications["nanopubs"][number];
-      const graphs = [
-        np.assertionId,
-        pkgId("batch", np.batch, "sources"),
-        pkgId("batch", np.batch, "entities"),
-      ].map((name) => {
-        const contents = graph(result.dataset, name);
-        const canonical =
-          contents.size === 0
-            ? { id: "", labels: new Map<string, string>() }
-            : canonicalizeGraphWithLabels(contents);
-        return { name, fingerprint: canonical.id, previous: shared.get(name) };
-      });
-      // Blank-node labels are document-local. Keep one validated graph instead
-      // of unioning copies, and align references throughout the incoming dataset.
-      const duplicates = new Set<string>();
-      for (const { name, fingerprint, previous } of graphs) {
-        if (previous === undefined) continue;
-        if (previous !== fingerprint)
-          throw new Error("Conflicting copies of a shared nanopublication graph");
-        duplicates.add(name);
-      }
-      // Match duplicate graphs jointly; unresolved structural ties must reject
-      // rather than choose a correspondence based on document-local ordering.
-      const incoming = sharedGraphLabels(result.dataset, duplicates);
-      const retained = sharedGraphLabels(dataset, duplicates);
-      if (incoming.id !== retained.id)
-        throw new Error("Conflicting blank-node references in shared graphs");
-      const retainedNodes = new Map([...retained.labels].map(([node, label]) => [label, node]));
-      const replacements = new Map(
-        [...incoming.labels].map(([node, label]) => [node, retainedNodes.get(label) as string]),
-      );
-      const remap = <T extends Term>(term: T) =>
-        term.termType === "BlankNode" && replacements.has(term.value)
-          ? df.blankNode(replacements.get(term.value) as string)
-          : term;
-      for (const quad of result.dataset)
-        if (!duplicates.has(quad.graph.value))
-          dataset.add(
-            df.quad(remap(quad.subject), quad.predicate, remap(quad.object), remap(quad.graph)),
-          );
-      for (const { name, fingerprint } of graphs) shared.set(name, fingerprint);
-      nanopubs.push(...result.nanopubs);
+      if (uuid.test(id) && this.url(id) === entry.url) ids.add(id);
     }
-    return { dataset, nanopubs };
+    return ids;
   }
 
   /** Append a Retracted revision; the original resource remains immutable. */
@@ -405,4 +406,57 @@ function validateBlankNodeSharing(
 
 function equalBytes(a: Uint8Array, b: Uint8Array): boolean {
   return a.length === b.length && a.every((value, i) => value === b[i]);
+}
+
+/** Merge document-local blank nodes through their validated shared graphs. */
+function mergeNanopublications(values: Iterable<Nanopublications>): Nanopublications {
+  const dataset = new Store();
+  const nanopubs: Nanopublications["nanopubs"] = [];
+  const shared = new Map<string, string>();
+  for (const result of values) {
+    const np = result.nanopubs[0] as Nanopublications["nanopubs"][number];
+    const graphs = [
+      np.assertionId,
+      pkgId("batch", np.batch, "sources"),
+      pkgId("batch", np.batch, "entities"),
+    ].map((name) => {
+      const contents = graph(result.dataset, name);
+      const canonical =
+        contents.size === 0
+          ? { id: "", labels: new Map<string, string>() }
+          : canonicalizeGraphWithLabels(contents);
+      return { name, fingerprint: canonical.id, previous: shared.get(name) };
+    });
+    // Blank-node labels are document-local. Keep one validated graph instead
+    // of unioning copies, and align references throughout the incoming dataset.
+    const duplicates = new Set<string>();
+    for (const { name, fingerprint, previous } of graphs) {
+      if (previous === undefined) continue;
+      if (previous !== fingerprint)
+        throw new Error("Conflicting copies of a shared nanopublication graph");
+      duplicates.add(name);
+    }
+    // Match duplicate graphs jointly; unresolved structural ties must reject
+    // rather than choose a correspondence based on document-local ordering.
+    const incoming = sharedGraphLabels(result.dataset, duplicates);
+    const retained = sharedGraphLabels(dataset, duplicates);
+    if (incoming.id !== retained.id)
+      throw new Error("Conflicting blank-node references in shared graphs");
+    const retainedNodes = new Map([...retained.labels].map(([node, label]) => [label, node]));
+    const replacements = new Map(
+      [...incoming.labels].map(([node, label]) => [node, retainedNodes.get(label) as string]),
+    );
+    const remap = <T extends Term>(term: T) =>
+      term.termType === "BlankNode" && replacements.has(term.value)
+        ? df.blankNode(replacements.get(term.value) as string)
+        : term;
+    for (const quad of result.dataset)
+      if (!duplicates.has(quad.graph.value))
+        dataset.add(
+          df.quad(remap(quad.subject), quad.predicate, remap(quad.object), remap(quad.graph)),
+        );
+    for (const { name, fingerprint } of graphs) shared.set(name, fingerprint);
+    nanopubs.push(...result.nanopubs);
+  }
+  return { dataset, nanopubs };
 }

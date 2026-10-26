@@ -85,10 +85,12 @@ export function redirect(uri: string, values: Record<string, string>): Response 
   });
 }
 
-export async function readBody(message: Request | Response): Promise<string> {
-  if (Number(message.headers.get("content-length")) > MAX_BYTES)
+export async function readBodyBytes(message: Request | Response): Promise<Uint8Array<ArrayBuffer>> {
+  if (Number(message.headers.get("content-length")) > MAX_BYTES) {
+    void message.body?.cancel().catch(() => {});
     throw new OAuthError("invalid_request", 413);
-  if (!message.body) return "";
+  }
+  if (!message.body) return new Uint8Array();
   const reader = message.body.getReader();
   const chunks: Uint8Array[] = [];
   let length = 0;
@@ -98,7 +100,7 @@ export async function readBody(message: Request | Response): Promise<string> {
       if (done) break;
       length += value.byteLength;
       if (length > MAX_BYTES) {
-        await reader.cancel();
+        void reader.cancel().catch(() => {});
         throw new OAuthError("invalid_request", 413);
       }
       chunks.push(value);
@@ -106,7 +108,11 @@ export async function readBody(message: Request | Response): Promise<string> {
   } finally {
     reader.releaseLock();
   }
-  return Buffer.concat(chunks).toString("utf8");
+  return new Uint8Array(Buffer.concat(chunks));
+}
+
+export async function readBody(message: Request | Response): Promise<string> {
+  return Buffer.from(await readBodyBytes(message)).toString("utf8");
 }
 
 export function mediaType(message: Request | Response): string {

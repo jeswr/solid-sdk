@@ -164,6 +164,111 @@ async function symmetricSharedAuthors(ids = ["one", "two"]) {
 }
 
 it.each([
+  false,
+  true,
+])("rejects an ambiguous assertion repeated across puts without writing (reverse listing: %s)", async (reverse) => {
+  const { store, pod, write } = setup();
+  const symmetric = async (batch: string, ids: string[]) => {
+    const value = await sharedBlankAssertions(ids, batch);
+    const assertionId = value.nanopubs[0]!.assertionId;
+    for (const quad of [...value.dataset])
+      if (quad.graph.value === assertionId) value.dataset.delete(quad);
+    const assertion = new Store();
+    const sources = new Store();
+    for (const name of ["left", "right"]) {
+      const node = DataFactory.blankNode(name);
+      new RdfNode(identity.webId, assertion).add(`${NS.schema}hasPreference`, node);
+      new RdfNode(node, assertion).text(`${NS.schema}value`, "tea");
+      new RdfNode(node, sources).text(`${NS.schema}name`, name);
+    }
+    putGraph(value.dataset as Store, assertionId, assertion);
+    putGraph(value.dataset as Store, pkgId("batch", batch, "sources"), sources);
+    return value;
+  };
+  const first = await symmetric("first", ["one", "two"]);
+  const second = await symmetric("second", ["three"]);
+  const list = pod.list;
+  if (reverse) pod.list = async (container) => (await list(container)).reverse();
+  await store.put(first);
+  expect((await store.list()).nanopubs).toHaveLength(2);
+  write.mockClear();
+  await expect(store.put(second)).rejects.toThrow("Ambiguous shared blank-node identity");
+  expect(write).not.toHaveBeenCalled();
+  expect((await store.list()).nanopubs.map((np) => np.id).sort()).toEqual(
+    first.nanopubs.map((np) => np.id).sort(),
+  );
+});
+
+it.each([
+  404, 403,
+])("handles a collection listing failure (%s) before any write", async (status) => {
+  const { store, write } = setup({
+    list: async () => {
+      throw statusError(status);
+    },
+  });
+  const put = store.put(await build());
+  if (status === 404) {
+    await expect(put).resolves.toHaveLength(1);
+  } else {
+    await expect(put).rejects.toMatchObject({ status });
+    expect(write).not.toHaveBeenCalled();
+  }
+});
+
+it("aligns separate puts with empty shared batch graphs", async () => {
+  const { store } = setup();
+  const first = await sharedBlankAssertions(["one"], "empty-shared");
+  const second = await sharedBlankAssertions(["two"], "empty-shared");
+  for (const value of [first, second]) {
+    const names = ["sources", "entities"].map((kind) => pkgId("batch", "empty-shared", kind));
+    for (const quad of [...value.dataset])
+      if (names.includes(quad.graph.value)) value.dataset.delete(quad);
+    await store.put(value);
+  }
+  expect((await store.list()).nanopubs).toHaveLength(2);
+});
+
+it("rejects a conflicting stored shared graph before a subsequent put writes anything", async () => {
+  const { store, write } = setup();
+  const first = await sharedBlankBatchGraphs("conflicting-puts", ["one"]);
+  const second = await sharedBlankBatchGraphs("conflicting-puts", ["two"]);
+  const name = pkgId("batch", "conflicting-puts", "sources");
+  const sources = graph(second.dataset, name);
+  new RdfNode("https://example.org/document", sources).text(`${NS.schema}name`, "Changed");
+  putGraph(second.dataset as Store, name, sources);
+  await store.put(first);
+  write.mockClear();
+  await expect(store.put(second)).rejects.toThrow("Conflicting copies");
+  expect(write).not.toHaveBeenCalled();
+  expect((await store.list()).nanopubs).toHaveLength(1);
+});
+
+it("rejects inconsistent shared blank-node references before a subsequent put writes anything", async () => {
+  const { store, write } = setup();
+  const first = await sharedBlankBatchGraphs("inconsistent-puts", ["one"]);
+  const second = await sharedBlankBatchGraphs("inconsistent-puts", ["two"]);
+  const name = pkgId("batch", "inconsistent-puts", "entities");
+  const entities = graph(second.dataset, name);
+  const author = new RdfNode("https://example.org/document", entities).one(`${NS.schema}author`);
+  const separate = DataFactory.blankNode();
+  const changed = new Store();
+  for (const quad of entities)
+    new RdfNode(quad.subject.equals(author) ? separate : quad.subject, changed).add(
+      quad.predicate.value,
+      quad.object.equals(author) ? separate : quad.object,
+    );
+  for (const quad of [...second.dataset])
+    if (quad.graph.value === name) second.dataset.delete(quad);
+  putGraph(second.dataset as Store, name, changed);
+  await store.put(first);
+  write.mockClear();
+  await expect(store.put(second)).rejects.toThrow("Conflicting blank-node references");
+  expect(write).not.toHaveBeenCalled();
+  expect((await store.list()).nanopubs).toHaveLength(1);
+});
+
+it.each([
   "provenance",
   "pubinfo",
 ])("rejects blank nodes shared only between private %s graphs before any write", async (kind) => {

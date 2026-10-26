@@ -19,6 +19,7 @@ import {
   opaque,
   parameter,
   readBody,
+  readBodyBytes,
   secureUrl,
   unique,
 } from "./protocol.js";
@@ -148,8 +149,14 @@ export function createPodSessionProvider(options: PodSessionProviderOptions): Po
         const request = new Request(input, init);
         const response = await fetcher(request, { credentials: "omit" });
         if (discovering && response.status === 200) {
-          const metadata = JSON.parse(await readBody(response.clone()));
+          const bytes = await readBodyBytes(response);
+          const metadata = JSON.parse(Buffer.from(bytes).toString("utf8"));
           if (metadata.issuer !== issuer) throw new Error("Pod issuer mismatch");
+          return new Response(bytes, {
+            status: response.status,
+            statusText: response.statusText,
+            headers: response.headers,
+          });
         }
         return response;
       },

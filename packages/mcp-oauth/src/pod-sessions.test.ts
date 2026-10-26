@@ -11,7 +11,7 @@ import {
   podIssuer,
 } from "../test/pod-issuer.js";
 import { createPodSessionProvider } from "./pod-sessions.js";
-import { digest, GRANT_TTL, LOGIN_TTL } from "./protocol.js";
+import { digest, GRANT_TTL, LOGIN_TTL, MAX_BYTES } from "./protocol.js";
 import { createSessionVault } from "./vault.js";
 import { MemoryVaultStore } from "./vault-stores.js";
 
@@ -53,6 +53,51 @@ function brokerFixture() {
 }
 
 describe("Solid-OIDC pod broker", () => {
+  it.each([
+    false,
+    true,
+  ])("rejects oversized non-ending discovery promptly (Content-Length: %s)", async (declared) => {
+    const f = brokerFixture();
+    let discoveries = 0;
+    const cancel = vi.fn();
+    const provider = createPodSessionProvider({
+      ...f.options,
+      fetch: async (input, init) => {
+        if (++discoveries === 1) return f.op.fetch(input, init);
+        return new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              controller.enqueue(new Uint8Array(MAX_BYTES));
+              // Cross the bound later, then leave the stream open indefinitely.
+              queueMicrotask(() => controller.enqueue(new Uint8Array(1)));
+            },
+            cancel,
+          }),
+          {
+            headers: {
+              "content-type": "application/json",
+              ...(declared ? { "content-length": String(MAX_BYTES + 1) } : {}),
+            },
+          },
+        );
+      },
+    });
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await expect(
+        Promise.race([
+          provider.begin(POD_ISSUER, POD_CALLBACK),
+          new Promise((_, reject) => {
+            timer = setTimeout(() => reject(new Error("Discovery timed out")), 500);
+          }),
+        ]),
+      ).rejects.toThrow("something went wrong");
+      expect(cancel).toHaveBeenCalledOnce();
+      expect(discoveries).toBe(2);
+    } finally {
+      clearTimeout(timer);
+    }
+  });
   it("binds PKCE + nonce + DPoP, returns identity only, scopes fetch and retries nonces once", async () => {
     const f = brokerFixture();
     f.op.controls.tokenNonce = true;
@@ -529,6 +574,11 @@ describe("MCP grant to pod session boundary", () => {
   it("never serializes pod credentials, rejects MCP token passthrough and cascades in both directions", async () => {
     const f = brokerFixture();
     const oauth = fixture({ podSessions: f.provider });
+    const metadataUrl = oauth.server.protectedResourceMetadataUrl();
+    expect(metadataUrl).toBe("https://mcp.example/.well-known/oauth-protected-resource/mcp");
+    expect(await (await oauth.server.handle(new Request(metadataUrl))).json()).toEqual(
+      oauth.server.protectedResourceMetadata(),
+    );
     const id = await oauth.register();
     const authorization = await oauth.server.handle(oauth.authRequest(id, { webid: POD_WEBID }));
     const callback = f.op.callback(authorization.headers.get("location") as string);
@@ -573,6 +623,7 @@ describe("MCP grant to pod session boundary", () => {
     );
     expect((await oauth.refresh(id, second.refresh_token)).status).toBe(400);
     await expect(podFetch(`${POD_ROOT}notes`)).rejects.toThrow("inactive");
+    expect((await oauth.server.handle(new Request(metadataUrl))).status).toBe(200);
     const other = await f.login();
     const accepted = await oauth.server.authorize(oauth.authRequest(id), other.session);
     const next = await (

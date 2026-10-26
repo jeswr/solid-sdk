@@ -2,7 +2,7 @@
 // AUTHORED-BY Codex GPT-6
 
 import type { Nanopublication, Nanopublications } from "./model.js";
-import { graph, NS, RdfNode } from "./rdf.js";
+import { dateTime, graph, NS, RdfNode } from "./rdf.js";
 
 /** Consumer-facing belief levels from KG DESIGN §4.1. */
 export type Belief = "definitely" | "might" | "mentioned" | "past";
@@ -28,11 +28,13 @@ export function classifyNanopublications(value: Nanopublications): ClassifiedNan
   const inactive = new Set<string>();
   for (const np of nanopubs) {
     const provenance = graph(value.dataset, np.provenanceId);
-    const targets = new RdfNode(np.id, provenance).terms(`${NS.prov}wasRevisionOf`);
+    const targets = [...new RdfNode(np.id, provenance).terms(`${NS.prov}wasRevisionOf`)].filter(
+      (term) => term.termType === "NamedNode",
+    );
     // Envelope targets take precedence over legacy assertion-wide revision links.
     const previous =
-      targets.size > 0
-        ? [...targets].flatMap((target) => byId.get(target.value) ?? [])
+      targets.length > 0
+        ? targets.flatMap((target) => byId.get(target.value) ?? [])
         : np.supersedes.flatMap((target) => byAssertion.get(target) ?? []);
     for (const other of previous) {
       if (other.id === np.id) continue;
@@ -42,7 +44,18 @@ export function classifyNanopublications(value: Nanopublications): ClassifiedNan
     }
     if (
       past.has(np.validity) ||
-      new RdfNode(np.assertionId, provenance).terms(`${NS.prov}invalidatedAtTime`).size > 0
+      [...new RdfNode(np.assertionId, provenance).terms(`${NS.prov}invalidatedAtTime`)].some(
+        (term) => {
+          if (term.termType !== "Literal" || term.datatype.value !== `${NS.xsd}dateTime`)
+            return false;
+          try {
+            dateTime(term.value);
+            return true;
+          } catch {
+            return false;
+          }
+        },
+      )
     )
       inactive.add(np.id);
   }

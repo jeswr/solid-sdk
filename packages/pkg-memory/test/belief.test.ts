@@ -2,6 +2,7 @@
 // AUTHORED-BY Codex GPT-6
 /** biome-ignore-all lint/style/noNonNullAssertion: fixtures guarantee these entries. */
 import { readFile } from "node:fs/promises";
+import { DataFactory as df } from "n3";
 import { describe, expect, it, vi } from "vitest";
 import {
   buildNanopublications,
@@ -30,6 +31,72 @@ const build = (claims: Claim[]) =>
   );
 
 describe("KG §4.1 belief view", () => {
+  it.each([
+    "Literal",
+    "BlankNode",
+  ])("ignores %s envelope revision targets even when their value is an existing ID", async (kind) => {
+    const value = await build([
+      { id: "old", epistemic: "SelfReportedExplicit", assertion: assertion("old") },
+      { id: "new", epistemic: "SelfReportedExplicit", assertion: assertion("new") },
+    ]);
+    const old = value.nanopubs.find((np) => np.identifier === "belief/old")!;
+    const newer = value.nanopubs.find((np) => np.identifier === "belief/new")!;
+    const provenance = graph(value.dataset, newer.provenanceId);
+    new RdfNode(newer.id, provenance).add(
+      `${NS.prov}wasRevisionOf`,
+      kind === "Literal" ? df.literal(old.id) : df.blankNode(old.id),
+    );
+    putGraph(value.dataset, newer.provenanceId, provenance);
+    expect(classifyNanopublications(value).find((np) => np.id === old.id)).toMatchObject({
+      belief: "definitely",
+      replacedBy: [],
+    });
+    // Invalid envelope objects must not suppress a valid assertion revision.
+    newer.supersedes.push(old.assertionId);
+    expect(classifyNanopublications(value).find((np) => np.id === old.id)).toMatchObject({
+      belief: "past",
+      replacedBy: [newer.id],
+    });
+  });
+
+  it.each([
+    df.namedNode("https://example.org/time"),
+    df.blankNode("time"),
+    df.literal(options.generatedAt),
+    df.literal("invalid-time", df.namedNode(`${NS.xsd}dateTime`)),
+  ])("ignores malformed invalidation objects in derived belief: %j", async (term) => {
+    const value = await build([
+      { id: "one", epistemic: "SelfReportedExplicit", assertion: assertion("one") },
+    ]);
+    const np = value.nanopubs[0]!;
+    const provenance = graph(value.dataset, np.provenanceId);
+    new RdfNode(np.assertionId, provenance).add(`${NS.prov}invalidatedAtTime`, term);
+    putGraph(value.dataset, np.provenanceId, provenance);
+    expect(classifyNanopublications(value)[0]!.belief).toBe("definitely");
+    await expect(parseNanopublications(await serializeNanopublications(value))).rejects.toThrow();
+  });
+
+  it.each([
+    "envelope revision",
+    "assertion revision",
+    "contradiction",
+  ])("rejects non-IRI %s objects in the parser", async (kind) => {
+    for (const term of [df.literal("urn:uuid:target"), df.blankNode("target")]) {
+      const value = await build([
+        { id: "one", epistemic: "SelfReportedExplicit", assertion: assertion("one") },
+      ]);
+      const np = value.nanopubs[0]!;
+      const provenance = graph(value.dataset, np.provenanceId);
+      new RdfNode(kind === "envelope revision" ? np.id : np.assertionId, provenance).add(
+        kind === "contradiction" ? `${NS.pkg}contradicts` : `${NS.prov}wasRevisionOf`,
+        term,
+      );
+      putGraph(value.dataset, np.provenanceId, provenance);
+      await expect(parseNanopublications(await serializeNanopublications(value))).rejects.toThrow(
+        "Expected IRI",
+      );
+    }
+  });
   it.each([24, 48])("bounds provenance reads linearly for %i unrelated nanopubs", async (count) => {
     const value = await build(
       Array.from({ length: count }, (_, i) => ({

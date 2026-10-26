@@ -36,7 +36,7 @@ describe("stdio executable", () => {
   it.each([
     "environment",
     "file",
-  ])("logs in from %s and calls every registered tool over stdio", async (source) => {
+  ])("logs in from %s, registers chat tools and calls pod tools over stdio", async (source) => {
     if (source === "file") {
       await mkdir(join(home, ".config/solid-mcp"), { recursive: true });
       await writeFile(
@@ -66,6 +66,9 @@ describe("stdio executable", () => {
       await client.connect(transport);
       const { tools } = await client.listTools();
       expect(tools.map((t) => t.name).sort()).toEqual([
+        "chat_get",
+        "chat_list",
+        "chat_save",
         "pod_list",
         "pod_read",
         "pod_write",
