@@ -239,6 +239,12 @@ authenticates fetches of controlled pages inside the boundary. `providers` may b
 popups open in the tab whose request needs them (`bridge.forClient(clientId)`); the page runs
 `ReactiveFetchWorkerManager` to answer validated interaction requests. See [`examples/service-worker/sw.js`](examples/service-worker/sw.js) and [`page.html`](examples/service-worker/page.html).
 
+For the default `redirect: "follow"`, a browser-hidden authenticated redirect is reported as a synthetic
+`300` response with a plain-text explanation, `Cache-Control: no-store` and no `Location`. Its target and
+the write's outcome are unknown; check the outcome before retrying. The worker never replays the request
+to discover the target. Explicit `redirect: "manual"` returns the opaque redirect unchanged, and
+`redirect: "error"` rejects.
+
 ## Local development
 
 Plain-HTTP servers (e.g. Community Solid Server on `http://localhost:3000`) need explicit opt-ins, which also log
