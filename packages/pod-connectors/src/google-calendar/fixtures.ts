@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * Recorded Google Calendar API v3 shapes
  * (www.googleapis.com/calendar/v3) — trimmed to the fields the adapter reads.
@@ -17,12 +18,15 @@ export interface GCalEventDateTime {
 export interface GCalEvent {
   id: string;
   status: string;
-  htmlLink: string;
+  htmlLink?: string;
   summary?: string;
   description?: string;
   location?: string;
-  start: GCalEventDateTime;
-  end: GCalEventDateTime;
+  start?: GCalEventDateTime;
+  end?: GCalEventDateTime;
+  recurrence?: string[];
+  recurringEventId?: string;
+  originalStartTime?: GCalEventDateTime;
   created?: string;
   updated?: string;
 }
@@ -30,9 +34,11 @@ export interface GCalEvent {
 export interface GCalEventsList {
   items: GCalEvent[];
   nextPageToken?: string;
+  nextSyncToken?: string;
 }
 
 export const EVENTS: GCalEventsList = {
+  nextSyncToken: "synthetic-calendar-sync-1",
   items: [
     {
       id: "7p4f2k9q1m3n8s0a",
@@ -43,6 +49,10 @@ export const EVENTS: GCalEventsList = {
       location: "Meet: meet.google.com/abc-defg-hij",
       start: { dateTime: "2026-06-11T09:00:00+01:00", timeZone: "Europe/London" },
       end: { dateTime: "2026-06-11T09:15:00+01:00", timeZone: "Europe/London" },
+      recurrence: [
+        "RRULE:FREQ=WEEKLY;INTERVAL=1;UNTIL=20260701T080000Z;BYDAY=MO,TU,WE,TH,FR",
+        "EXDATE:20260612T080000Z",
+      ],
       created: "2026-05-01T12:00:00Z",
       updated: "2026-06-01T08:30:00Z",
     },
@@ -64,6 +74,10 @@ export const EVENTS: GCalEventsList = {
       summary: "Public holiday",
       start: { date: "2026-06-15" },
       end: { date: "2026-06-16" },
+      recurrence: [
+        "RRULE:FREQ=YEARLY;COUNT=3;BYMONTH=6;BYMONTHDAY=15",
+        "EXDATE;VALUE=DATE:20270615",
+      ],
       created: "2026-01-01T00:00:00Z",
       updated: "2026-01-01T00:00:00Z",
     },

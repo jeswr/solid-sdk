@@ -120,3 +120,33 @@ and unlisted JSON fields are omitted. Known token, cookie and personal keys cann
 allowlisted; empty allowlists are the default. Hosts must ensure every allowed scalar is
 non-personal and use synthetic replacements when replay requires personal fields. Tests use
 mocked source transports and memory Pods only.
+
+## Google Calendar
+
+`./adapters/google/oauth` exports `createGoogleOAuthConfig(product, options)` for
+`calendar`, `contacts`, `drive` and `gmail`. Each configuration requests only that
+product's read scope. Browser hosts inject `{ clientId, tokenProxyUrl }` and use the
+existing proxy exchange. Node hosts pass `{ clientType: 'desktop', clientId,
+clientSecret? }` from their own Desktop OAuth configuration and use the shared
+code exchange with a loopback redirect and S256 PKCE. The installed-app value is
+sent only in the direct token POST, never in the authorization URL or proxy form.
+Keep it out of browser configuration and persisted connector state. Tokens remain
+in memory; this module does not implement the CLI login (CON-03).
+
+The Calendar adapter reads the primary calendar, follows every `nextPageToken`,
+and returns the final `nextSyncToken` as its cursor. Incremental runs retain
+unchanged events and apply updates/deletions by event id. A 410 discards partial
+changes and retries a full snapshot once; a missing local document also requires a
+full snapshot. No event document is written until every page and the checkpoint
+are available, so a failed resync keeps the previous data and cursor. ETag
+preconditions still apply.
+
+Events retain `schema:Event` alongside the defined `sched:CalendarEvent` class.
+All-day start/end values use `xsd:date`, preserving Google's exclusive end date;
+timed values use `xsd:dateTime`. Recurrence rules use VOC-01's structured fields
+and deterministic linked nodes, with `schema:Schedule` as an additional type and
+`schema:scheduleTimezone` for the source time zone. Cancelled or moved instances
+supply exception dates and keep their deterministic identities across later master
+updates. RFC 5545 constructs outside VOC-01's shape fail before the document write
+or checkpoint advance (see root `QUESTIONS.md`). Fixtures and sorted Turtle mapping
+snapshots cover these paths without Google accounts or production traffic.

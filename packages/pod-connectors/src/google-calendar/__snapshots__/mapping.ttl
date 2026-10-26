@@ -1,0 +1,55 @@
+# AUTHORED-BY Codex GPT-6.1-Sol
+<https://pod.test/alice/integrations/google-calendar/calendar/events.ttl#event-7p4f2k9q1m3n8s0a> a <https://jeswr.org/ns/sectors/scheduling#CalendarEvent>, <https://schema.org/Event>;
+    <https://jeswr.org/ns/sectors/scheduling#description> "Daily sync — what shipped, what's blocked.";
+    <https://jeswr.org/ns/sectors/scheduling#endTime> "2026-06-11T09:15:00+01:00"^^<http://www.w3.org/2001/XMLSchema#dateTime>;
+    <https://jeswr.org/ns/sectors/scheduling#recurrence> <https://pod.test/alice/integrations/google-calendar/calendar/events.ttl#event-7p4f2k9q1m3n8s0a/recurrence-0>;
+    <https://jeswr.org/ns/sectors/scheduling#startTime> "2026-06-11T09:00:00+01:00"^^<http://www.w3.org/2001/XMLSchema#dateTime>;
+    <https://jeswr.org/ns/sectors/scheduling#summary> "Team standup";
+    <https://schema.org/dateCreated> "2026-05-01T12:00:00.000Z"^^<http://www.w3.org/2001/XMLSchema#dateTime>;
+    <https://schema.org/dateModified> "2026-06-01T08:30:00.000Z"^^<http://www.w3.org/2001/XMLSchema#dateTime>;
+    <https://schema.org/description> "Daily sync — what shipped, what's blocked.";
+    <https://schema.org/endDate> "2026-06-11T09:15:00+01:00"^^<http://www.w3.org/2001/XMLSchema#dateTime>;
+    <https://schema.org/eventSchedule> <https://pod.test/alice/integrations/google-calendar/calendar/events.ttl#event-7p4f2k9q1m3n8s0a/recurrence-0>;
+    <https://schema.org/identifier> "7p4f2k9q1m3n8s0a";
+    <https://schema.org/location> "Meet: meet.google.com/abc-defg-hij";
+    <https://schema.org/name> "Team standup";
+    <https://schema.org/startDate> "2026-06-11T09:00:00+01:00"^^<http://www.w3.org/2001/XMLSchema#dateTime>;
+    <https://schema.org/url> <https://www.google.com/calendar/event?eid=7p4f2k9q1m3n8s0a>.
+<https://pod.test/alice/integrations/google-calendar/calendar/events.ttl#event-7p4f2k9q1m3n8s0a/recurrence-0> a <https://jeswr.org/ns/sectors/scheduling#RecurrenceRule>, <https://schema.org/Schedule>;
+    <https://jeswr.org/ns/sectors/scheduling#frequency> "WEEKLY";
+    <https://jeswr.org/ns/sectors/scheduling#interval> 1;
+    <https://jeswr.org/ns/sectors/scheduling#until> "2026-07-01T08:00:00Z"^^<http://www.w3.org/2001/XMLSchema#dateTime>;
+    <https://schema.org/byDay> <https://schema.org/Friday>, <https://schema.org/Monday>, <https://schema.org/Thursday>, <https://schema.org/Tuesday>, <https://schema.org/Wednesday>;
+    <https://schema.org/exceptDate> "2026-06-12T08:00:00Z"^^<http://www.w3.org/2001/XMLSchema#dateTime>;
+    <https://schema.org/scheduleTimezone> "Europe/London".
+<https://pod.test/alice/integrations/google-calendar/calendar/events.ttl#event-a1b2c3d4e5f6g7h8> a <https://jeswr.org/ns/sectors/scheduling#CalendarEvent>, <https://schema.org/Event>;
+    <https://jeswr.org/ns/sectors/scheduling#endTime> "2026-06-12T15:00:00+01:00"^^<http://www.w3.org/2001/XMLSchema#dateTime>;
+    <https://jeswr.org/ns/sectors/scheduling#startTime> "2026-06-12T14:30:00+01:00"^^<http://www.w3.org/2001/XMLSchema#dateTime>;
+    <https://jeswr.org/ns/sectors/scheduling#summary> "Dentist";
+    <https://schema.org/dateCreated> "2026-04-20T10:00:00.000Z"^^<http://www.w3.org/2001/XMLSchema#dateTime>;
+    <https://schema.org/dateModified> "2026-04-20T10:00:00.000Z"^^<http://www.w3.org/2001/XMLSchema#dateTime>;
+    <https://schema.org/endDate> "2026-06-12T15:00:00+01:00"^^<http://www.w3.org/2001/XMLSchema#dateTime>;
+    <https://schema.org/identifier> "a1b2c3d4e5f6g7h8";
+    <https://schema.org/location> "12 High Street, London";
+    <https://schema.org/name> "Dentist";
+    <https://schema.org/startDate> "2026-06-12T14:30:00+01:00"^^<http://www.w3.org/2001/XMLSchema#dateTime>;
+    <https://schema.org/url> <https://www.google.com/calendar/event?eid=a1b2c3d4e5f6g7h8>.
+<https://pod.test/alice/integrations/google-calendar/calendar/events.ttl#event-z9y8x7w6v5u4t3s2> a <https://jeswr.org/ns/sectors/scheduling#CalendarEvent>, <https://schema.org/Event>;
+    <https://jeswr.org/ns/sectors/scheduling#endTime> "2026-06-16"^^<http://www.w3.org/2001/XMLSchema#date>;
+    <https://jeswr.org/ns/sectors/scheduling#recurrence> <https://pod.test/alice/integrations/google-calendar/calendar/events.ttl#event-z9y8x7w6v5u4t3s2/recurrence-0>;
+    <https://jeswr.org/ns/sectors/scheduling#startTime> "2026-06-15"^^<http://www.w3.org/2001/XMLSchema#date>;
+    <https://jeswr.org/ns/sectors/scheduling#summary> "Public holiday";
+    <https://schema.org/dateCreated> "2026-01-01T00:00:00.000Z"^^<http://www.w3.org/2001/XMLSchema#dateTime>;
+    <https://schema.org/dateModified> "2026-01-01T00:00:00.000Z"^^<http://www.w3.org/2001/XMLSchema#dateTime>;
+    <https://schema.org/endDate> "2026-06-16"^^<http://www.w3.org/2001/XMLSchema#date>;
+    <https://schema.org/eventSchedule> <https://pod.test/alice/integrations/google-calendar/calendar/events.ttl#event-z9y8x7w6v5u4t3s2/recurrence-0>;
+    <https://schema.org/identifier> "z9y8x7w6v5u4t3s2";
+    <https://schema.org/name> "Public holiday";
+    <https://schema.org/startDate> "2026-06-15"^^<http://www.w3.org/2001/XMLSchema#date>;
+    <https://schema.org/url> <https://www.google.com/calendar/event?eid=z9y8x7w6v5u4t3s2>.
+<https://pod.test/alice/integrations/google-calendar/calendar/events.ttl#event-z9y8x7w6v5u4t3s2/recurrence-0> a <https://jeswr.org/ns/sectors/scheduling#RecurrenceRule>, <https://schema.org/Schedule>;
+    <https://jeswr.org/ns/sectors/scheduling#count> 3;
+    <https://jeswr.org/ns/sectors/scheduling#frequency> "YEARLY";
+    <https://schema.org/byMonth> 6;
+    <https://schema.org/byMonthDay> 15;
+    <https://schema.org/exceptDate> "2027-06-15"^^<http://www.w3.org/2001/XMLSchema#date>.
