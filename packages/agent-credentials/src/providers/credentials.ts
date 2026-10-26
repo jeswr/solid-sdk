@@ -13,7 +13,7 @@
  * browser or an action request, and must not contain tokens.
  */
 import { spawn } from "child_process";
-import { readFileSync, statSync } from "fs";
+import { closeSync, constants, fstatSync, openSync, readFileSync } from "fs";
 import { isAbsolute } from "path";
 import { z } from "zod";
 import { parseRfc3339 } from "./common.js";
@@ -84,13 +84,24 @@ export const providerConfigSchema = z.strictObject({
 export type ProviderConfig = z.infer<typeof providerConfigSchema>;
 
 /**
- * Load the operator's provider configuration. Refuses files others can write, and any key that
- * looks like a stored credential (tokens are supplied by the helper at run time only).
+ * Load the operator's provider configuration from one verified descriptor. Refuses symlinks,
+ * non-files, foreign owners, files others can write, and keys that look like stored credentials.
  */
 export function loadProviderConfig(path: string): ProviderConfig {
-  const mode = statSync(path).mode & 0o777;
-  if (mode & 0o022) throw new Error("provider configuration must not be group/world-writable");
-  const raw = JSON.parse(readFileSync(path, "utf8")) as unknown;
+  const fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+  let raw: unknown;
+  try {
+    const st = fstatSync(fd);
+    if (!st.isFile()) throw new Error("provider configuration must be a regular file");
+    if (typeof process.getuid !== "function")
+      throw new Error("provider configuration ownership cannot be verified on this platform");
+    if (st.uid !== process.getuid())
+      throw new Error("provider configuration is owned by another user (refused)");
+    if (st.mode & 0o022) throw new Error("provider configuration must not be group/world-writable");
+    raw = JSON.parse(readFileSync(fd, "utf8")) as unknown;
+  } finally {
+    closeSync(fd);
+  }
   const scan = (v: unknown): void => {
     if (v && typeof v === "object")
       for (const [k, x] of Object.entries(v)) {
