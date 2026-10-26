@@ -167,3 +167,52 @@ collide with the reserved system document. No migration of previously imported d
 No dependencies, UI, screenshots, or other packages were changed. No network Git operations,
 branch switches, pushes, PRs, or changes to other checkouts were performed. Remaining verification
 limitations are the unavailable roborev executable and the prohibited full-workspace bootstrap.
+
+## Fix round 3 — review of 25097c501461
+
+Implemented exactly the three findings in
+`solid-sdk-lane-sst-bi8j-25097c501461.md` on `lane/sst-bi8j`:
+
+- `6457147f` — `fix: enforce mail RDF and thread consistency`: parse JSON-LD from the
+  validated canonical JSON representation so duplicate keys cannot expose discarded remote
+  contexts to the streaming parser. Preserve the final document URL and ETag for relative
+  identifiers and conditional writes. Honor explicit References roots before cached parent
+  ancestry, reconcile provisional cache mappings for future descendants and missing ancestors,
+  and carry thread-merge metadata to persistence. Conditional writes move previously saved
+  members to the resolved thread and clear their old thread memberships without retaining
+  prior message bodies. Reject named graphs before Turtle serialization or any PUT.
+- This final documentation commit — `docs: record third mail fix validation`.
+
+Regression tests exercise duplicate context keys at the document and nested graph-node levels
+through both load and list, verifying that global fetch is never called. They cover named
+graphs loaded from TriG, N-Quads and JSON-LD, plus late References, cached descendants, missing
+ancestors, independent conversations and reconciliation of already persisted provisional
+members. Missing provisional thread documents are left absent.
+
+Verification before the final commit (all inside this checkout):
+
+| Command | Result |
+| --- | --- |
+| `pnpm --filter @jeswr/guarded-fetch run build && pnpm --filter @jeswr/suite-ui run build` | PASS; existing dependency output only, uncommitted |
+| `pnpm --filter @jeswr/app-suite run lint && pnpm --filter @jeswr/app-suite run build && pnpm --filter @jeswr/app-suite run typecheck && pnpm --filter @jeswr/app-suite run test` | PASS; lint, Next production build, strict tsc, 9 test files / 85 tests |
+| `pnpm --filter @jeswr/app-suite run test:coverage` | PASS; 100% statements (528/528), branches (281/281), functions (157/157), lines (469/469) |
+| `pnpm run lint:root` | PASS; workspace/transport/fetch/token checks and 74 contrast pairs |
+| `TURBO_SCM_BASE=75079ec3e72e8388d368cc17e6c4211764010467 pnpm run gate` | PASS; 8/8 tasks, 0 cached |
+| `pnpm --filter @jeswr/app-suite exec vitest run test/mail/io.test.ts test/mail/importer.test.ts -t 'validated representation\|rejects named graphs\|honors References\|conditionally reconciles' --reporter=json --outputFile=/tmp/sst-bi8j-regression-baseline.json` | Expected FAIL against the three original source files at `25097c50`: all seven regression cases fail; fixed source restored immediately afterward |
+| `git diff --check` | PASS |
+| `command -v roborev` | Exit 1; executable unavailable, so no automated review verdict obtained |
+| `pnpm run gate:full` | Not run: the existing unstorage-solid bootstrap invokes a network `git clone`, prohibited by this lane; prior full-gate failures remain documented above |
+
+The first duplicate-key regression draft did not trigger the loader at its nested location;
+it was strengthened to a graph-node context and verified to fail against the original code.
+A coverage run exposed a missing independent-cache branch case; that case was added before
+the final passing coverage, package and affected-workspace gates.
+
+All three findings are addressed. The conservative dataset choice rejects named-graph writes
+rather than change the store's Turtle media type or discard graph data. Streaming items carry
+merge information for consumers; `persistImportedMail` applies it with the existing sequential,
+conditional-write semantics. Conflicts and partial completion still require callers to reload.
+No dependencies, UI, screenshots or other packages changed. No network Git operations, branch
+switches, pushes, PRs or edits to other checkouts occurred. No new open questions or unfinished
+implementation work remain. Verification limitations are the unavailable roborev executable
+and the prohibited full-workspace bootstrap.
