@@ -15,14 +15,22 @@ and `./memory` (`createMemoryStorage({ protocol, root, pageSize, moveResource, s
 `./solid`, `./lws` and `./testing` are still reserved (T-021…T-025).
 
 Rules the memory backend enforces, and the real backends must match:
-- Every mutation needs `ifMatch` (TypeError otherwise, unless `strictConditional: false`, where
-  Solid accepts the write and LWS answers 428). On Solid, `'*'` means no precondition. On LWS it is
-  `If-Match: *`, and PUT never creates (404); use `create`.
+- Every mutation (`write`, `writeRdf`, `patch`, `setMetadata`, `move`, `delete`) needs `ifMatch`
+  (TypeError otherwise, unless `strictConditional: false`, where Solid proceeds and LWS answers
+  428). `'*'` is accepted only by `write`/`writeRdf` (ADR-003 §3); elsewhere it is a TypeError. On
+  Solid, `'*'` means no precondition. On LWS it is `If-Match: *`, and PUT never creates (404).
+- Mutations are applied one at a time, so an ETag check and its commit are never split by another
+  mutation, and concurrent creates never share a URL. Reads snapshot the node before any await, so
+  bytes and ETag always describe the same state. An abort while a body is being collected cancels
+  the stream and nothing is committed.
 - A stale ETag gives `precondition-failed` (412) with the current `etag`. ETags change on every write,
   and a container's ETag changes only on membership changes.
 - LWS lists in pages (`next` cursors are opaque), Solid lists in one page. `listAll` refuses a
-  repeated page and stops at 10 000 pages.
-- RDF patch applies inserts/deletes atomically, and a missing deletion is a 409 `conflict`.
+  repeated page and stops at 10 000 pages. A raw LWS container `read` returns the same page with a
+  `next` link, and the `container?page=N` URL is readable.
+- RDF patch applies inserts/deletes atomically, and a missing deletion is a 409 `conflict`. Named
+  graphs are refused (422) for Turtle / N-Triples resources, and `writeRdf` throws a TypeError
+  rather than labelling graph blocks as Turtle.
   `where` is `unsupported` in memory. JSON Patch applies to JSON resources only.
 - Solid moves are copy+delete emulation (new URL, capped at 2 000 resources). LWS moves need
   MoveResource (`unsupported` with `feature: 'move'` otherwise), and the server picks the name.
@@ -30,10 +38,11 @@ Rules the memory backend enforces, and the real backends must match:
   not IRIs map to `http://www.iana.org/assignments/relation/<rel>`.
 - `readRdf` with a matching `ifNoneMatch` resolves with `notModified: true` and an empty dataset
   (an extension to ADR-003's `RdfReadResult`). `writeRdf` serialises the n3-writable formats.
-  JSON-LD serialisation is `unsupported` until the suite has a JSON-LD writer.
+  JSON-LD serialisation is `unsupported` (`feature: 'rdfConneg'`) until an allowed dependency
+  provides a JSON-LD writer: a documented deviation from ADR-003 §1, tracked in the suite tracker.
 
-`@rdfjs/types` is a dev-only, type-only import because the layer guard does not allow it as a
-runtime dependency. Consumers get it through n3 / fetch-rdf.
+RDF/JS types (`DatasetCore`, `Quad`, `Term`) come from `@jeswr/fetch-rdf`'s type re-exports, so the
+emitted declarations need no `@rdfjs/types` dependency (which the layer guard does not allow).
 
 Before implementation, read SDK core ADR-001 D4 and `ADR-003-storage-client.md` in
 `solid-suite-planning/specs/sdk-core/`, alongside this repository's `AGENTS.md`.

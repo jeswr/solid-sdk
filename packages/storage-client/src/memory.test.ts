@@ -1,5 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
-import type { Quad } from "@rdfjs/types";
+import type { Quad } from "@jeswr/fetch-rdf";
 import fc from "fast-check";
 import { DataFactory, Store } from "n3";
 import { describe, expect, test } from "vitest";
@@ -33,6 +33,18 @@ async function rejects(promise: Promise<unknown>, code: string, status?: number 
 const solid = (options: MemoryStorageOptions = {}) => createMemoryStorage(options);
 const lws = (options: MemoryStorageOptions = {}) =>
   createMemoryStorage({ protocol: "lws", ...options });
+
+/** The current ETag: ADR-003 §3 allows `'*'` only on write(). */
+async function current(storage: StorageClient, url: string) {
+  const etag = await storage.head(url).then(
+    (result) => result.etag as string,
+    () => '"absent"',
+  );
+  return { ifMatch: etag };
+}
+async function currentMeta(storage: StorageClient, url: string) {
+  return { ifMatch: (await storage.metadata(url)).etag as string };
+}
 
 describe("construction and features", () => {
   test("defaults to a Solid storage at memory.example", () => {
@@ -85,6 +97,45 @@ describe("conditional writes (ADR-003 §3)", () => {
         storage.patch(`${ROOT}a`, { kind: "json", ops: [] }, { ifMatch: missing }),
       ).rejects.toThrow(TypeError);
       await expect(storage.setMetadata(ROOT, [], { ifMatch: missing })).rejects.toThrow(TypeError);
+    }
+  });
+
+  test("'*' is accepted only by write(); patch and setMetadata refuse it", async () => {
+    for (const storage of [solid(), lws({ strictConditional: false })]) {
+      await expect(
+        storage.patch(ROOT, { kind: "json", ops: [] }, { ifMatch: "*" }),
+      ).rejects.toThrow(/only allowed on write/);
+      await expect(storage.setMetadata(ROOT, [], { ifMatch: "*" })).rejects.toThrow(TypeError);
+    }
+  });
+
+  test("mutations are serialised: two patches with one ETag yield one 412", async () => {
+    for (const storage of [solid(), lws()]) {
+      const turtle = await storage.create(ROOT, `<${EX}s> <${EX}p> "old" .`, {
+        contentType: TURTLE,
+        name: "r.ttl",
+      });
+      const insert = (value: string) =>
+        storage.patch(
+          turtle.url,
+          {
+            kind: "rdf",
+            inserts: [quad(namedNode(`${EX}s`), namedNode(`${EX}p`), literal(value))],
+            deletes: [],
+          },
+          { ifMatch: turtle.etag as string },
+        );
+      const results = await Promise.allSettled([insert("a"), insert("b")]);
+      expect(results.map((result) => result.status)).toEqual(["fulfilled", "rejected"]);
+      expect((results[1] as PromiseRejectedResult).reason).toMatchObject({
+        code: "precondition-failed",
+      });
+      // A failed mutation does not block the queue.
+      const writes = await Promise.allSettled([
+        storage.write(`${ROOT}x`, "1", { contentType: "text/plain", ifMatch: '"nope"' }),
+        storage.create(ROOT, "2", { contentType: "text/plain" }),
+      ]);
+      expect(writes.map((result) => result.status)).toEqual(["rejected", "fulfilled"]);
     }
   });
 
@@ -479,7 +530,7 @@ describe("listing and pagination (ADR-003 §4)", () => {
       ifMatch: created.etag as string,
     });
     expect((await storage.head(ROOT)).etag).toBe(afterCreate);
-    await storage.delete(created.url);
+    await storage.delete(created.url, await current(storage, created.url));
     expect((await storage.head(ROOT)).etag).not.toBe(afterCreate);
   });
 });
@@ -520,7 +571,7 @@ describe("patch", () => {
       await storage.patch(
         url,
         { kind: "rdf", deletes: [], inserts: [], where: [] },
-        { ifMatch: "*" },
+        await current(storage, url),
       ),
     ).toMatchObject({
       created: false,
@@ -534,7 +585,7 @@ describe("patch", () => {
       storage.patch(
         url,
         { kind: "rdf", deletes: [quad(s, p, literal("absent"))], inserts: [] },
-        { ifMatch: "*" },
+        await current(storage, url),
       ),
       "conflict",
       409,
@@ -547,7 +598,7 @@ describe("patch", () => {
           deletes: [],
           inserts: [quad(s, p, variable("v") as unknown as Quad["object"])],
         },
-        { ifMatch: "*" },
+        await current(storage, url),
       ),
       "bad-request",
       422,
@@ -556,7 +607,7 @@ describe("patch", () => {
       storage.patch(
         url,
         { kind: "rdf", deletes: [quad(s, p, blankNode())], inserts: [] },
-        { ifMatch: "*" },
+        await current(storage, url),
       ),
       "bad-request",
     );
@@ -569,7 +620,7 @@ describe("patch", () => {
           inserts: [],
           where: [quad(s, p, variable("o") as unknown as Quad["object"])],
         },
-        { ifMatch: "*" },
+        await current(storage, url),
       ),
       "unsupported",
       null,
@@ -577,7 +628,11 @@ describe("patch", () => {
     expect(unsupported.feature).toBe("patch");
     await storage.write(`${ROOT}j.json`, "{}", { contentType: "application/json", ifMatch: "*" });
     await rejects(
-      storage.patch(`${ROOT}j.json`, { kind: "rdf", deletes: [], inserts: [] }, { ifMatch: "*" }),
+      storage.patch(
+        `${ROOT}j.json`,
+        { kind: "rdf", deletes: [], inserts: [] },
+        await current(storage, `${ROOT}j.json`),
+      ),
       "unsupported-media-type",
       415,
     );
@@ -586,20 +641,32 @@ describe("patch", () => {
       ifMatch: "*",
     });
     await rejects(
-      storage.patch(`${ROOT}l.jsonld`, { kind: "rdf", deletes: [], inserts: [] }, { ifMatch: "*" }),
+      storage.patch(
+        `${ROOT}l.jsonld`,
+        { kind: "rdf", deletes: [], inserts: [] },
+        await current(storage, `${ROOT}l.jsonld`),
+      ),
       "unsupported-media-type",
     );
     await storage.write(`${ROOT}bad.ttl`, "<oops", { contentType: TURTLE, ifMatch: "*" });
     await rejects(
-      storage.patch(`${ROOT}bad.ttl`, { kind: "rdf", deletes: [], inserts: [] }, { ifMatch: "*" }),
+      storage.patch(
+        `${ROOT}bad.ttl`,
+        { kind: "rdf", deletes: [], inserts: [] },
+        await current(storage, `${ROOT}bad.ttl`),
+      ),
       "conflict",
     );
     await rejects(
-      storage.patch(ROOT, { kind: "rdf", deletes: [], inserts: [] }, { ifMatch: "*" }),
+      storage.patch(ROOT, { kind: "rdf", deletes: [], inserts: [] }, await current(storage, ROOT)),
       "method-not-allowed",
     );
     await rejects(
-      storage.patch(`${ROOT}missing`, { kind: "rdf", deletes: [], inserts: [] }, { ifMatch: "*" }),
+      storage.patch(
+        `${ROOT}missing`,
+        { kind: "rdf", deletes: [], inserts: [] },
+        { ifMatch: '"0"' },
+      ),
       "not-found",
     );
   });
@@ -630,7 +697,7 @@ describe("patch", () => {
       storage.patch(
         url,
         { kind: "json", ops: [{ op: "test", path: "/a", value: 3 }] },
-        { ifMatch: "*" },
+        await current(storage, url),
       ),
       "conflict",
       409,
@@ -639,7 +706,7 @@ describe("patch", () => {
       storage.patch(
         url,
         { kind: "json", ops: [{ op: "bogus", path: "/a" } as never] },
-        { ifMatch: "*" },
+        await current(storage, url),
       ),
       "bad-request",
       400,
@@ -648,23 +715,27 @@ describe("patch", () => {
       storage.patch(
         url,
         { kind: "raw", mediaType: "application/json-patch+json", body: "{" },
-        { ifMatch: "*" },
+        await current(storage, url),
       ),
       "bad-request",
     );
     await rejects(
-      storage.patch(url, { kind: "raw", mediaType: "text/n3", body: "" }, { ifMatch: "*" }),
+      storage.patch(
+        url,
+        { kind: "raw", mediaType: "text/n3", body: "" },
+        await current(storage, url),
+      ),
       "unsupported-media-type",
       415,
     );
     const text = await storage.create(ROOT, "plain", { contentType: "text/plain" });
     await rejects(
-      storage.patch(text.url, { kind: "json", ops: [] }, { ifMatch: "*" }),
+      storage.patch(text.url, { kind: "json", ops: [] }, await current(storage, text.url)),
       "unsupported-media-type",
     );
     const broken = await storage.create(ROOT, "{", { contentType: "application/json" });
     await rejects(
-      storage.patch(broken.url, { kind: "json", ops: [] }, { ifMatch: "*" }),
+      storage.patch(broken.url, { kind: "json", ops: [] }, await current(storage, broken.url)),
       "conflict",
     );
   });
@@ -679,31 +750,65 @@ describe("move", () => {
       ifMatch: "*",
     });
     await storage.create(ROOT, null, { kind: "container", name: "dst" });
-    const moved = await storage.move(`${ROOT}src/doc.txt`, `${ROOT}dst/`);
+    const moved = await storage.move(
+      `${ROOT}src/doc.txt`,
+      `${ROOT}dst/`,
+      await current(storage, `${ROOT}src/doc.txt`),
+    );
     expect(moved).toMatchObject({ url: `${ROOT}dst/doc.txt`, created: true });
     await rejects(storage.read(`${ROOT}src/doc.txt`), "not-found");
     const renamed = await storage.move(`${ROOT}dst/doc.txt`, `${ROOT}dst/`, {
       name: "renamed.txt",
+      ...(await current(storage, `${ROOT}dst/doc.txt`)),
     });
     expect(renamed.url).toBe(`${ROOT}dst/renamed.txt`);
-    const tree = await storage.move(`${ROOT}src/`, `${ROOT}dst/`);
+    const tree = await storage.move(
+      `${ROOT}src/`,
+      `${ROOT}dst/`,
+      await current(storage, `${ROOT}src/`),
+    );
     expect(tree.url).toBe(`${ROOT}dst/src/`);
     expect(await (await storage.read(`${ROOT}dst/src/sub/deep.txt`)).text()).toBe("y");
     expect(await storage.parentOf(`${ROOT}dst/src/sub/deep.txt`)).toBe(`${ROOT}dst/src/sub/`);
     await storage.write(`${ROOT}clash.txt`, "x", { contentType: "text/plain", ifMatch: "*" });
     await rejects(
-      storage.move(`${ROOT}clash.txt`, `${ROOT}dst/`, { name: "renamed.txt" }),
+      storage.move(`${ROOT}clash.txt`, `${ROOT}dst/`, {
+        name: "renamed.txt",
+        ...(await current(storage, `${ROOT}clash.txt`)),
+      }),
       "conflict",
       409,
     );
-    await rejects(storage.move(`${ROOT}dst/`, `${ROOT}dst/src/`), "conflict", 409);
-    await rejects(storage.move(ROOT, `${ROOT}dst/`), "method-not-allowed", 405);
+    await rejects(
+      storage.move(`${ROOT}dst/`, `${ROOT}dst/src/`, await current(storage, `${ROOT}dst/`)),
+      "conflict",
+      409,
+    );
+    await rejects(
+      storage.move(ROOT, `${ROOT}dst/`, await current(storage, ROOT)),
+      "method-not-allowed",
+      405,
+    );
     await rejects(
       storage.move(`${ROOT}clash.txt`, `${ROOT}dst/`, { ifMatch: '"stale"' }),
       "precondition-failed",
     );
-    await rejects(storage.move(`${ROOT}clash.txt`, `${ROOT}clash.txt`), "method-not-allowed");
-    await rejects(storage.move(`${ROOT}clash.txt`, "https://other.example/"), "scope");
+    await rejects(
+      storage.move(
+        `${ROOT}clash.txt`,
+        `${ROOT}clash.txt`,
+        await current(storage, `${ROOT}clash.txt`),
+      ),
+      "method-not-allowed",
+    );
+    await rejects(
+      storage.move(
+        `${ROOT}clash.txt`,
+        "https://other.example/",
+        await current(storage, `${ROOT}clash.txt`),
+      ),
+      "scope",
+    );
   });
 
   test("Solid caps emulated container moves at 2000 resources", async () => {
@@ -712,7 +817,10 @@ describe("move", () => {
       await storage.write(`${ROOT}big/${i}`, "x", { contentType: "text/plain", ifMatch: "*" });
     }
     await storage.create(ROOT, null, { kind: "container", name: "dst" });
-    const error = await rejects(storage.move(`${ROOT}big/`, `${ROOT}dst/`), "unsupported");
+    const error = await rejects(
+      storage.move(`${ROOT}big/`, `${ROOT}dst/`, await current(storage, `${ROOT}big/`)),
+      "unsupported",
+    );
     expect(error.feature).toBe("move");
   });
 
@@ -734,11 +842,12 @@ describe("move", () => {
     await storage.setMetadata(
       file.url,
       [{ op: "add", anchor: ROOT, rel: "describedby", href: `${EX}r` }],
-      {
-        ifMatch: "*",
-      },
+      await currentMeta(storage, file.url),
     );
-    const moved = await storage.move(file.url, b.url, { name: "ignored" });
+    const moved = await storage.move(file.url, b.url, {
+      name: "ignored",
+      ...(await current(storage, file.url)),
+    });
     expect((await storage.metadata(moved.url)).links.get(ROOT)?.get("describedby")).toEqual([
       { href: `${EX}r`, params: {} },
     ]);
@@ -758,13 +867,20 @@ describe("delete", () => {
       ifMatch: "*",
     });
     await rejects(storage.delete(url, { ifMatch: '"stale"' }), "precondition-failed", 412);
-    await rejects(storage.delete(`${ROOT}c/`), "conflict", 409);
-    await rejects(storage.delete(ROOT), "method-not-allowed", 405);
+    await rejects(
+      storage.delete(`${ROOT}c/`, await current(storage, `${ROOT}c/`)),
+      "conflict",
+      409,
+    );
+    await rejects(storage.delete(ROOT, await current(storage, ROOT)), "method-not-allowed", 405);
     await storage.delete(url, { ifMatch: etag as string });
     await storage.write(`${ROOT}c/b/x`, "x", { contentType: "text/plain", ifMatch: "*" });
-    await storage.delete(`${ROOT}c/`, { recursive: true });
+    await storage.delete(`${ROOT}c/`, {
+      recursive: true,
+      ...(await current(storage, `${ROOT}c/`)),
+    });
     await rejects(storage.head(`${ROOT}c/b/x`), "not-found");
-    await rejects(storage.delete(`${ROOT}c/`), "not-found");
+    await rejects(storage.delete(`${ROOT}c/`, await current(storage, `${ROOT}c/`)), "not-found");
   });
 });
 
@@ -807,9 +923,7 @@ describe("metadata", () => {
         { op: "remove", rel: "license", href: `${EX}license` },
         { op: "remove", rel: "x", href: "y" },
       ],
-      {
-        ifMatch: "*",
-      },
+      await currentMeta(storage, url),
     );
     expect(
       (await storage.metadata(url)).links
@@ -820,7 +934,7 @@ describe("metadata", () => {
       storage.setMetadata(
         url,
         [{ op: "add", anchor: "https://other.example/", rel: "x", href: "y" }],
-        { ifMatch: "*" },
+        await currentMeta(storage, url),
       ),
       "scope",
     );
@@ -847,12 +961,20 @@ describe("metadata", () => {
       { href: `${EX}d`, params: {} },
     ]);
     const up = await rejects(
-      storage.setMetadata(url, [{ op: "add", rel: "up", href: ROOT }], { ifMatch: "*" }),
+      storage.setMetadata(
+        url,
+        [{ op: "add", rel: "up", href: ROOT }],
+        await currentMeta(storage, url),
+      ),
       "unsupported",
     );
     expect(up.feature).toBe("move");
     const type = await rejects(
-      storage.setMetadata(url, [{ op: "add", rel: "type", href: ROOT }], { ifMatch: "*" }),
+      storage.setMetadata(
+        url,
+        [{ op: "add", rel: "type", href: ROOT }],
+        await currentMeta(storage, url),
+      ),
       "unsupported",
     );
     expect(type.feature).toBeUndefined();
@@ -966,5 +1088,108 @@ describe("writeRdf", () => {
     await expect(storage.writeRdf(`${ROOT}x.ttl`, dataset, undefined as never)).rejects.toThrow(
       TypeError,
     );
+  });
+});
+
+describe("review round 1 regressions", () => {
+  test("move and delete require ifMatch and refuse '*' in strict mode", async () => {
+    for (const storage of [solid(), lws({ moveResource: true })]) {
+      const file = await storage.create(ROOT, "x", { contentType: "text/plain" });
+      const missing = undefined as unknown as string;
+      await expect(storage.delete(file.url)).rejects.toThrow(TypeError);
+      await expect(storage.delete(file.url, { ifMatch: "*" })).rejects.toThrow(TypeError);
+      await expect(storage.move(file.url, ROOT, { ifMatch: missing })).rejects.toThrow(TypeError);
+      await expect(storage.move(file.url, ROOT, { ifMatch: "*" })).rejects.toThrow(TypeError);
+    }
+    // Non-strict Solid lets an unconditional delete through, like a server without preconditions.
+    const loose = solid({ strictConditional: false });
+    const file = await loose.create(ROOT, "x", { contentType: "text/plain" });
+    await loose.delete(file.url);
+    await rejects(loose.head(file.url), "not-found");
+  });
+
+  test("reads pair bytes with the ETag of the same state", async () => {
+    for (const storage of [solid(), lws()]) {
+      const parent = await storage.create(ROOT, null, { kind: "container", name: "c" });
+      const reading = storage.read(parent.url);
+      const created = storage.create(parent.url, "x", { contentType: "text/plain", name: "n" });
+      const [result] = await Promise.all([reading, created]);
+      expect(result.etag).toBe(parent.etag);
+      expect(await result.text()).not.toContain(`${parent.url}n`);
+    }
+  });
+
+  test("LWS container reads are paged with rel=next, and page URLs are readable", async () => {
+    const storage = lws({ pageSize: 1 });
+    await storage.create(ROOT, "1", { contentType: "text/plain", name: "a" });
+    await storage.create(ROOT, "2", { contentType: "text/plain", name: "b" });
+    const first = await storage.read(ROOT);
+    const next = first.links.get("next")?.[0]?.target as string;
+    expect(next).toBe(`${ROOT}?page=2`);
+    const second = await storage.read(next);
+    expect(second.url).toBe(next);
+    expect(JSON.parse(await second.text())).toMatchObject({ totalItems: 2, items: [{}] });
+    expect(second.links.has("next")).toBe(false);
+    expect((await storage.head(ROOT)).links.has("next")).toBe(true);
+    await rejects(storage.read(`${ROOT}a?page=2`), "not-found", 404);
+    await rejects(storage.read(`${ROOT}missing/?page=2`), "not-found", 404);
+    // Solid has no paged reads: the query is part of an unknown URL.
+    await rejects(solid().read(`${ROOT}?page=2`), "not-found", 404);
+  });
+
+  test("an abort during body collection prevents the commit", async () => {
+    for (const storage of [solid(), lws()]) {
+      const controller = new AbortController();
+      const body = new ReadableStream<Uint8Array>({ pull() {} });
+      const pending = storage.create(ROOT, body, {
+        contentType: "text/plain",
+        name: "aborted",
+        signal: controller.signal,
+      });
+      controller.abort();
+      await rejects(pending, "network");
+      expect((await storage.list(ROOT)).items).toEqual([]);
+      const existing = await storage.create(ROOT, "x", { contentType: "text/plain", name: "w" });
+      const writer = new AbortController();
+      const write = storage.write(existing.url, new ReadableStream<Uint8Array>({ pull() {} }), {
+        contentType: "text/plain",
+        ifMatch: existing.etag as string,
+        signal: writer.signal,
+      });
+      writer.abort();
+      await rejects(write, "network");
+      expect(await (await storage.read(existing.url)).text()).toBe("x");
+    }
+  });
+
+  test("named graphs never reach a triple-only format", async () => {
+    const storage = solid();
+    const graph = namedNode(`${EX}g`);
+    const named = quad(namedNode(`${EX}s`), namedNode(`${EX}p`), literal("o"), graph);
+    await expect(storage.writeRdf(`${ROOT}g.ttl`, [named], { ifMatch: "*" })).rejects.toThrow(
+      /named graphs/,
+    );
+    await expect(storage.head(`${ROOT}g.ttl`)).rejects.toBeInstanceOf(StorageError);
+    const written = await storage.writeRdf(`${ROOT}g.nq`, [named], {
+      ifMatch: "*",
+      contentType: "application/n-quads" as "text/turtle",
+    });
+    expect(written.created).toBe(true);
+    const turtle = await storage.write(`${ROOT}t.ttl`, "", { contentType: TURTLE, ifMatch: "*" });
+    await rejects(
+      storage.patch(
+        turtle.url,
+        { kind: "rdf", inserts: [named], deletes: [] },
+        { ifMatch: turtle.etag as string },
+      ),
+      "bad-request",
+      422,
+    );
+    const nquads = await storage.patch(
+      written.url,
+      { kind: "rdf", inserts: [], deletes: [named] },
+      { ifMatch: written.etag as string },
+    );
+    expect(nquads.created).toBe(false);
   });
 });

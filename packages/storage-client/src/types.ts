@@ -1,7 +1,8 @@
 // AUTHORED-BY Claude Opus 5.5
 // ADR-003 §1, verbatim except where marked "Extension".
+
+import type { DatasetCore, Quad } from "@jeswr/fetch-rdf";
 import type { DescriptionCache, Features, StorageDescription } from "@jeswr/storage-capabilities";
-import type { DatasetCore, Quad } from "@rdfjs/types";
 
 /** Injected authenticated fetch; pod-auth provides it. */
 export type AuthFetch = typeof fetch;

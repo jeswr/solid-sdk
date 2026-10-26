@@ -169,6 +169,10 @@ export function applyJsonPatch(document: unknown, ops: readonly JsonPatchOp[]): 
           throw new JsonPatchError("conflict", "Cannot move a value into one of its children");
         }
         const value = get(result, from);
+        // Moving a location onto itself (including the root) is a no-op once it exists.
+        if (from.length === path.length && from.every((token, index) => token === path[index])) {
+          break;
+        }
         result = add(remove(result, from), path, value);
         break;
       }

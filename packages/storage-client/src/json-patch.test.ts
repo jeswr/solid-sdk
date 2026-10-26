@@ -153,6 +153,10 @@ describe("applyJsonPatch semantics", () => {
       applyJsonPatch({ a: { b: 1 } }, [{ op: "move", from: "/a", path: "/a/b/c" }]),
     ).toThrow(/children/);
     expect(applyJsonPatch({ a: 1 }, [{ op: "move", from: "/a", path: "/a" }])).toEqual({ a: 1 });
+    expect(applyJsonPatch({ a: 1 }, [{ op: "move", from: "", path: "" }])).toEqual({ a: 1 });
+    expect(() => applyJsonPatch({}, [{ op: "move", from: "/x", path: "/x" }])).toThrow(
+      /Path not found/,
+    );
     expect(applyJsonPatch([1, 2, 3], [{ op: "replace", path: "/1", value: 9 }])).toEqual([1, 9, 3]);
   });
 

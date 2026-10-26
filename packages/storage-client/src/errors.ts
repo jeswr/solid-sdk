@@ -179,7 +179,8 @@ export function toStorageError(
 export async function readErrorBody(response: Response): Promise<string | undefined> {
   const mediaType = response.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase();
   if (mediaType !== "application/problem+json" && mediaType !== "application/json") {
-    await response.body?.cancel().catch(() => undefined);
+    // Never await a cancel: on a tee'd (cloned) body it settles only once the sibling is consumed.
+    void response.body?.cancel().catch(() => undefined);
     return undefined;
   }
   if (!response.body) return undefined;
@@ -192,7 +193,7 @@ export async function readErrorBody(response: Response): Promise<string | undefi
       if (done) break;
       size += value.byteLength;
       if (size > MAX_PROBLEM_BYTES) {
-        await reader.cancel().catch(() => undefined);
+        void reader.cancel().catch(() => undefined);
         return undefined;
       }
       chunks.push(value);

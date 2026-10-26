@@ -29,6 +29,8 @@ const etag = headers.get("etag");
 - Branch on `RdfFetchError` and its structured status fields; do not string-match error messages.
 - Pass the resource URL as `baseIRI` when parsing relative RDF identifiers.
 - Treat the returned dataset as RDF/JS `DatasetCore`; wrap it with package or local `@rdfjs/wrapper` accessors.
+- `DatasetCore`, `Quad` and `Term` are re-exported as types, so layered packages can name them in
+  public declarations without their own `@rdfjs/types` dependency.
 - Serialize writes with `n3.Writer`, use explicit RDF content type, and apply conditional `PUT` where an ETag exists.
 - Before writing to a user-configured pod base, use `@jeswr/guarded-fetch`'s pod-scope guard instead of another path-prefix implementation.
 - Before constructing RDF terms from untrusted IRIs, use `@jeswr/rdf-serialize` to escape forbidden IRIREF characters and enforce scheme policy.

@@ -19,12 +19,36 @@ export function throwIfAborted(method: string, url: string, signal: AbortSignal 
   }
 }
 
-/** Collect any supported body into bytes. Strings are UTF-8 encoded. */
-export async function toBytes(body: Body): Promise<Uint8Array> {
+/**
+ * Collect any supported body into bytes. Strings are UTF-8 encoded. Aborting `signal` cancels a
+ * pending stream and stops collection early; callers must re-check the signal before committing.
+ */
+export async function toBytes(body: Body, signal?: AbortSignal): Promise<Uint8Array> {
   if (typeof body === "string") return new TextEncoder().encode(body);
   if (body instanceof Uint8Array) return new Uint8Array(body);
-  if (body instanceof Blob) return new Uint8Array(await body.arrayBuffer());
-  return new Uint8Array(await new Response(body).arrayBuffer());
+  const reader = (body instanceof Blob ? body.stream() : body).getReader();
+  const cancel = () => void reader.cancel(signal?.reason).catch(() => undefined);
+  if (signal?.aborted) cancel();
+  signal?.addEventListener("abort", cancel, { once: true });
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      size += value.byteLength;
+    }
+  } finally {
+    signal?.removeEventListener("abort", cancel);
+  }
+  const bytes = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return bytes;
 }
 
 /** Iterate every page of a listing (ADR-003 §4): loop guard on repeated cursors and a page cap. */

@@ -5,6 +5,8 @@
  * membership and totalItems, LWS paging, linksets with `up`, the MoveResource toggle,
  * N3-Patch-equivalent quad application and RFC 6902 JSON Patch.
  */
+
+import type { Quad } from "@jeswr/fetch-rdf";
 import { parseRdf, SUPPORTED_RDF_MEDIA_TYPES } from "@jeswr/fetch-rdf";
 import {
   deriveFeatures,
@@ -12,7 +14,6 @@ import {
   type StorageDescription,
 } from "@jeswr/storage-capabilities";
 import { LWS, SSD } from "@jeswr/storage-capabilities/vocab";
-import type { Quad } from "@rdfjs/types";
 import { DataFactory, Store } from "n3";
 import { StorageError, type StorageErrorCode } from "./errors.js";
 import { isWithin, paginate, pathParent, throwIfAborted, toBytes } from "./internal.js";
@@ -22,6 +23,7 @@ import {
   mediaType,
   type RdfPatchError,
   serializeQuads,
+  TRIPLE_FORMATS,
   WRITABLE_RDF,
 } from "./rdf.js";
 import type {
@@ -199,12 +201,19 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
     return node;
   }
 
-  /** Missing precondition: TypeError in strict mode; otherwise LWS 428 and Solid proceeds. */
+  /**
+   * Missing precondition: TypeError in strict mode; otherwise LWS 428 and Solid proceeds.
+   * ADR-003 §3: `'*'` is accepted only by `write` (`allowAny`); elsewhere it is a TypeError.
+   */
   function conditional(
     method: string,
     url: string,
     ifMatch: string | undefined,
+    allowAny = false,
   ): string | undefined {
+    if (ifMatch === "*" && !allowAny) {
+      throw new TypeError(`${method} ${url}: ifMatch '*' is only allowed on write()`);
+    }
     if (typeof ifMatch === "string" && ifMatch !== "") return ifMatch;
     if (strict) {
       throw new TypeError(`${method} ${url}: ifMatch is required (ETag or '*')`);
@@ -282,20 +291,30 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
     return links;
   }
 
-  async function representation(node: Node): Promise<{ bytes: Uint8Array; contentType: string }> {
+  /**
+   * The representation of a snapshot node. Everything is captured synchronously before the only
+   * await, so bytes, ETag and links always describe the same state. LWS containers are paged
+   * (`page` is 1-based) and expose `rel=next` like `list()`.
+   */
+  async function representation(
+    node: Node,
+    page = 1,
+  ): Promise<{ bytes: Uint8Array; contentType: string; next: string | null }> {
     if (node.kind !== "container") {
       // Resources always carry the contentType they were written with.
-      return { bytes: node.body, contentType: node.contentType as string };
+      return { bytes: node.body, contentType: node.contentType as string, next: null };
     }
     if (lws) {
       const items = children(node.url);
+      const start = (page - 1) * pageSize;
       return {
+        next: start + pageSize < items.length ? `${node.url}?page=${page + 1}` : null,
         bytes: new TextEncoder().encode(
           JSON.stringify({
             id: node.url,
             type: "Container",
             totalItems: items.length,
-            items: items.slice(0, pageSize).map((child) => ({
+            items: items.slice(start, start + pageSize).map((child) => ({
               id: child.url,
               type: child.kind === "container" ? "Container" : "DataResource",
               ...(child.kind === "container"
@@ -320,6 +339,19 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
     return {
       bytes: new TextEncoder().encode(await serializeQuads(quads, "text/turtle")),
       contentType: "text/turtle",
+      next: null,
+    };
+  }
+
+  /** Resolve a read target: an LWS `container?page=N` URL addresses one page of a container. */
+  function target(method: string, url: string): { node: Node; page: number } {
+    const match = lws ? /^(.*\/)\?page=([1-9]\d{0,8})$/.exec(url) : null;
+    // Only containers end in '/', so a matched base is always a container.
+    const node = need(method, match ? (match[1] as string) : url);
+    // Snapshot: later mutations replace fields, they never alter this copy.
+    return {
+      node: { ...node, links: [...node.links], types: [...node.types] },
+      page: match ? Number(match[2]) : 1,
     };
   }
 
@@ -328,10 +360,14 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
     status: 200 | 206 | 304,
     bytes: Uint8Array | null,
     contentType: string,
+    next: string | null,
+    requestUrl: string,
   ): ReadResult {
     const data = bytes ?? new Uint8Array();
+    const links = headerLinks(node);
+    if (next !== null) links.set("next", [{ target: next, params: {} }]);
     return {
-      url: node.url,
+      url: requestUrl,
       status,
       etag: node.etag,
       contentType,
@@ -340,7 +376,7 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
       bytes: async () => data.slice(),
       text: async () => new TextDecoder().decode(data),
       blob: async () => new Blob([data.slice()], { type: contentType }),
-      links: headerLinks(node),
+      links,
       parent: node.parent,
       metadataUrl: metadataUrl(node.url),
       kind: node.kind,
@@ -446,6 +482,17 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
     }
   }
 
+  // Mutations run one at a time, like a server applying requests atomically: an ETag check and
+  // the commit can never be split by another mutation across an await.
+  let queue: Promise<unknown> = Promise.resolve();
+  const serial =
+    <A extends unknown[], R>(fn: (...args: A) => Promise<R>) =>
+    (...args: A): Promise<R> => {
+      const run = queue.then(() => fn(...args));
+      queue = run.catch(() => undefined);
+      return run;
+    };
+
   const client: MemoryStorage = {
     protocol,
     root,
@@ -466,20 +513,20 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
 
     async head(url, opts = {}) {
       begin("HEAD", url, opts.signal);
-      const node = need("HEAD", url);
-      const { contentType } = await representation(node);
-      return readResult(node, 200, null, contentType);
+      const { node, page } = target("HEAD", url);
+      const { contentType, next } = await representation(node, page);
+      return readResult(node, 200, null, contentType, next, url);
     },
 
     async read(url, opts = {}) {
       begin("GET", url, opts.signal);
-      const node = need("GET", url);
-      const { bytes, contentType } = await representation(node);
+      const { node, page } = target("GET", url);
+      const { bytes, contentType, next } = await representation(node, page);
       if (
         opts.ifNoneMatch !== undefined &&
         (opts.ifNoneMatch === "*" || opts.ifNoneMatch === node.etag)
       ) {
-        return readResult(node, 304, null, contentType);
+        return readResult(node, 304, null, contentType, next, url);
       }
       if (opts.range) {
         const { start, end = bytes.byteLength - 1 } = opts.range;
@@ -497,9 +544,11 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
           206,
           bytes.slice(start, Math.min(end, bytes.byteLength - 1) + 1),
           contentType,
+          null,
+          url,
         );
       }
-      return readResult(node, 200, bytes, contentType);
+      return readResult(node, 200, bytes, contentType, next, url);
     },
 
     async readRdf(url, opts = {}): Promise<RdfReadResult> {
@@ -527,12 +576,12 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
       }
     },
 
-    async write(url, body, opts) {
+    write: serial(async (url, body, opts) => {
       begin("PUT", url, opts?.signal);
       if (typeof opts?.contentType !== "string" || opts.contentType === "") {
         throw new TypeError(`PUT ${url}: contentType is required`);
       }
-      const ifMatch = conditional("PUT", url, opts.ifMatch);
+      const ifMatch = conditional("PUT", url, opts.ifMatch, true);
       if (url.endsWith("/")) {
         throw fail("method-not-allowed", "PUT", url, 405, {
           message: "Containers have no writable body",
@@ -548,7 +597,8 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
         );
       }
       checkEtag("PUT", url, node, ifMatch);
-      const bytes = await toBytes(body);
+      const bytes = await toBytes(body, opts.signal);
+      throwIfAborted("PUT", url, opts.signal);
       if (node) {
         node.body = bytes;
         node.contentType = opts.contentType;
@@ -574,7 +624,7 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
       nodes.set(url, created);
       touch(created.parent);
       return { url, etag: created.etag, created: true };
-    },
+    }),
 
     async writeRdf(url, dataset, opts) {
       const contentType = opts?.contentType ?? "text/turtle";
@@ -588,7 +638,7 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
       return client.write(url, text, { ...opts, contentType });
     },
 
-    async create(url, body, opts: CreateOptions = {}) {
+    create: serial(async (url, body, opts: CreateOptions = {}) => {
       begin("POST", url, opts.signal);
       const parent = container("POST", url);
       const kind = opts.kind ?? "resource";
@@ -609,11 +659,14 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
         target = freeUrl(url, name ?? slug(), kind);
       }
       const links = lws ? (opts.links ?? []) : [];
+      const bytes =
+        kind === "resource" && body !== null ? await toBytes(body, opts.signal) : new Uint8Array();
+      throwIfAborted("POST", url, opts.signal);
       const created: Node = {
         url: target,
         kind,
         parent: parent.url,
-        body: kind === "resource" && body !== null ? await toBytes(body) : new Uint8Array(),
+        body: bytes,
         contentType: kind === "resource" ? (opts.contentType as string) : null,
         etag: nextEtag(),
         metaEtag: nextEtag(),
@@ -626,9 +679,9 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
       nodes.set(target, created);
       touch(parent.url);
       return { url: target, etag: created.etag, created: true };
-    },
+    }),
 
-    async patch(url, patch: Patch, opts) {
+    patch: serial(async (url, patch: Patch, opts) => {
       begin("PATCH", url, opts?.signal);
       const ifMatch = conditional("PATCH", url, opts?.ifMatch);
       const node = need("PATCH", url);
@@ -662,7 +715,7 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
           });
         }
         try {
-          applyQuadPatch(store, patch.inserts, patch.deletes);
+          applyQuadPatch(store, patch.inserts, patch.deletes, TRIPLE_FORMATS.has(type));
         } catch (error) {
           const patchError = error as RdfPatchError;
           throw fail(
@@ -724,13 +777,14 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
           );
         }
       }
+      throwIfAborted("PATCH", url, opts?.signal);
       node.body = bytes;
       node.etag = nextEtag();
       node.modified = clock();
       return { url, etag: node.etag, created: false };
-    },
+    }),
 
-    async move(url, destination, opts = {}) {
+    move: serial(async (url, destination, opts = {}) => {
       begin("MOVE", url, opts.signal);
       begin("MOVE", destination, opts.signal);
       if (lws && !moveResource) {
@@ -739,10 +793,11 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
           message: "MoveResource is not advertised",
         });
       }
+      const ifMatch = conditional("MOVE", url, opts.ifMatch);
       const node = need("MOVE", url);
       if (url === root) throw fail("method-not-allowed", "MOVE", url, 405);
       const target = container("MOVE", destination);
-      checkEtag("MOVE", url, node, opts.ifMatch);
+      checkEtag("MOVE", url, node, ifMatch);
       if (node.kind === "container" && destination.startsWith(url)) {
         throw fail("conflict", "MOVE", url, 409, {
           message: "Cannot move a container into itself",
@@ -772,19 +827,20 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
       touch(oldParent);
       touch(target.url);
       return { url: newUrl, etag: node.etag, created: true };
-    },
+    }),
 
-    async delete(url, opts = {}) {
+    delete: serial(async (url, opts = {}) => {
       begin("DELETE", url, opts.signal);
+      const ifMatch = conditional("DELETE", url, opts.ifMatch);
       const node = need("DELETE", url);
       if (url === root) throw fail("method-not-allowed", "DELETE", url, 405);
-      checkEtag("DELETE", url, node, opts.ifMatch);
+      checkEtag("DELETE", url, node, ifMatch);
       if (node.kind === "container" && children(url).length > 0 && opts.recursive !== true) {
         throw fail("conflict", "DELETE", url, 409, { message: `${url} is not empty` });
       }
       for (const removed of subtree(url)) nodes.delete(removed.url);
       touch(node.parent);
-    },
+    }),
 
     async metadata(url): Promise<Metadata> {
       begin("GET", url);
@@ -822,7 +878,7 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
       return { url: metadataUrl(url), etag: node.metaEtag, links, raw };
     },
 
-    async setMetadata(url, ops: readonly MetadataOp[], opts) {
+    setMetadata: serial(async (url, ops: readonly MetadataOp[], opts) => {
       begin("PATCH", metadataUrl(url));
       const ifMatch = conditional("PATCH", metadataUrl(url), opts?.ifMatch);
       const node = need("PATCH", url);
@@ -849,7 +905,7 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
       node.links = next;
       node.metaEtag = nextEtag();
       return { etag: node.metaEtag };
-    },
+    }),
 
     async parentOf(url) {
       begin("HEAD", url);

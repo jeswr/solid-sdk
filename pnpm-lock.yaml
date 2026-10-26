@@ -4473,9 +4473,6 @@ importers:
       '@biomejs/biome':
         specifier: ^2.5.1
         version: 2.5.3
-      '@rdfjs/types':
-        specifier: ^2.0.1
-        version: 2.0.1
       '@types/n3':
         specifier: ^1.16.0
         version: 1.26.1

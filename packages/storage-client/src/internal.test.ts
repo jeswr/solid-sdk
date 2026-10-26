@@ -94,6 +94,42 @@ describe("url helpers", () => {
   });
 });
 
+describe("toBytes cancellation", () => {
+  test("an abort cancels a pending stream and stops collection", async () => {
+    let cancelled: unknown;
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array([1]));
+      },
+      cancel(reason) {
+        cancelled = reason;
+      },
+    });
+    const controller = new AbortController();
+    const pending = toBytes(stream, controller.signal);
+    controller.abort("stop");
+    expect(await pending).toEqual(new Uint8Array([1]));
+    expect(cancelled).toBe("stop");
+  });
+
+  test("an already-aborted signal cancels before reading", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const never = new ReadableStream<Uint8Array>({ pull() {} });
+    expect(await toBytes(never, controller.signal)).toEqual(new Uint8Array());
+    const failingCancel = new ReadableStream<Uint8Array>({
+      pull() {},
+      cancel() {
+        throw new Error("cancel failed");
+      },
+    });
+    expect(await toBytes(failingCancel, controller.signal)).toEqual(new Uint8Array());
+    expect(await toBytes(new Blob(["x"]), new AbortController().signal)).toEqual(
+      new TextEncoder().encode("x"),
+    );
+  });
+});
+
 describe("toBytes", () => {
   test("accepts every Body type", async () => {
     const expected = new TextEncoder().encode("héllo");

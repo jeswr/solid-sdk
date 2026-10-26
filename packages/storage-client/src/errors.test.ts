@@ -266,6 +266,18 @@ describe("reading error bodies", () => {
     ).toBeUndefined();
   });
 
+  test("mapping a cloned response never waits for the sibling body", async () => {
+    for (const contentType of ["text/html", "application/json"]) {
+      const original = new Response(`${"x".repeat(MAX_PROBLEM_BYTES + 1)}`, {
+        status: 500,
+        headers: { "Content-Type": contentType },
+      });
+      const error = await storageErrorFrom("GET", URL_, original.clone());
+      expect(error.code).toBe("server");
+      await original.body?.cancel();
+    }
+  });
+
   test("multi-chunk bodies are reassembled", async () => {
     const encoder = new TextEncoder();
     const body = new ReadableStream<Uint8Array>({
