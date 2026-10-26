@@ -169,6 +169,41 @@ test("maps only JWK verification methods and preserves cryptographic type and ke
 });
 
 test.each([
+  { revoked: "2024-12-10T15:28:32Z" },
+  { expires: "2025-12-01T00:00:00Z" },
+  { revoked: "2030-01-01T12:00:00.123+02:00", expires: "2031-01-01T00:00:00Z" },
+])("preserves verification-method validity metadata for use-time checks: %j", (validity) => {
+  const method = { ...sparqLwsCid.verificationMethod[0], ...validity };
+  const body = minimal({ verificationMethod: [method] });
+  const before = structuredClone(body);
+  vi.spyOn(Date, "now").mockReturnValue(Date.parse("2026-01-01T00:00:00Z"));
+  const parsed = parseLwsDescription(body, storageUrl, requestUrl);
+  // Cache serialization must retain past and future validity limits verbatim.
+  expect(JSON.parse(JSON.stringify(parsed)).verificationMethods).toEqual([method]);
+  expect(body).toEqual(before);
+});
+
+test.each(["revoked", "expires"])("rejects malformed %s metadata", (field) => {
+  for (const value of [
+    null,
+    false,
+    42,
+    {},
+    [],
+    "",
+    "not a date",
+    "2026-01-01T00:00:00",
+    "2026-13-01T00:00:00Z",
+  ]) {
+    failure(
+      minimal({
+        verificationMethod: [{ ...sparqLwsCid.verificationMethod[0], [field]: value }],
+      }),
+    );
+  }
+});
+
+test.each([
   null,
   undefined,
   [],

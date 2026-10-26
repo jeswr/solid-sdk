@@ -45,6 +45,17 @@ export function parseLwsDescription(
     }
   }
 
+  function timestamp(value: unknown, field: string): string {
+    const text = string(value, field);
+    if (
+      !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(text) ||
+      !Number.isFinite(Date.parse(text))
+    ) {
+      invalid(`${field} must be a timestamp with a timezone`);
+    }
+    return text;
+  }
+
   function array(value: unknown, field: string): unknown[] {
     if (value === undefined) return [];
     if (!Array.isArray(value)) invalid(`${field} must be an array`);
@@ -127,6 +138,12 @@ export function parseLwsDescription(
       type: string(method.type, "verificationMethod type"),
       controller: string(method.controller, "verificationMethod controller"),
       publicKeyJwk: record(method.publicKeyJwk, "publicKeyJwk"),
+      ...(method.revoked === undefined
+        ? {}
+        : { revoked: timestamp(method.revoked, "verificationMethod revoked") }),
+      ...(method.expires === undefined
+        ? {}
+        : { expires: timestamp(method.expires, "verificationMethod expires") }),
     });
   }
 
