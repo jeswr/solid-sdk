@@ -321,6 +321,32 @@ describe("reviewed recipe failure boundaries", () => {
     expect(mark).not.toHaveBeenCalled();
   });
 
+  it("posts the exact discovered notification channel type to its service", async () => {
+    const code = blocks("solid-notifications", "ts", "### 2. Subscribe")[0];
+    for (const channelTypeIri of [
+      "http://www.w3.org/ns/solid/notifications#WebSocketChannel2023",
+      "https://server.example/channels#WebSocketChannel2023",
+    ]) {
+      const fetch = vi.fn(async () =>
+        Response.json({ receiveFrom: "wss://server.example/receive" }),
+      );
+      const subscriptionServiceUrl = "https://server.example/subscriptions";
+      const resourceUrl = "https://pod.example/notes.ttl";
+      expect(
+        await execute(
+          code,
+          { fetch, subscriptionServiceUrl, channelTypeIri, resourceUrl },
+          {},
+          "wsUrl",
+        ),
+      ).toBe("wss://server.example/receive");
+      const [url, init] = fetch.mock.calls[0];
+      expect(url).toBe(subscriptionServiceUrl);
+      expect(init.method).toBe("POST");
+      expect(JSON.parse(init.body)).toMatchObject({ type: channelTypeIri, topic: resourceUrl });
+    }
+  });
+
   it("keeps newer field generations even when priority returns to the same value", async () => {
     const code = blocks("solid-app-shell", "ts", "### Trap 2")[0];
     const { claimMutation, revertIfCurrent, fieldOwners } = await execute(

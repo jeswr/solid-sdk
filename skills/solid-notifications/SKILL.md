@@ -84,16 +84,22 @@ Two `Link` rels carry discovery, per
 | `http://www.w3.org/ns/solid/terms#storageDescription` | any resource in a storage | the storage description doc (also lists services) |
 
 `HEAD` the resource, read the `Link` header, dereference the description doc, and read off the
-subscription-service URL for the channel type you want. CSS exposes fixed paths under
+subscription-service URL **and the exact advertised channel-type IRI** for the channel you want.
+Keep that service/type pair together for the subscription request. CSS exposes fixed paths under
 `/.notifications/` (e.g. `…/.notifications/WebSocketChannel2023/`), but **discover them — do not
 assume that layout**
 ([CSS 7.x notifications docs](https://communitysolidserver.github.io/CommunitySolidServer/7.x/usage/notifications/)).
 
 ### 2. Subscribe — POST a JSON-LD channel request
 
+<!-- AUTHORED-BY Codex GPT-6 -->
+
 `POST` `application/ld+json` to the subscription service. The channel **type IRI** and
 `receiveFrom` are defined by the channel-type spec, not the protocol doc
-([WebSocketChannel2023](https://solid.github.io/notifications/websocket-channel-2023)). Context
+([WebSocketChannel2023](https://solid.github.io/notifications/websocket-channel-2023)).
+Use the channel-type IRI discovered in step 1 as `channelTypeIri`; CSS 7 advertises
+`http://www.w3.org/ns/solid/notifications#WebSocketChannel2023`. Never hard-code the singular
+`notification#` namespace or reconstruct the IRI from its fragment. Context
 URL is `https://www.w3.org/ns/solid/notifications-context/v1`
 ([notifications-protocol](https://solidproject.org/TR/notifications-protocol)).
 
@@ -104,7 +110,7 @@ const subRes = await fetch(subscriptionServiceUrl, {
   headers: { "content-type": "application/ld+json" },
   body: JSON.stringify({
     "@context": "https://www.w3.org/ns/solid/notifications-context/v1",
-    type: "http://www.w3.org/ns/solid/notification#WebSocketChannel2023",
+    type: channelTypeIri, // exact IRI advertised by this subscription service
     topic: resourceUrl, // the resource OR container to watch
   }),
 });
