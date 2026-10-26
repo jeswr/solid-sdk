@@ -162,3 +162,78 @@ questions. Original implementation limitations above remain outside this fix rou
 `roborev` is still unavailable in this environment, so automated per-commit review could
 not run; the supplied review findings were reproduced and verified locally. No remote
 service was called.
+
+## Fix round 2 — review findings at `0f75104add08`
+
+2026-10-26. All five requested findings are fixed on `lane/sst-gpa`:
+
+- `c1ea969a` — `fix(agent-mandate): validate complete signed policy graphs`.
+  Reject unsupported issuance fields at policy, rule, duty, constraint and limit depths.
+  Every VC verifier entry path now compares the complete signed claim graph with its
+  decoded representation. Signed unsupported restrictions fail both direct verification
+  and Turtle parsing instead of disappearing before evaluation.
+- `c1a22241` — `fix(agent-mandate): validate active permission duties`.
+  Independently validate discharge evidence and every active permission duty's operands
+  before accepting fulfillment. Inactive duties do not affect unrelated permissions;
+  definite prohibitions retain precedence.
+- `19c792b8` — `fix(agent-mandate): validate both constraint operands`.
+  Validate every value on both sides against declared or inferred supported datatypes,
+  including scalar cardinality, finite numbers, integer bounds, calendar-valid temporal
+  values and homogeneous sets. Malformed or non-comparable values are indeterminate
+  throughout rules, permission duties and policy obligations.
+- `93ec9450` — `fix(agent-mandate): require confirmed legacy revocation clearance`.
+  Only an explicit `false` resolver result clears legacy revocation; malformed, absent,
+  indeterminate and revoked results refuse the mandate.
+- `06cd1c30` — `fix(agent-mandate): preserve signed RDF proof configuration`.
+  Both Turtle writers use the exact solid-vc proof options, with a blank proof node and
+  `xsd:dateTime` creation literal. Parsing/verification rejects altered proof configurations.
+  Independent tests hash the actual exported RDF configuration and claim graphs, then
+  verify the signature directly with WebCrypto, without reconstructing proof options or
+  calling the package's verification path. Named-node, datatype and extra-option tampering
+  fails independent and package verification.
+- Final report commit — `docs(agent-mandate): record second fix round validation`.
+
+Every regression group was observed failing before its corresponding fix. Commits use
+the prescribed identity, signing disabled and provenance naming Codex GPT-6.
+
+Validation used Node v24.22.1 (`PATH=/opt/node24/bin:$PATH`):
+
+```sh
+pnpm exec turbo run build --filter=@jeswr/agent-mandate... --concurrency=4
+pnpm --filter @jeswr/agent-mandate run lint && pnpm --filter @jeswr/agent-mandate run build && pnpm --filter @jeswr/agent-mandate run typecheck && pnpm --filter @jeswr/agent-mandate run test
+TURBO_SCM_BASE=0f75104add084e3a3b0269dc7211031331f4a901 pnpm run gate
+pnpm run gate:full
+```
+
+The prerequisite build passes 7/7 tasks. The package gate passes 194 tests in 8 files,
+with 100% coverage per source file: statements 388/388, branches 466/466, functions
+107/107 and lines 348/348. No thresholds, exclusions or timeouts changed. The affected
+repository gate passes 11/11 tasks, including `pnpm run lint:root`. The existing non-fatal
+agent-authz-verifier sourcemap warning remains.
+
+- `pnpm run gate:full` — FAIL outside this fix round after 67 successful tasks
+  (238 total reported), in 1m59s. Root tests reported 683 passes and three timing failures
+  in untouched files: two `test/agent-layers.test.mjs` module-load-form cases exceeded the
+  5-second timeout, and `test/check-sdk-layers.test.mjs`'s pathological-spec performance
+  assertion took 167 ms against a 50 ms limit. No root source or tests were changed.
+  The previously documented federation-codegen failures were not reached in this run.
+- Isolated rerun of both affected root test files — PASS, 643/643 tests in 85 seconds:
+
+  ```sh
+  pnpm exec vitest run test/check-sdk-layers.test.mjs test/agent-layers.test.mjs --maxWorkers=1 --testTimeout=30000 --hookTimeout=30000
+  ```
+
+  Only the CLI timeout and worker count changed for this rerun; the 50 ms performance
+  assertion and all repository test configurations remained unchanged.
+- `git diff --check` — PASS.
+
+No dependencies were added; no new `check:packages` run was needed. Changes are confined
+to the reviewed package and this required lane report. Conservative choices: unsupported
+datatypes and numeric-looking `xsd:string` values require confirmation because the upstream
+evaluator would otherwise coerce them; supported temporal comparisons use zoned dateTime
+instants or bare calendar dates. Unsupported policy fields fail issuance and verification.
+
+No requested finding remains unfinished and there are no new open questions. The original
+implementation limitations recorded above remain outside this fix round. `roborev` is
+still unavailable, so automated per-commit review could not run; the supplied findings were
+reproduced and verified locally. No external review service was called.
