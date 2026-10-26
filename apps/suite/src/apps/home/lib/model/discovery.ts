@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 // Container orchestration ported from PM pod-data.ts; no app or SDK runtime imports.
 import { RdfFetchError } from "@jeswr/fetch-rdf";
 import { NS } from "@jeswr/suite-vocab";
@@ -137,7 +138,9 @@ export async function discoverDomainItems(
         url: location.instance,
         container: false,
         files,
-        parent: new URL(".", storage).href,
+        parent: inStorage(location.instance, storage)
+          ? new URL(".", location.instance).href
+          : storage,
       });
   }
   const known =

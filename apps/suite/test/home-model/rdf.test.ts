@@ -1,7 +1,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { NS } from "@jeswr/suite-vocab";
 import { DataFactory } from "n3";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   httpUrl,
   inStorage,
@@ -14,6 +15,58 @@ import {
 import { fixtureFetch, rdf, STORAGE } from "./fixtures";
 
 describe("typed RDF read model", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it.each([
+    "https://foreign.example/context.jsonld",
+    [[null, { name: "https://schema.org/name" }, "../context.jsonld"]],
+    { "@import": "https://foreign.example/context.jsonld" },
+    { scoped: { "@id": "https://schema.org/about", "@context": "/context.jsonld" } },
+  ])("rejects remote JSON-LD contexts without any context requests: %j", async (context) => {
+    const url = `${STORAGE}item.jsonld`;
+    const body = JSON.stringify({
+      "@context": context,
+      "@id": "#it",
+      "https://schema.org/name": "A book",
+    });
+    const globalFetch = vi.fn<typeof fetch>();
+    vi.stubGlobal("fetch", globalFetch);
+    const fetch = vi.fn<typeof globalThis.fetch>(
+      async () =>
+        new Response(body, { headers: { "content-type": "application/ld+json; charset=utf-8" } }),
+    );
+    await expect(parseResource(body, "application/ld+json", url)).rejects.toThrow();
+    await expect(readResource(fetch, url)).rejects.toThrow();
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(globalFetch).not.toHaveBeenCalled();
+  });
+
+  it("supports inline JSON-LD contexts and fully expanded JSON-LD without network reads", async () => {
+    const url = `${STORAGE}item.jsonld`;
+    const globalFetch = vi.fn<typeof fetch>();
+    vi.stubGlobal("fetch", globalFetch);
+    for (const document of [
+      {
+        "@context": [null, { name: "https://schema.org/name" }],
+        "@id": "#it",
+        name: "A book",
+      },
+      [{ "@id": `${url}#it`, "https://schema.org/name": [{ "@value": "A book" }] }],
+      // A streaming parser could otherwise load the overwritten context before seeing the last key.
+      '{"@context":"https://foreign.example/context.jsonld","@context":{"name":"https://schema.org/name"},"@id":"#it","name":"A book"}',
+    ]) {
+      const body = typeof document === "string" ? document : JSON.stringify(document);
+      const dataset = await parseResource(body, "application/ld+json", url);
+      expect(subjectOf(dataset, `${url}#it`).name).toBe("A book");
+      const fetch = vi.fn<typeof globalThis.fetch>(
+        async () => new Response(body, { headers: { "content-type": "application/ld+json" } }),
+      );
+      expect(subjectOf((await readResource(fetch, url)).dataset, `${url}#it`).name).toBe("A book");
+      expect(fetch).toHaveBeenCalledTimes(1);
+    }
+    expect(globalFetch).not.toHaveBeenCalled();
+  });
+
   it("selects #it, #this, then most statements, with deterministic ties", async () => {
     const doc = `${STORAGE}item.ttl`;
     for (const [body, expected] of [

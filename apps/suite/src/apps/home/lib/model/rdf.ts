@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { fetchRdf, parseRdf } from "@jeswr/fetch-rdf";
+// AUTHORED-BY Codex GPT-6
+import { extractMediaType, fetchRdf, parseRdf } from "@jeswr/fetch-rdf";
 import { serialize } from "@jeswr/rdf-serialize";
 import { NS } from "@jeswr/suite-vocab";
 import type { DatasetCore, Term } from "@rdfjs/types";
@@ -37,6 +38,7 @@ export class HomeSubject extends TermWrapper {
       `${NS.VCARD}fn`,
       `${NS.FOAF}name`,
       `${NS.RDFS}label`,
+      `${NS.CAL}summary`,
     ]
       .flatMap((predicate) => this.texts(predicate))
       .find((name) => name.trim().length > 0);
@@ -102,17 +104,44 @@ export function inStorage(value: string, storage: string): boolean {
   return url.pathname.startsWith(root.pathname);
 }
 
+/** The shared parser has no loader option, so reject remote contexts before it can fetch. */
+function localJsonLd(body: string): string {
+  const document = JSON.parse(body, (key, value: unknown) => {
+    if (
+      key === "@import" ||
+      (key === "@context" && [value].flat(Infinity).some((context) => typeof context === "string"))
+    )
+      throw new TypeError("Remote JSON-LD contexts are disabled");
+    return value;
+  });
+  // Feed exactly the validated object to the streaming parser, including duplicate-key semantics.
+  return JSON.stringify(document);
+}
+
 /** Port of PM freshRdf: explicit injection and cache revalidation, with redirects disabled. */
 export function readResource(fetch: typeof globalThis.fetch, url: string, signal?: AbortSignal) {
   if (!httpUrl(url)) throw new TypeError("Expected an HTTP(S) resource URL");
   return fetchRdf(url, {
-    fetch: (input, init) => fetch(input, { ...init, redirect: "error" }),
+    fetch: async (input, init) => {
+      const response = await fetch(input, { ...init, redirect: "error" });
+      if (
+        response.ok &&
+        extractMediaType(response.headers.get("content-type")) === "application/ld+json"
+      )
+        return new Response(localJsonLd(await response.text()), {
+          status: response.status,
+          statusText: response.statusText,
+          headers: response.headers,
+        });
+      return response;
+    },
     headers: { "cache-control": "no-cache" },
     ...(signal ? { signal } : {}),
   });
 }
 
-export function parseResource(body: string, contentType: string, url: string) {
+export async function parseResource(body: string, contentType: string, url: string) {
+  if (extractMediaType(contentType) === "application/ld+json") body = localJsonLd(body);
   return parseRdf(body, contentType, { baseIRI: url });
 }
 

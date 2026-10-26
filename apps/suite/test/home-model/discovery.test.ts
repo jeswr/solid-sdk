@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { NS } from "@jeswr/suite-vocab";
 import { describe, expect, it } from "vitest";
 import {
@@ -8,9 +9,56 @@ import {
   sortItems,
 } from "../../src/apps/home/lib/model/discovery";
 import { DOMAINS } from "../../src/apps/home/lib/model/domains";
+import { provenanceOf } from "../../src/apps/home/lib/model/provenance";
 import { fixtureFetch, rdf, STORAGE, WEB_ID } from "./fixtures";
 
 describe("domain discovery", () => {
+  it("retains the containing folder of direct instances after integration URL deduplication", async () => {
+    const url = `${STORAGE}integrations/netflix/watched.ttl`;
+    const containerUrl = `${STORAGE}integrations/netflix/`;
+    const fetch = fixtureFetch({
+      [url]: '<#it> a schema:Movie ; schema:name "A film" .',
+      [`${STORAGE}integrations/`]: "<> ldp:contains <netflix/> .",
+      [containerUrl]: "<> ldp:contains <watched.ttl> .",
+    });
+    const result = await discoverDomainItems("media", {
+      storage: STORAGE,
+      fetch,
+      typeIndex: [{ forClass: `${NS.SCHEMA}Movie`, instance: `${url}#it` }],
+    });
+    expect(result.failures).toEqual([]);
+    expect(result.items).toHaveLength(1);
+    const item = result.items[0] as DomainItem;
+    expect(item.containerUrl).toBe(containerUrl);
+    expect(
+      provenanceOf(item.dataset, item.subject, item.containerUrl, { storage: STORAGE }),
+    ).toEqual({
+      kind: "source",
+      label: "Netflix",
+      logoId: "netflix",
+    });
+    expect(fetch.mock.calls.filter(([input]) => String(input) === url)).toHaveLength(1);
+  });
+
+  it.each([
+    NS.CAL,
+    "http://www.w3.org/2002/12/cal/icaltzd#",
+  ])("reads task titles from %ssummary, including Pod Manager task output", async (ical) => {
+    const url = `${STORAGE}tasks/generated-id.ttl`;
+    // Pod Manager buildTask writes #it, Vtodo, summary and NEEDS-ACTION status.
+    const fetch = fixtureFetch({
+      [url]: `<#it> a <${ical}Vtodo> ; <${ical}summary> "Buy groceries" ; <${ical}status> "NEEDS-ACTION" .`,
+    });
+    const result = await discoverDomainItems("calendar", {
+      storage: STORAGE,
+      fetch,
+      typeIndex: [{ forClass: `${ical}Vtodo`, instance: url }],
+    });
+    expect(result.failures).toEqual([]);
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]).toMatchObject({ title: "Buy groceries", dataType: { id: "tasks" } });
+  });
+
   it("merges public/private locations and known folders, deduplicating and classifying actual primary subjects", async () => {
     const fetch = fixtureFetch({
       [`${STORAGE}registered/`]:
