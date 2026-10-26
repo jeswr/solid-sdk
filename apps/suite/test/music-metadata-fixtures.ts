@@ -109,15 +109,15 @@ export function picture(mime = "image/png") {
 function base64(bytes: Uint8Array) {
   return btoa(String.fromCharCode(...bytes));
 }
-export function comments(withPicture = true) {
+export function comments(withPicture = true, artistTag: "ARTIST" | "ARTISTS" = "ARTIST") {
   const fields = [
     "TITLE=Paper Moon",
-    "ARTIST=Mira Example",
+    `${artistTag}=Mira Example`,
     "ALBUM=Fictional Skies",
     "TRACKNUMBER=7",
     "DISCNUMBER=2",
     "DATE=2024-05-06",
-    "ARTIST=Rowan Fiction",
+    `${artistTag}=Rowan Fiction`,
     "URL=https://example.org/music",
   ];
   if (withPicture) fields.push(`METADATA_BLOCK_PICTURE=${base64(picture())}`);
@@ -130,7 +130,12 @@ export function comments(withPicture = true) {
   );
 }
 
-export function flac(withTags = true, withPicture = true, samples = BigInt(88200)) {
+export function flac(
+  withTags = true,
+  withPicture = true,
+  samples = BigInt(88200),
+  artistTag: "ARTIST" | "ARTISTS" = "ARTIST",
+) {
   const streamInfo = new Uint8Array(34);
   // sample rate 44100, stereo, 16-bit, 36-bit sample count.
   new DataView(streamInfo.buffer).setBigUint64(
@@ -148,7 +153,7 @@ export function flac(withTags = true, withPicture = true, samples = BigInt(88200
     block(0, streamInfo, !withTags),
     ...(withTags
       ? [
-          block(4, comments(false), !withPicture),
+          block(4, comments(false, artistTag), !withPicture),
           ...(withPicture ? [block(6, picture(), true)] : []),
         ]
       : []),

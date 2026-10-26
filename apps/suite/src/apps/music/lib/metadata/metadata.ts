@@ -30,11 +30,14 @@ export async function extractAudioMetadata(buffer: ArrayBuffer): Promise<AudioMe
   });
   return {
     title: common.title ?? null,
-    artist: common.artist ?? null,
+    artist: common.artists?.[0] ?? common.artist ?? null,
     album: common.album ?? null,
     track: id3Number(native, ["TRCK"]) ?? common.track.no,
     disc: common.disk.no,
-    year: id3Number(native, ["TDRC", "TYER"]) ?? common.year ?? null,
+    year:
+      id3Number(native, ["TDRC", "TYER"]) ??
+      (Number.isFinite(common.year) ? common.year : null) ??
+      id3Number(native, ["year"], ["ID3v1"]),
     duration: format.duration ?? null,
     coverArtMime: common.picture?.[0]?.format ?? null,
   };
@@ -42,13 +45,17 @@ export async function extractAudioMetadata(buffer: ArrayBuffer): Promise<AudioMe
 
 // The parser's common track and derived year can be overwritten by ID3v1.
 // Resolve these from native tags first, matching its ID3v2 source priority.
-function id3Number(native: IAudioMetadata["native"], ids: readonly string[]): number | null {
-  for (const source of ["ID3v2.4", "ID3v2.3"]) {
+function id3Number(
+  native: IAudioMetadata["native"],
+  ids: readonly string[],
+  sources: readonly string[] = ["ID3v2.4", "ID3v2.3"],
+): number | null {
+  for (const source of sources) {
     for (const id of ids) {
       const value = native[source]?.findLast((tag) => tag.id === id)?.value;
       if (typeof value !== "string") continue;
       const number = Number.parseInt(value, 10);
-      if (!Number.isNaN(number)) return number;
+      if (Number.isFinite(number)) return number;
     }
   }
   return null;

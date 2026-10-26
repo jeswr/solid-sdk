@@ -104,11 +104,36 @@ describe("extractAudioMetadata", () => {
       { track: 9, year: 1999 },
     ],
   ])("falls back to ID3v1 separately for missing or invalid ID3v2 numbers %j", async (numbers, expected) => {
-    const modern = id3(4, undefined, true, undefined, numbers);
+    for (const version of [3, 4] as const) {
+      const modern = id3(version, undefined, true, undefined, numbers);
+      const legacy = id3v1();
+      legacy.set(text("1999"), 93);
+      legacy[126] = 9;
+      expect(await extractAudioMetadata(join(modern, mpeg(), legacy).buffer)).toMatchObject(
+        expected,
+      );
+    }
+  });
+
+  it.each([
+    3, 4,
+  ] as const)("returns null for invalid ID3v2.%i years without a valid legacy year", async (version) => {
+    const modern = id3(version, undefined, true, undefined, { year: "invalid" });
+    expect(await extractAudioMetadata(join(modern, mpeg()).buffer)).toMatchObject({ year: null });
     const legacy = id3v1();
-    legacy.set(text("1999"), 93);
-    legacy[126] = 9;
-    expect(await extractAudioMetadata(join(modern, mpeg(), legacy).buffer)).toMatchObject(expected);
+    legacy.set(text("oops"), 93);
+    expect(await extractAudioMetadata(join(modern, mpeg(), legacy).buffer)).toMatchObject({
+      year: null,
+    });
+  });
+
+  it.each([
+    "ARTIST",
+    "ARTISTS",
+  ] as const)("returns the first artist from repeated FLAC %s tags", async (artistTag) => {
+    expect(
+      await extractAudioMetadata(flac(true, true, BigInt(88200), artistTag).buffer),
+    ).toMatchObject({ artist: "Mira Example" });
   });
 
   it("reads FLAC Vorbis comments, STREAMINFO duration and PICTURE MIME", async () => {
