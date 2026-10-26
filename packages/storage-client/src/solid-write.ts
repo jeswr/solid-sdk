@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 // Solid mutations (ADR-003 §6, T-022); the read side stays in solid-backend.ts.
 import type { DatasetCore, Quad } from "@jeswr/fetch-rdf";
 import { escapeIri } from "@jeswr/rdf-serialize";
@@ -9,7 +10,7 @@ import { pathParent } from "./internal.js";
 import { serializeQuads, WRITABLE_RDF } from "./rdf.js";
 import type { SolidBackendOptions } from "./solid-backend.js";
 import { buildN3Patch, n3Envelope, patchFormulas } from "./solid-patch.js";
-import type { Body, ReadResult, ResourceKind, StorageClient, WriteResult } from "./types.js";
+import type { Body, Entry, ReadResult, ResourceKind, StorageClient, WriteResult } from "./types.js";
 
 type Writes = Pick<
   StorageClient,
@@ -22,13 +23,59 @@ const MEDIA = new RegExp(
 const LDP_CONTAINER = '<http://www.w3.org/ns/ldp#BasicContainer>; rel="type"';
 const LDP_RESOURCE = '<http://www.w3.org/ns/ldp#Resource>; rel="type"';
 const BASE32 = "abcdefghijklmnopqrstuvwxyz234567";
+const LDP = "http://www.w3.org/ns/ldp#";
+const RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
+const PIM_STORAGE = "http://www.w3.org/ns/pim/space#Storage";
+const MODIFIED = "http://purl.org/dc/terms/modified";
+const STAT = "http://www.w3.org/ns/posix/stat#";
+const IANA = "http://www.w3.org/ns/iana/media-types/";
+
+/** Private listing hook: inspect the same parsed RDF that supplies listAll's entries. */
+export type InspectContainer = (url: string, dataset: DatasetCore, items: readonly Entry[]) => void;
+
+// CSS 8.0.0-alpha.3 dist/storage/DataAccessorBasedStore.js:95-100 (containment),
+// dist/util/ResourceUtil.js:21-36 (types/modified), and
+// dist/storage/accessors/FileDataAccessor.js:274-305 (member media-type class, stat:mtime/size).
+const checkContainerRdf: InspectContainer = (url, dataset, items) => {
+  const subjects = new Set([url, ...items.map((item) => item.url)]);
+  const members = new Set(items.map((item) => item.url));
+  for (const q of dataset) {
+    if (q.predicate.value === `${LDP}contains`) continue;
+    // File-backed CSS types each listed member with `<iana/media-types/{type}#Resource>`.
+    if (
+      q.subject.termType === "NamedNode" &&
+      members.has(q.subject.value) &&
+      q.predicate.value === RDF_TYPE &&
+      q.object.termType === "NamedNode" &&
+      q.object.value.startsWith(IANA) &&
+      q.object.value.endsWith("#Resource")
+    )
+      continue;
+    if (
+      q.subject.termType === "NamedNode" &&
+      subjects.has(q.subject.value) &&
+      (q.predicate.value === MODIFIED ||
+        q.predicate.value.startsWith(STAT) ||
+        (q.predicate.value === RDF_TYPE &&
+          q.object.termType === "NamedNode" &&
+          (q.object.value.startsWith(LDP) || q.object.value === PIM_STORAGE)))
+    )
+      continue;
+    throw new StorageError("unsupported", {
+      method: "MOVE",
+      url,
+      feature: "move",
+      message: "Container RDF would not be preserved by an emulated move",
+    });
+  }
+};
 
 // If-Match uses strong comparison: wildcards, weak tags and lists cannot identify copied bytes.
 function usableEtag(value: string | null | undefined): value is string {
   return typeof value === "string" && /^"[\x21\x23-\x7E\x80-\xFF]*"$/.test(value);
 }
 
-// Decode only for cycle comparisons. Requests retain the raw spelling, including non-UTF-8 names.
+// Decode only for comparisons. Requests retain the raw spelling, including non-UTF-8 names.
 function movePath(url: string): string[] {
   return new URL(url).pathname
     .replace(/\/$/, "")
@@ -40,6 +87,10 @@ function movePath(url: string): string[] {
         return segment;
       }
     });
+}
+function moveIdentity(url: string): string {
+  const parsed = new URL(url);
+  return JSON.stringify([parsed.origin, movePath(url), parsed.pathname.endsWith("/")]);
 }
 function withinMoveSource(url: string, source: string): boolean {
   const path = movePath(url);
@@ -85,7 +136,15 @@ interface Copy extends Node {
 }
 
 /** Attach mutations without changing the read implementation or its closure. */
-export function solidWrites(options: SolidBackendOptions, client: () => StorageClient): Writes {
+export function solidWrites(
+  options: SolidBackendOptions,
+  client: () => StorageClient,
+  listAll: (
+    url: string,
+    opts: { signal?: AbortSignal },
+    inspect?: InspectContainer,
+  ) => AsyncIterable<Entry>,
+): Writes {
   const { fetch } = options;
   const root = options.root;
   const error = (code: StorageErrorCode, method: string, url: string, message?: string) =>
@@ -221,11 +280,12 @@ export function solidWrites(options: SolidBackendOptions, client: () => StorageC
     url: string,
     limit = Number.POSITIVE_INFINITY,
     signal?: AbortSignal,
+    inspect?: InspectContainer,
   ): Promise<Node[]> {
     const nodes: Node[] = [{ url, kind: "container" }];
     for (const node of nodes) {
       if (node.kind !== "container") continue;
-      for await (const entry of client().listAll(node.url, { signal })) {
+      for await (const entry of listAll(node.url, { signal }, inspect)) {
         const child = target("GET", entry.url);
         nodes.push({ url: child, kind: entry.kind });
         if (nodes.length > limit)
@@ -426,23 +486,28 @@ export function solidWrites(options: SolidBackendOptions, client: () => StorageC
       if (first.etag !== opts.ifMatch) discard(first.body);
       checkEtag("MOVE", source, first.etag, opts.ifMatch);
       const nodes: Node[] =
-        kind === "container" ? await tree(source, 2000, opts.signal) : [{ url: source, kind }];
+        kind === "container"
+          ? await tree(source, 2000, opts.signal, checkContainerRdf)
+          : [{ url: source, kind }];
       const sourceEtags = new Map<string, string | null>();
       const excluded = new Set<string>();
+      const sourceIdentity = moveIdentity(source);
       for (const node of nodes) {
-        if (node.url !== source && /\.(acl|acr)$/.test(node.url)) excluded.add(node.url);
-        // Preflight only headers: discover every auxiliary exclusion before any body is copied.
+        const identity = moveIdentity(node.url);
+        if (identity !== sourceIdentity && /\.(acl|acr)$/.test(movePath(node.url).at(-1) as string))
+          excluded.add(identity);
+        // Discover every auxiliary exclusion before any resource body is copied.
         const read =
           node.url === source ? first : await client().head(node.url, { signal: opts.signal });
         const auxiliary = (read.links.get("acl") ?? []).map((link) => link.target);
         if (read.metadataUrl) auxiliary.push(read.metadataUrl);
         for (const url of auxiliary) {
-          const auxiliaryUrl = target("GET", url);
-          if (auxiliaryUrl !== source) excluded.add(auxiliaryUrl);
+          const auxiliaryIdentity = moveIdentity(target("GET", url));
+          if (auxiliaryIdentity !== sourceIdentity) excluded.add(auxiliaryIdentity);
         }
         sourceEtags.set(node.url, read.etag);
       }
-      const planned = nodes.filter((node) => !excluded.has(node.url));
+      const planned = nodes.filter((node) => !excluded.has(moveIdentity(node.url)));
       // Reject unusable validators before writes, including any used for auxiliary teardown.
       // Auxiliary members may have no ETag and are then deleted unconditionally. GET validators are
       // checked again when streaming, since those alone identify the bytes actually copied.
@@ -451,7 +516,7 @@ export function solidWrites(options: SolidBackendOptions, client: () => StorageC
         if (
           node.kind === "resource" &&
           !usableEtag(sourceEtag) &&
-          (!excluded.has(node.url) || sourceEtag !== null)
+          (!excluded.has(moveIdentity(node.url)) || sourceEtag !== null)
         )
           throw error(
             "invalid-response",

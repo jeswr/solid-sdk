@@ -119,8 +119,20 @@ Solid write side (ADR-003 §6, T-022; implementation isolated in `src/solid-writ
   missing/unusable GET ETags or missing/malformed Content-Type
   are invalid-response errors identifying the source GET, before its destination PUT.
 - Container moves walk listAll recursively before writes, capped at 2000 resources including the
-  top container (unsupported/feature move above the cap). Preflight HEADs every member to discover
-  auxiliary exclusions and rejects missing/unusable validators for copied resources before writes;
+  top container (unsupported/feature move above the cap). Preflight inspects every container's RDF,
+  including the top one, reusing the listing GET and its parsed dataset with the existing RDF body
+  handling and limits. Only `ldp:contains` (any subject), and statements about that container or its
+  listed members using `rdf:type` with an LDP-namespace IRI or `pim:Storage`, `dcterms:modified`, or
+  a predicate in `http://www.w3.org/ns/posix/stat#` are allowed, plus `rdf:type`
+  `<http://www.w3.org/ns/iana/media-types/{type}#Resource>` on listed members (file-backed CSS
+  types every member with its media type). Anything else refuses the move with
+  `unsupported`/feature `move`: container RDF would not be preserved. Other types, including an
+  IANA class on the container itself, are refused. CSS 8.0.0-alpha.3 sources
+  (under its installed package): `dist/storage/DataAccessorBasedStore.js:95–100` generates containment
+  and includes child metadata; `dist/util/ResourceUtil.js:21–36` generates LDP types and
+  `dcterms:modified`; `dist/storage/accessors/FileDataAccessor.js:297–305` generates `stat:mtime`
+  and `stat:size`, and `:278–282` the member IANA media-type classes. Preflight HEADs every member
+  to discover auxiliary exclusions and rejects missing/unusable validators for copied resources before writes;
   any supplied auxiliary-resource validator used for teardown must also be strong. No resource GET
   bodies are read during preflight. Copy breadth-first, creating containers before children and
   streaming one resource at a time without buffering. Record each GET ETag for depth-first source
@@ -129,7 +141,11 @@ Solid write side (ADR-003 §6, T-022; implementation isolated in `src/solid-writ
   advertised describedby documents, and every scoped rel="acl" link target (WAC or ACP,
   regardless of filename) discovered during header preflight are excluded from implicit copies;
   source teardown still deletes listed auxiliary members. The explicit move source is never
-  excluded. ACLs and metadata are not copied implicitly.
+  excluded. Exclusion identity compares origin, percent-decoded path segments (raw segment on
+  decoding failure), and the trailing slash; the suffix rule uses the decoded last segment.
+  Requests keep their original spellings. ACLs and metadata are not copied implicitly.
+  Residual race: triples added to a container after preflight are not detected, because source
+  container DELETEs are unconditional.
 - Copy failure rolls back completed copies deepest-first and rethrows the original error. Resource
   cleanup trusts only its own PUT-response ETag when it is exactly one strong entity-tag (no
   wildcard, weak tag, list or malformed value); follow-up HEAD observations are kept separately

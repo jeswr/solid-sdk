@@ -1713,6 +1713,252 @@ test.each([
   expect(calls).toHaveLength(0);
 });
 
+describe("round-5 move preflight regressions", () => {
+  const ldp = "http://www.w3.org/ns/ldp#";
+  const rdfType = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
+  const modified = "http://purl.org/dc/terms/modified";
+  const stat = "http://www.w3.org/ns/posix/stat#";
+  const storageType = "http://www.w3.org/ns/pim/space#Storage";
+  const contains = (container: string, member: string) =>
+    quad(nn(container), nn(`${ldp}contains`), nn(member));
+
+  test.each([
+    SRC,
+    `${SRC}sub/`,
+  ])("user RDF in container %s refuses the entire move before any writes", async (container) => {
+    const body = await serializeQuads(
+      [quad(nn("urn:example:container"), nn("urn:example:label"), literal("example"))],
+      "text/turtle",
+    );
+    const { storage, calls } = await treeBackend({
+      [`GET ${container}`]: response(200, { "content-type": "text/turtle" }, body),
+    });
+    expect(
+      await rejection(storage.move(SRC, DEST, { ifMatch: '"source"' }), "unsupported"),
+    ).toMatchObject({
+      method: "MOVE",
+      url: container,
+      feature: "move",
+      message: "Container RDF would not be preserved by an emulated move",
+    });
+    expect(calls.every((call) => ["HEAD", "GET"].includes(call.method))).toBe(true);
+    expect(calls.filter((call) => call.method === "GET" && call.url === container)).toHaveLength(1);
+  });
+
+  test.each([
+    quad(nn(SRC), nn(rdfType), nn("urn:custom:Type")),
+    quad(nn(SRC), nn(rdfType), literal(`${ldp}Container`)),
+    quad(nn(SRC), nn(rdfType), nn("http://www.w3.org/ns/pim/space#Workspace")),
+    quad(nn(SRC), nn(rdfType), nn("http://www.w3.org/ns/iana/media-types/text/plain#Resource")),
+    quad(nn(`${SRC}a`), nn(rdfType), nn("http://www.w3.org/ns/iana/media-types/text/plain")),
+    quad(
+      nn(`${SRC}a`),
+      nn(rdfType),
+      literal("http://www.w3.org/ns/iana/media-types/text/plain#Resource"),
+    ),
+    quad(nn(`${SRC}unlisted`), nn(modified), literal("2026-10-26T00:00:00Z")),
+    quad(blankNode("unrelated"), nn(`${stat}size`), literal(12)),
+    quad(nn(SRC), nn("http://www.w3.org/ns/posix/statistics#size"), literal(12)),
+    quad(nn(`${SRC}a`), nn("urn:example:label"), literal("member annotation")),
+  ])("refuses non-server-managed container statement %s", async (statement) => {
+    const { storage, calls } = await treeBackend({
+      [`GET ${SRC}`]: response(
+        200,
+        { "content-type": "text/turtle" },
+        await serializeQuads([contains(SRC, `${SRC}a`), statement], "text/turtle"),
+      ),
+    });
+    expect(
+      await rejection(storage.move(SRC, DEST, { ifMatch: '"source"' }), "unsupported"),
+    ).toMatchObject({ feature: "move", url: SRC });
+    expect(calls.map((call) => call.method)).toEqual(["HEAD", "GET"]);
+  });
+
+  test("server-managed RDF with members and CSS-shaped metadata still moves using one GET per container", async () => {
+    const generated = (url: string, container: boolean) => [
+      ...["Resource", ...(container ? ["Container", "BasicContainer"] : ["RDFSource"])].map(
+        (type) => quad(nn(url), nn(rdfType), nn(ldp + type)),
+      ),
+      quad(nn(url), nn(modified), literal("2026-10-26T00:00:00Z")),
+      quad(nn(url), nn(`${stat}mtime`), literal(1792972800)),
+      ...(container
+        ? []
+        : [
+            quad(nn(url), nn(`${stat}size`), literal(12)),
+            // FileDataAccessor's member media-type class.
+            quad(
+              nn(url),
+              nn(rdfType),
+              nn("http://www.w3.org/ns/iana/media-types/text/turtle#Resource"),
+            ),
+          ]),
+    ];
+    const overrides: Record<string, Exchange> = {};
+    for (const [container, members] of [
+      [SRC, [`${SRC}a`, `${SRC}sub/`]],
+      [`${SRC}sub/`, [`${SRC}sub/b`]],
+    ] as const) {
+      overrides[`GET ${container}`] = response(
+        200,
+        { etag: '"source"', "content-type": "text/turtle" },
+        await serializeQuads(
+          [
+            ...generated(container, true),
+            quad(nn(container), nn(rdfType), nn(storageType)),
+            ...members.flatMap((url) => [
+              contains(container, url),
+              ...generated(url, url.endsWith("/")),
+            ]),
+            // The contains predicate itself is server-managed, independent of its subject.
+            contains("urn:other:container", "urn:other:member"),
+          ],
+          "text/turtle",
+        ),
+      );
+    }
+    const { storage, calls } = await treeBackend(overrides);
+    expect((await storage.move(SRC, DEST, { ifMatch: '"source"' })).url).toBe(COPY);
+    const firstWrite = calls.findIndex((call) => call.method === "PUT");
+    for (const url of [SRC, `${SRC}sub/`]) {
+      const gets = calls.filter((call) => call.method === "GET" && call.url === url);
+      expect(gets).toHaveLength(1);
+      expect(calls.indexOf(gets[0] as Call)).toBeLessThan(firstWrite);
+    }
+    expect(calls.filter((call) => call.method === "PUT").map((call) => call.url)).toEqual([
+      COPY,
+      `${COPY}a`,
+      `${COPY}sub/`,
+      `${COPY}sub/b`,
+    ]);
+  });
+
+  test.each([
+    ["text/turtle", "not valid turtle!"],
+    ["text/plain", "opaque container representation"],
+  ])("unreadable %s container RDF fails closed before writes", async (type, body) => {
+    const { storage, calls } = await treeBackend({
+      [`GET ${SRC}sub/`]: response(200, { "content-type": type }, body),
+    });
+    await rejection(storage.move(SRC, DEST, { ifMatch: '"source"' }), "invalid-response");
+    expect(calls.every((call) => ["HEAD", "GET"].includes(call.method))).toBe(true);
+  });
+
+  test.each([
+    "acl",
+    "describedby",
+  ])("%s aliases exclude auxiliary copies and retain raw request spellings", async (rel) => {
+    for (const [listed, advertised] of [
+      [`${SRC}access`, `${SRC}%61ccess`],
+      [`${SRC}%61ccess`, `${SRC}access`],
+      [`${SRC}%FF`, `${SRC}%FF`],
+    ]) {
+      for (const etag of ['"access"', null]) {
+        const resource = `${SRC}z-file`;
+        const copy = COPY + (listed as string).slice(SRC.length);
+        const { storage, calls } = await treeBackend({
+          [`GET ${SRC}`]: response(
+            200,
+            { "content-type": "text/turtle" },
+            await serializeQuads(
+              [contains(SRC, listed as string), contains(SRC, resource)],
+              "text/turtle",
+            ),
+          ),
+          [`HEAD ${listed}`]: response(200, etag === null ? {} : { etag }),
+          [`HEAD ${resource}`]: response(200, {
+            etag: '"source"',
+            link: `<${advertised}>; rel="${rel}"`,
+          }),
+          [`GET ${listed}`]: response(
+            200,
+            { etag: '"access"', "content-type": "text/plain" },
+            "policy or metadata",
+          ),
+          [`PUT ${copy}`]: response(201),
+          [`GET ${resource}`]: response(
+            200,
+            { etag: '"source"', "content-type": "text/plain" },
+            "bytes",
+          ),
+          [`PUT ${COPY}z-file`]: response(201),
+          [`DELETE ${resource}`]: response(),
+          [`DELETE ${listed}`]: response(),
+        });
+        await storage.move(SRC, DEST, { ifMatch: '"source"' });
+        expect(calls.filter((call) => call.method === "PUT").map((call) => call.url)).toEqual([
+          COPY,
+          `${COPY}z-file`,
+        ]);
+        expect(calls.some((call) => call.method === "GET" && call.url === listed)).toBe(false);
+        expect(calls.some((call) => call.url === advertised && advertised !== listed)).toBe(false);
+        expect(
+          calls
+            .find((call) => call.method === "DELETE" && call.url === listed)
+            ?.headers.get("if-match"),
+        ).toBe(etag);
+      }
+    }
+  });
+
+  test.each([
+    "a%2Eacl",
+    "a.ac%72",
+  ])("decoded auxiliary suffix %s prevents implicit copying", async (name) => {
+    const auxiliary = SRC + name;
+    const { storage, calls } = await treeBackend({
+      [`GET ${SRC}`]: response(
+        200,
+        { "content-type": "text/turtle" },
+        await serializeQuads([contains(SRC, auxiliary)], "text/turtle"),
+      ),
+      [`HEAD ${auxiliary}`]: response(200, {}),
+      [`DELETE ${auxiliary}`]: response(),
+    });
+    await storage.move(SRC, DEST, { ifMatch: '"source"' });
+    expect(calls.filter((call) => call.method === "PUT").map((call) => call.url)).toEqual([COPY]);
+    expect(calls.some((call) => call.method === "GET" && call.url === auxiliary)).toBe(false);
+  });
+
+  test.each([
+    "acl",
+    "describedby",
+  ])("an %s alias of the explicit source never excludes it", async (rel) => {
+    const source = `${ROOT}%61ccess.acl`;
+    const dest = `${DEST}%61ccess.acl`;
+    const { storage, calls } = backend({
+      [`GET ${source}`]: response(
+        200,
+        {
+          etag: TAG,
+          "content-type": "text/plain",
+          link: `<${ROOT}access.acl>; rel="${rel}"`,
+        },
+        "explicit policy",
+      ),
+      [`PUT ${dest}`]: response(201),
+      [`DELETE ${source}`]: response(),
+    });
+    expect((await storage.move(source, DEST, { ifMatch: TAG })).url).toBe(dest);
+    expect(calls.map((call) => [call.method, call.url])).toEqual([
+      ["GET", source],
+      ["PUT", dest],
+      ["DELETE", source],
+    ]);
+    expect(await new Response(calls[1]?.body as ReadableStream).text()).toBe("explicit policy");
+  });
+
+  test("exclusion identities distinguish trailing slashes", async () => {
+    const { storage, calls } = await treeBackend({
+      [`HEAD ${SRC}a`]: response(200, {
+        etag: '"source"',
+        link: `<${SRC}sub>; rel="acl"`,
+      }),
+    });
+    await storage.move(SRC, DEST, { ifMatch: '"source"' });
+    expect(calls.some((call) => call.method === "PUT" && call.url === `${COPY}sub/`)).toBe(true);
+  });
+});
+
 describe("round-4 write regressions", () => {
   const unusableEtags = [
     "*",

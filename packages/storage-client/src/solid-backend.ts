@@ -20,7 +20,7 @@ import {
   send,
 } from "./http.js";
 import { paginate, pathParent } from "./internal.js";
-import { solidWrites } from "./solid-write.js";
+import { type InspectContainer, solidWrites } from "./solid-write.js";
 import type {
   AuthFetch,
   Entry,
@@ -227,57 +227,65 @@ export function createSolidBackend(options: SolidBackendOptions): StorageClient 
     };
   }
 
+  async function list(
+    url: string,
+    opts: Parameters<StorageClient["list"]>[1] = {},
+    inspect?: InspectContainer,
+  ) {
+    const container = scoped(root, "GET", url);
+    // A query or fragment (even an empty `?` or `#`, which URL.search/hash report as "") would
+    // name a different RDF subject than the container. In a canonical href both are delimiters.
+    if (/[?#]/.test(container)) {
+      throw new StorageError("bad-request", {
+        method: "GET",
+        url: container,
+        message: "list() takes a container URL without a query or fragment",
+      });
+    }
+    if (opts.cursor !== undefined) {
+      throw new StorageError("bad-request", {
+        method: "GET",
+        url: opts.cursor.url,
+        message: "Solid listings have one page",
+      });
+    }
+    const result = await get(container, { Accept: "text/turtle" }, opts.signal);
+    if (result.kind !== "container") {
+      discard(result.body);
+      throw new StorageError("method-not-allowed", {
+        method: "GET",
+        url: container,
+        message: `${container} is not a container`,
+      });
+    }
+    const { dataset } = await rdfBody(result, "invalid-response");
+    const listed = new Container(container, dataset, DataFactory);
+    const items: Entry[] = [];
+    // `contains` is a set of distinct members, so URLs are unique.
+    for (const resource of listed.contains) {
+      const entry = entryOf(new Member(resource.id, dataset, DataFactory), container);
+      if (entry) items.push(entry);
+    }
+    items.sort((a, b) => (a.url < b.url ? -1 : 1));
+    inspect?.(container, dataset, items);
+    return { items, next: null, total: items.length, etag: result.etag } satisfies Page<Entry>;
+  }
+
+  function listAll(url: string, opts: { signal?: AbortSignal } = {}, inspect?: InspectContainer) {
+    return paginate(
+      url,
+      (cursor) => list(url, { cursor, signal: opts.signal }, inspect),
+      opts.signal,
+    );
+  }
+
   const client: StorageClient = {
     protocol: "solid",
     root,
     features,
 
-    async list(url, opts = {}) {
-      const container = scoped(root, "GET", url);
-      // A query or fragment (even an empty `?` or `#`, which URL.search/hash report as "") would
-      // name a different RDF subject than the container. In a canonical href both are delimiters.
-      if (/[?#]/.test(container)) {
-        throw new StorageError("bad-request", {
-          method: "GET",
-          url: container,
-          message: "list() takes a container URL without a query or fragment",
-        });
-      }
-      if (opts.cursor !== undefined) {
-        throw new StorageError("bad-request", {
-          method: "GET",
-          url: opts.cursor.url,
-          message: "Solid listings have one page",
-        });
-      }
-      const result = await get(container, { Accept: "text/turtle" }, opts.signal);
-      if (result.kind !== "container") {
-        discard(result.body);
-        throw new StorageError("method-not-allowed", {
-          method: "GET",
-          url: container,
-          message: `${container} is not a container`,
-        });
-      }
-      const { dataset } = await rdfBody(result, "invalid-response");
-      const listed = new Container(container, dataset, DataFactory);
-      const items: Entry[] = [];
-      // `contains` is a set of distinct members, so URLs are unique.
-      for (const resource of listed.contains) {
-        const entry = entryOf(new Member(resource.id, dataset, DataFactory), container);
-        if (entry) items.push(entry);
-      }
-      items.sort((a, b) => (a.url < b.url ? -1 : 1));
-      return { items, next: null, total: items.length, etag: result.etag } satisfies Page<Entry>;
-    },
-
-    listAll(url, opts = {}) {
-      return paginate(
-        url,
-        (cursor) => client.list(url, { cursor, signal: opts.signal }),
-        opts.signal,
-      );
-    },
+    list,
+    listAll,
 
     async head(url, opts = {}) {
       const target = scoped(root, "HEAD", url);
@@ -320,7 +328,7 @@ export function createSolidBackend(options: SolidBackendOptions): StorageClient 
       return { url: result.url, etag: result.etag, contentType: type, dataset };
     },
 
-    ...solidWrites({ ...options, root }, () => client),
+    ...solidWrites({ ...options, root }, () => client, listAll),
 
     async metadata(url): Promise<Metadata> {
       const described = await client.head(url);
