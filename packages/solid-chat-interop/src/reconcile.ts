@@ -1,4 +1,6 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-5
+// AUTHORED-BY Codex GPT-6
 /**
  * The public RECONCILER — read either chat shape into the canonical model, write
  * the canonical model into either shape.
@@ -21,9 +23,11 @@
 
 import { serialize } from "@jeswr/rdf-serialize";
 import type { DatasetCore } from "@rdfjs/types";
-import type { Store } from "n3";
+import { DataFactory, type Store } from "n3";
 import { type As2MessageDoc, as2MessageSubject, buildAs2Message, parseAs2Message } from "./as2.js";
 import type { CanonicalMessage } from "./canonical.js";
+import { canonicalizeChatDataset } from "./canonical-vocab.js";
+import { activityStreamsDocumentLoader } from "./context-loader.js";
 import {
   buildLongChatMessage,
   type LongChatMessageDoc,
@@ -190,7 +194,7 @@ export function canonicalToLongChat(msg: CanonicalMessage, subject: string): Sto
 
 /** Serialise an n3 `Store` to Turtle via the shared serializer with reconciler prefixes. */
 export function storeToTurtle(store: Store): Promise<string> {
-  return serialize([...store], {
+  return serialize([...canonicalizeChatDataset(store, DataFactory)], {
     format: "text/turtle",
     prefixes: { ...PREFIXES },
     emptyAsEmptyString: false,
@@ -260,7 +264,10 @@ async function parseToDataset(
 ): Promise<DatasetCore> {
   const resolvedContentType = contentType ?? "text/turtle";
   const { parseRdf } = await import("@jeswr/fetch-rdf");
-  return parseRdf(body, resolvedContentType, { baseIRI: baseIri });
+  return parseRdf(body, resolvedContentType, {
+    baseIRI: baseIri,
+    documentLoader: activityStreamsDocumentLoader,
+  });
 }
 
 // --- Round-trip (shared-field-preservation) ---------------------------------

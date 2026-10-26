@@ -1,0 +1,138 @@
+{
+  "name": "@jeswr/personal-agent",
+  "version": "0.0.1",
+  "description": "The maintainer's personal agent — the works-today counterpart of the Accountable Web of Agents vision. Bridges real channels (Gmail first) into an owner-private Solid pod as provenance-carrying RDF, reads structured metadata deterministically (LLM-free) first, and acts under a hard Reader/Actor/outbox trust split where no single context both reads hostile input and holds act-credentials.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./reader": {
+      "types": "./dist/reader/index.d.ts",
+      "import": "./dist/reader/index.js"
+    },
+    "./actor": {
+      "types": "./dist/actor/index.d.ts",
+      "import": "./dist/actor/index.js"
+    },
+    "./outbox": {
+      "types": "./dist/outbox/index.d.ts",
+      "import": "./dist/outbox/index.js"
+    },
+    "./pod": {
+      "types": "./dist/pod/index.d.ts",
+      "import": "./dist/pod/index.js"
+    },
+    "./pilot": {
+      "types": "./dist/pilot/index.d.ts",
+      "import": "./dist/pilot/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "awp-pilot": "./dist/pilot/cli.js",
+    "awp-dashboard": "./dist/dashboard/cli.js",
+    "awp-credentials": "./dist/credentials/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "lint": "biome check src scripts",
+    "lint:fix": "biome check --write src scripts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "build": "tsc -p tsconfig.build.json && node scripts/copy-dashboard-assets.mjs dist",
+    "check:lockfile-transport": "node scripts/check-lockfile-transport.mjs",
+    "fix:lockfile-transport": "node scripts/normalize-lockfile.mjs",
+    "gate": "pnpm run lint && pnpm run build && pnpm run typecheck && pnpm run test",
+    "pilot": "node dist/pilot/cli.js",
+    "pilot:demo": "node dist/pilot/cli.js demo --out reports/pilot-demo-report.json",
+    "pilot:demo:sparq": "node dist/pilot/cli.js demo --policy-engine=sparq --out reports/pilot-demo-report-sparq.json",
+    "pilot:integration": "node scripts/pilot-integration.mjs --out reports/pilot-integration-report.json",
+    "pilot:mcp-integration": "node scripts/pilot-mcp-integration.mjs --out=reports/pilot-mcp-report.json",
+    "pilot:a2a-integration": "node scripts/pilot-a2a-integration.mjs --out=reports/pilot-a2a-report.json",
+    "pilot:regional-integration": "node scripts/pilot-regional-integration.mjs --out=reports/pilot-regional-report.json",
+    "pilot:mcp": "node scripts/mcp-client.mjs",
+    "pilot:smoke": "sh scripts/operator-smoke.sh",
+    "pilot:rdf": "node scripts/render-pilot-rdf.mjs",
+    "pilot:sparq-cases": "node scripts/sparq-policy-cases.mjs",
+    "dashboard": "node dist/dashboard/cli.js serve",
+    "dashboard:demo": "node dist/dashboard/cli.js serve --now 2026-10-19T08:00:00Z",
+    "dashboard:integration": "node scripts/dashboard-integration.mjs",
+    "dashboard:actions-demo": "node dist/dashboard/cli.js serve --state .awp-dashboard-actions-demo --port 4319 --now 2026-10-19T08:00:00Z --provider-fixtures",
+    "actions": "node dist/dashboard/cli.js actions",
+    "actions:integration": "node scripts/actions-integration.mjs",
+    "credentials": "node dist/credentials/cli.js",
+    "credentials:integration": "node scripts/credentials-integration.mjs",
+    "triage:eval": "node scripts/triage-eval.mjs",
+    "test:coverage": "vitest run --coverage"
+  },
+  "keywords": [
+    "solid",
+    "rdf",
+    "agentic",
+    "personal-agent",
+    "claude-agent-sdk",
+    "gmail",
+    "provenance",
+    "prov-o",
+    "metadata-protocol",
+    "outbox",
+    "legacy-interop"
+  ],
+  "author": "Jesse Wright",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jeswr/personal-agent.git"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "dependencies": {
+    "@a2a-js/sdk": "^1.2.1",
+    "@jeswr/agentic-legacy-bridge": "workspace:*",
+    "@jeswr/fetch-rdf": "^0.1.0",
+    "@jeswr/guarded-fetch": "workspace:*",
+    "@jeswr/solid-mcp": "workspace:*",
+    "@jeswr/solid-odrl": "workspace:*",
+    "@jeswr/solid-vc": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@solid/object": "^0.6.0",
+    "canonicalize": "^1.0.8",
+    "express": "^5.2.1",
+    "jose": "^6.2.3",
+    "n3": "^2.1.0",
+    "zod": "^4.4.3"
+  },
+  "peerDependencies": {
+    "@anthropic-ai/claude-agent-sdk": ">=0.3.0"
+  },
+  "peerDependenciesMeta": {
+    "@anthropic-ai/claude-agent-sdk": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.3.201",
+    "@biomejs/biome": "^2.5.1",
+    "@types/express": "^5.0.6",
+    "@types/n3": "^1.26.1",
+    "@types/node": "^25.9.2",
+    "jsonld-streaming-parser": "^5.0.1",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.9",
+    "@vitest/coverage-v8": "^4.1.9",
+    "@rdfjs/types": "^2.0.1"
+  },
+  "mirrorPublish": {
+    "inlined": []
+  }
+}
