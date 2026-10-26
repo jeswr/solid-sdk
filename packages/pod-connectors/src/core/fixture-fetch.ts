@@ -4,10 +4,11 @@
  * the UI and the adapter contract tests — **no live network ever**: an
  * unmatched request throws instead of hitting the wire.
  */
+
+import { readJson } from "./budget.js";
 import { IntegrationSyncError, RateLimitedError } from "./errors.js";
 import { matchingFixtureRoute } from "./fixture-route.js";
 import type { FixtureRoute } from "./types.js";
-import { readJson } from "./budget.js";
 
 /** Build a `fetch`-shaped function answering from fixture routes.
  * Repeated method/prefix keys replay in array order and fail when exhausted.
