@@ -17,6 +17,7 @@ import {
 // `Issue` model is used in client components (e.g. session-context), so it must
 // stay `node:fs`-free; `./task` carries only the runtime accessors.
 import { Task, type TaskPriority } from "@jeswr/solid-task-model/task";
+import { TaskTerm } from "./canonical-vocab";
 import { WF, DCT, RDF, STATE, TM, wf, dct, rdf, rdfs, sioc, foaf, vcard, schema, xsd, skos, prov, time, tm, odrl, TIME_UNIT_SECOND, SAVED_VIEW, VIEW_QUERY, RELEASED } from "./vocab";
 
 export type IssueState = "open" | "closed";
@@ -1039,7 +1040,7 @@ const isAction = (value: string): value is ActionKind => (ACTIONS as readonly st
  * so it is self-contained and removed with the rule. `enabled` defaults to true —
  * a rule with no explicit flag is active.
  */
-export class Rule extends TermWrapper {
+export class Rule extends TaskTerm {
   get iri(): string {
     return this.value;
   }
@@ -1149,7 +1150,7 @@ export class Rule extends TermWrapper {
  * label category classes (declared via `wf:issueCategory`, defined as fragments of
  * the tracker document), and the assignee group (`wf:assigneeGroup` → `vcard:Group`).
  */
-export class Tracker extends TermWrapper {
+export class Tracker extends TaskTerm {
   private get types(): Set<string> {
     return SetFrom.subjectPredicate(this, rdf("type"), NamedNodeAs.string, NamedNodeFrom.string);
   }
