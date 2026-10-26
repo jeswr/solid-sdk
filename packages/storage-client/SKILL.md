@@ -22,7 +22,12 @@ Rules the memory backend enforces, and the real backends must match:
 - Mutations are applied one at a time, so an ETag check and its commit are never split by another
   mutation, and concurrent creates never share a URL. Reads snapshot the node before any await, so
   bytes and ETag always describe the same state. An abort while a body is being collected cancels
-  the stream and nothing is committed.
+  the stream and nothing is committed; a queued mutation whose signal fires rejects at once. A
+  failing body stream is a non-retryable `network` error. Only canonical, IRI-safe URLs are
+  accepted (`bad-request` otherwise).
+- Every serialisation escapes IRIREF-forbidden characters in IRIs and prefix namespaces
+  (`escapeIri`), relabels unsafe blank-node labels and refuses malformed language tags and prefix
+  names, so crafted terms can never forge triples. `listAll` stops between entries once aborted.
 - A stale ETag gives `precondition-failed` (412) with the current `etag`. ETags change on every write,
   and a container's ETag changes only on membership changes.
 - LWS lists in pages (`next` cursors are opaque), Solid lists in one page. `listAll` refuses a

@@ -8,6 +8,7 @@
 
 import type { Quad } from "@jeswr/fetch-rdf";
 import { parseRdf, SUPPORTED_RDF_MEDIA_TYPES } from "@jeswr/fetch-rdf";
+import { escapeIri } from "@jeswr/rdf-serialize";
 import {
   deriveFeatures,
   type Features,
@@ -100,6 +101,14 @@ function relIri(rel: string): string {
   return rel.includes(":") ? rel : `${IANA_REL}${rel.toLowerCase()}`;
 }
 
+function canonical(url: string): boolean {
+  try {
+    return new URL(url).href === url && escapeIri(url) === url;
+  } catch {
+    return false;
+  }
+}
+
 export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryStorage {
   const protocol = options.protocol ?? "solid";
   const lws = protocol === "lws";
@@ -182,6 +191,12 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
 
   function begin(method: string, url: string, signal?: AbortSignal): void {
     throwIfAborted(method, url, signal);
+    // Only canonical, IRI-safe URLs are stored, so listings can never carry Turtle delimiters.
+    if (!canonical(url)) {
+      throw fail("bad-request", method, url, 400, {
+        message: `${JSON.stringify(url)} is not a canonical URL`,
+      });
+    }
     if (!isWithin(url, root)) {
       throw fail("scope", method, url, null, { message: `${url} is outside ${root}` });
     }
@@ -485,12 +500,27 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
   // Mutations run one at a time, like a server applying requests atomically: an ETag check and
   // the commit can never be split by another mutation across an await.
   let queue: Promise<unknown> = Promise.resolve();
+  // A queued caller whose signal fires is rejected at once; its turn then fails fast in begin().
   const serial =
-    <A extends unknown[], R>(fn: (...args: A) => Promise<R>) =>
+    <A extends [string, ...unknown[]], R>(method: string, fn: (...args: A) => Promise<R>) =>
     (...args: A): Promise<R> => {
       const run = queue.then(() => fn(...args));
       queue = run.catch(() => undefined);
-      return run;
+      const options = args.at(-1) as { signal?: unknown } | null | undefined;
+      const signal = options?.signal instanceof AbortSignal ? options.signal : undefined;
+      if (!signal) return run;
+      return new Promise<R>((resolve, reject) => {
+        const abort = () => {
+          try {
+            throwIfAborted(method, args[0], signal);
+          } catch (error) {
+            reject(error);
+          }
+        };
+        signal.addEventListener("abort", abort, { once: true });
+        abort();
+        run.then(resolve, reject).finally(() => signal.removeEventListener("abort", abort));
+      });
     };
 
   const client: MemoryStorage = {
@@ -576,7 +606,7 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
       }
     },
 
-    write: serial(async (url, body, opts) => {
+    write: serial("PUT", async (url, body, opts) => {
       begin("PUT", url, opts?.signal);
       if (typeof opts?.contentType !== "string" || opts.contentType === "") {
         throw new TypeError(`PUT ${url}: contentType is required`);
@@ -597,7 +627,7 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
         );
       }
       checkEtag("PUT", url, node, ifMatch);
-      const bytes = await toBytes(body, opts.signal);
+      const bytes = await toBytes(body, opts.signal, "PUT", url);
       throwIfAborted("PUT", url, opts.signal);
       if (node) {
         node.body = bytes;
@@ -638,7 +668,7 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
       return client.write(url, text, { ...opts, contentType });
     },
 
-    create: serial(async (url, body, opts: CreateOptions = {}) => {
+    create: serial("POST", async (url, body, opts: CreateOptions = {}) => {
       begin("POST", url, opts.signal);
       const parent = container("POST", url);
       const kind = opts.kind ?? "resource";
@@ -660,7 +690,9 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
       }
       const links = lws ? (opts.links ?? []) : [];
       const bytes =
-        kind === "resource" && body !== null ? await toBytes(body, opts.signal) : new Uint8Array();
+        kind === "resource" && body !== null
+          ? await toBytes(body, opts.signal, "POST", url)
+          : new Uint8Array();
       throwIfAborted("POST", url, opts.signal);
       const created: Node = {
         url: target,
@@ -681,7 +713,7 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
       return { url: target, etag: created.etag, created: true };
     }),
 
-    patch: serial(async (url, patch: Patch, opts) => {
+    patch: serial("PATCH", async (url, patch: Patch, opts) => {
       begin("PATCH", url, opts?.signal);
       const ifMatch = conditional("PATCH", url, opts?.ifMatch);
       const node = need("PATCH", url);
@@ -784,7 +816,7 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
       return { url, etag: node.etag, created: false };
     }),
 
-    move: serial(async (url, destination, opts = {}) => {
+    move: serial("MOVE", async (url, destination, opts = {}) => {
       begin("MOVE", url, opts.signal);
       begin("MOVE", destination, opts.signal);
       if (lws && !moveResource) {
@@ -829,7 +861,7 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
       return { url: newUrl, etag: node.etag, created: true };
     }),
 
-    delete: serial(async (url, opts = {}) => {
+    delete: serial("DELETE", async (url, opts = {}) => {
       begin("DELETE", url, opts.signal);
       const ifMatch = conditional("DELETE", url, opts.ifMatch);
       const node = need("DELETE", url);
@@ -878,7 +910,7 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
       return { url: metadataUrl(url), etag: node.metaEtag, links, raw };
     },
 
-    setMetadata: serial(async (url, ops: readonly MetadataOp[], opts) => {
+    setMetadata: serial("PATCH", async (url, ops: readonly MetadataOp[], opts) => {
       begin("PATCH", metadataUrl(url));
       const ifMatch = conditional("PATCH", metadataUrl(url), opts?.ifMatch);
       const node = need("PATCH", url);

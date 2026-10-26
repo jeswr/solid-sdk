@@ -1193,3 +1193,97 @@ describe("review round 1 regressions", () => {
     expect(nquads.created).toBe(false);
   });
 });
+
+describe("review round 2 regressions", () => {
+  test("non-canonical or IRI-unsafe URLs are refused before anything is stored", async () => {
+    for (const storage of [solid(), lws()]) {
+      for (const url of [
+        `${ROOT}a> <${EX}p> <${EX}o`,
+        `${ROOT}a|b`,
+        `${ROOT}a^b`,
+        `${ROOT}./a`,
+        "not a url",
+      ]) {
+        await rejects(
+          storage.write(url, "x", { contentType: "text/plain", ifMatch: "*" }),
+          "bad-request",
+          400,
+        );
+      }
+    }
+  });
+
+  test("serialisation escapes IRIs, relabels unsafe blank nodes and refuses bad tags/prefixes", async () => {
+    const storage = solid();
+    const evil = namedNode(`${EX}s> <${EX}forged> <${EX}o`);
+    const written = await storage.writeRdf(
+      `${ROOT}e.ttl`,
+      [
+        quad(evil, namedNode(`${EX}p`), literal("v")),
+        quad(blankNode("a b> <x"), namedNode(`${EX}p`), literal("w", namedNode(`${EX}d>t`))),
+        quad(blankNode("a b> <x"), namedNode(`${EX}q`), literal("hello", "en-GB")),
+      ],
+      { ifMatch: "*" },
+    );
+    const { dataset } = await storage.readRdf(written.url);
+    expect(dataset.size).toBe(3);
+    expect([...dataset].some((q) => q.predicate.value === `${EX}forged`)).toBe(false);
+    // The relabelled blank node stays one node.
+    expect(
+      new Set(
+        [...dataset].filter((q) => q.subject.termType === "BlankNode").map((q) => q.subject.value),
+      ).size,
+    ).toBe(1);
+    await expect(
+      storage.writeRdf(`${ROOT}l.ttl`, [quad(evil, namedNode(`${EX}p`), literal("v", "en x"))], {
+        ifMatch: "*",
+      }),
+    ).rejects.toThrow(/language tag/);
+    await expect(
+      storage.writeRdf(`${ROOT}p.ttl`, [], { ifMatch: "*", prefixes: { "a b": EX } }),
+    ).rejects.toThrow(/prefix name/);
+    const prefixed = await storage.writeRdf(
+      `${ROOT}q.ttl`,
+      [quad(namedNode(`${EX}s`), namedNode(`${EX}p`), literal("v"))],
+      { ifMatch: "*", prefixes: { ex: `${EX}>` } },
+    );
+    expect((await storage.readRdf(prefixed.url)).dataset.size).toBe(1);
+    await expect(
+      storage.writeRdf(
+        `${ROOT}v.ttl`,
+        [
+          quad(
+            namedNode(`${EX}s`),
+            namedNode(`${EX}p`),
+            variable("v") as unknown as Quad["object"],
+          ),
+        ],
+        { ifMatch: "*" },
+      ),
+    ).rejects.toThrow(/cannot be serialised/);
+  });
+
+  test("a queued mutation rejects promptly when its signal aborts", async () => {
+    for (const storage of [solid(), lws()]) {
+      const stuck = storage.create(ROOT, new ReadableStream<Uint8Array>({ pull() {} }), {
+        contentType: "text/plain",
+        signal: new AbortController().signal,
+      });
+      const controller = new AbortController();
+      const queued = storage.create(ROOT, "x", {
+        contentType: "text/plain",
+        name: "queued",
+        signal: controller.signal,
+      });
+      controller.abort();
+      await rejects(queued, "network");
+      const already = new AbortController();
+      already.abort();
+      await rejects(
+        storage.create(ROOT, "y", { contentType: "text/plain", signal: already.signal }),
+        "network",
+      );
+      void stuck.catch(() => undefined);
+    }
+  });
+});
