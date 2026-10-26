@@ -59,6 +59,8 @@ export interface MailItem {
   readonly fallbackId: string;
   /** Explicit source identity (Gmail), or a previously stored document id. Bypasses Message-ID keying. */
   readonly documentId?: string;
+  /** Resolve a parent's RFC Message-ID to its actual document id when this source uses other keys. */
+  resolveParent?(messageId: string): Promise<string | undefined>;
   /** Source item URL recorded as provenance (`prov:wasDerivedFrom`); identifies the item. */
   readonly sourceUrl?: string;
   readonly receivedAt?: Date;
@@ -116,11 +118,8 @@ export function createMailWriter(ctx: MailPorts, account: string): MailWriter {
   /** Thread document slug → members to add / drop, plus the first subject seen. */
   const threads = new Map<string, { add: Set<string>; drop: Set<string>; title?: string }>();
   const deletions = new Set<string>();
-  // Reuse the last batch's collection reads in flush, including an exact multiple of 100.
-  // Additions invalidate this snapshot before they can change a collection.
-  let deletionSnapshot:
-    | { folders: Set<string>; collections: Map<string, Store | undefined> }
-    | undefined;
+  /** RFC Message-ID → actual document id for messages successfully added during this run. */
+  const messageIds = new Map<string, string>();
   const thread = (slug: string) => {
     let entry = threads.get(slug);
     if (!entry) {
@@ -170,7 +169,6 @@ export function createMailWriter(ctx: MailPorts, account: string): MailWriter {
     const slug = messageSlug(account, id);
     const iri = iriOf(slug);
     deletions.delete(slug);
-    deletionSnapshot = undefined;
 
     const dataset = new Store();
     const message = new MailMessage(iri, dataset, DataFactory);
@@ -190,7 +188,13 @@ export function createMailWriter(ctx: MailPorts, account: string): MailWriter {
       ? (previous?.dateRead ?? mail.date ?? item.receivedAt ?? new Date(0))
       : undefined;
     message.encoding = ctx.resolve(emlSlug(account, id));
-    if (mail.inReplyTo) message.inReplyTo = iriOf(messageSlug(account, mail.inReplyTo));
+    if (mail.inReplyTo) {
+      const parent =
+        messageIds.get(mail.inReplyTo) ??
+        (await item.resolveParent?.(mail.inReplyTo)) ??
+        (item.documentId === undefined ? mail.inReplyTo : undefined);
+      if (parent !== undefined) message.inReplyTo = iriOf(messageSlug(account, parent));
+    }
     // Without a source key, a stored message keeps its thread (reconciliation is not
     // retroactive), so a replay never strands it in two conversations.
     const kept = previous?.partOfThread && docOf(previous.partOfThread);
@@ -264,6 +268,7 @@ export function createMailWriter(ctx: MailPorts, account: string): MailWriter {
         body: part.content,
         mode: "replace",
       });
+    if (mail.messageId) messageIds.set(mail.messageId, id);
     return { slug, iri, thread: iriOf(threadDoc), id };
   }
 
@@ -291,20 +296,19 @@ export function createMailWriter(ctx: MailPorts, account: string): MailWriter {
     slug: string,
     iris: ReadonlySet<string>,
     forClass: string,
-  ): Promise<Store | undefined> {
+  ): Promise<void> {
     const current = await ctx.read(slug);
-    if (!current) return undefined;
+    if (!current) return;
     const dataset = new Store([...current]);
     const collection = new MailCollection(iriOf(slug), dataset, DataFactory);
     let changed = false;
     for (const iri of iris) if (collection.members.delete(iri)) changed = true;
-    if (!changed) return dataset;
+    if (!changed) return;
     if (collection.members.size === 0 && !slug.includes("/folders/system:")) {
       await ctx.remove(slug);
-      return undefined;
+      return;
     }
     await ctx.write({ slug, category: "mail", forClass, dataset, skipRegistration: true });
-    return dataset;
   }
 
   async function removeMessage(slug: string): Promise<void> {
@@ -327,12 +331,11 @@ export function createMailWriter(ctx: MailPorts, account: string): MailWriter {
         if (previous.partOfThread) affectedThreads.add(slugOf(docOf(previous.partOfThread)));
         for (const folder of previous.folderIris) folders.add(slugOf(docOf(folder)));
       }
-      const collections = new Map<string, Store | undefined>();
       // Keep every message's inventory until ALL collection writes have succeeded.
       for (const slug of [...affectedThreads].sort())
-        collections.set(slug, await dropMembers(slug, iris, MAIL_CLASSES.Conversation));
+        await dropMembers(slug, iris, MAIL_CLASSES.Conversation);
       for (const folder of [...folders].sort())
-        collections.set(folder, await dropMembers(folder, iris, MAIL_CLASSES.Folder));
+        await dropMembers(folder, iris, MAIL_CLASSES.Folder);
       for (const [slug, previous] of messages) {
         for (const attachment of previous.attachments) await ctx.remove(slugOf(attachment));
         if (previous.encoding) await ctx.remove(slugOf(previous.encoding));
@@ -347,26 +350,22 @@ export function createMailWriter(ctx: MailPorts, account: string): MailWriter {
         }
         if (entry.add.size === 0 && entry.drop.size === 0) threads.delete(slug);
       }
-      deletionSnapshot = { folders, collections };
     }
     deletions.clear();
   }
 
   async function flush(known: readonly MailFolder[] = []): Promise<void> {
     await deleteBatch();
-    const snapshot = deletionSnapshot;
-    deletionSnapshot = undefined;
-    const readCollection = (slug: string) =>
-      snapshot?.collections.has(slug) ? snapshot.collections.get(slug) : ctx.read(slug);
     // Every stored folder is reconciled too: a label deleted at the source may still list a
     // message whose previous version (the only other record of it) was already replaced.
-    for (const slug of snapshot?.folders ?? (await storedFolders())) remember(slug);
+    for (const slug of await storedFolders()) remember(slug);
     for (const { key, title } of known) {
       const slug = folderSlug(account, key);
       if (title || !titles.has(slug)) titles.set(slug, title);
     }
     for (const [slug, title] of [...titles.entries()].sort(([a], [b]) => a.localeCompare(b))) {
-      const current = await readCollection(slug);
+      // Read again after deletion writes so this dataset and its retained ETag agree.
+      const current = await ctx.read(slug);
       const dataset = new Store([...(current ?? [])]);
       const folder = new MailCollection(iriOf(slug), dataset, DataFactory);
       let changed = !current;
@@ -399,7 +398,7 @@ export function createMailWriter(ctx: MailPorts, account: string): MailWriter {
     }
     titles.clear();
     for (const [slug, entry] of [...threads.entries()].sort(([a], [b]) => a.localeCompare(b))) {
-      const current = await readCollection(slug);
+      const current = await ctx.read(slug);
       const dataset = new Store([...(current ?? [])]);
       const collection = new MailCollection(iriOf(slug), dataset, DataFactory);
       for (const iri of entry.drop) collection.members.delete(iri);

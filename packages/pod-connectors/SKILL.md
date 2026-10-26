@@ -44,6 +44,10 @@ vocabulary (`http://schema.org/`, matching apps/suite's mail model) stay identic
 collision fallback and References/In-Reply-To ancestry. Gmail history deletions resolve slugs
 directly; full syncs list the account's `messages/` container and sweep unseen Gmail message RDF
 documents. There is no Gmail source index. Keep Spam/Trash in the full source listing.
+Resolve In-Reply-To through the writer's run-local Message-ID map, then the optional
+`MailItem.resolveParent(messageId)` hook. Gmail resolves from validated thread metadata via
+`ctx.api`/`getJson`, cached once per thread per run. Omit unresolved parent links for explicit
+document ids; only Message-ID-keyed file imports retain the Message-ID-derived fallback.
 
 Additions commit RDF, then `.eml`/attachment bytes, then thread/folder memberships in `flush()`.
 Retire dropped attachments and remove a changed thread's old membership conditionally before
@@ -51,6 +55,8 @@ replacing the RDF that records them; flush only visits known threads. Deletions 
 messages or `flush()`, which processes the remainder before reconciliation. Read each queued
 message and each affected collection once per batch, listing stored folders once. Persist all
 membership removals conditionally before deleting any message's attachments, `.eml`, then RDF.
+Flush rereads its folder listing and each collection it reconciles; never reuse a deletion
+batch's dataset after a write has cleared the import session's retained precondition.
 Keep each message document available for retries until its cleanup succeeds;
 a missing document is a no-op. Reconcile all stored folders, including vanished labels, so
 interrupted relabeling cannot strand memberships. Preserve one run per connector container.

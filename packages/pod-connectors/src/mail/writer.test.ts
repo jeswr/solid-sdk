@@ -1,7 +1,7 @@
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { DataFactory } from "n3";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { runImport } from "../core/import-runner.js";
 import { createFetchPodWriter } from "../core/pod-writer.js";
 import { createMemoryPod, TEST_POD_ROOT, TEST_PROFILE_DOC, TEST_WEBID } from "../core/testing.js";
@@ -138,6 +138,81 @@ describe("MailWriter", () => {
     expect(new MailMessage(`${first}#it`, pod.dataset(first), DataFactory).dateRead).toEqual(
       new Date(0),
     );
+    const reply = url(messageSlug(ME, "<b@x.test>"));
+    expect(new MailMessage(`${reply}#it`, pod.dataset(reply), DataFactory).inReplyTo).toBe(
+      `${first}#it`,
+    );
+  });
+
+  it("resolves a reply to a document added this run before consulting the source", async () => {
+    const resolveParent = vi.fn(async () => "wrong-parent");
+    const pod = await withWriter(async (mail) => {
+      await mail.add({
+        raw: raw("parent"),
+        folders: [INBOX],
+        read: true,
+        fallbackId: "parent",
+        documentId: "source-parent",
+      });
+      await mail.add({
+        raw: raw("reply", ["In-Reply-To: <parent@x.test>"]),
+        folders: [INBOX],
+        read: true,
+        fallbackId: "reply",
+        documentId: "source-reply",
+        resolveParent,
+      });
+    });
+    const reply = url(messageSlug(ME, "source-reply"));
+    expect(new MailMessage(`${reply}#it`, pod.dataset(reply), DataFactory).inReplyTo).toBe(
+      `${url(messageSlug(ME, "source-parent"))}#it`,
+    );
+    expect(resolveParent).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    undefined,
+    "source-reply",
+  ])("uses the source's resolved parent document (reply documentId: %s)", async (documentId) => {
+    const resolveParent = vi.fn(async () => "source-parent");
+    const pod = await withWriter(async (mail) => {
+      await mail.add({
+        raw: raw("reply", ["In-Reply-To: <parent@x.test>"]),
+        folders: [INBOX],
+        read: true,
+        fallbackId: "reply",
+        documentId,
+        resolveParent,
+      });
+    });
+    const reply = url(messageSlug(ME, documentId ?? "<reply@x.test>"));
+    expect(new MailMessage(`${reply}#it`, pod.dataset(reply), DataFactory).inReplyTo).toBe(
+      `${url(messageSlug(ME, "source-parent"))}#it`,
+    );
+    expect(resolveParent).toHaveBeenCalledExactlyOnceWith("<parent@x.test>");
+  });
+
+  it.each([
+    undefined,
+    "source-reply",
+  ])("handles an unresolved parent conservatively (reply documentId: %s)", async (documentId) => {
+    const resolveParent = vi.fn(async () => undefined);
+    const pod = await withWriter(async (mail) => {
+      for (const resolver of [undefined, resolveParent])
+        await mail.add({
+          raw: raw("reply", ["In-Reply-To: <unknown@x.test>"]),
+          folders: [INBOX],
+          read: true,
+          fallbackId: "reply",
+          documentId,
+          resolveParent: resolver,
+        });
+    });
+    const reply = url(messageSlug(ME, documentId ?? "<reply@x.test>"));
+    expect(new MailMessage(`${reply}#it`, pod.dataset(reply), DataFactory).inReplyTo).toBe(
+      documentId === undefined ? `${url(messageSlug(ME, "<unknown@x.test>"))}#it` : undefined,
+    );
+    expect(resolveParent).toHaveBeenCalledExactlyOnceWith("<unknown@x.test>");
   });
 
   it("ignores malformed Message-ID headers and keeps empty system folders", async () => {
@@ -252,8 +327,53 @@ describe("MailWriter", () => {
   });
 
   it.each([
+    1, 100,
+  ])("preserves app edits between a deletion batch and mixed-addition flush (%s deletions)", async (count) => {
+    const pod = createMemoryPod();
+    const item = (id: string) => ({
+      raw: raw(id),
+      folders: [INBOX],
+      read: true,
+      fallbackId: id,
+      documentId: id,
+      threadKey: "shared",
+    });
+    await withWriter(async (mail) => {
+      await mail.add(item("keep"));
+      for (let i = 0; i < count; i++) await mail.add(item(`delete-${i}`));
+    }, pod);
+    const last = url(messageSlug(ME, `delete-${count - 1}`));
+    let edited = false;
+    const transport: typeof fetch = async (input, init) => {
+      const response = await pod.fetch(input, init);
+      if (String(input) === last && init?.method === "DELETE") {
+        // The batch has committed every collection. An independent app adds a member
+        // before this import reconciles its pending addition against those collections.
+        edited = true;
+        const app = foreign(pod);
+        await app.add(item("app"));
+        await app.flush();
+      }
+      return response;
+    };
+    await withWriter(
+      async (mail) => {
+        await mail.add(item("added"));
+        for (let i = 0; i < count; i++) await mail.removeMessage(messageSlug(ME, `delete-${i}`));
+      },
+      pod,
+      undefined,
+      transport,
+    );
+    expect(edited).toBe(true);
+    const expected = ["added", "app", "keep"].map((id) => `${url(messageSlug(ME, id))}#it`);
+    expect(membersOf(pod, folderSlug(ME, "Inbox"))).toEqual(expected);
+    expect(membersOf(pod, threadSlug(ME, "shared"))).toEqual(expected);
+  });
+
+  it.each([
     37, 100, 205,
-  ])("reads and updates each collection once per deletion batch (%s messages)", async (count) => {
+  ])("batches collection cleanup and rereads folders at flush (%s messages)", async (count) => {
     const pod = createMemoryPod();
     const folders = [
       INBOX,
@@ -304,9 +424,13 @@ describe("MailWriter", () => {
       transport,
     );
     const batches = Math.ceil(count / 100);
-    expect(calls.get(`GET ${url(folderSlug(ME, "Inbox")).replace(/[^/]+$/, "")}`)).toBe(batches);
+    expect(calls.get(`GET ${url(folderSlug(ME, "Inbox")).replace(/[^/]+$/, "")}`)).toBe(
+      batches + 1,
+    );
     for (const slug of collections) {
-      expect(calls.get(`GET ${url(slug)}`), slug).toBe(batches);
+      expect(calls.get(`GET ${url(slug)}`), slug).toBe(
+        batches + (slug.includes("/folders/") ? 1 : 0),
+      );
       expect(calls.get(`PUT ${url(slug)}`), slug).toBe(batches);
       expect(calls.get(`DELETE ${url(slug)}`), slug).toBeUndefined();
     }

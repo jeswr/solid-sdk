@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * Recorded Gmail API v1 shapes (gmail.googleapis.com/gmail/v1/users/me), trimmed to the
  * fields the adapter reads. All people, addresses and content are synthetic.
@@ -33,6 +34,14 @@ export interface GmailMessage {
   labelIds?: string[];
   internalDate?: string;
   raw?: string;
+}
+export interface GmailThread {
+  id: string;
+  messages?: {
+    id: string;
+    threadId: string;
+    payload?: { headers?: { name: string; value: string }[] };
+  }[];
 }
 export interface GmailHistoryRecord {
   id: string;
@@ -137,4 +146,35 @@ export const GMAIL_FIXTURES: readonly FixtureRoute[] = [
   { url: `${GMAIL_API}/labels`, json: LABELS },
   { url: `${GMAIL_API}/messages`, json: { messages: [MESSAGES.m1, MESSAGES.m2, MESSAGES.m3] } },
   ...Object.values(MESSAGES).map((json) => ({ url: `${GMAIL_API}/messages/${json.id}`, json })),
+  {
+    url: `${GMAIL_API}/threads/t1`,
+    json: {
+      id: "t1",
+      messages: [
+        {
+          id: "m1",
+          threadId: "t1",
+          payload: { headers: [{ name: "Message-ID", value: "<lunch-1@example.test>" }] },
+        },
+        {
+          id: "m2",
+          threadId: "t1",
+          payload: { headers: [{ name: "Message-ID", value: "<lunch-2@example.test>" }] },
+        },
+      ],
+    } satisfies GmailThread,
+  },
+  {
+    url: `${GMAIL_API}/threads/t3`,
+    json: {
+      id: "t3",
+      messages: [
+        {
+          id: "m3",
+          threadId: "t3",
+          payload: { headers: [{ name: "Message-ID", value: "<receipt-9@shop.example.test>" }] },
+        },
+      ],
+    } satisfies GmailThread,
+  },
 ];

@@ -68,6 +68,20 @@ const fetched = (m: GmailMessage): FixtureRoute => ({
   url: `${GMAIL_API}/messages/${m.id}`,
   json: m,
 });
+const replyMessage = (id: string, parent = "<lunch-1@example.test>"): GmailMessage => ({
+  id,
+  threadId: "t1",
+  labelIds: ["INBOX"],
+  raw: rawMessage([
+    `Message-ID: <reply-${id}@example.test>`,
+    `In-Reply-To: ${parent}`,
+    "Subject: Reply",
+    "",
+    "Synthetic reply.",
+  ]),
+});
+const threadRequests = (api: ReturnType<ReturnType<typeof setup>["run"]>["api"]) =>
+  api.mock.calls.map(([u]) => new URL(String(u))).filter((u) => u.pathname.includes("/threads/"));
 
 describe("Gmail full import", () => {
   it("stores messages, sources, threads and folders in the pod-mail layout", async () => {
@@ -100,7 +114,7 @@ describe("Gmail full import", () => {
     expect(reply.bodyHtml).toContain("<p>");
     expect(reply.dateRead).toBeDefined();
     expect([...reply.cc]).toEqual(["mailto:kim%40example.test"]);
-    expect(reply.inReplyTo).toBe(`${msg("<lunch-1@example.test>")}#it`);
+    expect(reply.inReplyTo).toBe(`${LUNCH_1}#it`);
     expect(reply.partOfThread).toBe(`${THREAD_1}#it`);
     expect(members(pod, THREAD_1)).toEqual([`${LUNCH_1}#it`, `${LUNCH_2}#it`]);
     expect(new MailCollection(`${THREAD_1}#it`, pod.dataset(THREAD_1), DataFactory).title).toBe(
@@ -203,11 +217,163 @@ describe("Gmail full import", () => {
     expect(pod.get(msg(`gmail-${valid.id}`))).toBeDefined();
     expect(pod.get(msg("gmail-badThread"))).toBeUndefined();
     expect(api.mock.calls.filter(([url]) => String(url).includes("?format=raw"))).toHaveLength(2);
+    expect(threadRequests(api)).toEqual([]);
+  });
+});
+
+describe("Gmail reply resolution", () => {
+  it("resolves newest-first replies with one metadata request per thread and run", async () => {
+    const { pod, run } = setup();
+    const reply = replyMessage("m4");
+    const first = run([
+      ...base,
+      {
+        url: `${GMAIL_API}/messages`,
+        json: { messages: [MESSAGES.m2, reply, MESSAGES.m1] },
+      },
+      fetched(MESSAGES.m2 as GmailMessage),
+      fetched(reply),
+      fetched(MESSAGES.m1 as GmailMessage),
+    ]);
+    const report = await first.result;
+    for (const id of ["gmail-m2", "gmail-m4"])
+      expect(message(pod, msg(id)).inReplyTo).toBe(`${LUNCH_1}#it`);
+    expect(pod.get(msg("<lunch-1@example.test>"))).toBeUndefined();
+    const requests = threadRequests(first.api);
+    expect(requests).toHaveLength(1);
+    expect(requests[0]?.pathname).toBe("/gmail/v1/users/me/threads/t1");
+    expect(requests[0]?.searchParams.get("format")).toBe("metadata");
+    expect(requests[0]?.searchParams.getAll("metadataHeaders")).toEqual(["Message-ID"]);
+    expect(first.api).toHaveBeenCalledTimes(7);
+
+    // Only the reply changes in the next run; its parent is already stored in the pod.
+    const next = run(
+      [
+        ...base,
+        {
+          url: `${GMAIL_API}/history`,
+          json: {
+            historyId: "1001",
+            history: [{ labelsAdded: [{ message: { id: reply.id }, labelIds: ["INBOX"] }] }],
+          },
+        },
+        fetched(reply),
+      ],
+      report.state,
+    );
+    await next.result;
+    expect(message(pod, msg("gmail-m4")).inReplyTo).toBe(`${LUNCH_1}#it`);
+    expect(threadRequests(next.api)).toHaveLength(1);
+    expect(next.api.mock.calls.filter(([u]) => String(u).includes("/messages/"))).toHaveLength(1);
+    expect(next.api).toHaveBeenCalledTimes(5);
+  });
+
+  it("omits unknown parents and caches unsuccessful lookups too", async () => {
+    const { pod, run } = setup();
+    await run(GMAIL_FIXTURES).result;
+    const replies = [
+      replyMessage("m2", "<unknown@example.test>"),
+      replyMessage("m4", "<other@example.test>"),
+    ];
+    const { api, result } = run([
+      ...base,
+      { url: `${GMAIL_API}/messages`, json: { messages: replies } },
+      ...replies.map(fetched),
+    ]);
+    await result;
+    for (const reply of replies)
+      expect(message(pod, msg(`gmail-${reply.id}`)).inReplyTo).toBeUndefined();
+    expect(threadRequests(api)).toHaveLength(1);
+  });
+
+  it("validates member ids, thread identity and Message-ID header tokens", async () => {
+    const { pod, run } = setup();
+    const parent = {
+      id: "m1",
+      threadId: "t1",
+      payload: { headers: [{ name: "message-id", value: " <lunch-1@example.test> " }] },
+    };
+    const reply = replyMessage("m2");
+    await run([
+      ...base.filter((r) => !r.url.includes("/threads/")),
+      { url: `${GMAIL_API}/messages`, json: { messages: [reply] } },
+      fetched(reply),
+      {
+        url: `${GMAIL_API}/threads/t1`,
+        json: {
+          id: "t1",
+          messages: [
+            parent,
+            null,
+            ...["../bad", "a".repeat(257), "with.dot", ""].map((id) => ({ ...parent, id })),
+            { ...parent, id: "wrong-thread", threadId: "other" },
+            { id: "no-payload", threadId: "t1" },
+            { ...parent, id: "bad-headers", payload: { headers: {} } },
+            {
+              id: "bad-header",
+              threadId: "t1",
+              payload: {
+                headers: [
+                  null,
+                  { name: 5, value: "<lunch-1@example.test>" },
+                  { name: "Subject", value: "<lunch-1@example.test>" },
+                  { name: "Message-ID", value: 5 },
+                  { name: "Message-ID", value: "<lunch-1@example.test> <second@example.test>" },
+                ],
+              },
+            },
+          ],
+        },
+      },
+    ]).result;
+    expect(message(pod, LUNCH_2).inReplyTo).toBe(`${LUNCH_1}#it`);
+    expect(pod.get(LUNCH_1)).toBeUndefined();
+  });
+
+  it.each([
+    null,
+    {},
+    { id: "other", messages: [] },
+    { id: "t1", messages: {} },
+    { id: "t1", messages: [null, { id: "invalid.id", threadId: "t1" }] },
+  ])("omits links from malformed thread metadata %j", async (json) => {
+    const { pod, run } = setup();
+    const replies = [replyMessage("m2"), replyMessage("m4")];
+    const { api, result } = run([
+      ...base.filter((r) => !r.url.includes("/threads/")),
+      { url: `${GMAIL_API}/messages`, json: { messages: replies } },
+      ...replies.map(fetched),
+      { url: `${GMAIL_API}/threads/t1`, json },
+    ]);
+    await result;
+    for (const reply of replies)
+      expect(message(pod, msg(`gmail-${reply.id}`)).inReplyTo).toBeUndefined();
+    expect(threadRequests(api)).toHaveLength(1);
+  });
+
+  it.each([
+    401, 403, 404, 429, 500,
+  ])("propagates thread metadata HTTP %s before committing the reply", async (status) => {
+    const { pod, run } = setup();
+    const reply = replyMessage("m2");
+    const { api, result } = run([
+      ...base.filter((r) => !r.url.includes("/threads/")),
+      { url: `${GMAIL_API}/messages`, json: { messages: [reply] } },
+      fetched(reply),
+      { url: `${GMAIL_API}/threads/t1`, json: {}, status },
+    ]);
+    await expect(result).rejects.toMatchObject({
+      status,
+      name: status === 429 ? "RateLimitedError" : "IntegrationSyncError",
+    });
+    expect(pod.get(LUNCH_2)).toBeUndefined();
+    expect(pod.bytes(LUNCH_2.replace(/\.ttl$/, ".eml"))).toBeUndefined();
+    expect(threadRequests(api)).toHaveLength(1);
   });
 });
 
 describe("Gmail full resync", () => {
-  it("reads and updates each collection once when sweeping a mailbox batch", async () => {
+  it("batches sweep cleanup and rereads folders for reconciliation", async () => {
     const { pod, run, transport } = setup();
     const messages = Array.from({ length: 53 }, (_, i) => ({
       ...(MESSAGES.m1 as GmailMessage),
@@ -235,9 +401,9 @@ describe("Gmail full resync", () => {
       return pod.fetch(input, init);
     });
     await run([...base, { url: `${GMAIL_API}/messages`, json: { messages: [] } }]).result;
-    expect(reads.get(`${ACCOUNT}folders/`)).toBe(1);
+    expect(reads.get(`${ACCOUNT}folders/`)).toBe(2);
     for (const url of collections) {
-      expect(reads.get(url), url).toBe(1);
+      expect(reads.get(url), url).toBe(url.includes("/folders/") ? 2 : 1);
       expect(writes.get(url) ?? 0, url).toBeLessThanOrEqual(1);
     }
     expect(pod.urls().filter((url) => url.startsWith(`${ACCOUNT}messages/`))).toEqual([]);

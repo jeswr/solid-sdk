@@ -29,6 +29,7 @@ import {
   type GmailMessage,
   type GmailMessageList,
   type GmailProfile,
+  type GmailThread,
 } from "./fixtures.js";
 
 const ID = "gmail";
@@ -120,6 +121,8 @@ class Sync {
   done = 0;
   skipped = 0;
   private readonly seen = new Set<string>();
+  /** Per-run metadata cache, including threads with no usable Message-ID headers. */
+  private readonly parents = new Map<string, ReadonlyMap<string, string>>();
   constructor(
     private readonly ctx: ImportContext,
     private readonly mail: MailWriter,
@@ -244,6 +247,7 @@ class Sync {
         threadKey: `gmail-${message.threadId}`,
         fallbackId: `gmail-${id}`,
         documentId: `gmail-${id}`,
+        resolveParent: (messageId) => this.resolveParent(message.threadId, messageId),
         sourceUrl: source,
         receivedAt: Number.isFinite(received) && received > 0 ? new Date(received) : undefined,
       });
@@ -260,6 +264,38 @@ class Sync {
 
   private async remove(id: string): Promise<void> {
     await this.mail.removeMessage(messageSlug(this.account, `gmail-${id}`));
+  }
+
+  private async resolveParent(threadId: string, messageId: string): Promise<string | undefined> {
+    let parents = this.parents.get(threadId);
+    if (!parents) {
+      const params = new URLSearchParams({ format: "metadata", metadataHeaders: "Message-ID" });
+      const metadata = await getJson<GmailThread>(
+        ID,
+        this.ctx.api,
+        `${GMAIL_API}/threads/${threadId}?${params}`,
+      );
+      const found = new Map<string, string>();
+      if (metadata?.id === threadId && Array.isArray(metadata.messages))
+        for (const member of metadata.messages) {
+          if (!validId(member?.id) || member.threadId !== threadId) continue;
+          const headers = member.payload?.headers;
+          if (!Array.isArray(headers)) continue;
+          for (const header of headers) {
+            if (
+              typeof header?.name !== "string" ||
+              header.name.toLowerCase() !== "message-id" ||
+              typeof header.value !== "string"
+            )
+              continue;
+            const value = header.value.trim();
+            if (/^<[^<>\s]+>$/.test(value)) found.set(value, `gmail-${member.id}`);
+          }
+        }
+      parents = found;
+      this.parents.set(threadId, parents);
+    }
+    return parents.get(messageId);
   }
 }
 
