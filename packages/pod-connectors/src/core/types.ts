@@ -53,6 +53,8 @@ export interface OAuthAppConfig {
    */
   readonly tokenExchange: "public" | "proxy";
   readonly tokenProxyUrl?: string;
+  /** Optional installed-app secret injected by a Node host; never persist or expose in a UI. */
+  readonly clientSecret?: string;
   /** Extra query params some platforms require on the authorize URL. */
   readonly extraAuthParams?: Readonly<Record<string, string>>;
   /**
@@ -92,11 +94,36 @@ export interface NormalisedDoc {
   /** Source document for items without their own schema:url (e.g. file exports). */
   readonly sourceUrl?: string;
   /**
+   * Register `forClass` for this ancestor container slug (ending in `/`) instead of the
+   * document's own container, e.g. a mail account root holding `messages/` and `threads/`.
+   */
+  readonly registrationContainer?: string;
+  /**
    * Skip Type-Index registration for this doc's class (default false). Used
    * for companion documents that ride along in an already-registered
    * container (e.g. a profile doc beside the repositories collection).
    */
   readonly skipRegistration?: boolean;
+}
+
+/**
+ * A non-RDF resource. `"create"` keeps an existing resource (source-immutable content keyed
+ * by a stable id, e.g. a mail message); `"replace"` overwrites it under its current ETag.
+ */
+export interface BinaryDoc {
+  /** Path under the adapter's root container, e.g. `"mail/acct/messages/id.eml"`. */
+  readonly slug: string;
+  /** Media type sent as `Content-Type`; RDF media types are refused (use `write`). */
+  readonly contentType: string;
+  readonly body: Uint8Array;
+  /** Default `"create"`. */
+  readonly mode?: "create" | "replace";
+}
+
+/** A binary resource the writer stored (`created: false` when `"create"` kept an existing one). */
+export interface WrittenBinary {
+  readonly url: string;
+  readonly created: boolean;
 }
 
 /** A doc the runner wrote, with its final URL. */
@@ -105,6 +132,8 @@ export interface WrittenDoc {
   readonly category: string;
   readonly forClass: string;
   readonly skipRegistration?: boolean;
+  /** Absolute container registered instead of the document's own container. */
+  readonly registrationContainer?: string;
 }
 
 export interface ImportProgress {
@@ -133,6 +162,16 @@ export interface ImportContext {
   read(slug: string): Promise<DatasetCore | undefined>;
   /** Write RDF; defaults to the precondition retained by a preceding read of this URL. */
   write(doc: NormalisedDoc, conditions?: WriteConditions): Promise<WrittenDoc>;
+  /**
+   * Write a non-RDF resource (original file, `.eml` source, attachment) inside the
+   * adapter container. Throws `IntegrationSyncError` when the host writer has no binary port.
+   */
+  writeBinary(doc: BinaryDoc): Promise<WrittenBinary>;
+  /**
+   * Delete a resource the source deleted (RDF or binary). Missing resources are not an
+   * error. Throws `IntegrationSyncError` when the host writer has no delete port.
+   */
+  remove(slug: string): Promise<void>;
   /** Report progress to the UI. */
   progress(p: ImportProgress): void;
   /** Incremental cursor from the previous import of this adapter, if any. */
@@ -218,6 +257,14 @@ export interface PodWriter {
   read(slug: string): Promise<{ dataset: DatasetCore; etag: string | null } | undefined>;
   /** Write RDF, preserving the caller's conditional-write precondition. */
   write(doc: NormalisedDoc, conditions?: WriteConditions): Promise<WrittenDoc>;
+  /**
+   * Optional binary port with the same container confinement as `write`. `"create"` sends
+   * `If-None-Match: *` and reports a 412 as an existing resource; `"replace"` reads the
+   * current ETag first and sends `If-Match` (or `If-None-Match: *` when absent).
+   */
+  writeBinary?(doc: BinaryDoc): Promise<WrittenBinary>;
+  /** Optional delete port with the same confinement; 404 counts as already deleted. */
+  remove?(slug: string, conditions?: { readonly ifMatch?: string }): Promise<void>;
   /** Ensure the distinct class/container registrations and report the index used. */
   registerType(registrations: readonly TypeRegistrationRequest[]): Promise<{ indexUrl: string }>;
 }

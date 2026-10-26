@@ -22,10 +22,12 @@
  * write an unbounded pod document. Writes are confined to the adapter's own
  * container under the user's pod root (the slug-escape guard below).
  */
+import type { DatasetCore } from "@rdfjs/types";
 import { IntegrationSyncError } from "./errors.js";
 import type { ImportReport } from "./import-runner.js";
 import { createImportSession } from "./import-session.js";
 import type {
+  BinaryDoc,
   ConnectorStateOptions,
   ImportProgress,
   IntegrationMetadata,
@@ -33,6 +35,7 @@ import type {
   PodWriter,
   VocabMap,
   WriteConditions,
+  WrittenBinary,
   WrittenDoc,
 } from "./types.js";
 
@@ -59,6 +62,12 @@ export interface FileImportContext {
   resolve(slug: string): string;
   /** Serialise + PUT a normalised document into the pod. */
   write(doc: NormalisedDoc, conditions?: WriteConditions): Promise<WrittenDoc>;
+  /** Read existing RDF in the connector container (see `ImportContext.read`). */
+  read(slug: string): Promise<DatasetCore | undefined>;
+  /** Store a non-RDF resource (see `ImportContext.writeBinary`). */
+  writeBinary(doc: BinaryDoc): Promise<WrittenBinary>;
+  /** Delete a resource (see `ImportContext.remove`). */
+  remove(slug: string): Promise<void>;
   /** Report progress to the UI. */
   progress(p: ImportProgress): void;
   /** Shared row cap so adapters bound their own loops consistently. */
@@ -130,7 +139,10 @@ export async function runFileImport(opts: RunFileImportOptions): Promise<ImportR
       maxRows: MAX_ROWS,
       resolve: (slug) => opts.podWriter.resolve(slug),
       progress: (p) => opts.onProgress?.(p),
+      read: session.read,
       write: session.write,
+      writeBinary: session.writeBinary,
+      remove: session.remove,
     });
     if (session.written.length === 0) {
       throw new IntegrationSyncError(

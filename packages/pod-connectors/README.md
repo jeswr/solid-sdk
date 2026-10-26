@@ -63,12 +63,56 @@ Entry points:
 `pnpm --filter @jeswr/pod-connectors build` builds ESM and declarations. `test` runs all
 moved fixture tests and the environment-read regression test without production traffic.
 
+## Binary resources
+
+Adapters store non-RDF resources (original files, `.eml` sources, attachments) with
+`ctx.writeBinary({ slug, contentType, body, mode })`. The fetch-backed writer confines them to
+the connector container exactly like RDF writes and refuses RDF media types (those go through
+`ctx.write` so N3 serialises them and provenance is attached). `mode: 'create'` (default) sends
+`If-None-Match: *` and reports an existing resource as `created: false`; `mode: 'replace'`
+reads the current ETag and sends `If-Match`, refusing resources without a strong ETag. Hosts
+whose `PodWriter` has no `writeBinary` make the call fail with `IntegrationSyncError`.
+
+## Mail (Gmail and the shared MailWriter)
+
+`./adapters/gmail` imports a mailbox through the Gmail API: a full sync lists every message
+(`format=raw`), later runs replay `users.history.list` from the persisted `historyId` (an expired
+id, HTTP 404, falls back to a full sync). Messages land in the pod-mail layout used by the Mail app
+(apps MAI-01), inside the connector container: `mail/<account>/messages/gmail-<messageId>.ttl` with the
+RFC 822 source beside it as `.eml`, `threads/gmail-<threadId>.ttl`, `folders/system:inbox.ttl` etc.
+for system labels and `folders/<label>.ttl` for user labels, attachments under
+`mail/attachments/<account>/`. Messages without INBOX, SENT, DRAFT or TRASH go to Archive; UNREAD
+clears `schema:dateRead`; SPAM and deleted messages are removed together with their source and
+attachments. `schema:EmailMessage` is registered for the account root (`registrationContainer`).
+
+Gmail uses its opaque message id (1–256 ASCII letters, digits, `_` or `-`) for every document,
+source and attachment path, and its thread id for conversations. Invalid ids are skipped.
+Message-ID remains message metadata and supplies In-Reply-To links. History deletions resolve
+the message path directly; full syncs sweep vanished Gmail messages by listing `messages/`.
+No separate source index is stored.
+
+`./mail` exports `createMailWriter(ctx, account)`, shared with the Takeout mbox path: `add()` stores
+one raw message, then `flush()` writes accumulated thread and folder membership once per run.
+File imports retain Message-ID document keys with collision fallback and References/In-Reply-To
+thread ancestry. An explicit `documentId` bypasses Message-ID keying. Additions commit RDF before
+bytes and collections; `removeMessage()` immediately removes collection memberships, then
+attachments and `.eml`, and deletes RDF last. An interrupted deletion retains its cleanup inventory
+in that RDF for replay; a missing document is a no-op. Attachment media types from mail are
+untrusted: RDF and malformed types are stored as `application/octet-stream`.
+
 ## Incremental imports and provenance
 
 Pass host-owned `state: ConnectorState` into `runImport` (or `runFileImport`) and persist
 `report.state` after success. `onState` also receives failed outcomes, preserving the previous
 successful cursor, sync time and counts. State contains ISO date strings and never tokens or
 exception text. An explicit `cursor` overrides the state's cursor for API imports.
+
+**One run per connector at a time.** Imports reconcile against their own reads (source
+inventories, collection documents), so a second `runImport`/`runFileImport` for the same
+connector container while one is running in this process is refused ("already running").
+Hosts that share a pod across processes (for example the CLI and a browser app) must not run
+the same connector concurrently; the conditional writes then fail an overlapping run with 412
+rather than merging it.
 
 The shared write pipeline reads each deterministic slug before writing. Documents default to
 replacement (`writeMode: 'replace'`), preserving snapshot behavior for Spotify, GitHub and other
@@ -120,3 +164,33 @@ and unlisted JSON fields are omitted. Known token, cookie and personal keys cann
 allowlisted; empty allowlists are the default. Hosts must ensure every allowed scalar is
 non-personal and use synthetic replacements when replay requires personal fields. Tests use
 mocked source transports and memory Pods only.
+
+## Google Calendar
+
+`./adapters/google/oauth` exports `createGoogleOAuthConfig(product, options)` for
+`calendar`, `contacts`, `drive` and `gmail`. Each configuration requests only that
+product's read scope. Browser hosts inject `{ clientId, tokenProxyUrl }` and use the
+existing proxy exchange. Node hosts pass `{ clientType: 'desktop', clientId,
+clientSecret? }` from their own Desktop OAuth configuration and use the shared
+code exchange with a loopback redirect and S256 PKCE. The installed-app value is
+sent only in the direct token POST, never in the authorization URL or proxy form.
+Keep it out of browser configuration and persisted connector state. Tokens remain
+in memory; this module does not implement the CLI login (CON-03).
+
+The Calendar adapter reads the primary calendar, follows every `nextPageToken`,
+and returns the final `nextSyncToken` as its cursor. Incremental runs retain
+unchanged events and apply updates/deletions by event id. A 410 discards partial
+changes and retries a full snapshot once; a missing local document also requires a
+full snapshot. No event document is written until every page and the checkpoint
+are available, so a failed resync keeps the previous data and cursor. ETag
+preconditions still apply.
+
+Events retain `schema:Event` alongside the defined `sched:CalendarEvent` class.
+All-day start/end values use `xsd:date`, preserving Google's exclusive end date;
+timed values use `xsd:dateTime`. Recurrence rules use VOC-01's structured fields
+and deterministic linked nodes, with `schema:Schedule` as an additional type and
+`schema:scheduleTimezone` for the source time zone. Cancelled or moved instances
+supply exception dates and keep their deterministic identities across later master
+updates. RFC 5545 constructs outside VOC-01's shape fail before the document write
+or checkpoint advance (see root `QUESTIONS.md`). Fixtures and sorted Turtle mapping
+snapshots cover these paths without Google accounts or production traffic.

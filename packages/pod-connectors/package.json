@@ -135,6 +135,26 @@
       "types": "./dist/goodreads/*.d.ts",
       "default": "./dist/goodreads/*.js"
     },
+    "./adapters/google/oauth": {
+      "types": "./dist/adapters/google/oauth.d.ts",
+      "default": "./dist/adapters/google/oauth.js"
+    },
+    "./adapters/gmail": {
+      "types": "./dist/gmail/adapter.d.ts",
+      "default": "./dist/gmail/adapter.js"
+    },
+    "./gmail/*": {
+      "types": "./dist/gmail/*.d.ts",
+      "default": "./dist/gmail/*.js"
+    },
+    "./mail": {
+      "types": "./dist/mail/writer.d.ts",
+      "default": "./dist/mail/writer.js"
+    },
+    "./mail/*": {
+      "types": "./dist/mail/*.d.ts",
+      "default": "./dist/mail/*.js"
+    },
     "./adapters/google-calendar": {
       "types": "./dist/google-calendar/adapter.d.ts",
       "default": "./dist/google-calendar/adapter.js"
@@ -305,12 +325,13 @@
     "@rdfjs/wrapper": "^0.34.0",
     "@solid/object": "^0.6.0",
     "jsonld-streaming-parser": "^5.0.0",
-    "n3": "^2.0.3"
+    "n3": "^2.0.3",
+    "postal-mime": "4.1.4"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.5.1",
     "@rdfjs/types": "^2.0.1",
     "@types/n3": "^1.26.1",
-    "@biomejs/biome": "^2.5.1",
     "typescript": "^6.0.3",
     "vitest": "^4.1.9"
   }

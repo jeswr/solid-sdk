@@ -16,7 +16,9 @@ Runners receive PodWriter and SourceAuth explicitly. Every adapter uses ctx.api 
 I/O and ctx.write for Pod I/O. Keep credentials on their own transport. Fetch-backed writes
 are confined to the adapter container; Type Index documents must be within a `pim:storage`
 or `solid:storage` root advertised by the user's WebID, independently of the import destination.
-Preserve ETags and conditional PUT semantics. Use typed RDF wrappers and N3 Writer, never inline quads.
+Preserve ETags and conditional PUT semantics. Runners allow one run per connector container
+at a time (an overlapping run in the same process is refused); hosts sharing a pod across
+processes must serialise runs of the same connector. Use typed RDF wrappers and N3 Writer, never inline quads.
 Hosts pass the canonical `profileDocumentUrl` from their existing profile load into
 createFetchPodWriter. Pin profile reads and updates to that document while keeping the WebID
 as the RDF subject. Do not resolve redirects or fetch an unauthenticated profile during
@@ -30,3 +32,22 @@ recording and per-adapter vocab-map.ts hooks. Preserve ETags on automatic merges
 advance checkpoints on failure. The fixture recorder exposes only allowlisted non-personal JSON
 fields under configured public route prefixes; it never saves headers or dynamic URLs. Detailed
 adapter mappings and Node CLI remain owned by their follow-on connector tasks.
+
+CON-14 adds the optional `PodWriter.writeBinary`/`remove` ports and `ctx.writeBinary`/`ctx.remove`
+for non-RDF resources and source deletions. Keep binaries inside the connector container, never send RDF through it, default
+to create-only, and replace only under a strong ETag.
+
+Mail sources (Gmail, Takeout mbox) go through `src/mail/writer.ts` so the pod-mail layout and
+vocabulary (`http://schema.org/`, matching apps/suite's mail model) stay identical. Gmail supplies
+`documentId: "gmail-" + id` and a source-native thread key; validate opaque ids against
+`[A-Za-z0-9_-]{1,256}` and skip invalid ones. File/mbox imports keep Message-ID document ids with
+collision fallback and References/In-Reply-To ancestry. Gmail history deletions resolve slugs
+directly; full syncs list the account's `messages/` container and sweep unseen Gmail message RDF
+documents. There is no Gmail source index. Keep Spam/Trash in the full source listing.
+
+Additions commit RDF, then `.eml`/attachment bytes, then thread/folder memberships in `flush()`.
+Retire dropped attachments before replacing the RDF that records them. Deletions reverse the
+order: read the message, persist membership removals conditionally, delete attachments and `.eml`,
+and delete message RDF last. Keep that document available for retries until cleanup succeeds;
+a missing document is a no-op. Reconcile all stored folders, including vanished labels, so
+interrupted relabeling cannot strand memberships. Preserve one run per connector container.
