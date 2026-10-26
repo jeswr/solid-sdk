@@ -112,9 +112,10 @@ export async function preparePhoto(
   encoder: ImageEncoder,
   now: string,
 ): Promise<PreparedPhoto> {
-  const root = httpIri(storage);
-  if (!root.endsWith("/") || new URL(root).hash || new URL(root).search)
+  const base = httpIri(storage);
+  if (!base.endsWith("/") || new URL(base).hash || new URL(base).search)
     throw new TypeError("Expected a storage container URL");
+  const root = new URL(base).href;
   const id = identifier(input.id);
   const extensions: Record<string, string> = {
     "image/jpeg": "jpg",

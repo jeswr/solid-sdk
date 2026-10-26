@@ -11,6 +11,8 @@ retaining valid fields and other photos in the same document.
 
 `index.ts` exports the model, EXIF, album, timeline, upload, I/O, and trash functions.
 `photoStorage(authenticatedFetch, storageRoot)` scopes all requests and redirects to `photos/`.
+Upload preparation canonicalizes the storage base before minting resource URLs and RDF subjects,
+so default ports and hostname casing agree with storage requests, listings, and managed purge paths.
 Reads retain ETags; writes require `{ create: true }` or `{ etag }`. A server without ETags can
 support create/read, but cannot safely support the model's destructive trash operations.
 `ensureContainers` creates intermediate containers with create-only semantics. `list` reads an

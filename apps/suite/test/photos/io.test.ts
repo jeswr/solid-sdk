@@ -4,6 +4,7 @@ import { PodScopeError } from "@jeswr/guarded-fetch";
 import { Store } from "n3";
 import { expect, it } from "vitest";
 import { PhotoIoError, photoStorage } from "../../src/apps/photos/lib/model/io.js";
+import { purgePhoto, trashPhoto } from "../../src/apps/photos/lib/model/trash.js";
 import type { ImageEncoder } from "../../src/apps/photos/lib/model/upload.js";
 import { tiffFixture } from "./fixtures.js";
 import { mockPod } from "./pod.js";
@@ -117,4 +118,41 @@ it("uploads original, thumbnail, then metadata with create-only preconditions", 
   pod.failures.set(`PUT ${storage}photos/thumbs/b.webp`, 507);
   await expect(io.uploadPhotos([next], encoder, now)).rejects.toMatchObject({ status: 507 });
   expect(pod.files.has(`${storage}photos/items/b.ttl`)).toBe(false);
+});
+
+it.each([
+  "https://pod.example:443/",
+  "https://POD.example/",
+])("uses canonical photo identities from upload through purge for %s", async (base) => {
+  const pod = mockPod();
+  const io = photoStorage(pod.fetch, base);
+  const [uploaded] = await io.uploadPhotos(
+    [
+      {
+        id: "a",
+        name: "TIFF",
+        original: new Blob([tiffFixture()], { type: "image/tiff" }),
+        stripLocation: false,
+      },
+    ],
+    encoder,
+    now,
+  );
+  expect(io.root).toBe(`${storage}photos/`);
+  expect(uploaded?.itemUrl).toBe(url);
+  expect(uploaded?.photo.contentUrl).toBe(`${io.root}originals/a.tif`);
+  expect(uploaded?.photo.thumbnailUrl).toBe(`${io.root}thumbs/a.webp`);
+  pod.files.set(io.root, {
+    body: `<> <http://www.w3.org/ns/ldp#contains> <items/a.ttl>.`,
+    type: "text/turtle",
+    etag: '"listing"',
+  });
+  const [listed] = await io.list(io.root);
+  expect(listed).toBe(url);
+  expect((await io.loadPhoto(listed as string)).photo).toEqual(uploaded?.photo);
+  const trash = await trashPhoto(io, url, "a", `${storage}profile/card#me`, now);
+  await purgePhoto(io, trash);
+  expect(pod.files.has(trash)).toBe(false);
+  expect(pod.files.has(`${io.root}originals/a.tif`)).toBe(false);
+  expect(pod.files.has(`${io.root}thumbs/a.webp`)).toBe(false);
 });

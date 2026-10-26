@@ -116,6 +116,17 @@ describe("EXIF extraction and upload preparation", () => {
       contentType: "image/webp",
     });
   });
+  it.each([
+    "https://pod.example:443/home/",
+    "https://POD.example/home/",
+  ])("prepares canonical resource URLs and RDF subjects for %s", async (base) => {
+    const prepared = await preparePhoto(base, input, encoder(), now);
+    const item = "https://pod.example/home/photos/items/one.ttl";
+    expect(prepared.itemUrl).toBe(item);
+    expect(prepared.photo.contentUrl).toBe("https://pod.example/home/photos/originals/one.tif");
+    expect(prepared.photo.thumbnailUrl).toBe("https://pod.example/home/photos/thumbs/one.webp");
+    expect(parsePhoto(item, buildPhoto(prepared.itemUrl, prepared.photo))).toEqual(prepared.photo);
+  });
   it("strips the binary and emits no geo triples", async () => {
     const image = encoder();
     const prepared = await preparePhoto(storage, { ...input, stripLocation: true }, image, now);
