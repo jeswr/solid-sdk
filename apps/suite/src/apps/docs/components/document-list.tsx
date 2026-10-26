@@ -269,7 +269,7 @@ export function DocumentList({ session }: { session: PodSession }) {
                           variant="destructive"
                           onSelect={() => setDeleting(entry)}
                         >
-                          Delete
+                          Move to trash
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
