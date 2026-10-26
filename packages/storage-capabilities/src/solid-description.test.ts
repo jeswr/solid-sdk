@@ -282,7 +282,12 @@ describe("parseSolidDescription", () => {
       [`${SSD_NS}format`]: {
         "@id": expect.stringMatching(/^_:/),
         [`${SSD_NS}source`]: "text/turtle",
-        [`${SSD_NS}back`]: { "@id": expect.stringMatching(/^_:/) },
+        // The entry root is expanded once where nested; the cycle then ends in a reference.
+        [`${SSD_NS}back`]: {
+          "@id": expect.stringMatching(/^_:/),
+          "http://www.w3.org/1999/02/22-rdf-syntax-ns#type": SSD.PatchSupport,
+          [`${SSD_NS}format`]: { "@id": expect.stringMatching(/^_:/) },
+        },
       },
     });
     expect(() => JSON.stringify(result)).not.toThrow();
@@ -390,6 +395,36 @@ describe("parseSolidDescription", () => {
     });
     expect(features.patch.detail.formats["text/turtle"]).toHaveLength(n);
     expect(performance.now() - started).toBeLessThan(3000);
+  });
+
+  test.each([
+    [
+      "the format node is also a capability",
+      "<#fmt> a ssd:PatchSupport ; ssd:format <#fmt> . <> lws:capability <#fmt> .",
+    ],
+    [
+      "the format node is a blank capability first",
+      "<> lws:capability _:f . _:f a ssd:PatchSupport ; ssd:format _:f .",
+    ],
+  ])("format references always resolve when %s", async (_name, body) => {
+    const node = body.includes("_:f") ? "_:f" : "<#fmt>";
+    const dataset = await turtle(`${body}
+      <> lws:capability [ a ssd:PatchSupport ; ssd:format ${node} ] .
+      ${node} ssd:source "text/turtle" ; ssd:patchType "application/sparql-update" .`);
+    const result = parseSolidDescription(dataset, ROOT);
+    const features = deriveFeatures({
+      protocol: "solid",
+      id: ROOT,
+      root: ROOT,
+      descriptionUrl: `${ROOT}.well-known/solid`,
+      sources: ["solid-description"],
+      fetchedAt: 0,
+      etag: null,
+      maxAgeMs: 0,
+      verificationMethods: [],
+      ...result,
+    });
+    expect(features.patch.detail.formats["text/turtle"]).toEqual(["application/sparql-update"]);
   });
 
   test("expands shared blank-node extensions once rather than multiplying their contents", async () => {
