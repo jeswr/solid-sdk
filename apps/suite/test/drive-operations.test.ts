@@ -16,6 +16,7 @@ import {
   extensionChange,
   isHidden,
   listTrash,
+  measureUsage,
   moveItems,
   purgeExpired,
   recentFiles,
@@ -80,6 +81,54 @@ async function trashOne(client: DriveClient, url = NOTES, at = NOW) {
 }
 
 afterEach(() => vi.restoreAllMocks());
+
+describe("Drive usage", () => {
+  it("sums file bytes recursively, including hidden files and app-managed trash", async () => {
+    const { pod, client } = await setup();
+    await uploadFile(client, DRIVE, new Blob(["secret"]), ".hidden");
+    await trashOne(client);
+    const expected = pod
+      .snapshot()
+      .resources.filter(([url]) => url.startsWith(DRIVE))
+      .reduce((sum, [, resource]) => sum + resource.body.byteLength, 0);
+    expect(expected).toBeGreaterThan(0);
+    expect(await measureUsage(client, DRIVE)).toBe(expected);
+    expect(await measureUsage(client, `${DRIVE}Archive/`)).toBe(0);
+  });
+
+  it("skips unavailable listings and counts missing sizes as zero", async () => {
+    const { client } = await setup();
+    const list = vi.spyOn(client, "list").mockImplementation(async (url) => {
+      if (url !== DRIVE) throw new Error("unreadable folder");
+      return [
+        { url: `${DRIVE}bad/`, name: "bad", kind: "folder", size: 999 },
+        { url: NOTES, name: "notes.md", kind: "file", size: 12 },
+        { url: `${DRIVE}unknown`, name: "unknown", kind: "file" },
+        { url: `${DRIVE}empty`, name: "empty", kind: "file", size: 0 },
+      ];
+    });
+    expect(await measureUsage(client, DRIVE)).toBe(12);
+    expect(list.mock.calls.map(([url]) => url)).toEqual([DRIVE, `${DRIVE}bad/`]);
+    expect(await measureUsage(client, `${DRIVE}bad/`)).toBe(0);
+  });
+
+  it("never visits more than the container budget, even across batches of eight", async () => {
+    const { client } = await setup();
+    const folders = Array.from({ length: 12 }, (_, i) => `${DRIVE}${i}/`);
+    const list = vi
+      .spyOn(client, "list")
+      .mockImplementation(async (url) =>
+        url === DRIVE
+          ? folders.map((url) => ({ url, name: "folder", kind: "folder" as const }))
+          : [{ url: `${url}file`, name: "file", kind: "file", size: 1 }],
+      );
+    expect(await measureUsage(client, DRIVE, { maxContainers: 10 })).toBe(9);
+    expect(list.mock.calls.map(([url]) => url)).toEqual([DRIVE, ...folders.slice(0, 9)]);
+    list.mockClear();
+    expect(await measureUsage(client, DRIVE, { maxContainers: 0 })).toBe(0);
+    expect(list).not.toHaveBeenCalled();
+  });
+});
 
 describe("Drive names and media types", () => {
   it.each([

@@ -219,7 +219,12 @@ export function FileBrowser(props: FileBrowserProps) {
     [selection.selected, selected],
   );
 
+  // Menu content is portalled but React events still bubble through the row:
+  // only clicks inside the row's own DOM select or open it.
+  const fromRow = (event: React.MouseEvent) => event.currentTarget.contains(event.target as Node);
+
   const onItemClick = (event: React.MouseEvent, item: BrowserItem) => {
+    if (!fromRow(event)) return;
     if (event.shiftKey)
       dispatch({ type: "range", id: item.url, additive: event.metaKey || event.ctrlKey });
     else if (event.metaKey || event.ctrlKey) dispatch({ type: "toggle", id: item.url });
@@ -590,7 +595,9 @@ export function FileBrowser(props: FileBrowserProps) {
                   draggable={Boolean(folder)}
                   onDragStart={(event) => onDragStart(event, item)}
                   onClick={(event) => onItemClick(event, item)}
-                  onDoubleClick={() => actions.open(item, visible, ui.setPreview)}
+                  onDoubleClick={(event) =>
+                    fromRow(event) && actions.open(item, visible, ui.setPreview)
+                  }
                 >
                   <span className="drv-card-thumb">
                     <ItemIcon item={item} size={48} />
@@ -672,7 +679,9 @@ export function FileBrowser(props: FileBrowserProps) {
                     draggable={Boolean(folder)}
                     onDragStart={(event) => onDragStart(event, item)}
                     onClick={(event) => onItemClick(event, item)}
-                    onDoubleClick={() => actions.open(item, visible, ui.setPreview)}
+                    onDoubleClick={(event) =>
+                      fromRow(event) && actions.open(item, visible, ui.setPreview)
+                    }
                     {...folderDropProps(item)}
                   >
                     <td>

@@ -80,6 +80,7 @@ export default defineConfig({
         "src/lib/refs.ts",
         "src/apps/drive/lib/client/client.ts",
         "src/apps/drive/lib/operations/**/*.ts",
+        "src/apps/drive/lib/view/**/*.ts",
       ],
       reporter: ["text", "json-summary"],
       thresholds: {

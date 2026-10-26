@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6
 /**
  * Pure helpers the Drive screens use to present listings: adapting
  * {@link DriveItem}s to the list helpers, the "Modified" column text, friendly
@@ -208,7 +209,7 @@ export function parseCsv(text: string, maxRows = 200): string[][] {
       if (rows.length >= maxRows) return rows;
     } else field += char;
   }
-  if (field !== "" || row.length > 0) {
+  if (field !== "" || row.length > 0 || text.endsWith('"')) {
     row.push(field);
     rows.push(row);
   }
