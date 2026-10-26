@@ -111,3 +111,33 @@ No dependencies added. No UI, screenshots, tracker updates or changes outside th
 checkout. No new open questions or unfinished implementation. Full-workspace
 verification remains blocked as above; `roborev` is still unavailable, so automated
 per-commit reviews could not run. No push, PR, branch switch, fetch or merge performed.
+
+## Fix round 2 — 2026-10-26
+
+Starting head: `f0a05e47d24c02a75adb36a701273fc70cc2c6ca` on `lane/sst-age2`.
+The supplied review finding is addressed:
+
+- `13baaaa0` — `fix: preserve comments access on editor promotions`: Editor and
+  Owner selections only plan file and management permission changes, preserving
+  existing comments permissions. Only Commenter requests comments Append.
+  WAC/ACP regression tests cover Viewer promotions without a comments destination,
+  preservation of empty, Read, Append, Read+Write and Read+Write+Append comments
+  grants, and the continued destination requirement for Commenter.
+- Closing commit — `docs: record sst-age2 round two verification` (this section).
+
+The new regressions produced eight failures before the fix and all passed afterwards.
+No dependencies or unrelated implementation changes were added.
+
+| Command | Result |
+| --- | --- |
+| `pnpm --filter @jeswr/suite-ui run build` | PASS; prepare existing workspace dependency. |
+| `pnpm --filter @jeswr/app-suite run lint && pnpm --filter @jeswr/app-suite run build && pnpm --filter @jeswr/app-suite run typecheck && pnpm --filter @jeswr/app-suite run test` | PASS after formatting the new tests; 120 tests, including 119 sharing tests. Sharing coverage: 100% statements (215/215), branches (206/206), functions (45/45) and lines (178/178). |
+| `pnpm run lint:root` | PASS; workspace, lockfile, fetch, token and contrast guards. |
+| `TURBO_SCM_BASE=f0a05e47d24c02a75adb36a701273fc70cc2c6ca pnpm run gate` | PASS; 6/6 tasks, none cached. |
+| `PATH="/tmp/sst-age2-gate-bin:$PATH" pnpm run gate:full` | BLOCKED in unchanged `@jeswr/unstorage-solid#build` after 4 successful tasks (1 cached). The existing temporary Git wrapper blocked its attempted remote clone, honoring the lane restrictions; no remote Git operation ran. |
+| `git diff --check` | PASS. |
+
+Implementation is complete with no new open questions. Full-workspace verification
+remains blocked as above. `roborev` is unavailable, so per-commit automated reviews
+could not run. No UI, screenshots, tracker updates, push, PR, branch switch, fetch
+or merge was performed.
