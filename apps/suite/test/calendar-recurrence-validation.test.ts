@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { describe, expect, it } from "vitest";
 import {
   expandRecurrence,
@@ -167,6 +168,36 @@ describe("recurrence rejects unsupported or malformed inputs", () => {
 });
 
 describe("bounded, fail-closed expansion", () => {
+  it.each([
+    "9999-12-30T00:00:00Z",
+    "9999-12-30T09:00:00Z",
+  ])("ignores generated interval overflow at or after window end %s", (end) => {
+    expect(
+      expandRecurrence(
+        { ...base, start: "9999-12-29T09:00:00", durationMs: 2 * 86_400_000, rrule: "FREQ=DAILY" },
+        { start: Date.parse("9999-12-29T00:00:00Z"), end: Date.parse(end) },
+      ),
+    ).toEqual([
+      { start: Date.parse("9999-12-29T09:00:00Z"), end: Date.parse("9999-12-31T09:00:00Z") },
+    ]);
+  });
+
+  it("still rejects overflowing visible occurrences and out-of-window explicit dates", () => {
+    const input = {
+      ...base,
+      start: "9999-12-29T09:00:00",
+      durationMs: 2 * 86_400_000,
+      rrule: "FREQ=DAILY",
+    };
+    const range = {
+      start: Date.parse("9999-12-29T00:00:00Z"),
+      end: Date.parse("9999-12-30T00:00:00Z"),
+    };
+    rejects(input, "invalid-date", { ...range, end: Date.parse("9999-12-30T10:00:00Z") });
+    rejects({ ...input, rdates: ["9999-12-30T09:00:00Z"] }, "invalid-date", range);
+    rejects({ ...input, start: "9999-12-30T09:00:00" }, "invalid-date", range);
+  });
+
   it("allows exactly the cap, counts distinct visible starts, and never truncates", () => {
     expect(
       expandRecurrence({ ...base, rrule: "FREQ=DAILY;COUNT=2", maxOccurrences: 2 }, window),

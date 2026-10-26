@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { check, fields } from "./errors";
 import { matches, parseRule } from "./rule";
 import { DAY, instant, local, Zone } from "./time";
@@ -91,6 +92,8 @@ export function expandRecurrence(input: RecurrenceInput, window: BusyInterval): 
       const candidate = zone.resolve(day * DAY + wall - seedDay * DAY);
       if (candidate === undefined || candidate > rule.until) continue;
       count++;
+      // The scan margin can reach starts that cannot overlap the window.
+      if (candidate >= window.end) continue;
       add(candidate);
     }
   }
