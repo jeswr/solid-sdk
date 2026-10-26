@@ -42,6 +42,7 @@ module.exports = {
         { from: 'src/manifest.json', to: 'manifest.json' },
         { from: 'src/shared/suite-tokens.css', to: 'shared/suite-tokens.css' },
         { from: 'src/shared/account-surface.css', to: 'shared/account-surface.css' },
+        { from: 'src/shared/permission-surface.css', to: 'shared/permission-surface.css' },
         { from: 'src/popup/popup.html', to: 'popup/popup.html' },
         { from: 'src/popup/popup.css', to: 'popup/popup.css' },
         { from: 'src/popup/profiles.css', to: 'popup/profiles.css' },

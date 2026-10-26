@@ -82,8 +82,8 @@ export async function grantOrigin(context: BrowserContext, page: Page): Promise<
   await page.getByRole('button', { name: 'Grant origin access' }).click();
   const consent = await consentPromise;
   await consent.waitForURL('**/consent/consent.html?*');
-  await expect(consent.getByLabel('Share from profile')).toBeVisible();
+  await expect(consent.locator('#webid')).not.toBeEmpty();
   await expect(consent.locator('.targets')).toContainText('/private/notes');
-  await consent.getByRole('button', { name: 'Approve selected' }).click();
+  await consent.getByRole('button', { name: 'Share', exact: true }).click();
   await expect(page.locator('#grant-origin-fixture')).toHaveAttribute('data-approved', 'true');
 }

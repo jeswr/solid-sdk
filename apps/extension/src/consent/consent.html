@@ -8,26 +8,34 @@
   <link rel="stylesheet" href="consent.css" />
 </head>
 <body>
-  <main class="card">
-    <h1 class="title">Access request</h1>
-    <p class="lede">
-      <strong id="origin">An app</strong> is asking to access data in your pod
-      <span id="webid" class="muted"></span>.
-    </p>
+  <a class="permission-skip-link" href="#content">Skip to request</a>
+  <main id="content" class="permission-surface consent-sheet card" aria-labelledby="consent-title" tabindex="-1">
+    <p class="eyebrow">Access request</p>
+    <h1 id="consent-title" class="title"><span id="purpose-headline"></span><span id="origin">An app</span> requests access to:</h1>
+    <p class="hint">Share from your account: <span id="webid"></span></p>
 
-    <label for="profile">Share from profile</label>
-    <select id="profile" aria-describedby="webid"></select>
+    <div id="account-switcher" hidden>
+      <label for="profile">Change account</label>
+      <select id="profile" aria-describedby="webid error" disabled></select>
+    </div>
 
-    <section id="classes" class="classes" aria-label="Requested data classes"></section>
+    <label class="card-check"><input id="select-all" type="checkbox" disabled> Select all</label>
+    <section id="classes" class="classes" aria-label="Requested data"></section>
 
     <p id="empty-note" class="note" hidden>
-      This request resolved to <strong>no matching resources</strong> in your pod. Approving it
-      grants access to nothing (it is safe to deny).
+      No matching items were found in this account. Sharing this request gives access to no items.
     </p>
 
+    <fieldset class="duration-chips" role="radiogroup" aria-labelledby="duration-title" aria-describedby="duration-hint" aria-disabled="true">
+      <legend id="duration-title">Access duration</legend>
+      <label class="duration-chip"><input id="duration" type="radio" name="duration" checked disabled><span id="duration-label">Requested end date</span></label>
+    </fieldset>
+    <p id="duration-hint" class="hint">The site sets this request's end date. You can shorten access in Sites with access after sharing.</p>
+    <p id="selection-hint" class="hint" aria-live="polite">Choose at least one data type to share.</p>
+
     <div class="actions">
-      <button id="deny" type="button" class="btn btn-secondary">Deny all</button>
-      <button id="approve" type="button" class="btn btn-primary">Approve selected</button>
+      <button id="deny" type="button" class="btn">Cancel</button>
+      <button id="approve" type="button" class="btn" aria-describedby="selection-hint error" disabled>Share</button>
     </div>
 
     <p id="error" class="error" role="alert" hidden></p>
