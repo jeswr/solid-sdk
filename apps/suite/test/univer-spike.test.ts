@@ -254,6 +254,83 @@ describe("real headless engine and SHT-00 hand-off", () => {
     expect(storageToWorkbook(storage)).toEqual(loaded);
   });
 
+  it.each([
+    ["New text\r\n", "New text"],
+    ["\u001aFirst\u001b\rSecond\u001c\u001d\u000e\u000f\u0010\u0011\r\n", "First\rSecond"],
+    ["\r\n", ""],
+    ["No terminator", "No terminator"],
+  ])("exports authoritative rich text %j through engine and storage", (dataStream, expected) => {
+    const snapshot = csvToWorkbook("rich", "Rich text", [
+      { id: "s", name: "Sheet", csv: "Text,Count\nold,99" },
+    ]);
+    snapshot.sheets.s!.cellData![1] = {
+      0: { v: "", p: { id: "text", documentStyle: {}, body: { dataStream } } },
+      1: {
+        v: false,
+        t: CellValueType.BOOLEAN,
+        p: { id: "count", documentStyle: {}, body: { dataStream: "42\r\n" } },
+      },
+    };
+    const loaded = loadWorkbook(snapshot);
+    expect(loaded.sheets.s!.cellData![1]).toEqual(snapshot.sheets.s!.cellData![1]);
+    const csv = serializeCsv([
+      ["Text", "Count"],
+      [expected, "42"],
+    ]);
+    expect(workbookToCsv(snapshot, "s")).toBe(csv);
+    expect(workbookToCsv(loaded, "s")).toBe(csv);
+    const storage = workbookToStorage(loaded);
+    expect(storage.sheets[0]!.csv).toBe(csv);
+    expect(storage.sheets[0]!.columns).toEqual([
+      { name: "Text", type: "string" },
+      { name: "Count", type: "number" },
+    ]);
+    expect(storageToWorkbook(storage)).toEqual(loaded);
+  });
+
+  it("falls back to scalar text when a rich-text document has no content", () => {
+    const snapshot = fixture();
+    firstSheet(snapshot).cellData = {
+      0: {
+        0: { v: "Empty body", p: { id: "empty", documentStyle: {}, body: { dataStream: "" } } },
+        1: { v: "No body", p: { id: "missing", documentStyle: {} } },
+      },
+    };
+    expect(workbookToCsv(snapshot, "people")).toBe("Empty body,No body\r\n");
+  });
+
+  it.each([
+    ["false", "false"],
+    ["FALSE", "false"],
+    ["fAlSe", "false"],
+    ["0", "false"],
+    ["0.0", "false"],
+    [false, "false"],
+    ["true", "true"],
+    ["TRUE", "true"],
+    ["tRuE", "true"],
+    ["1", "true"],
+    ["1.0", "true"],
+    [true, "true"],
+  ])("normalizes boolean cell %j through engine and storage", (value, expected) => {
+    const snapshot = csvToWorkbook("bool", "Boolean representations", [
+      { id: "s", name: "Sheet", csv: "Active,Text\nvalue,value" },
+    ]);
+    snapshot.sheets.s!.cellData![1] = {
+      0: { v: value, t: CellValueType.BOOLEAN },
+      1: { v: String(value), t: CellValueType.STRING },
+    };
+    const loaded = loadWorkbook(snapshot);
+    expect(loaded.sheets.s!.cellData![1]![0]).toEqual({ v: value, t: CellValueType.BOOLEAN });
+    const csv = `Active,Text\r\n${expected},${value}\r\n`;
+    expect(workbookToCsv(snapshot, "s")).toBe(csv);
+    expect(workbookToCsv(loaded, "s")).toBe(csv);
+    const storage = workbookToStorage(loaded);
+    expect(storage.sheets[0]!.csv).toBe(csv);
+    expect(storage.sheets[0]!.columns[0]).toEqual({ name: "Active", type: "boolean" });
+    expect(storageToWorkbook(storage)).toEqual(loaded);
+  });
+
   it("loads in Node with no DOM, preserves formulas/styles and disposes cleanly", () => {
     expect(typeof window).toBe("undefined");
     const original = fixture();

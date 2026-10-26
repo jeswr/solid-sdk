@@ -1,6 +1,13 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
-import { CellValueType, type ICellData, type IWorkbookData, LocaleType } from "@univerjs/core";
+import {
+  CellValueType,
+  getPlainText,
+  type ICellData,
+  type IWorkbookData,
+  LocaleType,
+} from "@univerjs/core";
+import { getCellValue } from "@univerjs/sheets";
 import { parseCsv, serializeCsv } from "./csv";
 
 export interface CsvSheet {
@@ -85,11 +92,15 @@ export function workbookToCsv(snapshot: IWorkbookData, sheetId: string): string 
     Array.from({ length: height }, (_, r) =>
       Array.from({ length: width }, (_, c) => {
         const cell = cells[r]?.[c];
+        const richText = cell?.p?.body?.dataStream;
+        if (richText) return getPlainText(richText);
         if (cell?.v != null) {
-          if (cell.t === CellValueType.BOOLEAN) return cell.v ? "true" : "false";
+          if (cell.t === CellValueType.BOOLEAN) {
+            return getCellValue(CellValueType.BOOLEAN, cell) ? "true" : "false";
+          }
           return String(cell.v);
         }
-        return cell?.p?.body?.dataStream.replace(/\r\n$/, "") ?? "";
+        return "";
       }),
     ),
   );
