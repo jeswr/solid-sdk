@@ -43,8 +43,8 @@ activity in the trash claim and the create-only live description. A retry recogn
 and retries conditional trash cleanup, including after a lost creation response. An unrelated live
 description (even an identical photo without the receipt) preserves the copy in `restoring` state,
 which forbids purge. Legacy restoring records without a receipt retain create-only collision
-protection. Purge removes
-matching app-owned original/thumbnail binaries, then the metadata copy; imported binary paths and
+protection. Purge removes matching app-owned original/thumbnail binaries, then the metadata copy;
+imported binary paths and
 existing original descriptions are refused. A `purging` record can only retry purge, including
 after partial binary deletion; it permanently forbids restore. Failed moves may leave both metadata
 copies, so callers can reconcile without losing the recovery copy. Existing album memberships and

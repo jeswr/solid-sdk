@@ -106,3 +106,45 @@ removed before closing the lane. No screenshots or browser checks apply to these
 
 All four requested fixes are complete. Open questions: none. The full-workspace snapshot failure
 and unavailable roborev are the remaining validation limitations; no unrelated fix was attempted.
+
+## Fix round 2 — review of `25a9001cfeb4`
+
+Implemented exactly the two supplied findings on `lane/sst-sf1j`.
+
+- `060f7d70` — `fix(photos): recover restore cleanup with persisted receipts`: persist a unique
+  restore activity as `prov:wasGeneratedBy` in the ETag-conditional trash claim and atomically
+  with the create-only live description. On a 412, only a matching persisted receipt permits
+  conditional trash cleanup. Retries preserve the live resource and recover after failed cleanup
+  or a lost creation response. Regression tests cover 503/412 cleanup failures, a fresh adapter,
+  a lost creation response, failed receipt reads, retrashing the same identifier, and identical
+  live photos with missing or unrelated receipts. Existing restore/purge race tests still pass.
+- `bd809fd2` — `fix(photos): canonicalize upload storage URLs`: normalize the validated storage
+  base with `URL.href` before minting item URLs, binary URLs, thumbnail URLs, and RDF subjects.
+  Tests cover explicit default ports and uppercase hostnames, including nested storage roots
+  and upload → canonical listing → load → trash → purge.
+- Final documentation commit — `docs(photos): record second review fixes and validation`:
+  this report and the model integration notes.
+
+Conservative collision policy: an existing live description without this restore's receipt
+remains a collision, even when its supported photo fields are identical. Legacy trash records
+remain readable and can restore create-only; historical completed restores without receipts
+cannot be inferred safely. No dependencies, UI, tracker files, or unrelated source changes added.
+No pushes, PRs, branch switches, remote fetches, or merges occurred.
+
+### Fix-round-2 validation
+
+| Exact command | Result |
+| --- | --- |
+| `pnpm --filter '@jeswr/app-suite^...' run build` | PASS: all three workspace prerequisites. |
+| `pnpm --filter @jeswr/app-suite exec vitest run test/photos/trash.test.ts test/photos/io.test.ts` | Before fixes: reproduced both findings (3 failed, 18 passed). After fixes: PASS (21 tests), before adding further receipt/canonicalization cases. |
+| `pnpm --filter @jeswr/app-suite run lint && pnpm --filter @jeswr/app-suite run build && pnpm --filter @jeswr/app-suite run typecheck && pnpm --filter @jeswr/app-suite run test` | PASS: lint, production build, strict tsc, 9 files / 128 tests. |
+| `pnpm --filter @jeswr/app-suite run test:coverage` | PASS: every model file meets 100% statements, branches, functions, and lines; totals 557 statements, 361 branches, 163 functions, 474 lines. No exclusions. |
+| `pnpm run lint:root` | PASS: all guards and 74 contrast pairs. |
+| `TURBO_SCM_BASE=25a9001cfeb4bcf53501005292d1860b25dacfaf pnpm run gate` | PASS: 8 / 8 tasks (3 cached) before this report update. An initial overlapping invocation hit Next.js's build lock; rerunning after the standalone app gate completed resolved it. Final run after this report update also passed. |
+| `GIT_ALLOW_PROTOCOL=file pnpm run gate:full --env-mode=loose` | BLOCKED in untouched `@jeswr/unstorage-solid#build`: its dependency bootstrap attempted a remote clone and Git rejected HTTPS transport before any network fetch. 19 / 151 tasks completed. Full-workspace validation remains incomplete under the lane's remote-fetch restriction. |
+| `git diff --check` | PASS. |
+| `command -v roborev` | Unavailable; no automated per-commit verdict could be collected. |
+
+Both supplied findings are addressed. No implementation work remains; open questions: none.
+Full-workspace validation and automated roborev review have the limitations above. No screenshots
+or browser checks apply to these pure model fixes.
