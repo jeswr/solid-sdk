@@ -26,7 +26,8 @@ other ASCII controls (including NUL and DEL) are rejected. Empty input is `[]`, 
 
 `serializeCsv` defaults to comma and CRLF, terminates every record, and supports `lineEnding: '\n'`
 and `bom: true`. It accepts rectangular string tables; zero-cell rows cannot be represented and
-throw. Formula-like strings stay literal strings; the library does not evaluate them or add
+throw. Fields containing any candidate delimiter are quoted so that auto-detection can read the
+output without reinterpreting cell contents. Formula-like strings stay literal strings; the library does not evaluate them or add
 apostrophes. Consumers choose any spreadsheet-execution policy separately.
 
 `inferColumnTypes` returns metadata only; it never converts or rewrites cells. There is no

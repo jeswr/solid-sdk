@@ -32,8 +32,8 @@ export function serializeCsv(
       if (c > 0) append(delimiter);
       const value = row[c] as string;
       // Quoting a content BOM prevents the parser mistaking it for the file BOM.
-      const quote =
-        /["\r\n]/u.test(value) || value.includes(delimiter) || value.startsWith("\uFEFF");
+      // Quote every sniffable separator so our output also round-trips with auto-detection.
+      const quote = /[",;\t\r\n]/u.test(value) || value.startsWith("\uFEFF");
       append(quote ? `"${value.replaceAll('"', '""')}"` : value);
     }
     append(lineEnding);

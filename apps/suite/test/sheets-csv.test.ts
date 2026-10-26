@@ -150,6 +150,9 @@ describe("serialisation and round trips", () => {
     expect(parseCsv(serializeCsv([[""], [""]]))).toEqual([[""], [""]]);
     expect(serializeCsv([["\uFEFFdata"]])).toBe('"\uFEFFdata"\r\n');
     expect(serializeCsv([], { bom: true })).toBe("\uFEFF");
+    for (const table of [[["a;b"]], [["a\tb"]], [["a;b", "c;d"]]]) {
+      expect(parseCsv(serializeCsv(table))).toEqual(table);
+    }
   });
 
   it.each([
@@ -190,6 +193,7 @@ describe("serialisation and round trips", () => {
         (table, delimiter) => {
           const snapshot = structuredClone(table);
           expect(parseCsv(serializeCsv(table, { delimiter }), { delimiter })).toEqual(snapshot);
+          expect(parseCsv(serializeCsv(table, { delimiter }))).toEqual(snapshot);
           expect(table).toEqual(snapshot);
         },
       ),
