@@ -228,3 +228,47 @@ roborev` found no executable); no review tool was installed. No live credential,
 real op, tracker or network remote was accessed. Only the credential package and this lane
 status changed, with no generated build artifacts committed. Integration review and bead
 closure remain with the integration owner. Open questions: none.
+
+## Fix round 4 — review of `3bcdbbf106b0`
+
+This round addresses the single supplied existing-record replacement finding:
+
+- `4d6b07ca` — `fix(credentials): migrate legacy provisioned tokens`:
+  validate the replacement, identify existing records with the same provider/account/purpose,
+  and write the canonical record using the existing private atomic-write path before removing
+  older keys. Retain ownership, permission and symlink checks for reads and deletion. A failed
+  validation, write, fsync or rename preserves the previous credential. Cleanup failures report
+  failure; retrying removes the remaining older records. Other providers, accounts and purposes
+  are preserved.
+- Final `docs: record fourth credential fix verification` commit — this verification record,
+  committed last.
+
+Regression tests reproduce the historical reference/account/purpose filename algorithm and
+cover replacement with the same or a different reference, canonical records coexisting with
+multiple legacy records, unrelated tuples, invalid values, injected write/fsync/rename and
+cleanup failures, insecure legacy files, and records disappearing after enumeration. Token
+lookups succeed after migration. Both historical-filename regressions were also run against
+the previous provisioning call and failed because the old files remained; the fixed call was
+restored before the passing affected gate.
+
+Verification for this round:
+
+| Command | Result |
+| --- | --- |
+| `pnpm exec turbo run lint build typecheck test --filter=@jeswr/agent-credentials --concurrency=4` | PASS; 5/5 tasks including root lint. 9 files, 143 tests; 100% statements (1386), branches (1043), functions (209), lines (1255), with per-file thresholds unchanged. |
+| `pnpm run lint:root` (invoked by the package and affected gates) | PASS; all root guards passed. |
+| `TURBO_SCM_BASE=0d45e1083ce2a9396e1b42a9931ac6bb5002e382 pnpm run gate` | PASS; 6/6 tasks, including 686 root tests, in 11.943s. Uses this lane's supplied base SHA. |
+| `pnpm run gate:full` | FAIL in unchanged `@jeswr/federation-codegen#test`: the same two `test/generator.test.ts` namespace fixture failures recorded in earlier rounds (`https://w3id.org/jeswr/...` versus `https://jeswr.org/ns/...`). 236 successful tasks out of 315 scheduled before stopping; 1m16.377s. |
+| `git diff --exit-code 3bcdbbf106b0508636d643eddeab3512510e83ec -- tools/federation-codegen packages/solid-federation-vocab` | PASS; failing paths unchanged from this round's starting commit. |
+| `git diff --check` and `git show --check --oneline 4d6b07ca` | PASS. |
+
+No dependencies were added, so no dependency policy check was needed. Manifests, lockfile,
+coverage thresholds and timeout settings are unchanged. No timeout flakes occurred. Tests
+use temporary stores, synthetic values and fake op executables; no real credential store,
+provider or op was accessed. Generated application callback/client-id assets from the full
+build were removed; no generated artifacts are committed.
+
+The requested fix and regression tests are complete. The full-workspace gate remains blocked
+by the unchanged federation-codegen failures. Roborev remains unavailable (`command -v roborev`
+found no executable); no tool was installed. Integration review and bead closure remain with
+the integration owner. No tracker, remote or other checkout was modified. Open questions: none.
