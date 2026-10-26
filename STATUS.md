@@ -141,3 +141,37 @@ Implementation is complete with no new open questions. Full-workspace verificati
 remains blocked as above. `roborev` is unavailable, so per-commit automated reviews
 could not run. No UI, screenshots, tracker updates, push, PR, branch switch, fetch
 or merge was performed.
+
+## Fix round 3 — 2026-10-26
+
+Starting head: `10359deb4300542ae88ce74955d130f2a8df993c` on `lane/sst-age2`.
+The anonymous-comments finding in the supplied review is addressed:
+
+- `fd8ac401` — `fix: reject anonymous comments permissions`: fail closed with
+  `SharingError` before projection or diff planning when applicable public comments
+  grants carry any modes, including inherited grants. Empty grants remain harmless.
+  Document this restriction and add WAC/ACP regressions for Read, Append and Write,
+  with no file rows, named Viewer rows and public file access. Verify unchanged
+  authenticated-agent rejection, empty/unrelated grants, minimal Editor promotions
+  and preservation of the caller's comments dataset.
+- Closing commit — `docs: record sst-age2 round three verification` (this section;
+  `STATUS.md` committed last).
+
+The focused regressions produced 12 failures before the fix; all pass afterwards.
+This follows the integrator's conservative design call: unrepresentable anonymous
+comments permissions throw rather than silently disappearing from the sharing state.
+No dependencies or unrelated implementation changes were added.
+
+| Command | Result |
+| --- | --- |
+| `pnpm --filter @jeswr/suite-ui run build` | PASS; prepare existing workspace dependency. |
+| `pnpm --filter @jeswr/app-suite run lint && pnpm --filter @jeswr/app-suite run build && pnpm --filter @jeswr/app-suite run typecheck && pnpm --filter @jeswr/app-suite run test` | PASS after formatting; 140 tests, including 139 sharing tests. Sharing coverage: 100% statements (218/218), branches (210/210), functions (46/46) and lines (180/180). |
+| `pnpm run lint:root` | PASS; workspace, lockfile, fetch, token and all 74 contrast checks. |
+| `TURBO_SCM_BASE=f0a05e47d24c02a75adb36a701273fc70cc2c6ca pnpm run gate` | PASS; 7/7 tasks, none cached. |
+| `PATH="/tmp/sst-age2-gate-bin:$PATH" pnpm run gate:full` | BLOCKED in unchanged `@jeswr/unstorage-solid#build` after 19 successful tasks (4 cached). The existing temporary Git wrapper blocked its attempted remote clone of fetch-rdf, honoring the lane restrictions; no remote Git operation ran. |
+| `git diff --check` | PASS. |
+
+Implementation is complete with no new open questions. Full-workspace verification
+remains blocked as above. `roborev` is unavailable, so per-commit automated reviews
+could not run. No UI, screenshots, tracker updates, push, PR, branch switch, fetch
+or merge was performed.
