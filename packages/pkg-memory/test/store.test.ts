@@ -340,6 +340,43 @@ it.each([
   }
 });
 
+it.each([
+  ["dateTime", "2026-10-25T12:00:00Z", "2026-10-25T12:00:00+00:00"],
+  ["date", "2026-10-25Z", "2026-10-25"],
+  ["gYear", "2026Z", "2026"],
+  ["gYearMonth", "2026-10Z", "2026-10"],
+])("rejects shared graphs with lexically distinct %s literals", async (datatype, first, second) => {
+  const { store, pod } = setup();
+  const value = await sharedBlankBatchGraphs();
+  const name = pkgId("batch", "shared-batch", "sources");
+  const source = "https://example.org/document";
+  const contents = graph(value.dataset, name);
+  const author = new RdfNode(source, contents).one(`${NS.schema}author`);
+  new RdfNode(author, contents).text(`${NS.schema}dateCreated`, first, NS.xsd + datatype);
+  putGraph(value.dataset as Store, name, contents);
+  await store.put(value);
+  expect(isomorphic([...(await store.list()).dataset], [...value.dataset])).toBe(true);
+  const np = value.nanopubs[1]!;
+  const altered = await store.get(np.id);
+  const changed = graph(altered.dataset, name);
+  const changedAuthor = new RdfNode(source, changed).one(`${NS.schema}author`);
+  const date = new RdfNode(changedAuthor, changed);
+  date.terms(`${NS.schema}dateCreated`).clear();
+  date.text(`${NS.schema}dateCreated`, second, NS.xsd + datatype);
+  for (const quad of [...altered.dataset])
+    if (quad.graph.value === name) altered.dataset.delete(quad);
+  putGraph(altered.dataset as Store, name, changed);
+  const url = store.url(np.id);
+  await pod.write(url, encode(await serializeNanopublications(altered)), "application/trig", {
+    ifMatch: (await pod.read(url)).etag,
+  });
+  const list = pod.list;
+  for (const reverse of [false, true]) {
+    if (reverse) pod.list = async (container) => (await list(container)).reverse();
+    await expect(store.list()).rejects.toThrow("Conflicting copies");
+  }
+});
+
 it("keeps independent batches' blank-node source/entity descriptions distinct", async () => {
   const { store } = setup();
   const first = await sharedBlankBatchGraphs("first-batch", ["one"]);

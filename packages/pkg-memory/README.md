@@ -159,6 +159,9 @@ has not been run in this fixture-only lane.
 
 `get(id)` verifies the stored media type and nanopub identity. `list()` loads only
 immediate UUID resources and ignores nested or off-container listing entries.
+Repeated graphs must match exactly up to blank-node labels, including literal
+lexical forms, datatypes and language tags; assertion value normalization does
+not apply to this comparison.
 `retract(id, { batchId, clientId, generatedAt? })` appends a new Retracted nanopub
 with `prov:wasRevisionOf` and `prov:invalidatedAtTime`; original bytes remain
 unchanged, and the withdrawal reuses the original assertion graph and IRI,

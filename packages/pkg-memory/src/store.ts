@@ -5,7 +5,7 @@ import { type OdrlPolicy, policyToTurtle } from "@jeswr/solid-odrl";
 import type { DatasetCore, Term } from "@rdfjs/types";
 import { DataFactory as df } from "n3";
 import { compareDateTimes } from "./chronology.js";
-import { canonicalizeAssertionWithLabels, pkgId } from "./ids.js";
+import { canonicalizeGraphWithLabels, pkgId } from "./ids.js";
 import {
   buildNanopublications,
   type Nanopublications,
@@ -124,7 +124,7 @@ export class NanopubStore {
         const canonical =
           contents.size === 0
             ? { id: "", labels: new Map<string, string>() }
-            : canonicalizeAssertionWithLabels(contents);
+            : canonicalizeGraphWithLabels(contents);
         return { name, fingerprint: canonical.id, previous: shared.get(name) };
       });
       // Blank-node labels are document-local. Keep one validated graph instead
@@ -353,7 +353,7 @@ function sharedGraphLabels(dataset: DatasetCore, names: Set<string>) {
       );
   return combined.size === 0
     ? { id: "", labels: new Map<string, string>() }
-    : canonicalizeAssertionWithLabels(combined);
+    : canonicalizeGraphWithLabels(combined);
 }
 
 /** Every cross-resource node needs a common graph through which list() can align it. */

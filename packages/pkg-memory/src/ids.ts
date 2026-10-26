@@ -171,26 +171,38 @@ export function canonicalizeAssertion(
 /** Internal canonical labels let the store align independently parsed blank nodes. */
 export function canonicalizeAssertionWithLabels(
   dataset: DatasetCore,
-  { maxWork = 10000 }: { maxWork?: number } = {},
+  options: { maxWork?: number } = {},
 ): { id: string; dataset: Store; labels: Map<string, string> } {
-  if (dataset.size === 0) throw new Error("Empty assertion");
   const normalized = new Store();
   for (const q of dataset) {
-    if (q.graph.termType !== "DefaultGraph")
-      throw new Error("Assertion must be a single default graph");
     for (const t of [q.subject, q.predicate, q.object]) validateTermSafety(t);
     normalized.addQuad(
       df.quad(
         q.subject,
         q.predicate,
         q.object.termType === "Literal" ? normalizeLiteral(q.object) : q.object,
+        q.graph,
       ),
     );
   }
-  const names = labels(normalized, maxWork);
+  return canonicalizeGraphWithLabels(normalized, options);
+}
+
+/** Internal graph comparison preserves RDF terms; only blank-node labels change. */
+export function canonicalizeGraphWithLabels(
+  dataset: DatasetCore,
+  { maxWork = 10000 }: { maxWork?: number } = {},
+): { id: string; dataset: Store; labels: Map<string, string> } {
+  if (dataset.size === 0) throw new Error("Empty assertion");
+  for (const q of dataset) {
+    if (q.graph.termType !== "DefaultGraph")
+      throw new Error("Assertion must be a single default graph");
+    for (const t of [q.subject, q.predicate, q.object]) validateTermSafety(t);
+  }
+  const names = labels(dataset, maxWork);
   const canonical = (t: Term): Term =>
     t.termType === "BlankNode" ? df.blankNode(names.get(t.value) as string) : t;
-  const lines = [...normalized]
+  const lines = [...dataset]
     .map(
       (q) =>
         `${[q.subject, q.predicate, q.object].map((t) => termN3(canonical(t), true)).join(" ")} .`,
@@ -202,7 +214,7 @@ export function canonicalizeAssertionWithLabels(
       ? df.namedNode(pkgId("assertion", digest, "node", names.get(t.value) as string))
       : t;
   const out = new Store();
-  for (const q of normalized)
+  for (const q of dataset)
     out.addQuad(
       df.quad(
         skolem(q.subject) as typeof q.subject,
