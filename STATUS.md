@@ -295,3 +295,70 @@ Both requested findings are fixed and tested. No implementation work is unfinish
 there are no open questions. `roborev` remains unavailable on PATH, so fresh automated per-commit
 verdicts could not be obtained locally. Dispatcher/security review remains outstanding; this
 security-critical package has not been merged.
+
+## Fix round 4 — review `aabe179c6427`
+
+Completed both findings in `solid-sdk-lane-sst-8xm.28-aabe179c6427.md`.
+Only `packages/reactive-authentication` and this report changed. No dependencies were added.
+
+| Commit | Change |
+| --- | --- |
+| `f25357a6` | Remove a superseded durable refresh record under the same fenced commit when the replacement session has no refresh token. Add regressions for refresh followed by reauthorization without offline credentials, restore after clearing memory, and durable deletion failure before the replacement reaches memory. |
+| `5d686481` | Retain the verified RPT cache context for each exact resource URL and reuse it for standard DPoP nonce retries. Generate a fresh proof without repeating UMA discovery, context resolution, login or ticket exchange. Add real HTTP and adversarial regressions covering signature/key binding, method and target, access-token hash, distinct proof IDs, separate token/resource nonces, request-body replay, resource/origin isolation, expiry, Bearer rejection, incomplete challenges, invalidation and peer logout during a delayed cache read. |
+| Final documentation commit (this commit) | Record round-4 verification and the review-tool limitation. |
+
+Conservative retry behavior: a nonce-only challenge can reuse only a current, usable DPoP RPT already
+verified for the exact URL. A missing, expired, invalidated or superseded RPT fails closed; acquiring
+an RPT still requires an UMA challenge. Provider selection remains UMA-specific.
+
+### Round-4 verification
+
+PASS required package gate and root checks, run before the final documentation commit:
+
+```sh
+pnpm --filter @jeswr/reactive-authentication run lint && pnpm --filter @jeswr/reactive-authentication run build && pnpm --filter @jeswr/reactive-authentication run typecheck && pnpm --filter @jeswr/reactive-authentication run test
+pnpm run lint:root
+git diff --check
+```
+
+- Package lint: zero errors; **65 warnings** and **22 informational diagnostics**.
+- Build and typecheck: pass, including the SDK type-contract checks.
+- Tests: **284/284** pass in **29/29** files, with no skips.
+- Enforced coverage: statements **2059/2059**, branches **1520/1520**, functions **467/467**,
+  lines **1857/1857** — **100% in every metric**. Coverage configuration and thresholds are unchanged.
+- Root lint: Biome, lockfile transport, app workspace and raw-fetch guards pass.
+- Whitespace validation: pass.
+
+Regression sensitivity was checked before each implementation fix:
+
+```sh
+pnpm --filter @jeswr/reactive-authentication exec vitest run test/session-coverage.test.js --coverage.enabled=false '--testNamePattern=reauthorization without a refresh token'
+pnpm --filter @jeswr/reactive-authentication exec vitest run test/uma.test.js --coverage.enabled=false '--testNamePattern=standard resource-server|nonce retries stay'
+```
+
+Expected baseline results: both **2/2** selected session regressions and **2/2** selected UMA regressions
+failed. The session tests detected the surviving refresh record and the absent deletion-error rejection;
+the UMA tests failed because the nonce challenge carried no UMA `as_uri` or `ticket`. All four, plus
+four further nonce safety regressions, pass in the final coverage-enforced package gate.
+
+Focused verification also passed:
+
+```sh
+pnpm --filter @jeswr/reactive-authentication exec vitest run test/session-coverage.test.js test/persistence.test.js --coverage.enabled=false
+pnpm --filter @jeswr/reactive-authentication exec vitest run test/uma.test.js test/uma-coverage.test.js --coverage.enabled=false
+```
+
+Results: **19/19** session/persistence tests and **20/20** UMA tests passed. Validation used
+Node `24.22.1` and pnpm `10.4.1`.
+
+No `check:packages` run was needed because no dependency was added. The authentication package still
+has no workspace dependants, so no dependant gate applies. Per the lane brief, no whole-workspace
+gate or `gate:full` ran. No push, PR, branch switch, network Git operation or edits to another checkout
+were performed. The working tree is clean after this final report commit.
+
+### Round-4 remaining work and questions
+
+Both requested findings are fixed and tested. No implementation work is unfinished or blocked;
+there are no open questions. `roborev` remains unavailable on PATH, so fresh automated per-commit
+verdicts could not be obtained locally. Dispatcher/security review remains outstanding; this
+security-critical package has not been merged.
