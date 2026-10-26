@@ -56,4 +56,14 @@ describe("RunBudget", () => {
     for (let i = 0; i < 1000; i++) budget.request();
     budget.items(1_000_000);
   });
+
+  it("counts response bytes against the run's data budget", async () => {
+    const budget = new RunBudget("x", { maxRequests: 10, maxItems: 10, maxBytes: 8 });
+    expect(await readJson(new Response("[1,2]"), "x", "u", undefined, budget)).toEqual([1, 2]);
+    await expect(readJson(new Response("[1,2]"), "x", "u", undefined, budget)).rejects.toThrow(
+      "data budget",
+    );
+    // Limits without maxBytes fall back to the default data budget.
+    new RunBudget("x", { maxRequests: 1, maxItems: 1 }).bytes(1024);
+  });
 });
