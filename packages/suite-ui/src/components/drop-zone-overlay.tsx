@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 "use client";
 import { Upload } from "lucide-react";
-import { type ReactNode, useId, useRef, useState } from "react";
+import { type ReactNode, useEffect, useId, useRef, useState } from "react";
 import { captureDrop, type DroppedFiles, filesFromPicker, readDrop } from "../uploads/drop.js";
 import { SurfaceFeedback, type SurfaceState } from "./surface-state.js";
 export interface DropZoneOverlayProps {
@@ -35,6 +35,24 @@ export function DropZoneOverlay({
     depth.current = 0;
     setDragging(false);
   };
+  useEffect(() => {
+    if (!dragging) return;
+    const clear = () => {
+      depth.current = 0;
+      setDragging(false);
+    };
+    const onEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") clear();
+    };
+    window.addEventListener("keydown", onEscape);
+    window.addEventListener("dragend", clear);
+    window.addEventListener("blur", clear);
+    return () => {
+      window.removeEventListener("keydown", onEscape);
+      window.removeEventListener("dragend", clear);
+      window.removeEventListener("blur", clear);
+    };
+  }, [dragging]);
   async function accept(read: () => Promise<DroppedFiles> | DroppedFiles) {
     if (busy.current || disabled) return;
     busy.current = true;
@@ -69,15 +87,17 @@ export function DropZoneOverlay({
         }
       }}
       onDragLeave={(event) => {
+        depth.current = Math.max(0, depth.current - 1);
         if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
-        if (--depth.current <= 0) reset();
+        if (depth.current === 0) reset();
       }}
       onDrop={(event) => {
         if (disabled || !event.dataTransfer.types.includes("Files")) return;
         event.preventDefault();
         reset();
-        const captured = captureDrop(event.dataTransfer.items, event.dataTransfer.files);
-        void accept(() => readDrop(captured));
+        void accept(() =>
+          readDrop(captureDrop(event.dataTransfer.items, event.dataTransfer.files)),
+        );
       }}
       onKeyDown={(event) => {
         if (event.key === "Escape") reset();

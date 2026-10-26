@@ -41,13 +41,13 @@ export function previewKind(
   return "unknown";
 }
 function useBlobUrl(blob: Blob, forcePdf = false) {
-  const [value, setValue] = useState<{ blob: Blob; url: string }>();
+  const [value, setValue] = useState<{ blob: Blob; url: string; forcePdf: boolean }>();
   useEffect(() => {
     const url = URL.createObjectURL(forcePdf ? blob.slice(0, blob.size, "application/pdf") : blob);
-    setValue({ blob, url });
+    setValue({ blob, url, forcePdf });
     return () => URL.revokeObjectURL(url);
   }, [blob, forcePdf]);
-  return value?.blob === blob ? value.url : undefined;
+  return value?.blob === blob && value.forcePdf === forcePdf ? value.url : undefined;
 }
 function ImagePreview({ url, name, onError }: { url: string; name: string; onError: () => void }) {
   const [zoom, setZoom] = useState(1);
@@ -300,7 +300,10 @@ function ReadyPreview({ source, url }: { source: PreviewSource; url: string }) {
   );
 }
 function BlobPreview({ source }: { source: PreviewSource }) {
-  const url = useBlobUrl(source.blob);
+  const url = useBlobUrl(
+    source.blob,
+    previewKind(source.contentType || source.blob.type) === "pdf",
+  );
   return url ? (
     <ReadyPreview key={url} source={source} url={url} />
   ) : (

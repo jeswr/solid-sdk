@@ -129,35 +129,25 @@ export function UploadDock({
                       />
                     </Progress.Root>
                     <div className="su-actions">
-                      {active && (
+                      {(active || item.status === "paused" || item.status === "failed") && (
                         <button
                           type="button"
                           className="su-button"
-                          aria-label={`Pause ${item.name}`}
-                          disabled={!canPause}
-                          onClick={() => onPause(item.id)}
+                          aria-label={`${item.status === "paused" ? "Resume" : item.status === "failed" ? "Retry" : "Pause"} ${item.name}`}
+                          disabled={active && !canPause}
+                          onClick={() =>
+                            item.status === "paused"
+                              ? onResume(item.id)
+                              : item.status === "failed"
+                                ? onRetry(item.id)
+                                : onPause(item.id)
+                          }
                         >
-                          Pause
-                        </button>
-                      )}
-                      {item.status === "paused" && (
-                        <button
-                          type="button"
-                          className="su-button"
-                          aria-label={`Resume ${item.name}`}
-                          onClick={() => onResume(item.id)}
-                        >
-                          Resume
-                        </button>
-                      )}
-                      {item.status === "failed" && (
-                        <button
-                          type="button"
-                          className="su-button"
-                          aria-label={`Retry ${item.name}`}
-                          onClick={() => onRetry(item.id)}
-                        >
-                          Retry
+                          {item.status === "paused"
+                            ? "Resume"
+                            : item.status === "failed"
+                              ? "Retry"
+                              : "Pause"}
                         </button>
                       )}
                       {!["done", "skipped"].includes(item.status) && (
@@ -165,7 +155,10 @@ export function UploadDock({
                           type="button"
                           className="su-button"
                           aria-label={`Cancel ${item.name}`}
-                          onClick={() => onCancel(item.id)}
+                          onClick={() => {
+                            onCancel(item.id);
+                            toggle.current?.focus();
+                          }}
                         >
                           Cancel
                         </button>

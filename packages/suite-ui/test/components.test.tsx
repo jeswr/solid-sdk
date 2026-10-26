@@ -3,12 +3,14 @@
 import { Blob as NodeBlob } from "node:buffer";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import axe from "axe-core";
+import { useReducer } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DropZoneOverlay } from "../src/components/drop-zone-overlay.js";
 import { PreviewPane, type PreviewSource, previewKind } from "../src/components/preview-pane.js";
 import { type SurfaceState, surfaceErrorCopy } from "../src/components/surface-state.js";
 import { UploadDock } from "../src/components/upload-dock.js";
 import type { UploadItem } from "../src/uploads/queue.js";
+import { uploadQueueReducer } from "../src/uploads/queue.js";
 
 const noop = () => {};
 const controls = { onPause: vi.fn(), onResume: vi.fn(), onCancel: vi.fn(), onRetry: vi.fn() };
@@ -50,6 +52,38 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 describe("UploadDock", () => {
+  it("keeps keyboard focus through pause/resume/retry and returns it after cancel", () => {
+    function Controlled() {
+      const [items, dispatch] = useReducer(uploadQueueReducer, [item("uploading"), item("failed")]);
+      return (
+        <UploadDock
+          items={items}
+          onPause={(id) => dispatch({ type: "pause", id })}
+          onResume={(id) => dispatch({ type: "resume", id })}
+          onRetry={(id) => dispatch({ type: "retry", id })}
+          onCancel={(id) => dispatch({ type: "cancel", id })}
+        />
+      );
+    }
+    render(<Controlled />);
+    const pause = screen.getByRole("button", { name: "Pause uploading.txt" });
+    pause.focus();
+    fireEvent.click(pause);
+    expect(document.activeElement).toBe(
+      screen.getByRole("button", { name: "Resume uploading.txt" }),
+    );
+    fireEvent.click(document.activeElement as HTMLElement);
+    expect(document.activeElement).toBe(
+      screen.getByRole("button", { name: "Pause uploading.txt" }),
+    );
+    const retry = screen.getByRole("button", { name: "Retry failed.txt" });
+    retry.focus();
+    fireEvent.click(retry);
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Pause failed.txt" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cancel uploading.txt" }));
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: /Uploads.*Collapse/ }));
+  });
+
   it("shows per-file progress, labelled actions, live summary and a keyboard-collapsible pill", async () => {
     const { container } = render(
       <UploadDock
@@ -134,6 +168,43 @@ describe("async feedback", () => {
     }
 });
 describe("DropZoneOverlay", () => {
+  it("clears nested drag state on leaving and handles escape outside the pane", () => {
+    const { container } = render(
+      <DropZoneOverlay folderName="Projects" onFiles={noop}>
+        <p>Nested</p>
+      </DropZoneOverlay>,
+    );
+    const zone = screen.getByRole("region");
+    const transfer = { dataTransfer: { types: ["Files"] } };
+    fireEvent.dragEnter(zone, transfer);
+    fireEvent.dragEnter(screen.getByText("Nested"), transfer);
+    fireEvent.dragLeave(screen.getByText("Nested"), { relatedTarget: zone });
+    fireEvent.dragLeave(zone);
+    expect(container.querySelector(".su-drop-overlay")?.hasAttribute("hidden")).toBe(true);
+    fireEvent.dragEnter(zone, transfer);
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(container.querySelector(".su-drop-overlay")?.hasAttribute("hidden")).toBe(true);
+  });
+  it("reports synchronous entry-capture failures", async () => {
+    render(<DropZoneOverlay folderName="Projects" onFiles={noop} />);
+    fireEvent.drop(screen.getByRole("region"), {
+      dataTransfer: {
+        types: ["Files"],
+        files: [],
+        items: [
+          {
+            kind: "file",
+            getAsFile: () => null,
+            webkitGetAsEntry: () => {
+              throw new Error("read denied");
+            },
+          },
+        ],
+      },
+    });
+    await screen.findByRole("alert");
+  });
+
   it("keeps nested drag events stable, ignores non-file drags and clears on escape/leave", async () => {
     const { container } = render(
       <DropZoneOverlay folderName="Projects" onFiles={noop}>
@@ -190,6 +261,39 @@ describe("DropZoneOverlay", () => {
   });
 });
 describe("PreviewPane", () => {
+  it("forces PDF MIME on the iframe blob rather than embedding HTML", async () => {
+    render(
+      <PreviewPane
+        source={{
+          ...source("text/html", "<script>bad()</script>"),
+          contentType: "application/pdf",
+        }}
+      />,
+    );
+    await screen.findByTitle("PDF preview: Example");
+    expect(vi.mocked(URL.createObjectURL).mock.calls[0]?.[0]).toHaveProperty(
+      "type",
+      "application/pdf",
+    );
+  });
+  it("pans an image with pointer capture", async () => {
+    render(<PreviewPane source={source("image/png")} />);
+    const viewport = await screen.findByRole("region", { name: "Image preview: Example" });
+    viewport.setPointerCapture = vi.fn();
+    viewport.scrollLeft = 100;
+    viewport.scrollTop = 100;
+    fireEvent(
+      viewport,
+      new MouseEvent("pointerdown", { bubbles: true, button: 0, clientX: 40, clientY: 40 }),
+    );
+    fireEvent(viewport, new MouseEvent("pointermove", { bubbles: true, clientX: 10, clientY: 20 }));
+    expect(viewport.scrollLeft).toBe(130);
+    expect(viewport.scrollTop).toBe(120);
+    fireEvent.pointerUp(viewport);
+    fireEvent(viewport, new MouseEvent("pointermove", { bubbles: true, clientX: 0, clientY: 0 }));
+    expect(viewport.scrollLeft).toBe(130);
+  });
+
   it.each([
     ["image/png", "image"],
     ["application/pdf", "pdf"],
