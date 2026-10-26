@@ -137,3 +137,58 @@ No dependencies, manifests, or lockfiles changed; `check:packages` was not appli
 No implementation remains unfinished and there are no open questions.
 `roborev status` exited 127 (`roborev: command not found`); automated commit review remains
 unavailable. No pushes, PRs, branch switches, or Git remote fetches/merges were performed.
+
+## Fix round 3 — integrate with main
+
+- `95fe8776` — `chore: integrate main into CID parser lane`: merge authoritative main
+  `abc5de29cf557e1235773baa8938becffc1ab39e` and resolve the README/SKILL conflicts by
+  adding T-011's LWS CID parser guidance to main's T-012 Solid description mapper documentation.
+  Keep both implementations and their tests unchanged.
+- Final reporting commit — `docs: record main integration results`: append this report last.
+
+`origin` is the local source clone `/home/runner/work/solid-sdk`. The prescribed default fetch
+initially selected its stale local `main` (`809c3c12`, missing T-012); that uncommitted merge
+was aborted. Fetching the source clone's `refs/remotes/origin/main` explicitly into this
+checkout's `origin/main` supplied the authoritative main containing T-012 (#109), and
+produced exactly the two documentation conflicts described by the brief. No Git network
+remote was fetched or merged, and no other checkout was modified.
+
+Lockfile handling used pnpm, with no manual conflict merging. A full
+`pnpm install --lockfile-only --ignore-scripts --prefer-frozen-lockfile` succeeded but
+refreshed unrelated Git dependency pins and peer snapshots. To preserve main outside this
+lane's scope, retain main's complete lockfile and validate it with
+`pnpm install --lockfile-only --frozen-lockfile --ignore-scripts` (exit 0).
+`pnpm install --frozen-lockfile --offline --ignore-scripts` then refreshed local dependency
+links successfully. No dependency or manifest changes were added beyond main's changes;
+the resulting lockfile is byte-identical to main.
+
+Final checks passed before the reporting commit:
+
+```sh
+pnpm exec turbo run lint build typecheck test --filter=...@jeswr/storage-capabilities
+pnpm run lint:root
+pnpm run test:root
+TURBO_SCM_BASE=origin/main pnpm run gate
+git diff origin/main --check
+```
+
+- Dependency-first scoped checks: 6/6 Turbo tasks passed, including the `fetch-rdf` build.
+- Package lint, build, and typecheck passed. All 219 tests across 6 files passed,
+  including 103 CID parser cases and main's 12 Solid mapper cases.
+- V8 coverage passed at 100% statements (342/342), branches (254/254), functions
+  (46/46), and lines (290/290).
+- Root lint and every guard passed; all 745 root tests across 9 files passed.
+- Repository gate against authoritative main: 7/7 tasks passed (6 cached).
+  The first unconfigured gate could not find a local base branch and selected the whole
+  workspace; it was interrupted and rerun with `TURBO_SCM_BASE=origin/main`.
+- Byte comparisons confirmed all previous lane source/test files remain unchanged,
+  main's Solid mapper source/tests and package manifest remain unchanged, and differences
+  from main are confined to the lane's existing storage-capabilities scope and this report.
+  The scoped whitespace check passed; pre-existing whitespace in imported main files was
+  left unchanged.
+
+Initial package checks needed refreshed dependency links and a dependency-first `fetch-rdf`
+build; the final checks above resolve those setup failures. No implementation remains
+unfinished or blocked, and there are no open questions. `roborev status` still exits 127
+(`roborev: command not found`), so no new automated review verdict is available.
+No pushes, PRs, or branch switches were performed.
