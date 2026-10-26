@@ -1,5 +1,6 @@
 // biome-ignore-all lint/style/useNodejsImportProtocol: agent layer requires bare module specifiers
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { createHash } from "crypto";
 import { type CredentialStore, HelperError, type TokenFileProvider } from "./store.js";
 
@@ -50,7 +51,7 @@ export function provisionValue(options: {
     });
   } else {
     const name = `${provider}-${createHash("sha256")
-      .update(JSON.stringify([reference, options.account, options.purpose]))
+      .update(JSON.stringify([provider, options.account, options.purpose]))
       .digest("hex")
       .slice(0, 20)}`;
     store.putTokenFile({
