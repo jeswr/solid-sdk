@@ -21,6 +21,7 @@ export const propertyLabels = new Map([
     `${NS.RDFS}label`,
   ]),
   ...field("description", "Description", [
+    `${NS.WF}description`,
     `${NS.SCHEMA}description`,
     `${NS.DCT}description`,
     `${NS.SCHEMA}text`,
@@ -42,7 +43,7 @@ export const propertyLabels = new Map([
   ...field("start", "Starts", [`${NS.SCHEMA}startDate`]),
   ...field("end", "Ends", [`${NS.SCHEMA}endDate`]),
   ...field("location", "Location", [`${NS.SCHEMA}location`]),
-  ...field("due", "Due", [`${NS.SCHEDULING}dueTime`, `${NS.WF}due`]),
+  ...field("due", "Due", [`${NS.WF}dateDue`, `${NS.SCHEDULING}dueTime`, `${NS.WF}due`]),
   ...field("status", "Status", [`${NS.WF}state`, `${NS.SCHEMA}actionStatus`]),
   ...field("created", "Created", [`${NS.DCT}created`, `${NS.SCHEMA}dateCreated`]),
   ...field("modified", "Modified", [`${NS.DCT}modified`, `${NS.SCHEMA}dateModified`]),
@@ -89,12 +90,16 @@ export async function typedViewData(
     const values = node.objects(predicate).map((term): string => {
       if (term.termType === "Literal") {
         if (["start", "end", "due", "created", "modified"].includes(descriptor.key)) {
-          const date = new Date(term.value);
+          const dateOnly =
+            term.datatype.value === "http://www.w3.org/2001/XMLSchema#date" ||
+            /^\d{4}-\d{2}-\d{2}$/.test(term.value);
+          // Calendar dates retain their lexical day; only instants use the display time zone.
+          const date = new Date(dateOnly ? `${term.value.slice(0, 10)}T00:00:00Z` : term.value);
           return Number.isFinite(date.getTime())
             ? new Intl.DateTimeFormat(options.locale ?? "en", {
                 dateStyle: "medium",
-                ...(term.value.includes("T") ? { timeStyle: "short" as const } : {}),
-                timeZone: options.timeZone ?? "UTC",
+                ...(!dateOnly && term.value.includes("T") ? { timeStyle: "short" as const } : {}),
+                timeZone: dateOnly ? "UTC" : (options.timeZone ?? "UTC"),
               }).format(date)
             : "Date unavailable";
         }
@@ -113,10 +118,13 @@ export async function typedViewData(
       if (term.termType === "NamedNode" && states[canonicalize(term.value)])
         return states[canonicalize(term.value)] as string;
       const linked = subjectOf(dataset, term);
-      // vCard often wraps mailto/tel in a node with vcard:hasValue.
-      const contact = linked
-        .iris(`${NS.VCARD}hasValue`)
-        .find((value) => /^(mailto:|tel:)/i.test(value));
+      // Both vCard forms wrap mailto/tel IRIs or literal contact values.
+      const contact = [
+        ...linked.objects(`${NS.VCARD}value`),
+        ...linked.objects(`${NS.VCARD}hasValue`),
+      ].find(
+        (value) => value.termType === "Literal" || /^(mailto:|tel:)/i.test(value.value),
+      )?.value;
       return linked.name ?? contact?.replace(/^(mailto:|tel:)/i, "") ?? "Linked item";
     });
     if (values.length) {
@@ -124,6 +132,14 @@ export async function typedViewData(
       if (previous) previous.values = [...new Set([...previous.values, ...values])];
       else properties.push({ ...descriptor, values });
     }
+  }
+  const typeStates = node.types
+    .map(canonicalize)
+    .flatMap((type) => (states[type] ? [states[type]] : []));
+  if (typeStates.length) {
+    const status = properties.find((property) => property.key === "status");
+    if (status) status.values = [...new Set([...status.values, ...typeStates])];
+    else properties.push({ key: "status", label: "Status", values: [...new Set(typeStates)] });
   }
   if (
     node.types.map(canonicalize).includes(`${NS.POD_DOCS}Document`) &&

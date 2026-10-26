@@ -85,3 +85,80 @@ test("document body excerpts strip markup, preserve readable entities and merge 
     "Ideas &amp; plans",
   );
 });
+
+test.each([
+  ["Open", "Open"],
+  ["Closed", "Completed"],
+])("tasks read wf:%s type, dateDue and description", async (type, status) => {
+  const url = "https://pod.example/task";
+  const dataset = await parseResource(
+    `@prefix wf: <http://www.w3.org/2005/01/wf/flow#> . <#it> a wf:Task, wf:${type}; wf:dateDue "2026-10-28"; wf:description "Read the plan" .`,
+    "text/turtle",
+    url,
+  );
+  const data = await typedViewData(dataset, `${url}#it`, {
+    locale: "en-US",
+    timeZone: "America/Los_Angeles",
+  });
+  expect(data.properties.find((property) => property.key === "status")?.values).toEqual([status]);
+  expect(data.properties.find((property) => property.key === "due")?.values).toEqual([
+    "Oct 28, 2026",
+  ]);
+  expect(data.properties.find((property) => property.key === "description")?.values).toEqual([
+    "Read the plan",
+  ]);
+});
+
+test.each([
+  "value",
+  "hasValue",
+])("contacts read vcard:%s from wrapped emails and telephone numbers", async (predicate) => {
+  const url = "https://pod.example/contact";
+  const dataset = await parseResource(
+    `@prefix v: <http://www.w3.org/2006/vcard/ns#> . <#it> a v:Individual; v:fn "Mira"; v:hasEmail [ v:${predicate} <mailto:mira@example.test> ]; v:hasTelephone [ v:${predicate} <tel:+441234567890> ] .`,
+    "text/turtle",
+    url,
+  );
+  const data = await typedViewData(dataset, `${url}#it`);
+  expect(data.properties.find((property) => property.key === "email")?.values).toEqual([
+    "mira@example.test",
+  ]);
+  expect(data.properties.find((property) => property.key === "telephone")?.values).toEqual([
+    "+441234567890",
+  ]);
+});
+
+test.each([
+  '"2026-10-28"',
+  '"2026-10-28"^^xsd:date',
+  '"2026-10-28+14:00"^^xsd:date',
+])("date-only %s retains its calendar day in every display time zone", async (literal) => {
+  const url = "https://pod.example/event";
+  const dataset = await parseResource(
+    `@prefix xsd: <http://www.w3.org/2001/XMLSchema#> . <#it> <https://schema.org/startDate> ${literal} .`,
+    "text/turtle",
+    url,
+  );
+  for (const timeZone of ["America/Los_Angeles", "Pacific/Kiritimati"]) {
+    const data = await typedViewData(dataset, `${url}#it`, { locale: "en-US", timeZone });
+    expect(data.properties.find((property) => property.key === "start")?.values).toEqual([
+      "Oct 28, 2026",
+    ]);
+  }
+});
+
+test("date-time instants still format in the requested time zone", async () => {
+  const url = "https://pod.example/event";
+  const dataset = await parseResource(
+    '<#it> <https://schema.org/startDate> "2026-10-28T01:00:00Z" .',
+    "text/turtle",
+    url,
+  );
+  const data = await typedViewData(dataset, `${url}#it`, {
+    locale: "en-US",
+    timeZone: "America/Los_Angeles",
+  });
+  expect(data.properties.find((property) => property.key === "start")?.values[0]).toContain(
+    "Oct 27, 2026",
+  );
+});
