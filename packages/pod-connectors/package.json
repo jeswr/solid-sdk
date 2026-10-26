@@ -163,6 +163,14 @@
       "types": "./dist/google-calendar/*.d.ts",
       "default": "./dist/google-calendar/*.js"
     },
+    "./adapters/google-contacts": {
+      "types": "./dist/google-contacts/adapter.d.ts",
+      "default": "./dist/google-contacts/adapter.js"
+    },
+    "./google-contacts/*": {
+      "types": "./dist/google-contacts/*.d.ts",
+      "default": "./dist/google-contacts/*.js"
+    },
     "./adapters/google-photos": {
       "types": "./dist/google-photos/adapter.d.ts",
       "default": "./dist/google-photos/adapter.js"

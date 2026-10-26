@@ -90,6 +90,34 @@ one raw message (Message-ID as document id, source-native or In-Reply-To thread 
 writes the accumulated thread and folder membership once per run. Attachment media types from mail
 are untrusted: RDF and malformed types are stored as `application/octet-stream`.
 
+## Google Contacts
+
+`./adapters/google-contacts` imports People API connections with the sensitive
+`contacts.readonly` scope (Tier B). It uses the shared Google OAuth configuration and
+follows every page, persisting only the final `nextSyncToken`. An expired token (HTTP
+410 or HTTP 400 with `EXPIRED_SYNC_TOKEN` in error details) discards partial pages and
+retries a full sync once. Source errors and missing final checkpoints cause no contact
+writes or deletions. Pod failures retain the previous checkpoint; writes across separate
+documents are not transactional and a retry reapplies the source changes.
+
+The connector contains the SolidOS vCard layout: `contacts/index.ttl#this` is the
+`vcard:AddressBook`, `contacts/people.ttl` holds names and `vcard:inAddressBook` links,
+and `contacts/Person/<pathId>/index.ttl#this` holds each `vcard:Individual`. Names,
+emails, phones, addresses, organizations and birthdays use vCard predicates and named
+linked nodes where appropriate. Organization `jobDescription` maps to `vcard:role`, and
+`title` to `vcard:title`. Year-less birthdays use `xsd:gMonthDay`; invalid dates are omitted.
+Unusable phone IRIs retain their raw literal, and malformed optional fields are omitted.
+Malformed person ids count as skipped; nameless people retain an unnamed-contact label.
+Each person document derives from its Google Contacts page. The Type Index registers
+only `vcard:AddressBook` for `contacts/`. No contacts sector constant exists in the current
+federation bridge, so its `vocabMap` preserves vCard without adding an alignment type.
+
+Incremental deletions remove person documents through `ctx.remove`; full resyncs also
+remove previously indexed people absent from the snapshot. Unchanged people survive
+increments, and `people.ttl` is replaced once per successful run. A missing local membership
+index forces a full sync. Synthetic fixtures, memory Pods and the sorted Turtle mapping
+snapshot exercise these paths without contacting Google.
+
 ## Incremental imports and provenance
 
 Pass host-owned `state: ConnectorState` into `runImport` (or `runFileImport`) and persist

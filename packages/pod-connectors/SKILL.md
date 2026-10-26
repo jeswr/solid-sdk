@@ -38,3 +38,13 @@ to create-only, and replace only under a strong ETag.
 Mail sources (Gmail, Takeout mbox) go through `src/mail/writer.ts` so the pod-mail layout and
 vocabulary (`http://schema.org/`, matching apps/suite's mail model) stay identical. Keep Message-ID
 document ids, write `.eml` create-only, and flush thread/folder membership once per run.
+
+Google Contacts (CON-05) writes the SolidOS vCard address book under `contacts/`, with
+`index.ttl#this`, `people.ttl`, and `Person/<pathId>/index.ttl#this`. Use its typed wrappers;
+keep vCard as the write model (V10). Register only the address-book class for `contacts/`.
+Buffer every People API page and require the final sync token before applying writes or
+deletions. An expired token (410, or 400 with the documented `EXPIRED_SYNC_TOKEN` error
+detail) discards partial increments and retries a full snapshot once. Retain unchanged
+members on increments, remove source deletions with `ctx.remove`, and rewrite `people.ttl`
+once. Full snapshots also remove stale indexed person documents. Keep malformed-person
+skip counting and the synthetic sorted Turtle mapping snapshot covered by fixture tests.
