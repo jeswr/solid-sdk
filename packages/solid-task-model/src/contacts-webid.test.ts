@@ -2,7 +2,7 @@
 import { TermTypeError } from "@rdfjs/wrapper";
 import { DataFactory, Parser, Store } from "n3";
 import { describe, expect, it } from "vitest";
-import { Contact, parsePerson, personSubject } from "./contacts.js";
+import { buildPerson, Contact, parsePerson, personSubject } from "./contacts.js";
 
 const PERSON = "https://pod.example/contacts/alice.ttl";
 const HOMEPAGE = "https://alice.example/home";
@@ -63,6 +63,11 @@ describe.each([
   it("fails with a typed error for a literal explicit WebID instead of reading the homepage", () => {
     const store = dataset(`<${HOMEPAGE}>, _:web`, `_:web a vcard:WebId; vcard:value "${WEB_ID}" .`);
     expect(() => read(store)).toThrow(TermTypeError);
+  });
+
+  it("rejects RDF-forbidden characters in an explicit WebID from an in-memory dataset", () => {
+    const store = buildPerson(PERSON, { name: "Alice", webId: "https://alice.example/a|b" });
+    expect(read(store)).toBeUndefined();
   });
 
   it("uses the first valid explicit WebID when an earlier explicit node is empty", () => {

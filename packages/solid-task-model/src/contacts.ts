@@ -42,6 +42,7 @@
  * server-only.
  */
 
+import { isHttpIri as isRdfHttpIri } from "@jeswr/rdf-serialize";
 import type { DatasetCore, Term } from "@rdfjs/types";
 import {
   BlankNodeFrom,
@@ -503,7 +504,7 @@ export class Contact extends TermWrapper {
       explicit = true;
       const child = new TermWrapper(edge.object, this.dataset, this.factory);
       const value = OptionalFrom.subjectPredicate(child, VCARD_VALUE, NamedNodeAs.string);
-      if (isHttpIri(value)) return value;
+      if (isRdfHttpIri(value) && isHttpIri(value)) return value;
     }
     return explicit ? undefined : readStructuredValues(this, VCARD_URL).find(isHttpIri);
   }
