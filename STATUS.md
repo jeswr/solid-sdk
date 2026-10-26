@@ -494,3 +494,75 @@ The requested finding is fixed and tested. No implementation work is unfinished 
 there are no open questions. `roborev status` failed with exit 127 (`roborev: command not found`), so
 fresh automated per-commit verdicts could not be obtained locally. Dispatcher/security review remains
 outstanding; this security-critical package has not been merged.
+
+## Fix round 7 — review `c5d32cc167b7`
+
+Completed the sole finding in `solid-sdk-lane-sst-8xm.28-c5d32cc167b7.md`.
+Only `packages/reactive-authentication` and this report changed. No dependencies were added.
+
+| Commit | Change |
+| --- | --- |
+| `fb40d2f7` | Close the completed authorization popup during cleanup while the Web Lock is still held. Preserve the disposable result API with cleanup already complete, so immediate, delayed or repeated disposal cannot close the next flow's popup. Add regressions using real Node Web Locks and Chromium, including two queued successful callbacks and verification that the named popup is closed before another flow can reuse it. |
+| Final documentation commit (this commit) | Record round-7 verification and the review-tool limitation. |
+
+The implementation follows the review's proposed close-before-release option. Cancellation and failure
+use the same popup cleanup. No new protocol behavior or session policy was introduced.
+
+### Round-7 verification
+
+PASS required package gate and root checks, run before the final documentation commit:
+
+```sh
+pnpm --filter @jeswr/reactive-authentication run lint && pnpm --filter @jeswr/reactive-authentication run build && pnpm --filter @jeswr/reactive-authentication run typecheck && pnpm --filter @jeswr/reactive-authentication run test
+pnpm run lint:root
+git diff --check
+```
+
+- Package lint: zero errors; **65 warnings** and **22 informational diagnostics**, unchanged from round 6.
+- Build and typecheck: pass, including the SDK type-contract checks.
+- Tests: **289/289** pass in **29/29** files, with no skips.
+- Enforced coverage: statements **2060/2060**, branches **1525/1525**, functions **466/466**,
+  lines **1859/1859** — **100% in every metric**. Coverage configuration and thresholds are unchanged.
+- Root lint: Biome, lockfile transport, app workspace and raw-fetch guards pass.
+- Whitespace validation: pass.
+
+Regression sensitivity was checked before the implementation fix:
+
+```sh
+pnpm --filter @jeswr/reactive-authentication exec vitest run test/browser-elements.test.js --coverage.enabled=false '--testNamePattern=disposal of a completed flow'
+```
+
+Expected baseline result: **2/2** selected regressions failed because disposing the first result closed
+the second popup. The tests use Node's actual Web Locks and cover both immediate disposal and disposal
+after the next flow opens. With the fix, the first popup closes before the second opens, repeated disposal
+leaves the active popup open, both callbacks resolve, and the second popup also closes on completion.
+
+Additional verification passed:
+
+```sh
+pnpm --filter @jeswr/reactive-authentication exec vitest run test/browser-elements.test.js --coverage.enabled=false
+PLAYWRIGHT_BROWSERS_PATH=/tmp/sst-8xm28-browsers pnpm --filter @jeswr/reactive-authentication run test:browser
+```
+
+All **12/12** element tests pass. Chromium `156.0.8078.4` passes all existing browser smoke checks and
+the new queued-popup disposal scenarios. Real popup messages complete both queued calls under immediate
+and delayed disposal; each completed popup is closed before the next opens, and the flows receive distinct
+window references. The installed browser was reused; no dependency or browser download was needed.
+
+Validation used Node `24.22.1` and pnpm `10.4.1`. No `check:packages` run was needed because no dependency
+was added. The dependant dry run selected only this package, so no dependant gate applies:
+
+```sh
+pnpm exec turbo run build typecheck test --filter=...@jeswr/reactive-authentication --dry=json
+```
+
+Per the lane brief, no whole-workspace gate or `gate:full` ran. No push, PR, branch switch, network Git
+operation or edits to another checkout were performed. The working tree is clean after this final
+report commit.
+
+### Round-7 remaining work and questions
+
+The requested finding is fixed and tested. No implementation work is unfinished or blocked;
+there are no open questions. `roborev status` failed with exit 127 (`roborev: command not found`), so
+fresh automated per-commit verdicts could not be obtained locally. Dispatcher/security review remains
+outstanding; this security-critical package has not been merged.
