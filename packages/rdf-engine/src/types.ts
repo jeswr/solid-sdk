@@ -65,9 +65,15 @@ export interface RdfEngine {
   serialize(data: QuadSource, format: RdfMediaType, opts?: SerializeOptions): Promise<string>;
   validate(data: QuadSource, shapes: QuadSource | string): Promise<ValidationReport>;
   canonicalize(data: QuadSource): Promise<string>;
-  /** Evaluate the first policy using solid-odrl; unfulfilled duties remain advisory. */
+  /**
+   * Evaluate the first policy using solid-odrl; unfulfilled duties remain advisory.
+   * @throws {PolicyIdentifierCollisionError} If a generated trace ID aliases a named node.
+   */
   evaluatePolicy(policy: DatasetCore, ctx: PolicyContext): Promise<PolicyResult>;
-  /** Return Sparq's FormDescription JSON without reconstructing its fields. */
+  /**
+   * Return Sparq's FormDescription JSON without reconstructing its fields.
+   * @throws {FormGraphUnsupportedError} If data or shapes contain non-default graph quads.
+   */
   deriveForm(
     data: DatasetCore,
     shapes: DatasetCore,

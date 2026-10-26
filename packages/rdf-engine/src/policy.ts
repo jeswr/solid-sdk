@@ -3,6 +3,7 @@ import type { OdrlDuty, OdrlPolicy, OdrlRule } from "@jeswr/solid-odrl";
 import { ACTION_IRI, evaluate, IRI_TO_ACTION, policyFromRdf } from "@jeswr/solid-odrl";
 import type { DatasetCore, Term } from "@rdfjs/types";
 import { DataFactory } from "n3";
+import { PolicyIdentifierCollisionError } from "./errors.js";
 import type { PolicyContext, PolicyResult } from "./types.js";
 
 const ODRL = "http://www.w3.org/ns/odrl/2/";
@@ -12,14 +13,23 @@ const key = (term: Term) => `${term.termType}:${term.value}`;
 /** Add trace IDs to the parsed model; never rewrite the RDF or its evaluation inputs. */
 function identifiedPolicy(data: DatasetCore, policy: OdrlPolicy): OdrlPolicy {
   const quads = [...data];
+  const namedNodes = new Set<string>();
+  for (const q of quads) {
+    for (const term of [q.subject, q.predicate, q.object, q.graph]) {
+      if (term.termType === "NamedNode") namedNodes.add(term.value);
+      else if (term.termType === "Literal") namedNodes.add(term.datatype.value);
+    }
+  }
   const rules = new Map<string, string>();
   const duties = new Map<string, string>();
   const identify = (term: Term, kind: "rule" | "duty", ids: Map<string, string>) => {
     if (!ids.has(key(term))) {
-      ids.set(
-        key(term),
-        term.termType === "NamedNode" ? term.value : `${policy.id}#${kind}-${ids.size + 1}`,
-      );
+      const id =
+        term.termType === "NamedNode" ? term.value : `${policy.id}#${kind}-${ids.size + 1}`;
+      if (term.termType !== "NamedNode" && namedNodes.has(id)) {
+        throw new PolicyIdentifierCollisionError(id);
+      }
+      ids.set(key(term), id);
     }
   };
   // Dataset iteration order is the document order available at this API boundary.
@@ -83,12 +93,13 @@ function identifiedPolicy(data: DatasetCore, policy: OdrlPolicy): OdrlPolicy {
 export function evaluatePolicy(data: DatasetCore, ctx: PolicyContext): PolicyResult {
   const policy = policyFromRdf(data);
   if (!policy) return empty();
+  const identified = identifiedPolicy(data, policy);
   const action =
     (Object.hasOwn(IRI_TO_ACTION, ctx.action) ? IRI_TO_ACTION[ctx.action] : undefined) ??
     (Object.hasOwn(ACTION_IRI, ctx.action) ? (ctx.action as keyof typeof ACTION_IRI) : undefined);
   if (!action) return empty();
   const result = evaluate(
-    identifiedPolicy(data, policy),
+    identified,
     {
       action,
       target: ctx.target,

@@ -3,6 +3,7 @@
 import type { BlankNode, Quad, Term } from "@rdfjs/types";
 import type * as Wasm from "@sparq-org/sparq/wasm-node";
 import { DataFactory, Store } from "n3";
+import { FormGraphUnsupportedError } from "./errors.js";
 import { createLocalIndex } from "./local-index.js";
 import { evaluatePolicy } from "./policy.js";
 import { decode, formatName, graphDocument, parseN3, writeN3 } from "./rdf.js";
@@ -210,8 +211,16 @@ export function createEngine(load: () => Promise<Runtime>): RdfEngine {
       return use(() => evaluatePolicy(policy, ctx));
     },
     deriveForm(data, shapes, focus, opts) {
-      return use(({ Store: WasmStore }) =>
-        withStore(WasmStore.load("", "turtle"), (store) => {
+      return use(({ Store: WasmStore }) => {
+        for (const [input, quads] of [
+          ["data", data],
+          ["shapes", shapes],
+        ] as const) {
+          for (const quad of quads) {
+            if (quad.graph.termType !== "DefaultGraph") throw new FormGraphUnsupportedError(input);
+          }
+        }
+        return withStore(WasmStore.load("", "turtle"), (store) => {
           if (typeof store.deriveForm !== "function") {
             throw new Error("Sparq bundle lacks deriveForm (requires forms)");
           }
@@ -224,8 +233,8 @@ export function createEngine(load: () => Promise<Runtime>): RdfEngine {
               JSON.stringify(opts),
             ),
           ) as unknown;
-        }),
-      );
+        });
+      });
     },
     createIndex() {
       return use(({ Store: WasmStore }) => {

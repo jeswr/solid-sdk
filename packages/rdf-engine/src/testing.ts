@@ -6,6 +6,7 @@ import { evaluatePolicy } from "./policy.js";
 import { decode, formatName, groundCanonical, hasBlankNode, parseN3, writeN3 } from "./rdf.js";
 import type { LocalIndex, QuadSource, RdfEngine, ValidationReport } from "./types.js";
 
+export { FormGraphUnsupportedError, PolicyIdentifierCollisionError } from "./errors.js";
 export type * from "./types.js";
 
 /** A capability intentionally excluded from the small, WASM-free test engine. */

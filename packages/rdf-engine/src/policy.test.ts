@@ -5,7 +5,7 @@ import { ACTION_IRI, evaluate, policyToRdf } from "@jeswr/solid-odrl";
 import { Parser, Store } from "n3";
 import { describe, expect, test, vi } from "vitest";
 import { createEngine } from "./engine.js";
-import { createRdfEngine } from "./node.js";
+import { createRdfEngine, PolicyIdentifierCollisionError } from "./node.js";
 import { createFakeRdfEngine } from "./testing.js";
 import type { PolicyContext } from "./types.js";
 
@@ -294,6 +294,107 @@ for (const [name, factory] of [
       await expect(
         engine.evaluatePolicy(new Store(), { action: "read", target: RES }),
       ).rejects.toThrow("disposed");
+    });
+
+    test.each(
+      (["permission", "prohibition", "duty", "obligation"] as const).flatMap((relation) =>
+        [false, true].map((namedFirst) => ({ relation, namedFirst })),
+      ),
+    )("rejects colliding $relation IDs (named first: $namedFirst)", async ({
+      relation,
+      namedFirst,
+    }) => {
+      const kind = relation === "permission" || relation === "prohibition" ? "rule" : "duty";
+      const identifier = `${POLICY}#${kind}-${namedFirst ? 2 : 1}`;
+      const references = namedFirst
+        ? `<${identifier}>, _:anonymous`
+        : `_:anonymous, <${identifier}>`;
+      const data = new Store(
+        new Parser().parse(`
+          @prefix odrl: <${ODRL}> .
+          <${POLICY}> a odrl:Set ; ${
+            relation === "duty"
+              ? `odrl:permission <https://example/rule> .
+                 <https://example/rule> odrl:action odrl:read ; odrl:duty ${references}`
+              : `odrl:${relation} ${references}`
+          } .
+          <${identifier}> odrl:action odrl:read .
+          _:anonymous odrl:action odrl:read .
+        `),
+      );
+      const original = [...data];
+      const engine = factory();
+      try {
+        for (const action of ["read", "delete", "unknown"]) {
+          const result = engine.evaluatePolicy(data, { action, target: RES });
+          await expect(result).rejects.toBeInstanceOf(PolicyIdentifierCollisionError);
+          await expect(result).rejects.toMatchObject({
+            name: "PolicyIdentifierCollisionError",
+            identifier,
+          });
+        }
+        expect([...data]).toEqual(original);
+      } finally {
+        engine.dispose();
+      }
+    });
+
+    test.each(
+      (["rule", "duty"] as const).flatMap((kind) =>
+        (["subject", "predicate", "object", "graph", "datatype"] as const).map((position) => ({
+          kind,
+          position,
+        })),
+      ),
+    )("reserves named nodes in $position position against generated $kind IDs", async ({
+      kind,
+      position,
+    }) => {
+      const identifier = `${POLICY}#${kind}-1`;
+      const sentinel = {
+        subject: `<${identifier}> <https://example/p> "sentinel" .`,
+        predicate: `<https://example/s> <${identifier}> "sentinel" .`,
+        object: `<https://example/s> <https://example/p> <${identifier}> .`,
+        graph: `<${identifier}> { <https://example/s> <https://example/p> "sentinel" . }`,
+        datatype: `<https://example/s> <https://example/p> "sentinel"^^<${identifier}> .`,
+      }[position];
+      const data = new Store(
+        new Parser({ format: "application/trig" }).parse(`
+          @prefix odrl: <${ODRL}> .
+          <${POLICY}> a odrl:Set ; odrl:permission [ odrl:action odrl:read ;
+            odrl:duty [ odrl:action odrl:attribute ] ] .
+          ${sentinel}
+        `),
+      );
+      const engine = factory();
+      try {
+        await expect(
+          engine.evaluatePolicy(data, { action: "read", target: RES }),
+        ).rejects.toBeInstanceOf(PolicyIdentifierCollisionError);
+      } finally {
+        engine.dispose();
+      }
+    });
+
+    test("literal text matching generated IDs is not a named-node collision", async () => {
+      const data = new Store(
+        new Parser().parse(`
+          @prefix odrl: <${ODRL}> .
+          <${POLICY}> a odrl:Set ; odrl:permission [ odrl:action odrl:read ;
+            odrl:duty [ odrl:action odrl:attribute ] ] .
+          <https://example/s> <https://example/p> "${POLICY}#rule-1", "${POLICY}#duty-1" .
+        `),
+      );
+      const engine = factory();
+      try {
+        expect(await engine.evaluatePolicy(data, { action: "read", target: RES })).toEqual({
+          allow: true,
+          matched: [`${POLICY}#rule-1`],
+          unmet: [`${POLICY}#duty-1`],
+        });
+      } finally {
+        engine.dispose();
+      }
     });
 
     test("trace naming preserves blank targets and skips malformed nodes and duplicate graph references", async () => {

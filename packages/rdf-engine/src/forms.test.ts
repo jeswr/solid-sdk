@@ -1,8 +1,8 @@
 // AUTHORED-BY Codex GPT-6
-import { Parser, Store } from "n3";
+import { DataFactory, Parser, Store } from "n3";
 import { afterEach, expect, test, vi } from "vitest";
 import { createEngine } from "./engine.js";
-import { createRdfEngine } from "./node.js";
+import { createRdfEngine, FormGraphUnsupportedError } from "./node.js";
 import { createFakeRdfEngine, FakeEngineUnsupportedError } from "./testing.js";
 import type { FormOptions } from "./types.js";
 
@@ -62,6 +62,48 @@ test("supports automatic shape selection with mode only", async () => {
     expect(await engine.deriveForm(data, shapes, focus, { mode: "edit" })).toMatchObject({
       shape: { value: shape },
     });
+  } finally {
+    engine.dispose();
+  }
+});
+
+test.each(
+  (["data", "shapes"] as const).flatMap((input) =>
+    [false, true].flatMap((mixed) =>
+      [DataFactory.namedNode("https://example/graph"), DataFactory.blankNode()].map((graph) => ({
+        input,
+        mixed,
+        graph,
+      })),
+    ),
+  ),
+)("rejects $input in a $graph.termType graph (mixed: $mixed) before native derivation", async ({
+  input,
+  mixed,
+  graph,
+}) => {
+  const runtime = await import("@sparq-org/sparq/wasm-node");
+  const load = vi.spyOn(runtime.Store, "load");
+  const derive = vi.spyOn(runtime.Store.prototype, "deriveForm");
+  const source = input === "data" ? data : shapes;
+  const scoped = new Store(
+    [...source].map((q) => DataFactory.quad(q.subject, q.predicate, q.object, graph)),
+  );
+  const invalid = new Store(mixed ? [...source, ...scoped] : scoped);
+  const original = [...invalid];
+  const engine = createRdfEngine();
+  try {
+    const result = engine.deriveForm(
+      input === "data" ? invalid : data,
+      input === "shapes" ? invalid : shapes,
+      focus,
+      { mode: "edit" },
+    );
+    await expect(result).rejects.toBeInstanceOf(FormGraphUnsupportedError);
+    await expect(result).rejects.toMatchObject({ name: "FormGraphUnsupportedError", input });
+    expect(load).not.toHaveBeenCalled();
+    expect(derive).not.toHaveBeenCalled();
+    expect([...invalid]).toEqual(original);
   } finally {
     engine.dispose();
   }

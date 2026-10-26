@@ -1,4 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
+
+export { FormGraphUnsupportedError, PolicyIdentifierCollisionError } from "./errors.js";
 export { createRdfEngine } from "./index.js";
 export type * from "./types.js";
 

@@ -91,6 +91,10 @@ nodes (including named nodes), in dataset iteration order. A dataset carries no
 source locations, so this is its available document order. Inactive duties are
 excluded. Repeated traces from solid-odrl retain their multiplicity. Naming only
 annotates its parsed model; the input RDF and evaluation fields remain unchanged.
+If a generated anonymous ID collides with any named node in the supplied dataset
+(including graph names and literal datatype IRIs), `evaluatePolicy` throws the
+exported `PolicyIdentifierCollisionError`, with the colliding `identifier` property.
+This signals a malformed policy, even for a request whose action would not match.
 
 The experimental Sparq policy probe is never invoked. `features.policyEvaluate`
 is true only for a callable export with a finite numeric `policyContractVersion`
@@ -103,6 +107,13 @@ datasets as N-Quads, calls Sparq's `Store.deriveForm`, and returns its parsed
 FormDescription JSON verbatim as `unknown`. It preserves field/group/widget keys,
 passes options unchanged, and releases the temporary store on success or error.
 A bundle without the forms feature throws a descriptive error.
+Both datasets must contain only default-graph quads. A named graph in either
+dataset (including a blank-node graph name or a mix of default and named graphs)
+throws the exported `FormGraphUnsupportedError` before native derivation; its
+`input` property identifies `"data"` or `"shapes"`. Sparq 0.1.5 derives forms only
+from the default graph, so this check prevents silently missing values or
+constraints. The adapter does not fold graphs. Both error classes extend
+`TypeError` and are exported from the default, browser, node and testing entries.
 
 For browsers, copy the installed browser artifact into the app's static directory:
 
