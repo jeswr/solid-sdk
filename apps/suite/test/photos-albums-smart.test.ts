@@ -126,7 +126,7 @@ describe("smart albums", () => {
     ...[NaN, Infinity, -8.64e15 - 1, 0.1, "2026:10:26 12:00:00", null].map((takenAt) => [
       { id: "https://example.org/photos/invalid", takenAt },
     ]),
-    ...["", null, 42].flatMap((value) => [
+    ...[null, 42].flatMap((value) => [
       [{ id: "https://example.org/photos/invalid", make: value }],
       [{ id: "https://example.org/photos/invalid", model: value }],
     ]),

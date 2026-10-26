@@ -46,8 +46,9 @@ function validatePredicate(predicate: SmartAlbumPredicate): void {
 function validateMetadata(photo: PhotoMetadata): void {
   requireAlbum(isRecord(photo) && isText(photo.id), "invalid-metadata");
   requireAlbum(photo.takenAt === undefined || isInstant(photo.takenAt), "invalid-metadata");
-  requireAlbum(photo.make === undefined || isText(photo.make), "invalid-metadata");
-  requireAlbum(photo.model === undefined || isText(photo.model), "invalid-metadata");
+  // EXIF preserves camera strings verbatim, including blank values.
+  requireAlbum(photo.make === undefined || typeof photo.make === "string", "invalid-metadata");
+  requireAlbum(photo.model === undefined || typeof photo.model === "string", "invalid-metadata");
   if (photo.gps !== undefined) {
     requireAlbum(isRecord(photo.gps), "invalid-metadata");
     requireAlbum(
