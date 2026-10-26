@@ -75,3 +75,31 @@ Validation commands below ran before the final report commit; command output is 
 Coverage remains **100% statements (311/311), branches (315/315), functions (40/40) and lines (264/264)** across the import directory, enforced per executable source file by the ordinary app test command. Regression cases cover both SGML and XML decimal commas, exact precision, grouping rejection, atomic currency/correction rejection after valid records, incomplete correction metadata, `ORIGCURRENCY`, and QFX `INTU.BID` with implicit/explicit closing tags.
 
 All four requested findings are addressed. No UI, screenshots, dependency checks or new specification questions apply. Package and affected gates pass. Full-workspace validation remains blocked by an unrelated dependency build that requires a remote clone and an unwritable npm cache; roborev remains unavailable. No unrelated source changes were made to work around those limitations.
+
+## Fix round 2 — review of 9def91cfea4a
+
+Scope: the single PAYEE description finding and its regression tests. No dependencies, manifests, UI or unrelated source files changed.
+
+Commits:
+
+- `8d94c286` — `fix: preserve OFX payee descriptions`: read and validate the PAYEE aggregate and its NAME field before falling back to MEMO. Reject duplicate aggregates, duplicate/nested NAME fields and scalar PAYEE text. Add 18 SGML/XML regression cases for payees with and without memos, empty-name fallback, malformed records, description precedence, duplicate detection and categorisation.
+- Final `docs: record OFX payee fix validation` commit — this required report.
+
+Conservative choice: preserve direct NAME precedence if both alternatives are supplied; otherwise use PAYEE/NAME before MEMO. Empty payee names retain the existing memo fallback and missing-description rejection. Memo remains available separately on the transaction.
+
+| Exact command | Result |
+| --- | --- |
+| `pnpm --filter @jeswr/app-suite run test` (new regressions before implementation) | Expected FAIL; 11 new regression failures reproduced description loss and missing validation. Log: `/tmp/sst-esit-r2-red.log`. |
+| `pnpm --filter @jeswr/app-suite exec biome check --write src/apps/money/lib/import/ofx.ts test/money-import.test.ts` | PASS; formatted the test file. |
+| `pnpm --filter @jeswr/app-suite run test` (after fix) | PASS; 179 tests, including all 18 new cases. Log: `/tmp/sst-esit-r2-test.log`. |
+| `pnpm --filter @jeswr/suite-ui run build` | PASS; existing workspace dependency. Log: `/tmp/sst-esit-r2-dependency-build.log`. |
+| `pnpm --filter @jeswr/app-suite run lint && pnpm --filter @jeswr/app-suite run build && pnpm --filter @jeswr/app-suite run typecheck && pnpm --filter @jeswr/app-suite run test` | PASS (exit 0); lint, Next.js production build, strict typecheck and 179 tests. |
+| `pnpm run lint:root` | PASS (exit 0), including 74 contrast pairs with zero failures. Log: `/tmp/sst-esit-r2-root-lint.log`. |
+| `TURBO_SCM_BASE=9def91cfea4a68b507f1c1b9e93659bec888a6e5 pnpm run gate` | PASS (exit 0); 6/6 tasks. Log: `/tmp/sst-esit-r2-affected-gate.log`. |
+| `GIT_ALLOW_PROTOCOL=file pnpm run gate:full --env-mode=loose` | FAIL (exit 1); 12 successful tasks before the unchanged `@jeswr/unstorage-solid#build` failed. Its dependency script attempts an HTTPS clone, blocked by the protocol guard with `fatal: transport 'https' not allowed`; no remote clone completed. Log: `/tmp/sst-esit-r2-full-gate.log`. |
+| `git diff --check` | PASS. |
+| `command -v roborev` | Unavailable; automated per-commit review cannot run. |
+
+Import-directory coverage remains **100% statements (317/317), branches (322/322), functions (42/42) and lines (268/268)**, enforced by the ordinary app test command. All checks ran in this checkout before the final report commit. No dependency additions, screenshots, browser runs, pushes or branch switches. No generated artifacts committed.
+
+The requested finding is addressed. No implementation work or open questions remain. Package and affected gates pass; full-workspace validation and roborev retain the unrelated environmental limitations above.
