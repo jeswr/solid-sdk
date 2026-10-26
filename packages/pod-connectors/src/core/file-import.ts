@@ -1,3 +1,5 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /**
  * The Tier-C **file-import** runner — the second place integration data enters
  * the pod, beside the OAuth `import-runner`. It deliberately reuses the same
@@ -22,12 +24,14 @@
  */
 import { IntegrationSyncError } from "./errors.js";
 import type { ImportReport } from "./import-runner.js";
-import { registrationsFor } from "./pod-writer.js";
+import { createImportSession } from "./import-session.js";
 import type {
+  ConnectorStateOptions,
   ImportProgress,
   IntegrationMetadata,
   NormalisedDoc,
   PodWriter,
+  VocabMap,
   WriteConditions,
   WrittenDoc,
 } from "./types.js";
@@ -66,6 +70,7 @@ export interface FileImportContext {
  * that turns one uploaded export file into pod documents via `ctx.write`.
  */
 export interface FileImportAdapter {
+  readonly vocabMap?: VocabMap;
   readonly metadata: IntegrationMetadata;
   /**
    * The `accept` attribute for the file input (e.g. `".csv,text/csv"`). Honest
@@ -90,7 +95,7 @@ export interface FileImportAdapter {
   importFile(file: ImportFile, ctx: FileImportContext): Promise<void>;
 }
 
-export interface RunFileImportOptions {
+export interface RunFileImportOptions extends ConnectorStateOptions {
   adapter: FileImportAdapter;
   file: ImportFile;
   podWriter: PodWriter;
@@ -113,35 +118,49 @@ export async function runFileImport(opts: RunFileImportOptions): Promise<ImportR
     );
   }
 
-  const written: WrittenDoc[] = [];
-
-  await adapter.importFile(file, {
-    maxRows: MAX_ROWS,
-    resolve: (slug) => opts.podWriter.resolve(slug),
-    progress: (p) => opts.onProgress?.(p),
-    write: async (doc, conditions) => {
-      const w = await opts.podWriter.write(doc, conditions);
-      written.push(w);
-      return w;
-    },
-  });
-
-  if (written.length === 0) {
-    throw new IntegrationSyncError(
-      id,
-      "No importable records were found in that file. Double-check you selected the right export file.",
-    );
+  const session = createImportSession(
+    opts.podWriter,
+    id,
+    `urn:solid:connector:${encodeURIComponent(id)}:export`,
+    opts,
+    adapter.vocabMap,
+  );
+  try {
+    await adapter.importFile(file, {
+      maxRows: MAX_ROWS,
+      resolve: (slug) => opts.podWriter.resolve(slug),
+      progress: (p) => opts.onProgress?.(p),
+      write: session.write,
+    });
+    if (session.written.length === 0) {
+      throw new IntegrationSyncError(
+        id,
+        "No importable records were found in that file. Double-check you selected the right export file.",
+      );
+    }
+    const { indexUrl } = await opts.podWriter.registerType(session.registrations());
+    await session.finish();
+    const state = session.state({});
+    opts.onState?.(state);
+    return {
+      adapterId: id,
+      mode: "live",
+      written: session.written,
+      categories: [...new Set(session.written.map((w) => w.category))],
+      indexUrl,
+      state,
+    };
+  } catch (error) {
+    // Partial writes already link to this run. Record it when storage is available,
+    // preserving the original failure if the provenance write also fails.
+    try {
+      await session.finish();
+    } catch {
+      /* Original failure takes priority. */
+    }
+    opts.onState?.(session.state());
+    throw error;
   }
-
-  const { indexUrl } = await opts.podWriter.registerType(registrationsFor(written));
-
-  return {
-    adapterId: id,
-    mode: "live",
-    written,
-    categories: [...new Set(written.map((w) => w.category))],
-    indexUrl,
-  };
 }
 
 function formatBytes(bytes: number): string {
