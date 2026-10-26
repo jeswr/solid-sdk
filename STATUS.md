@@ -242,3 +242,73 @@ branch switch, remote Git fetch/merge or other-checkout edit was performed. Auto
 roborev remains unavailable (no executable or installed post-commit hook); no automated
 verdict is claimed. All requested implementation fixes are complete. Full-workspace
 validation and automated review retain the limitations above; there are no new open questions.
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+## Fix round 4 — 2026-10-26
+
+Integrated authoritative main `809c3c12b59847444c2b83be757b4813c4865579` from the
+local `origin` clone into the reviewed lane head
+`53cd15baa148846048213e7c80e1d56bfa6a36d0`.
+
+- `ab8b2632` — `chore: integrate main into OAuth lane`: resolve all seven scaffold
+  add/add conflicts by retaining the lane's implementation, documentation, exports,
+  configuration and tests, including the testing stores and DOM/Node compiler options.
+  Take main outside the lane's scope, including its single OAuth suite entry and
+  dependency resolutions. Regenerate the lockfile with pnpm; only the OAuth importer
+  differs from main.
+- `docs: record OAuth integration results` — this final report commit; `STATUS.md`
+  was updated last.
+
+The conservative resolution preserves every file in `packages/mcp-oauth` byte-for-byte
+from the reviewed lane. Git reported seven conflicts rather than the two named in the
+brief because main contains an independently added scaffold. Files outside the package,
+existing lane reports and regenerated lockfile match main exactly. No API, behavior,
+test, coverage threshold or dependency policy was changed.
+
+Lockfile regeneration used the following scoped offline command, preserving unrelated
+main resolutions and avoiding remote Git resolution:
+
+```sh
+env GIT_ALLOW_PROTOCOL=none GIT_TERMINAL_PROMPT=0 \
+  pnpm --filter @jeswr/mcp-oauth... --config.dedupe-peer-dependents=false \
+  install --lockfile-only --offline --ignore-scripts \
+  --store-dir=/tmp/sst-tsax-round4-pnpm-store
+```
+
+A subsequent frozen offline install succeeded for all 98 workspace projects using a
+temporary copy of the existing package cache, with no downloads or lifecycle scripts.
+Final validation therefore uses main's pinned `undici@8.9.0`.
+
+Commands ran on Node 24.22.1 / pnpm 10.4.1 before this final report commit.
+
+| Command | Result |
+| --- | --- |
+| `pnpm --filter @jeswr/guarded-fetch run build` | PASS; build the existing workspace dependency. |
+| `pnpm --filter @jeswr/mcp-oauth run lint` | PASS. |
+| `pnpm --filter @jeswr/mcp-oauth run build` | PASS. |
+| `pnpm --filter @jeswr/mcp-oauth run typecheck` | PASS; implementation and tests. |
+| `pnpm --filter @jeswr/mcp-oauth run test` | PASS; 198 tests; 355/355 statements, 303/303 branches, 52/52 functions and 317/317 lines covered. |
+| `pnpm run lint:root` | PASS. |
+| `env GIT_ALLOW_PROTOCOL=none NODE_OPTIONS=--require=/tmp/sst-tsax-network-guard.cjs pnpm run test:root` | PASS; 745/745 tests. |
+| `env GIT_ALLOW_PROTOCOL=none NODE_OPTIONS=--require=/tmp/sst-tsax-network-guard.cjs TURBO_SCM_BASE=809c3c12b59847444c2b83be757b4813c4865579 pnpm run gate` | PASS; 7/7 tasks. |
+| `env -u NODE_OPTIONS GIT_ALLOW_PROTOCOL=none GIT_TERMINAL_PROMPT=0 pnpm run gate:full` | FAIL outside this lane: `@jeswr/app-suite#build`; 91 successful tasks, 88 cached, before stopping. |
+| `git diff --check` | PASS. |
+
+The standard full gate fails in `packages/suite-ui/dist/fonts.js`: Next's Google font
+loader throws `TypeError: Cannot read properties of null (reading '1')`. The preceding
+guarded full gate stopped at the same application because the inherited temporary
+network guard refused Google Fonts downloads (Onest, Source Code Pro and Source Serif 4).
+Both `apps/suite` and `packages/suite-ui` match main; no unrelated workaround was added.
+
+Logs: `/tmp/sst-tsax-round4-lockfile-scoped.log`, `/tmp/sst-tsax-round4-install.log`,
+`/tmp/sst-tsax-round4-package-gate.log`, `/tmp/sst-tsax-round4-lint-root.log`,
+`/tmp/sst-tsax-round4-test-root.log`, `/tmp/sst-tsax-round4-gate.log`,
+`/tmp/sst-tsax-round4-gate-full.log` and
+`/tmp/sst-tsax-round4-gate-full-standard.log`.
+
+The fetch/merge used only the prescribed local source clone. No push, PR, publication,
+branch switch, network Git fetch/merge or other-checkout edit was performed. Automated
+roborev remains unavailable (no executable or installed post-commit hook); no new
+automated verdict is claimed. Integration is complete with no open questions; the
+full-workspace gate and automated review retain the limitations above.
