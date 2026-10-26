@@ -9,7 +9,7 @@
     "start": "next start -p 3210",
     "lint": "biome check src test e2e *.ts *.mjs",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
+    "test": "vitest run --coverage",
     "test:e2e": "pnpm --filter @jeswr/suite-ui run build && playwright test",
     "measure:univer": "node test/univer-spike.measure.mjs",
     "test:mime": "vitest run test/mime.test.ts --coverage",
@@ -34,7 +34,13 @@
     "@jeswr/fetch-rdf": "workspace:*",
     "@jeswr/guarded-fetch": "workspace:*",
     "@jeswr/rdf-serialize": "workspace:*",
-    "jsonld-streaming-serializer": "^4.0.0"
+    "jsonld-streaming-serializer": "^4.0.0",
+    "@jeswr/suite-vocab": "workspace:*",
+    "saxes": "6.0.0",
+    "lucide-react": "1.24.0",
+    "react-hook-form": "7.81.0",
+    "zod": "4.4.3",
+    "@hookform/resolvers": "5.4.0"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.11.1",
