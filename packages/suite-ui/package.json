@@ -21,7 +21,12 @@
     "./styles/theme.css": "./dist/styles/theme.css",
     "./styles/density.css": "./dist/styles/density.css",
     "./styles/components.css": "./dist/styles/components.css",
-    "./styles/navigation.css": "./dist/styles/navigation.css"
+    "./styles/navigation.css": "./dist/styles/navigation.css",
+    "./shell": {
+      "types": "./dist/shell/index.d.ts",
+      "import": "./dist/shell/index.js"
+    },
+    "./styles/shell.css": "./dist/styles/shell.css"
   },
   "files": [
     "dist",
