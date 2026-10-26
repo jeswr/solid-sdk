@@ -2,10 +2,12 @@
 // AUTHORED-BY Codex GPT-6
 import type { DatasetCore } from "@rdfjs/types";
 import { DataFactory } from "n3";
+import { IntegrationSyncError } from "./errors.js";
 import { copyDataset, mergeItems } from "./incremental.js";
 import { registrationsFor } from "./pod-writer.js";
 import { PROV, Provenance } from "./provenance.js";
 import type {
+  BinaryDoc,
   ConnectorState,
   ConnectorStateOptions,
   ImportOutcome,
@@ -14,6 +16,7 @@ import type {
   TypeRegistrationRequest,
   VocabMap,
   WriteConditions,
+  WrittenBinary,
   WrittenDoc,
 } from "./types.js";
 import { safeIri } from "./vocab.js";
@@ -82,6 +85,15 @@ export function createImportSession(
     else written[index] = result;
     return result;
   }
+  /** Binary resources carry no RDF; their metadata documents link to them. */
+  async function writeBinary(doc: BinaryDoc): Promise<WrittenBinary> {
+    if (!writer.writeBinary)
+      throw new IntegrationSyncError(id, "This host cannot store binary resources.");
+    const url = writer.resolve(doc.slug);
+    if (url.split(/[?#]/, 1)[0] === writer.resolve(RUNS))
+      throw new Error("Reserved connector provenance slug.");
+    return writer.writeBinary(doc);
+  }
   let finalized = false;
   async function finish() {
     if (finalized) return;
@@ -117,5 +129,13 @@ export function createImportSession(
         : (options.state?.counts ?? { documents: 0, items: 0, skipped: 0 }),
     };
   }
-  return { read, write, written, registrations: () => [...registrations.values()], finish, state };
+  return {
+    read,
+    write,
+    writeBinary,
+    written,
+    registrations: () => [...registrations.values()],
+    finish,
+    state,
+  };
 }

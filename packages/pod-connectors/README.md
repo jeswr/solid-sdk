@@ -63,6 +63,16 @@ Entry points:
 `pnpm --filter @jeswr/pod-connectors build` builds ESM and declarations. `test` runs all
 moved fixture tests and the environment-read regression test without production traffic.
 
+## Binary resources
+
+Adapters store non-RDF resources (original files, `.eml` sources, attachments) with
+`ctx.writeBinary({ slug, contentType, body, mode })`. The fetch-backed writer confines them to
+the connector container exactly like RDF writes and refuses RDF media types (those go through
+`ctx.write` so N3 serialises them and provenance is attached). `mode: 'create'` (default) sends
+`If-None-Match: *` and reports an existing resource as `created: false`; `mode: 'replace'`
+reads the current ETag and sends `If-Match`, refusing resources without a strong ETag. Hosts
+whose `PodWriter` has no `writeBinary` make the call fail with `IntegrationSyncError`.
+
 ## Incremental imports and provenance
 
 Pass host-owned `state: ConnectorState` into `runImport` (or `runFileImport`) and persist

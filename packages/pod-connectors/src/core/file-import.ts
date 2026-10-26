@@ -26,6 +26,7 @@ import { IntegrationSyncError } from "./errors.js";
 import type { ImportReport } from "./import-runner.js";
 import { createImportSession } from "./import-session.js";
 import type {
+  BinaryDoc,
   ConnectorStateOptions,
   ImportProgress,
   IntegrationMetadata,
@@ -33,6 +34,7 @@ import type {
   PodWriter,
   VocabMap,
   WriteConditions,
+  WrittenBinary,
   WrittenDoc,
 } from "./types.js";
 
@@ -59,6 +61,8 @@ export interface FileImportContext {
   resolve(slug: string): string;
   /** Serialise + PUT a normalised document into the pod. */
   write(doc: NormalisedDoc, conditions?: WriteConditions): Promise<WrittenDoc>;
+  /** Store a non-RDF resource (see `ImportContext.writeBinary`). */
+  writeBinary(doc: BinaryDoc): Promise<WrittenBinary>;
   /** Report progress to the UI. */
   progress(p: ImportProgress): void;
   /** Shared row cap so adapters bound their own loops consistently. */
@@ -131,6 +135,7 @@ export async function runFileImport(opts: RunFileImportOptions): Promise<ImportR
       resolve: (slug) => opts.podWriter.resolve(slug),
       progress: (p) => opts.onProgress?.(p),
       write: session.write,
+      writeBinary: session.writeBinary,
     });
     if (session.written.length === 0) {
       throw new IntegrationSyncError(
