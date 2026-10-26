@@ -61,7 +61,7 @@ function formatTime(ms: number): string {
   ).padStart(2, "0")}.${String(ms % 1000).padStart(3, "0")}`;
 }
 function wordSegments(text: string, lineTime: number): LyricsWord[] {
-  if (!lrcSyntax.test(text)) return [];
+  if (!lrcSyntax.test(text) && !/[<>]/u.test(text)) return [];
   // A numeric-looking square tag inside the lyric is never silently treated as text.
   if (!text.includes("<") || /\[/u.test(text)) throw new LyricsError("invalid-lrc");
   const words: LyricsWord[] = [];
@@ -122,6 +122,7 @@ export function parseLrc(source: string): Lyrics {
   if (source.length > LYRICS_LIMITS.maxCodeUnits) throw new LyricsError("limit-exceeded");
   if (
     !source.isWellFormed() ||
+    /^\uFEFF{2}/u.test(source) ||
     /[\p{Zl}\p{Zp}]/u.test(source) ||
     /\p{Cc}/u.test(source.replace(/[\t\r\n]/gu, ""))
   ) {

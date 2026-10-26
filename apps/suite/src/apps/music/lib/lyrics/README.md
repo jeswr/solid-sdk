@@ -45,8 +45,9 @@ Metadata-only input is an LRC document with no timed lines. Mixed timed/untimed
 content, malformed tags/times/word markers, duplicate offsets, invalid Unicode,
 controls other than tabs/newlines and unsupported line separators fail closed.
 Numeric square/angle tags and metadata-shaped tags are reserved, including when
-embedded in prose; they never cause a silent plain-text fallback. In enhanced
-lines square brackets and stray angle delimiters are rejected as ambiguous.
+embedded in prose; they never cause a silent plain-text fallback. In timed
+lines stray angle delimiters are rejected as ambiguous, as are square brackets
+inside enhanced lines. Multiple leading BOMs are rejected to keep round trips stable.
 
 `LYRICS_LIMITS` caps raw input **and expanded canonical output** at 1,000,000 UTF-16
 code units, 10,000 physical lines and 16,384 code units per line. Timestamps and

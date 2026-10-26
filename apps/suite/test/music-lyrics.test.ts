@@ -174,6 +174,7 @@ describe("fail closed", () => {
       {},
       "\uD800",
       "\uDC00",
+      "\uFEFF\uFEFFMoon",
       "a\0b",
       "a\x1bb",
       "a\u2028b",
@@ -202,6 +203,8 @@ describe("fail closed", () => {
       "[00:01]<00:02>Moon[aside]",
       "[00:01]<00:02>Moon<00:03",
       "[00:01]Text [offset:2]",
+      "[00:01]Text > stray",
+      "[00:01]Text <bad",
     ])
       fails(source, "invalid-lrc");
   });
@@ -219,6 +222,7 @@ describe("fail closed", () => {
       "[00:02]<00:01>Early",
       "[00:01]<00:03>First<00:02>Back",
       "[00:01]<00:xx>Bad",
+      "[00:01]<bad>Ambiguous",
       "[00:00][1440:00]<00:01>Overflow",
     ])
       fails(source, "invalid-timestamp");
