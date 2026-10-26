@@ -111,7 +111,13 @@ export async function runCli(args: readonly string[], options: CliOptions = {}):
     const withSignal =
       (transport: typeof fetch): typeof fetch =>
       (input, init) =>
-        transport(input, { ...init, signal: options.signal ?? init?.signal });
+        transport(input, {
+          ...init,
+          signal:
+            options.signal && init?.signal
+              ? AbortSignal.any([options.signal, init.signal])
+              : (options.signal ?? init?.signal),
+        });
     const podFetch = await createClientCredentialsFetch(
       config,
       withSignal(options.podTransport ?? globalThis.fetch),

@@ -53,6 +53,7 @@ const dirs: string[] = [];
 afterEach(async () => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+  vi.useRealTimers();
   await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
 });
 async function configPath() {
@@ -474,6 +475,82 @@ describe("Pod client credentials", () => {
 });
 
 describe("CLI import", () => {
+  it.each([
+    "deadline",
+    "host",
+  ])("cancels a pending source exchange on %s and closes the listener", async (kind) => {
+    const { transport } = fixturePod();
+    const path = await configPath();
+    await writeFile(
+      path,
+      JSON.stringify({ ...config, connectors: { spotify: { clientId: "synthetic-client" } } }),
+    );
+    const controller = new AbortController();
+    let exchangeSignal: AbortSignal | undefined;
+    let redirect: URL | undefined;
+    let started: (() => void) | undefined;
+    const exchanging = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const result = runCli(["import", "spotify"], {
+      configPath: path,
+      podTransport: transport,
+      signal: controller.signal,
+      stdout: vi.fn(),
+      stderr: vi.fn(),
+      sourceTransport: async (_input, init) => {
+        const signal = init?.signal;
+        if (!signal) throw new Error("Missing exchange signal");
+        exchangeSignal = signal;
+        return new Promise<Response>((_resolve, reject) => {
+          signal.addEventListener("abort", () => reject(signal.reason), {
+            once: true,
+          });
+          started?.();
+        });
+      },
+      async openAuthorizationUrl(url) {
+        const auth = new URL(url);
+        const callbackUrl = new URL(auth.searchParams.get("redirect_uri") as string);
+        redirect = callbackUrl;
+        callbackUrl.searchParams.set("state", auth.searchParams.get("state") as string);
+        callbackUrl.searchParams.set("code", "synthetic-code");
+        await new Promise<void>((resolve, reject) => {
+          get(callbackUrl, (response) => {
+            response.resume();
+            response.on("end", resolve);
+          }).on("error", reject);
+        });
+      },
+    });
+    try {
+      await Promise.race([
+        exchanging,
+        result.then(() => {
+          throw new Error("CLI exited before token exchange");
+        }),
+      ]);
+      if (!exchangeSignal || !redirect) throw new Error("Source exchange never started");
+      expect(exchangeSignal.aborted).toBe(false);
+      if (kind === "deadline") await vi.advanceTimersByTimeAsync(120_000);
+      else controller.abort();
+      expect(exchangeSignal.aborted).toBe(true);
+      expect(controller.signal.aborted).toBe(kind === "host");
+      expect(await result).toBe(kind === "deadline" ? 3 : 130);
+      await expect(
+        new Promise((resolve, reject) => {
+          get(redirect as URL, (response) => {
+            response.resume();
+            resolve(response.statusCode);
+          }).on("error", reject);
+        }),
+      ).rejects.toThrow();
+    } finally {
+      controller.abort();
+      await result;
+    }
+  });
   it("uses pristine default transports and displays the loopback authorization URL", async () => {
     const { transport } = fixturePod();
     const path = await configPath();
