@@ -4,6 +4,7 @@ import { createRdfEngine as createBaseEngine } from "./index.js";
 import { createIndexedDbPersistence } from "./indexeddb.js";
 import type { RdfEngine, RdfEngineOptions } from "./types.js";
 
+export { FormGraphUnsupportedError, PolicyIdentifierCollisionError } from "./errors.js";
 export type { IndexedDbPersistenceOptions } from "./indexeddb.js";
 export { createIndexedDbPersistence } from "./indexeddb.js";
 
