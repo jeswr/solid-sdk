@@ -1,0 +1,36 @@
+{
+  "mcpServers": {
+    "awp-alice": {
+      "type": "stdio",
+      "command": "node",
+      "args": [
+        "/path/to/personal-agent/dist/pilot/cli.js",
+        "mcp",
+        "--name",
+        "alice",
+        "--a2a",
+        "--auto-dispatch",
+        "--dir",
+        "/path/to/personal-agent/.awp-runtime",
+        "--now",
+        "2026-10-19T08:00:00Z"
+      ]
+    },
+    "awp-bob": {
+      "type": "stdio",
+      "command": "node",
+      "args": [
+        "/path/to/personal-agent/dist/pilot/cli.js",
+        "mcp",
+        "--name",
+        "bob",
+        "--a2a",
+        "--auto-dispatch",
+        "--dir",
+        "/path/to/personal-agent/.awp-runtime",
+        "--now",
+        "2026-10-19T08:00:00Z"
+      ]
+    }
+  }
+}
