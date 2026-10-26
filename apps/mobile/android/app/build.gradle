@@ -19,6 +19,10 @@ android {
     buildFeatures {
         buildConfig = true
     }
+    testOptions {
+        // Android always encodes file names as UTF-8; a POSIX-locale host JVM would not.
+        unitTests.all { environment "LC_ALL", "C.UTF-8" }
+    }
     lint {
         abortOnError = true
         warningsAsErrors = false
