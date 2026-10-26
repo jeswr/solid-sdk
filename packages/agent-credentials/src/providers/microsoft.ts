@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /**
  * Microsoft calendar availability via Graph `calendarView` for ONE owner-selected calendar
  * (works for work/school and personal accounts; `getSchedule` does not support delegated personal
@@ -162,8 +163,16 @@ export async function microsoftCalendarView(
   });
   params.set("$select", "showAs,isAllDay,isCancelled,type,start,end");
   params.set("$top", String(GRAPH_PAGE_SIZE));
-  let url: string | undefined = `${GRAPH_ORIGIN}${path}?${params.toString()}`;
-  const seen = new Set<string>([new URL(url).toString()]);
+  const initialUrl = new URL(`${GRAPH_ORIGIN}${path}?${params.toString()}`);
+  // encodeURIComponent leaves dot segments intact; URL normalization must not select
+  // a different calendar operation before the first request is dispatched.
+  if (!input.calendarId || initialUrl.pathname !== path)
+    return failure(
+      "blocked",
+      "Microsoft calendar identifier does not preserve the selected calendar path",
+    );
+  let url: string | undefined = initialUrl.toString();
+  const seen = new Set<string>([url]);
   const busy: Slot[] = [];
   let events = 0;
   let pages = 0;

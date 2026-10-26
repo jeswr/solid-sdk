@@ -276,6 +276,37 @@ describe("Microsoft calendarView adapter", () => {
     );
   });
 
+  it.each([
+    "",
+    ".",
+    "..",
+  ])("refuses an initial calendar identifier that loses its path: %j", async (id) => {
+    const f = paged([[]]);
+    const r = await view(f as unknown as Transport, id);
+    expect(r).toMatchObject({
+      ok: false,
+      status: "blocked",
+      reason: expect.stringMatching(/calendar.*path/),
+    });
+    expect(f).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    "AAMk+/=",
+    "%2e",
+    "%2E%2E",
+    "calendar/../other?query#fragment",
+  ])("preserves an encoded calendar identifier on the initial and paged requests: %j", async (id) => {
+    const f = paged([[], []]);
+    const r = await view(f as unknown as Transport, id);
+    expect(r.ok).toBe(true);
+    expect(f).toHaveBeenCalledTimes(2);
+    for (const [url] of f.mock.calls as unknown as [string][])
+      expect(new URL(url).pathname).toBe(
+        `/v1.0/me/calendars/${encodeURIComponent(id)}/calendarView`,
+      );
+  });
+
   it("an all-day event blocks the owner's whole local day (DST-aware) and its literal interval", async () => {
     const f = paged([
       [ev("oof", "2026-10-20T00:00:00", "2026-10-21T00:00:00", { isAllDay: true })],
