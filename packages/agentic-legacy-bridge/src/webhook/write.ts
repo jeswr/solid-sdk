@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Fable 5
+// AUTHORED-BY Codex GPT-6
 /**
  * The M2.4 webhook CREATE-ONLY pod write (M2-DESIGN.md §3.3/§3.4) — the persistence
  * half of the stateless webhook service. Where the batch {@link importInbound} writes
@@ -13,7 +14,8 @@
  *    message id — to the SAME URLs, and the create-only write no-ops (412) instead of
  *    double-writing. No dedupe table, no shared cache, no sticky instance.
  *  - **Least privilege.** The bridge's pod identity needs only `acl:Append`
- *    (create-inside), never `Write`/`Control`: it can ADD an inbox item but cannot
+ *    (create-inside) plus `Read` to verify retained raw anchors, never `Write`/`Control`:
+ *    it can ADD an inbox item but cannot
  *    modify or delete anything already there (tamper-evidence by construction). This
  *    writer NEVER writes an ACL at runtime — the owner provisions the container ACL
  *    ONCE (via {@link buildOwnerOnlyAclTurtle}); see {@link WriteMessageOptions.writeAcl}
@@ -21,11 +23,13 @@
  *
  * Partial-write recovery: because each of the three resources is written create-only
  * INDEPENDENTLY, a delivery that failed after writing only the raw anchor is HEALED on
- * the platform's retry — the already-written raw 412s (skipped) and the missing graph/
- * chat resources are created. The batch importer's redirect-refusal + within-container
+ * the platform's retry — the already-written raw 412s and is digest-checked before missing
+ * graph/chat resources are created. A different delivery under the same message id fails.
+ * The batch importer's redirect-refusal + within-container
  * scope guard are reused verbatim (no divergent copy).
  */
 
+import { createHash } from "node:crypto";
 import { serializeCanonical } from "../canonical.js";
 import type { InterpretationStatus } from "../graph.js";
 import { buildAgenticGraph } from "../graph.js";
@@ -48,7 +52,8 @@ export interface WriteMessageOptions {
   readonly container: string;
   /**
    * The bridge agent's authed Solid `fetch` (client-credentials/DPoP via
-   * `@jeswr/solid-openid-client`, granted `acl:Append` on the container). Injectable
+   * `@jeswr/solid-openid-client`, granted `acl:Append` on the container and `acl:Read`
+   * on retained raw resources for replay validation). Injectable
    * so the writer is unit-testable with a fake fetch. NOT routed through the SSRF
    * guard — the pod is the user's own trusted origin.
    */
@@ -90,6 +95,43 @@ export interface WriteMessageResult {
 
 /** The outcome of a single create-only PUT. */
 type PutOutcome = "created" | "exists";
+
+/** Retained or supplied raw bytes do not match the parsed delivery. No provenance is written. */
+export class RawResourceMismatchError extends Error {
+  constructor(readonly resourceUrl: string) {
+    super("raw resource does not match the delivery digest");
+    this.name = "RawResourceMismatchError";
+  }
+}
+
+async function validateRetainedRaw(
+  fetchImpl: typeof globalThis.fetch,
+  url: string,
+  message: BridgeMessage,
+): Promise<void> {
+  const response = await fetchImpl(url, { method: "GET", redirect: "manual" });
+  assertNoRedirect(response, "GET", url);
+  if (!response.ok) throw new Error(`pod read failed: GET ${url} -> ${response.status}`);
+  const reader = response.body?.getReader();
+  const hash = createHash("sha256");
+  let size = 0;
+  try {
+    while (reader) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > message.rawByteLength) {
+        await reader.cancel().catch(() => {});
+        throw new RawResourceMismatchError(url);
+      }
+      hash.update(value);
+    }
+  } finally {
+    reader?.releaseLock();
+  }
+  if (size !== message.rawByteLength || hash.digest("hex") !== message.rawSha256)
+    throw new RawResourceMismatchError(url);
+}
 
 /**
  * PUT a resource create-only (`If-None-Match: *`) via the injectable authed fetch.
@@ -156,6 +198,16 @@ export async function writeMessageCreateOnly(
   const docUrl = assertWritableUrl(`${base}.ttl`, options.container);
   const chatUrl = assertWritableUrl(`${base}.chat.ttl`, options.container);
 
+  if (
+    Buffer.byteLength(options.raw) !== message.rawByteLength ||
+    createHash("sha256").update(options.raw).digest("hex") !== message.rawSha256
+  )
+    throw new RawResourceMismatchError(rawUrl);
+
+  // Verify the byte-exact anchor before generating or writing any missing provenance.
+  const rawOutcome = await putCreateOnly(options.writeFetch, rawUrl, rawMediaType, options.raw);
+  if (rawOutcome === "exists") await validateRetainedRaw(options.writeFetch, rawUrl, message);
+
   const interpreter = options.interpreter ?? deterministicInterpreter;
   const interps = interpreter.interpret(message, {
     docIri: docUrl,
@@ -185,7 +237,6 @@ export async function writeMessageCreateOnly(
 
   // Raw bytes first (the anchor), then the graph, then the canonical chat resource —
   // each create-only + independently idempotent (so a partial delivery heals on retry).
-  const rawOutcome = await putCreateOnly(options.writeFetch, rawUrl, rawMediaType, options.raw);
   const docOutcome = await putCreateOnly(options.writeFetch, docUrl, "text/turtle", graph.turtle);
   const chatOutcome = await putCreateOnly(options.writeFetch, chatUrl, "text/turtle", chatTurtle);
 

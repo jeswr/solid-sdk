@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Fable 5
+// AUTHORED-BY Codex GPT-6
 import { createHmac } from "node:crypto";
 import { Parser, Store } from "n3";
 import { describe, expect, it } from "vitest";
@@ -20,8 +21,9 @@ interface Recorded {
   readonly headers: Record<string, string>;
 }
 
-function recordingFetch(existing: Set<string> = new Set()) {
+function recordingFetch(existing: Set<string> = new Set(), retainedRaw?: string) {
   const calls: Recorded[] = [];
+  const bodies = new Map<string, string>();
   const fetchImpl = (async (input: string | URL, init?: RequestInit) => {
     const url = String(input);
     const method = (init?.method ?? "GET").toUpperCase();
@@ -30,6 +32,9 @@ function recordingFetch(existing: Set<string> = new Set()) {
     if (method === "PUT" && headers["if-none-match"] === "*" && existing.has(url)) {
       return new Response(null, { status: 412 });
     }
+    if (method === "GET") return new Response(bodies.get(url) ?? retainedRaw, { status: 200 });
+    if (typeof init?.body === "string") bodies.set(url, init.body);
+    else if (init?.body instanceof Uint8Array) bodies.set(url, new TextDecoder().decode(init.body));
     return new Response(null, { status: 201 });
   }) as typeof fetch;
   return { fetchImpl, calls };
@@ -184,7 +189,7 @@ describe("Slack webhook handler — end to end", () => {
     const urls = new Set(first.calls.filter((c) => c.method === "PUT").map((c) => c.url));
 
     const events: WebhookAuditEvent[] = [];
-    const second = recordingFetch(urls);
+    const second = recordingFetch(urls, body);
     const res = await slackHandler(
       second.fetchImpl,
       events,
