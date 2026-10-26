@@ -689,6 +689,18 @@ describe("skill validation", () => {
     expect(checkSkills(root, { write: true }).errors).toEqual([]);
   });
 
+  const quotedAssignments = [
+    ["double-quoted hash", 'PASSWORD="#fixture-credential-value"'],
+    ["double-quoted leading space", 'PASSWORD=" fixture-credential-value"'],
+    ["single-quoted spaces", "API_TOKEN='a b c'"],
+    ["double-quoted placeholder lookalike", 'PASSWORD="changeme fixture-credential-value"'],
+    ["single-quoted placeholder lookalike", "PASSWORD='xxx #fixture-credential-value'"],
+    [
+      "assignment after an escaped backslash",
+      String.raw`TOKEN="your-token\\" PASSWORD="#fixture-credential-value"`,
+    ],
+  ];
+
   const inlineAssignments = [
     ["prose", "setting PASSWORD=fixture-credential-value for a command."],
     ["inline code", "setting `API_KEY=fixture-credential-value` for a command."],
@@ -699,11 +711,12 @@ describe("skill validation", () => {
     ["changeme lookalike", "setting TOKEN=changeme-credential-value"],
     ["xxx lookalike", "setting SECRET=xxx-credential-value"],
     ["generator lookalike", "setting PASSWORD=randomUUID()credential-value"],
+    ...quotedAssignments,
   ];
 
   it.each(inlineAssignments)("rejects inline credentials in metadata: %s", (_label, text) => {
     const root = fixture();
-    put(root, "skills/alpha/SKILL.md", skill({ description: `Use when ${text}` }));
+    put(root, "skills/alpha/SKILL.md", skill({ description: JSON.stringify(`Use when ${text}`) }));
     const indexPath = join(root, "skills/INDEX.md");
     for (const previousIndex of [undefined, "Previously generated index\n"]) {
       if (previousIndex !== undefined) put(root, "skills/INDEX.md", previousIndex);
@@ -732,6 +745,20 @@ describe("skill validation", () => {
     expect(existsSync(join(root, "skills/INDEX.md"))).toBe(false);
   });
 
+  it.each(
+    quotedAssignments,
+  )("rejects quoted credentials in a companion file: %s", (_label, text) => {
+    const root = fixture();
+    put(root, "skills/alpha/references/guide.md", `\n\n${text}\n`);
+    const result = cli(root, "--write");
+    expect(result.status).toBe(1);
+    expect(result.stderr).toBe(
+      "skills/alpha/references/guide.md: line 3: possible environment secret (value omitted)\n",
+    );
+    expect(result.stdout).toBe("");
+    expect(existsSync(join(root, "skills/INDEX.md"))).toBe(false);
+  });
+
   it.each([
     ["angle brackets", "<token>"],
     // biome-ignore lint/suspicious/noTemplateCurlyInString: literal documentation template
@@ -751,6 +778,9 @@ describe("skill validation", () => {
     ["xxx", "xxx"],
     ["public storage identifier", "solid:recent-accounts"],
     ["generated test password", "randomUUID()"],
+    ["double-quoted template with whitespace", '" <token> "'],
+    ["single-quoted template with whitespace", "' changeme '"],
+    ["escaped double quote", String.raw`"your-token\" PASSWORD=fixture-credential-value"`],
     ["empty double quotes", '""'],
     ["empty single quotes", "''"],
     ["empty", ""],

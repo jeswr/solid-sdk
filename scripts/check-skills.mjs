@@ -31,7 +31,8 @@ const secretPatterns = [
   ],
   [
     "environment secret",
-    /\b(?=[A-Z0-9_]*(?:TOKEN|SECRET|PASSWORD|KEY))[A-Z_][A-Z0-9_]*[\t ]*=[\t ]*["']?([^\s"'`#]+)/g,
+    // Capture complete quoted values; only double quotes honour backslash escapes.
+    /\b(?=[A-Z0-9_]*(?:TOKEN|SECRET|PASSWORD|KEY))[A-Z_][A-Z0-9_]*[\t ]*=[\t ]*(?:"((?:\\[\s\S]|[^"\\])*)"|'([^']*)'|([^\s"'`#]+))/g,
   ],
 ];
 
@@ -51,7 +52,11 @@ function lineNumber(text, offset) {
 function scanSecrets(text, report) {
   for (const [category, pattern] of secretPatterns) {
     for (const match of text.matchAll(pattern)) {
-      if (match[1] && isPlaceholder(match[1])) continue;
+      const value = match
+        .slice(1)
+        .find((part) => part !== undefined)
+        ?.trim();
+      if (value !== undefined && (value === "" || isPlaceholder(value))) continue;
       report(category, match.index);
     }
   }
