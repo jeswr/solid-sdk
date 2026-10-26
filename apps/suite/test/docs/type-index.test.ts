@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6 — missing linked index regression tests
 // Ported Pod Docs regression tests.
 import { DataFactory, Store } from "n3";
 import { describe, expect, it } from "vitest";
@@ -94,6 +95,123 @@ describe("typed wrappers", () => {
 });
 
 describe("ensureTypeRegistrations", () => {
+  it.each([
+    201, 412,
+  ])("repairs a missing linked index with create-only PUT (%s)", async (status) => {
+    const linkedIndex = `${POD}preferences/documents.ttl`;
+    const { fetch: transport, calls } = mockFetch({
+      [`GET ${WEBID}`]: { body: profileWith({ privateIndex: linkedIndex }) },
+      [`GET ${linkedIndex}`]: {
+        body: `@prefix solid: <http://www.w3.org/ns/solid/terms#>.
+          <> a solid:TypeIndex, solid:UnlistedDocument.
+          <#other> a solid:TypeRegistration; solid:forClass <https://example.org/Other>.`,
+        etag: '"fresh"',
+      },
+      [`PUT ${linkedIndex}`]: { status: 201 },
+    });
+    let reads = 0;
+    const fetchImpl: typeof fetch = async (url, init) => {
+      if (String(url) === linkedIndex && !init?.method && reads++ === 0)
+        return new Response(null, { status: 404 });
+      const response = await transport(url, init);
+      if (init?.method === "PUT" && new Headers(init.headers).has("if-none-match"))
+        return new Response(null, { status });
+      return response;
+    };
+    const result = await ensureTypeRegistrations({
+      webId: WEBID,
+      podRoot: POD,
+      registrations: [REG],
+      fetchImpl,
+    });
+    expect(result).toEqual({ indexUrl: linkedIndex, bootstrapped: true, added: 1 });
+    expect(reads).toBe(2);
+    const writes = calls.filter((call) => call.method === "PUT");
+    expect(writes).toHaveLength(2);
+    expect(writes[0]).toMatchObject({ url: linkedIndex, headers: { "if-none-match": "*" } });
+    const created = new TypeIndexDocument(
+      linkedIndex,
+      turtleToStore(writes[0]?.body ?? "", linkedIndex),
+      DataFactory,
+    );
+    expect([...created.types].sort()).toEqual([
+      "http://www.w3.org/ns/solid/terms#TypeIndex",
+      "http://www.w3.org/ns/solid/terms#UnlistedDocument",
+    ]);
+    expect(writes[1]?.headers["if-match"]).toBe('"fresh"');
+    const registered = new TypeIndexDataset(
+      turtleToStore(writes[1]?.body ?? "", linkedIndex),
+      DataFactory,
+    );
+    expect(
+      registered
+        .all()
+        .map((reg) => reg.forClass)
+        .sort(),
+    ).toEqual([DOCUMENT_CLASS, "https://example.org/Other"].sort());
+    expect(calls.every((call) => call.url === WEBID || call.url === linkedIndex)).toBe(true);
+  });
+
+  it.each([
+    401,
+    403,
+    500,
+    "offline",
+  ] as const)("propagates linked index read failure %s without writing", async (status) => {
+    const { fetch: transport, calls } = mockFetch({
+      [`GET ${WEBID}`]: { body: profileWith({ privateIndex: PRIVATE_INDEX }) },
+      [`GET ${PRIVATE_INDEX}`]: { status: status === "offline" ? 500 : status },
+    });
+    const fetchImpl: typeof fetch = async (url, init) => {
+      if (String(url) === PRIVATE_INDEX && status === "offline") throw new Error("offline");
+      return transport(url, init);
+    };
+    const result = ensureTypeRegistrations({
+      webId: WEBID,
+      podRoot: POD,
+      registrations: [REG],
+      fetchImpl,
+    });
+    if (status === "offline") await expect(result).rejects.toThrow("offline");
+    else await expect(result).rejects.toMatchObject({ status });
+    expect(calls.some((call) => call.method === "PUT")).toBe(false);
+  });
+
+  it("propagates permission failures when creating a missing linked index", async () => {
+    const { fetch, calls } = mockFetch({
+      [`GET ${WEBID}`]: { body: profileWith({ privateIndex: PRIVATE_INDEX }) },
+      [`PUT ${PRIVATE_INDEX}`]: { status: 403 },
+    });
+    await expect(
+      ensureTypeRegistrations({
+        webId: WEBID,
+        podRoot: POD,
+        registrations: [REG],
+        fetchImpl: fetch,
+      }),
+    ).rejects.toMatchObject({ status: 403 });
+    expect(calls.filter((call) => call.method === "PUT")).toHaveLength(1);
+  });
+
+  it("bounds recovery if a linked index keeps disappearing", async () => {
+    const { fetch, calls } = mockFetch({
+      [`GET ${WEBID}`]: { body: profileWith({ privateIndex: PRIVATE_INDEX }) },
+      [`PUT ${PRIVATE_INDEX}`]: { status: 201 },
+    });
+    await expect(
+      ensureTypeRegistrations({
+        webId: WEBID,
+        podRoot: POD,
+        registrations: [REG],
+        fetchImpl: fetch,
+      }),
+    ).rejects.toMatchObject({ status: 404 });
+    expect(calls.filter((call) => call.method === "PUT")).toHaveLength(3);
+    expect(
+      calls.filter((call) => call.url === PRIVATE_INDEX && call.method === "GET"),
+    ).toHaveLength(4);
+  });
+
   it("bootstraps a private index, links it from the profile, and adds the registration", async () => {
     const { fetch, calls } = mockFetch({
       [`GET ${WEBID}`]: { body: profileWith({}), etag: 'W/"p"' },

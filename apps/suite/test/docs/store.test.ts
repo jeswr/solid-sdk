@@ -107,6 +107,26 @@ function listing(children: string[]): string {
 }
 
 describe("store creation and scope", () => {
+  it.each([
+    "create",
+    "copy",
+  ])("repairs a missing linked index during document %s", async (operation) => {
+    const s = await server();
+    s.resources.delete(INDEX);
+    const created =
+      operation === "create"
+        ? await s.store.create({ title: "New" })
+        : await s.store.makeCopy(await document(), {
+            assets: [],
+            snapshot: () => ({ body: "copied" }),
+            persistFullState: async () => {},
+          });
+    expect(await s.store.read(created.url)).toEqual(created);
+    expect(s.resources.get(INDEX)?.body).toContain(`${POD}docs/`);
+    expect(s.calls.some((call) => call.method === "PUT" && call.url.includes("profile/card"))).toBe(
+      false,
+    );
+  });
   it("creates canonical metadata, containers and private registration; retries readable collisions", async () => {
     const s = await server();
     expect(s.store.docContainerUrls("plan")).toEqual(docContainerUrls(DOC));

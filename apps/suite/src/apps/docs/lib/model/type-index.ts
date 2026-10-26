@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6 — recover missing linked indexes
 // Ported from apps/pod-docs/src/type-index.ts.
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 /**
@@ -11,7 +12,7 @@
  * CSS does not seed these files, so reads tolerate their absence and the app
  * bootstraps a private index when missing.
  */
-import { RdfFetchError } from "@jeswr/fetch-rdf";
+import { type FetchedRdf, RdfFetchError } from "@jeswr/fetch-rdf";
 import { canonicalize, termsEqual } from "@jeswr/suite-vocab";
 import type { DatasetCore } from "@rdfjs/types";
 import {
@@ -133,7 +134,7 @@ export interface EnsureRegistrationsResult {
   indexUrl: string;
   /** How many registrations were newly added (0 = all already present). */
   added: number;
-  /** True when a fresh private index was created and linked. */
+  /** True when private index bootstrap ran (linking it from the profile if needed). */
   bootstrapped: boolean;
 }
 
@@ -179,8 +180,8 @@ async function createIndexDocument(indexUrl: string, fetchImpl: typeof fetch): P
  *
  * Uses only the private index; bootstraps
  * `settings/privateTypeIndex.ttl` under the pod root — and links it from the
- * profile — when no private index exists. Idempotent: existing registrations are left
- * untouched.
+ * profile — when no private index exists. A linked index returning 404 is created
+ * at its advertised URL. Idempotent: existing registrations are left untouched.
  *
  * @param fetchImpl - required account-scoped fetch implementation.
  */
@@ -208,7 +209,16 @@ export async function ensureTypeRegistrations(opts: {
 
   // Re-read and reapply on a concurrent registration instead of replaying stale RDF.
   for (let attempt = 0; ; attempt++) {
-    const { dataset: indexDs, etag: indexEtag } = await readRdf(indexUrl, fetchImpl);
+    let fetched: FetchedRdf;
+    try {
+      fetched = await readRdf(indexUrl, fetchImpl);
+    } catch (error) {
+      if (!(error instanceof RdfFetchError && error.status === 404) || attempt >= 3) throw error;
+      await createIndexDocument(indexUrl, fetchImpl);
+      bootstrapped = true;
+      continue;
+    }
+    const { dataset: indexDs, etag: indexEtag } = fetched;
     const index = new TypeIndexDataset(indexDs, DataFactory);
 
     let added = 0;
