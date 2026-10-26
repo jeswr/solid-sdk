@@ -2,6 +2,8 @@
 /** Storage capability contracts and CID parsing from ADR-002. */
 export { CapabilitiesError } from "./errors.js";
 export { parseLwsDescription } from "./lws-description.js";
+export { probe } from "./probe.js";
+export { resolveStorageDescription } from "./resolve.js";
 export type {
   CapabilityEntry,
   DescriptionCache,

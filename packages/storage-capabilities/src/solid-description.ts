@@ -86,6 +86,7 @@ function isNamedNode(term: Term): boolean {
 export function parseSolidDescription(
   dataset: DatasetCore,
   rootUrl: string,
+  notificationsOnly = false,
 ): Pick<StorageDescription, "services" | "capabilities"> {
   const root = new DescriptionNode(rootUrl, dataset, DataFactory);
   const services: ServiceEntry[] = [];
@@ -107,6 +108,7 @@ export function parseSolidDescription(
       },
     });
   }
+  if (notificationsOnly) return { services, capabilities: [] };
   for (const service of root.nodes(DID.service)) {
     const endpoint = service.iris(DID.serviceEndpoint)[0];
     if (endpoint === undefined) continue;
