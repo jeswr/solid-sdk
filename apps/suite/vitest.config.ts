@@ -10,6 +10,7 @@ export default defineConfig({
       enabled: true,
       provider: "v8",
       include: [
+        "src/apps/home/lib/model/**/*.ts",
         "src/apps/docs/lib/model/**/*.ts",
         "src/apps/health/lib/model/**/*.ts",
         "src/apps/mail/lib/model/**/*.ts",
