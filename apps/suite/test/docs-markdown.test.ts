@@ -21,6 +21,7 @@ const b = (type: string, content: DocsNode[] = [], attrs?: Record<string, unknow
 });
 const p = (...content: DocsNode[]) => b("paragraph", content);
 const doc = (...content: DocsNode[]) => b("doc", content);
+const numericReference = (value: number) => `&${"#"}${value};`;
 const m = (type: string): DocsMark => ({ type });
 function errorCode(action: () => unknown, code: string): void {
   try {
@@ -167,13 +168,13 @@ describe("DOC-L4 Markdown and Docs JSON", () => {
     "&toString;",
     "[ref]: https://example.org/?x=\\&amp;\n\n[ref]",
     "Orphan footnote[^1]",
-    "&#128;",
+    numericReference(128),
     "[x](<https://example.org/?x=\\&amp;>)",
     "&AMP;",
     "&#0;",
     "&#xD800;",
     "&#1114112;",
-    "&#127;",
+    numericReference(127),
     "[bad](javascript:alert(1))",
     "[bad](data:text/plain,hello)",
     "[bad](https://[)",
@@ -237,7 +238,7 @@ describe("DOC-L4 Markdown and Docs JSON", () => {
       "&constructor;",
       "&toString;",
       "Orphan footnote[^1]",
-      "&#128;",
+      numericReference(128),
       "[x](<https://example.org/?x=\\&amp;>)",
       "**bold**",
       "a\\b",
