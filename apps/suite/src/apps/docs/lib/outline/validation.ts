@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { DocumentOutlineError, type NodePath } from "./types";
 
 /** Limits include metadata; the character budget measures input UTF-16 code units. */
@@ -69,16 +70,19 @@ function validateJson(input: unknown): void {
   const ancestors = new Set<object>();
   let values = 0;
   let characters = 0;
+  function countCharacters(value: string): void {
+    characters += value.length;
+    if (characters > DOCUMENT_LIMITS.characters) {
+      throw new DocumentOutlineError("limit-exceeded", "Document exceeds character limit");
+    }
+  }
   function visit(value: unknown, depth: number): void {
     values += 1;
     if (depth > DOCUMENT_LIMITS.depth || values > DOCUMENT_LIMITS.values) {
       throw new DocumentOutlineError("limit-exceeded", "Document exceeds traversal limits");
     }
     if (typeof value === "string") {
-      characters += value.length;
-      if (characters > DOCUMENT_LIMITS.characters) {
-        throw new DocumentOutlineError("limit-exceeded", "Document exceeds character limit");
-      }
+      countCharacters(value);
       if (!value.isWellFormed()) invalid("Expected well-formed Unicode", []);
       return;
     }
@@ -106,6 +110,7 @@ function validateJson(input: unknown): void {
     }
     for (const key of Reflect.ownKeys(descriptors)) {
       if (typeof key !== "string") invalid("Expected string JSON property keys", []);
+      countCharacters(key);
       const descriptor = descriptors[key] as PropertyDescriptor;
       if (!descriptor.enumerable || !("value" in descriptor)) {
         invalid("Expected enumerable JSON data properties", []);

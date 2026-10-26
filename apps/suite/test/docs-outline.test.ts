@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import fc from "fast-check";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createSelectors } from "../src/apps/docs/lib/anchoring";
@@ -545,9 +546,29 @@ describe("fail-closed document validation", () => {
       "limit-exceeded",
     );
     expectError(doc(paragraph("a".repeat(DOCUMENT_LIMITS.characters))), "limit-exceeded");
+    // The type, attrs and note keys plus the doc value consume 16 code units.
     expect(
-      projectPlainText({ type: "doc", attrs: { note: "a".repeat(DOCUMENT_LIMITS.characters - 3) } })
-        .text,
+      projectPlainText({
+        type: "doc",
+        attrs: { note: "a".repeat(DOCUMENT_LIMITS.characters - 16) },
+      }).text,
     ).toBe("");
+  });
+
+  it("counts metadata property names as UTF-16 code units at the character limit", () => {
+    const overhead = "type".length + "doc".length + "attrs".length;
+    const key = "😀".repeat((DOCUMENT_LIMITS.characters - overhead) / 2);
+    expect(projectPlainText({ type: "doc", attrs: { [key]: null } }).text).toBe("");
+    expectError({ type: "doc", attrs: { [`${key}a`]: null } }, "limit-exceeded");
+  });
+
+  it("shares the character budget across nested property names and string values", () => {
+    const overhead = "type".length + "doc".length + "attrs".length;
+    const key = "k".repeat(DOCUMENT_LIMITS.characters / 4);
+    const value = "v".repeat(DOCUMENT_LIMITS.characters - overhead - key.length * 2);
+    const input = { type: "doc", attrs: { [key]: { [key]: value } } };
+    expect(projectPlainText(input).text).toBe("");
+    expectError({ type: "doc", attrs: { [key]: { [`${key}a`]: value } } }, "limit-exceeded");
+    expectError({ type: "doc", attrs: { [key]: { [key]: `${value}a` } } }, "limit-exceeded");
   });
 });
