@@ -1,4 +1,4 @@
-// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY GPT-6.1-Sol
 /** Storage capability contracts and CID parsing from ADR-002. */
 export { capabilities } from "./capabilities.js";
 export { CapabilitiesError } from "./errors.js";

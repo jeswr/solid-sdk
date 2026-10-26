@@ -1,4 +1,4 @@
-// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY GPT-6.1-Sol
 import { describe, expect, test, vi } from "vitest";
 import { probe } from "./probe.js";
 import { ACP } from "./vocab.js";

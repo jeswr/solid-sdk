@@ -1,4 +1,4 @@
-// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY GPT-6.1-Sol
 
 /** A Link field value with its target and anchor context resolved against the response URL. */
 export interface ParsedLink {
