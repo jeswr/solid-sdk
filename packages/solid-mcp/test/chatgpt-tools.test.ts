@@ -227,6 +227,54 @@ describe("fetch representations and byte cap", () => {
   });
 
   it.each([
+    '"@context":"https://evil.example/context"',
+    '"@context":{"@import":"https://evil.example/context"}',
+  ])("normalizes duplicate context keys before parsing: %s", async (discarded) => {
+    const network = vi.fn(() => {
+      throw new Error("Unexpected network");
+    });
+    vi.stubGlobal("fetch", network);
+    const id = `${POD}data`;
+    const pod = makeFakePod({
+      [id]: {
+        contentType: "application/ld+json",
+        body: `{${discarded},"@context":{"name":"http://schema.org/name"},"@id":"#me","name":"Alice"}`,
+      },
+    });
+    const result = await fetchDocument({ fetch: pod.fetch, podRoot: POD }, id);
+    expect(result.text).toContain(`${id}#me`);
+    expect(result.text).toContain('"Alice"');
+    expect(network).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["text/turtle", '<#me> <http://schema.org/name> "Alice" .'],
+    [
+      "application/ld+json",
+      '{"@context":{"name":"http://schema.org/name"},"@id":"#me","name":"Alice"}',
+    ],
+  ])("resolves redirected %s against the effective response URL", async (contentType, body) => {
+    const id = `${POD}alias`;
+    const finalUrl = `${POD}actual/data`;
+    const pod = makeFakePod({
+      [id]: { contentType: "text/plain", body: "", redirectTo: finalUrl },
+      [finalUrl]: { contentType, body },
+    });
+    const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const response = await pod.fetch(input, init);
+      Object.defineProperty(response, "url", { value: String(input) });
+      return response;
+    });
+    const result = await fetchDocument({ fetch, podRoot: POD }, id);
+    const dataset = await parseRdf(result.text, "text/turtle");
+    expect(dataset.getSubjects(null, null, null).map((subject) => subject.value)).toEqual([
+      `${finalUrl}#me`,
+    ]);
+    expect(result).toMatchObject({ id, url: id });
+    expect(fetch.mock.calls.map(([url]) => url)).toEqual([id, finalUrl]);
+  });
+
+  it.each([
     { "@context": "http://127.0.0.1/context" },
     { "@context": [null, "https://evil.example/context"] },
     { "@context": { "@import": "https://evil.example/context" } },

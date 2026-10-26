@@ -5,11 +5,11 @@ import { NamedGraphDataset } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
 import { requirePodScopedUrl, type SolidMcpConfig, scopedFetch } from "./auth.js";
 import {
-  assertLocalJsonLd,
   decodePrefix,
   limitedBody,
   MAX_CONTENT_BYTES,
   mediaType,
+  normalizeLocalJsonLd,
   resourceTitle,
 } from "./content.js";
 import { RDF_MEDIA_TYPES } from "./pod.js";
@@ -58,12 +58,12 @@ export async function fetchDocument(config: SolidMcpConfig, id: string): Promise
   if (rdf) {
     // A partial RDF input cannot safely be parsed; empty text is valid Turtle.
     if (truncated) return result;
-    const source = decodePrefix(bytes, false);
-    if (contentType === "application/ld+json") assertLocalJsonLd(source);
+    const decoded = decodePrefix(bytes, false);
+    const source = contentType === "application/ld+json" ? normalizeLocalJsonLd(decoded) : decoded;
     const dataset = await parseRdf(
       source,
       contentType === "application/x-turtle" ? "text/turtle" : contentType,
-      { baseIRI: target },
+      { baseIRI: response.url || target },
     );
     // Turtle represents a graph, not a dataset. Use the typed wrapper's graph
     // projection to render a union view without constructing RDF statements.

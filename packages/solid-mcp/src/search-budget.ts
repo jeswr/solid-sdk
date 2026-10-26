@@ -1,5 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { assertLocalJsonLd, limitedBody, mediaType } from "./content.js";
+import { limitedBody, mediaType, normalizeLocalJsonLd } from "./content.js";
 
 /** One resource/deadline budget shared by discovery, hints, and the crawl. */
 export class SearchBudget {
@@ -53,14 +53,19 @@ export class SearchBudget {
       const { bytes, truncated } = await limitedBody(response, signal);
       signal.throwIfAborted();
       if (!this.active || truncated) throw new Error("Search response limit reached.");
-      if (mediaType(response.headers.get("content-type")) === "application/ld+json") {
-        assertLocalJsonLd(new TextDecoder().decode(bytes));
-      }
-      return new Response(response.body === null ? null : new Uint8Array(bytes), {
+      const body =
+        mediaType(response.headers.get("content-type")) === "application/ld+json"
+          ? normalizeLocalJsonLd(new TextDecoder().decode(bytes))
+          : new Uint8Array(bytes);
+      const bounded = new Response(response.body === null ? null : body, {
         status: response.status,
         statusText: response.statusText,
         headers: response.headers,
       });
+      // Response's constructor has no URL option; fetchRdf uses this effective
+      // URL as the base for relative RDF references after redirects.
+      Object.defineProperty(bounded, "url", { value: response.url });
+      return bounded;
     }) as typeof fetch;
   }
 }

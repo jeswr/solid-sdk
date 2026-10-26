@@ -48,8 +48,8 @@ export function decodePrefix(bytes: Uint8Array, truncated: boolean): string {
   return new TextDecoder().decode(bytes, { stream: truncated });
 }
 
-/** The pinned RDF parser has no documentLoader seam. Refuse remote contexts. */
-export function assertLocalJsonLd(text: string): void {
+/** Refuse remote contexts and return the exact JSON representation safe to parse. */
+export function normalizeLocalJsonLd(text: string): string {
   const document: unknown = JSON.parse(text);
   function visit(value: unknown, context = false): void {
     if (typeof value === "string" && context) {
@@ -65,6 +65,9 @@ export function assertLocalJsonLd(text: string): void {
     }
   }
   visit(document);
+  // The pinned RDF parser has no documentLoader seam. Re-serialize the checked
+  // object so duplicate keys cannot expose discarded contexts to its parser.
+  return JSON.stringify(document);
 }
 
 export function resourceTitle(url: string): string {

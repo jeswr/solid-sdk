@@ -69,6 +69,75 @@ describe("one bounded search across discovery and scanning", () => {
     expect(hits.map((hit) => hit.url).sort()).toEqual([chat, note].sort());
   });
 
+  it("resolves redirected container children against the effective URL", async () => {
+    const finalUrl = `${POD}actual/`;
+    const child = `${finalUrl}match.ttl`;
+    const pod = makeFakePod({
+      [POD]: { contentType: "text/plain", body: "", redirectTo: finalUrl },
+      [finalUrl]: {
+        contentType: "text/turtle",
+        body: "<> a <http://www.w3.org/ns/ldp#Container>; <http://www.w3.org/ns/ldp#contains> <match.ttl>.",
+      },
+      [child]: { contentType: "text/turtle", body: '<> <https://schema.org/name> "match".' },
+    });
+    const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const response = await pod.fetch(input, init);
+      Object.defineProperty(response, "url", { value: String(input) });
+      return response;
+    });
+    const hits = await search({ fetch, podRoot: POD }, "match");
+    expect(hits.map((hit) => hit.url)).toEqual([child]);
+    expect(fetch.mock.calls.map(([url]) => url)).toEqual([POD, finalUrl, child]);
+  });
+
+  it("preserves the final profile URL for relative Type Index discovery", async () => {
+    const finalProfile = `${POD}actual/card`;
+    const index = `${POD}actual/index.ttl`;
+    const note = `${POD}actual/note.ttl`;
+    const pod = makeFakePod({
+      [WEBID]: {
+        contentType: "text/turtle",
+        body: `<#me> <${SOLID}publicTypeIndex> <index.ttl>.`,
+      },
+      [index]: { contentType: "text/turtle", body: `<#r> <${SOLID}instance> <note.ttl>.` },
+      [note]: { contentType: "text/turtle", body: '<> <https://schema.org/name> "avocado".' },
+      [POD]: { contentType: "text/turtle", body: containerTurtle(POD, []) },
+    });
+    const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const response = await pod.fetch(input, init);
+      Object.defineProperty(response, "url", {
+        value: String(input) === WEBID ? finalProfile : String(input),
+      });
+      return response;
+    });
+    const hits = await search({ fetch, podRoot: POD, webId: WEBID }, "avocado");
+    expect(hits.map((hit) => hit.url)).toEqual([note]);
+    expect(fetch.mock.calls.map(([url]) => url)).toEqual([WEBID, index, note, POD]);
+  });
+
+  it.each([
+    '"@context":"https://evil.example/context"',
+    '"@context":{"@import":"https://evil.example/context"}',
+  ])("normalizes duplicate JSON-LD contexts in discovery: %s", async (discarded) => {
+    const network = vi.fn(() => {
+      throw new Error("Unexpected network");
+    });
+    vi.stubGlobal("fetch", network);
+    const note = `${POD}note.ttl`;
+    const pod = makeFakePod({
+      [WEBID]: {
+        contentType: "application/ld+json",
+        body: `{${discarded},"@context":{"index":{"@id":"${SOLID}publicTypeIndex","@type":"@id"}},"@id":"${WEBID}","index":"${INDEX}"}`,
+      },
+      [INDEX]: { contentType: "text/turtle", body: `<#r> <${SOLID}instance> <${note}>.` },
+      [note]: { contentType: "text/turtle", body: '<> <https://schema.org/name> "avocado".' },
+      [POD]: { contentType: "text/turtle", body: containerTurtle(POD, []) },
+    });
+    const hits = await search({ fetch: pod.fetch, podRoot: POD, webId: WEBID }, "avocado");
+    expect(hits.map((hit) => hit.url)).toEqual([note]);
+    expect(network).not.toHaveBeenCalled();
+  });
+
   it("caps direct index instances together with discovery", async () => {
     const urls = Array.from({ length: 20 }, (_, index) => `${POD}match-${index}.ttl`);
     const pod = makeFakePod({
