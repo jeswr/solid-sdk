@@ -16,3 +16,35 @@ parity test guard changes. Run `pnpm check:tokens` and `pnpm check:contrast` at 
 workspace root. `--input` supplies form control boundaries with at least 3:1 contrast
 against `--background` and `--surface` in both themes. `--border-strong` remains
 the decorative border token. Warning text on `--warning` meets 4.5:1 in both themes.
+
+## DS-02 primitives and atoms
+
+Import `@jeswr/suite-ui/styles/components.css` after the token, theme and density styles.
+Tailwind v4 consumers must scan this package's `src/` (or emitted `dist/`) with `@source`.
+The source preserves Next.js client boundaries; all exports are available from `@jeswr/suite-ui`.
+The shadcn source provenance and MIT notice are in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+`components/ui/` contains the §5 shadcn/Radix primitives, Command (cmdk), Calendar
+(react-day-picker 9), Form (react-hook-form + Zod), Toast (`Toaster` / `toast`, sonner),
+and Resizable. Controls inherit `--control-h` / `--control-h-sm`; focus is a 2px ring
+with a 2px offset. Menus, dialogs and sheets use the suite surface/elevation tokens.
+
+Use `IconButton label="Add item"` for an icon-only action. Its required nonblank label
+supplies both `aria-label` and the hover/focus tooltip. Disabled icon buttons remain
+focusable with `aria-disabled` so the label stays discoverable, and suppress activation.
+The package's AST lint test rejects literal icon-size Button usages without both a name
+and Tooltip. Prefer IconButton for dynamically selected icon sizes as well.
+
+Atoms: `AppIcon app size` (15 apps, 32/40/48); `FileTypeIcon contentType name size`
+(with optional `thumbnailSrc`); `ProvenanceBadge source logoSrc` (root-relative local
+logos, letter fallback on absence/error); native `Kbd`; labelled live `StatusDot`; and
+`CountBadge count` (nonnegative safe integers, visible zero, 99+ cap, full accessible count).
+App/file icons can be `decorative` beside existing text. File metadata takes precedence
+over filename fallback; unknown JSON is not assumed to be JSON-LD.
+
+The dev-only host exposes `/dev/components/primitives`, `/dev/components/atoms`, and
+individual component routes linked from `/dev/components`. `ds-02-components.spec.ts`
+checks axe, keyboard interaction, focus, density, touch targets and 320px reflow, and writes
+full-page screenshots under repo-root `artifacts/screens/DS-02/`. Chromium execution and
+visual comparison belong to the dispatcher. Unit axe checks run in jsdom; contrast is
+covered by the token gate and the browser tests.
