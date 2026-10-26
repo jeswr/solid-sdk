@@ -15,7 +15,7 @@
 
   "type": "App",
   "sector": "https://jeswr.org/ns/sectors/social#sector",
-  "access": ["Read", "Write", "Append"],
+  "access": ["acl:Read", "acl:Write", "acl:Append"],
   "produces": [
     "https://jeswr.org/ns/pod-chat#ChatRoom",
     "https://www.w3.org/ns/activitystreams#Note"
