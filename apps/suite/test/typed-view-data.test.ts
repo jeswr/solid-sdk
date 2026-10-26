@@ -130,6 +130,31 @@ test.each([
 });
 
 test.each([
+  [
+    "schema",
+    "<https://schema.org/email>",
+    "<https://schema.org/telephone>",
+    "a <https://schema.org/Person>",
+  ],
+  ["vcard", "v:hasEmail", "v:hasTelephone", "a v:Individual"],
+])("%s contact literals keep their address without the mailto/tel scheme", async (_, email, phone, type) => {
+  const url = "https://pod.example/contact";
+  const dataset = await parseResource(
+    `@prefix v: <http://www.w3.org/2006/vcard/ns#> .
+     <#it> ${type}; v:fn "Mira"; ${email} "mailto:mira@example.test"; ${phone} "tel:+441234567890" .`,
+    "text/turtle",
+    url,
+  );
+  const data = await typedViewData(dataset, `${url}#it`);
+  expect(data.properties.find((property) => property.key === "email")?.values).toEqual([
+    "mira@example.test",
+  ]);
+  expect(data.properties.find((property) => property.key === "telephone")?.values).toEqual([
+    "+441234567890",
+  ]);
+});
+
+test.each([
   ["value", "iri"],
   ["hasValue", "iri"],
   ["value", "literal"],

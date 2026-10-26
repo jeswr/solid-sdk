@@ -126,10 +126,11 @@ export async function typedViewData(
                 .filter(Boolean)
                 .join(" "),
           );
-        return term.value;
       }
+      // Contact addresses drop their scheme whether stored as an IRI or a literal.
       if (["email", "telephone"].includes(descriptor.key) && /^(mailto:|tel:)/i.test(term.value))
         return term.value.replace(/^(mailto:|tel:)/i, "");
+      if (term.termType === "Literal") return term.value;
       if (term.termType === "NamedNode" && states[canonicalize(term.value)])
         return states[canonicalize(term.value)] as string;
       const linked = subjectOf(dataset, term);
