@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { fetchRdf, RdfFetchError } from "@jeswr/fetch-rdf";
 import type { DatasetCore } from "@rdfjs/types";
 import { ModelError } from "./errors";
@@ -18,7 +19,7 @@ export class RdfIO {
         fetch: this.fetch,
         headers: { "Cache-Control": "no-cache" },
       });
-      return { url, dataset: new Store([...result.dataset]), etag: result.etag };
+      return { url: result.url, dataset: new Store([...result.dataset]), etag: result.etag };
     } catch (error) {
       if (error instanceof RdfFetchError)
         throw new ModelError(error.status ?? 0, url, null, { cause: error });
@@ -62,16 +63,16 @@ export class RdfIO {
     if (!response.ok) throw new ModelError(response.status, url, response.headers.get("ETag"));
     return response;
   }
-  async container(url: string): Promise<void> {
+  async container(url: string): Promise<Resource | undefined> {
     const dataset = new Store();
     const value = node(url, dataset);
     value.types.add(`${NS.LDP}BasicContainer`);
     try {
-      await this.write(url, dataset, { create: true });
+      return await this.write(url, dataset, { create: true });
     } catch (error) {
       if (!(error instanceof ModelError && error.status === 412)) throw error;
       const existing = await this.read(url);
-      const types = node(url, existing.dataset).types;
+      const types = node(existing.url, existing.dataset).types;
       if (!types.has(`${NS.LDP}BasicContainer`) && !types.has(`${NS.LDP}Container`))
         throw new TypeError("Expected an LDP container.");
     }
@@ -79,7 +80,7 @@ export class RdfIO {
   async list(url: string): Promise<string[]> {
     const resource = await this.optional(url);
     if (!resource) return [];
-    return [...node(url, resource.dataset).iris(`${NS.LDP}contains`)];
+    return [...node(resource.url, resource.dataset).iris(`${NS.LDP}contains`)];
   }
 }
 export function requireEtag(value: string | null): string {

@@ -25,6 +25,69 @@ function store(pod: Pod, extra = {}) {
 afterEach(() => vi.restoreAllMocks());
 
 describe("project discovery and first use", () => {
+  it.each([
+    "container",
+    "registration",
+  ])("compensates failed %s creation and reuses the project slug on retry", async (failure) => {
+    const pod = new Pod();
+    const tasks = store(pod);
+    const url = `${projects}home.ttl`;
+    pod.intercept = (request) =>
+      request.method === "PUT" &&
+      request.url === (failure === "container" ? `${projects}home/` : indexUrl)
+        ? new Response(null, { status: 503 })
+        : undefined;
+    await expect(tasks.createProject("Home")).rejects.toMatchObject({ status: 503 });
+    expect(pod.files.has(url)).toBe(false);
+    expect(await tasks.listProjects()).toEqual([]);
+    expect(
+      pod.requests
+        .find((request) => request.method === "DELETE" && request.url === url)
+        ?.headers.get("If-Match"),
+    ).toBe('"1"');
+    pod.intercept = undefined;
+    // A new model instance also reuses the identity after compensation.
+    expect((await store(pod).createProject("Home")).url).toBe(url);
+    expect((await tasks.listProjects()).map((project) => project.url)).toEqual([url]);
+    expect(await new RdfIO(pod.fetch).list(`${projects}home/`)).toEqual([]);
+  });
+  it("blocks a new reservation until failed compensation succeeds", async () => {
+    const pod = new Pod();
+    const tasks = store(pod, { typeIndex: false });
+    const url = `${projects}home.ttl`;
+    pod.intercept = (request) =>
+      request.method === "DELETE" ||
+      (request.method === "PUT" && request.url === `${projects}home/`)
+        ? new Response(null, { status: 503 })
+        : undefined;
+    await expect(tasks.createProject("Home")).rejects.toThrow(AggregateError);
+    const reservations = () =>
+      pod.mutations().filter((request) => request.method === "PUT" && request.url.endsWith(".ttl"));
+    await expect(tasks.createProject("Home")).rejects.toMatchObject({ status: 503 });
+    expect(reservations()).toHaveLength(1);
+    pod.intercept = undefined;
+    expect((await tasks.createProject("Home")).url).toBe(url);
+    expect(reservations().map((request) => request.url)).toEqual([url, url]);
+  });
+  it("does not compensate over concurrent edits and accepts an already removed tracker", async () => {
+    const pod = new Pod();
+    const tasks = store(pod, { typeIndex: false });
+    const url = `${projects}home.ttl`;
+    pod.intercept = (request) => {
+      if (request.method === "PUT" && request.url === `${projects}home/`) {
+        pod.seed(url, `<#this> a <${NS.WF}Tracker>; <${NS.DCT}title> "Concurrent".`);
+        return new Response(null, { status: 503 });
+      }
+      return undefined;
+    };
+    await expect(tasks.createProject("Home")).rejects.toThrow(AggregateError);
+    expect((await tasks.readProject(url)).tracker.title).toBe("Concurrent");
+    await expect(tasks.createProject("Home")).rejects.toMatchObject({ status: 412 });
+    pod.intercept = (request) =>
+      request.method === "DELETE" ? new Response(null, { status: 404 }) : undefined;
+    pod.files.delete(url);
+    expect((await tasks.createProject("Home")).url).toBe(url);
+  });
   it("creates the Inbox, its hierarchy and private Type Index registrations idempotently", async () => {
     const pod = new Pod();
     const tasks = store(pod);
@@ -205,6 +268,84 @@ describe("project discovery and first use", () => {
   });
 });
 describe("task conditional CRUD", () => {
+  it("uses final response identities for redirected tasks, projects and container listings", async () => {
+    const pod = new Pod();
+    const tasks = store(pod, { typeIndex: false });
+    const home = `${storage}canonical/home.ttl`;
+    const container = `${storage}canonical/tasks/`;
+    const taskUrl = `${container}item.ttl`;
+    const projectAlias = `${projects}home.ttl`;
+    const taskAlias = `${projects}home/item.ttl`;
+    const containerAlias = `${projects}home/`;
+    await pod.emptyContainer(`${storage}canonical/`);
+    await pod.emptyContainer(container);
+    pod.seed(
+      home,
+      `<#this> a <${NS.WF}Tracker>; <${NS.DCT}title> "Home"; <${NS.WF}stateStore> <tasks/>.`,
+    );
+    pod.seed(taskUrl, `<#it> a <${NS.WF}Task>, <${NS.WF}Open>; <${NS.DCT}title> "Task".`);
+    const redirects = new Map([
+      [
+        projects,
+        {
+          url: `${storage}canonical/projects/`,
+          body: `<> a <${NS.LDP}BasicContainer>; <${NS.LDP}contains> <${projectAlias}>.`,
+        },
+      ],
+      [projectAlias, { url: home, body: pod.files.get(home)?.body as string }],
+      [
+        containerAlias,
+        {
+          url: container,
+          body: `<> a <${NS.LDP}BasicContainer>; <${NS.LDP}contains> <${taskAlias}>.`,
+        },
+      ],
+      [taskAlias, { url: taskUrl, body: pod.files.get(taskUrl)?.body as string }],
+    ]);
+    pod.intercept = (request) => {
+      const redirect = redirects.get(request.url);
+      if (!redirect) return undefined;
+      if (request.method === "PUT") return new Response(null, { status: 412 });
+      const response = new Response(redirect.body, {
+        headers: {
+          "Content-Type": "text/turtle",
+          ETag: '"1"',
+        },
+      });
+      Object.defineProperty(response, "url", { value: redirect.url });
+      return response;
+    };
+    const io = new RdfIO(pod.fetch);
+    expect((await io.read(projectAlias)).url).toBe(home);
+    await expect(io.container(containerAlias)).resolves.toBeUndefined();
+    expect(await io.list(containerAlias)).toEqual([taskAlias]);
+    const project = await tasks.readProject(projectAlias);
+    expect(project.url).toBe(home);
+    expect(project.tracker.id).toBe(`${home}#this`);
+    expect((await tasks.listProjects()).map((item) => item.tracker.id)).toEqual([`${home}#this`]);
+    const task = await tasks.readTask(taskAlias);
+    expect(task.url).toBe(taskUrl);
+    expect(task.task.id).toBe(`${taskUrl}#it`);
+    expect((await tasks.listTasks(containerAlias)).map((item) => item.task.id)).toEqual([
+      `${taskUrl}#it`,
+    ]);
+    const updated = await tasks.updateTask(task, (item) => {
+      item.title = "Updated";
+    });
+    expect(updated.url).toBe(taskUrl);
+    expect((await tasks.readTask(taskUrl)).task.title).toBe("Updated");
+    const updatedProject = await tasks.updateProject(project, (item) => {
+      item.title = "Renamed";
+    });
+    expect(updatedProject.url).toBe(home);
+    await tasks.deleteTask(updated);
+    expect(
+      pod
+        .mutations()
+        .filter((request) => request.method === "DELETE")
+        .map((request) => request.url),
+    ).toEqual([taskUrl]);
+  });
   it("clears all-day markers on due-date edits and rejects conflicting persisted dates", async () => {
     const pod = new Pod();
     const tasks = store(pod);
@@ -493,7 +634,7 @@ describe("transport failures and typed classification", () => {
     pod.intercept = () => new Response(null, { status: 201 });
     expect((await io.write(`${storage}new.ttl`, new Store(), { create: true })).etag).toBeNull();
     pod.intercept = undefined;
-    await expect(io.container(`${storage}new/`)).resolves.toBeUndefined();
+    expect((await io.container(`${storage}new/`))?.url).toBe(`${storage}new/`);
     pod.seed(`${storage}file/`, `<${storage}file/> <${NS.DCT}title> "Not a container".`);
     await expect(io.container(`${storage}file/`)).rejects.toThrow("LDP container");
     pod.seed(`${storage}generic/`, `<${storage}generic/> a <${NS.LDP}Container>.`);

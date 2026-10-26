@@ -29,6 +29,7 @@ export class TaskStore {
   private readonly index: TypeIndex;
   private readonly now: () => Date;
   private readonly uuid: () => string;
+  private readonly pendingCleanup = new Map<string, Resource>();
   constructor(private readonly options: StoreOptions) {
     this.projects = new URL("tasks/projects/", options.storage).href;
     this.io = new RdfIO(options.fetch);
@@ -54,7 +55,7 @@ export class TaskStore {
     const projects: StoredProject[] = [];
     for (const url of urls) {
       const resource = await this.io.read(url);
-      const tracker = new TaskTracker(`${url}#this`, resource.dataset, DataFactory);
+      const tracker = new TaskTracker(`${resource.url}#this`, resource.dataset, DataFactory);
       if (tracker.isTracker) projects.push({ ...resource, tracker });
     }
     return projects.sort((a, b) => (a.tracker.position ?? 0) - (b.tracker.position ?? 0));
@@ -87,6 +88,8 @@ export class TaskStore {
   }
   async createProject(title: string, inbox = false): Promise<StoredProject> {
     requireTitle(title);
+    // If compensation previously failed, finish it before reserving another identity.
+    for (const resource of this.pendingCleanup.values()) await this.cleanupProject(resource);
     await this.io.container(new URL("tasks/", this.options.storage).href);
     await this.io.container(this.projects);
     const used = (await this.io.list(this.projects)).map((url) => {
@@ -106,14 +109,36 @@ export class TaskStore {
         used.push(name);
         continue;
       }
-      await this.io.container(stateStore);
-      await this.register(stateStore);
+      let container: Resource | undefined;
+      try {
+        container = await this.io.container(stateStore);
+        await this.register(stateStore);
+      } catch (error) {
+        this.pendingCleanup.set(resource.url, resource);
+        // Only delete a task container reserved by this attempt, using its validator.
+        if (container) this.pendingCleanup.set(container.url, container);
+        try {
+          await this.cleanupProject(resource);
+          if (container) await this.cleanupProject(container);
+        } catch (cleanupError) {
+          throw new AggregateError([error, cleanupError], "Project creation and cleanup failed.");
+        }
+        throw error;
+      }
       return {
         ...resource,
         tracker: new TaskTracker(`${url}#this`, resource.dataset, DataFactory),
       };
     }
     throw new ModelError(409, this.projects);
+  }
+  private async cleanupProject(resource: Resource): Promise<void> {
+    try {
+      await this.io.remove(resource.url, resource.etag);
+    } catch (error) {
+      if (!(error instanceof ModelError && error.status === 404)) throw error;
+    }
+    this.pendingCleanup.delete(resource.url);
   }
   async updateProject(
     project: StoredProject,
@@ -138,7 +163,7 @@ export class TaskStore {
     for (const url of await this.io.list(stateStore)) {
       if (!url.endsWith(".ttl")) continue;
       const resource = await this.io.read(url);
-      const task = new TaskItem(`${url}#it`, resource.dataset, DataFactory);
+      const task = new TaskItem(`${resource.url}#it`, resource.dataset, DataFactory);
       if (task.isTask) tasks.push({ ...resource, task });
     }
     return tasks;
