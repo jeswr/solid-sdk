@@ -45,3 +45,19 @@ Scope/assumptions: CAL-00 is absent in this base, so compatibility follows the s
 | `git diff --check` | PASS. |
 
 No dependencies added, so no `check:packages` commands were needed. No UI changes or screenshots. `roborev` remains unavailable on PATH; dispatcher review is still required. All four requested fixes are implemented; no open questions. Conservative compatibility choice: retain the singular reminder attachment field for existing exporters while using the collection for imported EMAIL attachments.
+
+## Fix round 2 — review of `a881975b7d00`
+
+- `02a813b3` — `fix: accept valid calendar clock and integer forms`: addresses all three findings. TZID start/end ordering is deferred to a timezone resolver even for equal TZIDs; DATE, floating and UTC ordering checks remain enforced. Alarm REPEAT accepts an explicit plus sign before nonnegative safe-integer validation. BYDAY accepts signed or unsigned two-digit padded ordinals in the existing 1–53 range. Regression tests exercise imports/exports, the New York DST gap in both directions, equal TZID clocks, malformed integer/ordinal spellings, numeric boundaries, and unchanged frequency restrictions. The ICS README documents the timezone validation boundary.
+- Final documentation commit — `docs: record ICS round two verification`: this verification record.
+
+| Exact command | Result |
+| --- | --- |
+| `pnpm --filter @jeswr/suite-ui run build` | PASS; existing workspace prerequisite built. |
+| `pnpm --filter @jeswr/app-suite run lint && pnpm --filter @jeswr/app-suite run build && pnpm --filter @jeswr/app-suite run typecheck && pnpm --filter @jeswr/app-suite run test` | PASS; production build, lint, strict TypeScript and 240 tests in 2 files. ICS coverage: 100% statements (324/324), branches (262/262), functions (48/48), lines (286/286). |
+| `pnpm run lint:root` | PASS; all root checks, including 74 contrast pairs with zero failures. |
+| `TURBO_SCM_BASE=a881975b7d00cfb011fa38e1911974e0dde5f395 pnpm run gate` | PASS; 6/6 Turbo tasks successful. |
+| `pnpm run gate:full` | FAIL outside the changed app: existing `@jeswr/unstorage-solid#build` dependency bootstrap runs npm install and receives EROFS writing `/home/runner/.npm/_cacache/tmp/`. Same environment blocker as prior rounds; no unrelated changes made. |
+| `git diff --check` | PASS. |
+
+No dependencies added, so no `check:packages` commands were needed. No UI changes or screenshots. The `roborev-review` skill was read; `roborev` remains unavailable on PATH, so dispatcher review is still required. All three requested fixes are implemented; no open questions. TZID values remain opaque wall clocks for callers to resolve, as requested; no timezone engine was added.
