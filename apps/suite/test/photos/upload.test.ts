@@ -69,6 +69,34 @@ describe("EXIF extraction and upload preparation", () => {
     expect(await readExif(empty.buffer)).toEqual({});
     await expect(readExif(new ArrayBuffer(2))).rejects.toThrow();
   });
+  it("prepares a real WebP without unsupported EXIF parsing and still validates pixels", async () => {
+    // Lossless one-pixel WebP, not a TIFF relabelled with a different media type.
+    const webp = new Blob(
+      [Buffer.from("UklGRhoAAABXRUJQVlA4TA0AAAAvAAAAEAcQERGIiP4HAA==", "base64")],
+      { type: "image/webp" },
+    );
+    expect(await readExif(await webp.arrayBuffer())).toEqual({});
+    const image = encoder();
+    image.dimensions = vi.fn(async () => ({ width: 1, height: 1 }));
+    const prepared = await preparePhoto(storage, { ...input, original: webp }, image, now);
+    expect(prepared.photo.contentUrl).toBe(`${storage}photos/originals/one.webp`);
+    expect(prepared.photo.exif).toEqual({ pixelWidth: 1, pixelHeight: 1 });
+    expect(prepared.original).toBe(webp);
+    expect(image.thumbnail).toHaveBeenCalledWith(webp, {
+      width: 1,
+      height: 1,
+      orientation: 1,
+      contentType: "image/webp",
+    });
+    image.dimensions = async () => {
+      throw new Error("Invalid WebP pixels");
+    };
+    await expect(preparePhoto(storage, { ...input, original: webp }, image, now)).rejects.toThrow(
+      "Invalid WebP pixels",
+    );
+    // A different RIFF container must still be rejected by the EXIF reader.
+    await expect(readExif(new TextEncoder().encode("RIFF1234WAVE").buffer)).rejects.toThrow();
+  });
   it("prepares fixed paths and passes raw orientation to the injected encoder", async () => {
     const image = encoder();
     const prepared = await preparePhoto(storage, input, image, now);

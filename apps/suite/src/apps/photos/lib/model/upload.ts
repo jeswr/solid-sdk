@@ -38,6 +38,14 @@ export function mapExif(tags: Record<string, unknown>): ExifMetadata {
 }
 
 export async function readExif(bytes: ArrayBuffer): Promise<ExifMetadata> {
+  // exifr 7 has no WebP reader. Let the encoder validate/decode these images;
+  // omit their metadata rather than failing the upload on an unsupported container.
+  const header = new Uint8Array(bytes, 0, Math.min(bytes.byteLength, 12));
+  if (
+    String.fromCharCode(...header.slice(0, 4)) === "RIFF" &&
+    String.fromCharCode(...header.slice(8, 12)) === "WEBP"
+  )
+    return {};
   const tags: Record<string, unknown> | undefined = await parse(bytes, {
     translateValues: false,
     reviveValues: false,
