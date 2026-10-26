@@ -3,7 +3,7 @@ import type { OdrlDuty, OdrlPolicy, OdrlRule } from "@jeswr/solid-odrl";
 import { ACTION_IRI, evaluate, IRI_TO_ACTION, policyFromRdf } from "@jeswr/solid-odrl";
 import type { DatasetCore, Term } from "@rdfjs/types";
 import { DataFactory } from "n3";
-import { PolicyIdentifierCollisionError } from "./errors.js";
+import { PolicyIdentifierCollisionError, PolicySubjectUnsupportedError } from "./errors.js";
 import type { PolicyContext, PolicyResult } from "./types.js";
 
 const ODRL = "http://www.w3.org/ns/odrl/2/";
@@ -13,6 +13,25 @@ const key = (term: Term) => `${term.termType}:${term.value}`;
 /** Add trace IDs to the parsed model; never rewrite the RDF or its evaluation inputs. */
 function identifiedPolicy(data: DatasetCore, policy: OdrlPolicy): OdrlPolicy {
   const quads = [...data];
+  // solid-odrl projects a subject's value into policy.id, losing its term type.
+  // Recover it from recognized policy type assertions, never unrelated subjects.
+  const subjects = new Map<string, Term>();
+  const rdfType = DataFactory.namedNode("http://www.w3.org/1999/02/22-rdf-syntax-ns#type");
+  const policyTypes = ["Policy", "Set", "Offer", "Agreement"].map((name) =>
+    DataFactory.namedNode(ODRL + name),
+  );
+  for (const q of quads) {
+    if (
+      q.subject.value === policy.id &&
+      q.predicate.equals(rdfType) &&
+      policyTypes.some((type) => q.object.equals(type))
+    ) {
+      subjects.set(key(q.subject), q.subject);
+    }
+  }
+  const [subject] = subjects.values();
+  if (subjects.size !== 1 || !subject) throw new PolicySubjectUnsupportedError(policy.id);
+  const root = subject;
   const namedNodes = new Set<string>();
   for (const q of quads) {
     for (const term of [q.subject, q.predicate, q.object, q.graph]) {
@@ -35,7 +54,7 @@ function identifiedPolicy(data: DatasetCore, policy: OdrlPolicy): OdrlPolicy {
   // Dataset iteration order is the document order available at this API boundary.
   for (const q of quads) {
     if (
-      q.subject.value === policy.id &&
+      q.subject.equals(root) &&
       ["permission", "prohibition"].some((name) => q.predicate.value === ODRL + name)
     ) {
       identify(q.object, "rule", rules);
@@ -44,7 +63,7 @@ function identifiedPolicy(data: DatasetCore, policy: OdrlPolicy): OdrlPolicy {
   for (const q of quads) {
     if (
       (rules.has(key(q.subject)) && q.predicate.value === `${ODRL}duty`) ||
-      (q.subject.value === policy.id && q.predicate.value === `${ODRL}obligation`)
+      (q.subject.equals(root) && q.predicate.value === `${ODRL}obligation`)
     ) {
       identify(q.object, "duty", duties);
     }
@@ -60,8 +79,6 @@ function identifiedPolicy(data: DatasetCore, policy: OdrlPolicy): OdrlPolicy {
         ),
       );
   }
-  const root = quads.find((q) => q.subject.value === policy.id)?.subject;
-  if (!root) throw new Error("Policy trace is missing its subject");
   function dutyIds(
     values: readonly OdrlDuty[] | undefined,
     owner: Term,
@@ -71,7 +88,7 @@ function identifiedPolicy(data: DatasetCore, policy: OdrlPolicy): OdrlPolicy {
     return (values ?? []).map((duty, i) => ({ ...duty, id: duties.get(key(terms[i] as Term)) }));
   }
   function ruleIds(values: readonly OdrlRule[] | undefined, relation: string): OdrlRule[] {
-    const terms = references(root as Term, relation);
+    const terms = references(root, relation);
     return (values ?? []).map((rule, i) => {
       const term = terms[i] as Term;
       return {
