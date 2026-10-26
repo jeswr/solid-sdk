@@ -30,3 +30,7 @@ recording and per-adapter vocab-map.ts hooks. Preserve ETags on automatic merges
 advance checkpoints on failure. The fixture recorder exposes only allowlisted non-personal JSON
 fields under configured public route prefixes; it never saves headers or dynamic URLs. Detailed
 adapter mappings and Node CLI remain owned by their follow-on connector tasks.
+
+CON-14 adds the optional `PodWriter.writeBinary` port and `ctx.writeBinary` for non-RDF
+resources. Keep binaries inside the connector container, never send RDF through it, default
+to create-only, and replace only under a strong ETag.
