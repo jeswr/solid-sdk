@@ -1,85 +1,85 @@
 <!-- AUTHORED-BY Codex GPT-6 -->
 
-# Lane sst-8xm.30 — T-004, PR CI loading fix
+# Lane sst-8xm.30 — fix round 6
 
-Date: 2026-10-26. Branch: `lane/sst-8xm.30`.
+Date: 2026-10-26. Branch: `lane/sst-8xm.30`. Starting head: `539f09bd`.
 
-## Integration and commits
+## Commits and scope
 
-The requested `git merge --no-edit sdk/t-004-fetch-rdf` failed because that local
-branch name is absent. Merged the already-stored local ref
-`origin/sdk/t-004-fetch-rdf` instead, using signing-disabled git: fast-forward
-from `c53be0b1` to `63c34f6e`. This includes the integrator's main merge and
-deletion of the obsolete rdf-engine scaffold test. No fetch or network merge ran.
-The referenced `lanes/briefs/` directory is absent in this checkout; the supplied
-brief, previous STATUS.md and repository history supplied the context.
+- `9af449d5 fix: bundle federation OIDC context offline` — bundle the complete
+  Solid OIDC JSON-LD context separately in federation-client and federation-registry;
+  use an inline-only documentLoader for client verification, source/member listing,
+  and registry/storage body and fetch loading. Add 15 regression cases covering
+  successful offline loading and refusal of unknown, additional, scoped, and
+  lookalike context URLs. Context provenance and license are recorded beside each copy.
+- Final report commit: `docs: report federation context fix validation` — this file,
+  edited last after implementation and validation.
 
-- `e147733e fix: restore buffered RDF parsing completion` — restore the published
-  synchronous N3 parser path for strings, add regression coverage and document
-  the distinction between buffered and streamed bodies.
-- Final report commit: `docs: report RDF loading fix validation` — this file,
-  edited last after validation.
+Only finding 2 in `solid-sdk-lane-sst-8xm.30-539f09bd1ec7.md` was addressed.
+The conservative context allowlist contains exactly
+`https://www.w3.org/ns/solid/oidc-context.jsonld`. Every other remote context is
+refused, including nested loads. Context documents are cloned before use and
+embedded by the existing package builds. No runtime context download or public
+loader option was added. No dependencies, manifests, lockfiles, or fetch-rdf
+policy were changed; `check:packages` was not needed.
 
-## Cause and fix
-
-The six suites named in the brief live in `packages/solid-components`, rather
-than solid-elements. Their injected fetch reads reach `parseToStore`, which
-buffers the Response body and calls `parseRdf` with a string. The published
-implementation used `N3.Parser.parse` for N3-family strings; the imported version
-used `StreamParser`, whose completion needs an event-loop turn beyond the
-consumer's promise-based render flush. The reads eventually finish, but only
-after the test helper exhausts its microtask loop and reports Loading.
-
-Conservatively restored the prior parsing behavior for already-buffered Turtle,
-N-Triples, N-Quads and TriG strings. Response streams still use incremental
-parsing. Structured parse errors, base IRI resolution and graph preservation
-remain covered. JSON-LD and its refused-by-default remote context policy are
-unchanged. No consumer tests, timeouts, dependencies or manifests were changed.
-
-Before the fix, the six named suites had **22 failures / 48 tests**, including
-the reported Loading symptoms. Four focused buffered-format regressions also
-failed against the previous source. All pass with the fix.
+Findings 1 and 3 are the pre-existing VOC-02 issues tracked as VOC-05 and remain
+untouched, as directed. The shipped Pod Docs document now parses offline; its
+canonical federation namespace still produces the existing `no-app` validation
+issue rather than `parse-failed`. The regression explicitly preserves that scope.
 
 ## Validation
 
-PASS (exit 0):
+All required touched-package gates and root lint passed (exit 0):
 
 ```sh
-pnpm exec turbo run lint build typecheck test --filter=@jeswr/fetch-rdf --concurrency=4
-pnpm exec turbo run lint build typecheck test --filter=@jeswr/solid-components --concurrency=4
-pnpm exec turbo run lint build typecheck test --filter=@jeswr/solid-elements --concurrency=4
-git diff 63c34f6e --check
+pnpm run lint:root
+pnpm exec turbo run lint build typecheck test --filter=...@jeswr/federation-client --filter=...@jeswr/federation-registry --concurrency=4
+pnpm --filter @jeswr/federation-client run test:coverage
+pnpm --filter @jeswr/federation-registry run test:coverage
 ```
 
-- Fetch-rdf: **5/5 tasks**, **7 files / 73 tests**, including context refusal,
-  streaming teardown and response cancellation tests.
-- Solid-components: **11/11 tasks**, **21 files / 204 tests**, including all six
-  named suites and packaged-output checks.
-- Solid-elements: **7/7 tasks**, **15 files / 324 tests**, manifest checks pass.
+- Turbo: **12/12 tasks successful**, 3 cached. Dependency builds ran first.
+  The dependent selectors resolve to the two touched packages; there are no
+  additional workspace dependents to test.
+- federation-client: **15 files / 220 tests passed**, including 9 new tests.
+- federation-registry: **8 files / 107 tests passed**, including 6 new tests.
+- Coverage: both commands passed; each new context loader has **100% statements,
+  branches, functions, and lines**. Overall statement/line coverage is 99.25% for
+  federation-client and 99.05% for federation-registry.
+- Root lint passed all guards, token checks, and 74 contrast pairs.
 
-FAIL (exit 1), both run before the final commit:
+Focused tests also passed independently (exit 0):
 
 ```sh
-pnpm run gate
-pnpm run gate:full
+pnpm --filter @jeswr/federation-client exec vitest run test/offline-contexts.test.ts
+pnpm --filter @jeswr/federation-registry exec vitest run test/offline-contexts.test.ts
 ```
 
-The affected gate completed **206 successful / 258 total tasks** (98 cached).
-The full gate completed **116 successful / 251 total tasks** (88 cached).
-Both stop at `@jeswr/federation-codegen#test`: generator.test.ts expects legacy
-`https://w3id.org/jeswr/sectors/bookmarks#Bookmark`, but the ontology now uses
-`https://jeswr.org/ns/sectors/bookmarks#Bookmark`; committed generator output
-also differs from fresh generation. Both failures reproduced before this fix.
-Root lint passed. Cancelled or unrun workspace tasks are not claimed to pass.
-These vocabulary/generator changes are outside the brief and were left alone.
+Before the implementation, the positive cases failed on both body and fetch
+paths, the client source/member listing paths, and the shipped Pod Docs document.
+The test setup first built workspace dependencies using
+`pnpm exec turbo run build --filter=@jeswr/federation-client --concurrency=4`
+(exit 0); direct Vitest cannot resolve fetch-rdf before its dist exists.
 
-Roborev is unavailable on PATH, so no automated per-commit review verdict was
-obtained. Manual review checked string/stream dispatch, error metadata and
-unchanged JSON-LD context handling.
+Additional checks passed:
 
-## Remaining work
+- A `node --input-type=module` artifact smoke test imported both built packages,
+  exercised client verify/list and registry loading with global fetch disabled,
+  confirmed unknown contexts fail, and checked context data is inline in the
+  emitted bundles with no JSON imports.
+- Both bundled JSON documents match the complete canonical W3C context after
+  formatting (deep equality against the downloaded document).
+- `git diff --check` and the staged equivalent passed.
 
-The requested loading fix is complete. The integrator must resolve the existing
-federation-codegen vocabulary/output mismatch to obtain a green workspace gate.
-No open implementation questions. No push, PR, branch switch, other-checkout
-change or dependency addition was made. STATUS.md was edited last.
+Per the lane brief, the whole-workspace gate was not rerun. Its previously
+reported federation vocabulary/codegen failures are outside this fix's scope.
+Roborev is unavailable on PATH, so no automated per-commit verdict was obtained.
+Manual review checked all federation parse/fetch call sites, exact-URL refusal,
+cloned context isolation, unchanged APIs, and bundled build output.
+
+## Remaining work and questions
+
+Finding 2 is complete. No open implementation questions or blockers.
+Findings 1 and 3 remain with VOC-05. No push, PR, branch switch, remote git fetch,
+merge, or other-checkout modification was performed. STATUS.md was edited last.
