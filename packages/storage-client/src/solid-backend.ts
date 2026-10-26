@@ -1,7 +1,6 @@
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6.1-Sol
 // Solid backend, read side (ADR-003 §6, T-021). Writes arrive with T-022.
-import { isWithinPodScope } from "@jeswr/guarded-fetch";
 import { deriveFeatures, type Features } from "@jeswr/storage-capabilities";
 import { LiteralAs, OptionalFrom } from "@rdfjs/wrapper";
 import { Container, Resource } from "@solid/object/solid";
@@ -253,7 +252,12 @@ export function createSolidBackend(options: SolidBackendOptions): StorageClient 
     },
 
     isWithinStorage(url) {
-      return URL.canParse(url) && isWithinPodScope(root, url);
+      try {
+        scoped(root, "GET", url);
+        return true;
+      } catch {
+        return false;
+      }
     },
   };
   return client;

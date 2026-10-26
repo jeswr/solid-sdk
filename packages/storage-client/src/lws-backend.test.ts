@@ -57,10 +57,10 @@ function listing(raw: unknown = pageBody(), headers: Record<string, string> = {}
   });
 }
 
-function metadata(raw: unknown, contentType = "application/linkset+json") {
+function metadata(raw: unknown, contentType = "application/linkset+json", url = `${NOTE}.meta`) {
   return backend({
-    [`HEAD ${NOTE}`]: { status: 200, headers: { link: `<${NOTE}.meta>; rel="linkset"` } },
-    [`GET ${NOTE}.meta`]: {
+    [`HEAD ${NOTE}`]: { status: 200, headers: { link: `<${url}>; rel="linkset"` } },
+    [`GET ${url}`]: {
       status: 200,
       headers: { "content-type": contentType },
       body: JSON.stringify(raw),
@@ -693,6 +693,92 @@ describe("scope and foreign storage responses", () => {
 });
 
 describe("RFC 9264 metadata", () => {
+  test.each([
+    0, 1,
+  ])("bounds targets across all contexts and relations (excess %i)", async (excess) => {
+    const targets = (length: number) => Array.from({ length }, () => ({ href: "#x" }));
+    const raw = {
+      linkset: [
+        { anchor: NOTE, related: targets(4000), license: targets(2000) },
+        { anchor: NOTE, related: targets(2000) },
+        { anchor: FOREIGN, related: targets(2000 + excess) },
+      ],
+    };
+    const result = metadata(raw).storage.metadata(NOTE);
+    if (excess) await rejects(result);
+    else {
+      const { links } = await result;
+      expect(links.get(NOTE)?.get("related")).toHaveLength(6000);
+      expect(links.get(NOTE)?.get("license")).toHaveLength(2000);
+      expect(links.get(FOREIGN)?.get("related")).toHaveLength(2000);
+    }
+  });
+
+  test.each([
+    0, 1,
+  ])("bounds cumulative resolved anchor and href lengths (excess %i)", async (excess) => {
+    const cap = 4 * 1024 * 1024;
+    const url = `${NOTE}.meta?q=${"x".repeat(60000)}`;
+    const expanded = new URL("#x", url).href;
+    const length = Math.floor((cap - NOTE.length) / expanded.length);
+    const remaining = cap - NOTE.length - length * expanded.length;
+    const finalHref = `urn:${"x".repeat(remaining - 4 + excess)}`;
+    const raw = {
+      linkset: [
+        {
+          anchor: NOTE,
+          related: [...Array.from({ length }, () => ({ href: "#x" })), { href: finalHref }],
+        },
+      ],
+    };
+    // The wire body is small; relative references amplify only during URL resolution.
+    expect(JSON.stringify(raw).length).toBeLessThan(100000);
+    const result = metadata(raw, "application/linkset+json", url).storage.metadata(NOTE);
+    if (excess) await rejects(result);
+    else {
+      const { links } = await result;
+      const related = links.get(NOTE)?.get("related");
+      expect(related).toHaveLength(length + 1);
+      expect(related?.[0]?.href).toBe(expanded);
+      expect(related?.at(-1)?.href).toBe(finalHref);
+    }
+  });
+
+  test("rejects thousands of fragments expanded against a long query", async () => {
+    const url = `${NOTE}.meta?q=${"x".repeat(60000)}`;
+    const raw = {
+      linkset: [
+        {
+          anchor: NOTE,
+          related: Array.from({ length: 5000 }, (_, i) => ({ href: `#${i}` })),
+        },
+      ],
+    };
+    expect(JSON.stringify(raw).length).toBeLessThan(100000);
+    await rejects(metadata(raw, "application/linkset+json", url).storage.metadata(NOTE));
+    expect(
+      (await metadata({ linkset: [] }, "application/linkset+json", url).storage.metadata(NOTE))
+        .links.size,
+    ).toBe(0);
+  });
+
+  test("bounds resolved anchors even without any targets", async () => {
+    const url = `${NOTE}.meta?q=${"x".repeat(60000)}`;
+    const length = Math.floor((4 * 1024 * 1024) / url.length);
+    const contexts = Array.from({ length }, () => ({ anchor: "" }));
+    const { links } = await metadata(
+      { linkset: contexts },
+      "application/linkset+json",
+      url,
+    ).storage.metadata(NOTE);
+    expect(links.size).toBe(1);
+    expect(links.get(url)?.size).toBe(0);
+    contexts.push({ anchor: "" });
+    await rejects(
+      metadata({ linkset: contexts }, "application/linkset+json", url).storage.metadata(NOTE),
+    );
+  });
+
   test("reads actual sparq linkset with server-managed up/type/self", async () => {
     const { storage, calls } = backend();
     const result = await storage.metadata(NOTE);

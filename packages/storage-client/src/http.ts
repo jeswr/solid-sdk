@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6.1-Sol
 // HTTP plumbing shared by the network backends: scope-checked requests, network-error mapping,
 // Link / WAC-Allow parsing and ReadResult construction (ADR-003 §2, §6, §7). Not exported.
 import { assertWithinPodScope, redactUserinfo } from "@jeswr/guarded-fetch";
@@ -125,8 +126,10 @@ export function linksOf(
     for (const [name, value] of link.parameters) {
       if (name !== "rel" && name !== "anchor" && !(name in params)) params[name] = value;
     }
-    for (const rel of link.rel) {
-      links.set(rel, [...(links.get(rel) ?? []), { target: link.target, params }]);
+    for (const rel of new Set(link.rel)) {
+      const targets = links.get(rel) ?? [];
+      targets.push({ target: link.target, params });
+      links.set(rel, targets);
     }
   }
   return links;

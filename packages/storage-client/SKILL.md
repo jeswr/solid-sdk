@@ -52,6 +52,8 @@ Solid read side (ADR-003 §6):
   at most **64 KiB UTF-8 per combined field value** and **1,024 nonempty members** (including malformed
   members). Overflow gives `invalid-response` and discards the body before storage validation or
   type, next, describedby, up or linkset discovery can use partial results. Exact limits are accepted.
+  Repeated relation tokens within one member add only one target per relation; separate members
+  retain their order and duplicates. Targets append without copying earlier entries.
 
 ## LWS read side
 
@@ -63,7 +65,9 @@ Solid read side (ADR-003 §6):
   or non-HTTP(S) ids throw TypeError. Link comparisons use that normalised id, so equivalent URL
   spellings match. `features` defaults to `deriveFeatures` for an undescribed LWS
   storage (empty services/capabilities, probe source), or retains the supplied Features object.
-- Design call: `isWithinStorage` is the synchronous guarded-fetch root-prefix check, like Solid.
+- Design call: `isWithinStorage` calls `scoped(root, …)` synchronously on both backends, returning
+  true only when it succeeds. It applies the same standalone-destination and resolution-equivalence
+  checks as requests, including rejection of ambiguous same-scheme references.
   Every request must pass `scoped(root, …)` before fetch; storage-id equality never authorises an
   authenticated request outside the root, narrowing ADR-003's non-path-aligned identifier rule.
   On every response (HEAD, read, readRdf, list, metadata), ANY lws#storage link in the response URL's
@@ -101,7 +105,13 @@ Solid read side (ADR-003 §6):
   arrays of target objects with string href; malformed structure/reference → `invalid-response`.
   Resolve anchors/hrefs against the linkset URL. Anchors must be HTTP(S), foreign anchors are kept
   as data and never fetched; hrefs may name other absolute schemes. Duplicate anchors/relations
-  merge in order. Params keep only string-valued attributes except href; array attributes including
+  merge in order. Normalisation accepts at most **10,000 targets** across all contexts and relations
+  and **4 MiB of cumulative resolved anchor + href URL lengths**, measured in UTF-16 code units.
+  Every anchor occurrence counts, including duplicates and contexts without targets, and every
+  target href counts. Exceeding either budget gives `invalid-response` during expansion, before
+  retaining further entries or allocating their params; exact limits are accepted. These limits
+  apply independently of the streamed JSON byte cap and prevent short references amplifying a long
+  linkset base URL. Params keep only string-valued attributes except href; array attributes including
   hreflang/title* are skipped (preserved in raw). raw is parsed JSON, url is the fetched linkset URL,
   etag is its ETag. Maps and own-property params preserve hostile property names as data.
 - `parentOf` scopes first; root → null without a request, otherwise one HEAD returning parent.

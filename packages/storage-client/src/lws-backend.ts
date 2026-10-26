@@ -1,6 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // LWS read side (ADR-003 §7, T-023); mutations arrive with T-024.
-import { isWithinPodScope } from "@jeswr/guarded-fetch";
 import { deriveFeatures, type Features } from "@jeswr/storage-capabilities";
 import { StorageError } from "./errors.js";
 import { dateOf, discard, linksOf, mediaTypeOf, type ReadShape, scoped } from "./http.js";
@@ -16,6 +15,9 @@ import type { AuthFetch, Entry, MetadataLink, ReadResult, StorageClient } from "
 const LWS = "https://www.w3.org/ns/lws#";
 /** A hard byte limit, enforced while streaming (never trust Content-Length). */
 const MAX_JSON_BYTES = 16 * 1024 * 1024;
+const MAX_LINKSET_TARGETS = 10000;
+/** Cumulative resolved anchor + href lengths, measured in UTF-16 code units. */
+const MAX_LINKSET_URL_BYTES = 4 * 1024 * 1024;
 const LIST_ACCEPT = "application/lws+json, application/ld+json;q=0.5";
 
 export interface LwsBackendOptions {
@@ -105,20 +107,30 @@ async function jsonBody(
 function linksetOf(raw: unknown, url: string): Map<string, Map<string, MetadataLink[]>> {
   if (!object(raw) || !Array.isArray(raw.linkset)) throw invalid(url, "Expected linkset array");
   const links = new Map<string, Map<string, MetadataLink[]>>();
+  let targetCount = 0;
+  let urlBytes = 0;
+  const countUrl = (value: string) => {
+    urlBytes += value.length;
+    if (urlBytes > MAX_LINKSET_URL_BYTES) throw invalid(url, "Resolved linkset URLs exceed 4 MiB");
+  };
   for (const context of raw.linkset) {
     if (!object(context) || typeof context.anchor !== "string")
       throw invalid(url, "Missing anchor");
     const anchor = resolve(context.anchor, url);
     if (anchor === null || !/^https?:/.test(anchor)) throw invalid(url, "Invalid anchor URL");
+    countUrl(anchor);
     const rels = links.get(anchor) ?? new Map<string, MetadataLink[]>();
     for (const [rel, targets] of Object.entries(context)) {
       if (rel === "anchor") continue;
       if (!Array.isArray(targets)) throw invalid(url, "Expected relation target array");
       const normalised = rels.get(rel) ?? [];
       for (const target of targets) {
+        if (++targetCount > MAX_LINKSET_TARGETS)
+          throw invalid(url, "Linkset exceeds 10000 targets");
         if (!object(target) || typeof target.href !== "string") throw invalid(url, "Missing href");
         const href = resolve(target.href, url);
         if (href === null) throw invalid(url, "Invalid target URL");
+        countUrl(href);
         // Keep only string attributes; RFC 9264 arrays (hreflang/title*) are left in raw.
         const params = Object.fromEntries(
           Object.entries(target).filter(
@@ -166,7 +178,14 @@ export function createLwsBackend(options: LwsBackendOptions): StorageClient {
       maxAgeMs: 0,
       verificationMethods: [],
     });
-  const isWithinStorage = (url: string) => URL.canParse(url) && isWithinPodScope(root, url);
+  const isWithinStorage = (url: string) => {
+    try {
+      scoped(root, "GET", url);
+      return true;
+    } catch {
+      return false;
+    }
+  };
   const isRoot = (url: string) => {
     const parsed = new URL(url);
     parsed.search = "";

@@ -1,7 +1,9 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // Shared security regressions exercised through both public network backends.
 import { LinkHeaderOverflowError } from "@jeswr/storage-capabilities";
 import { describe, expect, test, vi } from "vitest";
 import { StorageError } from "./errors.js";
+import { scoped } from "./http.js";
 import { createLwsBackend } from "./lws.js";
 import { createSolidBackend } from "./solid.js";
 import type { AuthFetch } from "./types.js";
@@ -58,6 +60,7 @@ describe.each(factories)("$protocol request scope", ({ create }) => {
     }
     expect(fetch).not.toHaveBeenCalled();
     expect(requests).toEqual([]);
+    expect(storage.isWithinStorage(url)).toBe(false);
 
     // The injected transport uses Fetch's standalone Request parser and adds credentials.
     const result = await storage.head("HTTPS://LWS.EXAMPLE:443/a/../safe?token=a%2fb&x=1&x=2");
@@ -66,9 +69,99 @@ describe.each(factories)("$protocol request scope", ({ create }) => {
     expect(requests[0]?.headers.get("Authorization")).toBe("Bearer probe");
     expect(fetch.mock.calls[0]?.[0]).toBe(result.url);
   });
+
+  test.each([
+    ["https://lws.example/storage/", true],
+    ["https://lws.example/storage", true],
+    ["https://lws.example/storage?x=1#top", true],
+    ["https://lws.example/storage/note?token=a%2fb&x=1&x=2", true],
+    ["HTTPS://LWS.EXAMPLE:443/storage/a/../note", true],
+    [String.raw`https:\\lws.example\storage\note`, true],
+    ["https://lws.example/storage/child/../note", true],
+    ["https://lws.example/storage/../outside", false],
+    ["https://lws.example/storage-other/note", false],
+    ["https://lws.example/", false],
+    ["https://evil.example/storage/note", false],
+    ["https://user:secret@lws.example/storage/note", false],
+    ["http://lws.example/storage/note", false],
+    ["file:///storage/note", false],
+    ["https://lws.example/storage/..%2foutside", false],
+    ["https://lws.example/storage/..%5coutside", false],
+    ["https:evil.example/x", false],
+    ["https:lws.example/storage/note", false],
+    ["https:/lws.example/storage/note", false],
+    [String.raw`https:\lws.example/storage/note`, false],
+    ["//lws.example/storage/note", false],
+    ["/storage/note", false],
+    ["note", false],
+    ["https://[", false],
+    ["", false],
+  ])("predicate agrees with scoped and HEAD for %s", async (url, expected) => {
+    const root = `${ROOT}storage/`;
+    const fetch = vi.fn<AuthFetch>(async () => new Response(null));
+    const storage = create({ root, fetch });
+    let accepted = false;
+    try {
+      scoped(root, "HEAD", url);
+      accepted = true;
+    } catch (error) {
+      expect(error).toMatchObject({ code: "scope" });
+    }
+    expect(accepted).toBe(expected);
+    expect(storage.isWithinStorage(url)).toBe(accepted);
+    if (accepted) {
+      expect((await storage.head(url)).url).toBe(scoped(root, "HEAD", url));
+    } else {
+      await expect(storage.head(url)).rejects.toMatchObject({ code: "scope" });
+    }
+    expect(fetch).toHaveBeenCalledTimes(accepted ? 1 : 0);
+  });
 });
 
 describe.each(factories)("$protocol authoritative Link bounds", ({ create, protocol }) => {
+  test("deduplicates 32000 repeated relations in one 64 KiB member", async () => {
+    const prefix = `<urn:t>; rel="${Array(32000).fill("a").join(" ")}"; title="`;
+    const title = "x".repeat(65536 - prefix.length - 1);
+    const link = `${prefix}${title}"`;
+    expect(link).toHaveLength(65536);
+    const storage = create({
+      root: ROOT,
+      fetch: async () => new Response(null, { headers: { link } }),
+    });
+    const result = await storage.head(NOTE);
+    expect([...result.links]).toEqual([["a", [{ target: "urn:t", params: { title } }]]]);
+  });
+
+  test("preserves relation and target ordering, including duplicates across members", async () => {
+    const storage = create({
+      root: ROOT,
+      fetch: async () =>
+        new Response(null, {
+          headers: {
+            link: '<urn:first>; rel="a b a"; title="first", <urn:second>; rel="b a b"; title="second", <urn:first>; rel="a"',
+          },
+        }),
+    });
+    const result = await storage.head(NOTE);
+    expect([...result.links]).toEqual([
+      [
+        "a",
+        [
+          { target: "urn:first", params: { title: "first" } },
+          { target: "urn:second", params: { title: "second" } },
+          { target: "urn:first", params: {} },
+        ],
+      ],
+      [
+        "b",
+        [
+          { target: "urn:first", params: { title: "first" } },
+          { target: "urn:second", params: { title: "second" } },
+        ],
+      ],
+    ]);
+  });
+
   test.each([
     {
       name: "1025 members",
