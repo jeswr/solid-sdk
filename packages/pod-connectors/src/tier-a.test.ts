@@ -16,7 +16,12 @@ import {
   TEST_WEBID,
 } from "./core/testing.js";
 import type { ConnectorState, FixtureRoute, IntegrationAdapter } from "./core/types.js";
-import { DigitalDocument, ExerciseAction, SocialMediaPosting } from "./core/vocab.js";
+import {
+  DigitalDocument,
+  ExerciseAction,
+  SocialMediaPosting,
+  SoftwareSourceCode,
+} from "./core/vocab.js";
 import { discordAdapter } from "./discord/adapter.js";
 import { GUILDS } from "./discord/fixtures.js";
 import { dropboxAdapter } from "./dropbox/adapter.js";
@@ -190,6 +195,55 @@ describe("Tier A pagination and checkpoints", () => {
     expect(second.pod.get(`${root(githubAdapter)}work/repositories.ttl`)).not.toContain(
       "SoftwareSourceCode",
     );
+  });
+
+  it("retains an unseen GitHub repository pushed between page requests", async () => {
+    const url = "https://api.github.com/user/repos";
+    const repos = Array.from({ length: 101 }, (_, i) => ({
+      ...REPOS[0],
+      id: i + 1,
+      full_name: `synthetic/repository-${i + 1}`,
+      created_at: new Date(Date.UTC(2020, 0, 1, 0, 0, i)).toISOString(),
+      pushed_at: new Date(Date.UTC(2026, 0, 1, 0, 0, 101 - i)).toISOString(),
+    }));
+    const initial = await replay(githubAdapter, [
+      ...githubAdapter.fixtures().filter((r) => r.url !== url),
+      { url, json: repos.slice(0, 100) },
+      { url, json: repos.slice(100) },
+    ]);
+    const profileFetch = fixtureFetch("github", githubAdapter.fixtures());
+    const pages: URL[] = [];
+    const report = await runImport({
+      adapter: githubAdapter,
+      mode: "live",
+      podWriter: writer(githubAdapter, initial.pod),
+      state: initial.report.state,
+      sourceAuth: {
+        fetch: async (input, init) => {
+          const request = new URL(String(input));
+          if (request.pathname !== "/user/repos") return profileFetch(input, init);
+          pages.push(request);
+          const page = Number(request.searchParams.get("page"));
+          if (page === 2) repos[100].pushed_at = "2026-10-26T12:00:00.000Z";
+          const field = request.searchParams.get("sort") === "created" ? "created_at" : "pushed_at";
+          const direction = request.searchParams.get("direction") === "asc" ? 1 : -1;
+          const ordered = [...repos].sort((a, b) => direction * a[field].localeCompare(b[field]));
+          return new Response(JSON.stringify(ordered.slice((page - 1) * 100, page * 100)), {
+            headers: { "content-type": "application/json" },
+          });
+        },
+      },
+    });
+    const doc = `${root(githubAdapter)}work/repositories.ttl`;
+    const pushed = new SoftwareSourceCode(`${doc}#repo-101`, initial.pod.dataset(doc), DataFactory);
+    expect(pushed.name).toBe("synthetic/repository-101");
+    expect(pushed.description).toBe(REPOS[0].description);
+    expect(pushed.dateModified?.toISOString()).toBe("2026-10-26T12:00:00.000Z");
+    expect(report.state.counts.items).toBe(102);
+    expect(pages.map((page) => Object.fromEntries(page.searchParams))).toEqual([
+      { sort: "created", direction: "asc", per_page: "100", page: "1" },
+      { sort: "created", direction: "asc", per_page: "100", page: "2" },
+    ]);
   });
 
   it("drains short Strava pages before advancing the cursor and replaces incoming descriptions", async () => {

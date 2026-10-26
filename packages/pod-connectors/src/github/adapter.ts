@@ -85,7 +85,8 @@ export const githubAdapter: IntegrationAdapter = {
         await getJson<GitHubRepo[] | null>(
           ID,
           ctx.api,
-          `${API}/user/repos?sort=pushed&per_page=100&page=${page}`,
+          // Pushes must not move unseen repositories ahead of a page already read.
+          `${API}/user/repos?sort=created&direction=asc&per_page=100&page=${page}`,
         ),
       );
       repos.push(...batch);
