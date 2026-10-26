@@ -107,7 +107,7 @@ export class NanopubStore {
     const dataset = new Store();
     const nanopubs: Nanopublications["nanopubs"] = [];
     const ids = new Set<string>();
-    const shared = new Map<string, { fingerprint: string; nodes: Map<string, string> }>();
+    const shared = new Map<string, string>();
     for (const entry of await this.pod.list(this.container)) {
       if (entry.isContainer || !entry.url.startsWith(this.container)) continue;
       const id = `urn:uuid:${entry.url.slice(this.container.length).replace(/\.trig$/, "")}`;
@@ -125,29 +125,27 @@ export class NanopubStore {
           contents.size === 0
             ? { id: "", labels: new Map<string, string>() }
             : canonicalizeAssertionWithLabels(contents);
-        return { name, canonical, previous: shared.get(name) };
+        return { name, fingerprint: canonical.id, previous: shared.get(name) };
       });
       // Blank-node labels are document-local. Keep one validated graph instead
       // of unioning copies, and align references throughout the incoming dataset.
-      const replacements = new Map<string, string>();
-      const originals = new Map<string, string>();
       const duplicates = new Set<string>();
-      for (const { name, canonical, previous } of graphs) {
+      for (const { name, fingerprint, previous } of graphs) {
         if (previous === undefined) continue;
-        if (previous.fingerprint !== canonical.id)
+        if (previous !== fingerprint)
           throw new Error("Conflicting copies of a shared nanopublication graph");
         duplicates.add(name);
-        for (const [node, label] of canonical.labels) {
-          const retained = previous.nodes.get(label) as string;
-          if (
-            (replacements.has(node) && replacements.get(node) !== retained) ||
-            (originals.has(retained) && originals.get(retained) !== node)
-          )
-            throw new Error("Conflicting blank-node references in shared graphs");
-          replacements.set(node, retained);
-          originals.set(retained, node);
-        }
       }
+      // A symmetric graph cannot choose node correspondence alone. Match the
+      // duplicate graphs jointly, preserving graph identity in the hash input.
+      const incoming = sharedGraphLabels(result.dataset, duplicates);
+      const retained = sharedGraphLabels(dataset, duplicates);
+      if (incoming.id !== retained.id)
+        throw new Error("Conflicting blank-node references in shared graphs");
+      const retainedNodes = new Map([...retained.labels].map(([node, label]) => [label, node]));
+      const replacements = new Map(
+        [...incoming.labels].map(([node, label]) => [node, retainedNodes.get(label) as string]),
+      );
       const remap = <T extends Term>(term: T) =>
         term.termType === "BlankNode" && replacements.has(term.value)
           ? df.blankNode(replacements.get(term.value) as string)
@@ -157,16 +155,7 @@ export class NanopubStore {
           dataset.add(
             df.quad(remap(quad.subject), quad.predicate, remap(quad.object), remap(quad.graph)),
           );
-      for (const { name, canonical, previous } of graphs) {
-        if (previous === undefined) {
-          shared.set(name, {
-            fingerprint: canonical.id,
-            nodes: new Map(
-              [...canonical.labels].map(([node, label]) => [label, replacements.get(node) ?? node]),
-            ),
-          });
-        }
-      }
+      for (const { name, fingerprint } of graphs) shared.set(name, fingerprint);
       nanopubs.push(...result.nanopubs);
     }
     return { dataset, nanopubs };
@@ -351,6 +340,20 @@ export class NanopubStore {
     )
       throw new Error("Pod did not preserve nanopublication bytes in octet-stream fallback");
   }
+}
+
+/** Encode (graph, predicate) pairs only for joint matching, never for stored RDF. */
+function sharedGraphLabels(dataset: DatasetCore, names: Set<string>) {
+  const combined = new Store();
+  for (const name of names)
+    for (const quad of graph(dataset, name))
+      new RdfNode(quad.subject, combined).add(
+        pkgId("store", "shared-predicate", name, quad.predicate.value),
+        quad.object,
+      );
+  return combined.size === 0
+    ? { id: "", labels: new Map<string, string>() }
+    : canonicalizeAssertionWithLabels(combined);
 }
 
 /** Every cross-resource node needs a common graph through which list() can align it. */

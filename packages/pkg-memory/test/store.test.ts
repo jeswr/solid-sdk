@@ -283,6 +283,63 @@ it.each([
   }
 });
 
+it.each([
+  false,
+  true,
+])("resolves symmetric blank nodes across shared graphs jointly (reverse listing: %s)", async (reverse) => {
+  const { store, pod } = setup();
+  const value = await sharedBlankBatchGraphs();
+  const source = "https://example.org/document";
+  const sourcesId = pkgId("batch", "shared-batch", "sources");
+  const entitiesId = pkgId("batch", "shared-batch", "entities");
+  const sources = graph(value.dataset, sourcesId);
+  const author = new RdfNode(source, sources).one(`${NS.schema}author`);
+  const nested = new RdfNode(author, sources).one(`${NS.schema}additionalProperty`);
+  const other = DataFactory.blankNode();
+  new RdfNode(source, sources).add(`${NS.schema}author`, other);
+  new RdfNode(other, sources)
+    .text(`${NS.schema}name`, "Avery")
+    .add(`${NS.schema}additionalProperty`, nested);
+  putGraph(value.dataset as Store, sourcesId, sources);
+  const entities = graph(value.dataset, entitiesId);
+  new RdfNode(source, entities).add(`${NS.schema}author`, other);
+  new RdfNode(other, entities).text(`${NS.schema}description`, "Other document author");
+  putGraph(value.dataset as Store, entitiesId, entities);
+  await store.put(value);
+
+  const np = value.nanopubs[1]!;
+  const reordered = await store.get(np.id);
+  const contents = graph(reordered.dataset, sourcesId);
+  const reorderedDataset = new Store();
+  putGraph(reorderedDataset, sourcesId, new Store([...contents].reverse()));
+  for (const quad of reordered.dataset)
+    if (quad.graph.value !== sourcesId) reorderedDataset.add(quad);
+  reordered.dataset = reorderedDataset;
+  const url = store.url(np.id);
+  await pod.write(url, encode(await serializeNanopublications(reordered)), "application/trig", {
+    ifMatch: (await pod.read(url)).etag,
+  });
+  expect(isomorphic([...(await store.get(np.id)).dataset], [...reordered.dataset])).toBe(true);
+  const list = pod.list;
+  if (reverse) pod.list = async (container) => (await list(container)).reverse();
+  for (let i = 0; i < 2; i++) {
+    const loaded = await store.list();
+    expect(loaded.nanopubs).toHaveLength(3);
+    expect(isomorphic([...loaded.dataset], [...value.dataset])).toBe(true);
+    const retainedSources = graph(loaded.dataset, sourcesId);
+    const retainedEntities = graph(loaded.dataset, entitiesId);
+    expect([...new RdfNode(source, retainedSources).terms(`${NS.schema}author`)]).toHaveLength(2);
+    for (const entry of loaded.nanopubs) {
+      const retainedAuthor = new RdfNode(entry.id, graph(loaded.dataset, entry.provenanceId)).one(
+        `${NS.prov}primarySource`,
+      );
+      expect(new RdfNode(retainedAuthor, retainedEntities).oneText(`${NS.schema}description`)).toBe(
+        "Document author",
+      );
+    }
+  }
+});
+
 it("keeps independent batches' blank-node source/entity descriptions distinct", async () => {
   const { store } = setup();
   const first = await sharedBlankBatchGraphs("first-batch", ["one"]);
