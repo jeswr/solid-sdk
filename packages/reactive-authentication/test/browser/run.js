@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // Real-browser smoke tests (Playwright: `--browser chromium|firefox|webkit`, default chromium) against the same
 // local mock servers as the Node tests. Engine capabilities the library relies on are reported first:
 // 1. page.html   — ReactiveFetchManager registered globally, <authorization-code-flow> popup, DPoP-bound
@@ -272,6 +273,19 @@ try {
         r.closed?.error === "CodeRequestCancelledError" &&
         r.genuine === "good",
       r,
+    );
+    report(
+      "queued-popup-disposal",
+      r.disposals?.length === 2 &&
+        r.disposals.every(
+          (flow) =>
+            flow.closedBeforeNextOpen &&
+            flow.distinctPopups &&
+            flow.nextStayedOpen &&
+            flow.first &&
+            flow.second,
+        ),
+      r.disposals,
     );
     await page.close();
   }

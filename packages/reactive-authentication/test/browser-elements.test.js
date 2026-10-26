@@ -270,7 +270,10 @@ test("authorization popup validates messages and disposes the completed popup", 
   await send("https://app.example/callback?code=c&state=s");
   const result = await pending;
   assert.equal(result.value, "https://app.example/callback?code=c&state=s");
+  assert.equal(popup.close.mock.calls.length, 1, "the popup closes before getCode resolves");
   result[Symbol.dispose]();
+  result[Symbol.dispose]();
+  assert.equal(popup.close.mock.calls.length, 1, "disposal has no remaining popup work");
   element.cleanup();
   assert.equal(popup.close.mock.calls.length, 2);
   await assert.rejects(
@@ -278,6 +281,70 @@ test("authorization popup validates messages and disposes the completed popup", 
     /redirect_uri/,
   );
 });
+
+for (const disposal of ["immediate", "delayed"]) {
+  test(`${disposal} disposal of a completed flow leaves the queued authorization popup open`, async () => {
+    vi.stubGlobal("navigator", { locks: browserLocks });
+    const { element, popup } = flow();
+    popup.close.mockImplementation(() => {
+      popup.closed = true;
+    });
+    const nextPopup = {
+      closed: false,
+      close: vi.fn(() => {
+        nextPopup.closed = true;
+      }),
+    };
+    const opened = Promise.withResolvers();
+    const nextOpened = Promise.withResolvers();
+    let closedBeforeNextOpen;
+    globalThis.open
+      .mockImplementationOnce(() => {
+        opened.resolve();
+        return popup;
+      })
+      .mockImplementationOnce(() => {
+        closedBeforeNextOpen = popup.closed;
+        nextOpened.resolve();
+        return nextPopup;
+      });
+    const first = element.getCode(authorization, new AbortController().signal).then((result) => {
+      if (disposal === "immediate") result[Symbol.dispose]();
+      return result;
+    });
+    await opened.promise;
+    const controller = new AbortController();
+    const next = element.getCode(authorization, controller.signal);
+    try {
+      await element.view.emit("message", {
+        source: popup,
+        origin: "https://app.example",
+        data: "https://app.example/callback?code=first",
+      });
+      await nextOpened.promise;
+      const result = await first;
+      assert.equal(result.value, "https://app.example/callback?code=first");
+      result[Symbol.dispose]();
+      assert.equal(nextPopup.closed, false, "the first result cannot close the next popup");
+      assert.equal(closedBeforeNextOpen, true, "the completed popup closes before lock release");
+      assert.equal(popup.close.mock.calls.length, 1);
+      assert.equal(nextPopup.close.mock.calls.length, 0);
+      await element.view.emit("message", {
+        source: nextPopup,
+        origin: "https://app.example",
+        data: "https://app.example/callback?code=second",
+      });
+      const nextResult = await next;
+      assert.equal(nextResult.value, "https://app.example/callback?code=second");
+      assert.equal(nextPopup.close.mock.calls.length, 1);
+      nextResult[Symbol.dispose]();
+      assert.equal(nextPopup.close.mock.calls.length, 1);
+    } finally {
+      controller.abort();
+      await next.catch(() => {});
+    }
+  });
+}
 
 test("popup blocking, open/focus buttons, cancellation and user closure release the flow", async () => {
   vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });

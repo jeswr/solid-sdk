@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 import type { CodeProvider } from "./CodeProvider.js";
 import { CodeRequestCancelledError } from "./CodeRequestCancelledError.js";
 
@@ -189,10 +190,11 @@ export class AuthorizationCodeFlow extends HTMLElement implements CodeProvider {
         this.#newModal.close();
         this.#switchModal.close();
         this.#cancelCodeRequest = undefined;
+        // Close before releasing the lock so the named popup cannot be reused by the next flow.
+        this.#authorizationWindow?.close();
       };
       const fail = (reason: unknown) => {
         cleanup();
-        this.#authorizationWindow?.close();
         reject(reason);
       };
       const onMessage = (message: MessageEvent) => {
@@ -217,7 +219,8 @@ export class AuthorizationCodeFlow extends HTMLElement implements CodeProvider {
       }
 
       const value = await promise;
-      return new ValueWithCleanup(value, () => this.#authorizationWindow?.close());
+      // Cleanup is complete under the lock; later disposal must not affect another flow.
+      return { value, [Symbol.dispose]() {} };
     });
   }
 
@@ -265,16 +268,5 @@ function isCallback(data: unknown, origin: string): data is string {
     return new URL(data).origin === origin;
   } catch {
     return false;
-  }
-}
-
-class ValueWithCleanup implements Disposable {
-  constructor(
-    public readonly value: string,
-    private cleanup: () => void,
-  ) {}
-
-  [Symbol.dispose](): void {
-    this.cleanup();
   }
 }
