@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { extractMediaType, fetchRdf } from "@jeswr/fetch-rdf";
+// AUTHORED-BY Codex GPT-6
+import { fetchRdf } from "@jeswr/fetch-rdf";
 import { assertWithinPodScope, createPodScopedFetch } from "@jeswr/guarded-fetch";
 import { serialize } from "@jeswr/rdf-serialize";
 import type { DatasetCore } from "@rdfjs/types";
@@ -18,10 +19,6 @@ async function boundedResponse(response: Response, signal?: AbortSignal): Promis
   signal?.addEventListener("abort", cancel, { once: true });
   try {
     signal?.throwIfAborted();
-    // The dependency cannot inject a refusing JSON-LD document loader. Never enter that parser.
-    if (extractMediaType(response.headers.get("content-type")) === "application/ld+json") {
-      throw new TypeError("JSON-LD is unsupported; request Turtle without remote contexts.");
-    }
     if (Number(response.headers.get("content-length")) > MAX_RDF_BYTES) {
       throw new RangeError("Contacts RDF response exceeds the byte limit.");
     }
@@ -112,7 +109,7 @@ export class ContactsTransport {
   ): Promise<Snapshot<T>> {
     const target = this.url(url);
     const result = await fetchRdf(target, {
-      accept: "text/turtle",
+      // fetchRdf accepts inline JSON-LD and refuses remote contexts by default.
       fetch: async (input, init) => boundedResponse(await this.fetch(input, init), signal),
       ...(signal === undefined ? {} : { signal }),
     });

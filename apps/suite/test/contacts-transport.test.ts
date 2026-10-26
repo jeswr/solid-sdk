@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { serialize } from "@jeswr/rdf-serialize";
 import { Store } from "n3";
 import { describe, expect, test, vi } from "vitest";
@@ -65,28 +66,59 @@ describe("contacts injected transport", () => {
   });
 });
 
-test("refuses JSON-LD before remote contexts can bypass the injected transport", async () => {
+test("refuses remote JSON-LD contexts without requesting their URLs", async () => {
   const globalFetch = vi
     .spyOn(globalThis, "fetch")
     .mockRejectedValue(new Error("Unexpected global fetch"));
   try {
     for (const context of ["https://evil.example/context", `${ROOT}context`]) {
-      const injected = vi.fn<typeof fetch>(async (_input, init) => {
-        expect(new Headers(init?.headers).get("accept")).toBe("text/turtle");
+      const injected = vi.fn<typeof fetch>(async (input, init) => {
+        expect(input).toBe(ALICE);
+        expect(new Headers(init?.headers).get("accept")).toBe(
+          "text/turtle, application/ld+json;q=0.9",
+        );
         return new Response(JSON.stringify({ "@context": context, "@id": `${ALICE}#this` }), {
           headers: { "content-type": "Application/LD+JSON; charset=utf-8" },
         });
       });
       const transport = new ContactsTransport(ROOT, injected);
-      await expect(transport.read(ALICE, (dataset) => dataset)).rejects.toThrow(
-        "JSON-LD is unsupported",
-      );
+      await expect(transport.read(ALICE, (dataset) => dataset)).rejects.toMatchObject({
+        name: "RdfFetchError",
+        cause: expect.objectContaining({
+          message: expect.stringContaining("Remote JSON-LD context refused"),
+        }),
+      });
       expect(injected).toHaveBeenCalledTimes(1);
       expect(globalFetch).not.toHaveBeenCalled();
     }
   } finally {
     globalFetch.mockRestore();
   }
+});
+
+test("reads JSON-LD with inline contexts through the injected transport", async () => {
+  const injected = vi.fn<typeof fetch>(
+    async () =>
+      new Response(
+        JSON.stringify({
+          "@context": { name: "http://www.w3.org/2006/vcard/ns#fn" },
+          "@id": `${ALICE}#this`,
+          name: "Alice",
+        }),
+        { headers: { "content-type": "application/ld+json", etag: '"inline"' } },
+      ),
+  );
+  const snapshot = await new ContactsTransport(ROOT, injected).read(ALICE, (dataset) => [
+    ...dataset,
+  ]);
+  expect(snapshot.etag).toBe('"inline"');
+  expect(snapshot.data).toHaveLength(1);
+  expect(snapshot.data[0]).toMatchObject({
+    subject: { value: `${ALICE}#this` },
+    predicate: { value: "http://www.w3.org/2006/vcard/ns#fn" },
+    object: { termType: "Literal", value: "Alice" },
+  });
+  expect(injected).toHaveBeenCalledTimes(1);
 });
 
 test.each([
