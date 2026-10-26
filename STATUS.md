@@ -71,3 +71,47 @@ PASS. rrule.js 2.8.1 was unpacked only as a temporary fixture-generation tool, u
 - The caller must supply a scope-guarded authenticated fetch for authorized pod/shared locations and redirects. Missing strong ETags prevent updates/deletes. Cross-resource orchestration, undo persistence, outbox handling, ACL grants, IndexedDB fired-key storage, and hooks remain with the later tasks that own them.
 - Screenshots taken: **none**. This lane renders no UI; Playwright, visual fixtures, and axe screens are not applicable and were not run.
 - No requested model implementation remains unfinished. External verification limitations are the failed unrelated full-workspace build and unavailable roborev tooling above.
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+## Fix round 2 — review of `061de204d402`
+
+This round fixes only the four supplied findings on `lane/sst-ef15`:
+
+- `530b6f06` — `fix: validate task IRIs and preserve category identities`: use the existing workspace `@jeswr/rdf-serialize` safety helpers to reject unsafe HTTP IRIs before extension writes and reject unsafe named terms/datatype IRIs during serialization. Preserve safe lexical identities. Reuse exact category names and allocate deterministic suffixes for distinct names with colliding slugs, including identifiers occupied by foreign metadata.
+- `da933ab6` — `fix: recover project creation and redirected reads`: conditionally delete the tracker and any task container newly reserved by an unsuccessful creation attempt. Retain failed compensation in the store and finish it before reserving another identity; stale validators preserve concurrent changes. Use the final RDF response URL for resource identities and task/project/container wrappers, including later conditional edits and deletes.
+- Final report commit — `docs: record tasks review fix verification`: this verification record.
+
+Regression tests exercise all forbidden C0/space/symbol characters, unsafe extension inputs and serialization bypasses, category collisions and preserved task assignments, container/registration failures with successful slug reuse, failed cleanup and concurrent edits, and redirected reads/listings followed by conditional mutations.
+
+### Verification for this round
+
+Passed, with root tools made available to dependency-free workspace packages:
+
+```sh
+export PATH="$PWD/node_modules/.bin:$PATH"
+pnpm install --frozen-lockfile --offline --ignore-scripts
+pnpm --filter @jeswr/app-suite... run build
+pnpm --filter @jeswr/app-suite run lint && pnpm --filter @jeswr/app-suite run build && pnpm --filter @jeswr/app-suite run typecheck && pnpm --filter @jeswr/app-suite run test
+pnpm run lint:root
+TURBO_SCM_BASE=061de204d40239031fa73c2d42f281b0fad59803 pnpm run gate
+git diff --check
+```
+
+- Package lint, Next.js production build, typecheck and tests passed.
+- **100 tests passed** across four test files. Model coverage remains **100% statements (658/658), branches (456/456), functions (143/143), and lines (571/571)**, with the existing thresholds unchanged.
+- Root guards passed, including all 74 contrast checks.
+- Affected gate passed: **10 successful tasks / 10 total**, six cached.
+- Frozen offline installation passed. The only dependency change is the existing shared workspace helper required by finding 1; no third-party dependency was added.
+
+The package policy command was also attempted:
+
+```sh
+pnpm run check:packages @jeswr/rdf-serialize
+```
+
+It failed because this npm-only checker cannot find the unpublished workspace package in npm. The app uses `workspace:*` and the already-present repository package, not an npm installation of that name.
+
+Full-workspace verification was attempted with `pnpm run gate:full`, then **stopped (exit 130)** after its unrelated `@jeswr/unstorage-solid` dependency-build script started a remote clone into a temporary directory. Continuing that build would conflict with this lane's prohibition on remote fetches. Generated, untracked client-ID/callback assets from the broader build were removed; no unrelated source changes are retained. An affected-gate attempt that included those generated files was stopped and rerun after cleanup; the final affected result above is green. The full-workspace gate is not claimed to pass.
+
+`roborev` remains unavailable (`command -v roborev` found no executable), so no per-commit automated verdicts could be read. The supplied review findings were addressed with regression tests. No requested fix remains unfinished, and there are no new open questions. The conservative IRI policy rejects forbidden lexical characters instead of silently changing RDF identities. Failed cleanup retains its original validator in the current store instance and surfaces an error if concurrent changes prevent deletion. No UI or screenshots apply to this round.
