@@ -12,7 +12,36 @@ T-020 implements the ADR-003 §1 types (`src/types.ts`, re-exported as types fro
 `storageErrorFrom` that reads at most 64 KiB of a JSON/problem body), `./helpers`
 (`retryOnConflict`, which re-reads before every retry, plus the in-house RFC 6902 `applyJsonPatch`),
 and `./memory` (`createMemoryStorage({ protocol, root, pageSize, moveResource, strictConditional, clock })`).
-`./solid`, `./lws` and `./testing` are still reserved (T-021…T-025).
+T-021 adds the Solid backend's read side: `./solid` exports
+`createSolidBackend({ fetch, root, features? })`. `./lws` and `./testing` are still reserved
+(T-022…T-025); Solid mutations reject with `unsupported` until T-022.
+
+Solid read side (ADR-003 §6):
+- Every URL must be absolute and pass guarded-fetch `assertWithinPodScope(root, url)`; otherwise
+  `scope`, before any request. The canonical URL is the one fetched. Redirects are never followed
+  (`redirect: 'manual'`; a 3xx is `invalid-response`). Transport failures are retryable `network`
+  errors; aborts are non-retryable `network` errors.
+- `list` GETs Turtle and reads `ldp:contains` through `@solid/object`'s `Container`, with a local
+  `Resource` subclass for `dct:format`. Members outside the storage or not directly contained are
+  dropped (fail closed). Kind comes from `ldp:(Basic)Container` or a trailing slash, contentType
+  from a valid `dct:format` literal or the IANA media-type class, size from `posix:size`, modified
+  from `dc:modified`, else `posix:mtime` (epoch seconds). Non-IRI `rdf:type` objects and malformed
+  fields are dropped, never the member. Items are
+  sorted by URL. A non-container is `method-not-allowed`.
+- `head`/`read` use `Link` (context = the response URL; anchored links ignored) for `type`,
+  `describedby` → `metadataUrl`, WAC-Allow `user` → `allow`, and path arithmetic for `parent`.
+  `read` sends Accept, If-None-Match and `Range: bytes=…` (206). Only 200, a requested 206 and a
+  conditional 304 succeed; any other 2xx/3xx is `invalid-response`. `body` is the live stream;
+  `bytes()/text()/blob()` buffer that same stream once (use one or the other). A body failing
+  mid-transfer is a `network` error on both paths (non-retryable once the signal aborted).
+- Scope errors redact embedded credentials of the target and the root in every authority
+  spelling (backslashes included). `list()` refuses a URL with a query or fragment
+  (`bad-request`), `kind` follows the path (never the query), and the slashless root alias is the root even with a query or fragment (`parentOf` → null).
+- `readRdf` accepts `text/turtle, application/ld+json;q=0.9`, maps 304 to `notModified`, and
+  reports a non-RDF or unparsable body as `not-rdf`. `metadata` reads the `describedby` document as
+  RDF (`unsupported` when none is advertised).
+- `Link` and WAC-Allow parsing reuse `@jeswr/storage-capabilities` (`parseLinkHeaders`,
+  `parseWacAllow`).
 
 Rules the memory backend enforces, and the real backends must match:
 - Every mutation (`write`, `writeRdf`, `patch`, `setMetadata`, `move`, `delete`) needs `ifMatch`

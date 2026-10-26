@@ -4542,12 +4542,21 @@ importers:
       '@jeswr/fetch-rdf':
         specifier: workspace:*
         version: link:../fetch-rdf
+      '@jeswr/guarded-fetch':
+        specifier: workspace:*
+        version: link:../guarded-fetch
       '@jeswr/rdf-serialize':
         specifier: workspace:*
         version: link:../rdf-serialize
       '@jeswr/storage-capabilities':
         specifier: workspace:*
         version: link:../storage-capabilities
+      '@rdfjs/wrapper':
+        specifier: ^0.34.0
+        version: 0.34.0
+      '@solid/object':
+        specifier: ^0.6.0
+        version: 0.6.0
       n3:
         specifier: ^2.0.3
         version: 2.1.1
