@@ -55,6 +55,43 @@ function scan(path, source) {
 }
 
 describe("agent layer boundaries (DESIGN §2.2)", () => {
+  it("rejects type-only ./gmail/send imports outside the executor", () => {
+    expect(
+      scan(
+        "packages/agent-channels/src/reader.ts",
+        'import type { Send } from "./gmail/send";',
+      ).join("\n"),
+    ).toContain("executor-only");
+    expect(
+      scan(
+        "packages/agent-executor/src/index.ts",
+        'import type { Send } from "@jeswr/agent-channels/gmail/send";',
+      ),
+    ).toEqual([]);
+  });
+  it("allows only the direct test factory composition and blocks production consumers", () => {
+    expect(
+      scan(
+        "packages/agent-channels/src/testing.ts",
+        'export { createInMemoryDirectBinding } from "./direct/send.js";',
+      ),
+    ).toEqual([]);
+    expect(
+      scan("packages/agent-channels/src/testing.ts", 'export * from "./gmail/send.js";').join("\n"),
+    ).toContain("executor-only");
+    expect(
+      scan("apps/example/src/index.ts", 'import "@jeswr/agent-channels/testing";').join("\n"),
+    ).toContain("test-only");
+    expect(
+      scan(
+        "apps/example/src/index.ts",
+        'import "../../../packages/agent-channels/src/testing.js";',
+      ).join("\n"),
+    ).toContain("test-only");
+    expect(
+      scan("apps/example/src/index.test.ts", 'import "@jeswr/agent-channels/testing";'),
+    ).toEqual([]);
+  });
   it.each([
     'import "openai";',
     'export * from "@anthropic-ai/sdk";',

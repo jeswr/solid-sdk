@@ -191,8 +191,15 @@ function importFailures(ctx, target, typeOnly = false, manifest = false) {
   const failures = [];
   const name = packageName(target);
   const send = /^@jeswr\/agent-channels\/.+\/send(?:\/|$)/.test(target);
-  if (send && ctx.project !== "agent-executor" && !ctx.ownTest)
+  // DESIGN A-005 explicitly exposes the composed direct fake through ./testing.
+  // This single internal composition edge is not a production send entry point.
+  const testingFactory =
+    ctx.path === "packages/agent-channels/src/testing.ts" &&
+    target === "@jeswr/agent-channels/direct/send";
+  if (send && ctx.project !== "agent-executor" && !ctx.ownTest && !testingFactory)
     failures.push("send subpaths are executor-only (except agent-channels tests)");
+  if (/^@jeswr\/agent-channels\/(?:src\/|dist\/)?testing(?:\/|$)/.test(target) && !ctx.test)
+    failures.push("channel testing helpers are test-only");
   if (modelSdks.includes(name) && ctx.project !== "agent-model-gateway")
     failures.push("model SDKs are gateway-only");
   if (ctx.project === "agent-model-gateway" && name === agent("audit"))
