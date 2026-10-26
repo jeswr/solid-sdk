@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+// AUTHORED-BY Codex GPT-6.1-Sol
 //
 // DNS-less / capability-fallback behaviour for the re-exported guard.
 //
@@ -13,12 +14,13 @@
 // `import("node:dns/promises")` inside pre-bundled third-party code — so re-testing that
 // internal import-failure path HERE would be both redundant and flaky (it falls through to
 // REAL DNS). We therefore test what is meaningful AT THIS PACKAGE'S LAYER: that the
-// re-exported guard, driven down the DNS-less branch via the deterministic, public
+// shared guard, driven down the DNS-less branch via the deterministic, public
 // `dnsLookup: null` seam, makes the correct allow/deny decisions — no internal-import mock,
 // fully offline + deterministic.
 
+import { createGuardedFetch } from "@jeswr/guarded-fetch";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createGuardedFetch, SsrfError } from "../src/index.js";
+import { SsrfError } from "../src/index.js";
 
 function okFetch(): { fetch: typeof globalThis.fetch; calls: string[] } {
   const calls: string[] = [];
@@ -35,7 +37,7 @@ function stubBrowser() {
   vi.stubGlobal("document", {});
 }
 
-describe("re-exported guard — DNS-less branch (dnsLookup: null) decisions", () => {
+describe("shared guard — DNS-less branch (dnsLookup: null) decisions", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
   });
