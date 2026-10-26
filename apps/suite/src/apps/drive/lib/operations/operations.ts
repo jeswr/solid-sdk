@@ -420,3 +420,25 @@ export async function searchByName(
   }
   return out.slice(0, options.limit ?? 100);
 }
+
+/** Bytes used by files under `root` (hidden names included: trash counts). */
+export async function measureUsage(
+  client: DriveClient,
+  root: string,
+  options: { maxContainers?: number } = {},
+): Promise<number> {
+  const maxContainers = options.maxContainers ?? 400;
+  let total = 0;
+  const frontier = [root];
+  let visited = 0;
+  while (frontier.length > 0 && visited < maxContainers) {
+    const batch = frontier.splice(0, Math.min(8, maxContainers - visited));
+    visited += batch.length;
+    const listings = await Promise.all(batch.map((url) => client.list(url).catch(() => [])));
+    for (const item of listings.flat()) {
+      if (item.kind === "folder") frontier.push(item.url);
+      else total += item.size ?? 0;
+    }
+  }
+  return total;
+}
