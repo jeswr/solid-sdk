@@ -416,3 +416,67 @@ per-commit review remains outstanding. Both requested findings are implemented.
 No pushes, PRs, branch switches, remote fetches/merges, tracker changes, or edits
 to other checkouts were performed. No implementation work or open questions
 remain; the earlier pilot/live-server verification limits still apply.
+
+## Review fix round 3 — policy semantics and exact graph correspondence
+
+Review/fix base and affected-gate comparison:
+`306db133142931fcbcd50ff514c3cdc04884e410`; branch remains `lane/sst-vcij`.
+
+- `e786842a` — `fix(pkg-memory): deny unsupported policy semantics`: deny
+  profiles and unverified delegation in the public purpose filter on every read,
+  including direct callers and later policy edits. Cover both purposes, scalar
+  and array profiles, empty declarations, and combined profile/delegation fields.
+- `b7a31623` — `fix(pkg-memory): compare exact shared graph literals`: separate
+  literal-preserving graph comparison from the builder's RDFlib-compatible
+  assertion normalization. Reject conflicting lexical forms for all four temporal
+  datatypes in both listing orders; preserve the original assertion safety checks.
+- `a8165595` — `fix(pkg-memory): reject ambiguous shared node labels`: require
+  unique structural labels for nodes in their common shared graphs before any Pod
+  mutation, including single-resource puts that could be repeated in later calls.
+  Listing ambiguous older/external resources also rejects. Cover reordered
+  symmetric authors, reversed/repeated listings, private local symmetry, and
+  authors distinguished by exact literal spellings; retain existing joint-graph
+  correspondence regressions.
+- Final documentation commit — `docs: record sst-vcij round three validation`:
+  this report, committed last after the required gates.
+
+Conservative choice: reject shared-node correspondence that structural refinement
+cannot resolve without tie-breaking search. No persistent mapping format or
+delegation evaluation was introduced. Policies declaring even empty profile or
+delegation fields deny. No new design questions remain.
+
+### Validation
+
+Commands ran with `/opt/node24/bin` first on `PATH` (Node v24.22.1 and pnpm 10.4.1).
+
+| Exact command | Result |
+| --- | --- |
+| `pnpm exec turbo run build --filter=@jeswr/pkg-memory...` | PASS; four dependency-first builds. |
+| `pnpm --filter @jeswr/pkg-memory exec vitest run test/purpose.test.ts -t 'unsupported policy semantics' --coverage.enabled=false` | Expected FAIL before the policy fix; seven regression cases reproduced the finding. |
+| `pnpm --filter @jeswr/pkg-memory exec vitest run test/store.test.ts -t 'lexically distinct' --coverage.enabled=false` | Expected FAIL before the literal fix; all four temporal datatype cases reproduced the finding. |
+| `pnpm --filter @jeswr/pkg-memory exec vitest run test/store.test.ts -t 'ambiguous.*shared authors' --coverage.enabled=false` | Expected FAIL before the ambiguity fix; four write/list regression cases reproduced the finding. |
+| `pnpm --filter @jeswr/pkg-memory run lint` | PASS. |
+| `pnpm --filter @jeswr/pkg-memory run build` | PASS. |
+| `pnpm --filter @jeswr/pkg-memory run typecheck` | PASS, including tests. |
+| `pnpm --filter @jeswr/pkg-memory run test` | PASS; 11 files, 589 tests; 100% statements, branches, functions, and lines. |
+| `TURBO_SCM_BASE=306db133142931fcbcd50ff514c3cdc04884e410 pnpm run gate` | PASS; root lint and 8 successful tasks. |
+| `pnpm run gate:full` (first attempt) | FAIL outside this lane; one root agent-layer fixture exceeded its 5000 ms timeout during concurrent builds; 685 other root tests passed and 53 tasks succeeded. |
+| `pnpm exec turbo run test:root` | PASS without competing builds; all 686 root tests. |
+| `pnpm run gate:full` (retry) | FAIL outside this lane; 283 successful tasks before `@jeswr/federation-codegen#test` stopped the run (2 failed, 23 passed tests). Passing root tests were cached. |
+| `git diff --check 306db133142931fcbcd50ff514c3cdc04884e410` | PASS. |
+
+The full-gate retry reproduced the previously documented Bookmark target-class
+and generated-ontology namespace mismatches in
+`tools/federation-codegen/test/generator.test.ts`. The tool/vocabulary inputs and
+the timed-out root test/guard are unchanged from this round's base, verified with
+`git diff 306db133142931fcbcd50ff514c3cdc04884e410 --exit-code -- tools/federation-codegen packages/solid-federation-vocab test/agent-layers.test.mjs scripts/check-agent-layers.mjs`.
+Generated web-public build artifacts were removed before the final commit.
+
+All three requested findings are implemented with 19 added regression cases.
+No dependency, manifest, or lockfile changed; no dependency policy check was
+needed. Tests use fictional identities and the memory PodPort. `roborev` remains
+unavailable (`command -v roborev` found no executable), so independent automated
+per-commit review remains outstanding. No implementation work or open questions
+remain. No pushes, PRs, branch switches, remote fetches/merges, tracker changes,
+or edits to other checkouts were performed. The earlier pilot/live-server
+verification limits still apply.
