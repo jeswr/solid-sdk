@@ -2269,6 +2269,13 @@ importers:
         version: 4.1.10(vitest@4.1.10)
 
   packages/agent-credentials:
+    dependencies:
+      jose:
+        specifier: ^6.2.3
+        version: 6.2.3
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
     devDependencies:
       '@vitest/coverage-v8':
         specifier: ^4.1.10
