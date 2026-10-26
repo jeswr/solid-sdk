@@ -203,6 +203,120 @@ test.each(["revoked", "expires"])("rejects malformed %s metadata", (field) => {
   }
 });
 
+const publicKeys = [
+  { kty: "OKP", crv: "Ed25519", x: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" },
+  { kty: "EC", crv: "P-256", x: "AQID", y: "BAUG" },
+  { kty: "RSA", n: "AQID", e: "AQAB" },
+  { kty: "oct", k: "AQID" },
+];
+
+function withKey(publicKeyJwk: unknown): Record<string, unknown> {
+  return minimal({
+    verificationMethod: [{ ...sparqLwsCid.verificationMethod[0], publicKeyJwk }],
+  });
+}
+
+test.each(publicKeys)("preserves structurally valid $kty key parameters", (key) => {
+  const body = withKey(key);
+  const before = structuredClone(body);
+  expect(
+    parseLwsDescription(body, storageUrl, requestUrl).verificationMethods[0]?.publicKeyJwk,
+  ).toEqual(key);
+  expect(body).toEqual(before);
+});
+
+test.each(publicKeys)("requires nonempty $kty key parameters", (key) => {
+  for (const field of Object.keys(key)) {
+    for (const value of [undefined, null, "", " ", 4, {}, []]) {
+      failure(withKey({ ...key, [field]: value }));
+    }
+  }
+});
+
+test.each([
+  {},
+  { kty: "unknown" },
+  { kty: "__proto__" },
+])("rejects unknown or missing key types: %j", (key) => {
+  failure(withKey(key));
+});
+
+const jwkStringMembers = [
+  "alg",
+  "crv",
+  "d",
+  "dp",
+  "dq",
+  "e",
+  "k",
+  "n",
+  "p",
+  "q",
+  "qi",
+  "use",
+  "x",
+  "y",
+  "kid",
+  "x5u",
+  "x5t",
+  "x5t#S256",
+];
+
+test.each(jwkStringMembers)("rejects non-string JWK %s members", (field) => {
+  for (const value of [null, 4, false, {}, []]) {
+    failure(withKey({ ...publicKeys[0], [field]: value }));
+  }
+});
+
+test("preserves well-typed optional JWK members and unknown extensions", () => {
+  // Synthetic member values exercise the contract, not cryptographic key import.
+  const key = {
+    ...Object.fromEntries(jwkStringMembers.map((field) => [field, "AQID"])),
+    ...publicKeys[0],
+    ext: false,
+    key_ops: ["verify"],
+    x5c: ["AQID"],
+    oth: [{ r: "AQID", d: "AQID", t: "AQID" }],
+    "example:extension": { arbitrary: true },
+  };
+  const body = withKey(key);
+  const before = structuredClone(body);
+  expect(
+    parseLwsDescription(body, storageUrl, requestUrl).verificationMethods[0]?.publicKeyJwk,
+  ).toEqual(key);
+  expect(body).toEqual(before);
+  expect(
+    parseLwsDescription(
+      withKey({ ...key, ext: true, key_ops: [], x5c: [], oth: [] }),
+      storageUrl,
+      requestUrl,
+    ).verificationMethods[0]?.publicKeyJwk.ext,
+  ).toBe(true);
+});
+
+test.each([null, "false", 0, {}, []])("rejects non-boolean JWK ext: %j", (ext) => {
+  failure(withKey({ ...publicKeys[0], ext }));
+});
+
+test.each(["key_ops", "x5c"])("requires a string array for JWK %s", (field) => {
+  for (const value of [null, "verify", {}, [null], [4], [{}], [""]]) {
+    failure(withKey({ ...publicKeys[0], [field]: value }));
+  }
+});
+
+test.each([
+  null,
+  {},
+  "prime",
+  [null],
+  [[]],
+  [{}],
+  [{ r: "AQID", d: "AQID" }],
+  [{ r: "AQID", d: 4, t: "AQID" }],
+])("rejects malformed RSA other-prime members: %j", (oth) => {
+  failure(withKey({ ...publicKeys[2], oth }));
+});
+
 test.each([
   null,
   undefined,

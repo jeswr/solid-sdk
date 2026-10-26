@@ -66,6 +66,68 @@ export function parseLwsDescription(
     return (Array.isArray(value) ? value : [value]).map((item) => string(item, field));
   }
 
+  function jwk(value: unknown): JsonWebKey {
+    const key = record(value, "publicKeyJwk");
+    const kty = string(key.kty, "publicKeyJwk kty");
+    let required: readonly string[];
+    switch (kty) {
+      case "EC":
+        required = ["crv", "x", "y"];
+        break;
+      case "RSA":
+        required = ["n", "e"];
+        break;
+      case "OKP":
+        required = ["crv", "x"];
+        break;
+      case "oct":
+        required = ["k"];
+        break;
+      default:
+        return invalid("publicKeyJwk kty is unsupported");
+    }
+    for (const field of required) string(key[field], `publicKeyJwk ${field}`);
+    // Check all Web Crypto JsonWebKey members, plus the standard JOSE metadata.
+    // Unknown extension members remain data; cryptographic usability is checked at key import.
+    for (const field of [
+      "alg",
+      "crv",
+      "d",
+      "dp",
+      "dq",
+      "e",
+      "k",
+      "n",
+      "p",
+      "q",
+      "qi",
+      "use",
+      "x",
+      "y",
+      "kid",
+      "x5u",
+      "x5t",
+      "x5t#S256",
+    ]) {
+      if (key[field] !== undefined && typeof key[field] !== "string") {
+        invalid(`publicKeyJwk ${field} must be a string`);
+      }
+    }
+    if (key.ext !== undefined && typeof key.ext !== "boolean") {
+      invalid("publicKeyJwk ext must be a boolean");
+    }
+    for (const field of ["key_ops", "x5c"]) {
+      for (const item of array(key[field], `publicKeyJwk ${field}`)) {
+        string(item, `publicKeyJwk ${field} member`);
+      }
+    }
+    for (const item of array(key.oth, "publicKeyJwk oth")) {
+      const prime = record(item, "publicKeyJwk oth member");
+      for (const field of ["r", "d", "t"]) string(prime[field], `publicKeyJwk oth ${field}`);
+    }
+    return key;
+  }
+
   function expand(term: string): string {
     return term.includes(":") ? term : `${LWS_NAMESPACE}${term}`;
   }
@@ -137,7 +199,7 @@ export function parseLwsDescription(
       id: string(method.id, "verificationMethod id"),
       type: string(method.type, "verificationMethod type"),
       controller: string(method.controller, "verificationMethod controller"),
-      publicKeyJwk: record(method.publicKeyJwk, "publicKeyJwk"),
+      publicKeyJwk: jwk(method.publicKeyJwk),
       ...(method.revoked === undefined
         ? {}
         : { revoked: timestamp(method.revoked, "verificationMethod revoked") }),

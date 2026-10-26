@@ -26,6 +26,10 @@ type/subscriptionType terms, and preserves unknown types and raw extra keys. Ver
 types and key material retain their cryptographic vocabulary. Scalar subscriptionType values stay
 scalar; list values stay lists. Malformed descriptions throw `CapabilitiesError` with
 `code: 'description-invalid'`; foreign description/root authorities throw `code: 'root-mismatch'`.
+Verification methods retain optional CID `revoked` and `expires` timestamps. Consumers must enforce
+these limits when using a key, including from cached descriptions. JWK parsing checks known member
+types and requires the key parameters for EC, RSA, OKP, and oct keys; other key types are rejected
+conservatively. Cryptographic key import and signature verification remain the consumer's responsibility.
 Errors carry the supplied storage URL. URL normalisation keeps path case and trailing slashes.
 
 The parser sets `fetchedAt` to `Date.now()`, `etag` to `null`, and `maxAgeMs` to 3,600,000. The later
