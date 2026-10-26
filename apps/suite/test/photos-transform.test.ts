@@ -95,8 +95,8 @@ describe("EXIF normalization", () => {
     expect(createEditRecord()).toEqual({ orientation: 1, crop: full });
   });
   it("returns independent matrices and rejects invalid saved orientations", () => {
-    const matrix = orientationMatrix(1) as number[];
-    matrix[0] = 100;
+    const matrix = orientationMatrix(1);
+    Reflect.set(matrix, "0", 100);
     expect(orientationMatrix(1)[0]).toBe(1);
     fails(() => composeEdits({ orientation: 9, crop: full }, []), "invalid-orientation");
   });
