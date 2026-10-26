@@ -96,3 +96,58 @@ No `dist/` files are committed. No push, PR, merge, or publication was performed
 - Conservative choices are numbered in `QUESTIONS.md`: principal-to-server factory,
   fixed 1 MiB cap with stateless JSON responses, and exact public authority/origins
   with absent Origin allowed for native clients. No unresolved choice blocks HTTP.
+
+<!-- AUTHORED-BY Codex GPT-6 — fix round 2 validation -->
+## Fix round 2
+
+Starting commit: `9c3f13e8aa5f9ffbb2e2f23aee2a4210859e17fa`.
+
+- `2234cf0f` — `fix: correct MCP HTTP preflights and parse errors`: allow GET
+  preflights and include GET in `Access-Control-Allow-Methods`; preserve 405 and
+  `Allow: POST, OPTIONS` for actual authenticated GET requests. Make the JSON-RPC
+  error code configurable and return `-32700` for JSON/UTF-8 parse failures.
+  Regression tests also preserve the default `-32000` body validation error code.
+- `docs: record sst-vaj round two validation` — this report update.
+
+The regression tests failed before the implementation (six failures covering the
+preflight advertisement, GET preflight rejection, and four malformed-body cases).
+After the fix, all 74 HTTP tests pass. `src/http.ts` retains 100% coverage:
+69/69 branches, 107/107 lines, 114/114 statements, and 11/11 functions.
+
+Passed commands:
+
+```sh
+pnpm --filter @jeswr/solid-mcp exec vitest run test/http.test.ts --coverage
+PATH=/tmp/sst-vaj-git-bin:$PATH GIT_ALLOW_PROTOCOL=file pnpm --filter @jeswr/solid-mcp run lint
+pnpm --filter @jeswr/solid-mcp exec tsc --ignoreConfig src/http.ts --noEmit --strict --skipLibCheck --target es2022 --module nodenext --moduleResolution nodenext --lib es2022,dom,dom.asynciterable --types node
+git diff --check
+```
+
+Required package gate attempted before the final commit:
+
+```sh
+PATH=/tmp/sst-vaj-git-bin:$PATH GIT_ALLOW_PROTOCOL=file pnpm --filter @jeswr/solid-mcp run lint && PATH=/tmp/sst-vaj-git-bin:$PATH GIT_ALLOW_PROTOCOL=file pnpm --filter @jeswr/solid-mcp run build && PATH=/tmp/sst-vaj-git-bin:$PATH GIT_ALLOW_PROTOCOL=file pnpm --filter @jeswr/solid-mcp run typecheck && PATH=/tmp/sst-vaj-git-bin:$PATH GIT_ALLOW_PROTOCOL=file pnpm --filter @jeswr/solid-mcp run test
+```
+
+Lint passed; build exited 1 in the existing `build-deps.mjs` because the pinned
+`@jeswr/fetch-rdf` dependency lacks `dist/`. Its attempted Git network clone was
+rejected by the existing temporary PATH guard. Typecheck and test were attempted
+separately and both exited 1 in the same dependency prelude:
+
+```sh
+PATH=/tmp/sst-vaj-git-bin:$PATH GIT_ALLOW_PROTOCOL=file pnpm --filter @jeswr/solid-mcp run typecheck
+PATH=/tmp/sst-vaj-git-bin:$PATH GIT_ALLOW_PROTOCOL=file pnpm --filter @jeswr/solid-mcp run test
+PATH=/tmp/sst-vaj-git-bin:$PATH GIT_ALLOW_PROTOCOL=file TURBO_SCM_BASE=9c3f13e8aa5f9ffbb2e2f23aee2a4210859e17fa pnpm run gate
+PATH=/tmp/sst-vaj-git-bin:$PATH GIT_ALLOW_PROTOCOL=file pnpm run gate:full
+```
+
+The affected gate passed root lint and workspace checks, then exited 1 at
+`@jeswr/solid-mcp#build` (2 successful tasks, 4 total). The full gate exited 1 at
+`@jeswr/unstorage-solid#build` (9 successful tasks, 134 total), also due to the
+missing pinned `fetch-rdf` output and blocked network clone. Logs:
+`/tmp/sst-vaj-round2-{typecheck,test,affected-gate,full-gate}.log`.
+
+Both review findings are fixed. No dependencies were added, so `check:packages`
+was not required. The existing dependency-artifact gate blocker remains;
+`roborev` is still unavailable. No new design questions or unfinished implementation
+work. No remote fetch, push, PR, merge, publication, or tracker changes were made.
