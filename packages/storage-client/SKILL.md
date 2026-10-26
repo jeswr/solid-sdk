@@ -32,9 +32,10 @@ Solid read side (ADR-003 §6):
   `describedby` → `metadataUrl`, WAC-Allow `user` → `allow`, and path arithmetic for `parent`.
   `read` sends Accept, If-None-Match and `Range: bytes=…` (206). Only 200, a requested 206 and a
   conditional 304 succeed; any other 2xx/3xx is `invalid-response`. `body` is the live stream;
-  `bytes()/text()/blob()` buffer it once, and a body failing mid-transfer is a `network` error.
-- Scope errors redact embedded credentials, and the slashless root alias is the root
-  (`parentOf` → null).
+  `bytes()/text()/blob()` buffer that same stream once (use one or the other). A body failing
+  mid-transfer is a `network` error on both paths (non-retryable once the signal aborted).
+- Scope errors redact embedded credentials in every authority spelling (backslashes included),
+  and the slashless root alias is the root even with a query or fragment (`parentOf` → null).
 - `readRdf` accepts `text/turtle, application/ld+json;q=0.9`, maps 304 to `notModified`, and
   reports a non-RDF or unparsable body as `not-rdf`. `metadata` reads the `describedby` document as
   RDF (`unsupported` when none is advertised).

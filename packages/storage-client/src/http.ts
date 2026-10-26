@@ -17,11 +17,20 @@ export function scoped(root: string, method: string, url: string): string {
     // Absolute URLs only: guarded-fetch would resolve a relative reference against the root.
     if (typeof url !== "string" || !URL.canParse(url)) throw new TypeError("not an absolute URL");
     const canonical = assertWithinPodScope(root, url);
-    // The slashless alias of the root is the root (guarded-fetch accepts both spellings).
-    return `${canonical}/` === root ? root : canonical;
+    // The slashless alias of the root is the root (guarded-fetch accepts both spellings), with
+    // any query or fragment kept, so parents and listings never step above the storage.
+    const parsed = new URL(canonical);
+    const { search, hash } = parsed;
+    parsed.search = "";
+    parsed.hash = "";
+    return `${parsed.href}/` === root ? `${root}${search}${hash}` : canonical;
   } catch (cause) {
-    // Never echo embedded credentials (guarded-fetch redacts its own messages too).
-    const shown = redactUserinfo(String(url));
+    // Never echo embedded credentials (guarded-fetch redacts its own messages too). Parse first
+    // so every authority spelling (backslashes, mixed slashes) is normalised to `//` before redaction.
+    const text = String(url);
+    const shown = redactUserinfo(
+      URL.canParse(text) ? new URL(text).href : text.replaceAll("\\", "/"),
+    );
     throw new StorageError("scope", {
       method,
       url: shown,
@@ -120,9 +129,69 @@ export interface ReadShape {
   withBody: boolean;
 }
 
+/** A failed response body as a StorageError: `network`, non-retryable when `signal` aborted. */
+function bodyFailure(url: string, signal: AbortSignal | undefined, cause: unknown): StorageError {
+  try {
+    throwIfAborted("GET", url, signal);
+  } catch (aborted) {
+    return aborted as StorageError;
+  }
+  return new StorageError("network", {
+    method: "GET",
+    url,
+    cause,
+    message: `GET ${url}: the response body failed`,
+  });
+}
+
+/** Re-expose a response body so that transport failures surface as StorageError, not TypeError. */
+function mappedBody(
+  body: ReadableStream<Uint8Array>,
+  url: string,
+  signal: AbortSignal | undefined,
+): ReadableStream<Uint8Array> {
+  const reader = body.getReader();
+  return new ReadableStream<Uint8Array>(
+    {
+      async pull(controller) {
+        try {
+          const chunk = await reader.read();
+          if (chunk.done) controller.close();
+          else controller.enqueue(chunk.value);
+        } catch (cause) {
+          controller.error(bodyFailure(url, signal, cause));
+        }
+      },
+      cancel: (reason) => reader.cancel(reason),
+    },
+    // Pull only on demand, so a failure is classified (abort or transport) when it is read.
+    { highWaterMark: 0 },
+  );
+}
+
+async function collect(body: ReadableStream<Uint8Array> | null): Promise<Uint8Array> {
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  if (body) {
+    const reader = body.getReader();
+    for (let chunk = await reader.read(); !chunk.done; chunk = await reader.read()) {
+      chunks.push(chunk.value);
+      size += chunk.value.byteLength;
+    }
+  }
+  const bytes = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return bytes;
+}
+
 /**
- * Build a ReadResult over a response. `body` is the live stream; `bytes()/text()/blob()` buffer
- * it once and return copies, so use either the stream or the buffered accessors, not both.
+ * Build a ReadResult over a response. `body` is the live stream (its failures are `network`
+ * StorageErrors); `bytes()/text()/blob()` buffer that same stream once and return copies, so use
+ * either the stream or the buffered accessors, not both.
  */
 export function readResultFrom(
   response: Response,
@@ -131,33 +200,20 @@ export function readResultFrom(
   signal?: AbortSignal,
 ): ReadResult {
   const contentType = response.headers.get("content-type");
+  if (!shape.withBody) discard(response.body);
+  const body = shape.withBody && response.body ? mappedBody(response.body, url, signal) : null;
   let buffered: Promise<Uint8Array> | undefined;
   const bytes = async () => {
-    buffered ??= shape.withBody
-      ? response.arrayBuffer().then(
-          (buffer) => new Uint8Array(buffer),
-          (cause: unknown) => {
-            // A body that fails mid-transfer is a network error; an abort is not retryable.
-            throwIfAborted("GET", url, signal);
-            throw new StorageError("network", {
-              method: "GET",
-              url,
-              cause,
-              message: `GET ${url}: the response body failed`,
-            });
-          },
-        )
-      : Promise.resolve(new Uint8Array());
+    buffered ??= collect(body);
     return (await buffered).slice();
   };
-  if (!shape.withBody) discard(response.body);
   return {
     url,
     status: shape.status,
     etag: response.headers.get("etag"),
     contentType,
     lastModified: dateOf(response.headers.get("last-modified")),
-    body: shape.withBody ? response.body : null,
+    body,
     bytes,
     text: async () => new TextDecoder().decode(await bytes()),
     blob: async () => new Blob([await bytes()], contentType ? { type: contentType } : {}),

@@ -467,6 +467,50 @@ describe("review round 1 regressions", () => {
     expect((await rejects(result.text(), "network")).retryable).toBe(false);
   });
 
+  test("the streaming body maps failures and aborts to network errors, and forwards cancel", async () => {
+    const failing = () =>
+      new ReadableStream<Uint8Array>({
+        pull(controller) {
+          controller.error(new TypeError("terminated"));
+        },
+      });
+    const storage = createSolidBackend({
+      root: CSS_ROOT,
+      fetch: async () =>
+        new Response(failing(), { status: 200, headers: { "content-type": "text/plain" } }),
+    });
+    const streamed = (await storage.read(`${NOTES}a`)).body as ReadableStream<Uint8Array>;
+    const error = await rejects(streamed.getReader().read(), "network");
+    expect(error.retryable).toBe(true);
+    const controller = new AbortController();
+    const aborted = await storage.read(`${NOTES}a`, { signal: controller.signal });
+    controller.abort();
+    const reader = (aborted.body as ReadableStream<Uint8Array>).getReader();
+    expect((await rejects(reader.read(), "network")).retryable).toBe(false);
+
+    let cancelled: unknown;
+    const endless = createSolidBackend({
+      root: CSS_ROOT,
+      fetch: async () =>
+        new Response(
+          new ReadableStream<Uint8Array>({
+            pull(c) {
+              c.enqueue(new TextEncoder().encode("x"));
+            },
+            cancel(reason) {
+              cancelled = reason;
+            },
+          }),
+          { status: 200, headers: { "content-type": "text/plain" } },
+        ),
+    });
+    const live = (await endless.read(`${NOTES}a`)).body as ReadableStream<Uint8Array>;
+    const liveReader = live.getReader();
+    expect((await liveReader.read()).value).toEqual(new TextEncoder().encode("x"));
+    await liveReader.cancel("done");
+    expect(cancelled).toBe("done");
+  });
+
   test("odd rdf:type objects and numeric posix:mtime never drop a member", async () => {
     const odd = backend({
       [`GET ${NOTES}`]: {
@@ -497,6 +541,35 @@ describe("review round 1 regressions", () => {
     expect(error.message).not.toContain("secret");
     expect(error.url).not.toContain("secret");
     expect(await storage.parentOf("https://css.example/alice")).toBeNull();
+  });
+
+  test("backslash authorities never echo credentials, parseable or not", async () => {
+    const { storage } = backend();
+    for (const url of [
+      String.raw`https:\\user:secret@evil.example/x`,
+      String.raw`https:/\user:secret@evil.example/x`,
+      String.raw`not a url \\user:secret@evil.example/x`,
+    ]) {
+      const error = await rejects(storage.read(url), "scope");
+      expect(error.message).not.toContain("secret");
+      expect(error.url).not.toContain("secret");
+    }
+  });
+
+  test("root aliases with a query or fragment stay the root", async () => {
+    const fetched: string[] = [];
+    const storage = createSolidBackend({
+      root: CSS_ROOT,
+      fetch: async (input) => {
+        fetched.push(String(input));
+        return new Response("x", { status: 200, headers: { "content-type": "text/plain" } });
+      },
+    });
+    expect(await storage.parentOf("https://css.example/alice?x=1")).toBeNull();
+    expect(await storage.parentOf("https://css.example/alice#top")).toBeNull();
+    const result = await storage.read("https://css.example/alice?x=1");
+    expect(result.parent).toBeNull();
+    expect(fetched).toEqual([`${CSS_ROOT}?x=1`]);
   });
 
   test("unexpected successes are invalid-response", async () => {
