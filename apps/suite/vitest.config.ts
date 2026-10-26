@@ -35,6 +35,7 @@ export default defineConfig({
         "src/apps/calendar/lib/reminders/**/*.ts",
         "src/apps/calendar/lib/tz/**/*.ts",
         "src/apps/chat/lib/timeline/**/*.ts",
+        "src/apps/chat/lib/unread/**/*.ts",
         "src/apps/health/lib/stats/**/*.ts",
         "src/apps/health/lib/units/**/*.ts",
         "src/apps/health/lib/trends/**/*.ts",
