@@ -13,6 +13,7 @@ export default defineConfig({
         "src/apps/docs/lib/diff/**/*.ts",
         "src/apps/tasks/lib/quickadd/**/*.ts",
         "src/apps/music/lib/metadata/**/*.ts",
+        "src/apps/music/lib/lyrics/**/*.ts",
         "src/apps/contacts/lib/vcard/**/*.ts",
         "src/apps/money/lib/import/**/*.ts",
         "src/apps/calendar/lib/ics/**/*.ts",
