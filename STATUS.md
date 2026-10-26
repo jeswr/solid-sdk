@@ -59,3 +59,36 @@ in `QUESTIONS.md`: descriptor predicates and Type Index ownership.
 
 The implementation is committed on the assigned lane. No PR, push, branch switch, merge,
 or changes to another checkout were made. Workspace inventory is unchanged.
+
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+## Fix round 1 — review of f0f6db62faa8
+
+All four supplied findings are addressed on `lane/sst-q86l`:
+
+- `9e0d660f` — `fix(sheets): preserve lossless CSV conversions`: compare normalized
+  decimal coefficients and exponents before inference, preserving rounded/underflowing
+  lexemes as text. Reject Date cells outside years 0000–9999 before CSV export or
+  descriptor inference, the conservative option permitted by the finding.
+- `7a3dff85` — `fix(sheets): preserve valid RDF registrations`: emit creation and
+  modification timestamps with `LiteralFrom.dateTime`; mint an unused registration IRI
+  when any subject already occupies the generated IRI, including suffixed collisions.
+  Tests verify preservation of all original RDF and one-write idempotence.
+- Final documentation commit: `docs: record sheets fix validation` (this section).
+
+Regression tests reproduced all four findings before their fixes. Validation after fixes:
+
+| Command | Result |
+| --- | --- |
+| `pnpm --filter @jeswr/guarded-fetch --filter @jeswr/rdf-serialize --filter @jeswr/suite-ui run build` | PASS: required ignored workspace outputs built before app tests. |
+| `pnpm --filter @jeswr/app-suite run lint && pnpm --filter @jeswr/app-suite run build && pnpm --filter @jeswr/app-suite run typecheck && pnpm --filter @jeswr/app-suite run test` | PASS: lint, production Next build, strict typecheck, 50 tests across 5 files. |
+| `pnpm --filter @jeswr/app-suite run test:coverage` | PASS: statements 320/320, branches 211/211, functions 70/70, lines 289/289 (100% each). |
+| `PATH="/tmp/sht-q86l-no-remote-git:$PATH" TURBO_SCM_BASE=f0f6db62faa8d61e07912424d0bdf42252dfb052 pnpm run gate` | PASS: root lint/guards and all 8 affected Turbo tasks. |
+| `PATH="/tmp/sht-q86l-no-remote-git:$PATH" npm_config_cache=/tmp/sht-q86l-npm-cache pnpm run gate:full` | BLOCKED outside Sheets: 18 successful tasks before `@jeswr/unstorage-solid#build` attempted a remote fetch-rdf clone, which the existing temporary Git guard refused. No remote retrieval was performed. |
+| `git diff --check` | PASS. |
+
+No dependencies added, no UI changes, and no supplied finding remains unfinished. No new
+open questions. Full-workspace validation still requires the unrelated dependency bootstrap
+to be provisioned by the integrator. `roborev` remains unavailable; no new automated review
+verdict could be obtained. No push, PR, branch switch, merge, or other checkout edits.
