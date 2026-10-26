@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * Recorded GitHub REST v3 shapes (api.github.com) — trimmed to the fields the
  * adapter reads. Sources: GET /user, GET /user/repos?sort=pushed.

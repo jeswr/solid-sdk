@@ -12,6 +12,7 @@
  */
 import { DataFactory, Store } from "n3";
 import { postJson } from "../core/fixture-fetch.js";
+import { Pagination } from "../core/pagination.js";
 import { arr, optionalDate, optionalText, SkipCounter } from "../core/safe.js";
 import type { ImportContext, ImportOutcome, IntegrationAdapter } from "../core/types.js";
 import { CLASSES, DataCollection, DigitalDocument } from "../core/vocab.js";
@@ -54,16 +55,24 @@ export const notionAdapter: IntegrationAdapter = {
     const skipped = new SkipCounter();
 
     ctx.progress({ label: "Searching your Notion workspace…", done: 0, total: 2 });
-    const search = await postJson<NotionSearchAnswer>(ID, ctx.api, `${API}/search`, {
-      page_size: 100,
-    });
+    const results = [];
+    const pagination = new Pagination(ID);
+    let cursor: string | undefined;
+    do {
+      const search = await postJson<NotionSearchAnswer>(ID, ctx.api, `${API}/search`, {
+        page_size: 100,
+        ...(cursor ? { start_cursor: cursor } : {}),
+      });
+      results.push(...arr(search?.results));
+      cursor = search?.has_more ? pagination.next(search.next_cursor) : undefined;
+    } while (cursor);
 
     const pagesDoc = ctx.resolve("documents/pages.ttl");
     const dbDoc = ctx.resolve("documents/databases.ttl");
     const pages = new Store();
     const databases = new Store();
 
-    for (const result of arr(search?.results)) {
+    for (const result of results) {
       // A result with no id has no stable fragment IRI — skip it.
       const id = result ? optionalText(result.id) : undefined;
       if (!result || id === undefined) {
@@ -96,12 +105,14 @@ export const notionAdapter: IntegrationAdapter = {
       category: "documents",
       forClass: CLASSES.TextDigitalDocument,
       dataset: pages,
+      sourceUrl: `${API}/search`,
     });
     await ctx.write({
       slug: "documents/databases.ttl",
       category: "documents",
       forClass: CLASSES.Dataset,
       dataset: databases,
+      sourceUrl: `${API}/search`,
     });
 
     ctx.progress({ label: "Done", done: 2, total: 2 });

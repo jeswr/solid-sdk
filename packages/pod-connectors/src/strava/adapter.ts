@@ -12,8 +12,7 @@
  * Live-mode honesty: Strava's token endpoint requires the client secret (no
  * public PKCE) — live mode needs the maintainer's token proxy.
  */
-import { DataFactory } from "n3";
-import { asStore } from "../core/dataset.js";
+import { DataFactory, Store } from "n3";
 import { getJson } from "../core/fixture-fetch.js";
 import { arr, optionalDate, optionalNumber, optionalText, SkipCounter } from "../core/safe.js";
 import type { ImportContext, ImportOutcome, IntegrationAdapter } from "../core/types.js";
@@ -60,18 +59,24 @@ export const stravaAdapter: IntegrationAdapter = {
 
     ctx.progress({ label: "Fetching your activities…", done: 0, total: 2 });
     const after = ctx.cursor ? `&after=${encodeURIComponent(ctx.cursor)}` : "";
-    const activities = await getJson<StravaActivity[] | null>(
-      ID,
-      ctx.api,
-      `${API}/athlete/activities?per_page=100${after}`,
-    );
-    const list = arr(activities);
+    const list: (StravaActivity | null)[] = [];
+    for (let page = 1; ; page += 1) {
+      const batch = arr(
+        await getJson<StravaActivity[] | null>(
+          ID,
+          ctx.api,
+          `${API}/athlete/activities?per_page=100${after}&page=${page}`,
+        ),
+      );
+      list.push(...batch);
+      if (batch.length < 100) break;
+    }
 
     const workoutsDoc = ctx.resolve("fitness/activities.ttl");
     const ridesDoc = ctx.resolve("travel/rides.ttl");
-    // Merge into what's already there (incremental imports append).
-    const workouts = asStore(await ctx.read("fitness/activities.ttl"));
-    const rides = asStore(await ctx.read("travel/rides.ttl"));
+    // Let the framework replace incoming subjects, including removed optional fields.
+    const workouts = new Store();
+    const rides = new Store();
 
     for (const a of list) {
       // An activity with no id has no stable fragment IRI — skip it.
@@ -100,12 +105,16 @@ export const stravaAdapter: IntegrationAdapter = {
       category: "health",
       forClass: CLASSES.ExerciseAction,
       dataset: workouts,
+      writeMode: ctx.cursor ? "merge" : "replace",
+      sourceUrl: `${API}/athlete/activities`,
     });
     await ctx.write({
       slug: "travel/rides.ttl",
       category: "mobility",
       forClass: CLASSES.TravelAction,
       dataset: rides,
+      writeMode: ctx.cursor ? "merge" : "replace",
+      sourceUrl: `${API}/athlete/activities`,
     });
 
     ctx.progress({ label: "Done", done: 2, total: 2 });
@@ -131,6 +140,7 @@ function nextCursor(
   activities: (StravaActivity | null)[],
 ): string | undefined {
   const epochs = activities
+    .filter((a) => a?.id !== undefined && a?.id !== null)
     .map((a) => (a?.start_date ? Math.floor(Date.parse(a.start_date) / 1000) : Number.NaN))
     .filter((n) => Number.isFinite(n));
   if (previous) epochs.push(Number.parseInt(previous, 10) || 0);

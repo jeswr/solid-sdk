@@ -72,21 +72,29 @@ export const githubAdapter: IntegrationAdapter = {
       category: "work-education",
       forClass: CLASSES.OnlineAccount,
       dataset: profile,
+      sourceUrl: `${API}/user`,
       // Companion doc: it rides along in the registered work container —
       // registering OnlineAccount would misfile GitHub under Social.
       skipRegistration: true,
     });
 
     ctx.progress({ label: "Fetching your repositories…", done: 1, total: 2 });
-    const repos = await getJson<GitHubRepo[] | null>(
-      ID,
-      ctx.api,
-      `${API}/user/repos?sort=pushed&per_page=100`,
-    );
+    const repos: (GitHubRepo | null)[] = [];
+    for (let page = 1; ; page += 1) {
+      const batch = arr(
+        await getJson<GitHubRepo[] | null>(
+          ID,
+          ctx.api,
+          `${API}/user/repos?sort=pushed&per_page=100&page=${page}`,
+        ),
+      );
+      repos.push(...batch);
+      if (batch.length < 100) break;
+    }
 
     const reposDoc = ctx.resolve("work/repositories.ttl");
     const dataset = new Store();
-    for (const r of arr(repos)) {
+    for (const r of repos) {
       // A repo with no id has no stable fragment IRI — skip it.
       if (!r || r.id === undefined || r.id === null) {
         skipped.skip();
@@ -107,6 +115,7 @@ export const githubAdapter: IntegrationAdapter = {
       category: "work-education",
       forClass: CLASSES.SoftwareSourceCode,
       dataset,
+      sourceUrl: `${API}/user/repos`,
     });
 
     ctx.progress({ label: "Done", done: 2, total: 2 });

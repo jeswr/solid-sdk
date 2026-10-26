@@ -120,3 +120,23 @@ and unlisted JSON fields are omitted. Known token, cookie and personal keys cann
 allowlisted; empty allowlists are the default. Hosts must ensure every allowed scalar is
 non-personal and use synthetic replacements when replay requires personal fields. Tests use
 mocked source transports and memory Pods only.
+
+## Tier A sync behavior
+
+GitHub repositories, Discord guilds, Twitch follows and Notion search exhaust their API
+pages within each run, then replace the snapshot. Page cursors are not persisted as change
+checkpoints. Strava exhausts activity pages after its saved timestamp; Reddit walks saved
+posts newest-first to the last saved fullname and snapshots subscribed communities.
+Both use framework subject replacement for incremental writes. A cursor-free import
+replaces these collections, including items removed at the source.
+
+Dropbox drains `list_folder/continue` before returning its delta cursor. File metadata
+updates replace old descriptions, including removed optional fields; deleted path tombstones
+remove files and folder descendants. Imports continue to copy metadata only.
+
+Each adapter supplies a document-specific source fallback for provenance. Reddit adds the
+federation social Note type. The other Tier A vocab maps explicitly preserve their existing
+types where the current sectors have no equivalent (root `QUESTIONS.md` Q2); follows are
+not playback events, accounts are not people, and workouts are not clinical observations.
+Recorded fixture tests cover sorted Turtle mappings, re-imports, pagination, provenance,
+checkpoint retention on source errors, and Dropbox deletions without production API calls.

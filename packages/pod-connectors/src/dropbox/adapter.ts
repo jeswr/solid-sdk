@@ -9,9 +9,12 @@
  * delta mechanism. Dropbox supports secretless PKCE, so live mode needs only
  * a client id.
  */
-import { DataFactory } from "n3";
+import { DataFactory, Store } from "n3";
 import { asStore } from "../core/dataset.js";
 import { postJson } from "../core/fixture-fetch.js";
+import { mergeItems } from "../core/incremental.js";
+import { Pagination } from "../core/pagination.js";
+import { arr, optionalDate, optionalNumber, optionalText, SkipCounter } from "../core/safe.js";
 import type { ImportContext, ImportOutcome, IntegrationAdapter } from "../core/types.js";
 import { CLASSES, DigitalDocument } from "../core/vocab.js";
 import { DROPBOX_FIXTURES, type DropboxListFolderAnswer } from "./fixtures.js";
@@ -49,6 +52,7 @@ export const dropboxAdapter: IntegrationAdapter = {
   fixtures: () => DROPBOX_FIXTURES,
 
   async import(ctx: ImportContext): Promise<ImportOutcome> {
+    const skipped = new SkipCounter();
     ctx.progress({ label: "Listing your files…", done: 0, total: 2 });
     const first: DropboxListFolderAnswer = ctx.cursor
       ? await postJson(ID, ctx.api, `${API}/files/list_folder/continue`, { cursor: ctx.cursor })
@@ -59,24 +63,50 @@ export const dropboxAdapter: IntegrationAdapter = {
         });
 
     const doc = ctx.resolve("documents/files.ttl");
-    const dataset = asStore(await ctx.read("documents/files.ttl"));
+    let dataset = ctx.cursor ? asStore(await ctx.read("documents/files.ttl")) : new Store();
+    const pagination = new Pagination(ID);
+    if (ctx.cursor) pagination.next(ctx.cursor);
 
     let answer = first;
     for (;;) {
-      for (const entry of answer.entries) {
-        if (entry[".tag"] !== "file") continue; // folders are structure, not documents
+      for (const entry of arr(answer?.entries)) {
+        if (!entry) {
+          skipped.skip();
+          continue;
+        }
+        const path = optionalText(entry.path_lower) ?? optionalText(entry.path_display);
+        if (entry[".tag"] === "deleted") {
+          if (!path) {
+            skipped.skip();
+            continue;
+          }
+          removePath(dataset, path);
+          continue;
+        }
+        if (entry[".tag"] !== "file") continue;
+        const id = optionalText(entry.id);
+        if (!id) {
+          skipped.skip();
+          continue;
+        }
+        const incoming = new Store();
         const file = new DigitalDocument(
-          `${doc}#file-${fragmentSafe(entry.id)}`,
-          dataset,
+          `${doc}#file-${fragmentSafe(id)}`,
+          incoming,
           DataFactory,
         ).mark();
-        file.name = entry.name;
-        file.identifier = entry.id;
-        file.description = entry.path_display;
-        if (entry.size !== undefined) file.contentSize = humanSize(entry.size);
-        if (entry.server_modified) file.dateModified = new Date(entry.server_modified);
+        file.name = optionalText(entry.name);
+        file.identifier = id;
+        file.description = optionalText(entry.path_display) ?? path;
+        const size = optionalNumber(entry.size);
+        file.contentSize = size !== undefined ? humanSize(size) : undefined;
+        file.dateModified = optionalDate(entry.server_modified);
+        // Reconcile path reuse (another id at the same path) and replace all old fields.
+        if (path) removePath(dataset, path, false);
+        dataset = mergeItems(dataset, incoming);
       }
       if (!answer.has_more) break;
+      pagination.next(answer.cursor);
       answer = await postJson(ID, ctx.api, `${API}/files/list_folder/continue`, {
         cursor: answer.cursor,
       });
@@ -88,10 +118,11 @@ export const dropboxAdapter: IntegrationAdapter = {
       category: "documents",
       forClass: CLASSES.DigitalDocument,
       dataset,
+      sourceUrl: `${API}/files/list_folder`,
     });
 
     ctx.progress({ label: "Done", done: 2, total: 2 });
-    return { cursor: answer.cursor };
+    return { cursor: answer.cursor, skipped: skipped.value };
   },
 };
 
@@ -104,4 +135,18 @@ function humanSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/** Dropbox deletion tombstones identify paths, including whole deleted folders. */
+function removePath(dataset: Store, path: string, descendants = true): void {
+  const target = path.toLowerCase();
+  const subjects = new Set([...dataset].map((q) => q.subject.value));
+  for (const subject of subjects) {
+    const file = new DigitalDocument(subject, dataset, DataFactory);
+    const current = file.description?.toLowerCase();
+    if (current === target || (descendants && current?.startsWith(`${target}/`))) {
+      for (const quad of [...dataset.match(DataFactory.namedNode(subject), null, null)])
+        dataset.delete(quad);
+    }
+  }
 }
