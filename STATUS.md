@@ -153,3 +153,43 @@ No implementation work remains for the two supplied findings, and there are no o
 questions. Full-workspace green and roborev review remain unavailable for the reasons
 above. No UI changes, screenshots, push, PR, branch switch or lane fetch/merge. The full
 gate left no untracked generated files in this checkout.
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+## Fix round 3
+
+Review: `solid-sdk-lane-sst-hd1k-d468d0bc792a.md`, read in full. The single finding
+is addressed without dependency, shared-package, API or UI changes.
+
+- `529f145e` — `fix: preserve additional contact URLs on updates`: leave all existing
+  URL RDF untouched when the scalar WebID is unchanged. When it changes, reconcile
+  only nodes matching the previously exposed WebID value, retaining other direct and
+  structured URL nodes and their metadata. Preserve unreadable URL nodes when adding
+  the first WebID. Regression tests cover rename round trips through injected fetch,
+  direct and structured homepages, duplicate selected values, replacement, clearing,
+  selecting an existing URL, and absent or unsupported URL values.
+- Final documentation commit — this report, committed last.
+
+Conservative scope reading: keep the existing scalar WebID reader and edit the value
+it exposes; do not introduce a URL collection API or change shared reader semantics.
+
+| Exact command | Result |
+| --- | --- |
+| `pnpm --filter '@jeswr/app-suite^...' run build` | PASS; build the five workspace dependencies before app checks. |
+| `pnpm --filter @jeswr/app-suite exec vitest run test/contacts-data.test.ts` | Before the fix: 6 new regression cases fail, 8 tests pass, confirming the URL-loss behavior. |
+| `pnpm --filter @jeswr/app-suite exec vitest run test/contacts-data.test.ts test/contacts-crud.test.ts` | PASS after the fix; 44 tests. |
+| `pnpm --filter @jeswr/app-suite run lint && pnpm --filter @jeswr/app-suite run build && pnpm --filter @jeswr/app-suite run typecheck && pnpm --filter @jeswr/app-suite run test` | PASS on the final implementation; production Next.js build, 5 test files, 78 tests. An initial test-only exact-optional-property type error was corrected before this passing run. |
+| `pnpm --filter @jeswr/app-suite run test:coverage` | PASS; 100% statements (422/422), branches (214/214), functions (81/81), lines (373/373). |
+| `pnpm run lint:root` | PASS; all repository guards and 74 contrast pairs. |
+| `TURBO_SCM_BASE=d1909525ae4395fd3e91a1502bc6913537772cdc pnpm run gate` | PASS; 11/11 tasks, 78 app tests. |
+| `npm_config_cache=/tmp/sst-hd1k-npm-cache pnpm run gate:full --env-mode=loose` | FAIL outside lane scope after 181 successful tasks: `@jeswr/federation-codegen#test` has two failures at `test/generator.test.ts:81` and `:126`. Expected bookmark/core namespaces use `https://w3id.org/jeswr/`; ontology inputs use `https://jeswr.org/ns/`, causing target-class and generated-ontology drift failures. Used the previously documented writable-cache workaround. |
+| `pnpm --filter @jeswr/federation-codegen exec vitest run test/generator.test.ts` | Reproduces both failures in isolation; 20 tests pass, 2 fail. No generated outputs or expectations changed. |
+| `git diff --exit-code d1909525ae4395fd3e91a1502bc6913537772cdc -- tools/federation-codegen` | PASS; the failing tool is unchanged by this lane. |
+| `git diff d1909525ae4395fd3e91a1502bc6913537772cdc --check` | PASS. |
+| `roborev status` | Unavailable: `roborev: command not found`. No installation or configuration changes made. |
+
+No implementation work remains for the supplied finding; no open questions or new
+dependencies. Full-workspace green and roborev review remain unavailable as recorded
+above. No screenshots apply to this model-only fix. No push, PR, branch switch, remote
+fetch/merge, or changes outside this checkout. The full gate left no untracked generated
+files in the checkout.
