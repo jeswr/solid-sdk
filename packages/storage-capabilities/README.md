@@ -3,7 +3,7 @@
 
 # @jeswr/storage-capabilities
 
-> **Experimental — AI-agent-generated.** Vocabulary, type contracts, header parsing, LWS CID parsing, and Solid description mapping are implemented.
+> **Experimental — AI-agent-generated.** Storage discovery, description parsing, caches, and network probing are implemented.
 
 Storage description discovery and feature flags. Design of record: SDK core `ADR-002-capabilities.md` and ADR-001 D4 in
 `solid-suite-planning/specs/sdk-core/`.
@@ -34,14 +34,62 @@ registered JOSE private or secret key members are rejected, as are unsupported k
 Cryptographic key import and signature verification remain the consumer's responsibility.
 Errors carry the supplied storage URL. URL normalisation keeps path case and trailing slashes.
 
-The parser sets `fetchedAt` to `Date.now()`, `etag` to `null`, and `maxAgeMs` to 3,600,000. The later
+The parser sets `fetchedAt` to `Date.now()`, `etag` to `null`, and `maxAgeMs` to 3,600,000. The
 resolver supplies HTTP cache metadata, injected clocks, body-size limits, and fetching. Parsing
 uses the compact CID shape directly and does not fetch or expand JSON-LD contexts.
 `@jeswr/storage-capabilities/testing` exports `sparqLwsCid`, a representative public example of
 the sparq service set documented in ADR-002 and SDK-core STATUS.md, covered by a snapshot test.
 It is not a recorded server response.
 
-Internal helpers for the later discovery implementation:
+`resolveStorageDescription(url, { fetch, cache?, seedHeaders?, maxAncestorProbes?, signal?, now? })`
+resolves from any resource through HEAD and its advertised Link target. LWS takes priority;
+Solid root discovery walks at most eight ancestors by default. `seedHeaders` skips the initial
+HEAD. NSS `Updates-Via` headers and legacy update links produce a probe-only Solid description.
+The optional `evidence` array records `assumed-origin-root` and `cross-origin-description`.
+
+```ts
+import { resolveStorageDescription, probe } from '@jeswr/storage-capabilities';
+import { createMemoryCache, createIndexedDbCache } from '@jeswr/storage-capabilities/cache';
+
+const cache = createMemoryCache(); // Or createIndexedDbCache({ dbName: 'my-public-metadata' }).
+const description = await resolveStorageDescription(resourceUrl, { fetch: authFetch, cache });
+if (description.protocol === 'solid') {
+  const observations = await probe(description.root, authFetch);
+  await cache.set(description.id, { description, probe: observations });
+}
+```
+
+The resolver uses a shared memory cache unless one is supplied. Both cache factories implement
+`DescriptionCache`, including longest-prefix lookup with URL origin and path boundaries.
+Records include the description and optional probe. Memory cache reads/writes copy records;
+IndexedDB persists the same data using raw browser APIs, with no runtime adapter dependency.
+The default database name is `jeswr-storage-capabilities`. IndexedDB is opened lazily and
+errors reject the operation. `cache.delete(id)` invalidates the record; retained prefix mappings
+cannot serve a deleted record. Callers should invalidate session metadata on logout.
+
+Fresh descriptions resolve without fetching, including sibling URLs beneath a known root.
+TTL comes from `Cache-Control: max-age`, otherwise one hour. On expiry, the resolver GETs the
+known description directly with `If-None-Match` when an ETag exists. A 304 retains the description
+and cached probe, bumps `fetchedAt`, and updates cache headers when supplied. A replacement body
+discards an old probe. Description 404/410 and root mismatch invalidate the cached record.
+Expired legacy descriptions repeat discovery because there is no description resource to GET.
+
+Every network request uses the injected fetch, `redirect: 'manual'`, and the supplied signal.
+Pass a guarded authenticated fetch for SSRF protection. LWS descriptions and roots must share
+the requested resource's origin. Foreign Solid descriptions contribute only `notify:subscription`
+entries and use `credentials: 'omit'`; the injected transport must also enforce its credential
+destination policy. All description bodies are capped at 1 MiB of streamed bytes, even with a
+missing or dishonest Content-Length. Parsing uses `parseRdf` and the description URL as base.
+The standard W3C notifications context (and its legacy notification/v1 alias) is bundled for
+CSS JSON-LD; other remote contexts are refused without a network request.
+
+`probe(root, fetch, { signal?, now? })` uses OPTIONS, then HEAD if OPTIONS fails or is unsupported.
+It returns parsed Accept-Patch, Accept-Post, WAC-Allow, ACL/ACP links and Allow with raw header
+evidence. Denied HEAD responses can still supply observations. Run it only for Solid; LWS
+descriptions are authoritative. Feature derivation and the `capabilities()` convenience API
+belong to T-014.
+
+Internal helpers:
 
 - `parseLinkHeaders(values, responseUrl)` in `src/link.ts` accepts one combined Link field,
   an array of separate field values, or `null`. It resolves targets and anchor contexts independently,
@@ -75,8 +123,7 @@ Internal helpers for the later discovery implementation:
   Parse bytes first with `@jeswr/fetch-rdf`'s `parseRdf` and the description URL as `baseIRI`.
   The mapper does no fetching, origin validation, HTTP metadata handling, or dataset mutation.
 
-Discovery, network probing, feature derivation, caches, and other server fixtures arrive in later tasks.
-The `@jeswr/storage-capabilities/cache` entry point remains reserved.
+Feature derivation and other server fixtures arrive in later tasks.
 
 From the workspace root:
 
@@ -93,3 +140,6 @@ with an offline notifications context, the ADR-008 Turtle example (four services
 capabilities), ACQ mapping, root scoping, and malformed or cyclic extension data.
 Coverage thresholds are 100% for branches,
 functions, lines, and statements.
+Resolver tests use injected fetch and clocks for request counts, TTL/ETag/304 refresh,
+ancestor limits, NSS discovery, HTTP/parse errors, redirect/origin refusal, and streaming
+body limits. Both caches share a contract suite; IndexedDB is tested with fake-indexeddb.
