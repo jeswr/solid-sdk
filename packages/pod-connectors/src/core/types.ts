@@ -53,6 +53,8 @@ export interface OAuthAppConfig {
    */
   readonly tokenExchange: "public" | "proxy";
   readonly tokenProxyUrl?: string;
+  /** Optional installed-app secret injected by a Node host; never persist or expose in a UI. */
+  readonly clientSecret?: string;
   /** Extra query params some platforms require on the authorize URL. */
   readonly extraAuthParams?: Readonly<Record<string, string>>;
   /**

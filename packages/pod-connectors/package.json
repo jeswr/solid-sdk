@@ -135,6 +135,10 @@
       "types": "./dist/goodreads/*.d.ts",
       "default": "./dist/goodreads/*.js"
     },
+    "./adapters/google/oauth": {
+      "types": "./dist/adapters/google/oauth.d.ts",
+      "default": "./dist/adapters/google/oauth.js"
+    },
     "./adapters/google-calendar": {
       "types": "./dist/google-calendar/adapter.d.ts",
       "default": "./dist/google-calendar/adapter.js"
