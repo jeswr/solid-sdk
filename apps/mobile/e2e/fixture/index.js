@@ -2,6 +2,10 @@
 (() => {
   const state = {
     page: "index",
+    platform:
+      window.Capacitor?.getPlatform?.() === "ios" || window.webkit?.messageHandlers?.bridge
+        ? "ios"
+        : "android",
     documentId: crypto.randomUUID(),
     origin: location.origin,
     done: false,
@@ -31,6 +35,13 @@
   async function run() {
     const { suiteOrigin, foreignOrigin } = await (await fetch("/config.json")).json();
     if (location.origin !== suiteOrigin) throw new Error("Unexpected suite origin");
+    if (state.platform === "ios") {
+      const [webkitBridge, prompt] = await Promise.all([
+        window.__e2eIOS.webkit(`mob07-top-${crypto.randomUUID()}-webkit`),
+        window.__e2eIOS.prompt(),
+      ]);
+      state.ios = { top: { webkitBridge, prompt }, responses: window.__e2eIOS.responses };
+    }
     const frame = document.querySelector("#hostile");
     const nonce = crypto.randomUUID();
     const hostile = new Promise((resolve) => {
@@ -48,7 +59,7 @@
       window.addEventListener("message", receive);
     });
     // Deliberately no sandbox or CSP that could mask a native isolation regression.
-    frame.src = `${foreignOrigin}/hostile.html?parent=${encodeURIComponent(suiteOrigin)}&nonce=${nonce}`;
+    frame.src = `${foreignOrigin}/hostile.html?parent=${encodeURIComponent(suiteOrigin)}&nonce=${nonce}${state.platform === "ios" ? "&platform=ios" : ""}`;
     const cap = window.Capacitor;
     const intake = cap?.Plugins?.SuiteShareIntake ?? cap?.registerPlugin?.("SuiteShareIntake");
     if (!intake) throw new Error("SuiteShareIntake is unavailable");
@@ -77,5 +88,6 @@
     .catch((error) => state.errors.push(String(error)))
     .finally(() => {
       state.done = true;
+      document.querySelector("#e2e-result").value = JSON.stringify(state);
     });
 })();

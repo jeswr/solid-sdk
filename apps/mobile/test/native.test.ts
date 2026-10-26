@@ -1,9 +1,17 @@
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY GPT-5.6 Codex
-import { readFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { describe, expect, test } from "vitest";
 import { DEFAULT_SUITE_URL } from "../src/config.ts";
-import { renderOfflinePage, withAppBoundDomain } from "../src/www.ts";
+import {
+  prepareNative,
+  renderOfflinePage,
+  withAppBoundDomain,
+  withLocalNetworking,
+} from "../src/www.ts";
 
 const read = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 
@@ -37,6 +45,89 @@ describe("iOS project", () => {
       /<key>WKAppBoundDomains<\/key>\s*<array>\s*<string>suite\.example<\/string>\s*<\/array>/,
     );
     expect(() => withAppBoundDomain("<plist/>", {})).toThrow("WKAppBoundDomains");
+  });
+
+  test("the production plist never permits cleartext or names a loopback domain", () => {
+    expect(plist).not.toMatch(/NSAllows(?:LocalNetworking|ArbitraryLoads)|localhost|127\.0\.0\.1/);
+    expect(withLocalNetworking(plist, {})).toBe(plist);
+  });
+
+  test.each(["localhost", "127.0.0.1"])("generates reversible debug-only ATS for %s", (host) => {
+    const env = { SUITE_URL: `http://${host}:4173`, MOBILE_DEBUG: "1" };
+    const generated = withLocalNetworking(plist, env);
+    expect(generated).toMatch(/<key>NSAllowsLocalNetworking<\/key>\s*<true\/>/);
+    expect(generated).not.toContain("NSAllowsArbitraryLoads");
+    expect(withLocalNetworking(generated, env)).toBe(generated);
+    expect(withLocalNetworking(generated, {})).toBe(plist);
+    expect(
+      withLocalNetworking(generated, { SUITE_URL: "https://suite.example", MOBILE_DEBUG: "1" }),
+    ).toBe(plist);
+    expect(withLocalNetworking(generated, { SUITE_URL: `https://${host}:4173` })).toBe(plist);
+    expect(() => withLocalNetworking(plist, { SUITE_URL: `http://${host}:4173` })).toThrow();
+  });
+
+  test.each([
+    "http://suite.example",
+    "http://localhost.evil",
+    "http://10.0.2.2",
+  ])("rejects debug ATS for %s", (url) => {
+    expect(() => withLocalNetworking(plist, { SUITE_URL: url, MOBILE_DEBUG: "1" })).toThrow();
+  });
+
+  test("sync preparation writes loopback policy and removes it on a production rebuild", () => {
+    const root = mkdtempSync(join(tmpdir(), "mobile-www-"));
+    try {
+      for (const directory of ["templates", "www", "ios/App/App"])
+        mkdirSync(join(root, directory), { recursive: true });
+      writeFileSync(join(root, "templates/offline.html"), read("templates/offline.html"));
+      const path = join(root, "ios/App/App/Info.plist");
+      writeFileSync(path, plist);
+      prepareNative(pathToFileURL(`${root}/`), {
+        SUITE_URL: "http://localhost:4173",
+        MOBILE_DEBUG: "1",
+      });
+      const debug = readFileSync(path, "utf8");
+      expect(debug).toContain("<string>localhost</string>");
+      expect(debug).toContain("NSAllowsLocalNetworking");
+      prepareNative(pathToFileURL(`${root}/`), {});
+      expect(readFileSync(path, "utf8")).toBe(plist);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("the shared scheme includes the UI-test target and its App dependency", () => {
+    const target = pbxproj.match(
+      /([A-F0-9]{24}) \/\* AppUITests \*\/ = \{\s*isa = PBXNativeTarget;([\s\S]*?)\n\t\t\};/,
+    );
+    expect(target).not.toBeNull();
+    expect(target?.[2]).toContain('productType = "com.apple.product-type.bundle.ui-testing";');
+    expect(pbxproj.match(/TEST_TARGET_NAME = App;/g)).toHaveLength(2);
+    const dependency = target?.[2]?.match(/dependencies = \(\s*([A-F0-9]{24})/);
+    expect(dependency).not.toBeNull();
+    expect(pbxproj).toMatch(
+      new RegExp(
+        `${dependency?.[1]} /\\* PBXTargetDependency \\*/ = \\{\\s*isa = PBXTargetDependency;\\s*target = 504EC3031FED79650016851F`,
+      ),
+    );
+    const scheme = read("ios/App/App.xcodeproj/xcshareddata/xcschemes/App.xcscheme");
+    const testAction = scheme.match(/<TestAction\b[\s\S]*?<\/TestAction>/)?.[0];
+    expect(testAction).toContain(`BlueprintIdentifier = "${target?.[1]}"`);
+    expect(testAction).toContain('BuildableName = "AppUITests.xctest"');
+    expect(testAction).toContain('BuildableName = "AppTests.xctest"');
+    const ids = [...pbxproj.matchAll(/^\t\t([A-F0-9]{24})(?: \/\*.*?\*\/)? = \{/gm)].map(
+      (m) => m[1],
+    );
+    expect(new Set(ids).size).toBe(ids.length);
+    const ui = read("ios/App/AppUITests/FixtureTests.swift");
+    expect(ui).toContain("waitForExistence(timeout:");
+    expect(ui).toContain("XCTNSPredicateExpectation");
+    expect(ui).toContain('name: "e2e-result.json"');
+    expect(ui).toContain("attachment.lifetime = .keepAlways");
+    expect(ui).not.toMatch(/evaluateJavaScript|@testable import/);
+    for (const file of ["MainViewController.swift", "BridgeOriginGuard.swift"]) {
+      expect(read(`ios/App/App/${file}`)).not.toMatch(/__e2e|AppUITests|launchArguments/);
+    }
   });
 
   test("registers no URL types (ASWebAuthenticationSession receives the callback)", () => {
@@ -328,5 +419,48 @@ describe("mobile CI emulator guardrails", () => {
     expect(diagnostics).toContain("timeout-minutes: 1");
     expect(diagnostics).toContain("timeout 30 adb logcat -d -v threadtime");
     expect(diagnostics).toContain("|| true");
+  });
+});
+
+describe("mobile CI iOS fixture guardrails", () => {
+  const workflow = read("../../.github/workflows/mobile.yml");
+  const job = workflow.match(/^ {2}ios-e2e:\n[\s\S]*?(?=^ {2}[\w-]+:|$(?![\s\S]))/m)?.[0] ?? "";
+  const ios = workflow.match(/^ {2}ios:\n[\s\S]*?(?=^ {2}[\w-]+:|$(?![\s\S]))/m)?.[0] ?? "";
+
+  test("keeps fixture debug settings out of the policy build", () => {
+    expect(ios).toContain("pnpm --filter @jeswr/app-mobile run sync:ios");
+    expect(ios).not.toMatch(/MOBILE_DEBUG|SUITE_URL|ios-e2e\.mjs/);
+    expect(job).toContain("runs-on: macos-15");
+    expect(job).toContain("timeout-minutes: 45");
+    expect(job).toContain("node-version: 24");
+    expect(job).toContain("SUITE_URL: http://localhost:4173");
+    expect(job).toContain('MOBILE_DEBUG: "1"');
+    expect(job).toContain("pnpm --filter @jeswr/app-mobile run sync:ios");
+    expect(job).toContain("node apps/mobile/e2e/ios-e2e.mjs");
+  });
+
+  test("mirrors Xcode and iPhone selection, and bounds simulator pre-boot", () => {
+    expect(job).toContain("/Applications/Xcode_2[6-9]*.app");
+    expect(job).toContain('sudo xcode-select -s "$xcode"');
+    expect(job).toContain("com.apple.CoreSimulator.SimRuntime.iOS-");
+    expect(job).toContain("com.apple.CoreSimulator.SimDeviceType.iPhone");
+    expect(job).toContain("version >= (16,)");
+    expect(job).toContain("['simctl', 'bootstatus', udid, '-b']");
+    expect(job).toContain("timeout: 240000");
+    expect(job).toContain("timeout-minutes: 6");
+    expect(job.indexOf("bootstatus")).toBeLessThan(job.indexOf("run sync:ios"));
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: Literal GitHub Actions expression.
+    expect(job).toContain("TEST_DESTINATION: ${{ steps.simulator.outputs.destination }}");
+  });
+
+  test("uploads the result bundle and artifacts on failure", () => {
+    expect(job).toContain("if: failure()");
+    expect(job).toContain("uses: actions/upload-artifact@v4");
+    expect(job).toContain("name: ios-e2e-diagnostics");
+    expect(job).toContain("path: apps/mobile/e2e/artifacts/");
+    const driver = read("e2e/ios-e2e.mjs");
+    expect(driver).toContain('join(artifacts, "AppUITests.xcresult")');
+    expect(driver).toContain('"-only-testing:AppUITests"');
+    expect(driver).toMatch(/"-configuration",\s*"Debug"/);
   });
 });
