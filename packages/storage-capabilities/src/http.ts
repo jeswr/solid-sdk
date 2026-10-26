@@ -1,4 +1,4 @@
-// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY GPT-6.1-Sol
 import { CapabilitiesError } from "./errors.js";
 import type { ResolveOptions } from "./types.js";
 
