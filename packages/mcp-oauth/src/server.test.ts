@@ -403,7 +403,76 @@ describe("authorization restrictions and upstream transactions", () => {
     expect((await f.server.handle(f.authRequest(id))).status).toBe(302);
     const response = await f.server.handle(new Request(`${ISSUER}/callback?state=upstream-state`));
     expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: "invalid_request" });
+    expect(response.headers.has("location")).toBe(false);
+    expect(f.provider.complete).not.toHaveBeenCalled();
     expect(f.consent).not.toHaveBeenCalled();
+  });
+
+  it("keeps callback client revalidation failures local before broker completion", async () => {
+    const f = fixture();
+    const id = "https://client.example/metadata";
+    f.metadataFetch.mockResolvedValueOnce(
+      Response.json(
+        { client_id: id, redirect_uris: [REDIRECT] },
+        { headers: { "cache-control": "no-store" } },
+      ),
+    );
+    expect((await f.server.handle(f.authRequest(id))).status).toBe(302);
+    const response = await f.server.handle(new Request(`${ISSUER}/callback?state=upstream-state`));
+    expect(response.status).toBe(401);
+    expect(await response.json()).toEqual({ error: "invalid_client" });
+    expect(response.headers.has("location")).toBe(false);
+    expect(f.provider.complete).not.toHaveBeenCalled();
+    expect(f.consent).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { stage: "broker", error: "access_denied" },
+    { stage: "broker", error: "server_error" },
+    { stage: "consent", error: "access_denied" },
+    { stage: "consent", error: "server_error" },
+  ])("redirects callback $stage failures with $error, client state and issuer", async ({
+    stage,
+    error,
+  }) => {
+    const issuer = "https://MCP.EXAMPLE:443/auth/";
+    const f = fixture({ issuer });
+    const id = await f.register();
+    const state = "client-state +&=#/?";
+    expect((await f.server.handle(f.authRequest(id, { state }))).status).toBe(302);
+    const grants = vi.spyOn(f.stores.grants, "put");
+    const codes = vi.spyOn(f.stores.codes, "put");
+    const completion = stage === "broker" ? vi.mocked(f.provider.complete) : f.consent;
+    completion.mockRejectedValueOnce(
+      error === "access_denied"
+        ? new OAuthError("access_denied")
+        : new Error("sensitive completion detail"),
+    );
+    const request = new Request(`${ISSUER}/callback?state=upstream-state&code=pod-code`);
+    const response = await f.server.handle(request);
+    expect(response.status).toBe(302);
+    const destination = new URL(response.headers.get("location") as string);
+    expect(destination.origin + destination.pathname).toBe("https://client.example/callback");
+    expect(Object.fromEntries(destination.searchParams)).toEqual({
+      existing: "1",
+      error,
+      state,
+      iss: issuer,
+    });
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(response.headers.get("referrer-policy")).toBe("no-referrer");
+    expect(await response.text()).toBe("");
+    expect(f.provider.complete).toHaveBeenCalledWith(request.url, "upstream-state");
+    expect(f.consent).toHaveBeenCalledTimes(stage === "broker" ? 0 : 1);
+    expect(grants).not.toHaveBeenCalled();
+    expect(codes).not.toHaveBeenCalled();
+    const replay = await f.server.handle(request);
+    expect(replay.status).toBe(400);
+    expect(await replay.json()).toEqual({ error: "invalid_request" });
+    expect(replay.headers.has("location")).toBe(false);
+    expect(f.provider.complete).toHaveBeenCalledTimes(1);
+    expect(f.consent).toHaveBeenCalledTimes(stage === "broker" ? 0 : 1);
   });
 
   it("fails closed on unsafe upstream URLs, absent broker state, missing identity and broker errors", async () => {

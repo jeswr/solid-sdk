@@ -237,12 +237,20 @@ export class AuthorizationServer {
     if (!pending?.firstUse || pending.value.expiresAt <= this.now())
       throw new OAuthError("invalid_request");
     const authorization = pending.value.authorization;
-    const session = await this.options.podSessions.complete(request.url, state);
     // Re-check redirect registration after the upstream round trip/cache expiration.
     const client = await this.clients.get(authorization.clientId);
     if (!client.redirect_uris.includes(authorization.redirectUri))
       throw new OAuthError("invalid_request");
-    return this.finish(request, authorization, client, session);
+    try {
+      const session = await this.options.podSessions.complete(request.url, state);
+      return await this.finish(request, authorization, client, session);
+    } catch (error) {
+      return redirect(authorization.redirectUri, {
+        error: error instanceof OAuthError ? error.error : "server_error",
+        state: authorization.state,
+        iss: this.issuer,
+      });
+    }
   }
 
   private async finish(
