@@ -104,10 +104,12 @@ jobs:
           mkdir -p apps/mobile/e2e/artifacts
           # Print the emulator's own log whenever boot fails, not only when the process exits.
           trap 'status=$?; [ "$status" = 0 ] || tail -n 200 apps/mobile/e2e/artifacts/emulator.log; exit "$status"' EXIT
+          # avdmanager and the emulator disagree on the default AVD directory on hosted runners.
+          export ANDROID_AVD_HOME="$RUNNER_TEMP/avd"
+          mkdir -p "$ANDROID_AVD_HOME"
           echo no | avdmanager create avd --force --name suite-e2e --package "system-images;android-35;google_apis;x86_64" --device pixel_6
           emulator -avd suite-e2e -port 5554 -no-window -no-audio -no-boot-anim -no-snapshot -no-metrics -gpu swiftshader_indirect -accel on > apps/mobile/e2e/artifacts/emulator.log 2>&1 &
           emulator_pid=$!
-          timeout 180 adb wait-for-device
           booted=0
           for attempt in $(seq 1 180); do
             kill -0 "$emulator_pid" || { cat apps/mobile/e2e/artifacts/emulator.log; exit 1; }

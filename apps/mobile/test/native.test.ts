@@ -313,7 +313,8 @@ describe("mobile CI emulator guardrails", () => {
   test("bounds boot commands and failure diagnostics so artifacts can still upload", () => {
     const boot = job.match(/ {6}- name: Create and boot the AVD\n[\s\S]*?(?= {6}- )/)?.[0] ?? "";
     expect(boot).toContain("timeout-minutes: 10");
-    expect(boot).toContain("timeout 180 adb wait-for-device");
+    expect(boot).not.toContain("adb wait-for-device");
+    expect(boot).toContain('export ANDROID_AVD_HOME="$RUNNER_TEMP/avd"');
     const shellCalls = boot.split("\n").filter((line) => line.includes("adb shell"));
     expect(shellCalls).toHaveLength(5);
     for (const line of shellCalls) expect(line).toContain("timeout 10 adb shell");
