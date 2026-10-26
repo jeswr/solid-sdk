@@ -90,6 +90,49 @@ test("UMA accepts Bearer RPTs without an expiry and surfaces unrecognised exchan
   await p.forget();
 });
 
+for (const tokenType of ["DPoP", "Bearer"]) {
+  test(`UMA nonce retries require a DPoP RPT and a complete nonce challenge (${tokenType})`, async () => {
+    const p = provider(async (url, init) => {
+      const response = await transport(url, init);
+      if (String(url) === `${uma.url}/token`) {
+        const body = await response.json();
+        body.token_type = tokenType;
+        delete body.expires_in;
+        return Response.json(body);
+      }
+      return response;
+    });
+    const request = new Request(`${uma.url}/uma/nonce-without-expiry`);
+    try {
+      const original = await p.upgrade(request, challengeContext(await transport(request)));
+      for (const headers of [
+        { "www-authenticate": 'DPoP error="use_dpop_nonce"' },
+        { "dpop-nonce": "nonce" },
+        { "www-authenticate": 'DPoP error="invalid_token"', "dpop-nonce": "nonce" },
+      ]) {
+        await assert.rejects(
+          p.upgrade(request, challengeContext(new Response(null, { status: 401, headers }))),
+          /UMA challenge/,
+        );
+      }
+      const nonce = challengeContext(
+        new Response(null, {
+          status: 401,
+          headers: { "www-authenticate": 'DPoP error="use_dpop_nonce"', "dpop-nonce": "nonce" },
+        }),
+      );
+      if (tokenType === "Bearer") await assert.rejects(p.upgrade(request, nonce), /RPT context/);
+      else {
+        const retried = await p.upgrade(request, nonce);
+        assert.equal(retried.headers.get("authorization"), original.headers.get("authorization"));
+        assert.notEqual(retried.headers.get("dpop"), original.headers.get("dpop"));
+      }
+    } finally {
+      await p.forget();
+    }
+  });
+}
+
 test("UMA need_info error fields keep strings and discard malformed redirect hints", async () => {
   const p = provider(async (url, init) =>
     String(url) === `${uma.url}/token`

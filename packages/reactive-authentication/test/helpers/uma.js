@@ -13,6 +13,7 @@ export const PROFILE = "http://openid.net/specs/openid-connect-core-1_0.html#IDT
  * @param {object} op OpenID provider from startOpenIdProvider
  * @param {object} [options]
  * @param {boolean} [options.nonce] demand a DPoP nonce at the token endpoint first
+ * @param {boolean} [options.resourceNonce] demand a resource nonce without repeating the UMA challenge
  * @param {boolean} [options.needInfo] answer need_info with a claims interaction hint
  * @param {(base: string) => string} [options.asUri] as_uri the resource server announces
  */
@@ -21,7 +22,13 @@ export async function startUma(op, options = {}) {
   const tickets = new Set();
   const revoked = new Set();
   const seen = new Set();
-  const stats = { exchanges: [], rejected: [], accepted: [], nonceChallenges: 0 };
+  const stats = {
+    exchanges: [],
+    rejected: [],
+    accepted: [],
+    nonceChallenges: 0,
+    resourceNonceChallenges: 0,
+  };
   const nonce = options.nonce ? "uma-nonce" : undefined;
 
   const server = await serve(async (request, { url: base }) => {
@@ -116,12 +123,23 @@ export async function startUma(op, options = {}) {
           method: request.method,
           url: request.url,
           accessToken: token,
+          nonce: options.resourceNonce ? "uma-resource-nonce" : undefined,
           seen,
         });
         if (revoked.has(token) || proofKey !== payload.cnf.jkt) return challenge("invalid_token");
         stats.accepted.push({ url: request.url, webid: payload.webid, token });
         return new Response(`hello ${payload.webid}`);
-      } catch {
+      } catch (e) {
+        if (e.nonce) {
+          stats.resourceNonceChallenges++;
+          return new Response(null, {
+            status: 401,
+            headers: {
+              "www-authenticate": 'DPoP error="use_dpop_nonce"',
+              "dpop-nonce": "uma-resource-nonce",
+            },
+          });
+        }
         return challenge("invalid_token");
       }
     }
