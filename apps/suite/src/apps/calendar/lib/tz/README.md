@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # Calendar time and series edit helpers
 
@@ -46,7 +47,11 @@ Selected instants and EXDATEs must be actual members of the original rule, with 
 series' explicit overlap choice. EXDATEs do not reduce COUNT. Rule membership uses
 Gregorian wall time, so 09:00 remains 09:00 across DST. COUNT membership that encounters
 an intervening gap is rejected with `nonexistent-time`; it is never silently miscounted.
-That check is bounded by the supported date range and can visit each prior recurrence.
+Shared COUNT prefixes are checked once per series, with converted wall times reused
+across exceptions and the selection. Each plan permits at most 128 exhaustive inverse
+timezone conversions in total across the original series, replacement and selection,
+including rules without COUNT. Plans exceeding this work limit fail closed with
+`invalid-series`; the budget and caches are local to each call.
 UNTIL is inclusive; COUNT and UNTIL cannot coexist, per
 [RFC 5545 §3.3.10](https://www.rfc-editor.org/rfc/rfc5545.html#section-3.3.10).
 

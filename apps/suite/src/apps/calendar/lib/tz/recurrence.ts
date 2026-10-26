@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { instantToWallClock, type OverlapChoice, wallClockToInstant } from "./conversion";
 import { assertInstant, CalendarTimeError, wallEpoch } from "./validation";
 
@@ -27,6 +28,15 @@ interface Rule {
   interval: number;
   count: number | null;
   until: number | null;
+}
+
+// Each inverse conversion exhaustively searches 1681 offsets. Bound the work
+// across both series and the selection, including rules without COUNT.
+const MAX_CONVERSIONS = 128;
+
+interface ValidatedSeries {
+  rule: Rule;
+  occurrence: (instant: number) => void;
 }
 
 function positive(value: string): number {
@@ -66,7 +76,10 @@ function parseRule(value: string): Rule {
   };
 }
 
-function validate(timing: SeriesTiming): Rule | null {
+function validate(
+  timing: SeriesTiming,
+  convert: typeof wallClockToInstant,
+): ValidatedSeries | null {
   if (
     !timing ||
     typeof timing.id !== "string" ||
@@ -80,48 +93,69 @@ function validate(timing: SeriesTiming): Rule | null {
     throw new CalendarTimeError("invalid-series");
   assertInstant(timing.start);
   assertInstant(timing.start + timing.durationMs);
+  const converted = new Map<string, number>();
+  const toInstant = (wallTime: string): number => {
+    let instant = converted.get(wallTime);
+    if (instant === undefined) {
+      instant = convert(wallTime, timing.zone, timing.overlap);
+      converted.set(wallTime, instant);
+    }
+    return instant;
+  };
   const wall = instantToWallClock(timing.start, timing.zone).wallTime;
-  if (wallClockToInstant(wall, timing.zone, timing.overlap) !== timing.start) {
+  if (toInstant(wall) !== timing.start) {
     throw new CalendarTimeError("invalid-series");
   }
   const rule = timing.rrule === null ? null : parseRule(timing.rrule);
   if (rule !== null && rule.until !== null && rule.until < timing.start) {
     throw new CalendarTimeError("invalid-series");
   }
+  const validated =
+    rule === null ? null : { rule, occurrence: occurrenceValidator(timing, rule, wall, toInstant) };
   const seen = new Set<number>();
   for (const date of timing.exdates) {
     assertInstant(date);
-    if (!rule || seen.has(date)) throw new CalendarTimeError("invalid-series");
-    occurrence(timing, rule, date);
+    if (!validated || seen.has(date)) throw new CalendarTimeError("invalid-series");
+    validated.occurrence(date);
     seen.add(date);
   }
-  return rule;
+  return validated;
 }
 
 /** Membership is Gregorian wall-clock arithmetic, never fixed elapsed-day arithmetic. */
-function occurrence(timing: SeriesTiming, rule: Rule, instant: number): void {
-  assertInstant(instant);
-  const startWall = instantToWallClock(timing.start, timing.zone).wallTime;
-  const selectedWall = instantToWallClock(instant, timing.zone).wallTime;
+function occurrenceValidator(
+  timing: SeriesTiming,
+  rule: Rule,
+  startWall: string,
+  toInstant: (wallTime: string) => number,
+): (instant: number) => void {
+  const anchor = wallEpoch(startWall);
   const step = rule.interval * (rule.frequency === "WEEKLY" ? 7 : 1);
-  const index = (wallEpoch(selectedWall) - wallEpoch(startWall)) / (step * 86_400_000);
-  if (
-    !Number.isInteger(index) ||
-    index < 0 ||
-    (rule.count !== null && index >= rule.count) ||
-    (rule.until !== null && instant > rule.until) ||
-    wallClockToInstant(selectedWall, timing.zone, timing.overlap) !== instant
-  )
-    throw new CalendarTimeError("invalid-occurrence");
-  // COUNT excludes nonexistent local times in RFC 5545. Fail closed if a gap
-  // lies before the selected occurrence, rather than silently miscounting it.
-  if (rule.count !== null) {
-    const anchor = wallEpoch(startWall);
-    for (let i = 1; i < index; i++) {
-      const wall = new Date(anchor + i * step * 86_400_000).toISOString().slice(0, 19);
-      wallClockToInstant(wall, timing.zone, timing.overlap);
+  let checkedThrough = 0;
+  return (instant) => {
+    assertInstant(instant);
+    const selectedWall = instantToWallClock(instant, timing.zone).wallTime;
+    const index = (wallEpoch(selectedWall) - anchor) / (step * 86_400_000);
+    if (
+      !Number.isInteger(index) ||
+      index < 0 ||
+      (rule.count !== null && index >= rule.count) ||
+      (rule.until !== null && instant > rule.until) ||
+      toInstant(selectedWall) !== instant
+    )
+      throw new CalendarTimeError("invalid-occurrence");
+    // COUNT excludes nonexistent local times in RFC 5545. Check each shared
+    // prefix once, retaining gap rejection even for unsorted EXDATEs.
+    if (rule.count !== null) {
+      while (checkedThrough + 1 < index) {
+        checkedThrough++;
+        const wall = new Date(anchor + checkedThrough * step * 86_400_000)
+          .toISOString()
+          .slice(0, 19);
+        toInstant(wall);
+      }
     }
-  }
+  };
 }
 
 function copy(timing: SeriesTiming): SeriesTiming {
@@ -138,10 +172,17 @@ export function planSeriesEdit(
   selected: number,
   replacement: SeriesTiming,
 ): SeriesEditPlan {
-  const rule = validate(series);
-  validate(replacement);
-  if (!rule) throw new CalendarTimeError("invalid-series");
-  occurrence(series, rule, selected);
+  let conversions = 0;
+  const convert: typeof wallClockToInstant = (wall, zone, overlap) => {
+    if (conversions === MAX_CONVERSIONS) throw new CalendarTimeError("invalid-series");
+    conversions++;
+    return wallClockToInstant(wall, zone, overlap);
+  };
+  const validated = validate(series, convert);
+  validate(replacement, convert);
+  if (!validated) throw new CalendarTimeError("invalid-series");
+  const { rule } = validated;
+  validated.occurrence(selected);
   if (series.exdates.includes(selected)) throw new CalendarTimeError("invalid-occurrence");
   if (scope === "all-events") {
     if (replacement.id !== series.id) throw new CalendarTimeError("invalid-series");
