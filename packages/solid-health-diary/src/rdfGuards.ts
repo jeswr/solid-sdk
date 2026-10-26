@@ -47,7 +47,9 @@ export function assertSubjectSingletons(
     for (const iri of vocabularyAliases(predicate)) {
       for (const q of dataset.match(s, namedNode(iri), null)) {
         const object =
-          q.object.termType === "NamedNode" ? namedNode(canonicalVocabularyIri(q.object.value)) : q.object;
+          q.object.termType === "NamedNode"
+            ? namedNode(canonicalVocabularyIri(q.object.value))
+            : q.object;
         if (values.some((value) => value.equals(object))) continue;
         values.push(object);
         if (values.length > 1) {
