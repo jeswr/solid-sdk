@@ -1,7 +1,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /** biome-ignore-all lint/style/noNonNullAssertion: fixtures guarantee these entries. */
 import { readFile } from "node:fs/promises";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   buildNanopublications,
   type Claim,
@@ -29,6 +30,53 @@ const build = (claims: Claim[]) =>
   );
 
 describe("KG §4.1 belief view", () => {
+  it.each([24, 48])("bounds provenance reads linearly for %i unrelated nanopubs", async (count) => {
+    const value = await build(
+      Array.from({ length: count }, (_, i) => ({
+        id: String(i),
+        epistemic: "SelfReportedExplicit",
+        assertion: assertion(String(i)),
+      })),
+    );
+    const match = vi.spyOn(value.dataset, "match");
+    const result = classifyNanopublications(value);
+    expect(result).toHaveLength(count);
+    expect(result.every((np) => np.belief === "definitely" && np.corroboration === 1)).toBe(true);
+    expect(match.mock.calls.length).toBeLessThanOrEqual(count * 2);
+    match.mockRestore();
+  });
+
+  it("indexes multiple revisions and ignores missing and self-only revision targets", async () => {
+    const value = await build([
+      { id: "old", epistemic: "SelfReportedExplicit", assertion: assertion("old") },
+      {
+        id: "new",
+        epistemic: "SelfReportedExplicit",
+        assertion: assertion("new"),
+        supersedes: ["old"],
+      },
+      {
+        id: "alternative",
+        epistemic: "SelfReportedExplicit",
+        assertion: assertion("alternative"),
+        supersedes: ["old"],
+      },
+    ]);
+    const old = value.nanopubs.find((np) => np.identifier === "belief/old")!;
+    const newer = value.nanopubs.find((np) => np.identifier === "belief/new")!;
+    const alternative = value.nanopubs.find((np) => np.identifier === "belief/alternative")!;
+    newer.supersedes.push(newer.assertionId, "urn:uuid:missing");
+    const result = classifyNanopublications(value);
+    expect(result.find((np) => np.id === old.id)).toMatchObject({
+      belief: "past",
+      replacedBy: [newer.id, alternative.id].sort(),
+    });
+    expect(result.find((np) => np.id === newer.id)).toMatchObject({
+      belief: "definitely",
+      replacedBy: [],
+    });
+  });
+
   it("classifies the independent Python synthetic oracle without altering its dataset", async () => {
     const value = await parseNanopublications(
       await readFile(new URL("./fixtures/synthetic.expected.trig", import.meta.url), "utf8"),
