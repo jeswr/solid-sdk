@@ -117,3 +117,51 @@ full-gate run.
 `command -v roborev` still finds no executable; automated per-commit review
 remains for the dispatcher. Both requested fixes are complete, with no new open
 questions.
+
+## Fix round 3 — 2026-10-26
+
+Addressed the single timed recurrence exhaustion finding in
+`solid-sdk-lane-sst-cye3-2f5b700e229c.md`, without unrelated changes:
+
+- `40160f0b` — `fix(tasks): exhaust timed rules before calendar overflow`:
+  defer candidate range rejection until after the timed cutoff comparison.
+  Preserve possible-instant comparisons for DST folds and retain year-10000
+  candidates long enough to compare their instants near the supported boundary.
+  Larger calendar years use an overflow sentinel that still fails with a typed
+  range error when no cutoff exhausts the rule.
+- `docs(tasks): record timed exhaustion fix verification` — this final report
+  update, committed last.
+
+Added 16 regression cases covering daily, weekly/byDay, monthly and yearly
+exhaustion; very large intervals; both `nextOccurrence` and `completeTask`;
+input immutability; completion-clock and missing-due anchoring; inclusive final
+occurrences; positive-offset local dates beyond year 9999; and typed overflow
+errors without a cutoff. Ten new cases failed before the implementation fix.
+The existing DST gap/fold regressions continue to pass. Final app verification
+passes **376 tests in 11 files**, with **100% statements, branches, functions and
+lines** for every file in the lists directory.
+
+| Exact command | Fix-round result |
+| --- | --- |
+| `pnpm --filter @jeswr/app-suite exec vitest run test/tasks-lists.test.ts --coverage.enabled=false` | Initial reproduction: 10 failures, 109 passes; after implementation: 119 passes, before the final five unbounded-overflow cases were added |
+| `pnpm --filter @jeswr/suite-ui run build` | PASS; prerequisite workspace declarations |
+| `pnpm --filter @jeswr/app-suite run lint && pnpm --filter @jeswr/app-suite run build && pnpm --filter @jeswr/app-suite run typecheck && pnpm --filter @jeswr/app-suite run test` | PASS; production build, types and all 376 tests |
+| `pnpm run lint:root` | PASS |
+| `TURBO_SCM_BASE=8eca802b02b03b188c45c616cafcefb830f5778d pnpm run gate` | PASS; 7/7 tasks |
+| `GIT_ALLOW_PROTOCOL= pnpm run gate:full --env-mode=loose` | FAIL outside lane scope; 5/55 tasks successful before `@jeswr/unstorage-solid#build` failed |
+| `git diff --check` | PASS |
+
+Initial app validation caught formatting and an exact-optional-property type
+error in the new fixture; both were corrected before the passing app gate.
+The full gate's unchanged `packages/unstorage-solid/scripts/build-deps.mjs`
+attempted its temporary fetch-rdf clone. The inherited Git transport restriction
+rejected HTTPS before any remote fetch (`fatal: transport 'https' not allowed`),
+preserving this lane's prohibition on fetching network remotes. No retry with
+network transports enabled or unrelated build-helper modification was made.
+
+No dependencies, manifests, lockfiles or UI changed. `check:packages` and browser
+screenshots remain inapplicable. No push, PR, branch switch or remote fetch/merge.
+`command -v roborev` still finds no executable; automated per-commit review
+remains for the dispatcher. The requested fix is complete. No new ambiguities
+or open questions; supported civil-range errors are conservatively retained
+when a timed candidate is not exhausted.
