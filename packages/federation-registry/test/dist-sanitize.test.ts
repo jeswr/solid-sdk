@@ -198,3 +198,35 @@ describe("classifier is OS-agnostic + segment-exact (Windows-style backslash pat
     expect(pkgRelativePath(own, root)).toBe("foonode_modules/thing.ts");
   });
 });
+
+// AUTHORED-BY Codex GPT-6.1-Sol
+describe("workspace dependency paths", () => {
+  it("produces identical labels across checkout locations and map/banner bases", () => {
+    for (const workspace of ["/home/runner/checkout", "/tmp/node_modules/build with spaces"]) {
+      const root = `${workspace}/packages/consumer`;
+      expect(pkgRelativePath("../fetch-rdf/dist/parse.js", root)).toBe("fetch-rdf/dist/parse.js");
+      expect(
+        sanitizeMap({ sources: ["../../fetch-rdf/src/parse.ts"] }, root, `${root}/dist`).sources,
+      ).toEqual(["fetch-rdf/src/parse.ts"]);
+      expect(sanitizeJs(`// ${workspace}/packages/fetch-rdf/dist/parse.js`, root)).toBe(
+        "// fetch-rdf/dist/parse.js",
+      );
+      expect(
+        sanitizeMap({ sources: ["../../fetch-rdf/dist/parse.js"] }, root, `${root}/dist`).sources,
+      ).toEqual(["fetch-rdf/dist/parse.js"]);
+    }
+  });
+  it("continues refusing unrelated paths", () => {
+    const root = "/home/workspace/packages/consumer";
+    for (const path of [
+      "/home/other/packages/fetch-rdf/dist/parse.js",
+      "/home/workspace/packages/fetch-rdf/private/secret.ts",
+      "/home/workspace/packages/orphan.ts",
+      "/home/workspace/src/orphan.ts",
+      "/home/workspace/dist/orphan.js",
+    ]) {
+      expect(() => sanitizeJs(`// ${path}`, root)).toThrow(/host path/);
+      expect(() => sanitizeMap({ sources: [path] }, root)).toThrow(/host path/);
+    }
+  });
+});
