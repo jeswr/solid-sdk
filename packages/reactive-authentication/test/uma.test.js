@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 import assert from "node:assert/strict";
 import { createMemoryStore } from "@key-value-kit/storage/memory";
 import { afterAll as after, beforeAll as before, test } from "vitest";
@@ -9,6 +10,7 @@ import {
   DynamicRegistrationClientProvider,
   LwsTokenProvider,
   ReactiveFetchManager,
+  SessionFence,
   SolidUmaTokenProvider,
   UmaAuthorizationError,
   XASProvider,
@@ -215,4 +217,89 @@ test("uma-review #2: forget() while the trust policy is pending aborts that upgr
   );
   assert.equal(code.calls, 0, "no login");
   assert.equal(uma.stats.exchanges.length, exchanges, "no exchange");
+});
+
+test("UMA preserves its captured generation when a peer logs out before ID token acquisition", async () => {
+  const namespace = `uma-generation-${crypto.randomUUID()}`;
+  const generations = createMemoryStore();
+  const started = Promise.withResolvers();
+  const gate = Promise.withResolvers();
+  let pauseRead = false;
+  const fence = new SessionFence(namespace, {
+    broadcast: false,
+    store: {
+      ...generations,
+      getItem: async (key) => {
+        const value = await generations.getItem(key);
+        if (pauseRead) {
+          pauseRead = false;
+          started.resolve();
+          await gate.promise; // A pending validation can return its pre-logout value.
+        }
+        return value;
+      },
+    },
+  });
+  const peer = new SessionFence(namespace, { store: generations, broadcast: false });
+  const memory = createMemoryStore();
+  const durable = createMemoryStore();
+  const metadata = createMemoryStore();
+  const writes = [];
+  const persisted = [];
+  const { manager, code } = umaClient(uma, {
+    namespace,
+    fence,
+    cache: {
+      ...memory,
+      setItem: async (key, value) => {
+        writes.push(value);
+        await memory.setItem(key, value);
+      },
+    },
+    sessionStore: {
+      ...durable,
+      setItem: async (key, value) => {
+        persisted.push(value);
+        await durable.setItem(key, value);
+      },
+    },
+    metadataStore: {
+      ...metadata,
+      setItem: async (key, value) => {
+        await metadata.setItem(key, value);
+        pauseRead = true; // Pause the validation immediately before OidcSession.get.
+      },
+    },
+  });
+  const exchanges = uma.stats.exchanges.length;
+  const grants = op.stats.token.length;
+  const pending = manager.fetch(`${uma.url}/uma/peer-logout`);
+  const rejected = assert.rejects(pending, { name: "SessionSupersededError" });
+  try {
+    await started.promise;
+    await peer.supersede();
+    assert.equal(fence.signal.aborted, false, "no broadcast masks the generation race");
+    gate.resolve();
+    await rejected;
+    assert.deepEqual(
+      {
+        logins: code.calls,
+        grants: op.stats.token.length - grants,
+        exchanges: uma.stats.exchanges.length - exchanges,
+        cacheGenerations: writes.map((entry) => entry.generation),
+        durableGenerations: persisted.map((entry) => entry.generation),
+      },
+      { logins: 0, grants: 0, exchanges: 0, cacheGenerations: [], durableGenerations: [] },
+      "the superseded operation cannot log in, disclose claims or commit credentials",
+    );
+    assert.equal((await manager.fetch(`${uma.url}/uma/peer-logout`)).status, 200);
+    assert.equal(code.calls, 1, "a fresh UMA operation can log in after logout");
+    assert.equal(writes.at(-1).generation, 1);
+    assert.equal(persisted.at(-1).generation, 1);
+  } finally {
+    gate.resolve();
+    await Promise.allSettled([pending, rejected]);
+    fence.close();
+    peer.close();
+  }
 });

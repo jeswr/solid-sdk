@@ -242,7 +242,14 @@ export class SolidUmaTokenProvider implements TokenProvider {
     await this.#rpts.assertCurrent(ticket);
 
     // The ID token identifies the user to any trusted authorization server; RPTs are then per AS and context.
-    const entry = (await this.#session.get(op, "", ticket.signal, idTokenUsable))!;
+    const entry = (await this.#session.get(
+      op,
+      "",
+      ticket.signal,
+      idTokenUsable,
+      true,
+      ticket.generation,
+    ))!;
     await this.#session.assertCurrent(entry, ticket.signal);
     return await this.#exchange(uma, entry, permissionTicket, ticket.signal);
   }
