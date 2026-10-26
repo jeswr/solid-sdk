@@ -10,13 +10,12 @@ vi.mock("@/lib/demo-pod/browser", () => ({
   getDemoPod: () => Promise.resolve({ fetch: vi.fn(), subscribe: vi.fn() }),
   resetDemoPod: vi.fn(),
 }));
-vi.mock("@/apps/docs/components/docs.css", () => ({}));
-vi.mock("@/apps/docs/components/common", () => ({ DocumentSkeleton: () => "skeleton" }));
-vi.mock("@/apps/docs/components/docs-workspace", () => ({
+vi.mock("../src/apps/docs/components/common", () => ({ DocumentSkeleton: () => "skeleton" }));
+vi.mock("../src/apps/docs/components/docs-workspace", () => ({
   DocsWorkspace: () => (mocks.Workspace ? createElement(mocks.Workspace) : null),
 }));
 
-import DocsLayout from "../src/app/(suite)/docs/layout";
+import { DocsShell } from "../src/apps/docs/components/docs-shell";
 import { usePodSessionState } from "../src/lib/session/pod-session";
 
 afterEach(() => {
@@ -32,7 +31,7 @@ it("hydrates a workspace whose code loads after the session settles against the 
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const host = document.createElement("div");
   mocks.Workspace = Status;
-  host.innerHTML = renderToString(createElement(DocsLayout, { children: null }));
+  host.innerHTML = renderToString(createElement(DocsShell, { children: null }));
   document.body.append(host);
   expect(host.textContent).toBe("loading");
   // The workspace's code arrives only after the demo pod has opened, like a slow route chunk.
@@ -41,7 +40,7 @@ it("hydrates a workspace whose code loads after the session settles against the 
     () => new Promise<{ default: typeof Status }>((resolve) => (load = resolve)),
   );
   const recoverable = vi.fn();
-  const root = hydrateRoot(host, createElement(DocsLayout, { children: null }), {
+  const root = hydrateRoot(host, createElement(DocsShell, { children: null }), {
     onRecoverableError: recoverable,
   });
   try {
