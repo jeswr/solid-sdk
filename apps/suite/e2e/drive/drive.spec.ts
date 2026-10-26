@@ -71,6 +71,8 @@ async function navigate(page: Page, name: string) {
 }
 
 async function accessible(page: Page) {
+  // Next streams route metadata, so the <title> can land just after the content.
+  await expect(page).toHaveTitle(/\S/);
   const result = await new AxeBuilder({ page }).analyze();
   expect(
     result.violations.filter((v) => v.impact === "serious" || v.impact === "critical"),
