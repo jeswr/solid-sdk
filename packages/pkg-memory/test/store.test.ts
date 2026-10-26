@@ -355,6 +355,12 @@ it("retracts by appending a revising nanopub with invalidation, preserving origi
   const classified = classifyNanopublications(await store.list());
   expect(classified.map((item) => item.belief)).toEqual(["past", "past"]);
   expect(classified.find((item) => item.id === previous.id)!.replacedBy).toEqual([np.id]);
+  const simultaneous = await store.retract(previous.id, {
+    batchId: "same-clock",
+    clientId: np.agent,
+    generatedAt: previous.generatedAt,
+  });
+  expect(simultaneous.nanopubs[0]!.validity).toBe("Retracted");
   await expect(
     store.retract(previous.id, {
       batchId: "too-early",

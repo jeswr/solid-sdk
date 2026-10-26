@@ -9,9 +9,10 @@ import {
   createFactAssertion,
   EPISTEMIC_STATUSES,
   parseNanopublications,
+  serializeNanopublications,
   VALIDITY_STATUSES,
 } from "../src/index.js";
-import { graph, NS, putGraph, RdfNode } from "../src/rdf.js";
+import { graph, NS, putGraph, RdfNode, ReferenceStore } from "../src/rdf.js";
 import { exampleBuildOptions } from "../src/testing.js";
 
 const options = exampleBuildOptions();
@@ -116,7 +117,7 @@ describe("KG §4.1 belief view", () => {
     newer.generatedAt = "2025-01-01T00:00:00Z";
     expect(
       classifyNanopublications(value).find((np) => np.identifier === "belief/old")!.belief,
-    ).toBe("definitely");
+    ).toBe("past");
   });
 
   it("does not treat retired contradictions as unresolved", async () => {
@@ -140,25 +141,41 @@ describe("KG §4.1 belief view", () => {
     ).toBe("definitely");
   });
 
-  it("orders revisions at microsecond precision across timezone offsets", async () => {
-    const value = await build([
-      { id: "one", epistemic: "SelfReportedExplicit", assertion: assertion("one") },
-      {
-        id: "two",
-        epistemic: "SelfReportedExplicit",
-        assertion: assertion("two"),
-        supersedes: ["one"],
-      },
-    ]);
-    const one = value.nanopubs.find((np) => np.identifier === "belief/one")!;
-    const two = value.nanopubs.find((np) => np.identifier === "belief/two")!;
-    one.generatedAt = "2026-10-25T12:00:00.000500+00:00";
-    two.generatedAt = "2026-10-25T13:00:00.000400+01:00";
-    expect(classifyNanopublications(value).find((np) => np.id === one.id)!.belief).toBe(
-      "definitely",
+  it("honours cross-batch statement revisions when extraction order is reversed", async () => {
+    const dated = (batch: string, statementAt: string, generatedAt: string) =>
+      buildNanopublications(
+        {
+          batch_id: batch,
+          worker: { agent_id: "https://example.org/client", agent_label: "Test" },
+          sources: [{ id: "chat", kind: "document", url: `https://example.org/${batch}` }],
+          claims: [
+            {
+              id: "claim",
+              epistemic: "SelfReportedExplicit",
+              assertion: assertion(batch),
+              evidence: [{ source: "chat", timestamp: statementAt }],
+            },
+          ],
+        },
+        { ...options, generatedAt },
+      );
+    const old = await dated("old", "2026-10-24T12:00:00Z", "2026-10-26T12:00:00Z");
+    const newer = await dated("new", "2026-10-25T12:00:00Z", "2026-10-25T13:00:00Z");
+    const one = old.nanopubs[0]!;
+    const two = newer.nanopubs[0]!;
+    const dataset = new ReferenceStore([...old.dataset, ...newer.dataset]);
+    const provenance = graph(dataset, two.provenanceId);
+    new RdfNode(two.assertionId, provenance).link(`${NS.prov}wasRevisionOf`, one.assertionId);
+    putGraph(dataset, two.provenanceId, provenance);
+    const value = await parseNanopublications(
+      await serializeNanopublications({ dataset, nanopubs: [one, two] }),
     );
-    two.generatedAt = "2026-10-25T13:00:00.000600+01:00";
-    expect(classifyNanopublications(value).find((np) => np.id === one.id)!.belief).toBe("past");
+    const result = classifyNanopublications(value);
+    expect(result.find((np) => np.id === one.id)).toMatchObject({
+      belief: "past",
+      replacedBy: [two.id],
+    });
+    expect(result.find((np) => np.id === two.id)!.belief).toBe("definitely");
   });
 
   it("uses only the nanopub's own invalidation provenance", async () => {

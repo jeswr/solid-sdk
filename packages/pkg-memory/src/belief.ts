@@ -1,6 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 
-import { compareDateTimes } from "./chronology.js";
 import type { Nanopublication, Nanopublications } from "./model.js";
 import { graph, NS, RdfNode } from "./rdf.js";
 
@@ -19,10 +18,8 @@ export function classifyNanopublications(value: Nanopublications): ClassifiedNan
   const nanopubs = [...new Map(value.nanopubs.map((np) => [np.id, np])).values()];
   const replacements = (np: Nanopublication) =>
     nanopubs.filter(
-      (other) =>
-        other.id !== np.id &&
-        other.supersedes.includes(np.assertionId) &&
-        compareDateTimes(other.generatedAt, np.generatedAt) >= 0,
+      // Explicit revision links order statements; extraction clocks do not.
+      (other) => other.id !== np.id && other.supersedes.includes(np.assertionId),
     );
   const inactive = (np: Nanopublication) =>
     past.has(np.validity) ||

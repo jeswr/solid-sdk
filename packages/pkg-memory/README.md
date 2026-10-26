@@ -94,7 +94,8 @@ No owner identity or data access is implicit.
 `classifyNanopublications(result)` returns a derived view with `belief` equal to
 `definitely`, `might`, `mentioned`, or `past`, distinct-nanopub `corroboration`
 counts, and `replacedBy` nanopub IDs. Past validity, provenance invalidation and
-later revisions take precedence. Current Documented facts are definite; current
+explicit revisions take precedence regardless of extraction/publication order.
+Current Documented facts are definite; current
 explicit/summary facts need no unresolved contradiction in either direction.
 Other live claims are `might`, except `Mentioned`. Retired contradictory claims
 do not block current explicit facts. The source dataset is never modified.
