@@ -64,6 +64,9 @@ that binding through `usePreferences('rail')`. This UI adapter does not implemen
 SDK-APP-11 owns persistence, account isolation, cache and offline writes. The dev fixtures use
 an explicitly fixture-only browser key to exercise persistence until that SDK is present.
 
+The launcher grid renders the DS-02 `AppIcon`; `AppSlug` is the same id set as `AppId`.
+While preferences are loading or failed, the Customise rail panel is read-only.
+
 The launcher uses a Radix popover with a native search input and an ARIA layout grid of
 native links. Tab enters the grid; arrows move between apps; Home/End move within a row
 (Ctrl moves to the first/last app); typing filters; Enter follows the link; Escape closes
