@@ -12,7 +12,8 @@ const dependencyFields = [
   "peerDependencies",
   "optionalDependencies",
 ];
-const sharedInputs = ["pnpm-lock.yaml", "turbo.json", "pnpm-workspace.yaml", "package.json"];
+const nonBuildPaths =
+  /^(?:[^/]+\.md|(?:decisions|skills|docs|\.github|\.claude)\/.*|\.roborev\.toml|LICENSE[^/]*)$/;
 
 function workspacePackages(root) {
   const config = readFileSync(join(root, "pnpm-workspace.yaml"), "utf8");
@@ -84,23 +85,37 @@ function ignoreBuild(root, name) {
   const directories = [
     ...new Set([...closure.values()].map((project) => project.directory)),
   ].sort();
-  const git = (args) => spawnSync("git", args, { cwd: root, stdio: "ignore" });
+  const git = (args) =>
+    spawnSync("git", args, { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
   const previous = process.env.VERCEL_GIT_PREVIOUS_SHA;
-  let base = "HEAD^";
-  if (previous) {
-    const exists = git(["cat-file", "-e", `${previous}^{commit}`]);
-    if (!exists.error && exists.status === 0) base = previous;
+  if (!previous) throw new Error("VERCEL_GIT_PREVIOUS_SHA is unset");
+  const commit = git(["rev-parse", "--verify", "--end-of-options", `${previous}^{commit}`]);
+  if (commit.error || commit.status !== 0) {
+    throw new Error("VERCEL_GIT_PREVIOUS_SHA is unavailable in this clone");
   }
-  const result = git(["diff", "--quiet", base, "HEAD", "--", ...directories, ...sharedInputs]);
+  const base = commit.stdout.trim();
+  const ancestor = git(["merge-base", "--is-ancestor", base, "HEAD"]);
+  if (ancestor.error || ancestor.status !== 0) {
+    throw new Error("VERCEL_GIT_PREVIOUS_SHA is not a known ancestor of HEAD");
+  }
+  // NUL delimiters preserve unusual filenames; disabling renames includes both paths.
+  const result = git(["diff", "--name-only", "--no-renames", "-z", base, "HEAD", "--"]);
   if (result.error) throw new Error(`git diff failed: ${result.error.message}`);
-  if (result.status !== 0 && result.status !== 1) {
+  if (result.status !== 0) {
     throw new Error(`git diff failed for base ${base} (exit ${result.status})`);
   }
-  const unchanged = result.status === 0;
+  const workspaceDirectories = [...packages.values()].map((project) => project.directory);
+  const unchanged = !result.stdout
+    .split("\0")
+    .filter(Boolean)
+    .some((path) => {
+      if (directories.some((directory) => path.startsWith(`${directory}/`))) return true;
+      if (workspaceDirectories.some((directory) => path.startsWith(`${directory}/`))) return false;
+      // Unknown root inputs affect every app unless explicitly documented as harmless.
+      return !nonBuildPaths.test(path);
+    });
   console.log(
-    `${unchanged ? "Skip build" : "Build"}: ${name} workspace closure ${unchanged ? "unchanged" : "changed"} since ${base}${
-      base === "HEAD^" ? " (previous SHA unavailable; using HEAD^)" : ""
-    }.`,
+    `${unchanged ? "Skip build" : "Build"}: ${name} build inputs ${unchanged ? "unchanged" : "changed"} since ${base}.`,
   );
   return unchanged ? 0 : 1;
 }

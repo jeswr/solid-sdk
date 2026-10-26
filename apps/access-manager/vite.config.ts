@@ -4,43 +4,20 @@ import { readFileSync } from "node:fs";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig, loadEnv } from "vite";
+import { hostedClientIdConfig } from "./src/lib/hosted-client-id.js";
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
   const plugins = [react(), tailwindcss()];
   if (!env.APP_ORIGIN) return { plugins };
 
-  const url = new URL(env.APP_ORIGIN);
-  if (url.protocol !== "https:" && url.protocol !== "http:") {
-    throw new Error("APP_ORIGIN must be an http(s) origin");
-  }
-  const origin = url.origin;
-  const clientId = `${origin}/clientid.jsonld`;
-  const document = {
-    ...JSON.parse(readFileSync(new URL("./public/clientid.jsonld", import.meta.url), "utf8")),
-    client_id: clientId,
-    client_uri: origin,
-    redirect_uris: [`${origin}/callback.html`],
-    post_logout_redirect_uris: [origin],
-  };
+  const hosted = hostedClientIdConfig(
+    env,
+    JSON.parse(readFileSync(new URL("./public/clientid.jsonld", import.meta.url), "utf8")),
+  );
 
   return {
-    define: {
-      "import.meta.env.VITE_CLIENT_ID": JSON.stringify(env.VITE_CLIENT_ID || clientId),
-    },
-    plugins: [
-      ...plugins,
-      {
-        name: "hosted-client-id",
-        apply: "build",
-        generateBundle() {
-          this.emitFile({
-            type: "asset",
-            fileName: "clientid.jsonld",
-            source: `${JSON.stringify(document, null, 2)}\n`,
-          });
-        },
-      },
-    ],
+    ...hosted,
+    plugins: [...plugins, ...(hosted.plugins ?? [])],
   };
 });

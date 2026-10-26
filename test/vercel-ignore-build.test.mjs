@@ -3,7 +3,7 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import { runCommand } from "./helpers/run-command.mjs";
 
@@ -113,7 +113,7 @@ describe("Vercel ignored-build step", () => {
     commit(root, { [path]: "export const value = 2;\n" });
     const result = ignore(root, base);
     expect(result.status).toBe(1);
-    expect(result.stdout).toContain("Build: @example/web workspace closure changed");
+    expect(result.stdout).toContain("Build: @example/web build inputs changed");
   });
 
   it("skips when only an unrelated package changes, even if it has a registry dependency edge", () => {
@@ -121,7 +121,7 @@ describe("Vercel ignored-build step", () => {
     commit(root, { "modules/unrelated/src/index.js": "export const value = 2;\n" });
     const result = ignore(root, base);
     expect(result.status).toBe(0);
-    expect(result.stdout).toContain("Skip build: @example/web workspace closure unchanged");
+    expect(result.stdout).toContain("Skip build: @example/web build inputs unchanged");
   });
 
   it.each([
@@ -144,12 +144,13 @@ describe("Vercel ignored-build step", () => {
     undefined,
     "",
     "ffffffffffffffffffffffffffffffffffffffff",
-  ])("falls back to HEAD^ for an unavailable previous SHA: %j", (previous) => {
+  ])("builds for an unavailable previous SHA despite an unrelated latest commit: %j", (previous) => {
     const { root } = fixture();
+    commit(root, { "apps/example/web/src/app.js": "undeployed change" });
     commit(root, { "modules/unrelated/src/index.js": "changed" });
     const result = ignore(root, previous);
-    expect(result.status).toBe(0);
-    expect(result.stdout).toContain("using HEAD^");
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain("VERCEL_GIT_PREVIOUS_SHA");
   });
 
   it("uses a valid previous SHA across multiple commits", () => {
@@ -161,12 +162,29 @@ describe("Vercel ignored-build step", () => {
     expect(result.stdout).toContain(`since ${base}`);
   });
 
-  it("builds for a closure change when a missing previous SHA falls back to HEAD^", () => {
-    const { root } = fixture();
-    commit(root, { "modules/transitive/src/index.js": "changed" });
-    const result = ignore(root, "unavailable-commit");
+  it.each([undefined, "previous deployment"])("builds in a depth-one clone with %j", (previous) => {
+    const { root, base } = fixture();
+    commit(root, { "apps/example/web/src/app.js": "undeployed change" });
+    commit(root, { "modules/unrelated/src/index.js": "changed" });
+    const clone = mkdtempSync(join(tmpdir(), "vercel-shallow-"));
+    dirs.push(clone);
+    git(root, "clone", "--quiet", "--depth", "1", pathToFileURL(root).href, clone);
+    expect(git(clone, "rev-parse", "--is-shallow-repository")).toBe("true");
+    const result = ignore(clone, previous === undefined ? undefined : base);
     expect(result.status).toBe(1);
-    expect(result.stdout).toContain("closure changed since HEAD^");
+    expect(result.stdout).toContain(
+      previous === undefined ? "is unset" : "is unavailable in this clone",
+    );
+  });
+
+  it("builds when the previous SHA is resolvable but not an ancestor of HEAD", () => {
+    const { root, base } = fixture();
+    const previous = commit(root, { "modules/unrelated/src/index.js": "other history" });
+    git(root, "reset", "--hard", base);
+    commit(root, { "README.md": "unrelated current history" });
+    const result = ignore(root, previous);
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain("not a known ancestor of HEAD");
   });
 
   it.each([
@@ -174,10 +192,53 @@ describe("Vercel ignored-build step", () => {
     "turbo.json",
     "pnpm-workspace.yaml",
     "package.json",
+    "tsconfig.base.json",
+    ".npmrc",
+    "biome.json",
+    "scripts/shared-build.mjs",
+    "guardrails/package-policy.json",
+    "unknown-root-config.json",
   ])("builds for a shared root input change to %s", (path) => {
     const { root, base } = fixture();
-    const before = readFileSync(join(root, path), "utf8");
-    commit(root, { [path]: `${before}\n` });
+    if (["pnpm-workspace.yaml", "package.json"].includes(path)) {
+      const before = readFileSync(join(root, path), "utf8");
+      commit(root, { [path]: `${before}\n` });
+    } else {
+      commit(root, { [path]: "changed" });
+    }
+    expect(ignore(root, base).status).toBe(1);
+  });
+
+  it.each([
+    "README.md",
+    "AGENTS.md",
+    "decisions/0001.md",
+    "skills/example/SKILL.md",
+    "docs/deploy.md",
+    ".github/workflows/ci.yml",
+    ".claude/agents/example.md",
+    ".roborev.toml",
+    "LICENSE",
+    "LICENSE-MIT",
+  ])("skips for the explicitly allowed non-build path %s", (path) => {
+    const { root, base } = fixture();
+    commit(root, { [path]: "documentation change" });
+    expect(ignore(root, base).status).toBe(0);
+  });
+
+  it("builds for a package README change within the app closure", () => {
+    const { root, base } = fixture();
+    commit(root, { "modules/direct/README.md": "package change" });
+    expect(ignore(root, base).status).toBe(1);
+  });
+
+  it("builds for a root change even when other changes are allowed to skip", () => {
+    const { root, base } = fixture();
+    commit(root, {
+      "README.md": "documentation change",
+      "modules/unrelated/src/index.js": "unrelated change",
+      "tsconfig.base.json": "shared input change",
+    });
     expect(ignore(root, base).status).toBe(1);
   });
 
@@ -198,11 +259,11 @@ describe("Vercel ignored-build step", () => {
     expect(ignore(root, base).status).toBe(1);
   });
 
-  it("builds when HEAD^ is unavailable", () => {
+  it("builds on an initial deployment without a previous SHA", () => {
     const { root } = fixture();
     const result = ignore(root);
     expect(result.status).toBe(1);
-    expect(result.stdout).toContain("git diff failed for base HEAD^");
+    expect(result.stdout).toContain("VERCEL_GIT_PREVIOUS_SHA is unset");
   });
 
   it("builds when git is unavailable", () => {
@@ -211,7 +272,7 @@ describe("Vercel ignored-build step", () => {
       env: { PATH: "", VERCEL_GIT_PREVIOUS_SHA: base },
     });
     expect(result.status).toBe(1);
-    expect(result.stdout).toContain("git diff failed");
+    expect(result.stdout).toContain("VERCEL_GIT_PREVIOUS_SHA is unavailable in this clone");
   });
 
   it.each([
